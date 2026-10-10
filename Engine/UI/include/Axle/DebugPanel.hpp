@@ -22,13 +22,20 @@ namespace Axle {
 
         u32 TotalBodies = 0;
         u32 ActiveBodies = 0;
+
+        // JPH::DebugRenderer visualization
+        bool ShowPhysicsWireframe = false;
+        bool DrawBoundingBoxes = false;
+        bool DrawVelocity = false;
+        bool DrawCenterOfMass = false;
+        u32 DebugLineCount = 0;
     };
 
     class DebugPanel {
     public:
         DebugPanel() = default;
 
-        void OnImGuiRender(const TelemetryData& telemetry);
+        void OnImGuiRender(TelemetryData& telemetry);
     };
 
 }

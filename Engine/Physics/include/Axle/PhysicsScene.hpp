@@ -47,6 +47,16 @@ namespace Axle {
         bool AllowSleeping = true;
     };
 
+    struct PhysicsDrawSettings {
+        bool DrawShapes = true;
+        bool DrawWireframe = true;
+        bool DrawBoundingBoxes = false;
+        bool DrawVelocity = false;
+        bool DrawCenterOfMass = false;
+    };
+
+    class PhysicsDebugRenderer;
+
     class PhysicsScene {
     public:
         PhysicsScene(const PhysicsSettings& settings = PhysicsSettings());
@@ -54,6 +64,9 @@ namespace Axle {
 
         // Step simulation by delta time
         void Step(Timestep ts, i32 collisionSteps = 1);
+
+        // Debug visualization using PhysicsDebugRenderer
+        void DrawDebug(PhysicsDebugRenderer& renderer, const PhysicsDrawSettings& settings = PhysicsDrawSettings());
 
         // Body creation and management
         BodyID CreateBox(const BoxBodyProps& props);

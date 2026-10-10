@@ -1,6 +1,7 @@
 add_library(AxlePhysics STATIC
     src/PhysicsEngine.cpp
     src/PhysicsScene.cpp
+    src/PhysicsDebugRenderer.cpp
 )
 add_library(Axle::Physics ALIAS AxlePhysics)
 
@@ -11,5 +12,6 @@ target_include_directories(AxlePhysics PUBLIC
 target_link_libraries(AxlePhysics
     PUBLIC
         Axle::Core
+        Axle::Renderer
         Jolt
 )

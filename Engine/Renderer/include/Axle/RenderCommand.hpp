@@ -18,6 +18,10 @@ namespace Axle {
 
         // Submit indexed draw call from a VertexArray
         static void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray);
+
+        // Submit non-indexed line draw call
+        static void DrawLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount);
+        static void SetLineWidth(f32 width);
     };
 
 }

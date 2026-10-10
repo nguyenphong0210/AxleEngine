@@ -6,6 +6,7 @@
 #include <Axle/VertexArray.hpp>
 #include <Axle/DebugPanel.hpp>
 #include <Axle/PhysicsScene.hpp>
+#include <Axle/PhysicsDebugRenderer.hpp>
 #include <memory>
 
 class SandboxLayer : public Axle::Layer {
@@ -22,6 +23,11 @@ public:
 private:
     std::unique_ptr<Axle::PerspectiveCameraController> m_CameraController;
     std::unique_ptr<Axle::PhysicsScene> m_PhysicsScene;
+    std::unique_ptr<Axle::PhysicsDebugRenderer> m_PhysicsDebugRenderer;
+    Axle::PhysicsDrawSettings m_PhysicsDrawSettings;
+    bool m_ShowPhysicsDebug = false;
+    bool m_F1KeyWasPressed = false;
+
     Axle::BodyID m_FloorBodyID;
     Axle::BodyID m_BoxBodyID;
     Axle::BodyID m_SphereBodyID;

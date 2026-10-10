@@ -1,5 +1,6 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsEngine.hpp>
+#include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Log.hpp>
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
@@ -63,6 +64,19 @@ namespace Axle {
 
         // Jolt physics simulation update
         m_PhysicsSystem.Update(dt, collisionSteps, m_TempAllocator.get(), m_JobSystem.get());
+    }
+
+    void PhysicsScene::DrawDebug(PhysicsDebugRenderer& renderer, const PhysicsDrawSettings& settings) {
+        JPH::BodyManager::DrawSettings joltSettings;
+        joltSettings.mDrawShape = settings.DrawShapes;
+        joltSettings.mDrawShapeWireframe = settings.DrawWireframe;
+        joltSettings.mDrawBoundingBox = settings.DrawBoundingBoxes;
+        joltSettings.mDrawVelocity = settings.DrawVelocity;
+        joltSettings.mDrawCenterOfMassTransform = settings.DrawCenterOfMass;
+
+        m_PhysicsSystem.DrawBodies(joltSettings, &renderer);
+        m_PhysicsSystem.DrawConstraints(&renderer);
+        m_PhysicsSystem.DrawConstraintLimits(&renderer);
     }
 
     BodyID PhysicsScene::CreateBox(const BoxBodyProps& props) {

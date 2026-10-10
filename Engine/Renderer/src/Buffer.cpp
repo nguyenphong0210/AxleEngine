@@ -5,6 +5,12 @@ namespace Axle {
 
     // ---------------- VertexBuffer ----------------
 
+    VertexBuffer::VertexBuffer(u32 size) {
+        glCreateBuffers(1, &m_RendererID);
+        glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
+        glBufferData(GL_ARRAY_BUFFER, size, nullptr, GL_DYNAMIC_DRAW);
+    }
+
     VertexBuffer::VertexBuffer(const void* vertices, u32 size) {
         glCreateBuffers(1, &m_RendererID);
         glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
@@ -21,6 +27,11 @@ namespace Axle {
 
     void VertexBuffer::Unbind() const {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+
+    void VertexBuffer::SetData(const void* data, u32 size) {
+        glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, size, data);
     }
 
     // ---------------- IndexBuffer ----------------

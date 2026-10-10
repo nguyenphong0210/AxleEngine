@@ -86,11 +86,14 @@ namespace Axle {
 
     class VertexBuffer {
     public:
+        VertexBuffer(u32 size);
         VertexBuffer(const void* vertices, u32 size);
         ~VertexBuffer();
 
         void Bind() const;
         void Unbind() const;
+
+        void SetData(const void* data, u32 size);
 
         const BufferLayout& GetLayout() const { return m_Layout; }
         void SetLayout(const BufferLayout& layout) { m_Layout = layout; }

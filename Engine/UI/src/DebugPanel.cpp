@@ -3,9 +3,9 @@
 
 namespace Axle {
 
-    void DebugPanel::OnImGuiRender(const TelemetryData& telemetry) {
+    void DebugPanel::OnImGuiRender(TelemetryData& telemetry) {
         ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(340.0f, 420.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(350.0f, 520.0f), ImGuiCond_FirstUseEver);
 
         ImGui::Begin("Axle Engine - Telemetry");
 
@@ -47,6 +47,17 @@ namespace Axle {
             ImGui::Text("  State: %s", telemetry.IsSphereActive ? "Active" : "Sleeping");
 
             ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.5f, 1.0f), "Debug Collider Visualization");
+            ImGui::Separator();
+            ImGui::Checkbox("Show Physics Wireframe [F1]", &telemetry.ShowPhysicsWireframe);
+            if (telemetry.ShowPhysicsWireframe) {
+                ImGui::Checkbox("Draw Bounding Boxes", &telemetry.DrawBoundingBoxes);
+                ImGui::Checkbox("Draw Center of Mass", &telemetry.DrawCenterOfMass);
+                ImGui::Checkbox("Draw Velocity Vectors", &telemetry.DrawVelocity);
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Batched Lines: %u", telemetry.DebugLineCount);
+            }
+
+            ImGui::Spacing();
             ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "[R] Key: Drop Box & Sphere Again");
         }
 
@@ -58,6 +69,7 @@ namespace Axle {
         ImGui::BulletText("E / Space: Ascend");
         ImGui::BulletText("Q / LShift: Descend");
         ImGui::BulletText("R: Reset Box & Sphere");
+        ImGui::BulletText("F1: Toggle Physics Wireframe");
 
         ImGui::End();
     }

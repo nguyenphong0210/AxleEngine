@@ -232,11 +232,15 @@ void SandboxLayer::OnAttach() {
     // 5. UV Sphere Mesh Data
     m_SphereVertexArray = CreateSphereMesh(24, 32);
 
+    // 6. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
+    m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+
     Axle::RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
 }
 
 void SandboxLayer::OnDetach() {
     AXLE_INFO("SandboxLayer detached");
+    m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
 }
 
@@ -259,6 +263,16 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
 
         m_PhysicsScene->SetBodyPositionAndRotation(m_SphereBodyID, glm::vec3(2.0f, 14.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
         m_PhysicsScene->SetLinearVelocity(m_SphereBodyID, glm::vec3(0.0f));
+    }
+
+    // Press 'F1' to toggle physics wireframe debug visualization
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F1)) {
+        if (!m_F1KeyWasPressed) {
+            m_ShowPhysicsDebug = !m_ShowPhysicsDebug;
+            m_F1KeyWasPressed = true;
+        }
+    } else {
+        m_F1KeyWasPressed = false;
     }
 
     m_LastDeltaTime = ts.GetSeconds();
@@ -298,6 +312,13 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     m_Shader->SetFloat4("u_Color1", glm::vec4(0.0f, 0.85f, 0.95f, 1.0f));  // Electric cyan
     m_Shader->SetFloat4("u_Color2", glm::vec4(0.05f, 0.12f, 0.24f, 1.0f)); // Deep navy
     Axle::RenderCommand::DrawIndexed(m_SphereVertexArray);
+
+    // 4. Render JPH::DebugRenderer physics collider wireframes when enabled
+    if (m_ShowPhysicsDebug && m_PhysicsDebugRenderer) {
+        m_PhysicsDebugRenderer->Begin(m_CameraController->GetCamera().GetPosition());
+        m_PhysicsScene->DrawDebug(*m_PhysicsDebugRenderer, m_PhysicsDrawSettings);
+        m_PhysicsDebugRenderer->End(m_CameraController->GetCamera().GetViewProjectionMatrix());
+    }
 }
 
 void SandboxLayer::OnImGuiRender() {
@@ -315,8 +336,18 @@ void SandboxLayer::OnImGuiRender() {
         .SphereVelocity = m_PhysicsScene->GetLinearVelocity(m_SphereBodyID),
         .IsSphereActive = m_PhysicsScene->IsActive(m_SphereBodyID),
         .TotalBodies = m_PhysicsScene->GetNumBodies(),
-        .ActiveBodies = m_PhysicsScene->GetNumActiveBodies()
+        .ActiveBodies = m_PhysicsScene->GetNumActiveBodies(),
+        .ShowPhysicsWireframe = m_ShowPhysicsDebug,
+        .DrawBoundingBoxes = m_PhysicsDrawSettings.DrawBoundingBoxes,
+        .DrawVelocity = m_PhysicsDrawSettings.DrawVelocity,
+        .DrawCenterOfMass = m_PhysicsDrawSettings.DrawCenterOfMass,
+        .DebugLineCount = m_PhysicsDebugRenderer ? m_PhysicsDebugRenderer->GetLineCount() : 0
     };
 
     m_DebugPanel.OnImGuiRender(telemetry);
+
+    m_ShowPhysicsDebug = telemetry.ShowPhysicsWireframe;
+    m_PhysicsDrawSettings.DrawBoundingBoxes = telemetry.DrawBoundingBoxes;
+    m_PhysicsDrawSettings.DrawVelocity = telemetry.DrawVelocity;
+    m_PhysicsDrawSettings.DrawCenterOfMass = telemetry.DrawCenterOfMass;
 }

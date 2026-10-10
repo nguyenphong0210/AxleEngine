@@ -38,4 +38,13 @@ namespace Axle {
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(count), GL_UNSIGNED_INT, nullptr);
     }
 
+    void RenderCommand::DrawLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount) {
+        vertexArray->Bind();
+        glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertexCount));
+    }
+
+    void RenderCommand::SetLineWidth(f32 width) {
+        glLineWidth(width);
+    }
+
 }

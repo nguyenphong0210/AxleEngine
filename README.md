@@ -44,12 +44,12 @@ Level 0:  [ Engine/Core ]
   - [x] Integrate Dear ImGui (docking branch) as a submodule.
   - [x] Encapsulate `ImGuiLayer` (lifecycle, modern dark theme, multi-viewport support).
   - [x] Implement `DebugPanel` to display real-time FPS, delta time, and camera transform.
-- [ ] **Phase 2: Physics Engine Foundation (`Engine/Physics`)**
+- [x] **Phase 2: Physics Engine Foundation (`Engine/Physics`)**
   - [x] Integrate Jolt Physics submodule into `ThirdParty/JoltPhysics` (v5.2.0).
   - [x] Configure CMake build options for Jolt Physics and `Axle::Physics`.
   - [x] Implement `PhysicsSystem` & `PhysicsScene` (multithreaded job system, gravity, collision layers).
-  - [x] Simulate static ground plane and dynamic falling rigid body boxes.
-  - [ ] Integrate `JPH::DebugRenderer` to draw collider wireframes in OpenGL.
+  - [x] Simulate static ground plane, dynamic falling box, and bouncy sphere.
+  - [x] Integrate `JPH::DebugRenderer` (`PhysicsDebugRenderer`) to draw collider wireframes in OpenGL.
 - [ ] **Phase 3: Scene & Transform Synchronization (`Engine/Scene`)**
   - [ ] Integrate header-only ECS library (EnTT).
   - [ ] Define `TransformComponent`, `MeshRendererComponent`, and `RigidBodyComponent`.
@@ -116,6 +116,8 @@ cmake --build build --config Release --parallel
 | **W / A / S / D** | Move Forward / Left / Backward / Right |
 | **E / Space** | Move Up |
 | **Q / Left Shift** | Move Down |
+| **R** | Reset Falling Bodies |
+| **F1** | Toggle Physics Collider Wireframe |
 | **Escape** | Close Application |
 
 ---

@@ -421,7 +421,12 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     }
 
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::R)) {
-        ResetSimulation();
+        if (!m_RKeyWasPressed) {
+            ResetSimulation();
+            m_RKeyWasPressed = true;
+        }
+    } else {
+        m_RKeyWasPressed = false;
     }
 
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::C)) {

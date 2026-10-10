@@ -3,6 +3,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
+#include <Jolt/Physics/Body/BodyLock.h>
 #include <cstring>
 
 namespace Axle {
@@ -253,6 +254,29 @@ namespace Axle {
                         ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.3f, 1.0f), "ACTIVE");
                     } else {
                         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "SLEEPING");
+                    }
+
+                    // Friction & Restitution live tuning
+                    JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                    if (lock.Succeeded()) {
+                        JPH::Body& body = lock.GetBody();
+
+                        float friction = body.GetFriction();
+                        if (ImGui::SliderFloat("Friction", &friction, 0.0f, 2.0f, "%.2f")) {
+                            body.SetFriction(friction);
+                        }
+
+                        float restitution = body.GetRestitution();
+                        if (ImGui::SliderFloat("Restitution", &restitution, 0.0f, 1.0f, "%.2f")) {
+                            body.SetRestitution(restitution);
+                        }
+
+                        if (rb.IsDynamic) {
+                            bool allowSleeping = body.GetAllowSleeping();
+                            if (ImGui::Checkbox("Allow Sleeping", &allowSleeping)) {
+                                body.SetAllowSleeping(allowSleeping);
+                            }
+                        }
                     }
 
                     if (rb.IsDynamic) {

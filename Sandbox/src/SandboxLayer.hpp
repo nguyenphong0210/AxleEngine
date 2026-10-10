@@ -66,6 +66,7 @@ private:
     bool m_F7KeyWasPressed = false;
     bool m_OKeyWasPressed = false;
     bool m_EscKeyWasPressed = false;
+    bool m_RKeyWasPressed = false;
 
     // Vehicle and chase camera
     std::unique_ptr<Axle::Vehicle> m_Vehicle;

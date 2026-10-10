@@ -11,6 +11,7 @@ add_library(AxleUI STATIC
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_demo.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/backends/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/backends/imgui_impl_opengl3.cpp
+    ${CMAKE_SOURCE_DIR}/ThirdParty/ImGuizmo/src/ImGuizmo.cpp
 )
 add_library(Axle::UI ALIAS AxleUI)
 
@@ -18,6 +19,7 @@ target_include_directories(AxleUI PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/imgui>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/imgui/backends>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/ImGuizmo/src>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/glm>
 )
 

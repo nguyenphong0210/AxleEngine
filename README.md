@@ -68,11 +68,12 @@ Level 0:  [ Engine/Core ]
   - [x] Vehicle Live Tuner Panel (springs, dampers, steering, torque, 4-wheel telemetry table).
   - [x] Engine Console Panel (spdlog integration, log levels, search & auto-scroll).
   - [x] Procedural Primitive Meshes: Plane, Cube, Sphere, Cylinder, Cone with procedural shader patterns.
-- [ ] **Phase 6: Interactive 3D Viewport & Transform Gizmos *(Recommended Next)***
-  - [ ] **3D Transform Gizmo (ImGuizmo)**: Manipulate Entity Translation (`W`), Rotation (`E`), and Scale (`R`) directly inside the 3D Viewport with interactive coordinate arrows.
-  - [ ] **Viewport Mouse Picking**: Click directly on 3D objects in the viewport to select them in the Hierarchy & Inspector.
-  - [ ] **Grid & World Coordinates**: Render a dynamic infinite grid floor with metric ruler lines in the editor.
-- [ ] **Phase 7: Automotive Test Playground & Obstacle Course**
+- [x] **Phase 6: Interactive 3D Viewport & Transform Gizmos (`Engine/UI` & `Sandbox`)**
+  - [x] **3D Transform Gizmo (ImGuizmo)**: Manipulate Entity Translation (`W`), Rotation (`E`), and Scale (`R`) directly inside the 3D Viewport with interactive coordinate arrows and real-time sync with Jolt Physics.
+  - [x] **Viewport Mouse Picking**: Raycast query directly on 3D physics meshes in the viewport to select them in the Hierarchy & Inspector, with background click-to-deselect.
+  - [x] **Gizmo Controls Toolbar & Snapping**: Dedicated toolbar buttons for Select (`Q`), Translate (`W`), Rotate (`E`), Scale (`R`), Local/World coordinate system toggle, and adjustable distance/angle snapping (`0.5m` / `45°`).
+  - [x] **Grid & World Coordinates**: Render dynamic infinite metric grid floor using `ImGuizmo::DrawGrid` in Edit mode.
+- [ ] **Phase 7: Automotive Test Playground & Obstacle Course *(Recommended Next)***
   - [ ] **Jump Ramps & Inclines**: Multi-height ramps to test vehicle airborne physics and suspension landing.
   - [ ] **Washboard & Bumps Track**: Rhythmic road bumps to test suspension oscillation and damping.
   - [ ] **Banked Curved Track**: Oval / circuit track with elevated cambered turns.

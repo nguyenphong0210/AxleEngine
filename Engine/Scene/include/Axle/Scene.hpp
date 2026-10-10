@@ -20,6 +20,7 @@ namespace Axle {
 
         Entity CreateEntity(const std::string& name = "Entity");
         void DestroyEntity(Entity entity);
+        Entity FindEntityByBodyID(BodyID bodyID);
 
         // Update physics synchronization and render all mesh components
         void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader);

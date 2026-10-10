@@ -8,6 +8,8 @@
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 #include <Jolt/Physics/Collision/Shape/TaperedCylinderShape.h>
 #include <Jolt/Physics/Collision/Shape/PlaneShape.h>
+#include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 
 #include <thread>
@@ -388,6 +390,20 @@ namespace Axle {
         if (listener) {
             m_PhysicsSystem.RemoveStepListener(listener);
         }
+    }
+
+    bool PhysicsScene::CastRay(const glm::vec3& origin, const glm::vec3& direction, f32 maxDistance, RayCastHit& outHit) const {
+        const glm::vec3 normDir = (glm::length(direction) > 0.0001f) ? glm::normalize(direction) : glm::vec3(0.0f, -1.0f, 0.0f);
+        JPH::RRayCast ray(ToJolt(origin), ToJolt(normDir * maxDistance));
+        JPH::RayCastResult hit;
+
+        if (m_PhysicsSystem.GetNarrowPhaseQuery().CastRay(ray, hit)) {
+            outHit.HitBodyID = hit.mBodyID;
+            outHit.Distance = maxDistance * hit.mFraction;
+            outHit.Position = origin + normDir * outHit.Distance;
+            return true;
+        }
+        return false;
     }
 
 }

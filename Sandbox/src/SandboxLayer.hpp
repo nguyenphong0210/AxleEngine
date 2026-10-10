@@ -15,6 +15,8 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
+#include <imgui.h>
+#include <ImGuizmo.h>
 #include <memory>
 
 class SandboxLayer : public Axle::Layer {
@@ -67,6 +69,14 @@ private:
     bool m_OKeyWasPressed = false;
     bool m_EscKeyWasPressed = false;
     bool m_RKeyWasPressed = false;
+
+    // 3D Transform Gizmo & Viewport Interaction (Phase 6)
+    int m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
+    bool m_GizmoModeLocal = false;
+    bool m_SnapEnabled = false;
+    float m_SnapTranslation = 0.5f;
+    float m_SnapRotation = 45.0f;
+    float m_SnapScale = 0.5f;
 
     // Vehicle and chase camera
     std::unique_ptr<Axle::Vehicle> m_Vehicle;

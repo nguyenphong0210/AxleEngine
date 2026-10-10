@@ -18,6 +18,19 @@ namespace Axle {
         m_Registry.destroy(entity);
     }
 
+    Entity Scene::FindEntityByBodyID(BodyID bodyID) {
+        if (bodyID.IsInvalid()) return {};
+
+        auto view = m_Registry.view<RigidBodyComponent>();
+        for (auto entityID : view) {
+            const auto& rb = view.get<RigidBodyComponent>(entityID);
+            if (rb.RuntimeBodyID == bodyID) {
+                return { entityID, this };
+            }
+        }
+        return {};
+    }
+
     void Scene::OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader) {
         (void)ts;
 

@@ -27,6 +27,12 @@ namespace Axle {
         glm::vec3 Gravity{ 0.0f, -9.81f, 0.0f };
     };
 
+    struct RayCastHit {
+        BodyID HitBodyID;
+        glm::vec3 Position{ 0.0f };
+        f32 Distance = 0.0f;
+    };
+
     struct BoxBodyProps {
         glm::vec3 Position{ 0.0f };
         glm::vec3 HalfExtent{ 0.5f, 0.5f, 0.5f };
@@ -130,6 +136,9 @@ namespace Axle {
         bool IsActive(BodyID bodyID) const;
         void ActivateBody(BodyID bodyID);
         void DeactivateBody(BodyID bodyID);
+
+        // Raycasting
+        bool CastRay(const glm::vec3& origin, const glm::vec3& direction, f32 maxDistance, RayCastHit& outHit) const;
 
         // Scene statistics
         u32 GetNumBodies() const;

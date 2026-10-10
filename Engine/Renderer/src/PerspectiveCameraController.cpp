@@ -22,7 +22,7 @@ namespace Axle {
             m_FirstMouseUpdate = false;
         }
 
-        const bool isInteracting = Input::IsMouseButtonPressed(MouseCode::ButtonRight) || Input::IsMouseButtonPressed(MouseCode::ButtonLeft);
+        const bool isInteracting = Input::IsMouseButtonPressed(MouseCode::ButtonRight);
         if (isInteracting) {
             if (!m_WasInteracting) {
                 m_LastMousePosition = currentMousePos;
@@ -54,27 +54,29 @@ namespace Axle {
         const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
         const glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
-        // 3. Move along view axes with optional sprint boost
-        const f32 speedMultiplier = Input::IsKeyPressed(KeyCode::LeftShift) ? 2.5f : 1.0f;
-        const f32 speed = m_TranslationSpeed * speedMultiplier * ts.GetSeconds();
+        // 3. Move along view axes with optional sprint boost (only active when holding RMB)
+        if (isInteracting) {
+            const f32 speedMultiplier = Input::IsKeyPressed(KeyCode::LeftShift) ? 2.5f : 1.0f;
+            const f32 speed = m_TranslationSpeed * speedMultiplier * ts.GetSeconds();
 
-        if (Input::IsKeyPressed(KeyCode::W)) {
-            m_CameraPosition += forward * speed;
-        }
-        if (Input::IsKeyPressed(KeyCode::S)) {
-            m_CameraPosition -= forward * speed;
-        }
-        if (Input::IsKeyPressed(KeyCode::A)) {
-            m_CameraPosition -= right * speed;
-        }
-        if (Input::IsKeyPressed(KeyCode::D)) {
-            m_CameraPosition += right * speed;
-        }
-        if (Input::IsKeyPressed(KeyCode::E)) {
-            m_CameraPosition += up * speed;
-        }
-        if (Input::IsKeyPressed(KeyCode::Q)) {
-            m_CameraPosition -= up * speed;
+            if (Input::IsKeyPressed(KeyCode::W)) {
+                m_CameraPosition += forward * speed;
+            }
+            if (Input::IsKeyPressed(KeyCode::S)) {
+                m_CameraPosition -= forward * speed;
+            }
+            if (Input::IsKeyPressed(KeyCode::A)) {
+                m_CameraPosition -= right * speed;
+            }
+            if (Input::IsKeyPressed(KeyCode::D)) {
+                m_CameraPosition += right * speed;
+            }
+            if (Input::IsKeyPressed(KeyCode::E)) {
+                m_CameraPosition += up * speed;
+            }
+            if (Input::IsKeyPressed(KeyCode::Q)) {
+                m_CameraPosition -= up * speed;
+            }
         }
 
         // Update camera position and view matrix

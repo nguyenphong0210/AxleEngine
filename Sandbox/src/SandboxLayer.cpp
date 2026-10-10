@@ -420,13 +420,31 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_OKeyWasPressed = false;
     }
 
+    const bool isHoldingRMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight);
+    const bool isCtrlDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftControl) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightControl);
+
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::R)) {
         if (!m_RKeyWasPressed) {
-            ResetSimulation();
+            if (isCtrlDown || m_SceneState == SceneState::Play) {
+                ResetSimulation();
+            } else if (!isHoldingRMB && !ImGui::GetIO().WantTextInput) {
+                m_GizmoType = ImGuizmo::OPERATION::SCALE;
+            }
             m_RKeyWasPressed = true;
         }
     } else {
         m_RKeyWasPressed = false;
+    }
+
+    // Gizmo Hotkeys (Q: Select, W: Move, E: Rotate) when not holding RMB, not typing in UI, and not playing
+    if (!isHoldingRMB && !ImGui::GetIO().WantTextInput && m_SceneState != SceneState::Play) {
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Q)) {
+            m_GizmoType = -1;
+        } else if (Axle::Input::IsKeyPressed(Axle::KeyCode::W)) {
+            m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
+        } else if (Axle::Input::IsKeyPressed(Axle::KeyCode::E)) {
+            m_GizmoType = ImGuizmo::OPERATION::ROTATE;
+        }
     }
 
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::C)) {
@@ -534,7 +552,10 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     } else {
         // Editor Free-Fly Camera (Active in Edit mode, Pause mode, or Free-Fly mode)
         if ((m_ViewportHovered || m_ViewportFocused) && !ImGui::GetIO().WantTextInput) {
-            m_CameraController->OnUpdate(ts);
+            const bool isManipulatingGizmo = (m_SceneState == SceneState::Edit) && ImGuizmo::IsUsing();
+            if (!isManipulatingGizmo) {
+                m_CameraController->OnUpdate(ts);
+            }
         }
     }
 
@@ -600,6 +621,58 @@ void SandboxLayer::RenderToolbar() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
 
     if (ImGui::Begin("##FixedTopToolbar", nullptr, toolbarFlags)) {
+        auto DrawToolButton = [](const char* label, bool active, ImVec2 size) -> bool {
+            if (active) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.85f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.55f, 0.95f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.35f, 0.75f, 1.0f));
+            }
+            bool clicked = ImGui::Button(label, size);
+            if (active) {
+                ImGui::PopStyleColor(3);
+            }
+            return clicked;
+        };
+
+        // --- GIZMO TRANSFORMATION TOOLS ---
+        if (DrawToolButton("Select (Q)", m_GizmoType == -1, ImVec2(76.0f, 26.0f))) {
+            m_GizmoType = -1;
+        }
+        ImGui::SameLine();
+        if (DrawToolButton("Move (W)", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE, ImVec2(70.0f, 26.0f))) {
+            m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
+        }
+        ImGui::SameLine();
+        if (DrawToolButton("Rotate (E)", m_GizmoType == ImGuizmo::OPERATION::ROTATE, ImVec2(76.0f, 26.0f))) {
+            m_GizmoType = ImGuizmo::OPERATION::ROTATE;
+        }
+        ImGui::SameLine();
+        if (DrawToolButton("Scale (R)", m_GizmoType == ImGuizmo::OPERATION::SCALE, ImVec2(70.0f, 26.0f))) {
+            m_GizmoType = ImGuizmo::OPERATION::SCALE;
+        }
+        ImGui::SameLine();
+        const char* modeLabel = m_GizmoModeLocal ? "Coord: Local" : "Coord: World";
+        if (ImGui::Button(modeLabel, ImVec2(96.0f, 26.0f))) {
+            m_GizmoModeLocal = !m_GizmoModeLocal;
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Snap", &m_SnapEnabled);
+        if (m_SnapEnabled) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(65.0f);
+            if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) {
+                ImGui::DragFloat("##SnapRot", &m_SnapRotation, 1.0f, 1.0f, 90.0f, "%.0f deg");
+            } else if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
+                ImGui::DragFloat("##SnapScale", &m_SnapScale, 0.05f, 0.05f, 5.0f, "%.2f");
+            } else {
+                ImGui::DragFloat("##SnapTrans", &m_SnapTranslation, 0.05f, 0.05f, 5.0f, "%.2f m");
+            }
+        }
+
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
+        ImGui::SameLine();
+
         // --- 1. PLAY BUTTON ---
         if (m_SceneState == SceneState::Play) {
             ImGui::BeginDisabled(true);
@@ -675,7 +748,7 @@ void SandboxLayer::RenderToolbar() {
 
         // --- 5. RESET SCENE BUTTON ---
         ImGui::SameLine();
-        if (ImGui::Button("Reset (R)", ImVec2(85.0f, 26.0f))) {
+        if (ImGui::Button("Reset (Ctrl+R)", ImVec2(98.0f, 26.0f))) {
             ResetSimulation();
         }
 
@@ -704,11 +777,11 @@ void SandboxLayer::RenderToolbar() {
 
         ImGui::SameLine();
         if (m_SceneState == SceneState::Edit) {
-            ImGui::TextColored(ImVec4(0.35f, 0.70f, 1.0f, 1.0f), "EDIT MODE: Hold RMB + WASD to fly camera (Shift: Boost, Q/E: Elevate)");
+            ImGui::TextColored(ImVec4(0.35f, 0.70f, 1.0f, 1.0f), "EDIT MODE: Q:Select W:Move E:Rotate R:Scale | Click to select | RMB+WASD Fly");
         } else if (m_SceneState == SceneState::Play) {
             ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.45f, 1.0f), "PLAYING: Drive with WASD/Arrows (Space: Handbrake)");
         } else {
-            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "PAUSED: Physics frozen. Hold RMB + WASD to inspect scene");
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "PAUSED: Physics frozen. Hold RMB+WASD or manipulate entities");
         }
     }
     ImGui::End();
@@ -716,10 +789,12 @@ void SandboxLayer::RenderToolbar() {
 }
 
 void SandboxLayer::OnImGuiRender() {
+    ImGuizmo::BeginFrame();
+
     // 1. Global Main Menu Bar (At the absolute top of the application window)
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Reset Scene", "R")) {
+            if (ImGui::MenuItem("Reset Scene", "Ctrl+R")) {
                 ResetSimulation();
             }
             ImGui::Separator();
@@ -742,8 +817,30 @@ void SandboxLayer::OnImGuiRender() {
                 m_StepSingleFrame = true;
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Reset Scene", "R")) {
+            if (ImGui::MenuItem("Reset Scene", "Ctrl+R")) {
                 ResetSimulation();
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Gizmo")) {
+            if (ImGui::MenuItem("Select Tool", "Q", m_GizmoType == -1)) {
+                m_GizmoType = -1;
+            }
+            if (ImGui::MenuItem("Translate", "W", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE)) {
+                m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
+            }
+            if (ImGui::MenuItem("Rotate", "E", m_GizmoType == ImGuizmo::OPERATION::ROTATE)) {
+                m_GizmoType = ImGuizmo::OPERATION::ROTATE;
+            }
+            if (ImGui::MenuItem("Scale", "R", m_GizmoType == ImGuizmo::OPERATION::SCALE)) {
+                m_GizmoType = ImGuizmo::OPERATION::SCALE;
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Local Coordinates", nullptr, m_GizmoModeLocal)) {
+                m_GizmoModeLocal = !m_GizmoModeLocal;
+            }
+            if (ImGui::MenuItem("Grid Snapping", nullptr, m_SnapEnabled)) {
+                m_SnapEnabled = !m_SnapEnabled;
             }
             ImGui::EndMenu();
         }
@@ -849,6 +946,121 @@ void SandboxLayer::OnImGuiRender() {
                      viewportSize, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
     }
 
+    ImVec2 viewportMin = ImGui::GetItemRectMin();
+    ImVec2 viewportMax = ImGui::GetItemRectMax();
+    ImVec2 viewportBounds = ImGui::GetItemRectSize();
+
+    // Configure ImGuizmo rendering bounds
+    ImGuizmo::SetDrawlist();
+    ImGuizmo::SetRect(viewportMin.x, viewportMin.y, viewportBounds.x, viewportBounds.y);
+
+    const glm::mat4& cameraView = m_CameraController->GetCamera().GetViewMatrix();
+    const glm::mat4& cameraProj = m_CameraController->GetCamera().GetProjectionMatrix();
+
+    // 1. Draw Infinite / Metric Editor Grid Floor in Edit Mode
+    if (m_SceneState == SceneState::Edit) {
+        glm::mat4 gridMatrix = glm::mat4(1.0f);
+        ImGuizmo::DrawGrid(glm::value_ptr(cameraView), glm::value_ptr(cameraProj), glm::value_ptr(gridMatrix), 100.0f);
+    }
+
+    // 2. 3D Transform Gizmo Manipulation for Selected Entity
+    auto selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+    if (selectedEntity && selectedEntity.HasComponent<Axle::TransformComponent>() && m_GizmoType != -1) {
+        auto& tc = selectedEntity.GetComponent<Axle::TransformComponent>();
+        glm::mat4 transform = tc.GetTransform();
+
+        ImGuizmo::MODE mode = m_GizmoModeLocal ? ImGuizmo::MODE::LOCAL : ImGuizmo::MODE::WORLD;
+        if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
+            mode = ImGuizmo::MODE::LOCAL;
+        }
+
+        float snapValues[3] = { 0.0f, 0.0f, 0.0f };
+        if (m_SnapEnabled) {
+            if (m_GizmoType == ImGuizmo::OPERATION::TRANSLATE) {
+                snapValues[0] = snapValues[1] = snapValues[2] = m_SnapTranslation;
+            } else if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) {
+                snapValues[0] = snapValues[1] = snapValues[2] = m_SnapRotation;
+            } else if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
+                snapValues[0] = snapValues[1] = snapValues[2] = m_SnapScale;
+            }
+        }
+
+        if (ImGuizmo::Manipulate(
+                glm::value_ptr(cameraView),
+                glm::value_ptr(cameraProj),
+                static_cast<ImGuizmo::OPERATION>(m_GizmoType),
+                mode,
+                glm::value_ptr(transform),
+                nullptr,
+                m_SnapEnabled ? snapValues : nullptr
+            )) {
+            float translation[3], rotation[3], scale[3];
+            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform), translation, rotation, scale);
+
+            tc.Translation = glm::vec3(translation[0], translation[1], translation[2]);
+            tc.Rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
+            tc.Scale = glm::vec3(scale[0], scale[1], scale[2]);
+
+            // Real-time synchronization with Jolt Physics bodies
+            if (selectedEntity == m_ChassisEntity && m_Vehicle && m_SceneState == SceneState::Edit) {
+                m_Vehicle->Reset(tc.Translation, tc.Rotation);
+                for (Axle::u32 i = 0; i < 4; ++i) {
+                    const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
+                    auto& wtc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
+                    wtc.Translation = glm::vec3(wheelMat[3]);
+                    wtc.Rotation = glm::quat_cast(wheelMat);
+                }
+            } else if (selectedEntity.HasComponent<Axle::RigidBodyComponent>() && m_PhysicsScene) {
+                auto& rb = selectedEntity.GetComponent<Axle::RigidBodyComponent>();
+                if (!rb.RuntimeBodyID.IsInvalid()) {
+                    m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, tc.Translation, tc.Rotation, true);
+                    m_PhysicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
+                    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(rb.RuntimeBodyID, JPH::Vec3::sZero());
+                }
+            }
+        }
+    }
+
+    // 3. Viewport Mouse Picking (Click on 3D meshes to select entity)
+    if (m_ViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        if (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() && !Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)) {
+            ImVec2 mousePos = ImGui::GetMousePos();
+            float mouseX = mousePos.x - viewportMin.x;
+            float mouseY = mousePos.y - viewportMin.y;
+
+            if (mouseX >= 0.0f && mouseX < viewportBounds.x && mouseY >= 0.0f && mouseY < viewportBounds.y) {
+                float ndcX = (2.0f * (mouseX / viewportBounds.x)) - 1.0f;
+                float ndcY = 1.0f - (2.0f * (mouseY / viewportBounds.y));
+
+                glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
+                glm::vec4 nearPointNDC(ndcX, ndcY, -1.0f, 1.0f);
+                glm::vec4 farPointNDC(ndcX, ndcY, 1.0f, 1.0f);
+
+                glm::vec4 nearWorld = invVP * nearPointNDC;
+                if (std::abs(nearWorld.w) > 1e-6f) nearWorld /= nearWorld.w;
+
+                glm::vec4 farWorld = invVP * farPointNDC;
+                if (std::abs(farWorld.w) > 1e-6f) farWorld /= farWorld.w;
+
+                glm::vec3 rayOrigin = glm::vec3(nearWorld);
+                glm::vec3 rayDir = glm::normalize(glm::vec3(farWorld - nearWorld));
+
+                Axle::RayCastHit hit;
+                if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 1000.0f, hit)) {
+                    Axle::Entity hitEntity = m_Scene->FindEntityByBodyID(hit.HitBodyID);
+                    if (hitEntity) {
+                        m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
+                    } else {
+                        m_SceneHierarchyPanel.SetSelectedEntity({});
+                    }
+                } else {
+                    // Clicked empty space in viewport -> deselect
+                    m_SceneHierarchyPanel.SetSelectedEntity({});
+                }
+            }
+        }
+    }
+
     // Viewport Overlay Badges
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     ImVec2 winPos = ImGui::GetWindowPos();
@@ -873,8 +1085,8 @@ void SandboxLayer::OnImGuiRender() {
         drawList->AddText(ImVec2(speedPos.x + 8.0f, speedPos.y + 4.0f), IM_COL32(0, 230, 180, 255), speedStr);
     } else if (m_SceneState == SceneState::Edit) {
         ImVec2 hintPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
-        drawList->AddRectFilled(hintPos, ImVec2(hintPos.x + 380.0f, hintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
-        drawList->AddText(ImVec2(hintPos.x + 8.0f, hintPos.y + 4.0f), IM_COL32(200, 210, 225, 255), "RMB + WASD to Fly Camera | Shift: Boost | Q/E: Elevate");
+        drawList->AddRectFilled(hintPos, ImVec2(hintPos.x + 440.0f, hintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
+        drawList->AddText(ImVec2(hintPos.x + 8.0f, hintPos.y + 4.0f), IM_COL32(200, 210, 225, 255), "Gizmo: W/E/R | Q: Select | Click Mesh | RMB+WASD Fly");
     }
 
     ImGui::End();

@@ -78,19 +78,24 @@ Level 0:  [ Engine/Core ]
   - [ ] **Washboard & Bumps Track**: Rhythmic road bumps to test suspension oscillation and damping.
   - [ ] **Banked Curved Track**: Oval / circuit track with elevated cambered turns.
   - [ ] **Dynamic Destruction / Crash Barriers**: Stack of boxes, wooden crates, and tire barriers to test high-speed impacts.
-- [ ] **Phase 8: 3D Asset Loading (`Engine/Asset`)**
+- [ ] **Phase 8: C++ Native Scripting & Vehicle Component (`Engine/Scene`)**
+  - [ ] **VehicleComponent in ECS**: Encapsulate vehicle configuration and physics handle as an entity component.
+  - [ ] **`ScriptableEntity` Lifecycle**: Base C++ class exposing `OnCreate()`, `OnUpdate(Timestep)`, and `OnDestroy()`.
+  - [ ] **`NativeScriptComponent`**: Template-based script binding to entities with zero runtime overhead.
+  - [ ] **Modular Gameplay Scripts**: Decouple vehicle input (`CarPlayerScript`), chase camera (`FollowCameraScript`), and moving obstacle behaviors into clean, reusable C++ scripts.
+- [ ] **Phase 9: 3D Asset Loading (`Engine/Asset`)**
   - [ ] Integrate mesh loading (fastgltf / tinyobjloader) for detailed car body and wheel models.
   - [ ] Texture mapping (diffuse, normal maps) via `stb_image`.
   - [ ] Replace procedural shapes on car with realistic vehicle 3D model.
-- [ ] **Phase 9: Scene Serialization & Project Management**
+- [ ] **Phase 10: Scene Serialization & Project Management**
   - [ ] Scene save/load system via YAML (`.axle` scene files).
   - [ ] Save track layouts, obstacle arrangements, and vehicle tuning presets.
   - [ ] Shortcuts `Ctrl+S` (Save Scene), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene).
-- [ ] **Phase 10: Lighting, Shadows & Environmental Realism**
+- [ ] **Phase 11: Lighting, Shadows & Environmental Realism**
   - [ ] Directional Shadow Mapping (Real-time dynamic shadows cast by vehicle and obstacles).
   - [ ] PBR or Blinn-Phong material shading with specular highlights on car paint.
   - [ ] Atmospheric Skybox (Cubemap or procedural gradient sky).
-- [ ] **Phase 11: Audio System (`Engine/Audio`)**
+- [ ] **Phase 12: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
 

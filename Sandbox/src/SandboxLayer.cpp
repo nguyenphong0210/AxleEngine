@@ -29,7 +29,7 @@ void SandboxLayer::OnAttach() {
     // 2. Jolt Physics Scene
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
 
-    // Sàn tĩnh 100m x 1m x 100m tại Y = -0.5m
+    // Static floor: 100m x 1m x 100m at Y = -0.5m (top surface at Y = 0.0m)
     m_FloorBodyID = m_PhysicsScene->CreateBox(
         glm::vec3(0.0f, -0.5f, 0.0f),
         glm::vec3(50.0f, 0.5f, 50.0f),
@@ -38,7 +38,7 @@ void SandboxLayer::OnAttach() {
         0.2f   // Restitution
     );
 
-    // Khối hộp rơi tự do 1m x 1m x 1m tại Y = 10.0m
+    // Dynamic box: 1m x 1m x 1m starting at elevation Y = 10.0m
     m_BoxBodyID = m_PhysicsScene->CreateBox(
         glm::vec3(0.0f, 10.0f, 0.0f),
         glm::vec3(0.5f, 0.5f, 0.5f),
@@ -47,6 +47,7 @@ void SandboxLayer::OnAttach() {
         0.4f   // Restitution
     );
 
+    // Optimize broadphase after adding static environment
     m_PhysicsScene->OptimizeBroadPhase();
 
     // 3. Shaders
@@ -132,7 +133,7 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         return;
     }
 
-    // Nhấn phím 'R' để thả rơi lại khối hộp
+    // Press 'R' to reset and drop the box again from elevation
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::R)) {
         m_PhysicsScene->SetBodyPositionAndRotation(m_BoxBodyID, glm::vec3(0.0f, 10.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
         m_PhysicsScene->SetLinearVelocity(m_BoxBodyID, glm::vec3(0.0f));
@@ -148,13 +149,13 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     m_Shader->Bind();
     m_Shader->SetMat4("u_ViewProjection", m_CameraController->GetCamera().GetViewProjectionMatrix());
 
-    // 1. Render Sàn tĩnh
+    // 1. Render static floor
     const glm::mat4 floorTransform = m_PhysicsScene->GetBodyTransform(m_FloorBodyID) * glm::scale(glm::mat4(1.0f), glm::vec3(100.0f, 1.0f, 100.0f));
     m_Shader->SetMat4("u_Transform", floorTransform);
     m_Shader->SetFloat4("u_ColorTint", glm::vec4(0.25f, 0.28f, 0.32f, 1.0f));
     Axle::RenderCommand::DrawIndexed(m_VertexArray);
 
-    // 2. Render Khối hộp rơi tự do
+    // 2. Render dynamic falling box
     const glm::mat4 boxTransform = m_PhysicsScene->GetBodyTransform(m_BoxBodyID);
     m_Shader->SetMat4("u_Transform", boxTransform);
     m_Shader->SetFloat4("u_ColorTint", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
@@ -162,7 +163,7 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
 }
 
 void SandboxLayer::OnImGuiRender() {
-    // Thu thập telemetry
+    // Gather runtime telemetry
     Axle::TelemetryData telemetry{
         .DeltaTime = m_LastDeltaTime,
         .FPS = m_LastDeltaTime > 0.0f ? 1.0f / m_LastDeltaTime : 0.0f,

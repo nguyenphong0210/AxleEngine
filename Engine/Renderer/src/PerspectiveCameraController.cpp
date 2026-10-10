@@ -13,7 +13,7 @@ namespace Axle {
     }
 
     void PerspectiveCameraController::OnUpdate(Timestep ts) {
-        // 1. Mouse Look (Chuyển std::pair<Axle::f32, Axle::f32> sang glm::vec2)
+        // 1. Mouse Look (Convert mouse position pair to glm::vec2)
         const auto [mouseX, mouseY] = Input::GetMousePosition();
         const glm::vec2 currentMousePos{ mouseX, mouseY };
 
@@ -25,16 +25,16 @@ namespace Axle {
         if (Input::IsMouseButtonPressed(MouseCode::ButtonRight)) {
             const glm::vec2 delta = currentMousePos - m_LastMousePosition;
 
-            m_CameraRotation.y -= delta.x * m_RotationSpeed; // Yaw (Xoay quanh trục Y thế giới)
-            m_CameraRotation.x -= delta.y * m_RotationSpeed; // Pitch (Xoay quanh trục X cục bộ)
+            m_CameraRotation.y -= delta.x * m_RotationSpeed; // Yaw (Rotate around world Y-axis)
+            m_CameraRotation.x -= delta.y * m_RotationSpeed; // Pitch (Rotate around local X-axis)
 
-            // Khóa góc pitch tránh lật ngược camera
+            // Clamp pitch angle to avoid camera flipping
             m_CameraRotation.x = std::clamp(m_CameraRotation.x, -89.0f, 89.0f);
         }
 
         m_LastMousePosition = currentMousePos;
 
-        // 2. Tính toán vector hướng nhìn từ góc Euler (Pitch, Yaw)
+        // 2. Calculate forward direction vector from Euler angles (Pitch, Yaw)
         const f32 yawRad = glm::radians(m_CameraRotation.y);
         const f32 pitchRad = glm::radians(m_CameraRotation.x);
 
@@ -47,7 +47,7 @@ namespace Axle {
         const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
         const glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
-        // 3. Di chuyển phím theo hướng nhìn
+        // 3. Move along view axes
         const f32 speed = m_TranslationSpeed * ts.GetSeconds();
 
         if (Input::IsKeyPressed(KeyCode::W)) {
@@ -69,7 +69,7 @@ namespace Axle {
             m_CameraPosition -= up * speed;
         }
 
-        // Cập nhật ma trận camera
+        // Update camera position and view matrix
         m_Camera.SetPosition(m_CameraPosition);
         m_Camera.SetRotation(m_CameraRotation);
     }

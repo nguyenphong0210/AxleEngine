@@ -4,6 +4,9 @@
 namespace Axle {
 
     void DebugPanel::OnImGuiRender(const TelemetryData& telemetry) {
+        ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(340.0f, 320.0f), ImGuiCond_FirstUseEver);
+
         ImGui::Begin("Axle Engine - Telemetry");
 
         ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Performance");

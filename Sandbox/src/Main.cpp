@@ -5,12 +5,14 @@
 #include <Axle/Buffer.hpp>
 #include <Axle/VertexArray.hpp>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <memory>
 #include <iostream>
 
 int main() {
     Axle::WindowProps props;
-    props.Title = "Axle Engine - Colored Triangle";
+    props.Title = "Axle Engine - Uniforms & Matrix Transform";
     props.Width = 1280;
     props.Height = 720;
     props.VSync = true;
@@ -26,17 +28,19 @@ int main() {
         Axle::RenderCommand::SetViewport(0, 0, e.Width, e.Height);
     });
 
-    // 1. Shaders
+    // 1. Shaders supporting MVP transform matrices
     const std::string vertexSrc = R"(
         #version 450 core
         layout(location = 0) in vec3 a_Position;
         layout(location = 1) in vec4 a_Color;
 
+        uniform mat4 u_Transform;
+
         out vec4 v_Color;
 
         void main() {
             v_Color = a_Color;
-            gl_Position = vec4(a_Position, 1.0);
+            gl_Position = u_Transform * vec4(a_Position, 1.0);
         }
     )";
 
@@ -53,16 +57,15 @@ int main() {
 
     auto shader = std::make_unique<Axle::Shader>(vertexSrc, fragmentSrc);
 
-    // 2. Geometry data (x, y, z, r, g, b, a)
+    // 2. Triangle Geometry
     float vertices[3 * 7] = {
-        -0.5f, -0.5f, 0.0f,   1.0f, 0.2f, 0.2f, 1.0f,  // Bottom left (Red)
-         0.5f, -0.5f, 0.0f,   0.2f, 1.0f, 0.2f, 1.0f,  // Bottom right (Green)
-         0.0f,  0.5f, 0.0f,   0.2f, 0.4f, 1.0f, 1.0f   // Top center (Blue)
+        -0.5f, -0.5f, 0.0f,   1.0f, 0.2f, 0.2f, 1.0f,
+         0.5f, -0.5f, 0.0f,   0.2f, 1.0f, 0.2f, 1.0f,
+         0.0f,  0.5f, 0.0f,   0.2f, 0.4f, 1.0f, 1.0f
     };
 
     auto vertexArray = std::make_shared<Axle::VertexArray>();
-
-    auto vertexBuffer = std::make_shared<Axle::VertexBuffer>(vertices, sizeof(vertices));
+    auto vertexBuffer = std::make_shared<Axle::VertexBuffer>(vertices, static_cast<Axle::u32>(sizeof(vertices)));
     vertexBuffer->SetLayout({
         { Axle::ShaderDataType::Float3, "a_Position" },
         { Axle::ShaderDataType::Float4, "a_Color" }
@@ -75,6 +78,8 @@ int main() {
 
     Axle::RenderCommand::SetClearColor({ 0.12f, 0.14f, 0.18f, 1.0f });
 
+    float rotationAngle = 0.0f;
+
     while (!window.ShouldClose()) {
         window.PollEvents();
 
@@ -84,8 +89,15 @@ int main() {
 
         Axle::RenderCommand::Clear();
 
-        // Bind shader and submit draw command
         shader->Bind();
+
+        // Increment rotation over time
+        rotationAngle += 0.02f;
+        glm::mat4 transform = glm::rotate(glm::mat4(1.0f), rotationAngle, glm::vec3(0.0f, 0.0f, 1.0f));
+
+        // Upload matrix uniform to GPU
+        shader->SetMat4("u_Transform", transform);
+
         Axle::RenderCommand::DrawIndexed(vertexArray);
 
         window.SwapBuffers();

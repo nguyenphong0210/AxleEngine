@@ -1,5 +1,6 @@
 #include <Axle/Shader.hpp>
 #include <glad/glad.h>
+#include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <vector>
 
@@ -20,7 +21,6 @@ namespace Axle {
         glAttachShader(m_RendererID, fragmentShader);
         glLinkProgram(m_RendererID);
 
-        // Check program linking status
         GLint isLinked = 0;
         glGetProgramiv(m_RendererID, GL_LINK_STATUS, &isLinked);
         if (isLinked == GL_FALSE) {
@@ -36,7 +36,6 @@ namespace Axle {
             m_RendererID = 0;
         }
 
-        // Always detach and delete intermediate shaders after linking
         glDetachShader(m_RendererID, vertexShader);
         glDetachShader(m_RendererID, fragmentShader);
         glDeleteShader(vertexShader);
@@ -49,7 +48,8 @@ namespace Axle {
         }
     }
 
-    Shader::Shader(Shader&& other) noexcept : m_RendererID(other.m_RendererID) {
+    Shader::Shader(Shader&& other) noexcept 
+        : m_RendererID(other.m_RendererID), m_UniformLocationCache(std::move(other.m_UniformLocationCache)) {
         other.m_RendererID = 0;
     }
 
@@ -59,6 +59,7 @@ namespace Axle {
                 glDeleteProgram(m_RendererID);
             }
             m_RendererID = other.m_RendererID;
+            m_UniformLocationCache = std::move(other.m_UniformLocationCache);
             other.m_RendererID = 0;
         }
         return *this;
@@ -70,6 +71,48 @@ namespace Axle {
 
     void Shader::Unbind() const {
         glUseProgram(0);
+    }
+
+    void Shader::SetInt(const std::string& name, i32 value) {
+        glUniform1i(GetUniformLocation(name), value);
+    }
+
+    void Shader::SetFloat(const std::string& name, f32 value) {
+        glUniform1f(GetUniformLocation(name), value);
+    }
+
+    void Shader::SetFloat2(const std::string& name, const glm::vec2& value) {
+        glUniform2f(GetUniformLocation(name), value.x, value.y);
+    }
+
+    void Shader::SetFloat3(const std::string& name, const glm::vec3& value) {
+        glUniform3f(GetUniformLocation(name), value.x, value.y, value.z);
+    }
+
+    void Shader::SetFloat4(const std::string& name, const glm::vec4& value) {
+        glUniform4f(GetUniformLocation(name), value.x, value.y, value.z, value.w);
+    }
+
+    void Shader::SetMat3(const std::string& name, const glm::mat3& matrix) {
+        glUniformMatrix3fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(matrix));
+    }
+
+    void Shader::SetMat4(const std::string& name, const glm::mat4& matrix) {
+        glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(matrix));
+    }
+
+    i32 Shader::GetUniformLocation(const std::string& name) {
+        if (m_UniformLocationCache.contains(name)) {
+            return m_UniformLocationCache[name];
+        }
+
+        const i32 location = glGetUniformLocation(m_RendererID, name.c_str());
+        if (location == -1) {
+            std::cerr << "[Shader Warning] Uniform '" << name << "' does not exist or was stripped out!\n";
+        }
+
+        m_UniformLocationCache[name] = location;
+        return location;
     }
 
     u32 Shader::CompileShader(u32 type, const std::string& source) {

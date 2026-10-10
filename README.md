@@ -78,12 +78,13 @@ Level 0:  [ Engine/Core ]
   - [x] **Washboard & Bumps Track**: 10 transverse rhythmic rumble bumps along test lane causing rapid suspension oscillation, spring frequency, and damper rebound.
   - [x] **Banked Curved Track**: Multi-segment high-speed camber turn (22° inward banking) testing centrifugal road holding and lateral tire slip.
   - [x] **Dynamic Destruction / Crash Barriers**: Destructible 10-crate wooden pyramid, 6 slalom agility cones, and 6 dynamic tire impact barriers with one-click full scene reset (`R`).
-- [ ] **Phase 8: C++ Native Scripting & Vehicle Component (`Engine/Scene`) *(Recommended Next)***
-  - [ ] **VehicleComponent in ECS**: Encapsulate vehicle configuration and physics handle as an entity component.
-  - [ ] **`ScriptableEntity` Lifecycle**: Base C++ class exposing `OnCreate()`, `OnUpdate(Timestep)`, and `OnDestroy()`.
-  - [ ] **`NativeScriptComponent`**: Template-based script binding to entities with zero runtime overhead.
-  - [ ] **Modular Gameplay Scripts**: Decouple vehicle input (`CarPlayerScript`), chase camera (`FollowCameraScript`), and moving obstacle behaviors into clean, reusable C++ scripts.
-- [ ] **Phase 9: 3D Asset Loading (`Engine/Asset`)**
+- [x] **Phase 8: C++ Native Scripting & Vehicle Component (`Engine/Scene`)**
+  - [x] **VehicleComponent in ECS**: Encapsulated vehicle configuration and physics handle as an entity component.
+  - [x] **`ScriptableEntity` Lifecycle**: Base C++ class exposing `OnCreate()`, `OnUpdate(Timestep)`, and `OnDestroy()`.
+  - [x] **`NativeScriptComponent`**: Template-based script binding to entities with zero runtime overhead.
+  - [x] **Modular Gameplay Scripts**: Decoupled vehicle input (`CarPlayerScript`) into clean, reusable C++ scripts.
+  - [x] **Editor Component Management**: Interactive `+ Add Component` popup in Properties panel, component removal options, and File menu Save shortcuts (`Ctrl+S`, `Ctrl+O`, `Ctrl+N`).
+- [ ] **Phase 9: 3D Asset Loading (`Engine/Asset`) *(Recommended Next)***
   - [ ] Integrate mesh loading (fastgltf / tinyobjloader) for detailed car body and wheel models.
   - [ ] Texture mapping (diffuse, normal maps) via `stb_image`.
   - [ ] Replace procedural shapes on car with realistic vehicle 3D model.

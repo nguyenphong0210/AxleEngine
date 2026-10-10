@@ -52,6 +52,7 @@ private:
     Axle::PhysicsDrawSettings m_PhysicsDrawSettings;
     bool m_ShowPhysicsDebug = false;
     bool m_F1KeyWasPressed = false;
+    bool m_F11KeyWasPressed = false;
 
     // Viewport & Offscreen Framebuffer
     std::shared_ptr<Axle::Framebuffer> m_Framebuffer;
@@ -70,6 +71,8 @@ private:
     bool m_OKeyWasPressed = false;
     bool m_EscKeyWasPressed = false;
     bool m_RKeyWasPressed = false;
+    bool m_SKeyWasPressed = false;
+    bool m_NKeyWasPressed = false;
 
     // 3D Transform Gizmo & Viewport Interaction (Phase 6)
     int m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;

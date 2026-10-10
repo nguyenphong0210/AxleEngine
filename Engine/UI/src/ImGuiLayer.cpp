@@ -169,10 +169,6 @@ namespace Axle {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
-        // Create a fullscreen dockspace with transparent central node for background 3D scene rendering
-        const ImGuiDockNodeFlags dockspaceFlags = ImGuiDockNodeFlags_PassthruCentralNode;
-        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), dockspaceFlags);
     }
 
     void ImGuiLayer::End() {

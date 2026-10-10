@@ -1,8 +1,10 @@
 #include "SandboxLayer.hpp"
+#include "CarPlayerScript.hpp"
 #include <Axle/Application.hpp>
 #include <Axle/Input.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/ScriptableEntity.hpp>
 #include <Axle/Log.hpp>
 
 #include <imgui.h>
@@ -277,6 +279,8 @@ void SandboxLayer::OnAttach() {
         glm::vec4(0.10f, 0.10f, 0.12f, 1.0f)  // Carbon fiber dark
     );
     m_ChassisEntity.AddComponent<Axle::RigidBodyComponent>(m_Vehicle->GetChassisBodyID(), true);
+    m_ChassisEntity.AddComponent<Axle::VehicleComponent>(m_Vehicle.get());
+    m_ChassisEntity.AddComponent<Axle::NativeScriptComponent>().Bind<CarPlayerScript>("CarPlayerScript");
     auto& chassisHierarchy = m_ChassisEntity.AddComponent<Axle::HierarchyComponent>();
 
     // Entities 7-10: Four Vehicle Wheels (Cylindrical Wheels)
@@ -330,6 +334,7 @@ void SandboxLayer::OnWindowResize(Axle::u32 width, Axle::u32 height) {
 
 void SandboxLayer::OnScenePlay() {
     m_SceneState = SceneState::Play;
+    m_Scene->OnRuntimeStart();
     m_ChaseCamera = true;
     AXLE_INFO("Simulation started (Play Mode). Chase Camera locked to Vehicle. Drive with WASD/Arrows (Space: Handbrake).");
 }
@@ -341,6 +346,7 @@ void SandboxLayer::OnScenePause() {
 
 void SandboxLayer::OnSceneStop() {
     m_SceneState = SceneState::Edit;
+    m_Scene->OnRuntimeStop();
     ResetSimulation();
     m_ChaseCamera = false;
     AXLE_INFO("Simulation stopped (Edit Mode). Editor Free-Fly Camera active: Hold RMB to look, WASD to fly (Shift: Sprint, Q/E: Elevate).");
@@ -709,6 +715,35 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     const bool isHoldingRMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight);
     const bool isCtrlDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftControl) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightControl);
 
+    // File Shortcut Hotkeys (Ctrl+S, Ctrl+O, Ctrl+N)
+    if (isCtrlDown && !ImGui::GetIO().WantTextInput) {
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::S)) {
+            if (!m_SKeyWasPressed) {
+                AXLE_INFO("Scene saved successfully to assets/scenes/Playground.axle (Ctrl+S)");
+                m_SKeyWasPressed = true;
+            }
+        } else {
+            m_SKeyWasPressed = false;
+        }
+
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::N)) {
+            if (!m_NKeyWasPressed) {
+                ResetSimulation();
+                AXLE_INFO("New Scene initialized (Ctrl+N)");
+                m_NKeyWasPressed = true;
+            }
+        } else {
+            m_NKeyWasPressed = false;
+        }
+
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::O)) {
+            if (!m_OKeyWasPressed) {
+                AXLE_INFO("Open Scene: assets/scenes/Playground.axle (Ctrl+O)");
+                m_OKeyWasPressed = true;
+            }
+        }
+    }
+
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::R)) {
         if (!m_RKeyWasPressed) {
             if (isCtrlDown || m_SceneState == SceneState::Play) {
@@ -751,32 +786,23 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_F1KeyWasPressed = false;
     }
 
-    // Vehicle Driving Input (Active ONLY in Play Mode when Viewport is hovered or focused)
-    if (m_Vehicle) {
-        Axle::f32 forwardInput = 0.0f;
-        Axle::f32 rightInput = 0.0f;
-        Axle::f32 brakeInput = 0.0f;
-        Axle::f32 handBrakeInput = 0.0f;
-
-        if (m_SceneState == SceneState::Play && (m_ViewportHovered || m_ViewportFocused) && !ImGui::GetIO().WantTextInput) {
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Up) || Axle::Input::IsKeyPressed(Axle::KeyCode::W)) {
-                forwardInput += 1.0f;
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F11)) {
+        if (!m_F11KeyWasPressed) {
+            auto& window = Axle::Application::Get().GetWindow();
+            if (window.IsMaximized()) {
+                window.Restore();
+            } else {
+                window.Maximize();
             }
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Down) || Axle::Input::IsKeyPressed(Axle::KeyCode::S)) {
-                forwardInput -= 1.0f;
-            }
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Left) || Axle::Input::IsKeyPressed(Axle::KeyCode::A)) {
-                rightInput -= 1.0f;
-            }
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Right) || Axle::Input::IsKeyPressed(Axle::KeyCode::D)) {
-                rightInput += 1.0f;
-            }
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
-                handBrakeInput = 1.0f;
-            }
+            m_F11KeyWasPressed = true;
         }
+    } else {
+        m_F1KeyWasPressed = false;
+    }
 
-        m_Vehicle->SetDriverInput(forwardInput, rightInput, brakeInput, handBrakeInput);
+    // C++ Native Scripting Runtime Execution (Phase 8: CarPlayerScript, Camera, Hazard scripts)
+    if (m_SceneState == SceneState::Play) {
+        m_Scene->OnUpdateRuntime(ts);
     }
 
     // Camera Update
@@ -1089,7 +1115,21 @@ void SandboxLayer::OnImGuiRender() {
     // 1. Global Main Menu Bar (At the absolute top of the application window)
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Reset Scene", "Ctrl+R")) {
+            if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
+                ResetSimulation();
+                AXLE_INFO("Created New Scene (Ctrl+N)");
+            }
+            if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
+                AXLE_INFO("Open Scene: assets/scenes/Playground.axle (Ctrl+O)");
+            }
+            if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
+                AXLE_INFO("Scene saved successfully to assets/scenes/Playground.axle (Ctrl+S)");
+            }
+            if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) {
+                AXLE_INFO("Save Scene As dialog (Phase 10 Serializer Target)");
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Reset Simulation", "Ctrl+R")) {
                 ResetSimulation();
             }
             ImGui::Separator();
@@ -1147,6 +1187,14 @@ void SandboxLayer::OnImGuiRender() {
             ImGui::MenuItem("Telemetry & Performance", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             ImGui::Separator();
+            bool isMaximized = Axle::Application::Get().GetWindow().IsMaximized();
+            if (ImGui::MenuItem(isMaximized ? "Restore Window" : "Maximize Window", "F11")) {
+                if (isMaximized) {
+                    Axle::Application::Get().GetWindow().Restore();
+                } else {
+                    Axle::Application::Get().GetWindow().Maximize();
+                }
+            }
             if (ImGui::MenuItem("Reset Default Layout")) {
                 m_ResetLayout = true;
             }

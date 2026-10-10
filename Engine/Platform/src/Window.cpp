@@ -29,6 +29,9 @@ namespace Axle {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        if (props.Maximized) {
+            glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
+        }
 
         m_Window = glfwCreateWindow(
             static_cast<int>(m_Data.Width),
@@ -44,7 +47,15 @@ namespace Axle {
             return;
         }
 
-        AXLE_CORE_INFO("Created window '{0}' ({1}x{2})", m_Data.Title, m_Data.Width, m_Data.Height);
+        int actualWidth = 0, actualHeight = 0;
+        glfwGetFramebufferSize(m_Window, &actualWidth, &actualHeight);
+        if (actualWidth > 0 && actualHeight > 0) {
+            m_Data.Width = static_cast<u32>(actualWidth);
+            m_Data.Height = static_cast<u32>(actualHeight);
+        }
+
+        AXLE_CORE_INFO("Created window '{0}' ({1}x{2}) (Maximized: {3})", 
+                       m_Data.Title, m_Data.Width, m_Data.Height, props.Maximized ? "Yes" : "No");
 
         ++s_GLFWWindowCount;
 
@@ -162,6 +173,25 @@ namespace Axle {
     void Window::SetVSync(bool enabled) {
         glfwSwapInterval(enabled ? 1 : 0);
         m_Data.VSync = enabled;
+    }
+
+    void Window::Maximize() {
+        if (m_Window) {
+            glfwMaximizeWindow(m_Window);
+        }
+    }
+
+    void Window::Restore() {
+        if (m_Window) {
+            glfwRestoreWindow(m_Window);
+        }
+    }
+
+    bool Window::IsMaximized() const {
+        if (m_Window) {
+            return glfwGetWindowAttrib(m_Window, GLFW_MAXIMIZED) == GLFW_TRUE;
+        }
+        return false;
     }
 
 }

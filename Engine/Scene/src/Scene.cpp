@@ -1,6 +1,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/ScriptableEntity.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <algorithm>
 
@@ -16,6 +17,14 @@ namespace Axle {
     }
 
     void Scene::DestroyEntity(Entity entity) {
+        if (entity.HasComponent<NativeScriptComponent>()) {
+            auto& nsc = entity.GetComponent<NativeScriptComponent>();
+            if (nsc.Instance && nsc.DestroyScript) {
+                nsc.Instance->OnDestroy();
+                nsc.DestroyScript(&nsc);
+            }
+        }
+
         if (entity.HasComponent<HierarchyComponent>()) {
             auto& hc = entity.GetComponent<HierarchyComponent>();
             auto children = hc.Children; // Copy list to avoid iterator invalidation
@@ -83,4 +92,44 @@ namespace Axle {
         }
     }
 
+    void Scene::OnRuntimeStart() {
+        auto view = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : view) {
+            auto& nsc = view.get<NativeScriptComponent>(entity);
+            if (!nsc.Instance && nsc.InstantiateScript) {
+                nsc.Instance = nsc.InstantiateScript();
+                nsc.Instance->m_Entity = Entity{ entity, this };
+                nsc.Instance->OnCreate();
+            }
+        }
+    }
+
+    void Scene::OnUpdateRuntime(Timestep ts) {
+        auto view = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : view) {
+            auto& nsc = view.get<NativeScriptComponent>(entity);
+            if (!nsc.Instance && nsc.InstantiateScript) {
+                nsc.Instance = nsc.InstantiateScript();
+                nsc.Instance->m_Entity = Entity{ entity, this };
+                nsc.Instance->OnCreate();
+            }
+
+            if (nsc.Instance) {
+                nsc.Instance->OnUpdate(ts);
+            }
+        }
+    }
+
+    void Scene::OnRuntimeStop() {
+        auto view = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : view) {
+            auto& nsc = view.get<NativeScriptComponent>(entity);
+            if (nsc.Instance && nsc.DestroyScript) {
+                nsc.Instance->OnDestroy();
+                nsc.DestroyScript(&nsc);
+            }
+        }
+    }
+
 }
+

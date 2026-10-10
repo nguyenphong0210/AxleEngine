@@ -1,5 +1,7 @@
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/ScriptableEntity.hpp>
+#include <Axle/Vehicle.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -258,7 +260,16 @@ namespace Axle {
 
         // Mesh Component
         if (entity.HasComponent<MeshComponent>()) {
-            if (ImGui::TreeNodeEx((void*)typeid(MeshComponent).hash_code(), treeNodeFlags, "Mesh & Material")) {
+            bool removeMesh = false;
+            bool meshOpen = ImGui::TreeNodeEx((void*)typeid(MeshComponent).hash_code(), treeNodeFlags, "Mesh & Material");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeMesh = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (meshOpen) {
                 auto& mc = entity.GetComponent<MeshComponent>();
 
                 const char* patternNames[] = { "0: World XZ Caro (Floor)", "1: Local 3D Caro (Box/Cyl)", "2: Spherical Caro (Sphere)" };
@@ -274,12 +285,25 @@ namespace Axle {
 
                 ImGui::TreePop();
             }
+
+            if (removeMesh) {
+                entity.RemoveComponent<MeshComponent>();
+            }
             ImGui::Spacing();
         }
 
         // Rigid Body Component
         if (entity.HasComponent<RigidBodyComponent>()) {
-            if (ImGui::TreeNodeEx((void*)typeid(RigidBodyComponent).hash_code(), treeNodeFlags, "Jolt Rigid Body")) {
+            bool removeRB = false;
+            bool rbOpen = ImGui::TreeNodeEx((void*)typeid(RigidBodyComponent).hash_code(), treeNodeFlags, "Jolt Rigid Body");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeRB = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (rbOpen) {
                 auto& rb = entity.GetComponent<RigidBodyComponent>();
 
                 ImGui::Text("Body ID: %u", rb.RuntimeBodyID.GetIndexAndSequenceNumber());
@@ -339,7 +363,139 @@ namespace Axle {
 
                 ImGui::TreePop();
             }
+
+            if (removeRB) {
+                auto& rb = entity.GetComponent<RigidBodyComponent>();
+                if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid()) {
+                    m_PhysicsScene->DestroyBody(rb.RuntimeBodyID);
+                }
+                entity.RemoveComponent<RigidBodyComponent>();
+            }
             ImGui::Spacing();
+        }
+
+        // Vehicle Component
+        if (entity.HasComponent<VehicleComponent>()) {
+            bool removeVC = false;
+            bool vcOpen = ImGui::TreeNodeEx((void*)typeid(VehicleComponent).hash_code(), treeNodeFlags, "Vehicle Dynamics");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeVC = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (vcOpen) {
+                auto& vc = entity.GetComponent<VehicleComponent>();
+                if (vc.VehicleInstance) {
+                    auto telemetry = vc.VehicleInstance->GetTelemetry();
+                    ImGui::Text("Speed: %.1f km/h (%.1f m/s)", telemetry.SpeedKmh, telemetry.SpeedMps);
+                    ImGui::Text("Engine RPM: %.0f", telemetry.EngineRPM);
+                    ImGui::Text("Current Gear: %d", telemetry.CurrentGear);
+                    ImGui::Text("Chassis Mass: %.0f kg", vc.VehicleInstance->GetConfig().ChassisMass);
+                } else {
+                    ImGui::TextDisabled("Vehicle controller not attached.");
+                }
+                ImGui::TreePop();
+            }
+
+            if (removeVC) {
+                entity.RemoveComponent<VehicleComponent>();
+            }
+            ImGui::Spacing();
+        }
+
+        // Native Script Component
+        if (entity.HasComponent<NativeScriptComponent>()) {
+            bool removeNSC = false;
+            bool nscOpen = ImGui::TreeNodeEx((void*)typeid(NativeScriptComponent).hash_code(), treeNodeFlags, "C++ Native Script");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeNSC = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (nscOpen) {
+                auto& nsc = entity.GetComponent<NativeScriptComponent>();
+                ImGui::Text("Class: %s", nsc.ScriptName.c_str());
+                ImGui::Text("Status: %s", nsc.Instance ? "Active (Running)" : "Bound (Ready)");
+                ImGui::TreePop();
+            }
+
+            if (removeNSC) {
+                auto& nsc = entity.GetComponent<NativeScriptComponent>();
+                if (nsc.Instance && nsc.DestroyScript) {
+                    nsc.Instance->OnDestroy();
+                    nsc.DestroyScript(&nsc);
+                }
+                entity.RemoveComponent<NativeScriptComponent>();
+            }
+            ImGui::Spacing();
+        }
+
+        // --- ADD COMPONENT BUTTON ---
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        float availWidth = ImGui::GetContentRegionAvail().x;
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.85f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.55f, 0.95f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.35f, 0.75f, 1.0f));
+        if (ImGui::Button("+ Add Component", ImVec2(availWidth, 30.0f))) {
+            ImGui::OpenPopup("AddComponentPopup");
+        }
+        ImGui::PopStyleColor(3);
+
+        if (ImGui::BeginPopup("AddComponentPopup")) {
+            if (!entity.HasComponent<MeshComponent>()) {
+                if (ImGui::MenuItem("Mesh Component")) {
+                    entity.AddComponent<MeshComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!entity.HasComponent<RigidBodyComponent>()) {
+                if (ImGui::MenuItem("RigidBody (Box Dynamic)")) {
+                    if (m_PhysicsScene) {
+                        auto& tc = entity.GetComponent<TransformComponent>();
+                        Axle::BoxBodyProps bProps;
+                        bProps.Position = tc.Translation;
+                        bProps.Rotation = tc.Rotation;
+                        bProps.HalfExtent = tc.Scale * 0.5f;
+                        bProps.IsDynamic = true;
+                        auto bodyID = m_PhysicsScene->CreateBox(bProps);
+                        entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("RigidBody (Box Static)")) {
+                    if (m_PhysicsScene) {
+                        auto& tc = entity.GetComponent<TransformComponent>();
+                        Axle::BoxBodyProps bProps;
+                        bProps.Position = tc.Translation;
+                        bProps.Rotation = tc.Rotation;
+                        bProps.HalfExtent = tc.Scale * 0.5f;
+                        bProps.IsDynamic = false;
+                        auto bodyID = m_PhysicsScene->CreateBox(bProps);
+                        entity.AddComponent<RigidBodyComponent>(bodyID, false);
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!entity.HasComponent<NativeScriptComponent>()) {
+                if (ImGui::MenuItem("Native Script Component")) {
+                    entity.AddComponent<NativeScriptComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!entity.HasComponent<VehicleComponent>()) {
+                if (ImGui::MenuItem("Vehicle Component")) {
+                    entity.AddComponent<VehicleComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndPopup();
         }
     }
 

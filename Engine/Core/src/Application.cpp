@@ -26,6 +26,7 @@ namespace Axle {
         props.Width = spec.Width;
         props.Height = spec.Height;
         props.VSync = spec.VSync;
+        props.Maximized = spec.Maximized;
 
         m_Window = std::make_unique<Window>(props);
 

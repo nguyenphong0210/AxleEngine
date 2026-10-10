@@ -16,6 +16,7 @@ namespace Axle {
         u32 Width = 1280;
         u32 Height = 720;
         bool VSync = true;
+        bool Maximized = true;
     };
 
     class Application {

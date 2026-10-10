@@ -73,4 +73,34 @@ namespace Axle {
             : Parent(parent) {}
     };
 
+    class ScriptableEntity;
+
+    struct NativeScriptComponent {
+        ScriptableEntity* Instance = nullptr;
+        std::string ScriptName = "NativeScript";
+
+        ScriptableEntity* (*InstantiateScript)() = nullptr;
+        void (*DestroyScript)(NativeScriptComponent*) = nullptr;
+
+        template<typename T>
+        void Bind(const std::string& name = "") {
+            ScriptName = name.empty() ? typeid(T).name() : name;
+            InstantiateScript = []() -> ScriptableEntity* { return static_cast<ScriptableEntity*>(new T()); };
+            DestroyScript = [](NativeScriptComponent* nsc) {
+                delete nsc->Instance;
+                nsc->Instance = nullptr;
+            };
+        }
+    };
+
+    class Vehicle;
+
+    struct VehicleComponent {
+        Vehicle* VehicleInstance = nullptr;
+
+        VehicleComponent() = default;
+        VehicleComponent(Vehicle* vehicle)
+            : VehicleInstance(vehicle) {}
+    };
+
 }

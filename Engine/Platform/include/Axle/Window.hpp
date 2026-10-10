@@ -13,6 +13,7 @@ namespace Axle {
         u32 Width = 1280;
         u32 Height = 720;
         bool VSync = true;
+        bool Maximized = true;
     };
 
     class Window {
@@ -41,6 +42,10 @@ namespace Axle {
 
         void SetVSync(bool enabled);
         bool IsVSync() const { return m_Data.VSync; }
+
+        void Maximize();
+        void Restore();
+        bool IsMaximized() const;
 
         u32 GetWidth() const { return m_Data.Width; }
         u32 GetHeight() const { return m_Data.Height; }

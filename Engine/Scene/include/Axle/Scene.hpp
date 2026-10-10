@@ -25,6 +25,11 @@ namespace Axle {
         // Update physics synchronization and render all mesh components
         void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader);
 
+        // Scripting runtime lifecycle
+        void OnRuntimeStart();
+        void OnUpdateRuntime(Timestep ts);
+        void OnRuntimeStop();
+
         entt::registry& GetRegistry() { return m_Registry; }
         const entt::registry& GetRegistry() const { return m_Registry; }
 

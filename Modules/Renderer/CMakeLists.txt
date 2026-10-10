@@ -1,5 +1,8 @@
 add_library(AxleRenderer STATIC
     src/RenderCommand.cpp
+    src/Shader.cpp
+    src/Buffer.cpp
+    src/VertexArray.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

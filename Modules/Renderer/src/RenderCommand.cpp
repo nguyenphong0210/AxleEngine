@@ -31,4 +31,10 @@ namespace Axle {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
+    void RenderCommand::DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray) {
+        vertexArray->Bind();
+        const u32 count = vertexArray->GetIndexBuffer() ? vertexArray->GetIndexBuffer()->GetCount() : 0;
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(count), GL_UNSIGNED_INT, nullptr);
+    }
+
 }

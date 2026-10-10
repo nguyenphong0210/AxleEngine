@@ -1,22 +1,23 @@
+#include <Axle/Log.hpp>
+#include <Axle/Timestep.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/Input.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Shader.hpp>
 #include <Axle/Buffer.hpp>
 #include <Axle/VertexArray.hpp>
+#include <Axle/PerspectiveCamera.hpp>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <Axle/Log.hpp>
 #include <memory>
 
 int main() {
     Axle::Log::Init();
-    AXLE_CORE_INFO("Initializing Axle Engine...");
-    AXLE_INFO("Starting SandboxApp...");
+    AXLE_CORE_INFO("Starting 3D Perspective Sandbox...");
 
     Axle::WindowProps props;
-    props.Title = "Axle Engine - Uniforms & Matrix Transform";
+    props.Title = "Axle Engine - 3D Cube & Perspective Camera";
     props.Width = 1280;
     props.Height = 720;
     props.VSync = true;
@@ -24,28 +25,43 @@ int main() {
     Axle::Window window(props);
 
     if (!Axle::RenderCommand::Init(reinterpret_cast<Axle::GLProcAddressFn>(glfwGetProcAddress))) {
-        AXLE_CORE_CRITICAL("Failed to initialize RenderCommand!");
+        AXLE_CORE_CRITICAL("Failed to initialize renderer context!");
         return -1;
     }
 
     Axle::RenderCommand::SetViewport(0, 0, window.GetWidth(), window.GetHeight());
-    window.SetWindowResizeCallback([](const Axle::WindowResizeEvent& e) {
-        Axle::RenderCommand::SetViewport(0, 0, e.Width, e.Height);
+
+    // 1. Perspective Camera (45 degree FOV, 16:9 Aspect Ratio)
+    auto camera = std::make_unique<Axle::PerspectiveCamera>(
+        45.0f, 
+        static_cast<Axle::f32>(window.GetWidth()) / static_cast<Axle::f32>(window.GetHeight()), 
+        0.1f, 
+        100.0f
+    );
+    camera->SetPosition({ 0.0f, 0.0f, 3.5f });
+
+    // Window resize updates camera projection & viewport
+    window.SetWindowResizeCallback([&camera](const Axle::WindowResizeEvent& e) {
+        if (e.Width > 0 && e.Height > 0) {
+            Axle::RenderCommand::SetViewport(0, 0, e.Width, e.Height);
+            camera->SetProjection(45.0f, static_cast<Axle::f32>(e.Width) / static_cast<Axle::f32>(e.Height));
+        }
     });
 
-    // 1. Shaders supporting MVP transform matrices
+    // 2. Shaders supporting MVP
     const std::string vertexSrc = R"(
         #version 450 core
         layout(location = 0) in vec3 a_Position;
         layout(location = 1) in vec4 a_Color;
 
+        uniform mat4 u_ViewProjection;
         uniform mat4 u_Transform;
 
         out vec4 v_Color;
 
         void main() {
             v_Color = a_Color;
-            gl_Position = u_Transform * vec4(a_Position, 1.0);
+            gl_Position = u_ViewProjection * u_Transform * vec4(a_Position, 1.0);
         }
     )";
 
@@ -62,11 +78,33 @@ int main() {
 
     auto shader = std::make_unique<Axle::Shader>(vertexSrc, fragmentSrc);
 
-    // 2. Triangle Geometry
-    float vertices[3 * 7] = {
-        -0.5f, -0.5f, 0.0f,   1.0f, 0.2f, 0.2f, 1.0f,
-         0.5f, -0.5f, 0.0f,   0.2f, 1.0f, 0.2f, 1.0f,
-         0.0f,  0.5f, 0.0f,   0.2f, 0.4f, 1.0f, 1.0f
+    // 3. 3D Cube Vertices (Position: 3, Color: 4)
+    float vertices[8 * 7] = {
+        //  X      Y      Z       R     G     B     A
+        -0.5f, -0.5f, -0.5f,   0.9f, 0.2f, 0.2f, 1.0f, // 0: Left-Bottom-Back
+         0.5f, -0.5f, -0.5f,   0.2f, 0.9f, 0.2f, 1.0f, // 1: Right-Bottom-Back
+         0.5f,  0.5f, -0.5f,   0.2f, 0.2f, 0.9f, 1.0f, // 2: Right-Top-Back
+        -0.5f,  0.5f, -0.5f,   0.9f, 0.9f, 0.2f, 1.0f, // 3: Left-Top-Back
+        -0.5f, -0.5f,  0.5f,   0.9f, 0.2f, 0.9f, 1.0f, // 4: Left-Bottom-Front
+         0.5f, -0.5f,  0.5f,   0.2f, 0.9f, 0.9f, 1.0f, // 5: Right-Bottom-Front
+         0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 1.0f, 1.0f, // 6: Right-Top-Front
+        -0.5f,  0.5f,  0.5f,   0.3f, 0.3f, 0.3f, 1.0f  // 7: Left-Top-Front
+    };
+
+    // 36 indices forming 12 triangles of the cube
+    uint32_t indices[36] = {
+        // Front Face (+Z)
+        4, 5, 6,  6, 7, 4,
+        // Back Face (-Z)
+        1, 0, 3,  3, 2, 1,
+        // Left Face (-X)
+        0, 4, 7,  7, 3, 0,
+        // Right Face (+X)
+        5, 1, 2,  2, 6, 5,
+        // Top Face (+Y)
+        7, 6, 2,  2, 3, 7,
+        // Bottom Face (-Y)
+        0, 1, 5,  5, 4, 0
     };
 
     auto vertexArray = std::make_shared<Axle::VertexArray>();
@@ -77,19 +115,23 @@ int main() {
     });
     vertexArray->AddVertexBuffer(vertexBuffer);
 
-    uint32_t indices[3] = { 0, 1, 2 };
-    auto indexBuffer = std::make_shared<Axle::IndexBuffer>(indices, 3);
+    auto indexBuffer = std::make_shared<Axle::IndexBuffer>(indices, 36);
     vertexArray->SetIndexBuffer(indexBuffer);
 
-    Axle::RenderCommand::SetClearColor({ 0.12f, 0.14f, 0.18f, 1.0f });
+    Axle::RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
 
-    float rotationAngle = 0.0f;
+    Axle::f32 lastFrameTime = 0.0f;
+    Axle::f32 rotationAngle = 0.0f;
 
     while (!window.ShouldClose()) {
         window.PollEvents();
 
+        // Calculate delta time
+        const auto time = static_cast<Axle::f32>(glfwGetTime());
+        Axle::Timestep ts = time - lastFrameTime;
+        lastFrameTime = time;
+
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::Escape)) {
-            AXLE_INFO("Escape key pressed. Exiting...");
             break;
         }
 
@@ -97,12 +139,13 @@ int main() {
 
         shader->Bind();
 
-        // Increment rotation over time
-        rotationAngle += 0.02f;
-        glm::mat4 transform = glm::rotate(glm::mat4(1.0f), rotationAngle, glm::vec3(0.0f, 0.0f, 1.0f));
+        // Rotate cube across multiple axes smoothly over delta time
+        rotationAngle += 45.0f * ts; // 45 degrees per second
+        glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(rotationAngle), glm::vec3(0.5f, 1.0f, 0.2f));
 
-        // Upload matrix uniform to GPU
-        shader->SetMat4("u_Transform", transform);
+        // Upload MVP matrices
+        shader->SetMat4("u_ViewProjection", camera->GetViewProjectionMatrix());
+        shader->SetMat4("u_Transform", model);
 
         Axle::RenderCommand::DrawIndexed(vertexArray);
 

@@ -3,6 +3,7 @@ add_library(AxleRenderer STATIC
     src/Shader.cpp
     src/Buffer.cpp
     src/VertexArray.cpp
+    src/PerspectiveCamera.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

@@ -59,10 +59,39 @@ Level 0:  [ Engine/Core ]
   - [x] Configure 4-wheel suspension springs (frequency & damping), anti-roll bars, and tire slip models.
   - [x] Build powertrain model (engine torque curve, automatic transmission, differentials, throttle & brake).
   - [x] Wire vehicle telemetry (speedometer, tachometer progress bar, gear indicator, 4-wheel contact status) and smooth chase camera into ImGui and Sandbox.
-- [ ] **Phase 5: 3D Asset Loading (`Engine/Asset`)**
+- [x] **Phase 5: Editor Ecosystem & Simulation Lifecycle (`Engine/UI` & `Engine/Renderer`)**
+  - [x] Offscreen Viewport with Framebuffer (OpenGL FBO, auto-resize, aspect ratio handling).
+  - [x] 3-State Simulation Lifecycle: Edit (Stop), Play, Pause, Step 1 Frame (1/60s), Live Speed Scaling (0.1x - 2.0x).
+  - [x] Fixed Top Control Toolbar & Global Main Menu Bar.
+  - [x] Scene Hierarchy Panel (Entity tree, create/delete entity).
+  - [x] Properties / Inspector Panel (Tag rename, Transform X/Y/Z controls, Mesh & Material color/pattern, RigidBody with Friction & Restitution live tweaking, Sleeping controls).
+  - [x] Vehicle Live Tuner Panel (springs, dampers, steering, torque, 4-wheel telemetry table).
+  - [x] Engine Console Panel (spdlog integration, log levels, search & auto-scroll).
+  - [x] Procedural Primitive Meshes: Plane, Cube, Sphere, Cylinder, Cone with procedural shader patterns.
+- [ ] **Phase 6: Interactive 3D Viewport & Transform Gizmos *(Recommended Next)***
+  - [ ] **3D Transform Gizmo (ImGuizmo)**: Manipulate Entity Translation (`W`), Rotation (`E`), and Scale (`R`) directly inside the 3D Viewport with interactive coordinate arrows.
+  - [ ] **Viewport Mouse Picking**: Click directly on 3D objects in the viewport to select them in the Hierarchy & Inspector.
+  - [ ] **Grid & World Coordinates**: Render a dynamic infinite grid floor with metric ruler lines in the editor.
+- [ ] **Phase 7: Automotive Test Playground & Obstacle Course**
+  - [ ] **Jump Ramps & Inclines**: Multi-height ramps to test vehicle airborne physics and suspension landing.
+  - [ ] **Washboard & Bumps Track**: Rhythmic road bumps to test suspension oscillation and damping.
+  - [ ] **Banked Curved Track**: Oval / circuit track with elevated cambered turns.
+  - [ ] **Dynamic Destruction / Crash Barriers**: Stack of boxes, wooden crates, and tire barriers to test high-speed impacts.
+- [ ] **Phase 8: 3D Asset Loading (`Engine/Asset`)**
   - [ ] Integrate mesh loading (fastgltf / tinyobjloader) for detailed car body and wheel models.
   - [ ] Texture mapping (diffuse, normal maps) via `stb_image`.
-  - [ ] Replace debug cube meshes with realistic 3D vehicle assets.
+  - [ ] Replace procedural shapes on car with realistic vehicle 3D model.
+- [ ] **Phase 9: Scene Serialization & Project Management**
+  - [ ] Scene save/load system via YAML (`.axle` scene files).
+  - [ ] Save track layouts, obstacle arrangements, and vehicle tuning presets.
+  - [ ] Shortcuts `Ctrl+S` (Save Scene), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene).
+- [ ] **Phase 10: Lighting, Shadows & Environmental Realism**
+  - [ ] Directional Shadow Mapping (Real-time dynamic shadows cast by vehicle and obstacles).
+  - [ ] PBR or Blinn-Phong material shading with specular highlights on car paint.
+  - [ ] Atmospheric Skybox (Cubemap or procedural gradient sky).
+- [ ] **Phase 11: Audio System (`Engine/Audio`)**
+  - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
+  - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
 
 ---
 
@@ -110,15 +139,35 @@ cmake --build build --config Release --parallel
 
 ## 🎮 Controls
 
+### Simulation State & Toolbar Hotkeys
 | Input | Action |
 | :--- | :--- |
-| **Right Mouse Button + Drag** | Rotate / Look around (Free-Fly Camera) |
-| **W / A / S / D** | Move Forward / Left / Backward / Right |
-| **E / Space** | Move Up |
-| **Q / Left Shift** | Move Down |
-| **R** | Reset Falling Bodies |
-| **F1** | Toggle Physics Collider Wireframe |
-| **Escape** | Close Application |
+| **F5** | Play Simulation (starts physics & car driving) |
+| **F6** | Pause Simulation (freezes physics for free camera inspection) |
+| **F7 / Escape** | Stop Simulation (resets bodies & car to initial edit state) |
+| **O** | Step Single Frame (1/60s tick when paused) |
+| **R** | Reset Scene (reloads entity transforms & zero velocities) |
+| **C** | Toggle Camera Mode (Chase Camera vs Free-Fly Camera) |
+| **F1** | Toggle Jolt Physics Wireframe Colliders |
+
+### Edit Mode / Free-Fly Camera (Viewport)
+| Input | Action |
+| :--- | :--- |
+| **Right Mouse Button + Drag** | Look / Rotate Camera (Pitch & Yaw) |
+| **W / A / S / D** | Fly Camera Forward / Left / Backward / Right |
+| **E / Q** | Fly Camera Up / Down |
+| **Left Shift (Hold)** | Sprint Boost (2.5x speed) |
+| **Left Click** | Select entity in Hierarchy or adjust UI widgets |
+
+### Play Mode / Vehicle Driving
+| Input | Action |
+| :--- | :--- |
+| **W / Up Arrow** | Throttle (Accelerate forward) |
+| **S / Down Arrow** | Brake / Reverse |
+| **A / Left Arrow** | Steer Left |
+| **D / Right Arrow** | Steer Right |
+| **Space** | Handbrake (Rear-wheel lock drift) |
+| **Mouse Drag** | Orbit around car (3rd-Person Chase Cam) |
 
 ---
 

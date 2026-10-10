@@ -8,7 +8,21 @@
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <cstring>
 
+#include <Axle/VertexArray.hpp>
+#include <algorithm>
+#include <cctype>
+
 namespace Axle {
+
+    static bool ContainsIgnoreCase(const std::string& str, const std::string& query) {
+        if (query.empty()) return true;
+        auto it = std::search(
+            str.begin(), str.end(),
+            query.begin(), query.end(),
+            [](char ch1, char ch2) { return std::tolower(ch1) == std::tolower(ch2); }
+        );
+        return it != str.end();
+    }
 
     static void DrawVec3Control(const std::string& label, glm::vec3& values, float resetValue = 0.0f, float columnWidth = 100.0f) {
         ImGui::PushID(label.c_str());
@@ -80,6 +94,158 @@ namespace Axle {
         m_SelectedEntity = {};
     }
 
+    void SceneHierarchyPanel::SetMeshes(
+        std::shared_ptr<VertexArray> cube,
+        std::shared_ptr<VertexArray> sphere,
+        std::shared_ptr<VertexArray> cylinder,
+        std::shared_ptr<VertexArray> cone,
+        std::shared_ptr<VertexArray> plane
+    ) {
+        m_CubeMesh = cube;
+        m_SphereMesh = sphere;
+        m_CylinderMesh = cylinder;
+        m_ConeMesh = cone;
+        m_PlaneMesh = plane;
+    }
+
+    Entity SceneHierarchyPanel::CreatePrimitive(int primitiveType, const glm::vec3& position) {
+        if (!m_Scene) return {};
+
+        Entity entity{};
+        switch (primitiveType) {
+            case 0: { // 3D Cube
+                entity = m_Scene->CreateEntity("Dynamic Box");
+                entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
+                if (m_CubeMesh) {
+                    entity.AddComponent<MeshComponent>(
+                        m_CubeMesh, 1, 4.0f,
+                        glm::vec4(0.96f, 0.52f, 0.12f, 1.0f),
+                        glm::vec4(0.12f, 0.13f, 0.15f, 1.0f)
+                    );
+                }
+                if (m_PhysicsScene) {
+                    BoxBodyProps bProps;
+                    bProps.Position = position;
+                    bProps.HalfExtent = glm::vec3(0.5f, 0.5f, 0.5f);
+                    bProps.IsDynamic = true;
+                    auto bodyID = m_PhysicsScene->CreateBox(bProps);
+                    entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                }
+                break;
+            }
+            case 1: { // 3D Sphere
+                entity = m_Scene->CreateEntity("Dynamic Sphere");
+                entity.AddComponent<TransformComponent>(position, glm::vec3(0.5f, 0.5f, 0.5f));
+                if (m_SphereMesh) {
+                    entity.AddComponent<MeshComponent>(
+                        m_SphereMesh, 2, 16.0f,
+                        glm::vec4(0.0f, 0.85f, 0.95f, 1.0f),
+                        glm::vec4(0.05f, 0.12f, 0.24f, 1.0f)
+                    );
+                }
+                if (m_PhysicsScene) {
+                    SphereBodyProps sProps;
+                    sProps.Position = position;
+                    sProps.Radius = 0.5f;
+                    sProps.IsDynamic = true;
+                    auto bodyID = m_PhysicsScene->CreateSphere(sProps);
+                    entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                }
+                break;
+            }
+            case 2: { // 3D Cylinder
+                entity = m_Scene->CreateEntity("Dynamic Cylinder");
+                entity.AddComponent<TransformComponent>(position, glm::vec3(0.5f, 0.75f, 0.5f));
+                if (m_CylinderMesh) {
+                    entity.AddComponent<MeshComponent>(
+                        m_CylinderMesh, 1, 4.0f,
+                        glm::vec4(0.20f, 0.80f, 0.40f, 1.0f),
+                        glm::vec4(0.08f, 0.18f, 0.10f, 1.0f)
+                    );
+                }
+                if (m_PhysicsScene) {
+                    CylinderBodyProps cProps;
+                    cProps.Position = position;
+                    cProps.HalfHeight = 0.75f;
+                    cProps.Radius = 0.5f;
+                    cProps.IsDynamic = true;
+                    auto bodyID = m_PhysicsScene->CreateCylinder(cProps);
+                    entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                }
+                break;
+            }
+            case 3: { // 3D Cone
+                entity = m_Scene->CreateEntity("Dynamic Cone");
+                entity.AddComponent<TransformComponent>(position, glm::vec3(0.5f, 0.75f, 0.5f));
+                if (m_ConeMesh) {
+                    entity.AddComponent<MeshComponent>(
+                        m_ConeMesh, 1, 4.0f,
+                        glm::vec4(0.95f, 0.65f, 0.10f, 1.0f),
+                        glm::vec4(0.18f, 0.12f, 0.05f, 1.0f)
+                    );
+                }
+                if (m_PhysicsScene) {
+                    CylinderBodyProps cProps;
+                    cProps.Position = position;
+                    cProps.HalfHeight = 0.75f;
+                    cProps.Radius = 0.5f;
+                    cProps.IsDynamic = true;
+                    auto bodyID = m_PhysicsScene->CreateCylinder(cProps);
+                    entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                }
+                break;
+            }
+            case 4: { // Static Floor Plane
+                entity = m_Scene->CreateEntity("Static Floor Plane");
+                entity.AddComponent<TransformComponent>(position, glm::vec3(50.0f, 1.0f, 50.0f));
+                if (m_PlaneMesh) {
+                    entity.AddComponent<MeshComponent>(
+                        m_PlaneMesh, 0, 1.0f,
+                        glm::vec4(0.25f, 0.28f, 0.32f, 1.0f),
+                        glm::vec4(0.15f, 0.17f, 0.20f, 1.0f)
+                    );
+                }
+                if (m_PhysicsScene) {
+                    BoxBodyProps bProps;
+                    bProps.Position = position;
+                    bProps.HalfExtent = glm::vec3(25.0f, 0.5f, 25.0f);
+                    bProps.IsDynamic = false;
+                    auto bodyID = m_PhysicsScene->CreateBox(bProps);
+                    entity.AddComponent<RigidBodyComponent>(bodyID, false);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+
+        m_SelectedEntity = entity;
+        return entity;
+    }
+
+    void SceneHierarchyPanel::DrawCreateMenu() {
+        if (ImGui::MenuItem("Empty Entity")) {
+            m_SelectedEntity = m_Scene->CreateEntity("Empty Entity");
+            m_SelectedEntity.AddComponent<TransformComponent>();
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("3D Cube (Dynamic Box)")) {
+            CreatePrimitive(0);
+        }
+        if (ImGui::MenuItem("3D Sphere (Dynamic)")) {
+            CreatePrimitive(1);
+        }
+        if (ImGui::MenuItem("3D Cylinder (Dynamic)")) {
+            CreatePrimitive(2);
+        }
+        if (ImGui::MenuItem("3D Cone (Dynamic)")) {
+            CreatePrimitive(3);
+        }
+        if (ImGui::MenuItem("Static Floor Plane")) {
+            CreatePrimitive(4);
+        }
+    }
+
     void SceneHierarchyPanel::OnImGuiRender(bool* p_hierarchyOpen, bool* p_propertiesOpen) {
         if (!m_Scene) return;
 
@@ -87,9 +253,40 @@ namespace Axle {
         if (!p_hierarchyOpen || *p_hierarchyOpen) {
             ImGui::SetNextWindowSize(ImVec2(280.0f, 400.0f), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Scene Hierarchy", p_hierarchyOpen)) {
+                // Header Bar: [+ Create] Button & Search Filter
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.30f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.68f, 0.38f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.45f, 0.22f, 1.0f));
+                if (ImGui::Button("+ Create", ImVec2(75.0f, 24.0f))) {
+                    ImGui::OpenPopup("CreateEntityPopup");
+                }
+                ImGui::PopStyleColor(3);
+
+                if (ImGui::BeginPopup("CreateEntityPopup")) {
+                    DrawCreateMenu();
+                    ImGui::EndPopup();
+                }
+
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                ImGui::InputTextWithHint("##SearchFilter", "Search...", m_SearchFilter, sizeof(m_SearchFilter));
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
                 auto view = m_Scene->GetRegistry().view<TagComponent>();
                 for (auto entityID : view) {
                     Entity entity{ entityID, m_Scene };
+
+                    // Filter search
+                    if (m_SearchFilter[0] != '\0') {
+                        const auto& tag = entity.GetComponent<TagComponent>().Tag;
+                        if (!ContainsIgnoreCase(tag, m_SearchFilter)) {
+                            continue;
+                        }
+                    }
+
                     // If entity is a child, it will be rendered under its parent node
                     if (entity.HasComponent<HierarchyComponent>()) {
                         auto& hc = entity.GetComponent<HierarchyComponent>();
@@ -107,10 +304,7 @@ namespace Axle {
 
                 // Right click blank space context menu
                 if (ImGui::BeginPopupContextWindow(nullptr, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
-                    if (ImGui::MenuItem("Create Empty Entity")) {
-                        m_SelectedEntity = m_Scene->CreateEntity("Empty Entity");
-                        m_SelectedEntity.AddComponent<TransformComponent>();
-                    }
+                    DrawCreateMenu();
                     ImGui::EndPopup();
                 }
             }
@@ -124,8 +318,26 @@ namespace Axle {
                 if (m_SelectedEntity) {
                     DrawComponents(m_SelectedEntity);
                 } else {
+                    ImGui::Spacing();
                     ImGui::TextDisabled("No entity selected.");
-                    ImGui::TextWrapped("Click any entity in the Scene Hierarchy to view and edit its components.");
+                    ImGui::TextWrapped("Click any entity in Scene Hierarchy to inspect its components, or create a new one:");
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    float availW = ImGui::GetContentRegionAvail().x;
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.30f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.68f, 0.38f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.45f, 0.22f, 1.0f));
+                    if (ImGui::Button("+ Create Entity", ImVec2(availW, 28.0f))) {
+                        ImGui::OpenPopup("PropsCreateEntityPopup");
+                    }
+                    ImGui::PopStyleColor(3);
+
+                    if (ImGui::BeginPopup("PropsCreateEntityPopup")) {
+                        DrawCreateMenu();
+                        ImGui::EndPopup();
+                    }
                 }
             }
             ImGui::End();

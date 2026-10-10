@@ -307,6 +307,7 @@ void SandboxLayer::OnAttach() {
 
     // Connect Editor Panels
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_SceneHierarchyPanel.SetMeshes(m_CubeMesh, m_SphereMesh, m_CylinderMesh, m_ConeMesh, m_PlaneMesh);
     m_VehicleTunerPanel.SetContext(m_Vehicle.get(), m_PhysicsScene.get());
 
     AXLE_INFO("Axle Editor initialized successfully");
@@ -1135,6 +1136,30 @@ void SandboxLayer::OnImGuiRender() {
             ImGui::Separator();
             if (ImGui::MenuItem("Exit", "Alt+F4")) {
                 // Application exit
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Entity")) {
+            if (ImGui::MenuItem("Create Empty Entity")) {
+                auto entity = m_Scene->CreateEntity("Empty Entity");
+                entity.AddComponent<Axle::TransformComponent>();
+                m_SceneHierarchyPanel.SetSelectedEntity(entity);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("3D Cube (Dynamic Box)")) {
+                m_SceneHierarchyPanel.CreatePrimitive(0);
+            }
+            if (ImGui::MenuItem("3D Sphere (Dynamic)")) {
+                m_SceneHierarchyPanel.CreatePrimitive(1);
+            }
+            if (ImGui::MenuItem("3D Cylinder (Dynamic)")) {
+                m_SceneHierarchyPanel.CreatePrimitive(2);
+            }
+            if (ImGui::MenuItem("3D Cone (Dynamic)")) {
+                m_SceneHierarchyPanel.CreatePrimitive(3);
+            }
+            if (ImGui::MenuItem("Static Floor Plane")) {
+                m_SceneHierarchyPanel.CreatePrimitive(4);
             }
             ImGui::EndMenu();
         }

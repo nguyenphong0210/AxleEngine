@@ -10,65 +10,6 @@
 #include <cmath>
 #include <vector>
 
-namespace {
-
-    // Helper: generate procedural UV sphere mesh
-    std::shared_ptr<Axle::VertexArray> CreateSphereMesh(Axle::u32 stacks = 24, Axle::u32 sectors = 32) {
-        std::vector<Axle::f32> vertices;
-        std::vector<Axle::u32> indices;
-
-        constexpr Axle::f32 PI = 3.14159265358979323846f;
-
-        for (Axle::u32 i = 0; i <= stacks; ++i) {
-            const Axle::f32 stackAngle = (PI * 0.5f) - static_cast<Axle::f32>(i) * (PI / static_cast<Axle::f32>(stacks));
-            const Axle::f32 y = std::sin(stackAngle);
-            const Axle::f32 xz = std::cos(stackAngle);
-
-            for (Axle::u32 j = 0; j <= sectors; ++j) {
-                const Axle::f32 sectorAngle = static_cast<Axle::f32>(j) * (2.0f * PI / static_cast<Axle::f32>(sectors));
-                const Axle::f32 x = xz * std::cos(sectorAngle);
-                const Axle::f32 z = xz * std::sin(sectorAngle);
-
-                vertices.push_back(x);
-                vertices.push_back(y);
-                vertices.push_back(z);
-            }
-        }
-
-        for (Axle::u32 i = 0; i < stacks; ++i) {
-            const Axle::u32 k1 = i * (sectors + 1);
-            const Axle::u32 k2 = k1 + sectors + 1;
-
-            for (Axle::u32 j = 0; j < sectors; ++j) {
-                if (i != 0) {
-                    indices.push_back(k1 + j);
-                    indices.push_back(k2 + j);
-                    indices.push_back(k1 + j + 1);
-                }
-
-                if (i != (stacks - 1)) {
-                    indices.push_back(k1 + j + 1);
-                    indices.push_back(k2 + j);
-                    indices.push_back(k2 + j + 1);
-                }
-            }
-        }
-
-        auto va = std::make_shared<Axle::VertexArray>();
-        auto vb = std::make_shared<Axle::VertexBuffer>(vertices.data(), static_cast<Axle::u32>(vertices.size() * sizeof(Axle::f32)));
-        vb->SetLayout({
-            { Axle::ShaderDataType::Float3, "a_Position" }
-        });
-        va->AddVertexBuffer(vb);
-
-        auto ib = std::make_shared<Axle::IndexBuffer>(indices.data(), static_cast<Axle::u32>(indices.size()));
-        va->SetIndexBuffer(ib);
-
-        return va;
-    }
-
-}
-
 SandboxLayer::SandboxLayer()
     : Layer("SandboxLayer") {
 }
@@ -91,13 +32,13 @@ void SandboxLayer::OnAttach() {
     // 2. Jolt Physics Scene
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
 
-    // Static floor: 100m x 1m x 100m at Y = -0.5m (top surface at Y = 0.0m)
-    m_FloorBodyID = m_PhysicsScene->CreateBox(
-        glm::vec3(0.0f, -0.5f, 0.0f),
-        glm::vec3(50.0f, 0.5f, 50.0f),
-        false, // Static
-        0.6f,  // Friction
-        0.2f   // Restitution
+    // Static ground plane: normal (0, 1, 0) at Y = 0.0m
+    m_FloorBodyID = m_PhysicsScene->CreatePlane(
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 1.0f, 0.0f),
+        100.0f, // HalfExtent
+        0.6f,   // Friction
+        0.2f    // Restitution
     );
 
     // Dynamic box: 1m x 1m x 1m offset to side of track at (-5.0, 4.0, 8.0)
@@ -116,6 +57,26 @@ void SandboxLayer::OnAttach() {
         true,  // Dynamic
         0.3f,  // Friction
         0.75f  // Bouncy restitution
+    );
+
+    // Dynamic cylinder: radius 0.5m, half-height 0.75m at (-7.5, 4.0, 14.0)
+    m_CylinderBodyID = m_PhysicsScene->CreateCylinder(
+        glm::vec3(-7.5f, 4.0f, 14.0f),
+        0.75f, // HalfHeight
+        0.5f,  // Radius
+        true,  // Dynamic
+        0.5f,  // Friction
+        0.3f   // Restitution
+    );
+
+    // Dynamic cone: radius 0.6m, half-height 0.75m at (7.5, 4.0, 14.0)
+    m_ConeBodyID = m_PhysicsScene->CreateCone(
+        glm::vec3(7.5f, 4.0f, 14.0f),
+        0.75f, // HalfHeight
+        0.6f,  // Radius
+        true,  // Dynamic
+        0.5f,  // Friction
+        0.2f   // Restitution
     );
 
     // Optimize broadphase after adding static environment
@@ -199,54 +160,27 @@ void SandboxLayer::OnAttach() {
 
     m_Shader = std::make_unique<Axle::Shader>(vertexSrc, fragmentSrc);
 
-    // 4. Cube Mesh Data (Unit cube from -0.5 to 0.5)
-    Axle::f32 vertices[8 * 3] = {
-        -0.5f, -0.5f, -0.5f,
-         0.5f, -0.5f, -0.5f,
-         0.5f,  0.5f, -0.5f,
-        -0.5f,  0.5f, -0.5f,
-        -0.5f, -0.5f,  0.5f,
-         0.5f, -0.5f,  0.5f,
-         0.5f,  0.5f,  0.5f,
-        -0.5f,  0.5f,  0.5f
-    };
+    // 4. Primitive Mesh Data (Cube, Sphere, Cylinder, Cone, Plane)
+    m_CubeMesh = Axle::PrimitiveMesh::CreateCube();
+    m_SphereMesh = Axle::PrimitiveMesh::CreateSphere(24, 32);
+    m_CylinderMesh = Axle::PrimitiveMesh::CreateCylinder(32);
+    m_ConeMesh = Axle::PrimitiveMesh::CreateCone(32);
+    m_PlaneMesh = Axle::PrimitiveMesh::CreatePlane();
 
-    Axle::u32 indices[36] = {
-        4, 5, 6,  6, 7, 4,
-        1, 0, 3,  3, 2, 1,
-        0, 4, 7,  7, 3, 0,
-        5, 1, 2,  2, 6, 5,
-        7, 6, 2,  2, 3, 7,
-        0, 1, 5,  5, 4, 0
-    };
-
-    m_VertexArray = std::make_shared<Axle::VertexArray>();
-    auto vertexBuffer = std::make_shared<Axle::VertexBuffer>(vertices, static_cast<Axle::u32>(sizeof(vertices)));
-    vertexBuffer->SetLayout({
-        { Axle::ShaderDataType::Float3, "a_Position" }
-    });
-    m_VertexArray->AddVertexBuffer(vertexBuffer);
-
-    auto indexBuffer = std::make_shared<Axle::IndexBuffer>(indices, 36);
-    m_VertexArray->SetIndexBuffer(indexBuffer);
-
-    // 5. UV Sphere Mesh Data
-    m_SphereVertexArray = CreateSphereMesh(24, 32);
-
-    // 6. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
+    // 5. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
     m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
 
-    // 7. ECS Scene & Entities Initialization
+    // 6. ECS Scene & Entities Initialization
     m_Scene = std::make_unique<Axle::Scene>();
 
-    // Entity 1: Static Ground Floor
-    m_FloorEntity = m_Scene->CreateEntity("Static Floor");
+    // Entity 1: Static Ground Plane
+    m_FloorEntity = m_Scene->CreateEntity("Static Floor Plane");
     m_FloorEntity.AddComponent<Axle::TransformComponent>(
-        glm::vec3(0.0f, -0.5f, 0.0f),
-        glm::vec3(100.0f, 1.0f, 100.0f)
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(200.0f, 1.0f, 200.0f)
     );
     m_FloorEntity.AddComponent<Axle::MeshComponent>(
-        m_VertexArray,
+        m_PlaneMesh,
         0,       // World-space XZ caro
         1.0f,    // 1-meter squares
         glm::vec4(0.20f, 0.22f, 0.25f, 1.0f), // Dark slate
@@ -261,7 +195,7 @@ void SandboxLayer::OnAttach() {
         glm::vec3(1.0f, 1.0f, 1.0f)
     );
     m_BoxEntity.AddComponent<Axle::MeshComponent>(
-        m_VertexArray,
+        m_CubeMesh,
         1,       // Local-space 3D caro
         4.0f,    // 4x4 squares per face
         glm::vec4(0.96f, 0.52f, 0.12f, 1.0f), // Vibrant motorsport orange
@@ -276,7 +210,7 @@ void SandboxLayer::OnAttach() {
         glm::vec3(0.5f, 0.5f, 0.5f)
     );
     m_SphereEntity.AddComponent<Axle::MeshComponent>(
-        m_SphereVertexArray,
+        m_SphereMesh,
         2,       // Spherical Caro
         16.0f,   // 16 sectors x 8 rings
         glm::vec4(0.0f, 0.85f, 0.95f, 1.0f),  // Electric cyan
@@ -284,17 +218,47 @@ void SandboxLayer::OnAttach() {
     );
     m_SphereEntity.AddComponent<Axle::RigidBodyComponent>(m_SphereBodyID, true);
 
-    // 8. Vehicle Mechanics (Phase 4 Automotive Simulation)
+    // Entity 4: Dynamic Cylinder
+    m_CylinderEntity = m_Scene->CreateEntity("Dynamic Cylinder");
+    m_CylinderEntity.AddComponent<Axle::TransformComponent>(
+        glm::vec3(-7.5f, 4.0f, 14.0f),
+        glm::vec3(0.5f, 0.75f, 0.5f)
+    );
+    m_CylinderEntity.AddComponent<Axle::MeshComponent>(
+        m_CylinderMesh,
+        1,       // Local 3D caro
+        4.0f,
+        glm::vec4(0.12f, 0.88f, 0.38f, 1.0f), // Neon Emerald Green
+        glm::vec4(0.06f, 0.22f, 0.12f, 1.0f)  // Deep Forest Green
+    );
+    m_CylinderEntity.AddComponent<Axle::RigidBodyComponent>(m_CylinderBodyID, true);
+
+    // Entity 5: Dynamic Cone
+    m_ConeEntity = m_Scene->CreateEntity("Dynamic Cone");
+    m_ConeEntity.AddComponent<Axle::TransformComponent>(
+        glm::vec3(7.5f, 4.0f, 14.0f),
+        glm::vec3(0.6f, 0.75f, 0.6f)
+    );
+    m_ConeEntity.AddComponent<Axle::MeshComponent>(
+        m_ConeMesh,
+        1,       // Local 3D caro
+        5.0f,
+        glm::vec4(0.98f, 0.76f, 0.10f, 1.0f), // Vivid Gold
+        glm::vec4(0.52f, 0.10f, 0.82f, 1.0f)  // Royal Velvet Purple
+    );
+    m_ConeEntity.AddComponent<Axle::RigidBodyComponent>(m_ConeBodyID, true);
+
+    // 7. Vehicle Mechanics (Phase 4 Automotive Simulation)
     m_Vehicle = std::make_unique<Axle::Vehicle>(*m_PhysicsScene);
 
-    // Entity 4: Vehicle Chassis
+    // Entity 6: Vehicle Chassis
     m_ChassisEntity = m_Scene->CreateEntity("Vehicle Chassis");
     m_ChassisEntity.AddComponent<Axle::TransformComponent>(
         m_Vehicle->GetPosition(),
         glm::vec3(1.8f, 0.5f, 4.0f)
     );
     m_ChassisEntity.AddComponent<Axle::MeshComponent>(
-        m_VertexArray,
+        m_CubeMesh,
         1,      // Local 3D caro
         4.0f,   // 4x4 squares per face
         glm::vec4(0.88f, 0.12f, 0.15f, 1.0f), // Racing crimson red
@@ -302,18 +266,18 @@ void SandboxLayer::OnAttach() {
     );
     m_ChassisEntity.AddComponent<Axle::RigidBodyComponent>(m_Vehicle->GetChassisBodyID(), true);
 
-    // Entities 5-8: Four Vehicle Wheels
+    // Entities 7-10: Four Vehicle Wheels (Cylindrical Wheels)
     const char* wheelNames[4] = { "Wheel FL", "Wheel FR", "Wheel RL", "Wheel RR" };
     for (Axle::u32 i = 0; i < 4; ++i) {
         m_WheelEntities[i] = m_Scene->CreateEntity(wheelNames[i]);
         m_WheelEntities[i].AddComponent<Axle::TransformComponent>(
             glm::vec3(0.0f),
-            glm::vec3(0.20f, 0.35f, 0.35f)
+            glm::vec3(0.35f, 0.125f, 0.35f) // Radius 0.35m, half-width 0.125m (width 0.25m)
         );
         m_WheelEntities[i].AddComponent<Axle::MeshComponent>(
-            m_SphereVertexArray,
-            2,      // Spherical Caro
-            16.0f,
+            m_CylinderMesh,
+            1,      // Local 3D caro
+            6.0f,
             glm::vec4(0.15f, 0.16f, 0.18f, 1.0f), // Tire rubber
             glm::vec4(0.85f, 0.85f, 0.90f, 1.0f)  // Alloy rim silver
         );
@@ -328,6 +292,11 @@ void SandboxLayer::OnDetach() {
     m_Scene.reset();
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
+    m_CubeMesh.reset();
+    m_SphereMesh.reset();
+    m_CylinderMesh.reset();
+    m_ConeMesh.reset();
+    m_PlaneMesh.reset();
 }
 
 void SandboxLayer::OnWindowResize(Axle::u32 width, Axle::u32 height) {
@@ -349,6 +318,12 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
 
         m_PhysicsScene->SetBodyPositionAndRotation(m_SphereBodyID, glm::vec3(5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
         m_PhysicsScene->SetLinearVelocity(m_SphereBodyID, glm::vec3(0.0f));
+
+        m_PhysicsScene->SetBodyPositionAndRotation(m_CylinderBodyID, glm::vec3(-7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
+        m_PhysicsScene->SetLinearVelocity(m_CylinderBodyID, glm::vec3(0.0f));
+
+        m_PhysicsScene->SetBodyPositionAndRotation(m_ConeBodyID, glm::vec3(7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
+        m_PhysicsScene->SetLinearVelocity(m_ConeBodyID, glm::vec3(0.0f));
 
         if (m_Vehicle) {
             m_Vehicle->Reset(glm::vec3(0.0f, 1.2f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));

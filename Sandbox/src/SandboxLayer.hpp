@@ -10,6 +10,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Vehicle.hpp>
+#include <Axle/PrimitiveMesh.hpp>
 #include <memory>
 
 class SandboxLayer : public Axle::Layer {
@@ -44,15 +45,22 @@ private:
     Axle::Entity m_FloorEntity;
     Axle::Entity m_BoxEntity;
     Axle::Entity m_SphereEntity;
+    Axle::Entity m_CylinderEntity;
+    Axle::Entity m_ConeEntity;
     Axle::Entity m_ChassisEntity;
     Axle::Entity m_WheelEntities[4];
 
     Axle::BodyID m_FloorBodyID;
     Axle::BodyID m_BoxBodyID;
     Axle::BodyID m_SphereBodyID;
+    Axle::BodyID m_CylinderBodyID;
+    Axle::BodyID m_ConeBodyID;
 
-    std::shared_ptr<Axle::VertexArray> m_VertexArray;
-    std::shared_ptr<Axle::VertexArray> m_SphereVertexArray;
+    std::shared_ptr<Axle::VertexArray> m_CubeMesh;
+    std::shared_ptr<Axle::VertexArray> m_SphereMesh;
+    std::shared_ptr<Axle::VertexArray> m_CylinderMesh;
+    std::shared_ptr<Axle::VertexArray> m_ConeMesh;
+    std::shared_ptr<Axle::VertexArray> m_PlaneMesh;
     std::unique_ptr<Axle::Shader> m_Shader;
 
     Axle::DebugPanel m_DebugPanel;

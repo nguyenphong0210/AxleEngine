@@ -5,6 +5,9 @@
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/CylinderShape.h>
+#include <Jolt/Physics/Collision/Shape/TaperedCylinderShape.h>
+#include <Jolt/Physics/Collision/Shape/PlaneShape.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 
 #include <thread>
@@ -157,6 +160,130 @@ namespace Axle {
         props.Friction = friction;
         props.Restitution = restitution;
         return CreateSphere(props);
+    }
+
+    BodyID PhysicsScene::CreateCylinder(const CylinderBodyProps& props) {
+        JPH::CylinderShapeSettings shapeSettings(props.HalfHeight, props.Radius);
+        JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings.Create();
+        if (shapeResult.HasError()) {
+            AXLE_CORE_ERROR("Failed to create Cylinder shape: {0}", shapeResult.GetError().c_str());
+            return BodyID();
+        }
+
+        const JPH::EMotionType motionType = props.IsDynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static;
+        const JPH::ObjectLayer layer = props.IsDynamic ? Layers::MOVING : Layers::NON_MOVING;
+
+        JPH::BodyCreationSettings bodySettings(
+            shapeResult.Get(),
+            ToJolt(props.Position),
+            ToJolt(props.Rotation),
+            motionType,
+            layer
+        );
+        bodySettings.mFriction = props.Friction;
+        bodySettings.mRestitution = props.Restitution;
+        bodySettings.mAllowSleeping = props.AllowSleeping;
+
+        const JPH::EActivation activation = props.IsDynamic ? JPH::EActivation::Activate : JPH::EActivation::DontActivate;
+        const BodyID bodyID = m_PhysicsSystem.GetBodyInterface().CreateAndAddBody(bodySettings, activation);
+        if (bodyID.IsInvalid()) {
+            AXLE_CORE_ERROR("Failed to create and add Cylinder body to physics system!");
+        }
+        return bodyID;
+    }
+
+    BodyID PhysicsScene::CreateCylinder(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic, f32 friction, f32 restitution) {
+        CylinderBodyProps props;
+        props.Position = position;
+        props.HalfHeight = halfHeight;
+        props.Radius = radius;
+        props.IsDynamic = isDynamic;
+        props.Friction = friction;
+        props.Restitution = restitution;
+        return CreateCylinder(props);
+    }
+
+    BodyID PhysicsScene::CreateCone(const ConeBodyProps& props) {
+        JPH::TaperedCylinderShapeSettings shapeSettings(props.HalfHeight, 0.0f, props.Radius, 0.0f);
+        JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings.Create();
+        if (shapeResult.HasError()) {
+            AXLE_CORE_ERROR("Failed to create Cone shape: {0}", shapeResult.GetError().c_str());
+            return BodyID();
+        }
+
+        const JPH::EMotionType motionType = props.IsDynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static;
+        const JPH::ObjectLayer layer = props.IsDynamic ? Layers::MOVING : Layers::NON_MOVING;
+
+        JPH::BodyCreationSettings bodySettings(
+            shapeResult.Get(),
+            ToJolt(props.Position),
+            ToJolt(props.Rotation),
+            motionType,
+            layer
+        );
+        bodySettings.mFriction = props.Friction;
+        bodySettings.mRestitution = props.Restitution;
+        bodySettings.mAllowSleeping = props.AllowSleeping;
+
+        const JPH::EActivation activation = props.IsDynamic ? JPH::EActivation::Activate : JPH::EActivation::DontActivate;
+        const BodyID bodyID = m_PhysicsSystem.GetBodyInterface().CreateAndAddBody(bodySettings, activation);
+        if (bodyID.IsInvalid()) {
+            AXLE_CORE_ERROR("Failed to create and add Cone body to physics system!");
+        }
+        return bodyID;
+    }
+
+    BodyID PhysicsScene::CreateCone(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic, f32 friction, f32 restitution) {
+        ConeBodyProps props;
+        props.Position = position;
+        props.HalfHeight = halfHeight;
+        props.Radius = radius;
+        props.IsDynamic = isDynamic;
+        props.Friction = friction;
+        props.Restitution = restitution;
+        return CreateCone(props);
+    }
+
+    BodyID PhysicsScene::CreatePlane(const PlaneBodyProps& props) {
+        glm::vec3 n = props.Normal;
+        if (glm::dot(n, n) < 1e-6f) {
+            n = glm::vec3(0.0f, 1.0f, 0.0f);
+        } else {
+            n = glm::normalize(n);
+        }
+
+        JPH::PlaneShapeSettings shapeSettings(JPH::Plane(ToJolt(n), 0.0f), nullptr, props.HalfExtent);
+        JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings.Create();
+        if (shapeResult.HasError()) {
+            AXLE_CORE_ERROR("Failed to create Plane shape: {0}", shapeResult.GetError().c_str());
+            return BodyID();
+        }
+
+        JPH::BodyCreationSettings bodySettings(
+            shapeResult.Get(),
+            ToJolt(props.Position),
+            ToJolt(props.Rotation),
+            JPH::EMotionType::Static,
+            Layers::NON_MOVING
+        );
+        bodySettings.mFriction = props.Friction;
+        bodySettings.mRestitution = props.Restitution;
+
+        const BodyID bodyID = m_PhysicsSystem.GetBodyInterface().CreateAndAddBody(bodySettings, JPH::EActivation::DontActivate);
+        if (bodyID.IsInvalid()) {
+            AXLE_CORE_ERROR("Failed to create and add Plane body to physics system!");
+        }
+        return bodyID;
+    }
+
+    BodyID PhysicsScene::CreatePlane(const glm::vec3& position, const glm::vec3& normal, f32 halfExtent, f32 friction, f32 restitution) {
+        PlaneBodyProps props;
+        props.Position = position;
+        props.Normal = normal;
+        props.HalfExtent = halfExtent;
+        props.Friction = friction;
+        props.Restitution = restitution;
+        return CreatePlane(props);
     }
 
     void PhysicsScene::DestroyBody(BodyID bodyID) {

@@ -47,6 +47,37 @@ namespace Axle {
         bool AllowSleeping = true;
     };
 
+    struct CylinderBodyProps {
+        glm::vec3 Position{ 0.0f };
+        f32 HalfHeight = 1.0f;
+        f32 Radius = 0.5f;
+        glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+        bool IsDynamic = true;
+        f32 Friction = 0.5f;
+        f32 Restitution = 0.0f;
+        bool AllowSleeping = true;
+    };
+
+    struct ConeBodyProps {
+        glm::vec3 Position{ 0.0f };
+        f32 HalfHeight = 1.0f;
+        f32 Radius = 0.5f;
+        glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+        bool IsDynamic = true;
+        f32 Friction = 0.5f;
+        f32 Restitution = 0.0f;
+        bool AllowSleeping = true;
+    };
+
+    struct PlaneBodyProps {
+        glm::vec3 Position{ 0.0f };
+        glm::vec3 Normal{ 0.0f, 1.0f, 0.0f };
+        glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+        f32 HalfExtent = 100.0f;
+        f32 Friction = 0.6f;
+        f32 Restitution = 0.0f;
+    };
+
     struct PhysicsDrawSettings {
         bool DrawShapes = true;
         bool DrawWireframe = true;
@@ -74,6 +105,15 @@ namespace Axle {
 
         BodyID CreateSphere(const SphereBodyProps& props);
         BodyID CreateSphere(const glm::vec3& position, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f);
+
+        BodyID CreateCylinder(const CylinderBodyProps& props);
+        BodyID CreateCylinder(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f);
+
+        BodyID CreateCone(const ConeBodyProps& props);
+        BodyID CreateCone(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f);
+
+        BodyID CreatePlane(const PlaneBodyProps& props);
+        BodyID CreatePlane(const glm::vec3& position, const glm::vec3& normal = glm::vec3(0.0f, 1.0f, 0.0f), f32 halfExtent = 100.0f, f32 friction = 0.6f, f32 restitution = 0.0f);
 
         void DestroyBody(BodyID bodyID);
         void OptimizeBroadPhase();

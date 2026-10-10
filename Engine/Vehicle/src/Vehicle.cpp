@@ -214,7 +214,7 @@ namespace Axle {
         if (!m_Constraint || wheelIndex >= 4) {
             return glm::mat4(1.0f);
         }
-        const JPH::RMat44 joltMat = m_Constraint->GetWheelWorldTransform(wheelIndex, JPH::Vec3::sAxisX(), JPH::Vec3::sAxisY());
+        const JPH::RMat44 joltMat = m_Constraint->GetWheelWorldTransform(wheelIndex, JPH::Vec3::sAxisY(), JPH::Vec3::sAxisX());
         return ToGlm(joltMat.ToMat44());
     }
 

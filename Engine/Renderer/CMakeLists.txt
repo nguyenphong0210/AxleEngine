@@ -5,6 +5,7 @@ add_library(AxleRenderer STATIC
     src/VertexArray.cpp
     src/PerspectiveCamera.cpp
     src/PerspectiveCameraController.cpp
+    src/PrimitiveMesh.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

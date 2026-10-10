@@ -10,6 +10,7 @@
 #include <Axle/PerspectiveCameraController.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/DebugPanel.hpp>
+#include <Axle/PhysicsEngine.hpp>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -17,7 +18,8 @@
 
 int main() {
     Axle::Log::Init();
-    AXLE_CORE_INFO("Starting 3D Sandbox with Free-Fly Camera...");
+    Axle::PhysicsEngine::Init();
+    AXLE_CORE_INFO("Starting 3D Sandbox with Free-Fly Camera & Physics...");
 
     Axle::WindowProps props;
     props.Title = "Axle Engine - 3D Free-Fly Camera";
@@ -160,6 +162,7 @@ int main() {
     }
 
     imguiLayer->Shutdown();
+    Axle::PhysicsEngine::Shutdown();
 
     return 0;
 }

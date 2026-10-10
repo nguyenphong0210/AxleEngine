@@ -46,7 +46,7 @@ Level 0:  [ Engine/Core ]
   - [x] Implement `DebugPanel` to display real-time FPS, delta time, and camera transform.
 - [ ] **Phase 2: Physics Engine Foundation (`Engine/Physics`)**
   - [x] Integrate Jolt Physics submodule into `ThirdParty/JoltPhysics` (v5.2.0).
-  - [ ] Configure CMake build options for Jolt Physics and `Axle::Physics`.
+  - [x] Configure CMake build options for Jolt Physics and `Axle::Physics`.
   - [ ] Implement `PhysicsSystem` & `PhysicsScene` (multithreaded job system, gravity, collision layers).
   - [ ] Simulate static ground plane and dynamic falling rigid body boxes.
   - [ ] Integrate `JPH::DebugRenderer` to draw collider wireframes in OpenGL.

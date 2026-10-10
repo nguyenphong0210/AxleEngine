@@ -1,7 +1,7 @@
 #include <Axle/Shader.hpp>
+#include <Axle/Log.hpp>
 #include <glad/glad.h>
 #include <glm/gtc/type_ptr.hpp>
-#include <iostream>
 #include <vector>
 
 namespace Axle {
@@ -30,7 +30,7 @@ namespace Axle {
             std::vector<GLchar> infoLog(maxLength);
             glGetProgramInfoLog(m_RendererID, maxLength, &maxLength, infoLog.data());
 
-            std::cerr << "[Shader Link Error]: " << infoLog.data() << "\n";
+            AXLE_CORE_ERROR("[Shader Link Error]: {0}", infoLog.data());
 
             glDeleteProgram(m_RendererID);
             m_RendererID = 0;
@@ -108,7 +108,7 @@ namespace Axle {
 
         const i32 location = glGetUniformLocation(m_RendererID, name.c_str());
         if (location == -1) {
-            std::cerr << "[Shader Warning] Uniform '" << name << "' does not exist or was stripped out!\n";
+            AXLE_CORE_WARN("[Shader Warning] Uniform '{0}' does not exist or was stripped out!", name);
         }
 
         m_UniformLocationCache[name] = location;
@@ -131,7 +131,7 @@ namespace Axle {
             glGetShaderInfoLog(id, maxLength, &maxLength, infoLog.data());
 
             const std::string stageName = (type == GL_VERTEX_SHADER) ? "Vertex" : "Fragment";
-            std::cerr << "[Shader Compile Error (" << stageName << ")]: " << infoLog.data() << "\n";
+            AXLE_CORE_ERROR("[Shader Compile Error ({0})]: {1}", stageName, infoLog.data());
 
             glDeleteShader(id);
             return 0;

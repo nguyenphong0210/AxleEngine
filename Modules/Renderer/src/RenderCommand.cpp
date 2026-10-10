@@ -1,18 +1,19 @@
 #include <Axle/RenderCommand.hpp>
+#include <Axle/Log.hpp>
 #include <glad/glad.h>
-#include <iostream>
 
 namespace Axle {
 
     bool RenderCommand::Init(GLProcAddressFn procAddressLoader) {
         if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(procAddressLoader))) {
-            std::cerr << "[OpenGL Error] Failed to initialize GLAD loader!\n";
+            AXLE_CORE_CRITICAL("[OpenGL Error] Failed to initialize GLAD loader!");
             return false;
         }
 
-        std::cout << "[Renderer Info] Vendor:   " << glGetString(GL_VENDOR) << "\n";
-        std::cout << "[Renderer Info] GPU:      " << glGetString(GL_RENDERER) << "\n";
-        std::cout << "[Renderer Info] Version:  " << glGetString(GL_VERSION) << "\n";
+        AXLE_CORE_INFO("Renderer Initialized:");
+        AXLE_CORE_INFO("  Vendor:   {0}", reinterpret_cast<const char*>(glGetString(GL_VENDOR)));
+        AXLE_CORE_INFO("  GPU:      {0}", reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+        AXLE_CORE_INFO("  Version:  {0}", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
 
         glEnable(GL_DEPTH_TEST);
         return true;

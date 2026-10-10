@@ -11,9 +11,14 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 
+set(SPDLOG_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
+
 # Embed GLFW source code directly into the build tree
 add_subdirectory(ThirdParty/glfw)
 add_subdirectory(ThirdParty/glad)
+add_subdirectory(ThirdParty/spdlog)
 
 # Load modules according to architectural hierarchy
 add_subdirectory(Modules/Foundation)

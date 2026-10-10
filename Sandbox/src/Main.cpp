@@ -7,10 +7,14 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <Axle/Log.hpp>
 #include <memory>
-#include <iostream>
 
 int main() {
+    Axle::Log::Init();
+    AXLE_CORE_INFO("Initializing Axle Engine...");
+    AXLE_INFO("Starting SandboxApp...");
+
     Axle::WindowProps props;
     props.Title = "Axle Engine - Uniforms & Matrix Transform";
     props.Width = 1280;
@@ -20,6 +24,7 @@ int main() {
     Axle::Window window(props);
 
     if (!Axle::RenderCommand::Init(reinterpret_cast<Axle::GLProcAddressFn>(glfwGetProcAddress))) {
+        AXLE_CORE_CRITICAL("Failed to initialize RenderCommand!");
         return -1;
     }
 
@@ -84,6 +89,7 @@ int main() {
         window.PollEvents();
 
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::Escape)) {
+            AXLE_INFO("Escape key pressed. Exiting...");
             break;
         }
 

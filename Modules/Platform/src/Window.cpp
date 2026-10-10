@@ -1,14 +1,14 @@
 #include <Axle/Window.hpp>
 #include <Axle/Input.hpp>
+#include <Axle/Log.hpp>
 #include <GLFW/glfw3.h>
-#include <iostream>
 
 namespace Axle {
 
     static u32 s_GLFWWindowCount = 0;
 
     static void GLFWErrorCallback(int error, const char* description) {
-        std::cerr << "[GLFW Error] (" << error << "): " << description << "\n";
+        AXLE_CORE_ERROR("[GLFW Error] ({0}): {1}", error, description);
     }
 
     Window::Window(const WindowProps& props) {
@@ -20,7 +20,7 @@ namespace Axle {
         if (s_GLFWWindowCount == 0) {
             glfwSetErrorCallback(GLFWErrorCallback);
             if (!glfwInit()) {
-                std::cerr << "Failed to initialize GLFW!\n";
+                AXLE_CORE_CRITICAL("Failed to initialize GLFW!");
                 return;
             }
         }
@@ -39,10 +39,12 @@ namespace Axle {
         );
 
         if (!m_Window) {
-            std::cerr << "Failed to create GLFW window!\n";
+            AXLE_CORE_CRITICAL("Failed to create GLFW window '{0}'!", m_Data.Title);
             glfwTerminate();
             return;
         }
+
+        AXLE_CORE_INFO("Created window '{0}' ({1}x{2})", m_Data.Title, m_Data.Width, m_Data.Height);
 
         ++s_GLFWWindowCount;
 

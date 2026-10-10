@@ -9,6 +9,7 @@
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
+#include <Axle/Vehicle.hpp>
 #include <memory>
 
 class SandboxLayer : public Axle::Layer {
@@ -30,10 +31,21 @@ private:
     bool m_ShowPhysicsDebug = false;
     bool m_F1KeyWasPressed = false;
 
+    // Vehicle and chase camera
+    std::unique_ptr<Axle::Vehicle> m_Vehicle;
+    bool m_ChaseCamera = true;
+    bool m_CKeyWasPressed = false;
+    Axle::f32 m_OrbitYaw = 180.0f;
+    Axle::f32 m_OrbitPitch = 15.0f;
+    glm::vec2 m_LastMousePos{ 0.0f, 0.0f };
+    bool m_FirstMouseUpdate = true;
+
     std::unique_ptr<Axle::Scene> m_Scene;
     Axle::Entity m_FloorEntity;
     Axle::Entity m_BoxEntity;
     Axle::Entity m_SphereEntity;
+    Axle::Entity m_ChassisEntity;
+    Axle::Entity m_WheelEntities[4];
 
     Axle::BodyID m_FloorBodyID;
     Axle::BodyID m_BoxBodyID;

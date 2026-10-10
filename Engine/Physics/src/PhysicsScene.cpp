@@ -239,4 +239,28 @@ namespace Axle {
         return { g.GetX(), g.GetY(), g.GetZ() };
     }
 
+    void PhysicsScene::AddConstraint(JPH::Constraint* constraint) {
+        if (constraint) {
+            m_PhysicsSystem.AddConstraint(constraint);
+        }
+    }
+
+    void PhysicsScene::RemoveConstraint(JPH::Constraint* constraint) {
+        if (constraint) {
+            m_PhysicsSystem.RemoveConstraint(constraint);
+        }
+    }
+
+    void PhysicsScene::AddStepListener(JPH::PhysicsStepListener* listener) {
+        if (listener) {
+            m_PhysicsSystem.AddStepListener(listener);
+        }
+    }
+
+    void PhysicsScene::RemoveStepListener(JPH::PhysicsStepListener* listener) {
+        if (listener) {
+            m_PhysicsSystem.RemoveStepListener(listener);
+        }
+    }
+
 }

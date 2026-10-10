@@ -5,7 +5,7 @@ namespace Axle {
 
     void DebugPanel::OnImGuiRender(TelemetryData& telemetry) {
         ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(350.0f, 520.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(360.0f, 580.0f), ImGuiCond_FirstUseEver);
 
         ImGui::Begin("Axle Engine - Telemetry");
 
@@ -61,15 +61,44 @@ namespace Axle {
             ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "[R] Key: Drop Box & Sphere Again");
         }
 
+        if (telemetry.HasVehicle) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.2f, 1.0f), "Vehicle Dynamics & Powertrain");
+            ImGui::Separator();
+            ImGui::Text("Speed: %.1f km/h (%.1f m/s)", telemetry.VehicleSpeedKmh, telemetry.VehicleSpeedKmh / 3.6f);
+
+            // Tachometer RPM Progress Bar
+            const char* gearStr = telemetry.VehicleGear < 0 ? "R" : (telemetry.VehicleGear == 0 ? "N" : "D");
+            char gearBuf[16];
+            if (telemetry.VehicleGear > 0) {
+                snprintf(gearBuf, sizeof(gearBuf), "Gear: %d", telemetry.VehicleGear);
+            } else {
+                snprintf(gearBuf, sizeof(gearBuf), "Gear: %s", gearStr);
+            }
+            ImGui::Text("Tachometer: %.0f RPM | %s", telemetry.VehicleRPM, gearBuf);
+            const float rpmRatio = glm::clamp(telemetry.VehicleRPM / 6500.0f, 0.0f, 1.0f);
+            ImGui::ProgressBar(rpmRatio, ImVec2(-1.0f, 0.0f));
+
+            ImGui::Text("Wheel Contacts: FL: %s | FR: %s | RL: %s | RR: %s",
+                        telemetry.WheelContacts[0] ? "ON" : "OFF",
+                        telemetry.WheelContacts[1] ? "ON" : "OFF",
+                        telemetry.WheelContacts[2] ? "ON" : "OFF",
+                        telemetry.WheelContacts[3] ? "ON" : "OFF");
+
+            ImGui::Text("Camera Mode: %s (Press [C] to toggle)", 
+                        telemetry.IsChaseCamera ? "Vehicle Chase Cam" : "Free-Fly Cam");
+        }
+
         ImGui::Spacing();
         ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Controls Guide");
         ImGui::Separator();
-        ImGui::BulletText("Right-click + Drag: Free-fly look");
-        ImGui::BulletText("W / A / S / D: Move camera");
-        ImGui::BulletText("E / Space: Ascend");
-        ImGui::BulletText("Q / LShift: Descend");
-        ImGui::BulletText("R: Reset Box & Sphere");
-        ImGui::BulletText("F1: Toggle Physics Wireframe");
+        ImGui::BulletText("Up / Down (or W / S): Throttle / Brake / Reverse");
+        ImGui::BulletText("Left / Right (or A / D): Steer Left / Right");
+        ImGui::BulletText("Space: Handbrake");
+        ImGui::BulletText("C: Toggle Chase Camera / Free-Fly Camera");
+        ImGui::BulletText("R: Reset Vehicle & Physics Bodies");
+        ImGui::BulletText("F1: Toggle Physics Collider Wireframe");
+        ImGui::BulletText("Left / Right Click + Drag: Orbit vehicle / Look around");
 
         ImGui::End();
     }

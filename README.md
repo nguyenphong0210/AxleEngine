@@ -54,11 +54,11 @@ Level 0:  [ Engine/Core ]
   - [x] Integrate header-only ECS library (EnTT v3.14.0) via submodule in `ThirdParty/entt`.
   - [x] Define `TagComponent`, `TransformComponent`, `MeshComponent`, and `RigidBodyComponent`.
   - [x] Implement `Scene::OnUpdate()` to automatically bind Jolt physics transforms to render meshes.
-- [ ] **Phase 4: Automotive Mechanics (`Engine/Vehicle`)**
-  - [ ] Implement `VehicleConstraintWrapper` utilizing Jolt's vehicle mechanics.
-  - [ ] Configure 4-wheel suspension rays, springs, and tire friction curves.
-  - [ ] Build powertrain model (RPM, gear ratios, differential, acceleration/braking forces).
-  - [ ] Wire vehicle telemetry (speedometer, tachometer, G-force) into ImGui.
+- [x] **Phase 4: Automotive Mechanics (`Engine/Vehicle`)**
+  - [x] Implement `Vehicle` utilizing Jolt Physics' `VehicleConstraint` and `WheeledVehicleController`.
+  - [x] Configure 4-wheel suspension springs (frequency & damping), anti-roll bars, and tire slip models.
+  - [x] Build powertrain model (engine torque curve, automatic transmission, differentials, throttle & brake).
+  - [x] Wire vehicle telemetry (speedometer, tachometer progress bar, gear indicator, 4-wheel contact status) and smooth chase camera into ImGui and Sandbox.
 - [ ] **Phase 5: 3D Asset Loading (`Engine/Asset`)**
   - [ ] Integrate mesh loading (fastgltf / tinyobjloader) for detailed car body and wheel models.
   - [ ] Texture mapping (diffuse, normal maps) via `stb_image`.

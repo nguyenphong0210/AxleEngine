@@ -102,6 +102,12 @@ namespace Axle {
         JPH::BodyInterface& GetBodyInterface() { return m_PhysicsSystem.GetBodyInterface(); }
         const JPH::BodyInterface& GetBodyInterface() const { return m_PhysicsSystem.GetBodyInterface(); }
 
+        // Constraints & Step Listeners
+        void AddConstraint(JPH::Constraint* constraint);
+        void RemoveConstraint(JPH::Constraint* constraint);
+        void AddStepListener(JPH::PhysicsStepListener* listener);
+        void RemoveStepListener(JPH::PhysicsStepListener* listener);
+
         void SetGravity(const glm::vec3& gravity);
         glm::vec3 GetGravity() const;
 

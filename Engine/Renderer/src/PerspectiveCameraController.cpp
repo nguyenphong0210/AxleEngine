@@ -22,7 +22,7 @@ namespace Axle {
             m_FirstMouseUpdate = false;
         }
 
-        if (Input::IsMouseButtonPressed(MouseCode::ButtonRight)) {
+        if (Input::IsMouseButtonPressed(MouseCode::ButtonRight) || Input::IsMouseButtonPressed(MouseCode::ButtonLeft)) {
             const glm::vec2 delta = currentMousePos - m_LastMousePosition;
 
             m_CameraRotation.y -= delta.x * m_RotationSpeed; // Yaw (Rotate around world Y-axis)

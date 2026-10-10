@@ -100,18 +100,18 @@ void SandboxLayer::OnAttach() {
         0.2f   // Restitution
     );
 
-    // Dynamic box: 1m x 1m x 1m starting at elevation Y = 10.0m
+    // Dynamic box: 1m x 1m x 1m offset to side of track at (-5.0, 4.0, 8.0)
     m_BoxBodyID = m_PhysicsScene->CreateBox(
-        glm::vec3(0.0f, 10.0f, 0.0f),
+        glm::vec3(-5.0f, 4.0f, 8.0f),
         glm::vec3(0.5f, 0.5f, 0.5f),
         true,  // Dynamic
         0.5f,  // Friction
         0.4f   // Restitution
     );
 
-    // Dynamic bouncy sphere: radius 0.5m starting at elevation Y = 14.0m, offset at X = 2.0m
+    // Dynamic bouncy sphere: radius 0.5m offset to other side at (5.0, 4.0, 8.0)
     m_SphereBodyID = m_PhysicsScene->CreateSphere(
-        glm::vec3(2.0f, 14.0f, 0.0f),
+        glm::vec3(5.0f, 4.0f, 8.0f),
         0.5f,  // Radius
         true,  // Dynamic
         0.3f,  // Friction
@@ -257,7 +257,7 @@ void SandboxLayer::OnAttach() {
     // Entity 2: Dynamic Falling Box
     m_BoxEntity = m_Scene->CreateEntity("Dynamic Box");
     m_BoxEntity.AddComponent<Axle::TransformComponent>(
-        glm::vec3(0.0f, 10.0f, 0.0f),
+        glm::vec3(-5.0f, 4.0f, 8.0f),
         glm::vec3(1.0f, 1.0f, 1.0f)
     );
     m_BoxEntity.AddComponent<Axle::MeshComponent>(
@@ -272,7 +272,7 @@ void SandboxLayer::OnAttach() {
     // Entity 3: Dynamic Bouncy Sphere
     m_SphereEntity = m_Scene->CreateEntity("Bouncy Sphere");
     m_SphereEntity.AddComponent<Axle::TransformComponent>(
-        glm::vec3(2.0f, 14.0f, 0.0f),
+        glm::vec3(5.0f, 4.0f, 8.0f),
         glm::vec3(0.5f, 0.5f, 0.5f)
     );
     m_SphereEntity.AddComponent<Axle::MeshComponent>(
@@ -284,11 +284,47 @@ void SandboxLayer::OnAttach() {
     );
     m_SphereEntity.AddComponent<Axle::RigidBodyComponent>(m_SphereBodyID, true);
 
+    // 8. Vehicle Mechanics (Phase 4 Automotive Simulation)
+    m_Vehicle = std::make_unique<Axle::Vehicle>(*m_PhysicsScene);
+
+    // Entity 4: Vehicle Chassis
+    m_ChassisEntity = m_Scene->CreateEntity("Vehicle Chassis");
+    m_ChassisEntity.AddComponent<Axle::TransformComponent>(
+        m_Vehicle->GetPosition(),
+        glm::vec3(1.8f, 0.5f, 4.0f)
+    );
+    m_ChassisEntity.AddComponent<Axle::MeshComponent>(
+        m_VertexArray,
+        1,      // Local 3D caro
+        4.0f,   // 4x4 squares per face
+        glm::vec4(0.88f, 0.12f, 0.15f, 1.0f), // Racing crimson red
+        glm::vec4(0.10f, 0.10f, 0.12f, 1.0f)  // Carbon fiber dark
+    );
+    m_ChassisEntity.AddComponent<Axle::RigidBodyComponent>(m_Vehicle->GetChassisBodyID(), true);
+
+    // Entities 5-8: Four Vehicle Wheels
+    const char* wheelNames[4] = { "Wheel FL", "Wheel FR", "Wheel RL", "Wheel RR" };
+    for (Axle::u32 i = 0; i < 4; ++i) {
+        m_WheelEntities[i] = m_Scene->CreateEntity(wheelNames[i]);
+        m_WheelEntities[i].AddComponent<Axle::TransformComponent>(
+            glm::vec3(0.0f),
+            glm::vec3(0.20f, 0.35f, 0.35f)
+        );
+        m_WheelEntities[i].AddComponent<Axle::MeshComponent>(
+            m_SphereVertexArray,
+            2,      // Spherical Caro
+            16.0f,
+            glm::vec4(0.15f, 0.16f, 0.18f, 1.0f), // Tire rubber
+            glm::vec4(0.85f, 0.85f, 0.90f, 1.0f)  // Alloy rim silver
+        );
+    }
+
     Axle::RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
 }
 
 void SandboxLayer::OnDetach() {
     AXLE_INFO("SandboxLayer detached");
+    m_Vehicle.reset();
     m_Scene.reset();
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
@@ -306,13 +342,29 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         return;
     }
 
-    // Press 'R' to reset and drop the box and sphere again from elevation
+    // Press 'R' to reset and drop dynamic bodies and vehicle
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::R)) {
-        m_PhysicsScene->SetBodyPositionAndRotation(m_BoxBodyID, glm::vec3(0.0f, 10.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
+        m_PhysicsScene->SetBodyPositionAndRotation(m_BoxBodyID, glm::vec3(-5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
         m_PhysicsScene->SetLinearVelocity(m_BoxBodyID, glm::vec3(0.0f));
 
-        m_PhysicsScene->SetBodyPositionAndRotation(m_SphereBodyID, glm::vec3(2.0f, 14.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
+        m_PhysicsScene->SetBodyPositionAndRotation(m_SphereBodyID, glm::vec3(5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
         m_PhysicsScene->SetLinearVelocity(m_SphereBodyID, glm::vec3(0.0f));
+
+        if (m_Vehicle) {
+            m_Vehicle->Reset(glm::vec3(0.0f, 1.2f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        }
+        m_OrbitYaw = 180.0f;
+        m_OrbitPitch = 15.0f;
+    }
+
+    // Press 'C' to toggle chase camera / free-fly camera
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::C)) {
+        if (!m_CKeyWasPressed) {
+            m_ChaseCamera = !m_ChaseCamera;
+            m_CKeyWasPressed = true;
+        }
+    } else {
+        m_CKeyWasPressed = false;
     }
 
     // Press 'F1' to toggle physics wireframe debug visualization
@@ -325,14 +377,112 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_F1KeyWasPressed = false;
     }
 
+    // Driver inputs for vehicle
+    if (m_Vehicle) {
+        Axle::f32 forwardInput = 0.0f;
+        Axle::f32 rightInput = 0.0f;
+        Axle::f32 brakeInput = 0.0f;
+        Axle::f32 handBrakeInput = 0.0f;
+
+        // Drive inputs: Arrow keys always work; WASD work when Chase Camera is active
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Up) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::W))) {
+            forwardInput += 1.0f;
+        }
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Down) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::S))) {
+            forwardInput -= 1.0f;
+        }
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Left) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::A))) {
+            rightInput -= 1.0f;
+        }
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Right) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::D))) {
+            rightInput += 1.0f;
+        }
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
+            handBrakeInput = 1.0f;
+        }
+
+        m_Vehicle->SetDriverInput(forwardInput, rightInput, brakeInput, handBrakeInput);
+    }
+
     m_LastDeltaTime = ts.GetSeconds();
-    m_CameraController->OnUpdate(ts);
+
+    // Camera update: Chase vehicle with mouse orbit, or Free-fly controller
+    if (m_ChaseCamera && m_Vehicle) {
+        const auto [mouseX, mouseY] = Axle::Input::GetMousePosition();
+        const glm::vec2 currentMousePos{ mouseX, mouseY };
+
+        if (m_FirstMouseUpdate) {
+            m_LastMousePos = currentMousePos;
+            m_FirstMouseUpdate = false;
+        }
+
+        const glm::vec2 mouseDelta = currentMousePos - m_LastMousePos;
+        m_LastMousePos = currentMousePos;
+
+        // Orbit camera around vehicle with mouse drag (Right or Left button)
+        const bool isDragging = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)
+                             || Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonLeft);
+
+        if (isDragging) {
+            m_OrbitYaw -= mouseDelta.x * 0.25f;
+            m_OrbitPitch -= mouseDelta.y * 0.25f;
+            m_OrbitPitch = std::clamp(m_OrbitPitch, -45.0f, 75.0f);
+        }
+
+        const glm::vec3 carPos = m_Vehicle->GetPosition();
+        const glm::vec3 carFwd = m_Vehicle->GetForwardVector();
+
+        // If driving and not dragging mouse, smoothly align orbit behind car heading
+        if (!isDragging) {
+            const Axle::f32 carSpeed = glm::length(m_PhysicsScene->GetLinearVelocity(m_Vehicle->GetChassisBodyID()));
+            if (carSpeed > 0.5f) {
+                const Axle::f32 targetYaw = glm::degrees(std::atan2(-carFwd.x, -carFwd.z));
+                Axle::f32 diff = targetYaw - m_OrbitYaw;
+                while (diff < -180.0f) diff += 360.0f;
+                while (diff > 180.0f) diff -= 360.0f;
+                m_OrbitYaw += diff * std::min(1.0f, ts.GetSeconds() * 3.5f);
+            }
+        }
+
+        const Axle::f32 radYaw = glm::radians(m_OrbitYaw);
+        const Axle::f32 radPitch = glm::radians(m_OrbitPitch);
+        constexpr Axle::f32 dist = 7.5f;
+
+        glm::vec3 offset;
+        offset.x = -std::sin(radYaw) * std::cos(radPitch) * dist;
+        offset.y = std::sin(radPitch) * dist + 1.2f;
+        offset.z = -std::cos(radYaw) * std::cos(radPitch) * dist;
+
+        const glm::vec3 lookTarget = carPos + glm::vec3(0.0f, 0.8f, 0.0f);
+        const glm::vec3 camPos = lookTarget - offset;
+        const glm::vec3 lookDir = glm::normalize(lookTarget - camPos);
+
+        const Axle::f32 pitch = glm::degrees(std::asin(std::clamp(lookDir.y, -0.999f, 0.999f)));
+        const Axle::f32 yaw = glm::degrees(std::atan2(-lookDir.x, -lookDir.z));
+
+        m_CameraController->SetPosition(camPos);
+        m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
+    } else {
+        m_CameraController->OnUpdate(ts);
+    }
+
+    // Step physics simulation
     m_PhysicsScene->Step(ts);
+
+    // Synchronize 4 wheel entity transforms with physics vehicle constraint
+    if (m_Vehicle) {
+        for (Axle::u32 i = 0; i < 4; ++i) {
+            const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
+            auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
+            tc.Translation = glm::vec3(wheelMat[3]);
+            tc.Rotation = glm::quat_cast(wheelMat);
+        }
+    }
 
     // Render pass
     Axle::RenderCommand::Clear();
 
-    // 1. Render all entities through ECS Scene (automatically synchronizes Jolt physics transforms)
+    // 1. Render all entities through ECS Scene (chassis position is updated via RigidBodyComponent)
     m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader);
 
     // 2. Render JPH::DebugRenderer physics collider wireframes when enabled
@@ -363,8 +513,21 @@ void SandboxLayer::OnImGuiRender() {
         .DrawBoundingBoxes = m_PhysicsDrawSettings.DrawBoundingBoxes,
         .DrawVelocity = m_PhysicsDrawSettings.DrawVelocity,
         .DrawCenterOfMass = m_PhysicsDrawSettings.DrawCenterOfMass,
-        .DebugLineCount = m_PhysicsDebugRenderer ? m_PhysicsDebugRenderer->GetLineCount() : 0
+        .DebugLineCount = m_PhysicsDebugRenderer ? m_PhysicsDebugRenderer->GetLineCount() : 0,
+        .HasVehicle = (m_Vehicle != nullptr),
+        .IsChaseCamera = m_ChaseCamera
     };
+
+    if (m_Vehicle) {
+        const auto vTele = m_Vehicle->GetTelemetry();
+        telemetry.VehicleSpeedKmh = vTele.SpeedKmh;
+        telemetry.VehicleRPM = vTele.EngineRPM;
+        telemetry.VehicleGear = vTele.CurrentGear;
+        for (Axle::u32 i = 0; i < 4; ++i) {
+            telemetry.WheelContacts[i] = vTele.Wheels[i].HasContact;
+            telemetry.WheelSuspension[i] = vTele.Wheels[i].SuspensionLength;
+        }
+    }
 
     m_DebugPanel.OnImGuiRender(telemetry);
 

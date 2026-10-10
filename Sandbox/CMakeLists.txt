@@ -3,6 +3,7 @@ add_executable(SandboxApp
 )
 
 target_link_libraries(SandboxApp PRIVATE
+    Axle::Core
     Axle::Platform
     Axle::Renderer
     Axle::UI

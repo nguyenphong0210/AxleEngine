@@ -14,7 +14,7 @@ target_include_directories(AxleRenderer PUBLIC
 
 target_link_libraries(AxleRenderer
     PUBLIC
-        Axle::Foundation
+        Axle::Core
         Axle::Platform
     PRIVATE
         glad

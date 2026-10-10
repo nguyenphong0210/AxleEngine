@@ -11,7 +11,7 @@ target_include_directories(AxlePlatform PUBLIC
 
 target_link_libraries(AxlePlatform
     PUBLIC 
-        Axle::Foundation
+        Axle::Core
     PRIVATE 
         glfw
 )

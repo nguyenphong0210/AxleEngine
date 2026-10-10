@@ -19,7 +19,7 @@ target_include_directories(AxleUI PUBLIC
 
 target_link_libraries(AxleUI
     PUBLIC
-        Axle::Foundation
+        Axle::Core
         Axle::Platform
     PRIVATE
         glfw

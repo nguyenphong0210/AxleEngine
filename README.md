@@ -17,48 +17,49 @@ AxleEngine is organized into a strictly layered architecture to decouple graphic
 
 ```plaintext
 Level 4:  [ Sandbox / Game Client ]
-Level 3:  [ Modules/Scene ]        [ Modules/Vehicle ]
-Level 2:  [ Modules/Physics ]      [ Modules/Renderer ]    [ Modules/Asset ]    [ Modules/UI ]
-Level 1:  [ Modules/Platform ]
-Level 0:  [ Modules/Foundation ]
+Level 3:  [ Engine/Scene ]        [ Engine/Vehicle ]
+Level 2:  [ Engine/Physics ]      [ Engine/Renderer ]    [ Engine/Asset ]    [ Engine/UI ]
+Level 1:  [ Engine/Platform ]
+Level 0:  [ Engine/Core ]
 ```
 
 ### Module Breakdown:
-- **Level 0 - `Modules/Foundation`**: Primitive typedefs (`Axle::f32`, `Axle::u32`), high-performance multithreaded logging via **spdlog** (`Axle::Log`, `AXLE_CORE_*`), frame timing (`Axle::Timestep`), and debugging assertion macros.
-- **Level 1 - `Modules/Platform`**: Window lifecycle, OpenGL context creation, event dispatching, and static input polling (`Axle::Input`) via **GLFW**.
+- **Level 0 - `Engine/Core`**: Primitive typedefs (`Axle::f32`, `Axle::u32`), high-performance multithreaded logging via **spdlog** (`Axle::Log`, `AXLE_CORE_*`), frame timing (`Axle::Timestep`), and debugging assertion macros.
+- **Level 1 - `Engine/Platform`**: Window lifecycle, OpenGL context creation, event dispatching, and static input polling (`Axle::Input`) via **GLFW**.
 - **Level 2 - Core Subsystems**:
-  - **`Modules/Renderer`**: Complete OpenGL 4.5 Core Profile abstraction (Buffers, Vertex Arrays, Shaders with uniform caches, Perspective Camera & Free-Fly Controller).
-  - **`Modules/UI`**: Dedicated **Dear ImGui** (docking-enabled) integration with telemetry overlay (`DebugPanel`) for FPS, frametime, and camera statistics.
-  - **`Modules/Physics`** *(In Progress)*: Multithreaded physics simulation bridge using **Jolt Physics** (JobSystem, BroadPhase, RigidBodies, debug wireframe rendering).
-  - **`Modules/Asset`**: 3D mesh loaders (`.gltf`/`.obj`) and image texture loading into GPU memory.
+  - **`Engine/Renderer`**: Complete OpenGL 4.5 Core Profile abstraction (Buffers, Vertex Arrays, Shaders with uniform caches, Perspective Camera & Free-Fly Controller).
+  - **`Engine/UI`**: Dedicated **Dear ImGui** (docking-enabled) integration with telemetry overlay (`DebugPanel`) for FPS, frametime, and camera statistics.
+  - **`Engine/Physics`** *(In Progress)*: Multithreaded physics simulation bridge using **Jolt Physics** (JobSystem, BroadPhase, RigidBodies, debug wireframe rendering).
+  - **`Engine/Asset`**: 3D mesh loaders (`.gltf`/`.obj`) and image texture loading into GPU memory.
 - **Level 3 - High-Level Systems**:
-  - **`Modules/Scene`**: Entity Component System (ECS) synchronizing Jolt physics bodies with renderer transforms.
-  - **`Modules/Vehicle`**: Specialized vehicle dynamics (Ackermann steering, suspension spring dampening, tire slip, engine torque curve, and transmission).
+  - **`Engine/Scene`**: Entity Component System (ECS) synchronizing Jolt physics bodies with renderer transforms.
+  - **`Engine/Vehicle`**: Specialized vehicle dynamics (Ackermann steering, suspension spring dampening, tire slip, engine torque curve, and transmission).
 - **Level 4 - `Sandbox`**: Client applications demonstrating simulation scenarios.
 
 ---
 
 ## 🗺️ Project Roadmap
 
-- [x] **Phase 1: UI & Telemetry Overlay (`Modules/UI`)**
+- [x] **Phase 1: UI & Telemetry Overlay (`Engine/UI`)**
   - [x] Integrate Dear ImGui (docking branch) as a submodule.
   - [x] Encapsulate `ImGuiLayer` (lifecycle, modern dark theme, multi-viewport support).
   - [x] Implement `DebugPanel` to display real-time FPS, delta time, and camera transform.
-- [ ] **Phase 2: Physics Engine Foundation (`Modules/Physics`)**
-  - [ ] Integrate Jolt Physics submodule into `ThirdParty/JoltPhysics`.
+- [ ] **Phase 2: Physics Engine Foundation (`Engine/Physics`)**
+  - [x] Integrate Jolt Physics submodule into `ThirdParty/JoltPhysics` (v5.2.0).
+  - [ ] Configure CMake build options for Jolt Physics and `Axle::Physics`.
   - [ ] Implement `PhysicsSystem` & `PhysicsScene` (multithreaded job system, gravity, collision layers).
   - [ ] Simulate static ground plane and dynamic falling rigid body boxes.
   - [ ] Integrate `JPH::DebugRenderer` to draw collider wireframes in OpenGL.
-- [ ] **Phase 3: Scene & Transform Synchronization (`Modules/Scene`)**
+- [ ] **Phase 3: Scene & Transform Synchronization (`Engine/Scene`)**
   - [ ] Integrate header-only ECS library (EnTT).
   - [ ] Define `TransformComponent`, `MeshRendererComponent`, and `RigidBodyComponent`.
   - [ ] Implement `Scene::OnUpdate()` to automatically bind Jolt physics transforms to render meshes.
-- [ ] **Phase 4: Automotive Mechanics (`Modules/Vehicle`)**
+- [ ] **Phase 4: Automotive Mechanics (`Engine/Vehicle`)**
   - [ ] Implement `VehicleConstraintWrapper` utilizing Jolt's vehicle mechanics.
   - [ ] Configure 4-wheel suspension rays, springs, and tire friction curves.
   - [ ] Build powertrain model (RPM, gear ratios, differential, acceleration/braking forces).
   - [ ] Wire vehicle telemetry (speedometer, tachometer, G-force) into ImGui.
-- [ ] **Phase 5: 3D Asset Loading (`Modules/Asset`)**
+- [ ] **Phase 5: 3D Asset Loading (`Engine/Asset`)**
   - [ ] Integrate mesh loading (fastgltf / tinyobjloader) for detailed car body and wheel models.
   - [ ] Texture mapping (diffuse, normal maps) via `stb_image`.
   - [ ] Replace debug cube meshes with realistic 3D vehicle assets.

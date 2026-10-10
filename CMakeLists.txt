@@ -20,11 +20,11 @@ add_subdirectory(ThirdParty/glfw)
 add_subdirectory(ThirdParty/glad)
 add_subdirectory(ThirdParty/spdlog)
 
-# Load modules according to architectural hierarchy
-add_subdirectory(Modules/Foundation)
-add_subdirectory(Modules/Platform)
-add_subdirectory(Modules/Renderer)
-add_subdirectory(Modules/UI)
+# Load engine modules according to architectural hierarchy
+add_subdirectory(Engine/Core)
+add_subdirectory(Engine/Platform)
+add_subdirectory(Engine/Renderer)
+add_subdirectory(Engine/UI)
 
 # Load test application
 add_subdirectory(Sandbox)

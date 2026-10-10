@@ -17,19 +17,19 @@ AxleEngine is organized into a strictly layered architecture to decouple graphic
 
 ```plaintext
 Level 4:  [ Sandbox / Game Client ]
-Level 3:  [ Engine/Scene ]        [ Engine/Vehicle ]
-Level 2:  [ Engine/Physics ]      [ Engine/Renderer ]    [ Engine/Asset ]    [ Engine/UI ]
+Level 3:  [ Engine/Scene ]            [ Engine/Vehicle ]
+Level 2:  [ Engine/Physics ]          [ Engine/Renderer ] [ Engine/Asset ]    [ Engine/UI ]
 Level 1:  [ Engine/Platform ]
 Level 0:  [ Engine/Core ]
 ```
 
 ### Module Breakdown:
-- **Level 0 - `Engine/Core`**: Primitive typedefs (`Axle::f32`, `Axle::u32`), high-performance multithreaded logging via **spdlog** (`Axle::Log`, `AXLE_CORE_*`), frame timing (`Axle::Timestep`), and debugging assertion macros.
+- **Level 0 - `Engine/Core`**: Application lifecycle orchestrator (`Axle::Application`, `Axle::Layer`, `Axle::LayerStack`), primitive typedefs (`Axle::f32`, `Axle::u32`), high-performance multithreaded logging via **spdlog** (`Axle::Log`, `AXLE_CORE_*`), frame timing (`Axle::Timestep`), and debugging assertion macros.
 - **Level 1 - `Engine/Platform`**: Window lifecycle, OpenGL context creation, event dispatching, and static input polling (`Axle::Input`) via **GLFW**.
 - **Level 2 - Core Subsystems**:
   - **`Engine/Renderer`**: Complete OpenGL 4.5 Core Profile abstraction (Buffers, Vertex Arrays, Shaders with uniform caches, Perspective Camera & Free-Fly Controller).
   - **`Engine/UI`**: Dedicated **Dear ImGui** (docking-enabled) integration with telemetry overlay (`DebugPanel`) for FPS, frametime, and camera statistics.
-  - **`Engine/Physics`** *(In Progress)*: Multithreaded physics simulation bridge using **Jolt Physics** (JobSystem, BroadPhase, RigidBodies, debug wireframe rendering).
+  - **`Engine/Physics`**: Multithreaded physics simulation bridge using **Jolt Physics** (JobSystem, BroadPhase, RigidBodies, collision math bridge).
   - **`Engine/Asset`**: 3D mesh loaders (`.gltf`/`.obj`) and image texture loading into GPU memory.
 - **Level 3 - High-Level Systems**:
   - **`Engine/Scene`**: Entity Component System (ECS) synchronizing Jolt physics bodies with renderer transforms.
@@ -47,8 +47,8 @@ Level 0:  [ Engine/Core ]
 - [ ] **Phase 2: Physics Engine Foundation (`Engine/Physics`)**
   - [x] Integrate Jolt Physics submodule into `ThirdParty/JoltPhysics` (v5.2.0).
   - [x] Configure CMake build options for Jolt Physics and `Axle::Physics`.
-  - [ ] Implement `PhysicsSystem` & `PhysicsScene` (multithreaded job system, gravity, collision layers).
-  - [ ] Simulate static ground plane and dynamic falling rigid body boxes.
+  - [x] Implement `PhysicsSystem` & `PhysicsScene` (multithreaded job system, gravity, collision layers).
+  - [x] Simulate static ground plane and dynamic falling rigid body boxes.
   - [ ] Integrate `JPH::DebugRenderer` to draw collider wireframes in OpenGL.
 - [ ] **Phase 3: Scene & Transform Synchronization (`Engine/Scene`)**
   - [ ] Integrate header-only ECS library (EnTT).

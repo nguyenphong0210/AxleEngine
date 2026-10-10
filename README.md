@@ -50,10 +50,10 @@ Level 0:  [ Engine/Core ]
   - [x] Implement `PhysicsSystem` & `PhysicsScene` (multithreaded job system, gravity, collision layers).
   - [x] Simulate static ground plane, dynamic falling box, and bouncy sphere.
   - [x] Integrate `JPH::DebugRenderer` (`PhysicsDebugRenderer`) to draw collider wireframes in OpenGL.
-- [ ] **Phase 3: Scene & Transform Synchronization (`Engine/Scene`)**
-  - [ ] Integrate header-only ECS library (EnTT).
-  - [ ] Define `TransformComponent`, `MeshRendererComponent`, and `RigidBodyComponent`.
-  - [ ] Implement `Scene::OnUpdate()` to automatically bind Jolt physics transforms to render meshes.
+- [x] **Phase 3: Scene & Transform Synchronization (`Engine/Scene`)**
+  - [x] Integrate header-only ECS library (EnTT v3.14.0) via submodule in `ThirdParty/entt`.
+  - [x] Define `TagComponent`, `TransformComponent`, `MeshComponent`, and `RigidBodyComponent`.
+  - [x] Implement `Scene::OnUpdate()` to automatically bind Jolt physics transforms to render meshes.
 - [ ] **Phase 4: Automotive Mechanics (`Engine/Vehicle`)**
   - [ ] Implement `VehicleConstraintWrapper` utilizing Jolt's vehicle mechanics.
   - [ ] Configure 4-wheel suspension rays, springs, and tire friction curves.

@@ -17,3 +17,6 @@
 	path = ThirdParty/JoltPhysics
 	url = https://github.com/jrouwe/JoltPhysics.git
 	branch = v5.2.0
+[submodule "ThirdParty/entt"]
+	path = ThirdParty/entt
+	url = https://github.com/skypjack/entt.git

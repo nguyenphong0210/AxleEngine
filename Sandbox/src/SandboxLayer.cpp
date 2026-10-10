@@ -4,6 +4,7 @@
 #include <Axle/Input.hpp>
 #include <Axle/KeyCodes.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/Components.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
@@ -235,11 +236,60 @@ void SandboxLayer::OnAttach() {
     // 6. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
     m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
 
+    // 7. ECS Scene & Entities Initialization
+    m_Scene = std::make_unique<Axle::Scene>();
+
+    // Entity 1: Static Ground Floor
+    m_FloorEntity = m_Scene->CreateEntity("Static Floor");
+    m_FloorEntity.AddComponent<Axle::TransformComponent>(
+        glm::vec3(0.0f, -0.5f, 0.0f),
+        glm::vec3(100.0f, 1.0f, 100.0f)
+    );
+    m_FloorEntity.AddComponent<Axle::MeshComponent>(
+        m_VertexArray,
+        0,       // World-space XZ caro
+        1.0f,    // 1-meter squares
+        glm::vec4(0.20f, 0.22f, 0.25f, 1.0f), // Dark slate
+        glm::vec4(0.32f, 0.35f, 0.40f, 1.0f)  // Cool medium gray
+    );
+    m_FloorEntity.AddComponent<Axle::RigidBodyComponent>(m_FloorBodyID, false);
+
+    // Entity 2: Dynamic Falling Box
+    m_BoxEntity = m_Scene->CreateEntity("Dynamic Box");
+    m_BoxEntity.AddComponent<Axle::TransformComponent>(
+        glm::vec3(0.0f, 10.0f, 0.0f),
+        glm::vec3(1.0f, 1.0f, 1.0f)
+    );
+    m_BoxEntity.AddComponent<Axle::MeshComponent>(
+        m_VertexArray,
+        1,       // Local-space 3D caro
+        4.0f,    // 4x4 squares per face
+        glm::vec4(0.96f, 0.52f, 0.12f, 1.0f), // Vibrant motorsport orange
+        glm::vec4(0.12f, 0.13f, 0.15f, 1.0f)  // Dark graphite
+    );
+    m_BoxEntity.AddComponent<Axle::RigidBodyComponent>(m_BoxBodyID, true);
+
+    // Entity 3: Dynamic Bouncy Sphere
+    m_SphereEntity = m_Scene->CreateEntity("Bouncy Sphere");
+    m_SphereEntity.AddComponent<Axle::TransformComponent>(
+        glm::vec3(2.0f, 14.0f, 0.0f),
+        glm::vec3(0.5f, 0.5f, 0.5f)
+    );
+    m_SphereEntity.AddComponent<Axle::MeshComponent>(
+        m_SphereVertexArray,
+        2,       // Spherical Caro
+        16.0f,   // 16 sectors x 8 rings
+        glm::vec4(0.0f, 0.85f, 0.95f, 1.0f),  // Electric cyan
+        glm::vec4(0.05f, 0.12f, 0.24f, 1.0f)  // Deep navy
+    );
+    m_SphereEntity.AddComponent<Axle::RigidBodyComponent>(m_SphereBodyID, true);
+
     Axle::RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
 }
 
 void SandboxLayer::OnDetach() {
     AXLE_INFO("SandboxLayer detached");
+    m_Scene.reset();
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
 }
@@ -282,38 +332,10 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     // Render pass
     Axle::RenderCommand::Clear();
 
-    m_Shader->Bind();
-    m_Shader->SetMat4("u_ViewProjection", m_CameraController->GetCamera().GetViewProjectionMatrix());
-    m_Shader->SetFloat3("u_LightDir", glm::vec3(0.45f, 1.0f, 0.65f));
+    // 1. Render all entities through ECS Scene (automatically synchronizes Jolt physics transforms)
+    m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader);
 
-    // 1. Render static floor with world-space 1m x 1m Caro (Checkerboard) pattern
-    const glm::mat4 floorTransform = m_PhysicsScene->GetBodyTransform(m_FloorBodyID) * glm::scale(glm::mat4(1.0f), glm::vec3(100.0f, 1.0f, 100.0f));
-    m_Shader->SetMat4("u_Transform", floorTransform);
-    m_Shader->SetInt("u_PatternMode", 0);       // World-space XZ caro
-    m_Shader->SetFloat("u_TileScale", 1.0f);    // 1-meter squares
-    m_Shader->SetFloat4("u_Color1", glm::vec4(0.20f, 0.22f, 0.25f, 1.0f)); // Dark slate
-    m_Shader->SetFloat4("u_Color2", glm::vec4(0.32f, 0.35f, 0.40f, 1.0f)); // Cool medium gray
-    Axle::RenderCommand::DrawIndexed(m_VertexArray);
-
-    // 2. Render dynamic falling box with 4x4 Caro (Checkerboard) pattern on each face
-    const glm::mat4 boxTransform = m_PhysicsScene->GetBodyTransform(m_BoxBodyID);
-    m_Shader->SetMat4("u_Transform", boxTransform);
-    m_Shader->SetInt("u_PatternMode", 1);       // Local-space 3D caro
-    m_Shader->SetFloat("u_TileScale", 4.0f);    // 4x4 squares per face
-    m_Shader->SetFloat4("u_Color1", glm::vec4(0.96f, 0.52f, 0.12f, 1.0f)); // Vibrant motorsport orange
-    m_Shader->SetFloat4("u_Color2", glm::vec4(0.12f, 0.13f, 0.15f, 1.0f)); // Dark graphite
-    Axle::RenderCommand::DrawIndexed(m_VertexArray);
-
-    // 3. Render dynamic bouncy sphere with spherical Caro (Checkerboard) pattern
-    const glm::mat4 sphereTransform = m_PhysicsScene->GetBodyTransform(m_SphereBodyID) * glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
-    m_Shader->SetMat4("u_Transform", sphereTransform);
-    m_Shader->SetInt("u_PatternMode", 2);       // Spherical Caro
-    m_Shader->SetFloat("u_TileScale", 16.0f);   // 16 longitude sectors x 8 latitude rings
-    m_Shader->SetFloat4("u_Color1", glm::vec4(0.0f, 0.85f, 0.95f, 1.0f));  // Electric cyan
-    m_Shader->SetFloat4("u_Color2", glm::vec4(0.05f, 0.12f, 0.24f, 1.0f)); // Deep navy
-    Axle::RenderCommand::DrawIndexed(m_SphereVertexArray);
-
-    // 4. Render JPH::DebugRenderer physics collider wireframes when enabled
+    // 2. Render JPH::DebugRenderer physics collider wireframes when enabled
     if (m_ShowPhysicsDebug && m_PhysicsDebugRenderer) {
         m_PhysicsDebugRenderer->Begin(m_CameraController->GetCamera().GetPosition());
         m_PhysicsScene->DrawDebug(*m_PhysicsDebugRenderer, m_PhysicsDrawSettings);

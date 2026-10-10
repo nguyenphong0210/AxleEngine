@@ -33,6 +33,7 @@ add_subdirectory(Engine/Platform)
 add_subdirectory(Engine/Renderer)
 add_subdirectory(Engine/UI)
 add_subdirectory(Engine/Physics)
+add_subdirectory(Engine/Scene)
 
 # Load test application
 add_subdirectory(Sandbox)

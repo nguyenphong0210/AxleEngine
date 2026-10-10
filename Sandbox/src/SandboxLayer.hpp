@@ -7,6 +7,8 @@
 #include <Axle/DebugPanel.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/Entity.hpp>
 #include <memory>
 
 class SandboxLayer : public Axle::Layer {
@@ -27,6 +29,11 @@ private:
     Axle::PhysicsDrawSettings m_PhysicsDrawSettings;
     bool m_ShowPhysicsDebug = false;
     bool m_F1KeyWasPressed = false;
+
+    std::unique_ptr<Axle::Scene> m_Scene;
+    Axle::Entity m_FloorEntity;
+    Axle::Entity m_BoxEntity;
+    Axle::Entity m_SphereEntity;
 
     Axle::BodyID m_FloorBodyID;
     Axle::BodyID m_BoxBodyID;

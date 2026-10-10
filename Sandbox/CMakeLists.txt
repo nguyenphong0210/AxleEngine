@@ -13,4 +13,5 @@ target_link_libraries(SandboxApp PRIVATE
     Axle::Renderer
     Axle::UI
     Axle::Physics
+    Axle::Scene
 )

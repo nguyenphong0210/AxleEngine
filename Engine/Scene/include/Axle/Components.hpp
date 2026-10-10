@@ -6,7 +6,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <entt/entt.hpp>
 #include <string>
+#include <vector>
 #include <memory>
 
 namespace Axle {
@@ -60,6 +62,15 @@ namespace Axle {
         RigidBodyComponent() = default;
         RigidBodyComponent(BodyID bodyId, bool isDynamic = true)
             : RuntimeBodyID(bodyId), IsDynamic(isDynamic) {}
+    };
+
+    struct HierarchyComponent {
+        entt::entity Parent{ entt::null };
+        std::vector<entt::entity> Children;
+
+        HierarchyComponent() = default;
+        HierarchyComponent(entt::entity parent)
+            : Parent(parent) {}
     };
 
 }

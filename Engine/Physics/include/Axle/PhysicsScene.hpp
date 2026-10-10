@@ -126,6 +126,7 @@ namespace Axle {
 
         // Transform and motion queries / mutations
         glm::vec3 GetBodyPosition(BodyID bodyID) const;
+        glm::vec3 GetCenterOfMassPosition(BodyID bodyID) const;
         glm::quat GetBodyRotation(BodyID bodyID) const;
         glm::mat4 GetBodyTransform(BodyID bodyID) const;
 

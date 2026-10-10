@@ -301,6 +301,11 @@ namespace Axle {
 
     glm::vec3 PhysicsScene::GetBodyPosition(BodyID bodyID) const {
         if (bodyID.IsInvalid()) return glm::vec3(0.0f);
+        return ToGlm(m_PhysicsSystem.GetBodyInterface().GetPosition(bodyID));
+    }
+
+    glm::vec3 PhysicsScene::GetCenterOfMassPosition(BodyID bodyID) const {
+        if (bodyID.IsInvalid()) return glm::vec3(0.0f);
         return ToGlm(m_PhysicsSystem.GetBodyInterface().GetCenterOfMassPosition(bodyID));
     }
 

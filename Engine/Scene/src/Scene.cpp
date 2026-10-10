@@ -2,6 +2,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <algorithm>
 
 namespace Axle {
 
@@ -15,6 +16,22 @@ namespace Axle {
     }
 
     void Scene::DestroyEntity(Entity entity) {
+        if (entity.HasComponent<HierarchyComponent>()) {
+            auto& hc = entity.GetComponent<HierarchyComponent>();
+            auto children = hc.Children; // Copy list to avoid iterator invalidation
+            for (auto child : children) {
+                if (m_Registry.valid(child)) {
+                    DestroyEntity({ child, this });
+                }
+            }
+            if (hc.Parent != entt::null && m_Registry.valid(hc.Parent)) {
+                if (m_Registry.all_of<HierarchyComponent>(hc.Parent)) {
+                    auto& parentHc = m_Registry.get<HierarchyComponent>(hc.Parent);
+                    auto it = std::remove(parentHc.Children.begin(), parentHc.Children.end(), static_cast<entt::entity>(entity));
+                    parentHc.Children.erase(it, parentHc.Children.end());
+                }
+            }
+        }
         m_Registry.destroy(entity);
     }
 
@@ -38,10 +55,11 @@ namespace Axle {
         if (physicsScene) {
             auto physicsView = m_Registry.view<RigidBodyComponent, TransformComponent>();
             for (auto entity : physicsView) {
-                auto [rigidBody, transform] = physicsView.get<RigidBodyComponent, TransformComponent>(entity);
-                if (!rigidBody.RuntimeBodyID.IsInvalid()) {
-                    transform.Translation = physicsScene->GetBodyPosition(rigidBody.RuntimeBodyID);
-                    transform.Rotation = physicsScene->GetBodyRotation(rigidBody.RuntimeBodyID);
+                auto& tc = m_Registry.get<TransformComponent>(entity);
+                const auto& rb = m_Registry.get<RigidBodyComponent>(entity);
+                if (!rb.RuntimeBodyID.IsInvalid()) {
+                    tc.Translation = physicsScene->GetBodyPosition(rb.RuntimeBodyID);
+                    tc.Rotation = physicsScene->GetBodyRotation(rb.RuntimeBodyID);
                 }
             }
         }

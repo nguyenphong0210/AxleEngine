@@ -273,6 +273,7 @@ void SandboxLayer::OnAttach() {
         glm::vec4(0.10f, 0.10f, 0.12f, 1.0f)  // Carbon fiber dark
     );
     m_ChassisEntity.AddComponent<Axle::RigidBodyComponent>(m_Vehicle->GetChassisBodyID(), true);
+    auto& chassisHierarchy = m_ChassisEntity.AddComponent<Axle::HierarchyComponent>();
 
     // Entities 7-10: Four Vehicle Wheels (Cylindrical Wheels)
     const char* wheelNames[4] = { "Wheel FL", "Wheel FR", "Wheel RL", "Wheel RR" };
@@ -289,6 +290,8 @@ void SandboxLayer::OnAttach() {
             glm::vec4(0.15f, 0.16f, 0.18f, 1.0f), // Tire rubber
             glm::vec4(0.85f, 0.85f, 0.90f, 1.0f)  // Alloy rim silver
         );
+        m_WheelEntities[i].AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(m_ChassisEntity));
+        chassisHierarchy.Children.push_back(static_cast<entt::entity>(m_WheelEntities[i]));
     }
 
     // Connect Editor Panels
@@ -357,6 +360,10 @@ void SandboxLayer::ResetSimulation() {
     if (m_Vehicle) {
         m_Vehicle->Reset(glm::vec3(0.0f, 1.2f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
         m_Vehicle->SetDriverInput(0.0f, 0.0f, 0.0f, 0.0f);
+        auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
+        chassisTC.Translation = m_Vehicle->GetPosition();
+        chassisTC.Rotation = m_PhysicsScene->GetBodyRotation(m_Vehicle->GetChassisBodyID());
+
         for (Axle::u32 i = 0; i < 4; ++i) {
             const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
             auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
@@ -568,8 +575,17 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_StepSingleFrame = false;
     }
 
-    // Synchronize 4 wheel entity transforms with physics vehicle constraint
-    if (m_Vehicle && m_SceneState != SceneState::Edit) {
+    // Synchronize vehicle chassis and 4 wheel entities with physics simulation
+    if (m_Vehicle) {
+        if (m_SceneState == SceneState::Edit) {
+            auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
+            m_Vehicle->Reset(chassisTC.Translation, chassisTC.Rotation);
+        } else {
+            auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
+            chassisTC.Translation = m_Vehicle->GetPosition();
+            chassisTC.Rotation = m_PhysicsScene->GetBodyRotation(m_Vehicle->GetChassisBodyID());
+        }
+
         for (Axle::u32 i = 0; i < 4; ++i) {
             const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
             auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
@@ -957,65 +973,61 @@ void SandboxLayer::OnImGuiRender() {
     const glm::mat4& cameraView = m_CameraController->GetCamera().GetViewMatrix();
     const glm::mat4& cameraProj = m_CameraController->GetCamera().GetProjectionMatrix();
 
-    // 1. Draw Infinite / Metric Editor Grid Floor in Edit Mode
-    if (m_SceneState == SceneState::Edit) {
-        glm::mat4 gridMatrix = glm::mat4(1.0f);
-        ImGuizmo::DrawGrid(glm::value_ptr(cameraView), glm::value_ptr(cameraProj), glm::value_ptr(gridMatrix), 100.0f);
-    }
+    // 1. 3D Transform Gizmo Manipulation for Selected Entity (Active in Edit & Pause modes)
+    if (m_SceneState != SceneState::Play) {
+        auto selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+        if (selectedEntity && selectedEntity.HasComponent<Axle::TransformComponent>() && m_GizmoType != -1) {
+            auto& tc = selectedEntity.GetComponent<Axle::TransformComponent>();
+            glm::mat4 transform = tc.GetTransform();
 
-    // 2. 3D Transform Gizmo Manipulation for Selected Entity
-    auto selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
-    if (selectedEntity && selectedEntity.HasComponent<Axle::TransformComponent>() && m_GizmoType != -1) {
-        auto& tc = selectedEntity.GetComponent<Axle::TransformComponent>();
-        glm::mat4 transform = tc.GetTransform();
-
-        ImGuizmo::MODE mode = m_GizmoModeLocal ? ImGuizmo::MODE::LOCAL : ImGuizmo::MODE::WORLD;
-        if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
-            mode = ImGuizmo::MODE::LOCAL;
-        }
-
-        float snapValues[3] = { 0.0f, 0.0f, 0.0f };
-        if (m_SnapEnabled) {
-            if (m_GizmoType == ImGuizmo::OPERATION::TRANSLATE) {
-                snapValues[0] = snapValues[1] = snapValues[2] = m_SnapTranslation;
-            } else if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) {
-                snapValues[0] = snapValues[1] = snapValues[2] = m_SnapRotation;
-            } else if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
-                snapValues[0] = snapValues[1] = snapValues[2] = m_SnapScale;
+            ImGuizmo::MODE mode = m_GizmoModeLocal ? ImGuizmo::MODE::LOCAL : ImGuizmo::MODE::WORLD;
+            if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
+                mode = ImGuizmo::MODE::LOCAL;
             }
-        }
 
-        if (ImGuizmo::Manipulate(
-                glm::value_ptr(cameraView),
-                glm::value_ptr(cameraProj),
-                static_cast<ImGuizmo::OPERATION>(m_GizmoType),
-                mode,
-                glm::value_ptr(transform),
-                nullptr,
-                m_SnapEnabled ? snapValues : nullptr
-            )) {
-            float translation[3], rotation[3], scale[3];
-            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform), translation, rotation, scale);
-
-            tc.Translation = glm::vec3(translation[0], translation[1], translation[2]);
-            tc.Rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
-            tc.Scale = glm::vec3(scale[0], scale[1], scale[2]);
-
-            // Real-time synchronization with Jolt Physics bodies
-            if (selectedEntity == m_ChassisEntity && m_Vehicle && m_SceneState == SceneState::Edit) {
-                m_Vehicle->Reset(tc.Translation, tc.Rotation);
-                for (Axle::u32 i = 0; i < 4; ++i) {
-                    const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
-                    auto& wtc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
-                    wtc.Translation = glm::vec3(wheelMat[3]);
-                    wtc.Rotation = glm::quat_cast(wheelMat);
+            float snapValues[3] = { 0.0f, 0.0f, 0.0f };
+            if (m_SnapEnabled) {
+                if (m_GizmoType == ImGuizmo::OPERATION::TRANSLATE) {
+                    snapValues[0] = snapValues[1] = snapValues[2] = m_SnapTranslation;
+                } else if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) {
+                    snapValues[0] = snapValues[1] = snapValues[2] = m_SnapRotation;
+                } else if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
+                    snapValues[0] = snapValues[1] = snapValues[2] = m_SnapScale;
                 }
-            } else if (selectedEntity.HasComponent<Axle::RigidBodyComponent>() && m_PhysicsScene) {
-                auto& rb = selectedEntity.GetComponent<Axle::RigidBodyComponent>();
-                if (!rb.RuntimeBodyID.IsInvalid()) {
-                    m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, tc.Translation, tc.Rotation, true);
-                    m_PhysicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
-                    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(rb.RuntimeBodyID, JPH::Vec3::sZero());
+            }
+
+            if (ImGuizmo::Manipulate(
+                    glm::value_ptr(cameraView),
+                    glm::value_ptr(cameraProj),
+                    static_cast<ImGuizmo::OPERATION>(m_GizmoType),
+                    mode,
+                    glm::value_ptr(transform),
+                    nullptr,
+                    m_SnapEnabled ? snapValues : nullptr
+                )) {
+                float translation[3], rotation[3], scale[3];
+                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform), translation, rotation, scale);
+
+                tc.Translation = glm::vec3(translation[0], translation[1], translation[2]);
+                tc.Rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
+                tc.Scale = glm::vec3(scale[0], scale[1], scale[2]);
+
+                // Real-time synchronization with Jolt Physics bodies
+                if (selectedEntity == m_ChassisEntity && m_Vehicle) {
+                    m_Vehicle->Reset(tc.Translation, tc.Rotation);
+                    for (Axle::u32 i = 0; i < 4; ++i) {
+                        const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
+                        auto& wtc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
+                        wtc.Translation = glm::vec3(wheelMat[3]);
+                        wtc.Rotation = glm::quat_cast(wheelMat);
+                    }
+                } else if (selectedEntity.HasComponent<Axle::RigidBodyComponent>() && m_PhysicsScene) {
+                    auto& rb = selectedEntity.GetComponent<Axle::RigidBodyComponent>();
+                    if (!rb.RuntimeBodyID.IsInvalid()) {
+                        m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, tc.Translation, tc.Rotation, true);
+                        m_PhysicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
+                        m_PhysicsScene->GetBodyInterface().SetAngularVelocity(rb.RuntimeBodyID, JPH::Vec3::sZero());
+                    }
                 }
             }
         }

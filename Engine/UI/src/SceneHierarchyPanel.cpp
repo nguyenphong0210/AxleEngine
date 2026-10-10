@@ -88,6 +88,13 @@ namespace Axle {
                 auto view = m_Scene->GetRegistry().view<TagComponent>();
                 for (auto entityID : view) {
                     Entity entity{ entityID, m_Scene };
+                    // If entity is a child, it will be rendered under its parent node
+                    if (entity.HasComponent<HierarchyComponent>()) {
+                        auto& hc = entity.GetComponent<HierarchyComponent>();
+                        if (hc.Parent != entt::null && m_Scene->GetRegistry().valid(hc.Parent)) {
+                            continue;
+                        }
+                    }
                     DrawEntityNode(entity);
                 }
 
@@ -126,9 +133,20 @@ namespace Axle {
     void SceneHierarchyPanel::DrawEntityNode(Entity entity) {
         auto& tag = entity.GetComponent<TagComponent>().Tag;
 
+        bool hasChildren = false;
+        if (entity.HasComponent<HierarchyComponent>()) {
+            hasChildren = !entity.GetComponent<HierarchyComponent>().Children.empty();
+        }
+
         ImGuiTreeNodeFlags flags = ((m_SelectedEntity == entity) ? ImGuiTreeNodeFlags_Selected : 0) 
                                  | ImGuiTreeNodeFlags_OpenOnArrow 
                                  | ImGuiTreeNodeFlags_SpanAvailWidth;
+
+        if (!hasChildren) {
+            flags |= ImGuiTreeNodeFlags_Leaf;
+        } else {
+            flags |= ImGuiTreeNodeFlags_DefaultOpen;
+        }
 
         bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", tag.c_str());
 
@@ -145,6 +163,16 @@ namespace Axle {
         }
 
         if (opened) {
+            if (hasChildren) {
+                // Copy children list to avoid iterator invalidation upon modification
+                auto children = entity.GetComponent<HierarchyComponent>().Children;
+                for (auto childID : children) {
+                    if (m_Scene->GetRegistry().valid(childID)) {
+                        Entity childEntity{ childID, m_Scene };
+                        DrawEntityNode(childEntity);
+                    }
+                }
+            }
             ImGui::TreePop();
         }
 
@@ -169,6 +197,17 @@ namespace Axle {
                 tag = std::string(buffer);
             }
             ImGui::PopItemWidth();
+
+            if (entity.HasComponent<HierarchyComponent>()) {
+                auto& hc = entity.GetComponent<HierarchyComponent>();
+                if (hc.Parent != entt::null && m_Scene->GetRegistry().valid(hc.Parent)) {
+                    Entity parentEntity{ hc.Parent, m_Scene };
+                    ImGui::TextColored(ImVec4(0.45f, 0.75f, 1.0f, 1.0f), "Parent: %s", parentEntity.GetComponent<TagComponent>().Tag.c_str());
+                }
+                if (!hc.Children.empty()) {
+                    ImGui::TextColored(ImVec4(0.45f, 0.90f, 0.55f, 1.0f), "Children: %zu attached", hc.Children.size());
+                }
+            }
             ImGui::Spacing();
         }
 

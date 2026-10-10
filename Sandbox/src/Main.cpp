@@ -1,3 +1,4 @@
+#include <Axle/Types.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/Timestep.hpp>
 #include <Axle/Window.hpp>
@@ -6,7 +7,7 @@
 #include <Axle/Shader.hpp>
 #include <Axle/Buffer.hpp>
 #include <Axle/VertexArray.hpp>
-#include <Axle/PerspectiveCamera.hpp>
+#include <Axle/PerspectiveCameraController.hpp>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -14,10 +15,10 @@
 
 int main() {
     Axle::Log::Init();
-    AXLE_CORE_INFO("Starting 3D Perspective Sandbox...");
+    AXLE_CORE_INFO("Starting 3D Sandbox with Free-Fly Camera...");
 
     Axle::WindowProps props;
-    props.Title = "Axle Engine - 3D Cube & Perspective Camera";
+    props.Title = "Axle Engine - 3D Free-Fly Camera";
     props.Width = 1280;
     props.Height = 720;
     props.VSync = true;
@@ -31,24 +32,22 @@ int main() {
 
     Axle::RenderCommand::SetViewport(0, 0, window.GetWidth(), window.GetHeight());
 
-    // 1. Perspective Camera (45 degree FOV, 16:9 Aspect Ratio)
-    auto camera = std::make_unique<Axle::PerspectiveCamera>(
-        45.0f, 
-        static_cast<Axle::f32>(window.GetWidth()) / static_cast<Axle::f32>(window.GetHeight()), 
-        0.1f, 
-        100.0f
+    // Camera Controller dùng Axle::f32
+    auto cameraController = std::make_unique<Axle::PerspectiveCameraController>(
+        45.0f,
+        static_cast<Axle::f32>(window.GetWidth()) / static_cast<Axle::f32>(window.GetHeight()),
+        0.1f,
+        1000.0f
     );
-    camera->SetPosition({ 0.0f, 0.0f, 3.5f });
 
-    // Window resize updates camera projection & viewport
-    window.SetWindowResizeCallback([&camera](const Axle::WindowResizeEvent& e) {
+    window.SetWindowResizeCallback([&cameraController](const Axle::WindowResizeEvent& e) {
         if (e.Width > 0 && e.Height > 0) {
             Axle::RenderCommand::SetViewport(0, 0, e.Width, e.Height);
-            camera->SetProjection(45.0f, static_cast<Axle::f32>(e.Width) / static_cast<Axle::f32>(e.Height));
+            cameraController->OnResize(e.Width, e.Height);
         }
     });
 
-    // 2. Shaders supporting MVP
+    // Shaders
     const std::string vertexSrc = R"(
         #version 450 core
         layout(location = 0) in vec3 a_Position;
@@ -78,32 +77,24 @@ int main() {
 
     auto shader = std::make_unique<Axle::Shader>(vertexSrc, fragmentSrc);
 
-    // 3. 3D Cube Vertices (Position: 3, Color: 4)
-    float vertices[8 * 7] = {
-        //  X      Y      Z       R     G     B     A
-        -0.5f, -0.5f, -0.5f,   0.9f, 0.2f, 0.2f, 1.0f, // 0: Left-Bottom-Back
-         0.5f, -0.5f, -0.5f,   0.2f, 0.9f, 0.2f, 1.0f, // 1: Right-Bottom-Back
-         0.5f,  0.5f, -0.5f,   0.2f, 0.2f, 0.9f, 1.0f, // 2: Right-Top-Back
-        -0.5f,  0.5f, -0.5f,   0.9f, 0.9f, 0.2f, 1.0f, // 3: Left-Top-Back
-        -0.5f, -0.5f,  0.5f,   0.9f, 0.2f, 0.9f, 1.0f, // 4: Left-Bottom-Front
-         0.5f, -0.5f,  0.5f,   0.2f, 0.9f, 0.9f, 1.0f, // 5: Right-Bottom-Front
-         0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 1.0f, 1.0f, // 6: Right-Top-Front
-        -0.5f,  0.5f,  0.5f,   0.3f, 0.3f, 0.3f, 1.0f  // 7: Left-Top-Front
+    // Cube Mesh Data dùng Axle::f32
+    Axle::f32 vertices[8 * 7] = {
+        -0.5f, -0.5f, -0.5f,   0.9f, 0.2f, 0.2f, 1.0f,
+         0.5f, -0.5f, -0.5f,   0.2f, 0.9f, 0.2f, 1.0f,
+         0.5f,  0.5f, -0.5f,   0.2f, 0.2f, 0.9f, 1.0f,
+        -0.5f,  0.5f, -0.5f,   0.9f, 0.9f, 0.2f, 1.0f,
+        -0.5f, -0.5f,  0.5f,   0.9f, 0.2f, 0.9f, 1.0f,
+         0.5f, -0.5f,  0.5f,   0.2f, 0.9f, 0.9f, 1.0f,
+         0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f,   0.3f, 0.3f, 0.3f, 1.0f
     };
 
-    // 36 indices forming 12 triangles of the cube
-    uint32_t indices[36] = {
-        // Front Face (+Z)
+    Axle::u32 indices[36] = {
         4, 5, 6,  6, 7, 4,
-        // Back Face (-Z)
         1, 0, 3,  3, 2, 1,
-        // Left Face (-X)
         0, 4, 7,  7, 3, 0,
-        // Right Face (+X)
         5, 1, 2,  2, 6, 5,
-        // Top Face (+Y)
         7, 6, 2,  2, 3, 7,
-        // Bottom Face (-Y)
         0, 1, 5,  5, 4, 0
     };
 
@@ -121,12 +112,10 @@ int main() {
     Axle::RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
 
     Axle::f32 lastFrameTime = 0.0f;
-    Axle::f32 rotationAngle = 0.0f;
 
     while (!window.ShouldClose()) {
         window.PollEvents();
 
-        // Calculate delta time
         const auto time = static_cast<Axle::f32>(glfwGetTime());
         Axle::Timestep ts = time - lastFrameTime;
         lastFrameTime = time;
@@ -135,16 +124,16 @@ int main() {
             break;
         }
 
+        // Cập nhật Camera controller
+        cameraController->OnUpdate(ts);
+
         Axle::RenderCommand::Clear();
 
         shader->Bind();
 
-        // Rotate cube across multiple axes smoothly over delta time
-        rotationAngle += 45.0f * ts; // 45 degrees per second
-        glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(rotationAngle), glm::vec3(0.5f, 1.0f, 0.2f));
+        glm::mat4 model = glm::mat4(1.0f);
 
-        // Upload MVP matrices
-        shader->SetMat4("u_ViewProjection", camera->GetViewProjectionMatrix());
+        shader->SetMat4("u_ViewProjection", cameraController->GetCamera().GetViewProjectionMatrix());
         shader->SetMat4("u_Transform", model);
 
         Axle::RenderCommand::DrawIndexed(vertexArray);

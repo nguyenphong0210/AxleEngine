@@ -4,6 +4,7 @@ add_library(AxleRenderer STATIC
     src/Buffer.cpp
     src/VertexArray.cpp
     src/PerspectiveCamera.cpp
+    src/PerspectiveCameraController.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 
@@ -14,6 +15,7 @@ target_include_directories(AxleRenderer PUBLIC
 target_link_libraries(AxleRenderer
     PUBLIC
         Axle::Foundation
+        Axle::Platform
     PRIVATE
         glad
 )

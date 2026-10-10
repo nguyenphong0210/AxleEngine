@@ -1,5 +1,6 @@
 add_library(AxlePlatform STATIC
     src/Window.cpp
+    src/Input.cpp
 )
 add_library(Axle::Platform ALIAS AxlePlatform)
 

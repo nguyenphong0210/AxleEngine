@@ -8,6 +8,8 @@
 #include <Axle/Buffer.hpp>
 #include <Axle/VertexArray.hpp>
 #include <Axle/PerspectiveCameraController.hpp>
+#include <Axle/ImGuiLayer.hpp>
+#include <Axle/DebugPanel.hpp>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -31,6 +33,11 @@ int main() {
     }
 
     Axle::RenderCommand::SetViewport(0, 0, window.GetWidth(), window.GetHeight());
+
+    auto imguiLayer = std::make_unique<Axle::ImGuiLayer>();
+    imguiLayer->Init(window.GetNativeWindow());
+
+    Axle::DebugPanel debugPanel;
 
     // Camera Controller dùng Axle::f32
     auto cameraController = std::make_unique<Axle::PerspectiveCameraController>(
@@ -138,8 +145,21 @@ int main() {
 
         Axle::RenderCommand::DrawIndexed(vertexArray);
 
+        // Render UI
+        imguiLayer->Begin();
+        Axle::TelemetryData telemetry{
+            .DeltaTime = ts.GetSeconds(),
+            .FPS = ts.GetSeconds() > 0.0f ? 1.0f / ts.GetSeconds() : 0.0f,
+            .CameraPosition = cameraController->GetCamera().GetPosition(),
+            .CameraRotation = cameraController->GetCamera().GetRotation()
+        };
+        debugPanel.OnImGuiRender(telemetry);
+        imguiLayer->End();
+
         window.SwapBuffers();
     }
+
+    imguiLayer->Shutdown();
 
     return 0;
 }

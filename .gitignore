@@ -66,3 +66,6 @@ compile_commands.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ImGui Generated Files
+imgui.ini

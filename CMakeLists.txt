@@ -24,6 +24,7 @@ add_subdirectory(ThirdParty/spdlog)
 add_subdirectory(Modules/Foundation)
 add_subdirectory(Modules/Platform)
 add_subdirectory(Modules/Renderer)
+add_subdirectory(Modules/UI)
 
 # Load test application
 add_subdirectory(Sandbox)

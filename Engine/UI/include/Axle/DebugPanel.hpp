@@ -15,6 +15,11 @@ namespace Axle {
         glm::vec3 BoxPosition{ 0.0f };
         glm::vec3 BoxVelocity{ 0.0f };
         bool IsBoxActive = false;
+
+        glm::vec3 SpherePosition{ 0.0f };
+        glm::vec3 SphereVelocity{ 0.0f };
+        bool IsSphereActive = false;
+
         u32 TotalBodies = 0;
         u32 ActiveBodies = 0;
     };

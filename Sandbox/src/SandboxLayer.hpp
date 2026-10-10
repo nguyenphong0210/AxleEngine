@@ -24,8 +24,10 @@ private:
     std::unique_ptr<Axle::PhysicsScene> m_PhysicsScene;
     Axle::BodyID m_FloorBodyID;
     Axle::BodyID m_BoxBodyID;
+    Axle::BodyID m_SphereBodyID;
 
     std::shared_ptr<Axle::VertexArray> m_VertexArray;
+    std::shared_ptr<Axle::VertexArray> m_SphereVertexArray;
     std::unique_ptr<Axle::Shader> m_Shader;
 
     Axle::DebugPanel m_DebugPanel;

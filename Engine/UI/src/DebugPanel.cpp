@@ -5,7 +5,7 @@ namespace Axle {
 
     void DebugPanel::OnImGuiRender(const TelemetryData& telemetry) {
         ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(340.0f, 320.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(340.0f, 420.0f), ImGuiCond_FirstUseEver);
 
         ImGui::Begin("Axle Engine - Telemetry");
 
@@ -27,13 +27,27 @@ namespace Axle {
             ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "Jolt Physics Simulation");
             ImGui::Separator();
             ImGui::Text("Bodies: Total: %u | Active: %u", telemetry.TotalBodies, telemetry.ActiveBodies);
-            ImGui::Text("Box Pos: X: %.2f | Y: %.2f | Z: %.2f",
+
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.96f, 0.52f, 0.12f, 1.0f), "Dynamic Box (Orange):");
+            ImGui::Text("  Pos: X: %.2f | Y: %.2f | Z: %.2f",
                         telemetry.BoxPosition.x, telemetry.BoxPosition.y, telemetry.BoxPosition.z);
-            ImGui::Text("Box Vel: X: %.2f | Y: %.2f | Z: %.2f (Speed: %.2f m/s)",
+            ImGui::Text("  Vel: X: %.2f | Y: %.2f | Z: %.2f (Speed: %.2f m/s)",
                         telemetry.BoxVelocity.x, telemetry.BoxVelocity.y, telemetry.BoxVelocity.z,
                         glm::length(telemetry.BoxVelocity));
-            ImGui::Text("Box State: %s", telemetry.IsBoxActive ? "Active (Moving / Falling)" : "Sleeping (Resting on floor)");
-            ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "[R] Key: Drop Box Again");
+            ImGui::Text("  State: %s", telemetry.IsBoxActive ? "Active" : "Sleeping");
+
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.0f, 0.85f, 0.95f, 1.0f), "Dynamic Sphere (Cyan):");
+            ImGui::Text("  Pos: X: %.2f | Y: %.2f | Z: %.2f",
+                        telemetry.SpherePosition.x, telemetry.SpherePosition.y, telemetry.SpherePosition.z);
+            ImGui::Text("  Vel: X: %.2f | Y: %.2f | Z: %.2f (Speed: %.2f m/s)",
+                        telemetry.SphereVelocity.x, telemetry.SphereVelocity.y, telemetry.SphereVelocity.z,
+                        glm::length(telemetry.SphereVelocity));
+            ImGui::Text("  State: %s", telemetry.IsSphereActive ? "Active" : "Sleeping");
+
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "[R] Key: Drop Box & Sphere Again");
         }
 
         ImGui::Spacing();
@@ -43,7 +57,7 @@ namespace Axle {
         ImGui::BulletText("W / A / S / D: Move camera");
         ImGui::BulletText("E / Space: Ascend");
         ImGui::BulletText("Q / LShift: Descend");
-        ImGui::BulletText("R: Reset Falling Box");
+        ImGui::BulletText("R: Reset Box & Sphere");
 
         ImGui::End();
     }

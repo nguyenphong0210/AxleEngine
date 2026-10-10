@@ -18,6 +18,7 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <memory>
+#include <unordered_map>
 
 class SandboxLayer : public Axle::Layer {
 public:
@@ -126,4 +127,13 @@ private:
     bool m_ResetLayout = false;
 
     Axle::f32 m_LastDeltaTime = 0.0f;
+
+    // Playground Simulation State
+    struct InitialBodyState {
+        glm::vec3 Position{ 0.0f };
+        glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+    };
+    std::unordered_map<Axle::u32, InitialBodyState> m_InitialDynamicStates;
+
+    void CreatePlayground();
 };

@@ -210,6 +210,7 @@ void SandboxLayer::OnAttach() {
         glm::vec4(0.12f, 0.13f, 0.15f, 1.0f)  // Dark graphite
     );
     m_BoxEntity.AddComponent<Axle::RigidBodyComponent>(m_BoxBodyID, true);
+    m_InitialDynamicStates[m_BoxBodyID.GetIndexAndSequenceNumber()] = { glm::vec3(-5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f) };
 
     // Entity 3: Dynamic Bouncy Sphere
     m_SphereEntity = m_Scene->CreateEntity("Bouncy Sphere");
@@ -225,6 +226,7 @@ void SandboxLayer::OnAttach() {
         glm::vec4(0.05f, 0.12f, 0.24f, 1.0f)  // Deep navy
     );
     m_SphereEntity.AddComponent<Axle::RigidBodyComponent>(m_SphereBodyID, true);
+    m_InitialDynamicStates[m_SphereBodyID.GetIndexAndSequenceNumber()] = { glm::vec3(5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f) };
 
     // Entity 4: Dynamic Cylinder
     m_CylinderEntity = m_Scene->CreateEntity("Dynamic Cylinder");
@@ -240,6 +242,7 @@ void SandboxLayer::OnAttach() {
         glm::vec4(0.06f, 0.22f, 0.12f, 1.0f)  // Deep Forest Green
     );
     m_CylinderEntity.AddComponent<Axle::RigidBodyComponent>(m_CylinderBodyID, true);
+    m_InitialDynamicStates[m_CylinderBodyID.GetIndexAndSequenceNumber()] = { glm::vec3(-7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f) };
 
     // Entity 5: Dynamic Cone
     m_ConeEntity = m_Scene->CreateEntity("Dynamic Cone");
@@ -255,6 +258,7 @@ void SandboxLayer::OnAttach() {
         glm::vec4(0.52f, 0.10f, 0.82f, 1.0f)  // Royal Velvet Purple
     );
     m_ConeEntity.AddComponent<Axle::RigidBodyComponent>(m_ConeBodyID, true);
+    m_InitialDynamicStates[m_ConeBodyID.GetIndexAndSequenceNumber()] = { glm::vec3(7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f) };
 
     // 8. Vehicle Mechanics (Phase 4 Automotive Simulation)
     m_Vehicle = std::make_unique<Axle::Vehicle>(*m_PhysicsScene);
@@ -293,6 +297,9 @@ void SandboxLayer::OnAttach() {
         m_WheelEntities[i].AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(m_ChassisEntity));
         chassisHierarchy.Children.push_back(static_cast<entt::entity>(m_WheelEntities[i]));
     }
+
+    // 9. Automotive Test Playground & Obstacle Course (Phase 7)
+    CreatePlayground();
 
     // Connect Editor Panels
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
@@ -341,21 +348,16 @@ void SandboxLayer::OnSceneStop() {
 
 void SandboxLayer::ResetSimulation() {
     AXLE_INFO("Resetting physics simulation and vehicle state");
-    m_PhysicsScene->SetBodyPositionAndRotation(m_BoxBodyID, glm::vec3(-5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
-    m_PhysicsScene->SetLinearVelocity(m_BoxBodyID, glm::vec3(0.0f));
-    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(m_BoxBodyID, JPH::Vec3::sZero());
 
-    m_PhysicsScene->SetBodyPositionAndRotation(m_SphereBodyID, glm::vec3(5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
-    m_PhysicsScene->SetLinearVelocity(m_SphereBodyID, glm::vec3(0.0f));
-    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(m_SphereBodyID, JPH::Vec3::sZero());
-
-    m_PhysicsScene->SetBodyPositionAndRotation(m_CylinderBodyID, glm::vec3(-7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
-    m_PhysicsScene->SetLinearVelocity(m_CylinderBodyID, glm::vec3(0.0f));
-    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(m_CylinderBodyID, JPH::Vec3::sZero());
-
-    m_PhysicsScene->SetBodyPositionAndRotation(m_ConeBodyID, glm::vec3(7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
-    m_PhysicsScene->SetLinearVelocity(m_ConeBodyID, glm::vec3(0.0f));
-    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(m_ConeBodyID, JPH::Vec3::sZero());
+    // Reset all registered dynamic bodies (pyramid crates, cones, tires, demo shapes) to initial poses
+    for (const auto& [bodyIDRaw, state] : m_InitialDynamicStates) {
+        Axle::BodyID bodyID(bodyIDRaw);
+        if (!bodyID.IsInvalid()) {
+            m_PhysicsScene->SetBodyPositionAndRotation(bodyID, state.Position, state.Rotation, true);
+            m_PhysicsScene->SetLinearVelocity(bodyID, glm::vec3(0.0f));
+            m_PhysicsScene->GetBodyInterface().SetAngularVelocity(bodyID, JPH::Vec3::sZero());
+        }
+    }
 
     if (m_Vehicle) {
         m_Vehicle->Reset(glm::vec3(0.0f, 1.2f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
@@ -373,6 +375,283 @@ void SandboxLayer::ResetSimulation() {
     }
     m_OrbitYaw = 180.0f;
     m_OrbitPitch = 15.0f;
+}
+
+void SandboxLayer::CreatePlayground() {
+    AXLE_INFO("Generating Phase 7 Automotive Test Playground & Obstacle Course");
+
+    auto registerDynamic = [&](Axle::BodyID bodyID, const glm::vec3& pos, const glm::quat& rot) {
+        if (!bodyID.IsInvalid()) {
+            m_InitialDynamicStates[bodyID.GetIndexAndSequenceNumber()] = { pos, rot };
+        }
+    };
+
+    // Root Playground Entity
+    auto playgroundRoot = m_Scene->CreateEntity("Automotive Playground");
+    auto& playgroundHc = playgroundRoot.AddComponent<Axle::HierarchyComponent>();
+
+    // =========================================================================
+    // 1. JUMP RAMPS & INCLINES (Runway Center & Stunt Left Wing)
+    // =========================================================================
+    auto jumpGroup = m_Scene->CreateEntity("Jump Ramps & Inclines");
+    auto& jumpHc = jumpGroup.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(playgroundRoot));
+    playgroundHc.Children.push_back(static_cast<entt::entity>(jumpGroup));
+
+    // Ramp 1: Runway Launch Ramp (16 deg incline, 2.2m rise)
+    {
+        glm::vec3 pos(0.0f, 1.0f, 22.0f);
+        glm::quat rot = glm::angleAxis(glm::radians(-16.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        glm::vec3 halfExt(3.0f, 0.15f, 4.0f); // 6m wide, 8m long, 0.3m thick
+
+        auto launchRamp = m_Scene->CreateEntity("Runway Launch Ramp");
+        launchRamp.AddComponent<Axle::TransformComponent>(pos, rot, halfExt * 2.0f);
+        launchRamp.AddComponent<Axle::MeshComponent>(
+            m_CubeMesh, 1, 4.0f,
+            glm::vec4(0.96f, 0.78f, 0.10f, 1.0f), // Hazard Vivid Yellow
+            glm::vec4(0.12f, 0.13f, 0.16f, 1.0f)  // Dark Asphalt Carbon
+        );
+
+        Axle::BoxBodyProps props;
+        props.Position = pos;
+        props.Rotation = rot;
+        props.HalfExtent = halfExt;
+        props.IsDynamic = false;
+        props.Friction = 0.85f;
+        auto bodyID = m_PhysicsScene->CreateBox(props);
+        launchRamp.AddComponent<Axle::RigidBodyComponent>(bodyID, false);
+        launchRamp.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(jumpGroup));
+        jumpHc.Children.push_back(static_cast<entt::entity>(launchRamp));
+    }
+
+    // Ramp 2: Runway Landing Pad (14 deg decline to cushion suspension)
+    {
+        glm::vec3 pos(0.0f, 1.0f, 35.0f);
+        glm::quat rot = glm::angleAxis(glm::radians(14.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        glm::vec3 halfExt(3.0f, 0.15f, 4.0f);
+
+        auto landingPad = m_Scene->CreateEntity("Runway Landing Pad");
+        landingPad.AddComponent<Axle::TransformComponent>(pos, rot, halfExt * 2.0f);
+        landingPad.AddComponent<Axle::MeshComponent>(
+            m_CubeMesh, 1, 4.0f,
+            glm::vec4(0.90f, 0.92f, 0.95f, 1.0f), // Racing White
+            glm::vec4(0.12f, 0.13f, 0.16f, 1.0f)  // Dark Asphalt Carbon
+        );
+
+        Axle::BoxBodyProps props;
+        props.Position = pos;
+        props.Rotation = rot;
+        props.HalfExtent = halfExt;
+        props.IsDynamic = false;
+        props.Friction = 0.85f;
+        auto bodyID = m_PhysicsScene->CreateBox(props);
+        landingPad.AddComponent<Axle::RigidBodyComponent>(bodyID, false);
+        landingPad.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(jumpGroup));
+        jumpHc.Children.push_back(static_cast<entt::entity>(landingPad));
+    }
+
+    // Ramp 3: Stunt Mega Ramp (Extreme 24 deg incline, 4.0m rise)
+    {
+        glm::vec3 pos(-18.0f, 1.9f, 25.0f);
+        glm::quat rot = glm::angleAxis(glm::radians(-24.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        glm::vec3 halfExt(3.5f, 0.2f, 5.0f); // 7m wide, 10m long, 0.4m thick
+
+        auto megaRamp = m_Scene->CreateEntity("Stunt Mega Ramp");
+        megaRamp.AddComponent<Axle::TransformComponent>(pos, rot, halfExt * 2.0f);
+        megaRamp.AddComponent<Axle::MeshComponent>(
+            m_CubeMesh, 1, 5.0f,
+            glm::vec4(0.72f, 0.12f, 0.92f, 1.0f), // Royal Stunt Violet
+            glm::vec4(0.05f, 0.90f, 0.85f, 1.0f)  // Electric Cyan
+        );
+
+        Axle::BoxBodyProps props;
+        props.Position = pos;
+        props.Rotation = rot;
+        props.HalfExtent = halfExt;
+        props.IsDynamic = false;
+        props.Friction = 0.85f;
+        auto bodyID = m_PhysicsScene->CreateBox(props);
+        megaRamp.AddComponent<Axle::RigidBodyComponent>(bodyID, false);
+        megaRamp.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(jumpGroup));
+        jumpHc.Children.push_back(static_cast<entt::entity>(megaRamp));
+    }
+
+    // =========================================================================
+    // 2. WASHBOARD & BUMPS TRACK (Suspension Oscillation & Damping Lane)
+    // =========================================================================
+    auto washboardGroup = m_Scene->CreateEntity("Washboard Bumps Track");
+    auto& washboardHc = washboardGroup.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(playgroundRoot));
+    playgroundHc.Children.push_back(static_cast<entt::entity>(washboardGroup));
+
+    for (int i = 0; i < 10; ++i) {
+        float zPos = 10.0f + static_cast<float>(i) * 3.0f;
+        auto bumpEntity = m_Scene->CreateEntity("Rumble Bump " + std::to_string(i + 1));
+        glm::vec3 pos(14.0f, 0.10f, zPos);
+        glm::vec3 halfExt(2.5f, 0.10f, 0.35f); // 5m wide across lane, 0.20m high, 0.70m thick
+        bumpEntity.AddComponent<Axle::TransformComponent>(pos, halfExt * 2.0f);
+
+        // Alternating red and white curb pattern
+        glm::vec4 c1 = (i % 2 == 0) ? glm::vec4(0.92f, 0.15f, 0.15f, 1.0f) : glm::vec4(0.96f, 0.96f, 0.96f, 1.0f);
+        glm::vec4 c2 = (i % 2 == 0) ? glm::vec4(0.96f, 0.96f, 0.96f, 1.0f) : glm::vec4(0.92f, 0.15f, 0.15f, 1.0f);
+        bumpEntity.AddComponent<Axle::MeshComponent>(m_CubeMesh, 1, 6.0f, c1, c2);
+
+        Axle::BoxBodyProps bProps;
+        bProps.Position = pos;
+        bProps.HalfExtent = halfExt;
+        bProps.IsDynamic = false;
+        bProps.Friction = 0.85f;
+        auto bodyID = m_PhysicsScene->CreateBox(bProps);
+        bumpEntity.AddComponent<Axle::RigidBodyComponent>(bodyID, false);
+        bumpEntity.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(washboardGroup));
+        washboardHc.Children.push_back(static_cast<entt::entity>(bumpEntity));
+    }
+
+    // =========================================================================
+    // 3. BANKED CURVED TRACK (High-Speed Camber Turn)
+    // =========================================================================
+    auto bankedGroup = m_Scene->CreateEntity("Banked Camber Turn");
+    auto& bankedHc = bankedGroup.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(playgroundRoot));
+    playgroundHc.Children.push_back(static_cast<entt::entity>(bankedGroup));
+
+    for (int i = 0; i < 6; ++i) {
+        float t = static_cast<float>(i) / 5.0f;
+        float angleDeg = 15.0f + t * 75.0f; // 15 to 90 degrees
+        float angleRad = glm::radians(angleDeg);
+        float radius = 22.0f;
+        float x = 20.0f + radius * (1.0f - std::cos(angleRad));
+        float z = 45.0f + radius * std::sin(angleRad);
+        float y = 0.75f + t * 0.5f;
+
+        // Yaw angle aligns with curve tangent, roll angle banks inward by -22 degrees
+        glm::quat rot = glm::angleAxis(angleRad, glm::vec3(0.0f, 1.0f, 0.0f))
+                      * glm::angleAxis(glm::radians(-22.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+        auto segmentEntity = m_Scene->CreateEntity("Bank Segment " + std::to_string(i + 1));
+        glm::vec3 halfExt(3.0f, 0.15f, 3.5f); // 6m wide road, 0.3m thick, 7m long
+        segmentEntity.AddComponent<Axle::TransformComponent>(glm::vec3(x, y, z), rot, halfExt * 2.0f);
+        segmentEntity.AddComponent<Axle::MeshComponent>(
+            m_CubeMesh, 1, 3.0f,
+            glm::vec4(0.18f, 0.20f, 0.24f, 1.0f), // Asphalt Dark Slate
+            glm::vec4(0.10f, 0.55f, 0.95f, 1.0f)  // Electric Blue Curbing
+        );
+
+        Axle::BoxBodyProps bProps;
+        bProps.Position = glm::vec3(x, y, z);
+        bProps.Rotation = rot;
+        bProps.HalfExtent = halfExt;
+        bProps.IsDynamic = false;
+        bProps.Friction = 0.90f;
+        auto bodyID = m_PhysicsScene->CreateBox(bProps);
+        segmentEntity.AddComponent<Axle::RigidBodyComponent>(bodyID, false);
+        segmentEntity.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(bankedGroup));
+        bankedHc.Children.push_back(static_cast<entt::entity>(segmentEntity));
+    }
+
+    // =========================================================================
+    // 4. DYNAMIC CRASH BARRIERS & DESTRUCTION COURSE
+    // =========================================================================
+    auto crashGroup = m_Scene->CreateEntity("Crash Course & Barriers");
+    auto& crashHc = crashGroup.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(playgroundRoot));
+    playgroundHc.Children.push_back(static_cast<entt::entity>(crashGroup));
+
+    // A. Destructible 10-Crate Wooden Pyramid at Z = 52.0m on runway
+    const struct CratePlacement {
+        float x;
+        float y;
+    } pyramidCrates[10] = {
+        // Base (4 crates)
+        { -1.35f, 0.45f }, { -0.45f, 0.45f }, { 0.45f, 0.45f }, { 1.35f, 0.45f },
+        // Tier 2 (3 crates)
+        { -0.90f, 1.35f }, {  0.00f, 1.35f }, { 0.90f, 1.35f },
+        // Tier 3 (2 crates)
+        { -0.45f, 2.25f }, {  0.45f, 2.25f },
+        // Apex (1 crate)
+        {  0.00f, 3.15f }
+    };
+
+    for (int i = 0; i < 10; ++i) {
+        glm::vec3 pos(pyramidCrates[i].x, pyramidCrates[i].y, 52.0f);
+        glm::vec3 halfExt(0.45f, 0.45f, 0.45f);
+
+        auto crateEntity = m_Scene->CreateEntity("Wooden Crate " + std::to_string(i + 1));
+        crateEntity.AddComponent<Axle::TransformComponent>(pos, halfExt * 2.0f);
+        crateEntity.AddComponent<Axle::MeshComponent>(
+            m_CubeMesh, 1, 4.0f,
+            glm::vec4(0.82f, 0.52f, 0.20f, 1.0f), // Wood Amber
+            glm::vec4(0.38f, 0.22f, 0.08f, 1.0f)  // Dark Walnut
+        );
+
+        Axle::BoxBodyProps props;
+        props.Position = pos;
+        props.HalfExtent = halfExt;
+        props.IsDynamic = true;
+        props.Friction = 0.60f;
+        props.Restitution = 0.15f;
+        auto bodyID = m_PhysicsScene->CreateBox(props);
+        crateEntity.AddComponent<Axle::RigidBodyComponent>(bodyID, true);
+        crateEntity.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(crashGroup));
+        crashHc.Children.push_back(static_cast<entt::entity>(crateEntity));
+
+        registerDynamic(bodyID, pos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+    }
+
+    // B. Slalom Cones (6 dynamic cones along Lane X ~ -8m)
+    for (int i = 0; i < 6; ++i) {
+        float xPos = (i % 2 == 0) ? -7.5f : -9.0f;
+        float zPos = 8.0f + static_cast<float>(i) * 7.0f;
+        glm::vec3 pos(xPos, 0.65f, zPos);
+
+        auto coneEntity = m_Scene->CreateEntity("Slalom Cone " + std::to_string(i + 1));
+        coneEntity.AddComponent<Axle::TransformComponent>(pos, glm::vec3(0.45f, 0.65f, 0.45f));
+        coneEntity.AddComponent<Axle::MeshComponent>(
+            m_ConeMesh, 1, 6.0f,
+            glm::vec4(1.0f, 0.45f, 0.05f, 1.0f),  // Fluorescent Safety Orange
+            glm::vec4(0.96f, 0.96f, 0.96f, 1.0f)  // Reflective White
+        );
+
+        Axle::ConeBodyProps props;
+        props.Position = pos;
+        props.Radius = 0.45f;
+        props.HalfHeight = 0.65f;
+        props.IsDynamic = true;
+        props.Friction = 0.80f;
+        props.Restitution = 0.10f;
+        auto bodyID = m_PhysicsScene->CreateCone(props);
+        coneEntity.AddComponent<Axle::RigidBodyComponent>(bodyID, true);
+        coneEntity.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(crashGroup));
+        crashHc.Children.push_back(static_cast<entt::entity>(coneEntity));
+
+        registerDynamic(bodyID, pos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+    }
+
+    // C. Tire Stack Crash Barrier (6 dynamic rubber cylinders at Z = 68.0m)
+    for (int i = 0; i < 6; ++i) {
+        float xPos = -2.5f + static_cast<float>(i) * 1.0f;
+        glm::vec3 pos(xPos, 0.50f, 68.0f);
+
+        auto tireEntity = m_Scene->CreateEntity("Tire Barrier " + std::to_string(i + 1));
+        tireEntity.AddComponent<Axle::TransformComponent>(pos, glm::vec3(0.45f, 0.50f, 0.45f));
+        tireEntity.AddComponent<Axle::MeshComponent>(
+            m_CylinderMesh, 1, 4.0f,
+            glm::vec4(0.12f, 0.12f, 0.14f, 1.0f), // Tire Rubber Black
+            glm::vec4(0.22f, 0.22f, 0.25f, 1.0f)  // Weathered Rubber
+        );
+
+        Axle::CylinderBodyProps props;
+        props.Position = pos;
+        props.Radius = 0.45f;
+        props.HalfHeight = 0.50f;
+        props.IsDynamic = true;
+        props.Friction = 0.85f;
+        props.Restitution = 0.25f;
+        auto bodyID = m_PhysicsScene->CreateCylinder(props);
+        tireEntity.AddComponent<Axle::RigidBodyComponent>(bodyID, true);
+        tireEntity.AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(crashGroup));
+        crashHc.Children.push_back(static_cast<entt::entity>(tireEntity));
+
+        registerDynamic(bodyID, pos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+    }
+
+    AXLE_INFO("Phase 7 Automotive Playground generated successfully (41 physical obstacles)");
 }
 
 void SandboxLayer::OnUpdate(Axle::Timestep ts) {

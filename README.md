@@ -73,12 +73,12 @@ Level 0:  [ Engine/Core ]
   - [x] **Viewport Mouse Picking**: Raycast query directly on 3D physics meshes in the viewport to select them in the Hierarchy & Inspector, with background click-to-deselect.
   - [x] **Gizmo Controls Toolbar & Snapping**: Dedicated toolbar buttons for Select (`Q`), Translate (`W`), Rotate (`E`), Scale (`R`), Local/World coordinate system toggle, and adjustable distance/angle snapping (`0.5m` / `45°`).
   - [x] **Grid & World Coordinates**: Render dynamic infinite metric grid floor using `ImGuizmo::DrawGrid` in Edit mode.
-- [ ] **Phase 7: Automotive Test Playground & Obstacle Course *(Recommended Next)***
-  - [ ] **Jump Ramps & Inclines**: Multi-height ramps to test vehicle airborne physics and suspension landing.
-  - [ ] **Washboard & Bumps Track**: Rhythmic road bumps to test suspension oscillation and damping.
-  - [ ] **Banked Curved Track**: Oval / circuit track with elevated cambered turns.
-  - [ ] **Dynamic Destruction / Crash Barriers**: Stack of boxes, wooden crates, and tire barriers to test high-speed impacts.
-- [ ] **Phase 8: C++ Native Scripting & Vehicle Component (`Engine/Scene`)**
+- [x] **Phase 7: Automotive Test Playground & Obstacle Course (`Engine/Physics` & `Sandbox`)**
+  - [x] **Jump Ramps & Inclines**: Multi-height ramps (Runway Launch Ramp, Landing Pad, Stunt Mega Ramp) testing airborne trajectories, flight pitch, and suspension landing cushion.
+  - [x] **Washboard & Bumps Track**: 10 transverse rhythmic rumble bumps along test lane causing rapid suspension oscillation, spring frequency, and damper rebound.
+  - [x] **Banked Curved Track**: Multi-segment high-speed camber turn (22° inward banking) testing centrifugal road holding and lateral tire slip.
+  - [x] **Dynamic Destruction / Crash Barriers**: Destructible 10-crate wooden pyramid, 6 slalom agility cones, and 6 dynamic tire impact barriers with one-click full scene reset (`R`).
+- [ ] **Phase 8: C++ Native Scripting & Vehicle Component (`Engine/Scene`) *(Recommended Next)***
   - [ ] **VehicleComponent in ECS**: Encapsulate vehicle configuration and physics handle as an entity component.
   - [ ] **`ScriptableEntity` Lifecycle**: Base C++ class exposing `OnCreate()`, `OnUpdate(Timestep)`, and `OnDestroy()`.
   - [ ] **`NativeScriptComponent`**: Template-based script binding to entities with zero runtime overhead.

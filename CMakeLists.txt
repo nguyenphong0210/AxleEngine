@@ -13,10 +13,12 @@ set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 
 # Embed GLFW source code directly into the build tree
 add_subdirectory(ThirdParty/glfw)
+add_subdirectory(ThirdParty/glad)
 
 # Load modules according to architectural hierarchy
 add_subdirectory(Modules/Foundation)
 add_subdirectory(Modules/Platform)
+add_subdirectory(Modules/Renderer)
 
 # Load test application
 add_subdirectory(Sandbox)

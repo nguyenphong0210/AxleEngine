@@ -1,64 +1,53 @@
 #include <Axle/Window.hpp>
 #include <Axle/Input.hpp>
+#include <Axle/RenderCommand.hpp>
+#include <GLFW/glfw3.h>
 #include <iostream>
 
 int main() {
     Axle::WindowProps props;
-    props.Title = "Axle Sandbox - Full GLFW Platform";
+    props.Title = "Axle Engine - OpenGL 4.5 Context";
     props.Width = 1280;
     props.Height = 720;
     props.VSync = true;
 
     Axle::Window window(props);
 
-    // Register event callbacks
+    // Initialize OpenGL via GLAD
+    // Pass glfwGetProcAddress explicitly
+    if (!Axle::RenderCommand::Init(reinterpret_cast<Axle::GLProcAddressFn>(glfwGetProcAddress))) {
+        return -1;
+    }
+
+    // Set initial viewport
+    Axle::RenderCommand::SetViewport(0, 0, window.GetWidth(), window.GetHeight());
+
+    // Hook window resize callback to update viewport automatically
     window.SetWindowResizeCallback([](const Axle::WindowResizeEvent& e) {
-        std::cout << "[Event] Window Resized: " << e.Width << "x" << e.Height << "\n";
+        Axle::RenderCommand::SetViewport(0, 0, e.Width, e.Height);
     });
 
-    window.SetWindowCloseCallback([](const Axle::WindowCloseEvent&) {
-        std::cout << "[Event] Window Close Requested!\n";
-    });
-
-    window.SetKeyPressedCallback([](const Axle::KeyPressedEvent& e) {
-        std::cout << "[Event] Key Pressed: " << static_cast<Axle::u16>(e.Key) 
-                  << " (Repeat: " << e.IsRepeat << ")\n";
-    });
-
-    window.SetMouseScrolledCallback([](const Axle::MouseScrolledEvent& e) {
-        std::cout << "[Event] Mouse Scrolled: X=" << e.XOffset << ", Y=" << e.YOffset << "\n";
-    });
-
-    window.SetMouseButtonPressedCallback([](const Axle::MouseButtonPressedEvent& e) {
-        if (e.Button == Axle::MouseCode::ButtonLeft) {
-            std::cout << "[Event] Left Mouse Button Clicked!\n";
-        } else if (e.Button == Axle::MouseCode::ButtonRight) {
-            std::cout << "[Event] Right Mouse Button Clicked!\n";
-        }
-    });
-
-    window.SetMouseButtonReleasedCallback([](const Axle::MouseButtonReleasedEvent& e) {
-        if (e.Button == Axle::MouseCode::ButtonLeft) {
-            std::cout << "[Event] Left Mouse Button Released!\n";
-        }
-    });
-
-    std::cout << "Platform initialized successfully. Test inputs (Resize window, scroll, press keys, ESC to exit)...\n";
+    // Default clear color: slate gray
+    glm::vec4 clearColor = { 0.12f, 0.14f, 0.18f, 1.0f };
 
     while (!window.ShouldClose()) {
         window.PollEvents();
 
-        // Polling check: ESC to exit
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::Escape)) {
-            std::cout << "[Polling] Escape key detected. Exiting loop.\n";
             break;
         }
 
-        // Polling check: Space key
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
-            auto [mx, my] = Axle::Input::GetMousePosition();
-            std::cout << "[Polling] Space held! Mouse at (" << mx << ", " << my << ")\n";
+        // Change color dynamically based on mouse click
+        if (Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonLeft)) {
+            clearColor = { 0.15f, 0.35f, 0.25f, 1.0f }; // Dark forest green
+        } else if (Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)) {
+            clearColor = { 0.35f, 0.15f, 0.15f, 1.0f }; // Dark crimson
+        } else {
+            clearColor = { 0.12f, 0.14f, 0.18f, 1.0f }; // Default slate
         }
+
+        Axle::RenderCommand::SetClearColor(clearColor);
+        Axle::RenderCommand::Clear();
 
         window.SwapBuffers();
     }

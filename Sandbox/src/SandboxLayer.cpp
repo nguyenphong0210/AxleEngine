@@ -318,22 +318,51 @@ void SandboxLayer::OnWindowResize(Axle::u32 width, Axle::u32 height) {
     }
 }
 
+void SandboxLayer::OnScenePlay() {
+    m_SceneState = SceneState::Play;
+    m_ChaseCamera = true;
+    AXLE_INFO("Simulation started (Play Mode). Chase Camera locked to Vehicle. Drive with WASD/Arrows (Space: Handbrake).");
+}
+
+void SandboxLayer::OnScenePause() {
+    m_SceneState = SceneState::Pause;
+    AXLE_INFO("Simulation paused. Viewport Free-Fly inspection enabled.");
+}
+
+void SandboxLayer::OnSceneStop() {
+    m_SceneState = SceneState::Edit;
+    ResetSimulation();
+    m_ChaseCamera = false;
+    AXLE_INFO("Simulation stopped (Edit Mode). Editor Free-Fly Camera active: Hold RMB to look, WASD to fly (Shift: Sprint, Q/E: Elevate).");
+}
+
 void SandboxLayer::ResetSimulation() {
     AXLE_INFO("Resetting physics simulation and vehicle state");
     m_PhysicsScene->SetBodyPositionAndRotation(m_BoxBodyID, glm::vec3(-5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
     m_PhysicsScene->SetLinearVelocity(m_BoxBodyID, glm::vec3(0.0f));
+    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(m_BoxBodyID, JPH::Vec3::sZero());
 
     m_PhysicsScene->SetBodyPositionAndRotation(m_SphereBodyID, glm::vec3(5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
     m_PhysicsScene->SetLinearVelocity(m_SphereBodyID, glm::vec3(0.0f));
+    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(m_SphereBodyID, JPH::Vec3::sZero());
 
     m_PhysicsScene->SetBodyPositionAndRotation(m_CylinderBodyID, glm::vec3(-7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
     m_PhysicsScene->SetLinearVelocity(m_CylinderBodyID, glm::vec3(0.0f));
+    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(m_CylinderBodyID, JPH::Vec3::sZero());
 
     m_PhysicsScene->SetBodyPositionAndRotation(m_ConeBodyID, glm::vec3(7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
     m_PhysicsScene->SetLinearVelocity(m_ConeBodyID, glm::vec3(0.0f));
+    m_PhysicsScene->GetBodyInterface().SetAngularVelocity(m_ConeBodyID, JPH::Vec3::sZero());
 
     if (m_Vehicle) {
         m_Vehicle->Reset(glm::vec3(0.0f, 1.2f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        m_Vehicle->SetDriverInput(0.0f, 0.0f, 0.0f, 0.0f);
+        for (Axle::u32 i = 0; i < 4; ++i) {
+            const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
+            auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
+            tc.Translation = glm::vec3(wheelMat[3]);
+            tc.Rotation = glm::quat_cast(wheelMat);
+        }
     }
     m_OrbitYaw = 180.0f;
     m_OrbitPitch = 15.0f;
@@ -342,7 +371,55 @@ void SandboxLayer::ResetSimulation() {
 void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     m_LastDeltaTime = ts.GetSeconds();
 
-    // Hotkey Controls
+    // Hotkey Controls (debounced)
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F5)) {
+        if (!m_F5KeyWasPressed) {
+            if (m_SceneState != SceneState::Play) {
+                OnScenePlay();
+            }
+            m_F5KeyWasPressed = true;
+        }
+    } else {
+        m_F5KeyWasPressed = false;
+    }
+
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F6)) {
+        if (!m_F6KeyWasPressed) {
+            if (m_SceneState == SceneState::Play) {
+                OnScenePause();
+            } else if (m_SceneState == SceneState::Pause) {
+                OnScenePlay();
+            }
+            m_F6KeyWasPressed = true;
+        }
+    } else {
+        m_F6KeyWasPressed = false;
+    }
+
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F7) || Axle::Input::IsKeyPressed(Axle::KeyCode::Escape)) {
+        if (!m_F7KeyWasPressed && !m_EscKeyWasPressed) {
+            if (m_SceneState != SceneState::Edit) {
+                OnSceneStop();
+            }
+            m_F7KeyWasPressed = true;
+            m_EscKeyWasPressed = true;
+        }
+    } else {
+        m_F7KeyWasPressed = false;
+        m_EscKeyWasPressed = false;
+    }
+
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::O)) {
+        if (!m_OKeyWasPressed) {
+            if (m_SceneState == SceneState::Pause) {
+                m_StepSingleFrame = true;
+            }
+            m_OKeyWasPressed = true;
+        }
+    } else {
+        m_OKeyWasPressed = false;
+    }
+
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::R)) {
         ResetSimulation();
     }
@@ -365,24 +442,24 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_F1KeyWasPressed = false;
     }
 
-    // Vehicle Driving Input (Active only when Viewport is hovered or focused)
+    // Vehicle Driving Input (Active ONLY in Play Mode when Viewport is hovered or focused)
     if (m_Vehicle) {
         Axle::f32 forwardInput = 0.0f;
         Axle::f32 rightInput = 0.0f;
         Axle::f32 brakeInput = 0.0f;
         Axle::f32 handBrakeInput = 0.0f;
 
-        if (m_ViewportHovered || m_ViewportFocused) {
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Up) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::W))) {
+        if (m_SceneState == SceneState::Play && (m_ViewportHovered || m_ViewportFocused) && !ImGui::GetIO().WantTextInput) {
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Up) || Axle::Input::IsKeyPressed(Axle::KeyCode::W)) {
                 forwardInput += 1.0f;
             }
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Down) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::S))) {
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Down) || Axle::Input::IsKeyPressed(Axle::KeyCode::S)) {
                 forwardInput -= 1.0f;
             }
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Left) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::A))) {
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Left) || Axle::Input::IsKeyPressed(Axle::KeyCode::A)) {
                 rightInput -= 1.0f;
             }
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Right) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::D))) {
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Right) || Axle::Input::IsKeyPressed(Axle::KeyCode::D)) {
                 rightInput += 1.0f;
             }
             if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
@@ -394,7 +471,8 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     }
 
     // Camera Update
-    if (m_ChaseCamera && m_Vehicle) {
+    if (m_SceneState == SceneState::Play && m_ChaseCamera && m_Vehicle) {
+        // Vehicle Chase Camera
         const auto [mouseX, mouseY] = Axle::Input::GetMousePosition();
         const glm::vec2 currentMousePos{ mouseX, mouseY };
 
@@ -449,22 +527,23 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_CameraController->SetPosition(camPos);
         m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
     } else {
-        if (m_ViewportHovered) {
+        // Editor Free-Fly Camera (Active in Edit mode, Pause mode, or Free-Fly mode)
+        if ((m_ViewportHovered || m_ViewportFocused) && !ImGui::GetIO().WantTextInput) {
             m_CameraController->OnUpdate(ts);
         }
     }
 
     // Physics Simulation Stepping
-    if (m_IsSimulationRunning) {
+    if (m_SceneState == SceneState::Play) {
         Axle::Timestep simTs = ts.GetSeconds() * m_SimulationSpeed;
         m_PhysicsScene->Step(simTs);
-    } else if (m_StepSingleFrame) {
+    } else if (m_SceneState == SceneState::Pause && m_StepSingleFrame) {
         m_PhysicsScene->Step(1.0f / 60.0f);
         m_StepSingleFrame = false;
     }
 
     // Synchronize 4 wheel entity transforms with physics vehicle constraint
-    if (m_Vehicle) {
+    if (m_Vehicle && m_SceneState != SceneState::Edit) {
         for (Axle::u32 i = 0; i < 4; ++i) {
             const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
             auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
@@ -497,61 +576,211 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
 }
 
 void SandboxLayer::RenderToolbar() {
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 6.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 6.0f));
+    const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+    const float toolbarHeight = 36.0f;
 
-    if (ImGui::Begin("##Toolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
-        // Play / Pause button
-        if (m_IsSimulationRunning) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.35f, 0.15f, 1.0f));
-            if (ImGui::Button("Pause (Space)", ImVec2(100.0f, 26.0f))) {
-                m_IsSimulationRunning = false;
-            }
+    ImGui::SetNextWindowPos(mainViewport->WorkPos);
+    ImGui::SetNextWindowSize(ImVec2(mainViewport->WorkSize.x, toolbarHeight));
+    ImGui::SetNextWindowViewport(mainViewport->ID);
+
+    ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoDocking 
+                                  | ImGuiWindowFlags_NoTitleBar 
+                                  | ImGuiWindowFlags_NoResize 
+                                  | ImGuiWindowFlags_NoMove 
+                                  | ImGuiWindowFlags_NoScrollbar 
+                                  | ImGuiWindowFlags_NoSavedSettings;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
+
+    if (ImGui::Begin("##FixedTopToolbar", nullptr, toolbarFlags)) {
+        // --- 1. PLAY BUTTON ---
+        if (m_SceneState == SceneState::Play) {
+            ImGui::BeginDisabled(true);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.50f, 0.25f, 0.5f));
+            ImGui::Button("Playing (F5)", ImVec2(100.0f, 26.0f));
             ImGui::PopStyleColor();
+            ImGui::EndDisabled();
         } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.75f, 0.25f, 1.0f));
-            if (ImGui::Button("Play (Space)", ImVec2(100.0f, 26.0f))) {
-                m_IsSimulationRunning = true;
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.72f, 0.28f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.85f, 0.35f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.60f, 0.22f, 1.0f));
+            if (ImGui::Button("Play (F5)", ImVec2(100.0f, 26.0f))) {
+                OnScenePlay();
             }
-            ImGui::PopStyleColor();
+            ImGui::PopStyleColor(3);
         }
 
+        // --- 2. PAUSE BUTTON ---
         ImGui::SameLine();
-        if (ImGui::Button("Step Frame", ImVec2(90.0f, 26.0f))) {
-            m_IsSimulationRunning = false;
-            m_StepSingleFrame = true;
+        if (m_SceneState == SceneState::Play) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.88f, 0.48f, 0.12f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.98f, 0.58f, 0.18f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.75f, 0.40f, 0.10f, 1.0f));
+            if (ImGui::Button("Pause (F6)", ImVec2(100.0f, 26.0f))) {
+                OnScenePause();
+            }
+            ImGui::PopStyleColor(3);
+        } else if (m_SceneState == SceneState::Pause) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.72f, 0.28f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.85f, 0.35f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.60f, 0.22f, 1.0f));
+            if (ImGui::Button("Resume (F6)", ImVec2(100.0f, 26.0f))) {
+                OnScenePlay();
+            }
+            ImGui::PopStyleColor(3);
+        } else {
+            ImGui::BeginDisabled(true);
+            ImGui::Button("Pause", ImVec2(100.0f, 26.0f));
+            ImGui::EndDisabled();
         }
 
+        // --- 3. STOP BUTTON ---
         ImGui::SameLine();
-        if (ImGui::Button("Reset Scene", ImVec2(90.0f, 26.0f))) {
+        if (m_SceneState != SceneState::Edit) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.18f, 0.20f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.25f, 0.28f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.14f, 0.16f, 1.0f));
+            if (ImGui::Button("Stop (F7)", ImVec2(90.0f, 26.0f))) {
+                OnSceneStop();
+            }
+            ImGui::PopStyleColor(3);
+        } else {
+            ImGui::BeginDisabled(true);
+            ImGui::Button("Stop", ImVec2(90.0f, 26.0f));
+            ImGui::EndDisabled();
+        }
+
+        // --- 4. STEP 1 FRAME BUTTON ---
+        ImGui::SameLine();
+        if (m_SceneState == SceneState::Pause) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.52f, 0.88f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.62f, 0.98f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.42f, 0.75f, 1.0f));
+            if (ImGui::Button("Step (O)", ImVec2(80.0f, 26.0f))) {
+                m_StepSingleFrame = true;
+            }
+            ImGui::PopStyleColor(3);
+        } else {
+            ImGui::BeginDisabled(true);
+            ImGui::Button("Step", ImVec2(80.0f, 26.0f));
+            ImGui::EndDisabled();
+        }
+
+        // --- 5. RESET SCENE BUTTON ---
+        ImGui::SameLine();
+        if (ImGui::Button("Reset (R)", ImVec2(85.0f, 26.0f))) {
             ResetSimulation();
         }
 
+        // --- 6. SIMULATION SPEED SLIDER ---
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(120.0f);
+        ImGui::SetNextItemWidth(100.0f);
         ImGui::SliderFloat("Speed", &m_SimulationSpeed, 0.1f, 2.0f, "%.1fx");
 
         ImGui::SameLine();
-        ImGui::Spacing();
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "| Camera: %s", 
-                           m_ChaseCamera ? "Chase Cam [C]" : "Free-Fly [C]");
+        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
 
+        // --- 7. CAMERA MODE TOGGLE ---
+        ImGui::SameLine();
+        const char* camBtnText = m_ChaseCamera ? "Cam: Chase [C]" : "Cam: Free-Fly [C]";
+        if (ImGui::Button(camBtnText, ImVec2(125.0f, 26.0f))) {
+            m_ChaseCamera = !m_ChaseCamera;
+        }
+
+        // --- 8. WIREFRAME TOGGLE ---
         ImGui::SameLine();
         ImGui::Checkbox("Wireframe [F1]", &m_ShowPhysicsDebug);
+
+        // --- 9. STATUS / NAVIGATION HINT ---
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
+
+        ImGui::SameLine();
+        if (m_SceneState == SceneState::Edit) {
+            ImGui::TextColored(ImVec4(0.35f, 0.70f, 1.0f, 1.0f), "EDIT MODE: Hold RMB + WASD to fly camera (Shift: Boost, Q/E: Elevate)");
+        } else if (m_SceneState == SceneState::Play) {
+            ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.45f, 1.0f), "PLAYING: Drive with WASD/Arrows (Space: Handbrake)");
+        } else {
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "PAUSED: Physics frozen. Hold RMB + WASD to inspect scene");
+        }
     }
     ImGui::End();
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
 }
 
 void SandboxLayer::OnImGuiRender() {
-    // 1. Fullscreen DockSpace Container
+    // 1. Global Main Menu Bar (At the absolute top of the application window)
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Reset Scene", "R")) {
+                ResetSimulation();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Exit", "Alt+F4")) {
+                // Application exit
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Simulation")) {
+            if (ImGui::MenuItem("Play", "F5", m_SceneState == SceneState::Play, m_SceneState != SceneState::Play)) {
+                OnScenePlay();
+            }
+            if (ImGui::MenuItem("Pause", "F6", m_SceneState == SceneState::Pause, m_SceneState == SceneState::Play)) {
+                OnScenePause();
+            }
+            if (ImGui::MenuItem("Stop", "F7", m_SceneState == SceneState::Edit, m_SceneState != SceneState::Edit)) {
+                OnSceneStop();
+            }
+            if (ImGui::MenuItem("Step 1 Frame", "O", false, m_SceneState == SceneState::Pause)) {
+                m_StepSingleFrame = true;
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Reset Scene", "R")) {
+                ResetSimulation();
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("View")) {
+            ImGui::MenuItem("Scene Hierarchy", nullptr, &m_ShowSceneHierarchy);
+            ImGui::MenuItem("Properties / Inspector", nullptr, &m_ShowProperties);
+            ImGui::MenuItem("Vehicle Tuner", nullptr, &m_ShowVehicleTuner);
+            ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
+            ImGui::MenuItem("Telemetry & Performance", nullptr, &m_ShowTelemetry);
+            ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Reset Default Layout")) {
+                m_ResetLayout = true;
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Camera")) {
+            if (ImGui::MenuItem("Vehicle Chase Camera", "C", m_ChaseCamera)) {
+                m_ChaseCamera = true;
+            }
+            if (ImGui::MenuItem("Free-Fly Camera", "C", !m_ChaseCamera)) {
+                m_ChaseCamera = false;
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
+
+    // 2. Render Fixed Toolbar directly beneath Main Menu Bar
+    RenderToolbar();
+
+    // 3. Fullscreen DockSpace Container (Below Toolbar)
     const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(mainViewport->WorkPos);
-    ImGui::SetNextWindowSize(mainViewport->WorkSize);
+    const float toolbarHeight = 36.0f;
+    const ImVec2 dockspacePos = ImVec2(mainViewport->WorkPos.x, mainViewport->WorkPos.y + toolbarHeight);
+    const ImVec2 dockspaceSize = ImVec2(mainViewport->WorkSize.x, mainViewport->WorkSize.y - toolbarHeight);
+
+    ImGui::SetNextWindowPos(dockspacePos);
+    ImGui::SetNextWindowSize(dockspaceSize);
     ImGui::SetNextWindowViewport(mainViewport->ID);
 
-    ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking
+    ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_NoDocking
                                          | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse
                                          | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
                                          | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
@@ -566,53 +795,32 @@ void SandboxLayer::OnImGuiRender() {
     ImGuiID dockspaceID = ImGui::GetID("AxleMainDockspace");
     ImGui::DockSpace(dockspaceID, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
-    // 2. Main Menu Bar
-    if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Exit", "Alt+F4")) {
-                // Window will close
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Simulation")) {
-            if (ImGui::MenuItem(m_IsSimulationRunning ? "Pause" : "Play", "Space")) {
-                m_IsSimulationRunning = !m_IsSimulationRunning;
-            }
-            if (ImGui::MenuItem("Step 1 Frame", "O")) {
-                m_IsSimulationRunning = false;
-                m_StepSingleFrame = true;
-            }
-            if (ImGui::MenuItem("Reset All", "R")) {
-                ResetSimulation();
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("View")) {
-            ImGui::MenuItem("Scene Hierarchy", nullptr, &m_ShowSceneHierarchy);
-            ImGui::MenuItem("Properties / Inspector", nullptr, &m_ShowProperties);
-            ImGui::MenuItem("Vehicle Tuner", nullptr, &m_ShowVehicleTuner);
-            ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
-            ImGui::MenuItem("Telemetry & Performance", nullptr, &m_ShowTelemetry);
-            ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Camera")) {
-            if (ImGui::MenuItem("Vehicle Chase Camera", "C", m_ChaseCamera)) {
-                m_ChaseCamera = true;
-            }
-            if (ImGui::MenuItem("Free-Fly Camera", "C", !m_ChaseCamera)) {
-                m_ChaseCamera = false;
-            }
-            ImGui::EndMenu();
-        }
-        ImGui::EndMenuBar();
+    // Build default docked layout if not yet configured or if reset requested
+    ImGuiDockNode* node = ImGui::DockBuilderGetNode(dockspaceID);
+    if (node == nullptr || node->IsEmpty() || !node->IsSplitNode() || m_ResetLayout) {
+        m_ResetLayout = false;
+
+        ImGui::DockBuilderRemoveNode(dockspaceID);
+        ImGui::DockBuilderAddNode(dockspaceID, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspaceID, dockspaceSize);
+
+        ImGuiID dock_main = dockspaceID;
+        ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.20f, nullptr, &dock_main);
+        ImGuiID dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.26f, nullptr, &dock_main);
+        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.32f, nullptr, &dock_main);
+
+        ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_left);
+        ImGui::DockBuilderDockWindow("Viewport", dock_main);
+        ImGui::DockBuilderDockWindow("Vehicle Tuner", dock_bottom);
+        ImGui::DockBuilderDockWindow("Console", dock_bottom);
+        ImGui::DockBuilderDockWindow("Properties", dock_right);
+        ImGui::DockBuilderDockWindow("Axle Engine - Telemetry", dock_right);
+
+        ImGui::DockBuilderFinish(dockspaceID);
     }
     ImGui::End(); // End AxleEngineDockSpace
 
-    // 3. Render Top Simulation Toolbar
-    RenderToolbar();
-
-    // 4. Render 3D Viewport Window
+    // 3. Render 3D Viewport Window
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin("Viewport");
 
@@ -641,18 +849,27 @@ void SandboxLayer::OnImGuiRender() {
     ImVec2 winPos = ImGui::GetWindowPos();
     ImVec2 badgePos = ImVec2(winPos.x + 12.0f, winPos.y + 12.0f);
 
-    const char* statusText = m_IsSimulationRunning ? "SIMULATION ACTIVE" : "SIMULATION PAUSED";
-    ImU32 statusBg = m_IsSimulationRunning ? IM_COL32(30, 150, 60, 200) : IM_COL32(200, 100, 20, 200);
-    drawList->AddRectFilled(badgePos, ImVec2(badgePos.x + 160.0f, badgePos.y + 24.0f), statusBg, 4.0f);
+    const char* statusText = (m_SceneState == SceneState::Edit) ? "EDIT MODE (STOPPED)"
+                           : (m_SceneState == SceneState::Play) ? "SIMULATION ACTIVE"
+                           : "SIMULATION PAUSED";
+    ImU32 statusBg = (m_SceneState == SceneState::Edit) ? IM_COL32(35, 75, 150, 220)
+                   : (m_SceneState == SceneState::Play) ? IM_COL32(25, 140, 55, 220)
+                   : IM_COL32(190, 95, 15, 220);
+
+    drawList->AddRectFilled(badgePos, ImVec2(badgePos.x + 175.0f, badgePos.y + 24.0f), statusBg, 4.0f);
     drawList->AddText(ImVec2(badgePos.x + 8.0f, badgePos.y + 4.0f), IM_COL32(255, 255, 255, 255), statusText);
 
-    if (m_Vehicle) {
+    if (m_SceneState == SceneState::Play && m_Vehicle) {
         const auto vTele = m_Vehicle->GetTelemetry();
-        char speedStr[32];
-        snprintf(speedStr, sizeof(speedStr), "%.1f KM/H", vTele.SpeedKmh);
-        ImVec2 speedPos = ImVec2(badgePos.x + 170.0f, badgePos.y);
-        drawList->AddRectFilled(speedPos, ImVec2(speedPos.x + 100.0f, speedPos.y + 24.0f), IM_COL32(20, 80, 160, 200), 4.0f);
-        drawList->AddText(ImVec2(speedPos.x + 8.0f, speedPos.y + 4.0f), IM_COL32(255, 255, 255, 255), speedStr);
+        char speedStr[48];
+        snprintf(speedStr, sizeof(speedStr), "%.1f KM/H | GEAR %d", vTele.SpeedKmh, vTele.CurrentGear);
+        ImVec2 speedPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
+        drawList->AddRectFilled(speedPos, ImVec2(speedPos.x + 155.0f, speedPos.y + 24.0f), IM_COL32(20, 30, 45, 220), 4.0f);
+        drawList->AddText(ImVec2(speedPos.x + 8.0f, speedPos.y + 4.0f), IM_COL32(0, 230, 180, 255), speedStr);
+    } else if (m_SceneState == SceneState::Edit) {
+        ImVec2 hintPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
+        drawList->AddRectFilled(hintPos, ImVec2(hintPos.x + 380.0f, hintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
+        drawList->AddText(ImVec2(hintPos.x + 8.0f, hintPos.y + 4.0f), IM_COL32(200, 210, 225, 255), "RMB + WASD to Fly Camera | Shift: Boost | Q/E: Elevate");
     }
 
     ImGui::End();

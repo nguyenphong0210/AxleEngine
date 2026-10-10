@@ -30,11 +30,12 @@ namespace Axle {
         glm::vec3 m_CameraPosition{ 0.0f, 1.0f, 4.0f };
         glm::vec3 m_CameraRotation{ 0.0f, 0.0f, 0.0f }; // Pitch (X), Yaw (Y), Roll (Z) in degrees
 
-        f32 m_TranslationSpeed = 4.0f;
+        f32 m_TranslationSpeed = 8.0f;
         f32 m_RotationSpeed = 0.15f;
 
         glm::vec2 m_LastMousePosition{ 0.0f, 0.0f };
         bool m_FirstMouseUpdate = true;
+        bool m_WasInteracting = false;
     };
 
 }

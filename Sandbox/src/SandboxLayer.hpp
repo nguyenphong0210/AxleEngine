@@ -19,6 +19,12 @@
 
 class SandboxLayer : public Axle::Layer {
 public:
+    enum class SceneState {
+        Edit = 0,
+        Play = 1,
+        Pause = 2
+    };
+
     SandboxLayer();
     ~SandboxLayer() override = default;
 
@@ -27,6 +33,10 @@ public:
     void OnUpdate(Axle::Timestep ts) override;
     void OnImGuiRender() override;
     void OnWindowResize(Axle::u32 width, Axle::u32 height) override;
+
+    void OnScenePlay();
+    void OnScenePause();
+    void OnSceneStop();
 
 private:
     void ResetSimulation();
@@ -48,13 +58,18 @@ private:
     bool m_ViewportHovered = false;
 
     // Simulation Execution Control
-    bool m_IsSimulationRunning = true;
+    SceneState m_SceneState = SceneState::Edit;
     bool m_StepSingleFrame = false;
     Axle::f32 m_SimulationSpeed = 1.0f;
+    bool m_F5KeyWasPressed = false;
+    bool m_F6KeyWasPressed = false;
+    bool m_F7KeyWasPressed = false;
+    bool m_OKeyWasPressed = false;
+    bool m_EscKeyWasPressed = false;
 
     // Vehicle and chase camera
     std::unique_ptr<Axle::Vehicle> m_Vehicle;
-    bool m_ChaseCamera = true;
+    bool m_ChaseCamera = false;
     bool m_CKeyWasPressed = false;
     Axle::f32 m_OrbitYaw = 180.0f;
     Axle::f32 m_OrbitPitch = 15.0f;
@@ -97,6 +112,7 @@ private:
     bool m_ShowVehicleTuner = true;
     bool m_ShowConsole = true;
     bool m_ShowTelemetry = true;
+    bool m_ResetLayout = false;
 
     Axle::f32 m_LastDeltaTime = 0.0f;
 };

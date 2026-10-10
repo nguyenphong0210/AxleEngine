@@ -22,7 +22,12 @@ namespace Axle {
             m_FirstMouseUpdate = false;
         }
 
-        if (Input::IsMouseButtonPressed(MouseCode::ButtonRight) || Input::IsMouseButtonPressed(MouseCode::ButtonLeft)) {
+        const bool isInteracting = Input::IsMouseButtonPressed(MouseCode::ButtonRight) || Input::IsMouseButtonPressed(MouseCode::ButtonLeft);
+        if (isInteracting) {
+            if (!m_WasInteracting) {
+                m_LastMousePosition = currentMousePos;
+                m_WasInteracting = true;
+            }
             const glm::vec2 delta = currentMousePos - m_LastMousePosition;
 
             m_CameraRotation.y -= delta.x * m_RotationSpeed; // Yaw (Rotate around world Y-axis)
@@ -30,6 +35,8 @@ namespace Axle {
 
             // Clamp pitch angle to avoid camera flipping
             m_CameraRotation.x = std::clamp(m_CameraRotation.x, -89.0f, 89.0f);
+        } else {
+            m_WasInteracting = false;
         }
 
         m_LastMousePosition = currentMousePos;
@@ -47,8 +54,9 @@ namespace Axle {
         const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
         const glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
-        // 3. Move along view axes
-        const f32 speed = m_TranslationSpeed * ts.GetSeconds();
+        // 3. Move along view axes with optional sprint boost
+        const f32 speedMultiplier = Input::IsKeyPressed(KeyCode::LeftShift) ? 2.5f : 1.0f;
+        const f32 speed = m_TranslationSpeed * speedMultiplier * ts.GetSeconds();
 
         if (Input::IsKeyPressed(KeyCode::W)) {
             m_CameraPosition += forward * speed;
@@ -62,10 +70,10 @@ namespace Axle {
         if (Input::IsKeyPressed(KeyCode::D)) {
             m_CameraPosition += right * speed;
         }
-        if (Input::IsKeyPressed(KeyCode::E) || Input::IsKeyPressed(KeyCode::Space)) {
+        if (Input::IsKeyPressed(KeyCode::E)) {
             m_CameraPosition += up * speed;
         }
-        if (Input::IsKeyPressed(KeyCode::Q) || Input::IsKeyPressed(KeyCode::LeftShift)) {
+        if (Input::IsKeyPressed(KeyCode::Q)) {
             m_CameraPosition -= up * speed;
         }
 

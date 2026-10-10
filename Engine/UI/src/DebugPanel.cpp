@@ -19,13 +19,28 @@ namespace Axle {
         ImGui::Text("Rotation: Pitch: %.1f deg | Yaw: %.1f deg", 
                     telemetry.CameraRotation.x, telemetry.CameraRotation.y);
 
+        if (telemetry.HasPhysics) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "Jolt Physics Simulation");
+            ImGui::Separator();
+            ImGui::Text("Bodies: Total: %u | Active: %u", telemetry.TotalBodies, telemetry.ActiveBodies);
+            ImGui::Text("Box Pos: X: %.2f | Y: %.2f | Z: %.2f",
+                        telemetry.BoxPosition.x, telemetry.BoxPosition.y, telemetry.BoxPosition.z);
+            ImGui::Text("Box Vel: X: %.2f | Y: %.2f | Z: %.2f (Speed: %.2f m/s)",
+                        telemetry.BoxVelocity.x, telemetry.BoxVelocity.y, telemetry.BoxVelocity.z,
+                        glm::length(telemetry.BoxVelocity));
+            ImGui::Text("Box State: %s", telemetry.IsBoxActive ? "Active (Moving / Falling)" : "Sleeping (Resting on floor)");
+            ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "[R] Key: Drop Box Again");
+        }
+
         ImGui::Spacing();
         ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Controls Guide");
         ImGui::Separator();
         ImGui::BulletText("Right-click + Drag: Free-fly look");
-        ImGui::BulletText("W / A / S / D: Di chuyen");
-        ImGui::BulletText("E / Space: Len");
-        ImGui::BulletText("Q / LShift: Xuong");
+        ImGui::BulletText("W / A / S / D: Move camera");
+        ImGui::BulletText("E / Space: Ascend");
+        ImGui::BulletText("Q / LShift: Descend");
+        ImGui::BulletText("R: Reset Falling Box");
 
         ImGui::End();
     }

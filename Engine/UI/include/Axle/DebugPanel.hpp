@@ -9,6 +9,14 @@ namespace Axle {
         f32 FPS = 0.0f;
         glm::vec3 CameraPosition{ 0.0f };
         glm::vec3 CameraRotation{ 0.0f };
+
+        // Physics telemetry
+        bool HasPhysics = false;
+        glm::vec3 BoxPosition{ 0.0f };
+        glm::vec3 BoxVelocity{ 0.0f };
+        bool IsBoxActive = false;
+        u32 TotalBodies = 0;
+        u32 ActiveBodies = 0;
     };
 
     class DebugPanel {

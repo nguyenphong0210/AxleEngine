@@ -19,6 +19,9 @@ namespace Axle {
         void SetMoveSpeed(f32 speed) { m_TranslationSpeed = speed; }
         void SetRotationSpeed(f32 speed) { m_RotationSpeed = speed; }
 
+        void SetPosition(const glm::vec3& position) { m_CameraPosition = position; m_Camera.SetPosition(position); }
+        void SetRotation(const glm::vec3& rotation) { m_CameraRotation = rotation; m_Camera.SetRotation(rotation); }
+
     private:
         f32 m_AspectRatio;
         f32 m_FOV;

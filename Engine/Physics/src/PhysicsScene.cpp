@@ -1,0 +1,228 @@
+#include <Axle/PhysicsScene.hpp>
+#include <Axle/PhysicsEngine.hpp>
+#include <Axle/Log.hpp>
+
+#include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Body/BodyCreationSettings.h>
+
+#include <thread>
+#include <algorithm>
+
+namespace Axle {
+
+    PhysicsScene::PhysicsScene(const PhysicsSettings& settings)
+        : m_Settings(settings) {
+        
+        // Ensure core Jolt physics engine is initialized
+        if (!PhysicsEngine::IsInitialized()) {
+            PhysicsEngine::Init();
+        }
+
+        // 1. Allocate temporary buffer for physics updates
+        m_TempAllocator = std::make_unique<JPH::TempAllocatorImpl>(settings.TempAllocatorSizeMB * 1024 * 1024);
+
+        // 2. Initialize multithreaded job system using available CPU cores
+        const u32 threadCount = std::max(1u, std::thread::hardware_concurrency() - 1);
+        m_JobSystem = std::make_unique<JPH::JobSystemThreadPool>(
+            JPH::cMaxPhysicsJobs,
+            JPH::cMaxPhysicsBarriers,
+            static_cast<int>(threadCount)
+        );
+
+        // 3. Initialize Jolt PhysicsSystem
+        m_PhysicsSystem.Init(
+            settings.MaxBodies,
+            settings.NumBodyMutexes,
+            settings.MaxBodyPairs,
+            settings.MaxContactConstraints,
+            m_BPLayerInterface,
+            m_ObjectVsBPFilter,
+            m_ObjectLayerFilter
+        );
+
+        SetGravity(settings.Gravity);
+
+        AXLE_CORE_INFO("PhysicsScene initialized (Threads: {0}, MaxBodies: {1})", threadCount, settings.MaxBodies);
+    }
+
+    PhysicsScene::~PhysicsScene() {
+        JPH::BodyIDVector bodyIDs;
+        m_PhysicsSystem.GetBodies(bodyIDs);
+        if (!bodyIDs.empty()) {
+            auto& bi = m_PhysicsSystem.GetBodyInterface();
+            bi.RemoveBodies(bodyIDs.data(), static_cast<int>(bodyIDs.size()));
+            bi.DestroyBodies(bodyIDs.data(), static_cast<int>(bodyIDs.size()));
+        }
+        AXLE_CORE_INFO("PhysicsScene destroyed");
+    }
+
+    void PhysicsScene::Step(Timestep ts, i32 collisionSteps) {
+        const f32 dt = ts.GetSeconds();
+        if (dt <= 0.0f) return;
+
+        // Jolt physics simulation update
+        m_PhysicsSystem.Update(dt, collisionSteps, m_TempAllocator.get(), m_JobSystem.get());
+    }
+
+    BodyID PhysicsScene::CreateBox(const BoxBodyProps& props) {
+        JPH::BoxShapeSettings shapeSettings(ToJolt(props.HalfExtent));
+        JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings.Create();
+        if (shapeResult.HasError()) {
+            AXLE_CORE_ERROR("Failed to create Box shape: {0}", shapeResult.GetError().c_str());
+            return BodyID();
+        }
+
+        const JPH::EMotionType motionType = props.IsDynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static;
+        const JPH::ObjectLayer layer = props.IsDynamic ? Layers::MOVING : Layers::NON_MOVING;
+
+        JPH::BodyCreationSettings bodySettings(
+            shapeResult.Get(),
+            ToJolt(props.Position),
+            ToJolt(props.Rotation),
+            motionType,
+            layer
+        );
+        bodySettings.mFriction = props.Friction;
+        bodySettings.mRestitution = props.Restitution;
+        bodySettings.mAllowSleeping = props.AllowSleeping;
+
+        const JPH::EActivation activation = props.IsDynamic ? JPH::EActivation::Activate : JPH::EActivation::DontActivate;
+        const BodyID bodyID = m_PhysicsSystem.GetBodyInterface().CreateAndAddBody(bodySettings, activation);
+        if (bodyID.IsInvalid()) {
+            AXLE_CORE_ERROR("Failed to create and add Box body to physics system!");
+        }
+        return bodyID;
+    }
+
+    BodyID PhysicsScene::CreateBox(const glm::vec3& position, const glm::vec3& halfExtent, bool isDynamic, f32 friction, f32 restitution) {
+        BoxBodyProps props;
+        props.Position = position;
+        props.HalfExtent = halfExtent;
+        props.IsDynamic = isDynamic;
+        props.Friction = friction;
+        props.Restitution = restitution;
+        return CreateBox(props);
+    }
+
+    BodyID PhysicsScene::CreateSphere(const SphereBodyProps& props) {
+        JPH::SphereShapeSettings shapeSettings(props.Radius);
+        JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings.Create();
+        if (shapeResult.HasError()) {
+            AXLE_CORE_ERROR("Failed to create Sphere shape: {0}", shapeResult.GetError().c_str());
+            return BodyID();
+        }
+
+        const JPH::EMotionType motionType = props.IsDynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static;
+        const JPH::ObjectLayer layer = props.IsDynamic ? Layers::MOVING : Layers::NON_MOVING;
+
+        JPH::BodyCreationSettings bodySettings(
+            shapeResult.Get(),
+            ToJolt(props.Position),
+            ToJolt(props.Rotation),
+            motionType,
+            layer
+        );
+        bodySettings.mFriction = props.Friction;
+        bodySettings.mRestitution = props.Restitution;
+        bodySettings.mAllowSleeping = props.AllowSleeping;
+
+        const JPH::EActivation activation = props.IsDynamic ? JPH::EActivation::Activate : JPH::EActivation::DontActivate;
+        const BodyID bodyID = m_PhysicsSystem.GetBodyInterface().CreateAndAddBody(bodySettings, activation);
+        if (bodyID.IsInvalid()) {
+            AXLE_CORE_ERROR("Failed to create and add Sphere body to physics system!");
+        }
+        return bodyID;
+    }
+
+    BodyID PhysicsScene::CreateSphere(const glm::vec3& position, f32 radius, bool isDynamic, f32 friction, f32 restitution) {
+        SphereBodyProps props;
+        props.Position = position;
+        props.Radius = radius;
+        props.IsDynamic = isDynamic;
+        props.Friction = friction;
+        props.Restitution = restitution;
+        return CreateSphere(props);
+    }
+
+    void PhysicsScene::DestroyBody(BodyID bodyID) {
+        if (bodyID.IsInvalid()) return;
+        auto& bi = m_PhysicsSystem.GetBodyInterface();
+        bi.RemoveBody(bodyID);
+        bi.DestroyBody(bodyID);
+    }
+
+    void PhysicsScene::OptimizeBroadPhase() {
+        m_PhysicsSystem.OptimizeBroadPhase();
+    }
+
+    glm::vec3 PhysicsScene::GetBodyPosition(BodyID bodyID) const {
+        if (bodyID.IsInvalid()) return glm::vec3(0.0f);
+        return ToGlm(m_PhysicsSystem.GetBodyInterface().GetCenterOfMassPosition(bodyID));
+    }
+
+    glm::quat PhysicsScene::GetBodyRotation(BodyID bodyID) const {
+        if (bodyID.IsInvalid()) return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        return ToGlm(m_PhysicsSystem.GetBodyInterface().GetRotation(bodyID));
+    }
+
+    glm::mat4 PhysicsScene::GetBodyTransform(BodyID bodyID) const {
+        if (bodyID.IsInvalid()) return glm::mat4(1.0f);
+        return ToGlm(m_PhysicsSystem.GetBodyInterface().GetWorldTransform(bodyID));
+    }
+
+    void PhysicsScene::SetBodyPositionAndRotation(BodyID bodyID, const glm::vec3& position, const glm::quat& rotation, bool activate) {
+        if (bodyID.IsInvalid()) return;
+        auto& bi = m_PhysicsSystem.GetBodyInterface();
+        bi.SetPositionAndRotation(
+            bodyID,
+            ToJolt(position),
+            ToJolt(rotation),
+            activate ? JPH::EActivation::Activate : JPH::EActivation::DontActivate
+        );
+    }
+
+    glm::vec3 PhysicsScene::GetLinearVelocity(BodyID bodyID) const {
+        if (bodyID.IsInvalid()) return glm::vec3(0.0f);
+        return ToGlm(m_PhysicsSystem.GetBodyInterface().GetLinearVelocity(bodyID));
+    }
+
+    void PhysicsScene::SetLinearVelocity(BodyID bodyID, const glm::vec3& velocity) {
+        if (bodyID.IsInvalid()) return;
+        m_PhysicsSystem.GetBodyInterface().SetLinearVelocity(bodyID, ToJolt(velocity));
+    }
+
+    bool PhysicsScene::IsActive(BodyID bodyID) const {
+        if (bodyID.IsInvalid()) return false;
+        return m_PhysicsSystem.GetBodyInterface().IsActive(bodyID);
+    }
+
+    void PhysicsScene::ActivateBody(BodyID bodyID) {
+        if (bodyID.IsInvalid()) return;
+        m_PhysicsSystem.GetBodyInterface().ActivateBody(bodyID);
+    }
+
+    void PhysicsScene::DeactivateBody(BodyID bodyID) {
+        if (bodyID.IsInvalid()) return;
+        m_PhysicsSystem.GetBodyInterface().DeactivateBody(bodyID);
+    }
+
+    u32 PhysicsScene::GetNumBodies() const {
+        return m_PhysicsSystem.GetNumBodies();
+    }
+
+    u32 PhysicsScene::GetNumActiveBodies() const {
+        return m_PhysicsSystem.GetNumActiveBodies(JPH::EBodyType::RigidBody);
+    }
+
+    void PhysicsScene::SetGravity(const glm::vec3& gravity) {
+        m_Settings.Gravity = gravity;
+        m_PhysicsSystem.SetGravity(JPH::Vec3(gravity.x, gravity.y, gravity.z));
+    }
+
+    glm::vec3 PhysicsScene::GetGravity() const {
+        const JPH::Vec3 g = m_PhysicsSystem.GetGravity();
+        return { g.GetX(), g.GetY(), g.GetZ() };
+    }
+
+}

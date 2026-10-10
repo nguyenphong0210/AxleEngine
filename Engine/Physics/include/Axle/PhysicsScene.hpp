@@ -1,0 +1,111 @@
+#pragma once
+#include <Axle/Types.hpp>
+#include <Axle/Timestep.hpp>
+#include <Axle/PhysicsLayers.hpp>
+#include <Axle/PhysicsMath.hpp>
+
+#include <Jolt/Jolt.h>
+#include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Body/BodyID.h>
+#include <Jolt/Core/TempAllocator.h>
+#include <Jolt/Core/JobSystemThreadPool.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <memory>
+
+namespace Axle {
+
+    using BodyID = JPH::BodyID;
+
+    struct PhysicsSettings {
+        u32 MaxBodies = 10240;
+        u32 NumBodyMutexes = 0;
+        u32 MaxBodyPairs = 10240;
+        u32 MaxContactConstraints = 10240;
+        u32 TempAllocatorSizeMB = 10;
+        glm::vec3 Gravity{ 0.0f, -9.81f, 0.0f };
+    };
+
+    struct BoxBodyProps {
+        glm::vec3 Position{ 0.0f };
+        glm::vec3 HalfExtent{ 0.5f, 0.5f, 0.5f };
+        glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+        bool IsDynamic = true;
+        f32 Friction = 0.5f;
+        f32 Restitution = 0.0f;
+        bool AllowSleeping = true;
+    };
+
+    struct SphereBodyProps {
+        glm::vec3 Position{ 0.0f };
+        f32 Radius = 0.5f;
+        glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+        bool IsDynamic = true;
+        f32 Friction = 0.5f;
+        f32 Restitution = 0.0f;
+        bool AllowSleeping = true;
+    };
+
+    class PhysicsScene {
+    public:
+        PhysicsScene(const PhysicsSettings& settings = PhysicsSettings());
+        ~PhysicsScene();
+
+        // Step simulation by delta time
+        void Step(Timestep ts, i32 collisionSteps = 1);
+
+        // Body creation and management
+        BodyID CreateBox(const BoxBodyProps& props);
+        BodyID CreateBox(const glm::vec3& position, const glm::vec3& halfExtent, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f);
+
+        BodyID CreateSphere(const SphereBodyProps& props);
+        BodyID CreateSphere(const glm::vec3& position, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f);
+
+        void DestroyBody(BodyID bodyID);
+        void OptimizeBroadPhase();
+
+        // Transform and motion queries / mutations
+        glm::vec3 GetBodyPosition(BodyID bodyID) const;
+        glm::quat GetBodyRotation(BodyID bodyID) const;
+        glm::mat4 GetBodyTransform(BodyID bodyID) const;
+
+        void SetBodyPositionAndRotation(BodyID bodyID, const glm::vec3& position, const glm::quat& rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f), bool activate = true);
+        glm::vec3 GetLinearVelocity(BodyID bodyID) const;
+        void SetLinearVelocity(BodyID bodyID, const glm::vec3& velocity);
+
+        bool IsActive(BodyID bodyID) const;
+        void ActivateBody(BodyID bodyID);
+        void DeactivateBody(BodyID bodyID);
+
+        // Scene statistics
+        u32 GetNumBodies() const;
+        u32 GetNumActiveBodies() const;
+
+        // Raw Jolt accessors
+        JPH::PhysicsSystem& GetSystem() { return m_PhysicsSystem; }
+        const JPH::PhysicsSystem& GetSystem() const { return m_PhysicsSystem; }
+
+        JPH::BodyInterface& GetBodyInterface() { return m_PhysicsSystem.GetBodyInterface(); }
+        const JPH::BodyInterface& GetBodyInterface() const { return m_PhysicsSystem.GetBodyInterface(); }
+
+        void SetGravity(const glm::vec3& gravity);
+        glm::vec3 GetGravity() const;
+
+    private:
+        PhysicsSettings m_Settings;
+
+        // Jolt physics memory & job system
+        std::unique_ptr<JPH::TempAllocatorImpl> m_TempAllocator;
+        std::unique_ptr<JPH::JobSystemThreadPool> m_JobSystem;
+
+        // Broadphase and collision filters
+        BPLayerInterfaceImpl m_BPLayerInterface;
+        ObjectVsBroadPhaseLayerFilterImpl m_ObjectVsBPFilter;
+        ObjectLayerPairFilterImpl m_ObjectLayerFilter;
+
+        // Main Physics System
+        JPH::PhysicsSystem m_PhysicsSystem;
+    };
+
+}

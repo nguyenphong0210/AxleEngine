@@ -1,5 +1,6 @@
 add_library(AxlePhysics STATIC
     src/PhysicsEngine.cpp
+    src/PhysicsScene.cpp
 )
 add_library(Axle::Physics ALIAS AxlePhysics)
 

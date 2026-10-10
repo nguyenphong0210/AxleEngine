@@ -37,4 +37,12 @@ namespace Axle {
         return s_ClientLogger;
     }
 
+    void Log::AddSink(const spdlog::sink_ptr& sink) {
+        if (!s_CoreLogger || !s_ClientLogger) {
+            Init();
+        }
+        s_CoreLogger->sinks().push_back(sink);
+        s_ClientLogger->sinks().push_back(sink);
+    }
+
 }

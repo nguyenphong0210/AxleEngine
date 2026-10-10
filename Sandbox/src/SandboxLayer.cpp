@@ -1,25 +1,26 @@
 #include "SandboxLayer.hpp"
 #include <Axle/Application.hpp>
-#include <Axle/Log.hpp>
 #include <Axle/Input.hpp>
-#include <Axle/KeyCodes.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Components.hpp>
-#include <glm/glm.hpp>
+#include <Axle/Log.hpp>
+
+#include <imgui.h>
+#include <imgui_internal.h>
 #include <glm/gtc/matrix_transform.hpp>
-#include <cmath>
-#include <vector>
+#include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
 
 SandboxLayer::SandboxLayer()
     : Layer("SandboxLayer") {
 }
 
 void SandboxLayer::OnAttach() {
-    AXLE_INFO("SandboxLayer attached");
+    AXLE_INFO("SandboxLayer attached - Initializing Axle Editor Environment");
 
-    const auto& window = Axle::Application::Get().GetWindow();
+    auto& window = Axle::Application::Get().GetWindow();
 
-    // 1. Perspective Camera Controller
+    // 1. Perspective Camera
     m_CameraController = std::make_unique<Axle::PerspectiveCameraController>(
         45.0f,
         static_cast<Axle::f32>(window.GetWidth()) / static_cast<Axle::f32>(window.GetHeight()),
@@ -124,9 +125,7 @@ void SandboxLayer::OnAttach() {
                 vec2 coord = floor(v_WorldPos.xz * u_TileScale);
                 pattern = mod(coord.x + coord.y, 2.0);
 
-                vec3 dx = dFdx(v_WorldPos);
-                vec3 dy = dFdy(v_WorldPos);
-                normal = normalize(cross(dx, dy));
+                normal = vec3(0.0, 1.0, 0.0);
             } else if (u_PatternMode == 1) {
                 // Local 3D checkerboard (4x4 tiles per face on the 1x1x1 box)
                 vec3 coord = floor((v_LocalPos + vec3(0.5)) * u_TileScale + vec3(0.0001));
@@ -135,6 +134,7 @@ void SandboxLayer::OnAttach() {
                 vec3 dx = dFdx(v_WorldPos);
                 vec3 dy = dFdy(v_WorldPos);
                 normal = normalize(cross(dx, dy));
+                if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
             } else {
                 // Spherical Caro (Latitude & Longitude checkered pattern)
                 vec3 nLocal = normalize(v_LocalPos);
@@ -167,10 +167,18 @@ void SandboxLayer::OnAttach() {
     m_ConeMesh = Axle::PrimitiveMesh::CreateCone(32);
     m_PlaneMesh = Axle::PrimitiveMesh::CreatePlane();
 
-    // 5. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
+    // 5. Offscreen Framebuffer for Viewport
+    Axle::FramebufferSpecification fbSpec;
+    fbSpec.Width = window.GetWidth();
+    fbSpec.Height = window.GetHeight();
+    m_Framebuffer = Axle::Framebuffer::Create(fbSpec);
+    m_ViewportWidth = fbSpec.Width;
+    m_ViewportHeight = fbSpec.Height;
+
+    // 6. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
     m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
 
-    // 6. ECS Scene & Entities Initialization
+    // 7. ECS Scene & Entities Initialization
     m_Scene = std::make_unique<Axle::Scene>();
 
     // Entity 1: Static Ground Plane
@@ -248,7 +256,7 @@ void SandboxLayer::OnAttach() {
     );
     m_ConeEntity.AddComponent<Axle::RigidBodyComponent>(m_ConeBodyID, true);
 
-    // 7. Vehicle Mechanics (Phase 4 Automotive Simulation)
+    // 8. Vehicle Mechanics (Phase 4 Automotive Simulation)
     m_Vehicle = std::make_unique<Axle::Vehicle>(*m_PhysicsScene);
 
     // Entity 6: Vehicle Chassis
@@ -283,7 +291,11 @@ void SandboxLayer::OnAttach() {
         );
     }
 
-    Axle::RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
+    // Connect Editor Panels
+    m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_VehicleTunerPanel.SetContext(m_Vehicle.get(), m_PhysicsScene.get());
+
+    AXLE_INFO("Axle Editor initialized successfully");
 }
 
 void SandboxLayer::OnDetach() {
@@ -292,6 +304,7 @@ void SandboxLayer::OnDetach() {
     m_Scene.reset();
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
+    m_Framebuffer.reset();
     m_CubeMesh.reset();
     m_SphereMesh.reset();
     m_CylinderMesh.reset();
@@ -305,34 +318,35 @@ void SandboxLayer::OnWindowResize(Axle::u32 width, Axle::u32 height) {
     }
 }
 
+void SandboxLayer::ResetSimulation() {
+    AXLE_INFO("Resetting physics simulation and vehicle state");
+    m_PhysicsScene->SetBodyPositionAndRotation(m_BoxBodyID, glm::vec3(-5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
+    m_PhysicsScene->SetLinearVelocity(m_BoxBodyID, glm::vec3(0.0f));
+
+    m_PhysicsScene->SetBodyPositionAndRotation(m_SphereBodyID, glm::vec3(5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
+    m_PhysicsScene->SetLinearVelocity(m_SphereBodyID, glm::vec3(0.0f));
+
+    m_PhysicsScene->SetBodyPositionAndRotation(m_CylinderBodyID, glm::vec3(-7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
+    m_PhysicsScene->SetLinearVelocity(m_CylinderBodyID, glm::vec3(0.0f));
+
+    m_PhysicsScene->SetBodyPositionAndRotation(m_ConeBodyID, glm::vec3(7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
+    m_PhysicsScene->SetLinearVelocity(m_ConeBodyID, glm::vec3(0.0f));
+
+    if (m_Vehicle) {
+        m_Vehicle->Reset(glm::vec3(0.0f, 1.2f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+    }
+    m_OrbitYaw = 180.0f;
+    m_OrbitPitch = 15.0f;
+}
+
 void SandboxLayer::OnUpdate(Axle::Timestep ts) {
-    if (Axle::Input::IsKeyPressed(Axle::KeyCode::Escape)) {
-        Axle::Application::Get().Close();
-        return;
-    }
+    m_LastDeltaTime = ts.GetSeconds();
 
-    // Press 'R' to reset and drop dynamic bodies and vehicle
+    // Hotkey Controls
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::R)) {
-        m_PhysicsScene->SetBodyPositionAndRotation(m_BoxBodyID, glm::vec3(-5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
-        m_PhysicsScene->SetLinearVelocity(m_BoxBodyID, glm::vec3(0.0f));
-
-        m_PhysicsScene->SetBodyPositionAndRotation(m_SphereBodyID, glm::vec3(5.0f, 4.0f, 8.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
-        m_PhysicsScene->SetLinearVelocity(m_SphereBodyID, glm::vec3(0.0f));
-
-        m_PhysicsScene->SetBodyPositionAndRotation(m_CylinderBodyID, glm::vec3(-7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
-        m_PhysicsScene->SetLinearVelocity(m_CylinderBodyID, glm::vec3(0.0f));
-
-        m_PhysicsScene->SetBodyPositionAndRotation(m_ConeBodyID, glm::vec3(7.5f, 4.0f, 14.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), true);
-        m_PhysicsScene->SetLinearVelocity(m_ConeBodyID, glm::vec3(0.0f));
-
-        if (m_Vehicle) {
-            m_Vehicle->Reset(glm::vec3(0.0f, 1.2f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        }
-        m_OrbitYaw = 180.0f;
-        m_OrbitPitch = 15.0f;
+        ResetSimulation();
     }
 
-    // Press 'C' to toggle chase camera / free-fly camera
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::C)) {
         if (!m_CKeyWasPressed) {
             m_ChaseCamera = !m_ChaseCamera;
@@ -342,7 +356,6 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_CKeyWasPressed = false;
     }
 
-    // Press 'F1' to toggle physics wireframe debug visualization
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::F1)) {
         if (!m_F1KeyWasPressed) {
             m_ShowPhysicsDebug = !m_ShowPhysicsDebug;
@@ -352,36 +365,35 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_F1KeyWasPressed = false;
     }
 
-    // Driver inputs for vehicle
+    // Vehicle Driving Input (Active only when Viewport is hovered or focused)
     if (m_Vehicle) {
         Axle::f32 forwardInput = 0.0f;
         Axle::f32 rightInput = 0.0f;
         Axle::f32 brakeInput = 0.0f;
         Axle::f32 handBrakeInput = 0.0f;
 
-        // Drive inputs: Arrow keys always work; WASD work when Chase Camera is active
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Up) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::W))) {
-            forwardInput += 1.0f;
-        }
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Down) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::S))) {
-            forwardInput -= 1.0f;
-        }
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Left) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::A))) {
-            rightInput -= 1.0f;
-        }
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Right) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::D))) {
-            rightInput += 1.0f;
-        }
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
-            handBrakeInput = 1.0f;
+        if (m_ViewportHovered || m_ViewportFocused) {
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Up) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::W))) {
+                forwardInput += 1.0f;
+            }
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Down) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::S))) {
+                forwardInput -= 1.0f;
+            }
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Left) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::A))) {
+                rightInput -= 1.0f;
+            }
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Right) || (m_ChaseCamera && Axle::Input::IsKeyPressed(Axle::KeyCode::D))) {
+                rightInput += 1.0f;
+            }
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
+                handBrakeInput = 1.0f;
+            }
         }
 
         m_Vehicle->SetDriverInput(forwardInput, rightInput, brakeInput, handBrakeInput);
     }
 
-    m_LastDeltaTime = ts.GetSeconds();
-
-    // Camera update: Chase vehicle with mouse orbit, or Free-fly controller
+    // Camera Update
     if (m_ChaseCamera && m_Vehicle) {
         const auto [mouseX, mouseY] = Axle::Input::GetMousePosition();
         const glm::vec2 currentMousePos{ mouseX, mouseY };
@@ -394,9 +406,9 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         const glm::vec2 mouseDelta = currentMousePos - m_LastMousePos;
         m_LastMousePos = currentMousePos;
 
-        // Orbit camera around vehicle with mouse drag (Right or Left button)
-        const bool isDragging = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)
-                             || Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonLeft);
+        const bool isDragging = (m_ViewportHovered || m_ViewportFocused) 
+                             && (Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)
+                              || Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonLeft));
 
         if (isDragging) {
             m_OrbitYaw -= mouseDelta.x * 0.25f;
@@ -407,7 +419,6 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         const glm::vec3 carPos = m_Vehicle->GetPosition();
         const glm::vec3 carFwd = m_Vehicle->GetForwardVector();
 
-        // If driving and not dragging mouse, smoothly align orbit behind car heading
         if (!isDragging) {
             const Axle::f32 carSpeed = glm::length(m_PhysicsScene->GetLinearVelocity(m_Vehicle->GetChassisBodyID()));
             if (carSpeed > 0.5f) {
@@ -438,11 +449,19 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_CameraController->SetPosition(camPos);
         m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
     } else {
-        m_CameraController->OnUpdate(ts);
+        if (m_ViewportHovered) {
+            m_CameraController->OnUpdate(ts);
+        }
     }
 
-    // Step physics simulation
-    m_PhysicsScene->Step(ts);
+    // Physics Simulation Stepping
+    if (m_IsSimulationRunning) {
+        Axle::Timestep simTs = ts.GetSeconds() * m_SimulationSpeed;
+        m_PhysicsScene->Step(simTs);
+    } else if (m_StepSingleFrame) {
+        m_PhysicsScene->Step(1.0f / 60.0f);
+        m_StepSingleFrame = false;
+    }
 
     // Synchronize 4 wheel entity transforms with physics vehicle constraint
     if (m_Vehicle) {
@@ -454,60 +473,241 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         }
     }
 
-    // Render pass
-    Axle::RenderCommand::Clear();
+    // ==========================================
+    // RENDER PASS TO OFFSCREEN FRAMEBUFFER
+    // ==========================================
+    if (m_Framebuffer) {
+        m_Framebuffer->Bind();
+        Axle::RenderCommand::SetViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
+        Axle::RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
+        Axle::RenderCommand::Clear();
 
-    // 1. Render all entities through ECS Scene (chassis position is updated via RigidBodyComponent)
-    m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader);
+        // 1. Render all ECS entities
+        m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader);
 
-    // 2. Render JPH::DebugRenderer physics collider wireframes when enabled
-    if (m_ShowPhysicsDebug && m_PhysicsDebugRenderer) {
-        m_PhysicsDebugRenderer->Begin(m_CameraController->GetCamera().GetPosition());
-        m_PhysicsScene->DrawDebug(*m_PhysicsDebugRenderer, m_PhysicsDrawSettings);
-        m_PhysicsDebugRenderer->End(m_CameraController->GetCamera().GetViewProjectionMatrix());
+        // 2. Render JPH::DebugRenderer physics collider wireframes when enabled
+        if (m_ShowPhysicsDebug && m_PhysicsDebugRenderer) {
+            m_PhysicsDebugRenderer->Begin(m_CameraController->GetCamera().GetPosition());
+            m_PhysicsScene->DrawDebug(*m_PhysicsDebugRenderer, m_PhysicsDrawSettings);
+            m_PhysicsDebugRenderer->End(m_CameraController->GetCamera().GetViewProjectionMatrix());
+        }
+
+        m_Framebuffer->Unbind();
     }
 }
 
+void SandboxLayer::RenderToolbar() {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 6.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 6.0f));
+
+    if (ImGui::Begin("##Toolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+        // Play / Pause button
+        if (m_IsSimulationRunning) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.35f, 0.15f, 1.0f));
+            if (ImGui::Button("Pause (Space)", ImVec2(100.0f, 26.0f))) {
+                m_IsSimulationRunning = false;
+            }
+            ImGui::PopStyleColor();
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.75f, 0.25f, 1.0f));
+            if (ImGui::Button("Play (Space)", ImVec2(100.0f, 26.0f))) {
+                m_IsSimulationRunning = true;
+            }
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Step Frame", ImVec2(90.0f, 26.0f))) {
+            m_IsSimulationRunning = false;
+            m_StepSingleFrame = true;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Scene", ImVec2(90.0f, 26.0f))) {
+            ResetSimulation();
+        }
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(120.0f);
+        ImGui::SliderFloat("Speed", &m_SimulationSpeed, 0.1f, 2.0f, "%.1fx");
+
+        ImGui::SameLine();
+        ImGui::Spacing();
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "| Camera: %s", 
+                           m_ChaseCamera ? "Chase Cam [C]" : "Free-Fly [C]");
+
+        ImGui::SameLine();
+        ImGui::Checkbox("Wireframe [F1]", &m_ShowPhysicsDebug);
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(2);
+}
+
 void SandboxLayer::OnImGuiRender() {
-    // Gather runtime telemetry
-    Axle::TelemetryData telemetry{
-        .DeltaTime = m_LastDeltaTime,
-        .FPS = m_LastDeltaTime > 0.0f ? 1.0f / m_LastDeltaTime : 0.0f,
-        .CameraPosition = m_CameraController->GetCamera().GetPosition(),
-        .CameraRotation = m_CameraController->GetCamera().GetRotation(),
-        .HasPhysics = true,
-        .BoxPosition = m_PhysicsScene->GetBodyPosition(m_BoxBodyID),
-        .BoxVelocity = m_PhysicsScene->GetLinearVelocity(m_BoxBodyID),
-        .IsBoxActive = m_PhysicsScene->IsActive(m_BoxBodyID),
-        .SpherePosition = m_PhysicsScene->GetBodyPosition(m_SphereBodyID),
-        .SphereVelocity = m_PhysicsScene->GetLinearVelocity(m_SphereBodyID),
-        .IsSphereActive = m_PhysicsScene->IsActive(m_SphereBodyID),
-        .TotalBodies = m_PhysicsScene->GetNumBodies(),
-        .ActiveBodies = m_PhysicsScene->GetNumActiveBodies(),
-        .ShowPhysicsWireframe = m_ShowPhysicsDebug,
-        .DrawBoundingBoxes = m_PhysicsDrawSettings.DrawBoundingBoxes,
-        .DrawVelocity = m_PhysicsDrawSettings.DrawVelocity,
-        .DrawCenterOfMass = m_PhysicsDrawSettings.DrawCenterOfMass,
-        .DebugLineCount = m_PhysicsDebugRenderer ? m_PhysicsDebugRenderer->GetLineCount() : 0,
-        .HasVehicle = (m_Vehicle != nullptr),
-        .IsChaseCamera = m_ChaseCamera
-    };
+    // 1. Fullscreen DockSpace Container
+    const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(mainViewport->WorkPos);
+    ImGui::SetNextWindowSize(mainViewport->WorkSize);
+    ImGui::SetNextWindowViewport(mainViewport->ID);
+
+    ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking
+                                         | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse
+                                         | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+                                         | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+    ImGui::Begin("AxleEngineDockSpace", nullptr, dockspaceWindowFlags);
+    ImGui::PopStyleVar(3);
+
+    ImGuiID dockspaceID = ImGui::GetID("AxleMainDockspace");
+    ImGui::DockSpace(dockspaceID, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+
+    // 2. Main Menu Bar
+    if (ImGui::BeginMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Exit", "Alt+F4")) {
+                // Window will close
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Simulation")) {
+            if (ImGui::MenuItem(m_IsSimulationRunning ? "Pause" : "Play", "Space")) {
+                m_IsSimulationRunning = !m_IsSimulationRunning;
+            }
+            if (ImGui::MenuItem("Step 1 Frame", "O")) {
+                m_IsSimulationRunning = false;
+                m_StepSingleFrame = true;
+            }
+            if (ImGui::MenuItem("Reset All", "R")) {
+                ResetSimulation();
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("View")) {
+            ImGui::MenuItem("Scene Hierarchy", nullptr, &m_ShowSceneHierarchy);
+            ImGui::MenuItem("Properties / Inspector", nullptr, &m_ShowProperties);
+            ImGui::MenuItem("Vehicle Tuner", nullptr, &m_ShowVehicleTuner);
+            ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
+            ImGui::MenuItem("Telemetry & Performance", nullptr, &m_ShowTelemetry);
+            ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Camera")) {
+            if (ImGui::MenuItem("Vehicle Chase Camera", "C", m_ChaseCamera)) {
+                m_ChaseCamera = true;
+            }
+            if (ImGui::MenuItem("Free-Fly Camera", "C", !m_ChaseCamera)) {
+                m_ChaseCamera = false;
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+    }
+    ImGui::End(); // End AxleEngineDockSpace
+
+    // 3. Render Top Simulation Toolbar
+    RenderToolbar();
+
+    // 4. Render 3D Viewport Window
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("Viewport");
+
+    m_ViewportFocused = ImGui::IsWindowFocused();
+    m_ViewportHovered = ImGui::IsWindowHovered();
+
+    ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+    if (viewportSize.x > 0.0f && viewportSize.y > 0.0f &&
+        (m_ViewportWidth != static_cast<Axle::u32>(viewportSize.x) || 
+         m_ViewportHeight != static_cast<Axle::u32>(viewportSize.y))) {
+        m_ViewportWidth = static_cast<Axle::u32>(viewportSize.x);
+        m_ViewportHeight = static_cast<Axle::u32>(viewportSize.y);
+        m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+        m_CameraController->OnResize(m_ViewportWidth, m_ViewportHeight);
+    }
+
+    if (m_Framebuffer) {
+        uint32_t textureID = m_Framebuffer->GetColorAttachmentRendererID();
+        // Flip UV coordinates vertically for OpenGL
+        ImGui::Image(reinterpret_cast<void*>(static_cast<intptr_t>(textureID)), 
+                     viewportSize, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
+    }
+
+    // Viewport Overlay Badges
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    ImVec2 winPos = ImGui::GetWindowPos();
+    ImVec2 badgePos = ImVec2(winPos.x + 12.0f, winPos.y + 12.0f);
+
+    const char* statusText = m_IsSimulationRunning ? "SIMULATION ACTIVE" : "SIMULATION PAUSED";
+    ImU32 statusBg = m_IsSimulationRunning ? IM_COL32(30, 150, 60, 200) : IM_COL32(200, 100, 20, 200);
+    drawList->AddRectFilled(badgePos, ImVec2(badgePos.x + 160.0f, badgePos.y + 24.0f), statusBg, 4.0f);
+    drawList->AddText(ImVec2(badgePos.x + 8.0f, badgePos.y + 4.0f), IM_COL32(255, 255, 255, 255), statusText);
 
     if (m_Vehicle) {
         const auto vTele = m_Vehicle->GetTelemetry();
-        telemetry.VehicleSpeedKmh = vTele.SpeedKmh;
-        telemetry.VehicleRPM = vTele.EngineRPM;
-        telemetry.VehicleGear = vTele.CurrentGear;
-        for (Axle::u32 i = 0; i < 4; ++i) {
-            telemetry.WheelContacts[i] = vTele.Wheels[i].HasContact;
-            telemetry.WheelSuspension[i] = vTele.Wheels[i].SuspensionLength;
-        }
+        char speedStr[32];
+        snprintf(speedStr, sizeof(speedStr), "%.1f KM/H", vTele.SpeedKmh);
+        ImVec2 speedPos = ImVec2(badgePos.x + 170.0f, badgePos.y);
+        drawList->AddRectFilled(speedPos, ImVec2(speedPos.x + 100.0f, speedPos.y + 24.0f), IM_COL32(20, 80, 160, 200), 4.0f);
+        drawList->AddText(ImVec2(speedPos.x + 8.0f, speedPos.y + 4.0f), IM_COL32(255, 255, 255, 255), speedStr);
     }
 
-    m_DebugPanel.OnImGuiRender(telemetry);
+    ImGui::End();
+    ImGui::PopStyleVar();
 
-    m_ShowPhysicsDebug = telemetry.ShowPhysicsWireframe;
-    m_PhysicsDrawSettings.DrawBoundingBoxes = telemetry.DrawBoundingBoxes;
-    m_PhysicsDrawSettings.DrawVelocity = telemetry.DrawVelocity;
-    m_PhysicsDrawSettings.DrawCenterOfMass = telemetry.DrawCenterOfMass;
+    // 5. Scene Hierarchy & Inspector Panels
+    m_SceneHierarchyPanel.OnImGuiRender(&m_ShowSceneHierarchy, &m_ShowProperties);
+
+    // 6. Vehicle Tuner Panel
+    m_VehicleTunerPanel.OnImGuiRender(&m_ShowVehicleTuner);
+
+    // 7. Console Log Panel
+    m_ConsolePanel.OnImGuiRender(&m_ShowConsole);
+
+    // 8. Performance & Telemetry Panel
+    if (m_ShowTelemetry) {
+        Axle::TelemetryData telemetry{
+            .DeltaTime = m_LastDeltaTime,
+            .FPS = m_LastDeltaTime > 0.0f ? 1.0f / m_LastDeltaTime : 0.0f,
+            .CameraPosition = m_CameraController->GetCamera().GetPosition(),
+            .CameraRotation = m_CameraController->GetCamera().GetRotation(),
+            .HasPhysics = true,
+            .BoxPosition = m_PhysicsScene->GetBodyPosition(m_BoxBodyID),
+            .BoxVelocity = m_PhysicsScene->GetLinearVelocity(m_BoxBodyID),
+            .IsBoxActive = m_PhysicsScene->IsActive(m_BoxBodyID),
+            .SpherePosition = m_PhysicsScene->GetBodyPosition(m_SphereBodyID),
+            .SphereVelocity = m_PhysicsScene->GetLinearVelocity(m_SphereBodyID),
+            .IsSphereActive = m_PhysicsScene->IsActive(m_SphereBodyID),
+            .TotalBodies = m_PhysicsScene->GetNumBodies(),
+            .ActiveBodies = m_PhysicsScene->GetNumActiveBodies(),
+            .ShowPhysicsWireframe = m_ShowPhysicsDebug,
+            .DrawBoundingBoxes = m_PhysicsDrawSettings.DrawBoundingBoxes,
+            .DrawVelocity = m_PhysicsDrawSettings.DrawVelocity,
+            .DrawCenterOfMass = m_PhysicsDrawSettings.DrawCenterOfMass,
+            .DebugLineCount = m_PhysicsDebugRenderer ? m_PhysicsDebugRenderer->GetLineCount() : 0,
+            .HasVehicle = (m_Vehicle != nullptr),
+            .IsChaseCamera = m_ChaseCamera
+        };
+
+        if (m_Vehicle) {
+            const auto vTele = m_Vehicle->GetTelemetry();
+            telemetry.VehicleSpeedKmh = vTele.SpeedKmh;
+            telemetry.VehicleRPM = vTele.EngineRPM;
+            telemetry.VehicleGear = vTele.CurrentGear;
+            for (Axle::u32 i = 0; i < 4; ++i) {
+                telemetry.WheelContacts[i] = vTele.Wheels[i].HasContact;
+                telemetry.WheelSuspension[i] = vTele.Wheels[i].SuspensionLength;
+            }
+        }
+
+        m_DebugPanel.OnImGuiRender(telemetry);
+
+        m_ShowPhysicsDebug = telemetry.ShowPhysicsWireframe;
+        m_PhysicsDrawSettings.DrawBoundingBoxes = telemetry.DrawBoundingBoxes;
+        m_PhysicsDrawSettings.DrawVelocity = telemetry.DrawVelocity;
+        m_PhysicsDrawSettings.DrawCenterOfMass = telemetry.DrawCenterOfMass;
+    }
 }

@@ -11,6 +11,8 @@ namespace Axle {
         static std::shared_ptr<spdlog::logger>& GetCoreLogger();
         static std::shared_ptr<spdlog::logger>& GetClientLogger();
 
+        static void AddSink(const spdlog::sink_ptr& sink);
+
     private:
         static std::shared_ptr<spdlog::logger> s_CoreLogger;
         static std::shared_ptr<spdlog::logger> s_ClientLogger;

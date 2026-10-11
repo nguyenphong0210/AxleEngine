@@ -2,6 +2,7 @@ add_library(AxleCore STATIC
     src/Log.cpp
     src/LayerStack.cpp
     src/Application.cpp
+    src/FileSystem.cpp
 )
 add_library(Axle::Core ALIAS AxleCore)
 add_library(Axle::Foundation ALIAS AxleCore)

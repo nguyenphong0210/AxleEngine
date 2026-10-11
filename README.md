@@ -85,8 +85,8 @@ Level 0:  [ Engine/Core ]
   - [x] **Modular Gameplay Scripts**: Decoupled vehicle input (`CarPlayerScript`) into clean, reusable C++ scripts.
   - [x] **Editor Component Management**: Interactive `+ Add Component` popup in Properties panel, component removal options (`Remove Component`), prominent `+ Create` button with Search filter in Scene Hierarchy, and File menu actions (`Ctrl+S`, `Ctrl+O`, `Ctrl+N`).
   - [x] **Window Work Area & Fullscreen**: Automatic maximized window startup matching OS work area (zero taskbar overlap) and `F11` Maximize/Restore toggle.
-- [ ] **Phase 9: Asset System & 3D Model/Texture Loading (`Engine/Asset` & `Sandbox/assets`) *(Recommended Next)***
-  - [ ] **Project Asset Architecture**: Standardized `Sandbox/assets/` structure (`models/`, `textures/`, `scenes/`, `materials/`) - separating game project assets from engine core.
+- [ ] **Phase 9: Asset System & 3D Model/Texture Loading (`Engine/Asset` & `Sandbox/assets`) *(In Progress)***
+  - [x] **Project Asset Architecture**: Standardized `Sandbox/assets/` structure (`models/`, `textures/`, `scenes/`, `materials/`, `shaders/`) and `Axle::FileSystem` resolver - separating game project assets from engine core.
   - [ ] **Content Browser Panel (`Engine/UI`)**: ImGui-based visual asset browser with directory navigation, file type icons, search filter, and path breadcrumbs.
   - [ ] **Drag & Drop Workflow**: Drag 3D model files from Content Browser directly into Viewport or Properties panel to instantiate meshes.
   - [ ] **3D Mesh Loading (`fastgltf` / `tinyobjloader`)**: Detailed car body chassis and realistic wheel models.

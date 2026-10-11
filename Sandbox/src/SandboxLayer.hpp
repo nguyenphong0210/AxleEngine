@@ -51,6 +51,8 @@ public:
     void NewScene();
     void OpenScene(const std::filesystem::path& filepath = {});
     void SaveScene(const std::filesystem::path& filepath = {});
+    void SaveSceneAs();
+    void UpdateWindowTitle();
     const std::filesystem::path& GetCurrentScenePath() const { return m_CurrentScenePath; }
 
 private:

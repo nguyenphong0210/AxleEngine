@@ -97,7 +97,7 @@ Level 0:  [ Engine/Core ]
     - [x] **Step 4: Reverse Mesh Export (`.obj`)**: Export `.axle` / `.axlebin` meshes back into standard Wavefront `.obj` format with full material libraries (`.mtl`), grouped subparts, and smooth vertex normals for external DCC (Blender, Maya) interop and mesh inspection via right-click context menu.
 - [ ] **Phase 10: Scene Serialization & Project Management (`Engine/Scene` & `Engine/Project`) *(In Progress)***
   - [x] **Step 1: Core SceneSerializer (`.axlescene`)**: Built-in structured YAML-like scene serializer saving and restoring complete ECS scene state (UUIDs, TagComponents, TransformComponents, MeshComponents with builtin/custom models, Jolt RigidBodyComponents with shape detection, HierarchyComponents parent-child links, and NativeScriptComponents).
-  - [ ] **Step 2: Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with native file dialogs and window title indicators.
+  - [x] **Step 2: Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with native OS file dialogs (`Axle::FileDialogs`), dynamic window title indicator (`Axle Engine - [SceneName.axlescene]`), and full Main Menu Bar integration (`File -> New / Open / Save / Save As / Exit`).
   - [ ] **Step 3: Content Browser Scene Loading**: Double-click scene files in Content Browser to instantly load them into the active Viewport.
   - [ ] **Step 4: Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project` and `File -> Open Project`.
 - [ ] **Phase 11: Lighting, Dynamic Shadows & PBR Materials**
@@ -164,6 +164,16 @@ cmake --build build --config Release --parallel
 ---
 
 ## 🎮 Controls
+
+### Scene & Project Hotkeys
+| Input | Action |
+| :--- | :--- |
+| **Ctrl + N** | New Empty Scene |
+| **Ctrl + O** | Open Scene (`.axlescene`) via native OS file dialog |
+| **Ctrl + S** | Quick Save active scene (or Save As if untitled) |
+| **Ctrl + Shift + S** | Save Scene As... via native OS file dialog |
+| **F9** | Compile & Hot-Reload modified `.axle` asset meshes |
+| **F11** | Toggle Window Maximize / Restore (work-area aware) |
 
 ### Simulation State & Toolbar Hotkeys
 | Input | Action |

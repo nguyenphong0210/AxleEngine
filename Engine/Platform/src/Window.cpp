@@ -207,4 +207,11 @@ namespace Axle {
         return false;
     }
 
+    void Window::SetTitle(const std::string& title) {
+        m_Data.Title = title;
+        if (m_Window) {
+            glfwSetWindowTitle(m_Window, title.c_str());
+        }
+    }
+
 }

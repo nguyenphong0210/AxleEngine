@@ -7,6 +7,7 @@
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/PlatformUtils.hpp>
 #include <Axle/Log.hpp>
 #include <filesystem>
 
@@ -326,11 +327,12 @@ void SandboxLayer::OnAttach() {
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
 
-    // Initialize Scene Serialization (Phase 10: Step 1)
+    // Initialize Scene Serialization (Phase 10: Step 1 & 2)
     m_CurrentScenePath = Axle::FileSystem::ResolveAssetPath("scenes/Playground.axlescene");
     if (!std::filesystem::exists(m_CurrentScenePath)) {
         SaveScene(m_CurrentScenePath);
     }
+    UpdateWindowTitle();
 
     AXLE_INFO("Axle Editor initialized successfully");
 }
@@ -525,11 +527,26 @@ void SandboxLayer::NewScene() {
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_CompileNotificationMessage = "Created new empty scene";
     m_CompileNotificationTimer = 3.5f;
+    UpdateWindowTitle();
     AXLE_INFO("Sandbox: Created new empty scene");
 }
 
 void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
-    auto targetPath = filepath.empty() ? Axle::FileSystem::ResolveAssetPath("scenes/Playground.axlescene") : filepath;
+    std::filesystem::path targetPath = filepath;
+    if (targetPath.empty()) {
+        auto scenesDir = Axle::FileSystem::ResolveAssetPath("scenes");
+        if (!std::filesystem::exists(scenesDir)) {
+            std::filesystem::create_directories(scenesDir);
+        }
+        std::string defaultPathStr = scenesDir.string();
+
+        std::string selected = Axle::FileDialogs::OpenFile("Axle Scene (*.axlescene)\0*.axlescene\0All Files (*.*)\0*.*\0", defaultPathStr.c_str());
+        if (selected.empty()) {
+            return;
+        }
+        targetPath = selected;
+    }
+
     if (!std::filesystem::exists(targetPath)) {
         AXLE_WARN("Sandbox: Scene file does not exist: '{0}'", targetPath.string());
         return;
@@ -563,15 +580,18 @@ void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
 
         m_CompileNotificationMessage = "Loaded scene: " + targetPath.filename().string();
         m_CompileNotificationTimer = 3.5f;
+        UpdateWindowTitle();
         AXLE_INFO("Sandbox: Successfully loaded scene from '{0}'", targetPath.string());
     }
 }
 
 void SandboxLayer::SaveScene(const std::filesystem::path& filepath) {
-    auto targetPath = filepath.empty() ? m_CurrentScenePath : filepath;
-    if (targetPath.empty()) {
-        targetPath = Axle::FileSystem::ResolveAssetPath("scenes/Playground.axlescene");
+    if (filepath.empty() && m_CurrentScenePath.empty()) {
+        SaveSceneAs();
+        return;
     }
+
+    auto targetPath = filepath.empty() ? m_CurrentScenePath : filepath;
 
     Axle::SceneSerializer serializer(m_Scene.get(), m_PhysicsScene.get());
     Axle::SceneSerializerContext ctx;
@@ -591,8 +611,31 @@ void SandboxLayer::SaveScene(const std::filesystem::path& filepath) {
         m_CurrentScenePath = targetPath;
         m_CompileNotificationMessage = "Saved scene: " + targetPath.filename().string();
         m_CompileNotificationTimer = 3.5f;
+        UpdateWindowTitle();
         AXLE_INFO("Sandbox: Successfully saved scene to '{0}'", targetPath.string());
     }
+}
+
+void SandboxLayer::SaveSceneAs() {
+    auto scenesDir = Axle::FileSystem::ResolveAssetPath("scenes");
+    if (!std::filesystem::exists(scenesDir)) {
+        std::filesystem::create_directories(scenesDir);
+    }
+    std::string defaultPathStr = scenesDir.string();
+
+    std::string filepath = Axle::FileDialogs::SaveFile("Axle Scene (*.axlescene)\0*.axlescene\0All Files (*.*)\0*.*\0", defaultPathStr.c_str(), "axlescene");
+    if (!filepath.empty()) {
+        std::filesystem::path target(filepath);
+        if (target.extension() != ".axlescene") {
+            target += ".axlescene";
+        }
+        SaveScene(target);
+    }
+}
+
+void SandboxLayer::UpdateWindowTitle() {
+    std::string sceneName = m_CurrentScenePath.empty() ? "Untitled" : m_CurrentScenePath.filename().string();
+    Axle::Application::Get().GetWindow().SetTitle("Axle Engine - [" + sceneName + "]");
 }
 
 void SandboxLayer::OnScenePause() {
@@ -983,12 +1026,17 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
 
     const bool isHoldingRMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight);
     const bool isCtrlDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftControl) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightControl);
+    const bool isShiftDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift);
 
-    // File Shortcut Hotkeys (Ctrl+S, Ctrl+O, Ctrl+N)
+    // File Shortcut Hotkeys (Ctrl+S, Ctrl+Shift+S, Ctrl+O, Ctrl+N)
     if (isCtrlDown && !ImGui::GetIO().WantTextInput) {
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::S)) {
             if (!m_SKeyWasPressed) {
-                SaveScene();
+                if (isShiftDown) {
+                    SaveSceneAs();
+                } else {
+                    SaveScene();
+                }
                 m_SKeyWasPressed = true;
             }
         } else {
@@ -1413,7 +1461,7 @@ void SandboxLayer::OnImGuiRender() {
                 SaveScene();
             }
             if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) {
-                SaveScene();
+                SaveSceneAs();
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Reset Simulation", "Ctrl+R")) {
@@ -1421,7 +1469,7 @@ void SandboxLayer::OnImGuiRender() {
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Exit", "Alt+F4")) {
-                // Application exit
+                Axle::Application::Get().Close();
             }
             ImGui::EndMenu();
         }

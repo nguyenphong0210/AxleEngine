@@ -47,6 +47,9 @@ namespace Axle {
         void Restore();
         bool IsMaximized() const;
 
+        void SetTitle(const std::string& title);
+        const std::string& GetTitle() const { return m_Data.Title; }
+
         u32 GetWidth() const { return m_Data.Width; }
         u32 GetHeight() const { return m_Data.Height; }
         GLFWwindow* GetNativeWindow() const { return m_Window; }

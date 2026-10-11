@@ -1,6 +1,7 @@
 add_library(AxlePlatform STATIC
     src/Window.cpp
     src/Input.cpp
+    src/PlatformUtils.cpp
 )
 add_library(Axle::Platform ALIAS AxlePlatform)
 
@@ -15,3 +16,7 @@ target_link_libraries(AxlePlatform
     PRIVATE 
         glfw
 )
+
+if (WIN32)
+    target_link_libraries(AxlePlatform PRIVATE comdlg32)
+endif()

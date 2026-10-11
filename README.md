@@ -105,7 +105,10 @@ Level 0:  [ Engine/Core ]
     - [x] **Sub-step 1.1**: Core Depth Framebuffer (`GL_DEPTH_COMPONENT32F`, 2048x2048, border clamped), Light Space Matrix calculation, and `Scene::RenderShadowPass()`.
     - [x] **Sub-step 1.2**: Two-pass rendering pipeline with 3x3 Percentage-Closer Filtering (PCF) soft shadows and hardware polygon offset slope-scaled depth bias to eliminate shadow acne.
     - [x] **Sub-step 1.3**: ECS `DirectionalLightComponent`, Sun Light entity management, interactive Inspector controls (Sun Azimuth & Elevation sliders, Color picker, Intensity, Ambient fill, Cast Shadows toggle, Atmosphere presets), and full scene serialization.
-  - [ ] **Texture Mapping (`stb_image`)**: Load 2D texture maps (Albedo, Normal, Roughness, Metallic) and apply directly to 3D entities.
+  - [ ] **Texture Mapping (`stb_image`)**:
+    - [x] **Sub-step 2.1**: Tích hợp thư viện chuẩn `stb_image.h` (v2.30), xây dựng lớp trừu tượng OpenGL 4.5 Core `Axle::Texture2D` (hỗ trợ PNG/JPG/TGA/BMP, định dạng RGBA8/RGB8/RG8/R8, tự động sinh Mipmap, cấu hình Wrap/Filter, quản lý Slot Binding), kèm bộ nhớ đệm 1x1 Fallback Textures (White, Flat Normal, Black, Roughness).
+    - [ ] **Sub-step 2.2**: Nâng cấp Vertex Layout & UV coordinates (`a_TexCoord`) trên các Primitive Meshes; cấu hình Sampler Slots trong Shader (`u_AlbedoMap`, `u_NormalMap`, `u_RoughnessMap`, `u_MetallicMap`).
+    - [ ] **Sub-step 2.3**: `MaterialComponent` trong ECS, tích hợp Inspector UI với ô chọn ảnh, preview Thumbnail, kéo thả texture trực tiếp từ Content Browser và serialization (`.axlescene`).
   - [ ] **PBR Material System**: Physically based rendering pipeline (Cook-Torrance BRDF) alongside current procedural checkerboard shaders.
   - [ ] **Atmospheric Skybox**: Cubemap or HDR environment sky with ambient irradiance.
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**

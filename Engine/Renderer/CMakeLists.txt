@@ -8,11 +8,14 @@ add_library(AxleRenderer STATIC
     src/PrimitiveMesh.cpp
     src/Framebuffer.cpp
     src/ShadowMap.cpp
+    src/Texture2D.cpp
+    src/stb_image.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 
 target_include_directories(AxleRenderer PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/stb>
 )
 
 target_link_libraries(AxleRenderer

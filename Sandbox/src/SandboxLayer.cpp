@@ -244,6 +244,16 @@ void SandboxLayer::OnAttach() {
         }
     }
 
+    // 4.2 Texture Mapping Pipeline Validation (Phase 11: Sub-step 2.1)
+    auto testTexPath = Axle::FileSystem::ResolveAssetPath("textures/Prototype_Grid.png");
+    if (std::filesystem::exists(testTexPath)) {
+        auto testTex = Axle::Texture2D::Create(testTexPath.string());
+        if (testTex && testTex->IsLoaded()) {
+            AXLE_INFO("Texture Pipeline: Verified stb_image loader with '{0}' ({1}x{2}, ID: {3})",
+                testTexPath.filename().string(), testTex->GetWidth(), testTex->GetHeight(), testTex->GetRendererID());
+        }
+    }
+
     // 5. Offscreen Framebuffer for Viewport
     Axle::FramebufferSpecification fbSpec;
     fbSpec.Width = window.GetWidth();

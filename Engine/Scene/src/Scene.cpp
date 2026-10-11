@@ -89,7 +89,8 @@ namespace Axle {
         return transform;
     }
 
-    void Scene::OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader) {
+    void Scene::OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,
+                         const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, int shadowMapSlot) {
         (void)ts;
 
         // 1. Synchronize physics simulation transforms into TransformComponents
@@ -108,7 +109,9 @@ namespace Axle {
         // 2. Render all entities with MeshComponent and TransformComponent (with hierarchy propagation)
         shader.Bind();
         shader.SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix());
-        shader.SetFloat3("u_LightDir", glm::vec3(0.45f, 1.0f, 0.65f));
+        shader.SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
+        shader.SetFloat3("u_LightDir", lightDir);
+        shader.SetInt("u_ShadowMap", shadowMapSlot);
 
         auto renderView = m_Registry.view<MeshComponent, TransformComponent>();
         for (auto entity : renderView) {

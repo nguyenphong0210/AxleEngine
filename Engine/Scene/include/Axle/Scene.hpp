@@ -30,7 +30,10 @@ namespace Axle {
         glm::mat4 GetWorldTransform(entt::entity entityID) const;
 
         // Update physics synchronization and render all mesh components
-        void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader);
+        void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,
+                      const glm::mat4& lightSpaceMatrix = glm::mat4(1.0f),
+                      const glm::vec3& lightDir = glm::vec3(0.45f, 1.0f, 0.65f),
+                      int shadowMapSlot = 1);
 
         // Render shadow depth pass from light's perspective
         void RenderShadowPass(Shader& shadowShader, const glm::mat4& lightSpaceMatrix);

@@ -69,9 +69,12 @@ namespace Axle {
         glDepthFunc(GL_LESS);
         glDepthMask(GL_TRUE);
         glClear(GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(1.5f, 3.0f);
     }
 
     void ShadowMap::Unbind() {
+        glDisable(GL_POLYGON_OFFSET_FILL);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 

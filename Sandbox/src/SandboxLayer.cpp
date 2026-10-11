@@ -103,12 +103,15 @@ void SandboxLayer::OnAttach() {
             layout(location = 0) in vec3 a_Position;
             uniform mat4 u_ViewProjection;
             uniform mat4 u_Transform;
+            uniform mat4 u_LightSpaceMatrix;
             out vec3 v_WorldPos;
             out vec3 v_LocalPos;
+            out vec4 v_FragPosLightSpace;
             void main() {
                 v_LocalPos = a_Position;
                 vec4 worldPos = u_Transform * vec4(a_Position, 1.0);
                 v_WorldPos = worldPos.xyz;
+                v_FragPosLightSpace = u_LightSpaceMatrix * worldPos;
                 gl_Position = u_ViewProjection * worldPos;
             }
         )";
@@ -117,12 +120,33 @@ void SandboxLayer::OnAttach() {
             layout(location = 0) out vec4 o_Color;
             in vec3 v_WorldPos;
             in vec3 v_LocalPos;
+            in vec4 v_FragPosLightSpace;
             uniform int u_PatternMode;
             uniform float u_TileScale;
             uniform vec4 u_Color1;
             uniform vec4 u_Color2;
             uniform vec3 u_LightDir;
             uniform mat4 u_Transform;
+            uniform sampler2D u_ShadowMap;
+
+            float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
+                vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+                projCoords = projCoords * 0.5 + 0.5;
+                if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) {
+                    return 0.0;
+                }
+                float bias = max(0.0015 * (1.0 - dot(normal, lightDir)), 0.00015);
+                float shadow = 0.0;
+                vec2 texelSize = 1.0 / textureSize(u_ShadowMap, 0);
+                for (int x = -1; x <= 1; ++x) {
+                    for (int y = -1; y <= 1; ++y) {
+                        float pcfDepth = texture(u_ShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+                        shadow += (projCoords.z - bias > pcfDepth) ? 1.0 : 0.0;
+                    }
+                }
+                return shadow / 9.0;
+            }
+
             void main() {
                 float pattern = 0.0;
                 vec3 normal = vec3(0.0, 1.0, 0.0);
@@ -147,10 +171,13 @@ void SandboxLayer::OnAttach() {
                 vec4 baseColor = mix(u_Color1, u_Color2, pattern);
                 vec3 lightDir = normalize(u_LightDir);
                 float NdotL = max(dot(normal, lightDir), 0.0);
-                float lighting = 0.38 + 0.62 * NdotL;
+                float shadow = CalculateShadow(v_FragPosLightSpace, normal, lightDir);
+                float ambient = 0.28;
+                float diffuse = 0.72 * NdotL * (1.0 - shadow);
+                float lighting = ambient + diffuse;
                 vec3 viewDir = normalize(-v_WorldPos);
                 vec3 halfDir = normalize(lightDir + viewDir);
-                float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.18;
+                float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.18 * (1.0 - shadow);
                 o_Color = vec4(baseColor.rgb * lighting + vec3(spec), baseColor.a);
             }
         )";
@@ -1542,14 +1569,24 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         Axle::RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
         Axle::RenderCommand::Clear();
 
+        // Bind shadow map depth texture to slot 1 for soft shadow calculation
+        if (m_ShadowMap) {
+            m_ShadowMap->BindTexture(1);
+        }
+
         // 1. Render all ECS entities
-        m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader);
+        m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader,
+                          m_LightSpaceMatrix, m_LightDir, 1);
 
         // 2. Render JPH::DebugRenderer physics collider wireframes when enabled
         if (m_ShowPhysicsDebug && m_PhysicsDebugRenderer) {
             m_PhysicsDebugRenderer->Begin(m_CameraController->GetCamera().GetPosition());
             m_PhysicsScene->DrawDebug(*m_PhysicsDebugRenderer, m_PhysicsDrawSettings);
             m_PhysicsDebugRenderer->End(m_CameraController->GetCamera().GetViewProjectionMatrix());
+        }
+
+        if (m_ShadowMap) {
+            m_ShadowMap->UnbindTexture(1);
         }
 
         m_Framebuffer->Unbind();

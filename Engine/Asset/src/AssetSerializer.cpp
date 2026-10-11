@@ -6,6 +6,10 @@
 #include <iomanip>
 #include <algorithm>
 
+#define CGLTF_IMPLEMENTATION
+#include <cgltf.h>
+#include <ufbx.h>
+
 namespace Axle {
 
     static std::string Trim(const std::string& str) {
@@ -453,5 +457,163 @@ namespace Axle {
         return ExportMeshToAxle(outAxlePath, modelName, temp_positions, indices, patternMode, tileScale, color1, color2);
     }
 
+    bool AssetSerializer::ConvertGLTFToAxle(const std::filesystem::path& gltfPath,
+                                            const std::filesystem::path& outAxlePath,
+                                            int patternMode,
+                                            float tileScale,
+                                            const glm::vec4& color1,
+                                            const glm::vec4& color2) {
+        cgltf_options options{};
+        cgltf_data* data = nullptr;
+        cgltf_result result = cgltf_parse_file(&options, gltfPath.string().c_str(), &data);
+        if (result != cgltf_result_success) {
+            AXLE_ERROR("AssetSerializer: Failed to parse glTF file '{0}'", gltfPath.string());
+            return false;
+        }
+
+        result = cgltf_load_buffers(&options, data, gltfPath.string().c_str());
+        if (result != cgltf_result_success) {
+            AXLE_ERROR("AssetSerializer: Failed to load glTF buffers for '{0}'", gltfPath.string());
+            cgltf_free(data);
+            return false;
+        }
+
+        std::vector<glm::vec3> vertices;
+        std::vector<u32> indices;
+
+        for (size_t m = 0; m < data->meshes_count; ++m) {
+            const auto& mesh = data->meshes[m];
+            for (size_t p = 0; p < mesh.primitives_count; ++p) {
+                const auto& prim = mesh.primitives[p];
+                if (prim.type != cgltf_primitive_type_triangles) continue;
+
+                u32 vertexOffset = static_cast<u32>(vertices.size());
+
+                // Read vertex positions
+                for (size_t a = 0; a < prim.attributes_count; ++a) {
+                    if (prim.attributes[a].type == cgltf_attribute_type_position) {
+                        cgltf_accessor* acc = prim.attributes[a].data;
+                        vertices.reserve(vertices.size() + acc->count);
+                        for (size_t i = 0; i < acc->count; ++i) {
+                            float pos[3] = { 0.0f, 0.0f, 0.0f };
+                            cgltf_accessor_read_float(acc, i, pos, 3);
+                            vertices.push_back(glm::vec3(pos[0], pos[1], pos[2]));
+                        }
+                        break;
+                    }
+                }
+
+                // Read indices
+                if (prim.indices) {
+                    cgltf_accessor* idxAcc = prim.indices;
+                    indices.reserve(indices.size() + idxAcc->count);
+                    for (size_t i = 0; i < idxAcc->count; ++i) {
+                        u32 idx = static_cast<u32>(cgltf_accessor_read_index(idxAcc, i));
+                        indices.push_back(vertexOffset + idx);
+                    }
+                } else {
+                    size_t vertCount = vertices.size() - vertexOffset;
+                    indices.reserve(indices.size() + vertCount);
+                    for (size_t i = 0; i < vertCount; ++i) {
+                        indices.push_back(vertexOffset + static_cast<u32>(i));
+                    }
+                }
+            }
+        }
+
+        cgltf_free(data);
+
+        if (vertices.empty() || indices.empty()) {
+            AXLE_WARN("AssetSerializer: glTF file '{0}' contains no triangle geometry", gltfPath.string());
+            return false;
+        }
+
+        std::string modelName = gltfPath.stem().string();
+        return ExportMeshToAxle(outAxlePath, modelName, vertices, indices, patternMode, tileScale, color1, color2);
+    }
+
+    bool AssetSerializer::ConvertFBXToAxle(const std::filesystem::path& fbxPath,
+                                           const std::filesystem::path& outAxlePath,
+                                           int patternMode,
+                                           float tileScale,
+                                           const glm::vec4& color1,
+                                           const glm::vec4& color2) {
+        ufbx_load_opts opts{};
+        opts.target_axes = ufbx_axes_right_handed_y_up;
+        opts.target_unit_meters = 1.0f;
+        ufbx_error error;
+        ufbx_scene* scene = ufbx_load_file(fbxPath.string().c_str(), &opts, &error);
+        if (!scene) {
+            AXLE_ERROR("AssetSerializer: Failed to load FBX '{0}': {1}", fbxPath.string(), error.description.data);
+            return false;
+        }
+
+        std::vector<glm::vec3> vertices;
+        std::vector<u32> indices;
+
+        for (size_t m = 0; m < scene->meshes.count; ++m) {
+            ufbx_mesh* mesh = scene->meshes.data[m];
+            if (!mesh || mesh->num_triangles == 0) continue;
+
+            u32 vertexOffset = static_cast<u32>(vertices.size());
+            vertices.reserve(vertices.size() + mesh->vertices.count);
+
+            for (size_t v = 0; v < mesh->vertices.count; ++v) {
+                vertices.push_back(glm::vec3(
+                    static_cast<float>(mesh->vertices.data[v].x),
+                    static_cast<float>(mesh->vertices.data[v].y),
+                    static_cast<float>(mesh->vertices.data[v].z)
+                ));
+            }
+
+            indices.reserve(indices.size() + mesh->num_triangles * 3);
+            for (size_t f = 0; f < mesh->faces.count; ++f) {
+                ufbx_face face = mesh->faces.data[f];
+                for (size_t i = 1; i + 1 < face.num_indices; ++i) {
+                    u32 i0 = mesh->vertex_indices.data[face.index_begin];
+                    u32 i1 = mesh->vertex_indices.data[face.index_begin + i];
+                    u32 i2 = mesh->vertex_indices.data[face.index_begin + i + 1];
+                    indices.push_back(vertexOffset + i0);
+                    indices.push_back(vertexOffset + i1);
+                    indices.push_back(vertexOffset + i2);
+                }
+            }
+        }
+
+        ufbx_free_scene(scene);
+
+        if (vertices.empty() || indices.empty()) {
+            AXLE_WARN("AssetSerializer: FBX file '{0}' contains no triangle geometry", fbxPath.string());
+            return false;
+        }
+
+        std::string modelName = fbxPath.stem().string();
+        return ExportMeshToAxle(outAxlePath, modelName, vertices, indices, patternMode, tileScale, color1, color2);
+    }
+
+    bool AssetSerializer::AutoConvertModel(const std::filesystem::path& modelPath,
+                                           const std::filesystem::path& outAxlePath,
+                                           int patternMode,
+                                           float tileScale,
+                                           const glm::vec4& color1,
+                                           const glm::vec4& color2) {
+        std::string ext = modelPath.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+
+        if (ext == ".obj") {
+            return ConvertOBJToAxle(modelPath, outAxlePath, patternMode, tileScale, color1, color2);
+        }
+        if (ext == ".gltf" || ext == ".glb") {
+            return ConvertGLTFToAxle(modelPath, outAxlePath, patternMode, tileScale, color1, color2);
+        }
+        if (ext == ".fbx") {
+            return ConvertFBXToAxle(modelPath, outAxlePath, patternMode, tileScale, color1, color2);
+        }
+
+        AXLE_ERROR("AssetSerializer: Unsupported model format '{0}'", ext);
+        return false;
+    }
+
 }
+
 

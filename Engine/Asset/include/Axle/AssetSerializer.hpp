@@ -63,6 +63,30 @@ namespace Axle {
                                      float tileScale = 2.0f,
                                      const glm::vec4& color1 = glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
                                      const glm::vec4& color2 = glm::vec4(0.16f, 0.20f, 0.26f, 1.0f));
+
+        // Convert glTF 2.0 (.gltf / .glb) into .axle structured text + auto-baked .axlebin cache
+        static bool ConvertGLTFToAxle(const std::filesystem::path& gltfPath,
+                                      const std::filesystem::path& outAxlePath,
+                                      int patternMode = 1,
+                                      float tileScale = 2.0f,
+                                      const glm::vec4& color1 = glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
+                                      const glm::vec4& color2 = glm::vec4(0.16f, 0.20f, 0.26f, 1.0f));
+
+        // Convert FBX model (.fbx) into .axle structured text + auto-baked .axlebin cache
+        static bool ConvertFBXToAxle(const std::filesystem::path& fbxPath,
+                                     const std::filesystem::path& outAxlePath,
+                                     int patternMode = 1,
+                                     float tileScale = 2.0f,
+                                     const glm::vec4& color1 = glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
+                                     const glm::vec4& color2 = glm::vec4(0.16f, 0.20f, 0.26f, 1.0f));
+
+        // Unified 3D auto-converter supporting .obj, .gltf, .glb, and .fbx
+        static bool AutoConvertModel(const std::filesystem::path& modelPath,
+                                     const std::filesystem::path& outAxlePath,
+                                     int patternMode = 1,
+                                     float tileScale = 2.0f,
+                                     const glm::vec4& color1 = glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
+                                     const glm::vec4& color2 = glm::vec4(0.16f, 0.20f, 0.26f, 1.0f));
     };
 
 }

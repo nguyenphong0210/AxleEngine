@@ -363,79 +363,9 @@ void SandboxLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
         std::string stem = srcPath.stem().string();
 
-        if (ext == ".obj") {
-            // Auto-convert external OBJ to unified .axle format and bake binary cache
-            std::filesystem::path destAxlePath = destFolder / (stem + ".axle");
-            std::filesystem::path destObjPath = destFolder / srcPath.filename();
-
-            if (srcPath != destObjPath) {
-                std::filesystem::copy_file(srcPath, destObjPath, std::filesystem::copy_options::overwrite_existing, ec);
-            }
-
-            bool converted = Axle::AssetSerializer::ConvertOBJToAxle(destObjPath, destAxlePath);
-            if (converted) {
-                AXLE_INFO("Asset Pipeline: Ingested and auto-converted '{0}' -> '{1}' (with binary cache)", 
-                    srcPath.filename().string(), destAxlePath.filename().string());
-
-                // If dropped directly over 3D Viewport, instantiate immediately
-                if (m_ViewportHovered) {
-                    auto loaded = Axle::AssetSerializer::LoadMesh(destAxlePath);
-                    if (loaded.Success) {
-                        glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
-                        glm::vec4 nearPointNDC(0.0f, 0.0f, -1.0f, 1.0f);
-                        glm::vec4 farPointNDC(0.0f, 0.0f, 1.0f, 1.0f);
-
-                        glm::vec4 nearW = invVP * nearPointNDC;
-                        glm::vec4 farW = invVP * farPointNDC;
-                        if (std::abs(nearW.w) > 1e-6f) nearW /= nearW.w;
-                        if (std::abs(farW.w) > 1e-6f) farW /= farW.w;
-
-                        glm::vec3 rayOrigin = glm::vec3(nearW);
-                        glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
-
-                        glm::vec3 spawnPos(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
-                        Axle::RayCastHit hit;
-                        if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
-                            spawnPos = hit.Position + glm::vec3(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
-                        } else {
-                            if (std::abs(rayDir.y) > 1e-4f) {
-                                float t = -rayOrigin.y / rayDir.y;
-                                if (t > 0.0f && t < 150.0f) {
-                                    glm::vec3 groundHit = rayOrigin + rayDir * t;
-                                    spawnPos = groundHit + glm::vec3(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
-                                } else {
-                                    spawnPos = rayOrigin + rayDir * 10.0f;
-                                }
-                            } else {
-                                spawnPos = rayOrigin + rayDir * 10.0f;
-                            }
-                        }
-
-                        auto entity = m_Scene->CreateEntity(stem);
-                        entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
-                        entity.AddComponent<Axle::MeshComponent>(
-                            loaded.VAO, destAxlePath.string(),
-                            loaded.SourceData.PatternMode, loaded.SourceData.TileScale,
-                            loaded.SourceData.ColorPrimary, loaded.SourceData.ColorSecondary
-                        );
-
-                        if (m_PhysicsScene) {
-                            Axle::BoxBodyProps bProps;
-                            bProps.Position = spawnPos;
-                            bProps.HalfExtent = loaded.SourceData.HalfExtent;
-                            bProps.IsDynamic = true;
-                            bProps.Friction = 0.70f;
-                            bProps.Restitution = 0.15f;
-                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                            entity.AddComponent<Axle::RigidBodyComponent>(bodyId, true);
-                        }
-
-                        m_SceneHierarchyPanel.SetSelectedEntity(entity);
-                        AXLE_INFO("Asset Pipeline: Instantiated newly ingested model '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})", 
-                            stem, spawnPos.x, spawnPos.y, spawnPos.z);
-                    }
-                }
-            }
+        if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+            // Queue 3D asset for conversion confirmation modal
+            m_PendingImportQueue.push_back(srcPath);
         } else if (ext == ".axle") {
             std::filesystem::path destAxlePath = destFolder / srcPath.filename();
             if (srcPath != destAxlePath) {
@@ -506,6 +436,11 @@ void SandboxLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
                     srcPath.filename().string(), destFolder.string());
             }
         }
+    }
+
+    // Trigger conversion confirmation modal if 3D assets were queued
+    if (!m_PendingImportQueue.empty() && !m_ShowImportModal) {
+        SetupNextImportModal();
     }
 }
 
@@ -1523,10 +1458,10 @@ void SandboxLayer::OnImGuiRender() {
                         color1 = loaded.SourceData.ColorPrimary;
                         color2 = loaded.SourceData.ColorSecondary;
                     }
-                } else if (ext == ".obj") {
+                } else if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                     std::filesystem::path axlePath = assetPath.parent_path() / (assetPath.stem().string() + ".axle");
                     if (!std::filesystem::exists(axlePath)) {
-                        Axle::AssetSerializer::ConvertOBJToAxle(assetPath, axlePath);
+                        Axle::AssetSerializer::AutoConvertModel(assetPath, axlePath);
                     }
                     auto loaded = Axle::AssetSerializer::LoadMesh(axlePath);
                     if (loaded.Success) {
@@ -1538,7 +1473,7 @@ void SandboxLayer::OnImGuiRender() {
                         color1 = loaded.SourceData.ColorPrimary;
                         color2 = loaded.SourceData.ColorSecondary;
                         assetPath = axlePath;
-                    } else {
+                    } else if (ext == ".obj") {
                         meshInfo = Axle::PrimitiveMesh::LoadOBJEx(assetPath.string(), true);
                     }
                 }
@@ -1816,5 +1751,226 @@ void SandboxLayer::OnImGuiRender() {
         m_PhysicsDrawSettings.DrawBoundingBoxes = telemetry.DrawBoundingBoxes;
         m_PhysicsDrawSettings.DrawVelocity = telemetry.DrawVelocity;
         m_PhysicsDrawSettings.DrawCenterOfMass = telemetry.DrawCenterOfMass;
+    }
+
+    // 10. 3D Model Asset Ingestion Confirmation Modal
+    RenderImportModal();
+}
+
+void SandboxLayer::SetupNextImportModal() {
+    if (m_PendingImportQueue.empty()) {
+        m_ShowImportModal = false;
+        return;
+    }
+
+    m_ImportModalData.SourcePath = m_PendingImportQueue.front();
+    m_PendingImportQueue.erase(m_PendingImportQueue.begin());
+
+    if (m_ContentBrowserPanel.IsWindowHovered()) {
+        m_ImportModalData.TargetFolder = m_ContentBrowserPanel.GetCurrentPath();
+    } else {
+        m_ImportModalData.TargetFolder = Axle::FileSystem::ResolveAssetPath("models");
+    }
+
+    std::string stem = m_ImportModalData.SourcePath.stem().string();
+    std::string outName = stem + ".axle";
+    strncpy_s(m_ImportModalData.OutputFileName, sizeof(m_ImportModalData.OutputFileName), outName.c_str(), _TRUNCATE);
+
+    m_ImportModalData.PatternMode = 1;
+    m_ImportModalData.TileScale = 2.0f;
+    m_ImportModalData.ColorPrimary = glm::vec4(0.95f, 0.45f, 0.15f, 1.0f);
+    m_ImportModalData.ColorSecondary = glm::vec4(0.16f, 0.20f, 0.26f, 1.0f);
+    m_ImportModalData.ErrorMessage.clear();
+
+    m_ShowImportModal = true;
+    m_OpenImportModalPopup = true;
+}
+
+void SandboxLayer::RenderImportModal() {
+    if (m_OpenImportModalPopup) {
+        ImGui::OpenPopup("Import 3D Asset##Modal");
+        m_OpenImportModalPopup = false;
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(540.0f, 0.0f), ImGuiCond_Appearing);
+
+    bool modalOpen = m_ShowImportModal;
+    if (ImGui::BeginPopupModal("Import 3D Asset##Modal", &modalOpen, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+        m_ShowImportModal = modalOpen;
+
+        // Detect model extension and format badge
+        std::string ext = m_ImportModalData.SourcePath.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+
+        const char* formatName = "3D Asset";
+        ImVec4 badgeColor(0.2f, 0.6f, 1.0f, 1.0f);
+        if (ext == ".obj") {
+            formatName = "Wavefront OBJ (.obj)";
+            badgeColor = ImVec4(0.95f, 0.6f, 0.2f, 1.0f);
+        } else if (ext == ".gltf") {
+            formatName = "glTF 2.0 Scene (.gltf)";
+            badgeColor = ImVec4(0.2f, 0.8f, 0.4f, 1.0f);
+        } else if (ext == ".glb") {
+            formatName = "glTF 2.0 Binary (.glb)";
+            badgeColor = ImVec4(0.2f, 0.75f, 0.9f, 1.0f);
+        } else if (ext == ".fbx") {
+            formatName = "Autodesk FBX (.fbx)";
+            badgeColor = ImVec4(0.85f, 0.4f, 0.95f, 1.0f);
+        }
+
+        ImGui::TextColored(badgeColor, "[ %s ]", formatName);
+        ImGui::SameLine();
+        ImGui::TextDisabled("Model Ingestion Pipeline");
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Source details table
+        if (ImGui::BeginTable("##ImportInfoTable", 2, ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextDisabled("Source File:");
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(m_ImportModalData.SourcePath.filename().string().c_str());
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextDisabled("Source Path:");
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", m_ImportModalData.SourcePath.string().c_str());
+
+            std::error_code ec;
+            auto sz = std::filesystem::file_size(m_ImportModalData.SourcePath, ec);
+            if (!ec) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("File Size:");
+                ImGui::TableNextColumn();
+                if (sz < 1024) {
+                    ImGui::Text("%llu Bytes", sz);
+                } else if (sz < 1024 * 1024) {
+                    ImGui::Text("%.1f KB", sz / 1024.0f);
+                } else {
+                    ImGui::Text("%.2f MB", sz / (1024.0f * 1024.0f));
+                }
+            }
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextDisabled("Target Folder:");
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", m_ImportModalData.TargetFolder.string().c_str());
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Target filename
+        ImGui::TextUnformatted("Output Asset Name (.axle):");
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputText("##OutputFileName", m_ImportModalData.OutputFileName, sizeof(m_ImportModalData.OutputFileName));
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Material Presets
+        ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.35f, 1.0f), "Default Material & Procedural Surface Appearance");
+        ImGui::Spacing();
+
+        ImGui::ColorEdit4("Primary Color", glm::value_ptr(m_ImportModalData.ColorPrimary));
+        ImGui::ColorEdit4("Secondary Color", glm::value_ptr(m_ImportModalData.ColorSecondary));
+
+        const char* patternNames[] = {
+            "0: Solid Pure",
+            "1: Checkerboard",
+            "2: Cyber Grid",
+            "3: Warning Stripes",
+            "4: Carbon Fiber",
+            "5: Hexagon Dots"
+        };
+        ImGui::Combo("Pattern Preset", &m_ImportModalData.PatternMode, patternNames, IM_ARRAYSIZE(patternNames));
+        ImGui::SliderFloat("Pattern Scale", &m_ImportModalData.TileScale, 0.2f, 10.0f, "%.1fx");
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Pipeline info notice (Auto-Bake is always active under the hood, and immediate instantiate is removed as requested)
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.75f, 1.0f, 1.0f));
+        ImGui::TextWrapped("The model geometry will be converted into Axle's structured text format (.axle) and pre-baked into high-speed binary cache (.axlebin) inside the Content Browser.");
+        ImGui::PopStyleColor();
+
+        if (!m_ImportModalData.ErrorMessage.empty()) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", m_ImportModalData.ErrorMessage.c_str());
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Action Buttons
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.55f, 0.34f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.68f, 0.42f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.45f, 0.28f, 1.0f));
+
+        if (ImGui::Button("Convert & Import", ImVec2(160, 32))) {
+            std::string outNameStr = m_ImportModalData.OutputFileName;
+            if (outNameStr.empty()) {
+                outNameStr = m_ImportModalData.SourcePath.stem().string() + ".axle";
+            }
+            if (outNameStr.length() < 5 || outNameStr.substr(outNameStr.length() - 5) != ".axle") {
+                outNameStr += ".axle";
+            }
+
+            std::filesystem::path destAxlePath = m_ImportModalData.TargetFolder / outNameStr;
+
+            bool success = Axle::AssetSerializer::AutoConvertModel(
+                m_ImportModalData.SourcePath, destAxlePath,
+                m_ImportModalData.PatternMode,
+                m_ImportModalData.TileScale,
+                m_ImportModalData.ColorPrimary,
+                m_ImportModalData.ColorSecondary
+            );
+
+            if (success) {
+                AXLE_INFO("Asset Pipeline: Successfully converted '{0}' -> '{1}' (with binary cache)", 
+                    m_ImportModalData.SourcePath.filename().string(), destAxlePath.filename().string());
+
+                ImGui::CloseCurrentPopup();
+                if (!m_PendingImportQueue.empty()) {
+                    SetupNextImportModal();
+                } else {
+                    m_ShowImportModal = false;
+                }
+            } else {
+                m_ImportModalData.ErrorMessage = "Conversion failed! Check console logs for error details.";
+                AXLE_ERROR("Asset Pipeline: Failed to convert model '{0}'", m_ImportModalData.SourcePath.string());
+            }
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", ImVec2(100, 32))) {
+            ImGui::CloseCurrentPopup();
+            m_PendingImportQueue.clear();
+            m_ShowImportModal = false;
+        }
+
+        ImGui::EndPopup();
+    } else {
+        if (!modalOpen) {
+            m_PendingImportQueue.clear();
+            m_ShowImportModal = false;
+        }
     }
 }

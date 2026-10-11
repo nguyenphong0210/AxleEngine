@@ -20,6 +20,8 @@
 #include <ImGuizmo.h>
 #include <memory>
 #include <unordered_map>
+#include <vector>
+#include <filesystem>
 
 class SandboxLayer : public Axle::Layer {
 public:
@@ -143,4 +145,24 @@ private:
     std::unordered_map<Axle::u32, InitialBodyState> m_InitialDynamicStates;
 
     void CreatePlayground();
+
+    // 3D Model Asset Ingestion & Conversion Modal
+    struct ModelImportModalData {
+        std::filesystem::path SourcePath;
+        std::filesystem::path TargetFolder;
+        char OutputFileName[256] = "";
+        int PatternMode = 1;
+        float TileScale = 2.0f;
+        glm::vec4 ColorPrimary{ 0.95f, 0.45f, 0.15f, 1.0f };
+        glm::vec4 ColorSecondary{ 0.16f, 0.20f, 0.26f, 1.0f };
+        std::string ErrorMessage;
+    };
+
+    bool m_ShowImportModal = false;
+    bool m_OpenImportModalPopup = false;
+    ModelImportModalData m_ImportModalData;
+    std::vector<std::filesystem::path> m_PendingImportQueue;
+
+    void SetupNextImportModal();
+    void RenderImportModal();
 };

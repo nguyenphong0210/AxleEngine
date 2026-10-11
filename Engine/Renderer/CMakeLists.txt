@@ -10,6 +10,7 @@ add_library(AxleRenderer STATIC
     src/ShadowMap.cpp
     src/Texture2D.cpp
     src/stb_image.cpp
+    src/Skybox.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

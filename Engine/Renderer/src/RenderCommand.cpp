@@ -35,6 +35,26 @@ namespace Axle {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
+    void RenderCommand::SetDepthMask(bool writeEnabled) {
+        glDepthMask(writeEnabled ? GL_TRUE : GL_FALSE);
+    }
+
+    void RenderCommand::SetDepthFuncLEqual() {
+        glDepthFunc(GL_LEQUAL);
+    }
+
+    void RenderCommand::SetDepthFuncLess() {
+        glDepthFunc(GL_LESS);
+    }
+
+    void RenderCommand::SetCullFace(bool enabled) {
+        if (enabled) {
+            glEnable(GL_CULL_FACE);
+        } else {
+            glDisable(GL_CULL_FACE);
+        }
+    }
+
     void RenderCommand::DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray) {
         vertexArray->Bind();
         const u32 count = vertexArray->GetIndexBuffer() ? vertexArray->GetIndexBuffer()->GetCount() : 0;

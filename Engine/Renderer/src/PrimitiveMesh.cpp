@@ -78,6 +78,48 @@ namespace Axle {
         return va;
     }
 
+    std::shared_ptr<VertexArray> PrimitiveMesh::CreateSkyboxCube() {
+        // 8 corner vertices of a unit cube
+        f32 vertices[8 * 3] = {
+            -1.0f,  1.0f, -1.0f,
+            -1.0f, -1.0f, -1.0f,
+             1.0f, -1.0f, -1.0f,
+             1.0f,  1.0f, -1.0f,
+            -1.0f,  1.0f,  1.0f,
+            -1.0f, -1.0f,  1.0f,
+             1.0f, -1.0f,  1.0f,
+             1.0f,  1.0f,  1.0f
+        };
+
+        // Inward-facing winding order for camera-centric interior view
+        u32 indices[36] = {
+            // Front face (+Z)
+            4, 5, 6,  6, 7, 4,
+            // Back face (-Z)
+            3, 2, 1,  1, 0, 3,
+            // Top face (+Y)
+            4, 7, 3,  3, 0, 4,
+            // Bottom face (-Y)
+            1, 2, 6,  6, 5, 1,
+            // Right face (+X)
+            7, 6, 2,  2, 3, 7,
+            // Left face (-X)
+            0, 1, 5,  5, 4, 0
+        };
+
+        auto va = std::make_shared<VertexArray>();
+        auto vb = std::make_shared<VertexBuffer>(vertices, static_cast<u32>(sizeof(vertices)));
+        vb->SetLayout({
+            { ShaderDataType::Float3, "a_Position" }
+        });
+        va->AddVertexBuffer(vb);
+
+        auto ib = std::make_shared<IndexBuffer>(indices, 36);
+        va->SetIndexBuffer(ib);
+
+        return va;
+    }
+
     std::shared_ptr<VertexArray> PrimitiveMesh::CreateSphere(u32 stacks, u32 sectors) {
         std::vector<f32> vertices;
         std::vector<u32> indices;

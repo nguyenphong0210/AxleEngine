@@ -403,6 +403,9 @@ void SandboxLayer::OnAttach() {
         }
     }
 
+    // 4.3 Atmospheric Skybox Pipeline (Phase 11: Sub-step 4.1)
+    m_Skybox = std::make_unique<Axle::Skybox>();
+
     // 5. Offscreen Framebuffer for Viewport
     Axle::FramebufferSpecification fbSpec;
     fbSpec.Width = window.GetWidth();
@@ -1786,7 +1789,19 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader,
                           m_LightSpaceMatrix, m_LightDir, 1);
 
-        // 2. Render JPH::DebugRenderer physics collider wireframes when enabled
+        // 2. Render Atmospheric Skybox (Phase 11: Sub-step 4.1)
+        if (m_Skybox) {
+            if (hasSunLight) {
+                m_Skybox->SetSunDirection(activeSunLight.GetDirection());
+                m_Skybox->SetSunColor(activeSunLight.Color * activeSunLight.Intensity);
+                m_Skybox->SetExposure(activeSunLight.Exposure);
+                m_Skybox->SetToneMapping(activeSunLight.ToneMappingMode, activeSunLight.Gamma);
+            }
+            m_Skybox->Render(m_CameraController->GetCamera().GetViewMatrix(),
+                             m_CameraController->GetCamera().GetProjectionMatrix());
+        }
+
+        // 3. Render JPH::DebugRenderer physics collider wireframes when enabled
         if (m_ShowPhysicsDebug && m_PhysicsDebugRenderer) {
             m_PhysicsDebugRenderer->Begin(m_CameraController->GetCamera().GetPosition());
             m_PhysicsScene->DrawDebug(*m_PhysicsDebugRenderer, m_PhysicsDrawSettings);

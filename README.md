@@ -112,8 +112,10 @@ Level 0:  [ Engine/Core ]
   - [x] **PBR Material System (Cook-Torrance Microfacet BRDF)**:
     - [x] **Sub-step 3.1**: Physically based Cook-Torrance microfacet specular BRDF (Trowbridge-Reitz GGX normal distribution $D$, Smith-Schlick shadowing/masking $G$, Fresnel-Schlick reflectance $F$), energy conservation ($k_D + k_S = 1$), metallic workflow, and directional sun radiance integration with PCF soft shadows.
     - [x] **Sub-step 3.2**: HDR Filmic Tone Mapping (ACES Narkowicz approximation, Reinhard, Uncharted 2 Hable, and Linear Bypass modes) & Linear-to-sRGB display gamma correction ($1/\gamma$), with real-time Exposure and Tone Mapping controls in Sun Light Inspector and complete scene serialization.
-    - [x] **Sub-step 3.3**: Physical material presets in Inspector (Automotive Clearcoat Red, Metallic Blue, Chrome Mirror, 24K Gold, Brushed Copper, Rubber Tire, Matte Plastic, Cast Iron, Aluminum, Obsidian, LED Headlight/Taillight), normal perturbation strength slider, emission glow controls, UV tiling shortcuts, and complete scene serialization (`.axlescene`).
-  - [ ] **Atmospheric Skybox**: Cubemap or HDR environment sky with ambient irradiance.
+  - [ ] **Atmospheric Skybox**:
+    - [x] **Sub-step 4.1**: Procedural atmospheric Rayleigh / Mie scattering skybox pipeline (`Axle::Skybox`), camera-centric unit cube renderer at infinity (`glDepthFunc(GL_LEQUAL)`, $z/w = 1.0$), analytical sharp sun disk with anti-aliasing, sunset/sunrise golden horizon warming, night darkening with procedural twinkling stars, and full HDR ACES filmic tone mapping.
+    - [ ] **Sub-step 4.2**: Dynamic Sun Light synchronization & Inspector controls (Atmospheric Turbidity, Zenith, Horizon, Ground colors, Sun Disk Size & Glow) with scene serialization.
+    - [ ] **Sub-step 4.3**: Ambient hemisphere irradiance calculation from atmospheric sky.
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.

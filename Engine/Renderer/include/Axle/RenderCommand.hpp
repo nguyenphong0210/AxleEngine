@@ -16,6 +16,11 @@ namespace Axle {
         static void SetClearColor(const glm::vec4& color);
         static void Clear();
 
+        static void SetDepthMask(bool writeEnabled);
+        static void SetDepthFuncLEqual();
+        static void SetDepthFuncLess();
+        static void SetCullFace(bool enabled);
+
         // Submit indexed draw call from a VertexArray
         static void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray);
 

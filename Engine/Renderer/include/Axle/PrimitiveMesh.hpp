@@ -17,6 +17,9 @@ namespace Axle {
         // Unit cube: size 1.0 x 1.0 x 1.0 (from -0.5 to +0.5)
         static std::shared_ptr<VertexArray> CreateCube();
 
+        // Unit skybox cube (inward-facing geometry for camera-centric atmospheric rendering)
+        static std::shared_ptr<VertexArray> CreateSkyboxCube();
+
         // Unit sphere: radius 1.0 centered at origin
         static std::shared_ptr<VertexArray> CreateSphere(u32 stacks = 24, u32 sectors = 32);
 

@@ -5,6 +5,8 @@ add_library(AxleUI STATIC
     src/SceneHierarchyPanel.cpp
     src/VehicleTunerPanel.cpp
     src/ContentBrowserPanel.cpp
+    src/AssetThumbnailManager.cpp
+    src/AssetPreviewPanel.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_draw.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_tables.cpp
@@ -35,4 +37,5 @@ target_link_libraries(AxleUI
         Axle::Vehicle
     PRIVATE
         glfw
+        glad
 )

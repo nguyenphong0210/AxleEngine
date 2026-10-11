@@ -323,6 +323,8 @@ void SandboxLayer::OnAttach() {
     m_SceneHierarchyPanel.SetMeshes(m_CubeMesh, m_SphereMesh, m_CylinderMesh, m_ConeMesh, m_PlaneMesh);
     m_VehicleTunerPanel.SetContext(m_Vehicle.get(), m_PhysicsScene.get());
     m_ContentBrowserPanel.SetRootPath(Axle::FileSystem::GetAssetDirectory());
+    m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
+    m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
 
     AXLE_INFO("Axle Editor initialized successfully");
 }
@@ -1329,6 +1331,7 @@ void SandboxLayer::OnImGuiRender() {
             ImGui::MenuItem("Vehicle Tuner", nullptr, &m_ShowVehicleTuner);
             ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
             ImGui::MenuItem("Content Browser", nullptr, &m_ShowContentBrowser);
+            ImGui::MenuItem("Asset Preview", nullptr, &m_ShowAssetPreview);
             ImGui::MenuItem("Telemetry & Performance", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             ImGui::Separator();
@@ -1404,6 +1407,7 @@ void SandboxLayer::OnImGuiRender() {
         ImGui::DockBuilderDockWindow("Content Browser", dock_bottom);
         ImGui::DockBuilderDockWindow("Console", dock_bottom);
         ImGui::DockBuilderDockWindow("Properties", dock_right);
+        ImGui::DockBuilderDockWindow("Asset Preview", dock_right);
         ImGui::DockBuilderDockWindow("Vehicle Tuner", dock_right);
         ImGui::DockBuilderDockWindow("Axle Engine - Telemetry", dock_right);
 
@@ -1738,7 +1742,10 @@ void SandboxLayer::OnImGuiRender() {
     // 8. Content Browser Panel
     m_ContentBrowserPanel.OnImGuiRender(&m_ShowContentBrowser);
 
-    // 9. Performance & Telemetry Panel
+    // 9. Asset Preview Panel
+    m_AssetPreviewPanel.OnImGuiRender(&m_ShowAssetPreview);
+
+    // 10. Performance & Telemetry Panel
     if (m_ShowTelemetry) {
         Axle::TelemetryData telemetry{
             .DeltaTime = m_LastDeltaTime,

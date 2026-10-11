@@ -193,5 +193,12 @@ cmake --build build --config Release --parallel
 
 ---
 
+## 🗺️ Roadmap
+- [ ] **Asset Pipeline (.obj Export)**: Export `.axle` / `.axlebin` meshes back into standard Wavefront `.obj` format for external DCC (Blender, Maya) interop and mesh inspection.
+- [ ] **PBR Material System**: Support texture maps (Albedo, Normal, Metallic, Roughness) alongside current procedural shader styles.
+- [ ] **Scene Serialization**: Save and restore full ECS scene hierarchy and physics states to scene files (`.axlescene`).
+
+---
+
 ## 📜 License
 This project is open-source under the MIT License.

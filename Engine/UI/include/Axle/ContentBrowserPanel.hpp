@@ -5,15 +5,20 @@
 
 namespace Axle {
 
+    class AssetThumbnailManager;
+    class AssetPreviewPanel;
+
     class ContentBrowserPanel {
     public:
         ContentBrowserPanel();
         ContentBrowserPanel(const std::filesystem::path& rootPath);
-        ~ContentBrowserPanel() = default;
+        ~ContentBrowserPanel();
 
         void SetRootPath(const std::filesystem::path& rootPath);
         const std::filesystem::path& GetCurrentPath() const { return m_CurrentDirectory; }
         bool IsWindowHovered() const { return m_IsHovered; }
+
+        void SetAssetPreviewPanel(AssetPreviewPanel* previewPanel) { m_AssetPreviewPanel = previewPanel; }
 
         void OnImGuiRender(bool* p_open = nullptr);
 
@@ -33,6 +38,9 @@ namespace Axle {
         float m_ThumbnailSize = 84.0f;
         bool m_ShowHiddenFiles = false;
         bool m_IsHovered = false;
+
+        std::unique_ptr<AssetThumbnailManager> m_ThumbnailManager;
+        AssetPreviewPanel* m_AssetPreviewPanel = nullptr;
     };
 
 }

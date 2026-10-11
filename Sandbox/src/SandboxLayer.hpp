@@ -10,6 +10,7 @@
 #include <Axle/VehicleTunerPanel.hpp>
 #include <Axle/ConsolePanel.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
+#include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
@@ -124,6 +125,7 @@ private:
     Axle::VehicleTunerPanel m_VehicleTunerPanel;
     Axle::ConsolePanel m_ConsolePanel;
     Axle::ContentBrowserPanel m_ContentBrowserPanel;
+    Axle::AssetPreviewPanel m_AssetPreviewPanel;
     Axle::DebugPanel m_DebugPanel;
 
     // Panel Visibility Flags
@@ -132,6 +134,7 @@ private:
     bool m_ShowVehicleTuner = true;
     bool m_ShowConsole = true;
     bool m_ShowContentBrowser = true;
+    bool m_ShowAssetPreview = true;
     bool m_ShowTelemetry = true;
     bool m_ResetLayout = true;
 

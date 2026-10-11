@@ -1,4 +1,6 @@
 #include <Axle/ContentBrowserPanel.hpp>
+#include <Axle/AssetThumbnailManager.hpp>
+#include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
@@ -333,12 +335,16 @@ namespace Axle {
     // -----------------------------------------------------------------------------
 
     ContentBrowserPanel::ContentBrowserPanel() {
+        m_ThumbnailManager = std::make_unique<AssetThumbnailManager>();
         SetRootPath(FileSystem::GetAssetDirectory());
     }
 
     ContentBrowserPanel::ContentBrowserPanel(const std::filesystem::path& rootPath) {
+        m_ThumbnailManager = std::make_unique<AssetThumbnailManager>();
         SetRootPath(rootPath);
     }
+
+    ContentBrowserPanel::~ContentBrowserPanel() = default;
 
     void ContentBrowserPanel::SetRootPath(const std::filesystem::path& rootPath) {
         m_RootDirectory = rootPath;
@@ -359,6 +365,10 @@ namespace Axle {
         }
 
         m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+
+        if (m_ThumbnailManager) {
+            m_ThumbnailManager->OnUpdate();
+        }
 
         RenderTopBar();
         ImGui::Spacing();
@@ -543,6 +553,9 @@ namespace Axle {
 
                     if (isClicked) {
                         m_SelectedEntry = path;
+                        if (m_AssetPreviewPanel && !isDir) {
+                            m_AssetPreviewPanel->SetAsset(path);
+                        }
                     }
 
                     if (isDoubleClicked) {
@@ -551,6 +564,9 @@ namespace Axle {
                             m_SelectedEntry.clear();
                         } else {
                             AXLE_INFO("Content Browser: Selected file '{0}'", path.string());
+                            if (m_AssetPreviewPanel) {
+                                m_AssetPreviewPanel->SetAsset(path);
+                            }
                         }
                     }
 
@@ -587,16 +603,36 @@ namespace Axle {
                     ImVec2 iconCenter = ImVec2(cardMin.x + cardW * 0.5f, cardMin.y + iconAreaH * 0.52f);
                     float iconScale = iconAreaH * 0.36f;
 
-                    switch (meta.Kind) {
-                        case AssetKind::Folder:   DrawFolderIcon(drawList, iconCenter, iconScale); break;
-                        case AssetKind::Model3D:  DrawModel3DIcon(drawList, iconCenter, iconScale); break;
-                        case AssetKind::Texture:  DrawTexturePictureIcon(drawList, iconCenter, iconScale); break;
-                        case AssetKind::Shader:   DrawShaderIcon(drawList, iconCenter, iconScale); break;
-                        case AssetKind::Scene:    DrawSceneIcon(drawList, iconCenter, iconScale); break;
-                        case AssetKind::Material: DrawMaterialIcon(drawList, iconCenter, iconScale); break;
-                        case AssetKind::Script:   DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(75, 160, 245, 230)); break;
-                        case AssetKind::Document: DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(150, 165, 185, 230)); break;
-                        default:                  DrawGenericFileIcon(drawList, iconCenter, iconScale); break;
+                    u32 thumbTex = 0;
+                    if (meta.Kind == AssetKind::Model3D && m_ThumbnailManager) {
+                        thumbTex = m_ThumbnailManager->GetOrCreateThumbnail(path);
+                    }
+
+                    if (thumbTex != 0) {
+                        ImVec2 thumbMin = ImVec2(cardMin.x + 3.0f, cardMin.y + 3.0f);
+                        ImVec2 thumbMax = ImVec2(cardMax.x - 3.0f, cardMin.y + iconAreaH);
+                        drawList->AddImage(
+                            (ImTextureID)(intptr_t)thumbTex,
+                            thumbMin, thumbMax,
+                            ImVec2(0, 1), ImVec2(1, 0)
+                        );
+                        // Subtle type badge pill in top right
+                        ImVec2 badgeMax = ImVec2(cardMax.x - 4.0f, cardMin.y + 16.0f);
+                        ImVec2 badgeMin = ImVec2(badgeMax.x - 32.0f, cardMin.y + 4.0f);
+                        drawList->AddRectFilled(badgeMin, badgeMax, IM_COL32(18, 24, 34, 210), 3.0f);
+                        drawList->AddText(ImVec2(badgeMin.x + 3.0f, badgeMin.y + 1.0f), meta.AccentColor, meta.Tag);
+                    } else {
+                        switch (meta.Kind) {
+                            case AssetKind::Folder:   DrawFolderIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Model3D:  DrawModel3DIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Texture:  DrawTexturePictureIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Shader:   DrawShaderIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Scene:    DrawSceneIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Material: DrawMaterialIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Script:   DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(75, 160, 245, 230)); break;
+                            case AssetKind::Document: DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(150, 165, 185, 230)); break;
+                            default:                  DrawGenericFileIcon(drawList, iconCenter, iconScale); break;
+                        }
                     }
 
                     // Lower Footer Area (32% height)
@@ -610,8 +646,18 @@ namespace Axle {
                     drawList->AddRectFilled(footerMin, footerMax, footerBg, 6.0f, ImDrawFlags_RoundBottom);
                     drawList->AddLine(footerMin, ImVec2(footerMax.x, footerMin.y), IM_COL32(45, 52, 64, 150), 1.0f);
 
-                    // Centered truncated filename
+                    // Centered formatted filename (strip extension / show subpart cleanly)
                     std::string label = filenameStr;
+                    auto hashPos = label.find('#');
+                    if (hashPos != std::string::npos) {
+                        label = label.substr(0, hashPos);
+                    } else {
+                        auto dotPos = label.rfind('.');
+                        if (dotPos != std::string::npos && dotPos > 0 && !isDir) {
+                            label = label.substr(0, dotPos);
+                        }
+                    }
+
                     ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
                     float textMaxW = cardW - 8.0f;
                     if (textSize.x > textMaxW && label.length() > 4) {
@@ -631,20 +677,38 @@ namespace Axle {
                     // Rich Tooltip
                     if (isHovered) {
                         ImGui::BeginTooltip();
+
+                        if (thumbTex != 0) {
+                            ImGui::Image((ImTextureID)(intptr_t)thumbTex, ImVec2(140.0f, 140.0f), ImVec2(0, 1), ImVec2(1, 0));
+                            ImGui::Spacing();
+                        }
+
                         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", filenameStr.c_str());
                         ImGui::Separator();
                         ImGui::TextDisabled("Type: %s", meta.TypeLabel);
+
+                        if (m_ThumbnailManager) {
+                            if (const auto* cachedMeta = m_ThumbnailManager->GetCachedMeta(path)) {
+                                ImGui::Text("Triangles: %zu", cachedMeta->TriangleCount);
+                                ImGui::Text("Vertices: %zu", cachedMeta->VertexCount);
+                                ImGui::Text("Dimensions: %.2fm x %.2fm x %.2fm", 
+                                    cachedMeta->BoundingSize.x, cachedMeta->BoundingSize.y, cachedMeta->BoundingSize.z);
+                                if (cachedMeta->SubPartCount > 1) {
+                                    ImGui::Text("Subparts: %zu components", cachedMeta->SubPartCount);
+                                }
+                            }
+                        }
 
                         if (!isDir) {
                             std::error_code ec;
                             auto sz = std::filesystem::file_size(path, ec);
                             if (!ec) {
                                 if (sz < 1024) {
-                                    ImGui::Text("Size: %llu B", sz);
+                                    ImGui::Text("File Size: %llu B", sz);
                                 } else if (sz < 1024 * 1024) {
-                                    ImGui::Text("Size: %.1f KB", sz / 1024.0f);
+                                    ImGui::Text("File Size: %.1f KB", sz / 1024.0f);
                                 } else {
-                                    ImGui::Text("Size: %.2f MB", sz / (1024.0f * 1024.0f));
+                                    ImGui::Text("File Size: %.2f MB", sz / (1024.0f * 1024.0f));
                                 }
                             }
                         }

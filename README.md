@@ -83,15 +83,20 @@ Level 0:  [ Engine/Core ]
   - [x] **`ScriptableEntity` Lifecycle**: Base C++ class exposing `OnCreate()`, `OnUpdate(Timestep)`, and `OnDestroy()`.
   - [x] **`NativeScriptComponent`**: Template-based script binding to entities with zero runtime overhead.
   - [x] **Modular Gameplay Scripts**: Decoupled vehicle input (`CarPlayerScript`) into clean, reusable C++ scripts.
-  - [x] **Editor Component Management**: Interactive `+ Add Component` popup in Properties panel, component removal options, and File menu Save shortcuts (`Ctrl+S`, `Ctrl+O`, `Ctrl+N`).
-- [ ] **Phase 9: 3D Asset Loading (`Engine/Asset`) *(Recommended Next)***
-  - [ ] Integrate mesh loading (fastgltf / tinyobjloader) for detailed car body and wheel models.
-  - [ ] Texture mapping (diffuse, normal maps) via `stb_image`.
-  - [ ] Replace procedural shapes on car with realistic vehicle 3D model.
-- [ ] **Phase 10: Scene Serialization & Project Management**
-  - [ ] Scene save/load system via YAML (`.axle` scene files).
-  - [ ] Save track layouts, obstacle arrangements, and vehicle tuning presets.
-  - [ ] Shortcuts `Ctrl+S` (Save Scene), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene).
+  - [x] **Editor Component Management**: Interactive `+ Add Component` popup in Properties panel, component removal options (`Remove Component`), prominent `+ Create` button with Search filter in Scene Hierarchy, and File menu actions (`Ctrl+S`, `Ctrl+O`, `Ctrl+N`).
+  - [x] **Window Work Area & Fullscreen**: Automatic maximized window startup matching OS work area (zero taskbar overlap) and `F11` Maximize/Restore toggle.
+- [ ] **Phase 9: Asset System & 3D Model/Texture Loading (`Engine/Asset` & `Sandbox/assets`) *(Recommended Next)***
+  - [ ] **Project Asset Architecture**: Standardized `Sandbox/assets/` structure (`models/`, `textures/`, `scenes/`, `materials/`) - separating game project assets from engine core.
+  - [ ] **Content Browser Panel (`Engine/UI`)**: ImGui-based visual asset browser with directory navigation, file type icons, search filter, and path breadcrumbs.
+  - [ ] **Drag & Drop Workflow**: Drag 3D model files from Content Browser directly into Viewport or Properties panel to instantiate meshes.
+  - [ ] **3D Mesh Loading (`fastgltf` / `tinyobjloader`)**: Detailed car body chassis and realistic wheel models.
+  - [ ] **Texture Mapping (`stb_image`)**: Albedo, normal, and roughness textures applied to 3D meshes.
+  - [ ] Replace procedural shapes on car with a realistic sports car 3D model.
+- [ ] **Phase 10: Scene Serialization & Project Management (`Engine/Scene` & `Engine/Project`)**
+  - [ ] **Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project` and `File -> Open Project`.
+  - [ ] **Scene Serialization (YAML via `yaml-cpp`)**: Save and load complete ECS scene state (Transforms, Meshes, RigidBodies, Vehicle dynamics, Native scripts) into `.axle` scene files.
+  - [ ] **Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with file dialogs.
+  - [ ] Double-click scene files in Content Browser to instantly load them.
 - [ ] **Phase 11: Lighting, Shadows & Environmental Realism**
   - [ ] Directional Shadow Mapping (Real-time dynamic shadows cast by vehicle and obstacles).
   - [ ] PBR or Blinn-Phong material shading with specular highlights on car paint.
@@ -99,6 +104,12 @@ Level 0:  [ Engine/Core ]
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
+- [ ] **Phase 13: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
+  - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
+  - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.
+  - [ ] **Splatmap Texture Painting**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
+  - [ ] **Chunked Grid & LOD**: Chunk-based terrain mesh division with distance-dependent level of detail for large-scale open worlds.
+  - [ ] **Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
 
 ---
 

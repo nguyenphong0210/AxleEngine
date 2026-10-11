@@ -13,7 +13,7 @@ namespace Axle {
     };
 
     struct VehicleConfig {
-        glm::vec3 InitialPosition{ 0.0f, 1.2f, 0.0f };
+        glm::vec3 InitialPosition{ 0.0f, 0.95f, 0.0f };
         glm::quat InitialRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
 
         // Chassis properties

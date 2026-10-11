@@ -118,6 +118,27 @@ namespace Axle {
                 }
 
                 std::string shapeName = "Box";
+                if (rb.ShapeType == BodyShapeType::Plane) shapeName = "Plane";
+                else if (rb.ShapeType == BodyShapeType::Sphere) shapeName = "Sphere";
+                else if (rb.ShapeType == BodyShapeType::Cylinder) shapeName = "Cylinder";
+                else if (rb.ShapeType == BodyShapeType::Cone) shapeName = "Cone";
+                else if (entity.HasComponent<MeshComponent>()) {
+                    auto& mc = entity.GetComponent<MeshComponent>();
+                    std::string aPath = mc.AssetPath;
+                    if (aPath.empty() && mc.VAO) {
+                        if (m_Context.CubeMesh && mc.VAO == m_Context.CubeMesh) aPath = "builtin://cube";
+                        else if (m_Context.SphereMesh && mc.VAO == m_Context.SphereMesh) aPath = "builtin://sphere";
+                        else if (m_Context.CylinderMesh && mc.VAO == m_Context.CylinderMesh) aPath = "builtin://cylinder";
+                        else if (m_Context.ConeMesh && mc.VAO == m_Context.ConeMesh) aPath = "builtin://cone";
+                        else if (m_Context.PlaneMesh && mc.VAO == m_Context.PlaneMesh) aPath = "builtin://plane";
+                    }
+                    if (aPath == "builtin://plane") shapeName = "Plane";
+                    else if (aPath == "builtin://sphere") shapeName = "Sphere";
+                    else if (aPath == "builtin://cylinder") shapeName = "Cylinder";
+                    else if (aPath == "builtin://cone") shapeName = "Cone";
+                    else shapeName = "Box";
+                }
+
                 glm::vec3 halfExtent = rb.HalfExtent;
                 float radius = rb.Radius;
                 float halfHeight = rb.HalfHeight;
@@ -127,15 +148,6 @@ namespace Axle {
                     halfExtent = glm::max(tc.Scale * 0.5f, glm::vec3(0.01f));
                     radius = glm::max(tc.Scale.x * 0.5f, 0.01f);
                     halfHeight = glm::max(tc.Scale.y * 0.5f, 0.01f);
-                }
-
-                if (entity.HasComponent<MeshComponent>()) {
-                    auto& mc = entity.GetComponent<MeshComponent>();
-                    if (mc.AssetPath == "builtin://plane") shapeName = "Plane";
-                    else if (mc.AssetPath == "builtin://sphere") shapeName = "Sphere";
-                    else if (mc.AssetPath == "builtin://cylinder") shapeName = "Cylinder";
-                    else if (mc.AssetPath == "builtin://cone") shapeName = "Cone";
-                    else shapeName = "Box";
                 }
 
                 ss << "    RigidBodyComponent:\n";
@@ -170,6 +182,18 @@ namespace Axle {
             // VehicleComponent
             if (entity.HasComponent<VehicleComponent>()) {
                 ss << "    VehicleComponent: true\n";
+            }
+
+            // DirectionalLightComponent
+            if (entity.HasComponent<DirectionalLightComponent>()) {
+                auto& dlc = entity.GetComponent<DirectionalLightComponent>();
+                ss << "    DirectionalLightComponent:\n";
+                ss << "      Color: [ " << dlc.Color.r << " , " << dlc.Color.g << " , " << dlc.Color.b << " ]\n";
+                ss << "      Intensity: " << dlc.Intensity << "\n";
+                ss << "      AmbientIntensity: " << dlc.AmbientIntensity << "\n";
+                ss << "      Azimuth: " << dlc.Azimuth << "\n";
+                ss << "      Elevation: " << dlc.Elevation << "\n";
+                ss << "      CastShadows: " << (dlc.CastShadows ? "true" : "false") << "\n";
             }
         }
 
@@ -217,7 +241,8 @@ namespace Axle {
             Mesh,
             RigidBody,
             Hierarchy,
-            NativeScript
+            NativeScript,
+            DirectionalLight
         };
         ComponentSection currentSection = ComponentSection::None;
 
@@ -248,6 +273,8 @@ namespace Axle {
                 currentSection = ComponentSection::Hierarchy;
             } else if (trimmed == "NativeScriptComponent:") {
                 currentSection = ComponentSection::NativeScript;
+            } else if (trimmed == "DirectionalLightComponent:") {
+                currentSection = ComponentSection::DirectionalLight;
             } else if (trimmed == "VehicleComponent: true") {
                 if (!currentEntity.HasComponent<VehicleComponent>()) {
                     currentEntity.AddComponent<VehicleComponent>();
@@ -368,6 +395,28 @@ namespace Axle {
                         }
                         break;
                     }
+                    case ComponentSection::DirectionalLight: {
+                        if (!currentEntity.HasComponent<DirectionalLightComponent>()) {
+                            currentEntity.AddComponent<DirectionalLightComponent>();
+                        }
+                        auto& dlc = currentEntity.GetComponent<DirectionalLightComponent>();
+                        if (trimmed.rfind("Color:", 0) == 0) {
+                            float r = 1, g = 1, b = 1;
+                            sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
+                            dlc.Color = glm::vec3(r, g, b);
+                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                            dlc.Intensity = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("AmbientIntensity:", 0) == 0) {
+                            dlc.AmbientIntensity = std::stof(Trim(trimmed.substr(17)));
+                        } else if (trimmed.rfind("Azimuth:", 0) == 0) {
+                            dlc.Azimuth = std::stof(Trim(trimmed.substr(8)));
+                        } else if (trimmed.rfind("Elevation:", 0) == 0) {
+                            dlc.Elevation = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("CastShadows:", 0) == 0) {
+                            dlc.CastShadows = (Trim(trimmed.substr(12)) == "true");
+                        }
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -412,6 +461,8 @@ namespace Axle {
                     rb.RuntimeBodyID = bodyID;
                 }
             }
+
+            m_PhysicsScene->OptimizeBroadPhase();
         }
 
         // Resolve Hierarchies

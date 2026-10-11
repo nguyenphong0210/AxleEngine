@@ -248,6 +248,13 @@ namespace Axle {
         if (ImGui::MenuItem("Static Floor Plane")) {
             CreatePrimitive(4);
         }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Directional Sun Light")) {
+            auto lightEntity = m_Scene->CreateEntity("Sun Light");
+            lightEntity.AddComponent<TransformComponent>(glm::vec3(0.0f, 25.0f, 0.0f));
+            lightEntity.AddComponent<DirectionalLightComponent>();
+            m_SelectedEntity = lightEntity;
+        }
     }
 
     void SceneHierarchyPanel::OnImGuiRender(bool* p_hierarchyOpen, bool* p_propertiesOpen) {
@@ -989,6 +996,88 @@ namespace Axle {
             ImGui::Spacing();
         }
 
+        // Directional Light Component
+        if (entity.HasComponent<DirectionalLightComponent>()) {
+            bool removeDLC = false;
+            bool dlcOpen = ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), treeNodeFlags, "Directional Sun Light");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeDLC = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (dlcOpen) {
+                auto& dlc = entity.GetComponent<DirectionalLightComponent>();
+
+                // Light Color
+                ImGui::ColorEdit3("Light Color", glm::value_ptr(dlc.Color));
+
+                // Intensity
+                ImGui::SliderFloat("Intensity", &dlc.Intensity, 0.0f, 5.0f, "%.2f");
+
+                // Ambient Intensity
+                ImGui::SliderFloat("Ambient Fill", &dlc.AmbientIntensity, 0.0f, 1.0f, "%.2f");
+
+                // Sun Angles
+                ImGui::SliderFloat("Azimuth (Heading)", &dlc.Azimuth, 0.0f, 360.0f, "%.1f deg");
+                ImGui::SliderFloat("Elevation (Altitude)", &dlc.Elevation, 5.0f, 89.0f, "%.1f deg");
+
+                // Cast Shadows Toggle
+                ImGui::Checkbox("Cast Real-Time Shadows", &dlc.CastShadows);
+
+                // Quick Atmosphere Presets
+                ImGui::Spacing();
+                ImGui::TextDisabled("Atmosphere Presets:");
+                if (ImGui::SmallButton("Noon Daylight")) {
+                    dlc.Color = glm::vec3(1.0f, 0.98f, 0.92f);
+                    dlc.Intensity = 1.2f;
+                    dlc.AmbientIntensity = 0.28f;
+                    dlc.Azimuth = 45.0f;
+                    dlc.Elevation = 65.0f;
+                    dlc.CastShadows = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Golden Hour / Sunset")) {
+                    dlc.Color = glm::vec3(1.0f, 0.58f, 0.25f);
+                    dlc.Intensity = 1.35f;
+                    dlc.AmbientIntensity = 0.22f;
+                    dlc.Azimuth = 240.0f;
+                    dlc.Elevation = 15.0f;
+                    dlc.CastShadows = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Night Moonlight")) {
+                    dlc.Color = glm::vec3(0.45f, 0.60f, 0.95f);
+                    dlc.Intensity = 0.40f;
+                    dlc.AmbientIntensity = 0.15f;
+                    dlc.Azimuth = 135.0f;
+                    dlc.Elevation = 45.0f;
+                    dlc.CastShadows = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Overcast Studio")) {
+                    dlc.Color = glm::vec3(0.95f, 0.95f, 1.0f);
+                    dlc.Intensity = 1.0f;
+                    dlc.AmbientIntensity = 0.45f;
+                    dlc.Azimuth = 45.0f;
+                    dlc.Elevation = 70.0f;
+                    dlc.CastShadows = true;
+                }
+
+                // Vector display
+                glm::vec3 dir = dlc.GetDirection();
+                ImGui::TextDisabled("Light Direction: (%.2f, %.2f, %.2f)", dir.x, dir.y, dir.z);
+
+                ImGui::TreePop();
+            }
+
+            if (removeDLC) {
+                entity.RemoveComponent<DirectionalLightComponent>();
+            }
+            ImGui::Spacing();
+        }
+
         // --- ADD COMPONENT BUTTON ---
         ImGui::Spacing();
         ImGui::Separator();
@@ -1047,6 +1136,12 @@ namespace Axle {
             if (!entity.HasComponent<VehicleComponent>()) {
                 if (ImGui::MenuItem("Vehicle Component")) {
                     entity.AddComponent<VehicleComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!entity.HasComponent<DirectionalLightComponent>()) {
+                if (ImGui::MenuItem("Directional Light Component")) {
+                    entity.AddComponent<DirectionalLightComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }

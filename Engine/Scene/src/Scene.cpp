@@ -89,6 +89,15 @@ namespace Axle {
         return transform;
     }
 
+    bool Scene::GetPrimaryDirectionalLight(DirectionalLightComponent& outLight) const {
+        auto view = m_Registry.view<DirectionalLightComponent>();
+        for (auto entity : view) {
+            outLight = view.get<DirectionalLightComponent>(entity);
+            return true;
+        }
+        return false;
+    }
+
     void Scene::OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,
                          const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, int shadowMapSlot) {
         (void)ts;
@@ -106,11 +115,25 @@ namespace Axle {
             }
         }
 
-        // 2. Render all entities with MeshComponent and TransformComponent (with hierarchy propagation)
+        // 2. Query active directional sun light in scene
+        DirectionalLightComponent sunLight;
+        bool hasSunLight = GetPrimaryDirectionalLight(sunLight);
+
+        glm::vec3 activeLightDir = hasSunLight ? sunLight.GetDirection() : lightDir;
+        glm::vec3 activeLightColor = hasSunLight ? sunLight.Color : glm::vec3(1.0f, 0.98f, 0.92f);
+        float activeIntensity = hasSunLight ? sunLight.Intensity : 1.0f;
+        float activeAmbient = hasSunLight ? sunLight.AmbientIntensity : 0.28f;
+        int activeShadows = (hasSunLight ? sunLight.CastShadows : true) ? 1 : 0;
+
+        // 3. Render all entities with MeshComponent and TransformComponent (with hierarchy propagation)
         shader.Bind();
         shader.SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix());
         shader.SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
-        shader.SetFloat3("u_LightDir", lightDir);
+        shader.SetFloat3("u_LightDir", activeLightDir);
+        shader.SetFloat3("u_LightColor", activeLightColor);
+        shader.SetFloat("u_LightIntensity", activeIntensity);
+        shader.SetFloat("u_AmbientIntensity", activeAmbient);
+        shader.SetInt("u_ShadowsEnabled", activeShadows);
         shader.SetInt("u_ShadowMap", shadowMapSlot);
 
         auto renderView = m_Registry.view<MeshComponent, TransformComponent>();

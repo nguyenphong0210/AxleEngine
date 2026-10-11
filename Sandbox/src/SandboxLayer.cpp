@@ -126,6 +126,10 @@ void SandboxLayer::OnAttach() {
             uniform vec4 u_Color1;
             uniform vec4 u_Color2;
             uniform vec3 u_LightDir;
+            uniform vec3 u_LightColor;
+            uniform float u_LightIntensity;
+            uniform float u_AmbientIntensity;
+            uniform int u_ShadowsEnabled;
             uniform mat4 u_Transform;
             uniform sampler2D u_ShadowMap;
 
@@ -171,14 +175,18 @@ void SandboxLayer::OnAttach() {
                 vec4 baseColor = mix(u_Color1, u_Color2, pattern);
                 vec3 lightDir = normalize(u_LightDir);
                 float NdotL = max(dot(normal, lightDir), 0.0);
-                float shadow = CalculateShadow(v_FragPosLightSpace, normal, lightDir);
-                float ambient = 0.28;
-                float diffuse = 0.72 * NdotL * (1.0 - shadow);
-                float lighting = ambient + diffuse;
+                float shadow = 0.0;
+                if (u_ShadowsEnabled == 1) {
+                    shadow = CalculateShadow(v_FragPosLightSpace, normal, lightDir);
+                }
+                vec3 ambient = u_LightColor * u_AmbientIntensity;
+                vec3 diffuse = u_LightColor * (u_LightIntensity * NdotL * (1.0 - shadow));
+                vec3 lighting = ambient + diffuse;
                 vec3 viewDir = normalize(-v_WorldPos);
                 vec3 halfDir = normalize(lightDir + viewDir);
-                float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.18 * (1.0 - shadow);
-                o_Color = vec4(baseColor.rgb * lighting + vec3(spec), baseColor.a);
+                float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.20 * (1.0 - shadow);
+                vec3 finalRgb = baseColor.rgb * lighting + u_LightColor * (spec * u_LightIntensity);
+                o_Color = vec4(finalRgb, baseColor.a);
             }
         )";
     } else {
@@ -258,12 +266,20 @@ void SandboxLayer::OnAttach() {
     );
     m_FloorEntity.AddComponent<Axle::MeshComponent>(
         m_PlaneMesh,
+        "builtin://plane",
         0,       // World-space XZ caro
         1.0f,    // 1-meter squares
         glm::vec4(0.20f, 0.22f, 0.25f, 1.0f), // Dark slate
         glm::vec4(0.32f, 0.35f, 0.40f, 1.0f)  // Cool medium gray
     );
-    m_FloorEntity.AddComponent<Axle::RigidBodyComponent>(m_FloorBodyID, false);
+    m_FloorEntity.AddComponent<Axle::RigidBodyComponent>(
+        m_FloorBodyID,
+        false,
+        Axle::BodyShapeType::Plane,
+        glm::vec3(100.0f, 0.0f, 100.0f),
+        0.6f,
+        0.2f
+    );
 
     // Entity 2: Dynamic Falling Box
     m_BoxEntity = m_Scene->CreateEntity("Dynamic Box");
@@ -376,6 +392,14 @@ void SandboxLayer::OnAttach() {
 
     // 9. Automotive Test Playground & Obstacle Course (Phase 7)
     CreatePlayground();
+
+    // 10. Directional Sun Light Entity (Phase 11: Sub-step 1.3)
+    Axle::DirectionalLightComponent existingLight;
+    if (!m_Scene->GetPrimaryDirectionalLight(existingLight)) {
+        auto sunEntity = m_Scene->CreateEntity("Sun Light");
+        sunEntity.AddComponent<Axle::TransformComponent>(glm::vec3(0.0f, 25.0f, 0.0f));
+        sunEntity.AddComponent<Axle::DirectionalLightComponent>();
+    }
 
     // Connect Editor Panels
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
@@ -638,6 +662,11 @@ void SandboxLayer::NewScene() {
     m_FloorBodyID = m_PhysicsScene->CreatePlane(glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f), 75.0f, 0.6f, 0.0f);
     m_FloorEntity.AddComponent<Axle::RigidBodyComponent>(m_FloorBodyID, false, Axle::BodyShapeType::Plane, glm::vec3(75.0f), 0.6f, 0.0f);
 
+    // Create default Directional Sun Light
+    auto sunEntity = m_Scene->CreateEntity("Sun Light");
+    sunEntity.AddComponent<Axle::TransformComponent>(glm::vec3(0.0f, 25.0f, 0.0f));
+    sunEntity.AddComponent<Axle::DirectionalLightComponent>();
+
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_VehicleTunerPanel.SetContext(nullptr, m_PhysicsScene.get());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
@@ -754,6 +783,14 @@ void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
                     m_FloorBodyID = e.GetComponent<Axle::RigidBodyComponent>().RuntimeBodyID;
                 }
             }
+        }
+
+        // Ensure loaded scene has a Directional Sun Light
+        Axle::DirectionalLightComponent sceneSunLight;
+        if (!m_Scene->GetPrimaryDirectionalLight(sceneSunLight)) {
+            auto sunEntity = m_Scene->CreateEntity("Sun Light");
+            sunEntity.AddComponent<Axle::TransformComponent>(glm::vec3(0.0f, 25.0f, 0.0f));
+            sunEntity.AddComponent<Axle::DirectionalLightComponent>();
         }
 
         // Cache initial dynamic states for ResetSimulation()
@@ -988,7 +1025,7 @@ void SandboxLayer::ResetSimulation() {
     }
 
     if (m_Vehicle && m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::TransformComponent>()) {
-        m_Vehicle->Reset(glm::vec3(0.0f, 1.2f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        m_Vehicle->Reset(glm::vec3(0.0f, 0.95f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
         m_Vehicle->SetDriverInput(0.0f, 0.0f, 0.0f, 0.0f);
         auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
         chassisTC.Translation = m_Vehicle->GetPosition();
@@ -1548,10 +1585,18 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         }
     }
 
+    // Query active Directional Sun Light if present in scene
+    Axle::DirectionalLightComponent activeSunLight;
+    bool hasSunLight = m_Scene && m_Scene->GetPrimaryDirectionalLight(activeSunLight);
+    if (hasSunLight) {
+        m_LightDir = activeSunLight.GetDirection();
+    }
+    bool castShadows = hasSunLight ? activeSunLight.CastShadows : true;
+
     // ==========================================
     // PASS 1: SHADOW MAP DEPTH PASS (Phase 11: Sub-step 1.1)
     // ==========================================
-    if (m_ShadowMap && m_ShadowShader && m_Scene) {
+    if (castShadows && m_ShadowMap && m_ShadowShader && m_Scene) {
         glm::vec3 focusCenter = (m_Vehicle && m_ChassisEntity) ? m_Vehicle->GetPosition() : glm::vec3(0.0f);
         m_LightSpaceMatrix = m_ShadowMap->CalculateLightSpaceMatrix(m_LightDir, focusCenter);
 

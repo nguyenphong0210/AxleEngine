@@ -1019,7 +1019,7 @@ Entities:
     TagComponent:
       Tag: Wheel RR
     TransformComponent:
-      Translation: [ -0.950000 , 0.550000 , -1.400000 ]
+      Translation: [ -0.950000 , 0.350000 , -1.400000 ]
       Rotation: [ 0.707107 , 0.000000 , 0.000000 , 0.707107 ]
       Scale: [ 0.350000 , 0.125000 , 0.350000 ]
     MeshComponent:
@@ -1035,7 +1035,7 @@ Entities:
     TagComponent:
       Tag: Wheel RL
     TransformComponent:
-      Translation: [ 0.950000 , 0.550000 , -1.400000 ]
+      Translation: [ 0.950000 , 0.350000 , -1.400000 ]
       Rotation: [ 0.707107 , 0.000000 , 0.000000 , 0.707107 ]
       Scale: [ 0.350000 , 0.125000 , 0.350000 ]
     MeshComponent:
@@ -1051,7 +1051,7 @@ Entities:
     TagComponent:
       Tag: Wheel FR
     TransformComponent:
-      Translation: [ -0.950000 , 0.550000 , 1.400000 ]
+      Translation: [ -0.950000 , 0.350000 , 1.400000 ]
       Rotation: [ 0.707107 , 0.000000 , 0.000000 , 0.707107 ]
       Scale: [ 0.350000 , 0.125000 , 0.350000 ]
     MeshComponent:
@@ -1067,7 +1067,7 @@ Entities:
     TagComponent:
       Tag: Wheel FL
     TransformComponent:
-      Translation: [ 0.950000 , 0.550000 , 1.400000 ]
+      Translation: [ 0.950000 , 0.350000 , 1.400000 ]
       Rotation: [ 0.707107 , 0.000000 , 0.000000 , 0.707107 ]
       Scale: [ 0.350000 , 0.125000 , 0.350000 ]
     MeshComponent:
@@ -1083,7 +1083,7 @@ Entities:
     TagComponent:
       Tag: Vehicle Chassis
     TransformComponent:
-      Translation: [ 0.000000 , 1.200000 , 0.000000 ]
+      Translation: [ 0.000000 , 0.950000 , 0.000000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.800000 , 0.500000 , 4.000000 ]
     MeshComponent:
@@ -1204,10 +1204,10 @@ Entities:
       Color1: [ 0.200000 , 0.220000 , 0.250000 , 1.000000 ]
       Color2: [ 0.320000 , 0.350000 , 0.400000 , 1.000000 ]
     RigidBodyComponent:
-      ShapeType: Box
+      ShapeType: Plane
       IsDynamic: false
       Friction: 0.600000
       Restitution: 0.200000
-      HalfExtent: [ 100.000000 , 0.500000 , 100.000000 ]
+      HalfExtent: [ 100.000000 , 0.000000 , 100.000000 ]
       Radius: 100.000000
-      HalfHeight: 0.500000
+      HalfHeight: 0.000000

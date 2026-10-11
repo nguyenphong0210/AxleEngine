@@ -101,7 +101,10 @@ Level 0:  [ Engine/Core ]
   - [x] **Step 3: Content Browser Scene Loading**: Double-click scene files (`.axlescene`) in Content Browser to instantly load them into the active Viewport, with right-click context menu ("Open Scene in Viewport"), dedicated Scene clapperboard icon (`SCN`), and drag-and-drop scene loading onto the Viewport.
   - [x] **Step 4: Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project`, `File -> Open Project` (`Ctrl+Shift+O`), `File -> Save Project`, Content Browser `.axleproj` project blueprint icon (`PRJ`), and dynamic window title synchronization.
 - [ ] **Phase 11: Lighting, Dynamic Shadows & PBR Materials**
-  - [ ] **Directional Shadow Mapping**: Real-time dynamic shadows cast by vehicle and obstacles onto ground surfaces using depth framebuffer & PCF filtering.
+  - [x] **Directional Sun Light & Real-Time Shadow Mapping**:
+    - [x] **Sub-step 1.1**: Core Depth Framebuffer (`GL_DEPTH_COMPONENT32F`, 2048x2048, border clamped), Light Space Matrix calculation, and `Scene::RenderShadowPass()`.
+    - [x] **Sub-step 1.2**: Two-pass rendering pipeline with 3x3 Percentage-Closer Filtering (PCF) soft shadows and hardware polygon offset slope-scaled depth bias to eliminate shadow acne.
+    - [x] **Sub-step 1.3**: ECS `DirectionalLightComponent`, Sun Light entity management, interactive Inspector controls (Sun Azimuth & Elevation sliders, Color picker, Intensity, Ambient fill, Cast Shadows toggle, Atmosphere presets), and full scene serialization.
   - [ ] **Texture Mapping (`stb_image`)**: Load 2D texture maps (Albedo, Normal, Roughness, Metallic) and apply directly to 3D entities.
   - [ ] **PBR Material System**: Physically based rendering pipeline (Cook-Torrance BRDF) alongside current procedural checkerboard shaders.
   - [ ] **Atmospheric Skybox**: Cubemap or HDR environment sky with ambient irradiance.

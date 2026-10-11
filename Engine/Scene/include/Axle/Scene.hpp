@@ -14,6 +14,7 @@
 namespace Axle {
 
     class Entity;
+    struct DirectionalLightComponent;
 
     class Scene {
     public:
@@ -28,6 +29,9 @@ namespace Axle {
 
         // Hierarchical world transform calculation (propagating parent transforms)
         glm::mat4 GetWorldTransform(entt::entity entityID) const;
+
+        // Query active directional sun light in the scene (returns true if light found)
+        bool GetPrimaryDirectionalLight(DirectionalLightComponent& outLight) const;
 
         // Update physics synchronization and render all mesh components
         void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,

@@ -6,13 +6,17 @@ in vec3 v_WorldPos;
 in vec3 v_LocalPos;
 in vec4 v_FragPosLightSpace;
 
-uniform int u_PatternMode;      // 0: World-space XZ caro (Floor), 1: Local-space 3D caro (Box), 2: Spherical Caro (Sphere)
-uniform float u_TileScale;      // Frequency of the checkerboard tiles
-uniform vec4 u_Color1;          // Primary checker tile color
-uniform vec4 u_Color2;          // Secondary checker tile color
-uniform vec3 u_LightDir;        // Directional sun light vector
+uniform int u_PatternMode;        // 0: World-space XZ caro (Floor), 1: Local-space 3D caro (Box), 2: Spherical Caro (Sphere)
+uniform float u_TileScale;        // Frequency of the checkerboard tiles
+uniform vec4 u_Color1;            // Primary checker tile color
+uniform vec4 u_Color2;            // Secondary checker tile color
+uniform vec3 u_LightDir;          // Directional sun light vector
+uniform vec3 u_LightColor;        // Sun light RGB color
+uniform float u_LightIntensity;   // Sun brightness multiplier
+uniform float u_AmbientIntensity; // Ambient fill lighting
+uniform int u_ShadowsEnabled;     // 1: Enable soft shadows, 0: Disable shadows
 uniform mat4 u_Transform;
-uniform sampler2D u_ShadowMap;  // Real-time shadow map depth texture
+uniform sampler2D u_ShadowMap;    // Real-time shadow map depth texture
 
 float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
     // Perform perspective divide
@@ -79,16 +83,20 @@ void main() {
     vec3 lightDir = normalize(u_LightDir);
     float NdotL = max(dot(normal, lightDir), 0.0);
 
-    float shadow = CalculateShadow(v_FragPosLightSpace, normal, lightDir);
+    float shadow = 0.0;
+    if (u_ShadowsEnabled == 1) {
+        shadow = CalculateShadow(v_FragPosLightSpace, normal, lightDir);
+    }
 
-    float ambient = 0.28;
-    float diffuse = 0.72 * NdotL * (1.0 - shadow);
-    float lighting = ambient + diffuse;
+    vec3 ambient = u_LightColor * u_AmbientIntensity;
+    vec3 diffuse = u_LightColor * (u_LightIntensity * NdotL * (1.0 - shadow));
+    vec3 lighting = ambient + diffuse;
 
     // Subtle specular highlight for refined studio reflection (masked by shadow)
     vec3 viewDir = normalize(-v_WorldPos);
     vec3 halfDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.18 * (1.0 - shadow);
+    float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.20 * (1.0 - shadow);
 
-    o_Color = vec4(baseColor.rgb * lighting + vec3(spec), baseColor.a);
+    vec3 finalRgb = baseColor.rgb * lighting + u_LightColor * (spec * u_LightIntensity);
+    o_Color = vec4(finalRgb, baseColor.a);
 }

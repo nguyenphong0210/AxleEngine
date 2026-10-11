@@ -133,4 +133,29 @@ namespace Axle {
             : VehicleInstance(vehicle) {}
     };
 
+    struct DirectionalLightComponent {
+        glm::vec3 Color{ 1.0f, 0.98f, 0.92f }; // Sunlight warm tint
+        float Intensity = 1.0f;
+        float AmbientIntensity = 0.28f;
+        float Azimuth = 45.0f;    // Compass angle (0..360 deg)
+        float Elevation = 50.0f;  // Sun altitude angle (5..90 deg)
+        bool CastShadows = true;
+
+        DirectionalLightComponent() = default;
+        DirectionalLightComponent(const glm::vec3& color, float intensity = 1.0f, float ambient = 0.28f, float azimuth = 45.0f, float elevation = 50.0f, bool castShadows = true)
+            : Color(color), Intensity(intensity), AmbientIntensity(ambient), Azimuth(azimuth), Elevation(elevation), CastShadows(castShadows) {}
+
+        // Calculate unit vector pointing toward the sun light source
+        glm::vec3 GetDirection() const {
+            float radAz = glm::radians(Azimuth);
+            float radEl = glm::radians(std::clamp(Elevation, 1.0f, 89.9f));
+            return glm::normalize(glm::vec3(
+                std::cos(radEl) * std::sin(radAz),
+                std::sin(radEl),
+                std::cos(radEl) * std::cos(radAz)
+            ));
+        }
+    };
+
 }
+

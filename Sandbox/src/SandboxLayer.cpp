@@ -6,6 +6,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/AssetSerializer.hpp>
 #include <Axle/Log.hpp>
 #include <filesystem>
 
@@ -160,6 +161,18 @@ void SandboxLayer::OnAttach() {
     m_CylinderMesh = Axle::PrimitiveMesh::CreateCylinder(32);
     m_ConeMesh = Axle::PrimitiveMesh::CreateCone(32);
     m_PlaneMesh = Axle::PrimitiveMesh::CreatePlane();
+
+    // 4.1 Asset Pipeline Validation: Load SportsCar_Body.axle
+    auto carAxlePath = Axle::FileSystem::ResolveAssetPath("models/SportsCar_Body.axle");
+    if (std::filesystem::exists(carAxlePath)) {
+        auto loaded = Axle::AssetSerializer::LoadMesh(carAxlePath);
+        if (loaded.Success) {
+            AXLE_INFO("Asset Pipeline: Loaded '{0}' [Cache: {1}] ({2} vertices, {3} indices)", 
+                carAxlePath.filename().string(), 
+                loaded.LoadedFromCache ? "HIT" : "MISS (Auto-baked cache)",
+                loaded.SourceData.Vertices.size(), loaded.SourceData.Indices.size());
+        }
+    }
 
     // 5. Offscreen Framebuffer for Viewport
     Axle::FramebufferSpecification fbSpec;
@@ -1321,12 +1334,29 @@ void SandboxLayer::OnImGuiRender() {
             std::string ext = assetPath.extension().string();
             std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
-            if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+            if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                 // 1. Load 3D model geometry and compute centered bounding dimensions
                 Axle::MeshInfo meshInfo;
-                if (ext == ".obj") {
+                int patternMode = 1;
+                float tileScale = 2.0f;
+                glm::vec4 color1(0.95f, 0.45f, 0.15f, 1.0f); // Vibrant Sporty Tangerine
+                glm::vec4 color2(0.16f, 0.20f, 0.26f, 1.0f); // Dark Carbon Slate
+
+                if (ext == ".axle") {
+                    auto loaded = Axle::AssetSerializer::LoadMesh(assetPath);
+                    if (loaded.Success) {
+                        meshInfo.VAO = loaded.VAO;
+                        meshInfo.HalfExtent = loaded.SourceData.HalfExtent;
+                        meshInfo.BoundingSize = loaded.SourceData.BoundingSize;
+                        patternMode = loaded.SourceData.PatternMode;
+                        tileScale = loaded.SourceData.TileScale;
+                        color1 = loaded.SourceData.ColorPrimary;
+                        color2 = loaded.SourceData.ColorSecondary;
+                    }
+                } else if (ext == ".obj") {
                     meshInfo = Axle::PrimitiveMesh::LoadOBJEx(assetPath.string(), true);
                 }
+
                 if (!meshInfo.VAO) {
                     meshInfo.VAO = m_CubeMesh;
                     meshInfo.HalfExtent = glm::vec3(0.5f);
@@ -1381,9 +1411,8 @@ void SandboxLayer::OnImGuiRender() {
                 entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
 
                 auto& mc = entity.AddComponent<Axle::MeshComponent>(
-                    meshInfo.VAO, assetPath.string(), 1, 2.0f,
-                    glm::vec4(0.95f, 0.45f, 0.15f, 1.0f), // Vibrant Sporty Tangerine
-                    glm::vec4(0.16f, 0.20f, 0.26f, 1.0f)  // Dark Carbon Slate
+                    meshInfo.VAO, assetPath.string(), patternMode, tileScale,
+                    color1, color2
                 );
 
                 // 4. Add physics RigidBody with exact bounding box matching the 3D model

@@ -50,6 +50,9 @@ namespace Axle {
         auto ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
+        if (ext == ".axle") {
+            return { AssetKind::Model3D, "Axle Mesh", "AXLE", IM_COL32(255, 125, 45, 255) };
+        }
         if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
             return { AssetKind::Model3D, "3D Mesh", "3D", IM_COL32(65, 195, 255, 255) };
         }
@@ -59,7 +62,7 @@ namespace Axle {
         if (ext == ".vert" || ext == ".frag" || ext == ".glsl" || ext == ".comp") {
             return { AssetKind::Shader, "Shader", "SHD", IM_COL32(205, 105, 255, 255) };
         }
-        if (ext == ".axle" || ext == ".scene") {
+        if (ext == ".scene") {
             return { AssetKind::Scene, "Scene", "SCN", IM_COL32(255, 85, 95, 255) };
         }
         if (ext == ".axlemat" || ext == ".mat") {

@@ -29,6 +29,7 @@ target_link_libraries(AxleUI
         Axle::Core
         Axle::Platform
         Axle::Renderer
+        Axle::Asset
         Axle::Physics
         Axle::Scene
         Axle::Vehicle

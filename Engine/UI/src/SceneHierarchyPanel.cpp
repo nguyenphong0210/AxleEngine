@@ -3,6 +3,7 @@
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
+#include <Axle/AssetSerializer.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -318,11 +319,28 @@ namespace Axle {
                         std::filesystem::path p(pathStr);
                         std::string ext = p.extension().string();
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                        if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                        if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                             MeshInfo meshInfo;
-                            if (ext == ".obj") {
+                            int patternMode = 1;
+                            float tileScale = 2.0f;
+                            glm::vec4 color1(0.95f, 0.45f, 0.15f, 1.0f);
+                            glm::vec4 color2(0.16f, 0.20f, 0.26f, 1.0f);
+
+                            if (ext == ".axle") {
+                                auto loaded = AssetSerializer::LoadMesh(p);
+                                if (loaded.Success) {
+                                    meshInfo.VAO = loaded.VAO;
+                                    meshInfo.HalfExtent = loaded.SourceData.HalfExtent;
+                                    meshInfo.BoundingSize = loaded.SourceData.BoundingSize;
+                                    patternMode = loaded.SourceData.PatternMode;
+                                    tileScale = loaded.SourceData.TileScale;
+                                    color1 = loaded.SourceData.ColorPrimary;
+                                    color2 = loaded.SourceData.ColorSecondary;
+                                }
+                            } else if (ext == ".obj") {
                                 meshInfo = PrimitiveMesh::LoadOBJEx(p.string(), true);
                             }
+
                             if (!meshInfo.VAO) {
                                 meshInfo.VAO = m_CubeMesh;
                                 meshInfo.HalfExtent = glm::vec3(0.5f);
@@ -332,9 +350,8 @@ namespace Axle {
                             auto newEnt = m_Scene->CreateEntity(p.stem().string());
                             newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
                             newEnt.AddComponent<MeshComponent>(
-                                meshInfo.VAO, p.string(), 1, 2.0f,
-                                glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
-                                glm::vec4(0.16f, 0.20f, 0.26f, 1.0f)
+                                meshInfo.VAO, p.string(), patternMode, tileScale,
+                                color1, color2
                             );
                             if (m_PhysicsScene) {
                                 BoxBodyProps bProps;
@@ -589,9 +606,18 @@ namespace Axle {
                         std::filesystem::path p(pathStr);
                         std::string ext = p.extension().string();
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                        if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                        if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                             mc.AssetPath = p.string();
-                            if (ext == ".obj") {
+                            if (ext == ".axle") {
+                                auto loaded = AssetSerializer::LoadMesh(p);
+                                if (loaded.Success) {
+                                    mc.VAO = loaded.VAO;
+                                    mc.PatternMode = loaded.SourceData.PatternMode;
+                                    mc.TileScale = loaded.SourceData.TileScale;
+                                    mc.Color1 = loaded.SourceData.ColorPrimary;
+                                    mc.Color2 = loaded.SourceData.ColorSecondary;
+                                }
+                            } else if (ext == ".obj") {
                                 auto loadedVao = PrimitiveMesh::LoadOBJ(p.string());
                                 if (loadedVao) mc.VAO = loadedVao;
                             }
@@ -635,13 +661,30 @@ namespace Axle {
                     std::filesystem::path p(pathStr);
                     std::string ext = p.extension().string();
                     std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                    if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                        auto loadedVao = PrimitiveMesh::LoadOBJ(p.string());
+                    if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                        int patternMode = 1;
+                        float tileScale = 2.0f;
+                        glm::vec4 color1(0.95f, 0.45f, 0.15f, 1.0f);
+                        glm::vec4 color2(0.16f, 0.20f, 0.26f, 1.0f);
+                        std::shared_ptr<VertexArray> loadedVao;
+
+                        if (ext == ".axle") {
+                            auto loaded = AssetSerializer::LoadMesh(p);
+                            if (loaded.Success) {
+                                loadedVao = loaded.VAO;
+                                patternMode = loaded.SourceData.PatternMode;
+                                tileScale = loaded.SourceData.TileScale;
+                                color1 = loaded.SourceData.ColorPrimary;
+                                color2 = loaded.SourceData.ColorSecondary;
+                            }
+                        } else if (ext == ".obj") {
+                            loadedVao = PrimitiveMesh::LoadOBJ(p.string());
+                        }
+
                         if (!loadedVao) loadedVao = m_CubeMesh;
                         entity.AddComponent<MeshComponent>(
-                            loadedVao, p.string(), 1, 2.0f,
-                            glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
-                            glm::vec4(0.16f, 0.20f, 0.26f, 1.0f)
+                            loadedVao, p.string(), patternMode, tileScale,
+                            color1, color2
                         );
                         AXLE_INFO("Added MeshComponent with 3D model '{0}' to Entity '{1}'", p.filename().string(), entity.GetComponent<TagComponent>().Tag);
                     }

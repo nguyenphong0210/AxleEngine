@@ -90,9 +90,9 @@ Level 0:  [ Engine/Core ]
   - [x] **Content Browser Panel (`Engine/UI`)**: ImGui-based visual asset browser with directory navigation, file type icons, search filter, path breadcrumbs, Explorer integration, and Drag & Drop payload support.
   - [x] **Drag & Drop Workflow**: Drag 3D model files from Content Browser directly into Viewport or Properties panel to instantiate meshes with zero-gap ground snapping and centered pivots.
   - [ ] **Unified `.axle` Asset Pipeline & Auto-Conversion**:
-    - **Auto-Conversion on Drag & Drop**: Dragging external 3D files (`.obj`, `.gltf`, `.glb`, `.fbx`) automatically ingests and generates a standardized, AI-friendly text-based `<Model>.axle` asset.
-    - **AI & Human Editable Text Architecture**: Structured YAML/JSON text format allowing AI and developers to easily inspect, modify vertices/materials, or procedurally generate new models.
-    - **Automated Background Binary Caching (`.axlebin`)**: Engine compiles `.axle` text into flat binary buffers for instant 1ms GPU loading; automatically detects file changes and re-bakes the cache on the fly.
+    - [x] **Step 1: Core Engine/Asset Module & AssetSerializer**: Structured text format `.axle` (AI-friendly & human-editable) + Automated flat binary caching `.axlebin` (<1ms GPU loading) with smart timestamp validation (`last_write_time`) for automatic re-baking when text is modified. Seamless drag & drop support for `.axle` assets into Viewport, Scene Hierarchy, and Mesh Inspector.
+    - [ ] **Step 2: Ingest & Auto-Conversion Pipeline**: Dragging external 3D files (`.obj`, `.gltf`, `.glb`, `.fbx`) directly into the Content Browser automatically converts them into engine-standard `.axle` format with background binary cache generation.
+    - [ ] **Step 3: AI Mesh Mutation & Hot-Reload**: AI agents and developers can edit `.axle` files as text; the Engine instantly detects file modifications and reloads geometry and materials in real time.
   - [ ] **3D Mesh Loading (`fastgltf` / `ufbx` / `tinyobjloader`)**: Detailed car body chassis and realistic wheel models.
   - [ ] **Texture Mapping (`stb_image`)**: Albedo, normal, and roughness textures applied to 3D meshes.
   - [ ] Replace procedural shapes on car with a realistic sports car 3D model.

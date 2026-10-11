@@ -481,5 +481,15 @@ namespace Axle {
         }
     };
 
+    struct AssemblyComponent {
+        std::string AssetPath;
+        u64 AssemblyUUID = 0;
+        bool IsUnpacked = false;
+
+        AssemblyComponent() = default;
+        AssemblyComponent(const std::string& assetPath, u64 assemblyUUID = 0)
+            : AssetPath(assetPath), AssemblyUUID(assemblyUUID) {}
+    };
+
 }
 

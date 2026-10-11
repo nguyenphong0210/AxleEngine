@@ -2,6 +2,7 @@ add_library(AxleScene STATIC
     src/Scene.cpp
     src/Entity.cpp
     src/SceneSerializer.cpp
+    src/AssemblySerializer.cpp
 )
 add_library(Axle::Scene ALIAS AxleScene)
 

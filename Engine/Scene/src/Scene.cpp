@@ -3,6 +3,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/AssemblySerializer.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -19,6 +20,13 @@ namespace Axle {
         entity.AddComponent<IDComponent>(uuid);
         entity.AddComponent<TagComponent>(name.empty() ? "Entity" : name);
         return entity;
+    }
+
+    Entity Scene::InstantiateAssembly(const std::filesystem::path& filepath,
+                                     PhysicsScene* physicsScene,
+                                     const glm::vec3& spawnPosition,
+                                     const SceneSerializerContext* context) {
+        return AssemblySerializer::Deserialize(filepath, this, physicsScene, spawnPosition, context);
     }
 
     void Scene::Clear() {

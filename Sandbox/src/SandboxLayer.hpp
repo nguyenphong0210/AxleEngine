@@ -13,6 +13,7 @@
 #include <Axle/ConsolePanel.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
+#include <Axle/AssemblyEditorPanel.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
@@ -147,6 +148,7 @@ private:
     std::unique_ptr<Axle::Skybox> m_Skybox;
     glm::mat4 m_LightSpaceMatrix{ 1.0f };
     glm::vec3 m_LightDir{ 0.45f, 1.0f, 0.65f };
+    Axle::SceneSerializerContext m_SerializerContext;
 
     // Editor Panels
     Axle::SceneHierarchyPanel m_SceneHierarchyPanel;
@@ -154,6 +156,7 @@ private:
     Axle::ConsolePanel m_ConsolePanel;
     Axle::ContentBrowserPanel m_ContentBrowserPanel;
     Axle::AssetPreviewPanel m_AssetPreviewPanel;
+    Axle::AssemblyEditorPanel m_AssemblyEditorPanel;
     Axle::DebugPanel m_DebugPanel;
 
     // Panel Visibility Flags
@@ -163,6 +166,7 @@ private:
     bool m_ShowConsole = true;
     bool m_ShowContentBrowser = true;
     bool m_ShowAssetPreview = true;
+    bool m_ShowAssemblyEditor = false;
     bool m_ShowTelemetry = true;
     bool m_ResetLayout = true;
 

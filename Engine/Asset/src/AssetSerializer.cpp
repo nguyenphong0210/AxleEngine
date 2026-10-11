@@ -118,7 +118,12 @@ namespace Axle {
             std::string trimmed = Trim(line);
             if (trimmed.empty() || trimmed[0] == '#') continue;
 
-            if (trimmed.rfind("Name:", 0) == 0) {
+            if (trimmed.rfind("AssetType:", 0) == 0) {
+                std::string val = Trim(trimmed.substr(10));
+                if (val == "Assembly") {
+                    return false;
+                }
+            } else if (trimmed.rfind("Name:", 0) == 0) {
                 outMesh.Name = Trim(trimmed.substr(5));
             } else if (trimmed.rfind("Material:", 0) == 0) {
                 currentSection = Section::Material;

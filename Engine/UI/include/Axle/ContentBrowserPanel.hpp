@@ -23,6 +23,8 @@ namespace Axle {
         void SetCompileAssetsCallback(std::function<void()> callback) { m_OnCompileAssetsCallback = callback; }
         void SetOpenSceneCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenSceneCallback = callback; }
         void SetOpenProjectCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenProjectCallback = callback; }
+        void SetOpenAssemblyCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenAssemblyCallback = callback; }
+        void SetInstantiateAssemblyCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnInstantiateAssemblyCallback = callback; }
         void RefreshThumbnails();
         void SetStatusNotification(const std::string& message, float duration = 4.0f);
 
@@ -53,6 +55,8 @@ namespace Axle {
         std::function<void()> m_OnCompileAssetsCallback;
         std::function<void(const std::filesystem::path&)> m_OnOpenSceneCallback;
         std::function<void(const std::filesystem::path&)> m_OnOpenProjectCallback;
+        std::function<void(const std::filesystem::path&)> m_OnOpenAssemblyCallback;
+        std::function<void(const std::filesystem::path&)> m_OnInstantiateAssemblyCallback;
     };
 
 }

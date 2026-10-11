@@ -7,6 +7,7 @@
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/AssemblySerializer.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/Log.hpp>
@@ -602,6 +603,21 @@ void SandboxLayer::OnAttach() {
     m_ContentBrowserPanel.SetRootPath(Axle::FileSystem::GetAssetDirectory());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
+
+    // Setup Serializer Context for meshes & scripts
+    m_SerializerContext.CubeMesh = m_CubeMesh;
+    m_SerializerContext.SphereMesh = m_SphereMesh;
+    m_SerializerContext.CylinderMesh = m_CylinderMesh;
+    m_SerializerContext.ConeMesh = m_ConeMesh;
+    m_SerializerContext.PlaneMesh = m_PlaneMesh;
+    m_SerializerContext.ScriptBinder = [](Axle::Entity entity, const std::string& scriptName) {
+        if (scriptName == "CarPlayerScript") {
+            entity.AddComponent<Axle::NativeScriptComponent>().Bind<CarPlayerScript>("CarPlayerScript");
+        }
+    };
+
+    m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
+
     m_ContentBrowserPanel.SetCompileAssetsCallback([this]() {
         CompileAndHotReloadAssets(false);
     });
@@ -610,6 +626,16 @@ void SandboxLayer::OnAttach() {
     });
     m_ContentBrowserPanel.SetOpenProjectCallback([this](const std::filesystem::path& path) {
         OpenProject(path);
+    });
+    m_ContentBrowserPanel.SetOpenAssemblyCallback([this](const std::filesystem::path& path) {
+        m_AssemblyEditorPanel.SetAssembly(path);
+        m_ShowAssemblyEditor = true;
+    });
+    m_ContentBrowserPanel.SetInstantiateAssemblyCallback([this](const std::filesystem::path& path) {
+        auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 1.0f, 0.0f), &m_SerializerContext);
+        if (ent) {
+            m_SceneHierarchyPanel.SetSelectedEntity(ent);
+        }
     });
 
     // Initialize Scene Serialization (Phase 10: Step 1 & 2)
@@ -866,6 +892,7 @@ void SandboxLayer::NewScene() {
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_VehicleTunerPanel.SetContext(nullptr, m_PhysicsScene.get());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
+    m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
     m_CompileNotificationMessage = "Created new empty scene";
     m_CompileNotificationTimer = 3.5f;
     UpdateWindowTitle();
@@ -1036,6 +1063,7 @@ void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
         m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
         m_VehicleTunerPanel.SetContext(m_Vehicle.get(), m_PhysicsScene.get());
         m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
+        m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
 
         m_CompileNotificationMessage = "Loaded scene: " + targetPath.filename().string();
         m_CompileNotificationTimer = 3.5f;
@@ -2236,6 +2264,7 @@ void SandboxLayer::OnImGuiRender() {
             ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
             ImGui::MenuItem("Content Browser", nullptr, &m_ShowContentBrowser);
             ImGui::MenuItem("Asset Preview", nullptr, &m_ShowAssetPreview);
+            ImGui::MenuItem("Assembly Editor", nullptr, &m_ShowAssemblyEditor);
             ImGui::MenuItem("Telemetry & Performance", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             ImGui::Separator();
@@ -2357,6 +2386,52 @@ void SandboxLayer::OnImGuiRender() {
 
             if (ext == ".axlescene" || ext == ".scene") {
                 OpenScene(assetPath);
+            } else if (ext == ".axle" && Axle::AssemblySerializer::IsAssemblyFile(assetPath)) {
+                glm::vec3 spawnPos(0.0f, 1.0f, 0.0f);
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float mouseX = mousePos.x - viewportMin.x;
+                float mouseY = mousePos.y - viewportMin.y;
+
+                if (mouseX >= 0.0f && mouseX < viewportBounds.x && mouseY >= 0.0f && mouseY < viewportBounds.y) {
+                    float ndcX = (2.0f * (mouseX / viewportBounds.x)) - 1.0f;
+                    float ndcY = 1.0f - (2.0f * (mouseY / viewportBounds.y));
+
+                    glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
+                    glm::vec4 nearPointNDC(ndcX, ndcY, -1.0f, 1.0f);
+                    glm::vec4 farPointNDC(ndcX, ndcY, 1.0f, 1.0f);
+
+                    glm::vec4 nearW = invVP * nearPointNDC;
+                    glm::vec4 farW = invVP * farPointNDC;
+                    if (std::abs(nearW.w) > 1e-6f) nearW /= nearW.w;
+                    if (std::abs(farW.w) > 1e-6f) farW /= farW.w;
+
+                    glm::vec3 rayOrigin = glm::vec3(nearW);
+                    glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
+
+                    Axle::RayCastHit hit;
+                    if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
+                        spawnPos = hit.Position + glm::vec3(0.0f, 0.25f, 0.0f);
+                    } else {
+                        if (std::abs(rayDir.y) > 1e-4f) {
+                            float t = -rayOrigin.y / rayDir.y;
+                            if (t > 0.0f && t < 150.0f) {
+                                glm::vec3 groundHit = rayOrigin + rayDir * t;
+                                spawnPos = groundHit;
+                            } else {
+                                spawnPos = rayOrigin + rayDir * 10.0f;
+                            }
+                        } else {
+                            spawnPos = rayOrigin + rayDir * 10.0f;
+                        }
+                    }
+                }
+
+                auto spawned = m_Scene->InstantiateAssembly(assetPath, m_PhysicsScene.get(), spawnPos, &m_SerializerContext);
+                if (spawned) {
+                    m_SceneHierarchyPanel.SetSelectedEntity(spawned);
+                    AXLE_INFO("Instantiated Assembly '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})",
+                        assetPath.stem().string(), spawnPos.x, spawnPos.y, spawnPos.z);
+                }
             } else if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                 if (ext != ".axle") {
                     std::filesystem::path axlePath = assetPath.parent_path() / (assetPath.stem().string() + ".axle");
@@ -2655,7 +2730,10 @@ void SandboxLayer::OnImGuiRender() {
     // 9. Asset Preview Panel
     m_AssetPreviewPanel.OnImGuiRender(&m_ShowAssetPreview);
 
-    // 10. Performance & Telemetry Panel
+    // 10. Assembly Editor Panel (Phase 12)
+    m_AssemblyEditorPanel.OnImGuiRender(&m_ShowAssemblyEditor);
+
+    // 11. Performance & Telemetry Panel
     if (m_ShowTelemetry) {
         Axle::TelemetryData telemetry{
             .DeltaTime = m_LastDeltaTime,

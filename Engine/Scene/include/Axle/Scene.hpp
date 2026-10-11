@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <string>
+#include <filesystem>
 
 namespace Axle {
 
@@ -24,6 +25,10 @@ namespace Axle {
 
         Entity CreateEntity(const std::string& name = "Entity");
         Entity CreateEntityWithUUID(UUID uuid, const std::string& name = "Entity");
+        Entity InstantiateAssembly(const std::filesystem::path& filepath,
+                                  PhysicsScene* physicsScene = nullptr,
+                                  const glm::vec3& spawnPosition = glm::vec3(0.0f),
+                                  const struct SceneSerializerContext* context = nullptr);
         void DestroyEntity(Entity entity);
         void Clear();
         Entity FindEntityByBodyID(BodyID bodyID);

@@ -116,22 +116,25 @@ Level 0:  [ Engine/Core ]
     - [x] **Sub-step 4.1**: Procedural atmospheric Rayleigh / Mie scattering skybox pipeline (`Axle::Skybox`), camera-centric unit cube renderer at infinity (`glDepthFunc(GL_LEQUAL)`, $z/w = 1.0$), analytical sharp sun disk with anti-aliasing, sunset/sunrise golden horizon warming, night darkening with procedural twinkling stars, and full HDR ACES filmic tone mapping.
     - [x] **Sub-step 4.2**: ECS `SkyboxComponent`, dynamic Sun Light orientation & photometric post-process synchronization, interactive Inspector controls (Zenith, Horizon, Ground colors, Turbidity, Sun Disk Size & Corona Glow, Sync with Sun toggle, Atmosphere presets), and complete scene serialization (`.axlescene`).
     - [x] **Sub-step 4.3**: Ambient hemisphere irradiance calculation from atmospheric sky.
-- [ ] **Phase 12: Assembly Pipeline & Unified `.axle` Prefab System (`Engine/Asset`, `Engine/Scene` & `Engine/UI`)**
-  - [ ] **Step 1: Unified `.axle` Assembly Specification (`AssetType: Assembly`) & Serializer**:
+- [x] **Phase 12: Assembly Pipeline & Unified `.axle` Prefab System (`Engine/Asset`, `Engine/Scene` & `Engine/UI`)**
+  - [x] **Step 1: Unified `.axle` Assembly Specification (`AssetType: Assembly`) & Serializer**:
     - Standardize unified asset specification in `.axle` format with `AssetType: Assembly` header (YAML-like structured text, optimized for both human editing and AI prompt mutation, eliminating file format fragmentation).
     - Implement `AssemblySerializer::Serialize()` to recursively save complete entity hierarchies (Root + Children) preserving all ECS components (`TransformComponent`, `MeshInstance3D`, `CollisionShape3D`, `RigidBody3D`, `HierarchyComponent`, `MaterialComponent`, `VehicleComponent`, `NativeScriptComponent`).
     - Implement `AssemblySerializer::Deserialize()` with automatic **UUID Remapping** to guarantee collision-free instantiation when spawning multiple assembly instances in the same scene.
-  - [ ] **Step 2: Scene Assembly Instantiation & Physics Binding**:
+  - [x] **Step 2: Scene Assembly Instantiation & Physics Binding**:
     - Implement `Scene::InstantiateAssembly()` spawning assemblies at arbitrary world/raycast positions with ground snapping and centered pivot alignment.
     - Automatically establish parent-child transform hierarchies (`HierarchyComponent`) and instantiate corresponding Jolt runtime bodies and shapes (`RigidBody3D` + `CollisionShape3D`).
     - Add `AssemblyComponent` tracking metadata (`SourceAssetPath`, `AssetUUID`) for asset linkage management.
-  - [ ] **Step 3: Editor Drag-and-Drop & Hierarchy Integration**:
+  - [x] **Step 3: Editor Drag-and-Drop & Hierarchy Integration**:
+    - Right-click context menu in Content Browser blank space: **`Create -> Assembly (.axle)`** to quickly generate a new assembly template in the active folder.
     - Drag & drop entities from `Scene Hierarchy Panel` into `Content Browser` to package and export as `.axle` (Type: Assembly).
     - Drag & drop `.axle` Assembly assets from `Content Browser` into `3D Viewport` or `Scene Hierarchy` for instant scene instantiation.
     - Add entity context menu actions: *"Save as Assembly..."* and *"Unpack Assembly"*.
-  - [ ] **Step 4: Content Browser Visual Identification & 3D Preview**:
-    - Add visual identification for `AssetType: Assembly` in Content Browser with a dedicated `ASY` badge and distinct styling.
-    - Support interactive 3D turntable orbit preview of compound multi-entity Assemblies within `AssetPreviewPanel`.
+  - [x] **Step 4: Dedicated Assembly Editor Window (`AssemblyEditorPanel`)**:
+    - Double-clicking an `.axle` Assembly in Content Browser opens a dedicated **Assembly Editor** window for isolated inspection and modification (similar to dedicated Material and Physics inspectors).
+    - Features an isolated 3D viewport with orbit camera, interactive hierarchy tree, and inspectors for `TransformComponent`, `MeshInstance3D`, `CollisionShape3D`, and `RigidBody3D`.
+    - Includes "Save Assembly" back to disk and "Add to Scene" action, allowing users to configure assemblies thoroughly before dragging them into the active scene.
+    - Content Browser visual identification with a dedicated `ASY` badge and distinct styling.
 - [ ] **Phase 13: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.

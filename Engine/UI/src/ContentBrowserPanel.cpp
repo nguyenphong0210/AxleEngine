@@ -3,6 +3,7 @@
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/AssemblySerializer.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
 #include <algorithm>
@@ -29,6 +30,7 @@ namespace Axle {
 
     enum class AssetKind {
         Folder,
+        Assembly,
         Model3D,
         Texture,
         Shader,
@@ -56,6 +58,9 @@ namespace Axle {
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
         if (ext == ".axle") {
+            if (AssemblySerializer::IsAssemblyFile(entry.path())) {
+                return { AssetKind::Assembly, "Assembly Prefab", "ASY", IM_COL32(255, 175, 45, 255) };
+            }
             return { AssetKind::Model3D, "Axle Mesh", "AXLE", IM_COL32(255, 125, 45, 255) };
         }
         if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
@@ -239,6 +244,34 @@ namespace Axle {
 
         // Shimmer sparkle
         drawList->AddCircleFilled(pMid, 1.8f, IM_COL32(255, 255, 255, 255));
+    }
+
+    static void DrawAssemblyIcon(ImDrawList* drawList, ImVec2 center, float size) {
+        float r = size * 0.90f;
+        drawList->AddRectFilled(ImVec2(center.x - r * 0.65f, center.y - r * 0.65f),
+                                ImVec2(center.x + r * 0.65f, center.y + r * 0.65f),
+                                IM_COL32(235, 145, 30, 240), 4.0f);
+        drawList->AddRect(ImVec2(center.x - r * 0.65f, center.y - r * 0.65f),
+                          ImVec2(center.x + r * 0.65f, center.y + r * 0.65f),
+                          IM_COL32(255, 215, 110, 255), 4.0f, 0, 1.6f);
+
+        float pinW = r * 0.35f;
+        float pinH = r * 0.22f;
+        drawList->AddRectFilled(ImVec2(center.x - pinW * 0.5f, center.y - r * 0.95f),
+                                ImVec2(center.x + pinW * 0.5f, center.y - r * 0.60f),
+                                IM_COL32(255, 195, 70, 255), 2.0f);
+        drawList->AddRectFilled(ImVec2(center.x - pinW * 0.5f, center.y + r * 0.60f),
+                                ImVec2(center.x + pinW * 0.5f, center.y + r * 0.95f),
+                                IM_COL32(255, 195, 70, 255), 2.0f);
+        drawList->AddRectFilled(ImVec2(center.x - r * 0.95f, center.y - pinH * 0.5f),
+                                ImVec2(center.x - r * 0.60f, center.y + pinH * 0.5f),
+                                IM_COL32(255, 195, 70, 255), 2.0f);
+        drawList->AddRectFilled(ImVec2(center.x + r * 0.60f, center.y - pinH * 0.5f),
+                                ImVec2(center.x + r * 0.95f, center.y + pinH * 0.5f),
+                                IM_COL32(255, 195, 70, 255), 2.0f);
+
+        drawList->AddCircleFilled(center, r * 0.25f, IM_COL32(26, 32, 42, 255));
+        drawList->AddCircle(center, r * 0.25f, IM_COL32(255, 215, 100, 255), 0, 1.2f);
     }
 
     static void DrawSceneIcon(ImDrawList* drawList, ImVec2 center, float size) {
@@ -631,7 +664,9 @@ namespace Axle {
                             std::string ext = path.extension().string();
                             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                             if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                                m_AssetPreviewPanel->SetAsset(path);
+                                if (ext != ".axle" || !AssemblySerializer::IsAssemblyFile(path)) {
+                                    m_AssetPreviewPanel->SetAsset(path);
+                                }
                             }
                         }
                     }
@@ -649,6 +684,11 @@ namespace Axle {
                             } else if (ext == ".axleproj" && m_OnOpenProjectCallback) {
                                 m_OnOpenProjectCallback(path);
                                 SetStatusNotification("Loaded project: " + path.filename().string());
+                            } else if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(path)) {
+                                if (m_OnOpenAssemblyCallback) {
+                                    m_OnOpenAssemblyCallback(path);
+                                    SetStatusNotification("Opened Assembly Editor: " + path.filename().string());
+                                }
                             } else if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                                 AXLE_INFO("Content Browser: Selected file '{0}'", path.string());
                                 if (m_AssetPreviewPanel) {
@@ -665,7 +705,9 @@ namespace Axle {
                             std::string ext = path.extension().string();
                             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                             if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                                m_AssetPreviewPanel->SetAsset(path);
+                                if (ext != ".axle" || !AssemblySerializer::IsAssemblyFile(path)) {
+                                    m_AssetPreviewPanel->SetAsset(path);
+                                }
                             }
                         }
 
@@ -674,6 +716,21 @@ namespace Axle {
 
                         ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "%s", filenameStr.c_str());
                         ImGui::Separator();
+
+                        if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(path)) {
+                            if (ImGui::MenuItem("Open in Assembly Editor")) {
+                                if (m_OnOpenAssemblyCallback) {
+                                    m_OnOpenAssemblyCallback(path);
+                                }
+                            }
+                            if (ImGui::MenuItem("Instantiate into Active Scene")) {
+                                if (m_OnInstantiateAssemblyCallback) {
+                                    m_OnInstantiateAssemblyCallback(path);
+                                    SetStatusNotification("Spawned Assembly: " + path.filename().string());
+                                }
+                            }
+                            ImGui::Separator();
+                        }
 
                         if (ext == ".axlescene" || ext == ".scene") {
                             if (ImGui::MenuItem("Open Scene in Viewport")) {
@@ -808,6 +865,7 @@ namespace Axle {
                     } else {
                         switch (meta.Kind) {
                             case AssetKind::Folder:   DrawFolderIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Assembly: DrawAssemblyIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Model3D:  DrawModel3DIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Texture:  DrawTexturePictureIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Shader:   DrawShaderIcon(drawList, iconCenter, iconScale); break;
@@ -914,6 +972,24 @@ namespace Axle {
 
             // Right-click context menu on blank space
             if (ImGui::BeginPopupContextWindow(nullptr, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+                if (ImGui::BeginMenu("Create")) {
+                    if (ImGui::MenuItem("Assembly (.axle)")) {
+                        std::filesystem::path newAsmPath = m_CurrentDirectory / "New_Assembly.axle";
+                        int counter = 1;
+                        while (std::filesystem::exists(newAsmPath)) {
+                            newAsmPath = m_CurrentDirectory / ("New_Assembly_" + std::to_string(counter++) + ".axle");
+                        }
+                        if (AssemblySerializer::CreateEmptyAssembly(newAsmPath, newAsmPath.stem().string())) {
+                            SetStatusNotification("Created Assembly: " + newAsmPath.filename().string());
+                            if (m_OnOpenAssemblyCallback) {
+                                m_OnOpenAssemblyCallback(newAsmPath);
+                            }
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+                ImGui::Separator();
+
                 if (ImGui::MenuItem("Open in System Explorer")) {
 #ifdef _WIN32
                     ShellExecuteW(nullptr, L"open", m_CurrentDirectory.c_str(), nullptr, nullptr, SW_SHOWDEFAULT);

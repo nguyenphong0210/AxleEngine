@@ -54,6 +54,8 @@ namespace Axle {
             return !(*this == other);
         }
 
+        Scene* GetScene() const { return m_Scene; }
+
     private:
         entt::entity m_EntityHandle{ entt::null };
         Scene* m_Scene = nullptr;

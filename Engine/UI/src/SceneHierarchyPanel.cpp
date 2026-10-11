@@ -4,6 +4,8 @@
 #include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/AssemblySerializer.hpp>
+#include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/Texture2D.hpp>
 #include <imgui.h>
@@ -333,7 +335,13 @@ namespace Axle {
                         std::string ext = p.extension().string();
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
                         if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                            if (ext != ".axle") {
+                            if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(p)) {
+                                auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f));
+                                if (spawned) {
+                                    m_SelectedEntity = spawned;
+                                }
+                            } else {
+                                if (ext != ".axle") {
                                 std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
                                 if (!std::filesystem::exists(axlePath)) {
                                     AssetSerializer::AutoConvertModel(p, axlePath, true);
@@ -412,6 +420,7 @@ namespace Axle {
                                 }
                             }
                         }
+                        }
                     }
                     ImGui::EndDragDropTarget();
                 }
@@ -455,7 +464,13 @@ namespace Axle {
                             std::string ext = p.extension().string();
                             std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
                             if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                                if (ext != ".axle") {
+                                if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(p)) {
+                                    auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f));
+                                    if (spawned) {
+                                        m_SelectedEntity = spawned;
+                                    }
+                                } else {
+                                    if (ext != ".axle") {
                                     std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
                                     if (!std::filesystem::exists(axlePath)) {
                                         AssetSerializer::AutoConvertModel(p, axlePath, true);
@@ -534,6 +549,7 @@ namespace Axle {
                                     }
                                 }
                             }
+                            }
                         }
                         ImGui::EndDragDropTarget();
                     }
@@ -569,6 +585,21 @@ namespace Axle {
 
         bool entityDeleted = false;
         if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Save as Assembly...")) {
+                std::string entityTag = entity.HasComponent<TagComponent>() ? entity.GetComponent<TagComponent>().Tag : "Assembly";
+                std::filesystem::path outPath = FileSystem::GetAssetDirectory() / (entityTag + ".axle");
+                int counter = 1;
+                while (std::filesystem::exists(outPath)) {
+                    outPath = FileSystem::GetAssetDirectory() / (entityTag + "_" + std::to_string(counter++) + ".axle");
+                }
+                AssemblySerializer::Serialize(outPath, entity, m_PhysicsScene);
+            }
+            if (entity.HasComponent<AssemblyComponent>()) {
+                if (ImGui::MenuItem("Unpack Assembly")) {
+                    entity.RemoveComponent<AssemblyComponent>();
+                }
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Delete Entity")) {
                 entityDeleted = true;
             }
@@ -624,6 +655,21 @@ namespace Axle {
                 }
             }
             ImGui::Spacing();
+        }
+
+        // Assembly Component Indicator Banner
+        if (entity.HasComponent<AssemblyComponent>()) {
+            auto& ac = entity.GetComponent<AssemblyComponent>();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.2f, 1.0f));
+            ImGui::Text("[Assembly Prefab]");
+            ImGui::PopStyleColor();
+            ImGui::SameLine();
+            ImGui::TextDisabled("(%s)", std::filesystem::path(ac.AssetPath).filename().string().c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Unpack")) {
+                entity.RemoveComponent<AssemblyComponent>();
+            }
+            ImGui::Separator();
         }
 
         const ImGuiTreeNodeFlags treeNodeFlags = ImGuiTreeNodeFlags_DefaultOpen 

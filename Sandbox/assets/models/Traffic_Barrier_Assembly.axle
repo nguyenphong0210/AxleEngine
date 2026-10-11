@@ -1,0 +1,57 @@
+# Axle Unified Asset File
+AxleAsset:
+  AssetType: Assembly
+  Version: 1
+  Name: Traffic_Barrier_Assembly
+  RootEntityID: 9812345678901234567
+
+Entities:
+  - Entity: 9812345678901234567
+    TagComponent:
+      Tag: Traffic_Barrier_Assembly
+    TransformComponent:
+      Translation: [ 0.000000 , 0.500000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: models/Crash_Barrier.axle
+      PatternMode: 1
+      TileScale: 4.000000
+      Color1: [ 0.950000 , 0.450000 , 0.150000 , 1.000000 ]
+      Color2: [ 0.160000 , 0.200000 , 0.260000 , 1.000000 ]
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 1.500000 , 0.500000 , 0.450000 ]
+      Radius: 0.500000
+      HalfHeight: 0.500000
+      Offset: [ 0.000000 , 0.000000 , 0.000000 ]
+      Friction: 0.700000
+      Restitution: 0.150000
+      IsTrigger: false
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 45.000000
+      LinearDamping: 0.050000
+      AngularDamping: 0.050000
+      GravityFactor: 1.000000
+    HierarchyComponent:
+      Parent: 0
+      Children:
+        - 9812345678901234568
+  - Entity: 9812345678901234568
+    TagComponent:
+      Tag: Warning_Pylon
+    TransformComponent:
+      Translation: [ 0.000000 , 0.650000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 0.400000 , 0.400000 , 0.400000 ]
+    MeshInstance3D:
+      AssetPath: models/Traffic_Cone.axle
+      PatternMode: 1
+      TileScale: 2.000000
+      Color1: [ 1.000000 , 0.550000 , 0.100000 , 1.000000 ]
+      Color2: [ 0.950000 , 0.950000 , 0.950000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 9812345678901234567
+      Children:

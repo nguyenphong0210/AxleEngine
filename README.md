@@ -105,7 +105,10 @@ Level 0:  [ Engine/Core ]
     - [x] **Sub-step 1.1**: Core Depth Framebuffer (`GL_DEPTH_COMPONENT32F`, 2048x2048, border clamped), Light Space Matrix calculation, and `Scene::RenderShadowPass()`.
     - [x] **Sub-step 1.2**: Two-pass rendering pipeline with 3x3 Percentage-Closer Filtering (PCF) soft shadows and hardware polygon offset slope-scaled depth bias to eliminate shadow acne.
     - [x] **Sub-step 1.3**: ECS `DirectionalLightComponent`, Sun Light entity management, interactive Inspector controls (Sun Azimuth & Elevation sliders, Color picker, Intensity, Ambient fill, Cast Shadows toggle, Atmosphere presets), and full scene serialization.
-  - [ ] **Texture Mapping (`stb_image`)**: Load 2D texture maps (Albedo, Normal, Roughness, Metallic) and apply directly to 3D entities.
+  - [ ] **Texture Mapping (`stb_image`)**:
+    - [x] **Sub-step 2.1**: Integrate standard `stb_image.h` (v2.30) library, implement OpenGL 4.5 Core Profile `Axle::Texture2D` abstraction (support PNG/JPG/TGA/BMP, RGBA8/RGB8/RG8/R8 formats, auto mipmap generation, configurable wrap & filter modes, slot binding management), with pre-baked 1x1 fallback textures (White, Flat Normal, Black, Roughness).
+    - [ ] **Sub-step 2.2**: Upgrade Vertex Layout & UV coordinates (`a_TexCoord`) on Primitive Meshes; configure Texture Sampler Slots in Shader (`u_AlbedoMap`, `u_NormalMap`, `u_RoughnessMap`, `u_MetallicMap`).
+    - [ ] **Sub-step 2.3**: Add `MaterialComponent` in ECS, integrate Inspector UI with texture map slots, thumbnail preview, drag-and-drop from Content Browser, and scene serialization (`.axlescene`).
   - [ ] **PBR Material System**: Physically based rendering pipeline (Cook-Torrance BRDF) alongside current procedural checkerboard shaders.
   - [ ] **Atmospheric Skybox**: Cubemap or HDR environment sky with ambient irradiance.
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**

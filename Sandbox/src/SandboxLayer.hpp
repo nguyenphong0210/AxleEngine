@@ -19,6 +19,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
+#include <Axle/Texture2D.hpp>
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <memory>

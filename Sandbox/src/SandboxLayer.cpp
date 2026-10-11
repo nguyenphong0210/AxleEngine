@@ -160,6 +160,36 @@ void SandboxLayer::OnAttach() {
 
     m_Shader = std::make_unique<Axle::Shader>(vertexSrc, fragmentSrc);
 
+    // 3.1 Shadow Mapping System (Phase 11: Sub-step 1.1)
+    m_ShadowMap = std::make_unique<Axle::ShadowMap>();
+
+    std::string shadowVertSrc;
+    std::string shadowFragSrc;
+    auto shadowVertPath = Axle::FileSystem::ResolveAssetPath("shaders/ShadowDepth.vert");
+    auto shadowFragPath = Axle::FileSystem::ResolveAssetPath("shaders/ShadowDepth.frag");
+    if (std::filesystem::exists(shadowVertPath) && std::filesystem::exists(shadowFragPath)) {
+        shadowVertSrc = Axle::FileSystem::ReadTextFile(shadowVertPath);
+        shadowFragSrc = Axle::FileSystem::ReadTextFile(shadowFragPath);
+    }
+    if (shadowVertSrc.empty() || shadowFragSrc.empty()) {
+        shadowVertSrc = R"(
+            #version 450 core
+            layout (location = 0) in vec3 a_Position;
+            uniform mat4 u_LightSpaceMatrix;
+            uniform mat4 u_Transform;
+            void main() {
+                gl_Position = u_LightSpaceMatrix * u_Transform * vec4(a_Position, 1.0);
+            }
+        )";
+        shadowFragSrc = R"(
+            #version 450 core
+            void main() {}
+        )";
+    }
+    m_ShadowShader = std::make_unique<Axle::Shader>(shadowVertSrc, shadowFragSrc);
+    AXLE_INFO("Shadow Mapping: Depth Framebuffer ({0}x{1}) & Light Space Matrix pipeline initialized",
+        m_ShadowMap->GetWidth(), m_ShadowMap->GetHeight());
+
     // 4. Primitive Mesh Data (Cube, Sphere, Cylinder, Cone, Plane)
     m_CubeMesh = Axle::PrimitiveMesh::CreateCube();
     m_SphereMesh = Axle::PrimitiveMesh::CreateSphere(24, 32);
@@ -371,6 +401,8 @@ void SandboxLayer::OnAttach() {
 
 void SandboxLayer::OnDetach() {
     AXLE_INFO("SandboxLayer detached");
+    m_ShadowShader.reset();
+    m_ShadowMap.reset();
     m_Vehicle.reset();
     m_Scene.reset();
     m_PhysicsDebugRenderer.reset();
@@ -1490,7 +1522,19 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     }
 
     // ==========================================
-    // RENDER PASS TO OFFSCREEN FRAMEBUFFER
+    // PASS 1: SHADOW MAP DEPTH PASS (Phase 11: Sub-step 1.1)
+    // ==========================================
+    if (m_ShadowMap && m_ShadowShader && m_Scene) {
+        glm::vec3 focusCenter = (m_Vehicle && m_ChassisEntity) ? m_Vehicle->GetPosition() : glm::vec3(0.0f);
+        m_LightSpaceMatrix = m_ShadowMap->CalculateLightSpaceMatrix(m_LightDir, focusCenter);
+
+        m_ShadowMap->Bind();
+        m_Scene->RenderShadowPass(*m_ShadowShader, m_LightSpaceMatrix);
+        m_ShadowMap->Unbind();
+    }
+
+    // ==========================================
+    // PASS 2: RENDER PASS TO OFFSCREEN FRAMEBUFFER
     // ==========================================
     if (m_Framebuffer) {
         m_Framebuffer->Bind();

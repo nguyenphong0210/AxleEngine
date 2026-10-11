@@ -125,6 +125,21 @@ namespace Axle {
         }
     }
 
+    void Scene::RenderShadowPass(Shader& shadowShader, const glm::mat4& lightSpaceMatrix) {
+        shadowShader.Bind();
+        shadowShader.SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
+
+        auto renderView = m_Registry.view<MeshComponent, TransformComponent>();
+        for (auto entity : renderView) {
+            auto& mesh = m_Registry.get<MeshComponent>(entity);
+            if (mesh.VAO) {
+                glm::mat4 worldTransform = GetWorldTransform(entity);
+                shadowShader.SetMat4("u_Transform", worldTransform);
+                RenderCommand::DrawIndexed(mesh.VAO);
+            }
+        }
+    }
+
     void Scene::OnRuntimeStart() {
         auto view = m_Registry.view<NativeScriptComponent>();
         for (auto entity : view) {

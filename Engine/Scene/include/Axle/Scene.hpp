@@ -32,6 +32,9 @@ namespace Axle {
         // Update physics synchronization and render all mesh components
         void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader);
 
+        // Render shadow depth pass from light's perspective
+        void RenderShadowPass(Shader& shadowShader, const glm::mat4& lightSpaceMatrix);
+
         // Scripting runtime lifecycle
         void OnRuntimeStart();
         void OnUpdateRuntime(Timestep ts);

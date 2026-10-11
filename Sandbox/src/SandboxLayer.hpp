@@ -5,6 +5,7 @@
 #include <Axle/Buffer.hpp>
 #include <Axle/VertexArray.hpp>
 #include <Axle/Framebuffer.hpp>
+#include <Axle/ShadowMap.hpp>
 #include <Axle/DebugPanel.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/VehicleTunerPanel.hpp>
@@ -139,6 +140,10 @@ private:
     std::shared_ptr<Axle::VertexArray> m_ConeMesh;
     std::shared_ptr<Axle::VertexArray> m_PlaneMesh;
     std::unique_ptr<Axle::Shader> m_Shader;
+    std::unique_ptr<Axle::ShadowMap> m_ShadowMap;
+    std::unique_ptr<Axle::Shader> m_ShadowShader;
+    glm::mat4 m_LightSpaceMatrix{ 1.0f };
+    glm::vec3 m_LightDir{ 0.45f, 1.0f, 0.65f };
 
     // Editor Panels
     Axle::SceneHierarchyPanel m_SceneHierarchyPanel;

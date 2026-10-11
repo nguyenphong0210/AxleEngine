@@ -283,7 +283,11 @@ namespace Axle {
             if (trimmed.empty() || trimmed[0] == '#') continue;
 
             if (trimmed.rfind("RootEntityID:", 0) == 0) {
-                outRootUUID = std::stoull(Trim(trimmed.substr(13)));
+                try {
+                    outRootUUID = std::stoull(Trim(trimmed.substr(13)));
+                } catch (...) {
+                    outRootUUID = 0;
+                }
                 continue;
             }
 
@@ -292,7 +296,11 @@ namespace Axle {
                     entities.push_back(current);
                 }
                 current = RawAssemblyEntity{};
-                current.OldUUID = std::stoull(Trim(trimmed.substr(9)));
+                try {
+                    current.OldUUID = std::stoull(Trim(trimmed.substr(9)));
+                } catch (...) {
+                    current.OldUUID = 0;
+                }
                 inEntity = true;
                 currentSection = AsmSection::None;
                 continue;
@@ -441,7 +449,14 @@ namespace Axle {
                 }
                 case AsmSection::Hierarchy: {
                     if (trimmed.rfind("Parent:", 0) == 0) {
-                        current.ParentOldUUID = std::stoull(Trim(trimmed.substr(7)));
+                        try {
+                            std::string pStr = Trim(trimmed.substr(7));
+                            if (!pStr.empty()) {
+                                current.ParentOldUUID = std::stoull(pStr);
+                            }
+                        } catch (...) {
+                            current.ParentOldUUID = 0;
+                        }
                     } else if (trimmed == "Children:") {
                         currentSection = AsmSection::HierarchyChildren;
                     }
@@ -449,7 +464,12 @@ namespace Axle {
                 }
                 case AsmSection::HierarchyChildren: {
                     if (trimmed.rfind("- ", 0) == 0) {
-                        current.ChildrenOldUUIDs.push_back(std::stoull(Trim(trimmed.substr(2))));
+                        try {
+                            std::string cStr = Trim(trimmed.substr(2));
+                            if (!cStr.empty()) {
+                                current.ChildrenOldUUIDs.push_back(std::stoull(cStr));
+                            }
+                        } catch (...) {}
                     }
                     break;
                 }
@@ -515,8 +535,10 @@ namespace Axle {
             Entity entity = targetScene->CreateEntityWithUUID(newUUID, raw.Tag);
             oldToEntity[raw.OldUUID] = entity;
 
-            // TransformComponent
-            auto& tc = entity.GetComponent<TransformComponent>();
+            // TransformComponent: newly created entities do not have TransformComponent yet
+            auto& tc = entity.HasComponent<TransformComponent>() ?
+                       entity.GetComponent<TransformComponent>() :
+                       entity.AddComponent<TransformComponent>();
             if (raw.HasTransform) {
                 tc = raw.Transform;
             }
@@ -607,10 +629,13 @@ namespace Axle {
                 if (entity.HasComponent<RigidBody3D>() && entity.HasComponent<CollisionShape3D>()) {
                     auto& rb = entity.GetComponent<RigidBody3D>();
                     auto& cs = entity.GetComponent<CollisionShape3D>();
-                    auto& tc = entity.GetComponent<TransformComponent>();
+
+                    glm::mat4 worldMat = targetScene->GetWorldTransform((entt::entity)entity);
+                    glm::vec3 worldPos = glm::vec3(worldMat[3]);
+                    glm::quat worldRot = glm::quat_cast(worldMat);
 
                     // Spawn position including local collision offset
-                    glm::vec3 spawnPos = tc.Translation + tc.Rotation * cs.Offset;
+                    glm::vec3 spawnPos = worldPos + worldRot * cs.Offset;
                     bool isDyn = (rb.MotionType == BodyMotionType::Dynamic);
 
                     BodyID bodyId;
@@ -618,6 +643,7 @@ namespace Axle {
                         case CollisionShapeType::Sphere: {
                             SphereBodyProps props;
                             props.Position = spawnPos;
+                            props.Rotation = worldRot;
                             props.Radius = cs.Radius;
                             props.IsDynamic = isDyn;
                             props.Friction = cs.Friction;
@@ -628,6 +654,7 @@ namespace Axle {
                         case CollisionShapeType::Cylinder: {
                             CylinderBodyProps props;
                             props.Position = spawnPos;
+                            props.Rotation = worldRot;
                             props.HalfHeight = cs.HalfHeight;
                             props.Radius = cs.Radius;
                             props.IsDynamic = isDyn;
@@ -636,9 +663,22 @@ namespace Axle {
                             bodyId = physicsScene->CreateCylinder(props);
                             break;
                         }
+                        case CollisionShapeType::Cone: {
+                            ConeBodyProps props;
+                            props.Position = spawnPos;
+                            props.Rotation = worldRot;
+                            props.HalfHeight = cs.HalfHeight;
+                            props.Radius = cs.Radius;
+                            props.IsDynamic = isDyn;
+                            props.Friction = cs.Friction;
+                            props.Restitution = cs.Restitution;
+                            bodyId = physicsScene->CreateCone(props);
+                            break;
+                        }
                         case CollisionShapeType::Plane: {
                             BoxBodyProps props;
                             props.Position = spawnPos;
+                            props.Rotation = worldRot;
                             props.HalfExtent = cs.HalfExtent;
                             props.IsDynamic = false;
                             props.Friction = cs.Friction;
@@ -650,6 +690,7 @@ namespace Axle {
                         default: {
                             BoxBodyProps props;
                             props.Position = spawnPos;
+                            props.Rotation = worldRot;
                             props.HalfExtent = cs.HalfExtent;
                             props.IsDynamic = isDyn;
                             props.Friction = cs.Friction;
@@ -661,7 +702,9 @@ namespace Axle {
 
                     rb.RuntimeBodyID = bodyId;
                     if (physicsScene && !bodyId.IsInvalid()) {
-                        physicsScene->GetBodyInterface().SetGravityFactor(bodyId, rb.GravityFactor);
+                        if (isDyn) {
+                            physicsScene->GetBodyInterface().SetGravityFactor(bodyId, rb.GravityFactor);
+                        }
                         physicsScene->GetBodyInterface().SetFriction(bodyId, cs.Friction);
                         physicsScene->GetBodyInterface().SetRestitution(bodyId, cs.Restitution);
                     }

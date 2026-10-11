@@ -5,6 +5,7 @@
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
+#include <Axle/SceneSerializer.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/Texture2D.hpp>
@@ -336,7 +337,13 @@ namespace Axle {
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
                         if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                             if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(p)) {
-                                auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f));
+                                SceneSerializerContext ctx;
+                                ctx.CubeMesh = m_CubeMesh;
+                                ctx.SphereMesh = m_SphereMesh;
+                                ctx.CylinderMesh = m_CylinderMesh;
+                                ctx.ConeMesh = m_ConeMesh;
+                                ctx.PlaneMesh = m_PlaneMesh;
+                                auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f), &ctx);
                                 if (spawned) {
                                     m_SelectedEntity = spawned;
                                 }
@@ -465,7 +472,13 @@ namespace Axle {
                             std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
                             if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                                 if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(p)) {
-                                    auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f));
+                                    SceneSerializerContext ctx;
+                                    ctx.CubeMesh = m_CubeMesh;
+                                    ctx.SphereMesh = m_SphereMesh;
+                                    ctx.CylinderMesh = m_CylinderMesh;
+                                    ctx.ConeMesh = m_ConeMesh;
+                                    ctx.PlaneMesh = m_PlaneMesh;
+                                    auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f), &ctx);
                                     if (spawned) {
                                         m_SelectedEntity = spawned;
                                     }

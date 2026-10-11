@@ -43,6 +43,7 @@ namespace Axle {
 
     struct MeshComponent {
         std::shared_ptr<VertexArray> VAO;
+        std::string AssetPath;
 
         // Visual Caro (Checkerboard) material properties
         int PatternMode = 0; // 0: World XZ Caro, 1: 3D Caro, 2: Spherical Caro
@@ -53,6 +54,8 @@ namespace Axle {
         MeshComponent() = default;
         MeshComponent(const std::shared_ptr<VertexArray>& vao, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
             : VAO(vao), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
+        MeshComponent(const std::shared_ptr<VertexArray>& vao, const std::string& assetPath, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
+            : VAO(vao), AssetPath(assetPath), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
     };
 
     struct RigidBodyComponent {

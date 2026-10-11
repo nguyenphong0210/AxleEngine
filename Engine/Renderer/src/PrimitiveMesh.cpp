@@ -1,7 +1,12 @@
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/Buffer.hpp>
+#include <Axle/Log.hpp>
 #include <cmath>
 #include <vector>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <glm/glm.hpp>
 
 namespace Axle {
 
@@ -279,6 +284,107 @@ namespace Axle {
         va->SetIndexBuffer(ib);
 
         return va;
+    }
+
+    MeshInfo PrimitiveMesh::LoadOBJEx(const std::string& filepath, bool centerGeometry) {
+        MeshInfo result;
+
+        std::ifstream file(filepath);
+        if (!file.is_open()) {
+            AXLE_ERROR("PrimitiveMesh: Failed to open OBJ file '{0}'", filepath);
+            return result;
+        }
+
+        std::vector<glm::vec3> temp_positions;
+        std::vector<f32> vertexData;
+        std::vector<u32> indices;
+
+        std::string line;
+        while (std::getline(file, line)) {
+            size_t firstNonSpace = line.find_first_not_of(" \t\r\n");
+            if (firstNonSpace == std::string::npos) continue;
+            if (line[firstNonSpace] == '#') continue;
+
+            std::string sub = line.substr(firstNonSpace);
+            if (sub.rfind("v ", 0) == 0) {
+                std::istringstream s(sub.substr(2));
+                glm::vec3 v(0.0f);
+                s >> v.x >> v.y >> v.z;
+                temp_positions.push_back(v);
+            } else if (sub.rfind("f ", 0) == 0) {
+                std::istringstream s(sub.substr(2));
+                std::string token;
+                std::vector<u32> faceIdx;
+                while (s >> token) {
+                    size_t slash = token.find('/');
+                    std::string idxStr = (slash == std::string::npos) ? token : token.substr(0, slash);
+                    if (!idxStr.empty()) {
+                        try {
+                            int idx = std::stoi(idxStr);
+                            if (idx < 0) {
+                                idx = static_cast<int>(temp_positions.size()) + idx + 1;
+                            }
+                            if (idx > 0 && static_cast<size_t>(idx) <= temp_positions.size()) {
+                                faceIdx.push_back(static_cast<u32>(idx - 1));
+                            }
+                        } catch (...) {
+                        }
+                    }
+                }
+                // Triangulate n-gon / quad into triangle fan
+                for (size_t i = 1; i + 1 < faceIdx.size(); ++i) {
+                    indices.push_back(faceIdx[0]);
+                    indices.push_back(faceIdx[i]);
+                    indices.push_back(faceIdx[i + 1]);
+                }
+            }
+        }
+
+        if (temp_positions.empty() || indices.empty()) {
+            AXLE_WARN("PrimitiveMesh: OBJ file '{0}' contains no valid geometry", filepath);
+            return result;
+        }
+
+        // Calculate bounding box and geometric center
+        glm::vec3 minBound( 1e9f);
+        glm::vec3 maxBound(-1e9f);
+        for (const auto& pos : temp_positions) {
+            minBound = glm::min(minBound, pos);
+            maxBound = glm::max(maxBound, pos);
+        }
+
+        glm::vec3 center = (minBound + maxBound) * 0.5f;
+        result.BoundingSize = maxBound - minBound;
+        result.HalfExtent = glm::max(result.BoundingSize * 0.5f, glm::vec3(0.05f));
+
+        vertexData.reserve(temp_positions.size() * 3);
+        for (const auto& pos : temp_positions) {
+            glm::vec3 p = centerGeometry ? (pos - center) : pos;
+            vertexData.push_back(p.x);
+            vertexData.push_back(p.y);
+            vertexData.push_back(p.z);
+        }
+
+        auto va = std::make_shared<VertexArray>();
+        auto vb = std::make_shared<VertexBuffer>(vertexData.data(), static_cast<u32>(vertexData.size() * sizeof(f32)));
+        vb->SetLayout({
+            { ShaderDataType::Float3, "a_Position" }
+        });
+        va->AddVertexBuffer(vb);
+
+        auto ib = std::make_shared<IndexBuffer>(indices.data(), static_cast<u32>(indices.size()));
+        va->SetIndexBuffer(ib);
+
+        result.VAO = va;
+
+        AXLE_INFO("PrimitiveMesh: Loaded OBJ '{0}' ({1} vertices, {2} triangles)", 
+            filepath, temp_positions.size(), indices.size() / 3);
+
+        return result;
+    }
+
+    std::shared_ptr<VertexArray> PrimitiveMesh::LoadOBJ(const std::string& filepath) {
+        return LoadOBJEx(filepath, true).VAO;
     }
 
 }

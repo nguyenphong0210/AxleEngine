@@ -7,6 +7,7 @@
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
+#include <filesystem>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -1311,6 +1312,102 @@ void SandboxLayer::OnImGuiRender() {
     ImVec2 viewportMin = ImGui::GetItemRectMin();
     ImVec2 viewportMax = ImGui::GetItemRectMax();
     ImVec2 viewportBounds = ImGui::GetItemRectSize();
+
+    // Drag & Drop Target: Drag 3D models (.obj) from Content Browser into Viewport to instantiate
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+            const char* pathStr = static_cast<const char*>(payload->Data);
+            std::filesystem::path assetPath(pathStr);
+            std::string ext = assetPath.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+
+            if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                // 1. Load 3D model geometry and compute centered bounding dimensions
+                Axle::MeshInfo meshInfo;
+                if (ext == ".obj") {
+                    meshInfo = Axle::PrimitiveMesh::LoadOBJEx(assetPath.string(), true);
+                }
+                if (!meshInfo.VAO) {
+                    meshInfo.VAO = m_CubeMesh;
+                    meshInfo.HalfExtent = glm::vec3(0.5f);
+                    meshInfo.BoundingSize = glm::vec3(1.0f);
+                }
+
+                // 2. Raycast from camera through drop cursor position to calculate 3D spawn position
+                glm::vec3 spawnPos(0.0f, meshInfo.HalfExtent.y, 0.0f);
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float mouseX = mousePos.x - viewportMin.x;
+                float mouseY = mousePos.y - viewportMin.y;
+
+                if (mouseX >= 0.0f && mouseX < viewportBounds.x && mouseY >= 0.0f && mouseY < viewportBounds.y) {
+                    float ndcX = (2.0f * (mouseX / viewportBounds.x)) - 1.0f;
+                    float ndcY = 1.0f - (2.0f * (mouseY / viewportBounds.y));
+
+                    glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
+                    glm::vec4 nearPointNDC(ndcX, ndcY, -1.0f, 1.0f);
+                    glm::vec4 farPointNDC(ndcX, ndcY, 1.0f, 1.0f);
+
+                    glm::vec4 nearW = invVP * nearPointNDC;
+                    glm::vec4 farW = invVP * farPointNDC;
+                    if (std::abs(nearW.w) > 1e-6f) nearW /= nearW.w;
+                    if (std::abs(farW.w) > 1e-6f) farW /= farW.w;
+
+                    glm::vec3 rayOrigin = glm::vec3(nearW);
+                    glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
+
+                    Axle::RayCastHit hit;
+                    if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
+                        // Sits flush on top of the hit collider/surface
+                        spawnPos = hit.Position + glm::vec3(0.0f, meshInfo.HalfExtent.y, 0.0f);
+                    } else {
+                        // Project onto ground floor plane (Y = 0)
+                        if (std::abs(rayDir.y) > 1e-4f) {
+                            float t = -rayOrigin.y / rayDir.y;
+                            if (t > 0.0f && t < 150.0f) {
+                                glm::vec3 groundHit = rayOrigin + rayDir * t;
+                                spawnPos = groundHit + glm::vec3(0.0f, meshInfo.HalfExtent.y, 0.0f);
+                            } else {
+                                spawnPos = rayOrigin + rayDir * 10.0f;
+                            }
+                        } else {
+                            spawnPos = rayOrigin + rayDir * 10.0f;
+                        }
+                    }
+                }
+
+                // 3. Create Entity in Scene
+                std::string entityTag = assetPath.stem().string();
+                auto entity = m_Scene->CreateEntity(entityTag);
+                entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
+
+                auto& mc = entity.AddComponent<Axle::MeshComponent>(
+                    meshInfo.VAO, assetPath.string(), 1, 2.0f,
+                    glm::vec4(0.95f, 0.45f, 0.15f, 1.0f), // Vibrant Sporty Tangerine
+                    glm::vec4(0.16f, 0.20f, 0.26f, 1.0f)  // Dark Carbon Slate
+                );
+
+                // 4. Add physics RigidBody with exact bounding box matching the 3D model
+                if (m_PhysicsScene) {
+                    Axle::BoxBodyProps bProps;
+                    bProps.Position = spawnPos;
+                    bProps.HalfExtent = meshInfo.HalfExtent; // Exactly matches 3D model!
+                    bProps.IsDynamic = true;
+                    bProps.Friction = 0.70f;
+                    bProps.Restitution = 0.15f;
+                    auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                    entity.AddComponent<Axle::RigidBodyComponent>(bodyId, true);
+                }
+
+                // 5. Select newly created entity so its gizmo and properties show up immediately
+                m_SceneHierarchyPanel.SetSelectedEntity(entity);
+
+                AXLE_INFO("Instantiated 3D model '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f}) [Bounds: {4:.2f}, {5:.2f}, {6:.2f}]", 
+                    assetPath.filename().string(), spawnPos.x, spawnPos.y, spawnPos.z,
+                    meshInfo.BoundingSize.x, meshInfo.BoundingSize.y, meshInfo.BoundingSize.z);
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
 
     // Configure ImGuizmo rendering bounds
     ImGuizmo::SetDrawlist();

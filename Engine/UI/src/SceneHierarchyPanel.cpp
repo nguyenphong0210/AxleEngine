@@ -2,11 +2,14 @@
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/Vehicle.hpp>
+#include <Axle/PrimitiveMesh.hpp>
+#include <Axle/Log.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <cstring>
+#include <filesystem>
 
 #include <Axle/VertexArray.hpp>
 #include <algorithm>
@@ -307,6 +310,48 @@ namespace Axle {
                     DrawCreateMenu();
                     ImGui::EndPopup();
                 }
+
+                // Drag & Drop to instantiate 3D model in Hierarchy
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = static_cast<const char*>(payload->Data);
+                        std::filesystem::path p(pathStr);
+                        std::string ext = p.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                        if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                            MeshInfo meshInfo;
+                            if (ext == ".obj") {
+                                meshInfo = PrimitiveMesh::LoadOBJEx(p.string(), true);
+                            }
+                            if (!meshInfo.VAO) {
+                                meshInfo.VAO = m_CubeMesh;
+                                meshInfo.HalfExtent = glm::vec3(0.5f);
+                            }
+
+                            glm::vec3 spawnPos(0.0f, meshInfo.HalfExtent.y, 0.0f);
+                            auto newEnt = m_Scene->CreateEntity(p.stem().string());
+                            newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
+                            newEnt.AddComponent<MeshComponent>(
+                                meshInfo.VAO, p.string(), 1, 2.0f,
+                                glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
+                                glm::vec4(0.16f, 0.20f, 0.26f, 1.0f)
+                            );
+                            if (m_PhysicsScene) {
+                                BoxBodyProps bProps;
+                                bProps.Position = spawnPos;
+                                bProps.HalfExtent = meshInfo.HalfExtent;
+                                bProps.IsDynamic = true;
+                                bProps.Friction = 0.70f;
+                                bProps.Restitution = 0.15f;
+                                auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                                newEnt.AddComponent<RigidBodyComponent>(bodyId, true);
+                            }
+                            m_SelectedEntity = newEnt;
+                            AXLE_INFO("Instantiated 3D model '{0}' via Scene Hierarchy drop", p.filename().string());
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
             }
             ImGui::End();
         }
@@ -320,7 +365,7 @@ namespace Axle {
                 } else {
                     ImGui::Spacing();
                     ImGui::TextDisabled("No entity selected.");
-                    ImGui::TextWrapped("Click any entity in Scene Hierarchy to inspect its components, or create a new one:");
+                    ImGui::TextWrapped("Click any entity in Scene Hierarchy to inspect its components, or drag a 3D model (.obj) from Content Browser here to instantiate:");
                     ImGui::Spacing();
                     ImGui::Separator();
                     ImGui::Spacing();
@@ -337,6 +382,48 @@ namespace Axle {
                     if (ImGui::BeginPopup("PropsCreateEntityPopup")) {
                         DrawCreateMenu();
                         ImGui::EndPopup();
+                    }
+
+                    // Drag & Drop to instantiate when no entity selected
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                            const char* pathStr = static_cast<const char*>(payload->Data);
+                            std::filesystem::path p(pathStr);
+                            std::string ext = p.extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                            if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                                MeshInfo meshInfo;
+                                if (ext == ".obj") {
+                                    meshInfo = PrimitiveMesh::LoadOBJEx(p.string(), true);
+                                }
+                                if (!meshInfo.VAO) {
+                                    meshInfo.VAO = m_CubeMesh;
+                                    meshInfo.HalfExtent = glm::vec3(0.5f);
+                                }
+
+                                glm::vec3 spawnPos(0.0f, meshInfo.HalfExtent.y, 0.0f);
+                                auto newEnt = m_Scene->CreateEntity(p.stem().string());
+                                newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
+                                newEnt.AddComponent<MeshComponent>(
+                                    meshInfo.VAO, p.string(), 1, 2.0f,
+                                    glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
+                                    glm::vec4(0.16f, 0.20f, 0.26f, 1.0f)
+                                );
+                                if (m_PhysicsScene) {
+                                    BoxBodyProps bProps;
+                                    bProps.Position = spawnPos;
+                                    bProps.HalfExtent = meshInfo.HalfExtent;
+                                    bProps.IsDynamic = true;
+                                    bProps.Friction = 0.70f;
+                                    bProps.Restitution = 0.15f;
+                                    auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                                    newEnt.AddComponent<RigidBodyComponent>(bodyId, true);
+                                }
+                                m_SelectedEntity = newEnt;
+                                AXLE_INFO("Instantiated 3D model '{0}' via Properties panel drop", p.filename().string());
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
                     }
                 }
             }
@@ -484,6 +571,39 @@ namespace Axle {
             if (meshOpen) {
                 auto& mc = entity.GetComponent<MeshComponent>();
 
+                // 3D Model Asset Assignment via Drag & Drop
+                ImGui::Text("Model Asset:");
+                ImGui::SameLine();
+                std::string assetDisplayName = mc.AssetPath.empty() 
+                    ? "[ Built-in Primitive (Drop .obj here) ]" 
+                    : std::filesystem::path(mc.AssetPath).filename().string();
+
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.24f, 0.32f, 0.85f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.35f, 0.48f, 1.0f));
+                ImGui::Button(assetDisplayName.c_str(), ImVec2(-1.0f, 26.0f));
+                ImGui::PopStyleColor(2);
+
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = static_cast<const char*>(payload->Data);
+                        std::filesystem::path p(pathStr);
+                        std::string ext = p.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                        if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                            mc.AssetPath = p.string();
+                            if (ext == ".obj") {
+                                auto loadedVao = PrimitiveMesh::LoadOBJ(p.string());
+                                if (loadedVao) mc.VAO = loadedVao;
+                            }
+                            AXLE_INFO("Assigned 3D model '{0}' to Entity '{1}'", p.filename().string(), entity.GetComponent<TagComponent>().Tag);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Drag & Drop a 3D model (.obj) from Content Browser here to assign");
+                }
+
                 const char* patternNames[] = { "0: World XZ Caro (Floor)", "1: Local 3D Caro (Box/Cyl)", "2: Spherical Caro (Sphere)" };
                 int currentPattern = mc.PatternMode;
                 if (ImGui::Combo("Pattern Mode", &currentPattern, patternNames, IM_ARRAYSIZE(patternNames))) {
@@ -500,6 +620,33 @@ namespace Axle {
 
             if (removeMesh) {
                 entity.RemoveComponent<MeshComponent>();
+            }
+            ImGui::Spacing();
+        } else {
+            // Drop target when entity has no MeshComponent
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.18f, 0.24f, 0.65f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.30f, 0.42f, 0.90f));
+            ImGui::Button("+ Drop 3D model (.obj) here to add Mesh", ImVec2(-1.0f, 28.0f));
+            ImGui::PopStyleColor(2);
+
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    const char* pathStr = static_cast<const char*>(payload->Data);
+                    std::filesystem::path p(pathStr);
+                    std::string ext = p.extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                    if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                        auto loadedVao = PrimitiveMesh::LoadOBJ(p.string());
+                        if (!loadedVao) loadedVao = m_CubeMesh;
+                        entity.AddComponent<MeshComponent>(
+                            loadedVao, p.string(), 1, 2.0f,
+                            glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
+                            glm::vec4(0.16f, 0.20f, 0.26f, 1.0f)
+                        );
+                        AXLE_INFO("Added MeshComponent with 3D model '{0}' to Entity '{1}'", p.filename().string(), entity.GetComponent<TagComponent>().Tag);
+                    }
+                }
+                ImGui::EndDragDropTarget();
             }
             ImGui::Spacing();
         }

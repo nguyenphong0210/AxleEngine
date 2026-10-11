@@ -37,6 +37,11 @@ uniform vec2 u_UVScale;            // UV tiling multiplier (default 1.0, 1.0)
 uniform float u_Roughness;         // Material roughness (0.04 .. 1.0, default 0.5)
 uniform float u_Metallic;          // Material metallic (0.0 .. 1.0, default 0.0)
 
+const float PI = 3.14159265358979323846;
+
+// ----------------------------------------------------------------------------
+// Shadow Calculation with 3x3 Percentage-Closer Filtering (PCF)
+// ----------------------------------------------------------------------------
 float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
@@ -60,7 +65,9 @@ float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
     return shadow / 9.0;
 }
 
-// Cotangent-frame normal perturbation from screen-space derivatives
+// ----------------------------------------------------------------------------
+// Cotangent-Frame Normal Perturbation from Screen-Space Derivatives
+// ----------------------------------------------------------------------------
 vec3 PerturbNormal(vec3 N, vec3 V, vec2 texcoord) {
     vec3 mapNormal = texture(u_NormalMap, texcoord).xyz * 2.0 - 1.0;
 
@@ -84,6 +91,52 @@ vec3 PerturbNormal(vec3 N, vec3 V, vec2 texcoord) {
     return normalize(TBN * mapNormal);
 }
 
+// ----------------------------------------------------------------------------
+// Cook-Torrance Microfacet BRDF Functions
+// ----------------------------------------------------------------------------
+
+// 1. Trowbridge-Reitz GGX Normal Distribution Function (NDF)
+float DistributionGGX(vec3 N, vec3 H, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+
+    float nom = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
+
+    return nom / max(denom, 0.0000001);
+}
+
+// 2. Geometry Masking/Shadowing Function (Smith model with Schlick-GGX)
+float GeometrySchlickGGX(float NdotV, float roughness) {
+    float r = (roughness + 1.0);
+    float k = (r * r) / 8.0;
+
+    float nom = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
+
+    return nom / max(denom, 0.0000001);
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
+    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
+
+    return ggx1 * ggx2;
+}
+
+// 3. Fresnel-Schlick Approximation
+vec3 FresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// ----------------------------------------------------------------------------
+// Main Shader Routine
+// ----------------------------------------------------------------------------
 void main() {
     vec2 uvScale = (u_UVScale.x != 0.0 && u_UVScale.y != 0.0) ? u_UVScale : vec2(1.0);
     vec2 uv = v_TexCoord * uvScale;
@@ -122,8 +175,8 @@ void main() {
             pattern = mod(coord.x + coord.y + coord.z, 2.0);
         } else {
             vec3 nLocal = normalize(v_LocalPos);
-            float uSph = atan(nLocal.z, nLocal.x) / (2.0 * 3.14159265359) + 0.5;
-            float vSph = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
+            float uSph = atan(nLocal.z, nLocal.x) / (2.0 * PI) + 0.5;
+            float vSph = asin(clamp(nLocal.y, -1.0, 1.0)) / PI + 0.5;
             vec2 coord = floor(vec2(uSph * u_TileScale, vSph * (u_TileScale * 0.5)));
             pattern = mod(coord.x + coord.y, 2.0);
         }
@@ -137,31 +190,47 @@ void main() {
     float metallic = (u_UseMetallicMap == 1) ? texture(u_MetallicMap, uv).r : u_Metallic;
     metallic = clamp(metallic, 0.0, 1.0);
 
-    // 5. Directional diffuse + ambient lighting with real-time soft shadows
-    vec3 lightDir = normalize(u_LightDir);
-    float NdotL = max(dot(normal, lightDir), 0.0);
+    // 5. PBR Cook-Torrance Direct Lighting
+    vec3 N = normal;
+    vec3 V = normalize(-v_WorldPos);
+    vec3 L = normalize(u_LightDir);
+    vec3 H = normalize(V + L);
 
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 0.0);
+
+    // Surface reflection at zero incidence (F0)
+    // 0.04 for standard dielectrics, tinted baseColor for metals
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, baseColor.rgb, metallic);
+
+    // Cook-Torrance Specular BRDF terms
+    float NDF = DistributionGGX(N, H, roughness);
+    float G   = GeometrySmith(N, V, L, roughness);
+    vec3  F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    vec3 numerator    = NDF * G * F;
+    float denominator = 4.0 * NdotV * NdotL + 0.0001;
+    vec3 specular     = numerator / denominator;
+
+    // Energy conservation: kS is specular fraction, kD is diffuse fraction
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - metallic; // Pure metals absorb diffuse light
+
+    // Real-time PCF soft shadow
     float shadow = 0.0;
     if (u_ShadowsEnabled == 1) {
-        shadow = CalculateShadow(v_FragPosLightSpace, normal, lightDir);
+        shadow = CalculateShadow(v_FragPosLightSpace, N, L);
     }
 
-    // 6. View-dependent specular reflection
-    vec3 viewDir = normalize(-v_WorldPos);
-    vec3 halfDir = normalize(lightDir + viewDir);
+    // Direct lighting radiance
+    vec3 radiance = u_LightColor * u_LightIntensity;
+    vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
 
-    float alpha = max(roughness * roughness, 0.001);
-    float shininess = clamp(2.0 / (alpha * alpha) - 2.0, 1.0, 1024.0);
-    float NdotH = max(dot(normal, halfDir), 0.0);
-    float spec = pow(NdotH, shininess) * (1.0 - shadow);
+    // Ambient lighting term
+    vec3 ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
 
-    vec3 specColor = mix(vec3(0.04), baseColor.rgb, metallic);
-    vec3 diffColor = baseColor.rgb * (1.0 - metallic);
-
-    vec3 ambient = diffColor * u_LightColor * u_AmbientIntensity;
-    vec3 diffuse = diffColor * u_LightColor * (u_LightIntensity * NdotL * (1.0 - shadow));
-    vec3 specular = specColor * u_LightColor * (spec * u_LightIntensity * (0.2 + 0.8 * metallic));
-
-    vec3 finalRgb = ambient + diffuse + specular;
-    o_Color = vec4(finalRgb, baseColor.a);
+    vec3 finalColor = ambient + Lo;
+    o_Color = vec4(finalColor, baseColor.a);
 }

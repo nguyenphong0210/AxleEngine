@@ -236,30 +236,52 @@ void SandboxLayer::OnAttach() {
                 float metallic = (u_UseMetallicMap == 1) ? texture(u_MetallicMap, uv).r : u_Metallic;
                 metallic = clamp(metallic, 0.0, 1.0);
 
-                vec3 lightDir = normalize(u_LightDir);
-                float NdotL = max(dot(normal, lightDir), 0.0);
+                const float PI = 3.14159265358979323846;
+
+                // 1. Distribution GGX
+                float a = roughness * roughness;
+                float a2 = a * a;
+                vec3 N = normal;
+                vec3 V = normalize(-v_WorldPos);
+                vec3 L = normalize(u_LightDir);
+                vec3 H = normalize(V + L);
+                float NdotH = max(dot(N, H), 0.0);
+                float NdotH2 = NdotH * NdotH;
+                float denomD = (NdotH2 * (a2 - 1.0) + 1.0);
+                denomD = PI * denomD * denomD;
+                float NDF = a2 / max(denomD, 0.0000001);
+
+                // 2. Geometry Smith
+                float NdotV = max(dot(N, V), 0.0);
+                float NdotL = max(dot(N, L), 0.0);
+                float rK = (roughness + 1.0);
+                float k = (rK * rK) / 8.0;
+                float ggxV = NdotV / max(NdotV * (1.0 - k) + k, 0.0000001);
+                float ggxL = NdotL / max(NdotL * (1.0 - k) + k, 0.0000001);
+                float G = ggxV * ggxL;
+
+                // 3. Fresnel Schlick
+                vec3 F0 = mix(vec3(0.04), baseColor.rgb, metallic);
+                vec3 F = F0 + (1.0 - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
+
+                vec3 numerator = NDF * G * F;
+                float denominator = 4.0 * NdotV * NdotL + 0.0001;
+                vec3 specular = numerator / denominator;
+
+                vec3 kS = F;
+                vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
+
                 float shadow = 0.0;
                 if (u_ShadowsEnabled == 1) {
-                    shadow = CalculateShadow(v_FragPosLightSpace, normal, lightDir);
+                    shadow = CalculateShadow(v_FragPosLightSpace, N, L);
                 }
 
-                vec3 viewDir = normalize(-v_WorldPos);
-                vec3 halfDir = normalize(lightDir + viewDir);
+                vec3 radiance = u_LightColor * u_LightIntensity;
+                vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
+                vec3 ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
 
-                float alpha = max(roughness * roughness, 0.001);
-                float shininess = clamp(2.0 / (alpha * alpha) - 2.0, 1.0, 1024.0);
-                float NdotH = max(dot(normal, halfDir), 0.0);
-                float spec = pow(NdotH, shininess) * (1.0 - shadow);
-
-                vec3 specColor = mix(vec3(0.04), baseColor.rgb, metallic);
-                vec3 diffColor = baseColor.rgb * (1.0 - metallic);
-
-                vec3 ambient = diffColor * u_LightColor * u_AmbientIntensity;
-                vec3 diffuse = diffColor * u_LightColor * (u_LightIntensity * NdotL * (1.0 - shadow));
-                vec3 specular = specColor * u_LightColor * (spec * u_LightIntensity * (0.2 + 0.8 * metallic));
-
-                vec3 finalRgb = ambient + diffuse + specular;
-                o_Color = vec4(finalRgb, baseColor.a);
+                vec3 finalColor = ambient + Lo;
+                o_Color = vec4(finalColor, baseColor.a);
             }
         )";
     } else {

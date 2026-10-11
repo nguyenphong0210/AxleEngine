@@ -216,9 +216,16 @@ namespace Axle {
         float Elevation = 50.0f;  // Sun altitude angle (5..90 deg)
         bool CastShadows = true;
 
+        // Post-Processing & Photometric Tone Mapping (Phase 11: Sub-step 3.2)
+        float Exposure = 1.0f;
+        int ToneMappingMode = 0;  // 0: ACES Filmic, 1: Reinhard, 2: Uncharted 2, 3: Linear Bypass
+        float Gamma = 2.2f;
+
         DirectionalLightComponent() = default;
-        DirectionalLightComponent(const glm::vec3& color, float intensity = 1.0f, float ambient = 0.28f, float azimuth = 45.0f, float elevation = 50.0f, bool castShadows = true)
-            : Color(color), Intensity(intensity), AmbientIntensity(ambient), Azimuth(azimuth), Elevation(elevation), CastShadows(castShadows) {}
+        DirectionalLightComponent(const glm::vec3& color, float intensity = 1.0f, float ambient = 0.28f, float azimuth = 45.0f, float elevation = 50.0f, bool castShadows = true,
+                                  float exposure = 1.0f, int toneMapping = 0, float gamma = 2.2f)
+            : Color(color), Intensity(intensity), AmbientIntensity(ambient), Azimuth(azimuth), Elevation(elevation), CastShadows(castShadows),
+              Exposure(exposure), ToneMappingMode(toneMapping), Gamma(gamma) {}
 
         // Calculate unit vector pointing toward the sun light source
         glm::vec3 GetDirection() const {

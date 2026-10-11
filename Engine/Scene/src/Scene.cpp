@@ -124,6 +124,9 @@ namespace Axle {
         float activeIntensity = hasSunLight ? sunLight.Intensity : 1.0f;
         float activeAmbient = hasSunLight ? sunLight.AmbientIntensity : 0.28f;
         int activeShadows = (hasSunLight ? sunLight.CastShadows : true) ? 1 : 0;
+        float activeExposure = hasSunLight ? sunLight.Exposure : 1.0f;
+        int activeToneMapping = hasSunLight ? sunLight.ToneMappingMode : 0;
+        float activeGamma = hasSunLight ? sunLight.Gamma : 2.2f;
 
         // 3. Render all entities with MeshComponent and TransformComponent (with hierarchy propagation)
         shader.Bind();
@@ -135,6 +138,11 @@ namespace Axle {
         shader.SetFloat("u_AmbientIntensity", activeAmbient);
         shader.SetInt("u_ShadowsEnabled", activeShadows);
         shader.SetInt("u_ShadowMap", shadowMapSlot);
+
+        // Tone Mapping & Photometric Controls (Phase 11: Sub-step 3.2)
+        shader.SetFloat("u_Exposure", activeExposure);
+        shader.SetInt("u_ToneMappingMode", activeToneMapping);
+        shader.SetFloat("u_Gamma", activeGamma);
 
         // Texture sampler slot assignments
         shader.SetInt("u_AlbedoMap", 0);

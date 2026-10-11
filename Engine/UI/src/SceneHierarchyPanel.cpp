@@ -1206,6 +1206,52 @@ namespace Axle {
                     dlc.CastShadows = true;
                 }
 
+                // --- PHOTOMETRIC POST-PROCESSING & TONE MAPPING (Phase 11: Sub-step 3.2) ---
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), "HDR Filmic Tone Mapping & Gamma:");
+
+                ImGui::SliderFloat("Exposure", &dlc.Exposure, 0.1f, 5.0f, "%.2f");
+
+                const char* toneMappingNames[] = {
+                    "0: ACES Filmic (Cinematic)",
+                    "1: Reinhard (Standard)",
+                    "2: Uncharted 2 (Hable)",
+                    "3: None (Linear Bypass)"
+                };
+                int currentTM = dlc.ToneMappingMode;
+                if (ImGui::Combo("Tone Mapping", &currentTM, toneMappingNames, IM_ARRAYSIZE(toneMappingNames))) {
+                    dlc.ToneMappingMode = currentTM;
+                }
+
+                ImGui::SliderFloat("Display Gamma", &dlc.Gamma, 1.0f, 3.0f, "%.2f");
+
+                ImGui::TextDisabled("Quick Looks:");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("ACES Filmic")) {
+                    dlc.Exposure = 1.0f;
+                    dlc.ToneMappingMode = 0;
+                    dlc.Gamma = 2.2f;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("High Exposure")) {
+                    dlc.Exposure = 1.6f;
+                    dlc.ToneMappingMode = 0;
+                    dlc.Gamma = 2.2f;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Reinhard")) {
+                    dlc.Exposure = 1.2f;
+                    dlc.ToneMappingMode = 1;
+                    dlc.Gamma = 2.2f;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Raw Linear")) {
+                    dlc.Exposure = 1.0f;
+                    dlc.ToneMappingMode = 3;
+                    dlc.Gamma = 1.0f;
+                }
+
                 // Vector display
                 glm::vec3 dir = dlc.GetDirection();
                 ImGui::TextDisabled("Light Direction: (%.2f, %.2f, %.2f)", dir.x, dir.y, dir.z);

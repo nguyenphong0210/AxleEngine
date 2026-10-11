@@ -152,6 +152,10 @@ void SandboxLayer::OnAttach() {
             uniform float u_Roughness;
             uniform float u_Metallic;
 
+            uniform float u_Exposure;
+            uniform int u_ToneMappingMode;
+            uniform float u_Gamma;
+
             float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
                 vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
                 projCoords = projCoords * 0.5 + 0.5;
@@ -280,8 +284,40 @@ void SandboxLayer::OnAttach() {
                 vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
                 vec3 ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
 
-                vec3 finalColor = ambient + Lo;
-                o_Color = vec4(finalColor, baseColor.a);
+                vec3 linearColor = ambient + Lo;
+
+                // Exposure & Tone Mapping
+                float exposure = (u_Exposure > 0.0) ? u_Exposure : 1.0;
+                vec3 exposed = linearColor * exposure;
+
+                vec3 mappedColor;
+                if (u_ToneMappingMode == 0) {
+                    // ACES Filmic (Narkowicz fit)
+                    const float a = 2.51;
+                    const float b = 0.03;
+                    const float c = 2.43;
+                    const float d = 0.59;
+                    const float e = 0.14;
+                    mappedColor = clamp((exposed * (a * exposed + b)) / (exposed * (c * exposed + d) + e), 0.0, 1.0);
+                } else if (u_ToneMappingMode == 1) {
+                    // Reinhard
+                    mappedColor = exposed / (exposed + vec3(1.0));
+                } else if (u_ToneMappingMode == 2) {
+                    // Uncharted 2
+                    vec3 x = exposed * 2.0;
+                    const float A = 0.15; const float B = 0.50; const float C = 0.10; const float D = 0.20; const float E = 0.02; const float F = 0.30;
+                    vec3 curr = ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+                    const float W = 11.2;
+                    vec3 white = ((vec3(W) * (A * vec3(W) + C * B) + D * E) / (vec3(W) * (A * vec3(W) + B) + D * F)) - E / F;
+                    mappedColor = clamp(curr / white, 0.0, 1.0);
+                } else {
+                    mappedColor = clamp(exposed, 0.0, 1.0);
+                }
+
+                float gamma = (u_Gamma > 0.0) ? u_Gamma : 2.2;
+                vec3 srgbColor = pow(mappedColor, vec3(1.0 / gamma));
+
+                o_Color = vec4(srgbColor, baseColor.a);
             }
         )";
     } else {
@@ -295,6 +331,9 @@ void SandboxLayer::OnAttach() {
     m_Shader->SetInt("u_NormalMap", 2);
     m_Shader->SetInt("u_RoughnessMap", 3);
     m_Shader->SetInt("u_MetallicMap", 4);
+    m_Shader->SetFloat("u_Exposure", 1.0f);
+    m_Shader->SetInt("u_ToneMappingMode", 0);
+    m_Shader->SetFloat("u_Gamma", 2.2f);
 
     // 3.1 Shadow Mapping System (Phase 11: Sub-step 1.1)
     m_ShadowMap = std::make_unique<Axle::ShadowMap>();

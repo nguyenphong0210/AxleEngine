@@ -111,7 +111,7 @@ Level 0:  [ Engine/Core ]
     - [x] **Sub-step 2.3**: Add `MaterialComponent` in ECS, integrate Inspector UI with texture map slots (Albedo, Normal, Roughness, Metallic), live thumbnail previews, drag-and-drop assignment from Content Browser, quick presets, and complete scene serialization (`.axlescene`).
   - [ ] **PBR Material System (Cook-Torrance Microfacet BRDF)**:
     - [x] **Sub-step 3.1**: Physically based Cook-Torrance microfacet specular BRDF (Trowbridge-Reitz GGX normal distribution $D$, Smith-Schlick shadowing/masking $G$, Fresnel-Schlick reflectance $F$), energy conservation ($k_D + k_S = 1$), metallic workflow, and directional sun radiance integration with PCF soft shadows.
-    - [ ] **Sub-step 3.2**: HDR Filmic Tone Mapping (ACES / Reinhard curve) & Linear-to-sRGB display gamma correction.
+    - [x] **Sub-step 3.2**: HDR Filmic Tone Mapping (ACES Narkowicz approximation, Reinhard, Uncharted 2 Hable, and Linear Bypass modes) & Linear-to-sRGB display gamma correction ($1/\gamma$), with real-time Exposure and Tone Mapping controls in Sun Light Inspector and complete scene serialization.
     - [ ] **Sub-step 3.3**: Physical material presets in Inspector (Automotive Paint, Chrome, Gold, Copper, Rubber, Matte Plastic) and parameter controls.
   - [ ] **Atmospheric Skybox**: Cubemap or HDR environment sky with ambient irradiance.
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**

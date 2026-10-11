@@ -194,6 +194,9 @@ namespace Axle {
                 ss << "      Azimuth: " << dlc.Azimuth << "\n";
                 ss << "      Elevation: " << dlc.Elevation << "\n";
                 ss << "      CastShadows: " << (dlc.CastShadows ? "true" : "false") << "\n";
+                ss << "      Exposure: " << dlc.Exposure << "\n";
+                ss << "      ToneMappingMode: " << dlc.ToneMappingMode << "\n";
+                ss << "      Gamma: " << dlc.Gamma << "\n";
             }
 
             // MaterialComponent
@@ -435,6 +438,12 @@ namespace Axle {
                             dlc.Elevation = std::stof(Trim(trimmed.substr(10)));
                         } else if (trimmed.rfind("CastShadows:", 0) == 0) {
                             dlc.CastShadows = (Trim(trimmed.substr(12)) == "true");
+                        } else if (trimmed.rfind("Exposure:", 0) == 0) {
+                            dlc.Exposure = std::stof(Trim(trimmed.substr(9)));
+                        } else if (trimmed.rfind("ToneMappingMode:", 0) == 0) {
+                            dlc.ToneMappingMode = std::stoi(Trim(trimmed.substr(16)));
+                        } else if (trimmed.rfind("Gamma:", 0) == 0) {
+                            dlc.Gamma = std::stof(Trim(trimmed.substr(6)));
                         }
                         break;
                     }

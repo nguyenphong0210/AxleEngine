@@ -37,6 +37,11 @@ uniform vec2 u_UVScale;            // UV tiling multiplier (default 1.0, 1.0)
 uniform float u_Roughness;         // Material roughness (0.04 .. 1.0, default 0.5)
 uniform float u_Metallic;          // Material metallic (0.0 .. 1.0, default 0.0)
 
+// 5. Post-Processing & Tone Mapping (Phase 11: Sub-step 3.2)
+uniform float u_Exposure;          // Exposure multiplier (default 1.0)
+uniform int u_ToneMappingMode;     // 0: ACES Filmic, 1: Reinhard, 2: Uncharted 2, 3: Linear Bypass
+uniform float u_Gamma;             // Display gamma exponent (default 2.2)
+
 const float PI = 3.14159265358979323846;
 
 // ----------------------------------------------------------------------------
@@ -132,6 +137,43 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 // 3. Fresnel-Schlick Approximation
 vec3 FresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// ----------------------------------------------------------------------------
+// Filmic Tone Mapping Operators (ACES, Reinhard, Uncharted 2)
+// ----------------------------------------------------------------------------
+
+// ACES Filmic Curve (Narkowicz fit)
+vec3 ToneMapACES(vec3 x) {
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+// Reinhard Curve
+vec3 ToneMapReinhard(vec3 x) {
+    return x / (x + vec3(1.0));
+}
+
+// Uncharted 2 Filmic Curve (Hable)
+vec3 Uncharted2TonemapPartial(vec3 x) {
+    const float A = 0.15;
+    const float B = 0.50;
+    const float C = 0.10;
+    const float D = 0.20;
+    const float E = 0.02;
+    const float F = 0.30;
+    return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+}
+
+vec3 ToneMapUncharted2(vec3 x) {
+    const float W = 11.2;
+    vec3 curr = Uncharted2TonemapPartial(x * 2.0);
+    vec3 whiteScale = vec3(1.0) / Uncharted2TonemapPartial(vec3(W));
+    return clamp(curr * whiteScale, 0.0, 1.0);
 }
 
 // ----------------------------------------------------------------------------
@@ -231,6 +273,25 @@ void main() {
     // Ambient lighting term
     vec3 ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
 
-    vec3 finalColor = ambient + Lo;
-    o_Color = vec4(finalColor, baseColor.a);
+    vec3 linearColor = ambient + Lo;
+
+    // 6. Camera Exposure, Filmic Tone Mapping & Gamma Correction
+    float exposure = (u_Exposure > 0.0) ? u_Exposure : 1.0;
+    vec3 exposed = linearColor * exposure;
+
+    vec3 mappedColor;
+    if (u_ToneMappingMode == 0) {
+        mappedColor = ToneMapACES(exposed);
+    } else if (u_ToneMappingMode == 1) {
+        mappedColor = ToneMapReinhard(exposed);
+    } else if (u_ToneMappingMode == 2) {
+        mappedColor = ToneMapUncharted2(exposed);
+    } else {
+        mappedColor = clamp(exposed, 0.0, 1.0);
+    }
+
+    float gamma = (u_Gamma > 0.0) ? u_Gamma : 2.2;
+    vec3 srgbColor = pow(mappedColor, vec3(1.0 / gamma));
+
+    o_Color = vec4(srgbColor, baseColor.a);
 }

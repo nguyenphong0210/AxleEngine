@@ -300,6 +300,7 @@ void SandboxLayer::OnAttach() {
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_SceneHierarchyPanel.SetMeshes(m_CubeMesh, m_SphereMesh, m_CylinderMesh, m_ConeMesh, m_PlaneMesh);
     m_VehicleTunerPanel.SetContext(m_Vehicle.get(), m_PhysicsScene.get());
+    m_ContentBrowserPanel.SetRootPath(Axle::FileSystem::GetAssetDirectory());
 
     AXLE_INFO("Axle Editor initialized successfully");
 }
@@ -1200,6 +1201,7 @@ void SandboxLayer::OnImGuiRender() {
             ImGui::MenuItem("Properties / Inspector", nullptr, &m_ShowProperties);
             ImGui::MenuItem("Vehicle Tuner", nullptr, &m_ShowVehicleTuner);
             ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
+            ImGui::MenuItem("Content Browser", nullptr, &m_ShowContentBrowser);
             ImGui::MenuItem("Telemetry & Performance", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             ImGui::Separator();
@@ -1267,14 +1269,15 @@ void SandboxLayer::OnImGuiRender() {
 
         ImGuiID dock_main = dockspaceID;
         ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.20f, nullptr, &dock_main);
-        ImGuiID dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.26f, nullptr, &dock_main);
-        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.32f, nullptr, &dock_main);
+        ImGuiID dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.28f, nullptr, &dock_main);
+        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, nullptr, &dock_main);
 
         ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_left);
         ImGui::DockBuilderDockWindow("Viewport", dock_main);
-        ImGui::DockBuilderDockWindow("Vehicle Tuner", dock_bottom);
+        ImGui::DockBuilderDockWindow("Content Browser", dock_bottom);
         ImGui::DockBuilderDockWindow("Console", dock_bottom);
         ImGui::DockBuilderDockWindow("Properties", dock_right);
+        ImGui::DockBuilderDockWindow("Vehicle Tuner", dock_right);
         ImGui::DockBuilderDockWindow("Axle Engine - Telemetry", dock_right);
 
         ImGui::DockBuilderFinish(dockspaceID);
@@ -1456,7 +1459,10 @@ void SandboxLayer::OnImGuiRender() {
     // 7. Console Log Panel
     m_ConsolePanel.OnImGuiRender(&m_ShowConsole);
 
-    // 8. Performance & Telemetry Panel
+    // 8. Content Browser Panel
+    m_ContentBrowserPanel.OnImGuiRender(&m_ShowContentBrowser);
+
+    // 9. Performance & Telemetry Panel
     if (m_ShowTelemetry) {
         Axle::TelemetryData telemetry{
             .DeltaTime = m_LastDeltaTime,

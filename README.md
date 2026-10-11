@@ -87,7 +87,7 @@ Level 0:  [ Engine/Core ]
   - [x] **Window Work Area & Fullscreen**: Automatic maximized window startup matching OS work area (zero taskbar overlap) and `F11` Maximize/Restore toggle.
 - [ ] **Phase 9: Asset System & 3D Model/Texture Loading (`Engine/Asset` & `Sandbox/assets`) *(In Progress)***
   - [x] **Project Asset Architecture**: Standardized `Sandbox/assets/` structure (`models/`, `textures/`, `scenes/`, `materials/`, `shaders/`) and `Axle::FileSystem` resolver - separating game project assets from engine core.
-  - [ ] **Content Browser Panel (`Engine/UI`)**: ImGui-based visual asset browser with directory navigation, file type icons, search filter, and path breadcrumbs.
+  - [x] **Content Browser Panel (`Engine/UI`)**: ImGui-based visual asset browser with directory navigation, file type icons, search filter, path breadcrumbs, Explorer integration, and Drag & Drop payload support.
   - [ ] **Drag & Drop Workflow**: Drag 3D model files from Content Browser directly into Viewport or Properties panel to instantiate meshes.
   - [ ] **3D Mesh Loading (`fastgltf` / `tinyobjloader`)**: Detailed car body chassis and realistic wheel models.
   - [ ] **Texture Mapping (`stb_image`)**: Albedo, normal, and roughness textures applied to 3D meshes.

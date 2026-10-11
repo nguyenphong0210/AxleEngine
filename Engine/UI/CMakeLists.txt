@@ -4,6 +4,7 @@ add_library(AxleUI STATIC
     src/ConsolePanel.cpp
     src/SceneHierarchyPanel.cpp
     src/VehicleTunerPanel.cpp
+    src/ContentBrowserPanel.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_draw.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_tables.cpp

@@ -146,7 +146,10 @@ void SandboxLayer::OnAttach() {
                 vec3 lightDir = normalize(u_LightDir);
                 float NdotL = max(dot(normal, lightDir), 0.0);
                 float lighting = 0.38 + 0.62 * NdotL;
-                o_Color = vec4(baseColor.rgb * lighting, baseColor.a);
+                vec3 viewDir = normalize(-v_WorldPos);
+                vec3 halfDir = normalize(lightDir + viewDir);
+                float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.18;
+                o_Color = vec4(baseColor.rgb * lighting + vec3(spec), baseColor.a);
             }
         )";
     } else {
@@ -1440,120 +1443,125 @@ void SandboxLayer::OnImGuiRender() {
             std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
             if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                // 1. Load 3D model geometry and compute centered bounding dimensions
-                Axle::MeshInfo meshInfo;
-                int patternMode = 1;
-                float tileScale = 2.0f;
-                glm::vec4 color1(0.95f, 0.45f, 0.15f, 1.0f); // Vibrant Sporty Tangerine
-                glm::vec4 color2(0.16f, 0.20f, 0.26f, 1.0f); // Dark Carbon Slate
-
-                if (ext == ".axle") {
-                    auto loaded = Axle::AssetSerializer::LoadMesh(assetPath);
-                    if (loaded.Success) {
-                        meshInfo.VAO = loaded.VAO;
-                        meshInfo.HalfExtent = loaded.SourceData.HalfExtent;
-                        meshInfo.BoundingSize = loaded.SourceData.BoundingSize;
-                        patternMode = loaded.SourceData.PatternMode;
-                        tileScale = loaded.SourceData.TileScale;
-                        color1 = loaded.SourceData.ColorPrimary;
-                        color2 = loaded.SourceData.ColorSecondary;
-                    }
-                } else if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                if (ext != ".axle") {
                     std::filesystem::path axlePath = assetPath.parent_path() / (assetPath.stem().string() + ".axle");
                     if (!std::filesystem::exists(axlePath)) {
-                        Axle::AssetSerializer::AutoConvertModel(assetPath, axlePath);
+                        Axle::AssetSerializer::AutoConvertModel(assetPath, axlePath, true);
                     }
-                    auto loaded = Axle::AssetSerializer::LoadMesh(axlePath);
-                    if (loaded.Success) {
-                        meshInfo.VAO = loaded.VAO;
-                        meshInfo.HalfExtent = loaded.SourceData.HalfExtent;
-                        meshInfo.BoundingSize = loaded.SourceData.BoundingSize;
-                        patternMode = loaded.SourceData.PatternMode;
-                        tileScale = loaded.SourceData.TileScale;
-                        color1 = loaded.SourceData.ColorPrimary;
-                        color2 = loaded.SourceData.ColorSecondary;
-                        assetPath = axlePath;
-                    } else if (ext == ".obj") {
-                        meshInfo = Axle::PrimitiveMesh::LoadOBJEx(assetPath.string(), true);
-                    }
+                    assetPath = axlePath;
                 }
 
-                if (!meshInfo.VAO) {
-                    meshInfo.VAO = m_CubeMesh;
-                    meshInfo.HalfExtent = glm::vec3(0.5f);
-                    meshInfo.BoundingSize = glm::vec3(1.0f);
-                }
+                auto pkg = Axle::AssetSerializer::LoadPackage(assetPath);
+                if (pkg.Success) {
+                    glm::vec3 spawnPos(0.0f, pkg.HalfExtent.y, 0.0f);
+                    ImVec2 mousePos = ImGui::GetMousePos();
+                    float mouseX = mousePos.x - viewportMin.x;
+                    float mouseY = mousePos.y - viewportMin.y;
 
-                // 2. Raycast from camera through drop cursor position to calculate 3D spawn position
-                glm::vec3 spawnPos(0.0f, meshInfo.HalfExtent.y, 0.0f);
-                ImVec2 mousePos = ImGui::GetMousePos();
-                float mouseX = mousePos.x - viewportMin.x;
-                float mouseY = mousePos.y - viewportMin.y;
+                    if (mouseX >= 0.0f && mouseX < viewportBounds.x && mouseY >= 0.0f && mouseY < viewportBounds.y) {
+                        float ndcX = (2.0f * (mouseX / viewportBounds.x)) - 1.0f;
+                        float ndcY = 1.0f - (2.0f * (mouseY / viewportBounds.y));
 
-                if (mouseX >= 0.0f && mouseX < viewportBounds.x && mouseY >= 0.0f && mouseY < viewportBounds.y) {
-                    float ndcX = (2.0f * (mouseX / viewportBounds.x)) - 1.0f;
-                    float ndcY = 1.0f - (2.0f * (mouseY / viewportBounds.y));
+                        glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
+                        glm::vec4 nearPointNDC(ndcX, ndcY, -1.0f, 1.0f);
+                        glm::vec4 farPointNDC(ndcX, ndcY, 1.0f, 1.0f);
 
-                    glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
-                    glm::vec4 nearPointNDC(ndcX, ndcY, -1.0f, 1.0f);
-                    glm::vec4 farPointNDC(ndcX, ndcY, 1.0f, 1.0f);
+                        glm::vec4 nearW = invVP * nearPointNDC;
+                        glm::vec4 farW = invVP * farPointNDC;
+                        if (std::abs(nearW.w) > 1e-6f) nearW /= nearW.w;
+                        if (std::abs(farW.w) > 1e-6f) farW /= farW.w;
 
-                    glm::vec4 nearW = invVP * nearPointNDC;
-                    glm::vec4 farW = invVP * farPointNDC;
-                    if (std::abs(nearW.w) > 1e-6f) nearW /= nearW.w;
-                    if (std::abs(farW.w) > 1e-6f) farW /= farW.w;
+                        glm::vec3 rayOrigin = glm::vec3(nearW);
+                        glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
 
-                    glm::vec3 rayOrigin = glm::vec3(nearW);
-                    glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
-
-                    Axle::RayCastHit hit;
-                    if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
-                        // Sits flush on top of the hit collider/surface
-                        spawnPos = hit.Position + glm::vec3(0.0f, meshInfo.HalfExtent.y, 0.0f);
-                    } else {
-                        // Project onto ground floor plane (Y = 0)
-                        if (std::abs(rayDir.y) > 1e-4f) {
-                            float t = -rayOrigin.y / rayDir.y;
-                            if (t > 0.0f && t < 150.0f) {
-                                glm::vec3 groundHit = rayOrigin + rayDir * t;
-                                spawnPos = groundHit + glm::vec3(0.0f, meshInfo.HalfExtent.y, 0.0f);
+                        Axle::RayCastHit hit;
+                        if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
+                            spawnPos = hit.Position + glm::vec3(0.0f, pkg.HalfExtent.y, 0.0f);
+                        } else {
+                            if (std::abs(rayDir.y) > 1e-4f) {
+                                float t = -rayOrigin.y / rayDir.y;
+                                if (t > 0.0f && t < 150.0f) {
+                                    glm::vec3 groundHit = rayOrigin + rayDir * t;
+                                    spawnPos = groundHit + glm::vec3(0.0f, pkg.HalfExtent.y, 0.0f);
+                                } else {
+                                    spawnPos = rayOrigin + rayDir * 10.0f;
+                                }
                             } else {
                                 spawnPos = rayOrigin + rayDir * 10.0f;
                             }
-                        } else {
-                            spawnPos = rayOrigin + rayDir * 10.0f;
                         }
                     }
+
+                    if (pkg.IsPackage) {
+                        std::string rootTag = pkg.Name.empty() ? assetPath.stem().string() : pkg.Name;
+                        auto rootEntity = m_Scene->CreateEntity(rootTag);
+                        rootEntity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
+                        auto& rootHierarchy = rootEntity.AddComponent<Axle::HierarchyComponent>();
+
+                        if (m_PhysicsScene) {
+                            Axle::BoxBodyProps bProps;
+                            bProps.Position = spawnPos;
+                            bProps.HalfExtent = pkg.HalfExtent;
+                            bProps.IsDynamic = true;
+                            bProps.Friction = 0.70f;
+                            bProps.Restitution = 0.15f;
+                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                            rootEntity.AddComponent<Axle::RigidBodyComponent>(bodyId, true);
+                        }
+
+                        for (const auto& part : pkg.Parts) {
+                            auto childEntity = m_Scene->CreateEntity(part.Name);
+                            auto& ct = childEntity.AddComponent<Axle::TransformComponent>(part.LocalTranslation, part.LocalScale);
+                            ct.Rotation = part.LocalRotation;
+
+                            auto partFullPath = assetPath.parent_path() / part.RelativePath;
+                            childEntity.AddComponent<Axle::MeshComponent>(
+                                part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                partFullPath.string(),
+                                part.LoadedMesh.SourceData.PatternMode,
+                                part.LoadedMesh.SourceData.TileScale,
+                                part.LoadedMesh.SourceData.ColorPrimary,
+                                part.LoadedMesh.SourceData.ColorSecondary
+                            );
+
+                            childEntity.AddComponent<Axle::HierarchyComponent>((entt::entity)rootEntity);
+                            rootHierarchy.Children.push_back((entt::entity)childEntity);
+                        }
+
+                        m_SceneHierarchyPanel.SetSelectedEntity(rootEntity);
+                        AXLE_INFO("Instantiated Model Package '{0}' ({1} submeshes) into Viewport at ({2:.2f}, {3:.2f}, {4:.2f})", 
+                            rootTag, pkg.Parts.size(), spawnPos.x, spawnPos.y, spawnPos.z);
+                    } else if (!pkg.Parts.empty()) {
+                        const auto& part = pkg.Parts[0];
+                        std::string entityTag = pkg.Name.empty() ? assetPath.stem().string() : pkg.Name;
+                        auto entity = m_Scene->CreateEntity(entityTag);
+                        entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
+
+                        entity.AddComponent<Axle::MeshComponent>(
+                            part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                            assetPath.string(),
+                            part.LoadedMesh.SourceData.PatternMode,
+                            part.LoadedMesh.SourceData.TileScale,
+                            part.LoadedMesh.SourceData.ColorPrimary,
+                            part.LoadedMesh.SourceData.ColorSecondary
+                        );
+
+                        if (m_PhysicsScene) {
+                            Axle::BoxBodyProps bProps;
+                            bProps.Position = spawnPos;
+                            bProps.HalfExtent = pkg.HalfExtent;
+                            bProps.IsDynamic = true;
+                            bProps.Friction = 0.70f;
+                            bProps.Restitution = 0.15f;
+                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                            entity.AddComponent<Axle::RigidBodyComponent>(bodyId, true);
+                        }
+
+                        m_SceneHierarchyPanel.SetSelectedEntity(entity);
+                        AXLE_INFO("Instantiated 3D model '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})", 
+                            entityTag, spawnPos.x, spawnPos.y, spawnPos.z);
+                    }
                 }
-
-                // 3. Create Entity in Scene
-                std::string entityTag = assetPath.stem().string();
-                auto entity = m_Scene->CreateEntity(entityTag);
-                entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
-
-                auto& mc = entity.AddComponent<Axle::MeshComponent>(
-                    meshInfo.VAO, assetPath.string(), patternMode, tileScale,
-                    color1, color2
-                );
-
-                // 4. Add physics RigidBody with exact bounding box matching the 3D model
-                if (m_PhysicsScene) {
-                    Axle::BoxBodyProps bProps;
-                    bProps.Position = spawnPos;
-                    bProps.HalfExtent = meshInfo.HalfExtent; // Exactly matches 3D model!
-                    bProps.IsDynamic = true;
-                    bProps.Friction = 0.70f;
-                    bProps.Restitution = 0.15f;
-                    auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                    entity.AddComponent<Axle::RigidBodyComponent>(bodyId, true);
-                }
-
-                // 5. Select newly created entity so its gizmo and properties show up immediately
-                m_SceneHierarchyPanel.SetSelectedEntity(entity);
-
-                AXLE_INFO("Instantiated 3D model '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f}) [Bounds: {4:.2f}, {5:.2f}, {6:.2f}]", 
-                    assetPath.filename().string(), spawnPos.x, spawnPos.y, spawnPos.z,
-                    meshInfo.BoundingSize.x, meshInfo.BoundingSize.y, meshInfo.BoundingSize.z);
             }
         }
         ImGui::EndDragDropTarget();
@@ -1571,7 +1579,8 @@ void SandboxLayer::OnImGuiRender() {
         auto selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
         if (selectedEntity && selectedEntity.HasComponent<Axle::TransformComponent>() && m_GizmoType != -1) {
             auto& tc = selectedEntity.GetComponent<Axle::TransformComponent>();
-            glm::mat4 transform = tc.GetTransform();
+            glm::mat4 worldTransform = m_Scene->GetWorldTransform(selectedEntity);
+            glm::mat4 transform = worldTransform;
 
             ImGuizmo::MODE mode = m_GizmoModeLocal ? ImGuizmo::MODE::LOCAL : ImGuizmo::MODE::WORLD;
             if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
@@ -1598,12 +1607,26 @@ void SandboxLayer::OnImGuiRender() {
                     nullptr,
                     m_SnapEnabled ? snapValues : nullptr
                 )) {
-                float translation[3], rotation[3], scale[3];
-                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform), translation, rotation, scale);
+                if (selectedEntity.HasComponent<Axle::HierarchyComponent>() &&
+                    selectedEntity.GetComponent<Axle::HierarchyComponent>().Parent != entt::null &&
+                    m_Scene->GetRegistry().valid(selectedEntity.GetComponent<Axle::HierarchyComponent>().Parent)) {
 
-                tc.Translation = glm::vec3(translation[0], translation[1], translation[2]);
-                tc.Rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
-                tc.Scale = glm::vec3(scale[0], scale[1], scale[2]);
+                    entt::entity parentID = selectedEntity.GetComponent<Axle::HierarchyComponent>().Parent;
+                    glm::mat4 parentWorld = m_Scene->GetWorldTransform(parentID);
+                    glm::mat4 localMat = glm::inverse(parentWorld) * transform;
+
+                    float translation[3], rotation[3], scale[3];
+                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMat), translation, rotation, scale);
+                    tc.Translation = glm::vec3(translation[0], translation[1], translation[2]);
+                    tc.Rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
+                    tc.Scale = glm::vec3(scale[0], scale[1], scale[2]);
+                } else {
+                    float translation[3], rotation[3], scale[3];
+                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform), translation, rotation, scale);
+                    tc.Translation = glm::vec3(translation[0], translation[1], translation[2]);
+                    tc.Rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
+                    tc.Scale = glm::vec3(scale[0], scale[1], scale[2]);
+                }
 
                 // Real-time synchronization with Jolt Physics bodies
                 if (selectedEntity == m_ChassisEntity && m_Vehicle) {
@@ -1776,10 +1799,11 @@ void SandboxLayer::SetupNextImportModal() {
     std::string outName = stem + ".axle";
     strncpy_s(m_ImportModalData.OutputFileName, sizeof(m_ImportModalData.OutputFileName), outName.c_str(), _TRUNCATE);
 
+    m_ImportModalData.SplitSubmeshes = true;
     m_ImportModalData.PatternMode = 1;
-    m_ImportModalData.TileScale = 2.0f;
-    m_ImportModalData.ColorPrimary = glm::vec4(0.95f, 0.45f, 0.15f, 1.0f);
-    m_ImportModalData.ColorSecondary = glm::vec4(0.16f, 0.20f, 0.26f, 1.0f);
+    m_ImportModalData.TileScale = 8.0f;
+    m_ImportModalData.ColorPrimary = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f);
+    m_ImportModalData.ColorSecondary = glm::vec4(0.65f, 0.70f, 0.76f, 1.0f);
     m_ImportModalData.ErrorMessage.clear();
 
     m_ShowImportModal = true;
@@ -1881,9 +1905,45 @@ void SandboxLayer::RenderImportModal() {
         ImGui::Separator();
         ImGui::Spacing();
 
+        // Submesh splitting / hierarchy
+        ImGui::Checkbox("Split into Separate Parts / Hierarchy", &m_ImportModalData.SplitSubmeshes);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("When enabled, decomposes distinct submesh parts (doors, wheels, body) into separate .axle files organized in a dedicated folder, creating a hierarchical scene package.");
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
         // Material Presets
         ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.35f, 1.0f), "Default Material & Procedural Surface Appearance");
         ImGui::Spacing();
+
+        ImGui::TextDisabled("Quick Palettes:");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Titanium Silver")) {
+            m_ImportModalData.ColorPrimary = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f);
+            m_ImportModalData.ColorSecondary = glm::vec4(0.65f, 0.70f, 0.76f, 1.0f);
+            m_ImportModalData.TileScale = 8.0f;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Slate Graphite")) {
+            m_ImportModalData.ColorPrimary = glm::vec4(0.35f, 0.38f, 0.42f, 1.0f);
+            m_ImportModalData.ColorSecondary = glm::vec4(0.20f, 0.22f, 0.26f, 1.0f);
+            m_ImportModalData.TileScale = 8.0f;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Arctic Navy")) {
+            m_ImportModalData.ColorPrimary = glm::vec4(0.22f, 0.28f, 0.38f, 1.0f);
+            m_ImportModalData.ColorSecondary = glm::vec4(0.14f, 0.18f, 0.25f, 1.0f);
+            m_ImportModalData.TileScale = 8.0f;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Ceramic White")) {
+            m_ImportModalData.ColorPrimary = glm::vec4(0.92f, 0.92f, 0.94f, 1.0f);
+            m_ImportModalData.ColorSecondary = glm::vec4(0.80f, 0.82f, 0.85f, 1.0f);
+            m_ImportModalData.TileScale = 8.0f;
+        }
 
         ImGui::ColorEdit4("Primary Color", glm::value_ptr(m_ImportModalData.ColorPrimary));
         ImGui::ColorEdit4("Secondary Color", glm::value_ptr(m_ImportModalData.ColorSecondary));
@@ -1897,7 +1957,7 @@ void SandboxLayer::RenderImportModal() {
             "5: Hexagon Dots"
         };
         ImGui::Combo("Pattern Preset", &m_ImportModalData.PatternMode, patternNames, IM_ARRAYSIZE(patternNames));
-        ImGui::SliderFloat("Pattern Scale", &m_ImportModalData.TileScale, 0.2f, 10.0f, "%.1fx");
+        ImGui::SliderFloat("Pattern Scale", &m_ImportModalData.TileScale, 0.5f, 32.0f, "%.1fx");
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -1935,6 +1995,7 @@ void SandboxLayer::RenderImportModal() {
 
             bool success = Axle::AssetSerializer::AutoConvertModel(
                 m_ImportModalData.SourcePath, destAxlePath,
+                m_ImportModalData.SplitSubmeshes,
                 m_ImportModalData.PatternMode,
                 m_ImportModalData.TileScale,
                 m_ImportModalData.ColorPrimary,

@@ -5,6 +5,7 @@
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <entt/entt.hpp>
+#include <glm/glm.hpp>
 
 #include <memory>
 #include <string>
@@ -21,6 +22,9 @@ namespace Axle {
         Entity CreateEntity(const std::string& name = "Entity");
         void DestroyEntity(Entity entity);
         Entity FindEntityByBodyID(BodyID bodyID);
+
+        // Hierarchical world transform calculation (propagating parent transforms)
+        glm::mat4 GetWorldTransform(entt::entity entityID) const;
 
         // Update physics synchronization and render all mesh components
         void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader);

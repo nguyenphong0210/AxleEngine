@@ -320,67 +320,82 @@ namespace Axle {
                         std::string ext = p.extension().string();
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
                         if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                            MeshInfo meshInfo;
-                            int patternMode = 1;
-                            float tileScale = 2.0f;
-                            glm::vec4 color1(0.95f, 0.45f, 0.15f, 1.0f);
-                            glm::vec4 color2(0.16f, 0.20f, 0.26f, 1.0f);
-
-                            if (ext == ".axle") {
-                                auto loaded = AssetSerializer::LoadMesh(p);
-                                if (loaded.Success) {
-                                    meshInfo.VAO = loaded.VAO;
-                                    meshInfo.HalfExtent = loaded.SourceData.HalfExtent;
-                                    meshInfo.BoundingSize = loaded.SourceData.BoundingSize;
-                                    patternMode = loaded.SourceData.PatternMode;
-                                    tileScale = loaded.SourceData.TileScale;
-                                    color1 = loaded.SourceData.ColorPrimary;
-                                    color2 = loaded.SourceData.ColorSecondary;
-                                }
-                            } else if (ext == ".obj") {
+                            if (ext != ".axle") {
                                 std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
                                 if (!std::filesystem::exists(axlePath)) {
-                                    AssetSerializer::ConvertOBJToAxle(p, axlePath);
+                                    AssetSerializer::AutoConvertModel(p, axlePath, true);
                                 }
-                                auto loaded = AssetSerializer::LoadMesh(axlePath);
-                                if (loaded.Success) {
-                                    meshInfo.VAO = loaded.VAO;
-                                    meshInfo.HalfExtent = loaded.SourceData.HalfExtent;
-                                    meshInfo.BoundingSize = loaded.SourceData.BoundingSize;
-                                    patternMode = loaded.SourceData.PatternMode;
-                                    tileScale = loaded.SourceData.TileScale;
-                                    color1 = loaded.SourceData.ColorPrimary;
-                                    color2 = loaded.SourceData.ColorSecondary;
-                                    p = axlePath;
-                                } else {
-                                    meshInfo = PrimitiveMesh::LoadOBJEx(p.string(), true);
-                                }
+                                p = axlePath;
                             }
 
-                            if (!meshInfo.VAO) {
-                                meshInfo.VAO = m_CubeMesh;
-                                meshInfo.HalfExtent = glm::vec3(0.5f);
-                            }
+                            auto pkg = AssetSerializer::LoadPackage(p);
+                            if (pkg.Success) {
+                                glm::vec3 spawnPos(0.0f, pkg.HalfExtent.y, 0.0f);
+                                if (pkg.IsPackage) {
+                                    std::string rootTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
+                                    auto rootEntity = m_Scene->CreateEntity(rootTag);
+                                    rootEntity.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
+                                    auto& rootHierarchy = rootEntity.AddComponent<HierarchyComponent>();
 
-                            glm::vec3 spawnPos(0.0f, meshInfo.HalfExtent.y, 0.0f);
-                            auto newEnt = m_Scene->CreateEntity(p.stem().string());
-                            newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
-                            newEnt.AddComponent<MeshComponent>(
-                                meshInfo.VAO, p.string(), patternMode, tileScale,
-                                color1, color2
-                            );
-                            if (m_PhysicsScene) {
-                                BoxBodyProps bProps;
-                                bProps.Position = spawnPos;
-                                bProps.HalfExtent = meshInfo.HalfExtent;
-                                bProps.IsDynamic = true;
-                                bProps.Friction = 0.70f;
-                                bProps.Restitution = 0.15f;
-                                auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                newEnt.AddComponent<RigidBodyComponent>(bodyId, true);
+                                    if (m_PhysicsScene) {
+                                        BoxBodyProps bProps;
+                                        bProps.Position = spawnPos;
+                                        bProps.HalfExtent = pkg.HalfExtent;
+                                        bProps.IsDynamic = true;
+                                        bProps.Friction = 0.70f;
+                                        bProps.Restitution = 0.15f;
+                                        auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                                        rootEntity.AddComponent<RigidBodyComponent>(bodyId, true);
+                                    }
+
+                                    for (const auto& part : pkg.Parts) {
+                                        auto childEntity = m_Scene->CreateEntity(part.Name);
+                                        auto& ct = childEntity.AddComponent<TransformComponent>(part.LocalTranslation, part.LocalScale);
+                                        ct.Rotation = part.LocalRotation;
+
+                                        auto partFullPath = p.parent_path() / part.RelativePath;
+                                        childEntity.AddComponent<MeshComponent>(
+                                            part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                            partFullPath.string(),
+                                            part.LoadedMesh.SourceData.PatternMode,
+                                            part.LoadedMesh.SourceData.TileScale,
+                                            part.LoadedMesh.SourceData.ColorPrimary,
+                                            part.LoadedMesh.SourceData.ColorSecondary
+                                        );
+
+                                        childEntity.AddComponent<HierarchyComponent>((entt::entity)rootEntity);
+                                        rootHierarchy.Children.push_back((entt::entity)childEntity);
+                                    }
+                                    m_SelectedEntity = rootEntity;
+                                    AXLE_INFO("Instantiated Model Package '{0}' ({1} submeshes) via Scene Hierarchy drop", 
+                                        rootTag, pkg.Parts.size());
+                                } else if (!pkg.Parts.empty()) {
+                                    const auto& part = pkg.Parts[0];
+                                    std::string entityTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
+                                    auto newEnt = m_Scene->CreateEntity(entityTag);
+                                    newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
+                                    newEnt.AddComponent<MeshComponent>(
+                                        part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                        p.string(),
+                                        part.LoadedMesh.SourceData.PatternMode,
+                                        part.LoadedMesh.SourceData.TileScale,
+                                        part.LoadedMesh.SourceData.ColorPrimary,
+                                        part.LoadedMesh.SourceData.ColorSecondary
+                                    );
+                                    if (m_PhysicsScene) {
+                                        BoxBodyProps bProps;
+                                        bProps.Position = spawnPos;
+                                        bProps.HalfExtent = pkg.HalfExtent;
+                                        bProps.IsDynamic = true;
+                                        bProps.Friction = 0.70f;
+                                        bProps.Restitution = 0.15f;
+                                        auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                                        newEnt.AddComponent<RigidBodyComponent>(bodyId, true);
+                                    }
+                                    m_SelectedEntity = newEnt;
+                                    AXLE_INFO("Instantiated 3D model '{0}' via Scene Hierarchy drop", p.filename().string());
+                                }
                             }
-                            m_SelectedEntity = newEnt;
-                            AXLE_INFO("Instantiated 3D model '{0}' via Scene Hierarchy drop", p.filename().string());
                         }
                     }
                     ImGui::EndDragDropTarget();
@@ -424,36 +439,83 @@ namespace Axle {
                             std::filesystem::path p(pathStr);
                             std::string ext = p.extension().string();
                             std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                            if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                                MeshInfo meshInfo;
-                                if (ext == ".obj") {
-                                    meshInfo = PrimitiveMesh::LoadOBJEx(p.string(), true);
-                                }
-                                if (!meshInfo.VAO) {
-                                    meshInfo.VAO = m_CubeMesh;
-                                    meshInfo.HalfExtent = glm::vec3(0.5f);
+                            if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                                if (ext != ".axle") {
+                                    std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
+                                    if (!std::filesystem::exists(axlePath)) {
+                                        AssetSerializer::AutoConvertModel(p, axlePath, true);
+                                    }
+                                    p = axlePath;
                                 }
 
-                                glm::vec3 spawnPos(0.0f, meshInfo.HalfExtent.y, 0.0f);
-                                auto newEnt = m_Scene->CreateEntity(p.stem().string());
-                                newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
-                                newEnt.AddComponent<MeshComponent>(
-                                    meshInfo.VAO, p.string(), 1, 2.0f,
-                                    glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
-                                    glm::vec4(0.16f, 0.20f, 0.26f, 1.0f)
-                                );
-                                if (m_PhysicsScene) {
-                                    BoxBodyProps bProps;
-                                    bProps.Position = spawnPos;
-                                    bProps.HalfExtent = meshInfo.HalfExtent;
-                                    bProps.IsDynamic = true;
-                                    bProps.Friction = 0.70f;
-                                    bProps.Restitution = 0.15f;
-                                    auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                    newEnt.AddComponent<RigidBodyComponent>(bodyId, true);
+                                auto pkg = AssetSerializer::LoadPackage(p);
+                                if (pkg.Success) {
+                                    glm::vec3 spawnPos(0.0f, pkg.HalfExtent.y, 0.0f);
+                                    if (pkg.IsPackage) {
+                                        std::string rootTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
+                                        auto rootEntity = m_Scene->CreateEntity(rootTag);
+                                        rootEntity.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
+                                        auto& rootHierarchy = rootEntity.AddComponent<HierarchyComponent>();
+
+                                        if (m_PhysicsScene) {
+                                            BoxBodyProps bProps;
+                                            bProps.Position = spawnPos;
+                                            bProps.HalfExtent = pkg.HalfExtent;
+                                            bProps.IsDynamic = true;
+                                            bProps.Friction = 0.70f;
+                                            bProps.Restitution = 0.15f;
+                                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                                            rootEntity.AddComponent<RigidBodyComponent>(bodyId, true);
+                                        }
+
+                                        for (const auto& part : pkg.Parts) {
+                                            auto childEntity = m_Scene->CreateEntity(part.Name);
+                                            auto& ct = childEntity.AddComponent<TransformComponent>(part.LocalTranslation, part.LocalScale);
+                                            ct.Rotation = part.LocalRotation;
+
+                                            auto partFullPath = p.parent_path() / part.RelativePath;
+                                            childEntity.AddComponent<MeshComponent>(
+                                                part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                                partFullPath.string(),
+                                                part.LoadedMesh.SourceData.PatternMode,
+                                                part.LoadedMesh.SourceData.TileScale,
+                                                part.LoadedMesh.SourceData.ColorPrimary,
+                                                part.LoadedMesh.SourceData.ColorSecondary
+                                            );
+
+                                            childEntity.AddComponent<HierarchyComponent>((entt::entity)rootEntity);
+                                            rootHierarchy.Children.push_back((entt::entity)childEntity);
+                                        }
+                                        m_SelectedEntity = rootEntity;
+                                        AXLE_INFO("Instantiated Model Package '{0}' ({1} submeshes) via Properties drop", 
+                                            rootTag, pkg.Parts.size());
+                                    } else if (!pkg.Parts.empty()) {
+                                        const auto& part = pkg.Parts[0];
+                                        std::string entityTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
+                                        auto newEnt = m_Scene->CreateEntity(entityTag);
+                                        newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
+                                        newEnt.AddComponent<MeshComponent>(
+                                            part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                            p.string(),
+                                            part.LoadedMesh.SourceData.PatternMode,
+                                            part.LoadedMesh.SourceData.TileScale,
+                                            part.LoadedMesh.SourceData.ColorPrimary,
+                                            part.LoadedMesh.SourceData.ColorSecondary
+                                        );
+                                        if (m_PhysicsScene) {
+                                            BoxBodyProps bProps;
+                                            bProps.Position = spawnPos;
+                                            bProps.HalfExtent = pkg.HalfExtent;
+                                            bProps.IsDynamic = true;
+                                            bProps.Friction = 0.70f;
+                                            bProps.Restitution = 0.15f;
+                                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                                            newEnt.AddComponent<RigidBodyComponent>(bodyId, true);
+                                        }
+                                        m_SelectedEntity = newEnt;
+                                        AXLE_INFO("Instantiated 3D model '{0}' via Properties drop", p.filename().string());
+                                    }
                                 }
-                                m_SelectedEntity = newEnt;
-                                AXLE_INFO("Instantiated 3D model '{0}' via Properties panel drop", p.filename().string());
                             }
                         }
                         ImGui::EndDragDropTarget();
@@ -666,10 +728,55 @@ namespace Axle {
                     mc.PatternMode = currentPattern;
                 }
 
-                ImGui::DragFloat("Tile Scale", &mc.TileScale, 0.1f, 0.1f, 64.0f, "%.1f");
+                ImGui::DragFloat("Tile Scale", &mc.TileScale, 0.2f, 0.1f, 64.0f, "%.1f");
+
+                ImGui::TextDisabled("Quick Palettes:");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Titanium Silver")) {
+                    mc.Color1 = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f);
+                    mc.Color2 = glm::vec4(0.65f, 0.70f, 0.76f, 1.0f);
+                    mc.TileScale = 8.0f;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Slate Graphite")) {
+                    mc.Color1 = glm::vec4(0.35f, 0.38f, 0.42f, 1.0f);
+                    mc.Color2 = glm::vec4(0.20f, 0.22f, 0.26f, 1.0f);
+                    mc.TileScale = 8.0f;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Arctic Navy")) {
+                    mc.Color1 = glm::vec4(0.22f, 0.28f, 0.38f, 1.0f);
+                    mc.Color2 = glm::vec4(0.14f, 0.18f, 0.25f, 1.0f);
+                    mc.TileScale = 8.0f;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Ceramic White")) {
+                    mc.Color1 = glm::vec4(0.92f, 0.92f, 0.94f, 1.0f);
+                    mc.Color2 = glm::vec4(0.80f, 0.82f, 0.85f, 1.0f);
+                    mc.TileScale = 8.0f;
+                }
 
                 ImGui::ColorEdit4("Color Primary", glm::value_ptr(mc.Color1));
                 ImGui::ColorEdit4("Color Secondary", glm::value_ptr(mc.Color2));
+
+                if (entity.HasComponent<HierarchyComponent>() && !entity.GetComponent<HierarchyComponent>().Children.empty()) {
+                    ImGui::Spacing();
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.42f, 0.65f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.52f, 0.78f, 1.0f));
+                    if (ImGui::Button("Apply Material & Scale to All Child Parts", ImVec2(-1.0f, 26.0f))) {
+                        auto children = entity.GetComponent<HierarchyComponent>().Children;
+                        for (auto childId : children) {
+                            if (m_Scene->GetRegistry().valid(childId) && m_Scene->GetRegistry().all_of<MeshComponent>(childId)) {
+                                auto& childMc = m_Scene->GetRegistry().get<MeshComponent>(childId);
+                                childMc.Color1 = mc.Color1;
+                                childMc.Color2 = mc.Color2;
+                                childMc.TileScale = mc.TileScale;
+                                childMc.PatternMode = mc.PatternMode;
+                            }
+                        }
+                    }
+                    ImGui::PopStyleColor(2);
+                }
 
                 ImGui::TreePop();
             }
@@ -693,9 +800,9 @@ namespace Axle {
                     std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
                     if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                         int patternMode = 1;
-                        float tileScale = 2.0f;
-                        glm::vec4 color1(0.95f, 0.45f, 0.15f, 1.0f);
-                        glm::vec4 color2(0.16f, 0.20f, 0.26f, 1.0f);
+                        float tileScale = 8.0f;
+                        glm::vec4 color1(0.85f, 0.88f, 0.92f, 1.0f);
+                        glm::vec4 color2(0.65f, 0.70f, 0.76f, 1.0f);
                         std::shared_ptr<VertexArray> loadedVao;
 
                         if (ext == ".axle") {

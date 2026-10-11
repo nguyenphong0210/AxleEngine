@@ -57,6 +57,21 @@ namespace Axle {
         return {};
     }
 
+    glm::mat4 Scene::GetWorldTransform(entt::entity entityID) const {
+        if (!m_Registry.valid(entityID) || !m_Registry.all_of<TransformComponent>(entityID)) {
+            return glm::mat4(1.0f);
+        }
+
+        glm::mat4 transform = m_Registry.get<TransformComponent>(entityID).GetTransform();
+        if (m_Registry.all_of<HierarchyComponent>(entityID)) {
+            entt::entity parent = m_Registry.get<HierarchyComponent>(entityID).Parent;
+            if (parent != entt::null && m_Registry.valid(parent) && m_Registry.all_of<TransformComponent>(parent)) {
+                transform = GetWorldTransform(parent) * transform;
+            }
+        }
+        return transform;
+    }
+
     void Scene::OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader) {
         (void)ts;
 
@@ -73,16 +88,17 @@ namespace Axle {
             }
         }
 
-        // 2. Render all entities with MeshComponent and TransformComponent
+        // 2. Render all entities with MeshComponent and TransformComponent (with hierarchy propagation)
         shader.Bind();
         shader.SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix());
         shader.SetFloat3("u_LightDir", glm::vec3(0.45f, 1.0f, 0.65f));
 
         auto renderView = m_Registry.view<MeshComponent, TransformComponent>();
         for (auto entity : renderView) {
-            auto [mesh, transform] = renderView.get<MeshComponent, TransformComponent>(entity);
+            auto& mesh = m_Registry.get<MeshComponent>(entity);
             if (mesh.VAO) {
-                shader.SetMat4("u_Transform", transform.GetTransform());
+                glm::mat4 worldTransform = GetWorldTransform(entity);
+                shader.SetMat4("u_Transform", worldTransform);
                 shader.SetInt("u_PatternMode", mesh.PatternMode);
                 shader.SetFloat("u_TileScale", mesh.TileScale);
                 shader.SetFloat4("u_Color1", mesh.Color1);

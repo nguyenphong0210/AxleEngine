@@ -151,10 +151,11 @@ private:
         std::filesystem::path SourcePath;
         std::filesystem::path TargetFolder;
         char OutputFileName[256] = "";
+        bool SplitSubmeshes = true;
         int PatternMode = 1;
-        float TileScale = 2.0f;
-        glm::vec4 ColorPrimary{ 0.95f, 0.45f, 0.15f, 1.0f };
-        glm::vec4 ColorSecondary{ 0.16f, 0.20f, 0.26f, 1.0f };
+        float TileScale = 8.0f;
+        glm::vec4 ColorPrimary{ 0.85f, 0.88f, 0.92f, 1.0f };
+        glm::vec4 ColorSecondary{ 0.65f, 0.70f, 0.76f, 1.0f };
         std::string ErrorMessage;
     };
 

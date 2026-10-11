@@ -50,5 +50,10 @@ void main() {
     float NdotL = max(dot(normal, lightDir), 0.0);
     float lighting = 0.38 + 0.62 * NdotL;
 
-    o_Color = vec4(baseColor.rgb * lighting, baseColor.a);
+    // Subtle specular highlight for refined studio reflection
+    vec3 viewDir = normalize(-v_WorldPos);
+    vec3 halfDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.18;
+
+    o_Color = vec4(baseColor.rgb * lighting + vec3(spec), baseColor.a);
 }

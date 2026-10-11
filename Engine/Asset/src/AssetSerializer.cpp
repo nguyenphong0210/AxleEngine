@@ -5,6 +5,8 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <unordered_map>
+#include <glm/gtc/type_ptr.hpp>
 
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
@@ -17,6 +19,20 @@ namespace Axle {
         if (first == std::string::npos) return "";
         size_t last = str.find_last_not_of(" \t\r\n");
         return str.substr(first, (last - first + 1));
+    }
+
+    static std::string SanitizeFilename(const std::string& name) {
+        std::string result;
+        result.reserve(name.size());
+        for (char c : name) {
+            if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' || c == ' ') {
+                result += '_';
+            } else {
+                result += c;
+            }
+        }
+        std::string trimmed = Trim(result);
+        return trimmed.empty() ? "Submesh" : trimmed;
     }
 
     std::filesystem::path AssetSerializer::GetCachePathFor(const std::filesystem::path& axleTextPath) {
@@ -347,6 +363,191 @@ namespace Axle {
         return result;
     }
 
+    bool AssetSerializer::SavePackageManifest(const std::filesystem::path& manifestPath,
+                                              const std::string& packageName,
+                                              const std::vector<AxlePackagePart>& parts,
+                                              const glm::vec3& boundingSize,
+                                              const glm::vec3& halfExtent) {
+        std::ofstream file(manifestPath);
+        if (!file.is_open()) {
+            AXLE_ERROR("AssetSerializer: Failed to open package manifest for writing: '{0}'", manifestPath.string());
+            return false;
+        }
+
+        file << "# Axle Engine 3D Model Package\n";
+        file << "# AI-Friendly & Human-Readable Structured Text Format\n";
+        file << "AssetType: ModelPackage\n";
+        file << "Version: 1\n";
+        file << "Name: " << packageName << "\n\n";
+
+        file << "Bounds:\n";
+        file << "  Size: [" 
+             << std::setprecision(3) << boundingSize.x << ", " 
+             << boundingSize.y << ", " << boundingSize.z << "]\n";
+        file << "  HalfExtent: [" 
+             << halfExtent.x << ", " 
+             << halfExtent.y << ", " << halfExtent.z << "]\n\n";
+
+        file << "Parts:\n";
+        for (const auto& part : parts) {
+            file << "  - Name: " << part.Name << "\n";
+            file << "    Path: " << part.RelativePath << "\n";
+            file << "    Position: [" 
+                 << std::setprecision(4) << part.LocalTranslation.x << ", " 
+                 << part.LocalTranslation.y << ", " << part.LocalTranslation.z << "]\n";
+            file << "    Rotation: [" 
+                 << part.LocalRotation.x << ", " << part.LocalRotation.y << ", " 
+                 << part.LocalRotation.z << ", " << part.LocalRotation.w << "]\n";
+            file << "    Scale: [" 
+                 << part.LocalScale.x << ", " << part.LocalScale.y << ", " << part.LocalScale.z << "]\n";
+        }
+
+        AXLE_INFO("AssetSerializer: Saved multi-part package manifest '{0}' ({1} sub-parts)", 
+            manifestPath.filename().string(), parts.size());
+        return true;
+    }
+
+    AxleLoadedPackage AssetSerializer::LoadPackage(const std::filesystem::path& axlePath) {
+        AxleLoadedPackage pkg;
+        std::ifstream file(axlePath);
+        if (!file.is_open()) {
+            AXLE_ERROR("AssetSerializer: Failed to open package file '{0}'", axlePath.string());
+            return pkg;
+        }
+
+        std::string line;
+        bool isPackage = false;
+        std::string pkgName = axlePath.stem().string();
+        glm::vec3 boundingSize{ 1.0f };
+        glm::vec3 halfExtent{ 0.5f };
+
+        int headerLines = 0;
+        while (std::getline(file, line) && headerLines++ < 20) {
+            std::string trimmed = Trim(line);
+            if (trimmed.rfind("AssetType:", 0) == 0) {
+                std::string type = Trim(trimmed.substr(10));
+                if (type == "ModelPackage") {
+                    isPackage = true;
+                }
+                break;
+            }
+        }
+
+        if (!isPackage) {
+            auto singleMesh = LoadMesh(axlePath);
+            if (singleMesh.Success) {
+                pkg.Name = singleMesh.SourceData.Name;
+                pkg.BoundingSize = singleMesh.SourceData.BoundingSize;
+                pkg.HalfExtent = singleMesh.SourceData.HalfExtent;
+                pkg.IsPackage = false;
+                pkg.Success = true;
+
+                AxlePackagePart part;
+                part.Name = pkg.Name;
+                part.RelativePath = axlePath.filename().string();
+                part.LoadedMesh = singleMesh;
+                pkg.Parts.push_back(part);
+            }
+            return pkg;
+        }
+
+        file.clear();
+        file.seekg(0);
+
+        enum class Section { None, Bounds, Parts };
+        Section currentSection = Section::None;
+
+        AxlePackagePart currentPart;
+        bool hasCurrentPart = false;
+
+        auto finalizeCurrentPart = [&]() {
+            if (hasCurrentPart && !currentPart.RelativePath.empty()) {
+                auto partFullPath = axlePath.parent_path() / currentPart.RelativePath;
+                currentPart.LoadedMesh = LoadMesh(partFullPath);
+                pkg.Parts.push_back(currentPart);
+                currentPart = AxlePackagePart{};
+                hasCurrentPart = false;
+            }
+        };
+
+        while (std::getline(file, line)) {
+            std::string trimmed = Trim(line);
+            if (trimmed.empty() || trimmed[0] == '#') continue;
+
+            if (trimmed.rfind("Name:", 0) == 0 && currentSection != Section::Parts) {
+                pkgName = Trim(trimmed.substr(5));
+            } else if (trimmed == "Bounds:") {
+                currentSection = Section::Bounds;
+            } else if (trimmed == "Parts:") {
+                currentSection = Section::Parts;
+            } else if (currentSection == Section::Bounds) {
+                if (trimmed.rfind("Size:", 0) == 0) {
+                    auto b1 = trimmed.find('[');
+                    auto b2 = trimmed.find(']');
+                    if (b1 != std::string::npos && b2 != std::string::npos) {
+                        std::string inside = trimmed.substr(b1 + 1, b2 - b1 - 1);
+                        std::replace(inside.begin(), inside.end(), ',', ' ');
+                        std::istringstream iss(inside);
+                        iss >> boundingSize.x >> boundingSize.y >> boundingSize.z;
+                    }
+                } else if (trimmed.rfind("HalfExtent:", 0) == 0) {
+                    auto b1 = trimmed.find('[');
+                    auto b2 = trimmed.find(']');
+                    if (b1 != std::string::npos && b2 != std::string::npos) {
+                        std::string inside = trimmed.substr(b1 + 1, b2 - b1 - 1);
+                        std::replace(inside.begin(), inside.end(), ',', ' ');
+                        std::istringstream iss(inside);
+                        iss >> halfExtent.x >> halfExtent.y >> halfExtent.z;
+                    }
+                }
+            } else if (currentSection == Section::Parts) {
+                if (trimmed.rfind("- Name:", 0) == 0) {
+                    finalizeCurrentPart();
+                    hasCurrentPart = true;
+                    currentPart.Name = Trim(trimmed.substr(7));
+                } else if (trimmed.rfind("Path:", 0) == 0) {
+                    currentPart.RelativePath = Trim(trimmed.substr(5));
+                } else if (trimmed.rfind("Position:", 0) == 0) {
+                    auto b1 = trimmed.find('[');
+                    auto b2 = trimmed.find(']');
+                    if (b1 != std::string::npos && b2 != std::string::npos) {
+                        std::string inside = trimmed.substr(b1 + 1, b2 - b1 - 1);
+                        std::replace(inside.begin(), inside.end(), ',', ' ');
+                        std::istringstream iss(inside);
+                        iss >> currentPart.LocalTranslation.x >> currentPart.LocalTranslation.y >> currentPart.LocalTranslation.z;
+                    }
+                } else if (trimmed.rfind("Rotation:", 0) == 0) {
+                    auto b1 = trimmed.find('[');
+                    auto b2 = trimmed.find(']');
+                    if (b1 != std::string::npos && b2 != std::string::npos) {
+                        std::string inside = trimmed.substr(b1 + 1, b2 - b1 - 1);
+                        std::replace(inside.begin(), inside.end(), ',', ' ');
+                        std::istringstream iss(inside);
+                        iss >> currentPart.LocalRotation.x >> currentPart.LocalRotation.y >> currentPart.LocalRotation.z >> currentPart.LocalRotation.w;
+                    }
+                } else if (trimmed.rfind("Scale:", 0) == 0) {
+                    auto b1 = trimmed.find('[');
+                    auto b2 = trimmed.find(']');
+                    if (b1 != std::string::npos && b2 != std::string::npos) {
+                        std::string inside = trimmed.substr(b1 + 1, b2 - b1 - 1);
+                        std::replace(inside.begin(), inside.end(), ',', ' ');
+                        std::istringstream iss(inside);
+                        iss >> currentPart.LocalScale.x >> currentPart.LocalScale.y >> currentPart.LocalScale.z;
+                    }
+                }
+            }
+        }
+        finalizeCurrentPart();
+
+        pkg.Name = pkgName;
+        pkg.BoundingSize = boundingSize;
+        pkg.HalfExtent = halfExtent;
+        pkg.IsPackage = true;
+        pkg.Success = !pkg.Parts.empty();
+
+        return pkg;
+    }
+
     bool AssetSerializer::ExportMeshToAxle(const std::filesystem::path& axleTextPath,
                                            const std::string& name,
                                            const std::vector<glm::vec3>& vertices,
@@ -395,6 +596,7 @@ namespace Axle {
 
     bool AssetSerializer::ConvertOBJToAxle(const std::filesystem::path& objPath,
                                            const std::filesystem::path& outAxlePath,
+                                           bool splitSubmeshes,
                                            int patternMode,
                                            float tileScale,
                                            const glm::vec4& color1,
@@ -405,8 +607,14 @@ namespace Axle {
             return false;
         }
 
+        struct ObjGroupData {
+            std::string Name;
+            std::vector<u32> Triangles;
+        };
+
         std::vector<glm::vec3> temp_positions;
-        std::vector<u32> indices;
+        std::vector<ObjGroupData> groups;
+        groups.push_back({ objPath.stem().string(), {} });
 
         std::string line;
         while (std::getline(file, line)) {
@@ -420,6 +628,15 @@ namespace Axle {
                 glm::vec3 v(0.0f);
                 s >> v.x >> v.y >> v.z;
                 temp_positions.push_back(v);
+            } else if (sub.rfind("o ", 0) == 0 || sub.rfind("g ", 0) == 0) {
+                if (splitSubmeshes) {
+                    std::string gName = Trim(sub.substr(2));
+                    if (!groups.empty() && groups.back().Triangles.empty()) {
+                        groups.back().Name = gName.empty() ? ("Part_" + std::to_string(groups.size())) : gName;
+                    } else {
+                        groups.push_back({ gName.empty() ? ("Part_" + std::to_string(groups.size() + 1)) : gName, {} });
+                    }
+                }
             } else if (sub.rfind("f ", 0) == 0) {
                 std::istringstream s(sub.substr(2));
                 std::string token;
@@ -441,24 +658,117 @@ namespace Axle {
                     }
                 }
                 for (size_t i = 1; i + 1 < faceIdx.size(); ++i) {
-                    indices.push_back(faceIdx[0]);
-                    indices.push_back(faceIdx[i]);
-                    indices.push_back(faceIdx[i + 1]);
+                    groups.back().Triangles.push_back(faceIdx[0]);
+                    groups.back().Triangles.push_back(faceIdx[i]);
+                    groups.back().Triangles.push_back(faceIdx[i + 1]);
                 }
             }
         }
 
-        if (temp_positions.empty() || indices.empty()) {
+        std::vector<ObjGroupData> validGroups;
+        for (auto& g : groups) {
+            if (!g.Triangles.empty()) validGroups.push_back(std::move(g));
+        }
+
+        if (temp_positions.empty() || validGroups.empty()) {
             AXLE_WARN("AssetSerializer: OBJ file '{0}' contains no valid geometry", objPath.string());
             return false;
         }
 
+        if (splitSubmeshes && validGroups.size() > 1) {
+            std::vector<AxleSubmeshSource> submeshes;
+            std::unordered_map<std::string, int> nameCounts;
+            glm::vec3 overallMin( 1e9f);
+            glm::vec3 overallMax(-1e9f);
+
+            for (const auto& g : validGroups) {
+                std::string partName = SanitizeFilename(g.Name);
+                if (nameCounts[partName]++ > 0) {
+                    partName += "_" + std::to_string(nameCounts[partName]);
+                }
+
+                std::unordered_map<u32, u32> globalToLocal;
+                std::vector<glm::vec3> localVertices;
+                std::vector<u32> localIndices;
+
+                glm::vec3 partMin( 1e9f);
+                glm::vec3 partMax(-1e9f);
+
+                for (u32 gIdx : g.Triangles) {
+                    auto it = globalToLocal.find(gIdx);
+                    if (it == globalToLocal.end()) {
+                        u32 newIdx = static_cast<u32>(localVertices.size());
+                        globalToLocal[gIdx] = newIdx;
+                        glm::vec3 pos = temp_positions[gIdx];
+                        localVertices.push_back(pos);
+                        partMin = glm::min(partMin, pos);
+                        partMax = glm::max(partMax, pos);
+                        overallMin = glm::min(overallMin, pos);
+                        overallMax = glm::max(overallMax, pos);
+                        localIndices.push_back(newIdx);
+                    } else {
+                        localIndices.push_back(it->second);
+                    }
+                }
+
+                if (localVertices.empty() || localIndices.empty()) continue;
+
+                glm::vec3 partCenter = (partMin + partMax) * 0.5f;
+
+                AxleSubmeshSource sub;
+                sub.Name = partName;
+                sub.LocalTranslation = partCenter;
+                sub.BoundingSize = partMax - partMin;
+                sub.HalfExtent = glm::max(sub.BoundingSize * 0.5f, glm::vec3(0.02f));
+                sub.PatternMode = patternMode;
+                sub.TileScale = tileScale;
+                sub.ColorPrimary = color1;
+                sub.ColorSecondary = color2;
+                sub.Vertices.reserve(localVertices.size());
+                for (const auto& v : localVertices) {
+                    sub.Vertices.push_back(v - partCenter);
+                }
+                sub.Indices = std::move(localIndices);
+                submeshes.push_back(std::move(sub));
+            }
+
+            if (submeshes.size() > 1) {
+                auto partsFolder = outAxlePath.parent_path() / outAxlePath.stem();
+                std::error_code ec;
+                std::filesystem::create_directories(partsFolder, ec);
+
+                std::vector<AxlePackagePart> packageParts;
+                packageParts.reserve(submeshes.size());
+
+                for (const auto& sub : submeshes) {
+                    auto partAxlePath = partsFolder / (sub.Name + ".axle");
+                    ExportMeshToAxle(partAxlePath, sub.Name, sub.Vertices, sub.Indices, sub.PatternMode, sub.TileScale, sub.ColorPrimary, sub.ColorSecondary);
+
+                    AxlePackagePart p;
+                    p.Name = sub.Name;
+                    p.RelativePath = (outAxlePath.stem() / (sub.Name + ".axle")).generic_string();
+                    p.LocalTranslation = sub.LocalTranslation;
+                    packageParts.push_back(p);
+                }
+
+                glm::vec3 totalSize = overallMax - overallMin;
+                glm::vec3 totalHalf = glm::max(totalSize * 0.5f, glm::vec3(0.05f));
+                return SavePackageManifest(outAxlePath, outAxlePath.stem().string(), packageParts, totalSize, totalHalf);
+            }
+        }
+
+        std::vector<u32> allIndices;
+        for (const auto& g : validGroups) {
+            allIndices.insert(allIndices.end(), g.Triangles.begin(), g.Triangles.end());
+        }
+
         std::string modelName = objPath.stem().string();
-        return ExportMeshToAxle(outAxlePath, modelName, temp_positions, indices, patternMode, tileScale, color1, color2);
+        return ExportMeshToAxle(outAxlePath, modelName, temp_positions, allIndices, patternMode, tileScale, color1, color2);
     }
 
     bool AssetSerializer::ConvertGLTFToAxle(const std::filesystem::path& gltfPath,
                                             const std::filesystem::path& outAxlePath,
+                                            bool splitSubmeshes,
                                             int patternMode,
                                             float tileScale,
                                             const glm::vec4& color1,
@@ -478,62 +788,206 @@ namespace Axle {
             return false;
         }
 
-        std::vector<glm::vec3> vertices;
-        std::vector<u32> indices;
+        struct RawPart {
+            std::string Name;
+            std::vector<glm::vec3> Vertices;
+            std::vector<u32> Indices;
+        };
+        std::vector<RawPart> rawParts;
 
-        for (size_t m = 0; m < data->meshes_count; ++m) {
-            const auto& mesh = data->meshes[m];
-            for (size_t p = 0; p < mesh.primitives_count; ++p) {
-                const auto& prim = mesh.primitives[p];
-                if (prim.type != cgltf_primitive_type_triangles) continue;
+        if (data->nodes_count > 0) {
+            for (size_t n = 0; n < data->nodes_count; ++n) {
+                const auto* node = &data->nodes[n];
+                if (!node->mesh) continue;
 
-                u32 vertexOffset = static_cast<u32>(vertices.size());
+                cgltf_float world_mat[16];
+                cgltf_node_transform_world(node, world_mat);
+                glm::mat4 transform = glm::make_mat4(world_mat);
 
-                // Read vertex positions
-                for (size_t a = 0; a < prim.attributes_count; ++a) {
-                    if (prim.attributes[a].type == cgltf_attribute_type_position) {
-                        cgltf_accessor* acc = prim.attributes[a].data;
-                        vertices.reserve(vertices.size() + acc->count);
-                        for (size_t i = 0; i < acc->count; ++i) {
-                            float pos[3] = { 0.0f, 0.0f, 0.0f };
-                            cgltf_accessor_read_float(acc, i, pos, 3);
-                            vertices.push_back(glm::vec3(pos[0], pos[1], pos[2]));
+                std::string partName = node->name ? node->name : (node->mesh->name ? node->mesh->name : "Part");
+
+                RawPart part;
+                part.Name = SanitizeFilename(partName);
+
+                const auto* mesh = node->mesh;
+                for (size_t p = 0; p < mesh->primitives_count; ++p) {
+                    const auto& prim = mesh->primitives[p];
+                    if (prim.type != cgltf_primitive_type_triangles) continue;
+
+                    u32 vertexOffset = static_cast<u32>(part.Vertices.size());
+
+                    for (size_t a = 0; a < prim.attributes_count; ++a) {
+                        if (prim.attributes[a].type == cgltf_attribute_type_position) {
+                            cgltf_accessor* acc = prim.attributes[a].data;
+                            part.Vertices.reserve(part.Vertices.size() + acc->count);
+                            for (size_t i = 0; i < acc->count; ++i) {
+                                float pos[3] = { 0.0f, 0.0f, 0.0f };
+                                cgltf_accessor_read_float(acc, i, pos, 3);
+                                glm::vec4 worldPos = transform * glm::vec4(pos[0], pos[1], pos[2], 1.0f);
+                                part.Vertices.push_back(glm::vec3(worldPos));
+                            }
+                            break;
                         }
-                        break;
+                    }
+
+                    if (prim.indices) {
+                        cgltf_accessor* idxAcc = prim.indices;
+                        part.Indices.reserve(part.Indices.size() + idxAcc->count);
+                        for (size_t i = 0; i < idxAcc->count; ++i) {
+                            u32 idx = static_cast<u32>(cgltf_accessor_read_index(idxAcc, i));
+                            part.Indices.push_back(vertexOffset + idx);
+                        }
+                    } else {
+                        size_t vertCount = part.Vertices.size() - vertexOffset;
+                        part.Indices.reserve(part.Indices.size() + vertCount);
+                        for (size_t i = 0; i < vertCount; ++i) {
+                            part.Indices.push_back(vertexOffset + static_cast<u32>(i));
+                        }
                     }
                 }
 
-                // Read indices
-                if (prim.indices) {
-                    cgltf_accessor* idxAcc = prim.indices;
-                    indices.reserve(indices.size() + idxAcc->count);
-                    for (size_t i = 0; i < idxAcc->count; ++i) {
-                        u32 idx = static_cast<u32>(cgltf_accessor_read_index(idxAcc, i));
-                        indices.push_back(vertexOffset + idx);
+                if (!part.Vertices.empty() && !part.Indices.empty()) {
+                    rawParts.push_back(std::move(part));
+                }
+            }
+        }
+
+        if (rawParts.empty()) {
+            for (size_t m = 0; m < data->meshes_count; ++m) {
+                const auto& mesh = data->meshes[m];
+                std::string partName = mesh.name ? mesh.name : ("Part_" + std::to_string(m + 1));
+                RawPart part;
+                part.Name = SanitizeFilename(partName);
+
+                for (size_t p = 0; p < mesh.primitives_count; ++p) {
+                    const auto& prim = mesh.primitives[p];
+                    if (prim.type != cgltf_primitive_type_triangles) continue;
+
+                    u32 vertexOffset = static_cast<u32>(part.Vertices.size());
+
+                    for (size_t a = 0; a < prim.attributes_count; ++a) {
+                        if (prim.attributes[a].type == cgltf_attribute_type_position) {
+                            cgltf_accessor* acc = prim.attributes[a].data;
+                            part.Vertices.reserve(part.Vertices.size() + acc->count);
+                            for (size_t i = 0; i < acc->count; ++i) {
+                                float pos[3] = { 0.0f, 0.0f, 0.0f };
+                                cgltf_accessor_read_float(acc, i, pos, 3);
+                                part.Vertices.push_back(glm::vec3(pos[0], pos[1], pos[2]));
+                            }
+                            break;
+                        }
                     }
-                } else {
-                    size_t vertCount = vertices.size() - vertexOffset;
-                    indices.reserve(indices.size() + vertCount);
-                    for (size_t i = 0; i < vertCount; ++i) {
-                        indices.push_back(vertexOffset + static_cast<u32>(i));
+
+                    if (prim.indices) {
+                        cgltf_accessor* idxAcc = prim.indices;
+                        part.Indices.reserve(part.Indices.size() + idxAcc->count);
+                        for (size_t i = 0; i < idxAcc->count; ++i) {
+                            u32 idx = static_cast<u32>(cgltf_accessor_read_index(idxAcc, i));
+                            part.Indices.push_back(vertexOffset + idx);
+                        }
+                    } else {
+                        size_t vertCount = part.Vertices.size() - vertexOffset;
+                        part.Indices.reserve(part.Indices.size() + vertCount);
+                        for (size_t i = 0; i < vertCount; ++i) {
+                            part.Indices.push_back(vertexOffset + static_cast<u32>(i));
+                        }
                     }
+                }
+
+                if (!part.Vertices.empty() && !part.Indices.empty()) {
+                    rawParts.push_back(std::move(part));
                 }
             }
         }
 
         cgltf_free(data);
 
-        if (vertices.empty() || indices.empty()) {
+        if (rawParts.empty()) {
             AXLE_WARN("AssetSerializer: glTF file '{0}' contains no triangle geometry", gltfPath.string());
             return false;
         }
 
+        if (splitSubmeshes && rawParts.size() > 1) {
+            std::unordered_map<std::string, int> nameCounts;
+            glm::vec3 overallMin( 1e9f);
+            glm::vec3 overallMax(-1e9f);
+            std::vector<AxleSubmeshSource> submeshes;
+
+            for (auto& raw : rawParts) {
+                if (nameCounts[raw.Name]++ > 0) {
+                    raw.Name += "_" + std::to_string(nameCounts[raw.Name]);
+                }
+
+                glm::vec3 partMin( 1e9f);
+                glm::vec3 partMax(-1e9f);
+                for (const auto& v : raw.Vertices) {
+                    partMin = glm::min(partMin, v);
+                    partMax = glm::max(partMax, v);
+                    overallMin = glm::min(overallMin, v);
+                    overallMax = glm::max(overallMax, v);
+                }
+
+                glm::vec3 partCenter = (partMin + partMax) * 0.5f;
+
+                AxleSubmeshSource sub;
+                sub.Name = raw.Name;
+                sub.LocalTranslation = partCenter;
+                sub.BoundingSize = partMax - partMin;
+                sub.HalfExtent = glm::max(sub.BoundingSize * 0.5f, glm::vec3(0.02f));
+                sub.PatternMode = patternMode;
+                sub.TileScale = tileScale;
+                sub.ColorPrimary = color1;
+                sub.ColorSecondary = color2;
+                sub.Vertices.reserve(raw.Vertices.size());
+                for (const auto& v : raw.Vertices) {
+                    sub.Vertices.push_back(v - partCenter);
+                }
+                sub.Indices = std::move(raw.Indices);
+                submeshes.push_back(std::move(sub));
+            }
+
+            if (submeshes.size() > 1) {
+                auto partsFolder = outAxlePath.parent_path() / outAxlePath.stem();
+                std::error_code ec;
+                std::filesystem::create_directories(partsFolder, ec);
+
+                std::vector<AxlePackagePart> packageParts;
+                packageParts.reserve(submeshes.size());
+
+                for (const auto& sub : submeshes) {
+                    auto partAxlePath = partsFolder / (sub.Name + ".axle");
+                    ExportMeshToAxle(partAxlePath, sub.Name, sub.Vertices, sub.Indices, sub.PatternMode, sub.TileScale, sub.ColorPrimary, sub.ColorSecondary);
+
+                    AxlePackagePart p;
+                    p.Name = sub.Name;
+                    p.RelativePath = (outAxlePath.stem() / (sub.Name + ".axle")).generic_string();
+                    p.LocalTranslation = sub.LocalTranslation;
+                    packageParts.push_back(p);
+                }
+
+                glm::vec3 totalSize = overallMax - overallMin;
+                glm::vec3 totalHalf = glm::max(totalSize * 0.5f, glm::vec3(0.05f));
+                return SavePackageManifest(outAxlePath, outAxlePath.stem().string(), packageParts, totalSize, totalHalf);
+            }
+        }
+
+        std::vector<glm::vec3> allVertices;
+        std::vector<u32> allIndices;
+        for (const auto& part : rawParts) {
+            u32 vOffset = static_cast<u32>(allVertices.size());
+            allVertices.insert(allVertices.end(), part.Vertices.begin(), part.Vertices.end());
+            for (u32 idx : part.Indices) {
+                allIndices.push_back(vOffset + idx);
+            }
+        }
+
         std::string modelName = gltfPath.stem().string();
-        return ExportMeshToAxle(outAxlePath, modelName, vertices, indices, patternMode, tileScale, color1, color2);
+        return ExportMeshToAxle(outAxlePath, modelName, allVertices, allIndices, patternMode, tileScale, color1, color2);
     }
 
     bool AssetSerializer::ConvertFBXToAxle(const std::filesystem::path& fbxPath,
                                            const std::filesystem::path& outAxlePath,
+                                           bool splitSubmeshes,
                                            int patternMode,
                                            float tileScale,
                                            const glm::vec4& color1,
@@ -548,51 +1002,179 @@ namespace Axle {
             return false;
         }
 
-        std::vector<glm::vec3> vertices;
-        std::vector<u32> indices;
+        struct RawPart {
+            std::string Name;
+            std::vector<glm::vec3> Vertices;
+            std::vector<u32> Indices;
+        };
+        std::vector<RawPart> rawParts;
 
-        for (size_t m = 0; m < scene->meshes.count; ++m) {
-            ufbx_mesh* mesh = scene->meshes.data[m];
-            if (!mesh || mesh->num_triangles == 0) continue;
+        if (scene->nodes.count > 0) {
+            for (size_t i = 0; i < scene->nodes.count; ++i) {
+                ufbx_node* node = scene->nodes.data[i];
+                if (!node || !node->mesh || node->mesh->num_triangles == 0) continue;
 
-            u32 vertexOffset = static_cast<u32>(vertices.size());
-            vertices.reserve(vertices.size() + mesh->vertices.count);
+                ufbx_mesh* mesh = node->mesh;
+                std::string partName = node->name.length > 0 ? SanitizeFilename(node->name.data) 
+                                     : (mesh->name.length > 0 ? SanitizeFilename(mesh->name.data) : "Part");
 
-            for (size_t v = 0; v < mesh->vertices.count; ++v) {
-                vertices.push_back(glm::vec3(
-                    static_cast<float>(mesh->vertices.data[v].x),
-                    static_cast<float>(mesh->vertices.data[v].y),
-                    static_cast<float>(mesh->vertices.data[v].z)
-                ));
+                RawPart part;
+                part.Name = partName;
+                part.Vertices.reserve(mesh->vertices.count);
+
+                for (size_t v = 0; v < mesh->vertices.count; ++v) {
+                    ufbx_vec3 world_pos = ufbx_transform_position(&node->geometry_to_world, mesh->vertices.data[v]);
+                    part.Vertices.push_back(glm::vec3(
+                        static_cast<float>(world_pos.x),
+                        static_cast<float>(world_pos.y),
+                        static_cast<float>(world_pos.z)
+                    ));
+                }
+
+                part.Indices.reserve(mesh->num_triangles * 3);
+                for (size_t f = 0; f < mesh->faces.count; ++f) {
+                    ufbx_face face = mesh->faces.data[f];
+                    for (size_t fi = 1; fi + 1 < face.num_indices; ++fi) {
+                        u32 i0 = mesh->vertex_indices.data[face.index_begin];
+                        u32 i1 = mesh->vertex_indices.data[face.index_begin + fi];
+                        u32 i2 = mesh->vertex_indices.data[face.index_begin + fi + 1];
+                        part.Indices.push_back(i0);
+                        part.Indices.push_back(i1);
+                        part.Indices.push_back(i2);
+                    }
+                }
+
+                if (!part.Vertices.empty() && !part.Indices.empty()) {
+                    rawParts.push_back(std::move(part));
+                }
             }
+        }
 
-            indices.reserve(indices.size() + mesh->num_triangles * 3);
-            for (size_t f = 0; f < mesh->faces.count; ++f) {
-                ufbx_face face = mesh->faces.data[f];
-                for (size_t i = 1; i + 1 < face.num_indices; ++i) {
-                    u32 i0 = mesh->vertex_indices.data[face.index_begin];
-                    u32 i1 = mesh->vertex_indices.data[face.index_begin + i];
-                    u32 i2 = mesh->vertex_indices.data[face.index_begin + i + 1];
-                    indices.push_back(vertexOffset + i0);
-                    indices.push_back(vertexOffset + i1);
-                    indices.push_back(vertexOffset + i2);
+        if (rawParts.empty()) {
+            for (size_t m = 0; m < scene->meshes.count; ++m) {
+                ufbx_mesh* mesh = scene->meshes.data[m];
+                if (!mesh || mesh->num_triangles == 0) continue;
+
+                std::string partName = mesh->name.length > 0 ? SanitizeFilename(mesh->name.data) : ("Part_" + std::to_string(m + 1));
+                RawPart part;
+                part.Name = partName;
+                part.Vertices.reserve(mesh->vertices.count);
+
+                for (size_t v = 0; v < mesh->vertices.count; ++v) {
+                    part.Vertices.push_back(glm::vec3(
+                        static_cast<float>(mesh->vertices.data[v].x),
+                        static_cast<float>(mesh->vertices.data[v].y),
+                        static_cast<float>(mesh->vertices.data[v].z)
+                    ));
+                }
+
+                part.Indices.reserve(mesh->num_triangles * 3);
+                for (size_t f = 0; f < mesh->faces.count; ++f) {
+                    ufbx_face face = mesh->faces.data[f];
+                    for (size_t fi = 1; fi + 1 < face.num_indices; ++fi) {
+                        u32 i0 = mesh->vertex_indices.data[face.index_begin];
+                        u32 i1 = mesh->vertex_indices.data[face.index_begin + fi];
+                        u32 i2 = mesh->vertex_indices.data[face.index_begin + fi + 1];
+                        part.Indices.push_back(i0);
+                        part.Indices.push_back(i1);
+                        part.Indices.push_back(i2);
+                    }
+                }
+
+                if (!part.Vertices.empty() && !part.Indices.empty()) {
+                    rawParts.push_back(std::move(part));
                 }
             }
         }
 
         ufbx_free_scene(scene);
 
-        if (vertices.empty() || indices.empty()) {
+        if (rawParts.empty()) {
             AXLE_WARN("AssetSerializer: FBX file '{0}' contains no triangle geometry", fbxPath.string());
             return false;
         }
 
+        if (splitSubmeshes && rawParts.size() > 1) {
+            std::unordered_map<std::string, int> nameCounts;
+            glm::vec3 overallMin( 1e9f);
+            glm::vec3 overallMax(-1e9f);
+            std::vector<AxleSubmeshSource> submeshes;
+
+            for (auto& raw : rawParts) {
+                if (nameCounts[raw.Name]++ > 0) {
+                    raw.Name += "_" + std::to_string(nameCounts[raw.Name]);
+                }
+
+                glm::vec3 partMin( 1e9f);
+                glm::vec3 partMax(-1e9f);
+                for (const auto& v : raw.Vertices) {
+                    partMin = glm::min(partMin, v);
+                    partMax = glm::max(partMax, v);
+                    overallMin = glm::min(overallMin, v);
+                    overallMax = glm::max(overallMax, v);
+                }
+
+                glm::vec3 partCenter = (partMin + partMax) * 0.5f;
+
+                AxleSubmeshSource sub;
+                sub.Name = raw.Name;
+                sub.LocalTranslation = partCenter;
+                sub.BoundingSize = partMax - partMin;
+                sub.HalfExtent = glm::max(sub.BoundingSize * 0.5f, glm::vec3(0.02f));
+                sub.PatternMode = patternMode;
+                sub.TileScale = tileScale;
+                sub.ColorPrimary = color1;
+                sub.ColorSecondary = color2;
+                sub.Vertices.reserve(raw.Vertices.size());
+                for (const auto& v : raw.Vertices) {
+                    sub.Vertices.push_back(v - partCenter);
+                }
+                sub.Indices = std::move(raw.Indices);
+                submeshes.push_back(std::move(sub));
+            }
+
+            if (submeshes.size() > 1) {
+                auto partsFolder = outAxlePath.parent_path() / outAxlePath.stem();
+                std::error_code ec;
+                std::filesystem::create_directories(partsFolder, ec);
+
+                std::vector<AxlePackagePart> packageParts;
+                packageParts.reserve(submeshes.size());
+
+                for (const auto& sub : submeshes) {
+                    auto partAxlePath = partsFolder / (sub.Name + ".axle");
+                    ExportMeshToAxle(partAxlePath, sub.Name, sub.Vertices, sub.Indices, sub.PatternMode, sub.TileScale, sub.ColorPrimary, sub.ColorSecondary);
+
+                    AxlePackagePart p;
+                    p.Name = sub.Name;
+                    p.RelativePath = (outAxlePath.stem() / (sub.Name + ".axle")).generic_string();
+                    p.LocalTranslation = sub.LocalTranslation;
+                    packageParts.push_back(p);
+                }
+
+                glm::vec3 totalSize = overallMax - overallMin;
+                glm::vec3 totalHalf = glm::max(totalSize * 0.5f, glm::vec3(0.05f));
+                return SavePackageManifest(outAxlePath, outAxlePath.stem().string(), packageParts, totalSize, totalHalf);
+            }
+        }
+
+        std::vector<glm::vec3> allVertices;
+        std::vector<u32> allIndices;
+        for (const auto& part : rawParts) {
+            u32 vOffset = static_cast<u32>(allVertices.size());
+            allVertices.insert(allVertices.end(), part.Vertices.begin(), part.Vertices.end());
+            for (u32 idx : part.Indices) {
+                allIndices.push_back(vOffset + idx);
+            }
+        }
+
         std::string modelName = fbxPath.stem().string();
-        return ExportMeshToAxle(outAxlePath, modelName, vertices, indices, patternMode, tileScale, color1, color2);
+        return ExportMeshToAxle(outAxlePath, modelName, allVertices, allIndices, patternMode, tileScale, color1, color2);
     }
 
     bool AssetSerializer::AutoConvertModel(const std::filesystem::path& modelPath,
                                            const std::filesystem::path& outAxlePath,
+                                           bool splitSubmeshes,
                                            int patternMode,
                                            float tileScale,
                                            const glm::vec4& color1,
@@ -601,13 +1183,13 @@ namespace Axle {
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
         if (ext == ".obj") {
-            return ConvertOBJToAxle(modelPath, outAxlePath, patternMode, tileScale, color1, color2);
+            return ConvertOBJToAxle(modelPath, outAxlePath, splitSubmeshes, patternMode, tileScale, color1, color2);
         }
         if (ext == ".gltf" || ext == ".glb") {
-            return ConvertGLTFToAxle(modelPath, outAxlePath, patternMode, tileScale, color1, color2);
+            return ConvertGLTFToAxle(modelPath, outAxlePath, splitSubmeshes, patternMode, tileScale, color1, color2);
         }
         if (ext == ".fbx") {
-            return ConvertFBXToAxle(modelPath, outAxlePath, patternMode, tileScale, color1, color2);
+            return ConvertFBXToAxle(modelPath, outAxlePath, splitSubmeshes, patternMode, tileScale, color1, color2);
         }
 
         AXLE_ERROR("AssetSerializer: Unsupported model format '{0}'", ext);

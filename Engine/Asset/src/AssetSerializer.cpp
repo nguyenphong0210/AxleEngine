@@ -1196,6 +1196,76 @@ namespace Axle {
         return false;
     }
 
+    AssetSerializer::AssetCompileResult AssetSerializer::CompileAssetDirectory(const std::filesystem::path& assetDirectory, bool forceRebakeAll) {
+        AssetCompileResult result;
+        if (!std::filesystem::exists(assetDirectory)) {
+            AXLE_WARN("AssetSerializer: Asset directory '{0}' does not exist", assetDirectory.string());
+            return result;
+        }
+
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(assetDirectory, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file()) continue;
+
+            auto path = entry.path();
+            auto ext = path.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+
+            if (ext == ".axle") {
+                // Check if package manifest
+                std::ifstream testFile(path);
+                std::string firstLine;
+                std::getline(testFile, firstLine);
+                bool isPackage = (firstLine.rfind("Package:", 0) == 0);
+
+                if (isPackage) {
+                    auto pkg = LoadPackage(path);
+                    if (pkg.Success) {
+                        result.RecompiledCount++;
+                    } else {
+                        result.FailedCount++;
+                    }
+                } else {
+                    std::filesystem::path cachePath = GetCachePathFor(path);
+                    bool needRebake = forceRebakeAll;
+
+                    if (!needRebake) {
+                        if (!std::filesystem::exists(cachePath, ec)) {
+                            needRebake = true;
+                        } else {
+                            auto textWriteTime = std::filesystem::last_write_time(path, ec);
+                            auto cacheWriteTime = std::filesystem::last_write_time(cachePath, ec);
+                            if (ec || textWriteTime > cacheWriteTime) {
+                                needRebake = true;
+                            }
+                        }
+                    }
+
+                    if (needRebake) {
+                        AxleMeshSource source;
+                        if (LoadFromAxleText(path, source)) {
+                            if (SaveToAxleBinary(cachePath, source)) {
+                                result.RecompiledCount++;
+                            } else {
+                                result.FailedCount++;
+                            }
+                        } else {
+                            result.FailedCount++;
+                        }
+                    } else {
+                        result.UpToDateCount++;
+                    }
+                }
+            }
+        }
+
+        AXLE_INFO("AssetSerializer: Compilation scan completed for '{0}' (Recompiled: {1}, Up-to-date: {2}, Failed: {3})",
+            assetDirectory.string(), result.RecompiledCount, result.UpToDateCount, result.FailedCount);
+
+        return result;
+    }
+
 }
 
 

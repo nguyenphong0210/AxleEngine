@@ -455,10 +455,48 @@ void SandboxLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
 }
 
 void SandboxLayer::OnScenePlay() {
+    CompileAndHotReloadAssets(false);
     m_SceneState = SceneState::Play;
     m_Scene->OnRuntimeStart();
     m_ChaseCamera = true;
     AXLE_INFO("Simulation started (Play Mode). Chase Camera locked to Vehicle. Drive with WASD/Arrows (Space: Handbrake).");
+}
+
+void SandboxLayer::CompileAndHotReloadAssets(bool forceRebakeAll) {
+    auto assetDir = Axle::FileSystem::GetAssetDirectory();
+    auto result = Axle::AssetSerializer::CompileAssetDirectory(assetDir, forceRebakeAll);
+
+    // Hot-reload all active entities in the Scene with MeshComponent
+    size_t entitiesUpdated = 0;
+    auto view = m_Scene->GetRegistry().view<Axle::MeshComponent>();
+    for (auto entity : view) {
+        auto& mc = view.get<Axle::MeshComponent>(entity);
+        if (!mc.AssetPath.empty() && std::filesystem::exists(mc.AssetPath)) {
+            auto loaded = Axle::AssetSerializer::LoadMesh(mc.AssetPath);
+            if (loaded.Success && loaded.VAO) {
+                mc.VAO = loaded.VAO;
+                mc.PatternMode = loaded.SourceData.PatternMode;
+                mc.TileScale = loaded.SourceData.TileScale;
+                mc.Color1 = loaded.SourceData.ColorPrimary;
+                mc.Color2 = loaded.SourceData.ColorSecondary;
+                entitiesUpdated++;
+            }
+        }
+    }
+
+    // Refresh Content Browser Thumbnails and Asset Preview Panel
+    m_ContentBrowserPanel.RefreshThumbnails();
+    if (!m_AssetPreviewPanel.GetCurrentAsset().empty()) {
+        m_AssetPreviewPanel.SetAsset(m_AssetPreviewPanel.GetCurrentAsset());
+    }
+
+    m_CompileNotificationTimer = 3.5f;
+    m_CompileNotificationMessage = "Compiled " + std::to_string(result.RecompiledCount) + " modified (" +
+                                   std::to_string(result.UpToDateCount) + " up-to-date, " +
+                                   std::to_string(entitiesUpdated) + " scene meshes reloaded)";
+
+    AXLE_INFO("Asset Compiler: Finished! Recompiled {0} assets ({1} up-to-date). Hot-reloaded {2} active scene entities.",
+        result.RecompiledCount, result.UpToDateCount, entitiesUpdated);
 }
 
 void SandboxLayer::OnScenePause() {
@@ -834,6 +872,19 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_OKeyWasPressed = false;
     }
 
+    if (m_CompileNotificationTimer > 0.0f) {
+        m_CompileNotificationTimer -= ts.GetSeconds();
+    }
+
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F9)) {
+        if (!m_F9KeyWasPressed) {
+            CompileAndHotReloadAssets(false);
+            m_F9KeyWasPressed = true;
+        }
+    } else {
+        m_F9KeyWasPressed = false;
+    }
+
     const bool isHoldingRMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight);
     const bool isCtrlDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftControl) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightControl);
 
@@ -1116,6 +1167,24 @@ void SandboxLayer::RenderToolbar() {
         ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
         ImGui::SameLine();
 
+        // --- ASSET COMPILER / HOT-RELOAD TOOLBAR BUTTON ---
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.82f, 0.44f, 0.12f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.54f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.36f, 0.10f, 1.0f));
+        if (ImGui::Button("Compile Assets (F9)", ImVec2(138.0f, 26.0f))) {
+            CompileAndHotReloadAssets(false);
+        }
+        ImGui::PopStyleColor(3);
+
+        if (m_CompileNotificationTimer > 0.0f) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.55f, 1.0f), "[OK] %s", m_CompileNotificationMessage.c_str());
+        }
+
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
+        ImGui::SameLine();
+
         // --- 1. PLAY BUTTON ---
         if (m_SceneState == SceneState::Play) {
             ImGui::BeginDisabled(true);
@@ -1257,6 +1326,15 @@ void SandboxLayer::OnImGuiRender() {
             ImGui::Separator();
             if (ImGui::MenuItem("Exit", "Alt+F4")) {
                 // Application exit
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Asset")) {
+            if (ImGui::MenuItem("Compile Modified Assets", "F9")) {
+                CompileAndHotReloadAssets(false);
+            }
+            if (ImGui::MenuItem("Rebuild All Binary Caches", "Shift+F9")) {
+                CompileAndHotReloadAssets(true);
             }
             ImGui::EndMenu();
         }

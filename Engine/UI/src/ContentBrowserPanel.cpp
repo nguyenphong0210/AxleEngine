@@ -354,6 +354,12 @@ namespace Axle {
         m_CurrentDirectory = m_RootDirectory;
     }
 
+    void ContentBrowserPanel::RefreshThumbnails() {
+        if (m_ThumbnailManager) {
+            m_ThumbnailManager->Clear();
+        }
+    }
+
     void ContentBrowserPanel::OnImGuiRender(bool* p_open) {
         if (p_open && !*p_open) return;
 

@@ -19,6 +19,7 @@ namespace Axle {
         bool IsWindowHovered() const { return m_IsHovered; }
 
         void SetAssetPreviewPanel(AssetPreviewPanel* previewPanel) { m_AssetPreviewPanel = previewPanel; }
+        void RefreshThumbnails();
 
         void OnImGuiRender(bool* p_open = nullptr);
 

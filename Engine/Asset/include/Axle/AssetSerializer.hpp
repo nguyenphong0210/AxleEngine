@@ -138,6 +138,15 @@ namespace Axle {
                                      float tileScale = 8.0f,
                                      const glm::vec4& color1 = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f),
                                      const glm::vec4& color2 = glm::vec4(0.65f, 0.70f, 0.76f, 1.0f));
+
+        struct AssetCompileResult {
+            size_t RecompiledCount = 0;
+            size_t UpToDateCount = 0;
+            size_t FailedCount = 0;
+        };
+
+        // Recursively inspect and re-bake modified .axle assets in a directory
+        static AssetCompileResult CompileAssetDirectory(const std::filesystem::path& assetDirectory, bool forceRebakeAll = false);
     };
 
 }

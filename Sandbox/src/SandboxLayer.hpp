@@ -45,6 +45,7 @@ public:
     void OnScenePlay();
     void OnScenePause();
     void OnSceneStop();
+    void CompileAndHotReloadAssets(bool forceRebakeAll = false);
 
 private:
     void ResetSimulation();
@@ -57,7 +58,10 @@ private:
     Axle::PhysicsDrawSettings m_PhysicsDrawSettings;
     bool m_ShowPhysicsDebug = false;
     bool m_F1KeyWasPressed = false;
+    bool m_F9KeyWasPressed = false;
     bool m_F11KeyWasPressed = false;
+    float m_CompileNotificationTimer = 0.0f;
+    std::string m_CompileNotificationMessage;
 
     // Viewport & Offscreen Framebuffer
     std::shared_ptr<Axle::Framebuffer> m_Framebuffer;

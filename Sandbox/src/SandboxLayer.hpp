@@ -48,12 +48,18 @@ public:
     void OnSceneStop();
     void CompileAndHotReloadAssets(bool forceRebakeAll = false);
 
+    void NewProject();
+    void OpenProject(const std::filesystem::path& filepath = {});
+    void SaveProject();
+    void SaveProjectAs();
+
     void NewScene();
     void OpenScene(const std::filesystem::path& filepath = {});
     void SaveScene(const std::filesystem::path& filepath = {});
     void SaveSceneAs();
     void UpdateWindowTitle();
     const std::filesystem::path& GetCurrentScenePath() const { return m_CurrentScenePath; }
+    const std::filesystem::path& GetCurrentProjectPath() const { return m_CurrentProjectPath; }
 
 private:
     void ResetSimulation();
@@ -71,6 +77,7 @@ private:
     float m_CompileNotificationTimer = 0.0f;
     std::string m_CompileNotificationMessage;
     std::filesystem::path m_CurrentScenePath;
+    std::filesystem::path m_CurrentProjectPath;
 
     // Viewport & Offscreen Framebuffer
     std::shared_ptr<Axle::Framebuffer> m_Framebuffer;

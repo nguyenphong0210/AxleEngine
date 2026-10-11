@@ -8,6 +8,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/PlatformUtils.hpp>
+#include <Axle/Project.hpp>
 #include <Axle/Log.hpp>
 #include <filesystem>
 
@@ -332,12 +333,37 @@ void SandboxLayer::OnAttach() {
     m_ContentBrowserPanel.SetOpenSceneCallback([this](const std::filesystem::path& path) {
         OpenScene(path);
     });
+    m_ContentBrowserPanel.SetOpenProjectCallback([this](const std::filesystem::path& path) {
+        OpenProject(path);
+    });
 
     // Initialize Scene Serialization (Phase 10: Step 1 & 2)
     m_CurrentScenePath = Axle::FileSystem::ResolveAssetPath("scenes/Playground.axlescene");
     if (!std::filesystem::exists(m_CurrentScenePath)) {
         SaveScene(m_CurrentScenePath);
     }
+
+    // Initialize Project Configuration System (Phase 10: Step 4)
+    std::filesystem::path projFile = "AxleSandbox.axleproj";
+    if (!std::filesystem::exists(projFile)) {
+        auto checkAssetParent = Axle::FileSystem::GetAssetDirectory().parent_path() / "AxleSandbox.axleproj";
+        if (std::filesystem::exists(checkAssetParent)) {
+            projFile = checkAssetParent;
+        }
+    }
+
+    if (std::filesystem::exists(projFile)) {
+        OpenProject(projFile);
+    } else {
+        auto project = Axle::Project::New();
+        project->GetConfig().Name = "Axle Sandbox";
+        project->GetConfig().AssetDirectory = "assets";
+        project->GetConfig().StartScene = "scenes/Playground.axlescene";
+        Axle::Project::SetActive(project);
+        Axle::Project::SaveActive(projFile);
+        m_CurrentProjectPath = std::filesystem::absolute(projFile);
+    }
+
     UpdateWindowTitle();
 
     AXLE_INFO("Axle Editor initialized successfully");
@@ -760,9 +786,120 @@ void SandboxLayer::SaveSceneAs() {
     }
 }
 
+void SandboxLayer::NewProject() {
+    auto defaultDir = std::filesystem::current_path();
+    std::string filepath = Axle::FileDialogs::SaveFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", defaultDir.string().c_str(), "axleproj");
+    if (filepath.empty()) return;
+
+    std::filesystem::path target(filepath);
+    if (target.extension() != ".axleproj") {
+        target += ".axleproj";
+    }
+
+    auto projectDir = target.parent_path();
+    auto assetDir = projectDir / "assets";
+    std::filesystem::create_directories(assetDir / "scenes");
+    std::filesystem::create_directories(assetDir / "models");
+    std::filesystem::create_directories(assetDir / "textures");
+    std::filesystem::create_directories(assetDir / "shaders");
+
+    auto project = Axle::Project::New();
+    project->GetConfig().Name = target.stem().string();
+    project->GetConfig().AssetDirectory = "assets";
+    project->GetConfig().StartScene = "scenes/Untitled.axlescene";
+
+    Axle::Project::SetActive(project);
+    Axle::Project::SaveActive(target);
+    m_CurrentProjectPath = target;
+
+    // Create new scene in project's scenes directory
+    NewScene();
+    SaveScene(assetDir / "scenes/Untitled.axlescene");
+
+    m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
+    m_CompileNotificationMessage = "Created project: " + project->GetConfig().Name;
+    m_CompileNotificationTimer = 4.0f;
+    UpdateWindowTitle();
+    AXLE_INFO("Sandbox: Created and activated new project '{0}' at '{1}'", project->GetConfig().Name, target.string());
+}
+
+void SandboxLayer::OpenProject(const std::filesystem::path& filepath) {
+    std::filesystem::path target = filepath;
+    if (target.empty()) {
+        auto currentDir = m_CurrentProjectPath.empty() ? std::filesystem::current_path() : m_CurrentProjectPath.parent_path();
+        std::string selected = Axle::FileDialogs::OpenFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", currentDir.string().c_str());
+        if (selected.empty()) return;
+        target = selected;
+    }
+
+    if (!std::filesystem::exists(target)) {
+        AXLE_WARN("Sandbox: Project file does not exist: '{0}'", target.string());
+        return;
+    }
+
+    auto project = Axle::Project::Load(target);
+    if (project) {
+        m_CurrentProjectPath = target;
+        m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
+
+        // Load project's StartScene if specified
+        const auto& startSceneRel = project->GetConfig().StartScene;
+        if (!startSceneRel.empty()) {
+            auto startScenePath = Axle::Project::GetAssetDirectory() / startSceneRel;
+            if (std::filesystem::exists(startScenePath)) {
+                OpenScene(startScenePath);
+            } else {
+                NewScene();
+            }
+        } else {
+            NewScene();
+        }
+
+        m_CompileNotificationMessage = "Loaded project: " + project->GetConfig().Name;
+        m_CompileNotificationTimer = 4.0f;
+        UpdateWindowTitle();
+        AXLE_INFO("Sandbox: Successfully opened project '{0}'", target.string());
+    } else {
+        AXLE_ERROR("Sandbox: Failed to load project from '{0}'", target.string());
+    }
+}
+
+void SandboxLayer::SaveProject() {
+    if (m_CurrentProjectPath.empty()) {
+        SaveProjectAs();
+        return;
+    }
+    if (Axle::Project::SaveActive(m_CurrentProjectPath)) {
+        m_CompileNotificationMessage = "Saved project configuration";
+        m_CompileNotificationTimer = 3.5f;
+        AXLE_INFO("Sandbox: Saved project to '{0}'", m_CurrentProjectPath.string());
+    }
+}
+
+void SandboxLayer::SaveProjectAs() {
+    auto currentDir = m_CurrentProjectPath.empty() ? std::filesystem::current_path() : m_CurrentProjectPath.parent_path();
+    std::string filepath = Axle::FileDialogs::SaveFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", currentDir.string().c_str(), "axleproj");
+    if (!filepath.empty()) {
+        std::filesystem::path target(filepath);
+        if (target.extension() != ".axleproj") {
+            target += ".axleproj";
+        }
+        m_CurrentProjectPath = target;
+        if (Axle::Project::GetActive()) {
+            Axle::Project::GetActive()->GetConfig().Name = target.stem().string();
+        }
+        SaveProject();
+        UpdateWindowTitle();
+    }
+}
+
 void SandboxLayer::UpdateWindowTitle() {
+    std::string projName = "No Project";
+    if (auto active = Axle::Project::GetActive()) {
+        projName = active->GetConfig().Name;
+    }
     std::string sceneName = m_CurrentScenePath.empty() ? "Untitled" : m_CurrentScenePath.filename().string();
-    Axle::Application::Get().GetWindow().SetTitle("Axle Engine - [" + sceneName + "]");
+    Axle::Application::Get().GetWindow().SetTitle("Axle Engine - " + projName + " - [" + sceneName + "]");
 }
 
 void SandboxLayer::OnScenePause() {
@@ -1183,7 +1320,11 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
 
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::O)) {
             if (!m_OKeyWasPressed) {
-                OpenScene();
+                if (isShiftDown) {
+                    OpenProject();
+                } else {
+                    OpenScene();
+                }
                 m_OKeyWasPressed = true;
             }
         } else {
@@ -1582,6 +1723,22 @@ void SandboxLayer::OnImGuiRender() {
     // 1. Global Main Menu Bar (At the absolute top of the application window)
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
+            // Project Management
+            if (ImGui::MenuItem("New Project...")) {
+                NewProject();
+            }
+            if (ImGui::MenuItem("Open Project...", "Ctrl+Shift+O")) {
+                OpenProject();
+            }
+            if (ImGui::MenuItem("Save Project")) {
+                SaveProject();
+            }
+            if (ImGui::MenuItem("Save Project As...")) {
+                SaveProjectAs();
+            }
+            ImGui::Separator();
+
+            // Scene Operations
             if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
                 NewScene();
             }

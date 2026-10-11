@@ -16,6 +16,7 @@ target_link_libraries(SandboxApp PRIVATE
     Axle::Physics
     Axle::Scene
     Axle::Vehicle
+    Axle::Project
 )
 
 # Synchronize Sandbox/assets to binary output directory on post-build

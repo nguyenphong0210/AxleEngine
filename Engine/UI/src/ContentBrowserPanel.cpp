@@ -33,6 +33,7 @@ namespace Axle {
         Texture,
         Shader,
         Scene,
+        Project,
         Material,
         Script,
         Document,
@@ -68,6 +69,9 @@ namespace Axle {
         }
         if (ext == ".axlescene" || ext == ".scene") {
             return { AssetKind::Scene, "Axle Scene", "SCN", IM_COL32(255, 85, 95, 255) };
+        }
+        if (ext == ".axleproj") {
+            return { AssetKind::Project, "Axle Project", "PRJ", IM_COL32(0, 210, 180, 255) };
         }
         if (ext == ".axlemat" || ext == ".mat") {
             return { AssetKind::Material, "Material", "MAT", IM_COL32(255, 135, 45, 255) };
@@ -270,6 +274,32 @@ namespace Axle {
         }
         drawList->PopClipRect();
         drawList->AddRect(sMin, sMax, IM_COL32(80, 95, 115, 220), 3.0f, ImDrawFlags_RoundTop, 1.0f);
+    }
+
+    static void DrawProjectIcon(ImDrawList* drawList, ImVec2 center, float size) {
+        float w = size * 1.35f;
+        float h = size * 1.25f;
+        float halfW = w * 0.5f;
+        float halfH = h * 0.5f;
+
+        // Blueprint card background
+        ImVec2 pMin = ImVec2(center.x - halfW, center.y - halfH);
+        ImVec2 pMax = ImVec2(center.x + halfW, center.y + halfH);
+        drawList->AddRectFilled(pMin, pMax, IM_COL32(18, 38, 58, 255), 4.0f);
+        drawList->AddRect(pMin, pMax, IM_COL32(0, 190, 160, 220), 4.0f, 0, 1.5f);
+
+        // Blueprint grid lines
+        drawList->AddLine(ImVec2(center.x - halfW * 0.7f, center.y), ImVec2(center.x + halfW * 0.7f, center.y), IM_COL32(30, 80, 100, 180), 1.0f);
+        drawList->AddLine(ImVec2(center.x, center.y - halfH * 0.6f), ImVec2(center.x, center.y + halfH * 0.6f), IM_COL32(30, 80, 100, 180), 1.0f);
+
+        // Inner glowing cube / badge
+        float bSize = size * 0.45f;
+        ImVec2 b1 = ImVec2(center.x, center.y - bSize * 0.7f);
+        ImVec2 b2 = ImVec2(center.x + bSize * 0.7f, center.y - bSize * 0.2f);
+        ImVec2 b3 = ImVec2(center.x, center.y + bSize * 0.35f);
+        ImVec2 b4 = ImVec2(center.x - bSize * 0.7f, center.y - bSize * 0.2f);
+        drawList->AddQuadFilled(b1, b2, b3, b4, IM_COL32(0, 230, 195, 200));
+        drawList->AddQuad(b1, b2, b3, b4, IM_COL32(255, 255, 255, 240), 1.5f);
     }
 
     static void DrawMaterialIcon(ImDrawList* drawList, ImVec2 center, float size) {
@@ -616,6 +646,9 @@ namespace Axle {
                             if ((ext == ".axlescene" || ext == ".scene") && m_OnOpenSceneCallback) {
                                 m_OnOpenSceneCallback(path);
                                 SetStatusNotification("Loaded scene: " + path.filename().string());
+                            } else if (ext == ".axleproj" && m_OnOpenProjectCallback) {
+                                m_OnOpenProjectCallback(path);
+                                SetStatusNotification("Loaded project: " + path.filename().string());
                             } else if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                                 AXLE_INFO("Content Browser: Selected file '{0}'", path.string());
                                 if (m_AssetPreviewPanel) {
@@ -647,6 +680,14 @@ namespace Axle {
                                 if (m_OnOpenSceneCallback) {
                                     m_OnOpenSceneCallback(path);
                                     SetStatusNotification("Loaded scene: " + path.filename().string());
+                                }
+                            }
+                            ImGui::Separator();
+                        } else if (ext == ".axleproj") {
+                            if (ImGui::MenuItem("Open Project")) {
+                                if (m_OnOpenProjectCallback) {
+                                    m_OnOpenProjectCallback(path);
+                                    SetStatusNotification("Loaded project: " + path.filename().string());
                                 }
                             }
                             ImGui::Separator();
@@ -771,6 +812,7 @@ namespace Axle {
                             case AssetKind::Texture:  DrawTexturePictureIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Shader:   DrawShaderIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Scene:    DrawSceneIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Project:  DrawProjectIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Material: DrawMaterialIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Script:   DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(75, 160, 245, 230)); break;
                             case AssetKind::Document: DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(150, 165, 185, 230)); break;

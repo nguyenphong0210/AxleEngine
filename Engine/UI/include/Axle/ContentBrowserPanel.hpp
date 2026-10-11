@@ -22,6 +22,7 @@ namespace Axle {
         void SetAssetPreviewPanel(AssetPreviewPanel* previewPanel) { m_AssetPreviewPanel = previewPanel; }
         void SetCompileAssetsCallback(std::function<void()> callback) { m_OnCompileAssetsCallback = callback; }
         void SetOpenSceneCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenSceneCallback = callback; }
+        void SetOpenProjectCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenProjectCallback = callback; }
         void RefreshThumbnails();
         void SetStatusNotification(const std::string& message, float duration = 4.0f);
 
@@ -51,6 +52,7 @@ namespace Axle {
         AssetPreviewPanel* m_AssetPreviewPanel = nullptr;
         std::function<void()> m_OnCompileAssetsCallback;
         std::function<void(const std::filesystem::path&)> m_OnOpenSceneCallback;
+        std::function<void(const std::filesystem::path&)> m_OnOpenProjectCallback;
     };
 
 }

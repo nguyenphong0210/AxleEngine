@@ -85,7 +85,7 @@ Level 0:  [ Engine/Core ]
   - [x] **Modular Gameplay Scripts**: Decoupled vehicle input (`CarPlayerScript`) into clean, reusable C++ scripts.
   - [x] **Editor Component Management**: Interactive `+ Add Component` popup in Properties panel, component removal options (`Remove Component`), prominent `+ Create` button with Search filter in Scene Hierarchy, and File menu actions (`Ctrl+S`, `Ctrl+O`, `Ctrl+N`).
   - [x] **Window Work Area & Fullscreen**: Automatic maximized window startup matching OS work area (zero taskbar overlap) and `F11` Maximize/Restore toggle.
-- [ ] **Phase 9: Asset System & 3D Model/Texture Loading (`Engine/Asset` & `Sandbox/assets`) *(In Progress)***
+- [x] **Phase 9: Asset System & 3D Model Ingest Pipeline (`Engine/Asset` & `Sandbox/assets`)**
   - [x] **Project Asset Architecture**: Standardized `Sandbox/assets/` structure (`models/`, `textures/`, `scenes/`, `materials/`, `shaders/`) and `Axle::FileSystem` resolver - separating game project assets from engine core.
   - [x] **Content Browser Panel (`Engine/UI`)**: ImGui-based visual asset browser with directory navigation, file type icons, search filter, path breadcrumbs, Explorer integration, and Drag & Drop payload support.
   - [x] **Drag & Drop Workflow**: Drag 3D model files from Content Browser directly into Viewport or Properties panel to instantiate meshes with zero-gap ground snapping and centered pivots.
@@ -95,17 +95,16 @@ Level 0:  [ Engine/Core ]
     - [x] **Step 2: Ingest & Auto-Conversion Pipeline**: Dragging external 3D files (`.obj`, `.gltf`, `.glb`, `.fbx`) directly from Windows Explorer into Content Browser or Viewport automatically ingests and converts them into engine-standard `.axle` format with instant background `.axlebin` cache generation and seamless scene instantiation.
     - [x] **Step 3: AI Mesh Mutation & Hot-Reload**: AI agents and developers can edit `.axle` files as text; the Engine features a dedicated Editor Compiler button (`F9`), auto-compile before simulation Play (`F5`), and instant GPU VertexArray and material hot-reloading in real time without restart.
     - [x] **Step 4: Reverse Mesh Export (`.obj`)**: Export `.axle` / `.axlebin` meshes back into standard Wavefront `.obj` format with full material libraries (`.mtl`), grouped subparts, and smooth vertex normals for external DCC (Blender, Maya) interop and mesh inspection via right-click context menu.
-  - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights.
-  - [ ] **Texture Mapping (`stb_image`)**: Albedo, normal, and roughness textures applied to 3D meshes.
-- [ ] **Phase 10: Scene Serialization & Project Management (`Engine/Scene` & `Engine/Project`)**
-  - [ ] **Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project` and `File -> Open Project`.
+- [ ] **Phase 10: Scene Serialization & Project Management (`Engine/Scene` & `Engine/Project`) *(Up Next)***
   - [ ] **Scene Serialization (`.axlescene`)**: Save and load complete ECS scene state (Transforms, Meshes, RigidBodies, Vehicle dynamics, Hierarchies) to `.axlescene` files with interactive menu actions (`Ctrl+S`, `Ctrl+O`, `Ctrl+N`).
-  - [ ] **Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with file dialogs.
-  - [ ] Double-click scene files in Content Browser to instantly load them.
-- [ ] **Phase 11: Lighting, Shadows & Environmental Realism**
-  - [ ] Directional Shadow Mapping (Real-time dynamic shadows cast by vehicle and obstacles).
-  - [ ] **PBR Material System & Textures**: Support texture maps (Albedo, Normal, Metallic, Roughness) alongside current procedural checkerboard shaders.
-  - [ ] Atmospheric Skybox (Cubemap, HDRI, or procedural gradient sky).
+  - [ ] **Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with native file dialogs.
+  - [ ] **Content Browser Scene Loading**: Double-click scene files in Content Browser to instantly load them into the active Viewport.
+  - [ ] **Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project` and `File -> Open Project`.
+- [ ] **Phase 11: Lighting, Dynamic Shadows & PBR Materials**
+  - [ ] **Directional Shadow Mapping**: Real-time dynamic shadows cast by vehicle and obstacles onto ground surfaces using depth framebuffer & PCF filtering.
+  - [ ] **Texture Mapping (`stb_image`)**: Load 2D texture maps (Albedo, Normal, Roughness, Metallic) and apply directly to 3D entities.
+  - [ ] **PBR Material System**: Physically based rendering pipeline (Cook-Torrance BRDF) alongside current procedural checkerboard shaders.
+  - [ ] **Atmospheric Skybox**: Cubemap or HDR environment sky with ambient irradiance.
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
@@ -115,6 +114,10 @@ Level 0:  [ Engine/Core ]
   - [ ] **Splatmap Texture Painting**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
   - [ ] **Chunked Grid & LOD**: Chunk-based terrain mesh division with distance-dependent level of detail for large-scale open worlds.
   - [ ] **Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
+- [ ] **Phase 14: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
+  - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights.
+  - [ ] **Dynamic In-Car Dashboard & HUD**: Real-time tachometer (RPM), speedometer (km/h), current gear, and turbo boost indicator.
+  - [ ] **Multi-Angle Camera Controller**: Chase camera, first-person cockpit camera, hood camera, and free-orbit replay camera.
 
 ---
 

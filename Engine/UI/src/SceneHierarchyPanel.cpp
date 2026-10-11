@@ -599,6 +599,8 @@ namespace Axle {
                 if (hc.Parent != entt::null && m_Scene->GetRegistry().valid(hc.Parent)) {
                     Entity parentEntity{ hc.Parent, m_Scene };
                     ImGui::TextColored(ImVec4(0.45f, 0.75f, 1.0f, 1.0f), "Parent: %s", parentEntity.GetComponent<TagComponent>().Tag.c_str());
+                    ImGui::SameLine();
+                    ImGui::Checkbox("Inherit Transform", &hc.InheritTransform);
                 }
                 if (!hc.Children.empty()) {
                     ImGui::TextColored(ImVec4(0.45f, 0.90f, 0.55f, 1.0f), "Children: %zu attached", hc.Children.size());

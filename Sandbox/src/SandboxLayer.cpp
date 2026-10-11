@@ -306,8 +306,13 @@ void SandboxLayer::OnAttach() {
             glm::vec4(0.15f, 0.16f, 0.18f, 1.0f), // Tire rubber
             glm::vec4(0.85f, 0.85f, 0.90f, 1.0f)  // Alloy rim silver
         );
-        m_WheelEntities[i].AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(m_ChassisEntity));
+        m_WheelEntities[i].AddComponent<Axle::HierarchyComponent>(static_cast<entt::entity>(m_ChassisEntity), false);
         chassisHierarchy.Children.push_back(static_cast<entt::entity>(m_WheelEntities[i]));
+
+        const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
+        auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
+        tc.Translation = glm::vec3(wheelMat[3]);
+        tc.Rotation = glm::quat_cast(wheelMat);
     }
 
     // 9. Automotive Test Playground & Obstacle Course (Phase 7)
@@ -1608,6 +1613,7 @@ void SandboxLayer::OnImGuiRender() {
                     m_SnapEnabled ? snapValues : nullptr
                 )) {
                 if (selectedEntity.HasComponent<Axle::HierarchyComponent>() &&
+                    selectedEntity.GetComponent<Axle::HierarchyComponent>().InheritTransform &&
                     selectedEntity.GetComponent<Axle::HierarchyComponent>().Parent != entt::null &&
                     m_Scene->GetRegistry().valid(selectedEntity.GetComponent<Axle::HierarchyComponent>().Parent)) {
 

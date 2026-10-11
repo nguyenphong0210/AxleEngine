@@ -64,9 +64,9 @@ namespace Axle {
 
         glm::mat4 transform = m_Registry.get<TransformComponent>(entityID).GetTransform();
         if (m_Registry.all_of<HierarchyComponent>(entityID)) {
-            entt::entity parent = m_Registry.get<HierarchyComponent>(entityID).Parent;
-            if (parent != entt::null && m_Registry.valid(parent) && m_Registry.all_of<TransformComponent>(parent)) {
-                transform = GetWorldTransform(parent) * transform;
+            const auto& hc = m_Registry.get<HierarchyComponent>(entityID);
+            if (hc.InheritTransform && hc.Parent != entt::null && m_Registry.valid(hc.Parent) && m_Registry.all_of<TransformComponent>(hc.Parent)) {
+                transform = GetWorldTransform(hc.Parent) * transform;
             }
         }
         return transform;

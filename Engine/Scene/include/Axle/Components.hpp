@@ -70,10 +70,11 @@ namespace Axle {
     struct HierarchyComponent {
         entt::entity Parent{ entt::null };
         std::vector<entt::entity> Children;
+        bool InheritTransform = true;
 
         HierarchyComponent() = default;
-        HierarchyComponent(entt::entity parent)
-            : Parent(parent) {}
+        HierarchyComponent(entt::entity parent, bool inheritTransform = true)
+            : Parent(parent), InheritTransform(inheritTransform) {}
     };
 
     class ScriptableEntity;

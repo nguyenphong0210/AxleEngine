@@ -11,9 +11,26 @@ namespace Axle {
     }
 
     Entity Scene::CreateEntity(const std::string& name) {
+        return CreateEntityWithUUID(UUID(), name);
+    }
+
+    Entity Scene::CreateEntityWithUUID(UUID uuid, const std::string& name) {
         Entity entity = { m_Registry.create(), this };
+        entity.AddComponent<IDComponent>(uuid);
         entity.AddComponent<TagComponent>(name.empty() ? "Entity" : name);
         return entity;
+    }
+
+    void Scene::Clear() {
+        auto scriptView = m_Registry.view<NativeScriptComponent>();
+        for (auto entityID : scriptView) {
+            auto& nsc = scriptView.get<NativeScriptComponent>(entityID);
+            if (nsc.Instance && nsc.DestroyScript) {
+                nsc.Instance->OnDestroy();
+                nsc.DestroyScript(&nsc);
+            }
+        }
+        m_Registry.clear();
     }
 
     void Scene::DestroyEntity(Entity entity) {

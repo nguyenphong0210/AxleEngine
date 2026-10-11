@@ -95,11 +95,11 @@ Level 0:  [ Engine/Core ]
     - [x] **Step 2: Ingest & Auto-Conversion Pipeline**: Dragging external 3D files (`.obj`, `.gltf`, `.glb`, `.fbx`) directly from Windows Explorer into Content Browser or Viewport automatically ingests and converts them into engine-standard `.axle` format with instant background `.axlebin` cache generation and seamless scene instantiation.
     - [x] **Step 3: AI Mesh Mutation & Hot-Reload**: AI agents and developers can edit `.axle` files as text; the Engine features a dedicated Editor Compiler button (`F9`), auto-compile before simulation Play (`F5`), and instant GPU VertexArray and material hot-reloading in real time without restart.
     - [x] **Step 4: Reverse Mesh Export (`.obj`)**: Export `.axle` / `.axlebin` meshes back into standard Wavefront `.obj` format with full material libraries (`.mtl`), grouped subparts, and smooth vertex normals for external DCC (Blender, Maya) interop and mesh inspection via right-click context menu.
-- [ ] **Phase 10: Scene Serialization & Project Management (`Engine/Scene` & `Engine/Project`) *(Up Next)***
-  - [ ] **Scene Serialization (`.axlescene`)**: Save and load complete ECS scene state (Transforms, Meshes, RigidBodies, Vehicle dynamics, Hierarchies) to `.axlescene` files with interactive menu actions (`Ctrl+S`, `Ctrl+O`, `Ctrl+N`).
-  - [ ] **Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with native file dialogs.
-  - [ ] **Content Browser Scene Loading**: Double-click scene files in Content Browser to instantly load them into the active Viewport.
-  - [ ] **Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project` and `File -> Open Project`.
+- [ ] **Phase 10: Scene Serialization & Project Management (`Engine/Scene` & `Engine/Project`) *(In Progress)***
+  - [x] **Step 1: Core SceneSerializer (`.axlescene`)**: Built-in structured YAML-like scene serializer saving and restoring complete ECS scene state (UUIDs, TagComponents, TransformComponents, MeshComponents with builtin/custom models, Jolt RigidBodyComponents with shape detection, HierarchyComponents parent-child links, and NativeScriptComponents).
+  - [ ] **Step 2: Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with native file dialogs and window title indicators.
+  - [ ] **Step 3: Content Browser Scene Loading**: Double-click scene files in Content Browser to instantly load them into the active Viewport.
+  - [ ] **Step 4: Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project` and `File -> Open Project`.
 - [ ] **Phase 11: Lighting, Dynamic Shadows & PBR Materials**
   - [ ] **Directional Shadow Mapping**: Real-time dynamic shadows cast by vehicle and obstacles onto ground surfaces using depth framebuffer & PCF filtering.
   - [ ] **Texture Mapping (`stb_image`)**: Load 2D texture maps (Albedo, Normal, Roughness, Metallic) and apply directly to 3D entities.

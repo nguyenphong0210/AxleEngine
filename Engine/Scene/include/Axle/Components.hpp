@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/UUID.hpp>
 #include <Axle/VertexArray.hpp>
 #include <Axle/PhysicsScene.hpp>
 
@@ -12,6 +13,14 @@
 #include <memory>
 
 namespace Axle {
+
+    struct IDComponent {
+        UUID ID;
+
+        IDComponent() = default;
+        IDComponent(const UUID& id)
+            : ID(id) {}
+    };
 
     struct TagComponent {
         std::string Tag;
@@ -58,13 +67,30 @@ namespace Axle {
             : VAO(vao), AssetPath(assetPath), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
     };
 
+    enum class BodyShapeType {
+        Box = 0,
+        Sphere = 1,
+        Cylinder = 2,
+        Cone = 3,
+        Plane = 4,
+        Mesh = 5
+    };
+
     struct RigidBodyComponent {
         BodyID RuntimeBodyID;
         bool IsDynamic = true;
+        BodyShapeType ShapeType = BodyShapeType::Box;
+        glm::vec3 HalfExtent{ 0.5f };
+        float Radius = 0.5f;
+        float HalfHeight = 0.5f;
+        float Friction = 0.5f;
+        float Restitution = 0.0f;
 
         RigidBodyComponent() = default;
         RigidBodyComponent(BodyID bodyId, bool isDynamic = true)
             : RuntimeBodyID(bodyId), IsDynamic(isDynamic) {}
+        RigidBodyComponent(BodyID bodyId, bool isDynamic, BodyShapeType shape, const glm::vec3& halfExtent, float friction = 0.5f, float restitution = 0.0f)
+            : RuntimeBodyID(bodyId), IsDynamic(isDynamic), ShapeType(shape), HalfExtent(halfExtent), Friction(friction), Restitution(restitution) {}
     };
 
     struct HierarchyComponent {

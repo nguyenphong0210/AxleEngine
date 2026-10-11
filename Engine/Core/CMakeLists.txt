@@ -3,6 +3,7 @@ add_library(AxleCore STATIC
     src/LayerStack.cpp
     src/Application.cpp
     src/FileSystem.cpp
+    src/UUID.cpp
 )
 add_library(Axle::Core ALIAS AxleCore)
 add_library(Axle::Foundation ALIAS AxleCore)

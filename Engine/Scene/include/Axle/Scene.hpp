@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/UUID.hpp>
 #include <Axle/Timestep.hpp>
 #include <Axle/Shader.hpp>
 #include <Axle/PerspectiveCamera.hpp>
@@ -20,7 +21,9 @@ namespace Axle {
         ~Scene() = default;
 
         Entity CreateEntity(const std::string& name = "Entity");
+        Entity CreateEntityWithUUID(UUID uuid, const std::string& name = "Entity");
         void DestroyEntity(Entity entity);
+        void Clear();
         Entity FindEntityByBodyID(BodyID bodyID);
 
         // Hierarchical world transform calculation (propagating parent transforms)

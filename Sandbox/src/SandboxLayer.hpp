@@ -14,6 +14,7 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
+#include <Axle/SceneSerializer.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
@@ -47,6 +48,11 @@ public:
     void OnSceneStop();
     void CompileAndHotReloadAssets(bool forceRebakeAll = false);
 
+    void NewScene();
+    void OpenScene(const std::filesystem::path& filepath = {});
+    void SaveScene(const std::filesystem::path& filepath = {});
+    const std::filesystem::path& GetCurrentScenePath() const { return m_CurrentScenePath; }
+
 private:
     void ResetSimulation();
     void RenderToolbar();
@@ -62,6 +68,7 @@ private:
     bool m_F11KeyWasPressed = false;
     float m_CompileNotificationTimer = 0.0f;
     std::string m_CompileNotificationMessage;
+    std::filesystem::path m_CurrentScenePath;
 
     // Viewport & Offscreen Framebuffer
     std::shared_ptr<Axle::Framebuffer> m_Framebuffer;

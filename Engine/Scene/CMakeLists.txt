@@ -1,6 +1,7 @@
 add_library(AxleScene STATIC
     src/Scene.cpp
     src/Entity.cpp
+    src/SceneSerializer.cpp
 )
 add_library(Axle::Scene ALIAS AxleScene)
 
@@ -14,4 +15,5 @@ target_link_libraries(AxleScene
         Axle::Core
         Axle::Renderer
         Axle::Physics
+        Axle::Asset
 )

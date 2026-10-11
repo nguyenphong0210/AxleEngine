@@ -326,6 +326,12 @@ void SandboxLayer::OnAttach() {
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
 
+    // Initialize Scene Serialization (Phase 10: Step 1)
+    m_CurrentScenePath = Axle::FileSystem::ResolveAssetPath("scenes/Playground.axlescene");
+    if (!std::filesystem::exists(m_CurrentScenePath)) {
+        SaveScene(m_CurrentScenePath);
+    }
+
     AXLE_INFO("Axle Editor initialized successfully");
 }
 
@@ -497,6 +503,96 @@ void SandboxLayer::CompileAndHotReloadAssets(bool forceRebakeAll) {
 
     AXLE_INFO("Asset Compiler: Finished! Recompiled {0} assets ({1} up-to-date). Hot-reloaded {2} active scene entities.",
         result.RecompiledCount, result.UpToDateCount, entitiesUpdated);
+}
+
+void SandboxLayer::NewScene() {
+    if (m_SceneState != SceneState::Edit) {
+        OnSceneStop();
+    }
+
+    m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
+    m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+    m_Scene->Clear();
+    m_CurrentScenePath.clear();
+
+    // Create default floor plane
+    m_FloorEntity = m_Scene->CreateEntity("Ground Floor");
+    m_FloorEntity.AddComponent<Axle::TransformComponent>(glm::vec3(0.0f), glm::vec3(150.0f, 1.0f, 150.0f));
+    m_FloorEntity.AddComponent<Axle::MeshComponent>(m_PlaneMesh, "builtin://plane", 0, 2.0f, glm::vec4(0.35f, 0.38f, 0.42f, 1.0f), glm::vec4(0.18f, 0.20f, 0.24f, 1.0f));
+    m_FloorBodyID = m_PhysicsScene->CreatePlane(glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f), 75.0f, 0.6f, 0.0f);
+    m_FloorEntity.AddComponent<Axle::RigidBodyComponent>(m_FloorBodyID, false, Axle::BodyShapeType::Plane, glm::vec3(75.0f), 0.6f, 0.0f);
+
+    m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_CompileNotificationMessage = "Created new empty scene";
+    m_CompileNotificationTimer = 3.5f;
+    AXLE_INFO("Sandbox: Created new empty scene");
+}
+
+void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
+    auto targetPath = filepath.empty() ? Axle::FileSystem::ResolveAssetPath("scenes/Playground.axlescene") : filepath;
+    if (!std::filesystem::exists(targetPath)) {
+        AXLE_WARN("Sandbox: Scene file does not exist: '{0}'", targetPath.string());
+        return;
+    }
+
+    if (m_SceneState != SceneState::Edit) {
+        OnSceneStop();
+    }
+
+    m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
+    m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+
+    Axle::SceneSerializer serializer(m_Scene.get(), m_PhysicsScene.get());
+    Axle::SceneSerializerContext ctx;
+    ctx.CubeMesh = m_CubeMesh;
+    ctx.SphereMesh = m_SphereMesh;
+    ctx.CylinderMesh = m_CylinderMesh;
+    ctx.ConeMesh = m_ConeMesh;
+    ctx.PlaneMesh = m_PlaneMesh;
+    ctx.ScriptBinder = [](Axle::Entity entity, const std::string& scriptName) {
+        if (scriptName == "CarPlayerScript") {
+            entity.AddComponent<Axle::NativeScriptComponent>().Bind<CarPlayerScript>("CarPlayerScript");
+        }
+    };
+    serializer.SetContext(ctx);
+
+    if (serializer.Deserialize(targetPath)) {
+        m_CurrentScenePath = targetPath;
+        m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+        m_VehicleTunerPanel.SetContext(m_Vehicle.get(), m_PhysicsScene.get());
+
+        m_CompileNotificationMessage = "Loaded scene: " + targetPath.filename().string();
+        m_CompileNotificationTimer = 3.5f;
+        AXLE_INFO("Sandbox: Successfully loaded scene from '{0}'", targetPath.string());
+    }
+}
+
+void SandboxLayer::SaveScene(const std::filesystem::path& filepath) {
+    auto targetPath = filepath.empty() ? m_CurrentScenePath : filepath;
+    if (targetPath.empty()) {
+        targetPath = Axle::FileSystem::ResolveAssetPath("scenes/Playground.axlescene");
+    }
+
+    Axle::SceneSerializer serializer(m_Scene.get(), m_PhysicsScene.get());
+    Axle::SceneSerializerContext ctx;
+    ctx.CubeMesh = m_CubeMesh;
+    ctx.SphereMesh = m_SphereMesh;
+    ctx.CylinderMesh = m_CylinderMesh;
+    ctx.ConeMesh = m_ConeMesh;
+    ctx.PlaneMesh = m_PlaneMesh;
+    ctx.ScriptBinder = [](Axle::Entity entity, const std::string& scriptName) {
+        if (scriptName == "CarPlayerScript") {
+            entity.AddComponent<Axle::NativeScriptComponent>().Bind<CarPlayerScript>("CarPlayerScript");
+        }
+    };
+    serializer.SetContext(ctx);
+
+    if (serializer.Serialize(targetPath)) {
+        m_CurrentScenePath = targetPath;
+        m_CompileNotificationMessage = "Saved scene: " + targetPath.filename().string();
+        m_CompileNotificationTimer = 3.5f;
+        AXLE_INFO("Sandbox: Successfully saved scene to '{0}'", targetPath.string());
+    }
 }
 
 void SandboxLayer::OnScenePause() {
@@ -892,7 +988,7 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     if (isCtrlDown && !ImGui::GetIO().WantTextInput) {
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::S)) {
             if (!m_SKeyWasPressed) {
-                AXLE_INFO("Scene saved successfully to assets/scenes/Playground.axle (Ctrl+S)");
+                SaveScene();
                 m_SKeyWasPressed = true;
             }
         } else {
@@ -901,8 +997,7 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
 
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::N)) {
             if (!m_NKeyWasPressed) {
-                ResetSimulation();
-                AXLE_INFO("New Scene initialized (Ctrl+N)");
+                NewScene();
                 m_NKeyWasPressed = true;
             }
         } else {
@@ -911,9 +1006,11 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
 
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::O)) {
             if (!m_OKeyWasPressed) {
-                AXLE_INFO("Open Scene: assets/scenes/Playground.axle (Ctrl+O)");
+                OpenScene();
                 m_OKeyWasPressed = true;
             }
+        } else {
+            m_OKeyWasPressed = false;
         }
     }
 
@@ -1307,17 +1404,16 @@ void SandboxLayer::OnImGuiRender() {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
-                ResetSimulation();
-                AXLE_INFO("Created New Scene (Ctrl+N)");
+                NewScene();
             }
             if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
-                AXLE_INFO("Open Scene: assets/scenes/Playground.axle (Ctrl+O)");
+                OpenScene();
             }
             if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
-                AXLE_INFO("Scene saved successfully to assets/scenes/Playground.axle (Ctrl+S)");
+                SaveScene();
             }
             if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) {
-                AXLE_INFO("Save Scene As dialog (Phase 10 Serializer Target)");
+                SaveScene();
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Reset Simulation", "Ctrl+R")) {

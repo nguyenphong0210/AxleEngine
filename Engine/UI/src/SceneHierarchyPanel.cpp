@@ -1392,6 +1392,10 @@ namespace Axle {
                 auto& sbc = entity.GetComponent<SkyboxComponent>();
 
                 ImGui::Checkbox("Enable Skybox", &sbc.Enabled);
+                ImGui::Checkbox("Hemisphere Ambient Lighting", &sbc.HemisphereAmbient);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Compute realistic ambient irradiance gradients (Zenith, Horizon, Ground) from atmospheric sky.");
+                }
                 ImGui::Spacing();
 
                 // Atmosphere Colors

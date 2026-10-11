@@ -159,6 +159,12 @@ void SandboxLayer::OnAttach() {
             uniform int u_ToneMappingMode;
             uniform float u_Gamma;
 
+            uniform vec3 u_CameraPos;
+            uniform int u_UseHemisphereAmbient;
+            uniform vec3 u_SkyZenithColor;
+            uniform vec3 u_SkyHorizonColor;
+            uniform vec3 u_SkyGroundColor;
+
             float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
                 vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
                 projCoords = projCoords * 0.5 + 0.5;
@@ -252,7 +258,7 @@ void SandboxLayer::OnAttach() {
                 float a = roughness * roughness;
                 float a2 = a * a;
                 vec3 N = normal;
-                vec3 V = normalize(-v_WorldPos);
+                vec3 V = (length(u_CameraPos - v_WorldPos) > 1e-4) ? normalize(u_CameraPos - v_WorldPos) : normalize(-v_WorldPos);
                 vec3 L = normalize(u_LightDir);
                 vec3 H = normalize(V + L);
                 float NdotH = max(dot(N, H), 0.0);
@@ -288,7 +294,28 @@ void SandboxLayer::OnAttach() {
 
                 vec3 radiance = u_LightColor * u_LightIntensity;
                 vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
-                vec3 ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
+                vec3 ambient;
+                if (u_UseHemisphereAmbient == 1) {
+                    float upWeight = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
+                    float zenithWeight = clamp(N.y, 0.0, 1.0);
+                    vec3 skyUpper = mix(u_SkyHorizonColor, u_SkyZenithColor, zenithWeight);
+                    vec3 hemisphereLight = mix(u_SkyGroundColor, skyUpper, upWeight);
+
+                    vec3 diffuseAmbient = hemisphereLight * baseColor.rgb * kD;
+
+                    vec3 R = reflect(-V, N);
+                    float specUp = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
+                    float specZenith = clamp(R.y, 0.0, 1.0);
+                    vec3 specUpper = mix(u_SkyHorizonColor, u_SkyZenithColor, specZenith);
+                    vec3 specSky = mix(u_SkyGroundColor, specUpper, specUp);
+
+                    vec3 F_ambient = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
+                    vec3 specularAmbient = specSky * F_ambient * (1.0 - roughness * 0.7);
+
+                    ambient = (diffuseAmbient + specularAmbient) * u_AmbientIntensity;
+                } else {
+                    ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
+                }
                 vec3 emissive = u_EmissionColor * max(u_EmissionIntensity, 0.0);
                 vec3 linearColor = ambient + Lo + emissive;
 
@@ -343,6 +370,11 @@ void SandboxLayer::OnAttach() {
     m_Shader->SetFloat("u_Exposure", 1.0f);
     m_Shader->SetInt("u_ToneMappingMode", 0);
     m_Shader->SetFloat("u_Gamma", 2.2f);
+    m_Shader->SetFloat3("u_CameraPos", m_CameraController->GetCamera().GetPosition());
+    m_Shader->SetInt("u_UseHemisphereAmbient", 1);
+    m_Shader->SetFloat3("u_SkyZenithColor", glm::vec3(0.18f, 0.42f, 0.78f));
+    m_Shader->SetFloat3("u_SkyHorizonColor", glm::vec3(0.70f, 0.82f, 0.95f));
+    m_Shader->SetFloat3("u_SkyGroundColor", glm::vec3(0.18f, 0.16f, 0.14f));
 
     // 3.1 Shadow Mapping System (Phase 11: Sub-step 1.1)
     m_ShadowMap = std::make_unique<Axle::ShadowMap>();

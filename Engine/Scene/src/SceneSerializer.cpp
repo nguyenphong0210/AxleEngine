@@ -234,6 +234,7 @@ namespace Axle {
                 ss << "      SyncWithSun: " << (sbc.SyncWithSun ? "true" : "false") << "\n";
                 ss << "      CustomAzimuth: " << sbc.CustomAzimuth << "\n";
                 ss << "      CustomElevation: " << sbc.CustomElevation << "\n";
+                ss << "      HemisphereAmbient: " << (sbc.HemisphereAmbient ? "true" : "false") << "\n";
             }
         }
 
@@ -500,6 +501,8 @@ namespace Axle {
                             sbc.CustomAzimuth = std::stof(Trim(trimmed.substr(14)));
                         } else if (trimmed.rfind("CustomElevation:", 0) == 0) {
                             sbc.CustomElevation = std::stof(Trim(trimmed.substr(16)));
+                        } else if (trimmed.rfind("HemisphereAmbient:", 0) == 0) {
+                            sbc.HemisphereAmbient = (Trim(trimmed.substr(18)) == "true");
                         }
                         break;
                     }

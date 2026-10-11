@@ -45,6 +45,13 @@ uniform float u_Exposure;          // Exposure multiplier (default 1.0)
 uniform int u_ToneMappingMode;     // 0: ACES Filmic, 1: Reinhard, 2: Uncharted 2, 3: Linear Bypass
 uniform float u_Gamma;             // Display gamma exponent (default 2.2)
 
+// 6. Atmospheric Skybox & Hemisphere Ambient (Phase 11: Sub-step 4.3)
+uniform vec3 u_CameraPos;          // World-space camera position
+uniform int u_UseHemisphereAmbient;// 1: Enable hemisphere irradiance, 0: Flat ambient
+uniform vec3 u_SkyZenithColor;     // Sky radiance at zenith (+Y)
+uniform vec3 u_SkyHorizonColor;    // Atmospheric radiance at horizon (XZ)
+uniform vec3 u_SkyGroundColor;     // Terrain bounce radiance at ground (-Y)
+
 const float PI = 3.14159265358979323846;
 
 // ----------------------------------------------------------------------------
@@ -240,7 +247,7 @@ void main() {
 
     // 5. PBR Cook-Torrance Direct Lighting
     vec3 N = normal;
-    vec3 V = normalize(-v_WorldPos);
+    vec3 V = (length(u_CameraPos - v_WorldPos) > 1e-4) ? normalize(u_CameraPos - v_WorldPos) : normalize(-v_WorldPos);
     vec3 L = normalize(u_LightDir);
     vec3 H = normalize(V + L);
 
@@ -276,8 +283,33 @@ void main() {
     vec3 radiance = u_LightColor * u_LightIntensity;
     vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
 
-    // Ambient lighting term
-    vec3 ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
+    // Hemisphere Ambient Irradiance & Environment Reflection (Phase 11: Sub-step 4.3)
+    vec3 ambient;
+    if (u_UseHemisphereAmbient == 1) {
+        // Vertical normal component maps [-1, 1] to [0, 1] for ground-to-sky gradient
+        float upWeight = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
+        float zenithWeight = clamp(N.y, 0.0, 1.0);
+        vec3 skyUpper = mix(u_SkyHorizonColor, u_SkyZenithColor, zenithWeight);
+        vec3 hemisphereLight = mix(u_SkyGroundColor, skyUpper, upWeight);
+
+        // Diffuse hemisphere irradiance (energy-conserved via kD)
+        vec3 diffuseAmbient = hemisphereLight * baseColor.rgb * kD;
+
+        // Specular ambient environment approximation
+        vec3 R = reflect(-V, N);
+        float specUp = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
+        float specZenith = clamp(R.y, 0.0, 1.0);
+        vec3 specUpper = mix(u_SkyHorizonColor, u_SkyZenithColor, specZenith);
+        vec3 specSky = mix(u_SkyGroundColor, specUpper, specUp);
+
+        // Ambient Fresnel with roughness attenuation
+        vec3 F_ambient = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
+        vec3 specularAmbient = specSky * F_ambient * (1.0 - roughness * 0.7);
+
+        ambient = (diffuseAmbient + specularAmbient) * u_AmbientIntensity;
+    } else {
+        ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
+    }
 
     // Emissive lighting term (Automotive lights / Glow)
     vec3 emissive = u_EmissionColor * max(u_EmissionIntensity, 0.0);

@@ -153,6 +153,20 @@ namespace Axle {
         shader.SetInt("u_ToneMappingMode", activeToneMapping);
         shader.SetFloat("u_Gamma", activeGamma);
 
+        // 3. Query active atmospheric skybox for hemisphere ambient irradiance (Phase 11: Sub-step 4.3)
+        SkyboxComponent skybox;
+        bool hasSkybox = GetPrimarySkybox(skybox);
+        int useHemisphereAmbient = (hasSkybox && skybox.Enabled && skybox.HemisphereAmbient) ? 1 : 0;
+        glm::vec3 skyZenith = hasSkybox ? skybox.ZenithColor : glm::vec3(0.18f, 0.42f, 0.78f);
+        glm::vec3 skyHorizon = hasSkybox ? skybox.HorizonColor : glm::vec3(0.70f, 0.82f, 0.95f);
+        glm::vec3 skyGround = hasSkybox ? skybox.GroundColor : glm::vec3(0.18f, 0.16f, 0.14f);
+
+        shader.SetFloat3("u_CameraPos", camera.GetPosition());
+        shader.SetInt("u_UseHemisphereAmbient", useHemisphereAmbient);
+        shader.SetFloat3("u_SkyZenithColor", skyZenith);
+        shader.SetFloat3("u_SkyHorizonColor", skyHorizon);
+        shader.SetFloat3("u_SkyGroundColor", skyGround);
+
         // Texture sampler slot assignments
         shader.SetInt("u_AlbedoMap", 0);
         shader.SetInt("u_NormalMap", 2);

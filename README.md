@@ -100,7 +100,7 @@ Level 0:  [ Engine/Core ]
   - [x] **Step 2: Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with native OS file dialogs (`Axle::FileDialogs`), dynamic window title indicator (`Axle Engine - Project - [SceneName.axlescene]`), and full Main Menu Bar integration (`File -> New / Open / Save / Save As / Exit`).
   - [x] **Step 3: Content Browser Scene Loading**: Double-click scene files (`.axlescene`) in Content Browser to instantly load them into the active Viewport, with right-click context menu ("Open Scene in Viewport"), dedicated Scene clapperboard icon (`SCN`), and drag-and-drop scene loading onto the Viewport.
   - [x] **Step 4: Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project`, `File -> Open Project` (`Ctrl+Shift+O`), `File -> Save Project`, Content Browser `.axleproj` project blueprint icon (`PRJ`), and dynamic window title synchronization.
-- [ ] **Phase 11: Lighting, Dynamic Shadows & PBR Materials**
+- [x] **Phase 11: Lighting, Dynamic Shadows & PBR Materials**
   - [x] **Directional Sun Light & Real-Time Shadow Mapping**:
     - [x] **Sub-step 1.1**: Core Depth Framebuffer (`GL_DEPTH_COMPONENT32F`, 2048x2048, border clamped), Light Space Matrix calculation, and `Scene::RenderShadowPass()`.
     - [x] **Sub-step 1.2**: Two-pass rendering pipeline with 3x3 Percentage-Closer Filtering (PCF) soft shadows and hardware polygon offset slope-scaled depth bias to eliminate shadow acne.
@@ -112,10 +112,10 @@ Level 0:  [ Engine/Core ]
   - [x] **PBR Material System (Cook-Torrance Microfacet BRDF)**:
     - [x] **Sub-step 3.1**: Physically based Cook-Torrance microfacet specular BRDF (Trowbridge-Reitz GGX normal distribution $D$, Smith-Schlick shadowing/masking $G$, Fresnel-Schlick reflectance $F$), energy conservation ($k_D + k_S = 1$), metallic workflow, and directional sun radiance integration with PCF soft shadows.
     - [x] **Sub-step 3.2**: HDR Filmic Tone Mapping (ACES Narkowicz approximation, Reinhard, Uncharted 2 Hable, and Linear Bypass modes) & Linear-to-sRGB display gamma correction ($1/\gamma$), with real-time Exposure and Tone Mapping controls in Sun Light Inspector and complete scene serialization.
-  - [ ] **Atmospheric Skybox**:
+  - [x] **Atmospheric Skybox**:
     - [x] **Sub-step 4.1**: Procedural atmospheric Rayleigh / Mie scattering skybox pipeline (`Axle::Skybox`), camera-centric unit cube renderer at infinity (`glDepthFunc(GL_LEQUAL)`, $z/w = 1.0$), analytical sharp sun disk with anti-aliasing, sunset/sunrise golden horizon warming, night darkening with procedural twinkling stars, and full HDR ACES filmic tone mapping.
     - [x] **Sub-step 4.2**: ECS `SkyboxComponent`, dynamic Sun Light orientation & photometric post-process synchronization, interactive Inspector controls (Zenith, Horizon, Ground colors, Turbidity, Sun Disk Size & Corona Glow, Sync with Sun toggle, Atmosphere presets), and complete scene serialization (`.axlescene`).
-    - [ ] **Sub-step 4.3**: Ambient hemisphere irradiance calculation from atmospheric sky.
+    - [x] **Sub-step 4.3**: Ambient hemisphere irradiance calculation from atmospheric sky.
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.

@@ -380,6 +380,7 @@ namespace Axle {
         bool SyncWithSun = true;                          // Dynamically bind to primary directional sun
         float CustomAzimuth = 45.0f;                      // Custom sun heading if not synced
         float CustomElevation = 50.0f;                    // Custom sun altitude if not synced
+        bool HemisphereAmbient = true;                    // Enable atmospheric hemisphere ambient irradiance
 
         SkyboxComponent() = default;
 

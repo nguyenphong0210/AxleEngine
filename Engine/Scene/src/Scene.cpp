@@ -136,6 +136,21 @@ namespace Axle {
         shader.SetInt("u_ShadowsEnabled", activeShadows);
         shader.SetInt("u_ShadowMap", shadowMapSlot);
 
+        // Texture sampler slot assignments
+        shader.SetInt("u_AlbedoMap", 0);
+        shader.SetInt("u_NormalMap", 2);
+        shader.SetInt("u_RoughnessMap", 3);
+        shader.SetInt("u_MetallicMap", 4);
+
+        // Default texture & material parameters
+        shader.SetInt("u_UseAlbedoMap", 0);
+        shader.SetInt("u_UseNormalMap", 0);
+        shader.SetInt("u_UseRoughnessMap", 0);
+        shader.SetInt("u_UseMetallicMap", 0);
+        shader.SetFloat2("u_UVScale", glm::vec2(1.0f, 1.0f));
+        shader.SetFloat("u_Roughness", 0.5f);
+        shader.SetFloat("u_Metallic", 0.0f);
+
         auto renderView = m_Registry.view<MeshComponent, TransformComponent>();
         for (auto entity : renderView) {
             auto& mesh = m_Registry.get<MeshComponent>(entity);

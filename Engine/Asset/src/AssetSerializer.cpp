@@ -334,18 +334,31 @@ namespace Axle {
         }
 
         // Upload to GPU VertexArray
+        glm::vec3 minBound(1e9f);
+        glm::vec3 maxBound(-1e9f);
+        for (const auto& v : source.Vertices) {
+            minBound = glm::min(minBound, v);
+            maxBound = glm::max(maxBound, v);
+        }
+        glm::vec3 size = glm::max(maxBound - minBound, glm::vec3(0.01f));
+
         std::vector<f32> vertexBufferData;
-        vertexBufferData.reserve(source.Vertices.size() * 3);
+        vertexBufferData.reserve(source.Vertices.size() * 5);
         for (const auto& v : source.Vertices) {
             vertexBufferData.push_back(v.x);
             vertexBufferData.push_back(v.y);
             vertexBufferData.push_back(v.z);
+            float u = (v.x - minBound.x) / size.x;
+            float v_coord = (v.z - minBound.z) / size.z;
+            vertexBufferData.push_back(u);
+            vertexBufferData.push_back(v_coord);
         }
 
         auto va = std::make_shared<VertexArray>();
         auto vb = std::make_shared<VertexBuffer>(vertexBufferData.data(), static_cast<u32>(vertexBufferData.size() * sizeof(f32)));
         vb->SetLayout({
-            { ShaderDataType::Float3, "a_Position" }
+            { ShaderDataType::Float3, "a_Position" },
+            { ShaderDataType::Float2, "a_TexCoord" }
         });
         va->AddVertexBuffer(vb);
 

@@ -101,14 +101,17 @@ void SandboxLayer::OnAttach() {
         vertexSrc = R"(
             #version 450 core
             layout(location = 0) in vec3 a_Position;
+            layout(location = 1) in vec2 a_TexCoord;
             uniform mat4 u_ViewProjection;
             uniform mat4 u_Transform;
             uniform mat4 u_LightSpaceMatrix;
             out vec3 v_WorldPos;
             out vec3 v_LocalPos;
+            out vec2 v_TexCoord;
             out vec4 v_FragPosLightSpace;
             void main() {
                 v_LocalPos = a_Position;
+                v_TexCoord = a_TexCoord;
                 vec4 worldPos = u_Transform * vec4(a_Position, 1.0);
                 v_WorldPos = worldPos.xyz;
                 v_FragPosLightSpace = u_LightSpaceMatrix * worldPos;
@@ -118,9 +121,12 @@ void SandboxLayer::OnAttach() {
         fragmentSrc = R"(
             #version 450 core
             layout(location = 0) out vec4 o_Color;
+
             in vec3 v_WorldPos;
             in vec3 v_LocalPos;
+            in vec2 v_TexCoord;
             in vec4 v_FragPosLightSpace;
+
             uniform int u_PatternMode;
             uniform float u_TileScale;
             uniform vec4 u_Color1;
@@ -131,7 +137,20 @@ void SandboxLayer::OnAttach() {
             uniform float u_AmbientIntensity;
             uniform int u_ShadowsEnabled;
             uniform mat4 u_Transform;
+
+            uniform sampler2D u_AlbedoMap;
             uniform sampler2D u_ShadowMap;
+            uniform sampler2D u_NormalMap;
+            uniform sampler2D u_RoughnessMap;
+            uniform sampler2D u_MetallicMap;
+
+            uniform int u_UseAlbedoMap;
+            uniform int u_UseNormalMap;
+            uniform int u_UseRoughnessMap;
+            uniform int u_UseMetallicMap;
+            uniform vec2 u_UVScale;
+            uniform float u_Roughness;
+            uniform float u_Metallic;
 
             float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
                 vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
@@ -151,41 +170,95 @@ void SandboxLayer::OnAttach() {
                 return shadow / 9.0;
             }
 
+            vec3 PerturbNormal(vec3 N, vec3 V, vec2 texcoord) {
+                vec3 mapNormal = texture(u_NormalMap, texcoord).xyz * 2.0 - 1.0;
+                vec3 dp1 = dFdx(v_WorldPos);
+                vec3 dp2 = dFdy(v_WorldPos);
+                vec2 duv1 = dFdx(texcoord);
+                vec2 duv2 = dFdy(texcoord);
+                vec3 dp2perp = cross(dp2, N);
+                vec3 dp1perp = cross(N, dp1);
+                vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+                vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+                float lenT = length(T);
+                float lenB = length(B);
+                if (lenT < 1e-6 || lenB < 1e-6) return N;
+                mat3 TBN = mat3(T / lenT, B / lenB, N);
+                return normalize(TBN * mapNormal);
+            }
+
             void main() {
-                float pattern = 0.0;
+                vec2 uvScale = (u_UVScale.x != 0.0 && u_UVScale.y != 0.0) ? u_UVScale : vec2(1.0);
+                vec2 uv = v_TexCoord * uvScale;
+
                 vec3 normal = vec3(0.0, 1.0, 0.0);
                 if (u_PatternMode == 0) {
-                    vec2 coord = floor(v_WorldPos.xz * u_TileScale);
-                    pattern = mod(coord.x + coord.y, 2.0);
+                    normal = vec3(0.0, 1.0, 0.0);
                 } else if (u_PatternMode == 1) {
-                    vec3 coord = floor((v_LocalPos + vec3(0.5)) * u_TileScale + vec3(0.0001));
-                    pattern = mod(coord.x + coord.y + coord.z, 2.0);
                     vec3 dx = dFdx(v_WorldPos);
                     vec3 dy = dFdy(v_WorldPos);
                     normal = normalize(cross(dx, dy));
                     if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
                 } else {
-                    vec3 nLocal = normalize(v_LocalPos);
-                    float u = atan(nLocal.z, nLocal.x) / (2.0 * 3.14159265359) + 0.5;
-                    float v = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
-                    vec2 coord = floor(vec2(u * u_TileScale, v * (u_TileScale * 0.5)));
-                    pattern = mod(coord.x + coord.y, 2.0);
                     normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
                 }
-                vec4 baseColor = mix(u_Color1, u_Color2, pattern);
+
+                if (u_UseNormalMap == 1) {
+                    vec3 viewDir = normalize(-v_WorldPos);
+                    normal = PerturbNormal(normal, viewDir, uv);
+                }
+
+                vec4 baseColor;
+                if (u_UseAlbedoMap == 1) {
+                    vec4 texColor = texture(u_AlbedoMap, uv);
+                    baseColor = texColor * u_Color1;
+                } else {
+                    float pattern = 0.0;
+                    if (u_PatternMode == 0) {
+                        vec2 coord = floor(v_WorldPos.xz * u_TileScale);
+                        pattern = mod(coord.x + coord.y, 2.0);
+                    } else if (u_PatternMode == 1) {
+                        vec3 coord = floor((v_LocalPos + vec3(0.5)) * u_TileScale + vec3(0.0001));
+                        pattern = mod(coord.x + coord.y + coord.z, 2.0);
+                    } else {
+                        vec3 nLocal = normalize(v_LocalPos);
+                        float uSph = atan(nLocal.z, nLocal.x) / (2.0 * 3.14159265359) + 0.5;
+                        float vSph = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
+                        vec2 coord = floor(vec2(uSph * u_TileScale, vSph * (u_TileScale * 0.5)));
+                        pattern = mod(coord.x + coord.y, 2.0);
+                    }
+                    baseColor = mix(u_Color1, u_Color2, pattern);
+                }
+
+                float roughness = (u_UseRoughnessMap == 1) ? texture(u_RoughnessMap, uv).r : u_Roughness;
+                roughness = clamp(roughness, 0.04, 1.0);
+
+                float metallic = (u_UseMetallicMap == 1) ? texture(u_MetallicMap, uv).r : u_Metallic;
+                metallic = clamp(metallic, 0.0, 1.0);
+
                 vec3 lightDir = normalize(u_LightDir);
                 float NdotL = max(dot(normal, lightDir), 0.0);
                 float shadow = 0.0;
                 if (u_ShadowsEnabled == 1) {
                     shadow = CalculateShadow(v_FragPosLightSpace, normal, lightDir);
                 }
-                vec3 ambient = u_LightColor * u_AmbientIntensity;
-                vec3 diffuse = u_LightColor * (u_LightIntensity * NdotL * (1.0 - shadow));
-                vec3 lighting = ambient + diffuse;
+
                 vec3 viewDir = normalize(-v_WorldPos);
                 vec3 halfDir = normalize(lightDir + viewDir);
-                float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.20 * (1.0 - shadow);
-                vec3 finalRgb = baseColor.rgb * lighting + u_LightColor * (spec * u_LightIntensity);
+
+                float alpha = max(roughness * roughness, 0.001);
+                float shininess = clamp(2.0 / (alpha * alpha) - 2.0, 1.0, 1024.0);
+                float NdotH = max(dot(normal, halfDir), 0.0);
+                float spec = pow(NdotH, shininess) * (1.0 - shadow);
+
+                vec3 specColor = mix(vec3(0.04), baseColor.rgb, metallic);
+                vec3 diffColor = baseColor.rgb * (1.0 - metallic);
+
+                vec3 ambient = diffColor * u_LightColor * u_AmbientIntensity;
+                vec3 diffuse = diffColor * u_LightColor * (u_LightIntensity * NdotL * (1.0 - shadow));
+                vec3 specular = specColor * u_LightColor * (spec * u_LightIntensity * (0.2 + 0.8 * metallic));
+
+                vec3 finalRgb = ambient + diffuse + specular;
                 o_Color = vec4(finalRgb, baseColor.a);
             }
         )";
@@ -194,6 +267,12 @@ void SandboxLayer::OnAttach() {
     }
 
     m_Shader = std::make_unique<Axle::Shader>(vertexSrc, fragmentSrc);
+    m_Shader->Bind();
+    m_Shader->SetInt("u_AlbedoMap", 0);
+    m_Shader->SetInt("u_ShadowMap", 1);
+    m_Shader->SetInt("u_NormalMap", 2);
+    m_Shader->SetInt("u_RoughnessMap", 3);
+    m_Shader->SetInt("u_MetallicMap", 4);
 
     // 3.1 Shadow Mapping System (Phase 11: Sub-step 1.1)
     m_ShadowMap = std::make_unique<Axle::ShadowMap>();
@@ -1624,10 +1703,14 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         Axle::RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
         Axle::RenderCommand::Clear();
 
-        // Bind shadow map depth texture to slot 1 for soft shadow calculation
+        // Bind texture slots (0: Albedo, 1: ShadowMap, 2: Normal, 3: Roughness, 4: Metallic)
+        Axle::Texture2D::GetWhiteTexture()->Bind(0);
         if (m_ShadowMap) {
             m_ShadowMap->BindTexture(1);
         }
+        Axle::Texture2D::GetFlatNormalTexture()->Bind(2);
+        Axle::Texture2D::GetDefaultRoughnessTexture()->Bind(3);
+        Axle::Texture2D::GetBlackTexture()->Bind(4);
 
         // 1. Render all ECS entities
         m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader,
@@ -1640,9 +1723,13 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
             m_PhysicsDebugRenderer->End(m_CameraController->GetCamera().GetViewProjectionMatrix());
         }
 
+        Axle::Texture2D::GetWhiteTexture()->Unbind(0);
         if (m_ShadowMap) {
             m_ShadowMap->UnbindTexture(1);
         }
+        Axle::Texture2D::GetFlatNormalTexture()->Unbind(2);
+        Axle::Texture2D::GetDefaultRoughnessTexture()->Unbind(3);
+        Axle::Texture2D::GetBlackTexture()->Unbind(4);
 
         m_Framebuffer->Unbind();
     }

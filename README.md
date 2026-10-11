@@ -107,7 +107,7 @@ Level 0:  [ Engine/Core ]
     - [x] **Sub-step 1.3**: ECS `DirectionalLightComponent`, Sun Light entity management, interactive Inspector controls (Sun Azimuth & Elevation sliders, Color picker, Intensity, Ambient fill, Cast Shadows toggle, Atmosphere presets), and full scene serialization.
   - [ ] **Texture Mapping (`stb_image`)**:
     - [x] **Sub-step 2.1**: Integrate standard `stb_image.h` (v2.30) library, implement OpenGL 4.5 Core Profile `Axle::Texture2D` abstraction (support PNG/JPG/TGA/BMP, RGBA8/RGB8/RG8/R8 formats, auto mipmap generation, configurable wrap & filter modes, slot binding management), with pre-baked 1x1 fallback textures (White, Flat Normal, Black, Roughness).
-    - [ ] **Sub-step 2.2**: Upgrade Vertex Layout & UV coordinates (`a_TexCoord`) on Primitive Meshes; configure Texture Sampler Slots in Shader (`u_AlbedoMap`, `u_NormalMap`, `u_RoughnessMap`, `u_MetallicMap`).
+    - [x] **Sub-step 2.2**: Upgrade Vertex Layout & UV coordinates (`a_TexCoord`) across Primitive Meshes and `.axle` loaders; configure Texture Sampler Slots in Shader (`u_AlbedoMap`, `u_ShadowMap`, `u_NormalMap`, `u_RoughnessMap`, `u_MetallicMap`) with screen-space cotangent-frame normal perturbation, roughness/metallic sampling, and 1x1 fallback texture slot binding.
     - [ ] **Sub-step 2.3**: Add `MaterialComponent` in ECS, integrate Inspector UI with texture map slots, thumbnail preview, drag-and-drop from Content Browser, and scene serialization (`.axlescene`).
   - [ ] **PBR Material System**: Physically based rendering pipeline (Cook-Torrance BRDF) alongside current procedural checkerboard shaders.
   - [ ] **Atmospheric Skybox**: Cubemap or HDR environment sky with ambient irradiance.

@@ -326,6 +326,9 @@ void SandboxLayer::OnAttach() {
     m_ContentBrowserPanel.SetRootPath(Axle::FileSystem::GetAssetDirectory());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
+    m_ContentBrowserPanel.SetCompileAssetsCallback([this]() {
+        CompileAndHotReloadAssets(false);
+    });
 
     // Initialize Scene Serialization (Phase 10: Step 1 & 2)
     m_CurrentScenePath = Axle::FileSystem::ResolveAssetPath("scenes/Playground.axlescene");
@@ -502,6 +505,7 @@ void SandboxLayer::CompileAndHotReloadAssets(bool forceRebakeAll) {
     m_CompileNotificationMessage = "Compiled " + std::to_string(result.RecompiledCount) + " modified (" +
                                    std::to_string(result.UpToDateCount) + " up-to-date, " +
                                    std::to_string(entitiesUpdated) + " scene meshes reloaded)";
+    m_ContentBrowserPanel.SetStatusNotification(m_CompileNotificationMessage);
 
     AXLE_INFO("Asset Compiler: Finished! Recompiled {0} assets ({1} up-to-date). Hot-reloaded {2} active scene entities.",
         result.RecompiledCount, result.UpToDateCount, entitiesUpdated);
@@ -1273,7 +1277,23 @@ void SandboxLayer::RenderToolbar() {
             return clicked;
         };
 
-        // --- GIZMO TRANSFORMATION TOOLS ---
+        // --- 1. QUICK SCENE SAVE (Unreal Engine Style) ---
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.44f, 0.74f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.54f, 0.88f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.36f, 0.62f, 1.0f));
+        if (ImGui::Button("Save", ImVec2(56.0f, 26.0f))) {
+            SaveScene();
+        }
+        ImGui::PopStyleColor(3);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Save active scene to file (Ctrl+S)");
+        }
+
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.35f, 0.38f, 0.44f, 1.0f), "|");
+        ImGui::SameLine();
+
+        // --- 2. GIZMO TRANSFORMATION TOOLS ---
         if (DrawToolButton("Select (Q)", m_GizmoType == -1, ImVec2(76.0f, 26.0f))) {
             m_GizmoType = -1;
         }
@@ -1306,24 +1326,6 @@ void SandboxLayer::RenderToolbar() {
             } else {
                 ImGui::DragFloat("##SnapTrans", &m_SnapTranslation, 0.05f, 0.05f, 5.0f, "%.2f m");
             }
-        }
-
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
-        ImGui::SameLine();
-
-        // --- ASSET COMPILER / HOT-RELOAD TOOLBAR BUTTON ---
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.82f, 0.44f, 0.12f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.54f, 0.18f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.36f, 0.10f, 1.0f));
-        if (ImGui::Button("Compile Assets (F9)", ImVec2(138.0f, 26.0f))) {
-            CompileAndHotReloadAssets(false);
-        }
-        ImGui::PopStyleColor(3);
-
-        if (m_CompileNotificationTimer > 0.0f) {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.55f, 1.0f), "[OK] %s", m_CompileNotificationMessage.c_str());
         }
 
         ImGui::SameLine();
@@ -1433,7 +1435,9 @@ void SandboxLayer::RenderToolbar() {
         ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
 
         ImGui::SameLine();
-        if (m_SceneState == SceneState::Edit) {
+        if (m_CompileNotificationTimer > 0.0f) {
+            ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.55f, 1.0f), "[OK] %s", m_CompileNotificationMessage.c_str());
+        } else if (m_SceneState == SceneState::Edit) {
             ImGui::TextColored(ImVec4(0.35f, 0.70f, 1.0f, 1.0f), "EDIT MODE: Q:Select W:Move E:Rotate R:Scale | Click to select | RMB+WASD Fly");
         } else if (m_SceneState == SceneState::Play) {
             ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.45f, 1.0f), "PLAYING: Drive with WASD/Arrows (Space: Handbrake)");

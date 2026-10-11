@@ -2,6 +2,7 @@
 #include <Axle/Types.hpp>
 #include <filesystem>
 #include <string>
+#include <functional>
 
 namespace Axle {
 
@@ -19,6 +20,7 @@ namespace Axle {
         bool IsWindowHovered() const { return m_IsHovered; }
 
         void SetAssetPreviewPanel(AssetPreviewPanel* previewPanel) { m_AssetPreviewPanel = previewPanel; }
+        void SetCompileAssetsCallback(std::function<void()> callback) { m_OnCompileAssetsCallback = callback; }
         void RefreshThumbnails();
         void SetStatusNotification(const std::string& message, float duration = 4.0f);
 
@@ -46,6 +48,7 @@ namespace Axle {
 
         std::unique_ptr<AssetThumbnailManager> m_ThumbnailManager;
         AssetPreviewPanel* m_AssetPreviewPanel = nullptr;
+        std::function<void()> m_OnCompileAssetsCallback;
     };
 
 }

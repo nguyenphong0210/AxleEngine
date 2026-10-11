@@ -443,6 +443,23 @@ namespace Axle {
             ShellExecuteW(nullptr, L"open", m_CurrentDirectory.c_str(), nullptr, nullptr, SW_SHOWDEFAULT);
 #endif
         }
+
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.35f, 0.40f, 0.48f, 1.0f), "|");
+
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.82f, 0.44f, 0.12f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.54f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.36f, 0.10f, 1.0f));
+        if (ImGui::Button("Compile Assets (F9)", ImVec2(140.0f, 24.0f))) {
+            if (m_OnCompileAssetsCallback) {
+                m_OnCompileAssetsCallback();
+            }
+        }
+        ImGui::PopStyleColor(3);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Compile modified .axle models into GPU binary cache (.axlebin) and hot-reload active scene entities (F9)");
+        }
     }
 
     void ContentBrowserPanel::RenderBreadcrumb() {

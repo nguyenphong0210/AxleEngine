@@ -15,6 +15,7 @@ namespace Axle {
 
     class Entity;
     struct DirectionalLightComponent;
+    struct SkyboxComponent;
 
     class Scene {
     public:
@@ -32,6 +33,9 @@ namespace Axle {
 
         // Query active directional sun light in the scene (returns true if light found)
         bool GetPrimaryDirectionalLight(DirectionalLightComponent& outLight) const;
+
+        // Query active atmospheric skybox in the scene (returns true if skybox found)
+        bool GetPrimarySkybox(SkyboxComponent& outSkybox) const;
 
         // Update physics synchronization and render all mesh components
         void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,

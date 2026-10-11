@@ -114,7 +114,7 @@ Level 0:  [ Engine/Core ]
     - [x] **Sub-step 3.2**: HDR Filmic Tone Mapping (ACES Narkowicz approximation, Reinhard, Uncharted 2 Hable, and Linear Bypass modes) & Linear-to-sRGB display gamma correction ($1/\gamma$), with real-time Exposure and Tone Mapping controls in Sun Light Inspector and complete scene serialization.
   - [ ] **Atmospheric Skybox**:
     - [x] **Sub-step 4.1**: Procedural atmospheric Rayleigh / Mie scattering skybox pipeline (`Axle::Skybox`), camera-centric unit cube renderer at infinity (`glDepthFunc(GL_LEQUAL)`, $z/w = 1.0$), analytical sharp sun disk with anti-aliasing, sunset/sunrise golden horizon warming, night darkening with procedural twinkling stars, and full HDR ACES filmic tone mapping.
-    - [ ] **Sub-step 4.2**: Dynamic Sun Light synchronization & Inspector controls (Atmospheric Turbidity, Zenith, Horizon, Ground colors, Sun Disk Size & Glow) with scene serialization.
+    - [x] **Sub-step 4.2**: ECS `SkyboxComponent`, dynamic Sun Light orientation & photometric post-process synchronization, interactive Inspector controls (Zenith, Horizon, Ground colors, Turbidity, Sun Disk Size & Corona Glow, Sync with Sun toggle, Atmosphere presets), and complete scene serialization (`.axlescene`).
     - [ ] **Sub-step 4.3**: Ambient hemisphere irradiance calculation from atmospheric sky.
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).

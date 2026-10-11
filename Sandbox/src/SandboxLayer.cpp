@@ -561,6 +561,7 @@ void SandboxLayer::OnAttach() {
         auto sunEntity = m_Scene->CreateEntity("Sun Light");
         sunEntity.AddComponent<Axle::TransformComponent>(glm::vec3(0.0f, 25.0f, 0.0f));
         sunEntity.AddComponent<Axle::DirectionalLightComponent>();
+        sunEntity.AddComponent<Axle::SkyboxComponent>();
     }
 
     // Connect Editor Panels
@@ -947,12 +948,23 @@ void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
             }
         }
 
-        // Ensure loaded scene has a Directional Sun Light
+        // Ensure loaded scene has a Directional Sun Light and Skybox
         Axle::DirectionalLightComponent sceneSunLight;
         if (!m_Scene->GetPrimaryDirectionalLight(sceneSunLight)) {
             auto sunEntity = m_Scene->CreateEntity("Sun Light");
             sunEntity.AddComponent<Axle::TransformComponent>(glm::vec3(0.0f, 25.0f, 0.0f));
             sunEntity.AddComponent<Axle::DirectionalLightComponent>();
+            sunEntity.AddComponent<Axle::SkyboxComponent>();
+        } else {
+            Axle::SkyboxComponent sceneSkybox;
+            if (!m_Scene->GetPrimarySkybox(sceneSkybox)) {
+                auto sunView = m_Scene->GetRegistry().view<Axle::DirectionalLightComponent>();
+                for (auto e : sunView) {
+                    Axle::Entity sunEnt{ e, m_Scene.get() };
+                    sunEnt.AddComponent<Axle::SkyboxComponent>();
+                    break;
+                }
+            }
         }
 
         // Cache initial dynamic states for ResetSimulation()
@@ -1789,16 +1801,46 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader,
                           m_LightSpaceMatrix, m_LightDir, 1);
 
-        // 2. Render Atmospheric Skybox (Phase 11: Sub-step 4.1)
+        // 2. Render Atmospheric Skybox (Phase 11: Sub-step 4.1 & 4.2)
         if (m_Skybox) {
-            if (hasSunLight) {
-                m_Skybox->SetSunDirection(activeSunLight.GetDirection());
-                m_Skybox->SetSunColor(activeSunLight.Color * activeSunLight.Intensity);
-                m_Skybox->SetExposure(activeSunLight.Exposure);
-                m_Skybox->SetToneMapping(activeSunLight.ToneMappingMode, activeSunLight.Gamma);
+            Axle::SkyboxComponent activeSkybox;
+            bool hasSkybox = m_Scene && m_Scene->GetPrimarySkybox(activeSkybox);
+
+            if (!hasSkybox || activeSkybox.Enabled) {
+                if (hasSkybox) {
+                    auto& spec = m_Skybox->GetSpecification();
+                    spec.ZenithColor = activeSkybox.ZenithColor;
+                    spec.HorizonColor = activeSkybox.HorizonColor;
+                    spec.GroundColor = activeSkybox.GroundColor;
+                    spec.SunSize = activeSkybox.SunSize;
+                    spec.SunGlow = activeSkybox.SunGlow;
+                    spec.Turbidity = activeSkybox.Turbidity;
+
+                    if (!activeSkybox.SyncWithSun) {
+                        float radAz = glm::radians(activeSkybox.CustomAzimuth);
+                        float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
+                        glm::vec3 customSunDir = glm::normalize(glm::vec3(
+                            std::cos(radEl) * std::sin(radAz),
+                            std::sin(radEl),
+                            std::cos(radEl) * std::cos(radAz)
+                        ));
+                        m_Skybox->SetSunDirection(customSunDir);
+                    }
+                }
+
+                if (hasSunLight && (!hasSkybox || activeSkybox.SyncWithSun)) {
+                    m_Skybox->SetSunDirection(activeSunLight.GetDirection());
+                    m_Skybox->SetSunColor(activeSunLight.Color * activeSunLight.Intensity);
+                }
+
+                if (hasSunLight) {
+                    m_Skybox->SetExposure(activeSunLight.Exposure);
+                    m_Skybox->SetToneMapping(activeSunLight.ToneMappingMode, activeSunLight.Gamma);
+                }
+
+                m_Skybox->Render(m_CameraController->GetCamera().GetViewMatrix(),
+                                 m_CameraController->GetCamera().GetProjectionMatrix());
             }
-            m_Skybox->Render(m_CameraController->GetCamera().GetViewMatrix(),
-                             m_CameraController->GetCamera().GetProjectionMatrix());
         }
 
         // 3. Render JPH::DebugRenderer physics collider wireframes when enabled

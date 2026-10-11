@@ -369,5 +369,65 @@ namespace Axle {
         }
     };
 
+    struct SkyboxComponent {
+        bool Enabled = true;
+        glm::vec3 ZenithColor{ 0.18f, 0.42f, 0.78f };    // Deep sky blue at zenith
+        glm::vec3 HorizonColor{ 0.70f, 0.82f, 0.95f };   // Soft atmospheric haze at horizon
+        glm::vec3 GroundColor{ 0.18f, 0.16f, 0.14f };    // Warm terrain ground floor
+        float SunSize = 0.045f;                           // Angular disk radius
+        float SunGlow = 0.16f;                            // Forward Mie scattering halo
+        float Turbidity = 1.0f;                           // Atmospheric thickness / haze
+        bool SyncWithSun = true;                          // Dynamically bind to primary directional sun
+        float CustomAzimuth = 45.0f;                      // Custom sun heading if not synced
+        float CustomElevation = 50.0f;                    // Custom sun altitude if not synced
+
+        SkyboxComponent() = default;
+
+        void SetPresetNoon() {
+            ZenithColor = glm::vec3(0.18f, 0.42f, 0.78f);
+            HorizonColor = glm::vec3(0.70f, 0.82f, 0.95f);
+            GroundColor = glm::vec3(0.18f, 0.16f, 0.14f);
+            SunSize = 0.045f;
+            SunGlow = 0.16f;
+            Turbidity = 1.0f;
+        }
+
+        void SetPresetSunset() {
+            ZenithColor = glm::vec3(0.12f, 0.18f, 0.42f);
+            HorizonColor = glm::vec3(0.95f, 0.45f, 0.18f);
+            GroundColor = glm::vec3(0.12f, 0.08f, 0.06f);
+            SunSize = 0.060f;
+            SunGlow = 0.35f;
+            Turbidity = 1.5f;
+        }
+
+        void SetPresetNight() {
+            ZenithColor = glm::vec3(0.012f, 0.020f, 0.055f);
+            HorizonColor = glm::vec3(0.035f, 0.045f, 0.080f);
+            GroundColor = glm::vec3(0.010f, 0.010f, 0.015f);
+            SunSize = 0.030f;
+            SunGlow = 0.08f;
+            Turbidity = 0.8f;
+        }
+
+        void SetPresetOvercast() {
+            ZenithColor = glm::vec3(0.60f, 0.65f, 0.70f);
+            HorizonColor = glm::vec3(0.75f, 0.78f, 0.82f);
+            GroundColor = glm::vec3(0.25f, 0.25f, 0.25f);
+            SunSize = 0.050f;
+            SunGlow = 0.50f;
+            Turbidity = 2.2f;
+        }
+
+        void SetPresetAlienMars() {
+            ZenithColor = glm::vec3(0.65f, 0.22f, 0.12f);
+            HorizonColor = glm::vec3(0.85f, 0.45f, 0.25f);
+            GroundColor = glm::vec3(0.35f, 0.10f, 0.05f);
+            SunSize = 0.035f;
+            SunGlow = 0.25f;
+            Turbidity = 1.8f;
+        }
+    };
+
 }
 

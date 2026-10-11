@@ -98,6 +98,15 @@ namespace Axle {
         return false;
     }
 
+    bool Scene::GetPrimarySkybox(SkyboxComponent& outSkybox) const {
+        auto view = m_Registry.view<SkyboxComponent>();
+        for (auto entity : view) {
+            outSkybox = view.get<SkyboxComponent>(entity);
+            return true;
+        }
+        return false;
+    }
+
     void Scene::OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,
                          const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, int shadowMapSlot) {
         (void)ts;

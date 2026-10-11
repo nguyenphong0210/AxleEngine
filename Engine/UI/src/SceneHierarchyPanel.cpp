@@ -1377,6 +1377,74 @@ namespace Axle {
             ImGui::Spacing();
         }
 
+        // Atmospheric Skybox Component (Phase 11: Sub-step 4.2)
+        if (entity.HasComponent<SkyboxComponent>()) {
+            bool removeSBC = false;
+            bool sbcOpen = ImGui::TreeNodeEx((void*)typeid(SkyboxComponent).hash_code(), treeNodeFlags, "Atmospheric Skybox");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeSBC = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (sbcOpen) {
+                auto& sbc = entity.GetComponent<SkyboxComponent>();
+
+                ImGui::Checkbox("Enable Skybox", &sbc.Enabled);
+                ImGui::Spacing();
+
+                // Atmosphere Colors
+                ImGui::ColorEdit3("Zenith Color", glm::value_ptr(sbc.ZenithColor));
+                ImGui::ColorEdit3("Horizon Color", glm::value_ptr(sbc.HorizonColor));
+                ImGui::ColorEdit3("Ground Color", glm::value_ptr(sbc.GroundColor));
+                ImGui::Spacing();
+
+                // Atmospheric Properties
+                ImGui::SliderFloat("Turbidity (Haze)", &sbc.Turbidity, 0.2f, 4.0f, "%.2f");
+                ImGui::SliderFloat("Sun Disk Size", &sbc.SunSize, 0.01f, 0.15f, "%.3f");
+                ImGui::SliderFloat("Sun Glow (Corona)", &sbc.SunGlow, 0.02f, 0.80f, "%.2f");
+                ImGui::Spacing();
+
+                // Sun Alignment
+                ImGui::Checkbox("Sync with Directional Sun Light", &sbc.SyncWithSun);
+                if (!sbc.SyncWithSun) {
+                    ImGui::SliderFloat("Custom Sun Azimuth", &sbc.CustomAzimuth, 0.0f, 360.0f, "%.1f deg");
+                    ImGui::SliderFloat("Custom Sun Elevation", &sbc.CustomElevation, 1.0f, 89.0f, "%.1f deg");
+                }
+                ImGui::Spacing();
+
+                // Atmosphere Presets
+                ImGui::TextDisabled("Atmosphere Presets:");
+                if (ImGui::SmallButton("Clear Noon")) {
+                    sbc.SetPresetNoon();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Golden Sunset")) {
+                    sbc.SetPresetSunset();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Starry Night")) {
+                    sbc.SetPresetNight();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Overcast")) {
+                    sbc.SetPresetOvercast();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Mars Sky")) {
+                    sbc.SetPresetAlienMars();
+                }
+
+                ImGui::TreePop();
+            }
+
+            if (removeSBC) {
+                entity.RemoveComponent<SkyboxComponent>();
+            }
+            ImGui::Spacing();
+        }
+
         // --- ADD COMPONENT BUTTON ---
         ImGui::Spacing();
         ImGui::Separator();
@@ -1441,6 +1509,12 @@ namespace Axle {
             if (!entity.HasComponent<DirectionalLightComponent>()) {
                 if (ImGui::MenuItem("Directional Light Component")) {
                     entity.AddComponent<DirectionalLightComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!entity.HasComponent<SkyboxComponent>()) {
+                if (ImGui::MenuItem("Atmospheric Skybox Component")) {
+                    entity.AddComponent<SkyboxComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }

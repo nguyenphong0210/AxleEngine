@@ -219,6 +219,22 @@ namespace Axle {
                 ss << "      EmissionIntensity: " << mat.EmissionIntensity << "\n";
                 ss << "      UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
             }
+
+            // SkyboxComponent
+            if (entity.HasComponent<SkyboxComponent>()) {
+                auto& sbc = entity.GetComponent<SkyboxComponent>();
+                ss << "    SkyboxComponent:\n";
+                ss << "      Enabled: " << (sbc.Enabled ? "true" : "false") << "\n";
+                ss << "      ZenithColor: [ " << sbc.ZenithColor.r << " , " << sbc.ZenithColor.g << " , " << sbc.ZenithColor.b << " ]\n";
+                ss << "      HorizonColor: [ " << sbc.HorizonColor.r << " , " << sbc.HorizonColor.g << " , " << sbc.HorizonColor.b << " ]\n";
+                ss << "      GroundColor: [ " << sbc.GroundColor.r << " , " << sbc.GroundColor.g << " , " << sbc.GroundColor.b << " ]\n";
+                ss << "      SunSize: " << sbc.SunSize << "\n";
+                ss << "      SunGlow: " << sbc.SunGlow << "\n";
+                ss << "      Turbidity: " << sbc.Turbidity << "\n";
+                ss << "      SyncWithSun: " << (sbc.SyncWithSun ? "true" : "false") << "\n";
+                ss << "      CustomAzimuth: " << sbc.CustomAzimuth << "\n";
+                ss << "      CustomElevation: " << sbc.CustomElevation << "\n";
+            }
         }
 
         return ss.str();
@@ -267,7 +283,8 @@ namespace Axle {
             RigidBody,
             Hierarchy,
             NativeScript,
-            DirectionalLight
+            DirectionalLight,
+            Skybox
         };
         ComponentSection currentSection = ComponentSection::None;
 
@@ -302,6 +319,8 @@ namespace Axle {
                 currentSection = ComponentSection::NativeScript;
             } else if (trimmed == "DirectionalLightComponent:") {
                 currentSection = ComponentSection::DirectionalLight;
+            } else if (trimmed == "SkyboxComponent:") {
+                currentSection = ComponentSection::Skybox;
             } else if (trimmed == "VehicleComponent: true") {
                 if (!currentEntity.HasComponent<VehicleComponent>()) {
                     currentEntity.AddComponent<VehicleComponent>();
@@ -447,6 +466,40 @@ namespace Axle {
                             dlc.ToneMappingMode = std::stoi(Trim(trimmed.substr(16)));
                         } else if (trimmed.rfind("Gamma:", 0) == 0) {
                             dlc.Gamma = std::stof(Trim(trimmed.substr(6)));
+                        }
+                        break;
+                    }
+                    case ComponentSection::Skybox: {
+                        if (!currentEntity.HasComponent<SkyboxComponent>()) {
+                            currentEntity.AddComponent<SkyboxComponent>();
+                        }
+                        auto& sbc = currentEntity.GetComponent<SkyboxComponent>();
+                        if (trimmed.rfind("Enabled:", 0) == 0) {
+                            sbc.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("ZenithColor:", 0) == 0) {
+                            float r = 0.18f, g = 0.42f, b = 0.78f;
+                            sscanf(trimmed.c_str(), "ZenithColor: [ %f , %f , %f ]", &r, &g, &b);
+                            sbc.ZenithColor = glm::vec3(r, g, b);
+                        } else if (trimmed.rfind("HorizonColor:", 0) == 0) {
+                            float r = 0.70f, g = 0.82f, b = 0.95f;
+                            sscanf(trimmed.c_str(), "HorizonColor: [ %f , %f , %f ]", &r, &g, &b);
+                            sbc.HorizonColor = glm::vec3(r, g, b);
+                        } else if (trimmed.rfind("GroundColor:", 0) == 0) {
+                            float r = 0.18f, g = 0.16f, b = 0.14f;
+                            sscanf(trimmed.c_str(), "GroundColor: [ %f , %f , %f ]", &r, &g, &b);
+                            sbc.GroundColor = glm::vec3(r, g, b);
+                        } else if (trimmed.rfind("SunSize:", 0) == 0) {
+                            sbc.SunSize = std::stof(Trim(trimmed.substr(8)));
+                        } else if (trimmed.rfind("SunGlow:", 0) == 0) {
+                            sbc.SunGlow = std::stof(Trim(trimmed.substr(8)));
+                        } else if (trimmed.rfind("Turbidity:", 0) == 0) {
+                            sbc.Turbidity = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("SyncWithSun:", 0) == 0) {
+                            sbc.SyncWithSun = (Trim(trimmed.substr(12)) == "true");
+                        } else if (trimmed.rfind("CustomAzimuth:", 0) == 0) {
+                            sbc.CustomAzimuth = std::stof(Trim(trimmed.substr(14)));
+                        } else if (trimmed.rfind("CustomElevation:", 0) == 0) {
+                            sbc.CustomElevation = std::stof(Trim(trimmed.substr(16)));
                         }
                         break;
                     }

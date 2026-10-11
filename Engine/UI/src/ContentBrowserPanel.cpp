@@ -1,12 +1,14 @@
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
+#include <Axle/AssetSerializer.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
 #include <algorithm>
 #include <vector>
 #include <cctype>
+#include <fstream>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -360,6 +362,11 @@ namespace Axle {
         }
     }
 
+    void ContentBrowserPanel::SetStatusNotification(const std::string& message, float duration) {
+        m_StatusNotificationMessage = message;
+        m_StatusNotificationTimer = duration;
+    }
+
     void ContentBrowserPanel::OnImGuiRender(bool* p_open) {
         if (p_open && !*p_open) return;
 
@@ -371,6 +378,13 @@ namespace Axle {
         }
 
         m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+
+        if (m_StatusNotificationTimer > 0.0f) {
+            m_StatusNotificationTimer -= ImGui::GetIO().DeltaTime;
+            if (m_StatusNotificationTimer < 0.0f) {
+                m_StatusNotificationTimer = 0.0f;
+            }
+        }
 
         if (m_ThumbnailManager) {
             m_ThumbnailManager->OnUpdate();
@@ -479,6 +493,13 @@ namespace Axle {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.40f, 0.75f, 1.0f, 1.0f), "Selected: %s", m_SelectedEntry.filename().string().c_str());
         }
+
+        if (m_StatusNotificationTimer > 0.0f && !m_StatusNotificationMessage.empty()) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.35f, 0.40f, 0.48f, 1.0f), "|");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.25f, 0.90f, 0.55f, 1.0f), "[OK] %s", m_StatusNotificationMessage.c_str());
+        }
     }
 
     void ContentBrowserPanel::RenderDirectoryContents() {
@@ -574,6 +595,80 @@ namespace Axle {
                                 m_AssetPreviewPanel->SetAsset(path);
                             }
                         }
+                    }
+
+                    // Right-Click Context Menu on Asset Item
+                    if (ImGui::BeginPopupContextItem()) {
+                        m_SelectedEntry = path;
+                        if (m_AssetPreviewPanel && !isDir) {
+                            m_AssetPreviewPanel->SetAsset(path);
+                        }
+
+                        std::string ext = path.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                        ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "%s", filenameStr.c_str());
+                        ImGui::Separator();
+
+                        if (ext == ".axle" || ext == ".axlebin") {
+                            if (ImGui::MenuItem("Convert to Wavefront OBJ (.obj)")) {
+                                auto outObj = path.parent_path() / (path.stem().string() + ".obj");
+                                if (AssetSerializer::ConvertAxleToOBJ(path, outObj)) {
+                                    SetStatusNotification("Exported to " + outObj.filename().string());
+                                }
+                            }
+
+                            if (ext == ".axle") {
+                                std::ifstream manifestCheck(path);
+                                std::string manifestLine;
+                                bool isPackage = false;
+                                while (std::getline(manifestCheck, manifestLine)) {
+                                    if (manifestLine.rfind("Parts:", 0) == 0) {
+                                        isPackage = true;
+                                        break;
+                                    }
+                                }
+                                if (isPackage) {
+                                    if (ImGui::MenuItem("Export Subparts to Separate .obj Files")) {
+                                        if (AssetSerializer::ConvertAxlePackagePartsToOBJ(path)) {
+                                            SetStatusNotification("Exported subparts to " + path.stem().string() + "_obj_parts/");
+                                        }
+                                    }
+                                }
+                            }
+                            ImGui::Separator();
+                        } else if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                            if (ImGui::MenuItem("Convert to Axle Mesh (.axle)")) {
+                                auto outAxle = path.parent_path() / (path.stem().string() + ".axle");
+                                if (AssetSerializer::AutoConvertModel(path, outAxle)) {
+                                    SetStatusNotification("Converted to " + outAxle.filename().string());
+                                }
+                            }
+                            ImGui::Separator();
+                        }
+
+                        if (!isDir && m_AssetPreviewPanel) {
+                            if (ImGui::MenuItem("Inspect in 3D Asset Preview")) {
+                                m_AssetPreviewPanel->SetAsset(path);
+                            }
+                            ImGui::Separator();
+                        }
+
+                        if (ImGui::MenuItem("Open in System Explorer")) {
+#ifdef _WIN32
+                            ShellExecuteW(nullptr, L"open", m_CurrentDirectory.c_str(), nullptr, nullptr, SW_SHOWDEFAULT);
+#endif
+                        }
+
+                        if (ImGui::MenuItem("Copy Relative Path")) {
+                            std::error_code relEc;
+                            auto rel = std::filesystem::relative(path, m_RootDirectory, relEc);
+                            if (!relEc) {
+                                ImGui::SetClipboardText(rel.string().c_str());
+                            }
+                        }
+
+                        ImGui::EndPopup();
                     }
 
                     // Drag & Drop Source

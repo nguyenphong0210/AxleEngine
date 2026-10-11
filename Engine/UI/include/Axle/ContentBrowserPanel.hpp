@@ -20,6 +20,7 @@ namespace Axle {
 
         void SetAssetPreviewPanel(AssetPreviewPanel* previewPanel) { m_AssetPreviewPanel = previewPanel; }
         void RefreshThumbnails();
+        void SetStatusNotification(const std::string& message, float duration = 4.0f);
 
         void OnImGuiRender(bool* p_open = nullptr);
 
@@ -39,6 +40,9 @@ namespace Axle {
         float m_ThumbnailSize = 84.0f;
         bool m_ShowHiddenFiles = false;
         bool m_IsHovered = false;
+
+        std::string m_StatusNotificationMessage;
+        float m_StatusNotificationTimer = 0.0f;
 
         std::unique_ptr<AssetThumbnailManager> m_ThumbnailManager;
         AssetPreviewPanel* m_AssetPreviewPanel = nullptr;

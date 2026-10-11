@@ -147,6 +147,14 @@ namespace Axle {
 
         // Recursively inspect and re-bake modified .axle assets in a directory
         static AssetCompileResult CompileAssetDirectory(const std::filesystem::path& assetDirectory, bool forceRebakeAll = false);
+
+        // Reverse Mesh Export: Export .axle / .axlebin meshes back into Wavefront .obj format
+        static bool ConvertAxleToOBJ(const std::filesystem::path& axlePath,
+                                     const std::filesystem::path& outObjPath = {});
+
+        // Export multi-part package subparts into individual .obj files in a folder
+        static bool ConvertAxlePackagePartsToOBJ(const std::filesystem::path& manifestPath,
+                                                 const std::filesystem::path& outDir = {});
     };
 
 }

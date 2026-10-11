@@ -195,6 +195,24 @@ namespace Axle {
                 ss << "      Elevation: " << dlc.Elevation << "\n";
                 ss << "      CastShadows: " << (dlc.CastShadows ? "true" : "false") << "\n";
             }
+
+            // MaterialComponent
+            if (entity.HasComponent<MaterialComponent>()) {
+                auto& mat = entity.GetComponent<MaterialComponent>();
+                ss << "    MaterialComponent:\n";
+                ss << "      AlbedoPath: " << mat.AlbedoPath << "\n";
+                ss << "      UseAlbedoMap: " << (mat.UseAlbedoMap ? "true" : "false") << "\n";
+                ss << "      AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
+                ss << "      NormalPath: " << mat.NormalPath << "\n";
+                ss << "      UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
+                ss << "      RoughnessPath: " << mat.RoughnessPath << "\n";
+                ss << "      UseRoughnessMap: " << (mat.UseRoughnessMap ? "true" : "false") << "\n";
+                ss << "      Roughness: " << mat.Roughness << "\n";
+                ss << "      MetallicPath: " << mat.MetallicPath << "\n";
+                ss << "      UseMetallicMap: " << (mat.UseMetallicMap ? "true" : "false") << "\n";
+                ss << "      Metallic: " << mat.Metallic << "\n";
+                ss << "      UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
+            }
         }
 
         return ss.str();
@@ -239,6 +257,7 @@ namespace Axle {
             Tag,
             Transform,
             Mesh,
+            Material,
             RigidBody,
             Hierarchy,
             NativeScript,
@@ -267,6 +286,8 @@ namespace Axle {
                 currentSection = ComponentSection::Transform;
             } else if (trimmed == "MeshComponent:") {
                 currentSection = ComponentSection::Mesh;
+            } else if (trimmed == "MaterialComponent:") {
+                currentSection = ComponentSection::Material;
             } else if (trimmed == "RigidBodyComponent:") {
                 currentSection = ComponentSection::RigidBody;
             } else if (trimmed == "HierarchyComponent:") {
@@ -414,6 +435,46 @@ namespace Axle {
                             dlc.Elevation = std::stof(Trim(trimmed.substr(10)));
                         } else if (trimmed.rfind("CastShadows:", 0) == 0) {
                             dlc.CastShadows = (Trim(trimmed.substr(12)) == "true");
+                        }
+                        break;
+                    }
+                    case ComponentSection::Material: {
+                        if (!currentEntity.HasComponent<MaterialComponent>()) {
+                            currentEntity.AddComponent<MaterialComponent>();
+                        }
+                        auto& mat = currentEntity.GetComponent<MaterialComponent>();
+                        if (trimmed.rfind("AlbedoPath:", 0) == 0) {
+                            std::string p = Trim(trimmed.substr(11));
+                            if (!p.empty()) mat.SetAlbedo(p);
+                        } else if (trimmed.rfind("UseAlbedoMap:", 0) == 0) {
+                            mat.UseAlbedoMap = (Trim(trimmed.substr(13)) == "true");
+                        } else if (trimmed.rfind("AlbedoColor:", 0) == 0) {
+                            float r = 1, g = 1, b = 1, a = 1;
+                            sscanf(trimmed.c_str(), "AlbedoColor: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
+                            mat.AlbedoColor = glm::vec4(r, g, b, a);
+                        } else if (trimmed.rfind("NormalPath:", 0) == 0) {
+                            std::string p = Trim(trimmed.substr(11));
+                            if (!p.empty()) mat.SetNormal(p);
+                        } else if (trimmed.rfind("UseNormalMap:", 0) == 0) {
+                            mat.UseNormalMap = (Trim(trimmed.substr(13)) == "true");
+                        } else if (trimmed.rfind("RoughnessPath:", 0) == 0) {
+                            std::string p = Trim(trimmed.substr(14));
+                            if (!p.empty()) mat.SetRoughnessMap(p);
+                        } else if (trimmed.rfind("UseRoughnessMap:", 0) == 0) {
+                            mat.UseRoughnessMap = (Trim(trimmed.substr(16)) == "true");
+                        } else if (trimmed.rfind("Roughness:", 0) == 0) {
+                            mat.Roughness = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("MetallicPath:", 0) == 0) {
+                            std::string p = Trim(trimmed.substr(13));
+                            if (!p.empty()) mat.SetMetallicMap(p);
+                        } else if (trimmed.rfind("UseMetallicMap:", 0) == 0) {
+                            mat.UseMetallicMap = (Trim(trimmed.substr(15)) == "true");
+                        } else if (trimmed.rfind("Metallic:", 0) == 0) {
+                            mat.Metallic = std::stof(Trim(trimmed.substr(9)));
+                        } else if (trimmed.rfind("UVScale:", 0) == 0) {
+                            float u = 1, v = 1;
+                            sscanf(trimmed.c_str(), "UVScale: [ %f , %f ]", &u, &v);
+                            mat.UVScale = glm::vec2(u, v);
                         }
                         break;
                     }

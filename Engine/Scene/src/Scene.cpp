@@ -159,8 +159,64 @@ namespace Axle {
                 shader.SetMat4("u_Transform", worldTransform);
                 shader.SetInt("u_PatternMode", mesh.PatternMode);
                 shader.SetFloat("u_TileScale", mesh.TileScale);
-                shader.SetFloat4("u_Color1", mesh.Color1);
-                shader.SetFloat4("u_Color2", mesh.Color2);
+
+                if (m_Registry.all_of<MaterialComponent>(entity)) {
+                    auto& mat = m_Registry.get<MaterialComponent>(entity);
+
+                    if (mat.UseAlbedoMap && mat.AlbedoMap) {
+                        mat.AlbedoMap->Bind(0);
+                        shader.SetInt("u_UseAlbedoMap", 1);
+                    } else {
+                        Texture2D::GetWhiteTexture()->Bind(0);
+                        shader.SetInt("u_UseAlbedoMap", 0);
+                    }
+
+                    if (mat.UseNormalMap && mat.NormalMap) {
+                        mat.NormalMap->Bind(2);
+                        shader.SetInt("u_UseNormalMap", 1);
+                    } else {
+                        Texture2D::GetFlatNormalTexture()->Bind(2);
+                        shader.SetInt("u_UseNormalMap", 0);
+                    }
+
+                    if (mat.UseRoughnessMap && mat.RoughnessMap) {
+                        mat.RoughnessMap->Bind(3);
+                        shader.SetInt("u_UseRoughnessMap", 1);
+                    } else {
+                        Texture2D::GetDefaultRoughnessTexture()->Bind(3);
+                        shader.SetInt("u_UseRoughnessMap", 0);
+                    }
+
+                    if (mat.UseMetallicMap && mat.MetallicMap) {
+                        mat.MetallicMap->Bind(4);
+                        shader.SetInt("u_UseMetallicMap", 1);
+                    } else {
+                        Texture2D::GetBlackTexture()->Bind(4);
+                        shader.SetInt("u_UseMetallicMap", 0);
+                    }
+
+                    shader.SetFloat2("u_UVScale", mat.UVScale);
+                    shader.SetFloat("u_Roughness", mat.Roughness);
+                    shader.SetFloat("u_Metallic", mat.Metallic);
+                    shader.SetFloat4("u_Color1", mat.AlbedoColor);
+                    shader.SetFloat4("u_Color2", mesh.Color2);
+                } else {
+                    Texture2D::GetWhiteTexture()->Bind(0);
+                    Texture2D::GetFlatNormalTexture()->Bind(2);
+                    Texture2D::GetDefaultRoughnessTexture()->Bind(3);
+                    Texture2D::GetBlackTexture()->Bind(4);
+
+                    shader.SetInt("u_UseAlbedoMap", 0);
+                    shader.SetInt("u_UseNormalMap", 0);
+                    shader.SetInt("u_UseRoughnessMap", 0);
+                    shader.SetInt("u_UseMetallicMap", 0);
+                    shader.SetFloat2("u_UVScale", glm::vec2(1.0f, 1.0f));
+                    shader.SetFloat("u_Roughness", 0.5f);
+                    shader.SetFloat("u_Metallic", 0.0f);
+                    shader.SetFloat4("u_Color1", mesh.Color1);
+                    shader.SetFloat4("u_Color2", mesh.Color2);
+                }
+
                 RenderCommand::DrawIndexed(mesh.VAO);
             }
         }

@@ -5,6 +5,7 @@
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/Texture2D.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -854,6 +855,146 @@ namespace Axle {
             ImGui::Spacing();
         }
 
+        // Material Component (PBR Textures & Parameters)
+        if (entity.HasComponent<MaterialComponent>()) {
+            bool removeMat = false;
+            bool matOpen = ImGui::TreeNodeEx((void*)typeid(MaterialComponent).hash_code(), treeNodeFlags, "PBR Material");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeMat = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (matOpen) {
+                auto& mat = entity.GetComponent<MaterialComponent>();
+
+                auto DrawTextureSlot = [&](const char* slotName, 
+                                           std::shared_ptr<Texture2D>& tex, 
+                                           std::string& path, 
+                                           bool& enabled, 
+                                           auto onSetPath) {
+                    ImGui::PushID(slotName);
+                    ImGui::TextDisabled("%s", slotName);
+
+                    // 44x44 thumbnail card
+                    ImTextureID texId = 0;
+                    if (tex && tex->IsLoaded()) {
+                        texId = (ImTextureID)(intptr_t)tex->GetRendererID();
+                    }
+
+                    if (texId) {
+                        ImGui::Image(texId, ImVec2(44.0f, 44.0f), ImVec2(0, 1), ImVec2(1, 0), ImVec4(1, 1, 1, 1), ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
+                    } else {
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.15f, 0.20f, 0.85f));
+                        ImGui::Button("Drop\nTex", ImVec2(44.0f, 44.0f));
+                        ImGui::PopStyleColor();
+                    }
+
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                            const char* pathStr = static_cast<const char*>(payload->Data);
+                            std::filesystem::path p(pathStr);
+                            std::string ext = p.extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") {
+                                onSetPath(p.string());
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+
+                    ImGui::SameLine();
+                    ImGui::BeginGroup();
+                    ImGui::Checkbox("Use Texture", &enabled);
+
+                    std::string displayName = path.empty() ? "[ Drag Texture Here ]" : std::filesystem::path(path).filename().string();
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.20f, 0.26f, 0.85f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.32f, 0.44f, 1.0f));
+                    ImGui::Button(displayName.c_str(), ImVec2(ImGui::GetContentRegionAvail().x - 28.0f, 22.0f));
+                    ImGui::PopStyleColor(2);
+
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                            const char* pathStr = static_cast<const char*>(payload->Data);
+                            std::filesystem::path p(pathStr);
+                            std::string ext = p.extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") {
+                                onSetPath(p.string());
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("X", ImVec2(22.0f, 22.0f))) {
+                        onSetPath("");
+                    }
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear texture");
+
+                    ImGui::EndGroup();
+                    ImGui::PopID();
+                    ImGui::Spacing();
+                };
+
+                // 1. Albedo
+                DrawTextureSlot("Albedo Map (Base Color)", mat.AlbedoMap, mat.AlbedoPath, mat.UseAlbedoMap,
+                    [&](const std::string& p) { mat.SetAlbedo(p); });
+                ImGui::ColorEdit4("Albedo Tint", glm::value_ptr(mat.AlbedoColor));
+                ImGui::Spacing();
+
+                // 2. Normal Map
+                DrawTextureSlot("Normal Map (Cotangent Perturbation)", mat.NormalMap, mat.NormalPath, mat.UseNormalMap,
+                    [&](const std::string& p) { mat.SetNormal(p); });
+                ImGui::Spacing();
+
+                // 3. Roughness
+                DrawTextureSlot("Roughness Map", mat.RoughnessMap, mat.RoughnessPath, mat.UseRoughnessMap,
+                    [&](const std::string& p) { mat.SetRoughnessMap(p); });
+                if (!mat.UseRoughnessMap) {
+                    ImGui::SliderFloat("Roughness", &mat.Roughness, 0.04f, 1.0f, "%.2f");
+                }
+                ImGui::Spacing();
+
+                // 4. Metallic
+                DrawTextureSlot("Metallic Map", mat.MetallicMap, mat.MetallicPath, mat.UseMetallicMap,
+                    [&](const std::string& p) { mat.SetMetallicMap(p); });
+                if (!mat.UseMetallicMap) {
+                    ImGui::SliderFloat("Metallic", &mat.Metallic, 0.0f, 1.0f, "%.2f");
+                }
+                ImGui::Spacing();
+
+                // 5. UV Tiling
+                ImGui::DragFloat2("UV Scale", glm::value_ptr(mat.UVScale), 0.1f, 0.01f, 100.0f, "%.2f");
+
+                // Quick Presets
+                ImGui::Spacing();
+                ImGui::TextDisabled("Quick Texture Presets:");
+                if (ImGui::SmallButton("Prototype Grid")) {
+                    mat.SetAlbedo("textures/Prototype_Grid.png");
+                    mat.SetNormal("textures/Flat_Normal.png");
+                    mat.SetRoughnessMap("textures/Roughness_Gradient.png");
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Clear Textures")) {
+                    mat.SetAlbedo("");
+                    mat.SetNormal("");
+                    mat.SetRoughnessMap("");
+                    mat.SetMetallicMap("");
+                    mat.Roughness = 0.5f;
+                    mat.Metallic = 0.0f;
+                }
+
+                ImGui::TreePop();
+            }
+
+            if (removeMat) {
+                entity.RemoveComponent<MaterialComponent>();
+            }
+            ImGui::Spacing();
+        }
+
         // Rigid Body Component
         if (entity.HasComponent<RigidBodyComponent>()) {
             bool removeRB = false;
@@ -1142,6 +1283,12 @@ namespace Axle {
             if (!entity.HasComponent<DirectionalLightComponent>()) {
                 if (ImGui::MenuItem("Directional Light Component")) {
                     entity.AddComponent<DirectionalLightComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!entity.HasComponent<MaterialComponent>()) {
+                if (ImGui::MenuItem("Material Component")) {
+                    entity.AddComponent<MaterialComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }

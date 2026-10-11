@@ -2,6 +2,8 @@
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/VertexArray.hpp>
+#include <Axle/Texture2D.hpp>
+#include <Axle/FileSystem.hpp>
 #include <Axle/PhysicsScene.hpp>
 
 #include <glm/glm.hpp>
@@ -45,8 +47,8 @@ namespace Axle {
 
         glm::mat4 GetTransform() const {
             return glm::translate(glm::mat4(1.0f), Translation)
-                 * glm::mat4_cast(Rotation)
-                 * glm::scale(glm::mat4(1.0f), Scale);
+                * glm::mat4_cast(Rotation)
+                * glm::scale(glm::mat4(1.0f), Scale);
         }
     };
 
@@ -65,6 +67,79 @@ namespace Axle {
             : VAO(vao), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
         MeshComponent(const std::shared_ptr<VertexArray>& vao, const std::string& assetPath, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
             : VAO(vao), AssetPath(assetPath), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
+    };
+
+    struct MaterialComponent {
+        std::string AlbedoPath;
+        std::shared_ptr<Texture2D> AlbedoMap;
+        bool UseAlbedoMap = false;
+        glm::vec4 AlbedoColor{ 1.0f, 1.0f, 1.0f, 1.0f };
+
+        std::string NormalPath;
+        std::shared_ptr<Texture2D> NormalMap;
+        bool UseNormalMap = false;
+
+        std::string RoughnessPath;
+        std::shared_ptr<Texture2D> RoughnessMap;
+        bool UseRoughnessMap = false;
+        float Roughness = 0.5f;
+
+        std::string MetallicPath;
+        std::shared_ptr<Texture2D> MetallicMap;
+        bool UseMetallicMap = false;
+        float Metallic = 0.0f;
+
+        glm::vec2 UVScale{ 1.0f, 1.0f };
+
+        MaterialComponent() = default;
+
+        void SetAlbedo(const std::string& path) {
+            AlbedoPath = path;
+            if (!path.empty()) {
+                auto resolved = FileSystem::ResolveAssetPath(path);
+                AlbedoMap = Texture2D::Create(resolved.string());
+                UseAlbedoMap = (AlbedoMap && AlbedoMap->IsLoaded());
+            } else {
+                AlbedoMap = nullptr;
+                UseAlbedoMap = false;
+            }
+        }
+
+        void SetNormal(const std::string& path) {
+            NormalPath = path;
+            if (!path.empty()) {
+                auto resolved = FileSystem::ResolveAssetPath(path);
+                NormalMap = Texture2D::Create(resolved.string());
+                UseNormalMap = (NormalMap && NormalMap->IsLoaded());
+            } else {
+                NormalMap = nullptr;
+                UseNormalMap = false;
+            }
+        }
+
+        void SetRoughnessMap(const std::string& path) {
+            RoughnessPath = path;
+            if (!path.empty()) {
+                auto resolved = FileSystem::ResolveAssetPath(path);
+                RoughnessMap = Texture2D::Create(resolved.string());
+                UseRoughnessMap = (RoughnessMap && RoughnessMap->IsLoaded());
+            } else {
+                RoughnessMap = nullptr;
+                UseRoughnessMap = false;
+            }
+        }
+
+        void SetMetallicMap(const std::string& path) {
+            MetallicPath = path;
+            if (!path.empty()) {
+                auto resolved = FileSystem::ResolveAssetPath(path);
+                MetallicMap = Texture2D::Create(resolved.string());
+                UseMetallicMap = (MetallicMap && MetallicMap->IsLoaded());
+            } else {
+                MetallicMap = nullptr;
+                UseMetallicMap = false;
+            }
+        }
     };
 
     enum class BodyShapeType {

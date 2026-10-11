@@ -206,6 +206,9 @@ namespace Axle {
                     shader.SetFloat2("u_UVScale", mat.UVScale);
                     shader.SetFloat("u_Roughness", mat.Roughness);
                     shader.SetFloat("u_Metallic", mat.Metallic);
+                    shader.SetFloat("u_NormalStrength", mat.NormalStrength);
+                    shader.SetFloat3("u_EmissionColor", mat.EmissionColor);
+                    shader.SetFloat("u_EmissionIntensity", mat.EmissionIntensity);
                     shader.SetFloat4("u_Color1", mat.AlbedoColor);
                     shader.SetFloat4("u_Color2", mesh.Color2);
                 } else {
@@ -221,6 +224,9 @@ namespace Axle {
                     shader.SetFloat2("u_UVScale", glm::vec2(1.0f, 1.0f));
                     shader.SetFloat("u_Roughness", 0.5f);
                     shader.SetFloat("u_Metallic", 0.0f);
+                    shader.SetFloat("u_NormalStrength", 1.0f);
+                    shader.SetFloat3("u_EmissionColor", glm::vec3(0.0f));
+                    shader.SetFloat("u_EmissionIntensity", 0.0f);
                     shader.SetFloat4("u_Color1", mesh.Color1);
                     shader.SetFloat4("u_Color2", mesh.Color2);
                 }

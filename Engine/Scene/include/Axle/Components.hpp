@@ -78,6 +78,7 @@ namespace Axle {
         std::string NormalPath;
         std::shared_ptr<Texture2D> NormalMap;
         bool UseNormalMap = false;
+        float NormalStrength = 1.0f;
 
         std::string RoughnessPath;
         std::shared_ptr<Texture2D> RoughnessMap;
@@ -89,9 +90,138 @@ namespace Axle {
         bool UseMetallicMap = false;
         float Metallic = 0.0f;
 
+        glm::vec3 EmissionColor{ 0.0f, 0.0f, 0.0f };
+        float EmissionIntensity = 0.0f;
+
         glm::vec2 UVScale{ 1.0f, 1.0f };
 
         MaterialComponent() = default;
+
+        void ResetTextures() {
+            AlbedoPath.clear();
+            AlbedoMap = nullptr;
+            UseAlbedoMap = false;
+
+            NormalPath.clear();
+            NormalMap = nullptr;
+            UseNormalMap = false;
+
+            RoughnessPath.clear();
+            RoughnessMap = nullptr;
+            UseRoughnessMap = false;
+
+            MetallicPath.clear();
+            MetallicMap = nullptr;
+            UseMetallicMap = false;
+        }
+
+        void SetPresetCarPaintRed() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.85f, 0.06f, 0.08f, 1.0f);
+            Roughness = 0.15f;
+            Metallic = 0.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetCarPaintBlue() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.08f, 0.28f, 0.65f, 1.0f);
+            Roughness = 0.22f;
+            Metallic = 0.75f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetChrome() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.95f, 0.95f, 0.95f, 1.0f);
+            Roughness = 0.04f;
+            Metallic = 1.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetGold() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(1.00f, 0.77f, 0.34f, 1.0f);
+            Roughness = 0.18f;
+            Metallic = 1.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetCopper() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.96f, 0.64f, 0.54f, 1.0f);
+            Roughness = 0.35f;
+            Metallic = 0.95f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetRubber() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.07f, 0.07f, 0.07f, 1.0f);
+            Roughness = 0.85f;
+            Metallic = 0.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetPlastic() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.80f, 0.80f, 0.80f, 1.0f);
+            Roughness = 0.60f;
+            Metallic = 0.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetCastIron() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.56f, 0.57f, 0.58f, 1.0f);
+            Roughness = 0.45f;
+            Metallic = 1.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetAluminum() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.97f, 0.96f, 0.92f, 1.0f);
+            Roughness = 0.12f;
+            Metallic = 1.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetObsidian() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.04f, 0.04f, 0.05f, 1.0f);
+            Roughness = 0.08f;
+            Metallic = 0.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+        }
+
+        void SetPresetHeadlightLED() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            Roughness = 0.10f;
+            Metallic = 0.0f;
+            EmissionColor = glm::vec3(0.9f, 0.95f, 1.0f);
+            EmissionIntensity = 5.0f;
+        }
+
+        void SetPresetTaillightLED() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.9f, 0.05f, 0.05f, 1.0f);
+            Roughness = 0.20f;
+            Metallic = 0.0f;
+            EmissionColor = glm::vec3(1.0f, 0.05f, 0.05f);
+            EmissionIntensity = 4.0f;
+        }
 
         void SetAlbedo(const std::string& path) {
             AlbedoPath = path;

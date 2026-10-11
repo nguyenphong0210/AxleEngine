@@ -146,11 +146,14 @@ void SandboxLayer::OnAttach() {
 
             uniform int u_UseAlbedoMap;
             uniform int u_UseNormalMap;
+            uniform float u_NormalStrength;
             uniform int u_UseRoughnessMap;
             uniform int u_UseMetallicMap;
             uniform vec2 u_UVScale;
             uniform float u_Roughness;
             uniform float u_Metallic;
+            uniform vec3 u_EmissionColor;
+            uniform float u_EmissionIntensity;
 
             uniform float u_Exposure;
             uniform int u_ToneMappingMode;
@@ -174,8 +177,10 @@ void SandboxLayer::OnAttach() {
                 return shadow / 9.0;
             }
 
-            vec3 PerturbNormal(vec3 N, vec3 V, vec2 texcoord) {
+            vec3 PerturbNormal(vec3 N, vec3 V, vec2 texcoord, float strength) {
                 vec3 mapNormal = texture(u_NormalMap, texcoord).xyz * 2.0 - 1.0;
+                mapNormal.xy *= strength;
+                mapNormal = normalize(mapNormal);
                 vec3 dp1 = dFdx(v_WorldPos);
                 vec3 dp2 = dFdy(v_WorldPos);
                 vec2 duv1 = dFdx(texcoord);
@@ -209,7 +214,8 @@ void SandboxLayer::OnAttach() {
 
                 if (u_UseNormalMap == 1) {
                     vec3 viewDir = normalize(-v_WorldPos);
-                    normal = PerturbNormal(normal, viewDir, uv);
+                    float normStrength = (u_NormalStrength >= 0.0) ? u_NormalStrength : 1.0;
+                    normal = PerturbNormal(normal, viewDir, uv, normStrength);
                 }
 
                 vec4 baseColor;
@@ -283,8 +289,8 @@ void SandboxLayer::OnAttach() {
                 vec3 radiance = u_LightColor * u_LightIntensity;
                 vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
                 vec3 ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
-
-                vec3 linearColor = ambient + Lo;
+                vec3 emissive = u_EmissionColor * max(u_EmissionIntensity, 0.0);
+                vec3 linearColor = ambient + Lo + emissive;
 
                 // Exposure & Tone Mapping
                 float exposure = (u_Exposure > 0.0) ? u_Exposure : 1.0;
@@ -331,6 +337,9 @@ void SandboxLayer::OnAttach() {
     m_Shader->SetInt("u_NormalMap", 2);
     m_Shader->SetInt("u_RoughnessMap", 3);
     m_Shader->SetInt("u_MetallicMap", 4);
+    m_Shader->SetFloat("u_NormalStrength", 1.0f);
+    m_Shader->SetFloat3("u_EmissionColor", glm::vec3(0.0f));
+    m_Shader->SetFloat("u_EmissionIntensity", 0.0f);
     m_Shader->SetFloat("u_Exposure", 1.0f);
     m_Shader->SetInt("u_ToneMappingMode", 0);
     m_Shader->SetFloat("u_Gamma", 2.2f);

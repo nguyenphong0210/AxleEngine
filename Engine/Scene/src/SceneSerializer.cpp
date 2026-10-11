@@ -208,12 +208,15 @@ namespace Axle {
                 ss << "      AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
                 ss << "      NormalPath: " << mat.NormalPath << "\n";
                 ss << "      UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
+                ss << "      NormalStrength: " << mat.NormalStrength << "\n";
                 ss << "      RoughnessPath: " << mat.RoughnessPath << "\n";
                 ss << "      UseRoughnessMap: " << (mat.UseRoughnessMap ? "true" : "false") << "\n";
                 ss << "      Roughness: " << mat.Roughness << "\n";
                 ss << "      MetallicPath: " << mat.MetallicPath << "\n";
                 ss << "      UseMetallicMap: " << (mat.UseMetallicMap ? "true" : "false") << "\n";
                 ss << "      Metallic: " << mat.Metallic << "\n";
+                ss << "      EmissionColor: [ " << mat.EmissionColor.r << " , " << mat.EmissionColor.g << " , " << mat.EmissionColor.b << " ]\n";
+                ss << "      EmissionIntensity: " << mat.EmissionIntensity << "\n";
                 ss << "      UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
             }
         }
@@ -466,6 +469,8 @@ namespace Axle {
                             if (!p.empty()) mat.SetNormal(p);
                         } else if (trimmed.rfind("UseNormalMap:", 0) == 0) {
                             mat.UseNormalMap = (Trim(trimmed.substr(13)) == "true");
+                        } else if (trimmed.rfind("NormalStrength:", 0) == 0) {
+                            mat.NormalStrength = std::stof(Trim(trimmed.substr(15)));
                         } else if (trimmed.rfind("RoughnessPath:", 0) == 0) {
                             std::string p = Trim(trimmed.substr(14));
                             if (!p.empty()) mat.SetRoughnessMap(p);
@@ -480,6 +485,12 @@ namespace Axle {
                             mat.UseMetallicMap = (Trim(trimmed.substr(15)) == "true");
                         } else if (trimmed.rfind("Metallic:", 0) == 0) {
                             mat.Metallic = std::stof(Trim(trimmed.substr(9)));
+                        } else if (trimmed.rfind("EmissionColor:", 0) == 0) {
+                            float r = 0, g = 0, b = 0;
+                            sscanf(trimmed.c_str(), "EmissionColor: [ %f , %f , %f ]", &r, &g, &b);
+                            mat.EmissionColor = glm::vec3(r, g, b);
+                        } else if (trimmed.rfind("EmissionIntensity:", 0) == 0) {
+                            mat.EmissionIntensity = std::stof(Trim(trimmed.substr(18)));
                         } else if (trimmed.rfind("UVScale:", 0) == 0) {
                             float u = 1, v = 1;
                             sscanf(trimmed.c_str(), "UVScale: [ %f , %f ]", &u, &v);

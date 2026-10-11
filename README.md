@@ -109,10 +109,10 @@ Level 0:  [ Engine/Core ]
     - [x] **Sub-step 2.1**: Integrate standard `stb_image.h` (v2.30) library, implement OpenGL 4.5 Core Profile `Axle::Texture2D` abstraction (support PNG/JPG/TGA/BMP, RGBA8/RGB8/RG8/R8 formats, auto mipmap generation, configurable wrap & filter modes, slot binding management), with pre-baked 1x1 fallback textures (White, Flat Normal, Black, Roughness).
     - [x] **Sub-step 2.2**: Upgrade Vertex Layout & UV coordinates (`a_TexCoord`) across Primitive Meshes and `.axle` loaders; configure Texture Sampler Slots in Shader (`u_AlbedoMap`, `u_ShadowMap`, `u_NormalMap`, `u_RoughnessMap`, `u_MetallicMap`) with screen-space cotangent-frame normal perturbation, roughness/metallic sampling, and 1x1 fallback texture slot binding.
     - [x] **Sub-step 2.3**: Add `MaterialComponent` in ECS, integrate Inspector UI with texture map slots (Albedo, Normal, Roughness, Metallic), live thumbnail previews, drag-and-drop assignment from Content Browser, quick presets, and complete scene serialization (`.axlescene`).
-  - [ ] **PBR Material System (Cook-Torrance Microfacet BRDF)**:
+  - [x] **PBR Material System (Cook-Torrance Microfacet BRDF)**:
     - [x] **Sub-step 3.1**: Physically based Cook-Torrance microfacet specular BRDF (Trowbridge-Reitz GGX normal distribution $D$, Smith-Schlick shadowing/masking $G$, Fresnel-Schlick reflectance $F$), energy conservation ($k_D + k_S = 1$), metallic workflow, and directional sun radiance integration with PCF soft shadows.
     - [x] **Sub-step 3.2**: HDR Filmic Tone Mapping (ACES Narkowicz approximation, Reinhard, Uncharted 2 Hable, and Linear Bypass modes) & Linear-to-sRGB display gamma correction ($1/\gamma$), with real-time Exposure and Tone Mapping controls in Sun Light Inspector and complete scene serialization.
-    - [ ] **Sub-step 3.3**: Physical material presets in Inspector (Automotive Paint, Chrome, Gold, Copper, Rubber, Matte Plastic) and parameter controls.
+    - [x] **Sub-step 3.3**: Physical material presets in Inspector (Automotive Clearcoat Red, Metallic Blue, Chrome Mirror, 24K Gold, Brushed Copper, Rubber Tire, Matte Plastic, Cast Iron, Aluminum, Obsidian, LED Headlight/Taillight), normal perturbation strength slider, emission glow controls, UV tiling shortcuts, and complete scene serialization (`.axlescene`).
   - [ ] **Atmospheric Skybox**: Cubemap or HDR environment sky with ambient irradiance.
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).

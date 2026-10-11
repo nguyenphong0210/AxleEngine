@@ -31,11 +31,14 @@ uniform sampler2D u_MetallicMap;   // Slot 4: Metallic Mask Map
 // 4. Texture Mapping & Material Controls
 uniform int u_UseAlbedoMap;        // 1: Sample u_AlbedoMap, 0: Procedural pattern
 uniform int u_UseNormalMap;        // 1: Perturb normal via u_NormalMap, 0: Geometric normal
+uniform float u_NormalStrength;    // Normal map intensity multiplier (default 1.0)
 uniform int u_UseRoughnessMap;     // 1: Sample u_RoughnessMap, 0: Uniform u_Roughness
 uniform int u_UseMetallicMap;      // 1: Sample u_MetallicMap, 0: Uniform u_Metallic
 uniform vec2 u_UVScale;            // UV tiling multiplier (default 1.0, 1.0)
 uniform float u_Roughness;         // Material roughness (0.04 .. 1.0, default 0.5)
 uniform float u_Metallic;          // Material metallic (0.0 .. 1.0, default 0.0)
+uniform vec3 u_EmissionColor;      // Emissive RGB color (default 0,0,0)
+uniform float u_EmissionIntensity; // Emissive radiance multiplier (default 0.0)
 
 // 5. Post-Processing & Tone Mapping (Phase 11: Sub-step 3.2)
 uniform float u_Exposure;          // Exposure multiplier (default 1.0)
@@ -73,8 +76,10 @@ float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
 // ----------------------------------------------------------------------------
 // Cotangent-Frame Normal Perturbation from Screen-Space Derivatives
 // ----------------------------------------------------------------------------
-vec3 PerturbNormal(vec3 N, vec3 V, vec2 texcoord) {
+vec3 PerturbNormal(vec3 N, vec3 V, vec2 texcoord, float strength) {
     vec3 mapNormal = texture(u_NormalMap, texcoord).xyz * 2.0 - 1.0;
+    mapNormal.xy *= strength;
+    mapNormal = normalize(mapNormal);
 
     vec3 dp1 = dFdx(v_WorldPos);
     vec3 dp2 = dFdy(v_WorldPos);
@@ -199,7 +204,8 @@ void main() {
     // 2. Cotangent normal map perturbation
     if (u_UseNormalMap == 1) {
         vec3 viewDir = normalize(-v_WorldPos);
-        normal = PerturbNormal(normal, viewDir, uv);
+        float normStrength = (u_NormalStrength >= 0.0) ? u_NormalStrength : 1.0;
+        normal = PerturbNormal(normal, viewDir, uv, normStrength);
     }
 
     // 3. Base color (Albedo texture map or procedural checkerboard)
@@ -273,7 +279,10 @@ void main() {
     // Ambient lighting term
     vec3 ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
 
-    vec3 linearColor = ambient + Lo;
+    // Emissive lighting term (Automotive lights / Glow)
+    vec3 emissive = u_EmissionColor * max(u_EmissionIntensity, 0.0);
+
+    vec3 linearColor = ambient + Lo + emissive;
 
     // 6. Camera Exposure, Filmic Tone Mapping & Gamma Correction
     float exposure = (u_Exposure > 0.0) ? u_Exposure : 1.0;

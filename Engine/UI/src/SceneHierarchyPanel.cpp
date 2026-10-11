@@ -869,6 +869,88 @@ namespace Axle {
             if (matOpen) {
                 auto& mat = entity.GetComponent<MaterialComponent>();
 
+                // 1. Material Classification & Summary Badges
+                bool isMetal = (mat.Metallic >= 0.8f);
+                const char* typeBadge = isMetal ? "Conductor (Metallic)" : "Dielectric (Non-Metal)";
+                ImVec4 typeColor = isMetal ? ImVec4(0.95f, 0.75f, 0.35f, 1.0f) : ImVec4(0.40f, 0.70f, 1.0f, 1.0f);
+
+                const char* finishBadge = (mat.Roughness < 0.15f) ? "Mirror / Clearcoat" :
+                                          (mat.Roughness < 0.40f) ? "Satin / Gloss" :
+                                          (mat.Roughness < 0.70f) ? "Semi-Rough" : "Rough / Diffuse";
+
+                ImGui::TextColored(typeColor, "[%s]", typeBadge);
+                ImGui::SameLine();
+                ImGui::TextDisabled("| %s", finishBadge);
+                if (mat.EmissionIntensity > 0.0f) {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "| Luminous (%.1f)", mat.EmissionIntensity);
+                }
+                ImGui::Spacing();
+
+                // 2. Physical Material Presets Selector
+                static const char* s_PresetNames[] = {
+                    "Choose Material Preset...",
+                    "Automotive Paint (Red Clearcoat)",
+                    "Automotive Paint (Metallic Blue)",
+                    "Chrome (Mirror Polished)",
+                    "24K Gold (Polished)",
+                    "Brushed Copper",
+                    "Rubber (Tire)",
+                    "Matte Plastic",
+                    "Cast Iron / Steel",
+                    "Polished Aluminum",
+                    "Obsidian (Black Gloss)",
+                    "Automotive Headlight (LED / Xenon)",
+                    "Automotive Taillight (LED Red)"
+                };
+                int selectedPreset = 0;
+                if (ImGui::Combo("Physical Preset", &selectedPreset, s_PresetNames, IM_ARRAYSIZE(s_PresetNames))) {
+                    switch (selectedPreset) {
+                        case 1: mat.SetPresetCarPaintRed(); break;
+                        case 2: mat.SetPresetCarPaintBlue(); break;
+                        case 3: mat.SetPresetChrome(); break;
+                        case 4: mat.SetPresetGold(); break;
+                        case 5: mat.SetPresetCopper(); break;
+                        case 6: mat.SetPresetRubber(); break;
+                        case 7: mat.SetPresetPlastic(); break;
+                        case 8: mat.SetPresetCastIron(); break;
+                        case 9: mat.SetPresetAluminum(); break;
+                        case 10: mat.SetPresetObsidian(); break;
+                        case 11: mat.SetPresetHeadlightLED(); break;
+                        case 12: mat.SetPresetTaillightLED(); break;
+                        default: break;
+                    }
+                }
+
+                // Quick Preset Buttons Bar
+                ImGui::TextDisabled("Quick Presets:");
+                if (ImGui::SmallButton("Car Paint (Red)")) { mat.SetPresetCarPaintRed(); }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Car Paint (Blue)")) { mat.SetPresetCarPaintBlue(); }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Chrome")) { mat.SetPresetChrome(); }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Gold")) { mat.SetPresetGold(); }
+
+                if (ImGui::SmallButton("Copper")) { mat.SetPresetCopper(); }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Rubber Tire")) { mat.SetPresetRubber(); }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Plastic")) { mat.SetPresetPlastic(); }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Steel")) { mat.SetPresetCastIron(); }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Aluminum")) { mat.SetPresetAluminum(); }
+
+                if (ImGui::SmallButton("Obsidian")) { mat.SetPresetObsidian(); }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("LED Headlight")) { mat.SetPresetHeadlightLED(); }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("LED Taillight")) { mat.SetPresetTaillightLED(); }
+
+                ImGui::Separator();
+                ImGui::Spacing();
+
                 auto DrawTextureSlot = [&](const char* slotName, 
                                            std::shared_ptr<Texture2D>& tex, 
                                            std::string& path, 
@@ -947,6 +1029,9 @@ namespace Axle {
                 // 2. Normal Map
                 DrawTextureSlot("Normal Map (Cotangent Perturbation)", mat.NormalMap, mat.NormalPath, mat.UseNormalMap,
                     [&](const std::string& p) { mat.SetNormal(p); });
+                if (mat.UseNormalMap) {
+                    ImGui::SliderFloat("Normal Strength", &mat.NormalStrength, 0.0f, 3.0f, "%.2f");
+                }
                 ImGui::Spacing();
 
                 // 3. Roughness
@@ -954,6 +1039,8 @@ namespace Axle {
                     [&](const std::string& p) { mat.SetRoughnessMap(p); });
                 if (!mat.UseRoughnessMap) {
                     ImGui::SliderFloat("Roughness", &mat.Roughness, 0.04f, 1.0f, "%.2f");
+                } else {
+                    ImGui::TextDisabled("  [Active] Roughness sampled from texture red channel");
                 }
                 ImGui::Spacing();
 
@@ -962,28 +1049,53 @@ namespace Axle {
                     [&](const std::string& p) { mat.SetMetallicMap(p); });
                 if (!mat.UseMetallicMap) {
                     ImGui::SliderFloat("Metallic", &mat.Metallic, 0.0f, 1.0f, "%.2f");
+                } else {
+                    ImGui::TextDisabled("  [Active] Metallic conductivity sampled from texture red channel");
                 }
                 ImGui::Spacing();
 
-                // 5. UV Tiling
-                ImGui::DragFloat2("UV Scale", glm::value_ptr(mat.UVScale), 0.1f, 0.01f, 100.0f, "%.2f");
-
-                // Quick Presets
+                // 5. Emission (Automotive Lighting & Neon Glow)
+                ImGui::ColorEdit3("Emission Color", glm::value_ptr(mat.EmissionColor));
+                ImGui::DragFloat("Emission Intensity", &mat.EmissionIntensity, 0.1f, 0.0f, 25.0f, "%.1f");
+                if (mat.EmissionIntensity > 0.0f) {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Clear##Emission")) {
+                        mat.EmissionColor = glm::vec3(0.0f);
+                        mat.EmissionIntensity = 0.0f;
+                    }
+                }
                 ImGui::Spacing();
-                ImGui::TextDisabled("Quick Texture Presets:");
-                if (ImGui::SmallButton("Prototype Grid")) {
+
+                // 6. UV Tiling
+                ImGui::DragFloat2("UV Scale", glm::value_ptr(mat.UVScale), 0.1f, 0.01f, 100.0f, "%.2f");
+                ImGui::TextDisabled("UV Presets:");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("1x1")) mat.UVScale = glm::vec2(1.0f);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("2x2")) mat.UVScale = glm::vec2(2.0f);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("4x4")) mat.UVScale = glm::vec2(4.0f);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("8x8")) mat.UVScale = glm::vec2(8.0f);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("16x16")) mat.UVScale = glm::vec2(16.0f);
+
+                // Quick Texture Pipeline Actions
+                ImGui::Spacing();
+                ImGui::TextDisabled("Texture Setup Tools:");
+                if (ImGui::SmallButton("Prototype Grid (512x512)")) {
                     mat.SetAlbedo("textures/Prototype_Grid.png");
                     mat.SetNormal("textures/Flat_Normal.png");
                     mat.SetRoughnessMap("textures/Roughness_Gradient.png");
                 }
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Clear Textures")) {
-                    mat.SetAlbedo("");
-                    mat.SetNormal("");
-                    mat.SetRoughnessMap("");
-                    mat.SetMetallicMap("");
+                if (ImGui::SmallButton("Reset All Textures")) {
+                    mat.ResetTextures();
                     mat.Roughness = 0.5f;
                     mat.Metallic = 0.0f;
+                    mat.NormalStrength = 1.0f;
+                    mat.EmissionColor = glm::vec3(0.0f);
+                    mat.EmissionIntensity = 0.0f;
                 }
 
                 ImGui::TreePop();

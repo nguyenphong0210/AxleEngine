@@ -329,6 +329,9 @@ void SandboxLayer::OnAttach() {
     m_ContentBrowserPanel.SetCompileAssetsCallback([this]() {
         CompileAndHotReloadAssets(false);
     });
+    m_ContentBrowserPanel.SetOpenSceneCallback([this](const std::filesystem::path& path) {
+        OpenScene(path);
+    });
 
     // Initialize Scene Serialization (Phase 10: Step 1 & 2)
     m_CurrentScenePath = Axle::FileSystem::ResolveAssetPath("scenes/Playground.axlescene");
@@ -384,7 +387,9 @@ void SandboxLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
         std::string stem = srcPath.stem().string();
 
-        if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+        if (ext == ".axlescene" || ext == ".scene") {
+            OpenScene(srcPath);
+        } else if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
             // Queue 3D asset for conversion confirmation modal
             m_PendingImportQueue.push_back(srcPath);
         } else if (ext == ".axle") {
@@ -516,6 +521,26 @@ void SandboxLayer::NewScene() {
         OnSceneStop();
     }
 
+    // Release Vehicle before PhysicsScene is destroyed
+    m_Vehicle.reset();
+
+    // Clear cached entity and body handles
+    m_ChassisEntity = {};
+    for (int i = 0; i < 4; ++i) {
+        m_WheelEntities[i] = {};
+    }
+    m_FloorEntity = {};
+    m_BoxEntity = {};
+    m_SphereEntity = {};
+    m_CylinderEntity = {};
+    m_ConeEntity = {};
+    m_BoxBodyID = Axle::BodyID();
+    m_SphereBodyID = Axle::BodyID();
+    m_CylinderBodyID = Axle::BodyID();
+    m_ConeBodyID = Axle::BodyID();
+    m_FloorBodyID = Axle::BodyID();
+    m_InitialDynamicStates.clear();
+
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
     m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
     m_Scene->Clear();
@@ -529,6 +554,8 @@ void SandboxLayer::NewScene() {
     m_FloorEntity.AddComponent<Axle::RigidBodyComponent>(m_FloorBodyID, false, Axle::BodyShapeType::Plane, glm::vec3(75.0f), 0.6f, 0.0f);
 
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_VehicleTunerPanel.SetContext(nullptr, m_PhysicsScene.get());
+    m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
     m_CompileNotificationMessage = "Created new empty scene";
     m_CompileNotificationTimer = 3.5f;
     UpdateWindowTitle();
@@ -560,6 +587,27 @@ void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
         OnSceneStop();
     }
 
+    // 1. MUST destroy m_Vehicle BEFORE destroying m_PhysicsScene!
+    m_Vehicle.reset();
+
+    // 2. Clear cached entity and body handles
+    m_ChassisEntity = {};
+    for (int i = 0; i < 4; ++i) {
+        m_WheelEntities[i] = {};
+    }
+    m_FloorEntity = {};
+    m_BoxEntity = {};
+    m_SphereEntity = {};
+    m_CylinderEntity = {};
+    m_ConeEntity = {};
+    m_BoxBodyID = Axle::BodyID();
+    m_SphereBodyID = Axle::BodyID();
+    m_CylinderBodyID = Axle::BodyID();
+    m_ConeBodyID = Axle::BodyID();
+    m_FloorBodyID = Axle::BodyID();
+    m_InitialDynamicStates.clear();
+
+    // 3. Create fresh PhysicsScene and PhysicsDebugRenderer
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
     m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
 
@@ -579,8 +627,83 @@ void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
 
     if (serializer.Deserialize(targetPath)) {
         m_CurrentScenePath = targetPath;
+
+        // Rediscover vehicle entities and dynamic shapes from the deserialized scene
+        auto view = m_Scene->GetRegistry().view<Axle::TagComponent>();
+        for (auto entityID : view) {
+            const auto& tag = view.get<Axle::TagComponent>(entityID).Tag;
+            Axle::Entity e{ entityID, m_Scene.get() };
+            if (tag == "Vehicle Chassis") {
+                m_ChassisEntity = e;
+            } else if (tag == "Wheel FL") {
+                m_WheelEntities[0] = e;
+            } else if (tag == "Wheel FR") {
+                m_WheelEntities[1] = e;
+            } else if (tag == "Wheel RL") {
+                m_WheelEntities[2] = e;
+            } else if (tag == "Wheel RR") {
+                m_WheelEntities[3] = e;
+            } else if (tag == "Dynamic Box") {
+                m_BoxEntity = e;
+                if (e.HasComponent<Axle::RigidBodyComponent>()) {
+                    m_BoxBodyID = e.GetComponent<Axle::RigidBodyComponent>().RuntimeBodyID;
+                }
+            } else if (tag == "Bouncy Sphere") {
+                m_SphereEntity = e;
+                if (e.HasComponent<Axle::RigidBodyComponent>()) {
+                    m_SphereBodyID = e.GetComponent<Axle::RigidBodyComponent>().RuntimeBodyID;
+                }
+            } else if (tag == "Dynamic Cylinder") {
+                m_CylinderEntity = e;
+                if (e.HasComponent<Axle::RigidBodyComponent>()) {
+                    m_CylinderBodyID = e.GetComponent<Axle::RigidBodyComponent>().RuntimeBodyID;
+                }
+            } else if (tag == "Dynamic Cone") {
+                m_ConeEntity = e;
+                if (e.HasComponent<Axle::RigidBodyComponent>()) {
+                    m_ConeBodyID = e.GetComponent<Axle::RigidBodyComponent>().RuntimeBodyID;
+                }
+            } else if (tag == "Static Floor Plane" || tag == "Ground Floor") {
+                m_FloorEntity = e;
+                if (e.HasComponent<Axle::RigidBodyComponent>()) {
+                    m_FloorBodyID = e.GetComponent<Axle::RigidBodyComponent>().RuntimeBodyID;
+                }
+            }
+        }
+
+        // Cache initial dynamic states for ResetSimulation()
+        auto rbView = m_Scene->GetRegistry().view<Axle::RigidBodyComponent, Axle::TransformComponent>();
+        for (auto entityID : rbView) {
+            const auto& rb = rbView.get<Axle::RigidBodyComponent>(entityID);
+            const auto& tc = rbView.get<Axle::TransformComponent>(entityID);
+            if (rb.IsDynamic && !rb.RuntimeBodyID.IsInvalid()) {
+                m_InitialDynamicStates[rb.RuntimeBodyID.GetIndexAndSequenceNumber()] = { tc.Translation, tc.Rotation };
+            }
+        }
+
+        // If the loaded scene contains a Vehicle Chassis, re-instantiate Vehicle physics and bind components
+        if (m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::TransformComponent>()) {
+            m_Vehicle = std::make_unique<Axle::Vehicle>(*m_PhysicsScene);
+
+            auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
+            m_Vehicle->Reset(chassisTC.Translation, chassisTC.Rotation);
+
+            if (m_ChassisEntity.HasComponent<Axle::VehicleComponent>()) {
+                m_ChassisEntity.GetComponent<Axle::VehicleComponent>().VehicleInstance = m_Vehicle.get();
+            } else {
+                m_ChassisEntity.AddComponent<Axle::VehicleComponent>(m_Vehicle.get());
+            }
+
+            if (m_ChassisEntity.HasComponent<Axle::RigidBodyComponent>()) {
+                m_ChassisEntity.GetComponent<Axle::RigidBodyComponent>().RuntimeBodyID = m_Vehicle->GetChassisBodyID();
+            } else {
+                m_ChassisEntity.AddComponent<Axle::RigidBodyComponent>(m_Vehicle->GetChassisBodyID(), true);
+            }
+        }
+
         m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
         m_VehicleTunerPanel.SetContext(m_Vehicle.get(), m_PhysicsScene.get());
+        m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
 
         m_CompileNotificationMessage = "Loaded scene: " + targetPath.filename().string();
         m_CompileNotificationTimer = 3.5f;
@@ -661,14 +784,14 @@ void SandboxLayer::ResetSimulation() {
     // Reset all registered dynamic bodies (pyramid crates, cones, tires, demo shapes) to initial poses
     for (const auto& [bodyIDRaw, state] : m_InitialDynamicStates) {
         Axle::BodyID bodyID(bodyIDRaw);
-        if (!bodyID.IsInvalid()) {
+        if (!bodyID.IsInvalid() && m_PhysicsScene && m_PhysicsScene->IsBodyValid(bodyID)) {
             m_PhysicsScene->SetBodyPositionAndRotation(bodyID, state.Position, state.Rotation, true);
             m_PhysicsScene->SetLinearVelocity(bodyID, glm::vec3(0.0f));
             m_PhysicsScene->GetBodyInterface().SetAngularVelocity(bodyID, JPH::Vec3::sZero());
         }
     }
 
-    if (m_Vehicle) {
+    if (m_Vehicle && m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::TransformComponent>()) {
         m_Vehicle->Reset(glm::vec3(0.0f, 1.2f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
         m_Vehicle->SetDriverInput(0.0f, 0.0f, 0.0f, 0.0f);
         auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
@@ -676,10 +799,12 @@ void SandboxLayer::ResetSimulation() {
         chassisTC.Rotation = m_PhysicsScene->GetBodyRotation(m_Vehicle->GetChassisBodyID());
 
         for (Axle::u32 i = 0; i < 4; ++i) {
-            const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
-            auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
-            tc.Translation = glm::vec3(wheelMat[3]);
-            tc.Rotation = glm::quat_cast(wheelMat);
+            if (m_WheelEntities[i] && m_WheelEntities[i].HasComponent<Axle::TransformComponent>()) {
+                const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
+                auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
+                tc.Translation = glm::vec3(wheelMat[3]);
+                tc.Rotation = glm::quat_cast(wheelMat);
+            }
         }
     }
     m_OrbitYaw = 180.0f;
@@ -1194,16 +1319,16 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
     }
 
     // Physics Simulation Stepping
-    if (m_SceneState == SceneState::Play) {
+    if (m_SceneState == SceneState::Play && m_PhysicsScene) {
         Axle::Timestep simTs = ts.GetSeconds() * m_SimulationSpeed;
         m_PhysicsScene->Step(simTs);
-    } else if (m_SceneState == SceneState::Pause && m_StepSingleFrame) {
+    } else if (m_SceneState == SceneState::Pause && m_StepSingleFrame && m_PhysicsScene) {
         m_PhysicsScene->Step(1.0f / 60.0f);
         m_StepSingleFrame = false;
     }
 
     // Synchronize vehicle chassis and 4 wheel entities with physics simulation
-    if (m_Vehicle) {
+    if (m_Vehicle && m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::TransformComponent>()) {
         if (m_SceneState == SceneState::Edit) {
             auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
             m_Vehicle->Reset(chassisTC.Translation, chassisTC.Rotation);
@@ -1214,10 +1339,12 @@ void SandboxLayer::OnUpdate(Axle::Timestep ts) {
         }
 
         for (Axle::u32 i = 0; i < 4; ++i) {
-            const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
-            auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
-            tc.Translation = glm::vec3(wheelMat[3]);
-            tc.Rotation = glm::quat_cast(wheelMat);
+            if (m_WheelEntities[i] && m_WheelEntities[i].HasComponent<Axle::TransformComponent>()) {
+                const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
+                auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
+                tc.Translation = glm::vec3(wheelMat[3]);
+                tc.Rotation = glm::quat_cast(wheelMat);
+            }
         }
     }
 
@@ -1677,7 +1804,9 @@ void SandboxLayer::OnImGuiRender() {
             std::string ext = assetPath.extension().string();
             std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
-            if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+            if (ext == ".axlescene" || ext == ".scene") {
+                OpenScene(assetPath);
+            } else if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                 if (ext != ".axle") {
                     std::filesystem::path axlePath = assetPath.parent_path() / (assetPath.stem().string() + ".axle");
                     if (!std::filesystem::exists(axlePath)) {
@@ -1868,14 +1997,16 @@ void SandboxLayer::OnImGuiRender() {
                 if (selectedEntity == m_ChassisEntity && m_Vehicle) {
                     m_Vehicle->Reset(tc.Translation, tc.Rotation);
                     for (Axle::u32 i = 0; i < 4; ++i) {
-                        const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
-                        auto& wtc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
-                        wtc.Translation = glm::vec3(wheelMat[3]);
-                        wtc.Rotation = glm::quat_cast(wheelMat);
+                        if (m_WheelEntities[i] && m_WheelEntities[i].HasComponent<Axle::TransformComponent>()) {
+                            const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(i);
+                            auto& wtc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
+                            wtc.Translation = glm::vec3(wheelMat[3]);
+                            wtc.Rotation = glm::quat_cast(wheelMat);
+                        }
                     }
                 } else if (selectedEntity.HasComponent<Axle::RigidBodyComponent>() && m_PhysicsScene) {
                     auto& rb = selectedEntity.GetComponent<Axle::RigidBodyComponent>();
-                    if (!rb.RuntimeBodyID.IsInvalid()) {
+                    if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                         m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, tc.Translation, tc.Rotation, true);
                         m_PhysicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
                         m_PhysicsScene->GetBodyInterface().SetAngularVelocity(rb.RuntimeBodyID, JPH::Vec3::sZero());
@@ -1978,15 +2109,15 @@ void SandboxLayer::OnImGuiRender() {
             .FPS = m_LastDeltaTime > 0.0f ? 1.0f / m_LastDeltaTime : 0.0f,
             .CameraPosition = m_CameraController->GetCamera().GetPosition(),
             .CameraRotation = m_CameraController->GetCamera().GetRotation(),
-            .HasPhysics = true,
-            .BoxPosition = m_PhysicsScene->GetBodyPosition(m_BoxBodyID),
-            .BoxVelocity = m_PhysicsScene->GetLinearVelocity(m_BoxBodyID),
-            .IsBoxActive = m_PhysicsScene->IsActive(m_BoxBodyID),
-            .SpherePosition = m_PhysicsScene->GetBodyPosition(m_SphereBodyID),
-            .SphereVelocity = m_PhysicsScene->GetLinearVelocity(m_SphereBodyID),
-            .IsSphereActive = m_PhysicsScene->IsActive(m_SphereBodyID),
-            .TotalBodies = m_PhysicsScene->GetNumBodies(),
-            .ActiveBodies = m_PhysicsScene->GetNumActiveBodies(),
+            .HasPhysics = (m_PhysicsScene != nullptr),
+            .BoxPosition = (m_PhysicsScene && !m_BoxBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(m_BoxBodyID)) ? m_PhysicsScene->GetBodyPosition(m_BoxBodyID) : glm::vec3(0.0f),
+            .BoxVelocity = (m_PhysicsScene && !m_BoxBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(m_BoxBodyID)) ? m_PhysicsScene->GetLinearVelocity(m_BoxBodyID) : glm::vec3(0.0f),
+            .IsBoxActive = (m_PhysicsScene && !m_BoxBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(m_BoxBodyID)) ? m_PhysicsScene->IsActive(m_BoxBodyID) : false,
+            .SpherePosition = (m_PhysicsScene && !m_SphereBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(m_SphereBodyID)) ? m_PhysicsScene->GetBodyPosition(m_SphereBodyID) : glm::vec3(0.0f),
+            .SphereVelocity = (m_PhysicsScene && !m_SphereBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(m_SphereBodyID)) ? m_PhysicsScene->GetLinearVelocity(m_SphereBodyID) : glm::vec3(0.0f),
+            .IsSphereActive = (m_PhysicsScene && !m_SphereBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(m_SphereBodyID)) ? m_PhysicsScene->IsActive(m_SphereBodyID) : false,
+            .TotalBodies = m_PhysicsScene ? m_PhysicsScene->GetNumBodies() : 0,
+            .ActiveBodies = m_PhysicsScene ? m_PhysicsScene->GetNumActiveBodies() : 0,
             .ShowPhysicsWireframe = m_ShowPhysicsDebug,
             .DrawBoundingBoxes = m_PhysicsDrawSettings.DrawBoundingBoxes,
             .DrawVelocity = m_PhysicsDrawSettings.DrawVelocity,
@@ -1996,7 +2127,7 @@ void SandboxLayer::OnImGuiRender() {
             .IsChaseCamera = m_ChaseCamera
         };
 
-        if (m_Vehicle) {
+        if (m_Vehicle && m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::TransformComponent>()) {
             const auto vTele = m_Vehicle->GetTelemetry();
             telemetry.VehicleSpeedKmh = vTele.SpeedKmh;
             telemetry.VehicleRPM = vTele.EngineRPM;

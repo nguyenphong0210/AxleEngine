@@ -134,6 +134,7 @@ namespace Axle {
         glm::vec3 GetLinearVelocity(BodyID bodyID) const;
         void SetLinearVelocity(BodyID bodyID, const glm::vec3& velocity);
 
+        bool IsBodyValid(BodyID bodyID) const;
         bool IsActive(BodyID bodyID) const;
         void ActivateBody(BodyID bodyID);
         void DeactivateBody(BodyID bodyID);

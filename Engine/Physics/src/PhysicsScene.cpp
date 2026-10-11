@@ -299,28 +299,33 @@ namespace Axle {
         m_PhysicsSystem.OptimizeBroadPhase();
     }
 
+    bool PhysicsScene::IsBodyValid(BodyID bodyID) const {
+        if (bodyID.IsInvalid()) return false;
+        return m_PhysicsSystem.GetBodyInterface().IsAdded(bodyID);
+    }
+
     glm::vec3 PhysicsScene::GetBodyPosition(BodyID bodyID) const {
-        if (bodyID.IsInvalid()) return glm::vec3(0.0f);
+        if (!IsBodyValid(bodyID)) return glm::vec3(0.0f);
         return ToGlm(m_PhysicsSystem.GetBodyInterface().GetPosition(bodyID));
     }
 
     glm::vec3 PhysicsScene::GetCenterOfMassPosition(BodyID bodyID) const {
-        if (bodyID.IsInvalid()) return glm::vec3(0.0f);
+        if (!IsBodyValid(bodyID)) return glm::vec3(0.0f);
         return ToGlm(m_PhysicsSystem.GetBodyInterface().GetCenterOfMassPosition(bodyID));
     }
 
     glm::quat PhysicsScene::GetBodyRotation(BodyID bodyID) const {
-        if (bodyID.IsInvalid()) return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        if (!IsBodyValid(bodyID)) return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
         return ToGlm(m_PhysicsSystem.GetBodyInterface().GetRotation(bodyID));
     }
 
     glm::mat4 PhysicsScene::GetBodyTransform(BodyID bodyID) const {
-        if (bodyID.IsInvalid()) return glm::mat4(1.0f);
+        if (!IsBodyValid(bodyID)) return glm::mat4(1.0f);
         return ToGlm(m_PhysicsSystem.GetBodyInterface().GetWorldTransform(bodyID));
     }
 
     void PhysicsScene::SetBodyPositionAndRotation(BodyID bodyID, const glm::vec3& position, const glm::quat& rotation, bool activate) {
-        if (bodyID.IsInvalid()) return;
+        if (!IsBodyValid(bodyID)) return;
         auto& bi = m_PhysicsSystem.GetBodyInterface();
         bi.SetPositionAndRotation(
             bodyID,
@@ -331,27 +336,27 @@ namespace Axle {
     }
 
     glm::vec3 PhysicsScene::GetLinearVelocity(BodyID bodyID) const {
-        if (bodyID.IsInvalid()) return glm::vec3(0.0f);
+        if (!IsBodyValid(bodyID)) return glm::vec3(0.0f);
         return ToGlm(m_PhysicsSystem.GetBodyInterface().GetLinearVelocity(bodyID));
     }
 
     void PhysicsScene::SetLinearVelocity(BodyID bodyID, const glm::vec3& velocity) {
-        if (bodyID.IsInvalid()) return;
+        if (!IsBodyValid(bodyID)) return;
         m_PhysicsSystem.GetBodyInterface().SetLinearVelocity(bodyID, ToJolt(velocity));
     }
 
     bool PhysicsScene::IsActive(BodyID bodyID) const {
-        if (bodyID.IsInvalid()) return false;
+        if (!IsBodyValid(bodyID)) return false;
         return m_PhysicsSystem.GetBodyInterface().IsActive(bodyID);
     }
 
     void PhysicsScene::ActivateBody(BodyID bodyID) {
-        if (bodyID.IsInvalid()) return;
+        if (!IsBodyValid(bodyID)) return;
         m_PhysicsSystem.GetBodyInterface().ActivateBody(bodyID);
     }
 
     void PhysicsScene::DeactivateBody(BodyID bodyID) {
-        if (bodyID.IsInvalid()) return;
+        if (!IsBodyValid(bodyID)) return;
         m_PhysicsSystem.GetBodyInterface().DeactivateBody(bodyID);
     }
 

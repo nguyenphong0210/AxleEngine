@@ -381,6 +381,12 @@ namespace Axle {
                 auto& rb = rbView.get<RigidBodyComponent>(entityID);
                 auto& tc = rbView.get<TransformComponent>(entityID);
 
+                if (m_Scene->GetRegistry().all_of<TagComponent>(entityID)) {
+                    if (m_Scene->GetRegistry().get<TagComponent>(entityID).Tag == "Vehicle Chassis") {
+                        continue;
+                    }
+                }
+
                 BodyID bodyID;
                 switch (rb.ShapeType) {
                     case BodyShapeType::Plane:

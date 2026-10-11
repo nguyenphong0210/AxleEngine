@@ -66,8 +66,8 @@ namespace Axle {
         if (ext == ".vert" || ext == ".frag" || ext == ".glsl" || ext == ".comp") {
             return { AssetKind::Shader, "Shader", "SHD", IM_COL32(205, 105, 255, 255) };
         }
-        if (ext == ".scene") {
-            return { AssetKind::Scene, "Scene", "SCN", IM_COL32(255, 85, 95, 255) };
+        if (ext == ".axlescene" || ext == ".scene") {
+            return { AssetKind::Scene, "Axle Scene", "SCN", IM_COL32(255, 85, 95, 255) };
         }
         if (ext == ".axlemat" || ext == ".mat") {
             return { AssetKind::Material, "Material", "MAT", IM_COL32(255, 135, 45, 255) };
@@ -598,7 +598,11 @@ namespace Axle {
                     if (isClicked) {
                         m_SelectedEntry = path;
                         if (m_AssetPreviewPanel && !isDir) {
-                            m_AssetPreviewPanel->SetAsset(path);
+                            std::string ext = path.extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                                m_AssetPreviewPanel->SetAsset(path);
+                            }
                         }
                     }
 
@@ -607,9 +611,16 @@ namespace Axle {
                             m_CurrentDirectory /= path.filename();
                             m_SelectedEntry.clear();
                         } else {
-                            AXLE_INFO("Content Browser: Selected file '{0}'", path.string());
-                            if (m_AssetPreviewPanel) {
-                                m_AssetPreviewPanel->SetAsset(path);
+                            std::string ext = path.extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            if ((ext == ".axlescene" || ext == ".scene") && m_OnOpenSceneCallback) {
+                                m_OnOpenSceneCallback(path);
+                                SetStatusNotification("Loaded scene: " + path.filename().string());
+                            } else if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                                AXLE_INFO("Content Browser: Selected file '{0}'", path.string());
+                                if (m_AssetPreviewPanel) {
+                                    m_AssetPreviewPanel->SetAsset(path);
+                                }
                             }
                         }
                     }
@@ -618,7 +629,11 @@ namespace Axle {
                     if (ImGui::BeginPopupContextItem()) {
                         m_SelectedEntry = path;
                         if (m_AssetPreviewPanel && !isDir) {
-                            m_AssetPreviewPanel->SetAsset(path);
+                            std::string ext = path.extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                                m_AssetPreviewPanel->SetAsset(path);
+                            }
                         }
 
                         std::string ext = path.extension().string();
@@ -626,6 +641,16 @@ namespace Axle {
 
                         ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "%s", filenameStr.c_str());
                         ImGui::Separator();
+
+                        if (ext == ".axlescene" || ext == ".scene") {
+                            if (ImGui::MenuItem("Open Scene in Viewport")) {
+                                if (m_OnOpenSceneCallback) {
+                                    m_OnOpenSceneCallback(path);
+                                    SetStatusNotification("Loaded scene: " + path.filename().string());
+                                }
+                            }
+                            ImGui::Separator();
+                        }
 
                         if (ext == ".axle" || ext == ".axlebin") {
                             if (ImGui::MenuItem("Convert to Wavefront OBJ (.obj)")) {

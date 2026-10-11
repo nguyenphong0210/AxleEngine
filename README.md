@@ -98,7 +98,7 @@ Level 0:  [ Engine/Core ]
 - [ ] **Phase 10: Scene Serialization & Project Management (`Engine/Scene` & `Engine/Project`) *(In Progress)***
   - [x] **Step 1: Core SceneSerializer (`.axlescene`)**: Built-in structured YAML-like scene serializer saving and restoring complete ECS scene state (UUIDs, TagComponents, TransformComponents, MeshComponents with builtin/custom models, Jolt RigidBodyComponents with shape detection, HierarchyComponents parent-child links, and NativeScriptComponents).
   - [x] **Step 2: Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with native OS file dialogs (`Axle::FileDialogs`), dynamic window title indicator (`Axle Engine - [SceneName.axlescene]`), and full Main Menu Bar integration (`File -> New / Open / Save / Save As / Exit`).
-  - [ ] **Step 3: Content Browser Scene Loading**: Double-click scene files in Content Browser to instantly load them into the active Viewport.
+  - [x] **Step 3: Content Browser Scene Loading**: Double-click scene files (`.axlescene`) in Content Browser to instantly load them into the active Viewport, with right-click context menu ("Open Scene in Viewport"), dedicated Scene clapperboard icon (`SCN`), and drag-and-drop scene loading onto the Viewport.
   - [ ] **Step 4: Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project` and `File -> Open Project`.
 - [ ] **Phase 11: Lighting, Dynamic Shadows & PBR Materials**
   - [ ] **Directional Shadow Mapping**: Real-time dynamic shadows cast by vehicle and obstacles onto ground surfaces using depth framebuffer & PCF filtering.

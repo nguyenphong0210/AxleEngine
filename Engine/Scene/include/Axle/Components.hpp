@@ -52,7 +52,7 @@ namespace Axle {
         }
     };
 
-    struct MeshComponent {
+    struct MeshInstance3D {
         std::shared_ptr<VertexArray> VAO;
         std::string AssetPath;
 
@@ -62,12 +62,13 @@ namespace Axle {
         glm::vec4 Color1{ 1.0f };
         glm::vec4 Color2{ 0.0f };
 
-        MeshComponent() = default;
-        MeshComponent(const std::shared_ptr<VertexArray>& vao, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
+        MeshInstance3D() = default;
+        MeshInstance3D(const std::shared_ptr<VertexArray>& vao, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
             : VAO(vao), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
-        MeshComponent(const std::shared_ptr<VertexArray>& vao, const std::string& assetPath, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
+        MeshInstance3D(const std::shared_ptr<VertexArray>& vao, const std::string& assetPath, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
             : VAO(vao), AssetPath(assetPath), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
     };
+    using MeshComponent = MeshInstance3D; // Backward compatibility alias
 
     struct MaterialComponent {
         std::string AlbedoPath;
@@ -272,7 +273,7 @@ namespace Axle {
         }
     };
 
-    enum class BodyShapeType {
+    enum class CollisionShapeType {
         Box = 0,
         Sphere = 1,
         Cylinder = 2,
@@ -280,23 +281,73 @@ namespace Axle {
         Plane = 4,
         Mesh = 5
     };
+    using BodyShapeType = CollisionShapeType; // Backward compatibility alias
 
-    struct RigidBodyComponent {
-        BodyID RuntimeBodyID;
-        bool IsDynamic = true;
-        BodyShapeType ShapeType = BodyShapeType::Box;
+    struct CollisionShape3D {
+        CollisionShapeType ShapeType = CollisionShapeType::Box;
         glm::vec3 HalfExtent{ 0.5f };
         float Radius = 0.5f;
         float HalfHeight = 0.5f;
+        glm::vec3 Offset{ 0.0f };
+        glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
         float Friction = 0.5f;
         float Restitution = 0.0f;
+        bool IsTrigger = false;
 
-        RigidBodyComponent() = default;
-        RigidBodyComponent(BodyID bodyId, bool isDynamic = true)
-            : RuntimeBodyID(bodyId), IsDynamic(isDynamic) {}
-        RigidBodyComponent(BodyID bodyId, bool isDynamic, BodyShapeType shape, const glm::vec3& halfExtent, float friction = 0.5f, float restitution = 0.0f)
-            : RuntimeBodyID(bodyId), IsDynamic(isDynamic), ShapeType(shape), HalfExtent(halfExtent), Friction(friction), Restitution(restitution) {}
+        CollisionShape3D() = default;
+        explicit CollisionShape3D(CollisionShapeType shape)
+            : ShapeType(shape) {}
+
+        // Box / Plane: 2 args (shape, halfExtent) and 4 args (shape, halfExtent, friction, restitution)
+        CollisionShape3D(CollisionShapeType shape, const glm::vec3& halfExtent)
+            : ShapeType(shape), HalfExtent(halfExtent) {
+            Radius = glm::max(halfExtent.x, 0.01f);
+            HalfHeight = glm::max(halfExtent.y, 0.01f);
+        }
+        CollisionShape3D(CollisionShapeType shape, const glm::vec3& halfExtent, float friction, float restitution)
+            : ShapeType(shape), HalfExtent(halfExtent), Friction(friction), Restitution(restitution) {
+            Radius = glm::max(halfExtent.x, 0.01f);
+            HalfHeight = glm::max(halfExtent.y, 0.01f);
+        }
+
+        // Sphere: 2 args (shape, radius) and 4 args (shape, radius, friction, restitution)
+        CollisionShape3D(CollisionShapeType shape, float radius)
+            : ShapeType(shape), Radius(radius), HalfExtent(glm::vec3(radius)) {}
+        CollisionShape3D(CollisionShapeType shape, float radius, float friction, float restitution)
+            : ShapeType(shape), Radius(radius), HalfExtent(glm::vec3(radius)), Friction(friction), Restitution(restitution) {}
+
+        // Cylinder / Cone: 3 args (shape, halfHeight, radius) and 5 args (shape, halfHeight, radius, friction, restitution)
+        CollisionShape3D(CollisionShapeType shape, float halfHeight, float radius)
+            : ShapeType(shape), HalfHeight(halfHeight), Radius(radius), HalfExtent(glm::vec3(radius, halfHeight, radius)) {}
+        CollisionShape3D(CollisionShapeType shape, float halfHeight, float radius, float friction, float restitution)
+            : ShapeType(shape), HalfHeight(halfHeight), Radius(radius), HalfExtent(glm::vec3(radius, halfHeight, radius)), Friction(friction), Restitution(restitution) {}
     };
+
+    enum class BodyMotionType {
+        Static = 0,
+        Kinematic = 1,
+        Dynamic = 2
+    };
+
+    struct RigidBody3D {
+        BodyID RuntimeBodyID;
+        BodyMotionType MotionType = BodyMotionType::Dynamic;
+        bool IsDynamic = true;
+        float Mass = 1.0f;
+        float LinearDamping = 0.05f;
+        float AngularDamping = 0.05f;
+        float GravityFactor = 1.0f;
+
+        RigidBody3D() = default;
+        RigidBody3D(BodyID bodyId, bool isDynamic = true)
+            : RuntimeBodyID(bodyId), IsDynamic(isDynamic), MotionType(isDynamic ? BodyMotionType::Dynamic : BodyMotionType::Static) {}
+        RigidBody3D(BodyID bodyId, BodyMotionType motionType)
+            : RuntimeBodyID(bodyId), MotionType(motionType), IsDynamic(motionType == BodyMotionType::Dynamic) {}
+        // Backward compatibility constructor overload (shape moved to CollisionShape3D)
+        RigidBody3D(BodyID bodyId, bool isDynamic, CollisionShapeType /*shape*/, const glm::vec3& /*halfExtent*/, float /*friction*/ = 0.5f, float /*restitution*/ = 0.0f)
+            : RuntimeBodyID(bodyId), IsDynamic(isDynamic), MotionType(isDynamic ? BodyMotionType::Dynamic : BodyMotionType::Static) {}
+    };
+    using RigidBodyComponent = RigidBody3D; // Backward compatibility alias
 
     struct HierarchyComponent {
         entt::entity Parent{ entt::null };

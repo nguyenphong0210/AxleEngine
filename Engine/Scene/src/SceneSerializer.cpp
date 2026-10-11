@@ -83,9 +83,9 @@ namespace Axle {
                 ss << "      Scale: [ " << tc.Scale.x << " , " << tc.Scale.y << " , " << tc.Scale.z << " ]\n";
             }
 
-            // MeshComponent
-            if (entity.HasComponent<MeshComponent>()) {
-                auto& mc = entity.GetComponent<MeshComponent>();
+            // MeshInstance3D
+            if (entity.HasComponent<MeshInstance3D>()) {
+                auto& mc = entity.GetComponent<MeshInstance3D>();
                 std::string assetPath = mc.AssetPath;
 
                 if (assetPath.empty() && mc.VAO) {
@@ -96,7 +96,7 @@ namespace Axle {
                     else if (m_Context.PlaneMesh && mc.VAO == m_Context.PlaneMesh) assetPath = "builtin://plane";
                 }
 
-                ss << "    MeshComponent:\n";
+                ss << "    MeshInstance3D:\n";
                 ss << "      AssetPath: " << assetPath << "\n";
                 ss << "      PatternMode: " << mc.PatternMode << "\n";
                 ss << "      TileScale: " << mc.TileScale << "\n";
@@ -104,60 +104,55 @@ namespace Axle {
                 ss << "      Color2: [ " << mc.Color2.r << " , " << mc.Color2.g << " , " << mc.Color2.b << " , " << mc.Color2.a << " ]\n";
             }
 
-            // RigidBodyComponent
-            if (entity.HasComponent<RigidBodyComponent>()) {
-                auto& rb = entity.GetComponent<RigidBodyComponent>();
+            // RigidBody3D
+            if (entity.HasComponent<RigidBody3D>()) {
+                auto& rb = entity.GetComponent<RigidBody3D>();
                 bool isDynamic = rb.IsDynamic;
-                float friction = rb.Friction;
-                float restitution = rb.Restitution;
-
                 if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid()) {
                     isDynamic = (m_PhysicsScene->GetBodyInterface().GetMotionType(rb.RuntimeBodyID) == JPH::EMotionType::Dynamic);
-                    friction = m_PhysicsScene->GetBodyInterface().GetFriction(rb.RuntimeBodyID);
-                    restitution = m_PhysicsScene->GetBodyInterface().GetRestitution(rb.RuntimeBodyID);
                 }
 
-                std::string shapeName = "Box";
-                if (rb.ShapeType == BodyShapeType::Plane) shapeName = "Plane";
-                else if (rb.ShapeType == BodyShapeType::Sphere) shapeName = "Sphere";
-                else if (rb.ShapeType == BodyShapeType::Cylinder) shapeName = "Cylinder";
-                else if (rb.ShapeType == BodyShapeType::Cone) shapeName = "Cone";
-                else if (entity.HasComponent<MeshComponent>()) {
-                    auto& mc = entity.GetComponent<MeshComponent>();
-                    std::string aPath = mc.AssetPath;
-                    if (aPath.empty() && mc.VAO) {
-                        if (m_Context.CubeMesh && mc.VAO == m_Context.CubeMesh) aPath = "builtin://cube";
-                        else if (m_Context.SphereMesh && mc.VAO == m_Context.SphereMesh) aPath = "builtin://sphere";
-                        else if (m_Context.CylinderMesh && mc.VAO == m_Context.CylinderMesh) aPath = "builtin://cylinder";
-                        else if (m_Context.ConeMesh && mc.VAO == m_Context.ConeMesh) aPath = "builtin://cone";
-                        else if (m_Context.PlaneMesh && mc.VAO == m_Context.PlaneMesh) aPath = "builtin://plane";
-                    }
-                    if (aPath == "builtin://plane") shapeName = "Plane";
-                    else if (aPath == "builtin://sphere") shapeName = "Sphere";
-                    else if (aPath == "builtin://cylinder") shapeName = "Cylinder";
-                    else if (aPath == "builtin://cone") shapeName = "Cone";
-                    else shapeName = "Box";
-                }
+                std::string motionStr = isDynamic ? "Dynamic" : "Static";
+                if (rb.MotionType == BodyMotionType::Kinematic) motionStr = "Kinematic";
 
-                glm::vec3 halfExtent = rb.HalfExtent;
-                float radius = rb.Radius;
-                float halfHeight = rb.HalfHeight;
-
-                if (entity.HasComponent<TransformComponent>()) {
-                    auto& tc = entity.GetComponent<TransformComponent>();
-                    halfExtent = glm::max(tc.Scale * 0.5f, glm::vec3(0.01f));
-                    radius = glm::max(tc.Scale.x * 0.5f, 0.01f);
-                    halfHeight = glm::max(tc.Scale.y * 0.5f, 0.01f);
-                }
-
-                ss << "    RigidBodyComponent:\n";
-                ss << "      ShapeType: " << shapeName << "\n";
+                ss << "    RigidBody3D:\n";
+                ss << "      MotionType: " << motionStr << "\n";
                 ss << "      IsDynamic: " << (isDynamic ? "true" : "false") << "\n";
+                ss << "      Mass: " << rb.Mass << "\n";
+                ss << "      LinearDamping: " << rb.LinearDamping << "\n";
+                ss << "      AngularDamping: " << rb.AngularDamping << "\n";
+                ss << "      GravityFactor: " << rb.GravityFactor << "\n";
+            }
+
+            // CollisionShape3D
+            if (entity.HasComponent<CollisionShape3D>()) {
+                auto& cs = entity.GetComponent<CollisionShape3D>();
+                std::string shapeName = "Box";
+                if (cs.ShapeType == CollisionShapeType::Plane) shapeName = "Plane";
+                else if (cs.ShapeType == CollisionShapeType::Sphere) shapeName = "Sphere";
+                else if (cs.ShapeType == CollisionShapeType::Cylinder) shapeName = "Cylinder";
+                else if (cs.ShapeType == CollisionShapeType::Cone) shapeName = "Cone";
+                else if (cs.ShapeType == CollisionShapeType::Mesh) shapeName = "Mesh";
+
+                float friction = cs.Friction;
+                float restitution = cs.Restitution;
+                if (entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
+                    auto& rb = entity.GetComponent<RigidBody3D>();
+                    if (!rb.RuntimeBodyID.IsInvalid()) {
+                        friction = m_PhysicsScene->GetBodyInterface().GetFriction(rb.RuntimeBodyID);
+                        restitution = m_PhysicsScene->GetBodyInterface().GetRestitution(rb.RuntimeBodyID);
+                    }
+                }
+
+                ss << "    CollisionShape3D:\n";
+                ss << "      ShapeType: " << shapeName << "\n";
+                ss << "      HalfExtent: [ " << cs.HalfExtent.x << " , " << cs.HalfExtent.y << " , " << cs.HalfExtent.z << " ]\n";
+                ss << "      Radius: " << cs.Radius << "\n";
+                ss << "      HalfHeight: " << cs.HalfHeight << "\n";
+                ss << "      Offset: [ " << cs.Offset.x << " , " << cs.Offset.y << " , " << cs.Offset.z << " ]\n";
                 ss << "      Friction: " << friction << "\n";
                 ss << "      Restitution: " << restitution << "\n";
-                ss << "      HalfExtent: [ " << halfExtent.x << " , " << halfExtent.y << " , " << halfExtent.z << " ]\n";
-                ss << "      Radius: " << radius << "\n";
-                ss << "      HalfHeight: " << halfHeight << "\n";
+                ss << "      IsTrigger: " << (cs.IsTrigger ? "true" : "false") << "\n";
             }
 
             // HierarchyComponent
@@ -282,6 +277,7 @@ namespace Axle {
             Mesh,
             Material,
             RigidBody,
+            CollisionShape,
             Hierarchy,
             NativeScript,
             DirectionalLight,
@@ -308,12 +304,14 @@ namespace Axle {
                 currentSection = ComponentSection::Tag;
             } else if (trimmed == "TransformComponent:") {
                 currentSection = ComponentSection::Transform;
-            } else if (trimmed == "MeshComponent:") {
+            } else if (trimmed == "MeshInstance3D:" || trimmed == "MeshComponent:") {
                 currentSection = ComponentSection::Mesh;
             } else if (trimmed == "MaterialComponent:") {
                 currentSection = ComponentSection::Material;
-            } else if (trimmed == "RigidBodyComponent:") {
+            } else if (trimmed == "RigidBody3D:" || trimmed == "RigidBodyComponent:") {
                 currentSection = ComponentSection::RigidBody;
+            } else if (trimmed == "CollisionShape3D:" || trimmed == "CollisionShape:") {
+                currentSection = ComponentSection::CollisionShape;
             } else if (trimmed == "HierarchyComponent:") {
                 currentSection = ComponentSection::Hierarchy;
             } else if (trimmed == "NativeScriptComponent:") {
@@ -355,10 +353,10 @@ namespace Axle {
                         break;
                     }
                     case ComponentSection::Mesh: {
-                        if (!currentEntity.HasComponent<MeshComponent>()) {
-                            currentEntity.AddComponent<MeshComponent>();
+                        if (!currentEntity.HasComponent<MeshInstance3D>()) {
+                            currentEntity.AddComponent<MeshInstance3D>();
                         }
-                        auto& mc = currentEntity.GetComponent<MeshComponent>();
+                        auto& mc = currentEntity.GetComponent<MeshInstance3D>();
                         if (trimmed.rfind("AssetPath:", 0) == 0) {
                             mc.AssetPath = Trim(trimmed.substr(10));
                             if (mc.AssetPath == "builtin://cube") mc.VAO = m_Context.CubeMesh;
@@ -391,31 +389,89 @@ namespace Axle {
                         break;
                     }
                     case ComponentSection::RigidBody: {
-                        if (!currentEntity.HasComponent<RigidBodyComponent>()) {
-                            currentEntity.AddComponent<RigidBodyComponent>();
+                        if (!currentEntity.HasComponent<RigidBody3D>()) {
+                            currentEntity.AddComponent<RigidBody3D>();
                         }
-                        auto& rb = currentEntity.GetComponent<RigidBodyComponent>();
-                        if (trimmed.rfind("ShapeType:", 0) == 0) {
-                            std::string sName = Trim(trimmed.substr(10));
-                            if (sName == "Plane") rb.ShapeType = BodyShapeType::Plane;
-                            else if (sName == "Sphere") rb.ShapeType = BodyShapeType::Sphere;
-                            else if (sName == "Cylinder") rb.ShapeType = BodyShapeType::Cylinder;
-                            else if (sName == "Cone") rb.ShapeType = BodyShapeType::Cone;
-                            else rb.ShapeType = BodyShapeType::Box;
+                        auto& rb = currentEntity.GetComponent<RigidBody3D>();
+                        if (trimmed.rfind("MotionType:", 0) == 0) {
+                            std::string mType = Trim(trimmed.substr(11));
+                            if (mType == "Static") { rb.MotionType = BodyMotionType::Static; rb.IsDynamic = false; }
+                            else if (mType == "Kinematic") { rb.MotionType = BodyMotionType::Kinematic; rb.IsDynamic = false; }
+                            else { rb.MotionType = BodyMotionType::Dynamic; rb.IsDynamic = true; }
                         } else if (trimmed.rfind("IsDynamic:", 0) == 0) {
                             rb.IsDynamic = (Trim(trimmed.substr(10)) == "true");
-                        } else if (trimmed.rfind("Friction:", 0) == 0) {
-                            rb.Friction = std::stof(Trim(trimmed.substr(9)));
-                        } else if (trimmed.rfind("Restitution:", 0) == 0) {
-                            rb.Restitution = std::stof(Trim(trimmed.substr(12)));
+                            rb.MotionType = rb.IsDynamic ? BodyMotionType::Dynamic : BodyMotionType::Static;
+                        } else if (trimmed.rfind("Mass:", 0) == 0) {
+                            rb.Mass = std::stof(Trim(trimmed.substr(5)));
+                        } else if (trimmed.rfind("LinearDamping:", 0) == 0) {
+                            rb.LinearDamping = std::stof(Trim(trimmed.substr(14)));
+                        } else if (trimmed.rfind("AngularDamping:", 0) == 0) {
+                            rb.AngularDamping = std::stof(Trim(trimmed.substr(15)));
+                        } else if (trimmed.rfind("GravityFactor:", 0) == 0) {
+                            rb.GravityFactor = std::stof(Trim(trimmed.substr(14)));
+                        }
+                        // Backward compatibility: If legacy scene stored shape under RigidBody:
+                        else if (trimmed.rfind("ShapeType:", 0) == 0 || trimmed.rfind("HalfExtent:", 0) == 0 ||
+                                 trimmed.rfind("Radius:", 0) == 0 || trimmed.rfind("HalfHeight:", 0) == 0 ||
+                                 trimmed.rfind("Friction:", 0) == 0 || trimmed.rfind("Restitution:", 0) == 0) {
+                            if (!currentEntity.HasComponent<CollisionShape3D>()) {
+                                currentEntity.AddComponent<CollisionShape3D>();
+                            }
+                            auto& cs = currentEntity.GetComponent<CollisionShape3D>();
+                            if (trimmed.rfind("ShapeType:", 0) == 0) {
+                                std::string sName = Trim(trimmed.substr(10));
+                                if (sName == "Plane") cs.ShapeType = CollisionShapeType::Plane;
+                                else if (sName == "Sphere") cs.ShapeType = CollisionShapeType::Sphere;
+                                else if (sName == "Cylinder") cs.ShapeType = CollisionShapeType::Cylinder;
+                                else if (sName == "Cone") cs.ShapeType = CollisionShapeType::Cone;
+                                else cs.ShapeType = CollisionShapeType::Box;
+                            } else if (trimmed.rfind("Friction:", 0) == 0) {
+                                cs.Friction = std::stof(Trim(trimmed.substr(9)));
+                            } else if (trimmed.rfind("Restitution:", 0) == 0) {
+                                cs.Restitution = std::stof(Trim(trimmed.substr(12)));
+                            } else if (trimmed.rfind("HalfExtent:", 0) == 0) {
+                                float x = 0.5f, y = 0.5f, z = 0.5f;
+                                sscanf(trimmed.c_str(), "HalfExtent: [ %f , %f , %f ]", &x, &y, &z);
+                                cs.HalfExtent = glm::vec3(x, y, z);
+                            } else if (trimmed.rfind("Radius:", 0) == 0) {
+                                cs.Radius = std::stof(Trim(trimmed.substr(7)));
+                            } else if (trimmed.rfind("HalfHeight:", 0) == 0) {
+                                cs.HalfHeight = std::stof(Trim(trimmed.substr(11)));
+                            }
+                        }
+                        break;
+                    }
+                    case ComponentSection::CollisionShape: {
+                        if (!currentEntity.HasComponent<CollisionShape3D>()) {
+                            currentEntity.AddComponent<CollisionShape3D>();
+                        }
+                        auto& cs = currentEntity.GetComponent<CollisionShape3D>();
+                        if (trimmed.rfind("ShapeType:", 0) == 0) {
+                            std::string sName = Trim(trimmed.substr(10));
+                            if (sName == "Plane") cs.ShapeType = CollisionShapeType::Plane;
+                            else if (sName == "Sphere") cs.ShapeType = CollisionShapeType::Sphere;
+                            else if (sName == "Cylinder") cs.ShapeType = CollisionShapeType::Cylinder;
+                            else if (sName == "Cone") cs.ShapeType = CollisionShapeType::Cone;
+                            else if (sName == "Mesh") cs.ShapeType = CollisionShapeType::Mesh;
+                            else cs.ShapeType = CollisionShapeType::Box;
                         } else if (trimmed.rfind("HalfExtent:", 0) == 0) {
                             float x = 0.5f, y = 0.5f, z = 0.5f;
                             sscanf(trimmed.c_str(), "HalfExtent: [ %f , %f , %f ]", &x, &y, &z);
-                            rb.HalfExtent = glm::vec3(x, y, z);
+                            cs.HalfExtent = glm::vec3(x, y, z);
                         } else if (trimmed.rfind("Radius:", 0) == 0) {
-                            rb.Radius = std::stof(Trim(trimmed.substr(7)));
+                            cs.Radius = std::stof(Trim(trimmed.substr(7)));
                         } else if (trimmed.rfind("HalfHeight:", 0) == 0) {
-                            rb.HalfHeight = std::stof(Trim(trimmed.substr(11)));
+                            cs.HalfHeight = std::stof(Trim(trimmed.substr(11)));
+                        } else if (trimmed.rfind("Offset:", 0) == 0) {
+                            float x = 0.0f, y = 0.0f, z = 0.0f;
+                            sscanf(trimmed.c_str(), "Offset: [ %f , %f , %f ]", &x, &y, &z);
+                            cs.Offset = glm::vec3(x, y, z);
+                        } else if (trimmed.rfind("Friction:", 0) == 0) {
+                            cs.Friction = std::stof(Trim(trimmed.substr(9)));
+                        } else if (trimmed.rfind("Restitution:", 0) == 0) {
+                            cs.Restitution = std::stof(Trim(trimmed.substr(12)));
+                        } else if (trimmed.rfind("IsTrigger:", 0) == 0) {
+                            cs.IsTrigger = (Trim(trimmed.substr(10)) == "true");
                         }
                         break;
                     }
@@ -562,9 +618,9 @@ namespace Axle {
 
         // Recreate Physics Bodies in PhysicsScene if active
         if (m_PhysicsScene) {
-            auto rbView = m_Scene->GetRegistry().view<RigidBodyComponent, TransformComponent>();
+            auto rbView = m_Scene->GetRegistry().view<RigidBody3D, TransformComponent>();
             for (auto entityID : rbView) {
-                auto& rb = rbView.get<RigidBodyComponent>(entityID);
+                auto& rb = rbView.get<RigidBody3D>(entityID);
                 auto& tc = rbView.get<TransformComponent>(entityID);
 
                 if (m_Scene->GetRegistry().all_of<TagComponent>(entityID)) {
@@ -573,28 +629,69 @@ namespace Axle {
                     }
                 }
 
+                // Retrieve or initialize CollisionShape3D
+                CollisionShapeType shapeType = CollisionShapeType::Box;
+                glm::vec3 halfExtent = glm::max(tc.Scale * 0.5f, glm::vec3(0.01f));
+                float radius = glm::max(tc.Scale.x * 0.5f, 0.01f);
+                float halfHeight = glm::max(tc.Scale.y * 0.5f, 0.01f);
+                float friction = 0.5f;
+                float restitution = 0.0f;
+                glm::vec3 offset(0.0f);
+
+                if (m_Scene->GetRegistry().all_of<CollisionShape3D>(entityID)) {
+                    auto& cs = m_Scene->GetRegistry().get<CollisionShape3D>(entityID);
+                    shapeType = cs.ShapeType;
+                    halfExtent = cs.HalfExtent;
+                    radius = cs.Radius;
+                    halfHeight = cs.HalfHeight;
+                    friction = cs.Friction;
+                    restitution = cs.Restitution;
+                    offset = cs.Offset;
+                } else {
+                    // Create default CollisionShape3D matching mesh or box
+                    if (m_Scene->GetRegistry().all_of<MeshInstance3D>(entityID)) {
+                        auto& mc = m_Scene->GetRegistry().get<MeshInstance3D>(entityID);
+                        std::string aPath = mc.AssetPath;
+                        if (aPath.empty() && mc.VAO) {
+                            if (m_Context.CubeMesh && mc.VAO == m_Context.CubeMesh) aPath = "builtin://cube";
+                            else if (m_Context.SphereMesh && mc.VAO == m_Context.SphereMesh) aPath = "builtin://sphere";
+                            else if (m_Context.CylinderMesh && mc.VAO == m_Context.CylinderMesh) aPath = "builtin://cylinder";
+                            else if (m_Context.ConeMesh && mc.VAO == m_Context.ConeMesh) aPath = "builtin://cone";
+                            else if (m_Context.PlaneMesh && mc.VAO == m_Context.PlaneMesh) aPath = "builtin://plane";
+                        }
+                        if (aPath == "builtin://plane") shapeType = CollisionShapeType::Plane;
+                        else if (aPath == "builtin://sphere") shapeType = CollisionShapeType::Sphere;
+                        else if (aPath == "builtin://cylinder") shapeType = CollisionShapeType::Cylinder;
+                        else if (aPath == "builtin://cone") shapeType = CollisionShapeType::Cone;
+                        else shapeType = CollisionShapeType::Box;
+                    }
+                    m_Scene->GetRegistry().emplace<CollisionShape3D>(entityID, shapeType, halfExtent, friction, restitution);
+                }
+
                 BodyID bodyID;
-                switch (rb.ShapeType) {
-                    case BodyShapeType::Plane:
-                        bodyID = m_PhysicsScene->CreatePlane(tc.Translation, glm::vec3(0, 1, 0), tc.Scale.x * 0.5f, rb.Friction, rb.Restitution);
+                glm::vec3 spawnPos = tc.Translation + tc.Rotation * offset;
+                bool isDynamic = (rb.MotionType == BodyMotionType::Dynamic);
+                switch (shapeType) {
+                    case CollisionShapeType::Plane:
+                        bodyID = m_PhysicsScene->CreatePlane(spawnPos, glm::vec3(0, 1, 0), tc.Scale.x * 0.5f, friction, restitution);
                         break;
-                    case BodyShapeType::Sphere:
-                        bodyID = m_PhysicsScene->CreateSphere(tc.Translation, rb.Radius, rb.IsDynamic, rb.Friction, rb.Restitution);
+                    case CollisionShapeType::Sphere:
+                        bodyID = m_PhysicsScene->CreateSphere(spawnPos, radius, isDynamic, friction, restitution);
                         break;
-                    case BodyShapeType::Cylinder:
-                        bodyID = m_PhysicsScene->CreateCylinder(tc.Translation, rb.HalfHeight, rb.Radius, rb.IsDynamic, rb.Friction, rb.Restitution);
+                    case CollisionShapeType::Cylinder:
+                        bodyID = m_PhysicsScene->CreateCylinder(spawnPos, halfHeight, radius, isDynamic, friction, restitution);
                         break;
-                    case BodyShapeType::Cone:
-                        bodyID = m_PhysicsScene->CreateCone(tc.Translation, rb.HalfHeight, rb.Radius, rb.IsDynamic, rb.Friction, rb.Restitution);
+                    case CollisionShapeType::Cone:
+                        bodyID = m_PhysicsScene->CreateCone(spawnPos, halfHeight, radius, isDynamic, friction, restitution);
                         break;
-                    case BodyShapeType::Box:
+                    case CollisionShapeType::Box:
                     default:
-                        bodyID = m_PhysicsScene->CreateBox(tc.Translation, rb.HalfExtent, rb.IsDynamic, rb.Friction, rb.Restitution);
+                        bodyID = m_PhysicsScene->CreateBox(spawnPos, halfExtent, isDynamic, friction, restitution);
                         break;
                 }
 
                 if (!bodyID.IsInvalid()) {
-                    m_PhysicsScene->SetBodyPositionAndRotation(bodyID, tc.Translation, tc.Rotation);
+                    m_PhysicsScene->SetBodyPositionAndRotation(bodyID, spawnPos, tc.Rotation);
                     rb.RuntimeBodyID = bodyID;
                 }
             }

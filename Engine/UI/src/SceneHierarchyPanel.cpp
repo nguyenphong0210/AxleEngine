@@ -122,7 +122,7 @@ namespace Axle {
                 entity = m_Scene->CreateEntity("Dynamic Box");
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (m_CubeMesh) {
-                    entity.AddComponent<MeshComponent>(
+                    entity.AddComponent<MeshInstance3D>(
                         m_CubeMesh, 1, 4.0f,
                         glm::vec4(0.96f, 0.52f, 0.12f, 1.0f),
                         glm::vec4(0.12f, 0.13f, 0.15f, 1.0f)
@@ -134,7 +134,8 @@ namespace Axle {
                     bProps.HalfExtent = glm::vec3(0.5f, 0.5f, 0.5f);
                     bProps.IsDynamic = true;
                     auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                    entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                    entity.AddComponent<RigidBody3D>(bodyID, true);
+                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, glm::vec3(0.5f));
                 }
                 break;
             }
@@ -142,7 +143,7 @@ namespace Axle {
                 entity = m_Scene->CreateEntity("Dynamic Sphere");
                 entity.AddComponent<TransformComponent>(position, glm::vec3(0.5f, 0.5f, 0.5f));
                 if (m_SphereMesh) {
-                    entity.AddComponent<MeshComponent>(
+                    entity.AddComponent<MeshInstance3D>(
                         m_SphereMesh, 2, 16.0f,
                         glm::vec4(0.0f, 0.85f, 0.95f, 1.0f),
                         glm::vec4(0.05f, 0.12f, 0.24f, 1.0f)
@@ -154,7 +155,8 @@ namespace Axle {
                     sProps.Radius = 0.5f;
                     sProps.IsDynamic = true;
                     auto bodyID = m_PhysicsScene->CreateSphere(sProps);
-                    entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                    entity.AddComponent<RigidBody3D>(bodyID, true);
+                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Sphere, 0.5f);
                 }
                 break;
             }
@@ -162,7 +164,7 @@ namespace Axle {
                 entity = m_Scene->CreateEntity("Dynamic Cylinder");
                 entity.AddComponent<TransformComponent>(position, glm::vec3(0.5f, 0.75f, 0.5f));
                 if (m_CylinderMesh) {
-                    entity.AddComponent<MeshComponent>(
+                    entity.AddComponent<MeshInstance3D>(
                         m_CylinderMesh, 1, 4.0f,
                         glm::vec4(0.20f, 0.80f, 0.40f, 1.0f),
                         glm::vec4(0.08f, 0.18f, 0.10f, 1.0f)
@@ -175,7 +177,8 @@ namespace Axle {
                     cProps.Radius = 0.5f;
                     cProps.IsDynamic = true;
                     auto bodyID = m_PhysicsScene->CreateCylinder(cProps);
-                    entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                    entity.AddComponent<RigidBody3D>(bodyID, true);
+                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cylinder, 0.75f, 0.5f);
                 }
                 break;
             }
@@ -183,7 +186,7 @@ namespace Axle {
                 entity = m_Scene->CreateEntity("Dynamic Cone");
                 entity.AddComponent<TransformComponent>(position, glm::vec3(0.5f, 0.75f, 0.5f));
                 if (m_ConeMesh) {
-                    entity.AddComponent<MeshComponent>(
+                    entity.AddComponent<MeshInstance3D>(
                         m_ConeMesh, 1, 4.0f,
                         glm::vec4(0.95f, 0.65f, 0.10f, 1.0f),
                         glm::vec4(0.18f, 0.12f, 0.05f, 1.0f)
@@ -196,7 +199,8 @@ namespace Axle {
                     cProps.Radius = 0.5f;
                     cProps.IsDynamic = true;
                     auto bodyID = m_PhysicsScene->CreateCylinder(cProps);
-                    entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                    entity.AddComponent<RigidBody3D>(bodyID, true);
+                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cone, 0.75f, 0.5f);
                 }
                 break;
             }
@@ -204,7 +208,7 @@ namespace Axle {
                 entity = m_Scene->CreateEntity("Static Floor Plane");
                 entity.AddComponent<TransformComponent>(position, glm::vec3(50.0f, 1.0f, 50.0f));
                 if (m_PlaneMesh) {
-                    entity.AddComponent<MeshComponent>(
+                    entity.AddComponent<MeshInstance3D>(
                         m_PlaneMesh, 0, 1.0f,
                         glm::vec4(0.25f, 0.28f, 0.32f, 1.0f),
                         glm::vec4(0.15f, 0.17f, 0.20f, 1.0f)
@@ -216,7 +220,8 @@ namespace Axle {
                     bProps.HalfExtent = glm::vec3(25.0f, 0.5f, 25.0f);
                     bProps.IsDynamic = false;
                     auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                    entity.AddComponent<RigidBodyComponent>(bodyID, false);
+                    entity.AddComponent<RigidBody3D>(bodyID, false);
+                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Plane, glm::vec3(25.0f, 0.5f, 25.0f));
                 }
                 break;
             }
@@ -353,7 +358,8 @@ namespace Axle {
                                         bProps.Friction = 0.70f;
                                         bProps.Restitution = 0.15f;
                                         auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                        rootEntity.AddComponent<RigidBodyComponent>(bodyId, true);
+                                        rootEntity.AddComponent<RigidBody3D>(bodyId, true);
+                                        rootEntity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
                                     }
 
                                     for (const auto& part : pkg.Parts) {
@@ -362,7 +368,7 @@ namespace Axle {
                                         ct.Rotation = part.LocalRotation;
 
                                         auto partFullPath = p.parent_path() / part.RelativePath;
-                                        childEntity.AddComponent<MeshComponent>(
+                                        childEntity.AddComponent<MeshInstance3D>(
                                             part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
                                             partFullPath.string(),
                                             part.LoadedMesh.SourceData.PatternMode,
@@ -382,7 +388,7 @@ namespace Axle {
                                     std::string entityTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
                                     auto newEnt = m_Scene->CreateEntity(entityTag);
                                     newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
-                                    newEnt.AddComponent<MeshComponent>(
+                                    newEnt.AddComponent<MeshInstance3D>(
                                         part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
                                         p.string(),
                                         part.LoadedMesh.SourceData.PatternMode,
@@ -398,7 +404,8 @@ namespace Axle {
                                         bProps.Friction = 0.70f;
                                         bProps.Restitution = 0.15f;
                                         auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                        newEnt.AddComponent<RigidBodyComponent>(bodyId, true);
+                                        newEnt.AddComponent<RigidBody3D>(bodyId, true);
+                                        newEnt.AddComponent<CollisionShape3D>(CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
                                     }
                                     m_SelectedEntity = newEnt;
                                     AXLE_INFO("Instantiated 3D model '{0}' via Scene Hierarchy drop", p.filename().string());
@@ -473,7 +480,8 @@ namespace Axle {
                                             bProps.Friction = 0.70f;
                                             bProps.Restitution = 0.15f;
                                             auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                            rootEntity.AddComponent<RigidBodyComponent>(bodyId, true);
+                                            rootEntity.AddComponent<RigidBody3D>(bodyId, true);
+                                            rootEntity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
                                         }
 
                                         for (const auto& part : pkg.Parts) {
@@ -482,7 +490,7 @@ namespace Axle {
                                             ct.Rotation = part.LocalRotation;
 
                                             auto partFullPath = p.parent_path() / part.RelativePath;
-                                            childEntity.AddComponent<MeshComponent>(
+                                            childEntity.AddComponent<MeshInstance3D>(
                                                 part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
                                                 partFullPath.string(),
                                                 part.LoadedMesh.SourceData.PatternMode,
@@ -502,7 +510,7 @@ namespace Axle {
                                         std::string entityTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
                                         auto newEnt = m_Scene->CreateEntity(entityTag);
                                         newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
-                                        newEnt.AddComponent<MeshComponent>(
+                                        newEnt.AddComponent<MeshInstance3D>(
                                             part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
                                             p.string(),
                                             part.LoadedMesh.SourceData.PatternMode,
@@ -518,7 +526,8 @@ namespace Axle {
                                             bProps.Friction = 0.70f;
                                             bProps.Restitution = 0.15f;
                                             auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                            newEnt.AddComponent<RigidBodyComponent>(bodyId, true);
+                                            newEnt.AddComponent<RigidBody3D>(bodyId, true);
+                                            newEnt.AddComponent<CollisionShape3D>(CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
                                         }
                                         m_SelectedEntity = newEnt;
                                         AXLE_INFO("Instantiated 3D model '{0}' via Properties drop", p.filename().string());
@@ -650,8 +659,8 @@ namespace Axle {
                 }
 
                 // If rigid body attached and user modified transform, sync to physics engine
-                if (changed && entity.HasComponent<RigidBodyComponent>() && m_PhysicsScene) {
-                    auto& rb = entity.GetComponent<RigidBodyComponent>();
+                if (changed && entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
+                    auto& rb = entity.GetComponent<RigidBody3D>();
                     if (!rb.RuntimeBodyID.IsInvalid()) {
                         m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, tc.Translation, tc.Rotation, true);
                     }
@@ -662,10 +671,10 @@ namespace Axle {
             ImGui::Spacing();
         }
 
-        // Mesh Component
-        if (entity.HasComponent<MeshComponent>()) {
+        // MeshInstance3D Component
+        if (entity.HasComponent<MeshInstance3D>()) {
             bool removeMesh = false;
-            bool meshOpen = ImGui::TreeNodeEx((void*)typeid(MeshComponent).hash_code(), treeNodeFlags, "Mesh & Material");
+            bool meshOpen = ImGui::TreeNodeEx((void*)typeid(MeshInstance3D).hash_code(), treeNodeFlags, "MeshInstance3D");
             if (ImGui::BeginPopupContextItem()) {
                 if (ImGui::MenuItem("Remove Component")) {
                     removeMesh = true;
@@ -674,7 +683,7 @@ namespace Axle {
             }
 
             if (meshOpen) {
-                auto& mc = entity.GetComponent<MeshComponent>();
+                auto& mc = entity.GetComponent<MeshInstance3D>();
 
                 // 3D Model Asset Assignment via Drag & Drop
                 ImGui::Text("Model Asset:");
@@ -776,8 +785,8 @@ namespace Axle {
                     if (ImGui::Button("Apply Material & Scale to All Child Parts", ImVec2(-1.0f, 26.0f))) {
                         auto children = entity.GetComponent<HierarchyComponent>().Children;
                         for (auto childId : children) {
-                            if (m_Scene->GetRegistry().valid(childId) && m_Scene->GetRegistry().all_of<MeshComponent>(childId)) {
-                                auto& childMc = m_Scene->GetRegistry().get<MeshComponent>(childId);
+                            if (m_Scene->GetRegistry().valid(childId) && m_Scene->GetRegistry().all_of<MeshInstance3D>(childId)) {
+                                auto& childMc = m_Scene->GetRegistry().get<MeshInstance3D>(childId);
                                 childMc.Color1 = mc.Color1;
                                 childMc.Color2 = mc.Color2;
                                 childMc.TileScale = mc.TileScale;
@@ -792,11 +801,11 @@ namespace Axle {
             }
 
             if (removeMesh) {
-                entity.RemoveComponent<MeshComponent>();
+                entity.RemoveComponent<MeshInstance3D>();
             }
             ImGui::Spacing();
         } else {
-            // Drop target when entity has no MeshComponent
+            // Drop target when entity has no MeshInstance3D
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.18f, 0.24f, 0.65f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.30f, 0.42f, 0.90f));
             ImGui::Button("+ Drop 3D model (.obj) here to add Mesh", ImVec2(-1.0f, 28.0f));
@@ -843,11 +852,11 @@ namespace Axle {
                         }
 
                         if (!loadedVao) loadedVao = m_CubeMesh;
-                        entity.AddComponent<MeshComponent>(
+                        entity.AddComponent<MeshInstance3D>(
                             loadedVao, p.string(), patternMode, tileScale,
                             color1, color2
                         );
-                        AXLE_INFO("Added MeshComponent with 3D model '{0}' to Entity '{1}'", p.filename().string(), entity.GetComponent<TagComponent>().Tag);
+                        AXLE_INFO("Added MeshInstance3D with 3D model '{0}' to Entity '{1}'", p.filename().string(), entity.GetComponent<TagComponent>().Tag);
                     }
                 }
                 ImGui::EndDragDropTarget();
@@ -1107,10 +1116,87 @@ namespace Axle {
             ImGui::Spacing();
         }
 
-        // Rigid Body Component
-        if (entity.HasComponent<RigidBodyComponent>()) {
+        // Collision Shape 3D Component
+        if (entity.HasComponent<CollisionShape3D>()) {
+            bool removeCS = false;
+            bool csOpen = ImGui::TreeNodeEx((void*)typeid(CollisionShape3D).hash_code(), treeNodeFlags, "CollisionShape3D");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeCS = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (csOpen) {
+                auto& cs = entity.GetComponent<CollisionShape3D>();
+
+                const char* shapeTypeNames[] = { "Box", "Sphere", "Cylinder", "Cone", "Plane", "Mesh" };
+                int currentShape = static_cast<int>(cs.ShapeType);
+                if (ImGui::Combo("Shape Type", &currentShape, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames))) {
+                    cs.ShapeType = static_cast<CollisionShapeType>(currentShape);
+                }
+
+                switch (cs.ShapeType) {
+                    case CollisionShapeType::Box:
+                        ImGui::DragFloat3("Half Extents", glm::value_ptr(cs.HalfExtent), 0.05f, 0.01f, 100.0f);
+                        break;
+                    case CollisionShapeType::Sphere:
+                        ImGui::DragFloat("Radius", &cs.Radius, 0.05f, 0.01f, 100.0f);
+                        break;
+                    case CollisionShapeType::Cylinder:
+                        ImGui::DragFloat("Half Height", &cs.HalfHeight, 0.05f, 0.01f, 100.0f);
+                        ImGui::DragFloat("Radius", &cs.Radius, 0.05f, 0.01f, 100.0f);
+                        break;
+                    case CollisionShapeType::Cone:
+                        ImGui::DragFloat("Half Height", &cs.HalfHeight, 0.05f, 0.01f, 100.0f);
+                        ImGui::DragFloat("Radius", &cs.Radius, 0.05f, 0.01f, 100.0f);
+                        break;
+                    case CollisionShapeType::Plane:
+                        ImGui::DragFloat("Plane Half Extent", &cs.HalfExtent.x, 0.5f, 0.1f, 1000.0f);
+                        cs.HalfExtent.z = cs.HalfExtent.x;
+                        break;
+                    case CollisionShapeType::Mesh:
+                        ImGui::TextDisabled("Mesh shape matches active MeshInstance3D");
+                        break;
+                }
+
+                ImGui::DragFloat3("Offset", glm::value_ptr(cs.Offset), 0.05f);
+
+                if (ImGui::SliderFloat("Friction", &cs.Friction, 0.0f, 2.0f, "%.2f")) {
+                    if (entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
+                        auto& rb = entity.GetComponent<RigidBody3D>();
+                        if (!rb.RuntimeBodyID.IsInvalid()) {
+                            JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                            if (lock.Succeeded()) lock.GetBody().SetFriction(cs.Friction);
+                        }
+                    }
+                }
+
+                if (ImGui::SliderFloat("Restitution", &cs.Restitution, 0.0f, 1.0f, "%.2f")) {
+                    if (entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
+                        auto& rb = entity.GetComponent<RigidBody3D>();
+                        if (!rb.RuntimeBodyID.IsInvalid()) {
+                            JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                            if (lock.Succeeded()) lock.GetBody().SetRestitution(cs.Restitution);
+                        }
+                    }
+                }
+
+                ImGui::Checkbox("Is Trigger (Sensor)", &cs.IsTrigger);
+
+                ImGui::TreePop();
+            }
+
+            if (removeCS) {
+                entity.RemoveComponent<CollisionShape3D>();
+            }
+            ImGui::Spacing();
+        }
+
+        // Rigid Body 3D Component
+        if (entity.HasComponent<RigidBody3D>()) {
             bool removeRB = false;
-            bool rbOpen = ImGui::TreeNodeEx((void*)typeid(RigidBodyComponent).hash_code(), treeNodeFlags, "Jolt Rigid Body");
+            bool rbOpen = ImGui::TreeNodeEx((void*)typeid(RigidBody3D).hash_code(), treeNodeFlags, "RigidBody3D");
             if (ImGui::BeginPopupContextItem()) {
                 if (ImGui::MenuItem("Remove Component")) {
                     removeRB = true;
@@ -1119,10 +1205,36 @@ namespace Axle {
             }
 
             if (rbOpen) {
-                auto& rb = entity.GetComponent<RigidBodyComponent>();
+                auto& rb = entity.GetComponent<RigidBody3D>();
 
                 ImGui::Text("Body ID: %u", rb.RuntimeBodyID.GetIndexAndSequenceNumber());
-                ImGui::Text("Motion Type: %s", rb.IsDynamic ? "Dynamic" : "Static");
+
+                const char* motionNames[] = { "Static", "Kinematic", "Dynamic" };
+                int currentMotion = static_cast<int>(rb.MotionType);
+                if (ImGui::Combo("Motion Type", &currentMotion, motionNames, IM_ARRAYSIZE(motionNames))) {
+                    rb.MotionType = static_cast<BodyMotionType>(currentMotion);
+                    rb.IsDynamic = (rb.MotionType == BodyMotionType::Dynamic);
+                    if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid()) {
+                        JPH::EMotionType jType = JPH::EMotionType::Dynamic;
+                        if (rb.MotionType == BodyMotionType::Static) jType = JPH::EMotionType::Static;
+                        else if (rb.MotionType == BodyMotionType::Kinematic) jType = JPH::EMotionType::Kinematic;
+                        m_PhysicsScene->GetBodyInterface().SetMotionType(rb.RuntimeBodyID, jType, JPH::EActivation::Activate);
+                    }
+                }
+
+                ImGui::DragFloat("Mass (kg)", &rb.Mass, 1.0f, 0.01f, 100000.0f, "%.1f");
+                ImGui::DragFloat("Linear Damping", &rb.LinearDamping, 0.01f, 0.0f, 10.0f, "%.2f");
+                ImGui::DragFloat("Angular Damping", &rb.AngularDamping, 0.01f, 0.0f, 10.0f, "%.2f");
+                ImGui::DragFloat("Gravity Scale", &rb.GravityFactor, 0.05f, -10.0f, 10.0f, "%.2f");
+
+                // Warning if RigidBody3D has no CollisionShape3D
+                if (!entity.HasComponent<CollisionShape3D>()) {
+                    ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "[!] No CollisionShape3D attached.");
+                    if (ImGui::Button("+ Add CollisionShape3D")) {
+                        entity.AddComponent<CollisionShape3D>();
+                    }
+                }
 
                 if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid()) {
                     const bool isActive = m_PhysicsScene->IsActive(rb.RuntimeBodyID);
@@ -1134,30 +1246,16 @@ namespace Axle {
                         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "SLEEPING");
                     }
 
-                    // Friction & Restitution live tuning
-                    JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
-                    if (lock.Succeeded()) {
-                        JPH::Body& body = lock.GetBody();
-
-                        float friction = body.GetFriction();
-                        if (ImGui::SliderFloat("Friction", &friction, 0.0f, 2.0f, "%.2f")) {
-                            body.SetFriction(friction);
-                        }
-
-                        float restitution = body.GetRestitution();
-                        if (ImGui::SliderFloat("Restitution", &restitution, 0.0f, 1.0f, "%.2f")) {
-                            body.SetRestitution(restitution);
-                        }
-
-                        if (rb.IsDynamic) {
+                    if (rb.IsDynamic) {
+                        JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                        if (lock.Succeeded()) {
+                            JPH::Body& body = lock.GetBody();
                             bool allowSleeping = body.GetAllowSleeping();
                             if (ImGui::Checkbox("Allow Sleeping", &allowSleeping)) {
                                 body.SetAllowSleeping(allowSleeping);
                             }
                         }
-                    }
 
-                    if (rb.IsDynamic) {
                         if (ImGui::Button("Wake Up")) {
                             m_PhysicsScene->ActivateBody(rb.RuntimeBodyID);
                         }
@@ -1180,11 +1278,11 @@ namespace Axle {
             }
 
             if (removeRB) {
-                auto& rb = entity.GetComponent<RigidBodyComponent>();
+                auto& rb = entity.GetComponent<RigidBody3D>();
                 if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid()) {
                     m_PhysicsScene->DestroyBody(rb.RuntimeBodyID);
                 }
-                entity.RemoveComponent<RigidBodyComponent>();
+                entity.RemoveComponent<RigidBody3D>();
             }
             ImGui::Spacing();
         }
@@ -1464,14 +1562,24 @@ namespace Axle {
         ImGui::PopStyleColor(3);
 
         if (ImGui::BeginPopup("AddComponentPopup")) {
-            if (!entity.HasComponent<MeshComponent>()) {
-                if (ImGui::MenuItem("Mesh Component")) {
-                    entity.AddComponent<MeshComponent>();
+            if (!entity.HasComponent<MeshInstance3D>()) {
+                if (ImGui::MenuItem("MeshInstance3D")) {
+                    entity.AddComponent<MeshInstance3D>();
                     ImGui::CloseCurrentPopup();
                 }
             }
-            if (!entity.HasComponent<RigidBodyComponent>()) {
-                if (ImGui::MenuItem("RigidBody (Box Dynamic)")) {
+            if (!entity.HasComponent<CollisionShape3D>()) {
+                if (ImGui::MenuItem("CollisionShape3D")) {
+                    glm::vec3 halfExtent(0.5f);
+                    if (entity.HasComponent<TransformComponent>()) {
+                        halfExtent = entity.GetComponent<TransformComponent>().Scale * 0.5f;
+                    }
+                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, halfExtent);
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!entity.HasComponent<RigidBody3D>()) {
+                if (ImGui::MenuItem("RigidBody3D (Dynamic Box)")) {
                     if (m_PhysicsScene) {
                         auto& tc = entity.GetComponent<TransformComponent>();
                         Axle::BoxBodyProps bProps;
@@ -1480,11 +1588,14 @@ namespace Axle {
                         bProps.HalfExtent = tc.Scale * 0.5f;
                         bProps.IsDynamic = true;
                         auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                        entity.AddComponent<RigidBodyComponent>(bodyID, true);
+                        entity.AddComponent<RigidBody3D>(bodyID, true);
+                        if (!entity.HasComponent<CollisionShape3D>()) {
+                            entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, tc.Scale * 0.5f);
+                        }
                     }
                     ImGui::CloseCurrentPopup();
                 }
-                if (ImGui::MenuItem("RigidBody (Box Static)")) {
+                if (ImGui::MenuItem("RigidBody3D (Static Box)")) {
                     if (m_PhysicsScene) {
                         auto& tc = entity.GetComponent<TransformComponent>();
                         Axle::BoxBodyProps bProps;
@@ -1493,7 +1604,10 @@ namespace Axle {
                         bProps.HalfExtent = tc.Scale * 0.5f;
                         bProps.IsDynamic = false;
                         auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                        entity.AddComponent<RigidBodyComponent>(bodyID, false);
+                        entity.AddComponent<RigidBody3D>(bodyID, false);
+                        if (!entity.HasComponent<CollisionShape3D>()) {
+                            entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, tc.Scale * 0.5f);
+                        }
                     }
                     ImGui::CloseCurrentPopup();
                 }

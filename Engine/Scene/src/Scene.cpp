@@ -64,9 +64,9 @@ namespace Axle {
     Entity Scene::FindEntityByBodyID(BodyID bodyID) {
         if (bodyID.IsInvalid()) return {};
 
-        auto view = m_Registry.view<RigidBodyComponent>();
+        auto view = m_Registry.view<RigidBody3D>();
         for (auto entityID : view) {
-            const auto& rb = view.get<RigidBodyComponent>(entityID);
+            const auto& rb = view.get<RigidBody3D>(entityID);
             if (rb.RuntimeBodyID == bodyID) {
                 return { entityID, this };
             }
@@ -113,10 +113,10 @@ namespace Axle {
 
         // 1. Synchronize physics simulation transforms into TransformComponents
         if (physicsScene) {
-            auto physicsView = m_Registry.view<RigidBodyComponent, TransformComponent>();
+            auto physicsView = m_Registry.view<RigidBody3D, TransformComponent>();
             for (auto entity : physicsView) {
                 auto& tc = m_Registry.get<TransformComponent>(entity);
-                const auto& rb = m_Registry.get<RigidBodyComponent>(entity);
+                const auto& rb = m_Registry.get<RigidBody3D>(entity);
                 if (!rb.RuntimeBodyID.IsInvalid()) {
                     tc.Translation = physicsScene->GetBodyPosition(rb.RuntimeBodyID);
                     tc.Rotation = physicsScene->GetBodyRotation(rb.RuntimeBodyID);
@@ -137,7 +137,7 @@ namespace Axle {
         int activeToneMapping = hasSunLight ? sunLight.ToneMappingMode : 0;
         float activeGamma = hasSunLight ? sunLight.Gamma : 2.2f;
 
-        // 3. Render all entities with MeshComponent and TransformComponent (with hierarchy propagation)
+        // 3. Render all entities with MeshInstance3D and TransformComponent (with hierarchy propagation)
         shader.Bind();
         shader.SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix());
         shader.SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
@@ -182,9 +182,9 @@ namespace Axle {
         shader.SetFloat("u_Roughness", 0.5f);
         shader.SetFloat("u_Metallic", 0.0f);
 
-        auto renderView = m_Registry.view<MeshComponent, TransformComponent>();
+        auto renderView = m_Registry.view<MeshInstance3D, TransformComponent>();
         for (auto entity : renderView) {
-            auto& mesh = m_Registry.get<MeshComponent>(entity);
+            auto& mesh = m_Registry.get<MeshInstance3D>(entity);
             if (mesh.VAO) {
                 glm::mat4 worldTransform = GetWorldTransform(entity);
                 shader.SetMat4("u_Transform", worldTransform);
@@ -263,9 +263,9 @@ namespace Axle {
         shadowShader.Bind();
         shadowShader.SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
 
-        auto renderView = m_Registry.view<MeshComponent, TransformComponent>();
+        auto renderView = m_Registry.view<MeshInstance3D, TransformComponent>();
         for (auto entity : renderView) {
-            auto& mesh = m_Registry.get<MeshComponent>(entity);
+            auto& mesh = m_Registry.get<MeshInstance3D>(entity);
             if (mesh.VAO) {
                 glm::mat4 worldTransform = GetWorldTransform(entity);
                 shadowShader.SetMat4("u_Transform", worldTransform);

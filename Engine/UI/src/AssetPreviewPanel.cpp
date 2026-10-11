@@ -256,7 +256,8 @@ namespace Axle {
                 bProps.Friction = 0.70f;
                 bProps.Restitution = 0.15f;
                 auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                rootEntity.AddComponent<RigidBodyComponent>(bodyId, true);
+                rootEntity.AddComponent<RigidBody3D>(bodyId, true);
+                rootEntity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, m_CurrentPackage.HalfExtent, 0.70f, 0.15f);
             }
 
             for (const auto& part : m_CurrentPackage.Parts) {
@@ -265,7 +266,7 @@ namespace Axle {
                 ct.Rotation = part.LocalRotation;
 
                 auto partFullPath = m_CurrentAssetPath.parent_path() / part.RelativePath;
-                childEntity.AddComponent<MeshComponent>(
+                childEntity.AddComponent<MeshInstance3D>(
                     part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_FallbackMesh,
                     partFullPath.string(),
                     part.LoadedMesh.SourceData.PatternMode,
@@ -283,7 +284,7 @@ namespace Axle {
             std::string tag = m_CurrentPackage.Name.empty() ? m_CurrentAssetPath.stem().string() : m_CurrentPackage.Name;
             auto entity = m_Scene->CreateEntity(tag);
             entity.AddComponent<TransformComponent>(spawnPos, part.LocalScale);
-            entity.AddComponent<MeshComponent>(
+            entity.AddComponent<MeshInstance3D>(
                 part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_FallbackMesh,
                 m_CurrentAssetPath.string(),
                 part.LoadedMesh.SourceData.PatternMode,
@@ -298,7 +299,8 @@ namespace Axle {
                 bProps.HalfExtent = part.LoadedMesh.SourceData.HalfExtent;
                 bProps.IsDynamic = true;
                 auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                entity.AddComponent<RigidBodyComponent>(bodyId, true);
+                entity.AddComponent<RigidBody3D>(bodyId, true);
+                entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, part.LoadedMesh.SourceData.HalfExtent, 0.70f, 0.15f);
             }
             AXLE_INFO("AssetPreviewPanel: Instantiated single mesh '{0}'", tag);
         }

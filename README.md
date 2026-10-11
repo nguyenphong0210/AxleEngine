@@ -89,22 +89,23 @@ Level 0:  [ Engine/Core ]
   - [x] **Project Asset Architecture**: Standardized `Sandbox/assets/` structure (`models/`, `textures/`, `scenes/`, `materials/`, `shaders/`) and `Axle::FileSystem` resolver - separating game project assets from engine core.
   - [x] **Content Browser Panel (`Engine/UI`)**: ImGui-based visual asset browser with directory navigation, file type icons, search filter, path breadcrumbs, Explorer integration, and Drag & Drop payload support.
   - [x] **Drag & Drop Workflow**: Drag 3D model files from Content Browser directly into Viewport or Properties panel to instantiate meshes with zero-gap ground snapping and centered pivots.
+  - [x] **3D Asset Thumbnails & Interactive Asset Preview (`Engine/UI`)**: On-demand studio-lit 3D thumbnails rendered directly on Content Browser cards with frame-sliced caching, plus a dedicated interactive 3D Asset Preview window with turntable auto-orbit, wireframe inspection, geometry stats, and direct scene instantiation.
   - [ ] **Unified `.axle` Asset Pipeline & Auto-Conversion**:
     - [x] **Step 1: Core Engine/Asset Module & AssetSerializer**: Structured text format `.axle` (AI-friendly & human-editable) + Automated flat binary caching `.axlebin` (<1ms GPU loading) with smart timestamp validation (`last_write_time`) for automatic re-baking when text is modified. Seamless drag & drop support for `.axle` assets into Viewport, Scene Hierarchy, and Mesh Inspector.
     - [x] **Step 2: Ingest & Auto-Conversion Pipeline**: Dragging external 3D files (`.obj`, `.gltf`, `.glb`, `.fbx`) directly from Windows Explorer into Content Browser or Viewport automatically ingests and converts them into engine-standard `.axle` format with instant background `.axlebin` cache generation and seamless scene instantiation.
     - [ ] **Step 3: AI Mesh Mutation & Hot-Reload**: AI agents and developers can edit `.axle` files as text; the Engine instantly detects file modifications and reloads geometry and materials in real time.
-  - [ ] **3D Mesh Loading (`fastgltf` / `ufbx` / `tinyobjloader`)**: Detailed car body chassis and realistic wheel models.
+    - [ ] **Step 4: Reverse Mesh Export (`.obj`)**: Export `.axle` / `.axlebin` meshes back into standard Wavefront `.obj` format for external DCC (Blender, Maya) interop and mesh inspection.
+  - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights.
   - [ ] **Texture Mapping (`stb_image`)**: Albedo, normal, and roughness textures applied to 3D meshes.
-  - [ ] Replace procedural shapes on car with a realistic sports car 3D model.
 - [ ] **Phase 10: Scene Serialization & Project Management (`Engine/Scene` & `Engine/Project`)**
   - [ ] **Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project` and `File -> Open Project`.
-  - [ ] **Scene Serialization (YAML via `yaml-cpp`)**: Save and load complete ECS scene state (Transforms, Meshes, RigidBodies, Vehicle dynamics, Native scripts) into `.axle` scene files.
+  - [ ] **Scene Serialization (`.axlescene`)**: Save and load complete ECS scene state (Transforms, Meshes, RigidBodies, Vehicle dynamics, Hierarchies) to `.axlescene` files with interactive menu actions (`Ctrl+S`, `Ctrl+O`, `Ctrl+N`).
   - [ ] **Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with file dialogs.
   - [ ] Double-click scene files in Content Browser to instantly load them.
 - [ ] **Phase 11: Lighting, Shadows & Environmental Realism**
   - [ ] Directional Shadow Mapping (Real-time dynamic shadows cast by vehicle and obstacles).
-  - [ ] PBR or Blinn-Phong material shading with specular highlights on car paint.
-  - [ ] Atmospheric Skybox (Cubemap or procedural gradient sky).
+  - [ ] **PBR Material System & Textures**: Support texture maps (Albedo, Normal, Metallic, Roughness) alongside current procedural checkerboard shaders.
+  - [ ] Atmospheric Skybox (Cubemap, HDRI, or procedural gradient sky).
 - [ ] **Phase 12: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
@@ -190,13 +191,6 @@ cmake --build build --config Release --parallel
 | **D / Right Arrow** | Steer Right |
 | **Space** | Handbrake (Rear-wheel lock drift) |
 | **Mouse Drag** | Orbit around car (3rd-Person Chase Cam) |
-
----
-
-## 🗺️ Roadmap
-- [ ] **Asset Pipeline (.obj Export)**: Export `.axle` / `.axlebin` meshes back into standard Wavefront `.obj` format for external DCC (Blender, Maya) interop and mesh inspection.
-- [ ] **PBR Material System**: Support texture maps (Albedo, Normal, Metallic, Roughness) alongside current procedural shader styles.
-- [ ] **Scene Serialization**: Save and restore full ECS scene hierarchy and physics states to scene files (`.axlescene`).
 
 ---
 

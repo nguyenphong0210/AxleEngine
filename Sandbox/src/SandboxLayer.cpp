@@ -339,6 +339,176 @@ void SandboxLayer::OnWindowResize(Axle::u32 width, Axle::u32 height) {
     }
 }
 
+void SandboxLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
+    if (filepaths.empty()) return;
+
+    // 1. Determine destination directory based on UI hover state
+    std::filesystem::path destFolder;
+    if (m_ContentBrowserPanel.IsWindowHovered()) {
+        destFolder = m_ContentBrowserPanel.GetCurrentPath();
+    } else {
+        destFolder = Axle::FileSystem::ResolveAssetPath("models");
+    }
+
+    std::error_code ec;
+    if (!std::filesystem::exists(destFolder, ec)) {
+        std::filesystem::create_directories(destFolder, ec);
+    }
+
+    for (const auto& filepathStr : filepaths) {
+        std::filesystem::path srcPath(filepathStr);
+        if (!std::filesystem::exists(srcPath, ec)) continue;
+
+        std::string ext = srcPath.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+        std::string stem = srcPath.stem().string();
+
+        if (ext == ".obj") {
+            // Auto-convert external OBJ to unified .axle format and bake binary cache
+            std::filesystem::path destAxlePath = destFolder / (stem + ".axle");
+            std::filesystem::path destObjPath = destFolder / srcPath.filename();
+
+            if (srcPath != destObjPath) {
+                std::filesystem::copy_file(srcPath, destObjPath, std::filesystem::copy_options::overwrite_existing, ec);
+            }
+
+            bool converted = Axle::AssetSerializer::ConvertOBJToAxle(destObjPath, destAxlePath);
+            if (converted) {
+                AXLE_INFO("Asset Pipeline: Ingested and auto-converted '{0}' -> '{1}' (with binary cache)", 
+                    srcPath.filename().string(), destAxlePath.filename().string());
+
+                // If dropped directly over 3D Viewport, instantiate immediately
+                if (m_ViewportHovered) {
+                    auto loaded = Axle::AssetSerializer::LoadMesh(destAxlePath);
+                    if (loaded.Success) {
+                        glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
+                        glm::vec4 nearPointNDC(0.0f, 0.0f, -1.0f, 1.0f);
+                        glm::vec4 farPointNDC(0.0f, 0.0f, 1.0f, 1.0f);
+
+                        glm::vec4 nearW = invVP * nearPointNDC;
+                        glm::vec4 farW = invVP * farPointNDC;
+                        if (std::abs(nearW.w) > 1e-6f) nearW /= nearW.w;
+                        if (std::abs(farW.w) > 1e-6f) farW /= farW.w;
+
+                        glm::vec3 rayOrigin = glm::vec3(nearW);
+                        glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
+
+                        glm::vec3 spawnPos(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
+                        Axle::RayCastHit hit;
+                        if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
+                            spawnPos = hit.Position + glm::vec3(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
+                        } else {
+                            if (std::abs(rayDir.y) > 1e-4f) {
+                                float t = -rayOrigin.y / rayDir.y;
+                                if (t > 0.0f && t < 150.0f) {
+                                    glm::vec3 groundHit = rayOrigin + rayDir * t;
+                                    spawnPos = groundHit + glm::vec3(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
+                                } else {
+                                    spawnPos = rayOrigin + rayDir * 10.0f;
+                                }
+                            } else {
+                                spawnPos = rayOrigin + rayDir * 10.0f;
+                            }
+                        }
+
+                        auto entity = m_Scene->CreateEntity(stem);
+                        entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
+                        entity.AddComponent<Axle::MeshComponent>(
+                            loaded.VAO, destAxlePath.string(),
+                            loaded.SourceData.PatternMode, loaded.SourceData.TileScale,
+                            loaded.SourceData.ColorPrimary, loaded.SourceData.ColorSecondary
+                        );
+
+                        if (m_PhysicsScene) {
+                            Axle::BoxBodyProps bProps;
+                            bProps.Position = spawnPos;
+                            bProps.HalfExtent = loaded.SourceData.HalfExtent;
+                            bProps.IsDynamic = true;
+                            bProps.Friction = 0.70f;
+                            bProps.Restitution = 0.15f;
+                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                            entity.AddComponent<Axle::RigidBodyComponent>(bodyId, true);
+                        }
+
+                        m_SceneHierarchyPanel.SetSelectedEntity(entity);
+                        AXLE_INFO("Asset Pipeline: Instantiated newly ingested model '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})", 
+                            stem, spawnPos.x, spawnPos.y, spawnPos.z);
+                    }
+                }
+            }
+        } else if (ext == ".axle") {
+            std::filesystem::path destAxlePath = destFolder / srcPath.filename();
+            if (srcPath != destAxlePath) {
+                std::filesystem::copy_file(srcPath, destAxlePath, std::filesystem::copy_options::overwrite_existing, ec);
+            }
+            auto loaded = Axle::AssetSerializer::LoadMesh(destAxlePath);
+            AXLE_INFO("Asset Pipeline: Ingested .axle asset '{0}' (Cache: {1})", 
+                destAxlePath.filename().string(), loaded.LoadedFromCache ? "HIT" : "MISS");
+
+            if (m_ViewportHovered && loaded.Success) {
+                glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
+                glm::vec4 nearPointNDC(0.0f, 0.0f, -1.0f, 1.0f);
+                glm::vec4 farPointNDC(0.0f, 0.0f, 1.0f, 1.0f);
+
+                glm::vec4 nearW = invVP * nearPointNDC;
+                glm::vec4 farW = invVP * farPointNDC;
+                if (std::abs(nearW.w) > 1e-6f) nearW /= nearW.w;
+                if (std::abs(farW.w) > 1e-6f) farW /= farW.w;
+
+                glm::vec3 rayOrigin = glm::vec3(nearW);
+                glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
+
+                glm::vec3 spawnPos(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
+                Axle::RayCastHit hit;
+                if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
+                    spawnPos = hit.Position + glm::vec3(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
+                } else {
+                    if (std::abs(rayDir.y) > 1e-4f) {
+                        float t = -rayOrigin.y / rayDir.y;
+                        if (t > 0.0f && t < 150.0f) {
+                            glm::vec3 groundHit = rayOrigin + rayDir * t;
+                            spawnPos = groundHit + glm::vec3(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
+                        } else {
+                            spawnPos = rayOrigin + rayDir * 10.0f;
+                        }
+                    } else {
+                        spawnPos = rayOrigin + rayDir * 10.0f;
+                    }
+                }
+
+                auto entity = m_Scene->CreateEntity(stem);
+                entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
+                entity.AddComponent<Axle::MeshComponent>(
+                    loaded.VAO, destAxlePath.string(),
+                    loaded.SourceData.PatternMode, loaded.SourceData.TileScale,
+                    loaded.SourceData.ColorPrimary, loaded.SourceData.ColorSecondary
+                );
+
+                if (m_PhysicsScene) {
+                    Axle::BoxBodyProps bProps;
+                    bProps.Position = spawnPos;
+                    bProps.HalfExtent = loaded.SourceData.HalfExtent;
+                    bProps.IsDynamic = true;
+                    bProps.Friction = 0.70f;
+                    bProps.Restitution = 0.15f;
+                    auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                    entity.AddComponent<Axle::RigidBodyComponent>(bodyId, true);
+                }
+
+                m_SceneHierarchyPanel.SetSelectedEntity(entity);
+            }
+        } else {
+            // General asset file copy (textures, shaders, scenes, documents)
+            std::filesystem::path destPath = destFolder / srcPath.filename();
+            if (srcPath != destPath) {
+                std::filesystem::copy_file(srcPath, destPath, std::filesystem::copy_options::overwrite_existing, ec);
+                AXLE_INFO("Asset Pipeline: Ingested file '{0}' into '{1}'", 
+                    srcPath.filename().string(), destFolder.string());
+            }
+        }
+    }
+}
+
 void SandboxLayer::OnScenePlay() {
     m_SceneState = SceneState::Play;
     m_Scene->OnRuntimeStart();
@@ -1354,7 +1524,23 @@ void SandboxLayer::OnImGuiRender() {
                         color2 = loaded.SourceData.ColorSecondary;
                     }
                 } else if (ext == ".obj") {
-                    meshInfo = Axle::PrimitiveMesh::LoadOBJEx(assetPath.string(), true);
+                    std::filesystem::path axlePath = assetPath.parent_path() / (assetPath.stem().string() + ".axle");
+                    if (!std::filesystem::exists(axlePath)) {
+                        Axle::AssetSerializer::ConvertOBJToAxle(assetPath, axlePath);
+                    }
+                    auto loaded = Axle::AssetSerializer::LoadMesh(axlePath);
+                    if (loaded.Success) {
+                        meshInfo.VAO = loaded.VAO;
+                        meshInfo.HalfExtent = loaded.SourceData.HalfExtent;
+                        meshInfo.BoundingSize = loaded.SourceData.BoundingSize;
+                        patternMode = loaded.SourceData.PatternMode;
+                        tileScale = loaded.SourceData.TileScale;
+                        color1 = loaded.SourceData.ColorPrimary;
+                        color2 = loaded.SourceData.ColorSecondary;
+                        assetPath = axlePath;
+                    } else {
+                        meshInfo = Axle::PrimitiveMesh::LoadOBJEx(assetPath.string(), true);
+                    }
                 }
 
                 if (!meshInfo.VAO) {

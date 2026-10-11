@@ -46,6 +46,13 @@ namespace Axle {
             }
         });
 
+        // 5.1 Setup OS file drop callback
+        m_Window->SetWindowDropCallback([this](const std::vector<std::string>& paths) {
+            for (auto& layer : m_LayerStack) {
+                layer->OnFileDrop(paths);
+            }
+        });
+
         // 6. Initialize ImGui layer
         m_ImGuiLayer = std::make_unique<ImGuiLayer>();
         m_ImGuiLayer->Init(m_Window->GetNativeWindow());

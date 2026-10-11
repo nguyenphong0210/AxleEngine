@@ -91,7 +91,7 @@ Level 0:  [ Engine/Core ]
   - [x] **Drag & Drop Workflow**: Drag 3D model files from Content Browser directly into Viewport or Properties panel to instantiate meshes with zero-gap ground snapping and centered pivots.
   - [ ] **Unified `.axle` Asset Pipeline & Auto-Conversion**:
     - [x] **Step 1: Core Engine/Asset Module & AssetSerializer**: Structured text format `.axle` (AI-friendly & human-editable) + Automated flat binary caching `.axlebin` (<1ms GPU loading) with smart timestamp validation (`last_write_time`) for automatic re-baking when text is modified. Seamless drag & drop support for `.axle` assets into Viewport, Scene Hierarchy, and Mesh Inspector.
-    - [ ] **Step 2: Ingest & Auto-Conversion Pipeline**: Dragging external 3D files (`.obj`, `.gltf`, `.glb`, `.fbx`) directly into the Content Browser automatically converts them into engine-standard `.axle` format with background binary cache generation.
+    - [x] **Step 2: Ingest & Auto-Conversion Pipeline**: Dragging external 3D files (`.obj`, `.gltf`, `.glb`, `.fbx`) directly from Windows Explorer into Content Browser or Viewport automatically ingests and converts them into engine-standard `.axle` format with instant background `.axlebin` cache generation and seamless scene instantiation.
     - [ ] **Step 3: AI Mesh Mutation & Hot-Reload**: AI agents and developers can edit `.axle` files as text; the Engine instantly detects file modifications and reloads geometry and materials in real time.
   - [ ] **3D Mesh Loading (`fastgltf` / `ufbx` / `tinyobjloader`)**: Detailed car body chassis and realistic wheel models.
   - [ ] **Texture Mapping (`stb_image`)**: Albedo, normal, and roughness textures applied to 3D meshes.

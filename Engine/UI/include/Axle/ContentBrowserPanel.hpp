@@ -13,6 +13,7 @@ namespace Axle {
 
         void SetRootPath(const std::filesystem::path& rootPath);
         const std::filesystem::path& GetCurrentPath() const { return m_CurrentDirectory; }
+        bool IsWindowHovered() const { return m_IsHovered; }
 
         void OnImGuiRender(bool* p_open = nullptr);
 
@@ -31,6 +32,7 @@ namespace Axle {
         float m_Padding = 14.0f;
         float m_ThumbnailSize = 84.0f;
         bool m_ShowHiddenFiles = false;
+        bool m_IsHovered = false;
     };
 
 }

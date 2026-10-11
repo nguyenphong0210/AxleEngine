@@ -37,6 +37,7 @@ public:
     void OnUpdate(Axle::Timestep ts) override;
     void OnImGuiRender() override;
     void OnWindowResize(Axle::u32 width, Axle::u32 height) override;
+    void OnFileDrop(const std::vector<std::string>& filepaths) override;
 
     void OnScenePlay();
     void OnScenePause();

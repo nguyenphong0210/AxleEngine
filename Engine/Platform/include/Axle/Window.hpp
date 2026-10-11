@@ -60,6 +60,7 @@ namespace Axle {
         void SetMouseScrolledCallback(std::function<void(const MouseScrolledEvent&)> callback) { m_Data.OnMouseScrolled = callback; }
         void SetMouseButtonPressedCallback(std::function<void(const MouseButtonPressedEvent&)> callback) { m_Data.OnMouseButtonPressed = callback; }
         void SetMouseButtonReleasedCallback(std::function<void(const MouseButtonReleasedEvent&)> callback) { m_Data.OnMouseButtonReleased = callback; }
+        void SetWindowDropCallback(std::function<void(const std::vector<std::string>&)> callback) { m_Data.OnFileDrop = callback; }
 
     private:
         struct WindowData {
@@ -76,6 +77,7 @@ namespace Axle {
             std::function<void(const MouseScrolledEvent&)> OnMouseScrolled;
             std::function<void(const MouseButtonPressedEvent&)> OnMouseButtonPressed;
             std::function<void(const MouseButtonReleasedEvent&)> OnMouseButtonReleased;
+            std::function<void(const std::vector<std::string>&)> OnFileDrop;
         };
 
         GLFWwindow* m_Window = nullptr;

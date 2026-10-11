@@ -338,7 +338,23 @@ namespace Axle {
                                     color2 = loaded.SourceData.ColorSecondary;
                                 }
                             } else if (ext == ".obj") {
-                                meshInfo = PrimitiveMesh::LoadOBJEx(p.string(), true);
+                                std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
+                                if (!std::filesystem::exists(axlePath)) {
+                                    AssetSerializer::ConvertOBJToAxle(p, axlePath);
+                                }
+                                auto loaded = AssetSerializer::LoadMesh(axlePath);
+                                if (loaded.Success) {
+                                    meshInfo.VAO = loaded.VAO;
+                                    meshInfo.HalfExtent = loaded.SourceData.HalfExtent;
+                                    meshInfo.BoundingSize = loaded.SourceData.BoundingSize;
+                                    patternMode = loaded.SourceData.PatternMode;
+                                    tileScale = loaded.SourceData.TileScale;
+                                    color1 = loaded.SourceData.ColorPrimary;
+                                    color2 = loaded.SourceData.ColorSecondary;
+                                    p = axlePath;
+                                } else {
+                                    meshInfo = PrimitiveMesh::LoadOBJEx(p.string(), true);
+                                }
                             }
 
                             if (!meshInfo.VAO) {
@@ -618,8 +634,22 @@ namespace Axle {
                                     mc.Color2 = loaded.SourceData.ColorSecondary;
                                 }
                             } else if (ext == ".obj") {
-                                auto loadedVao = PrimitiveMesh::LoadOBJ(p.string());
-                                if (loadedVao) mc.VAO = loadedVao;
+                                std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
+                                if (!std::filesystem::exists(axlePath)) {
+                                    AssetSerializer::ConvertOBJToAxle(p, axlePath);
+                                }
+                                auto loaded = AssetSerializer::LoadMesh(axlePath);
+                                if (loaded.Success) {
+                                    mc.VAO = loaded.VAO;
+                                    mc.PatternMode = loaded.SourceData.PatternMode;
+                                    mc.TileScale = loaded.SourceData.TileScale;
+                                    mc.Color1 = loaded.SourceData.ColorPrimary;
+                                    mc.Color2 = loaded.SourceData.ColorSecondary;
+                                    mc.AssetPath = axlePath.string();
+                                } else {
+                                    auto loadedVao = PrimitiveMesh::LoadOBJ(p.string());
+                                    if (loadedVao) mc.VAO = loadedVao;
+                                }
                             }
                             AXLE_INFO("Assigned 3D model '{0}' to Entity '{1}'", p.filename().string(), entity.GetComponent<TagComponent>().Tag);
                         }
@@ -678,7 +708,21 @@ namespace Axle {
                                 color2 = loaded.SourceData.ColorSecondary;
                             }
                         } else if (ext == ".obj") {
-                            loadedVao = PrimitiveMesh::LoadOBJ(p.string());
+                            std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
+                            if (!std::filesystem::exists(axlePath)) {
+                                AssetSerializer::ConvertOBJToAxle(p, axlePath);
+                            }
+                            auto loaded = AssetSerializer::LoadMesh(axlePath);
+                            if (loaded.Success) {
+                                loadedVao = loaded.VAO;
+                                patternMode = loaded.SourceData.PatternMode;
+                                tileScale = loaded.SourceData.TileScale;
+                                color1 = loaded.SourceData.ColorPrimary;
+                                color2 = loaded.SourceData.ColorSecondary;
+                                p = axlePath;
+                            } else {
+                                loadedVao = PrimitiveMesh::LoadOBJ(p.string());
+                            }
                         }
 
                         if (!loadedVao) loadedVao = m_CubeMesh;

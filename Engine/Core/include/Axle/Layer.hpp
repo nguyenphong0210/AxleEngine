@@ -2,6 +2,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/Timestep.hpp>
 #include <string>
+#include <vector>
 
 namespace Axle {
 
@@ -15,6 +16,7 @@ namespace Axle {
         virtual void OnUpdate(Timestep ts) {}
         virtual void OnImGuiRender() {}
         virtual void OnWindowResize(u32 width, u32 height) {}
+        virtual void OnFileDrop(const std::vector<std::string>& filepaths) {}
 
         const std::string& GetName() const { return m_DebugName; }
 

@@ -145,6 +145,19 @@ namespace Axle {
                 data->OnMouseMoved({ static_cast<f32>(xPos), static_cast<f32>(yPos) });
             }
         });
+
+        // Window drag-and-drop callback from OS
+        glfwSetDropCallback(m_Window, [](GLFWwindow* window, int count, const char** paths) {
+            auto* data = static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+            if (data && data->OnFileDrop) {
+                std::vector<std::string> droppedPaths;
+                droppedPaths.reserve(count);
+                for (int i = 0; i < count; ++i) {
+                    droppedPaths.emplace_back(paths[i]);
+                }
+                data->OnFileDrop(droppedPaths);
+            }
+        });
     }
 
     Window::~Window() {

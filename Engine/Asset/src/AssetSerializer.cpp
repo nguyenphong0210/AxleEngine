@@ -389,7 +389,12 @@ namespace Axle {
         return true;
     }
 
-    bool AssetSerializer::ConvertOBJToAxle(const std::filesystem::path& objPath, const std::filesystem::path& outAxlePath) {
+    bool AssetSerializer::ConvertOBJToAxle(const std::filesystem::path& objPath,
+                                           const std::filesystem::path& outAxlePath,
+                                           int patternMode,
+                                           float tileScale,
+                                           const glm::vec4& color1,
+                                           const glm::vec4& color2) {
         std::ifstream file(objPath);
         if (!file.is_open()) {
             AXLE_ERROR("AssetSerializer: Failed to open OBJ file '{0}'", objPath.string());
@@ -445,7 +450,7 @@ namespace Axle {
         }
 
         std::string modelName = objPath.stem().string();
-        return ExportMeshToAxle(outAxlePath, modelName, temp_positions, indices);
+        return ExportMeshToAxle(outAxlePath, modelName, temp_positions, indices, patternMode, tileScale, color1, color2);
     }
 
 }

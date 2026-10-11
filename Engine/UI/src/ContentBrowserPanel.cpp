@@ -353,9 +353,12 @@ namespace Axle {
 
         ImGui::SetNextWindowSize(ImVec2(650.0f, 320.0f), ImGuiCond_FirstUseEver);
         if (!ImGui::Begin("Content Browser", p_open)) {
+            m_IsHovered = false;
             ImGui::End();
             return;
         }
+
+        m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 
         RenderTopBar();
         ImGui::Spacing();

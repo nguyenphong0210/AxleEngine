@@ -57,7 +57,12 @@ namespace Axle {
         static std::filesystem::path GetCachePathFor(const std::filesystem::path& axleTextPath);
 
         // Convert an OBJ model into .axle structured text + auto-baked .axlebin cache
-        static bool ConvertOBJToAxle(const std::filesystem::path& objPath, const std::filesystem::path& outAxlePath);
+        static bool ConvertOBJToAxle(const std::filesystem::path& objPath,
+                                     const std::filesystem::path& outAxlePath,
+                                     int patternMode = 1,
+                                     float tileScale = 2.0f,
+                                     const glm::vec4& color1 = glm::vec4(0.95f, 0.45f, 0.15f, 1.0f),
+                                     const glm::vec4& color2 = glm::vec4(0.16f, 0.20f, 0.26f, 1.0f));
     };
 
 }

@@ -207,6 +207,13 @@ namespace Axle {
                 fout << "      UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
             }
 
+            // NativeScriptComponent
+            if (entity.HasComponent<NativeScriptComponent>()) {
+                auto& nsc = entity.GetComponent<NativeScriptComponent>();
+                fout << "    NativeScriptComponent:\n";
+                fout << "      ScriptName: " << nsc.ScriptName << "\n";
+            }
+
             // HierarchyComponent
             if (entity.HasComponent<HierarchyComponent>()) {
                 auto& hc = entity.GetComponent<HierarchyComponent>();
@@ -254,6 +261,9 @@ namespace Axle {
         bool HasMaterial = false;
         MaterialComponent Material;
 
+        bool HasNativeScript = false;
+        std::string ScriptName;
+
         bool HasHierarchy = false;
         u64 ParentOldUUID = 0;
         std::vector<u64> ChildrenOldUUIDs;
@@ -267,6 +277,7 @@ namespace Axle {
         CollisionShape,
         RigidBody,
         Material,
+        NativeScript,
         Hierarchy,
         HierarchyChildren
     };
@@ -315,6 +326,7 @@ namespace Axle {
             if (trimmed == "CollisionShape3D:" || trimmed == "CollisionShape:") { currentSection = AsmSection::CollisionShape; current.HasCollisionShape = true; continue; }
             if (trimmed == "RigidBody3D:" || trimmed == "RigidBodyComponent:") { currentSection = AsmSection::RigidBody; current.HasRigidBody = true; continue; }
             if (trimmed == "MaterialComponent:") { currentSection = AsmSection::Material; current.HasMaterial = true; continue; }
+            if (trimmed == "NativeScriptComponent:") { currentSection = AsmSection::NativeScript; current.HasNativeScript = true; continue; }
             if (trimmed == "HierarchyComponent:") { currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
 
             switch (currentSection) {
@@ -444,6 +456,12 @@ namespace Axle {
                         float x = 1, y = 1;
                         sscanf(trimmed.c_str(), "UVScale: [ %f , %f ]", &x, &y);
                         current.Material.UVScale = glm::vec2(x, y);
+                    }
+                    break;
+                }
+                case AsmSection::NativeScript: {
+                    if (trimmed.rfind("ScriptName:", 0) == 0) {
+                        current.ScriptName = Trim(trimmed.substr(11));
                     }
                     break;
                 }
@@ -599,6 +617,11 @@ namespace Axle {
                         mat.AlbedoMap = Texture2D::Create(resolved.string());
                     }
                 }
+            }
+
+            // NativeScriptComponent
+            if (raw.HasNativeScript && !raw.ScriptName.empty()) {
+                entity.AddComponent<NativeScriptComponent>(raw.ScriptName);
             }
         }
 

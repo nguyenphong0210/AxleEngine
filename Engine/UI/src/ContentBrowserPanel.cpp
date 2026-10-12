@@ -986,6 +986,46 @@ namespace Axle {
                             }
                         }
                     }
+                    if (ImGui::MenuItem("C++ Native Script (.hpp)")) {
+                        std::string baseName = "NewScript";
+                        std::filesystem::path newScriptPath = m_CurrentDirectory / (baseName + ".hpp");
+                        int counter = 1;
+                        while (std::filesystem::exists(newScriptPath)) {
+                            baseName = "NewScript_" + std::to_string(counter++);
+                            newScriptPath = m_CurrentDirectory / (baseName + ".hpp");
+                        }
+                        std::ofstream fout(newScriptPath);
+                        if (fout.is_open()) {
+                            fout << "#pragma once\n";
+                            fout << "#include <Axle/ScriptableEntity.hpp>\n";
+                            fout << "#include <Axle/ScriptRegistry.hpp>\n";
+                            fout << "#include <Axle/Components.hpp>\n";
+                            fout << "#include <Axle/Input.hpp>\n";
+                            fout << "#include <Axle/KeyCodes.hpp>\n\n";
+                            fout << "class " << baseName << " : public Axle::ScriptableEntity {\n";
+                            fout << "public:\n";
+                            fout << "    float Speed = 10.0f;\n";
+                            fout << "    bool Enabled = true;\n\n";
+                            fout << "    void OnCreate() override {\n";
+                            fout << "        // Called once on play mode start\n";
+                            fout << "    }\n\n";
+                            fout << "    void OnUpdate(Axle::Timestep ts) override {\n";
+                            fout << "        (void)ts;\n";
+                            fout << "        // Update per-frame logic\n";
+                            fout << "    }\n\n";
+                            fout << "    void OnDestroy() override {\n";
+                            fout << "        // Called on cleanup\n";
+                            fout << "    }\n\n";
+                            fout << "    static void RegisterFields(Axle::ScriptFieldRegistry& reg) {\n";
+                            fout << "        reg.AddField(\"Speed\", &" << baseName << "::Speed, 0.0f, 100.0f, \"Movement speed\");\n";
+                            fout << "        reg.AddField(\"Enabled\", &" << baseName << "::Enabled, \"Enable script execution\");\n";
+                            fout << "    }\n";
+                            fout << "};\n\n";
+                            fout << "AXLE_REGISTER_SCRIPT(" << baseName << ");\n";
+                            fout.close();
+                            SetStatusNotification("Created C++ Script: " + newScriptPath.filename().string());
+                        }
+                    }
                     ImGui::EndMenu();
                 }
                 ImGui::Separator();

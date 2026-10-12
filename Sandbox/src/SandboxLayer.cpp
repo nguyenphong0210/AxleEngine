@@ -26,6 +26,18 @@ SandboxLayer::SandboxLayer()
 void SandboxLayer::OnAttach() {
     AXLE_INFO("SandboxLayer attached - Initializing Axle Editor Environment");
 
+    // Phase 13 Step 1 Verification
+    const auto& scripts = Axle::ScriptRegistry::GetScripts();
+    AXLE_INFO("--- [Phase 13 Step 1] ScriptRegistry Verification ---");
+    AXLE_INFO("Registered scripts count: {0}", scripts.size());
+    for (const auto& [name, meta] : scripts) {
+        AXLE_INFO("  Script: '{0}' ({1} reflected fields):", name, meta.Fields.size());
+        for (const auto& f : meta.Fields) {
+            AXLE_INFO("    - Field '{0}' (Type: {1}, Min: {2}, Max: {3})", f.Name, (int)f.Type, f.Min, f.Max);
+        }
+    }
+    AXLE_INFO("-----------------------------------------------------");
+
     auto& window = Axle::Application::Get().GetWindow();
 
     // 1. Perspective Camera

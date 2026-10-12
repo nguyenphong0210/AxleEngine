@@ -286,9 +286,14 @@ namespace Axle {
         auto view = m_Registry.view<NativeScriptComponent>();
         for (auto entity : view) {
             auto& nsc = view.get<NativeScriptComponent>(entity);
+            if (!nsc.InstantiateScript && !nsc.ScriptName.empty()) {
+                nsc.Bind(nsc.ScriptName);
+            }
+
             if (!nsc.Instance && nsc.InstantiateScript) {
                 nsc.Instance = nsc.InstantiateScript();
                 nsc.Instance->m_Entity = Entity{ entity, this };
+                nsc.SyncFieldsToInstance();
                 nsc.Instance->OnCreate();
             }
         }
@@ -298,9 +303,14 @@ namespace Axle {
         auto view = m_Registry.view<NativeScriptComponent>();
         for (auto entity : view) {
             auto& nsc = view.get<NativeScriptComponent>(entity);
+            if (!nsc.InstantiateScript && !nsc.ScriptName.empty()) {
+                nsc.Bind(nsc.ScriptName);
+            }
+
             if (!nsc.Instance && nsc.InstantiateScript) {
                 nsc.Instance = nsc.InstantiateScript();
                 nsc.Instance->m_Entity = Entity{ entity, this };
+                nsc.SyncFieldsToInstance();
                 nsc.Instance->OnCreate();
             }
 

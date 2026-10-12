@@ -3,6 +3,10 @@
 #include <Axle/Scene.hpp>
 #include <entt/entt.hpp>
 #include <utility>
+#include <vector>
+#include <string>
+#include <functional>
+#include <glm/glm.hpp>
 
 namespace Axle {
 
@@ -55,6 +59,17 @@ namespace Axle {
         }
 
         Scene* GetScene() const { return m_Scene; }
+
+        // Hierarchy Traversal & Management
+        Entity GetParent() const;
+        void SetParent(Entity parent);
+        std::vector<Entity> GetChildren() const;
+        size_t GetChildCount() const;
+        Entity FindChildByTag(const std::string& tag, bool recursive = true) const;
+        void ForEachChild(const std::function<void(Entity)>& func, bool recursive = true) const;
+        bool IsChildOf(Entity potentialParent) const;
+        const std::string& GetName() const;
+        glm::mat4 GetWorldTransform() const;
 
     private:
         entt::entity m_EntityHandle{ entt::null };

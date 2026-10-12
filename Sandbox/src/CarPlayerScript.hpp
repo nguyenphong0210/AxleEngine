@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/ScriptableEntity.hpp>
+#include <Axle/ScriptRegistry.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/Input.hpp>
 #include <Axle/KeyCodes.hpp>
@@ -7,6 +8,11 @@
 
 class CarPlayerScript : public Axle::ScriptableEntity {
 public:
+    float ForwardTorque = 1500.0f;
+    float MaxSteerAngle = 35.0f;
+    float BrakeTorque = 2500.0f;
+    bool EnableBoost = true;
+
     void OnCreate() override {
     }
 
@@ -42,4 +48,14 @@ public:
 
     void OnDestroy() override {
     }
+
+    static void RegisterFields(Axle::ScriptFieldRegistry& reg) {
+        reg.AddField("ForwardTorque", &CarPlayerScript::ForwardTorque, 100.0f, 10000.0f, "Engine drive torque in N.m");
+        reg.AddField("MaxSteerAngle", &CarPlayerScript::MaxSteerAngle, 10.0f, 60.0f, "Maximum steering angle in degrees");
+        reg.AddField("BrakeTorque", &CarPlayerScript::BrakeTorque, 100.0f, 10000.0f, "Braking force in N.m");
+        reg.AddField("EnableBoost", &CarPlayerScript::EnableBoost, "Enable speed boost");
+    }
 };
+
+AXLE_REGISTER_SCRIPT(CarPlayerScript);
+

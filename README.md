@@ -241,20 +241,20 @@ In complex mechanical vehicles (assemblies with dozens of connected wheels, susp
     - Features an isolated 3D viewport with orbit camera, interactive hierarchy tree, and inspectors for `TransformComponent`, `MeshInstance3D`, `CollisionShape3D`, and `RigidBody3D`.
     - Includes "Save Assembly" back to disk and "Add to Scene" action, allowing users to configure assemblies thoroughly before dragging them into the active scene.
     - Content Browser visual identification with a dedicated `ASY` badge and distinct styling.
-- [ ] **Phase 13: C++ Native Scripting Ecosystem & Mechanical Assembly Architecture (`Engine/Scene` & `Engine/UI`)**
-  - [ ] **Step 1: Core Static Reflection & Script Registry (`ScriptField` & `ScriptRegistry`)**:
+- [x] **Phase 13: C++ Native Scripting Ecosystem & Mechanical Assembly Architecture (`Engine/Scene` & `Engine/UI`)**
+  - [x] **Step 1: Core Static Reflection & Script Registry (`ScriptField` & `ScriptRegistry`)**:
     - Implement lightweight memory-offset reflection system (`ScriptField`) supporting `Float`, `Int`, `Bool`, `Vec3`, and `String` with min/max slider ranges and tooltips.
     - Build thread-safe `ScriptRegistry` singleton with automated `AXLE_REGISTER_SCRIPT(ClassName)` macro registration.
     - Upgrade `NativeScriptComponent` with Edit-mode field maps (`FloatFields`, `IntFields`, `BoolFields`, `Vec3Fields`) and bidirectional instance synchronization (`SyncFieldsToInstance()` / `SyncFieldsFromInstance()`).
-  - [ ] **Step 2: ECS Component Attachment & Hierarchy Traversal**:
+  - [x] **Step 2: ECS Component Attachment & Hierarchy Traversal**:
     - Equip `Entity` and `ScriptableEntity` with robust hierarchy traversal helpers (`FindChildByTag`, `GetParent`, `GetChildren`, `ForEachChild`) utilizing `HierarchyComponent`.
     - Enforce $O(1)$ zero-cost caching pattern inside `OnCreate()` — resolving child entities once at spawn time to eliminate expensive runtime string lookups.
     - Decouple assembly mechanics: allow individual child parts (turrets, robotic arms, steering linkages) to be queried and actuated directly from root scripts.
-  - [ ] **Step 3: Editor Workflow & Intuitive Drag-and-Drop (Unity-like Component Attachment)**:
+  - [x] **Step 3: Editor Workflow & Intuitive Drag-and-Drop (Unity-like Component Attachment)**:
     - Add right-click context menu in Content Browser: **`Create -> C++ Script (.hpp)`** to automatically generate boilerplate C++ scripts inheriting `ScriptableEntity` with registration macros.
     - Support drag-and-drop workflow: drag `.hpp`/`.cpp` script files from Content Browser directly onto Scene Hierarchy entities or Viewport meshes to instantly attach `NativeScriptComponent`.
     - Auto-generate dynamic Inspector UI in `SceneHierarchyPanel`: ComboBox script selector, interactive drag sliders with custom ranges, checkboxes, color-coded Vec3 axis inputs, tooltips, and "Reset to Default" (`↺`) actions.
-  - [ ] **Step 4: Unified Assembly Prefab Packaging & Gameplay Vehicle Implementation**:
+  - [x] **Step 4: Unified Assembly Prefab Packaging & Gameplay Vehicle Implementation**:
     - Upgrade `AssemblySerializer` (`.axle`) and `SceneSerializer` (`.axlescene`) to serialize and restore `NativeScriptComponent` and live-tuned field values.
     - Refactor `CarPlayerScript` with exposed drive torque, max steer angle, and child part control (headlights and wheels); implement smooth chase `CameraFollowScript`.
     - Verify complete roundtrip: create script $\rightarrow$ attach to vehicle $\rightarrow$ tune parameters $\rightarrow$ save as `.axle` prefab $\rightarrow$ instantiate in any scene and drive instantly upon pressing Play (`F5`).

@@ -492,6 +492,11 @@ namespace Axle {
                     case ComponentSection::NativeScript: {
                         if (trimmed.rfind("ScriptName:", 0) == 0) {
                             std::string scriptName = Trim(trimmed.substr(11));
+                            if (!currentEntity.HasComponent<NativeScriptComponent>()) {
+                                currentEntity.AddComponent<NativeScriptComponent>(scriptName);
+                            } else {
+                                currentEntity.GetComponent<NativeScriptComponent>().Bind(scriptName);
+                            }
                             if (m_Context.ScriptBinder) {
                                 m_Context.ScriptBinder(currentEntity, scriptName);
                             }

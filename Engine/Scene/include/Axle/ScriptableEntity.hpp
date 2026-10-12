@@ -25,6 +25,17 @@ namespace Axle {
 
         Entity GetEntity() const { return m_Entity; }
 
+        // Hierarchy Traversal & Relationship Helpers
+        Entity GetParent() const { return m_Entity.GetParent(); }
+        void SetParent(Entity parent) { m_Entity.SetParent(parent); }
+        std::vector<Entity> GetChildren() const { return m_Entity.GetChildren(); }
+        size_t GetChildCount() const { return m_Entity.GetChildCount(); }
+        Entity FindChildByTag(const std::string& tag, bool recursive = true) const { return m_Entity.FindChildByTag(tag, recursive); }
+        void ForEachChild(const std::function<void(Entity)>& func, bool recursive = true) const { m_Entity.ForEachChild(func, recursive); }
+        bool IsChildOf(Entity potentialParent) const { return m_Entity.IsChildOf(potentialParent); }
+        const std::string& GetName() const { return m_Entity.GetName(); }
+        glm::mat4 GetWorldTransform() const { return m_Entity.GetWorldTransform(); }
+
         virtual void OnCreate() {}
         virtual void OnUpdate(Timestep ts) {}
         virtual void OnDestroy() {}

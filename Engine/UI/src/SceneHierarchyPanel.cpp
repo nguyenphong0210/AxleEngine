@@ -1,6 +1,7 @@
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
+#include <Axle/ScriptRegistry.hpp>
 #include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
@@ -594,6 +595,27 @@ namespace Axle {
 
         if (ImGui::IsItemClicked()) {
             m_SelectedEntity = entity;
+        }
+
+        // Drag & Drop payload onto Entity node to attach Script
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                const char* pathStr = static_cast<const char*>(payload->Data);
+                std::filesystem::path p(pathStr);
+                std::string ext = p.extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                if (ext == ".hpp" || ext == ".h" || ext == ".cpp") {
+                    std::string scriptName = p.stem().string();
+                    if (!entity.HasComponent<NativeScriptComponent>()) {
+                        entity.AddComponent<NativeScriptComponent>(scriptName);
+                    } else {
+                        entity.GetComponent<NativeScriptComponent>().Bind(scriptName);
+                    }
+                    m_SelectedEntity = entity;
+                    AXLE_INFO("Attached Native Script '{0}' to Entity '{1}' via Tree Drag & Drop", scriptName, tag);
+                }
+            }
+            ImGui::EndDragDropTarget();
         }
 
         bool entityDeleted = false;
@@ -1606,6 +1628,184 @@ namespace Axle {
             ImGui::Spacing();
         }
 
+        // Native Script Component
+        if (entity.HasComponent<NativeScriptComponent>()) {
+            auto& nsc = entity.GetComponent<NativeScriptComponent>();
+            bool removeScript = false;
+            bool scriptOpen = ImGui::TreeNodeEx((void*)typeid(NativeScriptComponent).hash_code(), treeNodeFlags, "Native Script");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeScript = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (scriptOpen) {
+
+                // Script Class Combo Dropdown
+                const auto& registeredScripts = ScriptRegistry::GetScripts();
+                std::vector<std::string> scriptNames;
+                for (const auto& [name, _] : registeredScripts) {
+                    scriptNames.push_back(name);
+                }
+
+                ImGui::Text("Script Class:");
+                ImGui::SameLine();
+                std::string currentScript = nsc.ScriptName.empty() ? "[ Unbound ]" : nsc.ScriptName;
+                if (ImGui::BeginCombo("##ScriptClassCombo", currentScript.c_str())) {
+                    for (const auto& name : scriptNames) {
+                        bool isSelected = (nsc.ScriptName == name);
+                        if (ImGui::Selectable(name.c_str(), isSelected)) {
+                            nsc.Bind(name);
+                        }
+                        if (isSelected) {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+                // Drag & Drop Script Target Area
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.28f, 0.42f, 0.70f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.38f, 0.58f, 0.90f));
+                std::string dropBtnLabel = "Drop Script (.hpp) Here: " + (nsc.ScriptName.empty() ? "None" : nsc.ScriptName);
+                ImGui::Button(dropBtnLabel.c_str(), ImVec2(-1.0f, 26.0f));
+                ImGui::PopStyleColor(2);
+
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = static_cast<const char*>(payload->Data);
+                        std::filesystem::path p(pathStr);
+                        std::string ext = p.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                        if (ext == ".hpp" || ext == ".h" || ext == ".cpp") {
+                            std::string scriptName = p.stem().string();
+                            nsc.Bind(scriptName);
+                            AXLE_INFO("Bound Script '{0}' to Entity via Inspector drop", scriptName);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // Dynamic Reflected Fields
+                const auto* meta = ScriptRegistry::GetMetadata(nsc.ScriptName);
+                if (meta && !meta->Fields.empty()) {
+                    ImGui::TextColored(ImVec4(0.40f, 0.85f, 0.95f, 1.0f), "Exposed Fields (%zu):", meta->Fields.size());
+                    ImGui::Spacing();
+
+                    for (const auto& field : meta->Fields) {
+                        std::string label = field.Name + "##" + field.Name;
+                        switch (field.Type) {
+                            case ScriptFieldType::Float: {
+                                float val = nsc.FloatFields[field.Name];
+                                bool changed = false;
+                                if (field.Min < field.Max) {
+                                    changed = ImGui::SliderFloat(label.c_str(), &val, field.Min, field.Max, "%.2f");
+                                } else {
+                                    changed = ImGui::DragFloat(label.c_str(), &val, 0.1f);
+                                }
+                                if (changed) {
+                                    nsc.FloatFields[field.Name] = val;
+                                    if (nsc.Instance) {
+                                        field.SetValue(nsc.Instance, val);
+                                    }
+                                }
+                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                                }
+                                break;
+                            }
+                            case ScriptFieldType::Int: {
+                                int val = nsc.IntFields[field.Name];
+                                bool changed = false;
+                                if (field.Min < field.Max) {
+                                    changed = ImGui::SliderInt(label.c_str(), &val, (int)field.Min, (int)field.Max);
+                                } else {
+                                    changed = ImGui::DragInt(label.c_str(), &val, 1.0f);
+                                }
+                                if (changed) {
+                                    nsc.IntFields[field.Name] = val;
+                                    if (nsc.Instance) {
+                                        field.SetValue(nsc.Instance, val);
+                                    }
+                                }
+                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                                }
+                                break;
+                            }
+                            case ScriptFieldType::Bool: {
+                                bool val = nsc.BoolFields[field.Name];
+                                if (ImGui::Checkbox(label.c_str(), &val)) {
+                                    nsc.BoolFields[field.Name] = val;
+                                    if (nsc.Instance) {
+                                        field.SetValue(nsc.Instance, val);
+                                    }
+                                }
+                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                                }
+                                break;
+                            }
+                            case ScriptFieldType::Vec3: {
+                                glm::vec3 val = nsc.Vec3Fields[field.Name];
+                                if (ImGui::DragFloat3(label.c_str(), glm::value_ptr(val), 0.1f)) {
+                                    nsc.Vec3Fields[field.Name] = val;
+                                    if (nsc.Instance) {
+                                        field.SetValue(nsc.Instance, val);
+                                    }
+                                }
+                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                                }
+                                break;
+                            }
+                            case ScriptFieldType::String: {
+                                std::string& val = nsc.StringFields[field.Name];
+                                char buf[256];
+                                std::memset(buf, 0, sizeof(buf));
+                                std::strncpy(buf, val.c_str(), sizeof(buf) - 1);
+                                if (ImGui::InputText(label.c_str(), buf, sizeof(buf))) {
+                                    val = buf;
+                                    if (nsc.Instance) {
+                                        field.SetValue(nsc.Instance, val);
+                                    }
+                                }
+                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    ImGui::Spacing();
+                    if (ImGui::Button("Reset Defaults")) {
+                        nsc.Bind(nsc.ScriptName);
+                        if (nsc.Instance) {
+                            nsc.SyncFieldsToInstance();
+                        }
+                    }
+                } else if (!nsc.ScriptName.empty()) {
+                    ImGui::TextDisabled("No reflected fields registered for '%s'.", nsc.ScriptName.c_str());
+                }
+
+                ImGui::TreePop();
+            }
+
+            if (removeScript) {
+                if (nsc.Instance && nsc.DestroyScript) {
+                    nsc.DestroyScript(&nsc);
+                }
+                entity.RemoveComponent<NativeScriptComponent>();
+            }
+            ImGui::Spacing();
+        }
+
         // --- ADD COMPONENT BUTTON ---
         ImGui::Spacing();
         ImGui::Separator();
@@ -1673,7 +1873,11 @@ namespace Axle {
             }
             if (!entity.HasComponent<NativeScriptComponent>()) {
                 if (ImGui::MenuItem("Native Script Component")) {
-                    entity.AddComponent<NativeScriptComponent>();
+                    auto& nsc = entity.AddComponent<NativeScriptComponent>();
+                    const auto& registered = ScriptRegistry::GetScripts();
+                    if (!registered.empty()) {
+                        nsc.Bind(registered.begin()->first);
+                    }
                     ImGui::CloseCurrentPopup();
                 }
             }

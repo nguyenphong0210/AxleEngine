@@ -368,9 +368,26 @@ namespace Axle {
         ScriptableEntity* (*InstantiateScript)() = nullptr;
         void (*DestroyScript)(NativeScriptComponent*) = nullptr;
 
+        // Edit Mode & Serialization Field Buffers
+        std::unordered_map<std::string, float> FloatFields;
+        std::unordered_map<std::string, int> IntFields;
+        std::unordered_map<std::string, bool> BoolFields;
+        std::unordered_map<std::string, glm::vec3> Vec3Fields;
+        std::unordered_map<std::string, std::string> StringFields;
+
+        NativeScriptComponent() = default;
+        NativeScriptComponent(const std::string& scriptName) {
+            Bind(scriptName);
+        }
+
+        void Bind(const std::string& scriptName);
+        void SyncFieldsToInstance();
+        void SyncFieldsFromInstance();
+
         template<typename T>
         void Bind(const std::string& name = "") {
-            ScriptName = name.empty() ? typeid(T).name() : name;
+            std::string actualName = name.empty() ? typeid(T).name() : name;
+            ScriptName = actualName;
             InstantiateScript = []() -> ScriptableEntity* { return static_cast<ScriptableEntity*>(new T()); };
             DestroyScript = [](NativeScriptComponent* nsc) {
                 delete nsc->Instance;

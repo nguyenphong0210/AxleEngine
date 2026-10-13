@@ -24,7 +24,7 @@ Level 0:  [ Engine/Core ]
 ```
 
 ### Module Breakdown:
-- **Level 0 - `Engine/Core`**: Application lifecycle orchestrator (`Axle::Application`, `Axle::Layer`, `Axle::LayerStack`), primitive typedefs (`Axle::f32`, `Axle::u32`), high-performance multithreaded logging via **spdlog** (`Axle::Log`, `AXLE_CORE_*`), frame timing (`Axle::Timestep`), and debugging assertion macros.
+- **Level 0 - `Engine/Core`**: Application lifecycle orchestrator (`Axle::Application`, `Axle::Layer`, `Axle::LayerStack`), primitive typedefs (`Axle::f32`, `Axle::u32`), lock-free multithreaded Job System via **enkiTS** (`Axle::JobSystem`), high-performance multithreaded logging via **spdlog** (`Axle::Log`, `AXLE_CORE_*`), frame timing (`Axle::Timestep`), and debugging assertion macros.
 - **Level 1 - `Engine/Platform`**: Window lifecycle, OpenGL context creation, event dispatching, and static input polling (`Axle::Input`) via **GLFW**.
 - **Level 2 - Core Subsystems**:
   - **`Engine/Renderer`**: Complete OpenGL 4.5 Core Profile abstraction (Buffers, Vertex Arrays, Shaders with uniform caches, Perspective Camera & Free-Fly Controller).
@@ -258,16 +258,21 @@ In complex mechanical vehicles (assemblies with dozens of connected wheels, susp
     - Upgrade `AssemblySerializer` (`.axle`) and `SceneSerializer` (`.axlescene`) to serialize and restore `NativeScriptComponent` and live-tuned field values.
     - Refactor `CarPlayerScript` with exposed drive torque, max steer angle, and child part control (headlights and wheels); implement smooth chase `CameraFollowScript`.
     - Verify complete roundtrip: create script $\rightarrow$ attach to vehicle $\rightarrow$ tune parameters $\rightarrow$ save as `.axle` prefab $\rightarrow$ instantiate in any scene and drive instantly upon pressing Play (`F5`).
-- [ ] **Phase 14: Audio System (`Engine/Audio`)**
+- [ ] **Phase 14: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
+  - [ ] **ThirdParty Integration**: Embed `enkiTS` (Enki Task Scheduler) submodule/library into `ThirdParty/enkiTS` with modern CMake configuration.
+  - [ ] **Core JobSystem Engine**: Implement unified `Axle::JobSystem` in `Engine/Core` managing persistent lock-free worker threads (`enki::TaskScheduler`) matching CPU hardware concurrency.
+  - [ ] **Jolt Physics Bridge (`JobSystemEnkiTS`)**: Implement custom `JPH::JobSystem` backend routing Jolt Physics constraint solving and collision tasks into enkiTS, eliminating separate thread pools and thread oversubscription.
+  - [ ] **Parallel ECS Processing**: Implement `ParallelFor` utilities for `entt::registry` batch iteration, distributing bulk mechanical parts and transform evaluations across all worker cores without lock contention.
+- [ ] **Phase 15: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
-- [ ] **Phase 15: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
+- [ ] **Phase 16: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
   - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.
   - [ ] **Splatmap Texture Painting**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
-  - [ ] **Chunked Grid & LOD**: Chunk-based terrain mesh division with distance-dependent level of detail for large-scale open worlds.
+  - [ ] **Chunked Grid & Multithreaded LOD**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
   - [ ] **Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
-- [ ] **Phase 16: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
+- [ ] **Phase 17: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
   - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights via Assemblies.
   - [ ] **Dynamic In-Car Dashboard & HUD**: Real-time tachometer (RPM), speedometer (km/h), current gear, and turbo boost indicator.
   - [ ] **Multi-Angle Camera Controller**: Chase camera, first-person cockpit camera, hood camera, and free-orbit replay camera.

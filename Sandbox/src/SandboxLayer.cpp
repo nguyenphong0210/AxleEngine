@@ -611,8 +611,9 @@ void SandboxLayer::OnAttach() {
     // Connect Editor Panels
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_SceneHierarchyPanel.SetMeshes(m_CubeMesh, m_SphereMesh, m_CylinderMesh, m_ConeMesh, m_PlaneMesh);
+    m_SceneHierarchyPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
     m_ContentBrowserPanel.SetRootPath(Axle::FileSystem::GetAssetDirectory());
-    m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
+    m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
 
     // Setup Serializer Context for meshes & scripts
@@ -647,6 +648,102 @@ void SandboxLayer::OnAttach() {
         if (ent) {
             m_SceneHierarchyPanel.SetSelectedEntity(ent);
         }
+    });
+
+    // Asset Selection from Content Browser -> Properties Panel
+    m_ContentBrowserPanel.SetSelectAssetCallback([this](const std::filesystem::path& path) {
+        m_SceneHierarchyPanel.SetSelectedAsset(path);
+    });
+
+    m_SceneHierarchyPanel.SetSpawnAssetCallback([this](const std::filesystem::path& path) {
+        std::string ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext == ".axle" && Axle::AssemblySerializer::IsAssemblyFile(path)) {
+            auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 1.0f, 0.0f), &m_SerializerContext);
+            if (ent) {
+                m_SceneHierarchyPanel.SetSelectedEntity(ent);
+            }
+        } else if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+            std::filesystem::path axlePath = path;
+            if (ext != ".axle") {
+                axlePath = path.parent_path() / (path.stem().string() + ".axle");
+                if (!std::filesystem::exists(axlePath)) {
+                    Axle::AssetSerializer::AutoConvertModel(path, axlePath, true);
+                }
+            }
+            auto pkg = Axle::AssetSerializer::LoadPackage(axlePath);
+            if (pkg.Success) {
+                glm::vec3 spawnPos(0.0f, pkg.HalfExtent.y, 0.0f);
+                if (pkg.IsPackage) {
+                    std::string rootTag = pkg.Name.empty() ? axlePath.stem().string() : pkg.Name;
+                    auto rootEntity = m_Scene->CreateEntity(rootTag);
+                    rootEntity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
+                    auto& rootHierarchy = rootEntity.AddComponent<Axle::HierarchyComponent>();
+
+                    if (m_PhysicsScene) {
+                        Axle::BoxBodyProps bProps;
+                        bProps.Position = spawnPos;
+                        bProps.HalfExtent = pkg.HalfExtent;
+                        bProps.IsDynamic = true;
+                        bProps.Friction = 0.70f;
+                        bProps.Restitution = 0.15f;
+                        auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                        rootEntity.AddComponent<Axle::RigidBody3D>(bodyId, true);
+                        rootEntity.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
+                    }
+
+                    for (const auto& part : pkg.Parts) {
+                        auto childEntity = m_Scene->CreateEntity(part.Name);
+                        auto& ct = childEntity.AddComponent<Axle::TransformComponent>(part.LocalTranslation, part.LocalScale);
+                        ct.Rotation = part.LocalRotation;
+
+                        auto partFullPath = axlePath.parent_path() / part.RelativePath;
+                        childEntity.AddComponent<Axle::MeshInstance3D>(
+                            part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                            partFullPath.string(),
+                            part.LoadedMesh.SourceData.PatternMode,
+                            part.LoadedMesh.SourceData.TileScale,
+                            part.LoadedMesh.SourceData.ColorPrimary,
+                            part.LoadedMesh.SourceData.ColorSecondary
+                        );
+
+                        childEntity.AddComponent<Axle::HierarchyComponent>((entt::entity)rootEntity);
+                        rootHierarchy.Children.push_back((entt::entity)childEntity);
+                    }
+                    m_SceneHierarchyPanel.SetSelectedEntity(rootEntity);
+                } else if (!pkg.Parts.empty()) {
+                    const auto& part = pkg.Parts[0];
+                    std::string entityTag = pkg.Name.empty() ? axlePath.stem().string() : pkg.Name;
+                    auto newEnt = m_Scene->CreateEntity(entityTag);
+                    newEnt.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
+                    newEnt.AddComponent<Axle::MeshInstance3D>(
+                        part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                        axlePath.string(),
+                        part.LoadedMesh.SourceData.PatternMode,
+                        part.LoadedMesh.SourceData.TileScale,
+                        part.LoadedMesh.SourceData.ColorPrimary,
+                        part.LoadedMesh.SourceData.ColorSecondary
+                    );
+                    if (m_PhysicsScene) {
+                        Axle::BoxBodyProps bProps;
+                        bProps.Position = spawnPos;
+                        bProps.HalfExtent = pkg.HalfExtent;
+                        bProps.IsDynamic = true;
+                        bProps.Friction = 0.70f;
+                        bProps.Restitution = 0.15f;
+                        auto bodyId = m_PhysicsScene->CreateBox(bProps);
+                        newEnt.AddComponent<Axle::RigidBody3D>(bodyId, true);
+                        newEnt.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
+                    }
+                    m_SceneHierarchyPanel.SetSelectedEntity(newEnt);
+                }
+            }
+        }
+    });
+
+    m_SceneHierarchyPanel.SetOpenAssemblyEditorCallback([this](const std::filesystem::path& path) {
+        m_AssemblyEditorPanel.SetAssembly(path);
+        m_ShowAssemblyEditor = true;
     });
 
     // Initialize Scene Serialization (Phase 10: Step 1 & 2)
@@ -901,7 +998,7 @@ void SandboxLayer::NewScene() {
     sunEntity.AddComponent<Axle::DirectionalLightComponent>();
 
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
-    m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
+    m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
     m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
     m_CompileNotificationMessage = "Created new empty scene";
     m_CompileNotificationTimer = 3.5f;
@@ -1071,7 +1168,7 @@ void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
         }
 
         m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
-        m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
+        m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
         m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
 
         m_CompileNotificationMessage = "Loaded scene: " + targetPath.filename().string();
@@ -2271,7 +2368,6 @@ void SandboxLayer::OnImGuiRender() {
             ImGui::MenuItem("Properties / Inspector", nullptr, &m_ShowProperties);
             ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
             ImGui::MenuItem("Content Browser", nullptr, &m_ShowContentBrowser);
-            ImGui::MenuItem("Asset Preview", nullptr, &m_ShowAssetPreview);
             ImGui::MenuItem("Assembly Editor", nullptr, &m_ShowAssemblyEditor);
             ImGui::MenuItem("Performance & Debug", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
@@ -2348,7 +2444,6 @@ void SandboxLayer::OnImGuiRender() {
         ImGui::DockBuilderDockWindow("Content Browser", dock_bottom);
         ImGui::DockBuilderDockWindow("Console", dock_bottom);
         ImGui::DockBuilderDockWindow("Properties", dock_right);
-        ImGui::DockBuilderDockWindow("Asset Preview", dock_right);
         ImGui::DockBuilderDockWindow("Performance & Debug", dock_right);
 
         ImGui::DockBuilderFinish(dockspaceID);
@@ -2731,8 +2826,7 @@ void SandboxLayer::OnImGuiRender() {
     // 8. Content Browser Panel
     m_ContentBrowserPanel.OnImGuiRender(&m_ShowContentBrowser);
 
-    // 9. Asset Preview Panel
-    m_AssetPreviewPanel.OnImGuiRender(&m_ShowAssetPreview);
+
 
     // 10. Assembly Editor Panel (Phase 12)
     m_AssemblyEditorPanel.OnImGuiRender(&m_ShowAssemblyEditor);

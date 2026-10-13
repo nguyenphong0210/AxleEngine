@@ -1,4 +1,5 @@
 #include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/ScriptRegistry.hpp>
@@ -101,6 +102,26 @@ namespace Axle {
         m_Scene = scene;
         m_PhysicsScene = physicsScene;
         m_SelectedEntity = {};
+        m_SelectedAsset.clear();
+    }
+
+    void SceneHierarchyPanel::SetSelectedEntity(Entity entity) {
+        m_SelectedEntity = entity;
+        if (entity) {
+            m_SelectedAsset.clear();
+        }
+    }
+
+    void SceneHierarchyPanel::SetSelectedAsset(const std::filesystem::path& assetPath) {
+        m_SelectedAsset = assetPath;
+        m_SelectedEntity = {};
+        if (m_AssetPreviewPanel && !assetPath.empty()) {
+            m_AssetPreviewPanel->SetAsset(assetPath);
+        }
+    }
+
+    void SceneHierarchyPanel::ClearSelectedAsset() {
+        m_SelectedAsset.clear();
     }
 
     void SceneHierarchyPanel::SetMeshes(
@@ -321,6 +342,7 @@ namespace Axle {
                 // Click on blank space to deselect
                 if (ImGui::IsMouseDown(0) && ImGui::IsWindowHovered()) {
                     m_SelectedEntity = {};
+                    m_SelectedAsset.clear();
                 }
 
                 // Right click blank space context menu
@@ -442,6 +464,8 @@ namespace Axle {
             if (ImGui::Begin("Properties", p_propertiesOpen)) {
                 if (m_SelectedEntity) {
                     DrawComponents(m_SelectedEntity);
+                } else if (!m_SelectedAsset.empty() && std::filesystem::exists(m_SelectedAsset)) {
+                    DrawAssetProperties(m_SelectedAsset);
                 } else {
                     ImGui::Spacing();
                     ImGui::TextDisabled("No entity selected.");
@@ -595,6 +619,7 @@ namespace Axle {
 
         if (ImGui::IsItemClicked()) {
             m_SelectedEntity = entity;
+            m_SelectedAsset.clear();
         }
 
         // Drag & Drop payload onto Entity node to attach Script
@@ -1906,6 +1931,263 @@ namespace Axle {
                 }
             }
             ImGui::EndPopup();
+        }
+    }
+
+    void SceneHierarchyPanel::DrawAssetProperties(const std::filesystem::path& path) {
+        if (!std::filesystem::exists(path)) {
+            ImGui::Spacing();
+            ImGui::TextDisabled("Selected asset no longer exists.");
+            return;
+        }
+
+        std::filesystem::path relPath = path;
+        try {
+            relPath = std::filesystem::relative(path, FileSystem::GetAssetDirectory());
+        } catch (...) {}
+
+        std::string filenameStr = path.filename().string();
+        std::string ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+        uintmax_t fileSize = 0;
+        try {
+            fileSize = std::filesystem::file_size(path);
+        } catch (...) {}
+
+        std::string sizeStr;
+        if (fileSize < 1024) sizeStr = std::to_string(fileSize) + " B";
+        else if (fileSize < 1024 * 1024) sizeStr = std::to_string(fileSize / 1024) + " KB";
+        else {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%.2f MB", (double)fileSize / (1024.0 * 1024.0));
+            sizeStr = buf;
+        }
+
+        bool isAssembly = (ext == ".axle" && AssemblySerializer::IsAssemblyFile(path));
+        bool isMesh = (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") && !isAssembly;
+
+        // Top Asset Header Card
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.15f, 0.20f, 0.85f));
+        ImGui::BeginChild("AssetHeaderCard", ImVec2(0.0f, 66.0f), true);
+        {
+            if (isAssembly) {
+                ImGui::TextColored(ImVec4(0.25f, 0.90f, 0.55f, 1.0f), "[MECHANICAL ASSEMBLY PREFAB]");
+            } else if (isMesh) {
+                ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "[3D MESH PACKAGE]");
+            } else if (ext == ".axlescene" || ext == ".scene") {
+                ImGui::TextColored(ImVec4(1.0f, 0.80f, 0.30f, 1.0f), "[SCENE ASSET]");
+            } else {
+                ImGui::TextColored(ImVec4(0.65f, 0.75f, 0.85f, 1.0f), "[ASSET FILE]");
+            }
+
+            ImGui::TextUnformatted(filenameStr.c_str());
+            ImGui::TextDisabled("%s | %s", relPath.string().c_str(), sizeStr.c_str());
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+
+        // Embedded Interactive 3D Asset Preview Viewport (Unified Inspector paradigm)
+        if (m_AssetPreviewPanel && (isAssembly || isMesh)) {
+            if (m_AssetPreviewPanel->GetCurrentAsset() != path) {
+                m_AssetPreviewPanel->SetAsset(path);
+            }
+            if (m_AssetPreviewPanel->HasAsset()) {
+                m_AssetPreviewPanel->RenderPreviewViewport();
+                ImGui::Spacing();
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (isAssembly) {
+            AssemblyData asmData = AssemblySerializer::LoadAssemblyData(path);
+
+            size_t totalParts = 0;
+            float totalMass = 0.0f;
+
+            std::function<void(const AssemblyNode&)> countRecursive = [&](const AssemblyNode& node) {
+                totalParts++;
+                if (node.HasRigidBody) {
+                    totalMass += node.RigidBody.Mass;
+                }
+                for (const auto& child : node.Children) {
+                    countRecursive(child);
+                }
+            };
+            countRecursive(asmData.RootNode);
+
+            if (ImGui::CollapsingHeader("Assembly Specifications", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Columns(2, "AsmSpecsColumns", false);
+                ImGui::SetColumnWidth(0, 130.0f);
+
+                ImGui::TextDisabled("Assembly Name:");
+                ImGui::NextColumn();
+                ImGui::Text("%s", asmData.Name.empty() ? filenameStr.c_str() : asmData.Name.c_str());
+                ImGui::NextColumn();
+
+                ImGui::TextDisabled("Root Part:");
+                ImGui::NextColumn();
+                ImGui::Text("%s", asmData.RootNode.Tag.c_str());
+                ImGui::NextColumn();
+
+                ImGui::TextDisabled("Total Parts:");
+                ImGui::NextColumn();
+                ImGui::Text("%zu parts", totalParts);
+                ImGui::NextColumn();
+
+                ImGui::TextDisabled("Total Mass:");
+                ImGui::NextColumn();
+                ImGui::Text("%.1f kg", totalMass);
+                ImGui::NextColumn();
+
+                ImGui::TextDisabled("Status:");
+                ImGui::NextColumn();
+                ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.55f, 1.0f), "Valid Prefab");
+                ImGui::NextColumn();
+
+                ImGui::Columns(1);
+            }
+
+            ImGui::Spacing();
+
+            if (ImGui::CollapsingHeader("Part Structure Hierarchy", ImGuiTreeNodeFlags_DefaultOpen)) {
+                std::function<void(const AssemblyNode&, int)> drawPartTree = [&](const AssemblyNode& node, int depth) {
+                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+                    if (node.Children.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
+                    else flags |= ImGuiTreeNodeFlags_DefaultOpen;
+
+                    bool opened = ImGui::TreeNodeEx((void*)(intptr_t)&node, flags, "%s", node.Tag.c_str());
+                    if (opened) {
+                        if (node.HasRigidBody) {
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("(%.1fkg)", node.RigidBody.Mass);
+                        }
+                        if (node.HasMesh && !node.Mesh.AssetPath.empty()) {
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("[%s]", node.Mesh.AssetPath.c_str());
+                        }
+                        for (const auto& child : node.Children) {
+                            drawPartTree(child, depth + 1);
+                        }
+                        ImGui::TreePop();
+                    }
+                };
+                drawPartTree(asmData.RootNode, 0);
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Quick Actions
+            float availW = ImGui::GetContentRegionAvail().x;
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.30f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.68f, 0.38f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.45f, 0.22f, 1.0f));
+            if (ImGui::Button("+ Spawn into Active Scene", ImVec2(availW, 30.0f))) {
+                if (m_OnSpawnAssetCallback) {
+                    m_OnSpawnAssetCallback(path);
+                } else if (m_Scene) {
+                    SceneSerializerContext ctx;
+                    ctx.CubeMesh = m_CubeMesh;
+                    ctx.SphereMesh = m_SphereMesh;
+                    ctx.CylinderMesh = m_CylinderMesh;
+                    ctx.ConeMesh = m_ConeMesh;
+                    ctx.PlaneMesh = m_PlaneMesh;
+                    auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f), &ctx);
+                    if (ent) m_SelectedEntity = ent;
+                }
+            }
+            ImGui::PopStyleColor(3);
+
+            ImGui::Spacing();
+            if (ImGui::Button("Open in Assembly Editor", ImVec2(availW, 26.0f))) {
+                if (m_OnOpenAssemblyEditorCallback) {
+                    m_OnOpenAssemblyEditorCallback(path);
+                }
+            }
+        } else if (isMesh) {
+            auto pkg = AssetSerializer::LoadPackage(path);
+            if (pkg.Success) {
+                size_t totalVertices = 0;
+                size_t totalTriangles = 0;
+                for (const auto& part : pkg.Parts) {
+                    if (part.LoadedMesh.Success) {
+                        totalVertices += part.LoadedMesh.SourceData.Vertices.size();
+                        totalTriangles += part.LoadedMesh.SourceData.Indices.size() / 3;
+                    }
+                }
+
+                if (ImGui::CollapsingHeader("Mesh Geometry & Bounds", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    ImGui::Columns(2, "MeshGeomColumns", false);
+                    ImGui::SetColumnWidth(0, 130.0f);
+
+                    ImGui::TextDisabled("Format:");
+                    ImGui::NextColumn();
+                    ImGui::Text("%s", pkg.IsPackage ? "Multi-Part Package" : "Single Mesh Asset");
+                    ImGui::NextColumn();
+
+                    ImGui::TextDisabled("Submeshes:");
+                    ImGui::NextColumn();
+                    ImGui::Text("%zu submesh%s", pkg.Parts.size(), pkg.Parts.size() == 1 ? "" : "es");
+                    ImGui::NextColumn();
+
+                    ImGui::TextDisabled("Vertices:");
+                    ImGui::NextColumn();
+                    ImGui::Text("%zu", totalVertices);
+                    ImGui::NextColumn();
+
+                    ImGui::TextDisabled("Triangles:");
+                    ImGui::NextColumn();
+                    ImGui::Text("%zu", totalTriangles);
+                    ImGui::NextColumn();
+
+                    ImGui::TextDisabled("Bounding Size:");
+                    ImGui::NextColumn();
+                    ImGui::Text("%.2fm x %.2fm x %.2fm", pkg.HalfExtent.x * 2.0f, pkg.HalfExtent.y * 2.0f, pkg.HalfExtent.z * 2.0f);
+                    ImGui::NextColumn();
+
+                    ImGui::Columns(1);
+                }
+
+                if (!pkg.Parts.empty()) {
+                    ImGui::Spacing();
+                    if (ImGui::CollapsingHeader("Submesh Breakdown", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        for (size_t i = 0; i < pkg.Parts.size(); ++i) {
+                            const auto& part = pkg.Parts[i];
+                            ImGui::BulletText("%s (%zu verts, %zu tris)", part.Name.c_str(), 
+                                part.LoadedMesh.SourceData.Vertices.size(),
+                                part.LoadedMesh.SourceData.Indices.size() / 3);
+                        }
+                    }
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                float availW = ImGui::GetContentRegionAvail().x;
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.48f, 0.78f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.58f, 0.90f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.40f, 0.68f, 1.0f));
+                if (ImGui::Button("+ Spawn into Active Scene", ImVec2(availW, 30.0f))) {
+                    if (m_OnSpawnAssetCallback) {
+                        m_OnSpawnAssetCallback(path);
+                    }
+                }
+                ImGui::PopStyleColor(3);
+            } else {
+                ImGui::TextDisabled("Unable to read 3D mesh package header.");
+            }
+        } else {
+            ImGui::TextDisabled("File Type: %s", ext.c_str());
+            ImGui::TextDisabled("File Size: %s", sizeStr.c_str());
+            ImGui::Spacing();
+            ImGui::TextWrapped("Click any entity in Scene Hierarchy to inspect its components.");
         }
     }
 

@@ -1,6 +1,8 @@
 #pragma once
 #include <Axle/Types.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/AssemblySerializer.hpp>
+#include <Axle/SceneSerializer.hpp>
 #include <Axle/Framebuffer.hpp>
 #include <Axle/Shader.hpp>
 #include <Axle/Scene.hpp>
@@ -18,9 +20,11 @@ namespace Axle {
 
         void SetAsset(const std::filesystem::path& assetPath);
         const std::filesystem::path& GetCurrentAsset() const { return m_CurrentAssetPath; }
+        bool HasAsset() const { return m_HasAsset; }
 
-        void SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh);
+        void SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh, const SceneSerializerContext* serializerContext = nullptr);
 
+        void RenderPreviewViewport();
         void OnImGuiRender(bool* p_open = nullptr);
 
     private:
@@ -31,6 +35,8 @@ namespace Axle {
     private:
         std::filesystem::path m_CurrentAssetPath;
         AxleLoadedPackage m_CurrentPackage;
+        bool m_IsAssembly = false;
+        AssemblyData m_CurrentAssembly;
         bool m_HasAsset = false;
 
         // Viewport & Rendering
@@ -63,6 +69,7 @@ namespace Axle {
         Scene* m_Scene = nullptr;
         PhysicsScene* m_PhysicsScene = nullptr;
         std::shared_ptr<VertexArray> m_FallbackMesh;
+        const SceneSerializerContext* m_SerializerContext = nullptr;
     };
 
 }

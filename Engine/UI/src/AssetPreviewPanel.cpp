@@ -2,6 +2,7 @@
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
+#include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
 #include <glad/glad.h>
@@ -9,6 +10,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
+#include <functional>
 
 namespace Axle {
 
@@ -98,10 +100,37 @@ namespace Axle {
         m_Shader = std::make_unique<Shader>(s_PreviewVertSrc, s_PreviewFragSrc);
     }
 
-    void AssetPreviewPanel::SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh) {
+    void AssetPreviewPanel::SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh, const SceneSerializerContext* serializerContext) {
         m_Scene = scene;
         m_PhysicsScene = physicsScene;
         m_FallbackMesh = fallbackMesh;
+        m_SerializerContext = serializerContext;
+
+        if (m_HasAsset && m_IsAssembly) {
+            std::function<void(AssemblyNode&)> preloadMeshVAOs = [&](AssemblyNode& node) {
+                if (node.HasMesh && !node.Mesh.VAO) {
+                    if (m_SerializerContext) {
+                        if (node.Mesh.AssetPath == "builtin://sphere") node.Mesh.VAO = m_SerializerContext->SphereMesh;
+                        else if (node.Mesh.AssetPath == "builtin://cylinder") node.Mesh.VAO = m_SerializerContext->CylinderMesh;
+                        else if (node.Mesh.AssetPath == "builtin://cone") node.Mesh.VAO = m_SerializerContext->ConeMesh;
+                        else if (node.Mesh.AssetPath == "builtin://plane") node.Mesh.VAO = m_SerializerContext->PlaneMesh;
+                        else if (!node.Mesh.AssetPath.empty() && node.Mesh.AssetPath != "builtin://cube") {
+                            auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
+                            if (std::filesystem::exists(resolved)) {
+                                auto loaded = AssetSerializer::LoadMesh(resolved);
+                                if (loaded.Success) node.Mesh.VAO = loaded.VAO;
+                            }
+                        }
+                        if (!node.Mesh.VAO) node.Mesh.VAO = m_SerializerContext->CubeMesh;
+                    }
+                    if (!node.Mesh.VAO) node.Mesh.VAO = m_FallbackMesh;
+                }
+                for (auto& child : node.Children) {
+                    preloadMeshVAOs(child);
+                }
+            };
+            preloadMeshVAOs(m_CurrentAssembly.RootNode);
+        }
     }
 
     void AssetPreviewPanel::SetAsset(const std::filesystem::path& assetPath) {
@@ -111,6 +140,81 @@ namespace Axle {
             return;
         }
 
+        std::string ext = assetPath.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+        if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(assetPath)) {
+            m_IsAssembly = true;
+            m_CurrentAssembly = AssemblySerializer::LoadAssemblyData(assetPath, m_SerializerContext);
+            m_HasAsset = m_CurrentAssembly.IsValid;
+            if (!m_HasAsset) return;
+
+            // Preload and cache all mesh VAOs ONCE so RenderPreview3D doesn't reload from disk/cache every frame
+            std::function<void(AssemblyNode&)> preloadMeshVAOs = [&](AssemblyNode& node) {
+                if (node.HasMesh && !node.Mesh.VAO) {
+                    if (m_SerializerContext) {
+                        if (node.Mesh.AssetPath == "builtin://sphere") node.Mesh.VAO = m_SerializerContext->SphereMesh;
+                        else if (node.Mesh.AssetPath == "builtin://cylinder") node.Mesh.VAO = m_SerializerContext->CylinderMesh;
+                        else if (node.Mesh.AssetPath == "builtin://cone") node.Mesh.VAO = m_SerializerContext->ConeMesh;
+                        else if (node.Mesh.AssetPath == "builtin://plane") node.Mesh.VAO = m_SerializerContext->PlaneMesh;
+                        else if (!node.Mesh.AssetPath.empty() && node.Mesh.AssetPath != "builtin://cube") {
+                            auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
+                            if (std::filesystem::exists(resolved)) {
+                                auto loaded = AssetSerializer::LoadMesh(resolved);
+                                if (loaded.Success) node.Mesh.VAO = loaded.VAO;
+                            }
+                        }
+                        if (!node.Mesh.VAO) node.Mesh.VAO = m_SerializerContext->CubeMesh;
+                    }
+                    if (!node.Mesh.VAO) node.Mesh.VAO = m_FallbackMesh;
+                }
+                for (auto& child : node.Children) {
+                    preloadMeshVAOs(child);
+                }
+            };
+            preloadMeshVAOs(m_CurrentAssembly.RootNode);
+
+            // Compute aggregate bounding box from assembly
+            glm::vec3 minBound(1e9f);
+            glm::vec3 maxBound(-1e9f);
+            size_t totalVertices = 0;
+            size_t totalIndices = 0;
+
+            std::function<void(const AssemblyNode&, const glm::mat4&)> computeBounds = [&](const AssemblyNode& node, const glm::mat4& parentMat) {
+                glm::mat4 localMat = node.Transform.GetTransform();
+                glm::mat4 worldMat = parentMat * localMat;
+                glm::vec3 pos = glm::vec3(worldMat[3]);
+                glm::vec3 halfExt = node.HasCollisionShape ? node.CollisionShape.HalfExtent : glm::vec3(0.5f);
+                minBound = glm::min(minBound, pos - halfExt);
+                maxBound = glm::max(maxBound, pos + halfExt);
+                totalVertices += 24;
+                totalIndices += 36;
+                for (const auto& child : node.Children) {
+                    computeBounds(child, worldMat);
+                }
+            };
+            computeBounds(m_CurrentAssembly.RootNode, glm::mat4(1.0f));
+
+            if (minBound.x > maxBound.x) {
+                minBound = glm::vec3(-1.0f);
+                maxBound = glm::vec3(1.0f);
+            }
+
+            m_Center = (minBound + maxBound) * 0.5f;
+            m_Size = maxBound - minBound;
+            m_MaxDim = std::max({ m_Size.x, m_Size.y, m_Size.z, 0.2f });
+            m_TotalVertices = totalVertices;
+            m_TotalTriangles = totalIndices / 3;
+
+            // Reset camera framing
+            m_Pitch = 20.0f;
+            m_Yaw = 35.0f;
+            m_Zoom = 1.0f;
+            m_PanOffset = glm::vec3(0.0f);
+            return;
+        }
+
+        m_IsAssembly = false;
         m_CurrentPackage = AssetSerializer::LoadPackage(assetPath);
         if (!m_CurrentPackage.Success || m_CurrentPackage.Parts.empty()) {
             m_HasAsset = false;
@@ -175,7 +279,7 @@ namespace Axle {
         glClearColor(0.10f, 0.12f, 0.16f, 1.0f); // Sleek studio charcoal
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        if (!m_HasAsset || m_CurrentPackage.Parts.empty()) {
+        if (!m_HasAsset || (!m_IsAssembly && m_CurrentPackage.Parts.empty())) {
             m_Framebuffer->Unbind();
             return;
         }
@@ -214,21 +318,48 @@ namespace Axle {
             m_Shader->SetInt("u_WireframeMode", 0);
         }
 
-        // Render all subparts with center offset
-        for (const auto& part : m_CurrentPackage.Parts) {
-            if (!part.LoadedMesh.VAO) continue;
-            glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
-                               * glm::mat4_cast(part.LocalRotation)
-                               * glm::scale(glm::mat4(1.0f), part.LocalScale);
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), -m_Center) * localMat;
+        if (m_IsAssembly) {
+            std::function<void(const AssemblyNode&, const glm::mat4&)> renderNodeRec = [&](const AssemblyNode& node, const glm::mat4& parentMat) {
+                glm::mat4 localMat = node.Transform.GetTransform();
+                glm::mat4 worldMat = parentMat * localMat;
+                glm::mat4 model = glm::translate(glm::mat4(1.0f), -m_Center) * worldMat;
 
-            m_Shader->SetMat4("u_Transform", model);
-            m_Shader->SetInt("u_PatternMode", part.LoadedMesh.SourceData.PatternMode);
-            m_Shader->SetFloat("u_TileScale", part.LoadedMesh.SourceData.TileScale);
-            m_Shader->SetFloat4("u_Color1", part.LoadedMesh.SourceData.ColorPrimary);
-            m_Shader->SetFloat4("u_Color2", part.LoadedMesh.SourceData.ColorSecondary);
+                if (node.HasMesh) {
+                    std::shared_ptr<VertexArray> vao = node.Mesh.VAO;
+                    if (!vao) vao = m_FallbackMesh;
 
-            RenderCommand::DrawIndexed(part.LoadedMesh.VAO);
+                    if (vao) {
+                        m_Shader->SetMat4("u_Transform", model);
+                        m_Shader->SetInt("u_PatternMode", node.Mesh.PatternMode);
+                        m_Shader->SetFloat("u_TileScale", node.Mesh.TileScale);
+                        m_Shader->SetFloat4("u_Color1", node.Mesh.Color1);
+                        m_Shader->SetFloat4("u_Color2", node.Mesh.Color2);
+                        RenderCommand::DrawIndexed(vao);
+                    }
+                }
+
+                for (const auto& child : node.Children) {
+                    renderNodeRec(child, worldMat);
+                }
+            };
+            renderNodeRec(m_CurrentAssembly.RootNode, glm::mat4(1.0f));
+        } else {
+            // Render all subparts with center offset
+            for (const auto& part : m_CurrentPackage.Parts) {
+                if (!part.LoadedMesh.VAO) continue;
+                glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
+                                   * glm::mat4_cast(part.LocalRotation)
+                                   * glm::scale(glm::mat4(1.0f), part.LocalScale);
+                glm::mat4 model = glm::translate(glm::mat4(1.0f), -m_Center) * localMat;
+
+                m_Shader->SetMat4("u_Transform", model);
+                m_Shader->SetInt("u_PatternMode", part.LoadedMesh.SourceData.PatternMode);
+                m_Shader->SetFloat("u_TileScale", part.LoadedMesh.SourceData.TileScale);
+                m_Shader->SetFloat4("u_Color1", part.LoadedMesh.SourceData.ColorPrimary);
+                m_Shader->SetFloat4("u_Color2", part.LoadedMesh.SourceData.ColorSecondary);
+
+                RenderCommand::DrawIndexed(part.LoadedMesh.VAO);
+            }
         }
 
         if (m_WireframeMode) {
@@ -239,7 +370,15 @@ namespace Axle {
     }
 
     void AssetPreviewPanel::SpawnCurrentAssetIntoScene() {
-        if (!m_Scene || !m_HasAsset || m_CurrentPackage.Parts.empty()) return;
+        if (!m_Scene || !m_HasAsset) return;
+
+        if (m_IsAssembly) {
+            auto spawned = m_Scene->InstantiateAssembly(m_CurrentAssetPath, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f), m_SerializerContext);
+            AXLE_INFO("AssetPreviewPanel: Instantiated Assembly '{0}'", m_CurrentAssetPath.filename().string());
+            return;
+        }
+
+        if (m_CurrentPackage.Parts.empty()) return;
 
         glm::vec3 spawnPos(0.0f, m_CurrentPackage.HalfExtent.y, 0.0f);
         if (m_CurrentPackage.IsPackage) {
@@ -306,20 +445,8 @@ namespace Axle {
         }
     }
 
-    void AssetPreviewPanel::OnImGuiRender(bool* p_open) {
-        if (p_open && !*p_open) return;
-
-        ImGui::Begin("Asset Preview", p_open);
-
-        if (!m_HasAsset) {
-            ImGui::Spacing();
-            ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.45f, 0.70f, 0.95f, 1.0f), "  No 3D Asset Selected");
-            ImGui::Spacing();
-            ImGui::TextDisabled("  Click or double-click any 3D model asset (.axle, .glb, .obj)\n  in the Content Browser to inspect it in 3D.");
-            ImGui::End();
-            return;
-        }
+    void AssetPreviewPanel::RenderPreviewViewport() {
+        if (!m_HasAsset) return;
 
         // 1. Controls Toolbar
         {
@@ -387,86 +514,34 @@ namespace Axle {
             ImGui::Text("Spawn: %s", m_CurrentAssetPath.filename().string().c_str());
             ImGui::EndDragDropSource();
         }
+    }
+
+    void AssetPreviewPanel::OnImGuiRender(bool* p_open) {
+        if (p_open && !*p_open) return;
+
+        ImGui::Begin("Asset Preview", p_open);
+
+        if (!m_HasAsset) {
+            ImGui::Spacing();
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.45f, 0.70f, 0.95f, 1.0f), "  No 3D Asset Selected");
+            ImGui::Spacing();
+            ImGui::TextDisabled("  Click any 3D model asset (.axle, .glb, .obj)\n  in the Content Browser to inspect it in 3D.");
+            ImGui::End();
+            return;
+        }
+
+        RenderPreviewViewport();
 
         ImGui::Spacing();
 
-        // 3. Action Buttons
+        // Action Buttons
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.48f, 0.78f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.58f, 0.90f, 1.0f));
         if (ImGui::Button("+ Instantiate into Scene", ImVec2(-1.0f, 28.0f))) {
             SpawnCurrentAssetIntoScene();
         }
         ImGui::PopStyleColor(2);
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // 4. Detailed Asset Statistics Cards
-        if (ImGui::CollapsingHeader("Asset Metadata & Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::TextColored(ImVec4(0.40f, 0.75f, 1.0f, 1.0f), "Asset: %s", m_CurrentAssetPath.filename().string().c_str());
-            ImGui::TextDisabled("Format: %s", m_CurrentPackage.IsPackage ? "Multi-Part Package Manifest" : "Single Mesh Asset");
-
-            ImGui::Spacing();
-            ImGui::Columns(2, "MeshStatsColumns", false);
-            ImGui::SetColumnWidth(0, 140.0f);
-
-            ImGui::TextDisabled("Vertices:");
-            ImGui::NextColumn();
-            ImGui::Text("%zu", m_TotalVertices);
-            ImGui::NextColumn();
-
-            ImGui::TextDisabled("Triangles:");
-            ImGui::NextColumn();
-            ImGui::Text("%zu", m_TotalTriangles);
-            ImGui::NextColumn();
-
-            ImGui::TextDisabled("Submeshes:");
-            ImGui::NextColumn();
-            ImGui::Text("%zu part%s", m_CurrentPackage.Parts.size(), m_CurrentPackage.Parts.size() == 1 ? "" : "s");
-            ImGui::NextColumn();
-
-            ImGui::TextDisabled("Size (X x Y x Z):");
-            ImGui::NextColumn();
-            ImGui::Text("%.2fm x %.2fm x %.2fm", m_Size.x, m_Size.y, m_Size.z);
-            ImGui::NextColumn();
-
-            ImGui::Columns(1);
-
-            // Material Swatches
-            if (!m_CurrentPackage.Parts.empty()) {
-                const auto& firstPart = m_CurrentPackage.Parts[0].LoadedMesh.SourceData;
-                ImGui::Spacing();
-                ImGui::TextDisabled("Palette Swatches:");
-                ImGui::SameLine();
-                ImGui::ColorButton("##ColorP", ImVec4(firstPart.ColorPrimary.r, firstPart.ColorPrimary.g, firstPart.ColorPrimary.b, 1.0f), ImGuiColorEditFlags_NoTooltip, ImVec2(20, 20));
-                ImGui::SameLine();
-                ImGui::ColorButton("##ColorS", ImVec4(firstPart.ColorSecondary.r, firstPart.ColorSecondary.g, firstPart.ColorSecondary.b, 1.0f), ImGuiColorEditFlags_NoTooltip, ImVec2(20, 20));
-            }
-        }
-
-        // 5. Subparts Breakdown (For package models like Jetta)
-        if (m_CurrentPackage.Parts.size() > 1) {
-            if (ImGui::CollapsingHeader("Package Subparts Breakdown")) {
-                if (ImGui::BeginTable("SubpartsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 150.0f))) {
-                    ImGui::TableSetupColumn("Part Name", ImGuiTableColumnFlags_WidthStretch);
-                    ImGui::TableSetupColumn("Tris", ImGuiTableColumnFlags_WidthFixed, 55.0f);
-                    ImGui::TableSetupColumn("Verts", ImGuiTableColumnFlags_WidthFixed, 55.0f);
-                    ImGui::TableHeadersRow();
-
-                    for (const auto& part : m_CurrentPackage.Parts) {
-                        ImGui::TableNextRow();
-                        ImGui::TableNextColumn();
-                        ImGui::Text("%s", part.Name.c_str());
-                        ImGui::TableNextColumn();
-                        ImGui::Text("%zu", part.LoadedMesh.SourceData.Indices.size() / 3);
-                        ImGui::TableNextColumn();
-                        ImGui::Text("%zu", part.LoadedMesh.SourceData.Vertices.size());
-                    }
-                    ImGui::EndTable();
-                }
-            }
-        }
 
         ImGui::End();
     }

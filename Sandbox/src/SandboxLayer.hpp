@@ -162,7 +162,6 @@ private:
     bool m_ShowProperties = true;
     bool m_ShowConsole = true;
     bool m_ShowContentBrowser = true;
-    bool m_ShowAssetPreview = true;
     bool m_ShowAssemblyEditor = false;
     bool m_ShowTelemetry = false;
     bool m_ResetLayout = true;

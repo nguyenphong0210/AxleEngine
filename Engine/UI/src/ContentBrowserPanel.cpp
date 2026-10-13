@@ -660,13 +660,14 @@ namespace Axle {
 
                     if (isClicked) {
                         m_SelectedEntry = path;
+                        if (!isDir && m_OnSelectAssetCallback) {
+                            m_OnSelectAssetCallback(path);
+                        }
                         if (m_AssetPreviewPanel && !isDir) {
                             std::string ext = path.extension().string();
                             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                             if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                                if (ext != ".axle" || !AssemblySerializer::IsAssemblyFile(path)) {
-                                    m_AssetPreviewPanel->SetAsset(path);
-                                }
+                                m_AssetPreviewPanel->SetAsset(path);
                             }
                         }
                     }
@@ -684,30 +685,22 @@ namespace Axle {
                             } else if (ext == ".axleproj" && m_OnOpenProjectCallback) {
                                 m_OnOpenProjectCallback(path);
                                 SetStatusNotification("Loaded project: " + path.filename().string());
-                            } else if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(path)) {
-                                if (m_OnOpenAssemblyCallback) {
-                                    m_OnOpenAssemblyCallback(path);
-                                    SetStatusNotification("Opened Assembly Editor: " + path.filename().string());
-                                }
-                            } else if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                                AXLE_INFO("Content Browser: Selected file '{0}'", path.string());
-                                if (m_AssetPreviewPanel) {
-                                    m_AssetPreviewPanel->SetAsset(path);
-                                }
                             }
+                            // Note: .axle files are inspected via single-click into Properties + Asset Preview tabs
                         }
                     }
 
                     // Right-Click Context Menu on Asset Item
                     if (ImGui::BeginPopupContextItem()) {
                         m_SelectedEntry = path;
+                        if (!isDir && m_OnSelectAssetCallback) {
+                            m_OnSelectAssetCallback(path);
+                        }
                         if (m_AssetPreviewPanel && !isDir) {
                             std::string ext = path.extension().string();
                             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                             if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                                if (ext != ".axle" || !AssemblySerializer::IsAssemblyFile(path)) {
-                                    m_AssetPreviewPanel->SetAsset(path);
-                                }
+                                m_AssetPreviewPanel->SetAsset(path);
                             }
                         }
 

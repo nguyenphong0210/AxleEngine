@@ -149,7 +149,7 @@ namespace Axle {
                 float restitution = cs.Restitution;
                 if (entity.HasComponent<RigidBody3D>() && physicsScene) {
                     auto& rb = entity.GetComponent<RigidBody3D>();
-                    if (!rb.RuntimeBodyID.IsInvalid()) {
+                    if (!rb.RuntimeBodyID.IsInvalid() && physicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                         friction = physicsScene->GetBodyInterface().GetFriction(rb.RuntimeBodyID);
                         restitution = physicsScene->GetBodyInterface().GetRestitution(rb.RuntimeBodyID);
                     }
@@ -170,7 +170,7 @@ namespace Axle {
             if (entity.HasComponent<RigidBody3D>()) {
                 auto& rb = entity.GetComponent<RigidBody3D>();
                 bool isDynamic = rb.IsDynamic;
-                if (physicsScene && !rb.RuntimeBodyID.IsInvalid()) {
+                if (physicsScene && !rb.RuntimeBodyID.IsInvalid() && physicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                     isDynamic = (physicsScene->GetBodyInterface().GetMotionType(rb.RuntimeBodyID) == JPH::EMotionType::Dynamic);
                 }
 

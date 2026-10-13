@@ -21,6 +21,12 @@ namespace Axle {
         void SetAsset(const std::filesystem::path& assetPath);
         const std::filesystem::path& GetCurrentAsset() const { return m_CurrentAssetPath; }
         bool HasAsset() const { return m_HasAsset; }
+        bool IsAssembly() const { return m_IsAssembly; }
+        const AssemblyData& GetAssemblyData() const { return m_CurrentAssembly; }
+        const AxleLoadedPackage& GetPackageData() const { return m_CurrentPackage; }
+        const glm::vec3& GetBoundsSize() const { return m_Size; }
+        size_t GetTotalVertices() const { return m_TotalVertices; }
+        size_t GetTotalTriangles() const { return m_TotalTriangles; }
 
         void SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh, const SceneSerializerContext* serializerContext = nullptr);
 

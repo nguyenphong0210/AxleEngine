@@ -244,7 +244,33 @@ namespace Axle {
             outMeta.TileScale = firstPart.TileScale;
         }
 
-        // 2. Allocate 2D Texture attachment
+        // 2. Preserve OpenGL state to prevent corrupting ImGui / viewport rendering
+        struct GLStateScope {
+            GLint fbo = 0;
+            GLint viewport[4]{};
+            GLboolean depthTest = GL_FALSE;
+            GLboolean cullFace = GL_FALSE;
+            GLint polygonMode[2]{};
+
+            GLStateScope() {
+                glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
+                glGetIntegerv(GL_VIEWPORT, viewport);
+                depthTest = glIsEnabled(GL_DEPTH_TEST);
+                cullFace = glIsEnabled(GL_CULL_FACE);
+                glGetIntegerv(GL_POLYGON_MODE, polygonMode);
+            }
+
+            ~GLStateScope() {
+                glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+                glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+                if (depthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+                if (cullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+                glPolygonMode(GL_FRONT_AND_BACK, polygonMode[0]);
+            }
+        };
+        GLStateScope stateScope;
+
+        // Allocate 2D Texture attachment
         GLuint texID = 0;
         glGenTextures(1, &texID);
         glBindTexture(GL_TEXTURE_2D, texID);
@@ -296,8 +322,6 @@ namespace Axle {
 
             RenderCommand::DrawIndexed(part.LoadedMesh.VAO);
         }
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         outTexID = texID;
         return true;

@@ -103,25 +103,30 @@ namespace Axle {
         m_PhysicsScene = physicsScene;
         m_SelectedEntity = {};
         m_SelectedAsset.clear();
+        if (m_AssetPreviewPanel) m_AssetPreviewPanel->SetAsset({});
     }
 
     void SceneHierarchyPanel::SetSelectedEntity(Entity entity) {
         m_SelectedEntity = entity;
-        if (entity) {
-            m_SelectedAsset.clear();
+        m_SelectedAsset.clear();
+        if (m_AssetPreviewPanel) {
+            m_AssetPreviewPanel->SetAsset({});
         }
     }
 
     void SceneHierarchyPanel::SetSelectedAsset(const std::filesystem::path& assetPath) {
         m_SelectedAsset = assetPath;
         m_SelectedEntity = {};
-        if (m_AssetPreviewPanel && !assetPath.empty()) {
+        if (m_AssetPreviewPanel) {
             m_AssetPreviewPanel->SetAsset(assetPath);
         }
     }
 
     void SceneHierarchyPanel::ClearSelectedAsset() {
         m_SelectedAsset.clear();
+        if (m_AssetPreviewPanel) {
+            m_AssetPreviewPanel->SetAsset({});
+        }
     }
 
     void SceneHierarchyPanel::SetMeshes(
@@ -291,6 +296,10 @@ namespace Axle {
     void SceneHierarchyPanel::OnImGuiRender(bool* p_hierarchyOpen, bool* p_propertiesOpen) {
         if (!m_Scene) return;
 
+        if (m_SelectedEntity && !m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity)) {
+            m_SelectedEntity = {};
+        }
+
         // 1. Scene Hierarchy Window
         if (!p_hierarchyOpen || *p_hierarchyOpen) {
             ImGui::SetNextWindowSize(ImVec2(280.0f, 400.0f), ImGuiCond_FirstUseEver);
@@ -337,12 +346,6 @@ namespace Axle {
                         }
                     }
                     DrawEntityNode(entity);
-                }
-
-                // Click on blank space to deselect
-                if (ImGui::IsMouseDown(0) && ImGui::IsWindowHovered()) {
-                    m_SelectedEntity = {};
-                    m_SelectedAsset.clear();
                 }
 
                 // Right click blank space context menu
@@ -454,6 +457,10 @@ namespace Axle {
                     }
                     ImGui::EndDragDropTarget();
                 }
+                // Click on blank space to deselect
+                if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered()) {
+                    SetSelectedEntity({});
+                }
             }
             ImGui::End();
         }
@@ -462,7 +469,7 @@ namespace Axle {
         if (!p_propertiesOpen || *p_propertiesOpen) {
             ImGui::SetNextWindowSize(ImVec2(340.0f, 500.0f), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Properties", p_propertiesOpen)) {
-                if (m_SelectedEntity) {
+                if (m_SelectedEntity && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity)) {
                     DrawComponents(m_SelectedEntity);
                 } else if (!m_SelectedAsset.empty() && std::filesystem::exists(m_SelectedAsset)) {
                     DrawAssetProperties(m_SelectedAsset);
@@ -598,7 +605,7 @@ namespace Axle {
     }
 
     void SceneHierarchyPanel::DrawEntityNode(Entity entity) {
-        auto& tag = entity.GetComponent<TagComponent>().Tag;
+        std::string tag = entity.HasComponent<TagComponent>() ? entity.GetComponent<TagComponent>().Tag : "Entity";
 
         bool hasChildren = false;
         if (entity.HasComponent<HierarchyComponent>()) {
@@ -689,6 +696,12 @@ namespace Axle {
     }
 
     void SceneHierarchyPanel::DrawComponents(Entity entity) {
+        if (!entity || !m_Scene || !m_Scene->GetRegistry().valid((entt::entity)entity)) {
+            return;
+        }
+        std::string debugTag = entity.HasComponent<TagComponent>() ? entity.GetComponent<TagComponent>().Tag : "Unnamed";
+        AXLE_INFO("[INSPECTOR] Drawing components for Entity ID {}, Tag '{}'", (uint32_t)entity, debugTag);
+
         // Tag Component
         if (entity.HasComponent<TagComponent>()) {
             auto& tag = entity.GetComponent<TagComponent>().Tag;
@@ -706,7 +719,8 @@ namespace Axle {
                 auto& hc = entity.GetComponent<HierarchyComponent>();
                 if (hc.Parent != entt::null && m_Scene->GetRegistry().valid(hc.Parent)) {
                     Entity parentEntity{ hc.Parent, m_Scene };
-                    ImGui::TextColored(ImVec4(0.45f, 0.75f, 1.0f, 1.0f), "Parent: %s", parentEntity.GetComponent<TagComponent>().Tag.c_str());
+                    std::string parentTag = parentEntity.HasComponent<TagComponent>() ? parentEntity.GetComponent<TagComponent>().Tag : "Parent";
+                    ImGui::TextColored(ImVec4(0.45f, 0.75f, 1.0f, 1.0f), "Parent: %s", parentTag.c_str());
                     ImGui::SameLine();
                     ImGui::Checkbox("Inherit Transform", &hc.InheritTransform);
                 }
@@ -767,7 +781,7 @@ namespace Axle {
                 // If rigid body attached and user modified transform, sync to physics engine
                 if (changed && entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
                     auto& rb = entity.GetComponent<RigidBody3D>();
-                    if (!rb.RuntimeBodyID.IsInvalid()) {
+                    if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                         m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, tc.Translation, tc.Rotation, true);
                     }
                 }
@@ -1271,7 +1285,7 @@ namespace Axle {
                 if (ImGui::SliderFloat("Friction", &cs.Friction, 0.0f, 2.0f, "%.2f")) {
                     if (entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
                         auto& rb = entity.GetComponent<RigidBody3D>();
-                        if (!rb.RuntimeBodyID.IsInvalid()) {
+                        if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                             JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
                             if (lock.Succeeded()) lock.GetBody().SetFriction(cs.Friction);
                         }
@@ -1281,7 +1295,7 @@ namespace Axle {
                 if (ImGui::SliderFloat("Restitution", &cs.Restitution, 0.0f, 1.0f, "%.2f")) {
                     if (entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
                         auto& rb = entity.GetComponent<RigidBody3D>();
-                        if (!rb.RuntimeBodyID.IsInvalid()) {
+                        if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                             JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
                             if (lock.Succeeded()) lock.GetBody().SetRestitution(cs.Restitution);
                         }
@@ -1320,11 +1334,12 @@ namespace Axle {
                 if (ImGui::Combo("Motion Type", &currentMotion, motionNames, IM_ARRAYSIZE(motionNames))) {
                     rb.MotionType = static_cast<BodyMotionType>(currentMotion);
                     rb.IsDynamic = (rb.MotionType == BodyMotionType::Dynamic);
-                    if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid()) {
+                    if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                         JPH::EMotionType jType = JPH::EMotionType::Dynamic;
                         if (rb.MotionType == BodyMotionType::Static) jType = JPH::EMotionType::Static;
                         else if (rb.MotionType == BodyMotionType::Kinematic) jType = JPH::EMotionType::Kinematic;
-                        m_PhysicsScene->GetBodyInterface().SetMotionType(rb.RuntimeBodyID, jType, JPH::EActivation::Activate);
+                        JPH::EActivation act = (jType == JPH::EMotionType::Static) ? JPH::EActivation::DontActivate : JPH::EActivation::Activate;
+                        m_PhysicsScene->GetBodyInterface().SetMotionType(rb.RuntimeBodyID, jType, act);
                     }
                 }
 
@@ -1342,7 +1357,7 @@ namespace Axle {
                     }
                 }
 
-                if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid()) {
+                if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                     const bool isActive = m_PhysicsScene->IsActive(rb.RuntimeBodyID);
                     ImGui::Text("State: ");
                     ImGui::SameLine();
@@ -1352,13 +1367,30 @@ namespace Axle {
                         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "SLEEPING");
                     }
 
-                    if (rb.IsDynamic) {
-                        JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
-                        if (lock.Succeeded()) {
-                            JPH::Body& body = lock.GetBody();
-                            bool allowSleeping = body.GetAllowSleeping();
-                            if (ImGui::Checkbox("Allow Sleeping", &allowSleeping)) {
-                                body.SetAllowSleeping(allowSleeping);
+                    bool isDynamicInPhysics = false;
+                    if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                        isDynamicInPhysics = (m_PhysicsScene->GetBodyInterface().GetMotionType(rb.RuntimeBodyID) == JPH::EMotionType::Dynamic);
+                    }
+
+                    if (isDynamicInPhysics) {
+                        bool allowSleeping = true;
+                        {
+                            JPH::BodyLockRead lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                            if (lock.Succeeded()) {
+                                const JPH::Body& body = lock.GetBody();
+                                if (!body.IsStatic() && body.GetMotionProperties() != nullptr) {
+                                    allowSleeping = body.GetAllowSleeping();
+                                }
+                            }
+                        }
+
+                        if (ImGui::Checkbox("Allow Sleeping", &allowSleeping)) {
+                            JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                            if (lock.Succeeded()) {
+                                JPH::Body& body = lock.GetBody();
+                                if (!body.IsStatic() && body.GetMotionProperties() != nullptr) {
+                                    body.SetAllowSleeping(allowSleeping);
+                                }
                             }
                         }
 
@@ -1385,7 +1417,7 @@ namespace Axle {
 
             if (removeRB) {
                 auto& rb = entity.GetComponent<RigidBody3D>();
-                if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid()) {
+                if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                     m_PhysicsScene->DestroyBody(rb.RuntimeBodyID);
                 }
                 entity.RemoveComponent<RigidBody3D>();
@@ -1424,34 +1456,7 @@ namespace Axle {
             ImGui::Spacing();
         }
 
-        // Native Script Component
-        if (entity.HasComponent<NativeScriptComponent>()) {
-            bool removeNSC = false;
-            bool nscOpen = ImGui::TreeNodeEx((void*)typeid(NativeScriptComponent).hash_code(), treeNodeFlags, "C++ Native Script");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeNSC = true;
-                }
-                ImGui::EndPopup();
-            }
 
-            if (nscOpen) {
-                auto& nsc = entity.GetComponent<NativeScriptComponent>();
-                ImGui::Text("Class: %s", nsc.ScriptName.c_str());
-                ImGui::Text("Status: %s", nsc.Instance ? "Active (Running)" : "Bound (Ready)");
-                ImGui::TreePop();
-            }
-
-            if (removeNSC) {
-                auto& nsc = entity.GetComponent<NativeScriptComponent>();
-                if (nsc.Instance && nsc.DestroyScript) {
-                    nsc.Instance->OnDestroy();
-                    nsc.DestroyScript(&nsc);
-                }
-                entity.RemoveComponent<NativeScriptComponent>();
-            }
-            ImGui::Spacing();
-        }
 
         // Directional Light Component
         if (entity.HasComponent<DirectionalLightComponent>()) {
@@ -2003,8 +2008,8 @@ namespace Axle {
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (isAssembly) {
-            AssemblyData asmData = AssemblySerializer::LoadAssemblyData(path);
+        if (isAssembly && m_AssetPreviewPanel && m_AssetPreviewPanel->HasAsset() && m_AssetPreviewPanel->IsAssembly()) {
+            const auto& asmData = m_AssetPreviewPanel->GetAssemblyData();
 
             size_t totalParts = 0;
             float totalMass = 0.0f;
@@ -2060,7 +2065,8 @@ namespace Axle {
                     if (node.Children.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
                     else flags |= ImGuiTreeNodeFlags_DefaultOpen;
 
-                    bool opened = ImGui::TreeNodeEx((void*)(intptr_t)&node, flags, "%s", node.Tag.c_str());
+                    ImGui::PushID(&node);
+                    bool opened = ImGui::TreeNodeEx("PartNode", flags, "%s", node.Tag.c_str());
                     if (opened) {
                         if (node.HasRigidBody) {
                             ImGui::SameLine();
@@ -2075,6 +2081,7 @@ namespace Axle {
                         }
                         ImGui::TreePop();
                     }
+                    ImGui::PopID();
                 };
                 drawPartTree(asmData.RootNode, 0);
             }
@@ -2110,79 +2117,72 @@ namespace Axle {
                     m_OnOpenAssemblyEditorCallback(path);
                 }
             }
-        } else if (isMesh) {
-            auto pkg = AssetSerializer::LoadPackage(path);
-            if (pkg.Success) {
-                size_t totalVertices = 0;
-                size_t totalTriangles = 0;
-                for (const auto& part : pkg.Parts) {
-                    if (part.LoadedMesh.Success) {
-                        totalVertices += part.LoadedMesh.SourceData.Vertices.size();
-                        totalTriangles += part.LoadedMesh.SourceData.Indices.size() / 3;
-                    }
-                }
+        } else if (isMesh && m_AssetPreviewPanel && m_AssetPreviewPanel->HasAsset()) {
+            const auto& pkg = m_AssetPreviewPanel->GetPackageData();
+            size_t totalVertices = m_AssetPreviewPanel->GetTotalVertices();
+            size_t totalTriangles = m_AssetPreviewPanel->GetTotalTriangles();
+            glm::vec3 boundsSize = m_AssetPreviewPanel->GetBoundsSize();
 
-                if (ImGui::CollapsingHeader("Mesh Geometry & Bounds", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    ImGui::Columns(2, "MeshGeomColumns", false);
-                    ImGui::SetColumnWidth(0, 130.0f);
+            if (ImGui::CollapsingHeader("Mesh Geometry & Bounds", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Columns(2, "MeshGeomColumns", false);
+                ImGui::SetColumnWidth(0, 130.0f);
 
-                    ImGui::TextDisabled("Format:");
-                    ImGui::NextColumn();
-                    ImGui::Text("%s", pkg.IsPackage ? "Multi-Part Package" : "Single Mesh Asset");
-                    ImGui::NextColumn();
+                ImGui::TextDisabled("Format:");
+                ImGui::NextColumn();
+                ImGui::Text("%s", pkg.IsPackage ? "Multi-Part Package" : "Single Mesh Asset");
+                ImGui::NextColumn();
 
-                    ImGui::TextDisabled("Submeshes:");
-                    ImGui::NextColumn();
-                    ImGui::Text("%zu submesh%s", pkg.Parts.size(), pkg.Parts.size() == 1 ? "" : "es");
-                    ImGui::NextColumn();
+                ImGui::TextDisabled("Submeshes:");
+                ImGui::NextColumn();
+                ImGui::Text("%zu submesh%s", pkg.Parts.size(), pkg.Parts.size() == 1 ? "" : "es");
+                ImGui::NextColumn();
 
-                    ImGui::TextDisabled("Vertices:");
-                    ImGui::NextColumn();
-                    ImGui::Text("%zu", totalVertices);
-                    ImGui::NextColumn();
+                ImGui::TextDisabled("Vertices:");
+                ImGui::NextColumn();
+                ImGui::Text("%zu", totalVertices);
+                ImGui::NextColumn();
 
-                    ImGui::TextDisabled("Triangles:");
-                    ImGui::NextColumn();
-                    ImGui::Text("%zu", totalTriangles);
-                    ImGui::NextColumn();
+                ImGui::TextDisabled("Triangles:");
+                ImGui::NextColumn();
+                ImGui::Text("%zu", totalTriangles);
+                ImGui::NextColumn();
 
-                    ImGui::TextDisabled("Bounding Size:");
-                    ImGui::NextColumn();
-                    ImGui::Text("%.2fm x %.2fm x %.2fm", pkg.HalfExtent.x * 2.0f, pkg.HalfExtent.y * 2.0f, pkg.HalfExtent.z * 2.0f);
-                    ImGui::NextColumn();
+                ImGui::TextDisabled("Bounding Size:");
+                ImGui::NextColumn();
+                ImGui::Text("%.2fm x %.2fm x %.2fm", boundsSize.x, boundsSize.y, boundsSize.z);
+                ImGui::NextColumn();
 
-                    ImGui::Columns(1);
-                }
-
-                if (!pkg.Parts.empty()) {
-                    ImGui::Spacing();
-                    if (ImGui::CollapsingHeader("Submesh Breakdown", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        for (size_t i = 0; i < pkg.Parts.size(); ++i) {
-                            const auto& part = pkg.Parts[i];
-                            ImGui::BulletText("%s (%zu verts, %zu tris)", part.Name.c_str(), 
-                                part.LoadedMesh.SourceData.Vertices.size(),
-                                part.LoadedMesh.SourceData.Indices.size() / 3);
-                        }
-                    }
-                }
-
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                float availW = ImGui::GetContentRegionAvail().x;
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.48f, 0.78f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.58f, 0.90f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.40f, 0.68f, 1.0f));
-                if (ImGui::Button("+ Spawn into Active Scene", ImVec2(availW, 30.0f))) {
-                    if (m_OnSpawnAssetCallback) {
-                        m_OnSpawnAssetCallback(path);
-                    }
-                }
-                ImGui::PopStyleColor(3);
-            } else {
-                ImGui::TextDisabled("Unable to read 3D mesh package header.");
+                ImGui::Columns(1);
             }
+
+            if (!pkg.Parts.empty()) {
+                ImGui::Spacing();
+                if (ImGui::CollapsingHeader("Submesh Breakdown", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    for (size_t i = 0; i < pkg.Parts.size(); ++i) {
+                        const auto& part = pkg.Parts[i];
+                        ImGui::BulletText("%s (%zu verts, %zu tris)", part.Name.c_str(), 
+                            part.LoadedMesh.SourceData.Vertices.size(),
+                            part.LoadedMesh.SourceData.Indices.size() / 3);
+                    }
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            float availW = ImGui::GetContentRegionAvail().x;
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.48f, 0.78f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.58f, 0.90f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.40f, 0.68f, 1.0f));
+            if (ImGui::Button("+ Spawn into Active Scene", ImVec2(availW, 30.0f))) {
+                if (m_OnSpawnAssetCallback) {
+                    m_OnSpawnAssetCallback(path);
+                }
+            }
+            ImGui::PopStyleColor(3);
+        } else if (isAssembly || isMesh) {
+            ImGui::TextDisabled("Loading 3D asset metadata...");
         } else {
             ImGui::TextDisabled("File Type: %s", ext.c_str());
             ImGui::TextDisabled("File Size: %s", sizeStr.c_str());

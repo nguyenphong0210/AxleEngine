@@ -766,7 +766,7 @@ void SandboxLayer::OnAttach() {
     } else {
         auto project = Axle::Project::New();
         project->GetConfig().Name = "Axle Sandbox";
-        project->GetConfig().AssetDirectory = "assets";
+        project->GetConfig().AssetDirectory = "Sandbox/assets";
         project->GetConfig().StartScene = "scenes/Playground.axlescene";
         Axle::Project::SetActive(project);
         Axle::Project::SaveActive(projFile);
@@ -2737,9 +2737,12 @@ void SandboxLayer::OnImGuiRender() {
                 } else if (selectedEntity.HasComponent<Axle::RigidBody3D>() && m_PhysicsScene) {
                     auto& rb = selectedEntity.GetComponent<Axle::RigidBody3D>();
                     if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                        m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, tc.Translation, tc.Rotation, true);
-                        m_PhysicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
-                        m_PhysicsScene->GetBodyInterface().SetAngularVelocity(rb.RuntimeBodyID, JPH::Vec3::sZero());
+                        bool isDynamic = (m_PhysicsScene->GetBodyInterface().GetMotionType(rb.RuntimeBodyID) == JPH::EMotionType::Dynamic);
+                        m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, tc.Translation, tc.Rotation, isDynamic);
+                        if (isDynamic) {
+                            m_PhysicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
+                            m_PhysicsScene->GetBodyInterface().SetAngularVelocity(rb.RuntimeBodyID, JPH::Vec3::sZero());
+                        }
                     }
                 }
             }
@@ -2748,6 +2751,8 @@ void SandboxLayer::OnImGuiRender() {
 
     // 3. Viewport Mouse Picking (Click on 3D meshes to select entity)
     if (m_ViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        AXLE_INFO("[PICK] Left click detected in Viewport. Hovered=true, IsOverGizmo={}, IsUsingGizmo={}, RMBPressed={}",
+            ImGuizmo::IsOver(), ImGuizmo::IsUsing(), Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight));
         if (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() && !Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)) {
             ImVec2 mousePos = ImGui::GetMousePos();
             float mouseX = mousePos.x - viewportMin.x;
@@ -2768,19 +2773,36 @@ void SandboxLayer::OnImGuiRender() {
                 if (std::abs(farWorld.w) > 1e-6f) farWorld /= farWorld.w;
 
                 glm::vec3 rayOrigin = glm::vec3(nearWorld);
-                glm::vec3 rayDir = glm::normalize(glm::vec3(farWorld - nearWorld));
+                glm::vec3 delta = glm::vec3(farWorld - nearWorld);
+                if (glm::dot(delta, delta) > 1e-6f) {
+                    glm::vec3 rayDir = glm::normalize(delta);
 
-                Axle::RayCastHit hit;
-                if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 1000.0f, hit)) {
-                    Axle::Entity hitEntity = m_Scene->FindEntityByBodyID(hit.HitBodyID);
-                    if (hitEntity) {
-                        m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
+                    bool isFiniteRay = std::isfinite(rayOrigin.x) && std::isfinite(rayOrigin.y) && std::isfinite(rayOrigin.z) &&
+                                       std::isfinite(rayDir.x) && std::isfinite(rayDir.y) && std::isfinite(rayDir.z);
+
+                    if (isFiniteRay) {
+                        AXLE_INFO("[PICK] Raycast: origin=({:.2f}, {:.2f}, {:.2f}), dir=({:.2f}, {:.2f}, {:.2f})",
+                            rayOrigin.x, rayOrigin.y, rayOrigin.z, rayDir.x, rayDir.y, rayDir.z);
+
+                        Axle::RayCastHit hit;
+                        if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 1000.0f, hit)) {
+                            AXLE_INFO("[PICK] Raycast HIT body ID: {}", hit.HitBodyID.GetIndexAndSequenceNumber());
+                            Axle::Entity hitEntity = m_Scene->FindEntityByBodyID(hit.HitBodyID);
+                            if (hitEntity) {
+                                std::string tag = hitEntity.HasComponent<Axle::TagComponent>() ? hitEntity.GetComponent<Axle::TagComponent>().Tag : "Unnamed";
+                                AXLE_INFO("[PICK] Selected Entity ID: {}, Tag: '{}'", (uint32_t)hitEntity, tag);
+                                m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
+                            } else {
+                                AXLE_INFO("[PICK] Hit body ID {} not bound to any Entity, clearing selection", hit.HitBodyID.GetIndexAndSequenceNumber());
+                                m_SceneHierarchyPanel.SetSelectedEntity({});
+                            }
+                        } else {
+                            AXLE_INFO("[PICK] Raycast MISSED (empty space), clearing selection");
+                            m_SceneHierarchyPanel.SetSelectedEntity({});
+                        }
                     } else {
-                        m_SceneHierarchyPanel.SetSelectedEntity({});
+                        AXLE_WARN("[PICK] Non-finite ray origin/dir calculated, skipping CastRay");
                     }
-                } else {
-                    // Clicked empty space in viewport -> deselect
-                    m_SceneHierarchyPanel.SetSelectedEntity({});
                 }
             }
         }

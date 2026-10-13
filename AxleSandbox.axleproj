@@ -2,4 +2,4 @@
 Project:
   Name: Axle Sandbox
   StartScene: scenes/Playground.axlescene
-  AssetDirectory: assets
+  AssetDirectory: Sandbox/assets

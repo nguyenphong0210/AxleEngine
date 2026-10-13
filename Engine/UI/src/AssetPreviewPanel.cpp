@@ -135,13 +135,25 @@ namespace Axle {
 
     void AssetPreviewPanel::SetAsset(const std::filesystem::path& assetPath) {
         m_CurrentAssetPath = assetPath;
-        if (!std::filesystem::exists(assetPath)) {
+        if (assetPath.empty() || !std::filesystem::exists(assetPath)) {
             m_HasAsset = false;
+            m_IsAssembly = false;
+            m_CurrentPackage = {};
+            m_CurrentAssembly = {};
             return;
         }
 
         std::string ext = assetPath.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+        bool is3D = (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
+        if (!is3D) {
+            m_HasAsset = false;
+            m_IsAssembly = false;
+            m_CurrentPackage = {};
+            m_CurrentAssembly = {};
+            return;
+        }
 
         if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(assetPath)) {
             m_IsAssembly = true;
@@ -273,6 +285,15 @@ namespace Axle {
             m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
         }
 
+        GLint prevFBO = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
+        GLint prevViewport[4];
+        glGetIntegerv(GL_VIEWPORT, prevViewport);
+        GLboolean prevDepthTest = glIsEnabled(GL_DEPTH_TEST);
+        GLboolean prevCullFace = glIsEnabled(GL_CULL_FACE);
+        GLint prevPolygonMode[2];
+        glGetIntegerv(GL_POLYGON_MODE, prevPolygonMode);
+
         m_Framebuffer->Bind();
         glViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
         glEnable(GL_DEPTH_TEST);
@@ -280,7 +301,9 @@ namespace Axle {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         if (!m_HasAsset || (!m_IsAssembly && m_CurrentPackage.Parts.empty())) {
-            m_Framebuffer->Unbind();
+            glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
+            glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+            if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
             return;
         }
 
@@ -362,11 +385,11 @@ namespace Axle {
             }
         }
 
-        if (m_WireframeMode) {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        }
-
-        m_Framebuffer->Unbind();
+        glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
+        glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+        if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+        if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+        glPolygonMode(GL_FRONT_AND_BACK, prevPolygonMode[0]);
     }
 
     void AssetPreviewPanel::SpawnCurrentAssetIntoScene() {
@@ -505,14 +528,6 @@ namespace Axle {
                 m_PanOffset.x -= delta.x * 0.005f * m_MaxDim;
                 m_PanOffset.y += delta.y * 0.005f * m_MaxDim;
             }
-        }
-
-        // Drag & Drop Source directly from 3D Viewport
-        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-            std::string pathStr = m_CurrentAssetPath.string();
-            ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", pathStr.c_str(), pathStr.size() + 1);
-            ImGui::Text("Spawn: %s", m_CurrentAssetPath.filename().string().c_str());
-            ImGui::EndDragDropSource();
         }
     }
 

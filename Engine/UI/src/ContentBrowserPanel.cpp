@@ -660,14 +660,13 @@ namespace Axle {
 
                     if (isClicked) {
                         m_SelectedEntry = path;
-                        if (!isDir && m_OnSelectAssetCallback) {
-                            m_OnSelectAssetCallback(path);
-                        }
-                        if (m_AssetPreviewPanel && !isDir) {
-                            std::string ext = path.extension().string();
-                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                            if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                                m_AssetPreviewPanel->SetAsset(path);
+                        if (!isDir) {
+                            if (m_OnSelectAssetCallback) {
+                                m_OnSelectAssetCallback(path);
+                            }
+                        } else {
+                            if (m_OnSelectAssetCallback) {
+                                m_OnSelectAssetCallback({});
                             }
                         }
                     }
@@ -961,6 +960,14 @@ namespace Axle {
                     ImGui::PopID();
                 }
                 ImGui::EndTable();
+            }
+
+            // Left click on blank space in Content Browser -> deselect
+            if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered()) {
+                m_SelectedEntry.clear();
+                if (m_OnSelectAssetCallback) {
+                    m_OnSelectAssetCallback({});
+                }
             }
 
             // Right-click context menu on blank space

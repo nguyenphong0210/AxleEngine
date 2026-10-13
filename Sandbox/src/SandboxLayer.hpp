@@ -9,7 +9,6 @@
 #include <Axle/Skybox.hpp>
 #include <Axle/DebugPanel.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
-#include <Axle/VehicleTunerPanel.hpp>
 #include <Axle/ConsolePanel.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
@@ -152,7 +151,6 @@ private:
 
     // Editor Panels
     Axle::SceneHierarchyPanel m_SceneHierarchyPanel;
-    Axle::VehicleTunerPanel m_VehicleTunerPanel;
     Axle::ConsolePanel m_ConsolePanel;
     Axle::ContentBrowserPanel m_ContentBrowserPanel;
     Axle::AssetPreviewPanel m_AssetPreviewPanel;
@@ -162,12 +160,11 @@ private:
     // Panel Visibility Flags
     bool m_ShowSceneHierarchy = true;
     bool m_ShowProperties = true;
-    bool m_ShowVehicleTuner = true;
     bool m_ShowConsole = true;
     bool m_ShowContentBrowser = true;
     bool m_ShowAssetPreview = true;
     bool m_ShowAssemblyEditor = false;
-    bool m_ShowTelemetry = true;
+    bool m_ShowTelemetry = false;
     bool m_ResetLayout = true;
 
     Axle::f32 m_LastDeltaTime = 0.0f;

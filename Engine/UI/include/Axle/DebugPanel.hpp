@@ -44,7 +44,7 @@ namespace Axle {
     public:
         DebugPanel() = default;
 
-        void OnImGuiRender(TelemetryData& telemetry);
+        void OnImGuiRender(TelemetryData& telemetry, bool* p_open = nullptr);
     };
 
 }

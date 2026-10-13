@@ -611,7 +611,6 @@ void SandboxLayer::OnAttach() {
     // Connect Editor Panels
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_SceneHierarchyPanel.SetMeshes(m_CubeMesh, m_SphereMesh, m_CylinderMesh, m_ConeMesh, m_PlaneMesh);
-    m_VehicleTunerPanel.SetContext(m_Vehicle.get(), m_PhysicsScene.get());
     m_ContentBrowserPanel.SetRootPath(Axle::FileSystem::GetAssetDirectory());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
@@ -902,7 +901,6 @@ void SandboxLayer::NewScene() {
     sunEntity.AddComponent<Axle::DirectionalLightComponent>();
 
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
-    m_VehicleTunerPanel.SetContext(nullptr, m_PhysicsScene.get());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
     m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
     m_CompileNotificationMessage = "Created new empty scene";
@@ -1073,7 +1071,6 @@ void SandboxLayer::OpenScene(const std::filesystem::path& filepath) {
         }
 
         m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
-        m_VehicleTunerPanel.SetContext(m_Vehicle.get(), m_PhysicsScene.get());
         m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh);
         m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
 
@@ -2272,12 +2269,11 @@ void SandboxLayer::OnImGuiRender() {
         if (ImGui::BeginMenu("View")) {
             ImGui::MenuItem("Scene Hierarchy", nullptr, &m_ShowSceneHierarchy);
             ImGui::MenuItem("Properties / Inspector", nullptr, &m_ShowProperties);
-            ImGui::MenuItem("Vehicle Tuner", nullptr, &m_ShowVehicleTuner);
             ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
             ImGui::MenuItem("Content Browser", nullptr, &m_ShowContentBrowser);
             ImGui::MenuItem("Asset Preview", nullptr, &m_ShowAssetPreview);
             ImGui::MenuItem("Assembly Editor", nullptr, &m_ShowAssemblyEditor);
-            ImGui::MenuItem("Telemetry & Performance", nullptr, &m_ShowTelemetry);
+            ImGui::MenuItem("Performance & Debug", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             ImGui::Separator();
             bool isMaximized = Axle::Application::Get().GetWindow().IsMaximized();
@@ -2353,8 +2349,7 @@ void SandboxLayer::OnImGuiRender() {
         ImGui::DockBuilderDockWindow("Console", dock_bottom);
         ImGui::DockBuilderDockWindow("Properties", dock_right);
         ImGui::DockBuilderDockWindow("Asset Preview", dock_right);
-        ImGui::DockBuilderDockWindow("Vehicle Tuner", dock_right);
-        ImGui::DockBuilderDockWindow("Axle Engine - Telemetry", dock_right);
+        ImGui::DockBuilderDockWindow("Performance & Debug", dock_right);
 
         ImGui::DockBuilderFinish(dockspaceID);
     }
@@ -2730,10 +2725,7 @@ void SandboxLayer::OnImGuiRender() {
     // 5. Scene Hierarchy & Inspector Panels
     m_SceneHierarchyPanel.OnImGuiRender(&m_ShowSceneHierarchy, &m_ShowProperties);
 
-    // 6. Vehicle Tuner Panel
-    m_VehicleTunerPanel.OnImGuiRender(&m_ShowVehicleTuner);
-
-    // 7. Console Log Panel
+    // 6. Console Log Panel
     m_ConsolePanel.OnImGuiRender(&m_ShowConsole);
 
     // 8. Content Browser Panel
@@ -2781,7 +2773,7 @@ void SandboxLayer::OnImGuiRender() {
             }
         }
 
-        m_DebugPanel.OnImGuiRender(telemetry);
+        m_DebugPanel.OnImGuiRender(telemetry, &m_ShowTelemetry);
 
         m_ShowPhysicsDebug = telemetry.ShowPhysicsWireframe;
         m_PhysicsDrawSettings.DrawBoundingBoxes = telemetry.DrawBoundingBoxes;

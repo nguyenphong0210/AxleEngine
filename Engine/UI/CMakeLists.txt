@@ -3,7 +3,6 @@ add_library(AxleUI STATIC
     src/DebugPanel.cpp
     src/ConsolePanel.cpp
     src/SceneHierarchyPanel.cpp
-    src/VehicleTunerPanel.cpp
     src/ContentBrowserPanel.cpp
     src/AssetThumbnailManager.cpp
     src/AssetPreviewPanel.cpp

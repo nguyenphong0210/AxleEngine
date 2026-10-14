@@ -291,6 +291,12 @@ namespace Axle {
             lightEntity.AddComponent<DirectionalLightComponent>();
             m_SelectedEntity = lightEntity;
         }
+        if (ImGui::MenuItem("Atmospheric Skybox")) {
+            auto skyEntity = m_Scene->CreateEntity("Atmospheric Skybox");
+            skyEntity.AddComponent<TransformComponent>();
+            skyEntity.AddComponent<SkyboxComponent>();
+            m_SelectedEntity = skyEntity;
+        }
     }
 
     void SceneHierarchyPanel::OnImGuiRender(bool* p_hierarchyOpen, bool* p_propertiesOpen) {

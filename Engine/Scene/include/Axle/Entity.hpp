@@ -69,6 +69,7 @@ namespace Axle {
         // Hierarchy Traversal & Management
         Entity GetParent() const;
         void SetParent(Entity parent);
+        void Unparent() { SetParent({}); }
         std::vector<Entity> GetChildren() const;
         size_t GetChildCount() const;
         Entity FindChildByTag(const std::string& tag, bool recursive = true) const;

@@ -368,15 +368,17 @@ namespace Axle {
                 for (auto entityID : view) {
                     Entity entity{ entityID, m_Scene };
 
-                    // Filter search
+                    // Filter search: display all matching entities directly
                     if (m_SearchFilter[0] != '\0') {
                         const auto& tag = entity.GetComponent<TagComponent>().Tag;
                         if (!ContainsIgnoreCase(tag, m_SearchFilter)) {
                             continue;
                         }
+                        DrawEntityNode(entity);
+                        continue;
                     }
 
-                    // If entity is a child, it will be rendered under its parent node
+                    // Strict hierarchical tree view: render only root entities (no parent) at top level
                     if (entity.HasComponent<HierarchyComponent>()) {
                         auto& hc = entity.GetComponent<HierarchyComponent>();
                         if (hc.Parent != entt::null && m_Scene->GetRegistry().valid(hc.Parent)) {
@@ -662,7 +664,7 @@ namespace Axle {
 
         bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", tag.c_str());
 
-        if (ImGui::IsItemClicked()) {
+        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
             m_SelectedEntity = entity;
             m_SelectedAsset.clear();
         }
@@ -690,6 +692,55 @@ namespace Axle {
 
         bool entityDeleted = false;
         if (ImGui::BeginPopupContextItem()) {
+            m_SelectedEntity = entity;
+            m_SelectedAsset.clear();
+
+            if (ImGui::MenuItem("Create Empty Child")) {
+                auto child = m_Scene->CreateEntity("Child");
+                child.SetParent(entity);
+                m_SelectedEntity = child;
+            }
+
+            if (ImGui::BeginMenu("3D Object")) {
+                if (ImGui::MenuItem("Cube")) {
+                    auto prim = CreatePrimitive(0);
+                    prim.SetParent(entity);
+                    m_SelectedEntity = prim;
+                }
+                if (ImGui::MenuItem("Sphere")) {
+                    auto prim = CreatePrimitive(1);
+                    prim.SetParent(entity);
+                    m_SelectedEntity = prim;
+                }
+                if (ImGui::MenuItem("Cylinder")) {
+                    auto prim = CreatePrimitive(2);
+                    prim.SetParent(entity);
+                    m_SelectedEntity = prim;
+                }
+                if (ImGui::MenuItem("Cone")) {
+                    auto prim = CreatePrimitive(3);
+                    prim.SetParent(entity);
+                    m_SelectedEntity = prim;
+                }
+                if (ImGui::MenuItem("Plane")) {
+                    auto prim = CreatePrimitive(4);
+                    prim.SetParent(entity);
+                    m_SelectedEntity = prim;
+                }
+                ImGui::EndMenu();
+            }
+
+            if (entity.HasComponent<HierarchyComponent>()) {
+                auto& hc = entity.GetComponent<HierarchyComponent>();
+                if (hc.Parent != entt::null && m_Scene->GetRegistry().valid(hc.Parent)) {
+                    if (ImGui::MenuItem("Detach from Parent")) {
+                        entity.Unparent();
+                    }
+                }
+            }
+
+            ImGui::Separator();
+
             if (ImGui::MenuItem("Save as Assembly...")) {
                 std::string entityTag = entity.HasComponent<TagComponent>() ? entity.GetComponent<TagComponent>().Tag : "Assembly";
                 std::filesystem::path outPath = FileSystem::GetAssetDirectory() / (entityTag + ".axle");
@@ -726,7 +777,7 @@ namespace Axle {
         }
 
         if (entityDeleted) {
-            if (m_SelectedEntity == entity) {
+            if (m_SelectedEntity == entity || (m_SelectedEntity && m_SelectedEntity.IsChildOf(entity))) {
                 m_SelectedEntity = {};
             }
             m_Scene->DestroyEntity(entity);
@@ -737,8 +788,6 @@ namespace Axle {
         if (!entity || !m_Scene || !m_Scene->GetRegistry().valid((entt::entity)entity)) {
             return;
         }
-        std::string debugTag = entity.HasComponent<TagComponent>() ? entity.GetComponent<TagComponent>().Tag : "Unnamed";
-        AXLE_INFO("[INSPECTOR] Drawing components for Entity ID {}, Tag '{}'", (uint32_t)entity, debugTag);
 
         // Tag Component
         if (entity.HasComponent<TagComponent>()) {

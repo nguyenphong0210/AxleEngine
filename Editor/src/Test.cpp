@@ -537,6 +537,136 @@ bool RunTest_Step6_Phase15_ArchetypePresets() {
 }
 
 // =============================================================================
+// =============================================================================
+// TEST STEP 7: Phase 15.2 / Hierarchical Tree View & Lifecycle Management
+// =============================================================================
+bool RunTest_Step7_Phase15_HierarchicalTreeView() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 7 TEST] PHASE 15.2: HIERARCHICAL TREE VIEW       " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    auto scene = std::make_shared<Axle::Scene>();
+
+    // -----------------------------------------------------------------
+    // [7.1] Root vs Child Isolation
+    // -----------------------------------------------------------------
+    std::cout << "[7.1] Verifying Root-only Top-level Entity Isolation..." << std::endl;
+    auto rootA = scene->CreateEntity("Root_A");
+    auto rootB = scene->CreateEntity("Root_B");
+
+    auto childA1 = scene->CreateEntity("Child_A1");
+    auto childA2 = scene->CreateEntity("Child_A2");
+    childA1.SetParent(rootA);
+    childA2.SetParent(rootA);
+
+    auto grandChild = scene->CreateEntity("GrandChild_A1_1");
+    grandChild.SetParent(childA1);
+
+    // Simulate Top-Level Hierarchy iteration logic
+    int rootCount = 0;
+    auto view = scene->GetRegistry().view<Axle::TagComponent>();
+    for (auto entityID : view) {
+        Axle::Entity entity{ entityID, scene.get() };
+        if (entity.HasComponent<Axle::HierarchyComponent>()) {
+            auto& hc = entity.GetComponent<Axle::HierarchyComponent>();
+            if (hc.Parent != entt::null && scene->GetRegistry().valid(hc.Parent)) {
+                continue; // Child node, skip top-level
+            }
+        }
+        rootCount++;
+    }
+
+    std::cout << "  -> Total Entities: 5, Detected Root Entities: " << rootCount << std::endl;
+    if (rootCount != 2) {
+        std::cerr << "FAIL: Expected 2 root entities, got " << rootCount << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Only root entities qualify for top-level tree rendering." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [7.2] Multi-level Tree Structure Integrity
+    // -----------------------------------------------------------------
+    std::cout << "[7.2] Verifying Multi-level Tree Traversal..." << std::endl;
+    if (rootA.GetChildCount() != 2) {
+        std::cerr << "FAIL: Root_A direct child count is " << rootA.GetChildCount() << " (Expected: 2)" << std::endl;
+        return false;
+    }
+    if (childA1.GetChildCount() != 1) {
+        std::cerr << "FAIL: Child_A1 direct child count is " << childA1.GetChildCount() << " (Expected: 1)" << std::endl;
+        return false;
+    }
+    if (!grandChild.IsChildOf(rootA)) {
+        std::cerr << "FAIL: GrandChild is not child of Root_A!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Multi-level hierarchy verified (Root -> Child -> GrandChild)." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [7.3] Detach from Parent (Unparent)
+    // -----------------------------------------------------------------
+    std::cout << "[7.3] Verifying Entity Detach (Unparent)..." << std::endl;
+    childA2.Unparent();
+
+    if (childA2.GetParent()) {
+        std::cerr << "FAIL: Child_A2 still has a parent after Unparent!" << std::endl;
+        return false;
+    }
+    if (rootA.GetChildCount() != 1) {
+        std::cerr << "FAIL: Root_A child count should be 1 after detach, got " << rootA.GetChildCount() << std::endl;
+        return false;
+    }
+
+    // Recalculate root count
+    rootCount = 0;
+    for (auto entityID : view) {
+        Axle::Entity entity{ entityID, scene.get() };
+        if (entity.HasComponent<Axle::HierarchyComponent>()) {
+            auto& hc = entity.GetComponent<Axle::HierarchyComponent>();
+            if (hc.Parent != entt::null && scene->GetRegistry().valid(hc.Parent)) {
+                continue;
+            }
+        }
+        rootCount++;
+    }
+    if (rootCount != 3) {
+        std::cerr << "FAIL: Expected 3 root entities after unparenting, got " << rootCount << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Unparent promoted Child_A2 to root successfully." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [7.4] Recursive Destruction Lifecycle
+    // -----------------------------------------------------------------
+    std::cout << "[7.4] Verifying Recursive Child Cleanup on Root Destruction..." << std::endl;
+    scene->DestroyEntity(rootA);
+
+    if (scene->GetRegistry().valid((entt::entity)rootA)) {
+        std::cerr << "FAIL: Root_A was not destroyed!" << std::endl;
+        return false;
+    }
+    if (scene->GetRegistry().valid((entt::entity)childA1)) {
+        std::cerr << "FAIL: Child_A1 was not recursively destroyed with Root_A!" << std::endl;
+        return false;
+    }
+    if (scene->GetRegistry().valid((entt::entity)grandChild)) {
+        std::cerr << "FAIL: GrandChild was not recursively destroyed with Root_A!" << std::endl;
+        return false;
+    }
+    if (!scene->GetRegistry().valid((entt::entity)childA2)) {
+        std::cerr << "FAIL: Detached Child_A2 was incorrectly destroyed!" << std::endl;
+        return false;
+    }
+    if (!scene->GetRegistry().valid((entt::entity)rootB)) {
+        std::cerr << "FAIL: Root_B was incorrectly destroyed!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Root destruction recursively destroyed descendants while preserving unparented siblings." << std::endl;
+
+    std::cout << ">>> STEP 7 PASSED: Phase 15.2 Hierarchical Tree View verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -549,12 +679,13 @@ int main(int argc, char** argv) {
         else if (arg == "4" || arg == "step4" || arg == "--step4") targetStep = 4;
         else if (arg == "5" || arg == "step5" || arg == "--step5" || arg == "--phase14") targetStep = 5;
         else if (arg == "6" || arg == "step6" || arg == "--step6" || arg == "--phase15") targetStep = 6;
+        else if (arg == "7" || arg == "step7" || arg == "--step7" || arg == "--phase15.2") targetStep = 7;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 6 STEPS                       " << std::endl;
+        std::cout << "              RUNNING ALL 7 STEPS                       " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -579,6 +710,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 6) {
         if (!RunTest_Step6_Phase15_ArchetypePresets()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 7) {
+        if (!RunTest_Step7_Phase15_HierarchicalTreeView()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

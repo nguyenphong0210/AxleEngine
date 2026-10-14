@@ -82,6 +82,10 @@ namespace Axle {
                             if (StringFields.find(field.Name) == StringFields.end())
                                 StringFields[field.Name] = field.GetValue<std::string>(temp);
                             break;
+                        case ScriptFieldType::EntityRef:
+                            if (EntityFields.find(field.Name) == EntityFields.end())
+                                EntityFields[field.Name] = field.GetValue<UUID>(temp);
+                            break;
                         default:
                             break;
                         }
@@ -124,6 +128,11 @@ namespace Axle {
                 if (it != StringFields.end()) field.SetValue<std::string>(Instance, it->second);
                 break;
             }
+            case ScriptFieldType::EntityRef: {
+                auto it = EntityFields.find(field.Name);
+                if (it != EntityFields.end()) field.SetValue<UUID>(Instance, it->second);
+                break;
+            }
             default:
                 break;
             }
@@ -151,6 +160,9 @@ namespace Axle {
                 break;
             case ScriptFieldType::String:
                 StringFields[field.Name] = field.GetValue<std::string>(Instance);
+                break;
+            case ScriptFieldType::EntityRef:
+                EntityFields[field.Name] = field.GetValue<UUID>(Instance);
                 break;
             default:
                 break;

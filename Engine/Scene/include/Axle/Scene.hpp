@@ -33,6 +33,7 @@ namespace Axle {
         Entity DuplicateEntity(Entity entity, PhysicsScene* physicsScene = nullptr);
         void Clear();
         Entity FindEntityByBodyID(BodyID bodyID);
+        Entity GetEntityByUUID(UUID uuid);
 
         // Hierarchical world transform calculation (propagating parent transforms)
         glm::mat4 GetWorldTransform(entt::entity entityID) const;

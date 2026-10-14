@@ -326,11 +326,11 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Hierarchical Tree View**: Render only root entities at the top level, displaying children via collapsible arrow nodes (`ImGuiTreeNodeFlags_OpenOnArrow`).
   - [x] **Visual Drag & Drop Reparenting**: Register `"SCENE_HIERARCHY_ENTITY"` payload on entity nodes to allow intuitive mouse drag-and-drop reparenting between entities.
   - [x] **Deferred & Recursive Lifecycle**: Implement end-of-frame deferred deletion queue (`m_EntitiesToDestroy`) with recursive child cleanup; implement deep recursive duplication (`Ctrl+D`) with fresh UUID generation.
-- [ ] **Phase 16: Properties Panel & C++ Scripting Reflection (Category Component Adder & Macro Fields)**
-  - [ ] **Structured Component Widgets**: Encapsulate components in collapsible headers with custom context menus (`Remove Component`), and implement color-coded, draggable 3-axis `DrawVec3Control` for transforms.
-  - [ ] **Categorized `+ Add Component` Popup**: Group available components into *Rendering*, *Physics*, *Scripts*, and *Audio/VFX* with real-time search filtering.
-  - [ ] **C++ Script Reflection Macro**: Support `RegisterFields()` / `AXLE_SCRIPT_FIELDS(...)` macros in `ScriptableEntity` for automatic Editor reflection of `Float`, `Int`, `Bool`, `Vec3`, `String`, and `Entity Reference` (UUID).
-  - [ ] **Dual-Context Properties Inspector**: Support seamless switching between `InspectorMode::Entity` (inspecting active scene entity) and `InspectorMode::Asset` (inspecting `.axlemat` materials or `.axle` assemblies from Content Browser).
+- [x] **Phase 16: Properties Panel & C++ Scripting Reflection (Category Component Adder & Macro Fields)**
+  - [x] **Structured Component Widgets**: Encapsulate components in collapsible headers with custom context menus (`Remove Component`), and implement color-coded, draggable 3-axis `DrawVec3Control` for transforms.
+  - [x] **Categorized `+ Add Component` Popup**: Group available components into *Rendering*, *Physics*, *Scripts*, and *Audio/VFX* with real-time search filtering.
+  - [x] **C++ Script Reflection Macro**: Support `RegisterFields()` / `AXLE_SCRIPT_FIELDS(...)` macros in `ScriptableEntity` for automatic Editor reflection of `Float`, `Int`, `Bool`, `Vec3`, `String`, and `Entity Reference` (UUID).
+  - [x] **Dual-Context Properties Inspector**: Support seamless switching between `InspectorMode::Entity` (inspecting active scene entity) and `InspectorMode::Asset` (inspecting `.axlemat` materials or `.axle` assemblies from Content Browser).
 - [ ] **Phase 17: Content Browser & Material/Asset System (.meta & Physical Asset Creation)**
   - [ ] **Asset UUID & `.meta` File Pipeline**: Auto-generate `.meta` companion files storing persistent 64-bit UUIDs for assets in `Assets/` for path-independent referencing.
   - [ ] **Right-Click Asset Creation**: Right-click blank space in Content Browser to create `New Folder`, `Scene (.axlescene)`, `Material Asset (.amat / .axlemat)`, `C++ Script (.hpp)`, and `Physics Material (.physmat)`.

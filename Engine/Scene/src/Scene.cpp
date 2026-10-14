@@ -218,6 +218,18 @@ namespace Axle {
         return {};
     }
 
+    Entity Scene::GetEntityByUUID(UUID uuid) {
+        if ((uint64_t)uuid == 0) return {};
+
+        auto view = m_Registry.view<IDComponent>();
+        for (auto entityID : view) {
+            if (view.get<IDComponent>(entityID).ID == uuid) {
+                return { entityID, this };
+            }
+        }
+        return {};
+    }
+
     glm::mat4 Scene::GetWorldTransform(entt::entity entityID) const {
         if (!m_Registry.valid(entityID) || !m_Registry.all_of<TransformComponent>(entityID)) {
             return glm::mat4(1.0f);

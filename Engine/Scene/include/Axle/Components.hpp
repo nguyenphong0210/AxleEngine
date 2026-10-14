@@ -382,6 +382,7 @@ namespace Axle {
         std::unordered_map<std::string, bool> BoolFields;
         std::unordered_map<std::string, glm::vec3> Vec3Fields;
         std::unordered_map<std::string, std::string> StringFields;
+        std::unordered_map<std::string, UUID> EntityFields;
 
         NativeScriptComponent() = default;
         NativeScriptComponent(const std::string& scriptName) {

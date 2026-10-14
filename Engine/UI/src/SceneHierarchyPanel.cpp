@@ -21,6 +21,8 @@
 #include <Axle/VertexArray.hpp>
 #include <algorithm>
 #include <cctype>
+#include <fstream>
+#include <GLFW/glfw3.h>
 
 namespace Axle {
 
@@ -34,12 +36,18 @@ namespace Axle {
         return it != str.end();
     }
 
-    static void DrawVec3Control(const std::string& label, glm::vec3& values, float resetValue = 0.0f, float columnWidth = 100.0f) {
+    void SceneHierarchyPanel::DrawVec3Control(const std::string& label, glm::vec3& values, float resetValue, float columnWidth, float speed) {
         ImGui::PushID(label.c_str());
 
         ImGui::Columns(2);
         ImGui::SetColumnWidth(0, columnWidth);
         ImGui::Text("%s", label.c_str());
+        if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Reset All Axes")) {
+                values = glm::vec3(resetValue);
+            }
+            ImGui::EndPopup();
+        }
         ImGui::NextColumn();
 
         ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
@@ -48,50 +56,132 @@ namespace Axle {
         float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
         ImVec2 buttonSize = { lineHeight + 3.0f, lineHeight };
 
-        // X Control
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.8f, 0.15f, 0.15f, 1.0f });
+        // X Control - Red
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.80f, 0.15f, 0.15f, 1.0f });
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.95f, 0.25f, 0.25f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.7f, 0.1f, 0.1f, 1.0f });
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.70f, 0.10f, 0.10f, 1.0f });
         if (ImGui::Button("X", buttonSize)) {
             values.x = resetValue;
         }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Click to reset X to %.2f", resetValue);
+        }
         ImGui::PopStyleColor(3);
 
         ImGui::SameLine();
-        ImGui::DragFloat("##X", &values.x, 0.1f, 0.0f, 0.0f, "%.2f");
+        ImGui::DragFloat("##X", &values.x, speed, 0.0f, 0.0f, "%.2f");
         ImGui::PopItemWidth();
         ImGui::SameLine();
 
-        // Y Control
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.15f, 0.7f, 0.2f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.25f, 0.85f, 0.3f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.1f, 0.6f, 0.15f, 1.0f });
+        // Y Control - Green
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.15f, 0.70f, 0.20f, 1.0f });
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.25f, 0.85f, 0.30f, 1.0f });
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.10f, 0.60f, 0.15f, 1.0f });
         if (ImGui::Button("Y", buttonSize)) {
             values.y = resetValue;
         }
-        ImGui::PopStyleColor(3);
-
-        ImGui::SameLine();
-        ImGui::DragFloat("##Y", &values.y, 0.1f, 0.0f, 0.0f, "%.2f");
-        ImGui::PopItemWidth();
-        ImGui::SameLine();
-
-        // Z Control
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.15f, 0.35f, 0.85f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.25f, 0.45f, 0.95f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.1f, 0.25f, 0.75f, 1.0f });
-        if (ImGui::Button("Z", buttonSize)) {
-            values.z = resetValue;
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Click to reset Y to %.2f", resetValue);
         }
         ImGui::PopStyleColor(3);
 
         ImGui::SameLine();
-        ImGui::DragFloat("##Z", &values.z, 0.1f, 0.0f, 0.0f, "%.2f");
+        ImGui::DragFloat("##Y", &values.y, speed, 0.0f, 0.0f, "%.2f");
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+
+        // Z Control - Blue
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.15f, 0.35f, 0.85f, 1.0f });
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.25f, 0.45f, 0.95f, 1.0f });
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.10f, 0.25f, 0.75f, 1.0f });
+        if (ImGui::Button("Z", buttonSize)) {
+            values.z = resetValue;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Click to reset Z to %.2f", resetValue);
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine();
+        ImGui::DragFloat("##Z", &values.z, speed, 0.0f, 0.0f, "%.2f");
         ImGui::PopItemWidth();
 
         ImGui::PopStyleVar();
         ImGui::Columns(1);
         ImGui::PopID();
+    }
+
+    template<typename T, typename UIFunction>
+    static void DrawComponent(
+        const std::string& name,
+        Entity entity,
+        UIFunction uiFunction,
+        bool canRemove = true,
+        std::function<void(T&)> onRemove = nullptr
+    ) {
+        if (!entity.HasComponent<T>()) {
+            return;
+        }
+
+        const ImGuiTreeNodeFlags treeNodeFlags = ImGuiTreeNodeFlags_DefaultOpen 
+                                               | ImGuiTreeNodeFlags_Framed 
+                                               | ImGuiTreeNodeFlags_SpanAvailWidth 
+                                               | ImGuiTreeNodeFlags_AllowOverlap 
+                                               | ImGuiTreeNodeFlags_FramePadding;
+
+        auto& component = entity.GetComponent<T>();
+        ImVec2 contentRegionAvailable = ImGui::GetContentRegionAvail();
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{ 4.0f, 4.0f });
+        float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
+        ImGui::Separator();
+        bool open = ImGui::TreeNodeEx((void*)typeid(T).hash_code(), treeNodeFlags, "%s", name.c_str());
+        ImGui::PopStyleVar();
+
+        bool removeComponent = false;
+
+        // Context menu on right click of the header
+        if (ImGui::BeginPopupContextItem()) {
+            if (canRemove) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeComponent = true;
+                }
+            } else {
+                ImGui::TextDisabled("Cannot remove required component");
+            }
+            ImGui::EndPopup();
+        }
+
+        // Right-aligned settings button on header
+        ImGui::SameLine(contentRegionAvailable.x - lineHeight * 0.5f);
+        std::string btnId = "+##" + name;
+        if (ImGui::Button(btnId.c_str(), ImVec2{ lineHeight, lineHeight })) {
+            ImGui::OpenPopup("ComponentSettings");
+        }
+
+        if (ImGui::BeginPopup("ComponentSettings")) {
+            if (canRemove) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeComponent = true;
+                }
+            } else {
+                ImGui::TextDisabled("Cannot remove required component");
+            }
+            ImGui::EndPopup();
+        }
+
+        if (open) {
+            uiFunction(component);
+            ImGui::TreePop();
+        }
+
+        if (removeComponent) {
+            if (onRemove) {
+                onRemove(component);
+            }
+            entity.RemoveComponent<T>();
+        }
+        ImGui::Spacing();
     }
 
     SceneHierarchyPanel::SceneHierarchyPanel(Scene* scene, PhysicsScene* physicsScene) {
@@ -108,15 +198,12 @@ namespace Axle {
 
     void SceneHierarchyPanel::SetSelectedEntity(Entity entity) {
         m_SelectedEntity = entity;
-        m_SelectedAsset.clear();
-        if (m_AssetPreviewPanel) {
-            m_AssetPreviewPanel->SetAsset({});
-        }
+        m_InspectorMode = InspectorMode::Entity;
     }
 
     void SceneHierarchyPanel::SetSelectedAsset(const std::filesystem::path& assetPath) {
         m_SelectedAsset = assetPath;
-        m_SelectedEntity = {};
+        m_InspectorMode = InspectorMode::Asset;
         if (m_AssetPreviewPanel) {
             m_AssetPreviewPanel->SetAsset(assetPath);
         }
@@ -124,6 +211,7 @@ namespace Axle {
 
     void SceneHierarchyPanel::ClearSelectedAsset() {
         m_SelectedAsset.clear();
+        m_InspectorMode = InspectorMode::Entity;
         if (m_AssetPreviewPanel) {
             m_AssetPreviewPanel->SetAsset({});
         }
@@ -539,9 +627,40 @@ namespace Axle {
         if (!p_propertiesOpen || *p_propertiesOpen) {
             ImGui::SetNextWindowSize(ImVec2(340.0f, 500.0f), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Properties", p_propertiesOpen)) {
-                if (m_SelectedEntity && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity)) {
+                bool hasEntity = (m_SelectedEntity && m_Scene && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity));
+                bool hasAsset = (!m_SelectedAsset.empty() && std::filesystem::exists(m_SelectedAsset));
+
+                // Dual-Context Mode Switcher Tab Bar
+                if (hasEntity && hasAsset) {
+                    float tabWidth = (ImGui::GetContentRegionAvail().x - 4.0f) * 0.5f;
+                    bool isEntityMode = (m_InspectorMode == InspectorMode::Entity);
+                    bool isAssetMode = (m_InspectorMode == InspectorMode::Asset);
+
+                    if (isEntityMode) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.85f, 1.0f));
+                    if (ImGui::Button("Scene Entity", ImVec2(tabWidth, 24.0f))) {
+                        m_InspectorMode = InspectorMode::Entity;
+                    }
+                    if (isEntityMode) ImGui::PopStyleColor();
+
+                    ImGui::SameLine();
+
+                    if (isAssetMode) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.85f, 1.0f));
+                    if (ImGui::Button("Asset File", ImVec2(tabWidth, 24.0f))) {
+                        m_InspectorMode = InspectorMode::Asset;
+                    }
+                    if (isAssetMode) ImGui::PopStyleColor();
+
+                    ImGui::Separator();
+                    ImGui::Spacing();
+                }
+
+                if (m_InspectorMode == InspectorMode::Entity && hasEntity) {
                     DrawComponents(m_SelectedEntity);
-                } else if (!m_SelectedAsset.empty() && std::filesystem::exists(m_SelectedAsset)) {
+                } else if (m_InspectorMode == InspectorMode::Asset && hasAsset) {
+                    DrawAssetProperties(m_SelectedAsset);
+                } else if (hasEntity) {
+                    DrawComponents(m_SelectedEntity);
+                } else if (hasAsset) {
                     DrawAssetProperties(m_SelectedAsset);
                 } else {
                     ImGui::Spacing();
@@ -889,6 +1008,11 @@ namespace Axle {
             }
             ImGui::PopItemWidth();
 
+            if (entity.HasComponent<IDComponent>()) {
+                uint64_t uuid = (uint64_t)entity.GetComponent<IDComponent>().ID;
+                ImGui::TextDisabled("UUID: %llu", uuid);
+            }
+
             if (entity.HasComponent<HierarchyComponent>()) {
                 auto& hc = entity.GetComponent<HierarchyComponent>();
                 if (hc.Parent != entt::null && m_Scene->GetRegistry().valid(hc.Parent)) {
@@ -920,195 +1044,165 @@ namespace Axle {
             ImGui::Separator();
         }
 
-        const ImGuiTreeNodeFlags treeNodeFlags = ImGuiTreeNodeFlags_DefaultOpen 
-                                               | ImGuiTreeNodeFlags_Framed 
-                                               | ImGuiTreeNodeFlags_SpanAvailWidth;
+        // Transform Component (Required - cannot be removed)
+        DrawComponent<TransformComponent>("Transform", entity, [&](TransformComponent& tc) {
+            glm::vec3 translation = tc.Translation;
+            DrawVec3Control("Translation", translation);
 
-        // Transform Component
-        if (entity.HasComponent<TransformComponent>()) {
-            if (ImGui::TreeNodeEx((void*)typeid(TransformComponent).hash_code(), treeNodeFlags, "Transform")) {
-                auto& tc = entity.GetComponent<TransformComponent>();
+            glm::vec3 rotationDegrees = glm::degrees(glm::eulerAngles(tc.Rotation));
+            DrawVec3Control("Rotation", rotationDegrees);
 
-                glm::vec3 translation = tc.Translation;
-                DrawVec3Control("Translation", translation);
+            glm::vec3 scale = tc.Scale;
+            DrawVec3Control("Scale", scale, 1.0f);
 
-                glm::vec3 rotationDegrees = glm::degrees(glm::eulerAngles(tc.Rotation));
-                DrawVec3Control("Rotation", rotationDegrees);
-
-                glm::vec3 scale = tc.Scale;
-                DrawVec3Control("Scale", scale, 1.0f);
-
-                // Check if user changed values
-                bool changed = false;
-                if (translation != tc.Translation) {
-                    tc.Translation = translation;
-                    changed = true;
-                }
-                if (rotationDegrees != glm::degrees(glm::eulerAngles(tc.Rotation))) {
-                    tc.Rotation = glm::quat(glm::radians(rotationDegrees));
-                    changed = true;
-                }
-                if (scale != tc.Scale) {
-                    tc.Scale = scale;
-                }
-
-                // If rigid body attached and user modified transform, sync to physics engine (using world transform)
-                if (changed && m_PhysicsScene) {
-                    auto syncPhysicsBody = [&](Entity e) {
-                        if (e.HasComponent<RigidBody3D>()) {
-                            auto& rb = e.GetComponent<RigidBody3D>();
-                            if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                                glm::mat4 worldMat = e.GetWorldTransform();
-                                glm::vec3 worldPos = glm::vec3(worldMat[3]);
-                                glm::quat worldRot = glm::quat_cast(worldMat);
-                                m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, worldPos, worldRot, true);
-                            }
-                        }
-                    };
-                    syncPhysicsBody(entity);
-                    entity.ForEachChild(syncPhysicsBody, true);
-                }
-
-
-                ImGui::TreePop();
+            // Check if user changed values
+            bool changed = false;
+            if (translation != tc.Translation) {
+                tc.Translation = translation;
+                changed = true;
             }
-            ImGui::Spacing();
-        }
+            if (rotationDegrees != glm::degrees(glm::eulerAngles(tc.Rotation))) {
+                tc.Rotation = glm::quat(glm::radians(rotationDegrees));
+                changed = true;
+            }
+            if (scale != tc.Scale) {
+                tc.Scale = scale;
+            }
+
+            // If rigid body attached and user modified transform, sync to physics engine (using world transform)
+            if (changed && m_PhysicsScene) {
+                auto syncPhysicsBody = [&](Entity e) {
+                    if (e.HasComponent<RigidBody3D>()) {
+                        auto& rb = e.GetComponent<RigidBody3D>();
+                        if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                            glm::mat4 worldMat = e.GetWorldTransform();
+                            glm::vec3 worldPos = glm::vec3(worldMat[3]);
+                            glm::quat worldRot = glm::quat_cast(worldMat);
+                            m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, worldPos, worldRot, true);
+                        }
+                    }
+                };
+                syncPhysicsBody(entity);
+                entity.ForEachChild(syncPhysicsBody, true);
+            }
+        }, /*canRemove=*/ false);
 
         // MeshInstance3D Component
-        if (entity.HasComponent<MeshInstance3D>()) {
-            bool removeMesh = false;
-            bool meshOpen = ImGui::TreeNodeEx((void*)typeid(MeshInstance3D).hash_code(), treeNodeFlags, "MeshInstance3D");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeMesh = true;
+        DrawComponent<MeshInstance3D>("MeshInstance3D", entity, [&](MeshInstance3D& mc) {
+            // 3D Model Asset Assignment via Drag & Drop
+            ImGui::Text("Model Asset:");
+            ImGui::SameLine();
+            std::string assetDisplayName = mc.AssetPath.empty() 
+                ? "[ Built-in Primitive (Drop .obj here) ]" 
+                : std::filesystem::path(mc.AssetPath).filename().string();
+
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.24f, 0.32f, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.35f, 0.48f, 1.0f));
+            ImGui::Button(assetDisplayName.c_str(), ImVec2(-1.0f, 26.0f));
+            ImGui::PopStyleColor(2);
+
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    const char* pathStr = static_cast<const char*>(payload->Data);
+                    std::filesystem::path p(pathStr);
+                    std::string ext = p.extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                    if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                        mc.AssetPath = p.string();
+                        if (ext == ".axle") {
+                            auto loaded = AssetSerializer::LoadMesh(p);
+                            if (loaded.Success) {
+                                mc.VAO = loaded.VAO;
+                                mc.PatternMode = loaded.SourceData.PatternMode;
+                                mc.TileScale = loaded.SourceData.TileScale;
+                                mc.Color1 = loaded.SourceData.ColorPrimary;
+                                mc.Color2 = loaded.SourceData.ColorSecondary;
+                            }
+                        } else if (ext == ".obj") {
+                            std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
+                            if (!std::filesystem::exists(axlePath)) {
+                                AssetSerializer::ConvertOBJToAxle(p, axlePath);
+                            }
+                            auto loaded = AssetSerializer::LoadMesh(axlePath);
+                            if (loaded.Success) {
+                                mc.VAO = loaded.VAO;
+                                mc.PatternMode = loaded.SourceData.PatternMode;
+                                mc.TileScale = loaded.SourceData.TileScale;
+                                mc.Color1 = loaded.SourceData.ColorPrimary;
+                                mc.Color2 = loaded.SourceData.ColorSecondary;
+                                mc.AssetPath = axlePath.string();
+                            } else {
+                                auto loadedVao = PrimitiveMesh::LoadOBJ(p.string());
+                                if (loadedVao) mc.VAO = loadedVao;
+                            }
+                        }
+                        AXLE_INFO("Assigned 3D model '{0}' to Entity '{1}'", p.filename().string(), entity.GetComponent<TagComponent>().Tag);
+                    }
                 }
-                ImGui::EndPopup();
+                ImGui::EndDragDropTarget();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Drag & Drop a 3D model (.obj) from Content Browser here to assign");
             }
 
-            if (meshOpen) {
-                auto& mc = entity.GetComponent<MeshInstance3D>();
+            const char* patternNames[] = { "0: World XZ Caro (Floor)", "1: Local 3D Caro (Box/Cyl)", "2: Spherical Caro (Sphere)" };
+            int currentPattern = mc.PatternMode;
+            if (ImGui::Combo("Pattern Mode", &currentPattern, patternNames, IM_ARRAYSIZE(patternNames))) {
+                mc.PatternMode = currentPattern;
+            }
 
-                // 3D Model Asset Assignment via Drag & Drop
-                ImGui::Text("Model Asset:");
-                ImGui::SameLine();
-                std::string assetDisplayName = mc.AssetPath.empty() 
-                    ? "[ Built-in Primitive (Drop .obj here) ]" 
-                    : std::filesystem::path(mc.AssetPath).filename().string();
+            ImGui::DragFloat("Tile Scale", &mc.TileScale, 0.2f, 0.1f, 64.0f, "%.1f");
 
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.24f, 0.32f, 0.85f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.35f, 0.48f, 1.0f));
-                ImGui::Button(assetDisplayName.c_str(), ImVec2(-1.0f, 26.0f));
+            ImGui::TextDisabled("Quick Palettes:");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Titanium Silver")) {
+                mc.Color1 = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f);
+                mc.Color2 = glm::vec4(0.65f, 0.70f, 0.76f, 1.0f);
+                mc.TileScale = 8.0f;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Slate Graphite")) {
+                mc.Color1 = glm::vec4(0.35f, 0.38f, 0.42f, 1.0f);
+                mc.Color2 = glm::vec4(0.20f, 0.22f, 0.26f, 1.0f);
+                mc.TileScale = 8.0f;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Arctic Navy")) {
+                mc.Color1 = glm::vec4(0.22f, 0.28f, 0.38f, 1.0f);
+                mc.Color2 = glm::vec4(0.14f, 0.18f, 0.25f, 1.0f);
+                mc.TileScale = 8.0f;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Ceramic White")) {
+                mc.Color1 = glm::vec4(0.92f, 0.92f, 0.94f, 1.0f);
+                mc.Color2 = glm::vec4(0.80f, 0.82f, 0.85f, 1.0f);
+                mc.TileScale = 8.0f;
+            }
+
+            ImGui::ColorEdit4("Color Primary", glm::value_ptr(mc.Color1));
+            ImGui::ColorEdit4("Color Secondary", glm::value_ptr(mc.Color2));
+
+            if (entity.HasComponent<HierarchyComponent>() && !entity.GetComponent<HierarchyComponent>().Children.empty()) {
+                ImGui::Spacing();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.42f, 0.65f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.52f, 0.78f, 1.0f));
+                if (ImGui::Button("Apply Material & Scale to All Child Parts", ImVec2(-1.0f, 26.0f))) {
+                    auto children = entity.GetComponent<HierarchyComponent>().Children;
+                    for (auto childId : children) {
+                        if (m_Scene->GetRegistry().valid(childId) && m_Scene->GetRegistry().all_of<MeshInstance3D>(childId)) {
+                            auto& childMc = m_Scene->GetRegistry().get<MeshInstance3D>(childId);
+                            childMc.Color1 = mc.Color1;
+                            childMc.Color2 = mc.Color2;
+                            childMc.TileScale = mc.TileScale;
+                            childMc.PatternMode = mc.PatternMode;
+                        }
+                    }
+                }
                 ImGui::PopStyleColor(2);
-
-                if (ImGui::BeginDragDropTarget()) {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                        const char* pathStr = static_cast<const char*>(payload->Data);
-                        std::filesystem::path p(pathStr);
-                        std::string ext = p.extension().string();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                        if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                            mc.AssetPath = p.string();
-                            if (ext == ".axle") {
-                                auto loaded = AssetSerializer::LoadMesh(p);
-                                if (loaded.Success) {
-                                    mc.VAO = loaded.VAO;
-                                    mc.PatternMode = loaded.SourceData.PatternMode;
-                                    mc.TileScale = loaded.SourceData.TileScale;
-                                    mc.Color1 = loaded.SourceData.ColorPrimary;
-                                    mc.Color2 = loaded.SourceData.ColorSecondary;
-                                }
-                            } else if (ext == ".obj") {
-                                std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
-                                if (!std::filesystem::exists(axlePath)) {
-                                    AssetSerializer::ConvertOBJToAxle(p, axlePath);
-                                }
-                                auto loaded = AssetSerializer::LoadMesh(axlePath);
-                                if (loaded.Success) {
-                                    mc.VAO = loaded.VAO;
-                                    mc.PatternMode = loaded.SourceData.PatternMode;
-                                    mc.TileScale = loaded.SourceData.TileScale;
-                                    mc.Color1 = loaded.SourceData.ColorPrimary;
-                                    mc.Color2 = loaded.SourceData.ColorSecondary;
-                                    mc.AssetPath = axlePath.string();
-                                } else {
-                                    auto loadedVao = PrimitiveMesh::LoadOBJ(p.string());
-                                    if (loadedVao) mc.VAO = loadedVao;
-                                }
-                            }
-                            AXLE_INFO("Assigned 3D model '{0}' to Entity '{1}'", p.filename().string(), entity.GetComponent<TagComponent>().Tag);
-                        }
-                    }
-                    ImGui::EndDragDropTarget();
-                }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Drag & Drop a 3D model (.obj) from Content Browser here to assign");
-                }
-
-                const char* patternNames[] = { "0: World XZ Caro (Floor)", "1: Local 3D Caro (Box/Cyl)", "2: Spherical Caro (Sphere)" };
-                int currentPattern = mc.PatternMode;
-                if (ImGui::Combo("Pattern Mode", &currentPattern, patternNames, IM_ARRAYSIZE(patternNames))) {
-                    mc.PatternMode = currentPattern;
-                }
-
-                ImGui::DragFloat("Tile Scale", &mc.TileScale, 0.2f, 0.1f, 64.0f, "%.1f");
-
-                ImGui::TextDisabled("Quick Palettes:");
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Titanium Silver")) {
-                    mc.Color1 = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f);
-                    mc.Color2 = glm::vec4(0.65f, 0.70f, 0.76f, 1.0f);
-                    mc.TileScale = 8.0f;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Slate Graphite")) {
-                    mc.Color1 = glm::vec4(0.35f, 0.38f, 0.42f, 1.0f);
-                    mc.Color2 = glm::vec4(0.20f, 0.22f, 0.26f, 1.0f);
-                    mc.TileScale = 8.0f;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Arctic Navy")) {
-                    mc.Color1 = glm::vec4(0.22f, 0.28f, 0.38f, 1.0f);
-                    mc.Color2 = glm::vec4(0.14f, 0.18f, 0.25f, 1.0f);
-                    mc.TileScale = 8.0f;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Ceramic White")) {
-                    mc.Color1 = glm::vec4(0.92f, 0.92f, 0.94f, 1.0f);
-                    mc.Color2 = glm::vec4(0.80f, 0.82f, 0.85f, 1.0f);
-                    mc.TileScale = 8.0f;
-                }
-
-                ImGui::ColorEdit4("Color Primary", glm::value_ptr(mc.Color1));
-                ImGui::ColorEdit4("Color Secondary", glm::value_ptr(mc.Color2));
-
-                if (entity.HasComponent<HierarchyComponent>() && !entity.GetComponent<HierarchyComponent>().Children.empty()) {
-                    ImGui::Spacing();
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.42f, 0.65f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.52f, 0.78f, 1.0f));
-                    if (ImGui::Button("Apply Material & Scale to All Child Parts", ImVec2(-1.0f, 26.0f))) {
-                        auto children = entity.GetComponent<HierarchyComponent>().Children;
-                        for (auto childId : children) {
-                            if (m_Scene->GetRegistry().valid(childId) && m_Scene->GetRegistry().all_of<MeshInstance3D>(childId)) {
-                                auto& childMc = m_Scene->GetRegistry().get<MeshInstance3D>(childId);
-                                childMc.Color1 = mc.Color1;
-                                childMc.Color2 = mc.Color2;
-                                childMc.TileScale = mc.TileScale;
-                                childMc.PatternMode = mc.PatternMode;
-                            }
-                        }
-                    }
-                    ImGui::PopStyleColor(2);
-                }
-
-                ImGui::TreePop();
             }
+        }, /*canRemove=*/ true);
 
-            if (removeMesh) {
-                entity.RemoveComponent<MeshInstance3D>();
-            }
-            ImGui::Spacing();
-        } else {
+        if (!entity.HasComponent<MeshInstance3D>()) {
             // Drop target when entity has no MeshInstance3D
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.18f, 0.24f, 0.65f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.30f, 0.42f, 0.90f));
@@ -1169,774 +1263,133 @@ namespace Axle {
         }
 
         // Material Component (PBR Textures & Parameters)
-        if (entity.HasComponent<MaterialComponent>()) {
-            bool removeMat = false;
-            bool matOpen = ImGui::TreeNodeEx((void*)typeid(MaterialComponent).hash_code(), treeNodeFlags, "PBR Material");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeMat = true;
+        // Material Component (PBR Textures & Parameters)
+        DrawComponent<MaterialComponent>("PBR Material", entity, [&](MaterialComponent& mat) {
+            // 1. Material Classification & Summary Badges
+            bool isMetal = (mat.Metallic >= 0.8f);
+            const char* typeBadge = isMetal ? "Conductor (Metallic)" : "Dielectric (Non-Metal)";
+            ImVec4 typeColor = isMetal ? ImVec4(0.95f, 0.75f, 0.35f, 1.0f) : ImVec4(0.40f, 0.70f, 1.0f, 1.0f);
+
+            const char* finishBadge = (mat.Roughness < 0.15f) ? "Mirror / Clearcoat" :
+                                      (mat.Roughness < 0.40f) ? "Satin / Gloss" :
+                                      (mat.Roughness < 0.70f) ? "Semi-Rough" : "Rough / Diffuse";
+
+            ImGui::TextColored(typeColor, "[%s]", typeBadge);
+            ImGui::SameLine();
+            ImGui::TextDisabled("| %s", finishBadge);
+            if (mat.EmissionIntensity > 0.0f) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "| Luminous (%.1f)", mat.EmissionIntensity);
+            }
+            ImGui::Spacing();
+
+            // 2. Physical Material Presets Selector
+            static const char* s_PresetNames[] = {
+                "Choose Material Preset...",
+                "Automotive Paint (Red Clearcoat)",
+                "Automotive Paint (Metallic Blue)",
+                "Chrome (Mirror Polished)",
+                "24K Gold (Polished)",
+                "Brushed Copper",
+                "Rubber (Tire)",
+                "Matte Plastic",
+                "Cast Iron / Steel",
+                "Polished Aluminum",
+                "Obsidian (Black Gloss)",
+                "Automotive Headlight (LED / Xenon)",
+                "Automotive Taillight (LED Red)"
+            };
+            int selectedPreset = 0;
+            if (ImGui::Combo("Physical Preset", &selectedPreset, s_PresetNames, IM_ARRAYSIZE(s_PresetNames))) {
+                switch (selectedPreset) {
+                    case 1: mat.SetPresetCarPaintRed(); break;
+                    case 2: mat.SetPresetCarPaintBlue(); break;
+                    case 3: mat.SetPresetChrome(); break;
+                    case 4: mat.SetPresetGold(); break;
+                    case 5: mat.SetPresetCopper(); break;
+                    case 6: mat.SetPresetRubber(); break;
+                    case 7: mat.SetPresetPlastic(); break;
+                    case 8: mat.SetPresetCastIron(); break;
+                    case 9: mat.SetPresetAluminum(); break;
+                    case 10: mat.SetPresetObsidian(); break;
+                    case 11: mat.SetPresetHeadlightLED(); break;
+                    case 12: mat.SetPresetTaillightLED(); break;
+                    default: break;
                 }
-                ImGui::EndPopup();
             }
 
-            if (matOpen) {
-                auto& mat = entity.GetComponent<MaterialComponent>();
+            // Quick Preset Buttons Bar
+            ImGui::TextDisabled("Quick Presets:");
+            if (ImGui::SmallButton("Car Paint (Red)")) { mat.SetPresetCarPaintRed(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Car Paint (Blue)")) { mat.SetPresetCarPaintBlue(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Chrome")) { mat.SetPresetChrome(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Gold")) { mat.SetPresetGold(); }
 
-                // 1. Material Classification & Summary Badges
-                bool isMetal = (mat.Metallic >= 0.8f);
-                const char* typeBadge = isMetal ? "Conductor (Metallic)" : "Dielectric (Non-Metal)";
-                ImVec4 typeColor = isMetal ? ImVec4(0.95f, 0.75f, 0.35f, 1.0f) : ImVec4(0.40f, 0.70f, 1.0f, 1.0f);
+            if (ImGui::SmallButton("Copper")) { mat.SetPresetCopper(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Rubber Tire")) { mat.SetPresetRubber(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Plastic")) { mat.SetPresetPlastic(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Steel")) { mat.SetPresetCastIron(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Aluminum")) { mat.SetPresetAluminum(); }
 
-                const char* finishBadge = (mat.Roughness < 0.15f) ? "Mirror / Clearcoat" :
-                                          (mat.Roughness < 0.40f) ? "Satin / Gloss" :
-                                          (mat.Roughness < 0.70f) ? "Semi-Rough" : "Rough / Diffuse";
+            if (ImGui::SmallButton("Obsidian")) { mat.SetPresetObsidian(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("LED Headlight")) { mat.SetPresetHeadlightLED(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("LED Taillight")) { mat.SetPresetTaillightLED(); }
 
-                ImGui::TextColored(typeColor, "[%s]", typeBadge);
-                ImGui::SameLine();
-                ImGui::TextDisabled("| %s", finishBadge);
-                if (mat.EmissionIntensity > 0.0f) {
-                    ImGui::SameLine();
-                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "| Luminous (%.1f)", mat.EmissionIntensity);
-                }
-                ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
 
-                // 2. Physical Material Presets Selector
-                static const char* s_PresetNames[] = {
-                    "Choose Material Preset...",
-                    "Automotive Paint (Red Clearcoat)",
-                    "Automotive Paint (Metallic Blue)",
-                    "Chrome (Mirror Polished)",
-                    "24K Gold (Polished)",
-                    "Brushed Copper",
-                    "Rubber (Tire)",
-                    "Matte Plastic",
-                    "Cast Iron / Steel",
-                    "Polished Aluminum",
-                    "Obsidian (Black Gloss)",
-                    "Automotive Headlight (LED / Xenon)",
-                    "Automotive Taillight (LED Red)"
-                };
-                int selectedPreset = 0;
-                if (ImGui::Combo("Physical Preset", &selectedPreset, s_PresetNames, IM_ARRAYSIZE(s_PresetNames))) {
-                    switch (selectedPreset) {
-                        case 1: mat.SetPresetCarPaintRed(); break;
-                        case 2: mat.SetPresetCarPaintBlue(); break;
-                        case 3: mat.SetPresetChrome(); break;
-                        case 4: mat.SetPresetGold(); break;
-                        case 5: mat.SetPresetCopper(); break;
-                        case 6: mat.SetPresetRubber(); break;
-                        case 7: mat.SetPresetPlastic(); break;
-                        case 8: mat.SetPresetCastIron(); break;
-                        case 9: mat.SetPresetAluminum(); break;
-                        case 10: mat.SetPresetObsidian(); break;
-                        case 11: mat.SetPresetHeadlightLED(); break;
-                        case 12: mat.SetPresetTaillightLED(); break;
-                        default: break;
-                    }
+            auto DrawTextureSlot = [&](const char* slotName, 
+                                       std::shared_ptr<Texture2D>& tex, 
+                                       std::string& path, 
+                                       bool& enabled, 
+                                       auto onSetPath) {
+                ImGui::PushID(slotName);
+                ImGui::TextDisabled("%s", slotName);
+
+                // 44x44 thumbnail card
+                ImTextureID texId = 0;
+                if (tex && tex->IsLoaded()) {
+                    texId = (ImTextureID)(intptr_t)tex->GetRendererID();
                 }
 
-                // Quick Preset Buttons Bar
-                ImGui::TextDisabled("Quick Presets:");
-                if (ImGui::SmallButton("Car Paint (Red)")) { mat.SetPresetCarPaintRed(); }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Car Paint (Blue)")) { mat.SetPresetCarPaintBlue(); }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Chrome")) { mat.SetPresetChrome(); }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Gold")) { mat.SetPresetGold(); }
-
-                if (ImGui::SmallButton("Copper")) { mat.SetPresetCopper(); }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Rubber Tire")) { mat.SetPresetRubber(); }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Plastic")) { mat.SetPresetPlastic(); }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Steel")) { mat.SetPresetCastIron(); }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Aluminum")) { mat.SetPresetAluminum(); }
-
-                if (ImGui::SmallButton("Obsidian")) { mat.SetPresetObsidian(); }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("LED Headlight")) { mat.SetPresetHeadlightLED(); }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("LED Taillight")) { mat.SetPresetTaillightLED(); }
-
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                auto DrawTextureSlot = [&](const char* slotName, 
-                                           std::shared_ptr<Texture2D>& tex, 
-                                           std::string& path, 
-                                           bool& enabled, 
-                                           auto onSetPath) {
-                    ImGui::PushID(slotName);
-                    ImGui::TextDisabled("%s", slotName);
-
-                    // 44x44 thumbnail card
-                    ImTextureID texId = 0;
-                    if (tex && tex->IsLoaded()) {
-                        texId = (ImTextureID)(intptr_t)tex->GetRendererID();
-                    }
-
-                    if (texId) {
-                        ImGui::Image(texId, ImVec2(44.0f, 44.0f), ImVec2(0, 1), ImVec2(1, 0), ImVec4(1, 1, 1, 1), ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
-                    } else {
-                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.15f, 0.20f, 0.85f));
-                        ImGui::Button("Drop\nTex", ImVec2(44.0f, 44.0f));
-                        ImGui::PopStyleColor();
-                    }
-
-                    if (ImGui::BeginDragDropTarget()) {
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                            const char* pathStr = static_cast<const char*>(payload->Data);
-                            std::filesystem::path p(pathStr);
-                            std::string ext = p.extension().string();
-                            std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") {
-                                onSetPath(p.string());
-                            }
-                        }
-                        ImGui::EndDragDropTarget();
-                    }
-
-                    ImGui::SameLine();
-                    ImGui::BeginGroup();
-                    ImGui::Checkbox("Use Texture", &enabled);
-
-                    std::string displayName = path.empty() ? "[ Drag Texture Here ]" : std::filesystem::path(path).filename().string();
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.20f, 0.26f, 0.85f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.32f, 0.44f, 1.0f));
-                    ImGui::Button(displayName.c_str(), ImVec2(ImGui::GetContentRegionAvail().x - 28.0f, 22.0f));
-                    ImGui::PopStyleColor(2);
-
-                    if (ImGui::BeginDragDropTarget()) {
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                            const char* pathStr = static_cast<const char*>(payload->Data);
-                            std::filesystem::path p(pathStr);
-                            std::string ext = p.extension().string();
-                            std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") {
-                                onSetPath(p.string());
-                            }
-                        }
-                        ImGui::EndDragDropTarget();
-                    }
-
-                    ImGui::SameLine();
-                    if (ImGui::Button("X", ImVec2(22.0f, 22.0f))) {
-                        onSetPath("");
-                    }
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear texture");
-
-                    ImGui::EndGroup();
-                    ImGui::PopID();
-                    ImGui::Spacing();
-                };
-
-                // 1. Albedo
-                DrawTextureSlot("Albedo Map (Base Color)", mat.AlbedoMap, mat.AlbedoPath, mat.UseAlbedoMap,
-                    [&](const std::string& p) { mat.SetAlbedo(p); });
-                ImGui::ColorEdit4("Albedo Tint", glm::value_ptr(mat.AlbedoColor));
-                ImGui::Spacing();
-
-                // 2. Normal Map
-                DrawTextureSlot("Normal Map (Cotangent Perturbation)", mat.NormalMap, mat.NormalPath, mat.UseNormalMap,
-                    [&](const std::string& p) { mat.SetNormal(p); });
-                if (mat.UseNormalMap) {
-                    ImGui::SliderFloat("Normal Strength", &mat.NormalStrength, 0.0f, 3.0f, "%.2f");
-                }
-                ImGui::Spacing();
-
-                // 3. Roughness
-                DrawTextureSlot("Roughness Map", mat.RoughnessMap, mat.RoughnessPath, mat.UseRoughnessMap,
-                    [&](const std::string& p) { mat.SetRoughnessMap(p); });
-                if (!mat.UseRoughnessMap) {
-                    ImGui::SliderFloat("Roughness", &mat.Roughness, 0.04f, 1.0f, "%.2f");
+                if (texId) {
+                    ImGui::Image(texId, ImVec2(44.0f, 44.0f), ImVec2(0, 1), ImVec2(1, 0), ImVec4(1, 1, 1, 1), ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
                 } else {
-                    ImGui::TextDisabled("  [Active] Roughness sampled from texture red channel");
-                }
-                ImGui::Spacing();
-
-                // 4. Metallic
-                DrawTextureSlot("Metallic Map", mat.MetallicMap, mat.MetallicPath, mat.UseMetallicMap,
-                    [&](const std::string& p) { mat.SetMetallicMap(p); });
-                if (!mat.UseMetallicMap) {
-                    ImGui::SliderFloat("Metallic", &mat.Metallic, 0.0f, 1.0f, "%.2f");
-                } else {
-                    ImGui::TextDisabled("  [Active] Metallic conductivity sampled from texture red channel");
-                }
-                ImGui::Spacing();
-
-                // 5. Emission (Automotive Lighting & Neon Glow)
-                ImGui::ColorEdit3("Emission Color", glm::value_ptr(mat.EmissionColor));
-                ImGui::DragFloat("Emission Intensity", &mat.EmissionIntensity, 0.1f, 0.0f, 25.0f, "%.1f");
-                if (mat.EmissionIntensity > 0.0f) {
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Clear##Emission")) {
-                        mat.EmissionColor = glm::vec3(0.0f);
-                        mat.EmissionIntensity = 0.0f;
-                    }
-                }
-                ImGui::Spacing();
-
-                // 6. UV Tiling
-                ImGui::DragFloat2("UV Scale", glm::value_ptr(mat.UVScale), 0.1f, 0.01f, 100.0f, "%.2f");
-                ImGui::TextDisabled("UV Presets:");
-                ImGui::SameLine();
-                if (ImGui::SmallButton("1x1")) mat.UVScale = glm::vec2(1.0f);
-                ImGui::SameLine();
-                if (ImGui::SmallButton("2x2")) mat.UVScale = glm::vec2(2.0f);
-                ImGui::SameLine();
-                if (ImGui::SmallButton("4x4")) mat.UVScale = glm::vec2(4.0f);
-                ImGui::SameLine();
-                if (ImGui::SmallButton("8x8")) mat.UVScale = glm::vec2(8.0f);
-                ImGui::SameLine();
-                if (ImGui::SmallButton("16x16")) mat.UVScale = glm::vec2(16.0f);
-
-                // Quick Texture Pipeline Actions
-                ImGui::Spacing();
-                ImGui::TextDisabled("Texture Setup Tools:");
-                if (ImGui::SmallButton("Prototype Grid (512x512)")) {
-                    mat.SetAlbedo("textures/Prototype_Grid.png");
-                    mat.SetNormal("textures/Flat_Normal.png");
-                    mat.SetRoughnessMap("textures/Roughness_Gradient.png");
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Reset All Textures")) {
-                    mat.ResetTextures();
-                    mat.Roughness = 0.5f;
-                    mat.Metallic = 0.0f;
-                    mat.NormalStrength = 1.0f;
-                    mat.EmissionColor = glm::vec3(0.0f);
-                    mat.EmissionIntensity = 0.0f;
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.15f, 0.20f, 0.85f));
+                    ImGui::Button("Drop\nTex", ImVec2(44.0f, 44.0f));
+                    ImGui::PopStyleColor();
                 }
 
-                ImGui::TreePop();
-            }
-
-            if (removeMat) {
-                entity.RemoveComponent<MaterialComponent>();
-            }
-            ImGui::Spacing();
-        }
-
-        // Collision Shape 3D Component
-        if (entity.HasComponent<CollisionShape3D>()) {
-            bool removeCS = false;
-            bool csOpen = ImGui::TreeNodeEx((void*)typeid(CollisionShape3D).hash_code(), treeNodeFlags, "CollisionShape3D");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeCS = true;
-                }
-                ImGui::EndPopup();
-            }
-
-            if (csOpen) {
-                auto& cs = entity.GetComponent<CollisionShape3D>();
-
-                const char* shapeTypeNames[] = { "Box", "Sphere", "Cylinder", "Cone", "Plane", "Mesh" };
-                int currentShape = static_cast<int>(cs.ShapeType);
-                if (ImGui::Combo("Shape Type", &currentShape, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames))) {
-                    cs.ShapeType = static_cast<CollisionShapeType>(currentShape);
-                }
-
-                switch (cs.ShapeType) {
-                    case CollisionShapeType::Box:
-                        ImGui::DragFloat3("Half Extents", glm::value_ptr(cs.HalfExtent), 0.05f, 0.01f, 100.0f);
-                        break;
-                    case CollisionShapeType::Sphere:
-                        ImGui::DragFloat("Radius", &cs.Radius, 0.05f, 0.01f, 100.0f);
-                        break;
-                    case CollisionShapeType::Cylinder:
-                        ImGui::DragFloat("Half Height", &cs.HalfHeight, 0.05f, 0.01f, 100.0f);
-                        ImGui::DragFloat("Radius", &cs.Radius, 0.05f, 0.01f, 100.0f);
-                        break;
-                    case CollisionShapeType::Cone:
-                        ImGui::DragFloat("Half Height", &cs.HalfHeight, 0.05f, 0.01f, 100.0f);
-                        ImGui::DragFloat("Radius", &cs.Radius, 0.05f, 0.01f, 100.0f);
-                        break;
-                    case CollisionShapeType::Plane:
-                        ImGui::DragFloat("Plane Half Extent", &cs.HalfExtent.x, 0.5f, 0.1f, 1000.0f);
-                        cs.HalfExtent.z = cs.HalfExtent.x;
-                        break;
-                    case CollisionShapeType::Mesh:
-                        ImGui::TextDisabled("Mesh shape matches active MeshInstance3D");
-                        break;
-                }
-
-                ImGui::DragFloat3("Offset", glm::value_ptr(cs.Offset), 0.05f);
-
-                if (ImGui::SliderFloat("Friction", &cs.Friction, 0.0f, 2.0f, "%.2f")) {
-                    if (entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
-                        auto& rb = entity.GetComponent<RigidBody3D>();
-                        if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                            JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
-                            if (lock.Succeeded()) lock.GetBody().SetFriction(cs.Friction);
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = static_cast<const char*>(payload->Data);
+                        std::filesystem::path p(pathStr);
+                        std::string ext = p.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") {
+                            onSetPath(p.string());
                         }
                     }
+                    ImGui::EndDragDropTarget();
                 }
 
-                if (ImGui::SliderFloat("Restitution", &cs.Restitution, 0.0f, 1.0f, "%.2f")) {
-                    if (entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
-                        auto& rb = entity.GetComponent<RigidBody3D>();
-                        if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                            JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
-                            if (lock.Succeeded()) lock.GetBody().SetRestitution(cs.Restitution);
-                        }
-                    }
-                }
-
-                ImGui::Checkbox("Is Trigger (Sensor)", &cs.IsTrigger);
-
-                ImGui::TreePop();
-            }
-
-            if (removeCS) {
-                entity.RemoveComponent<CollisionShape3D>();
-            }
-            ImGui::Spacing();
-        }
-
-        // Rigid Body 3D Component
-        if (entity.HasComponent<RigidBody3D>()) {
-            bool removeRB = false;
-            bool rbOpen = ImGui::TreeNodeEx((void*)typeid(RigidBody3D).hash_code(), treeNodeFlags, "RigidBody3D");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeRB = true;
-                }
-                ImGui::EndPopup();
-            }
-
-            if (rbOpen) {
-                auto& rb = entity.GetComponent<RigidBody3D>();
-
-                ImGui::Text("Body ID: %u", rb.RuntimeBodyID.GetIndexAndSequenceNumber());
-
-                const char* motionNames[] = { "Static", "Kinematic", "Dynamic" };
-                int currentMotion = static_cast<int>(rb.MotionType);
-                if (ImGui::Combo("Motion Type", &currentMotion, motionNames, IM_ARRAYSIZE(motionNames))) {
-                    rb.MotionType = static_cast<BodyMotionType>(currentMotion);
-                    rb.IsDynamic = (rb.MotionType == BodyMotionType::Dynamic);
-                    if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                        JPH::EMotionType jType = JPH::EMotionType::Dynamic;
-                        if (rb.MotionType == BodyMotionType::Static) jType = JPH::EMotionType::Static;
-                        else if (rb.MotionType == BodyMotionType::Kinematic) jType = JPH::EMotionType::Kinematic;
-                        JPH::EActivation act = (jType == JPH::EMotionType::Static) ? JPH::EActivation::DontActivate : JPH::EActivation::Activate;
-                        m_PhysicsScene->GetBodyInterface().SetMotionType(rb.RuntimeBodyID, jType, act);
-                    }
-                }
-
-                ImGui::DragFloat("Mass (kg)", &rb.Mass, 1.0f, 0.01f, 100000.0f, "%.1f");
-                ImGui::DragFloat("Linear Damping", &rb.LinearDamping, 0.01f, 0.0f, 10.0f, "%.2f");
-                ImGui::DragFloat("Angular Damping", &rb.AngularDamping, 0.01f, 0.0f, 10.0f, "%.2f");
-                ImGui::DragFloat("Gravity Scale", &rb.GravityFactor, 0.05f, -10.0f, 10.0f, "%.2f");
-
-                // Warning if RigidBody3D has no CollisionShape3D
-                if (!entity.HasComponent<CollisionShape3D>()) {
-                    ImGui::Spacing();
-                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "[!] No CollisionShape3D attached.");
-                    if (ImGui::Button("+ Add CollisionShape3D")) {
-                        entity.AddComponent<CollisionShape3D>();
-                    }
-                }
-
-                if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                    const bool isActive = m_PhysicsScene->IsActive(rb.RuntimeBodyID);
-                    ImGui::Text("State: ");
-                    ImGui::SameLine();
-                    if (isActive) {
-                        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.3f, 1.0f), "ACTIVE");
-                    } else {
-                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "SLEEPING");
-                    }
-
-                    bool isDynamicInPhysics = false;
-                    if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                        isDynamicInPhysics = (m_PhysicsScene->GetBodyInterface().GetMotionType(rb.RuntimeBodyID) == JPH::EMotionType::Dynamic);
-                    }
-
-                    if (isDynamicInPhysics) {
-                        bool allowSleeping = true;
-                        {
-                            JPH::BodyLockRead lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
-                            if (lock.Succeeded()) {
-                                const JPH::Body& body = lock.GetBody();
-                                if (!body.IsStatic() && body.GetMotionProperties() != nullptr) {
-                                    allowSleeping = body.GetAllowSleeping();
-                                }
-                            }
-                        }
-
-                        if (ImGui::Checkbox("Allow Sleeping", &allowSleeping)) {
-                            JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
-                            if (lock.Succeeded()) {
-                                JPH::Body& body = lock.GetBody();
-                                if (!body.IsStatic() && body.GetMotionProperties() != nullptr) {
-                                    body.SetAllowSleeping(allowSleeping);
-                                }
-                            }
-                        }
-
-                        if (ImGui::Button("Wake Up")) {
-                            m_PhysicsScene->ActivateBody(rb.RuntimeBodyID);
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::Button("Put to Sleep")) {
-                            m_PhysicsScene->DeactivateBody(rb.RuntimeBodyID);
-                        }
-
-                        const glm::vec3 vel = m_PhysicsScene->GetLinearVelocity(rb.RuntimeBodyID);
-                        ImGui::Text("Velocity: (%.2f, %.2f, %.2f) m/s", vel.x, vel.y, vel.z);
-                        ImGui::Text("Linear Speed: %.2f m/s", glm::length(vel));
-
-                        if (ImGui::Button("Zero Velocity")) {
-                            m_PhysicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
-                        }
-                    }
-                }
-
-                ImGui::TreePop();
-            }
-
-            if (removeRB) {
-                auto& rb = entity.GetComponent<RigidBody3D>();
-                if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                    m_PhysicsScene->DestroyBody(rb.RuntimeBodyID);
-                }
-                entity.RemoveComponent<RigidBody3D>();
-            }
-            ImGui::Spacing();
-        }
-
-        // Vehicle Component
-        if (entity.HasComponent<VehicleComponent>()) {
-            bool removeVC = false;
-            bool vcOpen = ImGui::TreeNodeEx((void*)typeid(VehicleComponent).hash_code(), treeNodeFlags, "Vehicle Dynamics");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeVC = true;
-                }
-                ImGui::EndPopup();
-            }
-
-            if (vcOpen) {
-                auto& vc = entity.GetComponent<VehicleComponent>();
-                if (vc.VehicleInstance) {
-                    auto telemetry = vc.VehicleInstance->GetTelemetry();
-                    ImGui::Text("Speed: %.1f km/h (%.1f m/s)", telemetry.SpeedKmh, telemetry.SpeedMps);
-                    ImGui::Text("Engine RPM: %.0f", telemetry.EngineRPM);
-                    ImGui::Text("Current Gear: %d", telemetry.CurrentGear);
-                    ImGui::Text("Chassis Mass: %.0f kg", vc.VehicleInstance->GetConfig().ChassisMass);
-                } else {
-                    ImGui::TextDisabled("Vehicle controller not attached.");
-                }
-                ImGui::TreePop();
-            }
-
-            if (removeVC) {
-                entity.RemoveComponent<VehicleComponent>();
-            }
-            ImGui::Spacing();
-        }
-
-
-
-        // Directional Light Component
-        if (entity.HasComponent<DirectionalLightComponent>()) {
-            bool removeDLC = false;
-            bool dlcOpen = ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), treeNodeFlags, "Directional Sun Light");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeDLC = true;
-                }
-                ImGui::EndPopup();
-            }
-
-            if (dlcOpen) {
-                auto& dlc = entity.GetComponent<DirectionalLightComponent>();
-
-                // Light Color
-                ImGui::ColorEdit3("Light Color", glm::value_ptr(dlc.Color));
-
-                // Intensity
-                ImGui::SliderFloat("Intensity", &dlc.Intensity, 0.0f, 5.0f, "%.2f");
-
-                // Ambient Intensity
-                ImGui::SliderFloat("Ambient Fill", &dlc.AmbientIntensity, 0.0f, 1.0f, "%.2f");
-
-                // Sun Angles
-                ImGui::SliderFloat("Azimuth (Heading)", &dlc.Azimuth, 0.0f, 360.0f, "%.1f deg");
-                ImGui::SliderFloat("Elevation (Altitude)", &dlc.Elevation, 5.0f, 89.0f, "%.1f deg");
-
-                // Cast Shadows Toggle
-                ImGui::Checkbox("Cast Real-Time Shadows", &dlc.CastShadows);
-
-                // Quick Atmosphere Presets
-                ImGui::Spacing();
-                ImGui::TextDisabled("Atmosphere Presets:");
-                if (ImGui::SmallButton("Noon Daylight")) {
-                    dlc.Color = glm::vec3(1.0f, 0.98f, 0.92f);
-                    dlc.Intensity = 1.2f;
-                    dlc.AmbientIntensity = 0.28f;
-                    dlc.Azimuth = 45.0f;
-                    dlc.Elevation = 65.0f;
-                    dlc.CastShadows = true;
-                }
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Golden Hour / Sunset")) {
-                    dlc.Color = glm::vec3(1.0f, 0.58f, 0.25f);
-                    dlc.Intensity = 1.35f;
-                    dlc.AmbientIntensity = 0.22f;
-                    dlc.Azimuth = 240.0f;
-                    dlc.Elevation = 15.0f;
-                    dlc.CastShadows = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Night Moonlight")) {
-                    dlc.Color = glm::vec3(0.45f, 0.60f, 0.95f);
-                    dlc.Intensity = 0.40f;
-                    dlc.AmbientIntensity = 0.15f;
-                    dlc.Azimuth = 135.0f;
-                    dlc.Elevation = 45.0f;
-                    dlc.CastShadows = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Overcast Studio")) {
-                    dlc.Color = glm::vec3(0.95f, 0.95f, 1.0f);
-                    dlc.Intensity = 1.0f;
-                    dlc.AmbientIntensity = 0.45f;
-                    dlc.Azimuth = 45.0f;
-                    dlc.Elevation = 70.0f;
-                    dlc.CastShadows = true;
-                }
+                ImGui::BeginGroup();
+                ImGui::Checkbox("Use Texture", &enabled);
 
-                // --- PHOTOMETRIC POST-PROCESSING & TONE MAPPING (Phase 11: Sub-step 3.2) ---
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), "HDR Filmic Tone Mapping & Gamma:");
-
-                ImGui::SliderFloat("Exposure", &dlc.Exposure, 0.1f, 5.0f, "%.2f");
-
-                const char* toneMappingNames[] = {
-                    "0: ACES Filmic (Cinematic)",
-                    "1: Reinhard (Standard)",
-                    "2: Uncharted 2 (Hable)",
-                    "3: None (Linear Bypass)"
-                };
-                int currentTM = dlc.ToneMappingMode;
-                if (ImGui::Combo("Tone Mapping", &currentTM, toneMappingNames, IM_ARRAYSIZE(toneMappingNames))) {
-                    dlc.ToneMappingMode = currentTM;
-                }
-
-                ImGui::SliderFloat("Display Gamma", &dlc.Gamma, 1.0f, 3.0f, "%.2f");
-
-                ImGui::TextDisabled("Quick Looks:");
-                ImGui::SameLine();
-                if (ImGui::SmallButton("ACES Filmic")) {
-                    dlc.Exposure = 1.0f;
-                    dlc.ToneMappingMode = 0;
-                    dlc.Gamma = 2.2f;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("High Exposure")) {
-                    dlc.Exposure = 1.6f;
-                    dlc.ToneMappingMode = 0;
-                    dlc.Gamma = 2.2f;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Reinhard")) {
-                    dlc.Exposure = 1.2f;
-                    dlc.ToneMappingMode = 1;
-                    dlc.Gamma = 2.2f;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Raw Linear")) {
-                    dlc.Exposure = 1.0f;
-                    dlc.ToneMappingMode = 3;
-                    dlc.Gamma = 1.0f;
-                }
-
-                // Vector display
-                glm::vec3 dir = dlc.GetDirection();
-                ImGui::TextDisabled("Light Direction: (%.2f, %.2f, %.2f)", dir.x, dir.y, dir.z);
-
-                ImGui::TreePop();
-            }
-
-            if (removeDLC) {
-                entity.RemoveComponent<DirectionalLightComponent>();
-            }
-            ImGui::Spacing();
-        }
-
-        // Atmospheric Skybox Component (Phase 11: Sub-step 4.2)
-        if (entity.HasComponent<SkyboxComponent>()) {
-            bool removeSBC = false;
-            bool sbcOpen = ImGui::TreeNodeEx((void*)typeid(SkyboxComponent).hash_code(), treeNodeFlags, "Atmospheric Skybox");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeSBC = true;
-                }
-                ImGui::EndPopup();
-            }
-
-            if (sbcOpen) {
-                auto& sbc = entity.GetComponent<SkyboxComponent>();
-
-                ImGui::Checkbox("Enable Skybox", &sbc.Enabled);
-                ImGui::Checkbox("Hemisphere Ambient Lighting", &sbc.HemisphereAmbient);
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Compute realistic ambient irradiance gradients (Zenith, Horizon, Ground) from atmospheric sky.");
-                }
-                ImGui::Spacing();
-
-                // Atmosphere Colors
-                ImGui::ColorEdit3("Zenith Color", glm::value_ptr(sbc.ZenithColor));
-                ImGui::ColorEdit3("Horizon Color", glm::value_ptr(sbc.HorizonColor));
-                ImGui::ColorEdit3("Ground Color", glm::value_ptr(sbc.GroundColor));
-                ImGui::Spacing();
-
-                // Atmospheric Properties
-                ImGui::SliderFloat("Turbidity (Haze)", &sbc.Turbidity, 0.2f, 4.0f, "%.2f");
-                ImGui::SliderFloat("Sun Disk Size", &sbc.SunSize, 0.01f, 0.15f, "%.3f");
-                ImGui::SliderFloat("Sun Glow (Corona)", &sbc.SunGlow, 0.02f, 0.80f, "%.2f");
-                ImGui::Spacing();
-
-                // Sun Alignment
-                ImGui::Checkbox("Sync with Directional Sun Light", &sbc.SyncWithSun);
-                if (!sbc.SyncWithSun) {
-                    ImGui::SliderFloat("Custom Sun Azimuth", &sbc.CustomAzimuth, 0.0f, 360.0f, "%.1f deg");
-                    ImGui::SliderFloat("Custom Sun Elevation", &sbc.CustomElevation, 1.0f, 89.0f, "%.1f deg");
-                }
-                ImGui::Spacing();
-
-                // Atmosphere Presets
-                ImGui::TextDisabled("Atmosphere Presets:");
-                if (ImGui::SmallButton("Clear Noon")) {
-                    sbc.SetPresetNoon();
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Golden Sunset")) {
-                    sbc.SetPresetSunset();
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Starry Night")) {
-                    sbc.SetPresetNight();
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Overcast")) {
-                    sbc.SetPresetOvercast();
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Mars Sky")) {
-                    sbc.SetPresetAlienMars();
-                }
-
-                ImGui::TreePop();
-            }
-
-            if (removeSBC) {
-                entity.RemoveComponent<SkyboxComponent>();
-            }
-            ImGui::Spacing();
-        }
-
-        // Point Light Component
-        if (entity.HasComponent<PointLightComponent>()) {
-            bool removePLC = false;
-            bool plcOpen = ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), treeNodeFlags, "Point Light");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removePLC = true;
-                }
-                ImGui::EndPopup();
-            }
-
-            if (plcOpen) {
-                auto& plc = entity.GetComponent<PointLightComponent>();
-                ImGui::ColorEdit3("Light Color", glm::value_ptr(plc.Color));
-                ImGui::DragFloat("Intensity", &plc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
-                ImGui::DragFloat("Radius", &plc.Radius, 0.5f, 0.1f, 500.0f, "%.1f m");
-                ImGui::DragFloat("Falloff", &plc.Falloff, 0.05f, 0.1f, 10.0f, "%.2f");
-                ImGui::TreePop();
-            }
-
-            if (removePLC) {
-                entity.RemoveComponent<PointLightComponent>();
-            }
-            ImGui::Spacing();
-        }
-
-        // Camera Component
-        if (entity.HasComponent<CameraComponent>()) {
-            bool removeCam = false;
-            bool camOpen = ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), treeNodeFlags, "Camera");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeCam = true;
-                }
-                ImGui::EndPopup();
-            }
-
-            if (camOpen) {
-                auto& cam = entity.GetComponent<CameraComponent>();
-                ImGui::DragFloat("Field of View", &cam.FOV, 0.5f, 10.0f, 150.0f, "%.1f deg");
-                ImGui::DragFloat("Near Clip", &cam.NearClip, 0.01f, 0.001f, 10.0f, "%.3f m");
-                ImGui::DragFloat("Far Clip", &cam.FarClip, 1.0f, 1.0f, 10000.0f, "%.1f m");
-                ImGui::Checkbox("Primary Camera", &cam.Primary);
-                ImGui::TreePop();
-            }
-
-            if (removeCam) {
-                entity.RemoveComponent<CameraComponent>();
-            }
-            ImGui::Spacing();
-        }
-
-
-        // Native Script Component
-        if (entity.HasComponent<NativeScriptComponent>()) {
-            auto& nsc = entity.GetComponent<NativeScriptComponent>();
-            bool removeScript = false;
-            bool scriptOpen = ImGui::TreeNodeEx((void*)typeid(NativeScriptComponent).hash_code(), treeNodeFlags, "Native Script");
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) {
-                    removeScript = true;
-                }
-                ImGui::EndPopup();
-            }
-
-            if (scriptOpen) {
-
-                // Script Class Combo Dropdown
-                const auto& registeredScripts = ScriptRegistry::GetScripts();
-                std::vector<std::string> scriptNames;
-                for (const auto& [name, _] : registeredScripts) {
-                    scriptNames.push_back(name);
-                }
-
-                ImGui::Text("Script Class:");
-                ImGui::SameLine();
-                std::string currentScript = nsc.ScriptName.empty() ? "[ Unbound ]" : nsc.ScriptName;
-                if (ImGui::BeginCombo("##ScriptClassCombo", currentScript.c_str())) {
-                    for (const auto& name : scriptNames) {
-                        bool isSelected = (nsc.ScriptName == name);
-                        if (ImGui::Selectable(name.c_str(), isSelected)) {
-                            nsc.Bind(name);
-                        }
-                        if (isSelected) {
-                            ImGui::SetItemDefaultFocus();
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
-
-                // Drag & Drop Script Target Area
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.28f, 0.42f, 0.70f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.38f, 0.58f, 0.90f));
-                std::string dropBtnLabel = "Drop Script (.hpp) Here: " + (nsc.ScriptName.empty() ? "None" : nsc.ScriptName);
-                ImGui::Button(dropBtnLabel.c_str(), ImVec2(-1.0f, 26.0f));
+                std::string displayName = path.empty() ? "[ Drag Texture Here ]" : std::filesystem::path(path).filename().string();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.20f, 0.26f, 0.85f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.32f, 0.44f, 1.0f));
+                ImGui::Button(displayName.c_str(), ImVec2(ImGui::GetContentRegionAvail().x - 28.0f, 22.0f));
                 ImGui::PopStyleColor(2);
 
                 if (ImGui::BeginDragDropTarget()) {
@@ -1945,133 +1398,652 @@ namespace Axle {
                         std::filesystem::path p(pathStr);
                         std::string ext = p.extension().string();
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                        if (ext == ".hpp" || ext == ".h" || ext == ".cpp") {
-                            std::string scriptName = p.stem().string();
-                            nsc.Bind(scriptName);
-                            AXLE_INFO("Bound Script '{0}' to Entity via Inspector drop", scriptName);
+                        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") {
+                            onSetPath(p.string());
                         }
                     }
                     ImGui::EndDragDropTarget();
                 }
 
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                // Dynamic Reflected Fields
-                const auto* meta = ScriptRegistry::GetMetadata(nsc.ScriptName);
-                if (meta && !meta->Fields.empty()) {
-                    ImGui::TextColored(ImVec4(0.40f, 0.85f, 0.95f, 1.0f), "Exposed Fields (%zu):", meta->Fields.size());
-                    ImGui::Spacing();
-
-                    for (const auto& field : meta->Fields) {
-                        std::string label = field.Name + "##" + field.Name;
-                        switch (field.Type) {
-                            case ScriptFieldType::Float: {
-                                float val = nsc.FloatFields[field.Name];
-                                bool changed = false;
-                                if (field.Min < field.Max) {
-                                    changed = ImGui::SliderFloat(label.c_str(), &val, field.Min, field.Max, "%.2f");
-                                } else {
-                                    changed = ImGui::DragFloat(label.c_str(), &val, 0.1f);
-                                }
-                                if (changed) {
-                                    nsc.FloatFields[field.Name] = val;
-                                    if (nsc.Instance) {
-                                        field.SetValue(nsc.Instance, val);
-                                    }
-                                }
-                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
-                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
-                                }
-                                break;
-                            }
-                            case ScriptFieldType::Int: {
-                                int val = nsc.IntFields[field.Name];
-                                bool changed = false;
-                                if (field.Min < field.Max) {
-                                    changed = ImGui::SliderInt(label.c_str(), &val, (int)field.Min, (int)field.Max);
-                                } else {
-                                    changed = ImGui::DragInt(label.c_str(), &val, 1.0f);
-                                }
-                                if (changed) {
-                                    nsc.IntFields[field.Name] = val;
-                                    if (nsc.Instance) {
-                                        field.SetValue(nsc.Instance, val);
-                                    }
-                                }
-                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
-                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
-                                }
-                                break;
-                            }
-                            case ScriptFieldType::Bool: {
-                                bool val = nsc.BoolFields[field.Name];
-                                if (ImGui::Checkbox(label.c_str(), &val)) {
-                                    nsc.BoolFields[field.Name] = val;
-                                    if (nsc.Instance) {
-                                        field.SetValue(nsc.Instance, val);
-                                    }
-                                }
-                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
-                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
-                                }
-                                break;
-                            }
-                            case ScriptFieldType::Vec3: {
-                                glm::vec3 val = nsc.Vec3Fields[field.Name];
-                                if (ImGui::DragFloat3(label.c_str(), glm::value_ptr(val), 0.1f)) {
-                                    nsc.Vec3Fields[field.Name] = val;
-                                    if (nsc.Instance) {
-                                        field.SetValue(nsc.Instance, val);
-                                    }
-                                }
-                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
-                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
-                                }
-                                break;
-                            }
-                            case ScriptFieldType::String: {
-                                std::string& val = nsc.StringFields[field.Name];
-                                char buf[256];
-                                std::memset(buf, 0, sizeof(buf));
-                                std::strncpy(buf, val.c_str(), sizeof(buf) - 1);
-                                if (ImGui::InputText(label.c_str(), buf, sizeof(buf))) {
-                                    val = buf;
-                                    if (nsc.Instance) {
-                                        field.SetValue(nsc.Instance, val);
-                                    }
-                                }
-                                if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
-                                    ImGui::SetTooltip("%s", field.Tooltip.c_str());
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    ImGui::Spacing();
-                    if (ImGui::Button("Reset Defaults")) {
-                        nsc.Bind(nsc.ScriptName);
-                        if (nsc.Instance) {
-                            nsc.SyncFieldsToInstance();
-                        }
-                    }
-                } else if (!nsc.ScriptName.empty()) {
-                    ImGui::TextDisabled("No reflected fields registered for '%s'.", nsc.ScriptName.c_str());
+                ImGui::SameLine();
+                if (ImGui::Button("X", ImVec2(22.0f, 22.0f))) {
+                    onSetPath("");
                 }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear texture");
 
-                ImGui::TreePop();
-            }
+                ImGui::EndGroup();
+                ImGui::PopID();
+                ImGui::Spacing();
+            };
 
-            if (removeScript) {
-                if (nsc.Instance && nsc.DestroyScript) {
-                    nsc.DestroyScript(&nsc);
-                }
-                entity.RemoveComponent<NativeScriptComponent>();
+            // 1. Albedo
+            DrawTextureSlot("Albedo Map (Base Color)", mat.AlbedoMap, mat.AlbedoPath, mat.UseAlbedoMap,
+                [&](const std::string& p) { mat.SetAlbedo(p); });
+            ImGui::ColorEdit4("Albedo Tint", glm::value_ptr(mat.AlbedoColor));
+            ImGui::Spacing();
+
+            // 2. Normal Map
+            DrawTextureSlot("Normal Map (Cotangent Perturbation)", mat.NormalMap, mat.NormalPath, mat.UseNormalMap,
+                [&](const std::string& p) { mat.SetNormal(p); });
+            if (mat.UseNormalMap) {
+                ImGui::SliderFloat("Normal Strength", &mat.NormalStrength, 0.0f, 3.0f, "%.2f");
             }
             ImGui::Spacing();
-        }
+
+            // 3. Roughness
+            DrawTextureSlot("Roughness Map", mat.RoughnessMap, mat.RoughnessPath, mat.UseRoughnessMap,
+                [&](const std::string& p) { mat.SetRoughnessMap(p); });
+            if (!mat.UseRoughnessMap) {
+                ImGui::SliderFloat("Roughness", &mat.Roughness, 0.04f, 1.0f, "%.2f");
+            } else {
+                ImGui::TextDisabled("  [Active] Roughness sampled from texture red channel");
+            }
+            ImGui::Spacing();
+
+            // 4. Metallic
+            DrawTextureSlot("Metallic Map", mat.MetallicMap, mat.MetallicPath, mat.UseMetallicMap,
+                [&](const std::string& p) { mat.SetMetallicMap(p); });
+            if (!mat.UseMetallicMap) {
+                ImGui::SliderFloat("Metallic", &mat.Metallic, 0.0f, 1.0f, "%.2f");
+            } else {
+                ImGui::TextDisabled("  [Active] Metallic conductivity sampled from texture red channel");
+            }
+            ImGui::Spacing();
+
+            // 5. Emission (Automotive Lighting & Neon Glow)
+            ImGui::ColorEdit3("Emission Color", glm::value_ptr(mat.EmissionColor));
+            ImGui::DragFloat("Emission Intensity", &mat.EmissionIntensity, 0.1f, 0.0f, 25.0f, "%.1f");
+            if (mat.EmissionIntensity > 0.0f) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Clear##Emission")) {
+                    mat.EmissionColor = glm::vec3(0.0f);
+                    mat.EmissionIntensity = 0.0f;
+                }
+            }
+            ImGui::Spacing();
+
+            // 6. UV Tiling
+            ImGui::DragFloat2("UV Scale", glm::value_ptr(mat.UVScale), 0.1f, 0.01f, 100.0f, "%.2f");
+            ImGui::TextDisabled("UV Presets:");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("1x1")) mat.UVScale = glm::vec2(1.0f);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("2x2")) mat.UVScale = glm::vec2(2.0f);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("4x4")) mat.UVScale = glm::vec2(4.0f);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("8x8")) mat.UVScale = glm::vec2(8.0f);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("16x16")) mat.UVScale = glm::vec2(16.0f);
+
+            // Quick Texture Pipeline Actions
+            ImGui::Spacing();
+            ImGui::TextDisabled("Texture Setup Tools:");
+            if (ImGui::SmallButton("Prototype Grid (512x512)")) {
+                mat.SetAlbedo("textures/Prototype_Grid.png");
+                mat.SetNormal("textures/Flat_Normal.png");
+                mat.SetRoughnessMap("textures/Roughness_Gradient.png");
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Reset All Textures")) {
+                mat.ResetTextures();
+                mat.Roughness = 0.5f;
+                mat.Metallic = 0.0f;
+                mat.NormalStrength = 1.0f;
+                mat.EmissionColor = glm::vec3(0.0f);
+                mat.EmissionIntensity = 0.0f;
+            }
+        }, /*canRemove=*/ true);
+
+        // Collision Shape 3D Component
+        DrawComponent<CollisionShape3D>("CollisionShape3D", entity, [&](CollisionShape3D& cs) {
+            const char* shapeTypeNames[] = { "Box", "Sphere", "Cylinder", "Cone", "Plane", "Mesh" };
+            int currentShape = static_cast<int>(cs.ShapeType);
+            if (ImGui::Combo("Shape Type", &currentShape, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames))) {
+                cs.ShapeType = static_cast<CollisionShapeType>(currentShape);
+            }
+
+            switch (cs.ShapeType) {
+                case CollisionShapeType::Box:
+                    ImGui::DragFloat3("Half Extents", glm::value_ptr(cs.HalfExtent), 0.05f, 0.01f, 100.0f);
+                    break;
+                case CollisionShapeType::Sphere:
+                    ImGui::DragFloat("Radius", &cs.Radius, 0.05f, 0.01f, 100.0f);
+                    break;
+                case CollisionShapeType::Cylinder:
+                    ImGui::DragFloat("Half Height", &cs.HalfHeight, 0.05f, 0.01f, 100.0f);
+                    ImGui::DragFloat("Radius", &cs.Radius, 0.05f, 0.01f, 100.0f);
+                    break;
+                case CollisionShapeType::Cone:
+                    ImGui::DragFloat("Half Height", &cs.HalfHeight, 0.05f, 0.01f, 100.0f);
+                    ImGui::DragFloat("Radius", &cs.Radius, 0.05f, 0.01f, 100.0f);
+                    break;
+                case CollisionShapeType::Plane:
+                    ImGui::DragFloat("Plane Half Extent", &cs.HalfExtent.x, 0.5f, 0.1f, 1000.0f);
+                    cs.HalfExtent.z = cs.HalfExtent.x;
+                    break;
+                case CollisionShapeType::Mesh:
+                    ImGui::TextDisabled("Mesh shape matches active MeshInstance3D");
+                    break;
+            }
+
+            ImGui::DragFloat3("Offset", glm::value_ptr(cs.Offset), 0.05f);
+
+            if (ImGui::SliderFloat("Friction", &cs.Friction, 0.0f, 2.0f, "%.2f")) {
+                if (entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
+                    auto& rb = entity.GetComponent<RigidBody3D>();
+                    if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                        JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                        if (lock.Succeeded()) lock.GetBody().SetFriction(cs.Friction);
+                    }
+                }
+            }
+
+            if (ImGui::SliderFloat("Restitution", &cs.Restitution, 0.0f, 1.0f, "%.2f")) {
+                if (entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
+                    auto& rb = entity.GetComponent<RigidBody3D>();
+                    if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                        JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                        if (lock.Succeeded()) lock.GetBody().SetRestitution(cs.Restitution);
+                    }
+                }
+            }
+
+            ImGui::Checkbox("Is Trigger (Sensor)", &cs.IsTrigger);
+        }, /*canRemove=*/ true);
+
+        // Rigid Body 3D Component
+        DrawComponent<RigidBody3D>("RigidBody3D", entity, [&](RigidBody3D& rb) {
+            ImGui::Text("Body ID: %u", rb.RuntimeBodyID.GetIndexAndSequenceNumber());
+
+            const char* motionNames[] = { "Static", "Kinematic", "Dynamic" };
+            int currentMotion = static_cast<int>(rb.MotionType);
+            if (ImGui::Combo("Motion Type", &currentMotion, motionNames, IM_ARRAYSIZE(motionNames))) {
+                rb.MotionType = static_cast<BodyMotionType>(currentMotion);
+                rb.IsDynamic = (rb.MotionType == BodyMotionType::Dynamic);
+                if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                    JPH::EMotionType jType = JPH::EMotionType::Dynamic;
+                    if (rb.MotionType == BodyMotionType::Static) jType = JPH::EMotionType::Static;
+                    else if (rb.MotionType == BodyMotionType::Kinematic) jType = JPH::EMotionType::Kinematic;
+                    JPH::EActivation act = (jType == JPH::EMotionType::Static) ? JPH::EActivation::DontActivate : JPH::EActivation::Activate;
+                    m_PhysicsScene->GetBodyInterface().SetMotionType(rb.RuntimeBodyID, jType, act);
+                }
+            }
+
+            ImGui::DragFloat("Mass (kg)", &rb.Mass, 1.0f, 0.01f, 100000.0f, "%.1f");
+            ImGui::DragFloat("Linear Damping", &rb.LinearDamping, 0.01f, 0.0f, 10.0f, "%.2f");
+            ImGui::DragFloat("Angular Damping", &rb.AngularDamping, 0.01f, 0.0f, 10.0f, "%.2f");
+            ImGui::DragFloat("Gravity Scale", &rb.GravityFactor, 0.05f, -10.0f, 10.0f, "%.2f");
+
+            // Warning if RigidBody3D has no CollisionShape3D
+            if (!entity.HasComponent<CollisionShape3D>()) {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "[!] No CollisionShape3D attached.");
+                if (ImGui::Button("+ Add CollisionShape3D")) {
+                    entity.AddComponent<CollisionShape3D>();
+                }
+            }
+
+            if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                const bool isActive = m_PhysicsScene->IsActive(rb.RuntimeBodyID);
+                ImGui::Text("State: ");
+                ImGui::SameLine();
+                if (isActive) {
+                    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.3f, 1.0f), "ACTIVE");
+                } else {
+                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "SLEEPING");
+                }
+
+                bool isDynamicInPhysics = false;
+                if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                    isDynamicInPhysics = (m_PhysicsScene->GetBodyInterface().GetMotionType(rb.RuntimeBodyID) == JPH::EMotionType::Dynamic);
+                }
+
+                if (isDynamicInPhysics) {
+                    bool allowSleeping = true;
+                    {
+                        JPH::BodyLockRead lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                        if (lock.Succeeded()) {
+                            const JPH::Body& body = lock.GetBody();
+                            if (!body.IsStatic() && body.GetMotionProperties() != nullptr) {
+                                allowSleeping = body.GetAllowSleeping();
+                            }
+                        }
+                    }
+
+                    if (ImGui::Checkbox("Allow Sleeping", &allowSleeping)) {
+                        JPH::BodyLockWrite lock(m_PhysicsScene->GetSystem().GetBodyLockInterface(), rb.RuntimeBodyID);
+                        if (lock.Succeeded()) {
+                            JPH::Body& body = lock.GetBody();
+                            if (!body.IsStatic() && body.GetMotionProperties() != nullptr) {
+                                body.SetAllowSleeping(allowSleeping);
+                            }
+                        }
+                    }
+
+                    if (ImGui::Button("Wake Up")) {
+                        m_PhysicsScene->ActivateBody(rb.RuntimeBodyID);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Put to Sleep")) {
+                        m_PhysicsScene->DeactivateBody(rb.RuntimeBodyID);
+                    }
+
+                    const glm::vec3 vel = m_PhysicsScene->GetLinearVelocity(rb.RuntimeBodyID);
+                    ImGui::Text("Velocity: (%.2f, %.2f, %.2f) m/s", vel.x, vel.y, vel.z);
+                    ImGui::Text("Linear Speed: %.2f m/s", glm::length(vel));
+
+                    if (ImGui::Button("Zero Velocity")) {
+                        m_PhysicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
+                    }
+                }
+            }
+        }, /*canRemove=*/ true, [&](RigidBody3D& rb) {
+            if (m_PhysicsScene && !rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                m_PhysicsScene->DestroyBody(rb.RuntimeBodyID);
+            }
+        });
+
+        // Vehicle Component
+        DrawComponent<VehicleComponent>("Vehicle Dynamics", entity, [&](VehicleComponent& vc) {
+            if (vc.VehicleInstance) {
+                auto telemetry = vc.VehicleInstance->GetTelemetry();
+                ImGui::Text("Speed: %.1f km/h (%.1f m/s)", telemetry.SpeedKmh, telemetry.SpeedMps);
+                ImGui::Text("Engine RPM: %.0f", telemetry.EngineRPM);
+                ImGui::Text("Current Gear: %d", telemetry.CurrentGear);
+                ImGui::Text("Chassis Mass: %.0f kg", vc.VehicleInstance->GetConfig().ChassisMass);
+            } else {
+                ImGui::TextDisabled("Vehicle controller not attached.");
+            }
+        }, /*canRemove=*/ true);
+
+
+
+        // Directional Light Component
+        DrawComponent<DirectionalLightComponent>("Directional Sun Light", entity, [&](DirectionalLightComponent& dlc) {
+            // Light Color
+            ImGui::ColorEdit3("Light Color", glm::value_ptr(dlc.Color));
+
+            // Intensity
+            ImGui::SliderFloat("Intensity", &dlc.Intensity, 0.0f, 5.0f, "%.2f");
+
+            // Ambient Intensity
+            ImGui::SliderFloat("Ambient Fill", &dlc.AmbientIntensity, 0.0f, 1.0f, "%.2f");
+
+            // Sun Angles
+            ImGui::SliderFloat("Azimuth (Heading)", &dlc.Azimuth, 0.0f, 360.0f, "%.1f deg");
+            ImGui::SliderFloat("Elevation (Altitude)", &dlc.Elevation, 5.0f, 89.0f, "%.1f deg");
+
+            // Cast Shadows Toggle
+            ImGui::Checkbox("Cast Real-Time Shadows", &dlc.CastShadows);
+
+            // Quick Atmosphere Presets
+            ImGui::Spacing();
+            ImGui::TextDisabled("Atmosphere Presets:");
+            if (ImGui::SmallButton("Noon Daylight")) {
+                dlc.Color = glm::vec3(1.0f, 0.98f, 0.92f);
+                dlc.Intensity = 1.2f;
+                dlc.AmbientIntensity = 0.28f;
+                dlc.Azimuth = 45.0f;
+                dlc.Elevation = 65.0f;
+                dlc.CastShadows = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Golden Hour / Sunset")) {
+                dlc.Color = glm::vec3(1.0f, 0.58f, 0.25f);
+                dlc.Intensity = 1.35f;
+                dlc.AmbientIntensity = 0.22f;
+                dlc.Azimuth = 240.0f;
+                dlc.Elevation = 15.0f;
+                dlc.CastShadows = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Night Moonlight")) {
+                dlc.Color = glm::vec3(0.45f, 0.60f, 0.95f);
+                dlc.Intensity = 0.40f;
+                dlc.AmbientIntensity = 0.15f;
+                dlc.Azimuth = 135.0f;
+                dlc.Elevation = 45.0f;
+                dlc.CastShadows = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Overcast Studio")) {
+                dlc.Color = glm::vec3(0.95f, 0.95f, 1.0f);
+                dlc.Intensity = 1.0f;
+                dlc.AmbientIntensity = 0.45f;
+                dlc.Azimuth = 45.0f;
+                dlc.Elevation = 70.0f;
+                dlc.CastShadows = true;
+            }
+
+            // --- PHOTOMETRIC POST-PROCESSING & TONE MAPPING (Phase 11: Sub-step 3.2) ---
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), "HDR Filmic Tone Mapping & Gamma:");
+
+            ImGui::SliderFloat("Exposure", &dlc.Exposure, 0.1f, 5.0f, "%.2f");
+
+            const char* toneMappingNames[] = {
+                "0: ACES Filmic (Cinematic)",
+                "1: Reinhard (Standard)",
+                "2: Uncharted 2 (Hable)",
+                "3: None (Linear Bypass)"
+            };
+            int currentTM = dlc.ToneMappingMode;
+            if (ImGui::Combo("Tone Mapping", &currentTM, toneMappingNames, IM_ARRAYSIZE(toneMappingNames))) {
+                dlc.ToneMappingMode = currentTM;
+            }
+
+            ImGui::SliderFloat("Display Gamma", &dlc.Gamma, 1.0f, 3.0f, "%.2f");
+
+            ImGui::TextDisabled("Quick Looks:");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("ACES Filmic")) {
+                dlc.Exposure = 1.0f;
+                dlc.ToneMappingMode = 0;
+                dlc.Gamma = 2.2f;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("High Exposure")) {
+                dlc.Exposure = 1.6f;
+                dlc.ToneMappingMode = 0;
+                dlc.Gamma = 2.2f;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Reinhard")) {
+                dlc.Exposure = 1.2f;
+                dlc.ToneMappingMode = 1;
+                dlc.Gamma = 2.2f;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Raw Linear")) {
+                dlc.Exposure = 1.0f;
+                dlc.ToneMappingMode = 3;
+                dlc.Gamma = 1.0f;
+            }
+
+            // Vector display
+            glm::vec3 dir = dlc.GetDirection();
+            ImGui::TextDisabled("Light Direction: (%.2f, %.2f, %.2f)", dir.x, dir.y, dir.z);
+        }, /*canRemove=*/ true);
+
+        // Atmospheric Skybox Component (Phase 11: Sub-step 4.2)
+        DrawComponent<SkyboxComponent>("Atmospheric Skybox", entity, [&](SkyboxComponent& sbc) {
+            ImGui::Checkbox("Enable Skybox", &sbc.Enabled);
+            ImGui::Checkbox("Hemisphere Ambient Lighting", &sbc.HemisphereAmbient);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Compute realistic ambient irradiance gradients (Zenith, Horizon, Ground) from atmospheric sky.");
+            }
+            ImGui::Spacing();
+
+            // Atmosphere Colors
+            ImGui::ColorEdit3("Zenith Color", glm::value_ptr(sbc.ZenithColor));
+            ImGui::ColorEdit3("Horizon Color", glm::value_ptr(sbc.HorizonColor));
+            ImGui::ColorEdit3("Ground Color", glm::value_ptr(sbc.GroundColor));
+            ImGui::Spacing();
+
+            // Atmospheric Properties
+            ImGui::SliderFloat("Turbidity (Haze)", &sbc.Turbidity, 0.2f, 4.0f, "%.2f");
+            ImGui::SliderFloat("Sun Disk Size", &sbc.SunSize, 0.01f, 0.15f, "%.3f");
+            ImGui::SliderFloat("Sun Glow (Corona)", &sbc.SunGlow, 0.02f, 0.80f, "%.2f");
+            ImGui::Spacing();
+
+            // Sun Alignment
+            ImGui::Checkbox("Sync with Directional Sun Light", &sbc.SyncWithSun);
+            if (!sbc.SyncWithSun) {
+                ImGui::SliderFloat("Custom Sun Azimuth", &sbc.CustomAzimuth, 0.0f, 360.0f, "%.1f deg");
+                ImGui::SliderFloat("Custom Sun Elevation", &sbc.CustomElevation, 1.0f, 89.0f, "%.1f deg");
+            }
+            ImGui::Spacing();
+
+            // Atmosphere Presets
+            ImGui::TextDisabled("Atmosphere Presets:");
+            if (ImGui::SmallButton("Clear Noon")) {
+                sbc.SetPresetNoon();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Golden Sunset")) {
+                sbc.SetPresetSunset();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Starry Night")) {
+                sbc.SetPresetNight();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Overcast")) {
+                sbc.SetPresetOvercast();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Mars Sky")) {
+                sbc.SetPresetAlienMars();
+            }
+        }, /*canRemove=*/ true);
+
+        // Point Light Component
+        DrawComponent<PointLightComponent>("Point Light", entity, [&](PointLightComponent& plc) {
+            ImGui::ColorEdit3("Light Color", glm::value_ptr(plc.Color));
+            ImGui::DragFloat("Intensity", &plc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
+            ImGui::DragFloat("Radius", &plc.Radius, 0.5f, 0.1f, 500.0f, "%.1f m");
+            ImGui::DragFloat("Falloff", &plc.Falloff, 0.05f, 0.1f, 10.0f, "%.2f");
+        }, /*canRemove=*/ true);
+
+        // Camera Component
+        DrawComponent<CameraComponent>("Camera", entity, [&](CameraComponent& cam) {
+            ImGui::DragFloat("Field of View", &cam.FOV, 0.5f, 10.0f, 150.0f, "%.1f deg");
+            ImGui::DragFloat("Near Clip", &cam.NearClip, 0.01f, 0.001f, 10.0f, "%.3f m");
+            ImGui::DragFloat("Far Clip", &cam.FarClip, 1.0f, 1.0f, 10000.0f, "%.1f m");
+            ImGui::Checkbox("Primary Camera", &cam.Primary);
+        }, /*canRemove=*/ true);
+
+        // Native Script Component
+        DrawComponent<NativeScriptComponent>("Native Script", entity, [&](NativeScriptComponent& nsc) {
+            // Script Class Combo Dropdown
+            const auto& registeredScripts = ScriptRegistry::GetScripts();
+            std::vector<std::string> scriptNames;
+            for (const auto& [name, _] : registeredScripts) {
+                scriptNames.push_back(name);
+            }
+
+            ImGui::Text("Script Class:");
+            ImGui::SameLine();
+            std::string currentScript = nsc.ScriptName.empty() ? "[ Unbound ]" : nsc.ScriptName;
+            if (ImGui::BeginCombo("##ScriptClassCombo", currentScript.c_str())) {
+                for (const auto& name : scriptNames) {
+                    bool isSelected = (nsc.ScriptName == name);
+                    if (ImGui::Selectable(name.c_str(), isSelected)) {
+                        nsc.Bind(name);
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            // Drag & Drop Script Target Area
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.28f, 0.42f, 0.70f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.38f, 0.58f, 0.90f));
+            std::string dropBtnLabel = "Drop Script (.hpp) Here: " + (nsc.ScriptName.empty() ? "None" : nsc.ScriptName);
+            ImGui::Button(dropBtnLabel.c_str(), ImVec2(-1.0f, 26.0f));
+            ImGui::PopStyleColor(2);
+
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    const char* pathStr = static_cast<const char*>(payload->Data);
+                    std::filesystem::path p(pathStr);
+                    std::string ext = p.extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                    if (ext == ".hpp" || ext == ".h" || ext == ".cpp") {
+                        std::string scriptName = p.stem().string();
+                        nsc.Bind(scriptName);
+                        AXLE_INFO("Bound Script '{0}' to Entity via Inspector drop", scriptName);
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Dynamic Reflected Fields
+            const auto* meta = ScriptRegistry::GetMetadata(nsc.ScriptName);
+            if (meta && !meta->Fields.empty()) {
+                ImGui::TextColored(ImVec4(0.40f, 0.85f, 0.95f, 1.0f), "Exposed Fields (%zu):", meta->Fields.size());
+                ImGui::Spacing();
+
+                for (const auto& field : meta->Fields) {
+                    std::string label = field.Name + "##" + field.Name;
+                    switch (field.Type) {
+                        case ScriptFieldType::Float: {
+                            float val = nsc.FloatFields[field.Name];
+                            bool changed = false;
+                            if (field.Min < field.Max) {
+                                changed = ImGui::SliderFloat(label.c_str(), &val, field.Min, field.Max, "%.2f");
+                            } else {
+                                changed = ImGui::DragFloat(label.c_str(), &val, 0.1f);
+                            }
+                            if (changed) {
+                                nsc.FloatFields[field.Name] = val;
+                                if (nsc.Instance) {
+                                    field.SetValue(nsc.Instance, val);
+                                }
+                            }
+                            if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                            }
+                            break;
+                        }
+                        case ScriptFieldType::Int: {
+                            int val = nsc.IntFields[field.Name];
+                            bool changed = false;
+                            if (field.Min < field.Max) {
+                                changed = ImGui::SliderInt(label.c_str(), &val, (int)field.Min, (int)field.Max);
+                            } else {
+                                changed = ImGui::DragInt(label.c_str(), &val, 1.0f);
+                            }
+                            if (changed) {
+                                nsc.IntFields[field.Name] = val;
+                                if (nsc.Instance) {
+                                    field.SetValue(nsc.Instance, val);
+                                }
+                            }
+                            if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                            }
+                            break;
+                        }
+                        case ScriptFieldType::Bool: {
+                            bool val = nsc.BoolFields[field.Name];
+                            if (ImGui::Checkbox(label.c_str(), &val)) {
+                                nsc.BoolFields[field.Name] = val;
+                                if (nsc.Instance) {
+                                    field.SetValue(nsc.Instance, val);
+                                }
+                            }
+                            if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                            }
+                            break;
+                        }
+                        case ScriptFieldType::Vec3: {
+                            glm::vec3 val = nsc.Vec3Fields[field.Name];
+                            if (ImGui::DragFloat3(label.c_str(), glm::value_ptr(val), 0.1f)) {
+                                nsc.Vec3Fields[field.Name] = val;
+                                if (nsc.Instance) {
+                                    field.SetValue(nsc.Instance, val);
+                                }
+                            }
+                            if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                            }
+                            break;
+                        }
+                        case ScriptFieldType::String: {
+                            std::string& val = nsc.StringFields[field.Name];
+                            char buf[256];
+                            std::memset(buf, 0, sizeof(buf));
+                            std::strncpy(buf, val.c_str(), sizeof(buf) - 1);
+                            if (ImGui::InputText(label.c_str(), buf, sizeof(buf))) {
+                                val = buf;
+                                if (nsc.Instance) {
+                                    field.SetValue(nsc.Instance, val);
+                                }
+                            }
+                            if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                            }
+                            break;
+                        }
+                        case ScriptFieldType::EntityRef: {
+                            UUID targetUUID = nsc.EntityFields[field.Name];
+                            std::string targetTag = "(None)";
+                            if (m_Scene && (uint64_t)targetUUID != 0) {
+                                auto targetEnt = m_Scene->GetEntityByUUID(targetUUID);
+                                if (targetEnt) {
+                                    targetTag = targetEnt.GetName() + " (" + std::to_string((uint64_t)targetUUID) + ")";
+                                } else {
+                                    targetTag = "Missing Entity (" + std::to_string((uint64_t)targetUUID) + ")";
+                                }
+                            }
+
+                            ImGui::Columns(2);
+                            ImGui::SetColumnWidth(0, 100.0f);
+                            ImGui::Text("%s", label.c_str());
+                            ImGui::NextColumn();
+
+                            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.18f, 0.22f, 1.0f));
+                            ImGui::Button(targetTag.c_str(), ImVec2(-25.0f, 0.0f));
+                            ImGui::PopStyleColor();
+
+                            // Drag & drop target accepting SCENE_HIERARCHY_ENTITY
+                            if (ImGui::BeginDragDropTarget()) {
+                                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_HIERARCHY_ENTITY")) {
+                                    uint64_t droppedUUID = *(const uint64_t*)payload->Data;
+                                    nsc.EntityFields[field.Name] = droppedUUID;
+                                    if (nsc.Instance) {
+                                        field.SetValue(nsc.Instance, UUID(droppedUUID));
+                                    }
+                                }
+                                ImGui::EndDragDropTarget();
+                            }
+
+                            ImGui::SameLine();
+                            if (ImGui::Button("X", ImVec2(20.0f, 0.0f))) {
+                                nsc.EntityFields[field.Name] = 0;
+                                if (nsc.Instance) {
+                                    field.SetValue(nsc.Instance, UUID(0));
+                                }
+                            }
+                            if (ImGui::IsItemHovered()) {
+                                ImGui::SetTooltip("Clear entity reference");
+                            }
+
+                            ImGui::Columns(1);
+
+                            if (!field.Tooltip.empty() && ImGui::IsItemHovered()) {
+                                ImGui::SetTooltip("%s", field.Tooltip.c_str());
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                ImGui::Spacing();
+                if (ImGui::Button("Reset Defaults")) {
+                    nsc.Bind(nsc.ScriptName);
+                    if (nsc.Instance) {
+                        nsc.SyncFieldsToInstance();
+                    }
+                }
+            } else if (!nsc.ScriptName.empty()) {
+                ImGui::TextDisabled("No reflected fields registered for '%s'.", nsc.ScriptName.c_str());
+            }
+        }, /*canRemove=*/ true, [&](NativeScriptComponent& nsc) {
+            if (nsc.Instance && nsc.DestroyScript) {
+                nsc.DestroyScript(&nsc);
+            }
+        });
 
         // --- ADD COMPONENT BUTTON ---
         ImGui::Spacing();
@@ -2084,109 +2056,267 @@ namespace Axle {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.35f, 0.75f, 1.0f));
         if (ImGui::Button("+ Add Component", ImVec2(availWidth, 30.0f))) {
             ImGui::OpenPopup("AddComponentPopup");
+            m_ComponentSearchFilter[0] = '\0';
         }
         ImGui::PopStyleColor(3);
 
-        if (ImGui::BeginPopup("AddComponentPopup")) {
-            if (!entity.HasComponent<MeshInstance3D>()) {
-                if (ImGui::MenuItem("MeshInstance3D")) {
-                    entity.AddComponent<MeshInstance3D>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!entity.HasComponent<CollisionShape3D>()) {
-                if (ImGui::MenuItem("CollisionShape3D")) {
-                    glm::vec3 halfExtent(0.5f);
-                    if (entity.HasComponent<TransformComponent>()) {
-                        halfExtent = entity.GetComponent<TransformComponent>().Scale * 0.5f;
-                    }
-                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, halfExtent);
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!entity.HasComponent<RigidBody3D>()) {
-                if (ImGui::MenuItem("RigidBody3D (Dynamic Box)")) {
-                    if (m_PhysicsScene) {
-                        auto& tc = entity.GetComponent<TransformComponent>();
-                        Axle::BoxBodyProps bProps;
-                        bProps.Position = tc.Translation;
-                        bProps.Rotation = tc.Rotation;
-                        bProps.HalfExtent = tc.Scale * 0.5f;
-                        bProps.IsDynamic = true;
-                        auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                        entity.AddComponent<RigidBody3D>(bodyID, true);
-                        if (!entity.HasComponent<CollisionShape3D>()) {
-                            entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, tc.Scale * 0.5f);
-                        }
-                    }
-                    ImGui::CloseCurrentPopup();
-                }
-                if (ImGui::MenuItem("RigidBody3D (Static Box)")) {
-                    if (m_PhysicsScene) {
-                        auto& tc = entity.GetComponent<TransformComponent>();
-                        Axle::BoxBodyProps bProps;
-                        bProps.Position = tc.Translation;
-                        bProps.Rotation = tc.Rotation;
-                        bProps.HalfExtent = tc.Scale * 0.5f;
-                        bProps.IsDynamic = false;
-                        auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                        entity.AddComponent<RigidBody3D>(bodyID, false);
-                        if (!entity.HasComponent<CollisionShape3D>()) {
-                            entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, tc.Scale * 0.5f);
-                        }
-                    }
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!entity.HasComponent<NativeScriptComponent>()) {
-                if (ImGui::MenuItem("Native Script Component")) {
-                    auto& nsc = entity.AddComponent<NativeScriptComponent>();
-                    const auto& registered = ScriptRegistry::GetScripts();
-                    if (!registered.empty()) {
-                        nsc.Bind(registered.begin()->first);
-                    }
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!entity.HasComponent<VehicleComponent>()) {
-                if (ImGui::MenuItem("Vehicle Component")) {
-                    entity.AddComponent<VehicleComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!entity.HasComponent<DirectionalLightComponent>()) {
-                if (ImGui::MenuItem("Directional Light Component")) {
-                    entity.AddComponent<DirectionalLightComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!entity.HasComponent<SkyboxComponent>()) {
-                if (ImGui::MenuItem("Atmospheric Skybox Component")) {
-                    entity.AddComponent<SkyboxComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!entity.HasComponent<MaterialComponent>()) {
-                if (ImGui::MenuItem("Material Component")) {
-                    entity.AddComponent<MaterialComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!entity.HasComponent<PointLightComponent>()) {
-                if (ImGui::MenuItem("Point Light Component")) {
-                    entity.AddComponent<PointLightComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!entity.HasComponent<CameraComponent>()) {
-                if (ImGui::MenuItem("Camera Component")) {
-                    entity.AddComponent<CameraComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            ImGui::EndPopup();
+        DrawAddComponentPopup(entity);
+    }
 
+    void SceneHierarchyPanel::DrawAddComponentPopup(Entity entity) {
+        ImGui::SetNextWindowSize(ImVec2(320.0f, 0.0f));
+        if (!ImGui::BeginPopup("AddComponentPopup")) {
+            return;
         }
+
+        // Search Input Bar
+        ImGui::PushItemWidth(-1.0f);
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere(0);
+        }
+        ImGui::InputTextWithHint("##ComponentSearch", "Search components...", m_ComponentSearchFilter, sizeof(m_ComponentSearchFilter));
+        ImGui::PopItemWidth();
+        ImGui::Separator();
+
+        std::string searchQuery = m_ComponentSearchFilter;
+        bool isSearching = !searchQuery.empty();
+
+        struct AvailableItem {
+            std::string Category;
+            std::string Name;
+            std::string Description;
+            bool AlreadyAdded = false;
+            bool Enabled = true;
+            std::function<void()> OnAdd;
+        };
+
+        std::vector<AvailableItem> items;
+
+        // --- RENDERING CATEGORY ---
+        items.push_back({
+            "Rendering", "MeshInstance3D", "3D mesh instance rendering with vertex array or asset model",
+            entity.HasComponent<MeshInstance3D>(), true,
+            [&]() { entity.AddComponent<MeshInstance3D>(); }
+        });
+        items.push_back({
+            "Rendering", "MaterialComponent", "PBR material properties (Albedo, Normal, Roughness, Metallic)",
+            entity.HasComponent<MaterialComponent>(), true,
+            [&]() { entity.AddComponent<MaterialComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "DirectionalLightComponent", "Global sunlight with shadow casting and photometric tone mapping",
+            entity.HasComponent<DirectionalLightComponent>(), true,
+            [&]() { entity.AddComponent<DirectionalLightComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "PointLightComponent", "Omnidirectional local point light source",
+            entity.HasComponent<PointLightComponent>(), true,
+            [&]() { entity.AddComponent<PointLightComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "SkyboxComponent", "Procedural atmospheric Rayleigh/Mie sky dome",
+            entity.HasComponent<SkyboxComponent>(), true,
+            [&]() { entity.AddComponent<SkyboxComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "CameraComponent", "Perspective/Orthographic scene camera",
+            entity.HasComponent<CameraComponent>(), true,
+            [&]() { entity.AddComponent<CameraComponent>(); }
+        });
+
+        // --- PHYSICS CATEGORY ---
+        items.push_back({
+            "Physics", "CollisionShape3D (Box)", "Box collision primitive based on entity scale",
+            entity.HasComponent<CollisionShape3D>(), true,
+            [&]() {
+                glm::vec3 halfExtent(0.5f);
+                if (entity.HasComponent<TransformComponent>()) {
+                    halfExtent = entity.GetComponent<TransformComponent>().Scale * 0.5f;
+                }
+                entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, halfExtent);
+            }
+        });
+        items.push_back({
+            "Physics", "CollisionShape3D (Sphere)", "Sphere collision primitive based on entity scale",
+            entity.HasComponent<CollisionShape3D>(), true,
+            [&]() {
+                float radius = 0.5f;
+                if (entity.HasComponent<TransformComponent>()) {
+                    radius = entity.GetComponent<TransformComponent>().Scale.x * 0.5f;
+                }
+                entity.AddComponent<CollisionShape3D>(CollisionShapeType::Sphere, glm::vec3(radius));
+            }
+        });
+        items.push_back({
+            "Physics", "CollisionShape3D (Cylinder)", "Cylinder collision primitive (Radius & Height)",
+            entity.HasComponent<CollisionShape3D>(), true,
+            [&]() {
+                entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cylinder, glm::vec3(0.5f, 1.0f, 0.5f));
+            }
+        });
+        items.push_back({
+            "Physics", "RigidBody3D (Dynamic Box)", "Dynamic Jolt physics rigid body affected by gravity and forces",
+            entity.HasComponent<RigidBody3D>(), true,
+            [&]() {
+                if (m_PhysicsScene) {
+                    auto& tc = entity.GetComponent<TransformComponent>();
+                    Axle::BoxBodyProps bProps;
+                    bProps.Position = tc.Translation;
+                    bProps.Rotation = tc.Rotation;
+                    bProps.HalfExtent = tc.Scale * 0.5f;
+                    bProps.IsDynamic = true;
+                    auto bodyID = m_PhysicsScene->CreateBox(bProps);
+                    entity.AddComponent<RigidBody3D>(bodyID, true);
+                    if (!entity.HasComponent<CollisionShape3D>()) {
+                        entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, tc.Scale * 0.5f);
+                    }
+                }
+            }
+        });
+        items.push_back({
+            "Physics", "RigidBody3D (Static Box)", "Static immovable physics obstacle/terrain body",
+            entity.HasComponent<RigidBody3D>(), true,
+            [&]() {
+                if (m_PhysicsScene) {
+                    auto& tc = entity.GetComponent<TransformComponent>();
+                    Axle::BoxBodyProps bProps;
+                    bProps.Position = tc.Translation;
+                    bProps.Rotation = tc.Rotation;
+                    bProps.HalfExtent = tc.Scale * 0.5f;
+                    bProps.IsDynamic = false;
+                    auto bodyID = m_PhysicsScene->CreateBox(bProps);
+                    entity.AddComponent<RigidBody3D>(bodyID, false);
+                    if (!entity.HasComponent<CollisionShape3D>()) {
+                        entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, tc.Scale * 0.5f);
+                    }
+                }
+            }
+        });
+        items.push_back({
+            "Physics", "VehicleComponent", "Raycast/physics vehicle simulation controller",
+            entity.HasComponent<VehicleComponent>(), true,
+            [&]() { entity.AddComponent<VehicleComponent>(); }
+        });
+
+        // --- SCRIPTS CATEGORY ---
+        items.push_back({
+            "Scripts", "Native Script Component", "Generic C++ ScriptableEntity script container",
+            entity.HasComponent<NativeScriptComponent>(), true,
+            [&]() {
+                auto& nsc = entity.AddComponent<NativeScriptComponent>();
+                const auto& registered = ScriptRegistry::GetScripts();
+                if (!registered.empty()) {
+                    nsc.Bind(registered.begin()->first);
+                }
+            }
+        });
+
+        const auto& registeredScripts = ScriptRegistry::GetScripts();
+        for (const auto& [scriptName, scriptMeta] : registeredScripts) {
+            bool hasThisScript = entity.HasComponent<NativeScriptComponent>() &&
+                                 entity.GetComponent<NativeScriptComponent>().ScriptName == scriptName;
+            items.push_back({
+                "Scripts", "Script: " + scriptName, "Directly attach registered script '" + scriptName + "'",
+                hasThisScript, true,
+                [&, sName = scriptName]() {
+                    if (!entity.HasComponent<NativeScriptComponent>()) {
+                        auto& nsc = entity.AddComponent<NativeScriptComponent>(sName);
+                        nsc.Bind(sName);
+                    } else {
+                        auto& nsc = entity.GetComponent<NativeScriptComponent>();
+                        nsc.Bind(sName);
+                    }
+                }
+            });
+        }
+
+        // --- AUDIO / VFX CATEGORY ---
+        items.push_back({
+            "Audio/VFX", "AudioSource3D (Phase 20)", "Positional 3D spatial sound emitter",
+            false, false, nullptr
+        });
+        items.push_back({
+            "Audio/VFX", "AudioListener (Phase 20)", "3D audio microphone listener",
+            false, false, nullptr
+        });
+        items.push_back({
+            "Audio/VFX", "ParticleEmitter3D (Phase 20)", "Dynamic particle system (Dust, smoke, sparks)",
+            false, false, nullptr
+        });
+
+        // Rendering logic:
+        if (isSearching) {
+            int matchCount = 0;
+            for (const auto& item : items) {
+                std::string fullSearchString = item.Category + " " + item.Name + " " + item.Description;
+                if (!ContainsIgnoreCase(fullSearchString, searchQuery)) {
+                    continue;
+                }
+                matchCount++;
+
+                std::string displayLabel = item.Name + " [" + item.Category + "]";
+                if (item.AlreadyAdded) {
+                    displayLabel += " (Already added)";
+                } else if (!item.Enabled) {
+                    displayLabel += " (Coming Soon)";
+                }
+
+                bool canClick = (!item.AlreadyAdded && item.Enabled && item.OnAdd != nullptr);
+                if (!canClick) {
+                    ImGui::BeginDisabled();
+                }
+                if (ImGui::MenuItem(displayLabel.c_str())) {
+                    if (item.OnAdd) item.OnAdd();
+                    m_ComponentSearchFilter[0] = '\0';
+                    ImGui::CloseCurrentPopup();
+                }
+                if (!canClick) {
+                    ImGui::EndDisabled();
+                }
+                if (!item.Description.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                    ImGui::SetTooltip("%s", item.Description.c_str());
+                }
+            }
+
+            if (matchCount == 0) {
+                ImGui::TextDisabled("No components match '%s'", searchQuery.c_str());
+            }
+        } else {
+            const std::vector<std::string> categories = { "Rendering", "Physics", "Scripts", "Audio/VFX" };
+            for (const auto& cat : categories) {
+                if (ImGui::BeginMenu(cat.c_str())) {
+                    for (const auto& item : items) {
+                        if (item.Category != cat) continue;
+
+                        std::string displayLabel = item.Name;
+                        if (item.AlreadyAdded) {
+                            displayLabel += " (Already added)";
+                        } else if (!item.Enabled) {
+                            displayLabel += " (Coming Soon)";
+                        }
+
+                        bool canClick = (!item.AlreadyAdded && item.Enabled && item.OnAdd != nullptr);
+                        if (!canClick) {
+                            ImGui::BeginDisabled();
+                        }
+                        if (ImGui::MenuItem(displayLabel.c_str())) {
+                            if (item.OnAdd) item.OnAdd();
+                            m_ComponentSearchFilter[0] = '\0';
+                            ImGui::CloseCurrentPopup();
+                        }
+                        if (!canClick) {
+                            ImGui::EndDisabled();
+                        }
+                        if (!item.Description.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                            ImGui::SetTooltip("%s", item.Description.c_str());
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+            }
+        }
+
+        ImGui::EndPopup();
     }
 
     void SceneHierarchyPanel::DrawAssetProperties(const std::filesystem::path& path) {
@@ -2220,7 +2350,8 @@ namespace Axle {
         }
 
         bool isAssembly = (ext == ".axle" && AssemblySerializer::IsAssemblyFile(path));
-        bool isMesh = (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") && !isAssembly;
+        bool isMaterial = (ext == ".axlemat" || ext == ".amat" || ext == ".mat");
+        bool isMesh = (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") && !isAssembly && !isMaterial;
 
         // Top Asset Header Card
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.15f, 0.20f, 0.85f));
@@ -2228,6 +2359,8 @@ namespace Axle {
         {
             if (isAssembly) {
                 ImGui::TextColored(ImVec4(0.25f, 0.90f, 0.55f, 1.0f), "[MECHANICAL ASSEMBLY PREFAB]");
+            } else if (isMaterial) {
+                ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.20f, 1.0f), "[PBR MATERIAL ASSET]");
             } else if (isMesh) {
                 ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "[3D MESH PACKAGE]");
             } else if (ext == ".axlescene" || ext == ".scene") {
@@ -2243,6 +2376,11 @@ namespace Axle {
         ImGui::PopStyleColor();
 
         ImGui::Spacing();
+
+        if (isMaterial) {
+            DrawMaterialAssetProperties(path);
+            return;
+        }
 
         // Embedded Interactive 3D Asset Preview Viewport (Unified Inspector paradigm)
         if (m_AssetPreviewPanel && (isAssembly || isMesh)) {
@@ -2438,6 +2576,287 @@ namespace Axle {
             ImGui::TextDisabled("File Size: %s", sizeStr.c_str());
             ImGui::Spacing();
             ImGui::TextWrapped("Click any entity in Scene Hierarchy to inspect its components.");
+        }
+    }
+
+    bool SceneHierarchyPanel::SaveMaterialAsset(const std::filesystem::path& path, const MaterialComponent& mat) {
+        std::ofstream fout(path);
+        if (!fout.is_open()) return false;
+        fout << "MaterialAsset:\n";
+        fout << "  AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
+        fout << "  AlbedoPath: " << mat.AlbedoPath << "\n";
+        fout << "  UseAlbedoMap: " << (mat.UseAlbedoMap ? "true" : "false") << "\n";
+        fout << "  NormalPath: " << mat.NormalPath << "\n";
+        fout << "  UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
+        fout << "  NormalStrength: " << mat.NormalStrength << "\n";
+        fout << "  Roughness: " << mat.Roughness << "\n";
+        fout << "  RoughnessPath: " << mat.RoughnessPath << "\n";
+        fout << "  UseRoughnessMap: " << (mat.UseRoughnessMap ? "true" : "false") << "\n";
+        fout << "  Metallic: " << mat.Metallic << "\n";
+        fout << "  MetallicPath: " << mat.MetallicPath << "\n";
+        fout << "  UseMetallicMap: " << (mat.UseMetallicMap ? "true" : "false") << "\n";
+        fout << "  EmissionColor: [ " << mat.EmissionColor.r << " , " << mat.EmissionColor.g << " , " << mat.EmissionColor.b << " ]\n";
+        fout << "  EmissionIntensity: " << mat.EmissionIntensity << "\n";
+        fout << "  UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
+        fout.close();
+        return true;
+    }
+
+    bool SceneHierarchyPanel::LoadMaterialAsset(const std::filesystem::path& path, MaterialComponent& mat) {
+        std::ifstream fin(path);
+        if (!fin.is_open()) return false;
+        std::string line;
+        while (std::getline(fin, line)) {
+            size_t start = line.find_first_not_of(" \t\r\n");
+            if (start == std::string::npos) continue;
+            std::string trimmed = line.substr(start);
+
+            if (trimmed.rfind("AlbedoColor:", 0) == 0) {
+                float r = 1, g = 1, b = 1, a = 1;
+                sscanf(trimmed.c_str(), "AlbedoColor: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
+                mat.AlbedoColor = glm::vec4(r, g, b, a);
+            } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
+                std::string p = trimmed.substr(11);
+                size_t pStart = p.find_first_not_of(" \t");
+                std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
+                mat.AlbedoPath = pathStr;
+                if (!pathStr.empty() && glfwGetCurrentContext() != nullptr) {
+                    mat.SetAlbedo(pathStr);
+                }
+            } else if (trimmed.rfind("UseAlbedoMap:", 0) == 0) {
+                mat.UseAlbedoMap = (trimmed.find("true") != std::string::npos);
+            } else if (trimmed.rfind("NormalPath:", 0) == 0) {
+                std::string p = trimmed.substr(11);
+                size_t pStart = p.find_first_not_of(" \t");
+                std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
+                mat.NormalPath = pathStr;
+                if (!pathStr.empty() && glfwGetCurrentContext() != nullptr) {
+                    mat.SetNormal(pathStr);
+                }
+            } else if (trimmed.rfind("UseNormalMap:", 0) == 0) {
+                mat.UseNormalMap = (trimmed.find("true") != std::string::npos);
+            } else if (trimmed.rfind("NormalStrength:", 0) == 0) {
+                mat.NormalStrength = std::stof(trimmed.substr(15));
+            } else if (trimmed.rfind("Roughness:", 0) == 0) {
+                mat.Roughness = std::stof(trimmed.substr(10));
+            } else if (trimmed.rfind("RoughnessPath:", 0) == 0) {
+                std::string p = trimmed.substr(14);
+                size_t pStart = p.find_first_not_of(" \t");
+                std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
+                mat.RoughnessPath = pathStr;
+                if (!pathStr.empty() && glfwGetCurrentContext() != nullptr) {
+                    mat.SetRoughnessMap(pathStr);
+                }
+            } else if (trimmed.rfind("UseRoughnessMap:", 0) == 0) {
+                mat.UseRoughnessMap = (trimmed.find("true") != std::string::npos);
+            } else if (trimmed.rfind("Metallic:", 0) == 0) {
+                mat.Metallic = std::stof(trimmed.substr(9));
+            } else if (trimmed.rfind("MetallicPath:", 0) == 0) {
+                std::string p = trimmed.substr(13);
+                size_t pStart = p.find_first_not_of(" \t");
+                std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
+                mat.MetallicPath = pathStr;
+                if (!pathStr.empty() && glfwGetCurrentContext() != nullptr) {
+                    mat.SetMetallicMap(pathStr);
+                }
+            } else if (trimmed.rfind("UseMetallicMap:", 0) == 0) {
+                mat.UseMetallicMap = (trimmed.find("true") != std::string::npos);
+            } else if (trimmed.rfind("EmissionColor:", 0) == 0) {
+                float r = 0, g = 0, b = 0;
+                sscanf(trimmed.c_str(), "EmissionColor: [ %f , %f , %f ]", &r, &g, &b);
+                mat.EmissionColor = glm::vec3(r, g, b);
+            } else if (trimmed.rfind("EmissionIntensity:", 0) == 0) {
+                mat.EmissionIntensity = std::stof(trimmed.substr(18));
+            } else if (trimmed.rfind("UVScale:", 0) == 0) {
+                float x = 1, y = 1;
+                sscanf(trimmed.c_str(), "UVScale: [ %f , %f ]", &x, &y);
+                mat.UVScale = glm::vec2(x, y);
+            }
+        }
+        return true;
+    }
+
+    void SceneHierarchyPanel::DrawMaterialAssetProperties(const std::filesystem::path& path) {
+        if (m_LoadedMaterialPath != path || !m_MaterialAssetLoaded) {
+            m_ActiveMaterialAsset = MaterialComponent();
+            LoadMaterialAsset(path, m_ActiveMaterialAsset);
+            m_LoadedMaterialPath = path;
+            m_MaterialAssetLoaded = true;
+        }
+
+        bool changed = false;
+
+        // Material Presets Card
+        if (ImGui::CollapsingHeader("Material Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
+            float btnW = (ImGui::GetContentRegionAvail().x - 8.0f) / 3.0f;
+            if (ImGui::Button("Gold", ImVec2(btnW, 26.0f))) {
+                m_ActiveMaterialAsset.SetPresetGold();
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Aluminum", ImVec2(btnW, 26.0f))) {
+                m_ActiveMaterialAsset.SetPresetAluminum();
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Obsidian", ImVec2(btnW, 26.0f))) {
+                m_ActiveMaterialAsset.SetPresetObsidian();
+                changed = true;
+            }
+
+            if (ImGui::Button("Rubber", ImVec2(btnW, 26.0f))) {
+                m_ActiveMaterialAsset.SetPresetRubber();
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Headlight LED", ImVec2(btnW, 26.0f))) {
+                m_ActiveMaterialAsset.SetPresetHeadlightLED();
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Taillight LED", ImVec2(btnW, 26.0f))) {
+                m_ActiveMaterialAsset.SetPresetTaillightLED();
+                changed = true;
+            }
+        }
+
+        ImGui::Spacing();
+
+        if (ImGui::CollapsingHeader("PBR Surface Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+            // Albedo
+            if (ImGui::ColorEdit4("Albedo Color", glm::value_ptr(m_ActiveMaterialAsset.AlbedoColor))) {
+                changed = true;
+            }
+
+            char albedoBuf[256];
+            std::memset(albedoBuf, 0, sizeof(albedoBuf));
+            std::strncpy(albedoBuf, m_ActiveMaterialAsset.AlbedoPath.c_str(), sizeof(albedoBuf) - 1);
+            if (ImGui::InputText("Albedo Texture", albedoBuf, sizeof(albedoBuf))) {
+                m_ActiveMaterialAsset.SetAlbedo(albedoBuf);
+                changed = true;
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    std::string droppedPath = static_cast<const char*>(payload->Data);
+                    m_ActiveMaterialAsset.SetAlbedo(droppedPath);
+                    changed = true;
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            ImGui::Separator();
+
+            // Roughness
+            if (ImGui::SliderFloat("Roughness", &m_ActiveMaterialAsset.Roughness, 0.0f, 1.0f, "%.2f")) {
+                changed = true;
+            }
+            char roughBuf[256];
+            std::memset(roughBuf, 0, sizeof(roughBuf));
+            std::strncpy(roughBuf, m_ActiveMaterialAsset.RoughnessPath.c_str(), sizeof(roughBuf) - 1);
+            if (ImGui::InputText("Roughness Map", roughBuf, sizeof(roughBuf))) {
+                m_ActiveMaterialAsset.SetRoughnessMap(roughBuf);
+                changed = true;
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    std::string droppedPath = static_cast<const char*>(payload->Data);
+                    m_ActiveMaterialAsset.SetRoughnessMap(droppedPath);
+                    changed = true;
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            ImGui::Separator();
+
+            // Metallic
+            if (ImGui::SliderFloat("Metallic", &m_ActiveMaterialAsset.Metallic, 0.0f, 1.0f, "%.2f")) {
+                changed = true;
+            }
+            char metalBuf[256];
+            std::memset(metalBuf, 0, sizeof(metalBuf));
+            std::strncpy(metalBuf, m_ActiveMaterialAsset.MetallicPath.c_str(), sizeof(metalBuf) - 1);
+            if (ImGui::InputText("Metallic Map", metalBuf, sizeof(metalBuf))) {
+                m_ActiveMaterialAsset.SetMetallicMap(metalBuf);
+                changed = true;
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    std::string droppedPath = static_cast<const char*>(payload->Data);
+                    m_ActiveMaterialAsset.SetMetallicMap(droppedPath);
+                    changed = true;
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            ImGui::Separator();
+
+            // Normal
+            if (ImGui::SliderFloat("Normal Strength", &m_ActiveMaterialAsset.NormalStrength, 0.0f, 5.0f, "%.2f")) {
+                changed = true;
+            }
+            char normalBuf[256];
+            std::memset(normalBuf, 0, sizeof(normalBuf));
+            std::strncpy(normalBuf, m_ActiveMaterialAsset.NormalPath.c_str(), sizeof(normalBuf) - 1);
+            if (ImGui::InputText("Normal Map", normalBuf, sizeof(normalBuf))) {
+                m_ActiveMaterialAsset.SetNormal(normalBuf);
+                changed = true;
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    std::string droppedPath = static_cast<const char*>(payload->Data);
+                    m_ActiveMaterialAsset.SetNormal(droppedPath);
+                    changed = true;
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            ImGui::Separator();
+
+            // Emission
+            if (ImGui::ColorEdit3("Emission Color", glm::value_ptr(m_ActiveMaterialAsset.EmissionColor))) {
+                changed = true;
+            }
+            if (ImGui::DragFloat("Emission Intensity", &m_ActiveMaterialAsset.EmissionIntensity, 0.1f, 0.0f, 50.0f, "%.1f")) {
+                changed = true;
+            }
+
+            ImGui::Separator();
+
+            // UV Tiling
+            if (ImGui::DragFloat2("UV Scale", glm::value_ptr(m_ActiveMaterialAsset.UVScale), 0.1f, 0.01f, 100.0f, "%.2f")) {
+                changed = true;
+            }
+            if (ImGui::SmallButton("1x1")) { m_ActiveMaterialAsset.UVScale = glm::vec2(1.0f); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("2x2")) { m_ActiveMaterialAsset.UVScale = glm::vec2(2.0f); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("4x4")) { m_ActiveMaterialAsset.UVScale = glm::vec2(4.0f); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("8x8")) { m_ActiveMaterialAsset.UVScale = glm::vec2(8.0f); changed = true; }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        float availW = ImGui::GetContentRegionAvail().x;
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.55f, 0.32f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.68f, 0.40f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.45f, 0.25f, 1.0f));
+        if (ImGui::Button("Save Material Asset", ImVec2(availW, 30.0f)) || changed) {
+            SaveMaterialAsset(path, m_ActiveMaterialAsset);
+        }
+        ImGui::PopStyleColor(3);
+
+        if (m_SelectedEntity && m_Scene && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity)) {
+            ImGui::Spacing();
+            if (ImGui::Button("Apply to Selected Entity", ImVec2(availW, 26.0f))) {
+                if (m_SelectedEntity.HasComponent<MaterialComponent>()) {
+                    m_SelectedEntity.GetComponent<MaterialComponent>() = m_ActiveMaterialAsset;
+                } else {
+                    m_SelectedEntity.AddComponent<MaterialComponent>(m_ActiveMaterialAsset);
+                }
+            }
         }
     }
 

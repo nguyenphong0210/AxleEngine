@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/UUID.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -14,7 +15,8 @@ namespace Axle {
         Int,
         Bool,
         Vec3,
-        String
+        String,
+        EntityRef
     };
 
     struct ScriptField {
@@ -58,6 +60,11 @@ namespace Axle {
         }
 
         template<typename ClassType>
+        void AddField(const std::string& name, float ClassType::* member, const std::string& tooltip) {
+            AddField(name, member, 0.0f, 0.0f, tooltip);
+        }
+
+        template<typename ClassType>
         void AddField(const std::string& name, int ClassType::* member, int min = 0, int max = 0, const std::string& tooltip = "") {
             ScriptField field;
             field.Name = name;
@@ -67,6 +74,11 @@ namespace Axle {
             field.Max = static_cast<float>(max);
             field.Tooltip = tooltip;
             m_Fields.push_back(field);
+        }
+
+        template<typename ClassType>
+        void AddField(const std::string& name, int ClassType::* member, const std::string& tooltip) {
+            AddField(name, member, 0, 0, tooltip);
         }
 
         template<typename ClassType>
@@ -99,6 +111,26 @@ namespace Axle {
             m_Fields.push_back(field);
         }
 
+        template<typename ClassType>
+        void AddField(const std::string& name, UUID ClassType::* member, const std::string& tooltip = "") {
+            ScriptField field;
+            field.Name = name;
+            field.Type = ScriptFieldType::EntityRef;
+            field.Offset = CalculateOffset(member);
+            field.Tooltip = tooltip;
+            m_Fields.push_back(field);
+        }
+
+        template<typename ClassType>
+        void AddField(const std::string& name, u64 ClassType::* member, const std::string& tooltip = "") {
+            ScriptField field;
+            field.Name = name;
+            field.Type = ScriptFieldType::EntityRef;
+            field.Offset = CalculateOffset(member);
+            field.Tooltip = tooltip;
+            m_Fields.push_back(field);
+        }
+
         const std::vector<ScriptField>& GetFields() const { return m_Fields; }
 
     private:
@@ -106,3 +138,19 @@ namespace Axle {
     };
 
 }
+
+#define AXLE_SCRIPT_FIELDS(ClassName, ...) \
+    static void RegisterFields(::Axle::ScriptFieldRegistry& reg) { \
+        using _AxleScriptClass = ClassName; \
+        __VA_ARGS__; \
+    }
+
+#define AXLE_FIELD(Member, ...) \
+    reg.AddField(#Member, &_AxleScriptClass::Member, ##__VA_ARGS__)
+
+#define AXLE_FIELD_RANGE(Member, MinVal, MaxVal, ...) \
+    reg.AddField(#Member, &_AxleScriptClass::Member, MinVal, MaxVal, ##__VA_ARGS__)
+
+#define AXLE_FIELD_ENTITY(Member, ...) \
+    reg.AddField(#Member, &_AxleScriptClass::Member, ##__VA_ARGS__)
+

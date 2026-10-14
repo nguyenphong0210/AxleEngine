@@ -667,6 +667,110 @@ bool RunTest_Step7_Phase15_HierarchicalTreeView() {
 }
 
 // =============================================================================
+// =============================================================================
+// TEST STEP 8: Phase 15.3 / Visual Drag & Drop Reparenting ("SCENE_HIERARCHY_ENTITY")
+// =============================================================================
+bool RunTest_Step8_Phase15_DragAndDropReparenting() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 8 TEST] PHASE 15.3: DRAG & DROP REPARENTING      " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    auto scene = std::make_shared<Axle::Scene>();
+
+    // -----------------------------------------------------------------
+    // [8.1] Reparenting via Drag & Drop Payload Simulation
+    // -----------------------------------------------------------------
+    std::cout << "[8.1] Verifying Reparenting via Drag & Drop Payload Simulation..." << std::endl;
+    auto parentEntity = scene->CreateEntity("Parent_Entity");
+    parentEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(5.0f, 0.0f, 0.0f);
+
+    auto draggedEntity = scene->CreateEntity("Dragged_Child");
+    draggedEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(15.0f, 20.0f, 30.0f);
+
+    // Simulate drag source: get ID payload
+    uint32_t payloadData = (uint32_t)draggedEntity;
+
+    // Simulate drop target on parentEntity:
+    Axle::Entity resolvedDragged{ (entt::entity)payloadData, scene.get() };
+    if (resolvedDragged && resolvedDragged != parentEntity && !parentEntity.IsChildOf(resolvedDragged)) {
+        resolvedDragged.SetParent(parentEntity);
+    }
+
+    if (draggedEntity.GetParent() != parentEntity) {
+        std::cerr << "FAIL: Dragged entity parent is not parentEntity!" << std::endl;
+        return false;
+    }
+    if (parentEntity.GetChildCount() != 1) {
+        std::cerr << "FAIL: parentEntity child count should be 1, got " << parentEntity.GetChildCount() << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Entity successfully reparented via payload simulation." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [8.2] World Position Stays during Drag & Drop Reparenting
+    // -----------------------------------------------------------------
+    std::cout << "[8.2] Verifying World Position Stays after Reparent..." << std::endl;
+    glm::vec3 worldPosAfter = glm::vec3(draggedEntity.GetWorldTransform()[3]);
+    glm::vec3 expectedWorldPos = glm::vec3(15.0f, 20.0f, 30.0f);
+    std::cout << "  -> Dragged Entity World Pos: (" << worldPosAfter.x << ", " << worldPosAfter.y << ", " << worldPosAfter.z << ")" << std::endl;
+
+    if (!Vec3Eq(worldPosAfter, expectedWorldPos)) {
+        std::cerr << "FAIL: World position changed after drag & drop reparenting!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: World position preserved with zero displacement." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [8.3] Cycle Prevention Check on Drag & Drop Target
+    // -----------------------------------------------------------------
+    std::cout << "[8.3] Verifying Cycle Prevention Guard (Child cannot become parent of its ancestor)..." << std::endl;
+    uint32_t invalidDraggedID = (uint32_t)parentEntity;
+    Axle::Entity invalidDragged{ (entt::entity)invalidDraggedID, scene.get() };
+    Axle::Entity targetChild = draggedEntity;
+
+    bool reparentAttempted = false;
+    if (invalidDragged && invalidDragged != targetChild && !targetChild.IsChildOf(invalidDragged)) {
+        invalidDragged.SetParent(targetChild);
+        reparentAttempted = true;
+    }
+
+    if (reparentAttempted) {
+        std::cerr << "FAIL: Guard failed to prevent circular drag & drop reparenting!" << std::endl;
+        return false;
+    }
+    if (parentEntity.GetParent() == targetChild) {
+        std::cerr << "FAIL: Parent entity became child of its own child!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Cycle check successfully rejected circular drag & drop." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [8.4] Blank Space Drop (Unparent / Return to Root)
+    // -----------------------------------------------------------------
+    std::cout << "[8.4] Verifying Blank Space Drop (Unparent to Root)..." << std::endl;
+    draggedEntity.Unparent();
+
+    if (draggedEntity.GetParent()) {
+        std::cerr << "FAIL: Dragged entity still has parent after dropping on blank space!" << std::endl;
+        return false;
+    }
+    if (parentEntity.GetChildCount() != 0) {
+        std::cerr << "FAIL: parentEntity should have 0 children after child unparented, got " << parentEntity.GetChildCount() << std::endl;
+        return false;
+    }
+
+    glm::vec3 worldPosUnparented = glm::vec3(draggedEntity.GetWorldTransform()[3]);
+    if (!Vec3Eq(worldPosUnparented, expectedWorldPos)) {
+        std::cerr << "FAIL: World position changed after unparenting to root!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Unparent to Root preserves world coordinates and resets hierarchy cleanly." << std::endl;
+
+    std::cout << ">>> STEP 8 PASSED: Phase 15.3 Drag & Drop Reparenting verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -680,12 +784,13 @@ int main(int argc, char** argv) {
         else if (arg == "5" || arg == "step5" || arg == "--step5" || arg == "--phase14") targetStep = 5;
         else if (arg == "6" || arg == "step6" || arg == "--step6" || arg == "--phase15") targetStep = 6;
         else if (arg == "7" || arg == "step7" || arg == "--step7" || arg == "--phase15.2") targetStep = 7;
+        else if (arg == "8" || arg == "step8" || arg == "--step8" || arg == "--phase15.3") targetStep = 8;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 7 STEPS                       " << std::endl;
+        std::cout << "              RUNNING ALL 8 STEPS                       " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -713,6 +818,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 7) {
         if (!RunTest_Step7_Phase15_HierarchicalTreeView()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 8) {
+        if (!RunTest_Step8_Phase15_DragAndDropReparenting()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

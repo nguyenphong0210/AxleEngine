@@ -324,7 +324,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
 - [ ] **Phase 15: Scene Hierarchy Panel Upgrade (Presets, Tree UI & Drag-and-Drop Reparenting)**
   - [x] **Comprehensive Archetype Presets**: Complete `+ Create` menu (Unity/Godot style) with `Create Empty`, `Create Empty Child`, 3D Objects (`Cube`, `Sphere`, `Cylinder`, `Cone`, `Plane`), Light (`Directional Light`, `Point Light`), `Camera`, and Environment (`Atmospheric Skybox`).
   - [x] **Hierarchical Tree View**: Render only root entities at the top level, displaying children via collapsible arrow nodes (`ImGuiTreeNodeFlags_OpenOnArrow`).
-  - [ ] **Visual Drag & Drop Reparenting**: Register `"SCENE_HIERARCHY_ENTITY"` payload on entity nodes to allow intuitive mouse drag-and-drop reparenting between entities.
+  - [x] **Visual Drag & Drop Reparenting**: Register `"SCENE_HIERARCHY_ENTITY"` payload on entity nodes to allow intuitive mouse drag-and-drop reparenting between entities.
   - [ ] **Deferred & Recursive Lifecycle**: Implement end-of-frame deferred deletion queue (`m_EntitiesToDestroy`) with recursive child cleanup; implement deep recursive duplication (`Ctrl+D`) with fresh UUID generation.
 - [ ] **Phase 16: Properties Panel & C++ Scripting Reflection (Category Component Adder & Macro Fields)**
   - [ ] **Structured Component Widgets**: Encapsulate components in collapsible headers with custom context menus (`Remove Component`), and implement color-coded, draggable 3-axis `DrawVec3Control` for transforms.

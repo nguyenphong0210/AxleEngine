@@ -394,8 +394,18 @@ namespace Axle {
                     ImGui::EndPopup();
                 }
 
-                // Drag & Drop to instantiate 3D model in Hierarchy
+                // Drag & Drop to instantiate 3D model or unparent to Root in Hierarchy
                 if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_HIERARCHY_ENTITY")) {
+                        uint32_t draggedID = *(const uint32_t*)payload->Data;
+                        Entity draggedEntity{ (entt::entity)draggedID, m_Scene };
+                        if (draggedEntity) {
+                            draggedEntity.Unparent();
+                            m_SelectedEntity = draggedEntity;
+                            AXLE_INFO("Unparented Entity '{0}' to Root via Tree Drag & Drop", draggedEntity.GetName());
+                        }
+                    }
+
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         const char* pathStr = static_cast<const char*>(payload->Data);
                         std::filesystem::path p(pathStr);
@@ -497,9 +507,29 @@ namespace Axle {
                     }
                     ImGui::EndDragDropTarget();
                 }
-                // Click on blank space to deselect
-                if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered()) {
-                    SetSelectedEntity({});
+                // Blank space at bottom of Hierarchy: accept drops to Root & click to deselect
+                ImVec2 avail = ImGui::GetContentRegionAvail();
+                if (avail.y > 10.0f) {
+                    ImGui::Dummy(avail);
+                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+                        SetSelectedEntity({});
+                    }
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_HIERARCHY_ENTITY")) {
+                            uint32_t draggedID = *(const uint32_t*)payload->Data;
+                            Entity draggedEntity{ (entt::entity)draggedID, m_Scene };
+                            if (draggedEntity) {
+                                draggedEntity.Unparent();
+                                m_SelectedEntity = draggedEntity;
+                                AXLE_INFO("Unparented Entity '{0}' to Root via Tree Drag & Drop", draggedEntity.GetName());
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+                } else {
+                    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered()) {
+                        SetSelectedEntity({});
+                    }
                 }
             }
             ImGui::End();
@@ -669,8 +699,28 @@ namespace Axle {
             m_SelectedAsset.clear();
         }
 
-        // Drag & Drop payload onto Entity node to attach Script
+        // Drag Source: Allow dragging this entity to reparent
+        if (ImGui::BeginDragDropSource()) {
+            uint32_t entityID = (uint32_t)entity;
+            ImGui::SetDragDropPayload("SCENE_HIERARCHY_ENTITY", &entityID, sizeof(uint32_t));
+            ImGui::Text("Reparent '%s'", tag.c_str());
+            ImGui::EndDragDropSource();
+        }
+
+        // Drag & Drop payload onto Entity node
         if (ImGui::BeginDragDropTarget()) {
+            // 1. Reparent dragged entity under this entity
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_HIERARCHY_ENTITY")) {
+                uint32_t draggedID = *(const uint32_t*)payload->Data;
+                Entity draggedEntity{ (entt::entity)draggedID, m_Scene };
+                if (draggedEntity && draggedEntity != entity && !entity.IsChildOf(draggedEntity)) {
+                    draggedEntity.SetParent(entity);
+                    m_SelectedEntity = draggedEntity;
+                    AXLE_INFO("Reparented Entity '{0}' under '{1}' via Tree Drag & Drop", draggedEntity.GetName(), entity.GetName());
+                }
+            }
+
+            // 2. Attach Script from Content Browser
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                 const char* pathStr = static_cast<const char*>(payload->Data);
                 std::filesystem::path p(pathStr);

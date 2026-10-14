@@ -786,7 +786,9 @@ void EditorLayer::NewScene() {
     tc.Translation = glm::vec3(0.0f, 10.0f, 0.0f);
     tc.Rotation = glm::quat(glm::vec3(glm::radians(50.0f), glm::radians(-30.0f), 0.0f));
     sunEntity.AddComponent<Axle::DirectionalLightComponent>();
-    sunEntity.AddComponent<Axle::SkyboxComponent>();
+
+    auto skyEntity = m_Scene->CreateEntity("Skybox Environment");
+    skyEntity.AddComponent<Axle::SkyboxComponent>();
 
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
@@ -1414,7 +1416,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     if (hasSunLight) {
         m_LightDir = activeSunLight.GetDirection();
     }
-    bool castShadows = hasSunLight ? activeSunLight.CastShadows : true;
+    bool castShadows = hasSunLight && activeSunLight.CastShadows;
 
     // ==========================================
     // PASS 1: SHADOW MAP DEPTH PASS (Phase 11: Sub-step 1.1)
@@ -1455,31 +1457,31 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
             Axle::SkyboxComponent activeSkybox;
             bool hasSkybox = m_Scene && m_Scene->GetPrimarySkybox(activeSkybox);
 
-            if (!hasSkybox || activeSkybox.Enabled) {
-                if (hasSkybox) {
-                    auto& spec = m_Skybox->GetSpecification();
-                    spec.ZenithColor = activeSkybox.ZenithColor;
-                    spec.HorizonColor = activeSkybox.HorizonColor;
-                    spec.GroundColor = activeSkybox.GroundColor;
-                    spec.SunSize = activeSkybox.SunSize;
-                    spec.SunGlow = activeSkybox.SunGlow;
-                    spec.Turbidity = activeSkybox.Turbidity;
+            if (hasSkybox && activeSkybox.Enabled) {
+                auto& spec = m_Skybox->GetSpecification();
+                spec.ZenithColor = activeSkybox.ZenithColor;
+                spec.HorizonColor = activeSkybox.HorizonColor;
+                spec.GroundColor = activeSkybox.GroundColor;
+                spec.SunSize = activeSkybox.SunSize;
+                spec.SunGlow = activeSkybox.SunGlow;
+                spec.Turbidity = activeSkybox.Turbidity;
 
-                    if (!activeSkybox.SyncWithSun) {
-                        float radAz = glm::radians(activeSkybox.CustomAzimuth);
-                        float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
-                        glm::vec3 customSunDir = glm::normalize(glm::vec3(
-                            std::cos(radEl) * std::sin(radAz),
-                            std::sin(radEl),
-                            std::cos(radEl) * std::cos(radAz)
-                        ));
-                        m_Skybox->SetSunDirection(customSunDir);
-                    }
+                if (!activeSkybox.SyncWithSun) {
+                    float radAz = glm::radians(activeSkybox.CustomAzimuth);
+                    float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
+                    glm::vec3 customSunDir = glm::normalize(glm::vec3(
+                        std::cos(radEl) * std::sin(radAz),
+                        std::sin(radEl),
+                        std::cos(radEl) * std::cos(radAz)
+                    ));
+                    m_Skybox->SetSunDirection(customSunDir);
                 }
 
-                if (hasSunLight && (!hasSkybox || activeSkybox.SyncWithSun)) {
+                if (hasSunLight && activeSkybox.SyncWithSun) {
                     m_Skybox->SetSunDirection(activeSunLight.GetDirection());
                     m_Skybox->SetSunColor(activeSunLight.Color * activeSunLight.Intensity);
+                } else if (!hasSunLight) {
+                    m_Skybox->SetSunColor(glm::vec3(0.0f));
                 }
 
                 if (hasSunLight) {

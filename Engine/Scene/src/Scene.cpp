@@ -136,11 +136,11 @@ namespace Axle {
         DirectionalLightComponent sunLight;
         bool hasSunLight = GetPrimaryDirectionalLight(sunLight);
 
-        glm::vec3 activeLightDir = hasSunLight ? sunLight.GetDirection() : lightDir;
-        glm::vec3 activeLightColor = hasSunLight ? sunLight.Color : glm::vec3(1.0f, 0.98f, 0.92f);
-        float activeIntensity = hasSunLight ? sunLight.Intensity : 1.0f;
-        float activeAmbient = hasSunLight ? sunLight.AmbientIntensity : 0.28f;
-        int activeShadows = (hasSunLight ? sunLight.CastShadows : true) ? 1 : 0;
+        glm::vec3 activeLightDir = hasSunLight ? sunLight.GetDirection() : glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 activeLightColor = hasSunLight ? sunLight.Color : glm::vec3(0.0f);
+        float activeIntensity = hasSunLight ? sunLight.Intensity : 0.0f;
+        float activeAmbient = hasSunLight ? sunLight.AmbientIntensity : 0.0f;
+        int activeShadows = (hasSunLight && sunLight.CastShadows) ? 1 : 0;
         float activeExposure = hasSunLight ? sunLight.Exposure : 1.0f;
         int activeToneMapping = hasSunLight ? sunLight.ToneMappingMode : 0;
         float activeGamma = hasSunLight ? sunLight.Gamma : 2.2f;

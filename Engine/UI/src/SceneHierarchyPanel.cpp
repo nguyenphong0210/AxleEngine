@@ -784,13 +784,23 @@ namespace Axle {
                     tc.Scale = scale;
                 }
 
-                // If rigid body attached and user modified transform, sync to physics engine
-                if (changed && entity.HasComponent<RigidBody3D>() && m_PhysicsScene) {
-                    auto& rb = entity.GetComponent<RigidBody3D>();
-                    if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                        m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, tc.Translation, tc.Rotation, true);
-                    }
+                // If rigid body attached and user modified transform, sync to physics engine (using world transform)
+                if (changed && m_PhysicsScene) {
+                    auto syncPhysicsBody = [&](Entity e) {
+                        if (e.HasComponent<RigidBody3D>()) {
+                            auto& rb = e.GetComponent<RigidBody3D>();
+                            if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                                glm::mat4 worldMat = e.GetWorldTransform();
+                                glm::vec3 worldPos = glm::vec3(worldMat[3]);
+                                glm::quat worldRot = glm::quat_cast(worldMat);
+                                m_PhysicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, worldPos, worldRot, true);
+                            }
+                        }
+                    };
+                    syncPhysicsBody(entity);
+                    entity.ForEachChild(syncPhysicsBody, true);
                 }
+
 
                 ImGui::TreePop();
             }

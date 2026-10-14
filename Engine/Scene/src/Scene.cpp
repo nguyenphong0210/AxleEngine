@@ -102,6 +102,48 @@ namespace Axle {
         return transform;
     }
 
+    void Scene::UpdateWorldTransforms() {
+        auto view = m_Registry.view<TransformComponent>();
+        for (auto entityID : view) {
+            bool isRoot = true;
+            if (m_Registry.all_of<HierarchyComponent>(entityID)) {
+                const auto& hc = m_Registry.get<HierarchyComponent>(entityID);
+                if (hc.Parent != entt::null && m_Registry.valid(hc.Parent)) {
+                    isRoot = false;
+                }
+            }
+            if (isRoot) {
+                UpdateEntityTransformRecursive(entityID, glm::mat4(1.0f));
+            }
+        }
+    }
+
+    void Scene::UpdateEntityTransformRecursive(entt::entity entityID, const glm::mat4& parentWorld) {
+        if (!m_Registry.valid(entityID) || !m_Registry.all_of<TransformComponent>(entityID)) {
+            return;
+        }
+
+        auto& tc = m_Registry.get<TransformComponent>(entityID);
+        tc.LocalMatrix = tc.GetLocalTransform();
+        tc.WorldMatrix = parentWorld * tc.LocalMatrix;
+
+        if (m_Registry.all_of<HierarchyComponent>(entityID)) {
+            const auto& hc = m_Registry.get<HierarchyComponent>(entityID);
+            for (auto childHandle : hc.Children) {
+                if (m_Registry.valid(childHandle)) {
+                    UpdateEntityTransformRecursive(childHandle, tc.WorldMatrix);
+                }
+            }
+        }
+    }
+
+    void Scene::SetParent(Entity child, Entity parent) {
+        if (child) {
+            child.SetParent(parent);
+        }
+    }
+
+
     bool Scene::GetPrimaryDirectionalLight(DirectionalLightComponent& outLight) const {
         auto view = m_Registry.view<DirectionalLightComponent>();
         for (auto entity : view) {
@@ -131,13 +173,45 @@ namespace Axle {
                 auto& tc = m_Registry.get<TransformComponent>(entity);
                 const auto& rb = m_Registry.get<RigidBody3D>(entity);
                 if (!rb.RuntimeBodyID.IsInvalid()) {
-                    tc.Translation = physicsScene->GetBodyPosition(rb.RuntimeBodyID);
-                    tc.Rotation = physicsScene->GetBodyRotation(rb.RuntimeBodyID);
+                    glm::vec3 worldPos = physicsScene->GetBodyPosition(rb.RuntimeBodyID);
+                    glm::quat worldRot = physicsScene->GetBodyRotation(rb.RuntimeBodyID);
+
+                    // If entity is in a hierarchy with an active parent, convert world space to local space
+                    if (m_Registry.all_of<HierarchyComponent>(entity)) {
+                        const auto& hc = m_Registry.get<HierarchyComponent>(entity);
+                        if (hc.InheritTransform && hc.Parent != entt::null && m_Registry.valid(hc.Parent) && m_Registry.all_of<TransformComponent>(hc.Parent)) {
+                            glm::mat4 parentWorld = GetWorldTransform(hc.Parent);
+                            glm::mat4 invParent = glm::inverse(parentWorld);
+                            glm::mat4 childWorldMat = glm::translate(glm::mat4(1.0f), worldPos) * glm::mat4_cast(worldRot);
+                            glm::mat4 childLocalMat = invParent * childWorldMat;
+                            tc.Translation = glm::vec3(childLocalMat[3]);
+
+                            glm::vec3 scale(
+                                glm::length(glm::vec3(childLocalMat[0])),
+                                glm::length(glm::vec3(childLocalMat[1])),
+                                glm::length(glm::vec3(childLocalMat[2]))
+                            );
+                            glm::mat3 rotMatrix(1.0f);
+                            if (scale.x > 1e-6f) rotMatrix[0] = glm::vec3(childLocalMat[0]) / scale.x;
+                            if (scale.y > 1e-6f) rotMatrix[1] = glm::vec3(childLocalMat[1]) / scale.y;
+                            if (scale.z > 1e-6f) rotMatrix[2] = glm::vec3(childLocalMat[2]) / scale.z;
+                            tc.Rotation = glm::quat_cast(rotMatrix);
+                            continue;
+                        }
+                    }
+
+                    tc.Translation = worldPos;
+                    tc.Rotation = worldRot;
                 }
             }
         }
 
-        // 2. Query active directional sun light in scene
+
+        // 2. Propagate scene graph hierarchy transforms (Root -> Children)
+        UpdateWorldTransforms();
+
+        // 3. Query active directional sun light in scene
+
         DirectionalLightComponent sunLight;
         bool hasSunLight = GetPrimaryDirectionalLight(sunLight);
 

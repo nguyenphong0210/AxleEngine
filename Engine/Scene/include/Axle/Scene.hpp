@@ -35,6 +35,10 @@ namespace Axle {
 
         // Hierarchical world transform calculation (propagating parent transforms)
         glm::mat4 GetWorldTransform(entt::entity entityID) const;
+        void UpdateWorldTransforms();
+
+        // Reparenting API with cycle check and World Position Stays logic
+        void SetParent(Entity child, Entity parent);
 
         // Query active directional sun light in the scene (returns true if light found)
         bool GetPrimaryDirectionalLight(DirectionalLightComponent& outLight) const;
@@ -60,6 +64,8 @@ namespace Axle {
         const entt::registry& GetRegistry() const { return m_Registry; }
 
     private:
+        void UpdateEntityTransformRecursive(entt::entity entity, const glm::mat4& parentWorld);
+
         entt::registry m_Registry;
 
         friend class Entity;

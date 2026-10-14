@@ -29,7 +29,7 @@ for arg in "$@"; do
             echo "Options:"
             echo "  --release, -r    Build in Release mode (default: Debug)"
             echo "  --clean, -c      Wipe build directory before compiling"
-            echo "  --run            Execute SandboxApp after successful compilation"
+            echo "  --run            Execute AxleEditor after successful compilation"
             echo "  --help, -h       Display this help message"
             exit 0
             ;;
@@ -64,18 +64,18 @@ echo "--> Build completed successfully!"
 # 3. Optional: Run executable
 if [ "$RUN_APP" = true ]; then
     echo "=========================================="
-    echo " Running SandboxApp..."
+    echo " Running AxleEditor..."
     echo "=========================================="
     
     # Check for executable binary path (Handles both Windows and Linux layouts)
-    if [ -f "$BUILD_DIR/Sandbox/$BUILD_TYPE/SandboxApp.exe" ]; then
-        ./"$BUILD_DIR/Sandbox/$BUILD_TYPE/SandboxApp.exe"
-    elif [ -f "$BUILD_DIR/Sandbox/SandboxApp.exe" ]; then
-        ./"$BUILD_DIR/Sandbox/SandboxApp.exe"
-    elif [ -f "$BUILD_DIR/Sandbox/SandboxApp" ]; then
-        ./"$BUILD_DIR/Sandbox/SandboxApp"
+    if [ -f "$BUILD_DIR/Editor/$BUILD_TYPE/AxleEditor.exe" ]; then
+        ./"$BUILD_DIR/Editor/$BUILD_TYPE/AxleEditor.exe"
+    elif [ -f "$BUILD_DIR/Editor/AxleEditor.exe" ]; then
+        ./"$BUILD_DIR/Editor/AxleEditor.exe"
+    elif [ -f "$BUILD_DIR/Editor/AxleEditor" ]; then
+        ./"$BUILD_DIR/Editor/AxleEditor"
     else
-        echo "Error: SandboxApp executable not found in $BUILD_DIR/Sandbox!"
+        echo "Error: AxleEditor executable not found in $BUILD_DIR/Editor!"
         exit 1
     fi
 fi

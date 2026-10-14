@@ -17,26 +17,34 @@ namespace Axle {
         }
 
         // Auto-detection strategy:
-        // 1. Check "Sandbox/assets" relative to current working directory (typical when running from project root)
+        // 1. Check "Editor/assets" or "Sandbox/assets" relative to current working directory
+        if (std::filesystem::exists("Editor/assets")) {
+            s_AssetDirectory = std::filesystem::absolute("Editor/assets");
+            return s_AssetDirectory;
+        }
         if (std::filesystem::exists("Sandbox/assets")) {
             s_AssetDirectory = std::filesystem::absolute("Sandbox/assets");
             return s_AssetDirectory;
         }
 
-        // 2. Check "assets" in current working directory (typical when running from Sandbox folder or output directory)
+        // 2. Check "assets" in current working directory (typical when running from output directory)
         if (std::filesystem::exists("assets")) {
             s_AssetDirectory = std::filesystem::absolute("assets");
             return s_AssetDirectory;
         }
 
-        // 3. Check "../../Sandbox/assets" (typical when running from build/Sandbox/Release)
+        // 3. Check relative paths from build output folder (e.g., build/Editor/Release)
+        if (std::filesystem::exists("../../Editor/assets")) {
+            s_AssetDirectory = std::filesystem::canonical("../../Editor/assets");
+            return s_AssetDirectory;
+        }
         if (std::filesystem::exists("../../Sandbox/assets")) {
             s_AssetDirectory = std::filesystem::canonical("../../Sandbox/assets");
             return s_AssetDirectory;
         }
 
         // Fallback default
-        s_AssetDirectory = "Sandbox/assets";
+        s_AssetDirectory = "Editor/assets";
         return s_AssetDirectory;
     }
 

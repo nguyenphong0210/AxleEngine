@@ -38,5 +38,5 @@ add_subdirectory(Engine/Physics)
 add_subdirectory(Engine/Scene)
 add_subdirectory(Engine/Vehicle)
 
-# Load test application
-add_subdirectory(Sandbox)
+# Load Axle Editor
+add_subdirectory(Editor)

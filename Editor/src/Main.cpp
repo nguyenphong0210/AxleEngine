@@ -1,6 +1,6 @@
 #include <Axle/Application.hpp>
 #include <Axle/Log.hpp>
-#include "SandboxLayer.hpp"
+#include "EditorLayer.hpp"
 #include <exception>
 #include <csignal>
 #include <cstdio>
@@ -93,14 +93,14 @@ int main() {
 #endif
     try {
         Axle::ApplicationSpecification spec{
-            .Name = "Axle Engine - 3D Free-Fly Camera & Jolt Physics",
+            .Name = "Axle Editor",
             .Width = 1280,
             .Height = 720,
             .VSync = true
         };
 
         auto app = std::make_unique<Axle::Application>(spec);
-        app->PushLayer(std::make_shared<SandboxLayer>());
+        app->PushLayer(std::make_shared<EditorLayer>());
         app->Run();
     } catch (const std::exception& e) {
         AXLE_CRITICAL("Unhandled C++ Exception: {0}", e.what());

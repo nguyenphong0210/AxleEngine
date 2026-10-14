@@ -28,7 +28,7 @@
 #include <vector>
 #include <filesystem>
 
-class SandboxLayer : public Axle::Layer {
+class EditorLayer : public Axle::Layer {
 public:
     enum class SceneState {
         Edit = 0,
@@ -36,8 +36,8 @@ public:
         Pause = 2
     };
 
-    SandboxLayer();
-    ~SandboxLayer() override = default;
+    EditorLayer();
+    ~EditorLayer() override = default;
 
     void OnAttach() override;
     void OnDetach() override;
@@ -121,19 +121,8 @@ private:
 
     // Scene & Entities
     std::unique_ptr<Axle::Scene> m_Scene;
-    Axle::Entity m_FloorEntity;
-    Axle::Entity m_BoxEntity;
-    Axle::Entity m_SphereEntity;
-    Axle::Entity m_CylinderEntity;
-    Axle::Entity m_ConeEntity;
     Axle::Entity m_ChassisEntity;
     Axle::Entity m_WheelEntities[4];
-
-    Axle::BodyID m_FloorBodyID;
-    Axle::BodyID m_BoxBodyID;
-    Axle::BodyID m_SphereBodyID;
-    Axle::BodyID m_CylinderBodyID;
-    Axle::BodyID m_ConeBodyID;
 
     // Primitive Meshes & Shaders
     std::shared_ptr<Axle::VertexArray> m_CubeMesh;
@@ -168,14 +157,12 @@ private:
 
     Axle::f32 m_LastDeltaTime = 0.0f;
 
-    // Playground Simulation State
+    // Dynamic Simulation State Cache
     struct InitialBodyState {
         glm::vec3 Position{ 0.0f };
         glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
     };
     std::unordered_map<Axle::u32, InitialBodyState> m_InitialDynamicStates;
-
-    void CreatePlayground();
 
     // 3D Model Asset Ingestion & Conversion Modal
     struct ModelImportModalData {

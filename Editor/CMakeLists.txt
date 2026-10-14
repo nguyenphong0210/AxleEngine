@@ -1,13 +1,13 @@
-add_executable(SandboxApp
+add_executable(AxleEditor
     src/Main.cpp
-    src/SandboxLayer.cpp
+    src/EditorLayer.cpp
 )
 
-target_include_directories(SandboxApp PRIVATE
+target_include_directories(AxleEditor PRIVATE
     src
 )
 
-target_link_libraries(SandboxApp PRIVATE
+target_link_libraries(AxleEditor PRIVATE
     Axle::Core
     Axle::Platform
     Axle::Renderer
@@ -19,11 +19,11 @@ target_link_libraries(SandboxApp PRIVATE
     Axle::Project
 )
 
-# Synchronize Sandbox/assets to binary output directory on post-build
-add_custom_command(TARGET SandboxApp POST_BUILD
+# Synchronize Editor/assets to binary output directory on post-build
+add_custom_command(TARGET AxleEditor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_CURRENT_SOURCE_DIR}/assets
-    $<TARGET_FILE_DIR:SandboxApp>/assets
+    $<TARGET_FILE_DIR:AxleEditor>/assets
 )
 
 # Dedicated Test Executable for Automated Verifications

@@ -315,8 +315,8 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 # Compile
 cmake --build build --config Release --parallel
 
-# Execute Sandbox
-./build/Sandbox/Release/SandboxApp.exe
+# Execute Axle Editor
+./build/Editor/Release/AxleEditor.exe
 ```
 
 ---

@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/UUID.hpp>
 #include <Axle/Scene.hpp>
 #include <entt/entt.hpp>
 #include <utility>
@@ -19,7 +20,12 @@ namespace Axle {
 
         template<typename T, typename... Args>
         T& AddComponent(Args&&... args) {
-            return m_Scene->m_Registry.emplace<T>(m_EntityHandle, std::forward<Args>(args)...);
+            return m_Scene->m_Registry.emplace_or_replace<T>(m_EntityHandle, std::forward<Args>(args)...);
+        }
+
+        template<typename T, typename... Args>
+        T& AddOrReplaceComponent(Args&&... args) {
+            return m_Scene->m_Registry.emplace_or_replace<T>(m_EntityHandle, std::forward<Args>(args)...);
         }
 
         template<typename T>
@@ -69,6 +75,7 @@ namespace Axle {
         void ForEachChild(const std::function<void(Entity)>& func, bool recursive = true) const;
         bool IsChildOf(Entity potentialParent) const;
         const std::string& GetName() const;
+        UUID GetUUID() const;
         glm::mat4 GetWorldTransform() const;
 
     private:

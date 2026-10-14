@@ -13,6 +13,14 @@ namespace Axle {
         return s_Empty;
     }
 
+    UUID Entity::GetUUID() const {
+        if (!*this) return 0;
+        if (HasComponent<IDComponent>()) {
+            return GetComponent<IDComponent>().ID;
+        }
+        return 0;
+    }
+
     Entity Entity::GetParent() const {
         if (!*this) return {};
         if (!HasComponent<HierarchyComponent>()) return {};
@@ -32,6 +40,9 @@ namespace Axle {
         if (parent && (parent == *this || parent.IsChildOf(*this))) {
             return;
         }
+
+        // Keep World Position Stays: compute current world transform before reparenting
+        glm::mat4 currentWorld = GetWorldTransform();
 
         // 1. Detach from current parent if attached
         if (HasComponent<HierarchyComponent>()) {
@@ -60,6 +71,32 @@ namespace Axle {
             if (std::find(parentHc.Children.begin(), parentHc.Children.end(), m_EntityHandle) == parentHc.Children.end()) {
                 parentHc.Children.push_back(m_EntityHandle);
             }
+        }
+
+        // 3. Decompose new local transform to guarantee World Position Stays!
+        if (HasComponent<TransformComponent>()) {
+            auto& tc = GetComponent<TransformComponent>();
+            glm::mat4 newLocal = currentWorld;
+            if (parent) {
+                glm::mat4 parentWorld = parent.GetWorldTransform();
+                newLocal = glm::inverse(parentWorld) * currentWorld;
+            }
+
+            tc.Translation = glm::vec3(newLocal[3]);
+            tc.Scale = glm::vec3(
+                glm::length(glm::vec3(newLocal[0])),
+                glm::length(glm::vec3(newLocal[1])),
+                glm::length(glm::vec3(newLocal[2]))
+            );
+
+            glm::mat3 rotMatrix(1.0f);
+            if (tc.Scale.x > 1e-6f) rotMatrix[0] = glm::vec3(newLocal[0]) / tc.Scale.x;
+            if (tc.Scale.y > 1e-6f) rotMatrix[1] = glm::vec3(newLocal[1]) / tc.Scale.y;
+            if (tc.Scale.z > 1e-6f) rotMatrix[2] = glm::vec3(newLocal[2]) / tc.Scale.z;
+
+            tc.Rotation = glm::quat_cast(rotMatrix);
+            tc.LocalMatrix = newLocal;
+            tc.WorldMatrix = currentWorld;
         }
     }
 

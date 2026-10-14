@@ -19,6 +19,8 @@ namespace Axle {
         Entity entity = { m_Registry.create(), this };
         entity.AddComponent<IDComponent>(uuid);
         entity.AddComponent<TagComponent>(name.empty() ? "Entity" : name);
+        entity.AddComponent<TransformComponent>();
+        entity.AddComponent<HierarchyComponent>();
         return entity;
     }
 
@@ -87,13 +89,16 @@ namespace Axle {
             return glm::mat4(1.0f);
         }
 
-        glm::mat4 transform = m_Registry.get<TransformComponent>(entityID).GetTransform();
+        auto& tc = const_cast<entt::registry&>(m_Registry).get<TransformComponent>(entityID);
+        tc.LocalMatrix = tc.GetLocalTransform();
+        glm::mat4 transform = tc.LocalMatrix;
         if (m_Registry.all_of<HierarchyComponent>(entityID)) {
             const auto& hc = m_Registry.get<HierarchyComponent>(entityID);
             if (hc.InheritTransform && hc.Parent != entt::null && m_Registry.valid(hc.Parent) && m_Registry.all_of<TransformComponent>(hc.Parent)) {
                 transform = GetWorldTransform(hc.Parent) * transform;
             }
         }
+        tc.WorldMatrix = transform;
         return transform;
     }
 

@@ -37,6 +37,9 @@ namespace Axle {
         glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
         glm::vec3 Scale{ 1.0f };
 
+        glm::mat4 LocalMatrix{ 1.0f };
+        glm::mat4 WorldMatrix{ 1.0f };
+
         TransformComponent() = default;
         TransformComponent(const glm::vec3& translation)
             : Translation(translation) {}
@@ -45,10 +48,14 @@ namespace Axle {
         TransformComponent(const glm::vec3& translation, const glm::quat& rotation, const glm::vec3& scale)
             : Translation(translation), Rotation(rotation), Scale(scale) {}
 
-        glm::mat4 GetTransform() const {
+        glm::mat4 GetLocalTransform() const {
             return glm::translate(glm::mat4(1.0f), Translation)
                 * glm::mat4_cast(Rotation)
                 * glm::scale(glm::mat4(1.0f), Scale);
+        }
+
+        glm::mat4 GetTransform() const {
+            return GetLocalTransform();
         }
     };
 
@@ -358,6 +365,7 @@ namespace Axle {
         HierarchyComponent(entt::entity parent, bool inheritTransform = true)
             : Parent(parent), InheritTransform(inheritTransform) {}
     };
+    using RelationshipComponent = HierarchyComponent; // Relationship / Scene Graph alias
 
     class ScriptableEntity;
 

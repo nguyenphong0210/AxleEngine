@@ -29,7 +29,8 @@ namespace Axle {
                                   PhysicsScene* physicsScene = nullptr,
                                   const glm::vec3& spawnPosition = glm::vec3(0.0f),
                                   const struct SceneSerializerContext* context = nullptr);
-        void DestroyEntity(Entity entity);
+        void DestroyEntity(Entity entity, PhysicsScene* physicsScene = nullptr);
+        Entity DuplicateEntity(Entity entity, PhysicsScene* physicsScene = nullptr);
         void Clear();
         Entity FindEntityByBodyID(BodyID bodyID);
 

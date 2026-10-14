@@ -672,6 +672,38 @@ namespace Axle {
             }
             ImGui::End();
         }
+
+        // Global Scene Hierarchy / Inspector Shortcuts (when not typing in an InputText)
+        if (!ImGui::GetIO().WantTextInput) {
+            // Ctrl+D: Deep recursive duplication of selected entity
+            if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D)) {
+                if (m_SelectedEntity && m_Scene && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity)) {
+                    Entity duplicated = m_Scene->DuplicateEntity(m_SelectedEntity, m_PhysicsScene);
+                    if (duplicated) {
+                        m_SelectedEntity = duplicated;
+                        AXLE_INFO("Duplicated Entity '{0}' via Ctrl+D", duplicated.GetName());
+                    }
+                }
+            }
+
+            // Delete key: Deferred deletion of selected entity
+            if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+                if (m_SelectedEntity && m_Scene && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity)) {
+                    m_EntitiesToDestroy.push_back(m_SelectedEntity);
+                }
+            }
+        }
+
+        // Process end-of-frame deferred deletion queue
+        for (auto entityToDestroy : m_EntitiesToDestroy) {
+            if (m_Scene && entityToDestroy && m_Scene->GetRegistry().valid((entt::entity)entityToDestroy)) {
+                if (m_SelectedEntity == entityToDestroy || (m_SelectedEntity && m_SelectedEntity.IsChildOf(entityToDestroy))) {
+                    m_SelectedEntity = {};
+                }
+                m_Scene->DestroyEntity(entityToDestroy, m_PhysicsScene);
+            }
+        }
+        m_EntitiesToDestroy.clear();
     }
 
     void SceneHierarchyPanel::DrawEntityNode(Entity entity) {
@@ -791,6 +823,14 @@ namespace Axle {
 
             ImGui::Separator();
 
+            if (ImGui::MenuItem("Duplicate Entity", "Ctrl+D")) {
+                Entity duplicated = m_Scene->DuplicateEntity(entity, m_PhysicsScene);
+                if (duplicated) {
+                    m_SelectedEntity = duplicated;
+                    AXLE_INFO("Duplicated Entity '{0}' via Context Menu", duplicated.GetName());
+                }
+            }
+
             if (ImGui::MenuItem("Save as Assembly...")) {
                 std::string entityTag = entity.HasComponent<TagComponent>() ? entity.GetComponent<TagComponent>().Tag : "Assembly";
                 std::filesystem::path outPath = FileSystem::GetAssetDirectory() / (entityTag + ".axle");
@@ -806,7 +846,7 @@ namespace Axle {
                 }
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Delete Entity")) {
+            if (ImGui::MenuItem("Delete Entity", "Del")) {
                 entityDeleted = true;
             }
             ImGui::EndPopup();
@@ -827,10 +867,7 @@ namespace Axle {
         }
 
         if (entityDeleted) {
-            if (m_SelectedEntity == entity || (m_SelectedEntity && m_SelectedEntity.IsChildOf(entity))) {
-                m_SelectedEntity = {};
-            }
-            m_Scene->DestroyEntity(entity);
+            m_EntitiesToDestroy.push_back(entity);
         }
     }
 

@@ -56,6 +56,7 @@ namespace Axle {
         Entity m_SelectedEntity{};
         std::filesystem::path m_SelectedAsset;
         AssetPreviewPanel* m_AssetPreviewPanel = nullptr;
+        std::vector<Entity> m_EntitiesToDestroy;
 
         char m_SearchFilter[64] = "";
 

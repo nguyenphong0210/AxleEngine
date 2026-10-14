@@ -43,7 +43,11 @@ namespace Axle {
         m_Registry.clear();
     }
 
-    void Scene::DestroyEntity(Entity entity) {
+    void Scene::DestroyEntity(Entity entity, PhysicsScene* physicsScene) {
+        if (!entity || !m_Registry.valid((entt::entity)entity)) {
+            return;
+        }
+
         if (entity.HasComponent<NativeScriptComponent>()) {
             auto& nsc = entity.GetComponent<NativeScriptComponent>();
             if (nsc.Instance && nsc.DestroyScript) {
@@ -52,12 +56,20 @@ namespace Axle {
             }
         }
 
+        if (physicsScene && entity.HasComponent<RigidBody3D>()) {
+            auto& rb = entity.GetComponent<RigidBody3D>();
+            if (!rb.RuntimeBodyID.IsInvalid()) {
+                physicsScene->DestroyBody(rb.RuntimeBodyID);
+                rb.RuntimeBodyID = {};
+            }
+        }
+
         if (entity.HasComponent<HierarchyComponent>()) {
             auto& hc = entity.GetComponent<HierarchyComponent>();
             auto children = hc.Children; // Copy list to avoid iterator invalidation
             for (auto child : children) {
                 if (m_Registry.valid(child)) {
-                    DestroyEntity({ child, this });
+                    DestroyEntity({ child, this }, physicsScene);
                 }
             }
             if (hc.Parent != entt::null && m_Registry.valid(hc.Parent)) {
@@ -69,6 +81,128 @@ namespace Axle {
             }
         }
         m_Registry.destroy(entity);
+    }
+
+    Entity Scene::DuplicateEntity(Entity entity, PhysicsScene* physicsScene) {
+        if (!entity || !m_Registry.valid((entt::entity)entity)) {
+            return {};
+        }
+
+        std::string name = entity.GetName();
+        Entity newEntity = CreateEntity(name + " (Copy)");
+
+        // Copy TransformComponent
+        if (entity.HasComponent<TransformComponent>()) {
+            newEntity.GetComponent<TransformComponent>() = entity.GetComponent<TransformComponent>();
+        }
+
+        // Copy MeshInstance3D
+        if (entity.HasComponent<MeshInstance3D>()) {
+            newEntity.AddComponent<MeshInstance3D>(entity.GetComponent<MeshInstance3D>());
+        }
+
+        // Copy Lights & Environment
+        if (entity.HasComponent<DirectionalLightComponent>()) {
+            newEntity.AddComponent<DirectionalLightComponent>(entity.GetComponent<DirectionalLightComponent>());
+        }
+        if (entity.HasComponent<PointLightComponent>()) {
+            newEntity.AddComponent<PointLightComponent>(entity.GetComponent<PointLightComponent>());
+        }
+        if (entity.HasComponent<CameraComponent>()) {
+            newEntity.AddComponent<CameraComponent>(entity.GetComponent<CameraComponent>());
+        }
+        if (entity.HasComponent<SkyboxComponent>()) {
+            newEntity.AddComponent<SkyboxComponent>(entity.GetComponent<SkyboxComponent>());
+        }
+
+        // Copy NativeScriptComponent
+        if (entity.HasComponent<NativeScriptComponent>()) {
+            const auto& srcNsc = entity.GetComponent<NativeScriptComponent>();
+            auto& dstNsc = newEntity.AddComponent<NativeScriptComponent>(srcNsc.ScriptName);
+            dstNsc.FloatFields = srcNsc.FloatFields;
+            dstNsc.IntFields = srcNsc.IntFields;
+            dstNsc.BoolFields = srcNsc.BoolFields;
+            dstNsc.Vec3Fields = srcNsc.Vec3Fields;
+        }
+
+        // Copy AssemblyComponent
+        if (entity.HasComponent<AssemblyComponent>()) {
+            newEntity.AddComponent<AssemblyComponent>(entity.GetComponent<AssemblyComponent>());
+        }
+
+        // Copy CollisionShape3D and create new body in PhysicsScene
+        if (entity.HasComponent<CollisionShape3D>()) {
+            newEntity.AddComponent<CollisionShape3D>(entity.GetComponent<CollisionShape3D>());
+        }
+        if (physicsScene && entity.HasComponent<RigidBody3D>()) {
+            const auto& srcRb = entity.GetComponent<RigidBody3D>();
+            if (entity.HasComponent<CollisionShape3D>()) {
+                const auto& shape = entity.GetComponent<CollisionShape3D>();
+                const auto& tc = newEntity.GetComponent<TransformComponent>();
+                BodyID newBodyID{};
+                switch (shape.ShapeType) {
+                    case CollisionShapeType::Box: {
+                        BoxBodyProps bProps;
+                        bProps.Position = tc.Translation;
+                        bProps.Rotation = tc.Rotation;
+                        bProps.HalfExtent = shape.HalfExtent;
+                        bProps.IsDynamic = srcRb.IsDynamic;
+                        bProps.Friction = shape.Friction;
+                        bProps.Restitution = shape.Restitution;
+                        newBodyID = physicsScene->CreateBox(bProps);
+                        break;
+                    }
+                    case CollisionShapeType::Sphere: {
+                        SphereBodyProps sProps;
+                        sProps.Position = tc.Translation;
+                        sProps.Radius = shape.Radius;
+                        sProps.IsDynamic = srcRb.IsDynamic;
+                        sProps.Friction = shape.Friction;
+                        sProps.Restitution = shape.Restitution;
+                        newBodyID = physicsScene->CreateSphere(sProps);
+                        break;
+                    }
+                    case CollisionShapeType::Cylinder: {
+                        CylinderBodyProps cProps;
+                        cProps.Position = tc.Translation;
+                        cProps.HalfHeight = shape.HalfHeight;
+                        cProps.Radius = shape.Radius;
+                        cProps.IsDynamic = srcRb.IsDynamic;
+                        cProps.Friction = shape.Friction;
+                        cProps.Restitution = shape.Restitution;
+                        newBodyID = physicsScene->CreateCylinder(cProps);
+                        break;
+                    }
+                    default:
+                        break;
+                }
+                if (!newBodyID.IsInvalid()) {
+                    newEntity.AddComponent<RigidBody3D>(newBodyID, srcRb.IsDynamic);
+                }
+            }
+        }
+
+        // Parent relationship: preserve parent if source entity has a parent
+        Entity parent = entity.GetParent();
+        if (parent) {
+            newEntity.SetParent(parent);
+        }
+
+        // Deep Recursive Duplication of Children
+        if (entity.HasComponent<HierarchyComponent>()) {
+            auto children = entity.GetComponent<HierarchyComponent>().Children;
+            for (auto childID : children) {
+                if (m_Registry.valid(childID)) {
+                    Entity childEntity{ childID, this };
+                    Entity duplicatedChild = DuplicateEntity(childEntity, physicsScene);
+                    if (duplicatedChild) {
+                        duplicatedChild.SetParent(newEntity);
+                    }
+                }
+            }
+        }
+
+        return newEntity;
     }
 
     Entity Scene::FindEntityByBodyID(BodyID bodyID) {

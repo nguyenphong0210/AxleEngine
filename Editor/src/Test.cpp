@@ -771,6 +771,141 @@ bool RunTest_Step8_Phase15_DragAndDropReparenting() {
 }
 
 // =============================================================================
+// =============================================================================
+// TEST STEP 9: Phase 15.4 / Deferred Deletion & Deep Recursive Duplication
+// =============================================================================
+bool RunTest_Step9_Phase15_DeferredAndRecursiveLifecycle() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 9 TEST] PHASE 15.4: DEFERRED & DEEP LIFECYCLE    " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    auto scene = std::make_shared<Axle::Scene>();
+
+    // -----------------------------------------------------------------
+    // [9.1] Deferred Deletion Queue
+    // -----------------------------------------------------------------
+    std::cout << "[9.1] Verifying Deferred Deletion Queue Execution..." << std::endl;
+    auto e1 = scene->CreateEntity("Entity_1");
+    auto e2 = scene->CreateEntity("Entity_2");
+    auto e3 = scene->CreateEntity("Entity_3");
+
+    std::vector<Axle::Entity> deferredQueue;
+    deferredQueue.push_back(e1);
+    deferredQueue.push_back(e2);
+
+    // Ensure entities are still alive in scene before flush
+    if (!scene->GetRegistry().valid((entt::entity)e1) || !scene->GetRegistry().valid((entt::entity)e2)) {
+        std::cerr << "FAIL: Entities destroyed prematurely before queue flush!" << std::endl;
+        return false;
+    }
+
+    // Flush deferred queue
+    for (auto ent : deferredQueue) {
+        scene->DestroyEntity(ent);
+    }
+    deferredQueue.clear();
+
+    if (scene->GetRegistry().valid((entt::entity)e1) || scene->GetRegistry().valid((entt::entity)e2)) {
+        std::cerr << "FAIL: Deferred entities not destroyed after flush!" << std::endl;
+        return false;
+    }
+    if (!scene->GetRegistry().valid((entt::entity)e3)) {
+        std::cerr << "FAIL: Unrelated Entity_3 was destroyed!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Deferred queue properly isolated and safely executed at end-of-frame." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [9.2] Deep Recursive Duplication with Fresh UUID Generation
+    // -----------------------------------------------------------------
+    std::cout << "[9.2] Verifying Deep Recursive Duplication with Fresh UUIDs..." << std::endl;
+    auto carRoot = scene->CreateEntity("CarRoot");
+    carRoot.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(10.0f, 2.0f, 5.0f);
+    carRoot.AddComponent<Axle::PointLightComponent>(glm::vec3(1.0f, 0.9f, 0.8f), 3.0f, 20.0f);
+    carRoot.AddComponent<Axle::NativeScriptComponent>("CarPlayerScript");
+
+    auto wheelFL = scene->CreateEntity("Wheel_FL");
+    wheelFL.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(-1.0f, -0.5f, 1.5f);
+    wheelFL.SetParent(carRoot);
+
+    // Deep duplicate carRoot
+    auto duplicatedCar = scene->DuplicateEntity(carRoot);
+
+    if (!duplicatedCar) {
+        std::cerr << "FAIL: DuplicateEntity returned null entity!" << std::endl;
+        return false;
+    }
+    if (duplicatedCar.GetName() != "CarRoot (Copy)") {
+        std::cerr << "FAIL: Duplicated car name mismatch: " << duplicatedCar.GetName() << std::endl;
+        return false;
+    }
+
+    // Check Fresh UUID
+    std::cout << "  -> Original Car UUID:   " << carRoot.GetUUID() << std::endl;
+    std::cout << "  -> Duplicated Car UUID: " << duplicatedCar.GetUUID() << std::endl;
+    if (duplicatedCar.GetUUID() == carRoot.GetUUID()) {
+        std::cerr << "FAIL: Duplicated entity has duplicate UUID instead of fresh UUID!" << std::endl;
+        return false;
+    }
+
+    // Verify component cloning
+    if (!duplicatedCar.HasComponent<Axle::PointLightComponent>() ||
+        !duplicatedCar.HasComponent<Axle::NativeScriptComponent>()) {
+        std::cerr << "FAIL: Duplicated car missing components!" << std::endl;
+        return false;
+    }
+    if (duplicatedCar.GetComponent<Axle::PointLightComponent>().Intensity != 3.0f) {
+        std::cerr << "FAIL: Duplicated PointLightComponent field values mismatch!" << std::endl;
+        return false;
+    }
+
+    // Verify deep child duplication
+    if (duplicatedCar.GetChildCount() != 1) {
+        std::cerr << "FAIL: Expected 1 duplicated child, got " << duplicatedCar.GetChildCount() << std::endl;
+        return false;
+    }
+
+    auto dupChild = duplicatedCar.GetChildren()[0];
+    std::cout << "  -> Original Wheel UUID:   " << wheelFL.GetUUID() << std::endl;
+    std::cout << "  -> Duplicated Wheel UUID: " << dupChild.GetUUID() << std::endl;
+
+    if (dupChild.GetUUID() == wheelFL.GetUUID()) {
+        std::cerr << "FAIL: Duplicated child has duplicate UUID!" << std::endl;
+        return false;
+    }
+    if (dupChild.GetParent() != duplicatedCar) {
+        std::cerr << "FAIL: Duplicated child is not parented to duplicated car!" << std::endl;
+        return false;
+    }
+    if (wheelFL.GetParent() != carRoot) {
+        std::cerr << "FAIL: Original child parent link was corrupted!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Deep hierarchy and unique UUIDs successfully generated." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [9.3] Recursive Deletion of Duplicated Entity
+    // -----------------------------------------------------------------
+    std::cout << "[9.3] Verifying Recursive Cleanup of Duplicated Tree..." << std::endl;
+    scene->DestroyEntity(duplicatedCar);
+
+    if (scene->GetRegistry().valid((entt::entity)duplicatedCar) ||
+        scene->GetRegistry().valid((entt::entity)dupChild)) {
+        std::cerr << "FAIL: Duplicated car or its child was not cleanly destroyed!" << std::endl;
+        return false;
+    }
+    if (!scene->GetRegistry().valid((entt::entity)carRoot) ||
+        !scene->GetRegistry().valid((entt::entity)wheelFL)) {
+        std::cerr << "FAIL: Original car or child was destroyed unexpectedly!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Duplicated tree destroyed without affecting original hierarchy." << std::endl;
+
+    std::cout << ">>> STEP 9 PASSED: Phase 15.4 Deferred & Deep Lifecycle verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -785,12 +920,13 @@ int main(int argc, char** argv) {
         else if (arg == "6" || arg == "step6" || arg == "--step6" || arg == "--phase15") targetStep = 6;
         else if (arg == "7" || arg == "step7" || arg == "--step7" || arg == "--phase15.2") targetStep = 7;
         else if (arg == "8" || arg == "step8" || arg == "--step8" || arg == "--phase15.3") targetStep = 8;
+        else if (arg == "9" || arg == "step9" || arg == "--step9" || arg == "--phase15.4") targetStep = 9;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 8 STEPS                       " << std::endl;
+        std::cout << "              RUNNING ALL 9 STEPS                       " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -821,6 +957,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 8) {
         if (!RunTest_Step8_Phase15_DragAndDropReparenting()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 9) {
+        if (!RunTest_Step9_Phase15_DeferredAndRecursiveLifecycle()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

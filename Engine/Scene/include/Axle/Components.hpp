@@ -445,7 +445,30 @@ namespace Axle {
         }
     };
 
+    struct PointLightComponent {
+        glm::vec3 Color{ 1.0f, 1.0f, 1.0f };
+        float Intensity = 1.0f;
+        float Radius = 10.0f;
+        float Falloff = 1.0f;
+
+        PointLightComponent() = default;
+        PointLightComponent(const glm::vec3& color, float intensity = 1.0f, float radius = 10.0f, float falloff = 1.0f)
+            : Color(color), Intensity(intensity), Radius(radius), Falloff(falloff) {}
+    };
+
+    struct CameraComponent {
+        float FOV = 45.0f;
+        float NearClip = 0.1f;
+        float FarClip = 1000.0f;
+        bool Primary = false;
+
+        CameraComponent() = default;
+        CameraComponent(float fov, float nearClip = 0.1f, float farClip = 1000.0f, bool primary = false)
+            : FOV(fov), NearClip(nearClip), FarClip(farClip), Primary(primary) {}
+    };
+
     struct SkyboxComponent {
+
         bool Enabled = true;
         glm::vec3 ZenithColor{ 0.18f, 0.42f, 0.78f };    // Deep sky blue at zenith
         glm::vec3 HorizonColor{ 0.70f, 0.82f, 0.95f };   // Soft atmospheric haze at horizon

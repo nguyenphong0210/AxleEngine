@@ -264,40 +264,72 @@ namespace Axle {
     }
 
     void SceneHierarchyPanel::DrawCreateMenu() {
-        if (ImGui::MenuItem("Empty Entity")) {
-            m_SelectedEntity = m_Scene->CreateEntity("Empty Entity");
-            m_SelectedEntity.AddComponent<TransformComponent>();
+        bool hasSelected = m_SelectedEntity && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity);
+
+        if (ImGui::MenuItem("Create Empty")) {
+            m_SelectedEntity = m_Scene->CreateEntity("GameObject");
+        }
+        if (ImGui::MenuItem("Create Empty Child", nullptr, false, hasSelected)) {
+            if (hasSelected) {
+                auto child = m_Scene->CreateEntity("Child");
+                child.SetParent(m_SelectedEntity);
+                m_SelectedEntity = child;
+            }
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("3D Cube (Dynamic Box)")) {
-            CreatePrimitive(0);
+
+        if (ImGui::BeginMenu("3D Object")) {
+            if (ImGui::MenuItem("Cube")) {
+                CreatePrimitive(0);
+            }
+            if (ImGui::MenuItem("Sphere")) {
+                CreatePrimitive(1);
+            }
+            if (ImGui::MenuItem("Cylinder")) {
+                CreatePrimitive(2);
+            }
+            if (ImGui::MenuItem("Cone")) {
+                CreatePrimitive(3);
+            }
+            if (ImGui::MenuItem("Plane")) {
+                CreatePrimitive(4);
+            }
+            ImGui::EndMenu();
         }
-        if (ImGui::MenuItem("3D Sphere (Dynamic)")) {
-            CreatePrimitive(1);
+
+        if (ImGui::BeginMenu("Light")) {
+            if (ImGui::MenuItem("Directional Light")) {
+                auto lightEntity = m_Scene->CreateEntity("Directional Light");
+                lightEntity.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 25.0f, 0.0f);
+                lightEntity.AddComponent<DirectionalLightComponent>();
+                m_SelectedEntity = lightEntity;
+            }
+            if (ImGui::MenuItem("Point Light")) {
+                auto pointLight = m_Scene->CreateEntity("Point Light");
+                pointLight.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 3.0f, 0.0f);
+                pointLight.AddComponent<PointLightComponent>();
+                m_SelectedEntity = pointLight;
+            }
+            ImGui::EndMenu();
         }
-        if (ImGui::MenuItem("3D Cylinder (Dynamic)")) {
-            CreatePrimitive(2);
+
+        if (ImGui::MenuItem("Camera")) {
+            auto camEntity = m_Scene->CreateEntity("Camera");
+            camEntity.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 2.0f, 5.0f);
+            camEntity.AddComponent<CameraComponent>(45.0f, 0.1f, 1000.0f, false);
+            m_SelectedEntity = camEntity;
         }
-        if (ImGui::MenuItem("3D Cone (Dynamic)")) {
-            CreatePrimitive(3);
-        }
-        if (ImGui::MenuItem("Static Floor Plane")) {
-            CreatePrimitive(4);
-        }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Directional Sun Light")) {
-            auto lightEntity = m_Scene->CreateEntity("Sun Light");
-            lightEntity.AddComponent<TransformComponent>(glm::vec3(0.0f, 25.0f, 0.0f));
-            lightEntity.AddComponent<DirectionalLightComponent>();
-            m_SelectedEntity = lightEntity;
-        }
-        if (ImGui::MenuItem("Atmospheric Skybox")) {
-            auto skyEntity = m_Scene->CreateEntity("Atmospheric Skybox");
-            skyEntity.AddComponent<TransformComponent>();
-            skyEntity.AddComponent<SkyboxComponent>();
-            m_SelectedEntity = skyEntity;
+
+        if (ImGui::BeginMenu("Environment")) {
+            if (ImGui::MenuItem("Atmospheric Skybox")) {
+                auto skyEntity = m_Scene->CreateEntity("Atmospheric Skybox");
+                skyEntity.AddComponent<SkyboxComponent>();
+                m_SelectedEntity = skyEntity;
+            }
+            ImGui::EndMenu();
         }
     }
+
 
     void SceneHierarchyPanel::OnImGuiRender(bool* p_hierarchyOpen, bool* p_propertiesOpen) {
         if (!m_Scene) return;
@@ -1674,6 +1706,59 @@ namespace Axle {
             ImGui::Spacing();
         }
 
+        // Point Light Component
+        if (entity.HasComponent<PointLightComponent>()) {
+            bool removePLC = false;
+            bool plcOpen = ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), treeNodeFlags, "Point Light");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removePLC = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (plcOpen) {
+                auto& plc = entity.GetComponent<PointLightComponent>();
+                ImGui::ColorEdit3("Light Color", glm::value_ptr(plc.Color));
+                ImGui::DragFloat("Intensity", &plc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
+                ImGui::DragFloat("Radius", &plc.Radius, 0.5f, 0.1f, 500.0f, "%.1f m");
+                ImGui::DragFloat("Falloff", &plc.Falloff, 0.05f, 0.1f, 10.0f, "%.2f");
+                ImGui::TreePop();
+            }
+
+            if (removePLC) {
+                entity.RemoveComponent<PointLightComponent>();
+            }
+            ImGui::Spacing();
+        }
+
+        // Camera Component
+        if (entity.HasComponent<CameraComponent>()) {
+            bool removeCam = false;
+            bool camOpen = ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), treeNodeFlags, "Camera");
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeCam = true;
+                }
+                ImGui::EndPopup();
+            }
+
+            if (camOpen) {
+                auto& cam = entity.GetComponent<CameraComponent>();
+                ImGui::DragFloat("Field of View", &cam.FOV, 0.5f, 10.0f, 150.0f, "%.1f deg");
+                ImGui::DragFloat("Near Clip", &cam.NearClip, 0.01f, 0.001f, 10.0f, "%.3f m");
+                ImGui::DragFloat("Far Clip", &cam.FarClip, 1.0f, 1.0f, 10000.0f, "%.1f m");
+                ImGui::Checkbox("Primary Camera", &cam.Primary);
+                ImGui::TreePop();
+            }
+
+            if (removeCam) {
+                entity.RemoveComponent<CameraComponent>();
+            }
+            ImGui::Spacing();
+        }
+
+
         // Native Script Component
         if (entity.HasComponent<NativeScriptComponent>()) {
             auto& nsc = entity.GetComponent<NativeScriptComponent>();
@@ -1951,7 +2036,20 @@ namespace Axle {
                     ImGui::CloseCurrentPopup();
                 }
             }
+            if (!entity.HasComponent<PointLightComponent>()) {
+                if (ImGui::MenuItem("Point Light Component")) {
+                    entity.AddComponent<PointLightComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!entity.HasComponent<CameraComponent>()) {
+                if (ImGui::MenuItem("Camera Component")) {
+                    entity.AddComponent<CameraComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
             ImGui::EndPopup();
+
         }
     }
 

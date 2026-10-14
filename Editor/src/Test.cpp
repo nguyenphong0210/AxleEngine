@@ -3,6 +3,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/AssemblySerializer.hpp>
+#include <Axle/SceneHierarchyPanel.hpp>
 #include "CarPlayerScript.hpp"
 #include <iostream>
 #include <string>
@@ -448,6 +449,92 @@ bool RunTest_Step5_RelationshipAndTransform() {
     return true;
 }
 
+// =============================================================================
+// TEST STEP 6: Phase 15.1 / Standard Archetype Presets (Unity / Godot style)
+// =============================================================================
+bool RunTest_Step6_Phase15_ArchetypePresets() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 6 TEST] PHASE 15.1: STANDARD ARCHETYPE PRESETS   " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    auto scene = std::make_shared<Axle::Scene>();
+
+    // -----------------------------------------------------------------
+    // [6.1] PointLightComponent and CameraComponent attachment
+    // -----------------------------------------------------------------
+    std::cout << "[6.1] Verifying PointLight and Camera component attachment..." << std::endl;
+    auto pointLight = scene->CreateEntity("Point Light");
+    pointLight.AddComponent<Axle::PointLightComponent>(glm::vec3(1.0f, 0.5f, 0.2f), 2.5f, 15.0f);
+
+    auto camera = scene->CreateEntity("Perspective Camera");
+    camera.AddComponent<Axle::CameraComponent>(60.0f, 0.1f, 2000.0f, true);
+
+    if (!pointLight.HasComponent<Axle::PointLightComponent>()) {
+        std::cerr << "FAIL: PointLightComponent missing!" << std::endl;
+        return false;
+    }
+    const auto& plc = pointLight.GetComponent<Axle::PointLightComponent>();
+    if (plc.Intensity != 2.5f || plc.Radius != 15.0f) {
+        std::cerr << "FAIL: PointLightComponent field values mismatch!" << std::endl;
+        return false;
+    }
+
+    if (!camera.HasComponent<Axle::CameraComponent>()) {
+        std::cerr << "FAIL: CameraComponent missing!" << std::endl;
+        return false;
+    }
+    const auto& cam = camera.GetComponent<Axle::CameraComponent>();
+    if (cam.FOV != 60.0f || !cam.Primary) {
+        std::cerr << "FAIL: CameraComponent field values mismatch!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: PointLightComponent and CameraComponent validated." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [6.2] Create Empty & Create Empty Child Hierarchy Workflow
+    // -----------------------------------------------------------------
+    std::cout << "[6.2] Verifying 'Create Empty' and 'Create Empty Child' workflow..." << std::endl;
+    auto rootEntity = scene->CreateEntity("GameObject");
+    auto childEntity = scene->CreateEntity("Child");
+    childEntity.SetParent(rootEntity);
+
+    if (childEntity.GetParent() != rootEntity) {
+        std::cerr << "FAIL: Child parent is not rootEntity!" << std::endl;
+        return false;
+    }
+    if (rootEntity.GetChildCount() != 1) {
+        std::cerr << "FAIL: Expected 1 child in rootEntity, got " << rootEntity.GetChildCount() << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Create Empty Child workflow validated." << std::endl;
+
+    // -----------------------------------------------------------------
+    // [6.3] 3D Primitive Creation & Transform Propagation
+    // -----------------------------------------------------------------
+    std::cout << "[6.3] Verifying 3D Primitives and Transform Propagation..." << std::endl;
+    Axle::SceneHierarchyPanel panel(scene.get(), nullptr);
+    auto cubeEntity = panel.CreatePrimitive(0, glm::vec3(0.0f, 2.0f, 0.0f));
+    if (!cubeEntity || !cubeEntity.HasComponent<Axle::TransformComponent>()) {
+        std::cerr << "FAIL: CreatePrimitive(0) failed to create valid entity with transform!" << std::endl;
+        return false;
+    }
+
+    // Parent cube to rootEntity and check transform propagation
+    cubeEntity.SetParent(rootEntity);
+    glm::vec3 initialCubeWorld = glm::vec3(cubeEntity.GetWorldTransform()[3]);
+
+    rootEntity.GetComponent<Axle::TransformComponent>().Translation += glm::vec3(5.0f, 3.0f, -2.0f);
+    glm::vec3 movedCubeWorld = glm::vec3(cubeEntity.GetWorldTransform()[3]);
+
+    if (!Vec3Eq(movedCubeWorld, initialCubeWorld + glm::vec3(5.0f, 3.0f, -2.0f))) {
+        std::cerr << "FAIL: Cube primitive world transform did not propagate correctly!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: 3D Object primitive and scene graph propagation verified." << std::endl;
+
+    std::cout << ">>> STEP 6 PASSED: Phase 15.1 Archetype Presets verified! <<<\n" << std::endl;
+    return true;
+}
 
 // =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
@@ -461,12 +548,13 @@ int main(int argc, char** argv) {
         else if (arg == "3" || arg == "step3" || arg == "--step3") targetStep = 3;
         else if (arg == "4" || arg == "step4" || arg == "--step4") targetStep = 4;
         else if (arg == "5" || arg == "step5" || arg == "--step5" || arg == "--phase14") targetStep = 5;
+        else if (arg == "6" || arg == "step6" || arg == "--step6" || arg == "--phase15") targetStep = 6;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 5 STEPS                       " << std::endl;
+        std::cout << "              RUNNING ALL 6 STEPS                       " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -489,6 +577,9 @@ int main(int argc, char** argv) {
     if (targetStep == 0 || targetStep == 5) {
         if (!RunTest_Step5_RelationshipAndTransform()) allPassed = false;
     }
+    if (targetStep == 0 || targetStep == 6) {
+        if (!RunTest_Step6_Phase15_ArchetypePresets()) allPassed = false;
+    }
 
     std::cout << "========================================================" << std::endl;
     if (allPassed) {
@@ -500,4 +591,5 @@ int main(int argc, char** argv) {
 
     return allPassed ? 0 : 1;
 }
+
 

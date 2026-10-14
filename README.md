@@ -144,6 +144,65 @@ In complex mechanical vehicles (assemblies with dozens of connected wheels, susp
 
 ---
 
+## 🖥️ Modern Editor Architecture & Tri-Panel Ecosystem
+
+AxleEngine implements a strict, commercial-grade architectural separation between **Runtime Execution Memory (ECS Registry)** and **Persistent Disk Storage (Asset Pipeline)** across three core editor panels:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              AXLE ENGINE EDITOR ARCHITECTURE                           │
+├──────────────────────────┬─────────────────────────────┬───────────────────────────────┤
+│    1. CONTENT BROWSER    │     2. SCENE HIERARCHY      │      3. PROPERTIES PANEL      │
+│  (Asset Pipeline / Disk) │  (Active Entities / RAM)    │  (Component Data Inspector)   │
+├──────────────────────────┼─────────────────────────────┼───────────────────────────────┤
+│ • Disk Storage (Assets/) │ • RAM (entt::registry)      │ • RAM (Component Sparse Sets) │
+│ • Flyweight UUID Handles │ • Parent-Child Transforms   │ • ImGui Sliders & ColorEdit   │
+│ • Binary Cache (.axlebin)│ • Archetype & Presets       │ • C++ Script Field Reflection │
+│ • Right-Click: Create    │ • + Create: Entity Presets  │ • + Add Component (Categories)│
+│   Folder, Scene, Script, │   (Empty, Primitives, Sun,  │ • Drag & Drop Asset Assignment│
+│   Material, Prefab       │    Atmosphere, Camera, Rig) │   (Model, Texture, Material)  │
+└──────────────────────────┴─────────────────────────────┴───────────────────────────────┘
+```
+
+### 1. Architectural Boundaries & Responsibility Matrix
+
+| Editor Panel | ECS / Engine Underlying Nature | Storage Location | Creation Target (`Create / Add`) |
+| :--- | :--- | :--- | :--- |
+| **Scene Hierarchy** | Live `Entity` list (`uint32_t` / `entt::entity`) in active Scene | **RAM** (`ECS Registry`) & serialized into `.axlescene` | Spawns a new Entity ID with an Archetype/Preset of baseline components. |
+| **Properties (Inspector)** | Data reader/writer (Reflection / ImGui) for components on selected Entity | **RAM** (Component structs in contiguous sparse sets) | Emplaces a new component struct or binds a C++ Script to the active Entity (`registry.emplace<T>()`). |
+| **Content Browser** | Physical Asset Manager and project directory explorer (`Assets/`) | **Disk Storage** & managed via `AssetManager` (`UUID` handles) | Generates new physical files on disk (Material, Prefab, Scene, C++ Script) or re-bakes binary assets (`F9`). |
+
+### 2. Core Architectural Principles
+* **The Flyweight Asset Pattern**: Heavy binary payloads (vertex arrays, raw textures, sound buffers) are **NEVER** stored directly inside ECS components. Components (e.g., `MeshInstance3D`, `MaterialComponent`) only store an 8-byte `AssetHandle` (`Axle::UUID`). Multiple scene entities sharing the same 3D mesh share a single cached GPU buffer.
+* **World Position Stays**: When reparenting or unparenting an entity in the hierarchy, local transforms are automatically recomputed via inverted parent matrices (`Local = Inverse(ParentWorld) * ChildWorld`) and decomposed to ensure zero visual displacement in 3D space, fortified by graph cycle detection.
+* **Deferred & Recursive Lifecycle**: Entity destruction is queued safely to the end of the frame to prevent ImGui iterator invalidation, recursively freeing all child entities and associated physics bodies. Duplication (`Ctrl+D`) deep-copies child hierarchies with freshly minted UUIDs.
+* **Dual-Context Inspector**: The Properties panel automatically toggles between `InspectorMode::Entity` (when an entity is selected in the Scene Hierarchy) and `InspectorMode::Asset` (when an asset file such as `.axlemat` or `.axle` is selected in the Content Browser).
+* **Safe Scene State Simulation (Edit vs Play)**: Clicking `Play (F5)` deep-clones `m_EditorScene` into an ephemeral `m_RuntimeScene` using UUID remapping (`std::unordered_map<UUID, EntityID>`) for hierarchy and script references. Clicking `Stop (F7 / Esc)` discards the runtime state and restores the editor scene with zero lingering physics drift.
+
+### 3. Drag & Drop Workflow (Unified ImGui Payloads)
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        STANDARDIZED DRAG & DROP PIPELINE                               │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ FLOW 1: Content Browser ──["CONTENT_BROWSER_ITEM"]──> Viewport / Scene Hierarchy       │
+│ • Drag .axle / .obj model file into 3D Viewport -> Raycast spawn at ground coordinates │
+│ • Automatically calls registry.create(), binds TransformComponent + MeshInstance3D    │
+│                                                                                        │
+│ FLOW 2: Content Browser ──["CONTENT_BROWSER_ITEM"]──> Properties Panel                 │
+│ • Drag .obj/.axle into Mesh slot -> Instant model swap                                 │
+│ • Drag .png into Texture slot -> Instant PBR albedo map binding                        │
+│ • Drag .hpp script into Inspector -> Binds NativeScriptComponent                       │
+│                                                                                        │
+│ FLOW 3: Scene Hierarchy ──["SCENE_HIERARCHY_ENTITY"]──> Properties Panel / Hierarchy   │
+│ • Drag Entity A onto Entity B -> Re-parents Entity A under Entity B (Scene Graph)      │
+│ • Drag Entity into Script Target slot -> Injects target Entity UUID into C++ Script    │
+│ • Drag Entity to Content Browser -> Packages entity & children into reusable .prefab   │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## 🗺️ Project Roadmap
 
 - [x] **Phase 1: UI & Telemetry Overlay (`Engine/UI`)**
@@ -258,21 +317,42 @@ In complex mechanical vehicles (assemblies with dozens of connected wheels, susp
     - Upgrade `AssemblySerializer` (`.axle`) and `SceneSerializer` (`.axlescene`) to serialize and restore `NativeScriptComponent` and live-tuned field values.
     - Refactor `CarPlayerScript` with exposed drive torque, max steer angle, and child part control (headlights and wheels); implement smooth chase `CameraFollowScript`.
     - Verify complete roundtrip: create script $\rightarrow$ attach to vehicle $\rightarrow$ tune parameters $\rightarrow$ save as `.axle` prefab $\rightarrow$ instantiate in any scene and drive instantly upon pressing Play (`F5`).
-- [ ] **Phase 14: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
+- [ ] **Phase 14: Core ECS & Relationship Hierarchy (Parent - Child & Scene Graph)**
+  - [ ] **UUID & Standard Component Integrity**: Enforce automatic attachment of `IDComponent` (64-bit UUID), `TagComponent`, `TransformComponent`, and `RelationshipComponent` across all entities created via `Scene::CreateEntity()`.
+  - [ ] **Scene Graph Matrix Propagation**: Traverse root entities (`Parent == NullEntity`), computing `WorldMatrix = LocalMatrix`, and recursively propagate down child trees: $\text{WorldMatrix}_{\text{Child}} = \text{WorldMatrix}_{\text{Parent}} \times \text{LocalMatrix}_{\text{Child}}$.
+  - [ ] **World Position Stays & Cycle Check**: Implement `Scene::SetParent(child, parent)` computing $\text{Local} = \text{Inverse}(\text{ParentWorld}) \times \text{ChildWorld}$ with local translation/rotation/scale decomposition to prevent 3D displacement, reinforced with ancestor graph cycle detection.
+- [ ] **Phase 15: Scene Hierarchy Panel Upgrade (Presets, Tree UI & Drag-and-Drop Reparenting)**
+  - [ ] **Comprehensive Archetype Presets**: Complete `+ Create` menu with `Empty Entity`, 3D Primitives (`Cube`, `Sphere`, `Cylinder`, `Cone`, `Static Floor Plane`), Lighting & Environment (`Directional Sun Light`, `Atmospheric Skybox`, `Camera`, `Point Light`), and `Vehicle Rig Preset`.
+  - [ ] **Hierarchical Tree View**: Render only root entities at the top level, displaying children via collapsible arrow nodes (`ImGuiTreeNodeFlags_OpenOnArrow`).
+  - [ ] **Visual Drag & Drop Reparenting**: Register `"SCENE_HIERARCHY_ENTITY"` payload on entity nodes to allow intuitive mouse drag-and-drop reparenting between entities.
+  - [ ] **Deferred & Recursive Lifecycle**: Implement end-of-frame deferred deletion queue (`m_EntitiesToDestroy`) with recursive child cleanup; implement deep recursive duplication (`Ctrl+D`) with fresh UUID generation.
+- [ ] **Phase 16: Properties Panel & C++ Scripting Reflection (Category Component Adder & Macro Fields)**
+  - [ ] **Structured Component Widgets**: Encapsulate components in collapsible headers with custom context menus (`Remove Component`), and implement color-coded, draggable 3-axis `DrawVec3Control` for transforms.
+  - [ ] **Categorized `+ Add Component` Popup**: Group available components into *Rendering*, *Physics*, *Scripts*, and *Audio/VFX* with real-time search filtering.
+  - [ ] **C++ Script Reflection Macro**: Support `RegisterFields()` / `AXLE_SCRIPT_FIELDS(...)` macros in `ScriptableEntity` for automatic Editor reflection of `Float`, `Int`, `Bool`, `Vec3`, `String`, and `Entity Reference` (UUID).
+  - [ ] **Dual-Context Properties Inspector**: Support seamless switching between `InspectorMode::Entity` (inspecting active scene entity) and `InspectorMode::Asset` (inspecting `.axlemat` materials or `.axle` assemblies from Content Browser).
+- [ ] **Phase 17: Content Browser & Material/Asset System (.meta & Physical Asset Creation)**
+  - [ ] **Asset UUID & `.meta` File Pipeline**: Auto-generate `.meta` companion files storing persistent 64-bit UUIDs for assets in `Assets/` for path-independent referencing.
+  - [ ] **Right-Click Asset Creation**: Right-click blank space in Content Browser to create `New Folder`, `Scene (.axlescene)`, `Material Asset (.amat / .axlemat)`, `C++ Script (.hpp)`, and `Physics Material (.physmat)`.
+  - [ ] **Dedicated Material Inspector**: Selecting `.amat` in Content Browser switches Properties panel into interactive PBR Material editor (Albedo, Roughness, Metallic, Texture slots).
+- [ ] **Phase 18: Integrated Drag & Drop Pipelines & Safe Simulation State (Snapshot/Clone Scene)**
+  - [ ] **Full 3-Flow ImGui Drag & Drop**: Connect `"CONTENT_BROWSER_ITEM"` to Viewport/Hierarchy (Flow 1) and Properties (Flow 2); connect `"SCENE_HIERARCHY_ENTITY"` to Hierarchy reparenting, Script Target slots, and Content Browser prefab packaging (Flow 3).
+  - [ ] **Safe Scene State Simulation (Play / Stop Mode)**: Clicking `Play (F5)` deep-clones `m_EditorScene` into an ephemeral `m_RuntimeScene` using UUID remapping (`std::unordered_map<UUID, EntityID>`); clicking `Stop (F7 / Esc)` restores the pristine editor scene with zero physics drift.
+- [ ] **Phase 19: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
   - [ ] **ThirdParty Integration**: Embed `enkiTS` (Enki Task Scheduler) submodule/library into `ThirdParty/enkiTS` with modern CMake configuration.
   - [ ] **Core JobSystem Engine**: Implement unified `Axle::JobSystem` in `Engine/Core` managing persistent lock-free worker threads (`enki::TaskScheduler`) matching CPU hardware concurrency.
   - [ ] **Jolt Physics Bridge (`JobSystemEnkiTS`)**: Implement custom `JPH::JobSystem` backend routing Jolt Physics constraint solving and collision tasks into enkiTS, eliminating separate thread pools and thread oversubscription.
   - [ ] **Parallel ECS Processing**: Implement `ParallelFor` utilities for `entt::registry` batch iteration, distributing bulk mechanical parts and transform evaluations across all worker cores without lock contention.
-- [ ] **Phase 15: Audio System (`Engine/Audio`)**
+- [ ] **Phase 20: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
-- [ ] **Phase 16: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
+- [ ] **Phase 21: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
   - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.
   - [ ] **Splatmap Texture Painting**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
   - [ ] **Chunked Grid & Multithreaded LOD**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
   - [ ] **Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
-- [ ] **Phase 17: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
+- [ ] **Phase 22: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
   - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights via Assemblies.
   - [ ] **Dynamic In-Car Dashboard & HUD**: Real-time tachometer (RPM), speedometer (km/h), current gear, and turbo boost indicator.
   - [ ] **Multi-Angle Camera Controller**: Chase camera, first-person cockpit camera, hood camera, and free-orbit replay camera.

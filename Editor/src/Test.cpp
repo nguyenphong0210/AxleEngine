@@ -2180,6 +2180,159 @@ bool RunTest_Step17_Phase18_DragDropPipelinesAndClassCreation() {
 }
 
 // =============================================================================
+// STEP 18: PHASE 18.2 SAFE SCENE STATE SIMULATION (DEEP-CLONE & ZERO DRIFT)
+// =============================================================================
+bool RunTest_Step18_Phase18_SafeSceneStateSimulation() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 18 TEST] PHASE 18.2 SAFE SCENE STATE SIMULATION" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::unique_ptr<Axle::PhysicsScene> physicsScene = std::make_unique<Axle::PhysicsScene>();
+    std::shared_ptr<Axle::Scene> editorScene = std::make_shared<Axle::Scene>();
+
+    std::cout << "\n[18.1] Populating Pristine Editor Scene..." << std::endl;
+    
+    // 1. Parent Entity with Transform, Mesh, Material, RigidBody, CollisionShape
+    Axle::Entity parentEntity = editorScene->CreateEntity("CarChassis");
+    Axle::UUID parentUUID = parentEntity.GetUUID();
+    auto& parentTc = parentEntity.GetComponent<Axle::TransformComponent>();
+    parentTc.Translation = glm::vec3(0.0f, 1.0f, 0.0f);
+    parentTc.Rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    
+    Axle::MaterialComponent goldMat;
+    goldMat.AlbedoColor = glm::vec4(1.0f, 0.78f, 0.34f, 1.0f);
+    goldMat.Roughness = 0.2f;
+    goldMat.Metallic = 1.0f;
+    parentEntity.AddComponent<Axle::MaterialComponent>(goldMat);
+
+    Axle::BoxBodyProps bProps;
+    bProps.Position = parentTc.Translation;
+    bProps.HalfExtent = glm::vec3(1.0f, 0.5f, 2.0f);
+    bProps.IsDynamic = true;
+    Axle::BodyID parentBodyID = physicsScene->CreateBox(bProps);
+    parentEntity.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, bProps.HalfExtent);
+    parentEntity.AddComponent<Axle::RigidBody3D>(parentBodyID, true);
+
+    // 2. Child Entity parented to CarChassis with local offset
+    Axle::Entity childEntity = editorScene->CreateEntity("Spoiler");
+    Axle::UUID childUUID = childEntity.GetUUID();
+    auto& childTc = childEntity.GetComponent<Axle::TransformComponent>();
+    childTc.Translation = glm::vec3(0.0f, 1.2f, -1.8f);
+    childEntity.SetParent(parentEntity);
+
+    // 3. Scripted Entity referencing CarChassis via UUID
+    Axle::Entity scriptEntity = editorScene->CreateEntity("GameManager");
+    Axle::UUID scriptUUID = scriptEntity.GetUUID();
+    auto& nsc = scriptEntity.AddComponent<Axle::NativeScriptComponent>("ReflectionDemoScript");
+    nsc.FloatFields["m_MoveSpeed"] = 55.0f;
+    nsc.IntFields["m_AmmoCount"] = 999;
+    nsc.BoolFields["m_IsInvulnerable"] = true;
+    nsc.Vec3Fields["m_TargetPoint"] = glm::vec3(10.0f, 20.0f, 30.0f);
+    nsc.EntityFields["TargetEntity"] = parentUUID;
+
+    // 4. Directional Light & Skybox
+    Axle::Entity sunEntity = editorScene->CreateEntity("Sun");
+    sunEntity.AddComponent<Axle::DirectionalLightComponent>(glm::vec3(1.0f), 2.5f);
+    Axle::Entity skyEntity = editorScene->CreateEntity("Sky");
+    skyEntity.AddComponent<Axle::SkyboxComponent>();
+
+    editorScene->UpdateWorldTransforms();
+
+    assert(parentEntity.GetComponent<Axle::HierarchyComponent>().Children.size() == 1);
+    assert(childEntity.GetComponent<Axle::HierarchyComponent>().Parent == (entt::entity)parentEntity);
+    std::cout << "  -> PASS: Pristine EditorScene initialized with 4 entities and hierarchy." << std::endl;
+
+    std::cout << "\n[18.2] Testing Scene::Copy Deep-Cloning & UUID Preservation..." << std::endl;
+    std::shared_ptr<Axle::Scene> runtimeScene = Axle::Scene::Copy(editorScene);
+    assert(runtimeScene != nullptr);
+
+    // Verify all UUIDs preserved
+    Axle::Entity rtParent = runtimeScene->GetEntityByUUID(parentUUID);
+    Axle::Entity rtChild = runtimeScene->GetEntityByUUID(childUUID);
+    Axle::Entity rtScript = runtimeScene->GetEntityByUUID(scriptUUID);
+    assert(rtParent && rtChild && rtScript);
+    assert(rtParent.GetName() == "CarChassis");
+    assert(rtChild.GetName() == "Spoiler");
+    assert(rtScript.GetName() == "GameManager");
+
+    // Verify hierarchy remapped
+    assert(rtChild.GetComponent<Axle::HierarchyComponent>().Parent == (entt::entity)rtParent);
+    assert(rtParent.GetComponent<Axle::HierarchyComponent>().Children.size() == 1);
+    assert(rtParent.GetComponent<Axle::HierarchyComponent>().Children[0] == (entt::entity)rtChild);
+
+    // Verify Script Field values and UUID entity reference preserved
+    auto& rtNsc = rtScript.GetComponent<Axle::NativeScriptComponent>();
+    assert(rtNsc.FloatFields["m_MoveSpeed"] == 55.0f);
+    assert(rtNsc.IntFields["m_AmmoCount"] == 999);
+    assert(rtNsc.BoolFields["m_IsInvulnerable"] == true);
+    assert(rtNsc.EntityFields["TargetEntity"] == parentUUID);
+    Axle::Entity rtTarget = runtimeScene->GetEntityByUUID(rtNsc.EntityFields["TargetEntity"]);
+    assert(rtTarget && rtTarget == rtParent);
+    std::cout << "  -> PASS: Scene::Copy successfully cloned scene, preserved UUIDs & remapped hierarchy." << std::endl;
+
+    std::cout << "\n[18.3] Simulating Play Mode Perturbations & Severe Physics Drift..." << std::endl;
+    runtimeScene->OnRuntimeStart();
+
+    // Drastically alter the runtime transforms as if simulated by physics
+    auto& rtParentTc = rtParent.GetComponent<Axle::TransformComponent>();
+    rtParentTc.Translation = glm::vec3(1234.5f, -678.9f, 999.0f);
+    rtParentTc.Rotation = glm::quat(glm::vec3(1.2f, 0.8f, -0.5f));
+    
+    // Simulate physics moving the JPH body in physicsScene as well
+    physicsScene->SetBodyPositionAndRotation(parentBodyID, glm::vec3(1234.5f, -678.9f, 999.0f), rtParentTc.Rotation, true);
+    physicsScene->SetLinearVelocity(parentBodyID, glm::vec3(50.0f, -20.0f, 15.0f));
+
+    // Spawn an ephemeral bullet/projectile entity in runtime
+    Axle::Entity bullet = runtimeScene->CreateEntity("RuntimeBullet");
+    bullet.AddComponent<Axle::TransformComponent>(glm::vec3(50.0f));
+
+    runtimeScene->OnUpdateRuntime(0.016f);
+    assert(rtParent.GetComponent<Axle::TransformComponent>().Translation.x == 1234.5f);
+    std::cout << "  -> PASS: Runtime simulation drift introduced (Chassis moved to (1234.5, -678.9, 999.0))." << std::endl;
+
+    std::cout << "\n[18.4] Testing Stop Mode Discard & Zero Physics Drift Restoration..." << std::endl;
+    // Discard runtime scene
+    runtimeScene->OnRuntimeStop();
+    runtimeScene.reset();
+
+    // Restore pristine physics bodies
+    editorScene->RestorePhysicsBodies(physicsScene.get());
+
+    // Verify EditorScene transforms are 100% UNTOUCHED!
+    const auto& pristineParentTc = parentEntity.GetComponent<Axle::TransformComponent>();
+    assert(pristineParentTc.Translation == glm::vec3(0.0f, 1.0f, 0.0f));
+    assert(pristineParentTc.Rotation == glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+
+    // Verify JPH physics scene body was restored to pristine position & zeroed velocity
+    glm::vec3 restoredPos = physicsScene->GetBodyPosition(parentBodyID);
+    glm::vec3 restoredVel = physicsScene->GetLinearVelocity(parentBodyID);
+    assert(glm::distance(restoredPos, glm::vec3(0.0f, 1.0f, 0.0f)) < 0.001f);
+    assert(glm::length(restoredVel) < 0.001f);
+
+    // Verify hierarchy in editorScene is intact
+    assert(childEntity.GetComponent<Axle::HierarchyComponent>().Parent == (entt::entity)parentEntity);
+    assert(parentEntity.GetComponent<Axle::HierarchyComponent>().Children.size() == 1);
+
+    // Verify ephemeral bullet was destroyed with runtimeScene and never leaked into editorScene
+    bool bulletFound = false;
+    auto tagView = editorScene->GetRegistry().view<Axle::TagComponent>();
+    for (auto e : tagView) {
+        if (tagView.get<Axle::TagComponent>(e).Tag == "RuntimeBullet") {
+            bulletFound = true;
+            break;
+        }
+    }
+    assert(!bulletFound);
+
+    std::cout << "  -> PASS: Pristine EditorScene completely restored." << std::endl;
+    std::cout << "  -> PASS: Physics body zero-drift restoration verified (vel=0, pos=(0, 1, 0))." << std::endl;
+    std::cout << "  -> PASS: Ephemeral runtime entities safely discarded." << std::endl;
+
+    std::cout << ">>> STEP 18 PASSED: Phase 18.2 Safe Scene State Simulation verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -2203,12 +2356,13 @@ int main(int argc, char** argv) {
         else if (arg == "15" || arg == "step15" || arg == "--step15" || arg == "--phase17.2") targetStep = 15;
         else if (arg == "16" || arg == "step16" || arg == "--step16" || arg == "--phase17.3") targetStep = 16;
         else if (arg == "17" || arg == "step17" || arg == "--step17" || arg == "--phase18" || arg == "--phase18.1") targetStep = 17;
+        else if (arg == "18" || arg == "step18" || arg == "--step18" || arg == "--phase18.2") targetStep = 18;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 17 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 18 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -2266,6 +2420,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 17) {
         if (!RunTest_Step17_Phase18_DragDropPipelinesAndClassCreation()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 18) {
+        if (!RunTest_Step18_Phase18_SafeSceneStateSimulation()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

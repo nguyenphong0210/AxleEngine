@@ -335,9 +335,9 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Asset UUID & `.meta` File Pipeline**: Auto-generate `.meta` companion files storing persistent 64-bit UUIDs for assets in `Assets/` for path-independent referencing.
   - [x] **Right-Click Asset Creation**: Right-click blank space in Content Browser to create `New Folder`, `Scene (.axlescene)`, `Material Asset (.amat / .axlemat)`, `C++ Script (.hpp)`, and `Physics Material (.physmat)`.
   - [x] **Dedicated Material Inspector**: Selecting `.amat` in Content Browser switches Properties panel into interactive PBR Material editor (Albedo, Roughness, Metallic, Texture slots).
-- [ ] **Phase 18: Integrated Drag & Drop Pipelines & Safe Simulation State (Snapshot/Clone Scene)**
+- [x] **Phase 18: Integrated Drag & Drop Pipelines & Safe Simulation State (Snapshot/Clone Scene)**
   - [x] **Full 3-Flow ImGui Drag & Drop**: Connect `"CONTENT_BROWSER_ITEM"` to Viewport/Hierarchy (Flow 1) and Properties (Flow 2); connect `"SCENE_HIERARCHY_ENTITY"` to Hierarchy reparenting, Script Target slots, and Content Browser prefab packaging (Flow 3), with dual C++ Script (`.hpp`) and Class (`.hpp + .cpp`) creation.
-  - [ ] **Safe Scene State Simulation (Play / Stop Mode)**: Clicking `Play (F5)` deep-clones `m_EditorScene` into an ephemeral `m_RuntimeScene` using UUID remapping (`std::unordered_map<UUID, EntityID>`); clicking `Stop (F7 / Esc)` restores the pristine editor scene with zero physics drift.
+  - [x] **Safe Scene State Simulation (Play / Stop Mode)**: Clicking `Play (F5)` deep-clones `m_EditorScene` into an ephemeral `m_RuntimeScene` using UUID remapping (`std::unordered_map<UUID, EntityID>`); clicking `Stop (F7 / Esc)` restores the pristine editor scene with zero physics drift.
 - [ ] **Phase 19: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
   - [ ] **ThirdParty Integration**: Embed `enkiTS` (Enki Task Scheduler) submodule/library into `ThirdParty/enkiTS` with modern CMake configuration.
   - [ ] **Core JobSystem Engine**: Implement unified `Axle::JobSystem` in `Engine/Core` managing persistent lock-free worker threads (`enki::TaskScheduler`) matching CPU hardware concurrency.

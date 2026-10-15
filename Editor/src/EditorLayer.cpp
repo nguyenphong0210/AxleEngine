@@ -413,8 +413,9 @@ void EditorLayer::OnAttach() {
     // 6. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
     m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
 
-    // 7. ECS Scene Initialization
-    m_Scene = std::make_unique<Axle::Scene>();
+    // 7. ECS Scene Initialization (Phase 18.2: Safe Scene State Simulation)
+    m_EditorScene = std::make_shared<Axle::Scene>();
+    m_Scene = m_EditorScene;
 
     // Connect Editor Panels
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
@@ -735,11 +736,32 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
 }
 
 void EditorLayer::OnScenePlay() {
+    if (m_SceneState == SceneState::Play) return;
+
     CompileAndHotReloadAssets(false);
+
+    // Deep clone EditorScene into an ephemeral RuntimeScene (Phase 18.2: Safe Scene State)
+    m_RuntimeScene = Axle::Scene::Copy(m_EditorScene);
+    m_Scene = m_RuntimeScene;
+
+    // Update panel contexts to point to the active runtime scene
+    m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_SceneHierarchyPanel.SetSelectedEntity({});
+
+    // Rediscover vehicle entities from runtime scene if vehicle exists
+    if (m_ChassisEntity) {
+        m_ChassisEntity = m_Scene->GetEntityByUUID(m_ChassisEntity.GetUUID());
+        for (int i = 0; i < 4; ++i) {
+            if (m_WheelEntities[i]) {
+                m_WheelEntities[i] = m_Scene->GetEntityByUUID(m_WheelEntities[i].GetUUID());
+            }
+        }
+    }
+
     m_SceneState = SceneState::Play;
     m_Scene->OnRuntimeStart();
     m_ChaseCamera = true;
-    AXLE_INFO("Simulation started (Play Mode). Chase Camera locked to Vehicle. Drive with WASD/Arrows (Space: Handbrake).");
+    AXLE_INFO("Simulation started (Play Mode). Ephemeral Runtime Scene cloned from pristine Editor Scene.");
 }
 
 void EditorLayer::CompileAndHotReloadAssets(bool forceRebakeAll) {
@@ -964,7 +986,8 @@ void EditorLayer::SaveScene(const std::filesystem::path& filepath) {
 
     auto targetPath = filepath.empty() ? m_CurrentScenePath : filepath;
 
-    Axle::SceneSerializer serializer(m_Scene.get(), m_PhysicsScene.get());
+    // Always serialize pristine EditorScene even if simulation is active (Phase 18.2)
+    Axle::SceneSerializer serializer(m_EditorScene ? m_EditorScene.get() : m_Scene.get(), m_PhysicsScene.get());
     Axle::SceneSerializerContext ctx;
     ctx.CubeMesh = m_CubeMesh;
     ctx.SphereMesh = m_SphereMesh;
@@ -1126,11 +1149,49 @@ void EditorLayer::OnScenePause() {
 }
 
 void EditorLayer::OnSceneStop() {
+    if (m_SceneState == SceneState::Edit) return;
+
     m_SceneState = SceneState::Edit;
-    m_Scene->OnRuntimeStop();
+
+    if (m_RuntimeScene) {
+        m_RuntimeScene->OnRuntimeStop();
+        m_RuntimeScene.reset();
+    }
+
+    // Restore pristine EditorScene (Phase 18.2: Zero Physics Drift)
+    m_Scene = m_EditorScene;
+
+    // Zero-drift physics restoration to pristine editor transforms
+    if (m_Scene && m_PhysicsScene) {
+        m_Scene->RestorePhysicsBodies(m_PhysicsScene.get());
+    }
+
     ResetSimulation();
+
+    // Rediscover vehicle entities in the restored EditorScene
+    auto view = m_Scene->GetRegistry().view<Axle::TagComponent>();
+    for (auto entityID : view) {
+        const auto& tag = view.get<Axle::TagComponent>(entityID).Tag;
+        Axle::Entity e{ entityID, m_Scene.get() };
+        if (tag == "Vehicle Chassis") {
+            m_ChassisEntity = e;
+        } else if (tag == "Wheel FL") {
+            m_WheelEntities[0] = e;
+        } else if (tag == "Wheel FR") {
+            m_WheelEntities[1] = e;
+        } else if (tag == "Wheel RL") {
+            m_WheelEntities[2] = e;
+        } else if (tag == "Wheel RR") {
+            m_WheelEntities[3] = e;
+        }
+    }
+
+    // Restore panel contexts to pristine EditorScene
+    m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_SceneHierarchyPanel.SetSelectedEntity({});
+
     m_ChaseCamera = false;
-    AXLE_INFO("Simulation stopped (Edit Mode). Editor Free-Fly Camera active: Hold RMB to look, WASD to fly (Shift: Sprint, Q/E: Elevate).");
+    AXLE_INFO("Simulation stopped (Edit Mode). Restored pristine Editor Scene with zero physics drift.");
 }
 
 void EditorLayer::ResetSimulation() {

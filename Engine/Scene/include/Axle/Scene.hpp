@@ -35,6 +35,12 @@ namespace Axle {
         Entity FindEntityByBodyID(BodyID bodyID);
         Entity GetEntityByUUID(UUID uuid);
 
+        // Deep copy entire scene with UUID remapping for Play/Stop simulation (Phase 18.2)
+        static std::shared_ptr<Scene> Copy(std::shared_ptr<Scene> other);
+
+        // Zero-drift physics restoration for pristine scene reset
+        void RestorePhysicsBodies(PhysicsScene* physicsScene);
+
         // Hierarchical world transform calculation (propagating parent transforms)
         glm::mat4 GetWorldTransform(entt::entity entityID) const;
         void UpdateWorldTransforms();

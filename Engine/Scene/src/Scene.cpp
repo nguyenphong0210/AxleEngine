@@ -556,5 +556,143 @@ namespace Axle {
         }
     }
 
+    std::shared_ptr<Scene> Scene::Copy(std::shared_ptr<Scene> other) {
+        if (!other) return nullptr;
+
+        std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
+
+        // Map old UUID to new Entity handle
+        std::unordered_map<UUID, entt::entity> entMap;
+
+        // Pass 1: Clone all entities preserving exact UUID and Tag
+        auto idView = other->m_Registry.view<IDComponent>();
+        for (auto srcEntityID : idView) {
+            UUID uuid = other->m_Registry.get<IDComponent>(srcEntityID).ID;
+            std::string name = "Entity";
+            if (other->m_Registry.all_of<TagComponent>(srcEntityID)) {
+                name = other->m_Registry.get<TagComponent>(srcEntityID).Tag;
+            }
+
+            Entity dstEntity = newScene->CreateEntityWithUUID(uuid, name);
+            entMap[uuid] = (entt::entity)dstEntity;
+        }
+
+        // Pass 2: Deep copy all components
+        for (auto srcEntityID : idView) {
+            UUID uuid = other->m_Registry.get<IDComponent>(srcEntityID).ID;
+            Entity srcEntity{ srcEntityID, other.get() };
+            Entity dstEntity{ entMap[uuid], newScene.get() };
+
+            // TransformComponent
+            if (srcEntity.HasComponent<TransformComponent>()) {
+                dstEntity.GetComponent<TransformComponent>() = srcEntity.GetComponent<TransformComponent>();
+            }
+
+            // MeshInstance3D
+            if (srcEntity.HasComponent<MeshInstance3D>()) {
+                dstEntity.AddComponent<MeshInstance3D>(srcEntity.GetComponent<MeshInstance3D>());
+            }
+
+            // MaterialComponent
+            if (srcEntity.HasComponent<MaterialComponent>()) {
+                dstEntity.AddComponent<MaterialComponent>(srcEntity.GetComponent<MaterialComponent>());
+            }
+
+            // DirectionalLightComponent
+            if (srcEntity.HasComponent<DirectionalLightComponent>()) {
+                dstEntity.AddComponent<DirectionalLightComponent>(srcEntity.GetComponent<DirectionalLightComponent>());
+            }
+
+            // PointLightComponent
+            if (srcEntity.HasComponent<PointLightComponent>()) {
+                dstEntity.AddComponent<PointLightComponent>(srcEntity.GetComponent<PointLightComponent>());
+            }
+
+            // CameraComponent
+            if (srcEntity.HasComponent<CameraComponent>()) {
+                dstEntity.AddComponent<CameraComponent>(srcEntity.GetComponent<CameraComponent>());
+            }
+
+            // SkyboxComponent
+            if (srcEntity.HasComponent<SkyboxComponent>()) {
+                dstEntity.AddComponent<SkyboxComponent>(srcEntity.GetComponent<SkyboxComponent>());
+            }
+
+            // AssemblyComponent
+            if (srcEntity.HasComponent<AssemblyComponent>()) {
+                dstEntity.AddComponent<AssemblyComponent>(srcEntity.GetComponent<AssemblyComponent>());
+            }
+
+            // CollisionShape3D
+            if (srcEntity.HasComponent<CollisionShape3D>()) {
+                dstEntity.AddComponent<CollisionShape3D>(srcEntity.GetComponent<CollisionShape3D>());
+            }
+
+            // RigidBody3D
+            if (srcEntity.HasComponent<RigidBody3D>()) {
+                dstEntity.AddComponent<RigidBody3D>(srcEntity.GetComponent<RigidBody3D>());
+            }
+
+            // NativeScriptComponent
+            if (srcEntity.HasComponent<NativeScriptComponent>()) {
+                const auto& srcNsc = srcEntity.GetComponent<NativeScriptComponent>();
+                auto& dstNsc = dstEntity.AddComponent<NativeScriptComponent>(srcNsc.ScriptName);
+                dstNsc.FloatFields = srcNsc.FloatFields;
+                dstNsc.IntFields = srcNsc.IntFields;
+                dstNsc.BoolFields = srcNsc.BoolFields;
+                dstNsc.Vec3Fields = srcNsc.Vec3Fields;
+                dstNsc.StringFields = srcNsc.StringFields;
+                dstNsc.EntityFields = srcNsc.EntityFields;
+                dstNsc.InstantiateScript = srcNsc.InstantiateScript;
+                dstNsc.DestroyScript = srcNsc.DestroyScript;
+            }
+        }
+
+        // Pass 3: Remap Hierarchy Relationships using UUID mapping
+        for (auto srcEntityID : idView) {
+            UUID uuid = other->m_Registry.get<IDComponent>(srcEntityID).ID;
+            Entity srcEntity{ srcEntityID, other.get() };
+            Entity dstEntity{ entMap[uuid], newScene.get() };
+
+            if (srcEntity.HasComponent<HierarchyComponent>()) {
+                const auto& srcHc = srcEntity.GetComponent<HierarchyComponent>();
+                if (srcHc.Parent != entt::null && other->m_Registry.valid(srcHc.Parent)) {
+                    UUID parentUUID = other->m_Registry.get<IDComponent>(srcHc.Parent).ID;
+                    auto it = entMap.find(parentUUID);
+                    if (it != entMap.end()) {
+                        dstEntity.SetParent(Entity{ it->second, newScene.get() });
+                        if (dstEntity.HasComponent<HierarchyComponent>()) {
+                            dstEntity.GetComponent<HierarchyComponent>().InheritTransform = srcHc.InheritTransform;
+                        }
+                    }
+                }
+            }
+        }
+
+        newScene->UpdateWorldTransforms();
+        return newScene;
+    }
+
+    void Scene::RestorePhysicsBodies(PhysicsScene* physicsScene) {
+        if (!physicsScene) return;
+
+        auto view = m_Registry.view<RigidBody3D, TransformComponent>();
+        for (auto entity : view) {
+            const auto& rb = view.get<RigidBody3D>(entity);
+            const auto& tc = view.get<TransformComponent>(entity);
+
+            if (!rb.RuntimeBodyID.IsInvalid() && physicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                glm::vec3 offset(0.0f);
+                if (m_Registry.all_of<CollisionShape3D>(entity)) {
+                    offset = m_Registry.get<CollisionShape3D>(entity).Offset;
+                }
+                glm::vec3 worldPos = tc.Translation + tc.Rotation * offset;
+                physicsScene->SetBodyPositionAndRotation(rb.RuntimeBodyID, worldPos, tc.Rotation, true);
+                physicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
+                physicsScene->GetBodyInterface().SetAngularVelocity(rb.RuntimeBodyID, JPH::Vec3::sZero());
+            }
+        }
+    }
+
 }
 

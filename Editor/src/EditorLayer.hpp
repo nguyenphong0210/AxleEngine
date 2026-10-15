@@ -119,8 +119,10 @@ private:
     glm::vec2 m_LastMousePos{ 0.0f, 0.0f };
     bool m_FirstMouseUpdate = true;
 
-    // Scene & Entities
-    std::unique_ptr<Axle::Scene> m_Scene;
+    // Scene & Entities (Phase 18.2: Safe Scene State Simulation)
+    std::shared_ptr<Axle::Scene> m_Scene;        // Active Scene pointer
+    std::shared_ptr<Axle::Scene> m_EditorScene;  // Pristine Edit Mode Scene
+    std::shared_ptr<Axle::Scene> m_RuntimeScene; // Ephemeral Simulation Scene
     Axle::Entity m_ChassisEntity;
     Axle::Entity m_WheelEntities[4];
 

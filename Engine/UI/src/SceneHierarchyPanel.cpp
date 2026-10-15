@@ -202,6 +202,10 @@ namespace Axle {
     }
 
     void SceneHierarchyPanel::SetSelectedAsset(const std::filesystem::path& assetPath) {
+        if (assetPath.empty()) {
+            ClearSelectedAsset();
+            return;
+        }
         m_SelectedAsset = assetPath;
         m_InspectorMode = InspectorMode::Asset;
         if (m_AssetPreviewPanel) {

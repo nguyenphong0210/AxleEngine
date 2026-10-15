@@ -1016,10 +1016,10 @@ namespace Axle {
                             fout << "    void OnDestroy() override {\n";
                             fout << "        // Called on cleanup\n";
                             fout << "    }\n\n";
-                            fout << "    static void RegisterFields(Axle::ScriptFieldRegistry& reg) {\n";
-                            fout << "        reg.AddField(\"Speed\", &" << baseName << "::Speed, 0.0f, 100.0f, \"Movement speed\");\n";
-                            fout << "        reg.AddField(\"Enabled\", &" << baseName << "::Enabled, \"Enable script execution\");\n";
-                            fout << "    }\n";
+                            fout << "    AXLE_SCRIPT_FIELDS(" << baseName << ",\n";
+                            fout << "        AXLE_FIELD(Speed, 0.0f, 100.0f, \"Movement speed\"),\n";
+                            fout << "        AXLE_FIELD(Enabled, \"Enable script execution\")\n";
+                            fout << "    )\n";
                             fout << "};\n\n";
                             fout << "AXLE_REGISTER_SCRIPT(" << baseName << ");\n";
                             fout.close();

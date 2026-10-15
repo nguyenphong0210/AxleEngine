@@ -1,6 +1,10 @@
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/PrimitiveMesh.hpp>
+#include <Axle/AssemblySerializer.hpp>
+#include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/FileSystem.hpp>
 #include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -110,13 +114,15 @@ namespace Axle {
     }
 
     void AssetThumbnailManager::Clear() {
-        for (auto& [path, texID] : m_ThumbnailCache) {
+        for (u32 texID : m_GeneratedTextures) {
             if (texID != 0) {
                 glDeleteTextures(1, &texID);
             }
         }
+        m_GeneratedTextures.clear();
         m_ThumbnailCache.clear();
         m_MetaCache.clear();
+        m_LoadedTextures.clear();
         m_PendingQueue.clear();
     }
 
@@ -136,10 +142,27 @@ namespace Axle {
             return it->second;
         }
 
-        // Check if path is supported 3D format
         auto ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-        if (ext != ".axle" && ext != ".axlebin" && ext != ".obj" && ext != ".gltf" && ext != ".glb" && ext != ".fbx") {
+
+        // 1. Textures: Load directly via Texture2D and cache renderer ID
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
+            auto tex = Texture2D::Create(path.string());
+            if (tex && tex->IsLoaded()) {
+                u32 texID = tex->GetRendererID();
+                m_ThumbnailCache[key] = texID;
+                m_LoadedTextures[key] = tex;
+                return texID;
+            }
+            m_ThumbnailCache[key] = 0;
+            return 0;
+        }
+
+        // 2. Check if path is supported 3D format or Material
+        bool isSupported = (ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" || 
+                            ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx" ||
+                            ext == ".axlemat" || ext == ".amat" || ext == ".mat");
+        if (!isSupported) {
             return 0;
         }
 
@@ -150,6 +173,7 @@ namespace Axle {
             if (RenderThumbnail(path, texID, meta)) {
                 m_ThumbnailCache[key] = texID;
                 m_MetaCache[key] = meta;
+                m_GeneratedTextures.push_back(texID);
                 return texID;
             }
         }
@@ -180,6 +204,7 @@ namespace Axle {
             if (RenderThumbnail(path, texID, meta)) {
                 m_ThumbnailCache[key] = texID;
                 m_MetaCache[key] = meta;
+                m_GeneratedTextures.push_back(texID);
             } else {
                 m_ThumbnailCache[key] = 0; // Mark failed to avoid infinite retry
             }
@@ -190,9 +215,94 @@ namespace Axle {
     bool AssetThumbnailManager::RenderThumbnail(const std::filesystem::path& path, u32& outTexID, AssetCachedMeta& outMeta) {
         if (!std::filesystem::exists(path)) return false;
 
-        auto pkg = AssetSerializer::LoadPackage(path);
-        if (!pkg.Success || pkg.Parts.empty()) {
-            return false;
+        auto ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+
+        AxleLoadedPackage pkg;
+
+        // Case A: Material Asset (.axlemat) -> render on preview sphere
+        if (ext == ".axlemat" || ext == ".amat" || ext == ".mat") {
+            MaterialComponent mat;
+            if (!SceneHierarchyPanel::LoadMaterialAsset(path, mat)) {
+                return false;
+            }
+            if (!m_PreviewSphereMesh) {
+                m_PreviewSphereMesh = PrimitiveMesh::CreateSphere(24, 32);
+            }
+            pkg.Name = path.stem().string();
+            pkg.BoundingSize = glm::vec3(1.0f);
+            pkg.HalfExtent = glm::vec3(0.5f);
+            pkg.IsPackage = false;
+            pkg.Success = true;
+
+            AxlePackagePart spherePart;
+            spherePart.Name = "MaterialSphere";
+            spherePart.RelativePath = path.filename().string();
+            spherePart.LoadedMesh.Success = true;
+            spherePart.LoadedMesh.VAO = m_PreviewSphereMesh;
+            spherePart.LoadedMesh.SourceData.Name = pkg.Name;
+            spherePart.LoadedMesh.SourceData.ColorPrimary = mat.AlbedoColor;
+            spherePart.LoadedMesh.SourceData.ColorSecondary = mat.AlbedoColor * 0.85f;
+            spherePart.LoadedMesh.SourceData.PatternMode = 2; // Spherical PBR lighting pattern
+            spherePart.LoadedMesh.SourceData.TileScale = 1.0f;
+            spherePart.LoadedMesh.SourceData.Vertices = { glm::vec3(-0.5f), glm::vec3(0.5f) };
+            spherePart.LoadedMesh.SourceData.Indices = { 0, 1, 0 };
+            pkg.Parts.push_back(spherePart);
+        }
+        // Case B: Assembly Prefab (.axle) -> aggregate parts
+        else if (ext == ".axle") {
+            auto asmData = AssemblySerializer::LoadAssemblyData(path);
+            if (!asmData.IsValid) return false;
+
+            std::function<void(const AssemblyNode&, const glm::mat4&)> collectParts = 
+                [&](const AssemblyNode& node, const glm::mat4& parentMat) {
+                glm::mat4 currentMat = parentMat * node.Transform.GetTransform();
+                if (node.HasMesh && !node.Mesh.AssetPath.empty()) {
+                    auto meshPath = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
+                    if (!std::filesystem::exists(meshPath)) {
+                        if (meshPath.extension() == ".axle") {
+                            auto alt = meshPath;
+                            alt.replace_extension(".axlemesh");
+                            if (std::filesystem::exists(alt)) meshPath = alt;
+                        }
+                    }
+                    if (std::filesystem::exists(meshPath)) {
+                        auto loaded = AssetSerializer::LoadMesh(meshPath);
+                        if (loaded.Success && loaded.VAO) {
+                            AxlePackagePart part;
+                            part.Name = node.Tag;
+                            part.LocalTranslation = glm::vec3(currentMat[3]);
+                            part.LocalRotation = glm::quat_cast(currentMat);
+                            part.LocalScale = glm::vec3(glm::length(currentMat[0]), glm::length(currentMat[1]), glm::length(currentMat[2]));
+                            part.LoadedMesh = loaded;
+                            if (node.Mesh.Color1 != glm::vec4(0.0f)) {
+                                part.LoadedMesh.SourceData.ColorPrimary = node.Mesh.Color1;
+                                part.LoadedMesh.SourceData.ColorSecondary = node.Mesh.Color2;
+                                part.LoadedMesh.SourceData.PatternMode = node.Mesh.PatternMode;
+                                part.LoadedMesh.SourceData.TileScale = node.Mesh.TileScale;
+                            }
+                            pkg.Parts.push_back(part);
+                        }
+                    }
+                }
+                for (const auto& child : node.Children) {
+                    collectParts(child, currentMat);
+                }
+            };
+
+            collectParts(asmData.RootNode, glm::mat4(1.0f));
+            if (pkg.Parts.empty()) {
+                return false;
+            }
+            pkg.Name = asmData.Name;
+            pkg.Success = true;
+        }
+        // Case C: 3D Mesh (.axlemesh, .obj, .gltf, etc.)
+        else {
+            pkg = AssetSerializer::LoadPackage(path);
+            if (!pkg.Success || pkg.Parts.empty()) {
+                return false;
+            }
         }
 
         // 1. Compute aggregate bounds across all loaded parts

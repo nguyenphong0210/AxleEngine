@@ -467,15 +467,15 @@ void EditorLayer::OnAttach() {
     m_SceneHierarchyPanel.SetSpawnAssetCallback([this](const std::filesystem::path& path) {
         std::string ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        if (ext == ".axle" && Axle::AssemblySerializer::IsAssemblyFile(path)) {
+        if (ext == ".axle") {
             auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 1.0f, 0.0f), &m_SerializerContext);
             if (ent) {
                 m_SceneHierarchyPanel.SetSelectedEntity(ent);
             }
-        } else if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+        } else if (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
             std::filesystem::path axlePath = path;
-            if (ext != ".axle") {
-                axlePath = path.parent_path() / (path.stem().string() + ".axle");
+            if (ext != ".axlemesh" && ext != ".axle") {
+                axlePath = path.parent_path() / (path.stem().string() + ".axlemesh");
                 if (!std::filesystem::exists(axlePath)) {
                     Axle::AssetSerializer::AutoConvertModel(path, axlePath, true);
                 }
@@ -638,7 +638,7 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
         } else if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
             // Queue 3D asset for conversion confirmation modal
             m_PendingImportQueue.push_back(srcPath);
-        } else if (ext == ".axle") {
+        } else if (ext == ".axlemesh" || ext == ".axle") {
             std::filesystem::path destAxlePath = destFolder / srcPath.filename();
             if (srcPath != destAxlePath) {
                 std::filesystem::copy_file(srcPath, destAxlePath, std::filesystem::copy_options::overwrite_existing, ec);
@@ -1964,7 +1964,7 @@ void EditorLayer::OnImGuiRender() {
 
             if (ext == ".axlescene" || ext == ".scene") {
                 OpenScene(assetPath);
-            } else if (ext == ".axle" && Axle::AssemblySerializer::IsAssemblyFile(assetPath)) {
+            } else if (ext == ".axle") {
                 glm::vec3 spawnPos(0.0f, 1.0f, 0.0f);
                 ImVec2 mousePos = ImGui::GetMousePos();
                 float mouseX = mousePos.x - viewportMin.x;
@@ -2010,9 +2010,9 @@ void EditorLayer::OnImGuiRender() {
                     AXLE_INFO("Instantiated Assembly '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})",
                         assetPath.stem().string(), spawnPos.x, spawnPos.y, spawnPos.z);
                 }
-            } else if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                if (ext != ".axle") {
-                    std::filesystem::path axlePath = assetPath.parent_path() / (assetPath.stem().string() + ".axle");
+            } else if (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                if (ext != ".axlemesh" && ext != ".axle") {
+                    std::filesystem::path axlePath = assetPath.parent_path() / (assetPath.stem().string() + ".axlemesh");
                     if (!std::filesystem::exists(axlePath)) {
                         Axle::AssetSerializer::AutoConvertModel(assetPath, axlePath, true);
                     }

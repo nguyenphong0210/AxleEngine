@@ -3,6 +3,8 @@
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/PrimitiveMesh.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
 #include <glad/glad.h>
@@ -146,7 +148,8 @@ namespace Axle {
         std::string ext = assetPath.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-        bool is3D = (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
+        bool isMaterial = (ext == ".axlemat" || ext == ".amat" || ext == ".mat");
+        bool is3D = (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx" || isMaterial);
         if (!is3D) {
             m_HasAsset = false;
             m_IsAssembly = false;
@@ -155,7 +158,44 @@ namespace Axle {
             return;
         }
 
-        if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(assetPath)) {
+        if (isMaterial) {
+            MaterialComponent mat;
+            if (SceneHierarchyPanel::LoadMaterialAsset(assetPath, mat)) {
+                m_IsAssembly = false;
+                m_CurrentPackage = {};
+                m_CurrentPackage.Name = assetPath.stem().string();
+                m_CurrentPackage.BoundingSize = glm::vec3(1.0f);
+                m_CurrentPackage.HalfExtent = glm::vec3(0.5f);
+                m_CurrentPackage.Success = true;
+
+                AxlePackagePart spherePart;
+                spherePart.Name = "MaterialSphere";
+                spherePart.LoadedMesh.Success = true;
+                spherePart.LoadedMesh.VAO = m_SerializerContext ? m_SerializerContext->SphereMesh : m_FallbackMesh;
+                if (!spherePart.LoadedMesh.VAO) spherePart.LoadedMesh.VAO = PrimitiveMesh::CreateSphere(24, 32);
+                spherePart.LoadedMesh.SourceData.ColorPrimary = mat.AlbedoColor;
+                spherePart.LoadedMesh.SourceData.ColorSecondary = mat.AlbedoColor * 0.85f;
+                spherePart.LoadedMesh.SourceData.PatternMode = 2; // Spherical PBR
+                spherePart.LoadedMesh.SourceData.TileScale = 1.0f;
+                spherePart.LoadedMesh.SourceData.Vertices = { glm::vec3(-0.5f), glm::vec3(0.5f) };
+                spherePart.LoadedMesh.SourceData.Indices = { 0, 1, 0 };
+                m_CurrentPackage.Parts.push_back(spherePart);
+
+                m_HasAsset = true;
+                m_Center = glm::vec3(0.0f);
+                m_Size = glm::vec3(1.0f);
+                m_MaxDim = 1.0f;
+                m_TotalVertices = 768;
+                m_TotalTriangles = 512;
+                m_Pitch = 15.0f;
+                m_Yaw = 30.0f;
+                m_Zoom = 1.0f;
+                m_PanOffset = glm::vec3(0.0f);
+                return;
+            }
+        }
+
+        if (ext == ".axle") {
             m_IsAssembly = true;
             m_CurrentAssembly = AssemblySerializer::LoadAssemblyData(assetPath, m_SerializerContext);
             m_HasAsset = m_CurrentAssembly.IsValid;
@@ -163,22 +203,36 @@ namespace Axle {
 
             // Preload and cache all mesh VAOs ONCE so RenderPreview3D doesn't reload from disk/cache every frame
             std::function<void(AssemblyNode&)> preloadMeshVAOs = [&](AssemblyNode& node) {
-                if (node.HasMesh && !node.Mesh.VAO) {
-                    if (m_SerializerContext) {
-                        if (node.Mesh.AssetPath == "builtin://sphere") node.Mesh.VAO = m_SerializerContext->SphereMesh;
-                        else if (node.Mesh.AssetPath == "builtin://cylinder") node.Mesh.VAO = m_SerializerContext->CylinderMesh;
-                        else if (node.Mesh.AssetPath == "builtin://cone") node.Mesh.VAO = m_SerializerContext->ConeMesh;
-                        else if (node.Mesh.AssetPath == "builtin://plane") node.Mesh.VAO = m_SerializerContext->PlaneMesh;
-                        else if (!node.Mesh.AssetPath.empty() && node.Mesh.AssetPath != "builtin://cube") {
-                            auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
-                            if (std::filesystem::exists(resolved)) {
-                                auto loaded = AssetSerializer::LoadMesh(resolved);
-                                if (loaded.Success) node.Mesh.VAO = loaded.VAO;
+                if (node.HasMesh && !node.Mesh.AssetPath.empty()) {
+                    if (node.Mesh.AssetPath == "builtin://sphere") {
+                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->SphereMesh : nullptr;
+                    } else if (node.Mesh.AssetPath == "builtin://cylinder") {
+                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->CylinderMesh : nullptr;
+                    } else if (node.Mesh.AssetPath == "builtin://cone") {
+                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->ConeMesh : nullptr;
+                    } else if (node.Mesh.AssetPath == "builtin://plane") {
+                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->PlaneMesh : nullptr;
+                    } else if (node.Mesh.AssetPath == "builtin://cube") {
+                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->CubeMesh : nullptr;
+                    } else {
+                        auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
+                        if (!std::filesystem::exists(resolved)) {
+                            if (resolved.extension() == ".axle") {
+                                auto alt = resolved;
+                                alt.replace_extension(".axlemesh");
+                                if (std::filesystem::exists(alt)) resolved = alt;
                             }
                         }
-                        if (!node.Mesh.VAO) node.Mesh.VAO = m_SerializerContext->CubeMesh;
+                        if (std::filesystem::exists(resolved)) {
+                            auto loaded = AssetSerializer::LoadMesh(resolved);
+                            if (loaded.Success && loaded.VAO) {
+                                node.Mesh.VAO = loaded.VAO;
+                            }
+                        }
                     }
-                    if (!node.Mesh.VAO) node.Mesh.VAO = m_FallbackMesh;
+                    if (!node.Mesh.VAO) {
+                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->CubeMesh : m_FallbackMesh;
+                    }
                 }
                 for (auto& child : node.Children) {
                     preloadMeshVAOs(child);

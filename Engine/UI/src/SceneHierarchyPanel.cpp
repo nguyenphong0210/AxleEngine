@@ -11,6 +11,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/Texture2D.hpp>
+#include <Axle/PhysicsMaterial.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -503,8 +504,8 @@ namespace Axle {
                         std::filesystem::path p(pathStr);
                         std::string ext = p.extension().string();
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                        if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                            if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(p)) {
+                        if (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                            if (ext == ".axle") {
                                 SceneSerializerContext ctx;
                                 ctx.CubeMesh = m_CubeMesh;
                                 ctx.SphereMesh = m_SphereMesh;
@@ -516,13 +517,13 @@ namespace Axle {
                                     m_SelectedEntity = spawned;
                                 }
                             } else {
-                                if (ext != ".axle") {
-                                std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
-                                if (!std::filesystem::exists(axlePath)) {
-                                    AssetSerializer::AutoConvertModel(p, axlePath, true);
+                                if (ext != ".axlemesh" && ext != ".axle") {
+                                    std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axlemesh");
+                                    if (!std::filesystem::exists(axlePath)) {
+                                        AssetSerializer::AutoConvertModel(p, axlePath, true);
+                                    }
+                                    p = axlePath;
                                 }
-                                p = axlePath;
-                            }
 
                             auto pkg = AssetSerializer::LoadPackage(p);
                             if (pkg.Success) {
@@ -695,8 +696,8 @@ namespace Axle {
                             std::filesystem::path p(pathStr);
                             std::string ext = p.extension().string();
                             std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                            if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-                                if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(p)) {
+                            if (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                                if (ext == ".axle") {
                                     SceneSerializerContext ctx;
                                     ctx.CubeMesh = m_CubeMesh;
                                     ctx.SphereMesh = m_SphereMesh;
@@ -708,13 +709,13 @@ namespace Axle {
                                         m_SelectedEntity = spawned;
                                     }
                                 } else {
-                                    if (ext != ".axle") {
-                                    std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
-                                    if (!std::filesystem::exists(axlePath)) {
-                                        AssetSerializer::AutoConvertModel(p, axlePath, true);
+                                    if (ext != ".axlemesh" && ext != ".axle") {
+                                        std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axlemesh");
+                                        if (!std::filesystem::exists(axlePath)) {
+                                            AssetSerializer::AutoConvertModel(p, axlePath, true);
+                                        }
+                                        p = axlePath;
                                     }
-                                    p = axlePath;
-                                }
 
                                 auto pkg = AssetSerializer::LoadPackage(p);
                                 if (pkg.Success) {
@@ -2353,9 +2354,10 @@ namespace Axle {
             sizeStr = buf;
         }
 
-        bool isAssembly = (ext == ".axle" && AssemblySerializer::IsAssemblyFile(path));
+        bool isAssembly = (ext == ".axle");
         bool isMaterial = (ext == ".axlemat" || ext == ".amat" || ext == ".mat");
-        bool isMesh = (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") && !isAssembly && !isMaterial;
+        bool isMesh = (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
+        bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr");
 
         // Top Asset Header Card
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.15f, 0.20f, 0.85f));
@@ -2367,8 +2369,12 @@ namespace Axle {
                 ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.20f, 1.0f), "[PBR MATERIAL ASSET]");
             } else if (isMesh) {
                 ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "[3D MESH PACKAGE]");
+            } else if (isTexture) {
+                ImGui::TextColored(ImVec4(0.25f, 0.85f, 0.50f, 1.0f), "[2D TEXTURE ASSET]");
             } else if (ext == ".axlescene" || ext == ".scene") {
                 ImGui::TextColored(ImVec4(1.0f, 0.80f, 0.30f, 1.0f), "[SCENE ASSET]");
+            } else if (ext == ".physmat") {
+                ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.25f, 1.0f), "[PHYSICS MATERIAL ASSET]");
             } else {
                 ImGui::TextColored(ImVec4(0.65f, 0.75f, 0.85f, 1.0f), "[ASSET FILE]");
             }
@@ -2381,12 +2387,95 @@ namespace Axle {
 
         ImGui::Spacing();
 
+        // 1. Material Asset: Render 3D preview sphere turntable + interactive PBR controls
         if (isMaterial) {
+            if (m_AssetPreviewPanel) {
+                if (m_AssetPreviewPanel->GetCurrentAsset() != path) {
+                    m_AssetPreviewPanel->SetAsset(path);
+                }
+                if (m_AssetPreviewPanel->HasAsset()) {
+                    m_AssetPreviewPanel->RenderPreviewViewport();
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+                }
+            }
             DrawMaterialAssetProperties(path);
             return;
         }
 
-        // Embedded Interactive 3D Asset Preview Viewport (Unified Inspector paradigm)
+        // 2. 2D Texture Asset: Render image preview with resolution metadata
+        if (isTexture) {
+            auto tex = Texture2D::Create(path.string());
+            if (tex && tex->IsLoaded()) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.09f, 0.11f, 0.14f, 1.0f));
+                ImGui::BeginChild("TexturePreviewViewport", ImVec2(0.0f, 220.0f), true);
+                {
+                    float availW = ImGui::GetContentRegionAvail().x;
+                    float availH = 200.0f;
+                    float texW = (float)tex->GetWidth();
+                    float texH = (float)tex->GetHeight();
+                    float scale = std::min(availW / texW, availH / texH);
+                    float dispW = texW * scale;
+                    float dispH = texH * scale;
+
+                    float padX = (availW - dispW) * 0.5f;
+                    float padY = (availH - dispH) * 0.5f;
+                    if (padX > 0) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + padX);
+                    if (padY > 0) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + padY);
+
+                    ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), ImVec2(dispW, dispH), ImVec2(0, 1), ImVec2(1, 0));
+                }
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                if (ImGui::CollapsingHeader("Texture Metadata", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    ImGui::Columns(2, "TexMetaCols", false);
+                    ImGui::SetColumnWidth(0, 120.0f);
+
+                    ImGui::TextDisabled("Dimensions:");
+                    ImGui::NextColumn();
+                    ImGui::Text("%u x %u px", tex->GetWidth(), tex->GetHeight());
+                    ImGui::NextColumn();
+
+                    ImGui::TextDisabled("Aspect Ratio:");
+                    ImGui::NextColumn();
+                    ImGui::Text("%.2f:1", (float)tex->GetWidth() / (float)std::max(1u, tex->GetHeight()));
+                    ImGui::NextColumn();
+
+                    ImGui::TextDisabled("Renderer ID:");
+                    ImGui::NextColumn();
+                    ImGui::Text("%u", tex->GetRendererID());
+                    ImGui::NextColumn();
+
+                    ImGui::Columns(1);
+                }
+            }
+            return;
+        }
+
+        // 3. Physics Material: Interactive slider controls
+        if (ext == ".physmat") {
+            PhysicsMaterial physMat;
+            if (PhysicsMaterial::Load(path, physMat)) {
+                bool changed = false;
+                if (ImGui::CollapsingHeader("Physics Surface Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    if (ImGui::SliderFloat("Friction (Grip)", &physMat.Friction, 0.0f, 1.0f, "%.2f")) changed = true;
+                    if (ImGui::SliderFloat("Restitution (Bounciness)", &physMat.Restitution, 0.0f, 1.0f, "%.2f")) changed = true;
+                    if (ImGui::DragFloat("Density (kg/m3)", &physMat.Density, 10.0f, 1.0f, 20000.0f, "%.1f")) changed = true;
+                }
+                if (changed) {
+                    PhysicsMaterial::Save(path, physMat);
+                }
+            }
+            return;
+        }
+
+        // 4. Embedded Interactive 3D Asset Preview Viewport (Mesh & Assembly)
         if (m_AssetPreviewPanel && (isAssembly || isMesh)) {
             if (m_AssetPreviewPanel->GetCurrentAsset() != path) {
                 m_AssetPreviewPanel->SetAsset(path);

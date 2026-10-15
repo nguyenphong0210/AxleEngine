@@ -14,7 +14,7 @@ Entities:
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: models/Crash_Barrier.axle
+      AssetPath: models/Crash_Barrier.axlemesh
       PatternMode: 1
       TileScale: 4.000000
       Color1: [ 0.950000 , 0.450000 , 0.150000 , 1.000000 ]
@@ -47,7 +47,7 @@ Entities:
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 0.400000 , 0.400000 , 0.400000 ]
     MeshInstance3D:
-      AssetPath: models/Traffic_Cone.axle
+      AssetPath: models/Traffic_Cone.axlemesh
       PatternMode: 1
       TileScale: 2.000000
       Color1: [ 1.000000 , 0.550000 , 0.100000 , 1.000000 ]

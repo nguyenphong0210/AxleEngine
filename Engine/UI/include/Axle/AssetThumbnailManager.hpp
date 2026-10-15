@@ -2,6 +2,8 @@
 #include <Axle/Types.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/Shader.hpp>
+#include <Axle/Texture2D.hpp>
+#include <Axle/VertexArray.hpp>
 #include <glm/glm.hpp>
 #include <filesystem>
 #include <unordered_map>
@@ -55,9 +57,12 @@ namespace Axle {
         u32 m_FBO = 0;
         u32 m_RBO = 0;
         std::unique_ptr<Shader> m_Shader;
+        std::shared_ptr<VertexArray> m_PreviewSphereMesh;
 
         std::unordered_map<std::string, u32> m_ThumbnailCache;
         std::unordered_map<std::string, AssetCachedMeta> m_MetaCache;
+        std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_LoadedTextures;
+        std::vector<u32> m_GeneratedTextures;
         std::vector<std::filesystem::path> m_PendingQueue;
 
         const u32 m_ThumbnailResolution = 128;

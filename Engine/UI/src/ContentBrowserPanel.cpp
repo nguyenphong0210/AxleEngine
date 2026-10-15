@@ -958,7 +958,8 @@ namespace Axle {
                     float iconScale = iconAreaH * 0.36f;
 
                     u32 thumbTex = 0;
-                    if (meta.Kind == AssetKind::Model3D && m_ThumbnailManager) {
+                    if ((meta.Kind == AssetKind::Model3D || meta.Kind == AssetKind::Assembly || 
+                         meta.Kind == AssetKind::Material || meta.Kind == AssetKind::Texture) && m_ThumbnailManager) {
                         thumbTex = m_ThumbnailManager->GetOrCreateThumbnail(path);
                     }
 

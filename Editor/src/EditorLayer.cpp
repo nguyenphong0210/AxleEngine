@@ -377,8 +377,8 @@ void EditorLayer::OnAttach() {
     m_ConeMesh = Axle::PrimitiveMesh::CreateCone(32);
     m_PlaneMesh = Axle::PrimitiveMesh::CreatePlane();
 
-    // 4.1 Asset Pipeline Validation: Load SportsCar_Body.axle
-    auto carAxlePath = Axle::FileSystem::ResolveAssetPath("models/SportsCar_Body.axle");
+    // 4.1 Asset Pipeline Validation: Load SportsCar_Body.axlemesh
+    auto carAxlePath = Axle::FileSystem::ResolveAssetPath("models/SportsCar_Body.axlemesh");
     if (std::filesystem::exists(carAxlePath)) {
         auto loaded = Axle::AssetSerializer::LoadMesh(carAxlePath);
         if (loaded.Success) {

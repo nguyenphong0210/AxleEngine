@@ -56,16 +56,12 @@ namespace Axle {
         if (ext == ".axlescene" || ext == ".scene") return AssetType::Scene;
         if (ext == ".axlemat" || ext == ".amat" || ext == ".mat") return AssetType::Material;
         if (ext == ".physmat") return AssetType::PhysicsMaterial;
-        if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") return AssetType::Mesh;
+        if (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") return AssetType::Mesh;
+        if (ext == ".axle") return AssetType::Assembly;
         if (ext == ".hpp" || ext == ".cpp" || ext == ".cs" || ext == ".lua") return AssetType::Script;
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") return AssetType::Texture;
         if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") return AssetType::Audio;
         if (ext == ".ttf" || ext == ".otf") return AssetType::Font;
-
-        if (ext == ".axle") {
-            // Check if file content indicates Assembly or Mesh
-            return AssetType::Assembly;
-        }
 
         return AssetType::None;
     }

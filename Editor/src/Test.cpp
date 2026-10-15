@@ -1559,7 +1559,9 @@ bool RunTest_Step14_Phase17_AssetUUIDAndMetaPipeline() {
 
     // 1. AssetType detection from path extensions
     std::cout << "[14.1] Testing AssetType detection from file extensions..." << std::endl;
-    if (Axle::GetAssetTypeFromPath("car.obj") != Axle::AssetType::Mesh ||
+    if (Axle::GetAssetTypeFromPath("car.axlemesh") != Axle::AssetType::Mesh ||
+        Axle::GetAssetTypeFromPath("vehicle.axle") != Axle::AssetType::Assembly ||
+        Axle::GetAssetTypeFromPath("car.obj") != Axle::AssetType::Mesh ||
         Axle::GetAssetTypeFromPath("texture.png") != Axle::AssetType::Texture ||
         Axle::GetAssetTypeFromPath("material.axlemat") != Axle::AssetType::Material ||
         Axle::GetAssetTypeFromPath("script.hpp") != Axle::AssetType::Script ||
@@ -1569,7 +1571,7 @@ bool RunTest_Step14_Phase17_AssetUUIDAndMetaPipeline() {
         std::cerr << "FAIL: AssetType detection failed for standard asset extensions!" << std::endl;
         return false;
     }
-    std::cout << "  -> PASS: All asset extension types correctly categorized." << std::endl;
+    std::cout << "  -> PASS: All asset extension types correctly categorized (.axlemesh -> Mesh, .axle -> Assembly)." << std::endl;
 
     // 2. .meta serialization roundtrip
     std::cout << "\n[14.2] Testing .meta file serialization and parsing..." << std::endl;

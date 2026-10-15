@@ -1111,9 +1111,9 @@ namespace Axle {
                     std::filesystem::path p(pathStr);
                     std::string ext = p.extension().string();
                     std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                    if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                    if (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                         mc.AssetPath = p.string();
-                        if (ext == ".axle") {
+                        if (ext == ".axlemesh" || ext == ".axle") {
                             auto loaded = AssetSerializer::LoadMesh(p);
                             if (loaded.Success) {
                                 mc.VAO = loaded.VAO;
@@ -1123,7 +1123,7 @@ namespace Axle {
                                 mc.Color2 = loaded.SourceData.ColorSecondary;
                             }
                         } else if (ext == ".obj") {
-                            std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
+                            std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axlemesh");
                             if (!std::filesystem::exists(axlePath)) {
                                 AssetSerializer::ConvertOBJToAxle(p, axlePath);
                             }
@@ -1226,7 +1226,7 @@ namespace Axle {
                         glm::vec4 color2(0.65f, 0.70f, 0.76f, 1.0f);
                         std::shared_ptr<VertexArray> loadedVao;
 
-                        if (ext == ".axle") {
+                        if (ext == ".axlemesh" || ext == ".axle") {
                             auto loaded = AssetSerializer::LoadMesh(p);
                             if (loaded.Success) {
                                 loadedVao = loaded.VAO;
@@ -1236,7 +1236,7 @@ namespace Axle {
                                 color2 = loaded.SourceData.ColorSecondary;
                             }
                         } else if (ext == ".obj") {
-                            std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axle");
+                            std::filesystem::path axlePath = p.parent_path() / (p.stem().string() + ".axlemesh");
                             if (!std::filesystem::exists(axlePath)) {
                                 AssetSerializer::ConvertOBJToAxle(p, axlePath);
                             }

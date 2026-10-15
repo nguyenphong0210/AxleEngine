@@ -61,11 +61,11 @@ namespace Axle {
         auto ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
+        if (ext == ".axlemesh") {
+            return { AssetKind::Model3D, "3D Mesh", "MSH", IM_COL32(65, 195, 255, 255) };
+        }
         if (ext == ".axle") {
-            if (AssemblySerializer::IsAssemblyFile(entry.path())) {
-                return { AssetKind::Assembly, "Assembly Prefab", "ASY", IM_COL32(255, 175, 45, 255) };
-            }
-            return { AssetKind::Model3D, "Axle Mesh", "AXLE", IM_COL32(255, 125, 45, 255) };
+            return { AssetKind::Assembly, "Assembly Prefab", "ASY", IM_COL32(255, 175, 45, 255) };
         }
         if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
             return { AssetKind::Model3D, "3D Mesh", "3D", IM_COL32(65, 195, 255, 255) };
@@ -815,7 +815,7 @@ namespace Axle {
                         if (m_AssetPreviewPanel && !isDir) {
                             std::string ext = path.extension().string();
                             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                            if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
+                            if (ext == ".axle" || ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                                 m_AssetPreviewPanel->SetAsset(path);
                             }
                         }
@@ -830,7 +830,7 @@ namespace Axle {
                         }
                         ImGui::Separator();
 
-                        if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(path)) {
+                        if (ext == ".axle") {
                             if (ImGui::MenuItem("Open in Assembly Editor")) {
                                 if (m_OnOpenAssemblyCallback) {
                                     m_OnOpenAssemblyCallback(path);
@@ -863,7 +863,7 @@ namespace Axle {
                             ImGui::Separator();
                         }
 
-                        if (ext == ".axle" || ext == ".axlebin") {
+                        if (ext == ".axlemesh" || ext == ".axlebin") {
                             if (ImGui::MenuItem("Convert to Wavefront OBJ (.obj)")) {
                                 auto outObj = path.parent_path() / (path.stem().string() + ".obj");
                                 if (AssetSerializer::ConvertAxleToOBJ(path, outObj)) {

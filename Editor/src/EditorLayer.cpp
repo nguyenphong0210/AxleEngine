@@ -8,6 +8,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
+#include <Axle/AssetManager.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/Log.hpp>
@@ -419,6 +420,7 @@ void EditorLayer::OnAttach() {
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_SceneHierarchyPanel.SetMeshes(m_CubeMesh, m_SphereMesh, m_CylinderMesh, m_ConeMesh, m_PlaneMesh);
     m_SceneHierarchyPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
+    Axle::AssetManager::Init(Axle::FileSystem::GetAssetDirectory());
     m_ContentBrowserPanel.SetRootPath(Axle::FileSystem::GetAssetDirectory());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
@@ -586,6 +588,7 @@ void EditorLayer::OnAttach() {
 
 void EditorLayer::OnDetach() {
     AXLE_INFO("EditorLayer detached");
+    Axle::AssetManager::Shutdown();
     m_ShadowShader.reset();
     m_ShadowMap.reset();
     m_Vehicle.reset();

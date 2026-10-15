@@ -332,7 +332,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **C++ Script Reflection Macro**: Support `RegisterFields()` / `AXLE_SCRIPT_FIELDS(...)` macros in `ScriptableEntity` for automatic Editor reflection of `Float`, `Int`, `Bool`, `Vec3`, `String`, and `Entity Reference` (UUID).
   - [x] **Dual-Context Properties Inspector**: Support seamless switching between `InspectorMode::Entity` (inspecting active scene entity) and `InspectorMode::Asset` (inspecting `.axlemat` materials or `.axle` assemblies from Content Browser).
 - [ ] **Phase 17: Content Browser & Material/Asset System (.meta & Physical Asset Creation)**
-  - [ ] **Asset UUID & `.meta` File Pipeline**: Auto-generate `.meta` companion files storing persistent 64-bit UUIDs for assets in `Assets/` for path-independent referencing.
+  - [x] **Asset UUID & `.meta` File Pipeline**: Auto-generate `.meta` companion files storing persistent 64-bit UUIDs for assets in `Assets/` for path-independent referencing.
   - [ ] **Right-Click Asset Creation**: Right-click blank space in Content Browser to create `New Folder`, `Scene (.axlescene)`, `Material Asset (.amat / .axlemat)`, `C++ Script (.hpp)`, and `Physics Material (.physmat)`.
   - [ ] **Dedicated Material Inspector**: Selecting `.amat` in Content Browser switches Properties panel into interactive PBR Material editor (Albedo, Roughness, Metallic, Texture slots).
 - [ ] **Phase 18: Integrated Drag & Drop Pipelines & Safe Simulation State (Snapshot/Clone Scene)**

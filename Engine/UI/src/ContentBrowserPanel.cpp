@@ -2,6 +2,8 @@
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/AssetManager.hpp>
+#include <Axle/AssetTypes.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/Log.hpp>
@@ -417,12 +419,14 @@ namespace Axle {
             std::filesystem::create_directories(m_RootDirectory);
         }
         m_CurrentDirectory = m_RootDirectory;
+        AssetManager::Sync(m_RootDirectory);
     }
 
     void ContentBrowserPanel::RefreshThumbnails() {
         if (m_ThumbnailManager) {
             m_ThumbnailManager->Clear();
         }
+        AssetManager::Sync(m_CurrentDirectory);
     }
 
     void ContentBrowserPanel::SetStatusNotification(const std::string& message, float duration) {
@@ -598,6 +602,11 @@ namespace Axle {
                 continue;
             }
 
+            // Companion .meta files are hidden from content grid
+            if (entry.path().extension() == ".meta") {
+                continue;
+            }
+
             if (m_SearchFilter[0] != '\0' && !CaseInsensitiveFind(filename, m_SearchFilter)) {
                 continue;
             }
@@ -658,6 +667,16 @@ namespace Axle {
                     bool isDoubleClicked = isHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
                     bool isSelected = (m_SelectedEntry == path);
 
+                    if (isHovered && !isDir) {
+                        UUID uuid = AssetManager::GetAssetUUID(path);
+                        AssetType type = AssetManager::GetAssetType(path);
+                        ImGui::BeginTooltip();
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", filenameStr.c_str());
+                        ImGui::TextDisabled("Type: %s", AssetTypeToString(type));
+                        ImGui::TextDisabled("UUID: %llu", (unsigned long long)(uint64_t)uuid);
+                        ImGui::EndTooltip();
+                    }
+
                     if (isClicked) {
                         m_SelectedEntry = path;
                         if (!isDir) {
@@ -707,6 +726,10 @@ namespace Axle {
                         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
                         ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "%s", filenameStr.c_str());
+                        if (!isDir) {
+                            UUID uuid = AssetManager::GetAssetUUID(path);
+                            ImGui::TextDisabled("UUID: %llu", (unsigned long long)(uint64_t)uuid);
+                        }
                         ImGui::Separator();
 
                         if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(path)) {

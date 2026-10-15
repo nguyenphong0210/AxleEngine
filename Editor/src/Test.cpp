@@ -4,8 +4,12 @@
 #include <Axle/Scene.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/AssetManager.hpp>
+#include <Axle/AssetMetadataSerializer.hpp>
+#include <Axle/AssetTypes.hpp>
 #include "CarPlayerScript.hpp"
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <filesystem>
 #include <cmath>
@@ -1537,10 +1541,167 @@ bool RunTest_Step13_Phase16_DualContextPropertiesInspector() {
     }
     std::cout << "  -> Entity '" << testEntity.GetName() << "' received material asset properties perfectly." << std::endl;
 
-    // Cleanup temp test file
     std::filesystem::remove(matFilePath);
 
     std::cout << ">>> STEP 13 PASSED: Phase 16.4 Dual-Context Properties Inspector verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
+// TEST STEP 14: Phase 17.1 Asset UUID & .meta Companion File Pipeline
+// =============================================================================
+bool RunTest_Step14_Phase17_AssetUUIDAndMetaPipeline() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 14 TEST] PHASE 17.1: ASSET UUID & .META PIPELINE  " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // 1. AssetType detection from path extensions
+    std::cout << "[14.1] Testing AssetType detection from file extensions..." << std::endl;
+    if (Axle::GetAssetTypeFromPath("car.obj") != Axle::AssetType::Mesh ||
+        Axle::GetAssetTypeFromPath("texture.png") != Axle::AssetType::Texture ||
+        Axle::GetAssetTypeFromPath("material.axlemat") != Axle::AssetType::Material ||
+        Axle::GetAssetTypeFromPath("script.hpp") != Axle::AssetType::Script ||
+        Axle::GetAssetTypeFromPath("scene.axlescene") != Axle::AssetType::Scene ||
+        Axle::GetAssetTypeFromPath("phys.physmat") != Axle::AssetType::PhysicsMaterial ||
+        Axle::GetAssetTypeFromPath("engine.wav") != Axle::AssetType::Audio) {
+        std::cerr << "FAIL: AssetType detection failed for standard asset extensions!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: All asset extension types correctly categorized." << std::endl;
+
+    // 2. .meta serialization roundtrip
+    std::cout << "\n[14.2] Testing .meta file serialization and parsing..." << std::endl;
+    std::filesystem::path testMetaFile = "sandbox_single_asset.obj.meta";
+    Axle::UUID expectedUUID = 1234567890987654321ULL;
+    Axle::AssetMetadata originalMeta;
+    originalMeta.Handle = expectedUUID;
+    originalMeta.Type = Axle::AssetType::Mesh;
+    originalMeta.FilePath = "models/sandbox_single_asset.obj";
+
+    bool serOk = Axle::AssetMetadataSerializer::Serialize(testMetaFile, originalMeta);
+    if (!serOk || !std::filesystem::exists(testMetaFile)) {
+        std::cerr << "FAIL: AssetMetadataSerializer::Serialize failed!" << std::endl;
+        return false;
+    }
+
+    Axle::AssetMetadata loadedMeta;
+    bool deserOk = Axle::AssetMetadataSerializer::Deserialize(testMetaFile, loadedMeta);
+    if (!deserOk || loadedMeta.Handle != expectedUUID || loadedMeta.Type != Axle::AssetType::Mesh) {
+        std::cerr << "FAIL: AssetMetadataSerializer::Deserialize returned incorrect metadata!" << std::endl;
+        std::filesystem::remove(testMetaFile);
+        return false;
+    }
+    std::filesystem::remove(testMetaFile);
+    std::cout << "  -> PASS: .meta YAML format correctly serialized and parsed." << std::endl;
+
+    // 3. Auto-generation of companion .meta files in sandbox asset directory
+    std::cout << "\n[14.3] Testing auto-generation of companion .meta files..." << std::endl;
+    std::filesystem::path testDir = "sandbox_asset_pipeline_test";
+    std::error_code ec;
+    std::filesystem::remove_all(testDir, ec);
+    std::filesystem::create_directories(testDir / "submodels", ec);
+
+    // Create mock asset files
+    auto createMockFile = [](const std::filesystem::path& p) {
+        std::ofstream f(p);
+        f << "Mock asset payload for " << p.filename().string() << "\n";
+        f.close();
+    };
+
+    std::filesystem::path fileChassis = testDir / "submodels" / "chassis.obj";
+    std::filesystem::path fileTexture = testDir / "wheel_albedo.png";
+    std::filesystem::path fileMaterial = testDir / "car_paint.axlemat";
+
+    createMockFile(fileChassis);
+    createMockFile(fileTexture);
+    createMockFile(fileMaterial);
+
+    Axle::AssetManager::Init(testDir);
+
+    std::filesystem::path metaChassis = Axle::AssetMetadataSerializer::GetMetaPath(fileChassis);
+    std::filesystem::path metaTexture = Axle::AssetMetadataSerializer::GetMetaPath(fileTexture);
+    std::filesystem::path metaMaterial = Axle::AssetMetadataSerializer::GetMetaPath(fileMaterial);
+
+    if (!std::filesystem::exists(metaChassis) ||
+        !std::filesystem::exists(metaTexture) ||
+        !std::filesystem::exists(metaMaterial)) {
+        std::cerr << "FAIL: Companion .meta files were not auto-generated on AssetManager::Sync!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> Auto-generated: " << metaChassis.filename().string() << std::endl;
+    std::cout << "  -> Auto-generated: " << metaTexture.filename().string() << std::endl;
+    std::cout << "  -> Auto-generated: " << metaMaterial.filename().string() << std::endl;
+
+    Axle::UUID chassisUUID = Axle::AssetManager::GetAssetUUID(fileChassis);
+    Axle::UUID textureUUID = Axle::AssetManager::GetAssetUUID(fileTexture);
+    Axle::UUID materialUUID = Axle::AssetManager::GetAssetUUID(fileMaterial);
+
+    if (chassisUUID == 0 || textureUUID == 0 || materialUUID == 0) {
+        std::cerr << "FAIL: Generated UUIDs must be non-zero!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> Chassis UUID:  " << (uint64_t)chassisUUID << std::endl;
+    std::cout << "  -> Texture UUID:  " << (uint64_t)textureUUID << std::endl;
+    std::cout << "  -> Material UUID: " << (uint64_t)materialUUID << std::endl;
+
+    // 4. Verification of persistence across restart (Zero UUID drift)
+    std::cout << "\n[14.4] Testing UUID persistence across shutdown and restart..." << std::endl;
+    Axle::AssetManager::Shutdown();
+    Axle::AssetManager::Init(testDir);
+
+    Axle::UUID reloadedChassisUUID = Axle::AssetManager::GetAssetUUID(fileChassis);
+    if (reloadedChassisUUID != chassisUUID) {
+        std::cerr << "FAIL: UUID changed after restart! Expected " << (uint64_t)chassisUUID 
+                  << ", got " << (uint64_t)reloadedChassisUUID << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Persistent UUID preserved across restarts without drift." << std::endl;
+
+    // 5. Path-Independent Referencing & Rename Lifecycle
+    std::cout << "\n[14.5] Testing path-independent referencing and rename lifecycle..." << std::endl;
+    std::filesystem::path renamedChassis = testDir / "submodels" / "chassis_v2_sport.obj";
+    std::filesystem::rename(fileChassis, renamedChassis, ec);
+    Axle::AssetManager::OnAssetRenamed(fileChassis, renamedChassis);
+
+    std::filesystem::path renamedMeta = Axle::AssetMetadataSerializer::GetMetaPath(renamedChassis);
+    if (!std::filesystem::exists(renamedMeta) || std::filesystem::exists(metaChassis)) {
+        std::cerr << "FAIL: Companion .meta file was not renamed alongside asset!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Lookup path by old UUID -> must now resolve to the renamed path!
+    std::filesystem::path resolvedPath = Axle::AssetManager::GetAssetPath(chassisUUID);
+    std::string normResolved = resolvedPath.generic_string();
+    if (normResolved.find("chassis_v2_sport.obj") == std::string::npos) {
+        std::cerr << "FAIL: UUID lookup did not resolve to renamed file path!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> UUID " << (uint64_t)chassisUUID << " successfully resolved to renamed file: " 
+              << resolvedPath.string() << std::endl;
+    std::cout << "  -> PASS: Path-independent asset referencing verified." << std::endl;
+
+    // 6. Delete lifecycle
+    std::cout << "\n[14.6] Testing delete lifecycle..." << std::endl;
+    std::filesystem::remove(renamedChassis, ec);
+    Axle::AssetManager::OnAssetDeleted(renamedChassis);
+
+    if (std::filesystem::exists(renamedMeta) || Axle::AssetManager::HasAsset(chassisUUID)) {
+        std::cerr << "FAIL: Deleted asset companion .meta was not removed or registry still holds asset!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Companion .meta cleaned up and asset unregistered on delete." << std::endl;
+
+    // Cleanup
+    Axle::AssetManager::Shutdown();
+    std::filesystem::remove_all(testDir, ec);
+
+    std::cout << ">>> STEP 14 PASSED: Phase 17.1 Asset UUID & .meta Pipeline verified! <<<\n" << std::endl;
     return true;
 }
 
@@ -1564,12 +1725,13 @@ int main(int argc, char** argv) {
         else if (arg == "11" || arg == "step11" || arg == "--step11" || arg == "--phase16.2") targetStep = 11;
         else if (arg == "12" || arg == "step12" || arg == "--step12" || arg == "--phase16.3") targetStep = 12;
         else if (arg == "13" || arg == "step13" || arg == "--step13" || arg == "--phase16.4") targetStep = 13;
+        else if (arg == "14" || arg == "step14" || arg == "--step14" || arg == "--phase17" || arg == "--phase17.1") targetStep = 14;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 13 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 14 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -1615,6 +1777,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 13) {
         if (!RunTest_Step13_Phase16_DualContextPropertiesInspector()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 14) {
+        if (!RunTest_Step14_Phase17_AssetUUIDAndMetaPipeline()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

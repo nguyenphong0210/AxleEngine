@@ -342,7 +342,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [ ] **In-Editor C++ Script Hot-Reload & Live Coding (Unreal / Hazel Style)**:
     - [x] **Decoupled `AxleScripts.dll` Shared Module**: Separate user scripts into an auto-globbed dynamic library with export macros (`AXLE_SCRIPT_API`) and standardized lifecycle entry points (`Axle_InitializeScripts`, `Axle_ShutdownScripts`).
     - [x] **Anti-Lock Shadow-Copy & State Preservation**: Implement `ScriptHotReloadManager` copying `AxleScripts.dll` to runtime timestamped DLLs (`AxleScripts_Runtime_<timestamp>.dll`) to prevent Windows file locking (`LNK1104`), serializing and re-binding field properties on active entities seamlessly.
-    - [ ] **Async Background Compiler (`ScriptCompiler`)**: Spawn background worker thread executing `cmake --build build --config Release --target AxleScripts` with real-time stdout/stderr capture and error parsing without UI freezing.
+    - [x] **Async Background Compiler (`ScriptCompiler`)**: Spawn background worker thread executing `cmake --build build --config Release --target AxleScripts` with real-time stdout/stderr capture and error parsing without UI freezing.
     - [ ] **Editor UI Integration (Compile Button & Menu)**: Unreal-style `[🔨 Compile] (F9 / Ctrl+B)` toolbar button with dynamic status animations (`Compiling...`, `[OK] Reloaded in X.Xs`, `[X] Failed`), along with `Build` menu bar items (`Open in Visual Studio`, `Open Scripts Directory`).
 - [ ] **Phase 19: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
   - [ ] **ThirdParty Integration**: Embed `enkiTS` (Enki Task Scheduler) submodule/library into `ThirdParty/enkiTS` with modern CMake configuration.

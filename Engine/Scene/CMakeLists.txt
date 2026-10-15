@@ -5,6 +5,7 @@ add_library(AxleScene STATIC
     src/AssemblySerializer.cpp
     src/ScriptRegistry.cpp
     src/ScriptHotReloadManager.cpp
+    src/ScriptCompiler.cpp
 )
 add_library(Axle::Scene ALIAS AxleScene)
 

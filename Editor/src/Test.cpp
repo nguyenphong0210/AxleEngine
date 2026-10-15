@@ -10,6 +10,7 @@
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/PhysicsMaterial.hpp>
 #include <Axle/ScriptHotReloadManager.hpp>
+#include <Axle/ScriptCompiler.hpp>
 #include "CarPlayerScript.hpp"
 #include <iostream>
 #include <fstream>
@@ -2523,6 +2524,81 @@ bool RunTest_Step20_Phase18_AntiLockShadowCopyAndStatePreservation() {
 }
 
 // =============================================================================
+// STEP 21: PHASE 18.3 ASYNC BACKGROUND SCRIPT COMPILER
+// =============================================================================
+bool RunTest_Step21_Phase18_AsyncBackgroundScriptCompiler() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 21 TEST] PHASE 18.3 ASYNC BACKGROUND COMPILER    " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::cout << "\n[21.1] Testing MSVC Diagnostic Output Parsing..." << std::endl;
+    // Test Error Line
+    std::string errLine = "D:\\WorkSpace\\AxleEngine\\Editor\\assets\\scripts\\RotatorScript.hpp(25,10): error C2065: 'speedMultiplier': undeclared identifier";
+    auto diagErr = Axle::ScriptCompiler::ParseDiagnosticLine(errLine);
+    assert(diagErr.Level == Axle::CompilerDiagnostic::Severity::Error);
+    assert(diagErr.Line == 25);
+    assert(diagErr.Column == 10);
+    assert(diagErr.Code == "C2065");
+    std::cout << "  -> PASS: Parsed C++ compiler error: " << diagErr.Code << " at line " << diagErr.Line << std::endl;
+
+    // Test Warning Line
+    std::string warnLine = "D:\\WorkSpace\\AxleEngine\\Editor\\src\\Scripts\\ScriptsModule.cpp(42): warning C4101: 'unusedVar': unreferenced local variable";
+    auto diagWarn = Axle::ScriptCompiler::ParseDiagnosticLine(warnLine);
+    assert(diagWarn.Level == Axle::CompilerDiagnostic::Severity::Warning);
+    assert(diagWarn.Line == 42);
+    assert(diagWarn.Code == "C4101");
+    std::cout << "  -> PASS: Parsed C++ compiler warning: " << diagWarn.Code << " at line " << diagWarn.Line << std::endl;
+
+    // Test Linker Error Line
+    std::string linkLine = "LINK : fatal error LNK1104: cannot open file 'AxleScripts.dll'";
+    auto diagLink = Axle::ScriptCompiler::ParseDiagnosticLine(linkLine);
+    assert(diagLink.Level == Axle::CompilerDiagnostic::Severity::Error);
+    assert(diagLink.Code == "LNK1104");
+    std::cout << "  -> PASS: Parsed linker error: " << diagLink.Code << std::endl;
+
+    std::cout << "\n[21.2] Testing Asynchronous Background Compilation (Non-Blocking UI)..." << std::endl;
+    auto& compiler = Axle::ScriptCompiler::Get();
+    compiler.SetBuildConfig("Release");
+    compiler.SetTarget("AxleScripts");
+
+    std::atomic<bool> callbackFired{ false };
+    Axle::CompilationResult asyncResult;
+
+    bool started = compiler.CompileAsync([&](const Axle::CompilationResult& res) {
+        asyncResult = res;
+        callbackFired = true;
+    });
+    assert(started);
+
+    // Simulate Editor UI Loop running smoothly at 60 FPS while background compiler is working
+    int simulatedUiFrames = 0;
+    while (compiler.IsCompiling()) {
+        simulatedUiFrames++;
+        std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60fps frame tick
+    }
+
+    compiler.WaitForCompletion();
+    assert(callbackFired.load());
+    assert(asyncResult.Success);
+    assert(asyncResult.ExitCode == 0);
+    assert(asyncResult.DurationSeconds > 0.0);
+    std::cout << "  -> PASS: Compilation completed in background in " << asyncResult.DurationSeconds << "s." << std::endl;
+    std::cout << "  -> PASS: Editor UI simulated " << simulatedUiFrames << " frames without freezing!" << std::endl;
+
+    std::cout << "\n[21.3] Testing Live Output Log and Metadata Retrieval..." << std::endl;
+    std::string liveLog = compiler.GetCurrentOutputLog();
+    assert(!liveLog.empty());
+    auto lastRes = compiler.GetLastResult();
+    assert(lastRes.Success);
+    assert(lastRes.ExitCode == 0);
+    std::cout << "  -> Captured " << liveLog.size() << " bytes of compiler output log." << std::endl;
+    std::cout << "  -> PASS: CompilerStatus is Success and exit code is 0." << std::endl;
+
+    std::cout << ">>> STEP 21 PASSED: Phase 18.3 Async Background Compiler verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -2549,12 +2625,13 @@ int main(int argc, char** argv) {
         else if (arg == "18" || arg == "step18" || arg == "--step18" || arg == "--phase18.2") targetStep = 18;
         else if (arg == "19" || arg == "step19" || arg == "--step19" || arg == "--phase18.3") targetStep = 19;
         else if (arg == "20" || arg == "step20" || arg == "--step20") targetStep = 20;
+        else if (arg == "21" || arg == "step21" || arg == "--step21") targetStep = 21;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 20 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 21 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -2621,6 +2698,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 20) {
         if (!RunTest_Step20_Phase18_AntiLockShadowCopyAndStatePreservation()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 21) {
+        if (!RunTest_Step21_Phase18_AsyncBackgroundScriptCompiler()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

@@ -336,14 +336,14 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Asset UUID & `.meta` File Pipeline**: Auto-generate `.meta` companion files storing persistent 64-bit UUIDs for assets in `Assets/` for path-independent referencing.
   - [x] **Right-Click Asset Creation**: Right-click blank space in Content Browser to create `New Folder`, `Scene (.axlescene)`, `Material Asset (.amat / .axlemat)`, `C++ Script (.hpp)`, and `Physics Material (.physmat)`.
   - [x] **Dedicated Material Inspector**: Selecting `.amat` in Content Browser switches Properties panel into interactive PBR Material editor (Albedo, Roughness, Metallic, Texture slots).
-- [ ] **Phase 18: Integrated Drag & Drop, Safe Simulation & In-Editor Live Coding (Hot-Reload DLL)**
+- [x] **Phase 18: Integrated Drag & Drop, Safe Simulation & In-Editor Live Coding (Hot-Reload DLL)**
   - [x] **Full 3-Flow ImGui Drag & Drop**: Connect `"CONTENT_BROWSER_ITEM"` to Viewport/Hierarchy (Flow 1) and Properties (Flow 2); connect `"SCENE_HIERARCHY_ENTITY"` to Hierarchy reparenting, Script Target slots, and Content Browser prefab packaging (Flow 3), with dual C++ Script (`.hpp`) and Class (`.hpp + .cpp`) creation.
   - [x] **Safe Scene State Simulation (Play / Stop Mode)**: Clicking `Play (F5)` deep-clones `m_EditorScene` into an ephemeral `m_RuntimeScene` using UUID remapping (`std::unordered_map<UUID, EntityID>`); clicking `Stop (F7 / Esc)` restores the pristine editor scene with zero physics drift.
-  - [ ] **In-Editor C++ Script Hot-Reload & Live Coding (Unreal / Hazel Style)**:
+  - [x] **In-Editor C++ Script Hot-Reload & Live Coding (Unreal / Hazel Style)**:
     - [x] **Decoupled `AxleScripts.dll` Shared Module**: Separate user scripts into an auto-globbed dynamic library with export macros (`AXLE_SCRIPT_API`) and standardized lifecycle entry points (`Axle_InitializeScripts`, `Axle_ShutdownScripts`).
     - [x] **Anti-Lock Shadow-Copy & State Preservation**: Implement `ScriptHotReloadManager` copying `AxleScripts.dll` to runtime timestamped DLLs (`AxleScripts_Runtime_<timestamp>.dll`) to prevent Windows file locking (`LNK1104`), serializing and re-binding field properties on active entities seamlessly.
     - [x] **Async Background Compiler (`ScriptCompiler`)**: Spawn background worker thread executing `cmake --build build --config Release --target AxleScripts` with real-time stdout/stderr capture and error parsing without UI freezing.
-    - [ ] **Editor UI Integration (Compile Button & Menu)**: Unreal-style `[🔨 Compile] (F9 / Ctrl+B)` toolbar button with dynamic status animations (`Compiling...`, `[OK] Reloaded in X.Xs`, `[X] Failed`), along with `Build` menu bar items (`Open in Visual Studio`, `Open Scripts Directory`).
+    - [x] **Editor UI Integration (Compile Button & Menu)**: Unreal-style `[🔨 Compile] (F9 / Ctrl+B)` toolbar button with dynamic status animations (`Compiling...`, `[OK] Reloaded in X.Xs`, `[X] Failed`), along with `Build` menu bar items (`Open in Visual Studio`, `Open Scripts Directory`).
 - [ ] **Phase 19: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
   - [ ] **ThirdParty Integration**: Embed `enkiTS` (Enki Task Scheduler) submodule/library into `ThirdParty/enkiTS` with modern CMake configuration.
   - [ ] **Core JobSystem Engine**: Implement unified `Axle::JobSystem` in `Engine/Core` managing persistent lock-free worker threads (`enki::TaskScheduler`) matching CPU hardware concurrency.

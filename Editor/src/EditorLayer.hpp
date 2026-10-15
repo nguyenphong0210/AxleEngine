@@ -21,6 +21,8 @@
 #include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/Texture2D.hpp>
+#include <Axle/ScriptCompiler.hpp>
+#include <Axle/ScriptHotReloadManager.hpp>
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <memory>
@@ -51,6 +53,10 @@ public:
     void OnSceneStop();
     void CompileAndHotReloadAssets(bool forceRebakeAll = false);
 
+    void TriggerScriptCompilationAndReload();
+    void OpenInVisualStudio();
+    void OpenScriptsDirectory();
+
     void NewProject();
     void OpenProject(const std::filesystem::path& filepath = {});
     void SaveProject();
@@ -77,8 +83,12 @@ private:
     bool m_F1KeyWasPressed = false;
     bool m_F9KeyWasPressed = false;
     bool m_F11KeyWasPressed = false;
+    bool m_BKeyWasPressed = false;
     float m_CompileNotificationTimer = 0.0f;
     std::string m_CompileNotificationMessage;
+    float m_ScriptCompileStatusTimer = 0.0f;
+    std::string m_ScriptCompileStatusText;
+    ImVec4 m_ScriptCompileStatusColor = ImVec4(0.35f, 0.95f, 0.55f, 1.0f);
     std::filesystem::path m_CurrentScenePath;
     std::filesystem::path m_CurrentProjectPath;
 

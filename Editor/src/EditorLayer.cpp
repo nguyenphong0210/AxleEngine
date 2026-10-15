@@ -14,6 +14,14 @@
 #include <Axle/Log.hpp>
 #include <filesystem>
 
+#ifdef _WIN32
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
+    #include <windows.h>
+    #include <shellapi.h>
+#endif
+
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -802,6 +810,74 @@ void EditorLayer::CompileAndHotReloadAssets(bool forceRebakeAll) {
         result.RecompiledCount, result.UpToDateCount, entitiesUpdated);
 }
 
+void EditorLayer::TriggerScriptCompilationAndReload() {
+    if (Axle::ScriptCompiler::Get().IsCompiling()) {
+        return;
+    }
+
+    m_ScriptCompileStatusText = "Compiling...";
+    m_ScriptCompileStatusColor = ImVec4(0.95f, 0.75f, 0.15f, 1.0f);
+    AXLE_INFO("Editor: Starting background script compilation for 'AxleScripts'...");
+
+    Axle::ScriptCompiler::Get().CompileAsync([this](const Axle::CompilationResult& result) {
+        if (result.Success) {
+            auto reloadResult = Axle::ScriptHotReloadManager::Get().Reload(m_Scene, m_SceneState == SceneState::Play);
+            if (reloadResult.Success) {
+                char buf[64];
+                snprintf(buf, sizeof(buf), "[OK] Reloaded in %.2fs", result.DurationSeconds);
+                m_ScriptCompileStatusText = buf;
+                m_ScriptCompileStatusColor = ImVec4(0.20f, 0.75f, 0.35f, 1.0f);
+                m_CompileNotificationTimer = 4.0f;
+                m_CompileNotificationMessage = m_ScriptCompileStatusText;
+                AXLE_INFO("Editor: C++ Scripts recompiled and hot-reloaded successfully in {0:.2f}s ({1} script(s) active).",
+                    result.DurationSeconds, reloadResult.ScriptCount);
+            } else {
+                m_ScriptCompileStatusText = "[!] Reload Failed";
+                m_ScriptCompileStatusColor = ImVec4(0.95f, 0.35f, 0.20f, 1.0f);
+                AXLE_ERROR("Editor: Script reload failed: {0}", reloadResult.Message);
+            }
+        } else {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "[X] Failed (%d errors)", result.ErrorCount);
+            m_ScriptCompileStatusText = buf;
+            m_ScriptCompileStatusColor = ImVec4(0.95f, 0.20f, 0.20f, 1.0f);
+            AXLE_ERROR("Editor: Script compilation failed with {0} errors, {1} warnings.",
+                result.ErrorCount, result.WarningCount);
+        }
+        m_ScriptCompileStatusTimer = 5.0f;
+    });
+}
+
+void EditorLayer::OpenInVisualStudio() {
+    std::filesystem::path slnPath = std::filesystem::current_path() / "build" / "AxleEngine.sln";
+    if (!std::filesystem::exists(slnPath)) {
+        slnPath = std::filesystem::current_path() / "AxleEngine.sln";
+    }
+#ifdef _WIN32
+    if (std::filesystem::exists(slnPath)) {
+        ShellExecuteA(NULL, "open", slnPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+        AXLE_INFO("Editor: Opened Visual Studio solution '{0}'", slnPath.string());
+    } else {
+        ShellExecuteA(NULL, "open", std::filesystem::current_path().string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+        AXLE_INFO("Editor: Opened project folder '{0}'", std::filesystem::current_path().string());
+    }
+#endif
+}
+
+void EditorLayer::OpenScriptsDirectory() {
+    std::filesystem::path scriptsDir = std::filesystem::current_path() / "Editor" / "assets" / "scripts";
+    if (!std::filesystem::exists(scriptsDir)) {
+        scriptsDir = std::filesystem::current_path() / "Editor" / "src" / "Scripts";
+    }
+    if (!std::filesystem::exists(scriptsDir)) {
+        std::filesystem::create_directories(scriptsDir);
+    }
+#ifdef _WIN32
+    ShellExecuteA(NULL, "open", scriptsDir.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+    AXLE_INFO("Editor: Opened scripts directory '{0}'", scriptsDir.string());
+#endif
+}
+
 void EditorLayer::NewScene() {
     if (m_SceneState != SceneState::Edit) {
         OnSceneStop();
@@ -1282,10 +1358,13 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     if (m_CompileNotificationTimer > 0.0f) {
         m_CompileNotificationTimer -= ts.GetSeconds();
     }
+    if (m_ScriptCompileStatusTimer > 0.0f) {
+        m_ScriptCompileStatusTimer -= ts.GetSeconds();
+    }
 
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::F9)) {
         if (!m_F9KeyWasPressed) {
-            CompileAndHotReloadAssets(false);
+            TriggerScriptCompilationAndReload();
             m_F9KeyWasPressed = true;
         }
     } else {
@@ -1296,8 +1375,17 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     const bool isCtrlDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftControl) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightControl);
     const bool isShiftDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift);
 
-    // File Shortcut Hotkeys (Ctrl+S, Ctrl+Shift+S, Ctrl+O, Ctrl+N)
+    // File Shortcut Hotkeys (Ctrl+S, Ctrl+Shift+S, Ctrl+O, Ctrl+N, Ctrl+B)
     if (isCtrlDown && !ImGui::GetIO().WantTextInput) {
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::B)) {
+            if (!m_BKeyWasPressed) {
+                TriggerScriptCompilationAndReload();
+                m_BKeyWasPressed = true;
+            }
+        } else {
+            m_BKeyWasPressed = false;
+        }
+
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::S)) {
             if (!m_SKeyWasPressed) {
                 if (isShiftDown) {
@@ -1640,10 +1728,64 @@ void EditorLayer::RenderToolbar() {
         }
 
         ImGui::SameLine();
+
+        // --- 2. UNREAL-STYLE SCRIPT COMPILE & HOT-RELOAD BUTTON ---
+        auto& scriptCompiler = Axle::ScriptCompiler::Get();
+        const bool isCompilingScripts = scriptCompiler.IsCompiling();
+
+        if (isCompilingScripts) {
+            float time = (float)ImGui::GetTime();
+            float pulse = 0.70f + 0.30f * sinf(time * 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f * pulse, 0.60f * pulse, 0.10f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.70f, 0.20f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.75f, 0.50f, 0.05f, 1.0f));
+
+            int dotCount = ((int)(time * 3.0f)) % 4;
+            std::string dots(dotCount, '.');
+            std::string compText = "Compiling" + dots;
+            ImGui::Button(compText.c_str(), ImVec2(105.0f, 26.0f));
+            ImGui::PopStyleColor(3);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Building AxleScripts.dll asynchronously in background...");
+            }
+        } else if (m_ScriptCompileStatusTimer > 0.0f) {
+            ImGui::PushStyleColor(ImGuiCol_Button, m_ScriptCompileStatusColor);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, m_ScriptCompileStatusColor);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, m_ScriptCompileStatusColor);
+            if (ImGui::Button(m_ScriptCompileStatusText.c_str(), ImVec2(125.0f, 26.0f))) {
+                TriggerScriptCompilationAndReload();
+            }
+            ImGui::PopStyleColor(3);
+            if (ImGui::IsItemHovered()) {
+                auto lastRes = scriptCompiler.GetLastResult();
+                if (!lastRes.Success && !lastRes.Diagnostics.empty()) {
+                    std::string errSummary = "Compilation Diagnostics:\n";
+                    for (const auto& diag : lastRes.Diagnostics) {
+                        errSummary += " - " + diag.File + "(" + std::to_string(diag.Line) + "): " + diag.Message + "\n";
+                    }
+                    ImGui::SetTooltip("%s", errSummary.c_str());
+                } else {
+                    ImGui::SetTooltip("Click to Recompile C++ Scripts (F9 / Ctrl+B)");
+                }
+            }
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.23f, 0.28f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.33f, 0.40f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.19f, 0.23f, 1.0f));
+            if (ImGui::Button("Compile (F9)", ImVec2(105.0f, 26.0f))) {
+                TriggerScriptCompilationAndReload();
+            }
+            ImGui::PopStyleColor(3);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Compile C++ Scripts & Hot-Reload DLL (F9 / Ctrl+B)");
+            }
+        }
+
+        ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.35f, 0.38f, 0.44f, 1.0f), "|");
         ImGui::SameLine();
 
-        // --- 2. GIZMO TRANSFORMATION TOOLS ---
+        // --- 3. GIZMO TRANSFORMATION TOOLS ---
         if (DrawToolButton("Select (Q)", m_GizmoType == -1, ImVec2(76.0f, 26.0f))) {
             m_GizmoType = -1;
         }
@@ -1844,11 +1986,25 @@ void EditorLayer::OnImGuiRender() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Asset")) {
-            if (ImGui::MenuItem("Compile Modified Assets", "F9")) {
+            if (ImGui::MenuItem("Compile Modified Assets", "Ctrl+Shift+B")) {
                 CompileAndHotReloadAssets(false);
             }
             if (ImGui::MenuItem("Rebuild All Binary Caches", "Shift+F9")) {
                 CompileAndHotReloadAssets(true);
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Build")) {
+            bool canCompile = !Axle::ScriptCompiler::Get().IsCompiling();
+            if (ImGui::MenuItem("Compile Scripts", "F9 / Ctrl+B", false, canCompile)) {
+                TriggerScriptCompilationAndReload();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Open in Visual Studio")) {
+                OpenInVisualStudio();
+            }
+            if (ImGui::MenuItem("Open Scripts Directory")) {
+                OpenScriptsDirectory();
             }
             ImGui::EndMenu();
         }

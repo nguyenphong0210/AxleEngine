@@ -68,6 +68,10 @@ namespace Axle {
         void OnUpdateRuntime(Timestep ts);
         void OnRuntimeStop();
 
+        // Hot Reload Lifecycle & Field State Preservation
+        void OnPreScriptReload();
+        void OnPostScriptReload(bool isRuntimeActive = false);
+
         entt::registry& GetRegistry() { return m_Registry; }
         const entt::registry& GetRegistry() const { return m_Registry; }
 

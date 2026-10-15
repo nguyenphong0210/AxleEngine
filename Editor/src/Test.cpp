@@ -9,6 +9,7 @@
 #include <Axle/AssetTypes.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/PhysicsMaterial.hpp>
+#include <Axle/ScriptHotReloadManager.hpp>
 #include "CarPlayerScript.hpp"
 #include <iostream>
 #include <fstream>
@@ -2436,6 +2437,92 @@ bool RunTest_Step19_Phase18_DecoupledAxleScriptsModule() {
 }
 
 // =============================================================================
+// STEP 20: PHASE 18.3 ANTI-LOCK SHADOW-COPY & STATE PRESERVATION
+// =============================================================================
+bool RunTest_Step20_Phase18_AntiLockShadowCopyAndStatePreservation() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 20 TEST] PHASE 18.3 ANTI-LOCK SHADOW-COPY & STATE" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::cout << "\n[20.1] Initializing ScriptHotReloadManager..." << std::endl;
+    auto& reloadManager = Axle::ScriptHotReloadManager::Get();
+    bool initOk = reloadManager.Initialize("build/Editor/Release/AxleScripts.dll");
+    assert(initOk);
+    assert(reloadManager.IsLoaded());
+    std::cout << "  -> PASS: ScriptHotReloadManager initialized." << std::endl;
+
+    std::cout << "\n[20.2] Verifying Anti-Lock Shadow-Copy mechanism..." << std::endl;
+    auto sourceDll = reloadManager.GetSourceDllPath();
+    auto runtimeDll = reloadManager.GetCurrentRuntimeDllPath();
+    std::cout << "  -> Source DLL:  " << sourceDll.string() << std::endl;
+    std::cout << "  -> Runtime DLL: " << runtimeDll.string() << std::endl;
+    assert(sourceDll != runtimeDll);
+    assert(std::filesystem::exists(runtimeDll));
+
+    // Test that source DLL is NOT locked by the process (preventing LNK1104 during builds)
+    std::ofstream lockTest(sourceDll, std::ios::in | std::ios::out | std::ios::binary);
+    bool canOpenSourceForWrite = lockTest.is_open();
+    if (lockTest.is_open()) lockTest.close();
+    assert(canOpenSourceForWrite);
+    std::cout << "  -> PASS: Source AxleScripts.dll has ZERO locks (verified writable for MSBuild/Linker)!" << std::endl;
+
+    std::cout << "\n[20.3] Setting up Scene with Multiple Dynamic Script Entities..." << std::endl;
+    auto scene = std::make_shared<Axle::Scene>();
+    
+    // Entity 1: BeaconAlpha
+    auto beaconAlpha = scene->CreateEntity("BeaconAlpha");
+    auto& nscAlpha = beaconAlpha.AddComponent<Axle::NativeScriptComponent>("RotatorScript");
+    nscAlpha.FloatFields["RotationSpeed"] = 45.0f;
+    nscAlpha.Vec3Fields["Axis"] = glm::vec3(1.0f, 0.0f, 0.0f);
+    nscAlpha.BoolFields["Enabled"] = true;
+
+    // Entity 2: BeaconBeta
+    auto beaconBeta = scene->CreateEntity("BeaconBeta");
+    auto& nscBeta = beaconBeta.AddComponent<Axle::NativeScriptComponent>("RotatorScript");
+    nscBeta.FloatFields["RotationSpeed"] = -120.0f;
+    nscBeta.Vec3Fields["Axis"] = glm::vec3(0.0f, 1.0f, 0.0f);
+    nscBeta.BoolFields["Enabled"] = false;
+
+    // Start simulation / edit state
+    scene->OnRuntimeStart();
+    assert(nscAlpha.Instance != nullptr);
+    assert(nscBeta.Instance != nullptr);
+
+    // Modify a field dynamically in memory to simulate active game modifications
+    nscAlpha.FloatFields["RotationSpeed"] = 888.8f;
+    nscAlpha.SyncFieldsToInstance();
+
+    std::cout << "  -> Pre-reload BeaconAlpha RotationSpeed: " << nscAlpha.FloatFields["RotationSpeed"] << std::endl;
+    std::cout << "  -> Pre-reload BeaconBeta RotationSpeed:  " << nscBeta.FloatFields["RotationSpeed"] << std::endl;
+    std::cout << "  -> PASS: Entities populated and runtime instances active." << std::endl;
+
+    std::cout << "\n[20.4] Triggering Hot-Reload with Active Scene State Preservation..." << std::endl;
+    auto reloadResult = reloadManager.Reload(scene, true);
+    assert(reloadResult.Success);
+    std::cout << "  -> Hot Reload Result: " << reloadResult.Message << std::endl;
+    std::cout << "  -> New Runtime DLL: " << reloadManager.GetCurrentRuntimeDllPath().filename().string() << std::endl;
+    assert(reloadManager.GetCurrentRuntimeDllPath() != runtimeDll);
+
+    std::cout << "\n[20.5] Verifying State Preservation across Reload..." << std::endl;
+    assert(nscAlpha.Instance != nullptr);
+    assert(nscBeta.Instance != nullptr);
+    assert(std::abs(nscAlpha.FloatFields["RotationSpeed"] - 888.8f) < 0.001f);
+    assert(std::abs(nscBeta.FloatFields["RotationSpeed"] - (-120.0f)) < 0.001f);
+    assert(nscBeta.BoolFields["Enabled"] == false);
+    assert(nscBeta.Vec3Fields["Axis"].y == 1.0f);
+    std::cout << "  -> PASS: All modified fields preserved 100% with fresh class instances!" << std::endl;
+
+    std::cout << "\n[20.6] Shutting down and cleaning shadow copies..." << std::endl;
+    scene->OnRuntimeStop();
+    reloadManager.Shutdown();
+    assert(!reloadManager.IsLoaded());
+    std::cout << "  -> PASS: ScriptHotReloadManager successfully cleaned up." << std::endl;
+
+    std::cout << ">>> STEP 20 PASSED: Phase 18.3 Anti-Lock Shadow-Copy & State Preservation verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -2461,12 +2548,13 @@ int main(int argc, char** argv) {
         else if (arg == "17" || arg == "step17" || arg == "--step17" || arg == "--phase18" || arg == "--phase18.1") targetStep = 17;
         else if (arg == "18" || arg == "step18" || arg == "--step18" || arg == "--phase18.2") targetStep = 18;
         else if (arg == "19" || arg == "step19" || arg == "--step19" || arg == "--phase18.3") targetStep = 19;
+        else if (arg == "20" || arg == "step20" || arg == "--step20") targetStep = 20;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 19 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 20 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -2530,6 +2618,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 19) {
         if (!RunTest_Step19_Phase18_DecoupledAxleScriptsModule()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 20) {
+        if (!RunTest_Step20_Phase18_AntiLockShadowCopyAndStatePreservation()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

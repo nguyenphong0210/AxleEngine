@@ -2,6 +2,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
+#include <Axle/ScriptRegistry.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <algorithm>
@@ -552,6 +553,47 @@ namespace Axle {
             if (nsc.Instance && nsc.DestroyScript) {
                 nsc.Instance->OnDestroy();
                 nsc.DestroyScript(&nsc);
+            }
+        }
+    }
+
+    void Scene::OnPreScriptReload() {
+        auto view = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : view) {
+            auto& nsc = view.get<NativeScriptComponent>(entity);
+            if (nsc.Instance) {
+                // Pull modified values back to buffers
+                nsc.SyncFieldsFromInstance();
+                if (nsc.DestroyScript) {
+                    nsc.DestroyScript(&nsc);
+                } else {
+                    delete nsc.Instance;
+                    nsc.Instance = nullptr;
+                }
+            }
+            nsc.InstantiateScript = nullptr;
+            nsc.DestroyScript = nullptr;
+        }
+    }
+
+    void Scene::OnPostScriptReload(bool isRuntimeActive) {
+        auto view = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : view) {
+            auto& nsc = view.get<NativeScriptComponent>(entity);
+            if (!nsc.ScriptName.empty() && ScriptRegistry::Has(nsc.ScriptName)) {
+                nsc.Bind(nsc.ScriptName);
+                if (isRuntimeActive && nsc.InstantiateScript) {
+                    nsc.Instance = nsc.InstantiateScript();
+                    if (nsc.Instance) {
+                        nsc.Instance->m_Entity = Entity{ entity, this };
+                        nsc.SyncFieldsToInstance();
+                        nsc.Instance->OnCreate();
+                    }
+                }
+            } else {
+                nsc.InstantiateScript = nullptr;
+                nsc.DestroyScript = nullptr;
+                nsc.Instance = nullptr;
             }
         }
     }

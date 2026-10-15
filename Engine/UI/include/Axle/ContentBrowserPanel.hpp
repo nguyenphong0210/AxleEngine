@@ -26,6 +26,7 @@ namespace Axle {
         void SetOpenAssemblyCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenAssemblyCallback = callback; }
         void SetInstantiateAssemblyCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnInstantiateAssemblyCallback = callback; }
         void SetSelectAssetCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnSelectAssetCallback = callback; }
+        void SetPackageEntityCallback(std::function<void(uint32_t, const std::filesystem::path&)> callback) { m_OnPackageEntityCallback = callback; }
         void RefreshThumbnails();
         void SetStatusNotification(const std::string& message, float duration = 4.0f);
 
@@ -34,6 +35,7 @@ namespace Axle {
         static std::filesystem::path CreateNewScene(const std::filesystem::path& parentDir, const std::string& baseName = "New_Scene");
         static std::filesystem::path CreateNewMaterial(const std::filesystem::path& parentDir, const std::string& baseName = "New_Material");
         static std::filesystem::path CreateNewScript(const std::filesystem::path& parentDir, const std::string& baseName = "NewScript");
+        static std::pair<std::filesystem::path, std::filesystem::path> CreateNewClass(const std::filesystem::path& parentDir, const std::string& baseName = "NewClass");
         static std::filesystem::path CreateNewPhysicsMaterial(const std::filesystem::path& parentDir, const std::string& baseName = "New_PhysicsMaterial");
 
         void OnImGuiRender(bool* p_open = nullptr);
@@ -66,6 +68,7 @@ namespace Axle {
         std::function<void(const std::filesystem::path&)> m_OnOpenAssemblyCallback;
         std::function<void(const std::filesystem::path&)> m_OnInstantiateAssemblyCallback;
         std::function<void(const std::filesystem::path&)> m_OnSelectAssetCallback;
+        std::function<void(uint32_t, const std::filesystem::path&)> m_OnPackageEntityCallback;
     };
 
 }

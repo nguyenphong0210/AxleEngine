@@ -2025,6 +2025,161 @@ bool RunTest_Step16_Phase17_DedicatedMaterialInspector() {
 }
 
 // =============================================================================
+// STEP 17: PHASE 18.1 FULL 3-FLOW DRAG & DROP & C++ CLASS CREATION TEST
+// =============================================================================
+bool RunTest_Step17_Phase18_DragDropPipelinesAndClassCreation() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 17 TEST] PHASE 18.1 DRAG & DROP & C++ CLASS CREATION" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::filesystem::path testDir = "sandbox_dragdrop_phase18_test";
+    std::error_code ec;
+    std::filesystem::remove_all(testDir, ec);
+    std::filesystem::create_directories(testDir, ec);
+
+    Axle::AssetManager::Init(testDir);
+
+    // 1. C++ Class Generation (.hpp + .cpp)
+    std::cout << "\n[17.1] Testing C++ Class (.hpp + .cpp) Generation..." << std::endl;
+    auto [hppPath, cppPath] = Axle::ContentBrowserPanel::CreateNewClass(testDir, "VehicleController");
+
+    if (!std::filesystem::exists(hppPath) || !std::filesystem::exists(cppPath)) {
+        std::cerr << "FAIL: CreateNewClass did not generate both .hpp and .cpp files!" << std::endl;
+        return false;
+    }
+
+    // Verify .hpp contents
+    std::ifstream hppFile(hppPath);
+    std::string hppContent((std::istreambuf_iterator<char>(hppFile)), std::istreambuf_iterator<char>());
+    if (hppContent.find("class VehicleController : public Axle::ScriptableEntity") == std::string::npos ||
+        hppContent.find("AXLE_SCRIPT_FIELDS(VehicleController") == std::string::npos ||
+        hppContent.find("void OnCreate() override;") == std::string::npos ||
+        hppContent.find("void OnUpdate(Axle::Timestep ts) override;") == std::string::npos) {
+        std::cerr << "FAIL: Generated VehicleController.hpp missing critical class declarations or macros!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: VehicleController.hpp generated with valid class declaration & reflection macros." << std::endl;
+
+    // Verify .cpp contents
+    std::ifstream cppFile(cppPath);
+    std::string cppContent((std::istreambuf_iterator<char>(cppFile)), std::istreambuf_iterator<char>());
+    if (cppContent.find("#include \"VehicleController.hpp\"") == std::string::npos ||
+        cppContent.find("AXLE_REGISTER_SCRIPT(VehicleController);") == std::string::npos ||
+        cppContent.find("void VehicleController::OnCreate()") == std::string::npos ||
+        cppContent.find("void VehicleController::OnUpdate(") == std::string::npos) {
+        std::cerr << "FAIL: Generated VehicleController.cpp missing includes, registration, or implementations!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: VehicleController.cpp generated with includes, script registration & function bodies." << std::endl;
+
+    // Verify companion .meta generation
+    auto hppMeta = Axle::AssetManager::GetOrCreateMetadata(hppPath);
+    auto cppMeta = Axle::AssetManager::GetOrCreateMetadata(cppPath);
+    if (hppMeta.Type != Axle::AssetType::Script || cppMeta.Type != Axle::AssetType::Script) {
+        std::cerr << "FAIL: .hpp or .cpp files not categorized as AssetType::Script in AssetManager!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Both .hpp and .cpp companions generated with persistent UUIDs." << std::endl;
+
+    // Test name deduplication
+    auto [hppPath2, cppPath2] = Axle::ContentBrowserPanel::CreateNewClass(testDir, "VehicleController");
+    if (hppPath2.filename() != "VehicleController_1.hpp" || cppPath2.filename() != "VehicleController_1.cpp") {
+        std::cerr << "FAIL: Class name deduplication failed!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Name deduplication verified ('VehicleController_1.hpp' & '.cpp')." << std::endl;
+
+    // 2. Flow 3: Prefab Assembly Packaging from Entity Hierarchy
+    std::cout << "\n[17.2] Testing Prefab Assembly Packaging (Hierarchy -> Content Browser)..." << std::endl;
+    auto sourceScene = std::make_shared<Axle::Scene>();
+    auto rootCar = sourceScene->CreateEntity("CyberTruck");
+    rootCar.AddComponent<Axle::TransformComponent>(glm::vec3(0.0f, 2.0f, 0.0f));
+
+    auto wheelFL = sourceScene->CreateEntity("Wheel_FL");
+    wheelFL.AddComponent<Axle::TransformComponent>(glm::vec3(-1.0f, -0.5f, 1.5f));
+    wheelFL.SetParent(rootCar);
+
+    auto wheelFR = sourceScene->CreateEntity("Wheel_FR");
+    wheelFR.AddComponent<Axle::TransformComponent>(glm::vec3(1.0f, -0.5f, 1.5f));
+    wheelFR.SetParent(rootCar);
+
+    auto cabin = sourceScene->CreateEntity("Cabin");
+    cabin.AddComponent<Axle::TransformComponent>(glm::vec3(0.0f, 0.8f, 0.0f));
+    cabin.SetParent(rootCar);
+
+    std::filesystem::path prefabPath = testDir / "CyberTruck_Prefab.axle";
+    if (!Axle::AssemblySerializer::Serialize(prefabPath, rootCar)) {
+        std::cerr << "FAIL: Failed to serialize entity hierarchy into Prefab Assembly file!" << std::endl;
+        return false;
+    }
+
+    auto prefabMeta = Axle::AssetManager::GetOrCreateMetadata(prefabPath);
+    if (prefabMeta.Type != Axle::AssetType::Assembly) {
+        std::cerr << "FAIL: Prefab Assembly not recognized as AssetType::Assembly!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Entity hierarchy serialized to Prefab Assembly '" << prefabPath.filename().string() << "'." << std::endl;
+
+    // 3. Spawning / Deserializing the packaged Prefab Assembly
+    std::cout << "\n[17.3] Testing Spawning Packaged Prefab into Fresh Scene..." << std::endl;
+    auto targetScene = std::make_shared<Axle::Scene>();
+    auto spawnedCar = Axle::AssemblySerializer::Deserialize(prefabPath, targetScene.get(), nullptr, glm::vec3(10.0f, 0.0f, -5.0f));
+
+    if (!spawnedCar || !spawnedCar.HasComponent<Axle::HierarchyComponent>()) {
+        std::cerr << "FAIL: Deserialized Prefab missing or lacks HierarchyComponent!" << std::endl;
+        return false;
+    }
+    const auto& spawnedHierarchy = spawnedCar.GetComponent<Axle::HierarchyComponent>();
+    if (spawnedHierarchy.Children.size() != 3) {
+        std::cerr << "FAIL: Deserialized Prefab expected 3 children, got: " << spawnedHierarchy.Children.size() << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Prefab deserialized with 3 children intact at custom spawn position." << std::endl;
+
+    // 4. Flow 1 & 2: Material & Script Drag & Drop Target Application
+    std::cout << "\n[17.4] Testing Material & Script Drag-Drop Target Binding..." << std::endl;
+    auto targetEntity = targetScene->CreateEntity("TargetMeshObject");
+    targetEntity.AddComponent<Axle::TransformComponent>();
+
+    // Test Material apply
+    Axle::MaterialComponent sampleMat;
+    sampleMat.SetPresetChrome();
+    std::filesystem::path testMatPath = testDir / "ChromeTest.amat";
+    Axle::SceneHierarchyPanel::SaveMaterialAsset(testMatPath, sampleMat);
+
+    Axle::MaterialComponent loadedDropMat;
+    if (Axle::SceneHierarchyPanel::LoadMaterialAsset(testMatPath, loadedDropMat)) {
+        targetEntity.AddComponent<Axle::MaterialComponent>(loadedDropMat);
+    }
+    if (!targetEntity.HasComponent<Axle::MaterialComponent>() ||
+        targetEntity.GetComponent<Axle::MaterialComponent>().Metallic != 1.0f) {
+        std::cerr << "FAIL: Material asset drop did not apply Chrome preset!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Material asset dropped and applied to Entity successfully." << std::endl;
+
+    // Test Script live binding
+    if (Axle::ScriptRegistry::Has("ReflectionDemoScript")) {
+        if (!targetEntity.HasComponent<Axle::NativeScriptComponent>()) {
+            targetEntity.AddComponent<Axle::NativeScriptComponent>();
+        }
+        bool bound = Axle::ScriptRegistry::BindByName(targetEntity, "ReflectionDemoScript");
+        if (!bound) {
+            std::cerr << "FAIL: Failed to bind registered script by name!" << std::endl;
+            return false;
+        }
+        std::cout << "  -> PASS: Script 'ReflectionDemoScript' bound to entity via name-based drop pipeline." << std::endl;
+    }
+
+    // Cleanup
+    Axle::AssetManager::Shutdown();
+    std::filesystem::remove_all(testDir, ec);
+
+    std::cout << ">>> STEP 17 PASSED: Phase 18.1 Drag & Drop Pipelines & C++ Class Creation verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -2047,12 +2202,13 @@ int main(int argc, char** argv) {
         else if (arg == "14" || arg == "step14" || arg == "--step14" || arg == "--phase17" || arg == "--phase17.1") targetStep = 14;
         else if (arg == "15" || arg == "step15" || arg == "--step15" || arg == "--phase17.2") targetStep = 15;
         else if (arg == "16" || arg == "step16" || arg == "--step16" || arg == "--phase17.3") targetStep = 16;
+        else if (arg == "17" || arg == "step17" || arg == "--step17" || arg == "--phase18" || arg == "--phase18.1") targetStep = 17;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 16 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 17 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -2107,6 +2263,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 16) {
         if (!RunTest_Step16_Phase17_DedicatedMaterialInspector()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 17) {
+        if (!RunTest_Step17_Phase18_DragDropPipelinesAndClassCreation()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

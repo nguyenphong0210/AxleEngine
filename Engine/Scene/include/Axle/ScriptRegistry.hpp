@@ -8,6 +8,7 @@
 namespace Axle {
 
     class ScriptableEntity;
+    class Entity;
 
     struct ScriptMetadata {
         std::string Name;
@@ -40,6 +41,8 @@ namespace Axle {
 
         static const std::unordered_map<std::string, ScriptMetadata>& GetScripts();
         static const ScriptMetadata* GetMetadata(const std::string& name);
+        static bool Has(const std::string& name);
+        static bool BindByName(Entity entity, const std::string& scriptName);
         static ScriptableEntity* Create(const std::string& name);
         static void Destroy(const std::string& name, ScriptableEntity* instance);
 

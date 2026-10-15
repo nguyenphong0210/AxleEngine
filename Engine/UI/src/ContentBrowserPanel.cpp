@@ -518,6 +518,62 @@ namespace Axle {
         return newPath;
     }
 
+    std::pair<std::filesystem::path, std::filesystem::path> ContentBrowserPanel::CreateNewClass(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::string className = baseName;
+        std::filesystem::path hppPath = parentDir / (className + ".hpp");
+        std::filesystem::path cppPath = parentDir / (className + ".cpp");
+        int counter = 1;
+        while (std::filesystem::exists(hppPath) || std::filesystem::exists(cppPath)) {
+            className = baseName + "_" + std::to_string(counter++);
+            hppPath = parentDir / (className + ".hpp");
+            cppPath = parentDir / (className + ".cpp");
+        }
+
+        // 1. Write Header (.hpp)
+        std::ofstream hppOut(hppPath);
+        if (hppOut.is_open()) {
+            hppOut << "#pragma once\n";
+            hppOut << "#include <Axle/ScriptableEntity.hpp>\n";
+            hppOut << "#include <Axle/ScriptRegistry.hpp>\n";
+            hppOut << "#include <Axle/Components.hpp>\n\n";
+            hppOut << "class " << className << " : public Axle::ScriptableEntity {\n";
+            hppOut << "public:\n";
+            hppOut << "    float Speed = 10.0f;\n";
+            hppOut << "    bool Enabled = true;\n\n";
+            hppOut << "    void OnCreate() override;\n";
+            hppOut << "    void OnUpdate(Axle::Timestep ts) override;\n";
+            hppOut << "    void OnDestroy() override;\n\n";
+            hppOut << "    AXLE_SCRIPT_FIELDS(" << className << ",\n";
+            hppOut << "        AXLE_FIELD(Speed, 0.0f, 100.0f, \"Movement speed\"),\n";
+            hppOut << "        AXLE_FIELD(Enabled, \"Enable script execution\")\n";
+            hppOut << "    )\n";
+            hppOut << "};\n";
+            hppOut.close();
+            AssetManager::GetOrCreateMetadata(hppPath);
+        }
+
+        // 2. Write Implementation (.cpp)
+        std::ofstream cppOut(cppPath);
+        if (cppOut.is_open()) {
+            cppOut << "#include \"" << className << ".hpp\"\n";
+            cppOut << "#include <Axle/Log.hpp>\n\n";
+            cppOut << "AXLE_REGISTER_SCRIPT(" << className << ");\n\n";
+            cppOut << "void " << className << "::OnCreate() {\n";
+            cppOut << "    AXLE_INFO(\"" << className << "::OnCreate() called\");\n";
+            cppOut << "}\n\n";
+            cppOut << "void " << className << "::OnUpdate(Axle::Timestep ts) {\n";
+            cppOut << "    (void)ts;\n";
+            cppOut << "}\n\n";
+            cppOut << "void " << className << "::OnDestroy() {\n";
+            cppOut << "    AXLE_INFO(\"" << className << "::OnDestroy() called\");\n";
+            cppOut << "}\n";
+            cppOut.close();
+            AssetManager::GetOrCreateMetadata(cppPath);
+        }
+
+        return { hppPath, cppPath };
+    }
+
     std::filesystem::path ContentBrowserPanel::CreateNewPhysicsMaterial(const std::filesystem::path& parentDir, const std::string& baseName) {
         std::filesystem::path newPath = parentDir / (baseName + ".physmat");
         int counter = 1;
@@ -1089,6 +1145,18 @@ namespace Axle {
                 ImGui::EndTable();
             }
 
+            // Drag & Drop Target: Accept SCENE_HIERARCHY_ENTITY to package as Prefab Assembly (.axle)
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_HIERARCHY_ENTITY")) {
+                    uint32_t droppedId = *static_cast<const uint32_t*>(payload->Data);
+                    if (m_OnPackageEntityCallback) {
+                        m_OnPackageEntityCallback(droppedId, m_CurrentDirectory);
+                        RefreshThumbnails();
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
             // Left click on blank space in Content Browser -> deselect
             if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered()) {
                 m_SelectedEntry.clear();
@@ -1119,9 +1187,14 @@ namespace Axle {
                         }
                         RefreshThumbnails();
                     }
-                    if (ImGui::MenuItem("C++ Native Script (.hpp)")) {
+                    if (ImGui::MenuItem("C++ Script (Header-Only .hpp)")) {
                         auto p = CreateNewScript(m_CurrentDirectory);
                         SetStatusNotification("Created C++ Script: " + p.filename().string());
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("C++ Class (.hpp + .cpp)")) {
+                        auto [hppP, cppP] = CreateNewClass(m_CurrentDirectory);
+                        SetStatusNotification("Created C++ Class: " + hppP.stem().string() + " (.hpp & .cpp)");
                         RefreshThumbnails();
                     }
                     if (ImGui::MenuItem("Physics Material (.physmat)")) {

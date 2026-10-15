@@ -876,7 +876,7 @@ namespace Axle {
                 }
             }
 
-            // 2. Attach Script from Content Browser
+            // 2. Attach Script or Apply Material from Content Browser
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                 const char* pathStr = static_cast<const char*>(payload->Data);
                 std::filesystem::path p(pathStr);
@@ -891,6 +891,17 @@ namespace Axle {
                     }
                     m_SelectedEntity = entity;
                     AXLE_INFO("Attached Native Script '{0}' to Entity '{1}' via Tree Drag & Drop", scriptName, tag);
+                } else if (ext == ".amat" || ext == ".axlemat" || ext == ".mat") {
+                    MaterialComponent matComp;
+                    if (LoadMaterialAsset(p, matComp)) {
+                        if (entity.HasComponent<MaterialComponent>()) {
+                            entity.GetComponent<MaterialComponent>() = matComp;
+                        } else {
+                            entity.AddComponent<MaterialComponent>(matComp);
+                        }
+                        m_SelectedEntity = entity;
+                        AXLE_INFO("Applied Material '{0}' to Entity '{1}' via Tree Drag & Drop", p.stem().string(), tag);
+                    }
                 }
             }
             ImGui::EndDragDropTarget();

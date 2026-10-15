@@ -1,6 +1,7 @@
 #include <Axle/ScriptRegistry.hpp>
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/Entity.hpp>
 
 namespace Axle {
 
@@ -24,6 +25,20 @@ namespace Axle {
             return &it->second;
         }
         return nullptr;
+    }
+
+    bool ScriptRegistry::Has(const std::string& name) {
+        return GetMetadata(name) != nullptr;
+    }
+
+    bool ScriptRegistry::BindByName(Entity entity, const std::string& scriptName) {
+        if (!Has(scriptName) || !entity) return false;
+        if (!entity.HasComponent<NativeScriptComponent>()) {
+            entity.AddComponent<NativeScriptComponent>(scriptName);
+        } else {
+            entity.GetComponent<NativeScriptComponent>().Bind(scriptName);
+        }
+        return true;
     }
 
     ScriptableEntity* ScriptRegistry::Create(const std::string& name) {

@@ -464,6 +464,23 @@ void EditorLayer::OnAttach() {
         m_SceneHierarchyPanel.SetSelectedAsset(path);
     });
 
+    // Flow 3: Package Entity from Scene Hierarchy to Content Browser as Prefab Assembly (.axle)
+    m_ContentBrowserPanel.SetPackageEntityCallback([this](uint32_t entityID, const std::filesystem::path& targetDir) {
+        if (!m_Scene || !m_Scene->GetRegistry().valid((entt::entity)entityID)) return;
+        Axle::Entity ent((entt::entity)entityID, m_Scene.get());
+        std::string baseName = ent.GetName().empty() ? "Entity_Prefab" : ent.GetName();
+        std::filesystem::path targetPath = targetDir / (baseName + ".axle");
+        int counter = 1;
+        while (std::filesystem::exists(targetPath)) {
+            targetPath = targetDir / (baseName + "_" + std::to_string(counter++) + ".axle");
+        }
+        if (Axle::AssemblySerializer::Serialize(targetPath, ent, m_PhysicsScene.get(), &m_SerializerContext)) {
+            Axle::AssetManager::GetOrCreateMetadata(targetPath);
+            m_ContentBrowserPanel.SetStatusNotification("Packaged Prefab Assembly: " + targetPath.filename().string());
+            AXLE_INFO("Packaged Entity '{0}' into Prefab Assembly '{1}'", ent.GetName(), targetPath.string());
+        }
+    });
+
     m_SceneHierarchyPanel.SetSpawnAssetCallback([this](const std::filesystem::path& path) {
         std::string ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
@@ -2130,6 +2147,89 @@ void EditorLayer::OnImGuiRender() {
                         m_SceneHierarchyPanel.SetSelectedEntity(entity);
                         AXLE_INFO("Instantiated 3D model '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})", 
                             entityTag, spawnPos.x, spawnPos.y, spawnPos.z);
+                    }
+                }
+            } else if (ext == ".amat" || ext == ".axlemat" || ext == ".mat") {
+                // Drop Material into Viewport onto an Entity under the cursor
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float mouseX = mousePos.x - viewportMin.x;
+                float mouseY = mousePos.y - viewportMin.y;
+
+                Axle::Entity hitEntity;
+                if (mouseX >= 0.0f && mouseX < viewportBounds.x && mouseY >= 0.0f && mouseY < viewportBounds.y) {
+                    float ndcX = (2.0f * (mouseX / viewportBounds.x)) - 1.0f;
+                    float ndcY = 1.0f - (2.0f * (mouseY / viewportBounds.y));
+
+                    glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
+                    glm::vec4 nearW = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+                    glm::vec4 farW = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+                    if (std::abs(nearW.w) > 1e-6f) nearW /= nearW.w;
+                    if (std::abs(farW.w) > 1e-6f) farW /= farW.w;
+
+                    glm::vec3 rayOrigin = glm::vec3(nearW);
+                    glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
+
+                    Axle::RayCastHit hit;
+                    if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
+                        hitEntity = m_Scene->FindEntityByBodyID(hit.HitBodyID);
+                    }
+                }
+
+                Axle::MaterialComponent droppedMat;
+                if (Axle::SceneHierarchyPanel::LoadMaterialAsset(assetPath, droppedMat)) {
+                    if (hitEntity) {
+                        if (hitEntity.HasComponent<Axle::MaterialComponent>()) {
+                            hitEntity.GetComponent<Axle::MaterialComponent>() = droppedMat;
+                        } else {
+                            hitEntity.AddComponent<Axle::MaterialComponent>(droppedMat);
+                        }
+                        m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
+                        AXLE_INFO("Applied Material '{0}' onto Entity '{1}' in Viewport",
+                            assetPath.stem().string(), hitEntity.GetName());
+                    } else {
+                        m_SceneHierarchyPanel.SetSelectedAsset(assetPath);
+                    }
+                }
+            } else if (ext == ".hpp" || ext == ".cpp") {
+                // Drop Script into Viewport onto an Entity under the cursor
+                std::string scriptName = assetPath.stem().string();
+                if (Axle::ScriptRegistry::Has(scriptName)) {
+                    ImVec2 mousePos = ImGui::GetMousePos();
+                    float mouseX = mousePos.x - viewportMin.x;
+                    float mouseY = mousePos.y - viewportMin.y;
+
+                    Axle::Entity hitEntity;
+                    if (mouseX >= 0.0f && mouseX < viewportBounds.x && mouseY >= 0.0f && mouseY < viewportBounds.y) {
+                        float ndcX = (2.0f * (mouseX / viewportBounds.x)) - 1.0f;
+                        float ndcY = 1.0f - (2.0f * (mouseY / viewportBounds.y));
+
+                        glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
+                        glm::vec4 nearW = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+                        glm::vec4 farW = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+                        if (std::abs(nearW.w) > 1e-6f) nearW /= nearW.w;
+                        if (std::abs(farW.w) > 1e-6f) farW /= farW.w;
+
+                        glm::vec3 rayOrigin = glm::vec3(nearW);
+                        glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
+
+                        Axle::RayCastHit hit;
+                        if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
+                            hitEntity = m_Scene->FindEntityByBodyID(hit.HitBodyID);
+                        }
+                    }
+
+                    if (!hitEntity) {
+                        hitEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+                    }
+
+                    if (hitEntity) {
+                        if (!hitEntity.HasComponent<Axle::NativeScriptComponent>()) {
+                            hitEntity.AddComponent<Axle::NativeScriptComponent>();
+                        }
+                        if (Axle::ScriptRegistry::BindByName(hitEntity, scriptName)) {
+                            m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
+                            AXLE_INFO("Attached NativeScript '{0}' onto Entity '{1}'", scriptName, hitEntity.GetName());
+                        }
                     }
                 }
             }

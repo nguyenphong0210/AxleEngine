@@ -6,6 +6,8 @@
 #include <Axle/AssetTypes.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/AssemblySerializer.hpp>
+#include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/PhysicsMaterial.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
 #include <algorithm>
@@ -427,6 +429,102 @@ namespace Axle {
             m_ThumbnailManager->Clear();
         }
         AssetManager::Sync(m_CurrentDirectory);
+    }
+
+    std::filesystem::path ContentBrowserPanel::CreateNewFolder(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / baseName;
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++));
+        }
+        std::error_code ec;
+        std::filesystem::create_directory(newPath, ec);
+        return newPath;
+    }
+
+    std::filesystem::path ContentBrowserPanel::CreateNewScene(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / (baseName + ".axlescene");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axlescene");
+        }
+        std::ofstream fout(newPath);
+        if (fout.is_open()) {
+            fout << "# Axle Scene Definition File\n";
+            fout << "Scene: " << newPath.stem().string() << "\n";
+            fout << "Entities:\n";
+            fout.close();
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
+    }
+
+    std::filesystem::path ContentBrowserPanel::CreateNewMaterial(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / (baseName + ".axlemat");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axlemat");
+        }
+        MaterialComponent defaultMat;
+        if (SceneHierarchyPanel::SaveMaterialAsset(newPath, defaultMat)) {
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
+    }
+
+    std::filesystem::path ContentBrowserPanel::CreateNewScript(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::string className = baseName;
+        std::filesystem::path newPath = parentDir / (className + ".hpp");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            className = baseName + "_" + std::to_string(counter++);
+            newPath = parentDir / (className + ".hpp");
+        }
+        std::ofstream fout(newPath);
+        if (fout.is_open()) {
+            fout << "#pragma once\n";
+            fout << "#include <Axle/ScriptableEntity.hpp>\n";
+            fout << "#include <Axle/ScriptRegistry.hpp>\n";
+            fout << "#include <Axle/Components.hpp>\n";
+            fout << "#include <Axle/Input.hpp>\n";
+            fout << "#include <Axle/KeyCodes.hpp>\n\n";
+            fout << "class " << className << " : public Axle::ScriptableEntity {\n";
+            fout << "public:\n";
+            fout << "    float Speed = 10.0f;\n";
+            fout << "    bool Enabled = true;\n\n";
+            fout << "    void OnCreate() override {\n";
+            fout << "        // Called once on play mode start\n";
+            fout << "    }\n\n";
+            fout << "    void OnUpdate(Axle::Timestep ts) override {\n";
+            fout << "        (void)ts;\n";
+            fout << "        // Update per-frame logic\n";
+            fout << "    }\n\n";
+            fout << "    void OnDestroy() override {\n";
+            fout << "        // Called on cleanup\n";
+            fout << "    }\n\n";
+            fout << "    AXLE_SCRIPT_FIELDS(" << className << ",\n";
+            fout << "        AXLE_FIELD(Speed, 0.0f, 100.0f, \"Movement speed\"),\n";
+            fout << "        AXLE_FIELD(Enabled, \"Enable script execution\")\n";
+            fout << "    )\n";
+            fout << "};\n\n";
+            fout << "AXLE_REGISTER_SCRIPT(" << className << ");\n";
+            fout.close();
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
+    }
+
+    std::filesystem::path ContentBrowserPanel::CreateNewPhysicsMaterial(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / (baseName + ".physmat");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".physmat");
+        }
+        PhysicsMaterial defaultPhysMat;
+        if (PhysicsMaterial::Save(newPath, defaultPhysMat)) {
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
     }
 
     void ContentBrowserPanel::SetStatusNotification(const std::string& message, float duration) {
@@ -996,6 +1094,35 @@ namespace Axle {
             // Right-click context menu on blank space
             if (ImGui::BeginPopupContextWindow(nullptr, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
                 if (ImGui::BeginMenu("Create")) {
+                    if (ImGui::MenuItem("New Folder")) {
+                        auto p = CreateNewFolder(m_CurrentDirectory);
+                        SetStatusNotification("Created Folder: " + p.filename().string());
+                        RefreshThumbnails();
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Scene (.axlescene)")) {
+                        auto p = CreateNewScene(m_CurrentDirectory);
+                        SetStatusNotification("Created Scene: " + p.filename().string());
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("Material Asset (.axlemat)")) {
+                        auto p = CreateNewMaterial(m_CurrentDirectory);
+                        SetStatusNotification("Created Material Asset: " + p.filename().string());
+                        if (m_OnSelectAssetCallback) {
+                            m_OnSelectAssetCallback(p);
+                        }
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("C++ Native Script (.hpp)")) {
+                        auto p = CreateNewScript(m_CurrentDirectory);
+                        SetStatusNotification("Created C++ Script: " + p.filename().string());
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("Physics Material (.physmat)")) {
+                        auto p = CreateNewPhysicsMaterial(m_CurrentDirectory);
+                        SetStatusNotification("Created Physics Material: " + p.filename().string());
+                        RefreshThumbnails();
+                    }
                     if (ImGui::MenuItem("Assembly (.axle)")) {
                         std::filesystem::path newAsmPath = m_CurrentDirectory / "New_Assembly.axle";
                         int counter = 1;
@@ -1003,50 +1130,12 @@ namespace Axle {
                             newAsmPath = m_CurrentDirectory / ("New_Assembly_" + std::to_string(counter++) + ".axle");
                         }
                         if (AssemblySerializer::CreateEmptyAssembly(newAsmPath, newAsmPath.stem().string())) {
+                            AssetManager::GetOrCreateMetadata(newAsmPath);
                             SetStatusNotification("Created Assembly: " + newAsmPath.filename().string());
                             if (m_OnOpenAssemblyCallback) {
                                 m_OnOpenAssemblyCallback(newAsmPath);
                             }
-                        }
-                    }
-                    if (ImGui::MenuItem("C++ Native Script (.hpp)")) {
-                        std::string baseName = "NewScript";
-                        std::filesystem::path newScriptPath = m_CurrentDirectory / (baseName + ".hpp");
-                        int counter = 1;
-                        while (std::filesystem::exists(newScriptPath)) {
-                            baseName = "NewScript_" + std::to_string(counter++);
-                            newScriptPath = m_CurrentDirectory / (baseName + ".hpp");
-                        }
-                        std::ofstream fout(newScriptPath);
-                        if (fout.is_open()) {
-                            fout << "#pragma once\n";
-                            fout << "#include <Axle/ScriptableEntity.hpp>\n";
-                            fout << "#include <Axle/ScriptRegistry.hpp>\n";
-                            fout << "#include <Axle/Components.hpp>\n";
-                            fout << "#include <Axle/Input.hpp>\n";
-                            fout << "#include <Axle/KeyCodes.hpp>\n\n";
-                            fout << "class " << baseName << " : public Axle::ScriptableEntity {\n";
-                            fout << "public:\n";
-                            fout << "    float Speed = 10.0f;\n";
-                            fout << "    bool Enabled = true;\n\n";
-                            fout << "    void OnCreate() override {\n";
-                            fout << "        // Called once on play mode start\n";
-                            fout << "    }\n\n";
-                            fout << "    void OnUpdate(Axle::Timestep ts) override {\n";
-                            fout << "        (void)ts;\n";
-                            fout << "        // Update per-frame logic\n";
-                            fout << "    }\n\n";
-                            fout << "    void OnDestroy() override {\n";
-                            fout << "        // Called on cleanup\n";
-                            fout << "    }\n\n";
-                            fout << "    AXLE_SCRIPT_FIELDS(" << baseName << ",\n";
-                            fout << "        AXLE_FIELD(Speed, 0.0f, 100.0f, \"Movement speed\"),\n";
-                            fout << "        AXLE_FIELD(Enabled, \"Enable script execution\")\n";
-                            fout << "    )\n";
-                            fout << "};\n\n";
-                            fout << "AXLE_REGISTER_SCRIPT(" << baseName << ");\n";
-                            fout.close();
-                            SetStatusNotification("Created C++ Script: " + newScriptPath.filename().string());
+                            RefreshThumbnails();
                         }
                     }
                     ImGui::EndMenu();

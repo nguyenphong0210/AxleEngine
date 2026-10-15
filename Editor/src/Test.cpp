@@ -7,6 +7,8 @@
 #include <Axle/AssetManager.hpp>
 #include <Axle/AssetMetadataSerializer.hpp>
 #include <Axle/AssetTypes.hpp>
+#include <Axle/ContentBrowserPanel.hpp>
+#include <Axle/PhysicsMaterial.hpp>
 #include "CarPlayerScript.hpp"
 #include <iostream>
 #include <fstream>
@@ -1706,6 +1708,173 @@ bool RunTest_Step14_Phase17_AssetUUIDAndMetaPipeline() {
 }
 
 // =============================================================================
+// TEST STEP 15: Phase 17.2 Right-Click Asset Creation Pipeline
+// =============================================================================
+bool RunTest_Step15_Phase17_RightClickAssetCreation() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 15 TEST] PHASE 17.2: RIGHT-CLICK ASSET CREATION   " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::filesystem::path testDir = "sandbox_creation_pipeline_test";
+    std::error_code ec;
+    std::filesystem::remove_all(testDir, ec);
+    std::filesystem::create_directories(testDir, ec);
+
+    Axle::AssetManager::Init(testDir);
+
+    // 1. Create New Folder & Collision Handling
+    std::cout << "[15.1] Testing New Folder creation and name deduplication..." << std::endl;
+    auto folder1 = Axle::ContentBrowserPanel::CreateNewFolder(testDir);
+    auto folder2 = Axle::ContentBrowserPanel::CreateNewFolder(testDir);
+
+    if (!std::filesystem::is_directory(folder1) || !std::filesystem::is_directory(folder2)) {
+        std::cerr << "FAIL: CreateNewFolder failed to create physical directory!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    if (folder1 == folder2 || folder2.filename().string() != "New_Folder_1") {
+        std::cerr << "FAIL: Name deduplication for folder failed! Expected New_Folder_1, got " 
+                  << folder2.filename().string() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Created '" << folder1.filename().string() 
+              << "' and '" << folder2.filename().string() << "' cleanly." << std::endl;
+
+    // 2. Create Scene (.axlescene) & Companion .meta
+    std::cout << "\n[15.2] Testing Scene (.axlescene) creation and companion .meta..." << std::endl;
+    auto scene1 = Axle::ContentBrowserPanel::CreateNewScene(testDir);
+    auto scene2 = Axle::ContentBrowserPanel::CreateNewScene(testDir);
+
+    auto sceneMeta1 = Axle::AssetMetadataSerializer::GetMetaPath(scene1);
+    if (!std::filesystem::exists(scene1) || !std::filesystem::exists(sceneMeta1)) {
+        std::cerr << "FAIL: CreateNewScene did not create scene file or companion .meta!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    if (scene2.filename().string() != "New_Scene_1.axlescene") {
+        std::cerr << "FAIL: Scene deduplication failed! Got " << scene2.filename().string() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    Axle::AssetMetadata sceneMeta;
+    if (!Axle::AssetMetadataSerializer::Deserialize(sceneMeta1, sceneMeta) || sceneMeta.Type != Axle::AssetType::Scene) {
+        std::cerr << "FAIL: Scene companion .meta invalid or wrong AssetType!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Scene '" << scene1.filename().string() << "' created with .meta [UUID: " 
+              << (uint64_t)sceneMeta.Handle << "]" << std::endl;
+
+    // 3. Create Material Asset (.axlemat) & Default PBR Values
+    std::cout << "\n[15.3] Testing Material Asset (.axlemat) creation..." << std::endl;
+    auto mat1 = Axle::ContentBrowserPanel::CreateNewMaterial(testDir);
+    auto mat2 = Axle::ContentBrowserPanel::CreateNewMaterial(testDir);
+
+    auto matMeta1 = Axle::AssetMetadataSerializer::GetMetaPath(mat1);
+    if (!std::filesystem::exists(mat1) || !std::filesystem::exists(matMeta1)) {
+        std::cerr << "FAIL: CreateNewMaterial did not write material file or companion .meta!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    if (mat2.filename().string() != "New_Material_1.axlemat") {
+        std::cerr << "FAIL: Material deduplication failed! Got " << mat2.filename().string() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    Axle::MaterialComponent loadedMat;
+    if (!Axle::SceneHierarchyPanel::LoadMaterialAsset(mat1, loadedMat)) {
+        std::cerr << "FAIL: Could not load created .axlemat material file!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Material '" << mat1.filename().string() 
+              << "' created with default Albedo: (" << loadedMat.AlbedoColor.r << ", " 
+              << loadedMat.AlbedoColor.g << ", " << loadedMat.AlbedoColor.b << ")" << std::endl;
+
+    // 4. Create C++ Script (.hpp) & Boilerplate
+    std::cout << "\n[15.4] Testing C++ Script (.hpp) boilerplate creation..." << std::endl;
+    auto script1 = Axle::ContentBrowserPanel::CreateNewScript(testDir);
+    auto script2 = Axle::ContentBrowserPanel::CreateNewScript(testDir);
+
+    auto scriptMeta1 = Axle::AssetMetadataSerializer::GetMetaPath(script1);
+    if (!std::filesystem::exists(script1) || !std::filesystem::exists(scriptMeta1)) {
+        std::cerr << "FAIL: CreateNewScript did not write script file or companion .meta!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    if (script2.filename().string() != "NewScript_1.hpp") {
+        std::cerr << "FAIL: Script deduplication failed! Got " << script2.filename().string() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Verify script contains AXLE_SCRIPT_FIELDS and AXLE_REGISTER_SCRIPT
+    std::ifstream scriptIn(script1);
+    std::string scriptContent((std::istreambuf_iterator<char>(scriptIn)), std::istreambuf_iterator<char>());
+    scriptIn.close();
+    if (scriptContent.find("AXLE_SCRIPT_FIELDS") == std::string::npos ||
+        scriptContent.find("AXLE_REGISTER_SCRIPT") == std::string::npos) {
+        std::cerr << "FAIL: Generated C++ script does not contain required reflection macros!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: C++ Script boilerplate with reflection macro verified." << std::endl;
+
+    // 5. Create Physics Material (.physmat) & Restitution/Friction Validation
+    std::cout << "\n[15.5] Testing Physics Material (.physmat) creation..." << std::endl;
+    auto phys1 = Axle::ContentBrowserPanel::CreateNewPhysicsMaterial(testDir);
+    auto phys2 = Axle::ContentBrowserPanel::CreateNewPhysicsMaterial(testDir);
+
+    auto physMeta1 = Axle::AssetMetadataSerializer::GetMetaPath(phys1);
+    if (!std::filesystem::exists(phys1) || !std::filesystem::exists(physMeta1)) {
+        std::cerr << "FAIL: CreateNewPhysicsMaterial did not create file or companion .meta!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    if (phys2.filename().string() != "New_PhysicsMaterial_1.physmat") {
+        std::cerr << "FAIL: PhysicsMaterial deduplication failed! Got " << phys2.filename().string() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    Axle::PhysicsMaterial loadedPhys;
+    if (!Axle::PhysicsMaterial::Load(phys1, loadedPhys)) {
+        std::cerr << "FAIL: PhysicsMaterial::Load failed to parse .physmat file!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    if (std::abs(loadedPhys.Friction - 0.5f) > 0.01f || std::abs(loadedPhys.Restitution - 0.0f) > 0.01f) {
+        std::cerr << "FAIL: Physics material values do not match defaults!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Physics Material created with Friction: " << loadedPhys.Friction 
+              << ", Restitution: " << loadedPhys.Restitution << std::endl;
+
+    // 6. Verify all created assets are indexed in AssetManager
+    std::cout << "\n[15.6] Verifying all assets indexed in AssetManager..." << std::endl;
+    if (!Axle::AssetManager::HasAsset(scene1) ||
+        !Axle::AssetManager::HasAsset(mat1) ||
+        !Axle::AssetManager::HasAsset(script1) ||
+        !Axle::AssetManager::HasAsset(phys1)) {
+        std::cerr << "FAIL: Created assets missing from AssetManager registry!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: All created assets registered in AssetManager with persistent UUIDs." << std::endl;
+
+    // Cleanup
+    Axle::AssetManager::Shutdown();
+    std::filesystem::remove_all(testDir, ec);
+
+    std::cout << ">>> STEP 15 PASSED: Phase 17.2 Right-Click Asset Creation verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -1726,12 +1895,13 @@ int main(int argc, char** argv) {
         else if (arg == "12" || arg == "step12" || arg == "--step12" || arg == "--phase16.3") targetStep = 12;
         else if (arg == "13" || arg == "step13" || arg == "--step13" || arg == "--phase16.4") targetStep = 13;
         else if (arg == "14" || arg == "step14" || arg == "--step14" || arg == "--phase17" || arg == "--phase17.1") targetStep = 14;
+        else if (arg == "15" || arg == "step15" || arg == "--step15" || arg == "--phase17.2") targetStep = 15;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 14 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 15 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -1780,6 +1950,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 14) {
         if (!RunTest_Step14_Phase17_AssetUUIDAndMetaPipeline()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 15) {
+        if (!RunTest_Step15_Phase17_RightClickAssetCreation()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

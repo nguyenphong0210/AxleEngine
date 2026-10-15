@@ -29,6 +29,13 @@ namespace Axle {
         void RefreshThumbnails();
         void SetStatusNotification(const std::string& message, float duration = 4.0f);
 
+        // Asset Creation API (Right-Click Menu & Programmatic Creation)
+        static std::filesystem::path CreateNewFolder(const std::filesystem::path& parentDir, const std::string& baseName = "New_Folder");
+        static std::filesystem::path CreateNewScene(const std::filesystem::path& parentDir, const std::string& baseName = "New_Scene");
+        static std::filesystem::path CreateNewMaterial(const std::filesystem::path& parentDir, const std::string& baseName = "New_Material");
+        static std::filesystem::path CreateNewScript(const std::filesystem::path& parentDir, const std::string& baseName = "NewScript");
+        static std::filesystem::path CreateNewPhysicsMaterial(const std::filesystem::path& parentDir, const std::string& baseName = "New_PhysicsMaterial");
+
         void OnImGuiRender(bool* p_open = nullptr);
 
     private:

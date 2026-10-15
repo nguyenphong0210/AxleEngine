@@ -333,7 +333,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Dual-Context Properties Inspector**: Support seamless switching between `InspectorMode::Entity` (inspecting active scene entity) and `InspectorMode::Asset` (inspecting `.axlemat` materials or `.axle` assemblies from Content Browser).
 - [ ] **Phase 17: Content Browser & Material/Asset System (.meta & Physical Asset Creation)**
   - [x] **Asset UUID & `.meta` File Pipeline**: Auto-generate `.meta` companion files storing persistent 64-bit UUIDs for assets in `Assets/` for path-independent referencing.
-  - [ ] **Right-Click Asset Creation**: Right-click blank space in Content Browser to create `New Folder`, `Scene (.axlescene)`, `Material Asset (.amat / .axlemat)`, `C++ Script (.hpp)`, and `Physics Material (.physmat)`.
+  - [x] **Right-Click Asset Creation**: Right-click blank space in Content Browser to create `New Folder`, `Scene (.axlescene)`, `Material Asset (.amat / .axlemat)`, `C++ Script (.hpp)`, and `Physics Material (.physmat)`.
   - [ ] **Dedicated Material Inspector**: Selecting `.amat` in Content Browser switches Properties panel into interactive PBR Material editor (Albedo, Roughness, Metallic, Texture slots).
 - [ ] **Phase 18: Integrated Drag & Drop Pipelines & Safe Simulation State (Snapshot/Clone Scene)**
   - [ ] **Full 3-Flow ImGui Drag & Drop**: Connect `"CONTENT_BROWSER_ITEM"` to Viewport/Hierarchy (Flow 1) and Properties (Flow 2); connect `"SCENE_HIERARCHY_ENTITY"` to Hierarchy reparenting, Script Target slots, and Content Browser prefab packaging (Flow 3).

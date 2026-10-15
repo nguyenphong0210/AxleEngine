@@ -41,6 +41,7 @@ namespace Axle {
         Scene,
         Project,
         Material,
+        PhysicsMaterial,
         Script,
         Document,
         Other
@@ -82,8 +83,11 @@ namespace Axle {
         if (ext == ".axleproj") {
             return { AssetKind::Project, "Axle Project", "PRJ", IM_COL32(0, 210, 180, 255) };
         }
-        if (ext == ".axlemat" || ext == ".mat") {
+        if (ext == ".axlemat" || ext == ".amat" || ext == ".mat") {
             return { AssetKind::Material, "Material", "MAT", IM_COL32(255, 135, 45, 255) };
+        }
+        if (ext == ".physmat") {
+            return { AssetKind::PhysicsMaterial, "Physics Material", "PHY", IM_COL32(255, 165, 50, 255) };
         }
         if (ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".lua" || ext == ".py") {
             return { AssetKind::Script, "Source Code", "CODE", IM_COL32(75, 160, 245, 255) };
@@ -984,9 +988,10 @@ namespace Axle {
                             case AssetKind::Texture:  DrawTexturePictureIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Shader:   DrawShaderIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Scene:    DrawSceneIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Project:  DrawProjectIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Material: DrawMaterialIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Script:   DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(75, 160, 245, 230)); break;
+                            case AssetKind::Project:         DrawProjectIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Material:        
+                            case AssetKind::PhysicsMaterial: DrawMaterialIcon(drawList, iconCenter, iconScale); break;
+                            case AssetKind::Script:          DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(75, 160, 245, 230)); break;
                             case AssetKind::Document: DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(150, 165, 185, 230)); break;
                             default:                  DrawGenericFileIcon(drawList, iconCenter, iconScale); break;
                         }

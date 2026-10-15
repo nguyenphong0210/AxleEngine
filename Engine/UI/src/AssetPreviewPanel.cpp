@@ -535,6 +535,13 @@ namespace Axle {
         }
     }
 
+    void AssetPreviewPanel::UpdateMaterialPreview(const MaterialComponent& mat) {
+        if (!m_CurrentPackage.Parts.empty()) {
+            m_CurrentPackage.Parts[0].LoadedMesh.SourceData.ColorPrimary = mat.AlbedoColor;
+            m_CurrentPackage.Parts[0].LoadedMesh.SourceData.ColorSecondary = mat.AlbedoColor * 0.85f;
+        }
+    }
+
     void AssetPreviewPanel::RenderPreviewViewport() {
         if (!m_HasAsset) return;
 

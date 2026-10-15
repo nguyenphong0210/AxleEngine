@@ -29,6 +29,7 @@ namespace Axle {
         size_t GetTotalTriangles() const { return m_TotalTriangles; }
 
         void SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh, const SceneSerializerContext* serializerContext = nullptr);
+        void UpdateMaterialPreview(const MaterialComponent& mat);
 
         void RenderPreviewViewport();
         void OnImGuiRender(bool* p_open = nullptr);

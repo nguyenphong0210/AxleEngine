@@ -2779,52 +2779,60 @@ namespace Axle {
 
         bool changed = false;
 
-        // Material Presets Card
+        // 1. Material Presets Card (12 Professional Presets)
         if (ImGui::CollapsingHeader("Material Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
-            float btnW = (ImGui::GetContentRegionAvail().x - 8.0f) / 3.0f;
-            if (ImGui::Button("Gold", ImVec2(btnW, 26.0f))) {
-                m_ActiveMaterialAsset.SetPresetGold();
-                changed = true;
-            }
+            float btnW = (ImGui::GetContentRegionAvail().x - 12.0f) / 4.0f;
+            
+            // Row 1: Metals & Minerals
+            if (ImGui::Button("Gold", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetGold(); changed = true; }
             ImGui::SameLine();
-            if (ImGui::Button("Aluminum", ImVec2(btnW, 26.0f))) {
-                m_ActiveMaterialAsset.SetPresetAluminum();
-                changed = true;
-            }
+            if (ImGui::Button("Aluminum", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetAluminum(); changed = true; }
             ImGui::SameLine();
-            if (ImGui::Button("Obsidian", ImVec2(btnW, 26.0f))) {
-                m_ActiveMaterialAsset.SetPresetObsidian();
-                changed = true;
-            }
+            if (ImGui::Button("Obsidian", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetObsidian(); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Chrome", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetChrome(); changed = true; }
 
-            if (ImGui::Button("Rubber", ImVec2(btnW, 26.0f))) {
-                m_ActiveMaterialAsset.SetPresetRubber();
-                changed = true;
-            }
+            // Row 2: Automotive & Industrial
+            if (ImGui::Button("Rubber", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetRubber(); changed = true; }
             ImGui::SameLine();
-            if (ImGui::Button("Headlight LED", ImVec2(btnW, 26.0f))) {
-                m_ActiveMaterialAsset.SetPresetHeadlightLED();
-                changed = true;
-            }
+            if (ImGui::Button("Plastic", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetPlastic(); changed = true; }
             ImGui::SameLine();
-            if (ImGui::Button("Taillight LED", ImVec2(btnW, 26.0f))) {
-                m_ActiveMaterialAsset.SetPresetTaillightLED();
-                changed = true;
-            }
+            if (ImGui::Button("Copper", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCopper(); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Cast Iron", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCastIron(); changed = true; }
+
+            // Row 3: Car Paint & Lighting
+            if (ImGui::Button("Paint Red", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCarPaintRed(); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Paint Blue", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCarPaintBlue(); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Headlight", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetHeadlightLED(); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Taillight", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetTaillightLED(); changed = true; }
         }
 
         ImGui::Spacing();
 
+        // 2. Interactive PBR Surface Properties
         if (ImGui::CollapsingHeader("PBR Surface Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
-            // Albedo
+            // Albedo Color
             if (ImGui::ColorEdit4("Albedo Color", glm::value_ptr(m_ActiveMaterialAsset.AlbedoColor))) {
                 changed = true;
             }
 
+            // Albedo Texture Slot
+            ImGui::TextDisabled("Albedo Map");
+            if (m_ActiveMaterialAsset.UseAlbedoMap && m_ActiveMaterialAsset.AlbedoMap && m_ActiveMaterialAsset.AlbedoMap->IsLoaded()) {
+                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.AlbedoMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
+                ImGui::SameLine();
+            }
             char albedoBuf[256];
             std::memset(albedoBuf, 0, sizeof(albedoBuf));
             std::strncpy(albedoBuf, m_ActiveMaterialAsset.AlbedoPath.c_str(), sizeof(albedoBuf) - 1);
-            if (ImGui::InputText("Albedo Texture", albedoBuf, sizeof(albedoBuf))) {
+            float clearBtnW = 24.0f;
+            float inputW = ImGui::GetContentRegionAvail().x - clearBtnW - 6.0f;
+            ImGui::SetNextItemWidth(inputW);
+            if (ImGui::InputText("##AlbedoTexture", albedoBuf, sizeof(albedoBuf))) {
                 m_ActiveMaterialAsset.SetAlbedo(albedoBuf);
                 changed = true;
             }
@@ -2836,6 +2844,11 @@ namespace Axle {
                 }
                 ImGui::EndDragDropTarget();
             }
+            ImGui::SameLine();
+            if (ImGui::Button("X##ClearAlbedo", ImVec2(clearBtnW, 0.0f))) {
+                m_ActiveMaterialAsset.SetAlbedo("");
+                changed = true;
+            }
 
             ImGui::Separator();
 
@@ -2843,10 +2856,16 @@ namespace Axle {
             if (ImGui::SliderFloat("Roughness", &m_ActiveMaterialAsset.Roughness, 0.0f, 1.0f, "%.2f")) {
                 changed = true;
             }
+            ImGui::TextDisabled("Roughness Map");
+            if (m_ActiveMaterialAsset.UseRoughnessMap && m_ActiveMaterialAsset.RoughnessMap && m_ActiveMaterialAsset.RoughnessMap->IsLoaded()) {
+                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.RoughnessMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
+                ImGui::SameLine();
+            }
             char roughBuf[256];
             std::memset(roughBuf, 0, sizeof(roughBuf));
             std::strncpy(roughBuf, m_ActiveMaterialAsset.RoughnessPath.c_str(), sizeof(roughBuf) - 1);
-            if (ImGui::InputText("Roughness Map", roughBuf, sizeof(roughBuf))) {
+            ImGui::SetNextItemWidth(inputW);
+            if (ImGui::InputText("##RoughnessMap", roughBuf, sizeof(roughBuf))) {
                 m_ActiveMaterialAsset.SetRoughnessMap(roughBuf);
                 changed = true;
             }
@@ -2858,6 +2877,11 @@ namespace Axle {
                 }
                 ImGui::EndDragDropTarget();
             }
+            ImGui::SameLine();
+            if (ImGui::Button("X##ClearRoughness", ImVec2(clearBtnW, 0.0f))) {
+                m_ActiveMaterialAsset.SetRoughnessMap("");
+                changed = true;
+            }
 
             ImGui::Separator();
 
@@ -2865,10 +2889,16 @@ namespace Axle {
             if (ImGui::SliderFloat("Metallic", &m_ActiveMaterialAsset.Metallic, 0.0f, 1.0f, "%.2f")) {
                 changed = true;
             }
+            ImGui::TextDisabled("Metallic Map");
+            if (m_ActiveMaterialAsset.UseMetallicMap && m_ActiveMaterialAsset.MetallicMap && m_ActiveMaterialAsset.MetallicMap->IsLoaded()) {
+                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.MetallicMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
+                ImGui::SameLine();
+            }
             char metalBuf[256];
             std::memset(metalBuf, 0, sizeof(metalBuf));
             std::strncpy(metalBuf, m_ActiveMaterialAsset.MetallicPath.c_str(), sizeof(metalBuf) - 1);
-            if (ImGui::InputText("Metallic Map", metalBuf, sizeof(metalBuf))) {
+            ImGui::SetNextItemWidth(inputW);
+            if (ImGui::InputText("##MetallicMap", metalBuf, sizeof(metalBuf))) {
                 m_ActiveMaterialAsset.SetMetallicMap(metalBuf);
                 changed = true;
             }
@@ -2880,17 +2910,28 @@ namespace Axle {
                 }
                 ImGui::EndDragDropTarget();
             }
+            ImGui::SameLine();
+            if (ImGui::Button("X##ClearMetallic", ImVec2(clearBtnW, 0.0f))) {
+                m_ActiveMaterialAsset.SetMetallicMap("");
+                changed = true;
+            }
 
             ImGui::Separator();
 
-            // Normal
+            // Normal Map
             if (ImGui::SliderFloat("Normal Strength", &m_ActiveMaterialAsset.NormalStrength, 0.0f, 5.0f, "%.2f")) {
                 changed = true;
+            }
+            ImGui::TextDisabled("Normal Map");
+            if (m_ActiveMaterialAsset.UseNormalMap && m_ActiveMaterialAsset.NormalMap && m_ActiveMaterialAsset.NormalMap->IsLoaded()) {
+                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.NormalMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
+                ImGui::SameLine();
             }
             char normalBuf[256];
             std::memset(normalBuf, 0, sizeof(normalBuf));
             std::strncpy(normalBuf, m_ActiveMaterialAsset.NormalPath.c_str(), sizeof(normalBuf) - 1);
-            if (ImGui::InputText("Normal Map", normalBuf, sizeof(normalBuf))) {
+            ImGui::SetNextItemWidth(inputW);
+            if (ImGui::InputText("##NormalMap", normalBuf, sizeof(normalBuf))) {
                 m_ActiveMaterialAsset.SetNormal(normalBuf);
                 changed = true;
             }
@@ -2901,6 +2942,11 @@ namespace Axle {
                     changed = true;
                 }
                 ImGui::EndDragDropTarget();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("X##ClearNormal", ImVec2(clearBtnW, 0.0f))) {
+                m_ActiveMaterialAsset.SetNormal("");
+                changed = true;
             }
 
             ImGui::Separator();
@@ -2926,6 +2972,11 @@ namespace Axle {
             if (ImGui::SmallButton("4x4")) { m_ActiveMaterialAsset.UVScale = glm::vec2(4.0f); changed = true; }
             ImGui::SameLine();
             if (ImGui::SmallButton("8x8")) { m_ActiveMaterialAsset.UVScale = glm::vec2(8.0f); changed = true; }
+        }
+
+        // 3. Live 3D Preview Synchronization
+        if (changed && m_AssetPreviewPanel) {
+            m_AssetPreviewPanel->UpdateMaterialPreview(m_ActiveMaterialAsset);
         }
 
         ImGui::Spacing();

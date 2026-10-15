@@ -1877,6 +1877,154 @@ bool RunTest_Step15_Phase17_RightClickAssetCreation() {
 }
 
 // =============================================================================
+// STEP 16: PHASE 17.3 DEDICATED MATERIAL INSPECTOR TEST
+// =============================================================================
+bool RunTest_Step16_Phase17_DedicatedMaterialInspector() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 16 TEST] PHASE 17.3 DEDICATED MATERIAL INSPECTOR  " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::filesystem::path testDir = "sandbox_mat_inspector_test";
+    std::error_code ec;
+    std::filesystem::remove_all(testDir, ec);
+    std::filesystem::create_directories(testDir, ec);
+
+    Axle::AssetManager::Init(testDir);
+
+    // 1. Dual Format (.amat & .axlemat) Persistence & Serialization Roundtrip
+    std::cout << "\n[16.1] Testing Dual-Format (.amat & .axlemat) Persistence..." << std::endl;
+    std::filesystem::path amatPath = testDir / "RacingPaint.amat";
+    std::filesystem::path axlematPath = testDir / "GoldMetal.axlemat";
+
+    Axle::MaterialComponent mat1;
+    mat1.AlbedoColor = glm::vec4(0.88f, 0.12f, 0.15f, 0.95f);
+    mat1.AlbedoPath = "textures/paint_base.png";
+    mat1.UseAlbedoMap = true;
+    mat1.NormalPath = "textures/paint_normal.png";
+    mat1.UseNormalMap = true;
+    mat1.NormalStrength = 2.2f;
+    mat1.Roughness = 0.18f;
+    mat1.RoughnessPath = "textures/paint_rough.png";
+    mat1.UseRoughnessMap = true;
+    mat1.Metallic = 0.90f;
+    mat1.MetallicPath = "textures/paint_metal.png";
+    mat1.UseMetallicMap = true;
+    mat1.EmissionColor = glm::vec3(0.8f, 0.1f, 0.1f);
+    mat1.EmissionIntensity = 3.5f;
+    mat1.UVScale = glm::vec2(2.5f, 2.5f);
+
+    if (!Axle::SceneHierarchyPanel::SaveMaterialAsset(amatPath, mat1)) {
+        std::cerr << "FAIL: Failed to save .amat material file!" << std::endl;
+        return false;
+    }
+
+    Axle::MaterialComponent loadedAmat;
+    if (!Axle::SceneHierarchyPanel::LoadMaterialAsset(amatPath, loadedAmat)) {
+        std::cerr << "FAIL: Failed to load .amat material file!" << std::endl;
+        return false;
+    }
+
+    if (std::abs(loadedAmat.AlbedoColor.r - 0.88f) > 1e-3f ||
+        std::abs(loadedAmat.Roughness - 0.18f) > 1e-3f ||
+        std::abs(loadedAmat.Metallic - 0.90f) > 1e-3f ||
+        std::abs(loadedAmat.NormalStrength - 2.2f) > 1e-3f ||
+        std::abs(loadedAmat.EmissionIntensity - 3.5f) > 1e-3f ||
+        std::abs(loadedAmat.UVScale.x - 2.5f) > 1e-3f ||
+        loadedAmat.AlbedoPath != "textures/paint_base.png" ||
+        loadedAmat.NormalPath != "textures/paint_normal.png" ||
+        loadedAmat.RoughnessPath != "textures/paint_rough.png" ||
+        loadedAmat.MetallicPath != "textures/paint_metal.png") {
+        std::cerr << "FAIL: Loaded .amat material parameter mismatch!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: .amat file format saved and loaded with 100% parameter fidelity." << std::endl;
+
+    // Save and load .axlemat
+    Axle::MaterialComponent mat2;
+    mat2.SetPresetGold();
+    mat2.UVScale = glm::vec2(4.0f, 4.0f);
+    if (!Axle::SceneHierarchyPanel::SaveMaterialAsset(axlematPath, mat2)) {
+        std::cerr << "FAIL: Failed to save .axlemat material file!" << std::endl;
+        return false;
+    }
+    Axle::MaterialComponent loadedAxlemat;
+    if (!Axle::SceneHierarchyPanel::LoadMaterialAsset(axlematPath, loadedAxlemat)) {
+        std::cerr << "FAIL: Failed to load .axlemat material file!" << std::endl;
+        return false;
+    }
+    if (std::abs(loadedAxlemat.Metallic - 1.0f) > 1e-3f ||
+        std::abs(loadedAxlemat.Roughness - 0.18f) > 1e-3f ||
+        std::abs(loadedAxlemat.UVScale.x - 4.0f) > 1e-3f) {
+        std::cerr << "FAIL: Loaded .axlemat Gold preset parameter mismatch!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: .axlemat file format verified with Gold preset." << std::endl;
+
+    // 2. Testing Material Presets
+    std::cout << "\n[16.2] Testing Material Presets Library..." << std::endl;
+    Axle::MaterialComponent presetMat;
+    presetMat.SetPresetChrome();
+    if (presetMat.Metallic != 1.0f || presetMat.Roughness != 0.04f) {
+        std::cerr << "FAIL: Chrome preset properties incorrect!" << std::endl;
+        return false;
+    }
+    presetMat.SetPresetRubber();
+    if (presetMat.Metallic != 0.0f || presetMat.Roughness != 0.85f) {
+        std::cerr << "FAIL: Rubber preset properties incorrect!" << std::endl;
+        return false;
+    }
+    presetMat.SetPresetObsidian();
+    if (presetMat.Metallic != 0.0f || presetMat.Roughness != 0.08f) {
+        std::cerr << "FAIL: Obsidian preset properties incorrect!" << std::endl;
+        return false;
+    }
+    presetMat.SetPresetHeadlightLED();
+    if (presetMat.EmissionIntensity != 5.0f || presetMat.Roughness != 0.10f) {
+        std::cerr << "FAIL: Headlight LED preset properties incorrect!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: All PBR material presets verified (Chrome, Rubber, Obsidian, Headlight LED)." << std::endl;
+
+    // 3. Testing Applying Material to Entity
+    std::cout << "\n[16.3] Testing Application to Scene Entity..." << std::endl;
+    auto testScene = std::make_shared<Axle::Scene>();
+    auto ent = testScene->CreateEntity("CyberCar");
+    ent.AddComponent<Axle::TransformComponent>();
+    
+    // Apply material asset to entity
+    auto& comp = ent.AddComponent<Axle::MaterialComponent>(loadedAmat);
+    if (comp.AlbedoPath != "textures/paint_base.png" ||
+        std::abs(comp.Roughness - 0.18f) > 1e-3f ||
+        std::abs(comp.Metallic - 0.90f) > 1e-3f) {
+        std::cerr << "FAIL: Entity MaterialComponent did not receive material asset properties!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Applied material asset directly to Entity 'CyberCar'." << std::endl;
+
+    // 4. Testing .meta file Companion Generation for .amat and .axlemat
+    std::cout << "\n[16.4] Testing .meta file companion for .amat and .axlemat..." << std::endl;
+    auto metaAmat = Axle::AssetManager::GetOrCreateMetadata(amatPath);
+    auto metaAxlemat = Axle::AssetManager::GetOrCreateMetadata(axlematPath);
+
+    if (metaAmat.Type != Axle::AssetType::Material || metaAxlemat.Type != Axle::AssetType::Material) {
+        std::cerr << "FAIL: Material asset files not categorized as AssetType::Material!" << std::endl;
+        return false;
+    }
+    if (metaAmat.Handle == 0 || metaAxlemat.Handle == 0) {
+        std::cerr << "FAIL: Material asset files received invalid UUID!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Both .amat and .axlemat recognized as AssetType::Material with valid UUIDs." << std::endl;
+
+    // Cleanup
+    Axle::AssetManager::Shutdown();
+    std::filesystem::remove_all(testDir, ec);
+
+    std::cout << ">>> STEP 16 PASSED: Phase 17.3 Dedicated Material Inspector verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -1898,12 +2046,13 @@ int main(int argc, char** argv) {
         else if (arg == "13" || arg == "step13" || arg == "--step13" || arg == "--phase16.4") targetStep = 13;
         else if (arg == "14" || arg == "step14" || arg == "--step14" || arg == "--phase17" || arg == "--phase17.1") targetStep = 14;
         else if (arg == "15" || arg == "step15" || arg == "--step15" || arg == "--phase17.2") targetStep = 15;
+        else if (arg == "16" || arg == "step16" || arg == "--step16" || arg == "--phase17.3") targetStep = 16;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 15 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 16 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -1955,6 +2104,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 15) {
         if (!RunTest_Step15_Phase17_RightClickAssetCreation()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 16) {
+        if (!RunTest_Step16_Phase17_DedicatedMaterialInspector()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

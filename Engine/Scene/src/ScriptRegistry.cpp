@@ -2,6 +2,7 @@
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
+#include <unordered_set>
 
 namespace Axle {
 
@@ -10,8 +11,33 @@ namespace Axle {
         return s_Registry;
     }
 
-    void ScriptRegistry::RegisterMetadata(const std::string& name, const ScriptMetadata& meta) {
+    static std::unordered_set<std::string>& GetDynamicScriptsSet() {
+        static std::unordered_set<std::string> s_DynamicScripts;
+        return s_DynamicScripts;
+    }
+
+    void ScriptRegistry::RegisterMetadata(const std::string& name, const ScriptMetadata& meta, bool isDynamic) {
         GetRegistryMap()[name] = meta;
+        if (isDynamic) {
+            GetDynamicScriptsSet().insert(name);
+        }
+    }
+
+    void ScriptRegistry::UnregisterMetadata(const std::string& name) {
+        GetRegistryMap().erase(name);
+        GetDynamicScriptsSet().erase(name);
+    }
+
+    void ScriptRegistry::ClearDynamicScripts() {
+        auto& map = GetRegistryMap();
+        for (const auto& name : GetDynamicScriptsSet()) {
+            map.erase(name);
+        }
+        GetDynamicScriptsSet().clear();
+    }
+
+    bool ScriptRegistry::IsDynamicScript(const std::string& name) {
+        return GetDynamicScriptsSet().find(name) != GetDynamicScriptsSet().end();
     }
 
     const std::unordered_map<std::string, ScriptMetadata>& ScriptRegistry::GetScripts() {

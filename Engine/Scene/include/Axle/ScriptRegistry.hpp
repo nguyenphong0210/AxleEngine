@@ -1,6 +1,7 @@
 #pragma once
 #include <Axle/Types.hpp>
 #include <Axle/ScriptField.hpp>
+#include <Axle/ScriptModule.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -9,13 +10,6 @@ namespace Axle {
 
     class ScriptableEntity;
     class Entity;
-
-    struct ScriptMetadata {
-        std::string Name;
-        ScriptableEntity* (*Factory)() = nullptr;
-        void (*Destroyer)(ScriptableEntity*) = nullptr;
-        std::vector<ScriptField> Fields;
-    };
 
     class ScriptRegistry {
     public:
@@ -36,7 +30,7 @@ namespace Axle {
             }
             meta.Fields = fieldReg.GetFields();
 
-            RegisterMetadata(name, meta);
+            RegisterMetadata(name, meta, false);
         }
 
         static const std::unordered_map<std::string, ScriptMetadata>& GetScripts();
@@ -46,12 +40,24 @@ namespace Axle {
         static ScriptableEntity* Create(const std::string& name);
         static void Destroy(const std::string& name, ScriptableEntity* instance);
 
-    private:
-        static void RegisterMetadata(const std::string& name, const ScriptMetadata& meta);
+        // Dynamic DLL Metadata Registration & Lifecycle
+        static void RegisterMetadata(const std::string& name, const ScriptMetadata& meta, bool isDynamic = false);
+        static void UnregisterMetadata(const std::string& name);
+        static void ClearDynamicScripts();
+        static bool IsDynamicScript(const std::string& name);
     };
 
 }
 
+#ifdef AXLE_SCRIPTS_DLL
+#define AXLE_REGISTER_SCRIPT(Type) \
+    namespace { \
+        struct Type##_Registrar { \
+            Type##_Registrar() { ::Axle::ScriptModuleRegistry::Register<Type>(#Type); } \
+        }; \
+        inline static Type##_Registrar s_##Type##_Registrar; \
+    }
+#else
 #define AXLE_REGISTER_SCRIPT(Type) \
     namespace { \
         struct Type##_Registrar { \
@@ -59,3 +65,4 @@ namespace Axle {
         }; \
         inline static Type##_Registrar s_##Type##_Registrar; \
     }
+#endif

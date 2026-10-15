@@ -17,6 +17,13 @@
 #include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 // =============================================================================
 // TEST STEP 1: Core Static Reflection & Script Registry
 // =============================================================================
@@ -2333,6 +2340,102 @@ bool RunTest_Step18_Phase18_SafeSceneStateSimulation() {
 }
 
 // =============================================================================
+// STEP 19: PHASE 18.3 DECOUPLED AXLESCRIPTS.DLL SHARED MODULE & EXPORT API
+// =============================================================================
+bool RunTest_Step19_Phase18_DecoupledAxleScriptsModule() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 19 TEST] PHASE 18.3 DECOUPLED AXLESCRIPTS.DLL MODULE" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::cout << "\n[19.1] Locating AxleScripts.dll binary..." << std::endl;
+    std::filesystem::path dllPath = "build/Editor/Release/AxleScripts.dll";
+    if (!std::filesystem::exists(dllPath)) {
+        dllPath = "AxleScripts.dll";
+    }
+    if (!std::filesystem::exists(dllPath)) {
+        char exePath[MAX_PATH];
+        GetModuleFileNameA(NULL, exePath, MAX_PATH);
+        dllPath = std::filesystem::path(exePath).parent_path() / "AxleScripts.dll";
+    }
+
+    std::cout << "  -> DLL Path: " << dllPath.string() << std::endl;
+    assert(std::filesystem::exists(dllPath));
+    std::cout << "  -> PASS: AxleScripts.dll exists on disk." << std::endl;
+
+    std::cout << "\n[19.2] Dynamically loading AxleScripts.dll..." << std::endl;
+    HMODULE hModule = LoadLibraryA(dllPath.string().c_str());
+    assert(hModule != nullptr);
+    std::cout << "  -> PASS: Successfully loaded AxleScripts.dll into process memory." << std::endl;
+
+    std::cout << "\n[19.3] Querying exported C-API entry points..." << std::endl;
+    using GetCountFn = uint32_t(*)();
+    using InitFn = void(*)(Axle::ScriptRegisterCallback);
+    using ShutdownFn = void(*)();
+
+    GetCountFn fnGetCount = (GetCountFn)GetProcAddress(hModule, "Axle_GetScriptCount");
+    InitFn fnInit = (InitFn)GetProcAddress(hModule, "Axle_InitializeScripts");
+    ShutdownFn fnShutdown = (ShutdownFn)GetProcAddress(hModule, "Axle_ShutdownScripts");
+
+    assert(fnGetCount != nullptr);
+    assert(fnInit != nullptr);
+    assert(fnShutdown != nullptr);
+    std::cout << "  -> PASS: Exported symbols 'Axle_GetScriptCount', 'Axle_InitializeScripts', 'Axle_ShutdownScripts' found." << std::endl;
+
+    std::cout << "\n[19.4] Testing Script Discovery & Dynamic Registration..." << std::endl;
+    uint32_t scriptCount = fnGetCount();
+    std::cout << "  -> Discovered " << scriptCount << " script(s) in AxleScripts.dll." << std::endl;
+    assert(scriptCount >= 1);
+
+    // Call Axle_InitializeScripts and register into Axle::ScriptRegistry
+    fnInit([](const char* name, const Axle::ScriptMetadata* meta) {
+        std::cout << "    * Dynamic Registration: '" << name << "' with " << meta->Fields.size() << " reflected field(s)." << std::endl;
+        Axle::ScriptRegistry::RegisterMetadata(name, *meta, true);
+    });
+
+    assert(Axle::ScriptRegistry::Has("RotatorScript"));
+    assert(Axle::ScriptRegistry::IsDynamicScript("RotatorScript"));
+    const auto* rotatorMeta = Axle::ScriptRegistry::GetMetadata("RotatorScript");
+    assert(rotatorMeta != nullptr);
+    assert(rotatorMeta->Fields.size() == 3);
+    assert(rotatorMeta->Fields[0].Name == "RotationSpeed");
+    assert(rotatorMeta->Fields[1].Name == "Axis");
+    assert(rotatorMeta->Fields[2].Name == "Enabled");
+    std::cout << "  -> PASS: 'RotatorScript' registered dynamically with all 3 reflected fields." << std::endl;
+
+    std::cout << "\n[19.5] Testing Dynamic Script Instantiation & Field Synchronization..." << std::endl;
+    std::shared_ptr<Axle::Scene> testScene = std::make_shared<Axle::Scene>();
+    Axle::Entity testEntity = testScene->CreateEntity("RotatingBeacon");
+    auto& nsc = testEntity.AddComponent<Axle::NativeScriptComponent>("RotatorScript");
+    nsc.FloatFields["RotationSpeed"] = 180.0f;
+    nsc.Vec3Fields["Axis"] = glm::vec3(0.0f, 0.0f, 1.0f);
+    nsc.BoolFields["Enabled"] = true;
+
+    // Start scene runtime (automatically instantiates script, binds Entity, syncs fields, calls OnCreate)
+    testScene->OnRuntimeStart();
+    assert(nsc.Instance != nullptr);
+
+    // Update scene runtime (calls OnUpdate with delta time)
+    testScene->OnUpdateRuntime(0.1f);
+
+    // Stop scene runtime (calls OnDestroy and cleans up instance)
+    testScene->OnRuntimeStop();
+    std::cout << "  -> PASS: Instantiated dynamic script via Scene, verified field sync, execution and destruction." << std::endl;
+
+    std::cout << "\n[19.6] Testing Dynamic Script Unloading & Registry Cleanup..." << std::endl;
+    Axle::ScriptRegistry::ClearDynamicScripts();
+    assert(!Axle::ScriptRegistry::Has("RotatorScript"));
+    assert(!Axle::ScriptRegistry::IsDynamicScript("RotatorScript"));
+    std::cout << "  -> PASS: Dynamic scripts cleared from ScriptRegistry without affecting static scripts." << std::endl;
+
+    fnShutdown();
+    FreeLibrary(hModule);
+    std::cout << "  -> PASS: AxleScripts.dll cleanly shut down and unloaded from memory." << std::endl;
+
+    std::cout << ">>> STEP 19 PASSED: Phase 18.3 Decoupled AxleScripts.dll Module verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -2357,12 +2460,13 @@ int main(int argc, char** argv) {
         else if (arg == "16" || arg == "step16" || arg == "--step16" || arg == "--phase17.3") targetStep = 16;
         else if (arg == "17" || arg == "step17" || arg == "--step17" || arg == "--phase18" || arg == "--phase18.1") targetStep = 17;
         else if (arg == "18" || arg == "step18" || arg == "--step18" || arg == "--phase18.2") targetStep = 18;
+        else if (arg == "19" || arg == "step19" || arg == "--step19" || arg == "--phase18.3") targetStep = 19;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 18 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 19 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -2423,6 +2527,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 18) {
         if (!RunTest_Step18_Phase18_SafeSceneStateSimulation()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 19) {
+        if (!RunTest_Step19_Phase18_DecoupledAxleScriptsModule()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

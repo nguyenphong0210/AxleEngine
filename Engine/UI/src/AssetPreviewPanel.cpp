@@ -57,26 +57,39 @@ namespace Axle {
 
             float pattern = 0.0;
             vec3 normal = vec3(0.0, 1.0, 0.0);
+            vec4 baseColor = u_Color1;
             if (u_PatternMode == 0) {
                 vec2 coord = floor(v_WorldPos.xz * u_TileScale);
                 pattern = mod(coord.x + coord.y, 2.0);
+                baseColor = mix(u_Color1, u_Color2, pattern);
             } else if (u_PatternMode == 1) {
-                vec3 coord = floor((v_LocalPos + vec3(0.5)) * u_TileScale + vec3(0.0001));
-                pattern = mod(coord.x + coord.y + coord.z, 2.0);
                 vec3 dx = dFdx(v_WorldPos);
                 vec3 dy = dFdy(v_WorldPos);
                 normal = normalize(cross(dx, dy));
                 if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
-            } else {
+
+                vec3 absN = abs(normal);
+                vec2 uv = (absN.y >= absN.x && absN.y >= absN.z) ? v_LocalPos.xz :
+                          ((absN.x >= absN.z) ? v_LocalPos.zy : v_LocalPos.xy);
+                vec2 coord = floor(uv * u_TileScale + vec2(0.0001));
+                pattern = mod(coord.x + coord.y, 2.0);
+                baseColor = mix(u_Color1, u_Color2, pattern);
+            } else if (u_PatternMode == 2) {
                 vec3 nLocal = normalize(v_LocalPos);
                 float u = atan(nLocal.z, nLocal.x) / (2.0 * 3.14159265359) + 0.5;
                 float v = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
                 vec2 coord = floor(vec2(u * u_TileScale, v * (u_TileScale * 0.5)));
                 pattern = mod(coord.x + coord.y, 2.0);
                 normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
+                baseColor = mix(u_Color1, u_Color2, pattern);
+            } else {
+                // PatternMode 3+: Unity Default Shading (Clean, solid matte surface)
+                vec3 dx = dFdx(v_WorldPos);
+                vec3 dy = dFdy(v_WorldPos);
+                normal = normalize(cross(dx, dy));
+                if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
+                baseColor = u_Color1;
             }
-
-            vec4 baseColor = mix(u_Color1, u_Color2, pattern);
             vec3 keyLight = normalize(u_LightDir);
             vec3 fillLight = normalize(vec3(-0.45, 0.45, -0.65));
 

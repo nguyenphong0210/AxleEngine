@@ -16,9 +16,9 @@ Entities:
     MeshInstance3D:
       AssetPath: models/Crash_Barrier.axlemesh
       PatternMode: 1
-      TileScale: 4.000000
-      Color1: [ 0.950000 , 0.450000 , 0.150000 , 1.000000 ]
-      Color2: [ 0.160000 , 0.200000 , 0.260000 , 1.000000 ]
+      TileScale: 1.000000
+      Color1: [ 0.920000 , 0.930000 , 0.950000 , 1.000000 ]
+      Color2: [ 0.600000 , 0.630000 , 0.680000 , 1.000000 ]
     CollisionShape3D:
       ShapeType: Box
       HalfExtent: [ 1.500000 , 0.500000 , 0.450000 ]
@@ -50,8 +50,8 @@ Entities:
       AssetPath: models/Traffic_Cone.axlemesh
       PatternMode: 1
       TileScale: 2.000000
-      Color1: [ 1.000000 , 0.550000 , 0.100000 , 1.000000 ]
-      Color2: [ 0.950000 , 0.950000 , 0.950000 , 1.000000 ]
+      Color1: [ 0.920000 , 0.930000 , 0.950000 , 1.000000 ]
+      Color2: [ 0.600000 , 0.630000 , 0.680000 , 1.000000 ]
     HierarchyComponent:
       Parent: 9812345678901234567
       Children:

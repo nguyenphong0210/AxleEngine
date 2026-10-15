@@ -6,9 +6,9 @@ Name: SportsCar_Body
 
 Material:
   PatternMode: 1
-  TileScale: 2.00
-  ColorPrimary: [0.9500, 0.4500, 0.1500, 1.0000]
-  ColorSecondary: [0.1600, 0.2000, 0.2600, 1.0000]
+  TileScale: 1.00
+  ColorPrimary: [0.9200, 0.9300, 0.9500, 1.0000]
+  ColorSecondary: [0.6000, 0.6300, 0.6800, 1.0000]
 
 Bounds:
   Size: [2.000, 1.100, 4.400]

@@ -15,6 +15,11 @@ set(SPDLOG_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
 
+# Configure enkiTS Task Scheduler options
+set(ENKITS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(ENKITS_INSTALL OFF CACHE BOOL "" FORCE)
+set(ENKITS_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+
 # Configure Jolt Physics options to match engine settings
 set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
 set(OVERRIDE_CXX_FLAGS OFF CACHE BOOL "" FORCE)
@@ -25,6 +30,7 @@ set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
 add_subdirectory(ThirdParty/glfw)
 add_subdirectory(ThirdParty/glad)
 add_subdirectory(ThirdParty/spdlog)
+add_subdirectory(ThirdParty/enkiTS)
 add_subdirectory(ThirdParty/JoltPhysics/Build ThirdParty/JoltPhysics)
 
 # Load engine modules according to architectural hierarchy

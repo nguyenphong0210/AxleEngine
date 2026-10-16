@@ -20,3 +20,6 @@
 [submodule "ThirdParty/entt"]
 	path = ThirdParty/entt
 	url = https://github.com/skypjack/entt.git
+[submodule "ThirdParty/enkiTS"]
+	path = ThirdParty/enkiTS
+	url = https://github.com/dougbinks/enkiTS.git

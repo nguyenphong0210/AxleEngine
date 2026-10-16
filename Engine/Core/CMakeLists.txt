@@ -21,4 +21,5 @@ target_include_directories(AxleCore PUBLIC
 target_link_libraries(AxleCore PUBLIC
     spdlog::spdlog
     glfw
+    enkiTS
 )

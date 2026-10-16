@@ -345,7 +345,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - [x] **Async Background Compiler (`ScriptCompiler`)**: Spawn background worker thread executing `cmake --build build --config Release --target AxleScripts` with real-time stdout/stderr capture and error parsing without UI freezing.
     - [x] **Editor UI Integration (Compile Button & Menu)**: Unreal-style `[🔨 Compile] (F9 / Ctrl+B)` toolbar button with dynamic status animations (`Compiling...`, `[OK] Reloaded in X.Xs`, `[X] Failed`), along with `Build` menu bar items (`Open in Visual Studio`, `Open Scripts Directory`).
 - [ ] **Phase 19: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
-  - [ ] **ThirdParty Integration**: Embed `enkiTS` (Enki Task Scheduler) submodule/library into `ThirdParty/enkiTS` with modern CMake configuration.
+  - [x] **ThirdParty Integration**: Embed `enkiTS` (Enki Task Scheduler) submodule/library into `ThirdParty/enkiTS` with modern CMake configuration.
   - [ ] **Core JobSystem Engine**: Implement unified `Axle::JobSystem` in `Engine/Core` managing persistent lock-free worker threads (`enki::TaskScheduler`) matching CPU hardware concurrency.
   - [ ] **Jolt Physics Bridge (`JobSystemEnkiTS`)**: Implement custom `JPH::JobSystem` backend routing Jolt Physics constraint solving and collision tasks into enkiTS, eliminating separate thread pools and thread oversubscription.
   - [ ] **Parallel ECS Processing**: Implement `ParallelFor` utilities for `entt::registry` batch iteration, distributing bulk mechanical parts and transform evaluations across all worker cores without lock contention.

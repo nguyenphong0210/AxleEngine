@@ -1,0 +1,45 @@
+# Axle Scene Definition File
+Scene: Untitled
+Entities:
+  - Entity: 10711546192099806771
+    TagComponent:
+      Tag: Skybox Environment
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+    SkyboxComponent:
+      Enabled: true
+      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
+      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
+      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
+      SunSize: 0.045000
+      SunGlow: 0.160000
+      Turbidity: 1.000000
+      SyncWithSun: true
+      CustomAzimuth: 45.000000
+      CustomElevation: 50.000000
+      HemisphereAmbient: true
+  - Entity: 1153370790789502708
+    TagComponent:
+      Tag: Directional Light
+    TransformComponent:
+      Translation: [ 0.000000 , 10.000000 , 0.000000 ]
+      Rotation: [ 0.875426 , 0.408218 , -0.234570 , 0.109382 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+    DirectionalLightComponent:
+      Color: [ 1.000000 , 0.980000 , 0.920000 ]
+      Intensity: 1.000000
+      AmbientIntensity: 0.280000
+      Azimuth: 45.000000
+      Elevation: 50.000000
+      CastShadows: true
+      Exposure: 1.000000
+      ToneMappingMode: 0
+      Gamma: 2.200000

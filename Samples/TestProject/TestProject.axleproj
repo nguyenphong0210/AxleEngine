@@ -1,0 +1,5 @@
+# Axle Engine Project Configuration File
+Project:
+  Name: TestProject
+  StartScene: scenes/Test.axlescene
+  AssetDirectory: assets

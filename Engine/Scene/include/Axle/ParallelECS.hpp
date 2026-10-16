@@ -232,6 +232,22 @@ namespace Axle {
                             const auto& childHc = registry.get<HierarchyComponent>(child);
                             if (!childHc.InheritTransform) {
                                 childParentWorld = glm::mat4(1.0f);
+                            } else if (!childHc.InheritScale) {
+                                glm::vec3 pPos = glm::vec3(tc.WorldMatrix[3]);
+                                glm::vec3 col0 = glm::vec3(tc.WorldMatrix[0]);
+                                glm::vec3 col1 = glm::vec3(tc.WorldMatrix[1]);
+                                glm::vec3 col2 = glm::vec3(tc.WorldMatrix[2]);
+                                float l0 = glm::length(col0);
+                                float l1 = glm::length(col1);
+                                float l2 = glm::length(col2);
+                                glm::mat3 rot(
+                                    l0 > 1e-5f ? col0 / l0 : glm::vec3(1.0f, 0.0f, 0.0f),
+                                    l1 > 1e-5f ? col1 / l1 : glm::vec3(0.0f, 1.0f, 0.0f),
+                                    l2 > 1e-5f ? col2 / l2 : glm::vec3(0.0f, 0.0f, 1.0f)
+                                );
+                                glm::mat4 rigidParent = glm::mat4(rot);
+                                rigidParent[3] = glm::vec4(pPos, 1.0f);
+                                childParentWorld = rigidParent;
                             }
                         }
                         UpdateEntitySubtree(registry, child, childParentWorld);

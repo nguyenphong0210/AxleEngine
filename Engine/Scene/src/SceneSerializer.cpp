@@ -165,6 +165,7 @@ namespace Axle {
                 ss << "    HierarchyComponent:\n";
                 ss << "      Parent: " << parentUUID << "\n";
                 ss << "      InheritTransform: " << (hc.InheritTransform ? "true" : "false") << "\n";
+                ss << "      InheritScale: " << (hc.InheritScale ? "true" : "false") << "\n";
             }
 
             // NativeScriptComponent
@@ -294,6 +295,7 @@ namespace Axle {
             Entity ChildEntity;
             u64 ParentUUID = 0;
             bool InheritTransform = true;
+            bool InheritScale = true;
         };
         std::vector<PendingHierarchy> pendingHierarchy;
 
@@ -517,10 +519,14 @@ namespace Axle {
                             try {
                                 pUUID = std::stoull(Trim(trimmed.substr(7)));
                             } catch (...) {}
-                            pendingHierarchy.push_back({ currentEntity, pUUID, true });
+                            pendingHierarchy.push_back({ currentEntity, pUUID, true, true });
                         } else if (trimmed.rfind("InheritTransform:", 0) == 0) {
                             if (!pendingHierarchy.empty() && pendingHierarchy.back().ChildEntity == currentEntity) {
                                 pendingHierarchy.back().InheritTransform = (Trim(trimmed.substr(17)) == "true");
+                            }
+                        } else if (trimmed.rfind("InheritScale:", 0) == 0) {
+                            if (!pendingHierarchy.empty() && pendingHierarchy.back().ChildEntity == currentEntity) {
+                                pendingHierarchy.back().InheritScale = (Trim(trimmed.substr(13)) == "true");
                             }
                         }
                         break;
@@ -808,7 +814,7 @@ namespace Axle {
                 Entity parentEntity = entityMap[item.ParentUUID];
                 Entity childEntity = item.ChildEntity;
                 auto& childHc = childEntity.AddComponent<HierarchyComponent>(
-                    static_cast<entt::entity>(parentEntity), item.InheritTransform);
+                    static_cast<entt::entity>(parentEntity), item.InheritTransform, item.InheritScale);
 
                 if (!parentEntity.HasComponent<HierarchyComponent>()) {
                     parentEntity.AddComponent<HierarchyComponent>();

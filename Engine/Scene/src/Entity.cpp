@@ -79,7 +79,30 @@ namespace Axle {
             glm::mat4 newLocal = currentWorld;
             if (parent) {
                 glm::mat4 parentWorld = parent.GetWorldTransform();
-                newLocal = glm::inverse(parentWorld) * currentWorld;
+                bool inheritScale = true;
+                if (HasComponent<HierarchyComponent>()) {
+                    inheritScale = GetComponent<HierarchyComponent>().InheritScale;
+                }
+
+                if (!inheritScale) {
+                    glm::vec3 pPos = glm::vec3(parentWorld[3]);
+                    glm::vec3 col0 = glm::vec3(parentWorld[0]);
+                    glm::vec3 col1 = glm::vec3(parentWorld[1]);
+                    glm::vec3 col2 = glm::vec3(parentWorld[2]);
+                    float l0 = glm::length(col0);
+                    float l1 = glm::length(col1);
+                    float l2 = glm::length(col2);
+                    glm::mat3 rot(
+                        l0 > 1e-5f ? col0 / l0 : glm::vec3(1.0f, 0.0f, 0.0f),
+                        l1 > 1e-5f ? col1 / l1 : glm::vec3(0.0f, 1.0f, 0.0f),
+                        l2 > 1e-5f ? col2 / l2 : glm::vec3(0.0f, 0.0f, 1.0f)
+                    );
+                    glm::mat4 rigidParent = glm::mat4(rot);
+                    rigidParent[3] = glm::vec4(pPos, 1.0f);
+                    newLocal = glm::inverse(rigidParent) * currentWorld;
+                } else {
+                    newLocal = glm::inverse(parentWorld) * currentWorld;
+                }
             }
 
             tc.Translation = glm::vec3(newLocal[3]);

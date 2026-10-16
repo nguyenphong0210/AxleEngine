@@ -357,9 +357,9 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - [x] **Scene Serialization**: Full YAML serialization and deserialization for `WheelComponent` in `SceneSerializer.cpp`.
     - [x] **Runtime Simulation & Wheel Sync**: Dynamic discovery via `HierarchyComponent` and automatic synchronization of arbitrary N wheels with Jolt Physics in `EditorLayer.cpp` (preserving local transforms relative to chassis with zero drift).
     - [x] **Verification**: Step 25 in `AxleTests.exe` validating `WheelComponent` serialization and 6x6 all-wheel-drive truck physics simulation.
-  - [x] **Phase 20.2: Vehicle Inspector Tuning & Quick-Setup Presets (`Engine/UI`)**:
+  - [x] **Phase 20.2: Vehicle Inspector Tuning & Modular Component-Driven Workflow (`Engine/UI`)**:
     - [x] **Interactive Sliders & Live Telemetry**: Sliders in `SceneHierarchyPanel` for chassis mass, peak engine torque, RPM limits, and brake/handbrake torque with live Speedometer & Tachometer progress bars and per-wheel suspension contact indicators.
-    - [x] **One-Click Quick-Setup Buttons**: `[ Auto-Fit to Box Collider ]`, `[ Auto-Spawn 4 Wheels (Car Preset) ]`, and `[ Auto-Spawn 6 Wheels (6x6 Heavy Truck Preset) ]` automatically instantiating child wheel entities with textured cylinders and proper wheel orientations.
+    - [x] **Modular Manual Workflow**: Purely modular, decoupled vehicle authoring (Godot/Unity-style) where wheels are arbitrary child entities configured via `VehicleWheel3D` with individual suspension, steering, and traction tuning.
     - [x] **Direct Driving Controls**: Seamless W/A/S/D and Arrow key driving controls with Space handbrake in Play mode (`F5`), immediately operational on test scenes created from scratch without writing custom scripts.
     - [x] **Scene Serialization**: Full YAML serialization and deserialization for `VehicleComponent` tuning properties in `SceneSerializer.cpp`.
 - [ ] **Phase 21: Audio System (`Engine/Audio`)**

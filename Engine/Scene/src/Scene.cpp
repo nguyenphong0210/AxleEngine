@@ -243,7 +243,26 @@ namespace Axle {
         if (m_Registry.all_of<HierarchyComponent>(entityID)) {
             const auto& hc = m_Registry.get<HierarchyComponent>(entityID);
             if (hc.InheritTransform && hc.Parent != entt::null && m_Registry.valid(hc.Parent) && m_Registry.all_of<TransformComponent>(hc.Parent)) {
-                transform = GetWorldTransform(hc.Parent) * transform;
+                glm::mat4 parentWorld = GetWorldTransform(hc.Parent);
+                if (!hc.InheritScale) {
+                    glm::vec3 pPos = glm::vec3(parentWorld[3]);
+                    glm::vec3 col0 = glm::vec3(parentWorld[0]);
+                    glm::vec3 col1 = glm::vec3(parentWorld[1]);
+                    glm::vec3 col2 = glm::vec3(parentWorld[2]);
+                    float l0 = glm::length(col0);
+                    float l1 = glm::length(col1);
+                    float l2 = glm::length(col2);
+                    glm::mat3 rot(
+                        l0 > 1e-5f ? col0 / l0 : glm::vec3(1.0f, 0.0f, 0.0f),
+                        l1 > 1e-5f ? col1 / l1 : glm::vec3(0.0f, 1.0f, 0.0f),
+                        l2 > 1e-5f ? col2 / l2 : glm::vec3(0.0f, 0.0f, 1.0f)
+                    );
+                    glm::mat4 rigidParent = glm::mat4(rot);
+                    rigidParent[3] = glm::vec4(pPos, 1.0f);
+                    transform = rigidParent * transform;
+                } else {
+                    transform = parentWorld * transform;
+                }
             }
         }
         tc.WorldMatrix = transform;
@@ -265,7 +284,31 @@ namespace Axle {
 
         auto& tc = m_Registry.get<TransformComponent>(entityID);
         tc.LocalMatrix = tc.GetLocalTransform();
-        tc.WorldMatrix = parentWorld * tc.LocalMatrix;
+
+        glm::mat4 effectiveParent = parentWorld;
+        if (m_Registry.all_of<HierarchyComponent>(entityID)) {
+            const auto& hc = m_Registry.get<HierarchyComponent>(entityID);
+            if (!hc.InheritTransform) {
+                effectiveParent = glm::mat4(1.0f);
+            } else if (!hc.InheritScale) {
+                glm::vec3 pPos = glm::vec3(parentWorld[3]);
+                glm::vec3 col0 = glm::vec3(parentWorld[0]);
+                glm::vec3 col1 = glm::vec3(parentWorld[1]);
+                glm::vec3 col2 = glm::vec3(parentWorld[2]);
+                float l0 = glm::length(col0);
+                float l1 = glm::length(col1);
+                float l2 = glm::length(col2);
+                glm::mat3 rot(
+                    l0 > 1e-5f ? col0 / l0 : glm::vec3(1.0f, 0.0f, 0.0f),
+                    l1 > 1e-5f ? col1 / l1 : glm::vec3(0.0f, 1.0f, 0.0f),
+                    l2 > 1e-5f ? col2 / l2 : glm::vec3(0.0f, 0.0f, 1.0f)
+                );
+                glm::mat4 rigidParent = glm::mat4(rot);
+                rigidParent[3] = glm::vec4(pPos, 1.0f);
+                effectiveParent = rigidParent;
+            }
+        }
+        tc.WorldMatrix = effectiveParent * tc.LocalMatrix;
 
         if (m_Registry.all_of<HierarchyComponent>(entityID)) {
             const auto& hc = m_Registry.get<HierarchyComponent>(entityID);

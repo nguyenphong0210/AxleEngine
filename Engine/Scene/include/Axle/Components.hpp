@@ -360,10 +360,11 @@ namespace Axle {
         entt::entity Parent{ entt::null };
         std::vector<entt::entity> Children;
         bool InheritTransform = true;
+        bool InheritScale = true;
 
         HierarchyComponent() = default;
-        HierarchyComponent(entt::entity parent, bool inheritTransform = true)
-            : Parent(parent), InheritTransform(inheritTransform) {}
+        HierarchyComponent(entt::entity parent, bool inheritTransform = true, bool inheritScale = true)
+            : Parent(parent), InheritTransform(inheritTransform), InheritScale(inheritScale) {}
     };
     using RelationshipComponent = HierarchyComponent; // Relationship / Scene Graph alias
 

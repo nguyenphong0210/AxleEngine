@@ -1,5 +1,6 @@
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/JobSystem.hpp>
 
 // The Jolt headers don't include Jolt.h. Always include Jolt.h before including any other Jolt header.
 #include <Jolt/Jolt.h>
@@ -32,6 +33,11 @@ namespace Axle {
 
     void PhysicsEngine::Init() {
         if (s_Initialized) return;
+
+        // Ensure Axle JobSystem is initialized before physics initializes
+        if (!JobSystem::IsInitialized()) {
+            JobSystem::Init();
+        }
 
         // 1. Register default allocator
         JPH::RegisterDefaultAllocator();

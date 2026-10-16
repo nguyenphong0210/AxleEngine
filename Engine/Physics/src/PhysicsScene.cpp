@@ -28,12 +28,10 @@ namespace Axle {
         // 1. Allocate temporary buffer for physics updates
         m_TempAllocator = std::make_unique<JPH::TempAllocatorImpl>(settings.TempAllocatorSizeMB * 1024 * 1024);
 
-        // 2. Initialize multithreaded job system using available CPU cores
-        const u32 threadCount = std::max(1u, std::thread::hardware_concurrency() - 1);
-        m_JobSystem = std::make_unique<JPH::JobSystemThreadPool>(
+        // 2. Initialize multithreaded job system bridged to Axle::JobSystem (enkiTS)
+        m_JobSystem = std::make_unique<JobSystemEnkiTS>(
             JPH::cMaxPhysicsJobs,
-            JPH::cMaxPhysicsBarriers,
-            static_cast<int>(threadCount)
+            JPH::cMaxPhysicsBarriers
         );
 
         // 3. Initialize Jolt PhysicsSystem
@@ -49,7 +47,8 @@ namespace Axle {
 
         SetGravity(settings.Gravity);
 
-        AXLE_CORE_INFO("PhysicsScene initialized (Threads: {0}, MaxBodies: {1})", threadCount, settings.MaxBodies);
+        AXLE_CORE_INFO("PhysicsScene initialized with JobSystemEnkiTS (Concurrency: {0}, MaxBodies: {1})", 
+            m_JobSystem->GetMaxConcurrency(), settings.MaxBodies);
     }
 
     PhysicsScene::~PhysicsScene() {

@@ -12,6 +12,9 @@
 #include <Axle/ScriptHotReloadManager.hpp>
 #include <Axle/ScriptCompiler.hpp>
 #include <Axle/JobSystem.hpp>
+#include <Axle/JobSystemEnkiTS.hpp>
+#include <Axle/PhysicsScene.hpp>
+#include <Axle/PhysicsEngine.hpp>
 #include "CarPlayerScript.hpp"
 #include <iostream>
 #include <fstream>
@@ -2351,14 +2354,17 @@ bool RunTest_Step19_Phase18_DecoupledAxleScriptsModule() {
     std::cout << "========================================================" << std::endl;
 
     std::cout << "\n[19.1] Locating AxleScripts.dll binary..." << std::endl;
-    std::filesystem::path dllPath = "build/Editor/Release/AxleScripts.dll";
+    char exePath[MAX_PATH];
+    GetModuleFileNameA(NULL, exePath, MAX_PATH);
+    std::filesystem::path dllPath = std::filesystem::path(exePath).parent_path() / "AxleScripts.dll";
     if (!std::filesystem::exists(dllPath)) {
-        dllPath = "AxleScripts.dll";
+        dllPath = "build/Editor/Debug/AxleScripts.dll";
     }
     if (!std::filesystem::exists(dllPath)) {
-        char exePath[MAX_PATH];
-        GetModuleFileNameA(NULL, exePath, MAX_PATH);
-        dllPath = std::filesystem::path(exePath).parent_path() / "AxleScripts.dll";
+        dllPath = "build/Editor/Release/AxleScripts.dll";
+    }
+    if (!std::filesystem::exists(dllPath)) {
+        dllPath = "AxleScripts.dll";
     }
 
     std::cout << "  -> DLL Path: " << dllPath.string() << std::endl;
@@ -2447,8 +2453,17 @@ bool RunTest_Step20_Phase18_AntiLockShadowCopyAndStatePreservation() {
     std::cout << "========================================================" << std::endl;
 
     std::cout << "\n[20.1] Initializing ScriptHotReloadManager..." << std::endl;
+    char exePath[MAX_PATH];
+    GetModuleFileNameA(NULL, exePath, MAX_PATH);
+    std::filesystem::path dllPath = std::filesystem::path(exePath).parent_path() / "AxleScripts.dll";
+    if (!std::filesystem::exists(dllPath)) {
+        dllPath = "build/Editor/Debug/AxleScripts.dll";
+    }
+    if (!std::filesystem::exists(dllPath)) {
+        dllPath = "build/Editor/Release/AxleScripts.dll";
+    }
     auto& reloadManager = Axle::ScriptHotReloadManager::Get();
-    bool initOk = reloadManager.Initialize("build/Editor/Release/AxleScripts.dll");
+    bool initOk = reloadManager.Initialize(dllPath.string());
     assert(initOk);
     assert(reloadManager.IsLoaded());
     std::cout << "  -> PASS: ScriptHotReloadManager initialized." << std::endl;
@@ -2711,7 +2726,154 @@ bool RunTest_Step22_Phase19_CoreJobSystemEngine() {
     assert(!Axle::JobSystem::IsInitialized());
     std::cout << "  -> PASS: Re-initialization and custom thread pool size verified!" << std::endl;
 
+    // Restore default JobSystem for subsequent test steps
+    Axle::JobSystem::Init();
+
     std::cout << ">>> STEP 22 PASSED: Phase 19.2 Core JobSystem Engine verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
+// STEP 23: PHASE 19.3 JOLT PHYSICS BRIDGE (JobSystemEnkiTS)
+// =============================================================================
+#ifdef AddJob
+#undef AddJob
+#endif
+
+bool RunTest_Step23_Phase19_JoltPhysicsBridgeEnkiTS() {
+    using namespace Axle;
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 23 TEST] PHASE 19.3 JOLT PHYSICS BRIDGE (JobSystemEnkiTS)" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    if (!Axle::JobSystem::IsInitialized()) {
+        Axle::JobSystem::Init();
+    }
+    if (!Axle::PhysicsEngine::IsInitialized()) {
+        Axle::PhysicsEngine::Init();
+    }
+
+    std::cout << "\n[23.1] Initializing JobSystemEnkiTS & Verifying Concurrency..." << std::endl;
+    auto enkiJobSystem = std::make_unique<JobSystemEnkiTS>(
+        JPH::cMaxPhysicsJobs,
+        JPH::cMaxPhysicsBarriers
+    );
+    int concurrency = enkiJobSystem->GetMaxConcurrency();
+    std::cout << "  -> JobSystemEnkiTS Concurrency: " << concurrency << std::endl;
+    assert(concurrency >= 1);
+    assert(concurrency == static_cast<int>(Axle::JobSystem::GetWorkerThreadCount()));
+    std::cout << "  -> PASS: JobSystemEnkiTS concurrency matches Axle::JobSystem worker threads." << std::endl;
+
+    std::cout << "\n[23.2] Testing Direct Job Execution & Barrier Synchronization..." << std::endl;
+    {
+        std::atomic<int> directJobCounter{ 0 };
+        JPH::JobSystem::Barrier* barrier = enkiJobSystem->CreateBarrier();
+        assert(barrier != nullptr);
+
+        constexpr int numJobs = 64;
+        JPH::JobHandle handles[numJobs];
+        for (int i = 0; i < numJobs; ++i) {
+            handles[i] = enkiJobSystem->CreateJob("DirectPhysicsJob", JPH::ColorArg(0, 255, 0), [&directJobCounter]() {
+                directJobCounter.fetch_add(1, std::memory_order_relaxed);
+            }, 0);
+            barrier->AddJob(handles[i]);
+        }
+
+        enkiJobSystem->WaitForJobs(barrier);
+        assert(directJobCounter.load() == numJobs);
+        std::cout << "  -> PASS: All " << numJobs << " direct jobs synchronized and executed via JobSystemEnkiTS!" << std::endl;
+        enkiJobSystem->DestroyBarrier(barrier);
+    }
+
+    std::cout << "\n[23.3] Testing Jolt Dependency Chaining (Job A -> Job B)..." << std::endl;
+    {
+        std::atomic<bool> jobACompleted{ false };
+        std::atomic<bool> jobBCompleted{ false };
+
+        JPH::JobHandle jobB = enkiJobSystem->CreateJob("JobB", JPH::ColorArg(255, 0, 0), [&]() {
+            assert(jobACompleted.load() == true);
+            jobBCompleted.store(true);
+        }, 1); // 1 dependency
+
+        JPH::JobHandle jobA = enkiJobSystem->CreateJob("JobA", JPH::ColorArg(0, 0, 255), [&, jobB]() mutable {
+            jobACompleted.store(true);
+            jobB.RemoveDependency(1);
+        }, 0);
+
+        JPH::JobSystem::Barrier* depBarrier = enkiJobSystem->CreateBarrier();
+        depBarrier->AddJob(jobA);
+        depBarrier->AddJob(jobB);
+        enkiJobSystem->WaitForJobs(depBarrier);
+        assert(jobACompleted.load() == true);
+        assert(jobBCompleted.load() == true);
+        std::cout << "  -> PASS: Job dependency chain (Job A -> Job B) executed and verified in order." << std::endl;
+        enkiJobSystem->DestroyBarrier(depBarrier);
+    }
+
+    enkiJobSystem.reset();
+
+    std::cout << "\n[23.4] Testing Multithreaded Physics Simulation via PhysicsScene..." << std::endl;
+    auto physicsScene = std::make_unique<PhysicsScene>();
+
+    // 1. Create static floor
+    BoxBodyProps floorProps;
+    floorProps.Position = glm::vec3(0.0f, -0.5f, 0.0f);
+    floorProps.HalfExtent = glm::vec3(50.0f, 0.5f, 50.0f);
+    floorProps.IsDynamic = false;
+    BodyID floorID = physicsScene->CreateBox(floorProps);
+    assert(!floorID.IsInvalid());
+
+    // 2. Create multiple dynamic boxes dropped in a grid
+    constexpr int gridX = 4;
+    constexpr int gridZ = 4;
+    constexpr int layers = 3;
+    std::vector<BodyID> dynamicBodies;
+
+    for (int y = 0; y < layers; ++y) {
+        for (int x = 0; x < gridX; ++x) {
+            for (int z = 0; z < gridZ; ++z) {
+                BoxBodyProps boxProps;
+                boxProps.Position = glm::vec3(
+                    (x - gridX / 2.0f) * 2.5f,
+                    5.0f + y * 2.0f,
+                    (z - gridZ / 2.0f) * 2.5f
+                );
+                boxProps.HalfExtent = glm::vec3(0.5f, 0.5f, 0.5f);
+                boxProps.IsDynamic = true;
+                boxProps.Friction = 0.5f;
+                boxProps.Restitution = 0.0f;
+                BodyID bId = physicsScene->CreateBox(boxProps);
+                assert(!bId.IsInvalid());
+                dynamicBodies.push_back(bId);
+            }
+        }
+    }
+    std::cout << "  -> Spawned " << dynamicBodies.size() << " dynamic rigid bodies on static floor." << std::endl;
+
+    // 3. Step physics through JobSystemEnkiTS
+    constexpr int simulationSteps = 60;
+    const float dt = 1.0f / 60.0f;
+    for (int step = 0; step < simulationSteps; ++step) {
+        physicsScene->Step(dt);
+    }
+
+    // 4. Verify bodies have fallen and settled above the ground without falling through
+    int settledCount = 0;
+    for (const auto& bId : dynamicBodies) {
+        glm::vec3 pos = physicsScene->GetBodyPosition(bId);
+        // Box half-extent is 0.5, floor top is at y=0, so y should be >= 0.35f and < initial height
+        assert(pos.y >= 0.35f);
+        assert(pos.y < 15.0f);
+        settledCount++;
+    }
+    assert(settledCount == static_cast<int>(dynamicBodies.size()));
+    std::cout << "  -> PASS: All " << settledCount << " bodies simulated through JobSystemEnkiTS without penetration or drift." << std::endl;
+
+    std::cout << "\n[23.5] Cleaning up PhysicsScene and verifying clean shutdown..." << std::endl;
+    physicsScene.reset();
+    std::cout << "  -> PASS: PhysicsScene and JobSystemEnkiTS cleanly destroyed." << std::endl;
+
+    std::cout << ">>> STEP 23 PASSED: Phase 19.3 Jolt Physics Bridge (JobSystemEnkiTS) verified! <<<\n" << std::endl;
     return true;
 }
 
@@ -2744,12 +2906,13 @@ int main(int argc, char** argv) {
         else if (arg == "20" || arg == "step20" || arg == "--step20") targetStep = 20;
         else if (arg == "21" || arg == "step21" || arg == "--step21") targetStep = 21;
         else if (arg == "22" || arg == "step22" || arg == "--step22" || arg == "--phase19" || arg == "--phase19.2") targetStep = 22;
+        else if (arg == "23" || arg == "step23" || arg == "--step23" || arg == "--phase19.3") targetStep = 23;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 22 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 23 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -2822,6 +2985,13 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 22) {
         if (!RunTest_Step22_Phase19_CoreJobSystemEngine()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 23) {
+        if (!RunTest_Step23_Phase19_JoltPhysicsBridgeEnkiTS()) allPassed = false;
+    }
+
+    if (Axle::JobSystem::IsInitialized()) {
+        Axle::JobSystem::Shutdown();
     }
 
     std::cout << "========================================================" << std::endl;

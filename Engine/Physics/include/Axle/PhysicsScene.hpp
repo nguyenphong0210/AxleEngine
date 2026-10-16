@@ -8,7 +8,7 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Core/TempAllocator.h>
-#include <Jolt/Core/JobSystemThreadPool.h>
+#include <Axle/JobSystemEnkiTS.hpp>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -162,12 +162,15 @@ namespace Axle {
         void SetGravity(const glm::vec3& gravity);
         glm::vec3 GetGravity() const;
 
+        JobSystemEnkiTS* GetJobSystem() { return m_JobSystem.get(); }
+        const JobSystemEnkiTS* GetJobSystem() const { return m_JobSystem.get(); }
+
     private:
         PhysicsSettings m_Settings;
 
-        // Jolt physics memory & job system
+        // Jolt physics memory & unified job system
         std::unique_ptr<JPH::TempAllocatorImpl> m_TempAllocator;
-        std::unique_ptr<JPH::JobSystemThreadPool> m_JobSystem;
+        std::unique_ptr<JobSystemEnkiTS> m_JobSystem;
 
         // Broadphase and collision filters
         BPLayerInterfaceImpl m_BPLayerInterface;

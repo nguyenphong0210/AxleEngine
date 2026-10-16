@@ -462,7 +462,7 @@ void EditorLayer::OnAttach() {
         m_ShowAssemblyEditor = true;
     });
     m_ContentBrowserPanel.SetInstantiateAssemblyCallback([this](const std::filesystem::path& path) {
-        auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 1.0f, 0.0f), &m_SerializerContext);
+        auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 0.0f, 0.0f), &m_SerializerContext);
         if (ent) {
             m_SceneHierarchyPanel.SetSelectedEntity(ent);
         }
@@ -494,7 +494,7 @@ void EditorLayer::OnAttach() {
         std::string ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         if (ext == ".axle") {
-            auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 1.0f, 0.0f), &m_SerializerContext);
+            auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 0.0f, 0.0f), &m_SerializerContext);
             if (ent) {
                 m_SceneHierarchyPanel.SetSelectedEntity(ent);
             }
@@ -508,24 +508,12 @@ void EditorLayer::OnAttach() {
             }
             auto pkg = Axle::AssetSerializer::LoadPackage(axlePath);
             if (pkg.Success) {
-                glm::vec3 spawnPos(0.0f, pkg.HalfExtent.y, 0.0f);
+                glm::vec3 spawnPos(0.0f, 0.0f, 0.0f);
                 if (pkg.IsPackage) {
                     std::string rootTag = pkg.Name.empty() ? axlePath.stem().string() : pkg.Name;
                     auto rootEntity = m_Scene->CreateEntity(rootTag);
                     rootEntity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
                     auto& rootHierarchy = rootEntity.AddComponent<Axle::HierarchyComponent>();
-
-                    if (m_PhysicsScene) {
-                        Axle::BoxBodyProps bProps;
-                        bProps.Position = spawnPos;
-                        bProps.HalfExtent = pkg.HalfExtent;
-                        bProps.IsDynamic = true;
-                        bProps.Friction = 0.70f;
-                        bProps.Restitution = 0.15f;
-                        auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                        rootEntity.AddComponent<Axle::RigidBody3D>(bodyId, true);
-                        rootEntity.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
-                    }
 
                     for (const auto& part : pkg.Parts) {
                         auto childEntity = m_Scene->CreateEntity(part.Name);
@@ -559,17 +547,6 @@ void EditorLayer::OnAttach() {
                         part.LoadedMesh.SourceData.ColorPrimary,
                         part.LoadedMesh.SourceData.ColorSecondary
                     );
-                    if (m_PhysicsScene) {
-                        Axle::BoxBodyProps bProps;
-                        bProps.Position = spawnPos;
-                        bProps.HalfExtent = pkg.HalfExtent;
-                        bProps.IsDynamic = true;
-                        bProps.Friction = 0.70f;
-                        bProps.Restitution = 0.15f;
-                        auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                        newEnt.AddComponent<Axle::RigidBody3D>(bodyId, true);
-                        newEnt.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
-                    }
                     m_SceneHierarchyPanel.SetSelectedEntity(newEnt);
                 }
             }
@@ -582,28 +559,50 @@ void EditorLayer::OnAttach() {
     });
 
     // Initialize Project Configuration System (AxleEditor.axleproj)
-    std::filesystem::path projFile = "AxleEditor.axleproj";
-    if (!std::filesystem::exists(projFile)) {
-        if (std::filesystem::exists("AxleSandbox.axleproj")) {
-            projFile = "AxleSandbox.axleproj";
-        } else {
-            auto checkAssetParent = Axle::FileSystem::GetAssetDirectory().parent_path() / "AxleEditor.axleproj";
-            if (std::filesystem::exists(checkAssetParent)) {
-                projFile = checkAssetParent;
-            }
+    std::filesystem::path projFile;
+    std::vector<std::filesystem::path> searchCandidates = {
+        "AxleEditor.axleproj",
+        "AxleSandbox.axleproj",
+        "../../AxleEditor.axleproj",
+        "../../../AxleEditor.axleproj",
+        "../AxleEditor.axleproj"
+    };
+
+    auto assetDir = Axle::FileSystem::GetAssetDirectory();
+    if (std::filesystem::exists(assetDir)) {
+        searchCandidates.push_back(assetDir.parent_path() / "AxleEditor.axleproj");
+        searchCandidates.push_back(assetDir.parent_path().parent_path() / "AxleEditor.axleproj");
+    }
+
+    for (const auto& candidate : searchCandidates) {
+        if (std::filesystem::exists(candidate)) {
+            projFile = std::filesystem::canonical(candidate);
+            break;
         }
     }
 
-    if (std::filesystem::exists(projFile)) {
+    if (!projFile.empty() && std::filesystem::exists(projFile)) {
         OpenProject(projFile);
     } else {
         auto project = Axle::Project::New();
         project->GetConfig().Name = "Axle Project";
-        project->GetConfig().AssetDirectory = "Editor/assets";
+        if (std::filesystem::exists(assetDir)) {
+            std::error_code ec;
+            auto rel = std::filesystem::relative(assetDir, std::filesystem::current_path(), ec);
+            if (!ec && !rel.empty()) {
+                project->GetConfig().AssetDirectory = rel;
+            } else {
+                project->GetConfig().AssetDirectory = assetDir;
+            }
+        } else {
+            project->GetConfig().AssetDirectory = "assets";
+        }
         project->GetConfig().StartScene = "";
         Axle::Project::SetActive(project);
-        Axle::Project::SaveActive(projFile);
-        m_CurrentProjectPath = std::filesystem::absolute(projFile);
+        std::filesystem::path defaultProjPath = "AxleEditor.axleproj";
+        Axle::Project::SaveActive(defaultProjPath);
+        m_CurrentProjectPath = std::filesystem::absolute(defaultProjPath);
+        m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
         NewScene();
     }
 
@@ -686,16 +685,16 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
                 glm::vec3 rayOrigin = glm::vec3(nearW);
                 glm::vec3 rayDir = glm::normalize(glm::vec3(farW - nearW));
 
-                glm::vec3 spawnPos(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
+                glm::vec3 spawnPos(0.0f, 0.0f, 0.0f);
                 Axle::RayCastHit hit;
                 if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
-                    spawnPos = hit.Position + glm::vec3(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
+                    spawnPos = hit.Position;
                 } else {
                     if (std::abs(rayDir.y) > 1e-4f) {
                         float t = -rayOrigin.y / rayDir.y;
                         if (t > 0.0f && t < 150.0f) {
                             glm::vec3 groundHit = rayOrigin + rayDir * t;
-                            spawnPos = groundHit + glm::vec3(0.0f, loaded.SourceData.HalfExtent.y, 0.0f);
+                            spawnPos = groundHit;
                         } else {
                             spawnPos = rayOrigin + rayDir * 10.0f;
                         }
@@ -711,18 +710,6 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
                     loaded.SourceData.PatternMode, loaded.SourceData.TileScale,
                     loaded.SourceData.ColorPrimary, loaded.SourceData.ColorSecondary
                 );
-
-                if (m_PhysicsScene) {
-                    Axle::BoxBodyProps bProps;
-                    bProps.Position = spawnPos;
-                    bProps.HalfExtent = loaded.SourceData.HalfExtent;
-                    bProps.IsDynamic = true;
-                    bProps.Friction = 0.70f;
-                    bProps.Restitution = 0.15f;
-                    auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                    entity.AddComponent<Axle::RigidBody3D>(bodyId, true);
-                    entity.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, loaded.SourceData.HalfExtent, 0.70f, 0.15f);
-                }
 
                 m_SceneHierarchyPanel.SetSelectedEntity(entity);
             }
@@ -2199,7 +2186,7 @@ void EditorLayer::OnImGuiRender() {
             if (ext == ".axlescene" || ext == ".scene") {
                 OpenScene(assetPath);
             } else if (ext == ".axle") {
-                glm::vec3 spawnPos(0.0f, 1.0f, 0.0f);
+                glm::vec3 spawnPos(0.0f, 0.0f, 0.0f);
                 ImVec2 mousePos = ImGui::GetMousePos();
                 float mouseX = mousePos.x - viewportMin.x;
                 float mouseY = mousePos.y - viewportMin.y;
@@ -2222,7 +2209,7 @@ void EditorLayer::OnImGuiRender() {
 
                     Axle::RayCastHit hit;
                     if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
-                        spawnPos = hit.Position + glm::vec3(0.0f, 0.25f, 0.0f);
+                        spawnPos = hit.Position;
                     } else {
                         if (std::abs(rayDir.y) > 1e-4f) {
                             float t = -rayOrigin.y / rayDir.y;
@@ -2255,7 +2242,7 @@ void EditorLayer::OnImGuiRender() {
 
                 auto pkg = Axle::AssetSerializer::LoadPackage(assetPath);
                 if (pkg.Success) {
-                    glm::vec3 spawnPos(0.0f, pkg.HalfExtent.y, 0.0f);
+                    glm::vec3 spawnPos(0.0f, 0.0f, 0.0f);
                     ImVec2 mousePos = ImGui::GetMousePos();
                     float mouseX = mousePos.x - viewportMin.x;
                     float mouseY = mousePos.y - viewportMin.y;
@@ -2278,13 +2265,13 @@ void EditorLayer::OnImGuiRender() {
 
                         Axle::RayCastHit hit;
                         if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
-                            spawnPos = hit.Position + glm::vec3(0.0f, pkg.HalfExtent.y, 0.0f);
+                            spawnPos = hit.Position;
                         } else {
                             if (std::abs(rayDir.y) > 1e-4f) {
                                 float t = -rayOrigin.y / rayDir.y;
                                 if (t > 0.0f && t < 150.0f) {
                                     glm::vec3 groundHit = rayOrigin + rayDir * t;
-                                    spawnPos = groundHit + glm::vec3(0.0f, pkg.HalfExtent.y, 0.0f);
+                                    spawnPos = groundHit;
                                 } else {
                                     spawnPos = rayOrigin + rayDir * 10.0f;
                                 }
@@ -2299,18 +2286,6 @@ void EditorLayer::OnImGuiRender() {
                         auto rootEntity = m_Scene->CreateEntity(rootTag);
                         rootEntity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
                         auto& rootHierarchy = rootEntity.AddComponent<Axle::HierarchyComponent>();
-
-                        if (m_PhysicsScene) {
-                            Axle::BoxBodyProps bProps;
-                            bProps.Position = spawnPos;
-                            bProps.HalfExtent = pkg.HalfExtent;
-                            bProps.IsDynamic = true;
-                            bProps.Friction = 0.70f;
-                            bProps.Restitution = 0.15f;
-                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                            rootEntity.AddComponent<Axle::RigidBody3D>(bodyId, true);
-                            rootEntity.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
-                        }
 
                         for (const auto& part : pkg.Parts) {
                             auto childEntity = m_Scene->CreateEntity(part.Name);
@@ -2348,18 +2323,6 @@ void EditorLayer::OnImGuiRender() {
                             part.LoadedMesh.SourceData.ColorPrimary,
                             part.LoadedMesh.SourceData.ColorSecondary
                         );
-
-                        if (m_PhysicsScene) {
-                            Axle::BoxBodyProps bProps;
-                            bProps.Position = spawnPos;
-                            bProps.HalfExtent = pkg.HalfExtent;
-                            bProps.IsDynamic = true;
-                            bProps.Friction = 0.70f;
-                            bProps.Restitution = 0.15f;
-                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                            entity.AddComponent<Axle::RigidBody3D>(bodyId, true);
-                            entity.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
-                        }
 
                         m_SceneHierarchyPanel.SetSelectedEntity(entity);
                         AXLE_INFO("Instantiated 3D model '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})", 

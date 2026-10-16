@@ -512,7 +512,7 @@ namespace Axle {
                                 ctx.CylinderMesh = m_CylinderMesh;
                                 ctx.ConeMesh = m_ConeMesh;
                                 ctx.PlaneMesh = m_PlaneMesh;
-                                auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f), &ctx);
+                                auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 0.0f, 0.0f), &ctx);
                                 if (spawned) {
                                     m_SelectedEntity = spawned;
                                 }
@@ -527,24 +527,12 @@ namespace Axle {
 
                             auto pkg = AssetSerializer::LoadPackage(p);
                             if (pkg.Success) {
-                                glm::vec3 spawnPos(0.0f, pkg.HalfExtent.y, 0.0f);
+                                glm::vec3 spawnPos(0.0f, 0.0f, 0.0f);
                                 if (pkg.IsPackage) {
                                     std::string rootTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
                                     auto rootEntity = m_Scene->CreateEntity(rootTag);
                                     rootEntity.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
                                     auto& rootHierarchy = rootEntity.AddComponent<HierarchyComponent>();
-
-                                    if (m_PhysicsScene) {
-                                        BoxBodyProps bProps;
-                                        bProps.Position = spawnPos;
-                                        bProps.HalfExtent = pkg.HalfExtent;
-                                        bProps.IsDynamic = true;
-                                        bProps.Friction = 0.70f;
-                                        bProps.Restitution = 0.15f;
-                                        auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                        rootEntity.AddComponent<RigidBody3D>(bodyId, true);
-                                        rootEntity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
-                                    }
 
                                     for (const auto& part : pkg.Parts) {
                                         auto childEntity = m_Scene->CreateEntity(part.Name);
@@ -580,17 +568,6 @@ namespace Axle {
                                         part.LoadedMesh.SourceData.ColorPrimary,
                                         part.LoadedMesh.SourceData.ColorSecondary
                                     );
-                                    if (m_PhysicsScene) {
-                                        BoxBodyProps bProps;
-                                        bProps.Position = spawnPos;
-                                        bProps.HalfExtent = pkg.HalfExtent;
-                                        bProps.IsDynamic = true;
-                                        bProps.Friction = 0.70f;
-                                        bProps.Restitution = 0.15f;
-                                        auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                        newEnt.AddComponent<RigidBody3D>(bodyId, true);
-                                        newEnt.AddComponent<CollisionShape3D>(CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
-                                    }
                                     m_SelectedEntity = newEnt;
                                     AXLE_INFO("Instantiated 3D model '{0}' via Scene Hierarchy drop", p.filename().string());
                                 }
@@ -704,7 +681,7 @@ namespace Axle {
                                     ctx.CylinderMesh = m_CylinderMesh;
                                     ctx.ConeMesh = m_ConeMesh;
                                     ctx.PlaneMesh = m_PlaneMesh;
-                                    auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f), &ctx);
+                                    auto spawned = m_Scene->InstantiateAssembly(p, m_PhysicsScene, glm::vec3(0.0f, 0.0f, 0.0f), &ctx);
                                     if (spawned) {
                                         m_SelectedEntity = spawned;
                                     }
@@ -719,24 +696,12 @@ namespace Axle {
 
                                 auto pkg = AssetSerializer::LoadPackage(p);
                                 if (pkg.Success) {
-                                    glm::vec3 spawnPos(0.0f, pkg.HalfExtent.y, 0.0f);
+                                    glm::vec3 spawnPos(0.0f, 0.0f, 0.0f);
                                     if (pkg.IsPackage) {
                                         std::string rootTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
                                         auto rootEntity = m_Scene->CreateEntity(rootTag);
                                         rootEntity.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
                                         auto& rootHierarchy = rootEntity.AddComponent<HierarchyComponent>();
-
-                                        if (m_PhysicsScene) {
-                                            BoxBodyProps bProps;
-                                            bProps.Position = spawnPos;
-                                            bProps.HalfExtent = pkg.HalfExtent;
-                                            bProps.IsDynamic = true;
-                                            bProps.Friction = 0.70f;
-                                            bProps.Restitution = 0.15f;
-                                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                            rootEntity.AddComponent<RigidBody3D>(bodyId, true);
-                                            rootEntity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
-                                        }
 
                                         for (const auto& part : pkg.Parts) {
                                             auto childEntity = m_Scene->CreateEntity(part.Name);
@@ -772,17 +737,6 @@ namespace Axle {
                                             part.LoadedMesh.SourceData.ColorPrimary,
                                             part.LoadedMesh.SourceData.ColorSecondary
                                         );
-                                        if (m_PhysicsScene) {
-                                            BoxBodyProps bProps;
-                                            bProps.Position = spawnPos;
-                                            bProps.HalfExtent = pkg.HalfExtent;
-                                            bProps.IsDynamic = true;
-                                            bProps.Friction = 0.70f;
-                                            bProps.Restitution = 0.15f;
-                                            auto bodyId = m_PhysicsScene->CreateBox(bProps);
-                                            newEnt.AddComponent<RigidBody3D>(bodyId, true);
-                                            newEnt.AddComponent<CollisionShape3D>(CollisionShapeType::Box, pkg.HalfExtent, 0.70f, 0.15f);
-                                        }
                                         m_SelectedEntity = newEnt;
                                         AXLE_INFO("Instantiated 3D model '{0}' via Properties drop", p.filename().string());
                                     }
@@ -2597,7 +2551,7 @@ namespace Axle {
                     ctx.CylinderMesh = m_CylinderMesh;
                     ctx.ConeMesh = m_ConeMesh;
                     ctx.PlaneMesh = m_PlaneMesh;
-                    auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f), &ctx);
+                    auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene, glm::vec3(0.0f, 0.0f, 0.0f), &ctx);
                     if (ent) m_SelectedEntity = ent;
                 }
             }

@@ -27,19 +27,23 @@ namespace Axle {
             return s_AssetDirectory;
         }
 
-        // 2. Check "assets" in current working directory (typical when running from output directory)
-        if (std::filesystem::exists("assets")) {
-            s_AssetDirectory = std::filesystem::absolute("assets");
-            return s_AssetDirectory;
-        }
-
-        // 3. Check relative paths from build output folder (e.g., build/Editor/Release)
+        // 2. Check relative paths from build output folder (e.g., build/Editor/Release)
         if (std::filesystem::exists("../../Editor/assets")) {
             s_AssetDirectory = std::filesystem::canonical("../../Editor/assets");
             return s_AssetDirectory;
         }
+        if (std::filesystem::exists("../../../Editor/assets")) {
+            s_AssetDirectory = std::filesystem::canonical("../../../Editor/assets");
+            return s_AssetDirectory;
+        }
         if (std::filesystem::exists("../../Sandbox/assets")) {
             s_AssetDirectory = std::filesystem::canonical("../../Sandbox/assets");
+            return s_AssetDirectory;
+        }
+
+        // 3. Check "assets" in current working directory (typical when running standalone distribution)
+        if (std::filesystem::exists("assets")) {
+            s_AssetDirectory = std::filesystem::absolute("assets");
             return s_AssetDirectory;
         }
 

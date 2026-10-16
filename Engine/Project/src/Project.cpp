@@ -16,7 +16,23 @@ namespace Axle {
     std::filesystem::path Project::GetAssetDirectory() {
         if (s_ActiveProject) {
             if (s_ActiveProject->m_Config.AssetDirectory.is_absolute()) {
-                return s_ActiveProject->m_Config.AssetDirectory;
+                if (std::filesystem::exists(s_ActiveProject->m_Config.AssetDirectory)) {
+                    return s_ActiveProject->m_Config.AssetDirectory;
+                }
+            } else {
+                auto resolved = s_ActiveProject->m_ProjectDirectory / s_ActiveProject->m_Config.AssetDirectory;
+                if (std::filesystem::exists(resolved)) {
+                    return resolved;
+                }
+            }
+            // If the configured path doesn't exist, check if AssetDirectory exists relative to current working directory
+            if (std::filesystem::exists(s_ActiveProject->m_Config.AssetDirectory)) {
+                return std::filesystem::absolute(s_ActiveProject->m_Config.AssetDirectory);
+            }
+            // Fall back to FileSystem auto-detection
+            auto fsAssetDir = FileSystem::GetAssetDirectory();
+            if (std::filesystem::exists(fsAssetDir)) {
+                return fsAssetDir;
             }
             return s_ActiveProject->m_ProjectDirectory / s_ActiveProject->m_Config.AssetDirectory;
         }

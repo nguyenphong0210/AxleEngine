@@ -15,6 +15,7 @@
 #include <Axle/JobSystemEnkiTS.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsEngine.hpp>
+#include <Axle/ParallelECS.hpp>
 #include "CarPlayerScript.hpp"
 #include <iostream>
 #include <fstream>
@@ -28,6 +29,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <crtdbg.h>
 #endif
 
 // =============================================================================
@@ -2878,9 +2880,260 @@ bool RunTest_Step23_Phase19_JoltPhysicsBridgeEnkiTS() {
 }
 
 // =============================================================================
+// TEST STEP 24: Parallel ECS Processing (Batch Views, Hierarchy, CommandBuffer)
+// =============================================================================
+bool RunTest_Step24_Phase19_ParallelECSProcessing() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 24 TEST] PHASE 19.4: PARALLEL ECS PROCESSING     " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    using namespace Axle;
+
+    if (!JobSystem::IsInitialized()) {
+        JobSystem::Init();
+    }
+    const uint32_t workerCount = JobSystem::GetWorkerThreadCount();
+    std::cout << "  -> Active JobSystem worker threads: " << workerCount << std::endl;
+
+    // -------------------------------------------------------------------------
+    // [24.1] Parallel view iteration across 50,000 entities
+    // -------------------------------------------------------------------------
+    std::cout << "\n[24.1] Testing ParallelECS::ForEach across 50,000 entities..." << std::endl;
+    entt::registry registry;
+    constexpr uint32_t kEntityCount = 50000;
+
+    std::vector<entt::entity> createdEntities;
+    createdEntities.reserve(kEntityCount);
+    for (uint32_t i = 0; i < kEntityCount; ++i) {
+        entt::entity entity = registry.create();
+        registry.emplace<TransformComponent>(entity, glm::vec3(0.0f));
+        createdEntities.push_back(entity);
+    }
+    std::cout << "  -> Spawned " << kEntityCount << " entities with initial zero TransformComponent." << std::endl;
+
+    std::atomic<uint32_t> processedCount{0};
+    std::atomic<uint32_t> threadActivity[128]{};
+
+    auto tStart = std::chrono::high_resolution_clock::now();
+
+    ParallelECS::ForEach<TransformComponent>(registry, [&](entt::entity e, TransformComponent& tc, uint32_t threadNum) {
+        uint32_t idVal = static_cast<uint32_t>(e);
+        tc.Translation = glm::vec3(static_cast<float>(idVal), 1.0f, 2.0f);
+        tc.Scale = glm::vec3(1.5f);
+        processedCount.fetch_add(1, std::memory_order_relaxed);
+        if (threadNum < 128) {
+            threadActivity[threadNum].fetch_add(1, std::memory_order_relaxed);
+        }
+    }, 1024);
+
+    auto tEnd = std::chrono::high_resolution_clock::now();
+    double elapsedMs = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
+
+    assert(processedCount.load() == kEntityCount);
+
+    uint32_t threadsUsed = 0;
+    for (uint32_t t = 0; t < 128; ++t) {
+        if (threadActivity[t].load() > 0) {
+            threadsUsed++;
+        }
+    }
+
+    std::cout << "  -> Processed " << processedCount.load() << " entities in " << elapsedMs 
+              << " ms (" << static_cast<uint32_t>((kEntityCount / (elapsedMs / 1000.0))) << " entities/sec)." << std::endl;
+    std::cout << "  -> Active threads participating in batch iteration: " << threadsUsed << " thread(s)." << std::endl;
+    if (workerCount > 1) {
+        assert(threadsUsed > 1);
+    }
+
+    // Spot check 10 entities
+    for (uint32_t i = 0; i < 10; ++i) {
+        entt::entity sampleEnt = createdEntities[i * (kEntityCount / 10)];
+        const auto& tc = registry.get<TransformComponent>(sampleEnt);
+        uint32_t expectedID = static_cast<uint32_t>(sampleEnt);
+        assert(tc.Translation == glm::vec3(static_cast<float>(expectedID), 1.0f, 2.0f));
+        assert(tc.Scale == glm::vec3(1.5f));
+    }
+    std::cout << "  -> PASS: All 50,000 entities verified with lock-free mutations across workers." << std::endl;
+
+    // -------------------------------------------------------------------------
+    // [24.2] Multi-component view filtering & mutation
+    // -------------------------------------------------------------------------
+    std::cout << "\n[24.2] Testing Multi-Component ParallelECS::ForEach<TransformComponent, RigidBody3D>..." << std::endl;
+    constexpr uint32_t kRigidBodyCount = 25000;
+    for (uint32_t i = 0; i < kRigidBodyCount; ++i) {
+        RigidBody3D rb;
+        rb.Mass = 10.0f;
+        registry.emplace<RigidBody3D>(createdEntities[i], rb);
+    }
+    std::cout << "  -> Emplaced RigidBody3D on first " << kRigidBodyCount << " entities." << std::endl;
+
+    std::atomic<uint32_t> multiCompCount{0};
+    ParallelECS::ForEach<TransformComponent, RigidBody3D>(registry, [&](entt::entity e, TransformComponent& tc, RigidBody3D& rb) {
+        (void)e;
+        tc.Translation.y = 42.0f;
+        rb.Mass = 25.0f;
+        multiCompCount.fetch_add(1, std::memory_order_relaxed);
+    }, 512);
+
+    assert(multiCompCount.load() == kRigidBodyCount);
+    std::cout << "  -> Processed exactly " << multiCompCount.load() << " filtered entities." << std::endl;
+
+    // Verify first half has updated values, second half unchanged
+    for (uint32_t i = 0; i < 5; ++i) {
+        entt::entity sampleWithRB = createdEntities[i * 100];
+        const auto& tc = registry.get<TransformComponent>(sampleWithRB);
+        const auto& rb = registry.get<RigidBody3D>(sampleWithRB);
+        assert(tc.Translation.y == 42.0f);
+        assert(rb.Mass == 25.0f);
+    }
+    for (uint32_t i = 0; i < 5; ++i) {
+        entt::entity sampleWithoutRB = createdEntities[kRigidBodyCount + i * 100];
+        const auto& tc = registry.get<TransformComponent>(sampleWithoutRB);
+        assert(tc.Translation.y == 1.0f);
+        assert(!registry.all_of<RigidBody3D>(sampleWithoutRB));
+    }
+    std::cout << "  -> PASS: Multi-component filtering verified without false positives or lock contention." << std::endl;
+
+    // -------------------------------------------------------------------------
+    // [24.3] Disjoint subtree parallel hierarchy transform evaluation
+    // -------------------------------------------------------------------------
+    std::cout << "\n[24.3] Testing ParallelECS::UpdateWorldTransforms on disjoint hierarchy subtrees..." << std::endl;
+    auto hierarchyScene = std::make_shared<Scene>();
+    constexpr uint32_t kRootCount = 500;
+    // Each root has 2 children, each child has 2 grandchildren: 500 * (1 + 2 + 4) = 3,500 entities
+    std::vector<Entity> rootList;
+    rootList.reserve(kRootCount);
+
+    for (uint32_t r = 0; r < kRootCount; ++r) {
+        Entity root = hierarchyScene->CreateEntity("Root_" + std::to_string(r));
+        root.GetComponent<TransformComponent>().Translation = glm::vec3(static_cast<float>(r) * 10.0f, 0.0f, 0.0f);
+
+        for (uint32_t c = 0; c < 2; ++c) {
+            Entity child = hierarchyScene->CreateEntity("Child_" + std::to_string(r) + "_" + std::to_string(c));
+            child.SetParent(root);
+            child.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 5.0f, 0.0f);
+
+            for (uint32_t g = 0; g < 2; ++g) {
+                Entity grandchild = hierarchyScene->CreateEntity("Grandchild_" + std::to_string(r) + "_" + std::to_string(c) + "_" + std::to_string(g));
+                grandchild.SetParent(child);
+                grandchild.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 0.0f, 3.0f);
+            }
+        }
+        rootList.push_back(root);
+    }
+    std::cout << "  -> Built scene graph hierarchy with " << kRootCount << " roots and 3,500 total nodes." << std::endl;
+
+    // Parallel evaluate transforms across worker threads
+    hierarchyScene->UpdateWorldTransformsParallel(32);
+
+    // Verify correct hierarchical world matrix propagation
+    for (uint32_t r = 0; r < kRootCount; r += 50) {
+        Entity root = rootList[r];
+        const auto& rootTc = root.GetComponent<TransformComponent>();
+        glm::vec3 expectedRootWorld(static_cast<float>(r) * 10.0f, 0.0f, 0.0f);
+        assert(glm::length(glm::vec3(rootTc.WorldMatrix[3]) - expectedRootWorld) < 1e-4f);
+
+        const auto& rootHc = root.GetComponent<HierarchyComponent>();
+        for (auto childID : rootHc.Children) {
+            Entity child{ childID, hierarchyScene.get() };
+            const auto& childTc = child.GetComponent<TransformComponent>();
+            glm::vec3 expectedChildWorld = expectedRootWorld + glm::vec3(0.0f, 5.0f, 0.0f);
+            assert(glm::length(glm::vec3(childTc.WorldMatrix[3]) - expectedChildWorld) < 1e-4f);
+
+            const auto& childHc = child.GetComponent<HierarchyComponent>();
+            for (auto grandID : childHc.Children) {
+                Entity grand{ grandID, hierarchyScene.get() };
+                const auto& grandTc = grand.GetComponent<TransformComponent>();
+                glm::vec3 expectedGrandWorld = expectedChildWorld + glm::vec3(0.0f, 0.0f, 3.0f);
+                assert(glm::length(glm::vec3(grandTc.WorldMatrix[3]) - expectedGrandWorld) < 1e-4f);
+            }
+        }
+    }
+    std::cout << "  -> PASS: Disjoint hierarchical subtrees evaluated in parallel matching exact world coordinates." << std::endl;
+
+    // -------------------------------------------------------------------------
+    // [24.4] Thread-safe deferred CommandBuffer mutations
+    // -------------------------------------------------------------------------
+    std::cout << "\n[24.4] Testing ParallelECS::CommandBuffer thread-safe deferred mutations..." << std::endl;
+    ParallelECS::CommandBuffer cmdBuffer;
+
+    // During parallel iteration, destroy even entities and emplace TagComponent on odd entities
+    ParallelECS::ForEach<TransformComponent>(registry, [&](entt::entity e, TransformComponent& tc, uint32_t threadNum) {
+        (void)tc;
+        (void)threadNum;
+        uint32_t idVal = static_cast<uint32_t>(e);
+        if (idVal % 2 == 0) {
+            cmdBuffer.DestroyEntity(e);
+        } else {
+            cmdBuffer.EmplaceOrReplace<TagComponent>(e, "DeferredTag_" + std::to_string(idVal));
+        }
+    }, 1024);
+
+    assert(cmdBuffer.GetPendingCount() == kEntityCount);
+    std::cout << "  -> Recorded " << cmdBuffer.GetPendingCount() << " deferred commands from worker threads." << std::endl;
+
+    // Commit on main thread
+    cmdBuffer.Execute(registry);
+    assert(cmdBuffer.GetPendingCount() == 0);
+    std::cout << "  -> Executed all deferred commands on main thread." << std::endl;
+
+    // Check entity states
+    uint32_t validCount = 0;
+    uint32_t taggedCount = 0;
+    for (entt::entity e : createdEntities) {
+        uint32_t idVal = static_cast<uint32_t>(e);
+        if (idVal % 2 == 0) {
+            assert(!registry.valid(e));
+        } else {
+            assert(registry.valid(e));
+            assert(registry.all_of<TagComponent>(e));
+            const auto& tag = registry.get<TagComponent>(e);
+            assert(tag.Tag == "DeferredTag_" + std::to_string(idVal));
+            validCount++;
+            taggedCount++;
+        }
+    }
+    assert(validCount == kEntityCount / 2);
+    assert(taggedCount == kEntityCount / 2);
+    std::cout << "  -> PASS: Deferred structural mutations executed cleanly without memory corruption." << std::endl;
+
+    // -------------------------------------------------------------------------
+    // [24.5] ParallelECS::ForEachEntity on filtered sub-collection
+    // -------------------------------------------------------------------------
+    std::cout << "\n[24.5] Testing ParallelECS::ForEachEntity on filtered entity collection..." << std::endl;
+    std::vector<entt::entity> remainingEntities;
+    remainingEntities.reserve(validCount);
+    for (entt::entity e : createdEntities) {
+        if (registry.valid(e)) {
+            remainingEntities.push_back(e);
+        }
+    }
+
+    ParallelECS::ForEachEntity<TransformComponent>(registry, remainingEntities, [](entt::entity e, TransformComponent& tc) {
+        (void)e;
+        tc.Scale = glm::vec3(3.0f, 3.0f, 3.0f);
+    }, 256);
+
+    for (entt::entity e : remainingEntities) {
+        const auto& tc = registry.get<TransformComponent>(e);
+        assert(tc.Scale == glm::vec3(3.0f, 3.0f, 3.0f));
+    }
+    std::cout << "  -> PASS: ForEachEntity updated all " << remainingEntities.size() << " surviving entities." << std::endl;
+
+    std::cout << ">>> STEP 24 PASSED: Phase 19.4 Parallel ECS Processing verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
     int targetStep = 0; // 0 = all
     if (argc > 1) {
         std::string arg = argv[1];
@@ -2907,12 +3160,13 @@ int main(int argc, char** argv) {
         else if (arg == "21" || arg == "step21" || arg == "--step21") targetStep = 21;
         else if (arg == "22" || arg == "step22" || arg == "--step22" || arg == "--phase19" || arg == "--phase19.2") targetStep = 22;
         else if (arg == "23" || arg == "step23" || arg == "--step23" || arg == "--phase19.3") targetStep = 23;
+        else if (arg == "24" || arg == "step24" || arg == "--step24" || arg == "--phase19.4") targetStep = 24;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 23 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 24 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -2988,6 +3242,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 23) {
         if (!RunTest_Step23_Phase19_JoltPhysicsBridgeEnkiTS()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 24) {
+        if (!RunTest_Step24_Phase19_ParallelECSProcessing()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

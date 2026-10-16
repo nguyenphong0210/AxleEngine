@@ -5,6 +5,7 @@
 #include <Axle/ScriptRegistry.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/AssemblySerializer.hpp>
+#include <Axle/ParallelECS.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -250,19 +251,11 @@ namespace Axle {
     }
 
     void Scene::UpdateWorldTransforms() {
-        auto view = m_Registry.view<TransformComponent>();
-        for (auto entityID : view) {
-            bool isRoot = true;
-            if (m_Registry.all_of<HierarchyComponent>(entityID)) {
-                const auto& hc = m_Registry.get<HierarchyComponent>(entityID);
-                if (hc.Parent != entt::null && m_Registry.valid(hc.Parent)) {
-                    isRoot = false;
-                }
-            }
-            if (isRoot) {
-                UpdateEntityTransformRecursive(entityID, glm::mat4(1.0f));
-            }
-        }
+        UpdateWorldTransformsParallel(64);
+    }
+
+    void Scene::UpdateWorldTransformsParallel(u32 minBatchSize) {
+        ParallelECS::UpdateWorldTransforms(m_Registry, minBatchSize);
     }
 
     void Scene::UpdateEntityTransformRecursive(entt::entity entityID, const glm::mat4& parentWorld) {
@@ -355,7 +348,7 @@ namespace Axle {
 
 
         // 2. Propagate scene graph hierarchy transforms (Root -> Children)
-        UpdateWorldTransforms();
+        UpdateWorldTransformsParallel(64);
 
         // 3. Query active directional sun light in scene
 

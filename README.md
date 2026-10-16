@@ -344,11 +344,11 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - [x] **Anti-Lock Shadow-Copy & State Preservation**: Implement `ScriptHotReloadManager` copying `AxleScripts.dll` to runtime timestamped DLLs (`AxleScripts_Runtime_<timestamp>.dll`) to prevent Windows file locking (`LNK1104`), serializing and re-binding field properties on active entities seamlessly.
     - [x] **Async Background Compiler (`ScriptCompiler`)**: Spawn background worker thread executing `cmake --build build --config Release --target AxleScripts` with real-time stdout/stderr capture and error parsing without UI freezing.
     - [x] **Editor UI Integration (Compile Button & Menu)**: Unreal-style `[🔨 Compile] (F9 / Ctrl+B)` toolbar button with dynamic status animations (`Compiling...`, `[OK] Reloaded in X.Xs`, `[X] Failed`), along with `Build` menu bar items (`Open in Visual Studio`, `Open Scripts Directory`).
-- [ ] **Phase 19: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
+- [x] **Phase 19: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
   - [x] **ThirdParty Integration**: Embed `enkiTS` (Enki Task Scheduler) submodule/library into `ThirdParty/enkiTS` with modern CMake configuration.
   - [x] **Core JobSystem Engine**: Implement unified `Axle::JobSystem` in `Engine/Core` managing persistent lock-free worker threads (`enki::TaskScheduler`) matching CPU hardware concurrency.
   - [x] **Jolt Physics Bridge (`JobSystemEnkiTS`)**: Implement custom `JPH::JobSystem` backend routing Jolt Physics constraint solving and collision tasks into enkiTS, eliminating separate thread pools and thread oversubscription.
-  - [ ] **Parallel ECS Processing**: Implement `ParallelFor` utilities for `entt::registry` batch iteration, distributing bulk mechanical parts and transform evaluations across all worker cores without lock contention.
+  - [x] **Parallel ECS Processing**: Implement `ParallelFor` utilities for `entt::registry` batch iteration, distributing bulk mechanical parts and transform evaluations across all worker cores without lock contention.
 - [ ] **Phase 20: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.

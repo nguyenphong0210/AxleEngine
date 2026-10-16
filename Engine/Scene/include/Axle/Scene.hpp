@@ -44,6 +44,7 @@ namespace Axle {
         // Hierarchical world transform calculation (propagating parent transforms)
         glm::mat4 GetWorldTransform(entt::entity entityID) const;
         void UpdateWorldTransforms();
+        void UpdateWorldTransformsParallel(u32 minBatchSize = 64);
 
         // Reparenting API with cycle check and World Position Stays logic
         void SetParent(Entity child, Entity parent);

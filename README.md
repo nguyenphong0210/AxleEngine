@@ -349,16 +349,22 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Core JobSystem Engine**: Implement unified `Axle::JobSystem` in `Engine/Core` managing persistent lock-free worker threads (`enki::TaskScheduler`) matching CPU hardware concurrency.
   - [x] **Jolt Physics Bridge (`JobSystemEnkiTS`)**: Implement custom `JPH::JobSystem` backend routing Jolt Physics constraint solving and collision tasks into enkiTS, eliminating separate thread pools and thread oversubscription.
   - [x] **Parallel ECS Processing**: Implement `ParallelFor` utilities for `entt::registry` batch iteration, distributing bulk mechanical parts and transform evaluations across all worker cores without lock contention.
-- [ ] **Phase 20: Audio System (`Engine/Audio`)**
+- [ ] **Phase 20: Component-Driven Vehicle Creation from Scratch (`Engine/Vehicle`, `Engine/Scene` & `Engine/UI`)**
+  - [ ] **Decouple Hardcoded Tags**: Completely eliminate fixed name queries (`"Vehicle Chassis"`, `"Wheel FL/FR/RL/RR"`). All vehicle lifecycle logic becomes 100% component-driven via `VehicleComponent` in `SceneSerializer.cpp` and `EditorLayer.cpp`.
+  - [ ] **Configurable VehicleComponent**: Integrate `VehicleConfig` directly into `VehicleComponent` (Chassis Mass/Extents, 4-wheel offsets, spring frequency, damping, engine torque, redline RPM, steer angle, 4WD/RWD toggle) and store 4 wheel entity references (`UUID WheelEntities[4]`) with full `.axlescene` serialization.
+  - [ ] **Properties Inspector Tuning UI**: Interactive sliders in `SceneHierarchyPanel` for real-time chassis, suspension, and powertrain tuning, quick-fit to collider geometry (`[ Auto-Fit to Box Collider ]`), and one-click `[ Auto-Spawn 4 Wheel Entities ]`.
+  - [ ] **Runtime Simulation & Wheel Sync**: Automatic Jolt physics vehicle constraint instantiation upon Play (`F5`) for any entity with `VehicleComponent`, synchronizing visual wheel mesh rotation and steering in real-time.
+  - [ ] **Gameplay Input, Camera & Verification**: Drive control via `CarPlayerScript`, dynamic chase camera targeting, and automated regression testing in `AxleTests.exe`.
+- [ ] **Phase 21: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
-- [ ] **Phase 21: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
+- [ ] **Phase 22: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
   - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.
   - [ ] **Splatmap Texture Painting**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
   - [ ] **Chunked Grid & Multithreaded LOD**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
   - [ ] **Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
-- [ ] **Phase 22: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
+- [ ] **Phase 23: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
   - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights via Assemblies.
   - [ ] **Dynamic In-Car Dashboard & HUD**: Real-time tachometer (RPM), speedometer (km/h), current gear, and turbo boost indicator.
   - [ ] **Multi-Angle Camera Controller**: Chase camera, first-person cockpit camera, hood camera, and free-orbit replay camera.

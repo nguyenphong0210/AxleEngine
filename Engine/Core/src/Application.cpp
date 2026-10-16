@@ -1,5 +1,6 @@
 #include <Axle/Application.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/JobSystem.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/PhysicsEngine.hpp>
 #include <GLFW/glfw3.h>
@@ -15,7 +16,10 @@ namespace Axle {
         // 1. Initialize logging
         Log::Init();
 
-        // 2. Initialize physics engine core
+        // 2. Initialize unified Job System
+        JobSystem::Init();
+
+        // 3. Initialize physics engine core
         if (!PhysicsEngine::IsInitialized()) {
             PhysicsEngine::Init();
         }
@@ -72,6 +76,8 @@ namespace Axle {
             PhysicsEngine::Shutdown();
         }
 
+        JobSystem::Shutdown();
+
         AXLE_CORE_INFO("Application '{0}' shut down", m_Specification.Name);
         s_Instance = nullptr;
     }
@@ -91,6 +97,7 @@ namespace Axle {
     void Application::Run() {
         while (m_Running && !m_Window->ShouldClose()) {
             m_Window->PollEvents();
+            JobSystem::RunPinnedTasks();
 
             const auto time = static_cast<f32>(glfwGetTime());
             Timestep ts = time - m_LastFrameTime;

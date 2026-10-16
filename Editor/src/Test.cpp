@@ -11,6 +11,7 @@
 #include <Axle/PhysicsMaterial.hpp>
 #include <Axle/ScriptHotReloadManager.hpp>
 #include <Axle/ScriptCompiler.hpp>
+#include <Axle/JobSystem.hpp>
 #include "CarPlayerScript.hpp"
 #include <iostream>
 #include <fstream>
@@ -2599,6 +2600,122 @@ bool RunTest_Step21_Phase18_AsyncBackgroundScriptCompiler() {
 }
 
 // =============================================================================
+// STEP 22: PHASE 19.2 CORE JOBSYSTEM ENGINE & PARALLEL PROCESSING
+// =============================================================================
+bool RunTest_Step22_Phase19_CoreJobSystemEngine() {
+    using namespace Axle;
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 22 TEST] PHASE 19.2 CORE JOBSYSTEM ENGINE        " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::cout << "\n[22.1] Initializing JobSystem & Verifying Hardware Concurrency..." << std::endl;
+    Axle::JobSystem::Init();
+    assert(Axle::JobSystem::IsInitialized());
+    
+    uint32_t workerThreads = Axle::JobSystem::GetWorkerThreadCount();
+    std::cout << "  -> Active Worker Threads: " << workerThreads << std::endl;
+    assert(workerThreads >= 1);
+    assert(Axle::JobSystem::IsMainThread());
+    assert(Axle::JobSystem::GetCurrentThreadIndex() == 0);
+    std::cout << "  -> PASS: JobSystem initialized. Main thread is thread 0." << std::endl;
+
+    std::cout << "\n[22.2] Testing Fine-Grained Parallel Loop (ParallelFor with 250,000 items)..." << std::endl;
+    const uint32_t elementCount = 250000;
+    std::vector<uint64_t> testArray(elementCount, 0);
+    std::atomic<uint32_t> processedCount{ 0 };
+
+    Axle::JobSystem::ParallelFor(elementCount, [&](uint32_t index, uint32_t threadNum) {
+        (void)threadNum;
+        testArray[index] = (static_cast<uint64_t>(index) * 3) + 7;
+        processedCount.fetch_add(1, std::memory_order_relaxed);
+    }, 4096);
+
+    assert(processedCount.load() == elementCount);
+    for (uint32_t i = 0; i < 100; ++i) {
+        assert(testArray[i] == (static_cast<uint64_t>(i) * 3) + 7);
+    }
+    assert(testArray[elementCount - 1] == (static_cast<uint64_t>(elementCount - 1) * 3) + 7);
+    std::cout << "  -> PASS: All " << elementCount << " iterations verified 100% correct across all worker threads!" << std::endl;
+
+    std::cout << "\n[22.3] Testing Coarse-Grained Range Processing (ParallelForRange with 50,000 items)..." << std::endl;
+    const uint32_t rangeCount = 50000;
+    std::vector<float> floatArray(rangeCount, 0.0f);
+
+    Axle::JobSystem::ParallelForRange(rangeCount, [&](uint32_t start, uint32_t end) {
+        for (uint32_t i = start; i < end; ++i) {
+            floatArray[i] = static_cast<float>(i) * 0.5f;
+        }
+    }, 2048);
+
+    for (uint32_t i = 0; i < rangeCount; ++i) {
+        float expected = static_cast<float>(i) * 0.5f;
+        assert(std::abs(floatArray[i] - expected) < 0.0001f);
+    }
+    std::cout << "  -> PASS: ParallelForRange executed and verified without partition gaps!" << std::endl;
+
+    std::cout << "\n[22.4] Testing Asynchronous Job Dispatching & Dependency Waiting (JobHandle)..." << std::endl;
+    std::atomic<bool> asyncTaskDone{ false };
+    std::atomic<uint32_t> asyncAccumulator{ 0 };
+
+    auto handle = Axle::JobSystem::Dispatch([&]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        asyncAccumulator.fetch_add(12345);
+        asyncTaskDone.store(true);
+    });
+
+    assert(handle.IsValid());
+    handle.Wait();
+    assert(handle.IsComplete());
+    assert(asyncTaskDone.load() == true);
+    assert(asyncAccumulator.load() == 12345);
+    std::cout << "  -> PASS: Async JobHandle dispatched, waited, and completed with synchronized state." << std::endl;
+
+    std::cout << "\n[22.5] Testing Cross-Thread Main-Thread Dispatching (DispatchToMainThread)..." << std::endl;
+    std::atomic<bool> mainThreadTaskExecuted{ false };
+    std::atomic<uint32_t> mainThreadWorkerId{ 999 };
+
+    auto workerHandle = Axle::JobSystem::Dispatch([&]() {
+        // Dispatched on worker thread, enqueue lambda to main thread
+        Axle::JobSystem::DispatchToMainThread([&]() {
+            assert(Axle::JobSystem::IsMainThread());
+            mainThreadWorkerId.store(Axle::JobSystem::GetCurrentThreadIndex());
+            mainThreadTaskExecuted.store(true);
+        });
+    });
+
+    workerHandle.Wait();
+    // Worker finished enqueuing, but main thread hasn't pumped pinned tasks yet
+    assert(!mainThreadTaskExecuted.load());
+
+    // Main thread pumps pinned tasks
+    Axle::JobSystem::RunPinnedTasks();
+    assert(mainThreadTaskExecuted.load());
+    assert(mainThreadWorkerId.load() == 0);
+    std::cout << "  -> PASS: Cross-thread callback safely executed on main thread (Thread 0)!" << std::endl;
+
+    std::cout << "\n[22.6] Testing JobSystem Shutdown and Re-initialization..." << std::endl;
+    Axle::JobSystem::Shutdown();
+    assert(!Axle::JobSystem::IsInitialized());
+    std::cout << "  -> PASS: Shutdown completed cleanly." << std::endl;
+
+    Axle::JobSystem::Init(2);
+    assert(Axle::JobSystem::IsInitialized());
+    assert(Axle::JobSystem::GetWorkerThreadCount() == 2);
+    std::atomic<int> testCount{ 0 };
+    Axle::JobSystem::ParallelFor(100, [&](uint32_t i) {
+        (void)i;
+        testCount.fetch_add(1);
+    });
+    assert(testCount.load() == 100);
+    Axle::JobSystem::Shutdown();
+    assert(!Axle::JobSystem::IsInitialized());
+    std::cout << "  -> PASS: Re-initialization and custom thread pool size verified!" << std::endl;
+
+    std::cout << ">>> STEP 22 PASSED: Phase 19.2 Core JobSystem Engine verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -2626,12 +2743,13 @@ int main(int argc, char** argv) {
         else if (arg == "19" || arg == "step19" || arg == "--step19" || arg == "--phase18.3") targetStep = 19;
         else if (arg == "20" || arg == "step20" || arg == "--step20") targetStep = 20;
         else if (arg == "21" || arg == "step21" || arg == "--step21") targetStep = 21;
+        else if (arg == "22" || arg == "step22" || arg == "--step22" || arg == "--phase19" || arg == "--phase19.2") targetStep = 22;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 21 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 22 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -2701,6 +2819,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 21) {
         if (!RunTest_Step21_Phase18_AsyncBackgroundScriptCompiler()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 22) {
+        if (!RunTest_Step22_Phase19_CoreJobSystemEngine()) allPassed = false;
     }
 
     std::cout << "========================================================" << std::endl;

@@ -4,6 +4,7 @@ add_library(AxleCore STATIC
     src/Application.cpp
     src/FileSystem.cpp
     src/UUID.cpp
+    src/JobSystem.cpp
 )
 add_library(Axle::Core ALIAS AxleCore)
 add_library(Axle::Foundation ALIAS AxleCore)

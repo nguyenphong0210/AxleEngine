@@ -69,3 +69,6 @@ desktop.ini
 
 # ImGui Generated Files
 imgui.ini
+
+# Test Generated Directories
+sandbox_dragdrop_*/

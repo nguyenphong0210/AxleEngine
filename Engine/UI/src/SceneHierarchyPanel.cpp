@@ -236,115 +236,121 @@ namespace Axle {
         m_PlaneMesh = plane;
     }
 
-    Entity SceneHierarchyPanel::CreatePrimitive(int primitiveType, const glm::vec3& position) {
+    Entity SceneHierarchyPanel::CreatePrimitive(int primitiveType, const glm::vec3& position, bool isDynamic) {
         if (!m_Scene) return {};
 
         Entity entity{};
+        const glm::vec4 defaultPrimaryColor{ 0.88f, 0.89f, 0.92f, 1.0f };   // Studio Light Silver
+        const glm::vec4 defaultSecondaryColor{ 0.45f, 0.48f, 0.52f, 1.0f }; // Subtle Slate Accent
+
         switch (primitiveType) {
             case 0: { // 3D Cube
-                entity = m_Scene->CreateEntity("Dynamic Box");
+                std::string name = isDynamic ? "Dynamic Box" : "Cube";
+                entity = m_Scene->CreateEntity(name);
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (m_CubeMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_CubeMesh, 1, 4.0f,
-                        glm::vec4(0.96f, 0.52f, 0.12f, 1.0f),
-                        glm::vec4(0.12f, 0.13f, 0.15f, 1.0f)
+                        m_CubeMesh, 0, 1.0f,
+                        defaultPrimaryColor,
+                        defaultSecondaryColor
                     );
                 }
-                if (m_PhysicsScene) {
-                    BoxBodyProps bProps;
-                    bProps.Position = position;
-                    bProps.HalfExtent = glm::vec3(0.5f, 0.5f, 0.5f);
-                    bProps.IsDynamic = true;
-                    auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                    entity.AddComponent<RigidBody3D>(bodyID, true);
+                if (isDynamic) {
                     entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, glm::vec3(0.5f));
+                    if (m_PhysicsScene) {
+                        BoxBodyProps bProps;
+                        bProps.Position = position;
+                        bProps.HalfExtent = glm::vec3(0.5f, 0.5f, 0.5f);
+                        bProps.IsDynamic = true;
+                        auto bodyID = m_PhysicsScene->CreateBox(bProps);
+                        entity.AddComponent<RigidBody3D>(bodyID, true);
+                    }
                 }
                 break;
             }
             case 1: { // 3D Sphere
-                entity = m_Scene->CreateEntity("Dynamic Sphere");
-                entity.AddComponent<TransformComponent>(position, glm::vec3(0.5f, 0.5f, 0.5f));
+                std::string name = isDynamic ? "Dynamic Sphere" : "Sphere";
+                entity = m_Scene->CreateEntity(name);
+                entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (m_SphereMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_SphereMesh, 2, 16.0f,
-                        glm::vec4(0.0f, 0.85f, 0.95f, 1.0f),
-                        glm::vec4(0.05f, 0.12f, 0.24f, 1.0f)
+                        m_SphereMesh, 0, 1.0f,
+                        defaultPrimaryColor,
+                        defaultSecondaryColor
                     );
                 }
-                if (m_PhysicsScene) {
-                    SphereBodyProps sProps;
-                    sProps.Position = position;
-                    sProps.Radius = 0.5f;
-                    sProps.IsDynamic = true;
-                    auto bodyID = m_PhysicsScene->CreateSphere(sProps);
-                    entity.AddComponent<RigidBody3D>(bodyID, true);
+                if (isDynamic) {
                     entity.AddComponent<CollisionShape3D>(CollisionShapeType::Sphere, 0.5f);
+                    if (m_PhysicsScene) {
+                        SphereBodyProps sProps;
+                        sProps.Position = position;
+                        sProps.Radius = 0.5f;
+                        sProps.IsDynamic = true;
+                        auto bodyID = m_PhysicsScene->CreateSphere(sProps);
+                        entity.AddComponent<RigidBody3D>(bodyID, true);
+                    }
                 }
                 break;
             }
             case 2: { // 3D Cylinder
-                entity = m_Scene->CreateEntity("Dynamic Cylinder");
-                entity.AddComponent<TransformComponent>(position, glm::vec3(0.5f, 0.75f, 0.5f));
+                std::string name = isDynamic ? "Dynamic Cylinder" : "Cylinder";
+                entity = m_Scene->CreateEntity(name);
+                entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (m_CylinderMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_CylinderMesh, 1, 4.0f,
-                        glm::vec4(0.20f, 0.80f, 0.40f, 1.0f),
-                        glm::vec4(0.08f, 0.18f, 0.10f, 1.0f)
+                        m_CylinderMesh, 0, 1.0f,
+                        defaultPrimaryColor,
+                        defaultSecondaryColor
                     );
                 }
-                if (m_PhysicsScene) {
-                    CylinderBodyProps cProps;
-                    cProps.Position = position;
-                    cProps.HalfHeight = 0.75f;
-                    cProps.Radius = 0.5f;
-                    cProps.IsDynamic = true;
-                    auto bodyID = m_PhysicsScene->CreateCylinder(cProps);
-                    entity.AddComponent<RigidBody3D>(bodyID, true);
-                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cylinder, 0.75f, 0.5f);
+                if (isDynamic) {
+                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cylinder, 0.5f, 0.5f);
+                    if (m_PhysicsScene) {
+                        CylinderBodyProps cProps;
+                        cProps.Position = position;
+                        cProps.HalfHeight = 0.5f;
+                        cProps.Radius = 0.5f;
+                        cProps.IsDynamic = true;
+                        auto bodyID = m_PhysicsScene->CreateCylinder(cProps);
+                        entity.AddComponent<RigidBody3D>(bodyID, true);
+                    }
                 }
                 break;
             }
             case 3: { // 3D Cone
-                entity = m_Scene->CreateEntity("Dynamic Cone");
-                entity.AddComponent<TransformComponent>(position, glm::vec3(0.5f, 0.75f, 0.5f));
+                std::string name = isDynamic ? "Dynamic Cone" : "Cone";
+                entity = m_Scene->CreateEntity(name);
+                entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (m_ConeMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_ConeMesh, 1, 4.0f,
-                        glm::vec4(0.95f, 0.65f, 0.10f, 1.0f),
-                        glm::vec4(0.18f, 0.12f, 0.05f, 1.0f)
+                        m_ConeMesh, 0, 1.0f,
+                        defaultPrimaryColor,
+                        defaultSecondaryColor
                     );
                 }
-                if (m_PhysicsScene) {
-                    CylinderBodyProps cProps;
-                    cProps.Position = position;
-                    cProps.HalfHeight = 0.75f;
-                    cProps.Radius = 0.5f;
-                    cProps.IsDynamic = true;
-                    auto bodyID = m_PhysicsScene->CreateCylinder(cProps);
-                    entity.AddComponent<RigidBody3D>(bodyID, true);
-                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cone, 0.75f, 0.5f);
+                if (isDynamic) {
+                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cone, 0.5f, 0.5f);
+                    if (m_PhysicsScene) {
+                        ConeBodyProps cProps;
+                        cProps.Position = position;
+                        cProps.HalfHeight = 0.5f;
+                        cProps.Radius = 0.5f;
+                        cProps.IsDynamic = true;
+                        auto bodyID = m_PhysicsScene->CreateCone(cProps);
+                        entity.AddComponent<RigidBody3D>(bodyID, true);
+                    }
                 }
                 break;
             }
-            case 4: { // Static Floor Plane
-                entity = m_Scene->CreateEntity("Static Floor Plane");
-                entity.AddComponent<TransformComponent>(position, glm::vec3(50.0f, 1.0f, 50.0f));
+            case 4: { // 3D Plane
+                entity = m_Scene->CreateEntity("Plane");
+                entity.AddComponent<TransformComponent>(position, glm::vec3(20.0f, 1.0f, 20.0f));
                 if (m_PlaneMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_PlaneMesh, 0, 1.0f,
-                        glm::vec4(0.25f, 0.28f, 0.32f, 1.0f),
-                        glm::vec4(0.15f, 0.17f, 0.20f, 1.0f)
+                        m_PlaneMesh, 1, 8.0f,
+                        glm::vec4(0.35f, 0.38f, 0.42f, 1.0f),
+                        glm::vec4(0.20f, 0.22f, 0.25f, 1.0f)
                     );
-                }
-                if (m_PhysicsScene) {
-                    BoxBodyProps bProps;
-                    bProps.Position = position;
-                    bProps.HalfExtent = glm::vec3(25.0f, 0.5f, 25.0f);
-                    bProps.IsDynamic = false;
-                    auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                    entity.AddComponent<RigidBody3D>(bodyID, false);
-                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Plane, glm::vec3(25.0f, 0.5f, 25.0f));
                 }
                 break;
             }
@@ -386,6 +392,16 @@ namespace Axle {
             }
             if (ImGui::MenuItem("Plane")) {
                 CreatePrimitive(4);
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Physics Templates")) {
+            if (ImGui::MenuItem("Dynamic Box (Falling)")) {
+                CreatePrimitive(0, glm::vec3(0.0f, 2.0f, 0.0f), true);
+            }
+            if (ImGui::MenuItem("Dynamic Sphere (Falling)")) {
+                CreatePrimitive(1, glm::vec3(0.0f, 2.0f, 0.0f), true);
             }
             ImGui::EndMenu();
         }
@@ -895,6 +911,20 @@ namespace Axle {
                 }
                 if (ImGui::MenuItem("Plane")) {
                     auto prim = CreatePrimitive(4);
+                    prim.SetParent(entity);
+                    m_SelectedEntity = prim;
+                }
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Physics Templates")) {
+                if (ImGui::MenuItem("Dynamic Box (Falling)")) {
+                    auto prim = CreatePrimitive(0, glm::vec3(0.0f, 2.0f, 0.0f), true);
+                    prim.SetParent(entity);
+                    m_SelectedEntity = prim;
+                }
+                if (ImGui::MenuItem("Dynamic Sphere (Falling)")) {
+                    auto prim = CreatePrimitive(1, glm::vec3(0.0f, 2.0f, 0.0f), true);
                     prim.SetParent(entity);
                     m_SelectedEntity = prim;
                 }
@@ -2096,69 +2126,70 @@ namespace Axle {
 
         // --- PHYSICS CATEGORY ---
         items.push_back({
-            "Physics", "CollisionShape3D (Box)", "Box collision primitive based on entity scale",
+            "Physics", "CollisionShape3D", "Physics collision shape (Box, Sphere, Cylinder, Cone, Plane)",
             entity.HasComponent<CollisionShape3D>(), true,
             [&]() {
+                CollisionShapeType shape = CollisionShapeType::Box;
                 glm::vec3 halfExtent(0.5f);
                 if (entity.HasComponent<TransformComponent>()) {
-                    halfExtent = entity.GetComponent<TransformComponent>().Scale * 0.5f;
+                    halfExtent = glm::max(entity.GetComponent<TransformComponent>().Scale * 0.5f, glm::vec3(0.01f));
                 }
-                entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, halfExtent);
-            }
-        });
-        items.push_back({
-            "Physics", "CollisionShape3D (Sphere)", "Sphere collision primitive based on entity scale",
-            entity.HasComponent<CollisionShape3D>(), true,
-            [&]() {
-                float radius = 0.5f;
-                if (entity.HasComponent<TransformComponent>()) {
-                    radius = entity.GetComponent<TransformComponent>().Scale.x * 0.5f;
+                if (entity.HasComponent<MeshInstance3D>()) {
+                    auto& mc = entity.GetComponent<MeshInstance3D>();
+                    if (mc.VAO == m_SphereMesh || mc.AssetPath == "builtin://sphere") shape = CollisionShapeType::Sphere;
+                    else if (mc.VAO == m_CylinderMesh || mc.AssetPath == "builtin://cylinder") shape = CollisionShapeType::Cylinder;
+                    else if (mc.VAO == m_ConeMesh || mc.AssetPath == "builtin://cone") shape = CollisionShapeType::Cone;
+                    else if (mc.VAO == m_PlaneMesh || mc.AssetPath == "builtin://plane") shape = CollisionShapeType::Plane;
                 }
-                entity.AddComponent<CollisionShape3D>(CollisionShapeType::Sphere, glm::vec3(radius));
+                entity.AddComponent<CollisionShape3D>(shape, halfExtent);
             }
         });
         items.push_back({
-            "Physics", "CollisionShape3D (Cylinder)", "Cylinder collision primitive (Radius & Height)",
-            entity.HasComponent<CollisionShape3D>(), true,
-            [&]() {
-                entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cylinder, glm::vec3(0.5f, 1.0f, 0.5f));
-            }
-        });
-        items.push_back({
-            "Physics", "RigidBody3D (Dynamic Box)", "Dynamic Jolt physics rigid body affected by gravity and forces",
+            "Physics", "RigidBody3D", "Dynamic or static Jolt physics rigid body for collision & forces",
             entity.HasComponent<RigidBody3D>(), true,
             [&]() {
                 if (m_PhysicsScene) {
                     auto& tc = entity.GetComponent<TransformComponent>();
-                    Axle::BoxBodyProps bProps;
-                    bProps.Position = tc.Translation;
-                    bProps.Rotation = tc.Rotation;
-                    bProps.HalfExtent = tc.Scale * 0.5f;
-                    bProps.IsDynamic = true;
-                    auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                    entity.AddComponent<RigidBody3D>(bodyID, true);
                     if (!entity.HasComponent<CollisionShape3D>()) {
-                        entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, tc.Scale * 0.5f);
+                        CollisionShapeType shape = CollisionShapeType::Box;
+                        glm::vec3 halfExtent = glm::max(tc.Scale * 0.5f, glm::vec3(0.01f));
+                        if (entity.HasComponent<MeshInstance3D>()) {
+                            auto& mc = entity.GetComponent<MeshInstance3D>();
+                            if (mc.VAO == m_SphereMesh || mc.AssetPath == "builtin://sphere") shape = CollisionShapeType::Sphere;
+                            else if (mc.VAO == m_CylinderMesh || mc.AssetPath == "builtin://cylinder") shape = CollisionShapeType::Cylinder;
+                            else if (mc.VAO == m_ConeMesh || mc.AssetPath == "builtin://cone") shape = CollisionShapeType::Cone;
+                            else if (mc.VAO == m_PlaneMesh || mc.AssetPath == "builtin://plane") shape = CollisionShapeType::Plane;
+                        }
+                        entity.AddComponent<CollisionShape3D>(shape, halfExtent);
                     }
-                }
-            }
-        });
-        items.push_back({
-            "Physics", "RigidBody3D (Static Box)", "Static immovable physics obstacle/terrain body",
-            entity.HasComponent<RigidBody3D>(), true,
-            [&]() {
-                if (m_PhysicsScene) {
-                    auto& tc = entity.GetComponent<TransformComponent>();
-                    Axle::BoxBodyProps bProps;
-                    bProps.Position = tc.Translation;
-                    bProps.Rotation = tc.Rotation;
-                    bProps.HalfExtent = tc.Scale * 0.5f;
-                    bProps.IsDynamic = false;
-                    auto bodyID = m_PhysicsScene->CreateBox(bProps);
-                    entity.AddComponent<RigidBody3D>(bodyID, false);
-                    if (!entity.HasComponent<CollisionShape3D>()) {
-                        entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, tc.Scale * 0.5f);
+
+                    auto& cs = entity.GetComponent<CollisionShape3D>();
+                    BodyID bodyID;
+                    glm::vec3 spawnPos = tc.Translation + tc.Rotation * cs.Offset;
+                    bool isDynamic = (cs.ShapeType != CollisionShapeType::Plane);
+                    switch (cs.ShapeType) {
+                        case CollisionShapeType::Sphere:
+                            bodyID = m_PhysicsScene->CreateSphere(spawnPos, cs.Radius, isDynamic, cs.Friction, cs.Restitution);
+                            break;
+                        case CollisionShapeType::Cylinder:
+                            bodyID = m_PhysicsScene->CreateCylinder(spawnPos, cs.HalfHeight, cs.Radius, isDynamic, cs.Friction, cs.Restitution);
+                            break;
+                        case CollisionShapeType::Cone:
+                            bodyID = m_PhysicsScene->CreateCone(spawnPos, cs.HalfHeight, cs.Radius, isDynamic, cs.Friction, cs.Restitution);
+                            break;
+                        case CollisionShapeType::Plane:
+                            bodyID = m_PhysicsScene->CreatePlane(spawnPos, glm::vec3(0, 1, 0), cs.HalfExtent.x, cs.Friction, cs.Restitution);
+                            break;
+                        case CollisionShapeType::Box:
+                        default:
+                            bodyID = m_PhysicsScene->CreateBox(spawnPos, cs.HalfExtent, isDynamic, cs.Friction, cs.Restitution);
+                            break;
                     }
+
+                    if (!bodyID.IsInvalid()) {
+                        m_PhysicsScene->SetBodyPositionAndRotation(bodyID, spawnPos, tc.Rotation);
+                    }
+                    entity.AddComponent<RigidBody3D>(bodyID, isDynamic);
                 }
             }
         });

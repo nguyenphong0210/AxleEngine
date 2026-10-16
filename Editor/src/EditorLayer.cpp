@@ -1,10 +1,10 @@
 #include "EditorLayer.hpp"
-#include "CarPlayerScript.hpp"
 #include <Axle/Application.hpp>
 #include <Axle/Input.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
+#include <Axle/ScriptRegistry.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
@@ -441,8 +441,10 @@ void EditorLayer::OnAttach() {
     m_SerializerContext.ConeMesh = m_ConeMesh;
     m_SerializerContext.PlaneMesh = m_PlaneMesh;
     m_SerializerContext.ScriptBinder = [](Axle::Entity entity, const std::string& scriptName) {
-        if (scriptName == "CarPlayerScript") {
-            entity.AddComponent<Axle::NativeScriptComponent>().Bind<CarPlayerScript>("CarPlayerScript");
+        if (!entity.HasComponent<Axle::NativeScriptComponent>()) {
+            entity.AddComponent<Axle::NativeScriptComponent>().Bind(scriptName);
+        } else {
+            entity.GetComponent<Axle::NativeScriptComponent>().Bind(scriptName);
         }
     };
 
@@ -951,8 +953,10 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
     ctx.ConeMesh = m_ConeMesh;
     ctx.PlaneMesh = m_PlaneMesh;
     ctx.ScriptBinder = [](Axle::Entity entity, const std::string& scriptName) {
-        if (scriptName == "CarPlayerScript") {
-            entity.AddComponent<Axle::NativeScriptComponent>().Bind<CarPlayerScript>("CarPlayerScript");
+        if (!entity.HasComponent<Axle::NativeScriptComponent>()) {
+            entity.AddComponent<Axle::NativeScriptComponent>().Bind(scriptName);
+        } else {
+            entity.GetComponent<Axle::NativeScriptComponent>().Bind(scriptName);
         }
     };
     serializer.SetContext(ctx);
@@ -1058,8 +1062,10 @@ void EditorLayer::SaveScene(const std::filesystem::path& filepath) {
     ctx.ConeMesh = m_ConeMesh;
     ctx.PlaneMesh = m_PlaneMesh;
     ctx.ScriptBinder = [](Axle::Entity entity, const std::string& scriptName) {
-        if (scriptName == "CarPlayerScript") {
-            entity.AddComponent<Axle::NativeScriptComponent>().Bind<CarPlayerScript>("CarPlayerScript");
+        if (!entity.HasComponent<Axle::NativeScriptComponent>()) {
+            entity.AddComponent<Axle::NativeScriptComponent>().Bind(scriptName);
+        } else {
+            entity.GetComponent<Axle::NativeScriptComponent>().Bind(scriptName);
         }
     };
     serializer.SetContext(ctx);
@@ -2002,20 +2008,32 @@ void EditorLayer::OnImGuiRender() {
                 m_SceneHierarchyPanel.SetSelectedEntity(entity);
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("3D Cube (Dynamic Box)")) {
-                m_SceneHierarchyPanel.CreatePrimitive(0);
+            if (ImGui::BeginMenu("3D Object")) {
+                if (ImGui::MenuItem("Cube")) {
+                    m_SceneHierarchyPanel.CreatePrimitive(0);
+                }
+                if (ImGui::MenuItem("Sphere")) {
+                    m_SceneHierarchyPanel.CreatePrimitive(1);
+                }
+                if (ImGui::MenuItem("Cylinder")) {
+                    m_SceneHierarchyPanel.CreatePrimitive(2);
+                }
+                if (ImGui::MenuItem("Cone")) {
+                    m_SceneHierarchyPanel.CreatePrimitive(3);
+                }
+                if (ImGui::MenuItem("Plane")) {
+                    m_SceneHierarchyPanel.CreatePrimitive(4);
+                }
+                ImGui::EndMenu();
             }
-            if (ImGui::MenuItem("3D Sphere (Dynamic)")) {
-                m_SceneHierarchyPanel.CreatePrimitive(1);
-            }
-            if (ImGui::MenuItem("3D Cylinder (Dynamic)")) {
-                m_SceneHierarchyPanel.CreatePrimitive(2);
-            }
-            if (ImGui::MenuItem("3D Cone (Dynamic)")) {
-                m_SceneHierarchyPanel.CreatePrimitive(3);
-            }
-            if (ImGui::MenuItem("Static Floor Plane")) {
-                m_SceneHierarchyPanel.CreatePrimitive(4);
+            if (ImGui::BeginMenu("Physics Templates")) {
+                if (ImGui::MenuItem("Dynamic Box (Falling)")) {
+                    m_SceneHierarchyPanel.CreatePrimitive(0, glm::vec3(0.0f, 2.0f, 0.0f), true);
+                }
+                if (ImGui::MenuItem("Dynamic Sphere (Falling)")) {
+                    m_SceneHierarchyPanel.CreatePrimitive(1, glm::vec3(0.0f, 2.0f, 0.0f), true);
+                }
+                ImGui::EndMenu();
             }
             ImGui::EndMenu();
         }
@@ -2540,18 +2558,68 @@ void EditorLayer::OnImGuiRender() {
                         AXLE_INFO("[PICK] Raycast: origin=({:.2f}, {:.2f}, {:.2f}), dir=({:.2f}, {:.2f}, {:.2f})",
                             rayOrigin.x, rayOrigin.y, rayOrigin.z, rayDir.x, rayDir.y, rayDir.z);
 
+                        Axle::Entity selectedHitEntity{};
+                        float closestDist = 100000.0f;
+
+                        // 1. Check Jolt Physics raycast first
                         Axle::RayCastHit hit;
                         if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 1000.0f, hit)) {
-                            AXLE_INFO("[PICK] Raycast HIT body ID: {}", hit.HitBodyID.GetIndexAndSequenceNumber());
                             Axle::Entity hitEntity = m_Scene->FindEntityByBodyID(hit.HitBodyID);
                             if (hitEntity) {
-                                std::string tag = hitEntity.HasComponent<Axle::TagComponent>() ? hitEntity.GetComponent<Axle::TagComponent>().Tag : "Unnamed";
-                                AXLE_INFO("[PICK] Selected Entity ID: {}, Tag: '{}'", (uint32_t)hitEntity, tag);
-                                m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
-                            } else {
-                                AXLE_INFO("[PICK] Hit body ID {} not bound to any Entity, clearing selection", hit.HitBodyID.GetIndexAndSequenceNumber());
-                                m_SceneHierarchyPanel.SetSelectedEntity({});
+                                selectedHitEntity = hitEntity;
+                                closestDist = hit.Distance;
+                                AXLE_INFO("[PICK] Physics Raycast HIT body ID: {}", hit.HitBodyID.GetIndexAndSequenceNumber());
                             }
+                        }
+
+                        // 2. Ray-OBB intersection test for MeshInstance3D entities (including pure visual primitives without physics)
+                        auto meshView = m_Scene->GetRegistry().view<Axle::TransformComponent, Axle::MeshInstance3D>();
+                        for (auto entityID : meshView) {
+                            Axle::Entity candidate(entityID, m_Scene.get());
+                            if (candidate == selectedHitEntity) continue;
+
+                            glm::mat4 worldTransform = candidate.GetWorldTransform();
+                            glm::mat4 invTransform = glm::inverse(worldTransform);
+
+                            glm::vec3 localOrigin = glm::vec3(invTransform * glm::vec4(rayOrigin, 1.0f));
+                            glm::vec3 localDir = glm::vec3(invTransform * glm::vec4(rayDir, 0.0f));
+                            float localDirLen = glm::length(localDir);
+                            if (localDirLen < 1e-6f) continue;
+                            localDir /= localDirLen;
+
+                            glm::vec3 boxMin(-0.5f);
+                            glm::vec3 boxMax(0.5f);
+
+                            // Give Plane mesh a small thickness in Y so it's easy to click
+                            if (candidate.GetComponent<Axle::MeshInstance3D>().VAO == m_PlaneMesh) {
+                                boxMin.y = -0.05f;
+                                boxMax.y = 0.05f;
+                            }
+
+                            // Slab intersection test
+                            glm::vec3 invD = 1.0f / localDir;
+                            glm::vec3 t0 = (boxMin - localOrigin) * invD;
+                            glm::vec3 t1 = (boxMax - localOrigin) * invD;
+                            glm::vec3 tmin = glm::min(t0, t1);
+                            glm::vec3 tmax = glm::max(t0, t1);
+                            float tEnter = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
+                            float tExit = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
+
+                            if (tEnter <= tExit && tExit >= 0.0f) {
+                                float hitLocalT = (tEnter >= 0.0f) ? tEnter : tExit;
+                                glm::vec3 worldHitPoint = glm::vec3(worldTransform * glm::vec4(localOrigin + localDir * hitLocalT, 1.0f));
+                                float dist = glm::length(worldHitPoint - rayOrigin);
+                                if (dist < closestDist) {
+                                    closestDist = dist;
+                                    selectedHitEntity = candidate;
+                                }
+                            }
+                        }
+
+                        if (selectedHitEntity) {
+                            std::string tag = selectedHitEntity.HasComponent<Axle::TagComponent>() ? selectedHitEntity.GetComponent<Axle::TagComponent>().Tag : "Unnamed";
+                            AXLE_INFO("[PICK] Selected Entity ID: {}, Tag: '{}' (dist={:.2f}m)", (uint32_t)selectedHitEntity, tag, closestDist);
+                            m_SceneHierarchyPanel.SetSelectedEntity(selectedHitEntity);
                         } else {
                             AXLE_INFO("[PICK] Raycast MISSED (empty space), clearing selection");
                             m_SceneHierarchyPanel.SetSelectedEntity({});

@@ -16,8 +16,32 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/ParallelECS.hpp>
-#include "CarPlayerScript.hpp"
+#include <Axle/ScriptableEntity.hpp>
 #include <iostream>
+
+// =============================================================================
+// Test Mock Script for Testing Reflection & Serialization
+// =============================================================================
+class CarPlayerScript : public Axle::ScriptableEntity {
+public:
+    float ForwardTorque = 1500.0f;
+    float MaxSteerAngle = 35.0f;
+    float BrakeTorque = 2500.0f;
+    bool EnableBoost = true;
+
+    void OnCreate() override {}
+    void OnUpdate(Axle::Timestep ts) override { (void)ts; }
+    void OnDestroy() override {}
+
+    AXLE_SCRIPT_FIELDS(CarPlayerScript,
+        AXLE_FIELD(ForwardTorque, 100.0f, 10000.0f, "Engine drive torque in N.m"),
+        AXLE_FIELD(MaxSteerAngle, 10.0f, 60.0f, "Maximum steering angle in degrees"),
+        AXLE_FIELD(BrakeTorque, 100.0f, 10000.0f, "Braking force in N.m"),
+        AXLE_FIELD(EnableBoost, "Enable speed boost")
+    )
+};
+
+AXLE_REGISTER_SCRIPT(CarPlayerScript);
 #include <fstream>
 #include <string>
 #include <filesystem>

@@ -73,6 +73,9 @@ add_custom_command(TARGET AxleEditor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_CURRENT_SOURCE_DIR}/assets
     $<TARGET_FILE_DIR:AxleEditor>/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/Engine/Resources
+    $<TARGET_FILE_DIR:AxleEditor>/Resources
 )
 
 add_dependencies(AxleEditor AxleScripts)
@@ -80,6 +83,12 @@ add_dependencies(AxleEditor AxleScripts)
 # Dedicated Test Executable for Automated Verifications
 add_executable(AxleTests
     src/Test.cpp
+)
+
+add_custom_command(TARGET AxleTests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/Engine/Resources
+    $<TARGET_FILE_DIR:AxleTests>/Resources
 )
 
 target_include_directories(AxleTests PRIVATE

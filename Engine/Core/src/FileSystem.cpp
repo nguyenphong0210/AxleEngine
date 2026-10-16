@@ -58,10 +58,36 @@ namespace Axle {
             return relativePath;
         }
 
-        // Try against active asset directory
+        // 1. Try against active asset directory
         auto resolved = GetAssetDirectory() / relativePath;
         if (std::filesystem::exists(resolved)) {
             return resolved;
+        }
+
+        // 2. Try against Engine Resources (Engine/Resources or Resources in binary dir)
+        static const std::vector<std::filesystem::path> s_ResourceRoots = {
+            "Engine/Resources",
+            "../../Engine/Resources",
+            "../../../Engine/Resources",
+            "../Engine/Resources",
+            "Resources",
+            "../../Resources"
+        };
+
+        for (const auto& root : s_ResourceRoots) {
+            auto candidate = root / relativePath;
+            if (std::filesystem::exists(candidate)) {
+                return std::filesystem::canonical(candidate);
+            }
+
+            // Also check Shaders/ subfolder if relativePath begins with shaders/
+            std::string relStr = relativePath.generic_string();
+            if (relStr.rfind("shaders/", 0) == 0) {
+                auto candidateShaders = root / "Shaders" / relStr.substr(8);
+                if (std::filesystem::exists(candidateShaders)) {
+                    return std::filesystem::canonical(candidateShaders);
+                }
+            }
         }
 
         // Fallback checks

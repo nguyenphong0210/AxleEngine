@@ -132,6 +132,16 @@ namespace Axle {
             newEntity.AddComponent<AssemblyComponent>(entity.GetComponent<AssemblyComponent>());
         }
 
+        // Copy VehicleComponent
+        if (entity.HasComponent<VehicleComponent>()) {
+            newEntity.AddComponent<VehicleComponent>(entity.GetComponent<VehicleComponent>());
+        }
+
+        // Copy WheelComponent
+        if (entity.HasComponent<WheelComponent>()) {
+            newEntity.AddComponent<WheelComponent>(entity.GetComponent<WheelComponent>());
+        }
+
         // Copy CollisionShape3D and create new body in PhysicsScene
         if (entity.HasComponent<CollisionShape3D>()) {
             newEntity.AddComponent<CollisionShape3D>(entity.GetComponent<CollisionShape3D>());
@@ -187,7 +197,7 @@ namespace Axle {
         // Parent relationship: preserve parent if source entity has a parent
         Entity parent = entity.GetParent();
         if (parent) {
-            newEntity.SetParent(parent);
+            newEntity.SetParent(parent, false);
         }
 
         // Deep Recursive Duplication of Children
@@ -198,7 +208,7 @@ namespace Axle {
                     Entity childEntity{ childID, this };
                     Entity duplicatedChild = DuplicateEntity(childEntity, physicsScene);
                     if (duplicatedChild) {
-                        duplicatedChild.SetParent(newEntity);
+                        duplicatedChild.SetParent(newEntity, false);
                     }
                 }
             }
@@ -320,9 +330,9 @@ namespace Axle {
         }
     }
 
-    void Scene::SetParent(Entity child, Entity parent) {
+    void Scene::SetParent(Entity child, Entity parent, bool keepWorldPosition) {
         if (child) {
-            child.SetParent(parent);
+            child.SetParent(parent, keepWorldPosition);
         }
     }
 
@@ -353,6 +363,9 @@ namespace Axle {
         if (physicsScene) {
             auto physicsView = m_Registry.view<RigidBody3D, TransformComponent>();
             for (auto entity : physicsView) {
+                if (m_Registry.all_of<VehicleComponent>(entity)) {
+                    continue; // Skip vehicle chassis; transform is managed by Vehicle physics controller with COM compensation
+                }
                 auto& tc = m_Registry.get<TransformComponent>(entity);
                 const auto& rb = m_Registry.get<RigidBody3D>(entity);
                 if (!rb.RuntimeBodyID.IsInvalid()) {
@@ -724,6 +737,16 @@ namespace Axle {
                 dstNsc.InstantiateScript = srcNsc.InstantiateScript;
                 dstNsc.DestroyScript = srcNsc.DestroyScript;
             }
+
+            // VehicleComponent
+            if (srcEntity.HasComponent<VehicleComponent>()) {
+                dstEntity.AddComponent<VehicleComponent>(srcEntity.GetComponent<VehicleComponent>());
+            }
+
+            // WheelComponent
+            if (srcEntity.HasComponent<WheelComponent>()) {
+                dstEntity.AddComponent<WheelComponent>(srcEntity.GetComponent<WheelComponent>());
+            }
         }
 
         // Pass 3: Remap Hierarchy Relationships using UUID mapping
@@ -738,9 +761,10 @@ namespace Axle {
                     UUID parentUUID = other->m_Registry.get<IDComponent>(srcHc.Parent).ID;
                     auto it = entMap.find(parentUUID);
                     if (it != entMap.end()) {
-                        dstEntity.SetParent(Entity{ it->second, newScene.get() });
+                        dstEntity.SetParent(Entity{ it->second, newScene.get() }, false);
                         if (dstEntity.HasComponent<HierarchyComponent>()) {
                             dstEntity.GetComponent<HierarchyComponent>().InheritTransform = srcHc.InheritTransform;
+                            dstEntity.GetComponent<HierarchyComponent>().InheritScale = srcHc.InheritScale;
                         }
                     }
                 }

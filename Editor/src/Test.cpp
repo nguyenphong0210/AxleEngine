@@ -3238,6 +3238,7 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
         vc.MaxBrakeTorque = 3500.0f;
         vc.MaxHandBrakeTorque = 7000.0f;
         vc.FourWheelDrive = true;
+        vc.CenterOfMassOffset = glm::vec3(0.0f, -0.2f, 0.1f);
 
         Axle::SceneSerializer serializer(srcScene.get());
         bool serSuccess = serializer.Serialize(vehicleScenePath);
@@ -3264,6 +3265,7 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
             assert(std::abs(vc.MaxBrakeTorque - 3500.0f) < 0.001f);
             assert(std::abs(vc.MaxHandBrakeTorque - 7000.0f) < 0.001f);
             assert(vc.FourWheelDrive == true);
+            assert(glm::distance(vc.CenterOfMassOffset, glm::vec3(0.0f, -0.2f, 0.1f)) < 0.001f);
         }
         std::error_code ec;
         std::filesystem::remove(vehicleScenePath, ec);

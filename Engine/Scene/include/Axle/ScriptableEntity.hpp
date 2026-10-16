@@ -27,7 +27,7 @@ namespace Axle {
 
         // Hierarchy Traversal & Relationship Helpers
         Entity GetParent() const { return m_Entity.GetParent(); }
-        void SetParent(Entity parent) { m_Entity.SetParent(parent); }
+        void SetParent(Entity parent, bool keepWorldPosition = true) { m_Entity.SetParent(parent, keepWorldPosition); }
         std::vector<Entity> GetChildren() const { return m_Entity.GetChildren(); }
         size_t GetChildCount() const { return m_Entity.GetChildCount(); }
         Entity FindChildByTag(const std::string& tag, bool recursive = true) const { return m_Entity.FindChildByTag(tag, recursive); }

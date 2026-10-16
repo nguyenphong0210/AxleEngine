@@ -178,16 +178,14 @@ void EditorLayer::OnAttach() {
                 vec2 uvScale = (u_UVScale.x != 0.0 && u_UVScale.y != 0.0) ? u_UVScale : vec2(1.0);
                 vec2 uv = v_TexCoord * uvScale;
 
-                vec3 normal = vec3(0.0, 1.0, 0.0);
-                if (u_PatternMode == 0) {
-                    normal = vec3(0.0, 1.0, 0.0);
-                } else if (u_PatternMode == 1) {
+                vec3 normal;
+                if (u_PatternMode == 2) {
+                    normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
+                } else {
                     vec3 dx = dFdx(v_WorldPos);
                     vec3 dy = dFdy(v_WorldPos);
                     normal = normalize(cross(dx, dy));
                     if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
-                } else {
-                    normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
                 }
 
                 if (u_UseNormalMap == 1) {
@@ -1000,6 +998,7 @@ void EditorLayer::SetupVehiclePhysics(Axle::Entity chassisEntity) {
         config.MaxBrakeTorque = vc.MaxBrakeTorque;
         config.MaxHandBrakeTorque = vc.MaxHandBrakeTorque;
         config.FourWheelDrive = vc.FourWheelDrive;
+        config.CenterOfMassOffset = vc.CenterOfMassOffset;
     }
 
     // Build CustomWheels if any wheel entities have WheelComponent or custom geometry
@@ -1014,7 +1013,7 @@ void EditorLayer::SetupVehiclePhysics(Axle::Entity chassisEntity) {
 
         if (hasWheelComponent) {
             config.CustomWheels.reserve(m_WheelEntities.size());
-            for (const auto& wEnt : m_WheelEntities) {
+            for (auto wEnt : m_WheelEntities) {
                 if (!wEnt) continue;
 
                 Axle::WheelConfig wc;
@@ -1042,8 +1041,27 @@ void EditorLayer::SetupVehiclePhysics(Axle::Entity chassisEntity) {
                         wc.Position = glm::inverse(chassisTC.Rotation) * (worldPos - chassisTC.Translation);
                     }
                 }
+
+                // Ensure wheel visual mesh uses local coordinate mapping so roll rotation is visible
+                if (wEnt.HasComponent<Axle::MeshInstance3D>()) {
+                    auto& mc = wEnt.GetComponent<Axle::MeshInstance3D>();
+                    if (mc.PatternMode == 0) {
+                        mc.PatternMode = 1;
+                        if (mc.TileScale <= 1.0f) mc.TileScale = 4.0f;
+                    }
+                }
+
                 config.CustomWheels.push_back(wc);
             }
+        }
+    }
+
+    // Destroy any pre-existing body on chassis to prevent orphan overlapping collision body
+    if (m_ChassisEntity.HasComponent<Axle::RigidBody3D>()) {
+        auto& rb = m_ChassisEntity.GetComponent<Axle::RigidBody3D>();
+        if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+            m_PhysicsScene->DestroyBody(rb.RuntimeBodyID);
+            rb.RuntimeBodyID = {};
         }
     }
 
@@ -1061,6 +1079,8 @@ void EditorLayer::SetupVehiclePhysics(Axle::Entity chassisEntity) {
     } else {
         m_ChassisEntity.AddComponent<Axle::RigidBody3D>(m_Vehicle->GetChassisBodyID(), true);
     }
+
+    m_InitialDynamicStates[m_Vehicle->GetChassisBodyID().GetIndexAndSequenceNumber()] = { chassisTC.Translation, chassisTC.Rotation };
 
     if (!m_ChassisEntity.HasComponent<Axle::CollisionShape3D>()) {
         m_ChassisEntity.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, config.ChassisHalfExtent, 0.5f, 0.0f);
@@ -1395,7 +1415,14 @@ void EditorLayer::ResetSimulation() {
     }
 
     if (m_Vehicle && m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::TransformComponent>()) {
-        m_Vehicle->Reset(glm::vec3(0.0f, 0.95f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        glm::vec3 resetPos = m_ChassisEntity.GetComponent<Axle::TransformComponent>().Translation;
+        glm::quat resetRot = m_ChassisEntity.GetComponent<Axle::TransformComponent>().Rotation;
+        auto rawID = m_Vehicle->GetChassisBodyID().GetIndexAndSequenceNumber();
+        if (m_InitialDynamicStates.find(rawID) != m_InitialDynamicStates.end()) {
+            resetPos = m_InitialDynamicStates[rawID].Position;
+            resetRot = m_InitialDynamicStates[rawID].Rotation;
+        }
+        m_Vehicle->Reset(resetPos, resetRot);
         m_Vehicle->SetDriverInput(0.0f, 0.0f, 0.0f, 0.0f);
         auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
         chassisTC.Translation = m_Vehicle->GetPosition();

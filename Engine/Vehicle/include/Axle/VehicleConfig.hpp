@@ -37,6 +37,7 @@ namespace Axle {
         // Chassis properties
         glm::vec3 ChassisHalfExtent{ 0.9f, 0.25f, 2.0f };
         f32 ChassisMass = 1500.0f;
+        glm::vec3 CenterOfMassOffset{ 0.0f, 0.0f, 0.0f };
 
         // Wheel geometry
         f32 WheelRadius = 0.35f;

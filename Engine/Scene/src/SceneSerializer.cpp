@@ -188,6 +188,7 @@ namespace Axle {
                 ss << "      DefaultSuspensionFrequency: " << vc.DefaultSuspensionFrequency << "\n";
                 ss << "      DefaultSuspensionDamping: " << vc.DefaultSuspensionDamping << "\n";
                 ss << "      FourWheelDrive: " << (vc.FourWheelDrive ? "true" : "false") << "\n";
+                ss << "      CenterOfMassOffset: [ " << vc.CenterOfMassOffset.x << " , " << vc.CenterOfMassOffset.y << " , " << vc.CenterOfMassOffset.z << " ]\n";
             }
 
             // WheelComponent (VehicleWheel3D)
@@ -712,6 +713,10 @@ namespace Axle {
                             vc.DefaultSuspensionDamping = std::stof(Trim(trimmed.substr(25)));
                         } else if (trimmed.rfind("FourWheelDrive:", 0) == 0) {
                             vc.FourWheelDrive = (Trim(trimmed.substr(15)) == "true");
+                        } else if (trimmed.rfind("CenterOfMassOffset:", 0) == 0) {
+                            float x = 0.0f, y = 0.0f, z = 0.0f;
+                            sscanf(trimmed.c_str(), "CenterOfMassOffset: [ %f , %f , %f ]", &x, &y, &z);
+                            vc.CenterOfMassOffset = glm::vec3(x, y, z);
                         }
                         break;
                     }

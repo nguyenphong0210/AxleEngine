@@ -64,10 +64,10 @@ namespace Axle {
         std::string AssetPath;
 
         // Visual Caro (Checkerboard) material properties
-        int PatternMode = 0; // 0: World XZ Caro, 1: 3D Caro, 2: Spherical Caro
-        float TileScale = 1.0f;
-        glm::vec4 Color1{ 1.0f };
-        glm::vec4 Color2{ 0.0f };
+        int PatternMode = 1; // 0: World XZ Caro (Floor only), 1: Local 3D Caro (Default for 3D meshes), 2: Spherical Caro
+        float TileScale = 4.0f; // Default 4.0 so procedural checker tiles are immediately visible
+        glm::vec4 Color1{ 0.88f, 0.89f, 0.92f, 1.0f }; // Titanium Silver
+        glm::vec4 Color2{ 0.45f, 0.48f, 0.52f, 1.0f }; // Slate Graphite
 
         MeshInstance3D() = default;
         MeshInstance3D(const std::shared_ptr<VertexArray>& vao, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
@@ -423,6 +423,7 @@ namespace Axle {
         float DefaultSuspensionFrequency = 2.0f; // Spring frequency (Hz)
         float DefaultSuspensionDamping = 0.5f;   // Suspension damping ratio (0..1)
         bool FourWheelDrive = true;              // AWD vs RWD
+        glm::vec3 CenterOfMassOffset{ 0.0f, 0.0f, 0.0f }; // Center of mass offset relative to geometric pivot
 
         VehicleComponent() = default;
         VehicleComponent(Vehicle* vehicle)

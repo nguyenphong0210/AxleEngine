@@ -250,7 +250,7 @@ namespace Axle {
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (m_CubeMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_CubeMesh, 0, 1.0f,
+                        m_CubeMesh, 1, 4.0f,
                         defaultPrimaryColor,
                         defaultSecondaryColor
                     );
@@ -274,7 +274,7 @@ namespace Axle {
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (m_SphereMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_SphereMesh, 0, 1.0f,
+                        m_SphereMesh, 2, 4.0f,
                         defaultPrimaryColor,
                         defaultSecondaryColor
                     );
@@ -298,7 +298,7 @@ namespace Axle {
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (m_CylinderMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_CylinderMesh, 0, 1.0f,
+                        m_CylinderMesh, 1, 4.0f,
                         defaultPrimaryColor,
                         defaultSecondaryColor
                     );
@@ -323,7 +323,7 @@ namespace Axle {
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (m_ConeMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_ConeMesh, 0, 1.0f,
+                        m_ConeMesh, 1, 4.0f,
                         defaultPrimaryColor,
                         defaultSecondaryColor
                     );
@@ -347,7 +347,7 @@ namespace Axle {
                 entity.AddComponent<TransformComponent>(position, glm::vec3(20.0f, 1.0f, 20.0f));
                 if (m_PlaneMesh) {
                     entity.AddComponent<MeshInstance3D>(
-                        m_PlaneMesh, 1, 8.0f,
+                        m_PlaneMesh, 0, 1.0f,
                         glm::vec4(0.35f, 0.38f, 0.42f, 1.0f),
                         glm::vec4(0.20f, 0.22f, 0.25f, 1.0f)
                     );
@@ -1695,6 +1695,7 @@ namespace Axle {
                     entity.GetComponent<RigidBody3D>().Mass = vc.ChassisMass;
                 }
             }
+            ImGui::DragFloat3("Center of Mass Offset", &vc.CenterOfMassOffset.x, 0.01f, -5.0f, 5.0f, "%.2f");
 
             ImGui::Spacing();
             ImGui::TextDisabled("Powertrain & Torque:");

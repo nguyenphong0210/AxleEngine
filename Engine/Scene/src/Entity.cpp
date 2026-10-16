@@ -33,7 +33,7 @@ namespace Axle {
         return Entity(hc.Parent, m_Scene);
     }
 
-    void Entity::SetParent(Entity parent) {
+    void Entity::SetParent(Entity parent, bool keepWorldPosition) {
         if (!*this) return;
 
         // Prevent self-parenting or parenting to a descendant (cycle prevention)
@@ -42,7 +42,10 @@ namespace Axle {
         }
 
         // Keep World Position Stays: compute current world transform before reparenting
-        glm::mat4 currentWorld = GetWorldTransform();
+        glm::mat4 currentWorld = glm::mat4(1.0f);
+        if (keepWorldPosition) {
+            currentWorld = GetWorldTransform();
+        }
 
         // 1. Detach from current parent if attached
         if (HasComponent<HierarchyComponent>()) {
@@ -73,8 +76,8 @@ namespace Axle {
             }
         }
 
-        // 3. Decompose new local transform to guarantee World Position Stays!
-        if (HasComponent<TransformComponent>()) {
+        // 3. Decompose new local transform to guarantee World Position Stays ONLY if requested!
+        if (keepWorldPosition && HasComponent<TransformComponent>()) {
             auto& tc = GetComponent<TransformComponent>();
             glm::mat4 newLocal = currentWorld;
             if (parent) {

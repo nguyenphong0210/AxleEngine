@@ -195,17 +195,15 @@ void main() {
     vec2 uvScale = (u_UVScale.x != 0.0 && u_UVScale.y != 0.0) ? u_UVScale : vec2(1.0);
     vec2 uv = v_TexCoord * uvScale;
 
-    // 1. Geometric surface normal
-    vec3 normal = vec3(0.0, 1.0, 0.0);
-    if (u_PatternMode == 0) {
-        normal = vec3(0.0, 1.0, 0.0);
-    } else if (u_PatternMode == 1) {
+    // 1. Geometric surface normal (computed from 3D surface derivatives for accurate lighting)
+    vec3 normal;
+    if (u_PatternMode == 2) {
+        normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
+    } else {
         vec3 dx = dFdx(v_WorldPos);
         vec3 dy = dFdy(v_WorldPos);
         normal = normalize(cross(dx, dy));
         if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
-    } else {
-        normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
     }
 
     // 2. Cotangent normal map perturbation

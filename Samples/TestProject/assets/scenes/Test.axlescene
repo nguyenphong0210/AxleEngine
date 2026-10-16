@@ -1,7 +1,215 @@
 # Axle Scene Definition File
 Scene: Untitled
 Entities:
-  - Entity: 10711546192099806771
+  - Entity: 15027978107127069824
+    TagComponent:
+      Tag: Wheel_RR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.587732 , -1.400000 ]
+      Rotation: [ 0.552892 , -0.440806 , 0.440806 , 0.552892 ]
+      Scale: [ 0.350000 , 0.149995 , 0.350000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cylinder
+      PatternMode: 1
+      TileScale: 4.000000
+      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.150000
+      SuspensionMaxLength: 0.450000
+      SpringFrequency: 2.000000
+      SpringDamping: 0.500000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+  - Entity: 6128542852897491018
+    TagComponent:
+      Tag: Wheel_RL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.587703 , -1.400000 ]
+      Rotation: [ 0.252130 , 0.660629 , -0.660629 , 0.252130 ]
+      Scale: [ 0.350000 , 0.149997 , 0.350000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cylinder
+      PatternMode: 1
+      TileScale: 4.000000
+      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.150000
+      SuspensionMaxLength: 0.450000
+      SpringFrequency: 2.000000
+      SpringDamping: 0.500000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+  - Entity: 4716918885181481269
+    TagComponent:
+      Tag: Wheel_FR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.587107 , 1.400000 ]
+      Rotation: [ 0.281528 , 0.648646 , -0.648646 , 0.281528 ]
+      Scale: [ 0.350000 , 0.150000 , 0.350000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cylinder
+      PatternMode: 1
+      TileScale: 4.000000
+      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.150000
+      SuspensionMaxLength: 0.450000
+      SpringFrequency: 2.000000
+      SpringDamping: 0.500000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+  - Entity: 7782791376365683938
+    TagComponent:
+      Tag: Wheel_FL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.587079 , 1.400000 ]
+      Rotation: [ 0.443646 , 0.550616 , -0.550616 , 0.443646 ]
+      Scale: [ 0.350000 , 0.150000 , 0.350000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cylinder
+      PatternMode: 1
+      TileScale: 4.000000
+      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.150000
+      SuspensionMaxLength: 0.450000
+      SpringFrequency: 2.000000
+      SpringDamping: 0.500000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+  - Entity: 2479544764548422800
+    TagComponent:
+      Tag: BodyMesh
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.800000 , 0.800000 , 4.200000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 1
+      TileScale: 6.000000
+      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+  - Entity: 8959925798803133502
+    TagComponent:
+      Tag: Car
+    TransformComponent:
+      Translation: [ 0.000000 , 1.500000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 1500.000000
+      LinearDamping: 0.050000
+      AngularDamping: 0.050000
+      GravityFactor: 1.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.900000 , 0.400000 , 2.100000 ]
+      Radius: 0.500000
+      HalfHeight: 0.500000
+      Offset: [ 0.000000 , 0.000000 , 0.000000 ]
+      Friction: 0.200000
+      Restitution: 0.000000
+      IsTrigger: false
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    VehicleComponent:
+      ChassisMass: 1500.000000
+      MaxEngineTorque: 800.000000
+      MaxRPM: 7000.000000
+      MinRPM: 1000.000000
+      MaxBrakeTorque: 3000.000000
+      MaxHandBrakeTorque: 6000.000000
+      DefaultSuspensionFrequency: 2.000000
+      DefaultSuspensionDamping: 0.500000
+      FourWheelDrive: true
+      CenterOfMassOffset: [ 0.000000 , -0.200000 , 0.000000 ]
+  - Entity: 14508017990534648314
+    TagComponent:
+      Tag: Ground
+    TransformComponent:
+      Translation: [ 0.000000 , -0.500000 , 0.000000 ]
+      Rotation: [ 7.106335 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 100.000000 , 1.000000 , 100.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://plane
+      PatternMode: 1
+      TileScale: 8.000000
+      Color1: [ 0.350000 , 0.380000 , 0.420000 , 1.000000 ]
+      Color2: [ 0.200000 , 0.220000 , 0.250000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 1.000000
+      LinearDamping: 0.050000
+      AngularDamping: 0.050000
+      GravityFactor: 1.000000
+    CollisionShape3D:
+      ShapeType: Plane
+      HalfExtent: [ 50.000000 , 0.500000 , 50.000000 ]
+      Radius: 50.000000
+      HalfHeight: 0.500000
+      Offset: [ 0.000000 , 0.000000 , 0.000000 ]
+      Friction: 0.500000
+      Restitution: 0.000000
+      IsTrigger: false
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+  - Entity: 14539758737335856244
     TagComponent:
       Tag: Skybox Environment
     TransformComponent:
@@ -11,6 +219,7 @@ Entities:
     HierarchyComponent:
       Parent: 0
       InheritTransform: true
+      InheritScale: true
     SkyboxComponent:
       Enabled: true
       ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
@@ -23,7 +232,7 @@ Entities:
       CustomAzimuth: 45.000000
       CustomElevation: 50.000000
       HemisphereAmbient: true
-  - Entity: 1153370790789502708
+  - Entity: 17853323863493946772
     TagComponent:
       Tag: Directional Light
     TransformComponent:
@@ -33,6 +242,7 @@ Entities:
     HierarchyComponent:
       Parent: 0
       InheritTransform: true
+      InheritScale: true
     DirectionalLightComponent:
       Color: [ 1.000000 , 0.980000 , 0.920000 ]
       Intensity: 1.000000

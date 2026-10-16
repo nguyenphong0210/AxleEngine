@@ -47,7 +47,7 @@ namespace Axle {
         void UpdateWorldTransformsParallel(u32 minBatchSize = 64);
 
         // Reparenting API with cycle check and World Position Stays logic
-        void SetParent(Entity child, Entity parent);
+        void SetParent(Entity child, Entity parent, bool keepWorldPosition = true);
 
         // Query active directional sun light in the scene (returns true if light found)
         bool GetPrimaryDirectionalLight(DirectionalLightComponent& outLight) const;

@@ -879,7 +879,11 @@ void EditorLayer::NewScene() {
     m_InitialDynamicStates.clear();
 
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
-    m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+    if (!m_PhysicsDebugRenderer) {
+        m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+    } else {
+        m_PhysicsDebugRenderer->Clear();
+    }
     m_Scene->Clear();
     m_CurrentScenePath.clear();
 
@@ -1096,9 +1100,13 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
     m_WheelEntities.clear();
     m_InitialDynamicStates.clear();
 
-    // 3. Create fresh PhysicsScene and PhysicsDebugRenderer
+    // 3. Create fresh PhysicsScene and maintain PhysicsDebugRenderer
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
-    m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+    if (!m_PhysicsDebugRenderer) {
+        m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+    } else {
+        m_PhysicsDebugRenderer->Clear();
+    }
 
     Axle::SceneSerializer serializer(m_Scene.get(), m_PhysicsScene.get());
     Axle::SceneSerializerContext ctx;
@@ -1814,7 +1822,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         }
 
         // 3. Render JPH::DebugRenderer physics collider wireframes when enabled
-        if (m_ShowPhysicsDebug && m_PhysicsDebugRenderer) {
+        if (m_ShowPhysicsDebug && m_PhysicsDebugRenderer && m_PhysicsScene) {
             m_PhysicsDebugRenderer->Begin(m_CameraController->GetCamera().GetPosition());
             m_PhysicsScene->DrawDebug(*m_PhysicsDebugRenderer, m_PhysicsDrawSettings);
             m_PhysicsDebugRenderer->End(m_CameraController->GetCamera().GetViewProjectionMatrix());

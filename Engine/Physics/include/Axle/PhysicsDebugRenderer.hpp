@@ -23,7 +23,7 @@ namespace Axle {
     class PhysicsDebugRenderer : public JPH::DebugRendererSimple {
     public:
         PhysicsDebugRenderer();
-        ~PhysicsDebugRenderer() override = default;
+        ~PhysicsDebugRenderer() override;
 
         // JPH::DebugRendererSimple virtual overrides
         void DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, JPH::ColorArg inColor) override;

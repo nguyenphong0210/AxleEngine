@@ -41,9 +41,31 @@ namespace Axle {
 
         m_VertexArray = std::make_shared<VertexArray>();
         m_VertexArray->AddVertexBuffer(m_VertexBuffer);
+
+        sInstance = this;
+    }
+
+    PhysicsDebugRenderer::~PhysicsDebugRenderer() {
+        if (sInstance == this) {
+            sInstance = nullptr;
+        }
     }
 
     void PhysicsDebugRenderer::DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, JPH::ColorArg inColor) {
+        const float fx = static_cast<float>(inFrom.GetX());
+        const float fy = static_cast<float>(inFrom.GetY());
+        const float fz = static_cast<float>(inFrom.GetZ());
+        const float tx = static_cast<float>(inTo.GetX());
+        const float ty = static_cast<float>(inTo.GetY());
+        const float tz = static_cast<float>(inTo.GetZ());
+
+        if (std::isnan(fx) || std::isnan(fy) || std::isnan(fz) ||
+            std::isnan(tx) || std::isnan(ty) || std::isnan(tz) ||
+            std::isinf(fx) || std::isinf(fy) || std::isinf(fz) ||
+            std::isinf(tx) || std::isinf(ty) || std::isinf(tz)) {
+            return;
+        }
+
         const glm::vec4 col(
             static_cast<f32>(inColor.r) / 255.0f,
             static_cast<f32>(inColor.g) / 255.0f,
@@ -51,8 +73,8 @@ namespace Axle {
             static_cast<f32>(inColor.a) / 255.0f
         );
 
-        m_LineVertices.push_back({ glm::vec3(inFrom.GetX(), inFrom.GetY(), inFrom.GetZ()), col });
-        m_LineVertices.push_back({ glm::vec3(inTo.GetX(), inTo.GetY(), inTo.GetZ()), col });
+        m_LineVertices.push_back({ glm::vec3(fx, fy, fz), col });
+        m_LineVertices.push_back({ glm::vec3(tx, ty, tz), col });
     }
 
     void PhysicsDebugRenderer::DrawText3D(JPH::RVec3Arg inPosition, const std::string_view& inString, JPH::ColorArg inColor, float inHeight) {
@@ -64,6 +86,7 @@ namespace Axle {
     }
 
     void PhysicsDebugRenderer::Begin(const glm::vec3& cameraPos) {
+        sInstance = this;
         SetCameraPos(JPH::RVec3(cameraPos.x, cameraPos.y, cameraPos.z));
         m_LineVertices.clear();
         NextFrame();

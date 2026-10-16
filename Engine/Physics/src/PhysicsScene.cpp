@@ -71,6 +71,8 @@ namespace Axle {
     }
 
     void PhysicsScene::DrawDebug(PhysicsDebugRenderer& renderer, const PhysicsDrawSettings& settings) {
+        JPH::DebugRenderer::sInstance = &renderer;
+
         JPH::BodyManager::DrawSettings joltSettings;
         joltSettings.mDrawShape = settings.DrawShapes;
         joltSettings.mDrawShapeWireframe = settings.DrawWireframe;
@@ -78,7 +80,10 @@ namespace Axle {
         joltSettings.mDrawVelocity = settings.DrawVelocity;
         joltSettings.mDrawCenterOfMassTransform = settings.DrawCenterOfMass;
 
-        m_PhysicsSystem.DrawBodies(joltSettings, &renderer);
+        if (settings.DrawShapes || settings.DrawWireframe || settings.DrawBoundingBoxes || settings.DrawVelocity || settings.DrawCenterOfMass) {
+            m_PhysicsSystem.DrawBodies(joltSettings, &renderer);
+        }
+
         m_PhysicsSystem.DrawConstraints(&renderer);
         m_PhysicsSystem.DrawConstraintLimits(&renderer);
     }

@@ -56,12 +56,15 @@ namespace Axle {
     }
 
     void RenderCommand::DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray) {
+        if (!vertexArray) return;
         vertexArray->Bind();
         const u32 count = vertexArray->GetIndexBuffer() ? vertexArray->GetIndexBuffer()->GetCount() : 0;
+        if (count == 0) return;
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(count), GL_UNSIGNED_INT, nullptr);
     }
 
     void RenderCommand::DrawLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount) {
+        if (!vertexArray || vertexCount == 0) return;
         vertexArray->Bind();
         glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertexCount));
     }

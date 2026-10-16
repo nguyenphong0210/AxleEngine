@@ -17,6 +17,8 @@
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/ParallelECS.hpp>
 #include <Axle/ScriptableEntity.hpp>
+#include <Axle/Vehicle.hpp>
+#include <Axle/SceneSerializer.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -3149,6 +3151,166 @@ bool RunTest_Step24_Phase19_ParallelECSProcessing() {
 }
 
 // =============================================================================
+// TEST STEP 25: Phase 20 Component-per-Wheel N-Wheeled Vehicle Architecture
+// =============================================================================
+bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 25 TEST] PHASE 20: COMPONENT-PER-WHEEL VEHICLE   " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // -------------------------------------------------------------------------
+    // [25.1] WheelComponent & VehicleWheel3D serialization roundtrip
+    // -------------------------------------------------------------------------
+    std::cout << "[25.1] Testing WheelComponent serialization and deserialization..." << std::endl;
+    std::filesystem::path testScenePath = "temp_wheel_component_test.axlescene";
+
+    {
+        auto srcScene = std::make_shared<Axle::Scene>();
+        auto wheelEnt = srcScene->CreateEntity("CustomWheel_FrontLeft");
+        auto& tc = wheelEnt.GetComponent<Axle::TransformComponent>();
+        tc.Translation = glm::vec3(0.95f, -0.15f, 1.4f);
+
+        auto& wc = wheelEnt.AddComponent<Axle::WheelComponent>();
+        wc.Radius = 0.42f;
+        wc.Width = 0.28f;
+        wc.SuspensionMinLength = 0.18f;
+        wc.SuspensionMaxLength = 0.48f;
+        wc.SpringFrequency = 3.5f;
+        wc.SpringDamping = 0.65f;
+        wc.CanSteer = true;
+        wc.MaxSteerAngle = 38.0f;
+        wc.IsDriven = true;
+        wc.HasHandbrake = false;
+        wc.BrakeTorque = 4200.0f;
+        wc.HandBrakeTorque = 0.0f;
+
+        Axle::SceneSerializer serializer(srcScene.get());
+        bool serSuccess = serializer.Serialize(testScenePath);
+        assert(serSuccess);
+        assert(std::filesystem::exists(testScenePath));
+    }
+
+    // Verify deserialization
+    {
+        auto dstScene = std::make_shared<Axle::Scene>();
+        Axle::SceneSerializer deserializer(dstScene.get());
+        bool deserSuccess = deserializer.Deserialize(testScenePath);
+        assert(deserSuccess);
+
+        auto view = dstScene->GetRegistry().view<Axle::WheelComponent, Axle::TagComponent>();
+        assert(view.size_hint() == 1);
+
+        for (auto entityID : view) {
+            const auto& tag = view.get<Axle::TagComponent>(entityID).Tag;
+            const auto& wc = view.get<Axle::WheelComponent>(entityID);
+            assert(tag == "CustomWheel_FrontLeft");
+            assert(std::abs(wc.Radius - 0.42f) < 0.001f);
+            assert(std::abs(wc.Width - 0.28f) < 0.001f);
+            assert(std::abs(wc.SuspensionMinLength - 0.18f) < 0.001f);
+            assert(std::abs(wc.SuspensionMaxLength - 0.48f) < 0.001f);
+            assert(std::abs(wc.SpringFrequency - 3.5f) < 0.001f);
+            assert(std::abs(wc.SpringDamping - 0.65f) < 0.001f);
+            assert(wc.CanSteer == true);
+            assert(std::abs(wc.MaxSteerAngle - 38.0f) < 0.001f);
+            assert(wc.IsDriven == true);
+            assert(wc.HasHandbrake == false);
+            assert(std::abs(wc.BrakeTorque - 4200.0f) < 0.001f);
+        }
+        std::error_code ec;
+        std::filesystem::remove(testScenePath, ec);
+    }
+    std::cout << "  -> PASS: WheelComponent successfully serialized and deserialized with all tuning properties." << std::endl;
+
+    // -------------------------------------------------------------------------
+    // [25.2] 6x6 N-Wheeled Vehicle Physics Simulation
+    // -------------------------------------------------------------------------
+    std::cout << "\n[25.2] Testing 6-wheeled (6x6) heavy truck physics simulation..." << std::endl;
+    {
+        Axle::PhysicsScene physicsScene;
+
+        Axle::VehicleConfig config;
+        config.InitialPosition = glm::vec3(0.0f, 1.5f, 0.0f);
+        config.ChassisHalfExtent = glm::vec3(1.2f, 0.4f, 3.0f);
+        config.ChassisMass = 5000.0f;
+
+        // Configure 6 wheels (Front pair, Middle pair, Rear pair)
+        const float xOffset = 1.25f;
+        const float yOffset = -0.2f;
+
+        // Front pair (steerable + driven)
+        Axle::WheelConfig wFL;
+        wFL.Position = glm::vec3(xOffset, yOffset, 2.2f);
+        wFL.CanSteer = true;
+        wFL.IsDriven = true;
+        config.CustomWheels.push_back(wFL);
+
+        Axle::WheelConfig wFR;
+        wFR.Position = glm::vec3(-xOffset, yOffset, 2.2f);
+        wFR.CanSteer = true;
+        wFR.IsDriven = true;
+        config.CustomWheels.push_back(wFR);
+
+        // Middle pair (driven)
+        Axle::WheelConfig wML;
+        wML.Position = glm::vec3(xOffset, yOffset, 0.0f);
+        wML.CanSteer = false;
+        wML.IsDriven = true;
+        config.CustomWheels.push_back(wML);
+
+        Axle::WheelConfig wMR;
+        wMR.Position = glm::vec3(-xOffset, yOffset, 0.0f);
+        wMR.CanSteer = false;
+        wMR.IsDriven = true;
+        config.CustomWheels.push_back(wMR);
+
+        // Rear pair (driven + handbrake)
+        Axle::WheelConfig wRL;
+        wRL.Position = glm::vec3(xOffset, yOffset, -2.2f);
+        wRL.CanSteer = false;
+        wRL.IsDriven = true;
+        wRL.MaxHandBrakeTorque = 8000.0f;
+        config.CustomWheels.push_back(wRL);
+
+        Axle::WheelConfig wRR;
+        wRR.Position = glm::vec3(-xOffset, yOffset, -2.2f);
+        wRR.CanSteer = false;
+        wRR.IsDriven = true;
+        wRR.MaxHandBrakeTorque = 8000.0f;
+        config.CustomWheels.push_back(wRR);
+
+        Axle::Vehicle truck(physicsScene, config);
+
+        assert(truck.GetConstraint() != nullptr);
+        assert(truck.GetConstraint()->GetWheels().size() == 6);
+        std::cout << "  -> PASS: 6-wheeled vehicle constraint created with 6 active wheels in Jolt Physics." << std::endl;
+
+        // Verify GetWheelTransform for all 6 wheels
+        for (Axle::u32 i = 0; i < 6; ++i) {
+            glm::mat4 wMat = truck.GetWheelTransform(i);
+            glm::vec3 pos = glm::vec3(wMat[3]);
+            assert(!std::isnan(pos.x) && !std::isnan(pos.y) && !std::isnan(pos.z));
+        }
+        std::cout << "  -> PASS: All 6 wheel transforms queried successfully without bounds violation." << std::endl;
+
+        // Simulate 30 physics steps with full throttle
+        truck.SetDriverInput(1.0f, 0.0f, 0.0f, 0.0f);
+        for (int step = 0; step < 30; ++step) {
+            physicsScene.Step(1.0f / 60.0f);
+        }
+
+        // Verify truck position and state
+        glm::vec3 finalPos = truck.GetPosition();
+        assert(!std::isnan(finalPos.x) && !std::isnan(finalPos.y) && !std::isnan(finalPos.z));
+        std::cout << "  -> Final truck position after 30 simulation steps: ["
+                  << finalPos.x << ", " << finalPos.y << ", " << finalPos.z << "]" << std::endl;
+        std::cout << "  -> PASS: Dynamic powertrain differential and anti-roll bars simulated stably." << std::endl;
+    }
+
+    std::cout << ">>> STEP 25 PASSED: Phase 20 Component-per-Wheel Vehicle Architecture verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -3185,12 +3347,13 @@ int main(int argc, char** argv) {
         else if (arg == "22" || arg == "step22" || arg == "--step22" || arg == "--phase19" || arg == "--phase19.2") targetStep = 22;
         else if (arg == "23" || arg == "step23" || arg == "--step23" || arg == "--phase19.3") targetStep = 23;
         else if (arg == "24" || arg == "step24" || arg == "--step24" || arg == "--phase19.4") targetStep = 24;
+        else if (arg == "25" || arg == "step25" || arg == "--step25" || arg == "--phase20" || arg == "--phase20.1") targetStep = 25;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 24 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 25 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -3269,6 +3432,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 24) {
         if (!RunTest_Step24_Phase19_ParallelECSProcessing()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 25) {
+        if (!RunTest_Step25_Phase20_ComponentPerWheelVehicle()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

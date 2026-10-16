@@ -1653,7 +1653,35 @@ namespace Axle {
                 ImGui::Text("Current Gear: %d", telemetry.CurrentGear);
                 ImGui::Text("Chassis Mass: %.0f kg", vc.VehicleInstance->GetConfig().ChassisMass);
             } else {
-                ImGui::TextDisabled("Vehicle controller not attached.");
+                ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "Status: Vehicle Chassis Configured");
+                ImGui::Spacing();
+                ImGui::TextWrapped("This entity is configured as a Vehicle Chassis. Jolt Physics simulation controller initializes automatically upon entering Play Mode (F5).");
+            }
+        }, /*canRemove=*/ true);
+
+        // Wheel Component (VehicleWheel3D)
+        DrawComponent<WheelComponent>("Vehicle Wheel (VehicleWheel3D)", entity, [&](WheelComponent& wc) {
+            ImGui::DragFloat("Radius (m)", &wc.Radius, 0.01f, 0.05f, 2.0f, "%.2f");
+            ImGui::DragFloat("Width (m)", &wc.Width, 0.01f, 0.05f, 2.0f, "%.2f");
+            ImGui::Separator();
+            ImGui::TextDisabled("Suspension:");
+            ImGui::DragFloat("Min Compression (m)", &wc.SuspensionMinLength, 0.01f, 0.02f, 1.0f, "%.2f");
+            ImGui::DragFloat("Max Extension (m)", &wc.SuspensionMaxLength, 0.01f, 0.05f, 2.0f, "%.2f");
+            ImGui::DragFloat("Spring Frequency (Hz)", &wc.SpringFrequency, 0.1f, 0.5f, 10.0f, "%.1f");
+            ImGui::DragFloat("Spring Damping", &wc.SpringDamping, 0.05f, 0.0f, 2.0f, "%.2f");
+            ImGui::Separator();
+            ImGui::TextDisabled("Steering & Powertrain:");
+            ImGui::Checkbox("Steerable (Steering Input)", &wc.CanSteer);
+            if (wc.CanSteer) {
+                ImGui::DragFloat("Max Steer Angle (deg)", &wc.MaxSteerAngle, 0.5f, 5.0f, 60.0f, "%.1f");
+            }
+            ImGui::Checkbox("Driven (Engine Traction)", &wc.IsDriven);
+            ImGui::DragFloat("Brake Torque (N.m)", &wc.BrakeTorque, 50.0f, 0.0f, 20000.0f, "%.0f");
+            ImGui::Checkbox("Handbrake", &wc.HasHandbrake);
+            if (wc.HasHandbrake && wc.HandBrakeTorque == 0.0f) {
+                wc.HandBrakeTorque = 6000.0f;
+            } else if (!wc.HasHandbrake) {
+                wc.HandBrakeTorque = 0.0f;
             }
         }, /*canRemove=*/ true);
 
@@ -2197,6 +2225,11 @@ namespace Axle {
             "Physics", "VehicleComponent", "Raycast/physics vehicle simulation controller",
             entity.HasComponent<VehicleComponent>(), true,
             [&]() { entity.AddComponent<VehicleComponent>(); }
+        });
+        items.push_back({
+            "Physics", "VehicleWheel3D", "Raycast wheel dynamics controller for vehicle chassis",
+            entity.HasComponent<WheelComponent>(), true,
+            [&]() { entity.AddComponent<WheelComponent>(); }
         });
 
         // --- SCRIPTS CATEGORY ---

@@ -63,12 +63,6 @@ namespace Axle {
             return w;
         };
 
-        vehicleSettings.mWheels.resize(4);
-        vehicleSettings.mWheels[Wheel_FrontLeft]  = createWheel( config.WheelOffsetLateral, -config.WheelOffsetVertical,  config.WheelOffsetHorizontal, true);
-        vehicleSettings.mWheels[Wheel_FrontRight] = createWheel(-config.WheelOffsetLateral, -config.WheelOffsetVertical,  config.WheelOffsetHorizontal, true);
-        vehicleSettings.mWheels[Wheel_RearLeft]   = createWheel( config.WheelOffsetLateral, -config.WheelOffsetVertical, -config.WheelOffsetHorizontal, false);
-        vehicleSettings.mWheels[Wheel_RearRight]  = createWheel(-config.WheelOffsetLateral, -config.WheelOffsetVertical, -config.WheelOffsetHorizontal, false);
-
         // 3. Powertrain controller settings (Engine, Automatic Transmission, Differentials)
         JPH::WheeledVehicleControllerSettings* controllerSettings = new JPH::WheeledVehicleControllerSettings();
         controllerSettings->mEngine.mMaxTorque = config.MaxEngineTorque;
@@ -82,29 +76,84 @@ namespace Axle {
         controllerSettings->mTransmission.mSwitchTime = 0.15f;
         controllerSettings->mTransmission.mClutchStrength = 50.0f;
 
-        if (config.FourWheelDrive) {
-            controllerSettings->mDifferentials.resize(2);
-            controllerSettings->mDifferentials[0].mLeftWheel = Wheel_FrontLeft;
-            controllerSettings->mDifferentials[0].mRightWheel = Wheel_FrontRight;
-            controllerSettings->mDifferentials[0].mEngineTorqueRatio = 0.5f;
+        if (!config.CustomWheels.empty()) {
+            u32 numWheels = static_cast<u32>(config.CustomWheels.size());
+            vehicleSettings.mWheels.resize(numWheels);
+            for (u32 i = 0; i < numWheels; ++i) {
+                const auto& cw = config.CustomWheels[i];
+                JPH::WheelSettingsWV* w = new JPH::WheelSettingsWV();
+                w->mPosition = JPH::Vec3(cw.Position.x, cw.Position.y, cw.Position.z);
+                w->mRadius = cw.Radius;
+                w->mWidth = cw.Width;
+                w->mSuspensionMinLength = cw.SuspensionMinLength;
+                w->mSuspensionMaxLength = cw.SuspensionMaxLength;
+                w->mSuspensionSpring.mMode = JPH::ESpringMode::FrequencyAndDamping;
+                w->mSuspensionSpring.mFrequency = cw.SpringFrequency;
+                w->mSuspensionSpring.mDamping = cw.SpringDamping;
+                w->mMaxSteerAngle = cw.CanSteer ? JPH::DegreesToRadians(cw.MaxSteerAngleDegrees) : 0.0f;
+                w->mMaxBrakeTorque = cw.MaxBrakeTorque;
+                w->mMaxHandBrakeTorque = cw.MaxHandBrakeTorque;
+                vehicleSettings.mWheels[i] = w;
+            }
 
-            controllerSettings->mDifferentials[1].mLeftWheel = Wheel_RearLeft;
-            controllerSettings->mDifferentials[1].mRightWheel = Wheel_RearRight;
-            controllerSettings->mDifferentials[1].mEngineTorqueRatio = 0.5f;
+            // Configure differentials for driven wheels
+            std::vector<u32> drivenWheels;
+            for (u32 i = 0; i < numWheels; ++i) {
+                if (config.CustomWheels[i].IsDriven) {
+                    drivenWheels.push_back(i);
+                }
+            }
+
+            if (!drivenWheels.empty()) {
+                u32 diffCount = (static_cast<u32>(drivenWheels.size()) + 1) / 2;
+                controllerSettings->mDifferentials.resize(diffCount);
+                float torquePerDiff = 1.0f / static_cast<float>(diffCount);
+                for (u32 d = 0; d < diffCount; ++d) {
+                    controllerSettings->mDifferentials[d].mLeftWheel = drivenWheels[d * 2];
+                    controllerSettings->mDifferentials[d].mRightWheel = (d * 2 + 1 < drivenWheels.size()) ? drivenWheels[d * 2 + 1] : drivenWheels[d * 2];
+                    controllerSettings->mDifferentials[d].mEngineTorqueRatio = torquePerDiff;
+                }
+            }
+
+            // Anti-roll bars for wheel pairs
+            u32 pairCount = numWheels / 2;
+            vehicleSettings.mAntiRollBars.resize(pairCount);
+            for (u32 p = 0; p < pairCount; ++p) {
+                vehicleSettings.mAntiRollBars[p].mLeftWheel = p * 2;
+                vehicleSettings.mAntiRollBars[p].mRightWheel = p * 2 + 1;
+            }
         } else {
-            // Rear-wheel drive (RWD)
-            controllerSettings->mDifferentials.resize(1);
-            controllerSettings->mDifferentials[0].mLeftWheel = Wheel_RearLeft;
-            controllerSettings->mDifferentials[0].mRightWheel = Wheel_RearRight;
-            controllerSettings->mDifferentials[0].mEngineTorqueRatio = 1.0f;
-        }
+            // Default 4-wheel setup for backward compatibility
+            vehicleSettings.mWheels.resize(4);
+            vehicleSettings.mWheels[Wheel_FrontLeft]  = createWheel( config.WheelOffsetLateral, -config.WheelOffsetVertical,  config.WheelOffsetHorizontal, true);
+            vehicleSettings.mWheels[Wheel_FrontRight] = createWheel(-config.WheelOffsetLateral, -config.WheelOffsetVertical,  config.WheelOffsetHorizontal, true);
+            vehicleSettings.mWheels[Wheel_RearLeft]   = createWheel( config.WheelOffsetLateral, -config.WheelOffsetVertical, -config.WheelOffsetHorizontal, false);
+            vehicleSettings.mWheels[Wheel_RearRight]  = createWheel(-config.WheelOffsetLateral, -config.WheelOffsetVertical, -config.WheelOffsetHorizontal, false);
 
-        // Anti-roll bars
-        vehicleSettings.mAntiRollBars.resize(2);
-        vehicleSettings.mAntiRollBars[0].mLeftWheel = Wheel_FrontLeft;
-        vehicleSettings.mAntiRollBars[0].mRightWheel = Wheel_FrontRight;
-        vehicleSettings.mAntiRollBars[1].mLeftWheel = Wheel_RearLeft;
-        vehicleSettings.mAntiRollBars[1].mRightWheel = Wheel_RearRight;
+            if (config.FourWheelDrive) {
+                controllerSettings->mDifferentials.resize(2);
+                controllerSettings->mDifferentials[0].mLeftWheel = Wheel_FrontLeft;
+                controllerSettings->mDifferentials[0].mRightWheel = Wheel_FrontRight;
+                controllerSettings->mDifferentials[0].mEngineTorqueRatio = 0.5f;
+
+                controllerSettings->mDifferentials[1].mLeftWheel = Wheel_RearLeft;
+                controllerSettings->mDifferentials[1].mRightWheel = Wheel_RearRight;
+                controllerSettings->mDifferentials[1].mEngineTorqueRatio = 0.5f;
+            } else {
+                // Rear-wheel drive (RWD)
+                controllerSettings->mDifferentials.resize(1);
+                controllerSettings->mDifferentials[0].mLeftWheel = Wheel_RearLeft;
+                controllerSettings->mDifferentials[0].mRightWheel = Wheel_RearRight;
+                controllerSettings->mDifferentials[0].mEngineTorqueRatio = 1.0f;
+            }
+
+            // Anti-roll bars
+            vehicleSettings.mAntiRollBars.resize(2);
+            vehicleSettings.mAntiRollBars[0].mLeftWheel = Wheel_FrontLeft;
+            vehicleSettings.mAntiRollBars[0].mRightWheel = Wheel_FrontRight;
+            vehicleSettings.mAntiRollBars[1].mLeftWheel = Wheel_RearLeft;
+            vehicleSettings.mAntiRollBars[1].mRightWheel = Wheel_RearRight;
+        }
 
         vehicleSettings.mController = controllerSettings;
 
@@ -211,7 +260,7 @@ namespace Axle {
     }
 
     glm::mat4 Vehicle::GetWheelTransform(u32 wheelIndex) const {
-        if (!m_Constraint || wheelIndex >= 4) {
+        if (!m_Constraint || wheelIndex >= static_cast<u32>(m_Constraint->GetWheels().size())) {
             return glm::mat4(1.0f);
         }
         const JPH::RMat44 joltMat = m_Constraint->GetWheelWorldTransform(wheelIndex, JPH::Vec3::sAxisY(), JPH::Vec3::sAxisX());

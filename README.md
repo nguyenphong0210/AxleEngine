@@ -350,11 +350,17 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Jolt Physics Bridge (`JobSystemEnkiTS`)**: Implement custom `JPH::JobSystem` backend routing Jolt Physics constraint solving and collision tasks into enkiTS, eliminating separate thread pools and thread oversubscription.
   - [x] **Parallel ECS Processing**: Implement `ParallelFor` utilities for `entt::registry` batch iteration, distributing bulk mechanical parts and transform evaluations across all worker cores without lock contention.
 - [ ] **Phase 20: Component-Driven Vehicle Creation from Scratch (`Engine/Vehicle`, `Engine/Scene` & `Engine/UI`)**
-  - [ ] **Decouple Hardcoded Tags**: Completely eliminate fixed name queries (`"Vehicle Chassis"`, `"Wheel FL/FR/RL/RR"`). All vehicle lifecycle logic becomes 100% component-driven via `VehicleComponent` in `SceneSerializer.cpp` and `EditorLayer.cpp`.
-  - [ ] **Configurable VehicleComponent**: Integrate `VehicleConfig` directly into `VehicleComponent` (Chassis Mass/Extents, 4-wheel offsets, spring frequency, damping, engine torque, redline RPM, steer angle, 4WD/RWD toggle) and store 4 wheel entity references (`UUID WheelEntities[4]`) with full `.axlescene` serialization.
-  - [ ] **Properties Inspector Tuning UI**: Interactive sliders in `SceneHierarchyPanel` for real-time chassis, suspension, and powertrain tuning, quick-fit to collider geometry (`[ Auto-Fit to Box Collider ]`), and one-click `[ Auto-Spawn 4 Wheel Entities ]`.
-  - [ ] **Runtime Simulation & Wheel Sync**: Automatic Jolt physics vehicle constraint instantiation upon Play (`F5`) for any entity with `VehicleComponent`, synchronizing visual wheel mesh rotation and steering in real-time.
-  - [ ] **Gameplay Input, Camera & Verification**: Drive control via `CarPlayerScript`, dynamic chase camera targeting, and automated regression testing in `AxleTests.exe`.
+  - [x] **Phase 20.1: Decouple Hardcoded Tags & Component-per-Wheel Architecture (Godot/Unity-style N-Wheeled)**:
+    - [x] **Decouple Hardcoded Tags**: Completely eliminate fixed name queries (`"Vehicle Chassis"`, `"Wheel FL/FR/RL/RR"`). All vehicle lifecycle logic is 100% component-driven via `VehicleComponent` in `SceneSerializer.cpp` and `EditorLayer.cpp`.
+    - [x] **Component-per-Wheel (`WheelComponent` / `VehicleWheel3D`)**: Define `WheelComponent` for child wheel entities, exposing tire radius, width, suspension spring/damper, steerable flag, driven/traction flag, and handbrake settings.
+    - [x] **Arbitrary N-Wheeled Jolt Constraint**: Support arbitrary wheel counts (2-wheel bike, 4-wheel car, 6x6 heavy truck, 8x8 APC) via `VehicleConfig.CustomWheels` with automatic differential torque splitting and anti-roll bar distribution.
+    - [x] **Scene Serialization**: Full YAML serialization and deserialization for `WheelComponent` in `SceneSerializer.cpp`.
+    - [x] **Runtime Simulation & Wheel Sync**: Dynamic discovery via `HierarchyComponent` and automatic synchronization of arbitrary N wheels with Jolt Physics in `EditorLayer.cpp` (preserving local transforms relative to chassis with zero drift).
+    - [x] **Verification**: Step 25 in `AxleTests.exe` validating `WheelComponent` serialization and 6x6 all-wheel-drive truck physics simulation.
+  - [ ] **Phase 20.2: Vehicle Inspector Tuning & Quick-Setup Presets (`Engine/UI`)**:
+    - [ ] Interactive sliders in `SceneHierarchyPanel` for chassis mass, suspension frequency/damping, and engine torque tuning.
+    - [ ] One-click convenience buttons: `[ Auto-Fit to Box Collider ]` and `[ Auto-Spawn Child Wheels ]` (4-wheel car, 6x6 truck presets).
+    - [ ] Real-time driving controls and chase camera integration for test scenes created from scratch.
 - [ ] **Phase 21: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.

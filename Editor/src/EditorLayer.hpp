@@ -73,6 +73,8 @@ public:
 private:
     void ResetSimulation();
     void RenderToolbar();
+    void DiscoverVehicleEntities();
+    void SetupVehiclePhysics(Axle::Entity chassisEntity);
 
 private:
     std::unique_ptr<Axle::PerspectiveCameraController> m_CameraController;
@@ -134,7 +136,7 @@ private:
     std::shared_ptr<Axle::Scene> m_EditorScene;  // Pristine Edit Mode Scene
     std::shared_ptr<Axle::Scene> m_RuntimeScene; // Ephemeral Simulation Scene
     Axle::Entity m_ChassisEntity;
-    Axle::Entity m_WheelEntities[4];
+    std::vector<Axle::Entity> m_WheelEntities;
 
     // Primitive Meshes & Shaders
     std::shared_ptr<Axle::VertexArray> m_CubeMesh;

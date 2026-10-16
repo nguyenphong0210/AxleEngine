@@ -415,6 +415,27 @@ namespace Axle {
             : VehicleInstance(vehicle) {}
     };
 
+    // Godot/Unity-style Component-per-Wheel Architecture (VehicleWheel3D)
+    struct WheelComponent {
+        float Radius = 0.35f;               // Wheel tire radius (m)
+        float Width = 0.25f;                // Wheel tire width (m)
+        float SuspensionMinLength = 0.15f;  // Maximum suspension compression (m)
+        float SuspensionMaxLength = 0.45f;  // Maximum suspension extension (m)
+        float SpringFrequency = 2.0f;       // Spring oscillation frequency (Hz)
+        float SpringDamping = 0.5f;         // Suspension damping ratio (0..1)
+
+        bool CanSteer = false;              // Steerable wheel (affected by driver steering input)
+        float MaxSteerAngle = 32.0f;        // Peak steering angle (degrees)
+        bool IsDriven = true;               // Driven wheel (receives powertrain engine torque)
+        bool HasHandbrake = false;          // Locked by handbrake input
+        float BrakeTorque = 3000.0f;        // Service brake torque (N.m)
+        float HandBrakeTorque = 0.0f;       // Handbrake torque (N.m)
+
+        WheelComponent() = default;
+    };
+    using VehicleWheel3D = WheelComponent; // Godot-style decoupled wheel alias
+
+
     struct DirectionalLightComponent {
         glm::vec3 Color{ 1.0f, 0.98f, 0.92f }; // Sunlight warm tint
         float Intensity = 1.0f;

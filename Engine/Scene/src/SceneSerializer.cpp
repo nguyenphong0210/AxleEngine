@@ -179,6 +179,24 @@ namespace Axle {
                 ss << "    VehicleComponent: true\n";
             }
 
+            // WheelComponent (VehicleWheel3D)
+            if (entity.HasComponent<WheelComponent>()) {
+                const auto& wc = entity.GetComponent<WheelComponent>();
+                ss << "    WheelComponent:\n";
+                ss << "      Radius: " << wc.Radius << "\n";
+                ss << "      Width: " << wc.Width << "\n";
+                ss << "      SuspensionMinLength: " << wc.SuspensionMinLength << "\n";
+                ss << "      SuspensionMaxLength: " << wc.SuspensionMaxLength << "\n";
+                ss << "      SpringFrequency: " << wc.SpringFrequency << "\n";
+                ss << "      SpringDamping: " << wc.SpringDamping << "\n";
+                ss << "      CanSteer: " << (wc.CanSteer ? "true" : "false") << "\n";
+                ss << "      MaxSteerAngle: " << wc.MaxSteerAngle << "\n";
+                ss << "      IsDriven: " << (wc.IsDriven ? "true" : "false") << "\n";
+                ss << "      HasHandbrake: " << (wc.HasHandbrake ? "true" : "false") << "\n";
+                ss << "      BrakeTorque: " << wc.BrakeTorque << "\n";
+                ss << "      HandBrakeTorque: " << wc.HandBrakeTorque << "\n";
+            }
+
             // DirectionalLightComponent
             if (entity.HasComponent<DirectionalLightComponent>()) {
                 auto& dlc = entity.GetComponent<DirectionalLightComponent>();
@@ -281,7 +299,8 @@ namespace Axle {
             Hierarchy,
             NativeScript,
             DirectionalLight,
-            Skybox
+            Skybox,
+            Wheel
         };
         ComponentSection currentSection = ComponentSection::None;
 
@@ -320,6 +339,11 @@ namespace Axle {
                 currentSection = ComponentSection::DirectionalLight;
             } else if (trimmed == "SkyboxComponent:") {
                 currentSection = ComponentSection::Skybox;
+            } else if (trimmed == "WheelComponent:" || trimmed == "VehicleWheel3D:") {
+                currentSection = ComponentSection::Wheel;
+                if (!currentEntity.HasComponent<WheelComponent>()) {
+                    currentEntity.AddComponent<WheelComponent>();
+                }
             } else if (trimmed == "VehicleComponent: true") {
                 if (!currentEntity.HasComponent<VehicleComponent>()) {
                     currentEntity.AddComponent<VehicleComponent>();
@@ -615,6 +639,38 @@ namespace Axle {
                         }
                         break;
                     }
+                    case ComponentSection::Wheel: {
+                        if (!currentEntity.HasComponent<WheelComponent>()) {
+                            currentEntity.AddComponent<WheelComponent>();
+                        }
+                        auto& wc = currentEntity.GetComponent<WheelComponent>();
+                        if (trimmed.rfind("Radius:", 0) == 0) {
+                            wc.Radius = std::stof(Trim(trimmed.substr(7)));
+                        } else if (trimmed.rfind("Width:", 0) == 0) {
+                            wc.Width = std::stof(Trim(trimmed.substr(6)));
+                        } else if (trimmed.rfind("SuspensionMinLength:", 0) == 0) {
+                            wc.SuspensionMinLength = std::stof(Trim(trimmed.substr(20)));
+                        } else if (trimmed.rfind("SuspensionMaxLength:", 0) == 0) {
+                            wc.SuspensionMaxLength = std::stof(Trim(trimmed.substr(20)));
+                        } else if (trimmed.rfind("SpringFrequency:", 0) == 0) {
+                            wc.SpringFrequency = std::stof(Trim(trimmed.substr(16)));
+                        } else if (trimmed.rfind("SpringDamping:", 0) == 0) {
+                            wc.SpringDamping = std::stof(Trim(trimmed.substr(14)));
+                        } else if (trimmed.rfind("CanSteer:", 0) == 0) {
+                            wc.CanSteer = (Trim(trimmed.substr(9)) == "true");
+                        } else if (trimmed.rfind("MaxSteerAngle:", 0) == 0) {
+                            wc.MaxSteerAngle = std::stof(Trim(trimmed.substr(14)));
+                        } else if (trimmed.rfind("IsDriven:", 0) == 0) {
+                            wc.IsDriven = (Trim(trimmed.substr(9)) == "true");
+                        } else if (trimmed.rfind("HasHandbrake:", 0) == 0) {
+                            wc.HasHandbrake = (Trim(trimmed.substr(13)) == "true");
+                        } else if (trimmed.rfind("BrakeTorque:", 0) == 0) {
+                            wc.BrakeTorque = std::stof(Trim(trimmed.substr(12)));
+                        } else if (trimmed.rfind("HandBrakeTorque:", 0) == 0) {
+                            wc.HandBrakeTorque = std::stof(Trim(trimmed.substr(16)));
+                        }
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -628,10 +684,8 @@ namespace Axle {
                 auto& rb = rbView.get<RigidBody3D>(entityID);
                 auto& tc = rbView.get<TransformComponent>(entityID);
 
-                if (m_Scene->GetRegistry().all_of<TagComponent>(entityID)) {
-                    if (m_Scene->GetRegistry().get<TagComponent>(entityID).Tag == "Vehicle Chassis") {
-                        continue;
-                    }
+                if (m_Scene->GetRegistry().all_of<VehicleComponent>(entityID)) {
+                    continue; // Skip static body creation; handled by Vehicle physics controller
                 }
 
                 // Retrieve or initialize CollisionShape3D

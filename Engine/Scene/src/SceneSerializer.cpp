@@ -176,7 +176,17 @@ namespace Axle {
 
             // VehicleComponent
             if (entity.HasComponent<VehicleComponent>()) {
-                ss << "    VehicleComponent: true\n";
+                const auto& vc = entity.GetComponent<VehicleComponent>();
+                ss << "    VehicleComponent:\n";
+                ss << "      ChassisMass: " << vc.ChassisMass << "\n";
+                ss << "      MaxEngineTorque: " << vc.MaxEngineTorque << "\n";
+                ss << "      MaxRPM: " << vc.MaxRPM << "\n";
+                ss << "      MinRPM: " << vc.MinRPM << "\n";
+                ss << "      MaxBrakeTorque: " << vc.MaxBrakeTorque << "\n";
+                ss << "      MaxHandBrakeTorque: " << vc.MaxHandBrakeTorque << "\n";
+                ss << "      DefaultSuspensionFrequency: " << vc.DefaultSuspensionFrequency << "\n";
+                ss << "      DefaultSuspensionDamping: " << vc.DefaultSuspensionDamping << "\n";
+                ss << "      FourWheelDrive: " << (vc.FourWheelDrive ? "true" : "false") << "\n";
             }
 
             // WheelComponent (VehicleWheel3D)
@@ -300,7 +310,8 @@ namespace Axle {
             NativeScript,
             DirectionalLight,
             Skybox,
-            Wheel
+            Wheel,
+            Vehicle
         };
         ComponentSection currentSection = ComponentSection::None;
 
@@ -344,7 +355,8 @@ namespace Axle {
                 if (!currentEntity.HasComponent<WheelComponent>()) {
                     currentEntity.AddComponent<WheelComponent>();
                 }
-            } else if (trimmed == "VehicleComponent: true") {
+            } else if (trimmed == "VehicleComponent:" || trimmed == "VehicleComponent: true") {
+                currentSection = ComponentSection::Vehicle;
                 if (!currentEntity.HasComponent<VehicleComponent>()) {
                     currentEntity.AddComponent<VehicleComponent>();
                 }
@@ -668,6 +680,32 @@ namespace Axle {
                             wc.BrakeTorque = std::stof(Trim(trimmed.substr(12)));
                         } else if (trimmed.rfind("HandBrakeTorque:", 0) == 0) {
                             wc.HandBrakeTorque = std::stof(Trim(trimmed.substr(16)));
+                        }
+                        break;
+                    }
+                    case ComponentSection::Vehicle: {
+                        if (!currentEntity.HasComponent<VehicleComponent>()) {
+                            currentEntity.AddComponent<VehicleComponent>();
+                        }
+                        auto& vc = currentEntity.GetComponent<VehicleComponent>();
+                        if (trimmed.rfind("ChassisMass:", 0) == 0) {
+                            vc.ChassisMass = std::stof(Trim(trimmed.substr(12)));
+                        } else if (trimmed.rfind("MaxEngineTorque:", 0) == 0) {
+                            vc.MaxEngineTorque = std::stof(Trim(trimmed.substr(16)));
+                        } else if (trimmed.rfind("MaxRPM:", 0) == 0) {
+                            vc.MaxRPM = std::stof(Trim(trimmed.substr(7)));
+                        } else if (trimmed.rfind("MinRPM:", 0) == 0) {
+                            vc.MinRPM = std::stof(Trim(trimmed.substr(7)));
+                        } else if (trimmed.rfind("MaxBrakeTorque:", 0) == 0) {
+                            vc.MaxBrakeTorque = std::stof(Trim(trimmed.substr(15)));
+                        } else if (trimmed.rfind("MaxHandBrakeTorque:", 0) == 0) {
+                            vc.MaxHandBrakeTorque = std::stof(Trim(trimmed.substr(19)));
+                        } else if (trimmed.rfind("DefaultSuspensionFrequency:", 0) == 0) {
+                            vc.DefaultSuspensionFrequency = std::stof(Trim(trimmed.substr(27)));
+                        } else if (trimmed.rfind("DefaultSuspensionDamping:", 0) == 0) {
+                            vc.DefaultSuspensionDamping = std::stof(Trim(trimmed.substr(25)));
+                        } else if (trimmed.rfind("FourWheelDrive:", 0) == 0) {
+                            vc.FourWheelDrive = (Trim(trimmed.substr(15)) == "true");
                         }
                         break;
                     }

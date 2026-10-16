@@ -410,6 +410,19 @@ namespace Axle {
     struct VehicleComponent {
         Vehicle* VehicleInstance = nullptr;
 
+        // Chassis & Powertrain Tuning (Phase 20.2)
+        float ChassisMass = 1500.0f;        // Chassis mass in kg
+        float MaxEngineTorque = 800.0f;     // Engine peak torque in N.m
+        float MaxRPM = 7000.0f;             // Redline RPM
+        float MinRPM = 1000.0f;             // Idle RPM
+        float MaxBrakeTorque = 3000.0f;     // Service brake torque in N.m
+        float MaxHandBrakeTorque = 6000.0f; // Handbrake torque in N.m
+
+        // Default suspension settings for child wheel spawning
+        float DefaultSuspensionFrequency = 2.0f; // Spring frequency (Hz)
+        float DefaultSuspensionDamping = 0.5f;   // Suspension damping ratio (0..1)
+        bool FourWheelDrive = true;              // AWD vs RWD
+
         VehicleComponent() = default;
         VehicleComponent(Vehicle* vehicle)
             : VehicleInstance(vehicle) {}

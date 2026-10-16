@@ -987,6 +987,17 @@ void EditorLayer::SetupVehiclePhysics(Axle::Entity chassisEntity) {
         }
     }
 
+    if (m_ChassisEntity.HasComponent<Axle::VehicleComponent>()) {
+        const auto& vc = m_ChassisEntity.GetComponent<Axle::VehicleComponent>();
+        config.ChassisMass = vc.ChassisMass;
+        config.MaxEngineTorque = vc.MaxEngineTorque;
+        config.MaxRPM = vc.MaxRPM;
+        config.MinRPM = vc.MinRPM;
+        config.MaxBrakeTorque = vc.MaxBrakeTorque;
+        config.MaxHandBrakeTorque = vc.MaxHandBrakeTorque;
+        config.FourWheelDrive = vc.FourWheelDrive;
+    }
+
     // Build CustomWheels if any wheel entities have WheelComponent or custom geometry
     if (!m_WheelEntities.empty()) {
         bool hasWheelComponent = false;
@@ -1582,6 +1593,35 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     // C++ Native Scripting Runtime Execution (Phase 8: CarPlayerScript, Camera, Hazard scripts)
     if (m_SceneState == SceneState::Play) {
         m_Scene->OnUpdateRuntime(ts);
+
+        // Direct Driving Controls for Custom Vehicles without a script attached (Phase 20.2)
+        if (m_Vehicle) {
+            bool hasScriptController = m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::NativeScriptComponent>();
+            if (!hasScriptController && (m_ViewportHovered || m_ViewportFocused) && !ImGui::GetIO().WantTextInput) {
+                Axle::f32 forwardInput = 0.0f;
+                Axle::f32 rightInput = 0.0f;
+                Axle::f32 brakeInput = 0.0f;
+                Axle::f32 handBrakeInput = 0.0f;
+
+                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Up) || Axle::Input::IsKeyPressed(Axle::KeyCode::W)) {
+                    forwardInput += 1.0f;
+                }
+                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Down) || Axle::Input::IsKeyPressed(Axle::KeyCode::S)) {
+                    forwardInput -= 1.0f;
+                }
+                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Left) || Axle::Input::IsKeyPressed(Axle::KeyCode::A)) {
+                    rightInput -= 1.0f;
+                }
+                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Right) || Axle::Input::IsKeyPressed(Axle::KeyCode::D)) {
+                    rightInput += 1.0f;
+                }
+                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
+                    handBrakeInput = 1.0f;
+                }
+
+                m_Vehicle->SetDriverInput(forwardInput, rightInput, brakeInput, handBrakeInput);
+            }
+        }
     }
 
     // Camera Update

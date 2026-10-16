@@ -3222,9 +3222,58 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
     std::cout << "  -> PASS: WheelComponent successfully serialized and deserialized with all tuning properties." << std::endl;
 
     // -------------------------------------------------------------------------
-    // [25.2] 6x6 N-Wheeled Vehicle Physics Simulation
+    // [25.2] VehicleComponent tuning parameters serialization roundtrip (Phase 20.2)
     // -------------------------------------------------------------------------
-    std::cout << "\n[25.2] Testing 6-wheeled (6x6) heavy truck physics simulation..." << std::endl;
+    std::cout << "\n[25.2] Testing VehicleComponent tuning serialization and deserialization..." << std::endl;
+    std::filesystem::path vehicleScenePath = "temp_vehicle_component_test.axlescene";
+
+    {
+        auto srcScene = std::make_shared<Axle::Scene>();
+        auto carEnt = srcScene->CreateEntity("CustomTunedChassis");
+        auto& vc = carEnt.AddComponent<Axle::VehicleComponent>();
+        vc.ChassisMass = 1850.0f;
+        vc.MaxEngineTorque = 950.0f;
+        vc.MaxRPM = 7500.0f;
+        vc.MinRPM = 1100.0f;
+        vc.MaxBrakeTorque = 3500.0f;
+        vc.MaxHandBrakeTorque = 7000.0f;
+        vc.FourWheelDrive = true;
+
+        Axle::SceneSerializer serializer(srcScene.get());
+        bool serSuccess = serializer.Serialize(vehicleScenePath);
+        assert(serSuccess);
+    }
+
+    {
+        auto dstScene = std::make_shared<Axle::Scene>();
+        Axle::SceneSerializer deserializer(dstScene.get());
+        bool deserSuccess = deserializer.Deserialize(vehicleScenePath);
+        assert(deserSuccess);
+
+        auto view = dstScene->GetRegistry().view<Axle::VehicleComponent, Axle::TagComponent>();
+        assert(view.size_hint() == 1);
+
+        for (auto entityID : view) {
+            const auto& tag = view.get<Axle::TagComponent>(entityID).Tag;
+            const auto& vc = view.get<Axle::VehicleComponent>(entityID);
+            assert(tag == "CustomTunedChassis");
+            assert(std::abs(vc.ChassisMass - 1850.0f) < 0.001f);
+            assert(std::abs(vc.MaxEngineTorque - 950.0f) < 0.001f);
+            assert(std::abs(vc.MaxRPM - 7500.0f) < 0.001f);
+            assert(std::abs(vc.MinRPM - 1100.0f) < 0.001f);
+            assert(std::abs(vc.MaxBrakeTorque - 3500.0f) < 0.001f);
+            assert(std::abs(vc.MaxHandBrakeTorque - 7000.0f) < 0.001f);
+            assert(vc.FourWheelDrive == true);
+        }
+        std::error_code ec;
+        std::filesystem::remove(vehicleScenePath, ec);
+    }
+    std::cout << "  -> PASS: VehicleComponent tuning properties serialized and deserialized accurately." << std::endl;
+
+    // -------------------------------------------------------------------------
+    // [25.3] 6x6 N-Wheeled Vehicle Physics Simulation
+    // -------------------------------------------------------------------------
+    std::cout << "\n[25.3] Testing 6-wheeled (6x6) heavy truck physics simulation..." << std::endl;
     {
         Axle::PhysicsScene physicsScene;
 

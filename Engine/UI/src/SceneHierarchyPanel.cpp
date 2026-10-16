@@ -1644,18 +1644,215 @@ namespace Axle {
             }
         });
 
-        // Vehicle Component
+        // Vehicle Component (Phase 20.2: Vehicle Inspector Tuning & Quick-Setup Presets)
         DrawComponent<VehicleComponent>("Vehicle Dynamics", entity, [&](VehicleComponent& vc) {
+            // Section 1: Live Simulation Telemetry (Active during Play mode)
             if (vc.VehicleInstance) {
                 auto telemetry = vc.VehicleInstance->GetTelemetry();
-                ImGui::Text("Speed: %.1f km/h (%.1f m/s)", telemetry.SpeedKmh, telemetry.SpeedMps);
-                ImGui::Text("Engine RPM: %.0f", telemetry.EngineRPM);
-                ImGui::Text("Current Gear: %d", telemetry.CurrentGear);
-                ImGui::Text("Chassis Mass: %.0f kg", vc.VehicleInstance->GetConfig().ChassisMass);
-            } else {
-                ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "Status: Vehicle Chassis Configured");
+                ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.45f, 1.0f), "[ACTIVE] In-Game Vehicle Telemetry");
+                ImGui::Separator();
+
+                // Speedometer & Visual Gauge
+                float speedKmh = telemetry.SpeedKmh;
+                ImGui::Text("Speed: %.1f km/h (%.1f m/s)", speedKmh, telemetry.SpeedMps);
+                float speedFraction = std::clamp(speedKmh / 220.0f, 0.0f, 1.0f);
+                char speedBuf[64];
+                snprintf(speedBuf, sizeof(speedBuf), "%.0f km/h", speedKmh);
+                ImGui::ProgressBar(speedFraction, ImVec2(-1.0f, 0.0f), speedBuf);
+
+                // Tachometer (RPM) & Transmission Gear
+                float rpm = telemetry.EngineRPM;
+                float rpmFraction = (vc.MaxRPM > 0.0f) ? std::clamp(rpm / vc.MaxRPM, 0.0f, 1.0f) : 0.0f;
+                ImGui::Text("Engine RPM: %.0f / %.0f (Gear: %d)", rpm, vc.MaxRPM, telemetry.CurrentGear);
+                char rpmBuf[64];
+                snprintf(rpmBuf, sizeof(rpmBuf), "%.0f RPM", rpm);
+                ImGui::ProgressBar(rpmFraction, ImVec2(-1.0f, 0.0f), rpmBuf);
+
+                // Per-Wheel Suspension & Ground Contact
                 ImGui::Spacing();
-                ImGui::TextWrapped("This entity is configured as a Vehicle Chassis. Jolt Physics simulation controller initializes automatically upon entering Play Mode (F5).");
+                if (ImGui::TreeNodeEx("Wheel Telemetry & Suspension", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    for (int w = 0; w < 4; ++w) {
+                        const auto& wheel = telemetry.Wheels[w];
+                        ImGui::Text("Wheel [%d]: Contact=%s | Slip=(%.2f, %.2f) | Steer=%.1f deg",
+                            w, wheel.HasContact ? "YES" : "AIR",
+                            wheel.LongitudinalSlip, wheel.LateralSlip,
+                            glm::degrees(wheel.SteerAngle));
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::Separator();
+            } else {
+                ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "Status: Edit Mode (Press F5 to Simulate)");
+                ImGui::Separator();
+            }
+
+            // Section 2: Chassis & Powertrain Tuning Sliders
+            ImGui::TextDisabled("Chassis Weight & Distribution:");
+            if (ImGui::DragFloat("Chassis Mass (kg)", &vc.ChassisMass, 10.0f, 100.0f, 25000.0f, "%.0f")) {
+                if (entity.HasComponent<RigidBody3D>()) {
+                    entity.GetComponent<RigidBody3D>().Mass = vc.ChassisMass;
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::TextDisabled("Powertrain & Torque:");
+            ImGui::DragFloat("Max Engine Torque (N.m)", &vc.MaxEngineTorque, 20.0f, 100.0f, 15000.0f, "%.0f");
+            ImGui::DragFloat("Max RPM", &vc.MaxRPM, 50.0f, 2000.0f, 12000.0f, "%.0f");
+            ImGui::DragFloat("Idle RPM", &vc.MinRPM, 50.0f, 500.0f, 3000.0f, "%.0f");
+            ImGui::DragFloat("Max Brake Torque (N.m)", &vc.MaxBrakeTorque, 50.0f, 500.0f, 30000.0f, "%.0f");
+            ImGui::DragFloat("Max Handbrake Torque (N.m)", &vc.MaxHandBrakeTorque, 50.0f, 500.0f, 30000.0f, "%.0f");
+            ImGui::Checkbox("All-Wheel Drive (AWD)", &vc.FourWheelDrive);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextDisabled("Quick-Setup Presets (Phase 20.2):");
+
+            // Button 1: Auto-Fit to Box Collider
+            if (ImGui::Button("Auto-Fit to Box Collider", ImVec2(-1.0f, 26.0f))) {
+                glm::vec3 halfExtents{ 0.9f, 0.25f, 2.0f };
+                if (entity.HasComponent<CollisionShape3D>()) {
+                    const auto& cs = entity.GetComponent<CollisionShape3D>();
+                    if (cs.ShapeType == CollisionShapeType::Box) {
+                        halfExtents = cs.HalfExtent;
+                    }
+                } else if (entity.HasComponent<TransformComponent>()) {
+                    halfExtents = glm::max(entity.GetComponent<TransformComponent>().Scale * 0.5f, glm::vec3(0.2f));
+                }
+
+                float volume = 8.0f * halfExtents.x * halfExtents.y * halfExtents.z;
+                // Automotive density ~180 kg/m^3
+                vc.ChassisMass = std::clamp(std::round(volume * 180.0f / 50.0f) * 50.0f, 400.0f, 20000.0f);
+                if (entity.HasComponent<RigidBody3D>()) {
+                    entity.GetComponent<RigidBody3D>().Mass = vc.ChassisMass;
+                }
+            }
+
+            // Button 2: Auto-Spawn 4 Wheels (Car Preset)
+            if (ImGui::Button("Auto-Spawn 4 Wheels (Car Preset)", ImVec2(-1.0f, 26.0f))) {
+                glm::vec3 halfExtents{ 0.9f, 0.25f, 2.0f };
+                if (entity.HasComponent<CollisionShape3D>()) {
+                    const auto& cs = entity.GetComponent<CollisionShape3D>();
+                    if (cs.ShapeType == CollisionShapeType::Box) {
+                        halfExtents = cs.HalfExtent;
+                    }
+                } else if (entity.HasComponent<TransformComponent>()) {
+                    halfExtents = glm::max(entity.GetComponent<TransformComponent>().Scale * 0.5f, glm::vec3(0.2f));
+                }
+
+                float wheelRadius = std::clamp(halfExtents.y * 1.4f, 0.25f, 0.6f);
+                float wheelWidth = 0.25f;
+                float lateralOffset = halfExtents.x * 1.05f;
+                float verticalOffset = -halfExtents.y * 0.6f;
+                float longOffset = halfExtents.z * 0.70f;
+
+                struct WheelSpec {
+                    std::string Name;
+                    glm::vec3 Offset;
+                    bool Steerable;
+                    bool Driven;
+                    bool Handbrake;
+                };
+
+                std::vector<WheelSpec> specs = {
+                    { "Wheel_FL", glm::vec3( lateralOffset, verticalOffset,  longOffset), true,  true, false },
+                    { "Wheel_FR", glm::vec3(-lateralOffset, verticalOffset,  longOffset), true,  true, false },
+                    { "Wheel_RL", glm::vec3( lateralOffset, verticalOffset, -longOffset), false, true, true  },
+                    { "Wheel_RR", glm::vec3(-lateralOffset, verticalOffset, -longOffset), false, true, true  }
+                };
+
+                for (const auto& spec : specs) {
+                    Entity wEnt = m_Scene->CreateEntity(spec.Name);
+                    wEnt.SetParent(entity);
+
+                    auto& wtc = wEnt.GetComponent<TransformComponent>();
+                    wtc.Translation = spec.Offset;
+                    wtc.Rotation = glm::quat(glm::vec3(0.0f, 0.0f, glm::radians(90.0f)));
+                    wtc.Scale = glm::vec3(wheelRadius, wheelWidth * 0.5f, wheelRadius);
+
+                    auto& wc = wEnt.AddComponent<WheelComponent>();
+                    wc.Radius = wheelRadius;
+                    wc.Width = wheelWidth;
+                    wc.CanSteer = spec.Steerable;
+                    wc.MaxSteerAngle = 32.0f;
+                    wc.IsDriven = spec.Driven;
+                    wc.HasHandbrake = spec.Handbrake;
+                    wc.BrakeTorque = spec.Steerable ? vc.MaxBrakeTorque : vc.MaxBrakeTorque * 0.7f;
+                    wc.HandBrakeTorque = spec.Handbrake ? vc.MaxHandBrakeTorque : 0.0f;
+
+                    if (m_CylinderMesh) {
+                        wEnt.AddComponent<MeshInstance3D>(
+                            m_CylinderMesh, 1, 6.0f,
+                            glm::vec4(0.15f, 0.16f, 0.18f, 1.0f),
+                            glm::vec4(0.85f, 0.85f, 0.90f, 1.0f)
+                        );
+                    }
+                }
+            }
+
+            // Button 3: Auto-Spawn 6 Wheels (6x6 Heavy Truck Preset)
+            if (ImGui::Button("Auto-Spawn 6 Wheels (6x6 Heavy Truck)", ImVec2(-1.0f, 26.0f))) {
+                glm::vec3 halfExtents{ 1.1f, 0.35f, 2.8f };
+                if (entity.HasComponent<CollisionShape3D>()) {
+                    const auto& cs = entity.GetComponent<CollisionShape3D>();
+                    if (cs.ShapeType == CollisionShapeType::Box) {
+                        halfExtents = cs.HalfExtent;
+                    }
+                } else if (entity.HasComponent<TransformComponent>()) {
+                    halfExtents = glm::max(entity.GetComponent<TransformComponent>().Scale * 0.5f, glm::vec3(0.3f));
+                }
+
+                float wheelRadius = std::clamp(halfExtents.y * 1.3f, 0.30f, 0.75f);
+                float wheelWidth = 0.30f;
+                float lateralOffset = halfExtents.x * 1.05f;
+                float verticalOffset = -halfExtents.y * 0.6f;
+                float frontOffset = halfExtents.z * 0.75f;
+                float midOffset = -halfExtents.z * 0.05f;
+                float rearOffset = -halfExtents.z * 0.75f;
+
+                struct WheelSpec {
+                    std::string Name;
+                    glm::vec3 Offset;
+                    bool Steerable;
+                    bool Driven;
+                    bool Handbrake;
+                };
+
+                std::vector<WheelSpec> specs = {
+                    { "Wheel_FL", glm::vec3( lateralOffset, verticalOffset,  frontOffset), true,  true, false },
+                    { "Wheel_FR", glm::vec3(-lateralOffset, verticalOffset,  frontOffset), true,  true, false },
+                    { "Wheel_ML", glm::vec3( lateralOffset, verticalOffset,  midOffset),   false, true, true  },
+                    { "Wheel_MR", glm::vec3(-lateralOffset, verticalOffset,  midOffset),   false, true, true  },
+                    { "Wheel_RL", glm::vec3( lateralOffset, verticalOffset,  rearOffset),  false, true, true  },
+                    { "Wheel_RR", glm::vec3(-lateralOffset, verticalOffset,  rearOffset),  false, true, true  }
+                };
+
+                for (const auto& spec : specs) {
+                    Entity wEnt = m_Scene->CreateEntity(spec.Name);
+                    wEnt.SetParent(entity);
+
+                    auto& wtc = wEnt.GetComponent<TransformComponent>();
+                    wtc.Translation = spec.Offset;
+                    wtc.Rotation = glm::quat(glm::vec3(0.0f, 0.0f, glm::radians(90.0f)));
+                    wtc.Scale = glm::vec3(wheelRadius, wheelWidth * 0.5f, wheelRadius);
+
+                    auto& wc = wEnt.AddComponent<WheelComponent>();
+                    wc.Radius = wheelRadius;
+                    wc.Width = wheelWidth;
+                    wc.CanSteer = spec.Steerable;
+                    wc.MaxSteerAngle = 30.0f;
+                    wc.IsDriven = spec.Driven;
+                    wc.HasHandbrake = spec.Handbrake;
+                    wc.BrakeTorque = vc.MaxBrakeTorque;
+                    wc.HandBrakeTorque = spec.Handbrake ? vc.MaxHandBrakeTorque : 0.0f;
+
+                    if (m_CylinderMesh) {
+                        wEnt.AddComponent<MeshInstance3D>(
+                            m_CylinderMesh, 1, 6.0f,
+                            glm::vec4(0.12f, 0.13f, 0.15f, 1.0f),
+                            glm::vec4(0.80f, 0.80f, 0.85f, 1.0f)
+                        );
+                    }
+                }
             }
         }, /*canRemove=*/ true);
 
@@ -2224,7 +2421,19 @@ namespace Axle {
         items.push_back({
             "Physics", "VehicleComponent", "Raycast/physics vehicle simulation controller",
             entity.HasComponent<VehicleComponent>(), true,
-            [&]() { entity.AddComponent<VehicleComponent>(); }
+            [&]() {
+                entity.AddComponent<VehicleComponent>();
+                if (!entity.HasComponent<CollisionShape3D>()) {
+                    glm::vec3 halfExtent{ 0.9f, 0.25f, 2.0f };
+                    if (entity.HasComponent<TransformComponent>()) {
+                        halfExtent = glm::max(entity.GetComponent<TransformComponent>().Scale * 0.5f, glm::vec3(0.2f));
+                    }
+                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, halfExtent);
+                }
+                if (!entity.HasComponent<RigidBody3D>()) {
+                    entity.AddComponent<RigidBody3D>();
+                }
+            }
         });
         items.push_back({
             "Physics", "VehicleWheel3D", "Raycast wheel dynamics controller for vehicle chassis",

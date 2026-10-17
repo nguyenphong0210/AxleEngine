@@ -1396,10 +1396,11 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
                 if (camEntity && camEntity.HasComponent<Axle::TransformComponent>()) {
                     glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
                     glm::vec3 camPos = glm::vec3(worldMat[3]);
-                    glm::quat camRot = glm::quat_cast(worldMat);
-                    glm::vec3 camEuler = glm::degrees(glm::eulerAngles(camRot));
+                    glm::vec3 fwd = -glm::normalize(glm::vec3(worldMat[2]));
+                    float pitch = glm::degrees(std::asin(std::clamp(fwd.y, -0.999f, 0.999f)));
+                    float yaw = glm::degrees(std::atan2(-fwd.x, -fwd.z));
                     m_CameraController->SetPosition(camPos);
-                    m_CameraController->SetRotation(camEuler);
+                    m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
                 }
             }
             m_CKeyWasPressed = true;
@@ -1470,14 +1471,10 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
             m_ActiveCameraIsSceneCamera = true;
             const auto& camComp = camEntity.GetComponent<Axle::CameraComponent>();
             glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
-            glm::vec3 camPos = glm::vec3(worldMat[3]);
-            glm::quat camRot = glm::quat_cast(worldMat);
-            glm::vec3 camEuler = glm::degrees(glm::eulerAngles(camRot));
 
             const float aspect = (m_ViewportHeight > 0) ? (static_cast<float>(m_ViewportWidth) / static_cast<float>(m_ViewportHeight)) : (16.0f / 9.0f);
             activeCamera.SetProjection(camComp.FOV, aspect, camComp.NearClip, camComp.FarClip);
-            activeCamera.SetPosition(camPos);
-            activeCamera.SetRotation(camEuler);
+            activeCamera.SetWorldTransform(worldMat);
         } else {
             usingEditorCamera = true;
         }
@@ -1830,10 +1827,11 @@ void EditorLayer::RenderToolbar() {
                 if (camEntity && camEntity.HasComponent<Axle::TransformComponent>()) {
                     glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
                     glm::vec3 camPos = glm::vec3(worldMat[3]);
-                    glm::quat camRot = glm::quat_cast(worldMat);
-                    glm::vec3 camEuler = glm::degrees(glm::eulerAngles(camRot));
+                    glm::vec3 fwd = -glm::normalize(glm::vec3(worldMat[2]));
+                    float pitch = glm::degrees(std::asin(std::clamp(fwd.y, -0.999f, 0.999f)));
+                    float yaw = glm::degrees(std::atan2(-fwd.x, -fwd.z));
                     m_CameraController->SetPosition(camPos);
-                    m_CameraController->SetRotation(camEuler);
+                    m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
                 }
             }
         }
@@ -2039,10 +2037,11 @@ void EditorLayer::OnImGuiRender() {
                     if (camEntity && camEntity.HasComponent<Axle::TransformComponent>()) {
                         glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
                         glm::vec3 camPos = glm::vec3(worldMat[3]);
-                        glm::quat camRot = glm::quat_cast(worldMat);
-                        glm::vec3 camEuler = glm::degrees(glm::eulerAngles(camRot));
+                        glm::vec3 fwd = -glm::normalize(glm::vec3(worldMat[2]));
+                        float pitch = glm::degrees(std::asin(std::clamp(fwd.y, -0.999f, 0.999f)));
+                        float yaw = glm::degrees(std::atan2(-fwd.x, -fwd.z));
                         m_CameraController->SetPosition(camPos);
-                        m_CameraController->SetRotation(camEuler);
+                        m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
                     }
                 }
             }

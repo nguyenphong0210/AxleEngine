@@ -19,6 +19,8 @@
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/Vehicle.hpp>
 #include <Axle/SceneSerializer.hpp>
+#include <Axle/PerspectiveCamera.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -542,6 +544,31 @@ bool RunTest_Step6_Phase15_ArchetypePresets() {
         return false;
     }
     std::cout << "  -> PASS: PointLightComponent, CameraComponent, and GetPrimaryCameraEntity validated." << std::endl;
+
+    // Test PerspectiveCamera::SetWorldTransform when camera is rotated 180 degrees (behind vehicle)
+    {
+        Axle::PerspectiveCamera testCam(45.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+        // Camera at (0, 5, -8) looking towards target at (0, 2, 0) -> Yaw = 180 deg, Pitch = -20 deg
+        glm::vec3 camPos(0.0f, 5.0f, -8.0f);
+        glm::quat camRot = glm::quat(glm::vec3(glm::radians(-20.0f), glm::radians(180.0f), 0.0f));
+        glm::mat4 worldMat = glm::translate(glm::mat4(1.0f), camPos) * glm::mat4_cast(camRot);
+        testCam.SetWorldTransform(worldMat);
+
+        // In view space, world up (0, 1, 0) should have positive Y (upright camera, not inverted)
+        glm::vec4 viewUp = testCam.GetViewMatrix() * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        if (viewUp.y <= 0.0f) {
+            std::cerr << "FAIL: Camera view matrix is inverted upside-down when rotated behind vehicle! viewUp.y = " << viewUp.y << std::endl;
+            return false;
+        }
+
+        // Target at (0, 2, 0) in front of camera should have negative Z in view space (OpenGL convention)
+        glm::vec4 viewTarget = testCam.GetViewMatrix() * glm::vec4(0.0f, 2.0f, 0.0f, 1.0f);
+        if (viewTarget.z >= 0.0f) {
+            std::cerr << "FAIL: Target point is not in front of camera in view space! viewTarget.z = " << viewTarget.z << std::endl;
+            return false;
+        }
+        std::cout << "  -> PASS: PerspectiveCamera::SetWorldTransform behind-vehicle orientation validated." << std::endl;
+    }
 
     // -----------------------------------------------------------------
     // [6.2] Create Empty & Create Empty Child Hierarchy Workflow

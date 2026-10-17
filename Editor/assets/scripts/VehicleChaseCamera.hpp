@@ -31,9 +31,12 @@ public:
         AXLE_INFO("VehicleChaseCamera: Attached to entity '{0}'", GetEntityName());
         if (HasComponent<Axle::TransformComponent>()) {
             const auto& tc = GetComponent<Axle::TransformComponent>();
-            glm::vec3 euler = glm::degrees(glm::eulerAngles(tc.Rotation));
-            m_OrbitPitch = std::clamp(euler.x, -45.0f, 75.0f);
-            m_OrbitYaw = euler.y;
+            glm::vec3 fwd = tc.Rotation * glm::vec3(0.0f, 0.0f, -1.0f);
+            if (glm::length(fwd) > 1e-4f) {
+                fwd = glm::normalize(fwd);
+                m_OrbitPitch = std::clamp(glm::degrees(std::asin(std::clamp(fwd.y, -0.999f, 0.999f))), -45.0f, 75.0f);
+                m_OrbitYaw = glm::degrees(std::atan2(-fwd.x, -fwd.z));
+            }
         }
     }
 
@@ -71,6 +74,9 @@ public:
             m_OrbitPitch = std::clamp(m_OrbitPitch, -45.0f, 75.0f);
         }
 
+        while (m_OrbitYaw < -180.0f) m_OrbitYaw += 360.0f;
+        while (m_OrbitYaw > 180.0f) m_OrbitYaw -= 360.0f;
+
         // 2. Query target vehicle position, forward heading, and velocity
         glm::vec3 targetPos{ 0.0f };
         glm::vec3 targetFwd{ 0.0f, 0.0f, 1.0f };
@@ -94,6 +100,8 @@ public:
             while (diff < -180.0f) diff += 360.0f;
             while (diff > 180.0f) diff -= 360.0f;
             m_OrbitYaw += diff * std::min(1.0f, ts.GetSeconds() * AutoAlignSpeed);
+            while (m_OrbitYaw < -180.0f) m_OrbitYaw += 360.0f;
+            while (m_OrbitYaw > 180.0f) m_OrbitYaw -= 360.0f;
         }
 
         // 4. Calculate orbital camera world position

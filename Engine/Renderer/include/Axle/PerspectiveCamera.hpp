@@ -12,6 +12,8 @@ namespace Axle {
         
         void SetPosition(const glm::vec3& position);
         void SetRotation(const glm::vec3& rotation); // Euler angles (Pitch, Yaw, Roll) in degrees
+        void SetWorldTransform(const glm::mat4& transform);
+        void SetViewMatrix(const glm::mat4& viewMatrix, const glm::vec3& position);
 
         const glm::vec3& GetPosition() const { return m_Position; }
         const glm::vec3& GetRotation() const { return m_Rotation; }

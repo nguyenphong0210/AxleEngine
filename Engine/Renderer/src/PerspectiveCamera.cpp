@@ -1,5 +1,7 @@
 #include <Axle/PerspectiveCamera.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
+#include <cmath>
 
 namespace Axle {
 
@@ -21,6 +23,28 @@ namespace Axle {
     void PerspectiveCamera::SetRotation(const glm::vec3& rotation) {
         m_Rotation = rotation;
         RecalculateViewMatrix();
+    }
+
+    void PerspectiveCamera::SetWorldTransform(const glm::mat4& transform) {
+        m_Position = glm::vec3(transform[3]);
+        m_ViewMatrix = glm::inverse(transform);
+        m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
+
+        // Cleanly extract pitch and yaw from camera forward vector (-Z in local camera space)
+        glm::vec3 fwd = -glm::vec3(transform[2]);
+        float len = glm::length(fwd);
+        if (len > 1e-4f) {
+            fwd /= len;
+            f32 pitch = glm::degrees(std::asin(std::clamp(fwd.y, -0.999f, 0.999f)));
+            f32 yaw = glm::degrees(std::atan2(-fwd.x, -fwd.z));
+            m_Rotation = glm::vec3(pitch, yaw, 0.0f);
+        }
+    }
+
+    void PerspectiveCamera::SetViewMatrix(const glm::mat4& viewMatrix, const glm::vec3& position) {
+        m_Position = position;
+        m_ViewMatrix = viewMatrix;
+        m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
     }
 
     void PerspectiveCamera::RecalculateViewMatrix() {

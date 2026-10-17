@@ -6,6 +6,8 @@
 #include <Axle/Material.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/PhysicsScene.hpp>
+#include <Axle/AudioSource.hpp>
+#include <Axle/AudioListener.hpp>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -802,6 +804,100 @@ namespace Axle {
         AssemblyComponent() = default;
         AssemblyComponent(const std::string& assetPath, u64 assemblyUUID = 0)
             : AssetPath(assetPath), AssemblyUUID(assemblyUUID) {}
+    };
+
+    struct AudioListenerComponent {
+        bool Active = true;
+
+        AudioListenerComponent() = default;
+        AudioListenerComponent(bool active)
+            : Active(active) {}
+    };
+
+    struct AudioSourceComponent {
+        std::string AssetPath;
+        float Volume = 1.0f;
+        float Pitch = 1.0f;
+        bool Loop = false;
+        bool PlayOnAwake = true;
+        bool Spatialized = true;
+        AttenuationModel Attenuation = AttenuationModel::Inverse;
+        float MinDistance = 1.0f;
+        float MaxDistance = 50.0f;
+        float RollOff = 1.0f;
+        float InnerAngle = 360.0f; // Cone inner angle in degrees
+        float OuterAngle = 360.0f; // Cone outer angle in degrees
+        float OuterGain = 0.0f;
+        float DopplerFactor = 1.0f;
+
+        // Runtime playback instance (excluded from scene file serialization)
+        std::shared_ptr<AudioSource> Source;
+
+        AudioSourceComponent() = default;
+        AudioSourceComponent(const std::string& assetPath, bool playOnAwake = true, bool loop = false, float volume = 1.0f)
+            : AssetPath(assetPath), Volume(volume), Loop(loop), PlayOnAwake(playOnAwake) {}
+
+        void Play() {
+            if (!Source) {
+                InitSource();
+            }
+            if (Source) {
+                SyncProperties();
+                Source->Play();
+            }
+        }
+
+        void Pause() {
+            if (Source) Source->Pause();
+        }
+
+        void Stop() {
+            if (Source) Source->Stop();
+        }
+
+        bool IsPlaying() const {
+            return Source && Source->IsPlaying();
+        }
+
+        void SetVolume(float vol) {
+            Volume = vol;
+            if (Source) Source->SetVolume(vol);
+        }
+
+        void SetPitch(float pitch) {
+            Pitch = pitch;
+            if (Source) Source->SetPitch(pitch);
+        }
+
+        void SetLooping(bool loop) {
+            Loop = loop;
+            if (Source) Source->SetLooping(loop);
+        }
+
+        void InitSource() {
+            if (AssetPath.empty()) {
+                Source = nullptr;
+                return;
+            }
+            Source = AudioSource::Create(AssetPath);
+            if (Source) {
+                SyncProperties();
+            }
+        }
+
+        void SyncProperties() {
+            if (!Source) return;
+            Source->SetVolume(Volume);
+            Source->SetPitch(Pitch);
+            Source->SetLooping(Loop);
+            Source->SetSpatial(Spatialized);
+            Source->SetAttenuationModel(Attenuation);
+            Source->SetMinDistance(MinDistance);
+            Source->SetMaxDistance(MaxDistance);
+            Source->SetRollOff(RollOff);
+            Source->SetDopplerFactor(DopplerFactor);
+            Source->SetCone(glm::radians(InnerAngle), glm::radians(OuterAngle), OuterGain);
+        }
     };
 
 }

@@ -22,4 +22,5 @@ target_link_libraries(AxleScene
         Axle::Physics
         Axle::Vehicle
         Axle::Asset
+        Axle::Audio
 )

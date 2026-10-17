@@ -4600,8 +4600,8 @@ bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
     source->Rewind();
     std::cout << "  -> PASS: AudioSource playback control state transitions verified." << std::endl;
 
-    // 5. One-Shot Audio and Engine Shutdown
-    std::cout << "[31.5] Verifying One-Shot playback and subsystem shutdown..." << std::endl;
+    // 5. One-Shot Audio
+    std::cout << "[31.5] Verifying One-Shot playback..." << std::endl;
     Axle::AudioEngine::PlayOneShot(wavPath.string(), 0.9f, 1.1f);
     Axle::AudioEngine::PlayOneShot3D(wavPath.string(), glm::vec3(0.0f, 1.0f, 0.0f), 0.8f, 1.0f);
     Axle::AudioEngine::Update();
@@ -4609,18 +4609,173 @@ bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
     source->Unload();
     source.reset();
     clip.reset();
+    std::cout << "  -> PASS: One-shot playback validated." << std::endl;
 
+    // 6. ECS Audio Components & Scene Runtime Lifecycle
+    std::cout << "[31.6] Verifying ECS AudioListenerComponent & AudioSourceComponent runtime synchronization..." << std::endl;
+    auto testScene = std::make_shared<Axle::Scene>();
+
+    // Create camera entity with AudioListenerComponent
+    auto camEntity = testScene->CreateEntity("CameraListener");
+    camEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(12.0f, 3.0f, -8.0f);
+    camEntity.AddComponent<Axle::CameraComponent>(60.0f, 0.1f, 1000.0f, true);
+    camEntity.AddComponent<Axle::AudioListenerComponent>(true);
+
+    // Create sound entity with AudioSourceComponent
+    auto soundEntity = testScene->CreateEntity("VehicleEngineSound");
+    soundEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(4.0f, 1.0f, 2.0f);
+    auto& asc = soundEntity.AddComponent<Axle::AudioSourceComponent>(wavPath.string(), true, true, 0.75f);
+    asc.Pitch = 1.2f;
+    asc.Spatialized = true;
+    asc.Attenuation = Axle::AttenuationModel::Exponential;
+    asc.MinDistance = 2.0f;
+    asc.MaxDistance = 60.0f;
+    asc.RollOff = 1.5f;
+    asc.InnerAngle = 90.0f;
+    asc.OuterAngle = 180.0f;
+    asc.OuterGain = 0.25f;
+    asc.DopplerFactor = 1.3f;
+
+    // Start runtime simulation -> PlayOnAwake triggers
+    testScene->OnRuntimeStart();
+    if (!asc.IsPlaying()) {
+        std::cerr << "FAIL: AudioSourceComponent with PlayOnAwake was not playing after OnRuntimeStart()!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: AudioSourceComponent PlayOnAwake initiated playback on runtime start." << std::endl;
+
+    // Tick runtime simulation -> syncs listener and source 3D transform
+    testScene->OnUpdateRuntime(Axle::Timestep(0.016f));
+    glm::vec3 listenerPos = Axle::AudioListener::GetPosition();
+    if (glm::distance(listenerPos, glm::vec3(12.0f, 3.0f, -8.0f)) > 0.01f) {
+        std::cerr << "FAIL: AudioListener position was not synchronized with camera transform! Expected: (12, 3, -8), Got: ("
+                  << listenerPos.x << ", " << listenerPos.y << ", " << listenerPos.z << ")" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    if (asc.Source) {
+        glm::vec3 sourcePos = asc.Source->GetPosition();
+        if (glm::distance(sourcePos, glm::vec3(4.0f, 1.0f, 2.0f)) > 0.01f) {
+            std::cerr << "FAIL: AudioSource 3D position was not synchronized with entity transform!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+    }
+    std::cout << "  -> PASS: AudioListener and AudioSource 3D spatial properties successfully synchronized." << std::endl;
+
+    // Stop simulation -> stops audio sources
+    testScene->OnRuntimeStop();
+    if (asc.Source != nullptr) {
+        std::cerr << "FAIL: AudioSourceComponent runtime source was not cleaned up after OnRuntimeStop()!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: OnRuntimeStop cleanly terminated audio playback." << std::endl;
+
+    // 7. Scene Serialization Roundtrip (.axlescene)
+    std::cout << "[31.7] Verifying SceneSerializer roundtrip for Audio components..." << std::endl;
+    std::filesystem::path scenePath = testDir / "AudioTestScene.axle";
+    Axle::SceneSerializer serializer(testScene.get());
+    if (!serializer.Serialize(scenePath)) {
+        std::cerr << "FAIL: SceneSerializer failed to save scene with audio components!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    auto loadedScene = std::make_shared<Axle::Scene>();
+    Axle::SceneSerializer deserializer(loadedScene.get());
+    if (!deserializer.Deserialize(scenePath)) {
+        std::cerr << "FAIL: SceneSerializer failed to load scene with audio components!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Verify deserialized components
+    bool foundListener = false;
+    bool foundSource = false;
+    auto regView = loadedScene->GetRegistry().view<Axle::TagComponent>();
+    for (auto entID : regView) {
+        Axle::Entity e{ entID, loadedScene.get() };
+        if (e.HasComponent<Axle::AudioListenerComponent>()) {
+            foundListener = true;
+            if (!e.GetComponent<Axle::AudioListenerComponent>().Active) {
+                std::cerr << "FAIL: Deserialized AudioListenerComponent Active state mismatch!" << std::endl;
+                std::filesystem::remove_all(testDir, ec);
+                return false;
+            }
+        }
+        if (e.HasComponent<Axle::AudioSourceComponent>()) {
+            foundSource = true;
+            const auto& loadedAsc = e.GetComponent<Axle::AudioSourceComponent>();
+            if (loadedAsc.AssetPath != wavPath.string() ||
+                std::abs(loadedAsc.Volume - 0.75f) > 0.01f ||
+                std::abs(loadedAsc.Pitch - 1.2f) > 0.01f ||
+                !loadedAsc.Loop ||
+                !loadedAsc.PlayOnAwake ||
+                !loadedAsc.Spatialized ||
+                loadedAsc.Attenuation != Axle::AttenuationModel::Exponential ||
+                std::abs(loadedAsc.MinDistance - 2.0f) > 0.01f ||
+                std::abs(loadedAsc.MaxDistance - 60.0f) > 0.01f ||
+                std::abs(loadedAsc.RollOff - 1.5f) > 0.01f ||
+                std::abs(loadedAsc.InnerAngle - 90.0f) > 0.01f ||
+                std::abs(loadedAsc.OuterAngle - 180.0f) > 0.01f ||
+                std::abs(loadedAsc.OuterGain - 0.25f) > 0.01f ||
+                std::abs(loadedAsc.DopplerFactor - 1.3f) > 0.01f) {
+                std::cerr << "FAIL: Deserialized AudioSourceComponent parameter mismatch!" << std::endl;
+                std::filesystem::remove_all(testDir, ec);
+                return false;
+            }
+        }
+    }
+
+    if (!foundListener || !foundSource) {
+        std::cerr << "FAIL: AudioListener or AudioSource component missing in deserialized scene!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Audio components serialized and deserialized with 100% precision." << std::endl;
+
+    // 8. Assembly Prefab Serialization Roundtrip (.axle)
+    std::cout << "[31.8] Verifying AssemblySerializer roundtrip for AudioSource prefabs..." << std::endl;
+    std::filesystem::path asmPath = testDir / "AudioSpeakerAssembly.axle";
+    if (!Axle::AssemblySerializer::Serialize(asmPath, soundEntity, nullptr)) {
+        std::cerr << "FAIL: AssemblySerializer failed to export audio assembly!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    auto asmScene = std::make_shared<Axle::Scene>();
+    Axle::Entity instantiatedEntity = Axle::AssemblySerializer::Deserialize(asmPath, asmScene.get(), nullptr);
+    if (!instantiatedEntity || !instantiatedEntity.HasComponent<Axle::AudioSourceComponent>()) {
+        std::cerr << "FAIL: AssemblySerializer failed to instantiate entity with AudioSourceComponent!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    const auto& asmAsc = instantiatedEntity.GetComponent<Axle::AudioSourceComponent>();
+    if (asmAsc.AssetPath != wavPath.string() ||
+        std::abs(asmAsc.Volume - 0.75f) > 0.01f ||
+        asmAsc.Attenuation != Axle::AttenuationModel::Exponential) {
+        std::cerr << "FAIL: Instantiated assembly AudioSourceComponent parameters corrupted!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Assembly export and instantiation preserved AudioSourceComponent properties." << std::endl;
+
+    // 9. Subsystem Shutdown
+    std::cout << "[31.9] Verifying AudioEngine shutdown..." << std::endl;
     Axle::AudioEngine::Shutdown();
     if (Axle::AudioEngine::IsInitialized()) {
         std::cerr << "FAIL: AudioEngine still reports initialized after Shutdown()!" << std::endl;
         std::filesystem::remove_all(testDir, ec);
         return false;
     }
-    std::cout << "  -> PASS: One-shot playback and AudioEngine::Shutdown validated." << std::endl;
+    std::cout << "  -> PASS: AudioEngine::Shutdown validated." << std::endl;
 
     std::filesystem::remove_all(testDir, ec);
 
-    std::cout << ">>> STEP 31 PASSED: Phase 27.1 Core Audio Subsystem & miniaudio verified! <<<\n" << std::endl;
+    std::cout << ">>> STEP 31 PASSED: Phase 27 Audio Subsystem, ECS & Serialization verified! <<<\n" << std::endl;
     return true;
 }
 

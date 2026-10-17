@@ -288,6 +288,33 @@ namespace Axle {
                 ss << "      NearClip: " << cam.NearClip << "\n";
                 ss << "      FarClip: " << cam.FarClip << "\n";
             }
+
+            // AudioListenerComponent
+            if (entity.HasComponent<AudioListenerComponent>()) {
+                auto& alc = entity.GetComponent<AudioListenerComponent>();
+                ss << "    AudioListenerComponent:\n";
+                ss << "      Active: " << (alc.Active ? "true" : "false") << "\n";
+            }
+
+            // AudioSourceComponent
+            if (entity.HasComponent<AudioSourceComponent>()) {
+                auto& asc = entity.GetComponent<AudioSourceComponent>();
+                ss << "    AudioSourceComponent:\n";
+                ss << "      AssetPath: " << asc.AssetPath << "\n";
+                ss << "      Volume: " << asc.Volume << "\n";
+                ss << "      Pitch: " << asc.Pitch << "\n";
+                ss << "      Loop: " << (asc.Loop ? "true" : "false") << "\n";
+                ss << "      PlayOnAwake: " << (asc.PlayOnAwake ? "true" : "false") << "\n";
+                ss << "      Spatialized: " << (asc.Spatialized ? "true" : "false") << "\n";
+                ss << "      AttenuationModel: " << (int)asc.Attenuation << "\n";
+                ss << "      MinDistance: " << asc.MinDistance << "\n";
+                ss << "      MaxDistance: " << asc.MaxDistance << "\n";
+                ss << "      RollOff: " << asc.RollOff << "\n";
+                ss << "      InnerAngle: " << asc.InnerAngle << "\n";
+                ss << "      OuterAngle: " << asc.OuterAngle << "\n";
+                ss << "      OuterGain: " << asc.OuterGain << "\n";
+                ss << "      DopplerFactor: " << asc.DopplerFactor << "\n";
+            }
         }
 
         return ss.str();
@@ -338,7 +365,9 @@ namespace Axle {
             Skybox,
             Camera,
             Wheel,
-            Vehicle
+            Vehicle,
+            AudioListener,
+            AudioSource
         };
         ComponentSection currentSection = ComponentSection::None;
 
@@ -381,6 +410,16 @@ namespace Axle {
                 currentSection = ComponentSection::Camera;
                 if (!currentEntity.HasComponent<CameraComponent>()) {
                     currentEntity.AddComponent<CameraComponent>();
+                }
+            } else if (trimmed == "AudioListenerComponent:") {
+                currentSection = ComponentSection::AudioListener;
+                if (!currentEntity.HasComponent<AudioListenerComponent>()) {
+                    currentEntity.AddComponent<AudioListenerComponent>();
+                }
+            } else if (trimmed == "AudioSourceComponent:") {
+                currentSection = ComponentSection::AudioSource;
+                if (!currentEntity.HasComponent<AudioSourceComponent>()) {
+                    currentEntity.AddComponent<AudioSourceComponent>();
                 }
             } else if (trimmed == "WheelComponent:" || trimmed == "VehicleWheel3D:") {
                 currentSection = ComponentSection::Wheel;
@@ -793,6 +832,52 @@ namespace Axle {
                             float x = 0.0f, y = 0.0f, z = 0.0f;
                             sscanf(trimmed.c_str(), "CenterOfMassOffset: [ %f , %f , %f ]", &x, &y, &z);
                             vc.CenterOfMassOffset = glm::vec3(x, y, z);
+                        }
+                        break;
+                    }
+                    case ComponentSection::AudioListener: {
+                        if (!currentEntity.HasComponent<AudioListenerComponent>()) {
+                            currentEntity.AddComponent<AudioListenerComponent>();
+                        }
+                        auto& alc = currentEntity.GetComponent<AudioListenerComponent>();
+                        if (trimmed.rfind("Active:", 0) == 0) {
+                            alc.Active = (Trim(trimmed.substr(7)) == "true");
+                        }
+                        break;
+                    }
+                    case ComponentSection::AudioSource: {
+                        if (!currentEntity.HasComponent<AudioSourceComponent>()) {
+                            currentEntity.AddComponent<AudioSourceComponent>();
+                        }
+                        auto& asc = currentEntity.GetComponent<AudioSourceComponent>();
+                        if (trimmed.rfind("AssetPath:", 0) == 0) {
+                            asc.AssetPath = Trim(trimmed.substr(10));
+                        } else if (trimmed.rfind("Volume:", 0) == 0) {
+                            try { asc.Volume = std::stof(Trim(trimmed.substr(7))); } catch (...) {}
+                        } else if (trimmed.rfind("Pitch:", 0) == 0) {
+                            try { asc.Pitch = std::stof(Trim(trimmed.substr(6))); } catch (...) {}
+                        } else if (trimmed.rfind("Loop:", 0) == 0) {
+                            asc.Loop = (Trim(trimmed.substr(5)) == "true");
+                        } else if (trimmed.rfind("PlayOnAwake:", 0) == 0) {
+                            asc.PlayOnAwake = (Trim(trimmed.substr(12)) == "true");
+                        } else if (trimmed.rfind("Spatialized:", 0) == 0) {
+                            asc.Spatialized = (Trim(trimmed.substr(12)) == "true");
+                        } else if (trimmed.rfind("AttenuationModel:", 0) == 0) {
+                            try { asc.Attenuation = static_cast<AttenuationModel>(std::stoi(Trim(trimmed.substr(17)))); } catch (...) {}
+                        } else if (trimmed.rfind("MinDistance:", 0) == 0) {
+                            try { asc.MinDistance = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
+                        } else if (trimmed.rfind("MaxDistance:", 0) == 0) {
+                            try { asc.MaxDistance = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
+                        } else if (trimmed.rfind("RollOff:", 0) == 0) {
+                            try { asc.RollOff = std::stof(Trim(trimmed.substr(8))); } catch (...) {}
+                        } else if (trimmed.rfind("InnerAngle:", 0) == 0) {
+                            try { asc.InnerAngle = std::stof(Trim(trimmed.substr(11))); } catch (...) {}
+                        } else if (trimmed.rfind("OuterAngle:", 0) == 0) {
+                            try { asc.OuterAngle = std::stof(Trim(trimmed.substr(11))); } catch (...) {}
+                        } else if (trimmed.rfind("OuterGain:", 0) == 0) {
+                            try { asc.OuterGain = std::stof(Trim(trimmed.substr(10))); } catch (...) {}
+                        } else if (trimmed.rfind("DopplerFactor:", 0) == 0) {
+                            try { asc.DopplerFactor = std::stof(Trim(trimmed.substr(14))); } catch (...) {}
                         }
                         break;
                     }

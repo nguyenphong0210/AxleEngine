@@ -512,7 +512,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - Integrate `miniaudio.h` (single-header C/C++ backend, zero external DLL dependencies) into `ThirdParty/miniaudio`.
     - Implement decoupled RAII interfaces: `AudioEngine` (device lifecycle, master bus mixer, thread safety), `AudioClip` (preloaded PCM vs streaming WAV/MP3), `AudioSource` (voice control, gain, pitch, spatialization), and `AudioListener` (3D position, forward/up orientation, velocity).
     - Provide realistic 3D spatial sound modeling: distance attenuation (Inverse / Linear / Exponential curves), stereo panning, Doppler shift, and directional cones (exhaust emission angles).
-  - [ ] **Step 2 - ECS Audio Components & Scene Serialization (`Engine/Scene`)**:
+  - [x] **Step 2 - ECS Audio Components & Scene Serialization (`Engine/Scene`)**:
     - Implement `AudioListenerComponent` (binds to active primary camera with automatic transform & velocity synchronization).
     - Implement `AudioSourceComponent`: asset filepath, volume, pitch, loop toggle, 2D/3D mode, min/max attenuation distance, and directional cone parameters.
     - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize all audio components in `.axlescene` and `.axle` formats.

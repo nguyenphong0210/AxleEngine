@@ -143,6 +143,31 @@ namespace Axle {
             newEntity.AddComponent<WheelComponent>(entity.GetComponent<WheelComponent>());
         }
 
+        // Copy AudioListenerComponent
+        if (entity.HasComponent<AudioListenerComponent>()) {
+            newEntity.AddComponent<AudioListenerComponent>(entity.GetComponent<AudioListenerComponent>());
+        }
+
+        // Copy AudioSourceComponent
+        if (entity.HasComponent<AudioSourceComponent>()) {
+            const auto& srcAsc = entity.GetComponent<AudioSourceComponent>();
+            auto& dstAsc = newEntity.AddComponent<AudioSourceComponent>();
+            dstAsc.AssetPath = srcAsc.AssetPath;
+            dstAsc.Volume = srcAsc.Volume;
+            dstAsc.Pitch = srcAsc.Pitch;
+            dstAsc.Loop = srcAsc.Loop;
+            dstAsc.PlayOnAwake = srcAsc.PlayOnAwake;
+            dstAsc.Spatialized = srcAsc.Spatialized;
+            dstAsc.Attenuation = srcAsc.Attenuation;
+            dstAsc.MinDistance = srcAsc.MinDistance;
+            dstAsc.MaxDistance = srcAsc.MaxDistance;
+            dstAsc.RollOff = srcAsc.RollOff;
+            dstAsc.InnerAngle = srcAsc.InnerAngle;
+            dstAsc.OuterAngle = srcAsc.OuterAngle;
+            dstAsc.OuterGain = srcAsc.OuterGain;
+            dstAsc.DopplerFactor = srcAsc.DopplerFactor;
+        }
+
         // Copy CollisionShape3D and create new body in PhysicsScene
         if (entity.HasComponent<CollisionShape3D>()) {
             newEntity.AddComponent<CollisionShape3D>(entity.GetComponent<CollisionShape3D>());
@@ -712,6 +737,18 @@ namespace Axle {
                 m_RuntimeVehicles.push_back(std::move(rvData));
             }
         }
+
+        // 3. Audio Source Initialization & PlayOnAwake
+        auto audioSourceView = m_Registry.view<AudioSourceComponent>();
+        for (auto entityID : audioSourceView) {
+            auto& asc = audioSourceView.get<AudioSourceComponent>(entityID);
+            if (!asc.AssetPath.empty()) {
+                asc.InitSource();
+                if (asc.PlayOnAwake) {
+                    asc.Play();
+                }
+            }
+        }
     }
 
     void Scene::OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene) {
@@ -809,6 +846,59 @@ namespace Axle {
                 }
             }
         }
+
+        // 3. Audio Listener & 3D Spatial Audio Synchronization
+        Entity listenerEntity{};
+        auto listenerView = m_Registry.view<AudioListenerComponent>();
+        for (auto entityID : listenerView) {
+            const auto& alc = listenerView.get<AudioListenerComponent>(entityID);
+            if (alc.Active) {
+                listenerEntity = Entity{ entityID, this };
+                break;
+            }
+        }
+        if (!listenerEntity) {
+            listenerEntity = GetPrimaryCameraEntity();
+        }
+
+        if (listenerEntity && listenerEntity.HasComponent<TransformComponent>()) {
+            glm::mat4 listenerMat = GetWorldTransform(listenerEntity);
+            glm::vec3 listenerPos = glm::vec3(listenerMat[3]);
+            glm::vec3 listenerForward = -glm::normalize(glm::vec3(listenerMat[2]));
+            glm::vec3 listenerUp = glm::normalize(glm::vec3(listenerMat[1]));
+            glm::vec3 listenerVel(0.0f);
+
+            if (pScene && listenerEntity.HasComponent<RigidBody3D>()) {
+                const auto& rb = listenerEntity.GetComponent<RigidBody3D>();
+                if (!rb.RuntimeBodyID.IsInvalid() && pScene->IsBodyValid(rb.RuntimeBodyID)) {
+                    listenerVel = pScene->GetLinearVelocity(rb.RuntimeBodyID);
+                }
+            }
+
+            AudioListener::SetPosition(listenerPos);
+            AudioListener::SetOrientation(listenerForward, listenerUp);
+            AudioListener::SetVelocity(listenerVel);
+        }
+
+        auto audioSyncView = m_Registry.view<AudioSourceComponent, TransformComponent>();
+        for (auto entityID : audioSyncView) {
+            auto& asc = audioSyncView.get<AudioSourceComponent>(entityID);
+            if (!asc.Source || !asc.Spatialized) continue;
+
+            glm::mat4 worldMat = GetWorldTransform(entityID);
+            glm::vec3 pos = glm::vec3(worldMat[3]);
+            glm::vec3 forward = -glm::normalize(glm::vec3(worldMat[2]));
+            asc.Source->SetPosition(pos);
+            asc.Source->SetDirection(forward);
+
+            if (pScene && m_Registry.all_of<RigidBody3D>(entityID)) {
+                const auto& rb = m_Registry.get<RigidBody3D>(entityID);
+                if (!rb.RuntimeBodyID.IsInvalid() && pScene->IsBodyValid(rb.RuntimeBodyID)) {
+                    glm::vec3 vel = pScene->GetLinearVelocity(rb.RuntimeBodyID);
+                    asc.Source->SetVelocity(vel);
+                }
+            }
+        }
     }
 
     void Scene::OnRuntimeStop(PhysicsScene* physicsScene) {
@@ -827,6 +917,14 @@ namespace Axle {
         }
         m_RuntimeVehicles.clear();
         m_RuntimePhysicsScene = nullptr;
+
+        // Stop all audio sources on simulation exit
+        auto audioSourceView = m_Registry.view<AudioSourceComponent>();
+        for (auto entityID : audioSourceView) {
+            auto& asc = audioSourceView.get<AudioSourceComponent>(entityID);
+            asc.Stop();
+            asc.Source = nullptr;
+        }
 
         auto view = m_Registry.view<NativeScriptComponent>();
         for (auto entity : view) {
@@ -978,6 +1076,31 @@ namespace Axle {
             // WheelComponent
             if (srcEntity.HasComponent<WheelComponent>()) {
                 dstEntity.AddComponent<WheelComponent>(srcEntity.GetComponent<WheelComponent>());
+            }
+
+            // AudioListenerComponent
+            if (srcEntity.HasComponent<AudioListenerComponent>()) {
+                dstEntity.AddComponent<AudioListenerComponent>(srcEntity.GetComponent<AudioListenerComponent>());
+            }
+
+            // AudioSourceComponent
+            if (srcEntity.HasComponent<AudioSourceComponent>()) {
+                const auto& srcAsc = srcEntity.GetComponent<AudioSourceComponent>();
+                auto& dstAsc = dstEntity.AddComponent<AudioSourceComponent>();
+                dstAsc.AssetPath = srcAsc.AssetPath;
+                dstAsc.Volume = srcAsc.Volume;
+                dstAsc.Pitch = srcAsc.Pitch;
+                dstAsc.Loop = srcAsc.Loop;
+                dstAsc.PlayOnAwake = srcAsc.PlayOnAwake;
+                dstAsc.Spatialized = srcAsc.Spatialized;
+                dstAsc.Attenuation = srcAsc.Attenuation;
+                dstAsc.MinDistance = srcAsc.MinDistance;
+                dstAsc.MaxDistance = srcAsc.MaxDistance;
+                dstAsc.RollOff = srcAsc.RollOff;
+                dstAsc.InnerAngle = srcAsc.InnerAngle;
+                dstAsc.OuterAngle = srcAsc.OuterAngle;
+                dstAsc.OuterGain = srcAsc.OuterGain;
+                dstAsc.DopplerFactor = srcAsc.DopplerFactor;
             }
         }
 

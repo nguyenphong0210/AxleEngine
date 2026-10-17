@@ -111,6 +111,9 @@ namespace Axle {
         if (entity.HasComponent<PointLightComponent>()) {
             newEntity.AddComponent<PointLightComponent>(entity.GetComponent<PointLightComponent>());
         }
+        if (entity.HasComponent<SpotLightComponent>()) {
+            newEntity.AddComponent<SpotLightComponent>(entity.GetComponent<SpotLightComponent>());
+        }
         if (entity.HasComponent<CameraComponent>()) {
             newEntity.AddComponent<CameraComponent>(entity.GetComponent<CameraComponent>());
         }
@@ -1082,6 +1085,11 @@ namespace Axle {
             // PointLightComponent
             if (srcEntity.HasComponent<PointLightComponent>()) {
                 dstEntity.AddComponent<PointLightComponent>(srcEntity.GetComponent<PointLightComponent>());
+            }
+
+            // SpotLightComponent
+            if (srcEntity.HasComponent<SpotLightComponent>()) {
+                dstEntity.AddComponent<SpotLightComponent>(srcEntity.GetComponent<SpotLightComponent>());
             }
 
             // CameraComponent

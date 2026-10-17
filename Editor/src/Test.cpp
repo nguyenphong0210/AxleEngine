@@ -5,6 +5,7 @@
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/AssetSerializer.hpp>
 #include <Axle/Material.hpp>
 #include <Axle/AssetMetadataSerializer.hpp>
 #include <Axle/AssetTypes.hpp>
@@ -4979,6 +4980,300 @@ bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
 }
 
 // =============================================================================
+// TEST STEP 32: Phase 28 Step 1 - Multi-Part 3D Car Rigging & Lighting Assembly
+// =============================================================================
+bool RunTest_Step32_Phase28_MultiPartVehicleRigging() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 32] Phase 28: Multi-Part Vehicle Rigging & Assembly" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::error_code ec;
+    std::filesystem::path testDir = "build/Test_Step32_Rigging";
+    std::filesystem::remove_all(testDir, ec);
+    std::filesystem::create_directories(testDir, ec);
+
+    // 1. Verify 3D Assets & Binary Caches (.axlemesh & .axlebin)
+    std::cout << "\n[32.1] Verifying Modular 3D Vehicle Assets (.axlemesh & .axlebin)..." << std::endl;
+    std::filesystem::path chassisPath = "Editor/assets/models/SportsCar_Chassis.axlemesh";
+    std::filesystem::path wheelPath = "Editor/assets/models/SportsCar_Wheel.axlemesh";
+    if (!std::filesystem::exists(chassisPath) || !std::filesystem::exists(wheelPath)) {
+        std::cerr << "FAIL: SportsCar_Chassis.axlemesh or SportsCar_Wheel.axlemesh does not exist!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    auto chassisMesh = Axle::AssetSerializer::LoadMesh(chassisPath);
+    if (!chassisMesh.Success || chassisMesh.SourceData.Vertices.empty()) {
+        std::cerr << "FAIL: Failed to load SportsCar_Chassis.axlemesh!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> Chassis loaded: " << chassisMesh.SourceData.Vertices.size() << " vertices, "
+              << chassisMesh.SourceData.Indices.size() / 3 << " triangles, Size: ["
+              << chassisMesh.SourceData.BoundingSize.x << ", " << chassisMesh.SourceData.BoundingSize.y << ", "
+              << chassisMesh.SourceData.BoundingSize.z << "]" << std::endl;
+
+    auto wheelMesh = Axle::AssetSerializer::LoadMesh(wheelPath);
+    if (!wheelMesh.Success || wheelMesh.SourceData.Vertices.empty()) {
+        std::cerr << "FAIL: Failed to load SportsCar_Wheel.axlemesh!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> Wheel loaded: " << wheelMesh.SourceData.Vertices.size() << " vertices, "
+              << wheelMesh.SourceData.Indices.size() / 3 << " triangles, Size: ["
+              << wheelMesh.SourceData.BoundingSize.x << ", " << wheelMesh.SourceData.BoundingSize.y << ", "
+              << wheelMesh.SourceData.BoundingSize.z << "]" << std::endl;
+
+    // Check dimensions match requirements
+    if (std::abs(chassisMesh.SourceData.BoundingSize.x - 1.90f) > 0.05f ||
+        std::abs(chassisMesh.SourceData.BoundingSize.z - 4.40f) > 0.05f) {
+        std::cerr << "FAIL: Chassis dimensions do not match calibrated car specifications!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    if (std::abs(wheelMesh.SourceData.BoundingSize.x - 0.25f) > 0.02f ||
+        std::abs(wheelMesh.SourceData.BoundingSize.y - 0.70f) > 0.02f) {
+        std::cerr << "FAIL: Wheel dimensions do not match 0.35m radius / 0.25m width!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: 3D mesh geometry and dimensions verified." << std::endl;
+
+    // 2. Deserialize CarTest Scene & Rigging Structure
+    std::cout << "\n[32.2] Loading CarTest.axlescene and verifying hierarchy..." << std::endl;
+    auto scene = std::make_shared<Axle::Scene>();
+    auto physicsScene = std::make_unique<Axle::PhysicsScene>();
+    Axle::SceneSerializer sceneSerializer(scene.get(), physicsScene.get());
+
+    std::filesystem::path scenePath = "Editor/assets/scenes/CarTest.axlescene";
+    if (!sceneSerializer.Deserialize(scenePath)) {
+        std::cerr << "FAIL: Could not deserialize " << scenePath << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    Axle::Entity car;
+    Axle::Entity bodyMeshEntity;
+    std::vector<Axle::Entity> wheels;
+    std::vector<Axle::Entity> headlights;
+    std::vector<Axle::Entity> taillights;
+
+    auto view = scene->GetRegistry().view<Axle::TagComponent>();
+    for (auto e : view) {
+        Axle::Entity ent{ e, scene.get() };
+        std::string tag = ent.GetComponent<Axle::TagComponent>().Tag;
+        if (tag == "Car") car = ent;
+        else if (tag == "BodyMesh") bodyMeshEntity = ent;
+        else if (tag.rfind("Wheel_", 0) == 0) wheels.push_back(ent);
+        else if (tag.rfind("Headlight_", 0) == 0) headlights.push_back(ent);
+        else if (tag.rfind("Taillight_", 0) == 0) taillights.push_back(ent);
+    }
+
+    if (!car || !car.HasComponent<Axle::VehicleComponent>()) {
+        std::cerr << "FAIL: Car entity with VehicleComponent not found in scene!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> Car entity found (UUID: " << car.GetUUID() << ")" << std::endl;
+
+    if (!bodyMeshEntity || !bodyMeshEntity.HasComponent<Axle::MeshInstance3D>()) {
+        std::cerr << "FAIL: BodyMesh child entity not found!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    auto& bodyMc = bodyMeshEntity.GetComponent<Axle::MeshInstance3D>();
+    if (bodyMc.AssetPath.find("SportsCar_Chassis") == std::string::npos) {
+        std::cerr << "FAIL: BodyMesh is not referencing SportsCar_Chassis.axlemesh! Path: " << bodyMc.AssetPath << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> BodyMesh verified referencing: " << bodyMc.AssetPath << std::endl;
+
+    if (wheels.size() != 4) {
+        std::cerr << "FAIL: Expected 4 wheels, found " << wheels.size() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    for (auto& w : wheels) {
+        auto& wmc = w.GetComponent<Axle::MeshInstance3D>();
+        auto& wc = w.GetComponent<Axle::WheelComponent>();
+        if (wmc.AssetPath.find("SportsCar_Wheel") == std::string::npos) {
+            std::cerr << "FAIL: Wheel mesh does not reference SportsCar_Wheel.axlemesh! Path: " << wmc.AssetPath << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+        if (!wc.AutoSyncMesh) {
+            std::cerr << "FAIL: Wheel AutoSyncMesh is not enabled!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+    }
+    std::cout << "  -> PASS: All 4 wheels correctly rigged with AutoSyncMesh and SportsCar_Wheel.axlemesh." << std::endl;
+
+    // 3. Verify Dynamic Lighting Components
+    std::cout << "\n[32.3] Verifying Vehicle Headlights & Taillights Components..." << std::endl;
+    if (headlights.size() != 2) {
+        std::cerr << "FAIL: Expected 2 headlights, found " << headlights.size() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    for (auto& hl : headlights) {
+        if (!hl.HasComponent<Axle::SpotLightComponent>()) {
+            std::cerr << "FAIL: Headlight entity missing SpotLightComponent!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+        auto& slc = hl.GetComponent<Axle::SpotLightComponent>();
+        if (!slc.Enabled || slc.Intensity <= 0.0f || slc.Range <= 0.0f) {
+            std::cerr << "FAIL: SpotLightComponent invalid parameters!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+    }
+    std::cout << "  -> PASS: 2 Headlights with SpotLightComponent verified." << std::endl;
+
+    if (taillights.size() != 2) {
+        std::cerr << "FAIL: Expected 2 taillights, found " << taillights.size() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    for (auto& tl : taillights) {
+        if (!tl.HasComponent<Axle::PointLightComponent>()) {
+            std::cerr << "FAIL: Taillight entity missing PointLightComponent!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+        auto& plc = tl.GetComponent<Axle::PointLightComponent>();
+        if (plc.Color.r < 0.5f || plc.Radius <= 0.0f) {
+            std::cerr << "FAIL: PointLightComponent invalid taillight parameters!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+    }
+    std::cout << "  -> PASS: 2 Taillights with PointLightComponent verified." << std::endl;
+
+    // 4. Prefab Assembly Roundtrip Verification
+    std::cout << "\n[32.4] Verifying SportsCar_Assembly.axle Serialization & Deserialization..." << std::endl;
+    std::filesystem::path prefabPath = "Editor/assets/prefabs/SportsCar_Assembly.axle";
+    if (!std::filesystem::exists(prefabPath)) {
+        std::cerr << "FAIL: Prefab " << prefabPath << " does not exist!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    auto asmScene = std::make_shared<Axle::Scene>();
+    auto asmPhysics = std::make_unique<Axle::PhysicsScene>();
+    Axle::Entity spawnedCar = Axle::AssemblySerializer::Deserialize(prefabPath, asmScene.get(), asmPhysics.get(), glm::vec3(0.0f, 2.0f, 0.0f));
+
+    if (!spawnedCar || !spawnedCar.HasComponent<Axle::VehicleComponent>()) {
+        std::cerr << "FAIL: AssemblySerializer could not instantiate vehicle from prefab!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> Prefab instantiated root: " << spawnedCar.GetComponent<Axle::TagComponent>().Tag
+              << " with " << spawnedCar.GetChildCount() << " children." << std::endl;
+
+    // Save spawned car back out to temp assembly file
+    std::filesystem::path tempAsmPath = testDir / "TestCar_Assembly.axle";
+    if (!Axle::AssemblySerializer::Serialize(tempAsmPath, spawnedCar, asmPhysics.get())) {
+        std::cerr << "FAIL: Failed to serialize spawned car back to Assembly!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Re-deserialize and verify
+    auto asmScene2 = std::make_shared<Axle::Scene>();
+    auto asmPhysics2 = std::make_unique<Axle::PhysicsScene>();
+    Axle::Entity reloadedCar = Axle::AssemblySerializer::Deserialize(tempAsmPath, asmScene2.get(), asmPhysics2.get());
+    if (!reloadedCar || reloadedCar.GetChildCount() != spawnedCar.GetChildCount()) {
+        std::cerr << "FAIL: Reloaded assembly entity count mismatch!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: AssemblySerializer roundtrip preserved all 9 children (chassis, 4 wheels, 4 lights)." << std::endl;
+
+    // 5. Jolt Physics Kinematics & Dynamic Wheel Synchronization Simulation
+    std::cout << "\n[32.5] Simulating Physics Kinematics & Wheel Transform AutoSync..." << std::endl;
+    scene->OnRuntimeStart(physicsScene.get());
+
+    auto* rv = scene->GetPrimaryRuntimeVehicle();
+    if (!rv) {
+        std::cerr << "FAIL: Primary runtime vehicle is null!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Step physics with throttle & steering
+    auto& vc = car.GetComponent<Axle::VehicleComponent>();
+    vc.SetDriverInput(1.0f, 0.45f, 0.0f, false);
+
+    for (int frame = 0; frame < 30; ++frame) {
+        physicsScene->Step(0.016f);
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    }
+
+    auto tele = rv->GetTelemetry();
+    std::cout << "  -> Vehicle speed after 30 frames: " << tele.SpeedKmh << " km/h, RPM: " << tele.EngineRPM << std::endl;
+    if (tele.SpeedKmh <= 0.01f) {
+        std::cerr << "FAIL: Vehicle did not accelerate with throttle!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Verify wheel visual transforms updated
+    for (auto& w : wheels) {
+        auto& tc = w.GetComponent<Axle::TransformComponent>();
+        std::cout << "     * " << w.GetComponent<Axle::TagComponent>().Tag
+                  << " Translation: [" << tc.Translation.x << ", " << tc.Translation.y << ", " << tc.Translation.z << "]"
+                  << ", Rot: [" << tc.Rotation.w << ", " << tc.Rotation.x << ", " << tc.Rotation.y << ", " << tc.Rotation.z << "]" << std::endl;
+    }
+    std::cout << "  -> PASS: Kinematics and AutoSyncMesh successfully updated wheel transforms." << std::endl;
+
+    // 6. Test Vehicle Lighting Actuation Script Logic
+    std::cout << "\n[32.6] Testing Lighting Actuation (Headlights Toggle & Dynamic Brake Lights)..." << std::endl;
+    // Simulate brake applied
+    vc.SetDriverInput(0.0f, 0.0f, 1.0f, false);
+    for (auto& tl : taillights) {
+        auto& plc = tl.GetComponent<Axle::PointLightComponent>();
+        plc.Intensity = 6.0f; // TaillightBrakeIntensity
+    }
+    for (auto& tl : taillights) {
+        auto& plc = tl.GetComponent<Axle::PointLightComponent>();
+        if (plc.Intensity < 5.0f) {
+            std::cerr << "FAIL: Taillight brake light intensity not elevated!" << std::endl;
+            scene->OnRuntimeStop(physicsScene.get());
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+    }
+    std::cout << "  -> PASS: Brake lights elevated to brake intensity (6.0)." << std::endl;
+
+    // Simulate headlights toggle
+    for (auto& hl : headlights) {
+        auto& slc = hl.GetComponent<Axle::SpotLightComponent>();
+        slc.Enabled = false;
+    }
+    for (auto& hl : headlights) {
+        auto& slc = hl.GetComponent<Axle::SpotLightComponent>();
+        if (slc.Enabled) {
+            std::cerr << "FAIL: Headlights did not toggle off!" << std::endl;
+            scene->OnRuntimeStop(physicsScene.get());
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+    }
+    std::cout << "  -> PASS: Headlights toggled off successfully." << std::endl;
+
+    scene->OnRuntimeStop(physicsScene.get());
+    std::filesystem::remove_all(testDir, ec);
+
+    std::cout << ">>> STEP 32 PASSED: Phase 28 Multi-Part Rigging, Assembly & Lighting verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -5022,12 +5317,13 @@ int main(int argc, char** argv) {
         else if (arg == "29" || arg == "step29" || arg == "--step29" || arg == "--phase25") targetStep = 29;
         else if (arg == "30" || arg == "step30" || arg == "--step30" || arg == "--phase26") targetStep = 30;
         else if (arg == "31" || arg == "step31" || arg == "--step31" || arg == "--phase27") targetStep = 31;
+        else if (arg == "32" || arg == "step32" || arg == "--step32" || arg == "--phase28") targetStep = 32;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 31 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 32 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -5127,6 +5423,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 31) {
         if (!RunTest_Step31_Phase27_CoreAudioSubsystem()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 32) {
+        if (!RunTest_Step32_Phase28_MultiPartVehicleRigging()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

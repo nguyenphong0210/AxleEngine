@@ -705,6 +705,21 @@ namespace Axle {
             : Color(color), Intensity(intensity), Radius(radius), Falloff(falloff) {}
     };
 
+    struct SpotLightComponent {
+        glm::vec3 Color{ 1.0f, 0.98f, 0.92f };
+        float Intensity = 8.0f;
+        float Range = 35.0f;
+        float InnerConeAngle = 18.0f; // degrees
+        float OuterConeAngle = 32.0f; // degrees
+        bool Enabled = true;
+
+        SpotLightComponent() = default;
+        SpotLightComponent(const glm::vec3& color, float intensity = 8.0f, float range = 35.0f,
+                           float innerAngle = 18.0f, float outerAngle = 32.0f, bool enabled = true)
+            : Color(color), Intensity(intensity), Range(range),
+              InnerConeAngle(innerAngle), OuterConeAngle(outerAngle), Enabled(enabled) {}
+    };
+
     struct CameraComponent {
         float FOV = 45.0f;
         float NearClip = 0.1f;

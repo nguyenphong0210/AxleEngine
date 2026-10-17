@@ -21,22 +21,35 @@ namespace Axle {
     }
 
     VertexArray::VertexArray() {
-        glCreateVertexArrays(1, &m_RendererID);
+        if (glad_glCreateVertexArrays) {
+            glCreateVertexArrays(1, &m_RendererID);
+        }
     }
 
     VertexArray::~VertexArray() {
-        glDeleteVertexArrays(1, &m_RendererID);
+        if (glad_glDeleteVertexArrays && m_RendererID) {
+            glDeleteVertexArrays(1, &m_RendererID);
+        }
     }
 
     void VertexArray::Bind() const {
-        glBindVertexArray(m_RendererID);
+        if (glad_glBindVertexArray) {
+            glBindVertexArray(m_RendererID);
+        }
     }
 
     void VertexArray::Unbind() const {
-        glBindVertexArray(0);
+        if (glad_glBindVertexArray) {
+            glBindVertexArray(0);
+        }
     }
 
     void VertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& vertexBuffer) {
+        if (!glad_glBindVertexArray) {
+            m_VertexBuffers.push_back(vertexBuffer);
+            return;
+        }
+
         glBindVertexArray(m_RendererID);
         vertexBuffer->Bind();
 
@@ -58,8 +71,10 @@ namespace Axle {
     }
 
     void VertexArray::SetIndexBuffer(const std::shared_ptr<IndexBuffer>& indexBuffer) {
-        glBindVertexArray(m_RendererID);
-        indexBuffer->Bind();
+        if (glad_glBindVertexArray) {
+            glBindVertexArray(m_RendererID);
+            if (indexBuffer) indexBuffer->Bind();
+        }
 
         m_IndexBuffer = indexBuffer;
     }

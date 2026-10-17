@@ -279,6 +279,28 @@ namespace Axle {
                 ss << "      HemisphereAmbient: " << (sbc.HemisphereAmbient ? "true" : "false") << "\n";
             }
 
+            // PointLightComponent
+            if (entity.HasComponent<PointLightComponent>()) {
+                auto& plc = entity.GetComponent<PointLightComponent>();
+                ss << "    PointLightComponent:\n";
+                ss << "      Color: [ " << plc.Color.r << " , " << plc.Color.g << " , " << plc.Color.b << " ]\n";
+                ss << "      Intensity: " << plc.Intensity << "\n";
+                ss << "      Radius: " << plc.Radius << "\n";
+                ss << "      Falloff: " << plc.Falloff << "\n";
+            }
+
+            // SpotLightComponent
+            if (entity.HasComponent<SpotLightComponent>()) {
+                auto& slc = entity.GetComponent<SpotLightComponent>();
+                ss << "    SpotLightComponent:\n";
+                ss << "      Enabled: " << (slc.Enabled ? "true" : "false") << "\n";
+                ss << "      Color: [ " << slc.Color.r << " , " << slc.Color.g << " , " << slc.Color.b << " ]\n";
+                ss << "      Intensity: " << slc.Intensity << "\n";
+                ss << "      Range: " << slc.Range << "\n";
+                ss << "      InnerConeAngle: " << slc.InnerConeAngle << "\n";
+                ss << "      OuterConeAngle: " << slc.OuterConeAngle << "\n";
+            }
+
             // CameraComponent
             if (entity.HasComponent<CameraComponent>()) {
                 auto& cam = entity.GetComponent<CameraComponent>();
@@ -388,6 +410,8 @@ namespace Axle {
             Hierarchy,
             NativeScript,
             DirectionalLight,
+            PointLight,
+            SpotLight,
             Skybox,
             Camera,
             Wheel,
@@ -431,6 +455,16 @@ namespace Axle {
                 currentSection = ComponentSection::NativeScript;
             } else if (trimmed == "DirectionalLightComponent:") {
                 currentSection = ComponentSection::DirectionalLight;
+            } else if (trimmed == "PointLightComponent:") {
+                currentSection = ComponentSection::PointLight;
+                if (!currentEntity.HasComponent<PointLightComponent>()) {
+                    currentEntity.AddComponent<PointLightComponent>();
+                }
+            } else if (trimmed == "SpotLightComponent:") {
+                currentSection = ComponentSection::SpotLight;
+                if (!currentEntity.HasComponent<SpotLightComponent>()) {
+                    currentEntity.AddComponent<SpotLightComponent>();
+                }
             } else if (trimmed == "SkyboxComponent:") {
                 currentSection = ComponentSection::Skybox;
             } else if (trimmed == "CameraComponent:") {
@@ -679,6 +713,46 @@ namespace Axle {
                             dlc.ToneMappingMode = std::stoi(Trim(trimmed.substr(16)));
                         } else if (trimmed.rfind("Gamma:", 0) == 0) {
                             dlc.Gamma = std::stof(Trim(trimmed.substr(6)));
+                        }
+                        break;
+                    }
+                    case ComponentSection::PointLight: {
+                        if (!currentEntity.HasComponent<PointLightComponent>()) {
+                            currentEntity.AddComponent<PointLightComponent>();
+                        }
+                        auto& plc = currentEntity.GetComponent<PointLightComponent>();
+                        if (trimmed.rfind("Color:", 0) == 0) {
+                            float r = 1, g = 1, b = 1;
+                            sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
+                            plc.Color = glm::vec3(r, g, b);
+                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                            plc.Intensity = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("Radius:", 0) == 0) {
+                            plc.Radius = std::stof(Trim(trimmed.substr(7)));
+                        } else if (trimmed.rfind("Falloff:", 0) == 0) {
+                            plc.Falloff = std::stof(Trim(trimmed.substr(8)));
+                        }
+                        break;
+                    }
+                    case ComponentSection::SpotLight: {
+                        if (!currentEntity.HasComponent<SpotLightComponent>()) {
+                            currentEntity.AddComponent<SpotLightComponent>();
+                        }
+                        auto& slc = currentEntity.GetComponent<SpotLightComponent>();
+                        if (trimmed.rfind("Enabled:", 0) == 0) {
+                            slc.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("Color:", 0) == 0) {
+                            float r = 1, g = 1, b = 1;
+                            sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
+                            slc.Color = glm::vec3(r, g, b);
+                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                            slc.Intensity = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("Range:", 0) == 0) {
+                            slc.Range = std::stof(Trim(trimmed.substr(6)));
+                        } else if (trimmed.rfind("InnerConeAngle:", 0) == 0) {
+                            slc.InnerConeAngle = std::stof(Trim(trimmed.substr(15)));
+                        } else if (trimmed.rfind("OuterConeAngle:", 0) == 0) {
+                            slc.OuterConeAngle = std::stof(Trim(trimmed.substr(15)));
                         }
                         break;
                     }

@@ -1,0 +1,323 @@
+# Axle Unified Asset File
+AxleAsset:
+  AssetType: Assembly
+  Version: 1
+  Name: SportsCar
+  RootEntityID: 8959925798803133502
+
+Entities:
+  - Entity: 8959925798803133502
+    TagComponent:
+      Tag: SportsCar
+    TransformComponent:
+      Translation: [ 0.000000 , 0.750000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 1500.000000
+      LinearDamping: 0.050000
+      AngularDamping: 0.050000
+      GravityFactor: 1.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.900000 , 0.400000 , 2.100000 ]
+      Radius: 0.500000
+      HalfHeight: 0.500000
+      Offset: [ 0.000000 , 0.000000 , 0.000000 ]
+      Friction: 0.200000
+      Restitution: 0.000000
+      IsTrigger: false
+    HierarchyComponent:
+      Parent: 0
+      Children:
+        - 2479544764548422800
+        - 7782791376365683938
+        - 4716918885181481269
+        - 6128542852897491018
+        - 15027978107127069824
+        - 1100220033004400101
+        - 1100220033004400102
+        - 1100220033004400103
+        - 1100220033004400104
+    NativeScriptComponent:
+      ScriptName: CarController
+    VehicleComponent:
+      ChassisMass: 1500.000000
+      MaxEngineTorque: 800.000000
+      MaxRPM: 7000.000000
+      MinRPM: 1000.000000
+      MaxBrakeTorque: 3000.000000
+      MaxHandBrakeTorque: 6000.000000
+      AntiRollBarStiffness: 8000.000000
+      DefaultSuspensionFrequency: 2.000000
+      DefaultSuspensionDamping: 0.500000
+      FourWheelDrive: true
+      CenterOfMassOffset: [ 0.000000 , -0.200000 , 0.000000 ]
+    VehicleAudioComponent:
+      Enabled: true
+      EnginePowerClipPath: assets/audio/Engine_Power.wav
+      EngineCoastClipPath: assets/audio/Engine_Coast.wav
+      MinEnginePitch: 0.800000
+      MaxEnginePitch: 2.600000
+      EngineMasterVolume: 0.850000
+      ThrottleSmoothing: 8.000000
+      TireSquealClipPath: assets/audio/Tire_Squeal.wav
+      SlipThreshold: 0.200000
+      TireSquealMasterVolume: 0.700000
+      TireSquealFadeSpeed: 12.000000
+      SuspensionThudClipPath: assets/audio/Suspension_Thud.wav
+      SuspensionThudThreshold: 1.500000
+      SuspensionMasterVolume: 0.800000
+      CollisionImpactClipPath: assets/audio/Collision_Impact.wav
+      CollisionDecelThreshold: 15.000000
+      CollisionMasterVolume: 1.000000
+      Spatialized: true
+      MinDistance: 2.000000
+      MaxDistance: 60.000000
+
+  - Entity: 2479544764548422800
+    TagComponent:
+      Tag: BodyMesh
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Chassis.axlemesh
+      PatternMode: 1
+      TileScale: 6.000000
+      Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+      Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/GoldMetallic.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.180000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 1.000000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+
+  - Entity: 7782791376365683938
+    TagComponent:
+      Tag: Wheel_FL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.100000 , 1.400000 ]
+      Rotation: [ 0.443646 , 0.550616 , -0.550616 , 0.443646 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 1
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Roughness: 0.750000
+      Metallic: 0.050000
+    HierarchyComponent:
+      Parent: 8959925798803133502
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+
+  - Entity: 4716918885181481269
+    TagComponent:
+      Tag: Wheel_FR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.100000 , 1.400000 ]
+      Rotation: [ 0.281528 , 0.648646 , -0.648646 , 0.281528 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 1
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Roughness: 0.750000
+      Metallic: 0.050000
+    HierarchyComponent:
+      Parent: 8959925798803133502
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+
+  - Entity: 6128542852897491018
+    TagComponent:
+      Tag: Wheel_RL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.100000 , -1.400000 ]
+      Rotation: [ 0.252130 , 0.660629 , -0.660629 , 0.252130 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 1
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Roughness: 0.750000
+      Metallic: 0.050000
+    HierarchyComponent:
+      Parent: 8959925798803133502
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: true
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 6000.000000
+      AutoSyncMesh: true
+
+  - Entity: 15027978107127069824
+    TagComponent:
+      Tag: Wheel_RR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.100000 , -1.400000 ]
+      Rotation: [ 0.552892 , -0.440806 , 0.440806 , 0.552892 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 1
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Roughness: 0.750000
+      Metallic: 0.050000
+    HierarchyComponent:
+      Parent: 8959925798803133502
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: true
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 6000.000000
+      AutoSyncMesh: true
+
+  - Entity: 1100220033004400101
+    TagComponent:
+      Tag: Headlight_L
+    TransformComponent:
+      Translation: [ 0.650000 , 0.250000 , 2.050000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+    SpotLightComponent:
+      Enabled: true
+      Color: [ 1.000000 , 0.980000 , 0.900000 ]
+      Intensity: 15.000000
+      Range: 45.000000
+      InnerConeAngle: 18.000000
+      OuterConeAngle: 32.000000
+
+  - Entity: 1100220033004400102
+    TagComponent:
+      Tag: Headlight_R
+    TransformComponent:
+      Translation: [ -0.650000 , 0.250000 , 2.050000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+    SpotLightComponent:
+      Enabled: true
+      Color: [ 1.000000 , 0.980000 , 0.900000 ]
+      Intensity: 15.000000
+      Range: 45.000000
+      InnerConeAngle: 18.000000
+      OuterConeAngle: 32.000000
+
+  - Entity: 1100220033004400103
+    TagComponent:
+      Tag: Taillight_L
+    TransformComponent:
+      Translation: [ 0.650000 , 0.350000 , -2.150000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+    PointLightComponent:
+      Color: [ 1.000000 , 0.050000 , 0.020000 ]
+      Intensity: 1.000000
+      Radius: 8.000000
+      Falloff: 1.500000
+
+  - Entity: 1100220033004400104
+    TagComponent:
+      Tag: Taillight_R
+    TransformComponent:
+      Translation: [ -0.650000 , 0.350000 , -2.150000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+    PointLightComponent:
+      Color: [ 1.000000 , 0.050000 , 0.020000 ]
+      Intensity: 1.000000
+      Radius: 8.000000
+      Falloff: 1.500000

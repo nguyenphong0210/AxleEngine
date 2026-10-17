@@ -19,9 +19,17 @@ public:
     float BoostMultiplier = 1.5f;    // Nitro boost factor
     bool EnableBoost = true;
 
+    // Vehicle Lighting Fields
+    bool HeadlightsEnabled = true;   // Headlights on/off (toggle with 'L')
+    bool AutoBrakeLights = true;     // Dynamically glow brake lights when decelerating
+    float HeadlightIntensity = 15.0f;
+    float TaillightIdleIntensity = 1.0f;
+    float TaillightBrakeIntensity = 6.0f;
+
 private:
     float m_CurrentSteering = 0.0f;
     bool m_WasInputActive = false;
+    bool m_PrevKeyL = false;
 
 public:
     void OnCreate() override {
@@ -100,9 +108,22 @@ public:
             m_WasInputActive = false;
         }
 
-        // 4. Update child wheel entities' MaxSteerAngle if steerable
+        // 4. Vehicle Lighting Inputs & Dynamic Actuation
+        bool currentKeyL = Axle::Input::IsKeyPressed(Axle::KeyCode::L);
+        if (currentKeyL && !m_PrevKeyL) {
+            HeadlightsEnabled = !HeadlightsEnabled;
+            AXLE_INFO("CarController: Headlights toggled -> {0}", HeadlightsEnabled ? "ON" : "OFF");
+        }
+        m_PrevKeyL = currentKeyL;
+
+        const bool isBraking = (targetBrake > 0.05f || handbrake);
+
+        // 5. Update child entities (Wheels, Headlights, Taillights, Emission)
         for (auto child : GetEntity().GetChildren()) {
-            if (child && child.HasComponent<Axle::WheelComponent>()) {
+            if (!child) continue;
+
+            // Wheels: Steer angle & AWD/RWD distribution
+            if (child.HasComponent<Axle::WheelComponent>()) {
                 auto& wc = child.GetComponent<Axle::WheelComponent>();
                 if (wc.CanSteer) {
                     wc.MaxSteerAngle = MaxSteerAngle;
@@ -112,6 +133,32 @@ public:
                         const auto& wt = child.GetComponent<Axle::TransformComponent>();
                         wc.IsDriven = (wt.Translation.z < 0.0f);
                     }
+                }
+            }
+
+            // Headlights: SpotLightComponent actuation
+            if (child.HasComponent<Axle::SpotLightComponent>()) {
+                auto& slc = child.GetComponent<Axle::SpotLightComponent>();
+                slc.Enabled = HeadlightsEnabled;
+                slc.Intensity = HeadlightIntensity;
+            }
+
+            // Taillights / Brake lights: PointLightComponent actuation
+            if (child.HasComponent<Axle::PointLightComponent>()) {
+                auto& plc = child.GetComponent<Axle::PointLightComponent>();
+                if (AutoBrakeLights) {
+                    plc.Intensity = isBraking ? TaillightBrakeIntensity : TaillightIdleIntensity;
+                }
+            }
+
+            // Material emission synchronisation for visual glow
+            if (child.HasComponent<Axle::TagComponent>() && child.HasComponent<Axle::MaterialComponent>()) {
+                const auto& tag = child.GetComponent<Axle::TagComponent>().Tag;
+                auto& mat = child.GetComponent<Axle::MaterialComponent>();
+                if (tag.find("Taillight") != std::string::npos || tag.find("BrakeLight") != std::string::npos) {
+                    mat.EmissionIntensity = isBraking ? TaillightBrakeIntensity : TaillightIdleIntensity;
+                } else if (tag.find("Headlight") != std::string::npos) {
+                    mat.EmissionIntensity = HeadlightsEnabled ? 5.0f : 0.0f;
                 }
             }
         }
@@ -140,7 +187,9 @@ public:
         AXLE_FIELD(AllWheelDrive, "Enable All-Wheel Drive (AWD) vs Rear-Wheel Drive (RWD)"),
         AXLE_FIELD(SteerSpeed, 1.0f, 20.0f, "Steering wheel response speed"),
         AXLE_FIELD(BoostMultiplier, 1.0f, 3.0f, "Nitro boost multiplier on Left Shift"),
-        AXLE_FIELD(EnableBoost, "Enable nitro speed boost")
+        AXLE_FIELD(EnableBoost, "Enable nitro speed boost"),
+        AXLE_FIELD(HeadlightsEnabled, "Toggle vehicle headlights"),
+        AXLE_FIELD(AutoBrakeLights, "Dynamic brake lights on deceleration")
     )
 };
 

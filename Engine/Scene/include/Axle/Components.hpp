@@ -3,6 +3,7 @@
 #include <Axle/UUID.hpp>
 #include <Axle/VertexArray.hpp>
 #include <Axle/Texture2D.hpp>
+#include <Axle/Material.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/PhysicsScene.hpp>
 
@@ -79,6 +80,10 @@ namespace Axle {
     using MeshComponent = MeshInstance3D; // Backward compatibility alias
 
     struct MaterialComponent {
+        UUID MaterialHandle = 0; // AssetHandle (0 = inline / custom / unlinked)
+        std::shared_ptr<Material> MaterialAsset = nullptr; // Cached pointer for zero runtime lookup cost
+
+        // Local instance properties (active when MaterialHandle == 0 or when editing local values)
         std::string AlbedoPath;
         std::shared_ptr<Texture2D> AlbedoMap;
         bool UseAlbedoMap = false;
@@ -106,6 +111,129 @@ namespace Axle {
 
         MaterialComponent() = default;
 
+        MaterialComponent(UUID handle, const std::shared_ptr<Material>& asset)
+            : MaterialHandle(handle), MaterialAsset(asset) {
+            SyncFromAsset();
+        }
+
+        bool HasAsset() const { return MaterialHandle != 0 && MaterialAsset != nullptr; }
+
+        void SetAsset(UUID handle, const std::shared_ptr<Material>& asset) {
+            MaterialHandle = handle;
+            MaterialAsset = asset;
+            SyncFromAsset();
+        }
+
+        void SyncFromAsset() {
+            if (!MaterialAsset) return;
+            AlbedoColor = MaterialAsset->GetAlbedoColor();
+            AlbedoPath = MaterialAsset->GetAlbedoPath();
+            AlbedoMap = MaterialAsset->GetAlbedoMap();
+            UseAlbedoMap = MaterialAsset->UseAlbedoMap();
+
+            NormalPath = MaterialAsset->GetNormalPath();
+            NormalMap = MaterialAsset->GetNormalMap();
+            UseNormalMap = MaterialAsset->UseNormalMap();
+            NormalStrength = MaterialAsset->GetNormalStrength();
+
+            Roughness = MaterialAsset->GetRoughness();
+            RoughnessPath = MaterialAsset->GetRoughnessPath();
+            RoughnessMap = MaterialAsset->GetRoughnessMap();
+            UseRoughnessMap = MaterialAsset->UseRoughnessMap();
+
+            Metallic = MaterialAsset->GetMetallic();
+            MetallicPath = MaterialAsset->GetMetallicPath();
+            MetallicMap = MaterialAsset->GetMetallicMap();
+            UseMetallicMap = MaterialAsset->UseMetallicMap();
+
+            EmissionColor = MaterialAsset->GetEmissionColor();
+            EmissionIntensity = MaterialAsset->GetEmissionIntensity();
+            UVScale = MaterialAsset->GetUVScale();
+        }
+
+        void SyncToAsset() {
+            if (!MaterialAsset) return;
+            MaterialAsset->SetAlbedoColor(AlbedoColor);
+            MaterialAsset->SetAlbedoTexture(AlbedoMap, AlbedoPath);
+            MaterialAsset->SetUseAlbedoMap(UseAlbedoMap);
+
+            MaterialAsset->SetNormalTexture(NormalMap, NormalPath);
+            MaterialAsset->SetUseNormalMap(UseNormalMap);
+            MaterialAsset->SetNormalStrength(NormalStrength);
+
+            MaterialAsset->SetRoughness(Roughness);
+            MaterialAsset->SetRoughnessTexture(RoughnessMap, RoughnessPath);
+            MaterialAsset->SetUseRoughnessMap(UseRoughnessMap);
+
+            MaterialAsset->SetMetallic(Metallic);
+            MaterialAsset->SetMetallicTexture(MetallicMap, MetallicPath);
+            MaterialAsset->SetUseMetallicMap(UseMetallicMap);
+
+            MaterialAsset->SetEmissionColor(EmissionColor);
+            MaterialAsset->SetEmissionIntensity(EmissionIntensity);
+            MaterialAsset->SetUVScale(UVScale);
+        }
+
+        void MakeUnique() {
+            MaterialHandle = 0;
+            MaterialAsset = nullptr;
+        }
+
+        float GetRoughness() const { return MaterialAsset ? MaterialAsset->GetRoughness() : Roughness; }
+        float GetMetallic() const { return MaterialAsset ? MaterialAsset->GetMetallic() : Metallic; }
+        const glm::vec4& GetAlbedoColor() const { return MaterialAsset ? MaterialAsset->GetAlbedoColor() : AlbedoColor; }
+        float GetNormalStrength() const { return MaterialAsset ? MaterialAsset->GetNormalStrength() : NormalStrength; }
+        const glm::vec3& GetEmissionColor() const { return MaterialAsset ? MaterialAsset->GetEmissionColor() : EmissionColor; }
+        float GetEmissionIntensity() const { return MaterialAsset ? MaterialAsset->GetEmissionIntensity() : EmissionIntensity; }
+        const glm::vec2& GetUVScale() const { return MaterialAsset ? MaterialAsset->GetUVScale() : UVScale; }
+
+        void Bind(Shader& shader, uint32_t slotAlbedo = 0, uint32_t slotNormal = 2, uint32_t slotRoughness = 3, uint32_t slotMetallic = 4) const {
+            if (HasAsset()) {
+                MaterialAsset->Bind(shader, slotAlbedo, slotNormal, slotRoughness, slotMetallic);
+                return;
+            }
+
+            if (UseAlbedoMap && AlbedoMap && AlbedoMap->IsLoaded()) {
+                AlbedoMap->Bind(slotAlbedo);
+                shader.SetInt("u_UseAlbedoMap", 1);
+            } else {
+                Texture2D::GetWhiteTexture()->Bind(slotAlbedo);
+                shader.SetInt("u_UseAlbedoMap", 0);
+            }
+
+            if (UseNormalMap && NormalMap && NormalMap->IsLoaded()) {
+                NormalMap->Bind(slotNormal);
+                shader.SetInt("u_UseNormalMap", 1);
+            } else {
+                Texture2D::GetFlatNormalTexture()->Bind(slotNormal);
+                shader.SetInt("u_UseNormalMap", 0);
+            }
+
+            if (UseRoughnessMap && RoughnessMap && RoughnessMap->IsLoaded()) {
+                RoughnessMap->Bind(slotRoughness);
+                shader.SetInt("u_UseRoughnessMap", 1);
+            } else {
+                Texture2D::GetDefaultRoughnessTexture()->Bind(slotRoughness);
+                shader.SetInt("u_UseRoughnessMap", 0);
+            }
+
+            if (UseMetallicMap && MetallicMap && MetallicMap->IsLoaded()) {
+                MetallicMap->Bind(slotMetallic);
+                shader.SetInt("u_UseMetallicMap", 1);
+            } else {
+                Texture2D::GetBlackTexture()->Bind(slotMetallic);
+                shader.SetInt("u_UseMetallicMap", 0);
+            }
+
+            shader.SetFloat2("u_UVScale", UVScale);
+            shader.SetFloat("u_Roughness", Roughness);
+            shader.SetFloat("u_Metallic", Metallic);
+            shader.SetFloat("u_NormalStrength", NormalStrength);
+            shader.SetFloat3("u_EmissionColor", EmissionColor);
+            shader.SetFloat("u_EmissionIntensity", EmissionIntensity);
+            shader.SetFloat4("u_Color1", AlbedoColor);
+        }
+
         void ResetTextures() {
             AlbedoPath.clear();
             AlbedoMap = nullptr;
@@ -122,6 +250,8 @@ namespace Axle {
             MetallicPath.clear();
             MetallicMap = nullptr;
             UseMetallicMap = false;
+
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetCarPaintRed() {
@@ -131,6 +261,7 @@ namespace Axle {
             Metallic = 0.0f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetCarPaintBlue() {
@@ -140,6 +271,7 @@ namespace Axle {
             Metallic = 0.75f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetChrome() {
@@ -149,6 +281,7 @@ namespace Axle {
             Metallic = 1.0f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetGold() {
@@ -158,6 +291,7 @@ namespace Axle {
             Metallic = 1.0f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetCopper() {
@@ -167,6 +301,7 @@ namespace Axle {
             Metallic = 0.95f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetRubber() {
@@ -176,6 +311,7 @@ namespace Axle {
             Metallic = 0.0f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetPlastic() {
@@ -185,6 +321,7 @@ namespace Axle {
             Metallic = 0.0f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetCastIron() {
@@ -194,6 +331,7 @@ namespace Axle {
             Metallic = 1.0f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetAluminum() {
@@ -203,6 +341,7 @@ namespace Axle {
             Metallic = 1.0f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetObsidian() {
@@ -212,6 +351,7 @@ namespace Axle {
             Metallic = 0.0f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetHeadlightLED() {
@@ -221,6 +361,7 @@ namespace Axle {
             Metallic = 0.0f;
             EmissionColor = glm::vec3(0.9f, 0.95f, 1.0f);
             EmissionIntensity = 5.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetPresetTaillightLED() {
@@ -230,6 +371,7 @@ namespace Axle {
             Metallic = 0.0f;
             EmissionColor = glm::vec3(1.0f, 0.05f, 0.05f);
             EmissionIntensity = 4.0f;
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetAlbedo(const std::string& path) {
@@ -242,6 +384,7 @@ namespace Axle {
                 AlbedoMap = nullptr;
                 UseAlbedoMap = false;
             }
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetNormal(const std::string& path) {
@@ -254,6 +397,7 @@ namespace Axle {
                 NormalMap = nullptr;
                 UseNormalMap = false;
             }
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetRoughnessMap(const std::string& path) {
@@ -266,6 +410,7 @@ namespace Axle {
                 RoughnessMap = nullptr;
                 UseRoughnessMap = false;
             }
+            if (HasAsset()) SyncToAsset();
         }
 
         void SetMetallicMap(const std::string& path) {
@@ -278,6 +423,7 @@ namespace Axle {
                 MetallicMap = nullptr;
                 UseMetallicMap = false;
             }
+            if (HasAsset()) SyncToAsset();
         }
     };
 

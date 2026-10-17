@@ -2,6 +2,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/AssetManager.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 
@@ -190,6 +191,12 @@ namespace Axle {
             if (entity.HasComponent<MaterialComponent>()) {
                 auto& mat = entity.GetComponent<MaterialComponent>();
                 fout << "    MaterialComponent:\n";
+                if (mat.HasAsset()) {
+                    fout << "      MaterialHandle: " << (uint64_t)mat.MaterialHandle << "\n";
+                    if (!mat.MaterialAsset->GetFilePath().empty()) {
+                        fout << "      AssetPath: " << mat.MaterialAsset->GetFilePath().string() << "\n";
+                    }
+                }
                 fout << "      AlbedoPath: " << mat.AlbedoPath << "\n";
                 fout << "      UseAlbedoMap: " << (mat.UseAlbedoMap ? "true" : "false") << "\n";
                 fout << "      AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
@@ -435,7 +442,18 @@ namespace Axle {
                     break;
                 }
                 case AsmSection::Material: {
-                    if (trimmed.rfind("AlbedoPath:", 0) == 0) {
+                    if (trimmed.rfind("MaterialHandle:", 0) == 0) {
+                        current.Material.MaterialHandle = std::stoull(Trim(trimmed.substr(15)));
+                        if (current.Material.MaterialHandle != 0) {
+                            current.Material.MaterialAsset = AssetManager::GetMaterial(current.Material.MaterialHandle);
+                        }
+                    } else if (trimmed.rfind("AssetPath:", 0) == 0) {
+                        std::string path = Trim(trimmed.substr(10));
+                        if (!path.empty() && !current.Material.MaterialAsset) {
+                            current.Material.MaterialAsset = AssetManager::GetMaterial(path);
+                            if (current.Material.MaterialAsset) current.Material.MaterialHandle = current.Material.MaterialAsset->GetHandle();
+                        }
+                    } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
                         current.Material.AlbedoPath = Trim(trimmed.substr(11));
                     } else if (trimmed.rfind("UseAlbedoMap:", 0) == 0) {
                         current.Material.UseAlbedoMap = (Trim(trimmed.substr(13)) == "true");

@@ -5,6 +5,7 @@
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/Material.hpp>
 #include <Axle/AssetMetadataSerializer.hpp>
 #include <Axle/AssetTypes.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
@@ -3830,6 +3831,268 @@ static bool RunTest_Step27_Phase23_PackageAndVFS() {
 }
 
 // =============================================================================
+// TEST STEP 28: Phase 24 AAA Material Asset & Flyweight Architecture
+// =============================================================================
+bool RunTest_Step28_Phase24_MaterialAndFlyweight() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 28 TEST] AAA MATERIAL & FLYWEIGHT ARCHITECTURE   " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::filesystem::path testDir = "temp_step28_material_test";
+    std::error_code ec;
+    std::filesystem::remove_all(testDir, ec);
+    std::filesystem::create_directories(testDir, ec);
+
+    Axle::AssetManager::Init(testDir);
+
+    // -------------------------------------------------------------------------
+    // [28.1] Core Axle::Material Class, Presets & Standalone Serialization
+    // -------------------------------------------------------------------------
+    std::cout << "\n[28.1] Testing Axle::Material presets, properties & file I/O..." << std::endl;
+    auto matPath = testDir / "TestCarPaint.amat";
+    {
+        auto mat = std::make_shared<Axle::Material>("TestCarPaint");
+        mat->SetPresetCarPaintBlue();
+        if (std::abs(mat->GetRoughness() - 0.22f) > 1e-3f ||
+            std::abs(mat->GetMetallic() - 0.75f) > 1e-3f) {
+            std::cerr << "FAIL: PresetCarPaintBlue properties mismatch!" << std::endl;
+            return false;
+        }
+
+        // Customize properties
+        mat->SetAlbedoColor(glm::vec4(0.1f, 0.4f, 0.9f, 1.0f));
+        mat->SetRoughness(0.35f);
+        mat->SetMetallic(0.85f);
+        mat->SetEmissionColor(glm::vec3(0.5f, 0.2f, 0.8f));
+        mat->SetEmissionIntensity(2.5f);
+        mat->SetUVScale(glm::vec2(3.0f, 3.0f));
+
+        if (!mat->Save(matPath)) {
+            std::cerr << "FAIL: Failed to save Material to " << matPath << std::endl;
+            return false;
+        }
+
+        // Load into fresh instance
+        Axle::Material loadedMat;
+        if (!loadedMat.Load(matPath)) {
+            std::cerr << "FAIL: Failed to load Material from " << matPath << std::endl;
+            return false;
+        }
+
+        if (std::abs(loadedMat.GetAlbedoColor().r - 0.1f) > 1e-3f ||
+            std::abs(loadedMat.GetRoughness() - 0.35f) > 1e-3f ||
+            std::abs(loadedMat.GetMetallic() - 0.85f) > 1e-3f ||
+            std::abs(loadedMat.GetEmissionIntensity() - 2.5f) > 1e-3f ||
+            std::abs(loadedMat.GetUVScale().x - 3.0f) > 1e-3f ||
+            loadedMat.GetName() != "TestCarPaint") {
+            std::cerr << "FAIL: Loaded Material properties mismatch!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> PASS: Axle::Material preset, custom properties, and Save/Load verified." << std::endl;
+    }
+
+    // -------------------------------------------------------------------------
+    // [28.2] AssetManager MaterialCache & In-Place Live Reload
+    // -------------------------------------------------------------------------
+    std::cout << "\n[28.2] Testing Centralized MaterialCache and In-Place Live Reload..." << std::endl;
+    {
+        // Register asset metadata
+        auto meta = Axle::AssetManager::GetOrCreateMetadata(matPath);
+        if (meta.Handle == 0 || meta.Type != Axle::AssetType::Material) {
+            std::cerr << "FAIL: Failed to register Material metadata!" << std::endl;
+            return false;
+        }
+
+        // Cache hit test: GetMaterial by path
+        auto matA = Axle::AssetManager::GetMaterial(matPath);
+        auto matB = Axle::AssetManager::GetMaterial(matPath);
+        if (!matA || !matB || matA.get() != matB.get()) {
+            std::cerr << "FAIL: MaterialCache failed to return identical pointer for same path!" << std::endl;
+            return false;
+        }
+
+        // Cache hit test: GetMaterial by UUID
+        auto matByUUID = Axle::AssetManager::GetMaterial(meta.Handle);
+        if (matByUUID.get() != matA.get()) {
+            std::cerr << "FAIL: MaterialCache by UUID returned different pointer!" << std::endl;
+            return false;
+        }
+
+        // Test in-place live reload:
+        // Modify file on disk directly
+        {
+            Axle::Material diskModifier;
+            diskModifier.Load(matPath);
+            diskModifier.SetRoughness(0.05f); // Super glossy
+            diskModifier.SetMetallic(0.99f);
+            diskModifier.Save(matPath);
+        }
+
+        // Trigger ReloadMaterial
+        Axle::AssetManager::ReloadMaterial(meta.Handle);
+
+        // In-place verification: pointer matA MUST NOT have changed, but its internal properties MUST be 0.05f!
+        if (std::abs(matA->GetRoughness() - 0.05f) > 1e-3f ||
+            std::abs(matA->GetMetallic() - 0.99f) > 1e-3f) {
+            std::cerr << "FAIL: In-place live reload did not update existing Material instance!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> PASS: MaterialCache deduplication and in-place live reload verified." << std::endl;
+    }
+
+    // -------------------------------------------------------------------------
+    // [28.3] Flyweight MaterialComponent Binding, Synchronization & MakeUnique
+    // -------------------------------------------------------------------------
+    std::cout << "\n[28.3] Testing Flyweight MaterialComponent binding & MakeUnique..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        auto e1 = scene->CreateEntity("CarBody");
+        auto e2 = scene->CreateEntity("CarDoor");
+
+        auto& mc1 = e1.AddComponent<Axle::MaterialComponent>();
+        auto& mc2 = e2.AddComponent<Axle::MaterialComponent>();
+
+        auto sharedMat = Axle::AssetManager::GetMaterial(matPath);
+        Axle::UUID matUUID = Axle::AssetManager::GetAssetUUID(matPath);
+
+        // Bind shared flyweight asset to both entities
+        mc1.SetAsset(matUUID, sharedMat);
+        mc2.SetAsset(matUUID, sharedMat);
+
+        if (!mc1.HasAsset() || !mc2.HasAsset()) {
+            std::cerr << "FAIL: HasAsset() returned false after SetAsset!" << std::endl;
+            return false;
+        }
+        if (mc1.MaterialHandle != matUUID || mc2.MaterialHandle != matUUID) {
+            std::cerr << "FAIL: MaterialHandle mismatch!" << std::endl;
+            return false;
+        }
+
+        // Verify shared reading
+        if (std::abs(mc1.GetRoughness() - 0.05f) > 1e-3f ||
+            std::abs(mc2.GetRoughness() - 0.05f) > 1e-3f) {
+            std::cerr << "FAIL: Entity components did not read shared material properties!" << std::endl;
+            return false;
+        }
+
+        // Live change on shared asset propagates automatically to all entities
+        sharedMat->SetRoughness(0.55f);
+        if (std::abs(mc1.GetRoughness() - 0.55f) > 1e-3f ||
+            std::abs(mc2.GetRoughness() - 0.55f) > 1e-3f) {
+            std::cerr << "FAIL: Shared asset mutation did not reflect on both entities!" << std::endl;
+            return false;
+        }
+
+        // Test MakeUnique on mc2
+        mc2.MakeUnique();
+        if (mc2.HasAsset() || mc2.MaterialHandle != 0) {
+            std::cerr << "FAIL: MakeUnique() did not detach MaterialComponent from asset!" << std::endl;
+            return false;
+        }
+
+        // Mutate mc2 locally: must NOT affect mc1 or sharedMat
+        mc2.Roughness = 0.95f;
+        if (std::abs(mc1.GetRoughness() - 0.55f) > 1e-3f ||
+            std::abs(sharedMat->GetRoughness() - 0.55f) > 1e-3f) {
+            std::cerr << "FAIL: Modifying detached component affected shared asset!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> PASS: Flyweight binding, live synchronization, and MakeUnique() verified." << std::endl;
+    }
+
+    // -------------------------------------------------------------------------
+    // [28.4] Scene and Assembly Serialization Roundtrip with Flyweight Handles
+    // -------------------------------------------------------------------------
+    std::cout << "\n[28.4] Testing Scene & Assembly serialization with Flyweight Material handles..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        auto ent = scene->CreateEntity("VehicleWheel");
+        ent.AddComponent<Axle::TransformComponent>(glm::vec3(1.0f, 2.0f, 3.0f));
+        auto& mc = ent.AddComponent<Axle::MaterialComponent>();
+
+        auto sharedMat = Axle::AssetManager::GetMaterial(matPath);
+        Axle::UUID matUUID = Axle::AssetManager::GetAssetUUID(matPath);
+        mc.SetAsset(matUUID, sharedMat);
+
+        auto scenePath = testDir / "TestMaterialScene.axle";
+        Axle::SceneSerializer serializer(scene.get());
+        if (!serializer.Serialize(scenePath.string())) {
+            std::cerr << "FAIL: Scene serialization failed!" << std::endl;
+            return false;
+        }
+
+        // Deserialize into fresh scene
+        auto loadedScene = std::make_shared<Axle::Scene>();
+        Axle::SceneSerializer deserializer(loadedScene.get());
+        if (!deserializer.Deserialize(scenePath.string())) {
+            std::cerr << "FAIL: Scene deserialization failed!" << std::endl;
+            return false;
+        }
+
+        // Find entity
+        auto view = loadedScene->GetRegistry().view<Axle::TagComponent, Axle::MaterialComponent>();
+        bool found = false;
+        for (auto e : view) {
+            auto& tag = view.get<Axle::TagComponent>(e);
+            if (tag.Tag == "VehicleWheel") {
+                found = true;
+                auto& loadedMC = view.get<Axle::MaterialComponent>(e);
+                if (!loadedMC.HasAsset()) {
+                    std::cerr << "FAIL: Deserialized entity does not have bound asset!" << std::endl;
+                    return false;
+                }
+                if (loadedMC.MaterialHandle != matUUID) {
+                    std::cerr << "FAIL: Deserialized MaterialHandle mismatch!" << std::endl;
+                    return false;
+                }
+                if (std::abs(loadedMC.GetRoughness() - 0.55f) > 1e-3f) {
+                    std::cerr << "FAIL: Deserialized material roughness mismatch!" << std::endl;
+                    return false;
+                }
+                break;
+            }
+        }
+
+        if (!found) {
+            std::cerr << "FAIL: Serialized entity 'VehicleWheel' not found in loaded scene!" << std::endl;
+            return false;
+        }
+
+        // Also test Assembly serialization
+        auto assemblyPath = testDir / "WheelAssembly.axle";
+        if (!Axle::AssemblySerializer::Serialize(assemblyPath, ent)) {
+            std::cerr << "FAIL: AssemblySerializer::Serialize failed!" << std::endl;
+            return false;
+        }
+
+        auto assScene = std::make_shared<Axle::Scene>();
+        auto spawned = Axle::AssemblySerializer::Deserialize(assemblyPath, assScene.get());
+        if (!spawned || !spawned.HasComponent<Axle::MaterialComponent>()) {
+            std::cerr << "FAIL: Deserialize assembly failed or missing MaterialComponent!" << std::endl;
+            return false;
+        }
+
+        auto& spawnedMC = spawned.GetComponent<Axle::MaterialComponent>();
+        if (!spawnedMC.HasAsset() || spawnedMC.MaterialHandle != matUUID) {
+            std::cerr << "FAIL: Assembly spawned entity MaterialHandle not restored!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> PASS: Scene and Assembly serialization roundtrip preserved Flyweight Material handles." << std::endl;
+    }
+
+    // Cleanup
+    Axle::AssetManager::Shutdown();
+    std::filesystem::remove_all(testDir, ec);
+
+    std::cout << ">>> STEP 28 PASSED: Phase 24 Material & Flyweight Architecture verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -3869,12 +4132,13 @@ int main(int argc, char** argv) {
         else if (arg == "25" || arg == "step25" || arg == "--step25" || arg == "--phase20" || arg == "--phase20.1") targetStep = 25;
         else if (arg == "26" || arg == "step26" || arg == "--step26") targetStep = 26;
         else if (arg == "27" || arg == "step27" || arg == "--step27" || arg == "--phase23") targetStep = 27;
+        else if (arg == "28" || arg == "step28" || arg == "--step28" || arg == "--phase24") targetStep = 28;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 26 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 28 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -3962,6 +4226,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 27) {
         if (!RunTest_Step27_Phase23_PackageAndVFS()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 28) {
+        if (!RunTest_Step28_Phase24_MaterialAndFlyweight()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

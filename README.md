@@ -434,28 +434,28 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
       - **Editor Mode (Development)**: Direct transparent fallback to loose files on disk (`Assets/`) for live editing and instant hot-reloading.
   - [x] **Step 4 - Distribution Build Hygiene (`#ifdef AXLE_EDITOR` / Shipping Mode)**:
     - Standalone `AxleRuntime.exe` runs completely self-contained directly from `Data.axlepak` with zero loose asset dependencies and zero editor UI overhead.
-- [ ] **Phase 24: Decoupled Material Asset System & Flyweight Architecture (`Engine/Renderer`, `Engine/Asset` & `Engine/Scene`)**
-  - [ ] **Step 1 - Core `Axle::Material` Asset Class (`Engine/Renderer`)**:
+- [x] **Phase 24: Decoupled Material Asset System & Flyweight Architecture (`Engine/Renderer`, `Engine/Asset` & `Engine/Scene`)**
+  - [x] **Step 1 - Core `Axle::Material` Asset Class (`Engine/Renderer`)**:
     - Decouple material logic from UI/Scene into a first-class rendering asset: `Axle::Material` (`Engine/Renderer/include/Axle/Material.hpp` & `src/Material.cpp`).
     - Encapsulate PBR properties (AlbedoColor, Roughness, Metallic, NormalStrength, EmissionColor, EmissionIntensity, UVScale) and texture maps (`AlbedoMap`, `NormalMap`, `RoughnessMap`, `MetallicMap`).
     - Implement `Material::Bind(Shader& shader, ...)` encapsulating sampler binding slots (0: Albedo, 2: Normal, 3: Roughness, 4: Metallic) and uniform uploads.
     - Provide `Material::BindDefault(Shader& shader, ...)` replacing repetitive manual fallback texture binding logic across `Scene.cpp` and `SceneRenderer.cpp`.
     - Support built-in presets (Car Paint Red/Blue, Chrome, Gold, Copper, Rubber, Aluminum, Obsidian, Plastic, Cast Iron, LED Headlights/Taillights).
     - Implement standalone serialization & deserialization (`Save(path)` / `Load(path)`) supporting both loose disk files and VFS packages (`.amat` / `.axlemat`).
-  - [ ] **Step 2 - Centralized Asset Caching in `AssetManager` (`TextureCache` & `MaterialCache`)**:
+  - [x] **Step 2 - Centralized Asset Caching in `AssetManager` (`TextureCache` & `MaterialCache`)**:
     - Implement `TextureCache` in `Axle::AssetManager`: `GetTexture(const std::filesystem::path&)` and `GetTexture(UUID)`. Reuse already-loaded `Texture2D` instances across all materials and entities to eliminate duplicate GPU texture allocations.
     - Implement `MaterialCache` in `Axle::AssetManager`: `GetMaterial(const std::filesystem::path&)` and `GetMaterial(UUID)`.
     - Add real-time live reloading: `AssetManager::ReloadMaterial(handle)` automatically reloads modified properties in-place, instantly updating all entities in the active scene sharing that material without reloading the scene.
-  - [ ] **Step 3 - Flyweight `MaterialComponent` in ECS (`Engine/Scene`)**:
+  - [x] **Step 3 - Flyweight `MaterialComponent` in ECS (`Engine/Scene`)**:
     - Refactor `MaterialComponent`: store `UUID MaterialHandle` (8-byte asset handle) and a cached `std::shared_ptr<Material>` reference instead of duplicating bulky material parameter blocks per entity.
     - Support instance overrides / unique materials via `MakeUnique()` (Unity/Unreal style).
     - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize `MaterialHandle` with seamless backward-compatible fallback for legacy inline material parameters.
-  - [ ] **Step 4 - Unified Editor Workflow & Real-Time Sync (`Engine/UI` & `Editor`)**:
+  - [x] **Step 4 - Unified Editor Workflow & Real-Time Sync (`Engine/UI` & `Editor`)**:
     - Update `SceneHierarchyPanel`:
       - Properties panel displays the bound Material Asset slot (Name, UUID badge, clear/unlink button) with drag-and-drop support from Content Browser.
       - Tuning sliders on a shared Material Asset immediately propagate visual updates to all scene entities referencing that material in real time.
     - Viewport drag-and-drop: dragging `.amat` / `.axlemat` onto an entity attaches the shared `MaterialHandle` rather than cloning values by-value.
-  - [ ] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
+  - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
     - Add Step 28 test verifying `Material` class lifecycle, `TextureCache` deduplication (1 texture loaded once across multiple materials), `MaterialCache` live updates, and `MaterialComponent` Flyweight handle serialization roundtrip.
 - [ ] **Phase 25: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).

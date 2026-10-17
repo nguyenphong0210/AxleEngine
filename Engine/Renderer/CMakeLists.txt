@@ -11,6 +11,7 @@ add_library(AxleRenderer STATIC
     src/Texture2D.cpp
     src/stb_image.cpp
     src/Skybox.cpp
+    src/Material.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

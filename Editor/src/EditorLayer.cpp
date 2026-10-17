@@ -1951,17 +1951,18 @@ void EditorLayer::OnImGuiRender() {
                     }
                 }
 
-                Axle::MaterialComponent droppedMat;
-                if (Axle::SceneHierarchyPanel::LoadMaterialAsset(assetPath, droppedMat)) {
+                Axle::UUID matUUID = Axle::AssetManager::GetAssetUUID(assetPath);
+                auto matAsset = Axle::AssetManager::GetMaterial(assetPath);
+                if (matAsset) {
                     if (hitEntity) {
                         if (hitEntity.HasComponent<Axle::MaterialComponent>()) {
-                            hitEntity.GetComponent<Axle::MaterialComponent>() = droppedMat;
+                            hitEntity.GetComponent<Axle::MaterialComponent>().SetAsset(matUUID, matAsset);
                         } else {
-                            hitEntity.AddComponent<Axle::MaterialComponent>(droppedMat);
+                            hitEntity.AddComponent<Axle::MaterialComponent>(matUUID, matAsset);
                         }
                         m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
-                        AXLE_INFO("Applied Material '{0}' onto Entity '{1}' in Viewport",
-                            assetPath.stem().string(), hitEntity.GetName());
+                        AXLE_INFO("Applied Shared Material Asset '{0}' onto Entity '{1}' (Handle: {2})",
+                            assetPath.stem().string(), hitEntity.GetName(), (uint64_t)matUUID);
                     } else {
                         m_SceneHierarchyPanel.SetSelectedAsset(assetPath);
                     }

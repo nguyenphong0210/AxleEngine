@@ -2,6 +2,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/AssetManager.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 
@@ -230,6 +231,12 @@ namespace Axle {
             if (entity.HasComponent<MaterialComponent>()) {
                 auto& mat = entity.GetComponent<MaterialComponent>();
                 ss << "    MaterialComponent:\n";
+                if (mat.HasAsset()) {
+                    ss << "      MaterialHandle: " << (uint64_t)mat.MaterialHandle << "\n";
+                    if (!mat.MaterialAsset->GetFilePath().empty()) {
+                        ss << "      AssetPath: " << mat.MaterialAsset->GetFilePath().string() << "\n";
+                    }
+                }
                 ss << "      AlbedoPath: " << mat.AlbedoPath << "\n";
                 ss << "      UseAlbedoMap: " << (mat.UseAlbedoMap ? "true" : "false") << "\n";
                 ss << "      AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
@@ -645,7 +652,18 @@ namespace Axle {
                             currentEntity.AddComponent<MaterialComponent>();
                         }
                         auto& mat = currentEntity.GetComponent<MaterialComponent>();
-                        if (trimmed.rfind("AlbedoPath:", 0) == 0) {
+                        if (trimmed.rfind("MaterialHandle:", 0) == 0) {
+                            mat.MaterialHandle = std::stoull(Trim(trimmed.substr(15)));
+                            if (mat.MaterialHandle != 0) {
+                                mat.MaterialAsset = AssetManager::GetMaterial(mat.MaterialHandle);
+                            }
+                        } else if (trimmed.rfind("AssetPath:", 0) == 0) {
+                            std::string path = Trim(trimmed.substr(10));
+                            if (!path.empty() && !mat.MaterialAsset) {
+                                mat.MaterialAsset = AssetManager::GetMaterial(path);
+                                if (mat.MaterialAsset) mat.MaterialHandle = mat.MaterialAsset->GetHandle();
+                            }
+                        } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
                             std::string p = Trim(trimmed.substr(11));
                             if (!p.empty()) mat.SetAlbedo(p);
                         } else if (trimmed.rfind("UseAlbedoMap:", 0) == 0) {

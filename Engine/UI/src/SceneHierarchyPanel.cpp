@@ -12,6 +12,7 @@
 #include <Axle/Log.hpp>
 #include <Axle/Texture2D.hpp>
 #include <Axle/PhysicsMaterial.hpp>
+#include <Axle/AssetManager.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -1267,6 +1268,63 @@ namespace Axle {
         // Material Component (PBR Textures & Parameters)
         // Material Component (PBR Textures & Parameters)
         DrawComponent<MaterialComponent>("PBR Material", entity, [&](MaterialComponent& mat) {
+            // 0. Material Asset Slot (Flyweight Handle & Drag-Drop)
+            ImGui::Text("Material Asset:");
+            ImGui::SameLine();
+            if (mat.HasAsset()) {
+                std::string matName = mat.MaterialAsset->GetName();
+                if (matName.empty()) matName = "Material";
+                std::string label = matName + " [#" + std::to_string((uint64_t)mat.MaterialHandle).substr(0, 8) + "...]";
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.40f, 0.65f, 0.85f));
+                ImGui::Button(label.c_str(), ImVec2(ImGui::GetContentRegionAvail().x - 65.0f, 24.0f));
+                ImGui::PopStyleColor();
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Shared Material Asset: %s\nUUID: %llu\n(Edits synchronize across all entities sharing this asset)",
+                        matName.c_str(), (unsigned long long)mat.MaterialHandle);
+                }
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.20f, 0.24f, 0.85f));
+                ImGui::Button("None (Local Instance)", ImVec2(ImGui::GetContentRegionAvail().x - 65.0f, 24.0f));
+                ImGui::PopStyleColor();
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Local Material: values are stored directly on this entity.\nDrag an .amat / .axlemat file here to bind a shared asset.");
+                }
+            }
+
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    const char* pathStr = static_cast<const char*>(payload->Data);
+                    std::filesystem::path droppedPath(pathStr);
+                    std::string ext = droppedPath.extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                    if (ext == ".amat" || ext == ".axlemat" || ext == ".mat") {
+                        UUID handle = AssetManager::GetAssetUUID(droppedPath);
+                        auto asset = AssetManager::GetMaterial(droppedPath);
+                        if (asset) {
+                            mat.SetAsset(handle, asset);
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            ImGui::SameLine();
+            if (mat.HasAsset()) {
+                if (ImGui::Button("Unlink", ImVec2(60.0f, 24.0f))) {
+                    mat.MakeUnique();
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Make Unique: detach from shared asset and create independent instance");
+                }
+            } else {
+                ImGui::BeginDisabled();
+                ImGui::Button("Inline", ImVec2(60.0f, 24.0f));
+                ImGui::EndDisabled();
+            }
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
             // 1. Material Classification & Summary Badges
             bool isMetal = (mat.Metallic >= 0.8f);
             const char* typeBadge = isMetal ? "Conductor (Metallic)" : "Dielectric (Non-Metal)";
@@ -3184,16 +3242,29 @@ namespace Axle {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.45f, 0.25f, 1.0f));
         if (ImGui::Button("Save Material Asset", ImVec2(availW, 30.0f)) || changed) {
             SaveMaterialAsset(path, m_ActiveMaterialAsset);
+            AssetManager::ReloadMaterial(path);
         }
         ImGui::PopStyleColor(3);
 
         if (m_SelectedEntity && m_Scene && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity)) {
             ImGui::Spacing();
             if (ImGui::Button("Apply to Selected Entity", ImVec2(availW, 26.0f))) {
+                UUID handle = AssetManager::GetAssetUUID(path);
+                auto matAsset = AssetManager::GetMaterial(path);
                 if (m_SelectedEntity.HasComponent<MaterialComponent>()) {
-                    m_SelectedEntity.GetComponent<MaterialComponent>() = m_ActiveMaterialAsset;
+                    auto& mc = m_SelectedEntity.GetComponent<MaterialComponent>();
+                    if (matAsset) {
+                        mc.SetAsset(handle, matAsset);
+                    } else {
+                        mc = m_ActiveMaterialAsset;
+                    }
                 } else {
-                    m_SelectedEntity.AddComponent<MaterialComponent>(m_ActiveMaterialAsset);
+                    auto& mc = m_SelectedEntity.AddComponent<MaterialComponent>();
+                    if (matAsset) {
+                        mc.SetAsset(handle, matAsset);
+                    } else {
+                        mc = m_ActiveMaterialAsset;
+                    }
                 }
             }
         }

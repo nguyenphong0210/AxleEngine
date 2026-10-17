@@ -3,9 +3,12 @@
 #include <Axle/UUID.hpp>
 #include <Axle/AssetMetadata.hpp>
 #include <Axle/AssetMetadataSerializer.hpp>
+#include <Axle/Texture2D.hpp>
+#include <Axle/Material.hpp>
 #include <filesystem>
 #include <unordered_map>
 #include <mutex>
+#include <memory>
 
 namespace Axle {
 
@@ -42,6 +45,21 @@ namespace Axle {
         static const std::filesystem::path& GetAssetDirectory();
         static void SetAssetDirectory(const std::filesystem::path& dir);
 
+        // ---------------------------------------------------------------------
+        // Centralized Resource Cache (TextureCache & MaterialCache)
+        // ---------------------------------------------------------------------
+        // Texture Cache
+        static std::shared_ptr<Texture2D> GetTexture(const std::filesystem::path& path);
+        static std::shared_ptr<Texture2D> GetTexture(UUID uuid);
+        static void ClearTextureCache();
+
+        // Material Cache
+        static std::shared_ptr<Material> GetMaterial(const std::filesystem::path& path);
+        static std::shared_ptr<Material> GetMaterial(UUID uuid);
+        static void ReloadMaterial(UUID uuid);
+        static void ReloadMaterial(const std::filesystem::path& path);
+        static void ClearMaterialCache();
+
     private:
         static std::string NormalizePathKey(const std::filesystem::path& path);
 
@@ -49,6 +67,12 @@ namespace Axle {
         static std::filesystem::path s_AssetDirectory;
         static std::unordered_map<UUID, AssetMetadata> s_Assets;
         static std::unordered_map<std::string, UUID> s_PathToUUID;
+
+        static std::unordered_map<std::string, std::shared_ptr<Texture2D>> s_TextureCacheByPath;
+        static std::unordered_map<UUID, std::shared_ptr<Texture2D>> s_TextureCacheByUUID;
+        static std::unordered_map<UUID, std::shared_ptr<Material>> s_MaterialCacheByUUID;
+        static std::unordered_map<std::string, std::shared_ptr<Material>> s_MaterialCacheByPath;
+
         static std::recursive_mutex s_AssetMutex;
         static bool s_Initialized;
     };

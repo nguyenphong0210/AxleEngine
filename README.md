@@ -527,6 +527,9 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - Interactive audio preview controls in Inspector: Play, Pause, Stop, Volume/Pitch sliders, and viewport gizmo visualization for 3D min/max hearing radius.
   - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
     - Add Step 31 test in `Editor/src/Test.cpp` verifying headless Audio Subsystem initialization, audio clip decoding, 3D spatial calculations, vehicle audio telemetry binding, and ECS serialization roundtrip.
+  - [x] **Vehicle Audio Sample Pack Deployment (`Editor/assets/audio/`)**:
+    - Downloaded and configured open-source vehicle WAV sound clips (`Engine_Power.wav`, `Engine_Coast.wav`, `Tire_Squeal.wav`, `Suspension_Thud.wav`, `Collision_Impact.wav`) with `.meta` UUID companion files.
+    - Assigned `VehicleAudioComponent` and `AudioListenerComponent` directly onto the Player Car and Main Camera in `Editor/assets/scenes/CarTest.axlescene`.
 - [ ] **Phase 28: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
   - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.

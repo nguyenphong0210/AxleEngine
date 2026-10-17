@@ -263,6 +263,27 @@ Entities:
       DefaultSuspensionDamping: 0.500000
       FourWheelDrive: true
       CenterOfMassOffset: [ 0.000000 , -0.200000 , 0.000000 ]
+    VehicleAudioComponent:
+      Enabled: true
+      EnginePowerClipPath: assets/audio/Engine_Power.wav
+      EngineCoastClipPath: assets/audio/Engine_Coast.wav
+      MinEnginePitch: 0.800000
+      MaxEnginePitch: 2.600000
+      EngineMasterVolume: 0.850000
+      ThrottleSmoothing: 8.000000
+      TireSquealClipPath: assets/audio/Tire_Squeal.wav
+      SlipThreshold: 0.200000
+      TireSquealMasterVolume: 0.700000
+      TireSquealFadeSpeed: 12.000000
+      SuspensionThudClipPath: assets/audio/Suspension_Thud.wav
+      SuspensionThudThreshold: 1.500000
+      SuspensionMasterVolume: 0.800000
+      CollisionImpactClipPath: assets/audio/Collision_Impact.wav
+      CollisionDecelThreshold: 15.000000
+      CollisionMasterVolume: 1.000000
+      Spatialized: true
+      MinDistance: 2.000000
+      MaxDistance: 60.000000
   - Entity: 14508017990534648314
     TagComponent:
       Tag: Ground
@@ -356,6 +377,8 @@ Entities:
       FOV: 45.000000
       NearClip: 0.100000
       FarClip: 1000.000000
+    AudioListenerComponent:
+      Active: true
     NativeScriptComponent:
       ScriptName: VehicleChaseCamera
 

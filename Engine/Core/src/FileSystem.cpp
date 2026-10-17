@@ -98,6 +98,14 @@ namespace Axle {
             return resolved;
         }
 
+        std::string relStr = relativePath.generic_string();
+        if (relStr.rfind("assets/", 0) == 0) {
+            auto subCandidate = GetAssetDirectory() / relStr.substr(7);
+            if (std::filesystem::exists(subCandidate)) {
+                return subCandidate;
+            }
+        }
+
         // 2. Try against Engine Resources (Engine/Resources or Resources in binary dir)
         static const std::vector<std::filesystem::path> s_ResourceRoots = {
             "Engine/Resources",

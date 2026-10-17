@@ -394,16 +394,53 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Input System & Hotkey Hygiene**:
     - [x] Fix debouncing bug on `F11` (proper toggle between Maximize and Restore).
     - [x] Resolve hotkey conflict between single-frame step `O` in Pause mode and `Ctrl + O` (Open Scene/Project).
-- [ ] **Phase 21: Audio System (`Engine/Audio`)**
+- [ ] **Phase 21: Decoupled Scene Renderer Architecture (`Engine/Renderer`)**
+  - [ ] **Step 1 - Core `SceneRenderer` Class**:
+    - Encapsulate the full OpenGL rendering pipeline into `Axle::SceneRenderer` (`Engine/Renderer/include/Axle/SceneRenderer.hpp` & `src/SceneRenderer.cpp`).
+    - Decouple Shadow Depth Pass (`RenderShadowPass`), PBR Lighting Pass (directional sunlight, Cook-Torrance BRDF, fallback textures 1x1), Atmospheric Skybox Pass, and Tonemapping/Gamma post-processing out of `EditorLayer.cpp`.
+    - Support flexible render targets: Render to offscreen `Framebuffer` (for Editor viewport) or render directly to Default Backbuffer / Screen (`nullptr` for standalone games).
+  - [ ] **Step 2 - Render Context & Multi-Pass Pipeline**:
+    - Define `SceneRenderSettings` (shadows toggle, skybox toggle, debug wireframes, tonemapping mode, exposure).
+    - Implement `SceneRenderer::BeginScene(const PerspectiveCamera& camera, const SceneRenderSettings& settings)`, `SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, const std::shared_ptr<Framebuffer>& targetFBO)`, and `SceneRenderer::EndScene()`.
+    - Integrate `PhysicsDebugRenderer` directly into `SceneRenderer` optional debug pass.
+  - [ ] **Step 3 - EditorLayer Refactoring**:
+    - Replace 150+ lines of low-level OpenGL draw and texture binding loops in `EditorLayer::OnUpdate()` with high-level `m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer)`.
+    - Validate identical visual fidelity, zero performance regression, and clean separation of concerns.
+- [ ] **Phase 22: Standalone Game Runtime Player (`AxleRuntime.exe`)**
+  - [ ] **Step 1 - Standalone Executable Target (`Runtime/` or `Game/`)**:
+    - Add CMake target `add_executable(AxleRuntime src/Main.cpp src/RuntimeLayer.cpp)` completely detached from `Axle::UI` (Zero ImGui / ImGuizmo dependency for minimal binary footprint and maximum FPS).
+    - Link core engine libraries: `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, `Axle::Scene`, `Axle::Physics`, `Axle::Vehicle`, `Axle::Project`, `Axle::Asset`.
+  - [ ] **Step 2 - Clean Runtime Layer (`RuntimeLayer`)**:
+    - Implement headless/fullscreen game window lifecycle matching active monitor display mode.
+    - Load project configuration (`.axleproj`) and deserialize startup scene (`StartScene`).
+    - Initialize runtime simulation: `Scene::OnRuntimeStart(m_PhysicsScene.get())`.
+    - Main game loop: `m_PhysicsScene->Step(ts)`, `Scene::OnUpdateRuntime(ts)`, query `PrimaryCameraEntity`, and render directly to screen backbuffer via `m_SceneRenderer->RenderScene(...)`.
+  - [ ] **Step 3 - Game Controls & Windowing Ergonomics**:
+    - Dynamic script hotkeys & input routing directly to `CarController.hpp` and active gameplay scripts.
+    - Fullscreen toggle (`Alt+Enter` / `F11`), Pause menu toggle (`Escape`), and smooth exit handling.
+    - Automated build script update in `build.sh` (`--game` or `--runtime` flag to compile and run `AxleRuntime.exe`).
+- [ ] **Phase 23: Asset Packaging & Cooking Pipeline (`.axlepak` & VFS)**
+  - [ ] **Step 1 - Binary Package Specification (`.axlepak`)**:
+    - Design compact binary archive format with magic header (`AXPAK`), compression/encryption flags, asset table of contents (TOC: UUIDs, relative virtual paths, byte offsets, uncompressed/compressed sizes), and packed asset data blocks.
+  - [ ] **Step 2 - In-Editor Asset Cooker & Project Exporter (`Engine/Asset` & `Engine/UI`)**:
+    - Implement `AssetCooker`: Parse all referenced assets (`.axlescene`, `.axlebin`, pre-baked textures, shaders, scripts) in active project, compile text `.axle` to `.axlebin`, and serialize into a monolithic `Data.axlepak` file.
+    - Add Editor Main Menu action: `File -> Export Game / Package Project...` with destination folder selector, outputting standalone executable `AxleRuntime.exe`, `AxleScripts.dll`, and `Data.axlepak`.
+  - [ ] **Step 3 - Virtual File System (VFS) Integration (`Engine/Core` & `Engine/Asset`)**:
+    - Upgrade `Axle::FileSystem`: Seamless fallback mechanism.
+      - **Runtime Mode (Distribution)**: Mount `Data.axlepak` into memory-mapped VFS; transparently serve assets by virtual path or UUID.
+      - **Editor Mode (Development)**: Directly access loose files from disk (`Assets/`) for live editing and instant hot-reloading.
+  - [ ] **Step 4 - Distribution Build Hygiene (`#ifdef AXLE_EDITOR` / Shipping Mode)**:
+    - Eliminate unused editor reflection strings, tooltip buffers, and editor gizmo logic from runtime compilation to minimize binary size and memory footprint.
+- [ ] **Phase 24: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
-- [ ] **Phase 22: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
+- [ ] **Phase 25: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
   - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.
   - [ ] **Splatmap Texture Painting**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
   - [ ] **Chunked Grid & Multithreaded LOD**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
   - [ ] **Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
-- [ ] **Phase 23: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
+- [ ] **Phase 26: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
   - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights via Assemblies.
   - [ ] **Dynamic In-Car Dashboard & HUD**: Real-time tachometer (RPM), speedometer (km/h), current gear, and turbo boost indicator.
   - [ ] **Multi-Angle Camera Controller**: Chase camera, first-person cockpit camera, hood camera, and free-orbit replay camera.

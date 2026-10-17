@@ -457,16 +457,47 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - Viewport drag-and-drop: dragging `.amat` / `.axlemat` onto an entity attaches the shared `MaterialHandle` rather than cloning values by-value.
   - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
     - Add Step 28 test verifying `Material` class lifecycle, `TextureCache` deduplication (1 texture loaded once across multiple materials), `MaterialCache` live updates, and `MaterialComponent` Flyweight handle serialization roundtrip.
-- [ ] **Phase 25: Audio System (`Engine/Audio`)**
+- [ ] **Phase 25: AAA Soft Shadows & Precision Lighting Pipeline (`Engine/Renderer`, `Engine/Scene` & `Engine/UI`)**
+  - [ ] **Step 1 - Hardware Bilinear PCF (`ShadowMap` in `Engine/Renderer`)**:
+    - Upgrade `Axle::ShadowMap`: configure depth texture with `GL_TEXTURE_COMPARE_MODE = GL_COMPARE_REF_TO_TEXTURE` and `GL_TEXTURE_COMPARE_FUNC = GL_LEQUAL`.
+    - Enable hardware-accelerated 2x2 bilinear percentage-closer filtering natively on the GPU during texture comparison fetch (`sampler2DShadow`).
+    - Add dynamic shadow map resolution configuration support (`1024`, `2048 High`, `4096 Ultra`).
+  - [ ] **Step 2 - 16-Tap Vogel Spiral / Poisson Disk Soft Shadows (`SceneRenderer` & Shaders)**:
+    - Upgrade embedded PBR shader in `SceneRenderer.cpp` and standalone shader `Checkerboard.frag`:
+      - Replace rigid 3x3 box grid with a 16-tap Vogel Spiral / Poisson Disk distribution with randomized rotation per pixel (interleaved gradient noise) to eliminate banding and diagonal 45° staircases.
+      - Calculate continuous depth comparison using `textureProj(u_ShadowMap, ...)` / `texture(u_ShadowMap, vec3(coords.xy, coords.z - bias))`.
+      - Implement slope-scaled normal bias with normal offset push to eliminate shadow acne and light leaking on steep surfaces.
+  - [ ] **Step 3 - Dynamic Ortho Size & Shadow Distance in `DirectionalLightComponent` (`Engine/Scene`)**:
+    - Extend `DirectionalLightComponent` with configurable shadow properties:
+      - `ShadowOrthoSize` (default: `20.0f` for crisp near-field shadows, configurable from `5.0m` to `150.0m`).
+      - `ShadowBias` (depth bias multiplier) and `ShadowNormalBias` (normal offset multiplier).
+      - `ShadowNearPlane` and `ShadowFarPlane`.
+      - `ShadowQuality` (1024, 2048, 4096).
+    - Update `SceneRenderer::BeginFrame` to read light settings and pass dynamic `OrthoSize` into `CalculateLightSpaceMatrix`.
+    - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize the new shadow properties.
+  - [ ] **Step 4 - Interactive Inspector UI & Real-Time Tuning (`Engine/UI`)**:
+    - Update `SceneHierarchyPanel`:
+      - Add dedicated **Shadow Settings** group inside `DirectionalLightComponent` inspector:
+        - `Shadow Coverage (Ortho Size)` slider (`5.0m` - `100.0m`).
+        - `Shadow Bias` & `Normal Offset` sliders.
+        - `Shadow Resolution` dropdown (`1024`, `2048 High`, `4096 Ultra`).
+      - Real-time feedback on 3D Viewport when adjusting sliders.
+  - [ ] **Step 5 - Automated Regression & Verification (`AxleTests.exe`)**:
+    - Add Step 29 test in `Editor/src/Test.cpp`:
+      - Test `ShadowMap` hardware comparison modes and dynamic resolution resizing.
+      - Test `DirectionalLightComponent` shadow tuning properties serialization roundtrip.
+      - Verify light space matrix calculation with variable ortho bounds.
+      - Run full test suite with 100% pass rate.
+- [ ] **Phase 26: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
-- [ ] **Phase 26: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
+- [ ] **Phase 27: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
   - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.
   - [ ] **Splatmap Texture Painting**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
   - [ ] **Chunked Grid & Multithreaded LOD**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
   - [ ] **Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
-- [ ] **Phase 27: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
+- [ ] **Phase 28: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
   - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights via Assemblies.
   - [ ] **Dynamic In-Car Dashboard & HUD**: Real-time tachometer (RPM), speedometer (km/h), current gear, and turbo boost indicator.
   - [ ] **Multi-Angle Camera Controller**: Chase camera, first-person cockpit camera, hood camera, and free-orbit replay camera.

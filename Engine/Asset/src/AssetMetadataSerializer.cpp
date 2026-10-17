@@ -39,7 +39,11 @@ namespace Axle {
         fout << "  UUID: " << (uint64_t)metadata.Handle << "\n";
         fout << "  Type: " << AssetTypeToString(metadata.Type) << "\n";
         if (!metadata.FilePath.empty()) {
-            fout << "  FilePath: " << metadata.FilePath.generic_string() << "\n";
+            std::filesystem::path p = metadata.FilePath;
+            if (p.is_absolute()) {
+                p = p.filename();
+            }
+            fout << "  FilePath: " << p.generic_string() << "\n";
         }
         fout.close();
         return true;

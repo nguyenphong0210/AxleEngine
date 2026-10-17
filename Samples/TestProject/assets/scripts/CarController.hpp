@@ -21,10 +21,11 @@ public:
 
 private:
     float m_CurrentSteering = 0.0f;
+    bool m_WasInputActive = false;
 
 public:
     void OnCreate() override {
-        AXLE_INFO("CarController: Attached to entity '{0}'", GetEntityName());
+        AXLE_INFO("CarController: Attached to entity '{0}' (Input window: {1})", GetEntityName(), (void*)Axle::Input::GetContext());
         ApplyTuning();
     }
 
@@ -78,7 +79,19 @@ public:
         }
 
         // 3. Dispatch to ECS VehicleComponent
-        vc.SetDriverInput(targetThrottle, m_CurrentSteering, targetBrake, handbrake);
+        const bool inputActive = (targetThrottle != 0.0f || std::abs(m_CurrentSteering) > 0.05f || targetBrake > 0.0f || handbrake);
+        if (inputActive || m_WasInputActive) {
+            vc.SetDriverInput(targetThrottle, m_CurrentSteering, targetBrake, handbrake);
+        }
+
+        // Log driver input state change for live console feedback
+        if (inputActive && !m_WasInputActive) {
+            AXLE_INFO("CarController: Driver input active [Throttle: {0:.1f}, Steer: {1:.2f}, Brake: {2:.1f}, Handbrake: {3}]",
+                targetThrottle, m_CurrentSteering, targetBrake, handbrake ? "YES" : "NO");
+            m_WasInputActive = true;
+        } else if (!inputActive && m_WasInputActive) {
+            m_WasInputActive = false;
+        }
 
         // 4. Update child wheel entities' MaxSteerAngle if steerable
         for (auto child : GetEntity().GetChildren()) {

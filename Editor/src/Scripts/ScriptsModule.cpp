@@ -1,11 +1,21 @@
 #include <Axle/ScriptModule.hpp>
+#include <Axle/Input.hpp>
 #include <Axle/Log.hpp>
 
 #if __has_include("AutoScripts.inc")
     #include "AutoScripts.inc"
 #endif
 
+struct GLFWwindow;
+
 extern "C" {
+
+    AXLE_SCRIPT_API void Axle_SetInputContext(void* window) {
+        if (window) {
+            Axle::Input::SetContext(static_cast<GLFWwindow*>(window));
+            AXLE_INFO("AxleScripts.dll: Input context synchronized (window: {0})", window);
+        }
+    }
 
     AXLE_SCRIPT_API void Axle_InitializeScripts(Axle::ScriptRegisterCallback registerCallback) {
         if (!registerCallback) {

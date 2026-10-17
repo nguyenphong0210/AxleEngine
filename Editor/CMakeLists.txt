@@ -93,6 +93,7 @@ add_custom_command(TARGET AxleTests POST_BUILD
 
 target_include_directories(AxleTests PRIVATE
     src
+    assets/scripts
 )
 
 target_link_libraries(AxleTests PRIVATE

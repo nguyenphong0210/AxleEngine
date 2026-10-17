@@ -182,8 +182,8 @@ Entities:
     TagComponent:
       Tag: Ground
     TransformComponent:
-      Translation: [ 0.000000 , -0.500000 , 0.000000 ]
-      Rotation: [ 7.106335 , 0.000000 , 0.000000 , 0.000000 ]
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 100.000000 , 1.000000 , 100.000000 ]
     MeshInstance3D:
       AssetPath: builtin://plane
@@ -204,7 +204,7 @@ Entities:
       Radius: 50.000000
       HalfHeight: 0.500000
       Offset: [ 0.000000 , 0.000000 , 0.000000 ]
-      Friction: 0.500000
+      Friction: 0.800000
       Restitution: 0.000000
       IsTrigger: false
     HierarchyComponent:

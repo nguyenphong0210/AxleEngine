@@ -17,6 +17,11 @@ namespace Axle {
 
     // Converts GLM Quaternion to Jolt Quat (GLM order: w, x, y, z -> Jolt: x, y, z, w)
     inline JPH::Quat ToJolt(const glm::quat& q) {
+        float len2 = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
+        if (len2 > 1e-6f && std::abs(len2 - 1.0f) > 1e-4f) {
+            float invLen = 1.0f / std::sqrt(len2);
+            return JPH::Quat(q.x * invLen, q.y * invLen, q.z * invLen, q.w * invLen);
+        }
         return JPH::Quat(q.x, q.y, q.z, q.w);
     }
 

@@ -367,11 +367,21 @@ namespace Axle {
                 if (m_Registry.all_of<VehicleComponent>(entity)) {
                     continue; // Skip vehicle chassis; transform is managed by Vehicle physics controller with COM compensation
                 }
-                auto& tc = m_Registry.get<TransformComponent>(entity);
                 const auto& rb = m_Registry.get<RigidBody3D>(entity);
+                if (rb.MotionType == BodyMotionType::Static) {
+                    continue; // Static bodies never move; prevents visual mesh drift when collider has offset
+                }
+
+                auto& tc = m_Registry.get<TransformComponent>(entity);
                 if (!rb.RuntimeBodyID.IsInvalid()) {
                     glm::vec3 worldPos = physicsScene->GetBodyPosition(rb.RuntimeBodyID);
                     glm::quat worldRot = physicsScene->GetBodyRotation(rb.RuntimeBodyID);
+
+                    // Compensate for collider offset so TransformComponent represents the entity origin
+                    if (m_Registry.all_of<CollisionShape3D>(entity)) {
+                        const auto& cs = m_Registry.get<CollisionShape3D>(entity);
+                        worldPos -= worldRot * cs.Offset;
+                    }
 
                     // If entity is in a hierarchy with an active parent, convert world space to local space
                     if (m_Registry.all_of<HierarchyComponent>(entity)) {

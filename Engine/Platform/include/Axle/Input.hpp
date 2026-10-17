@@ -9,6 +9,7 @@ namespace Axle {
     class Input {
     public:
         static void SetContext(GLFWwindow* window);
+        static GLFWwindow* GetContext() { return s_WindowContext; }
 
         static bool IsKeyPressed(KeyCode key);
         static bool IsMouseButtonPressed(MouseCode button);

@@ -3502,6 +3502,143 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
 }
 
 // =============================================================================
+// TEST STEP 26: Diagnostic CarTest Scene Simulation
+// =============================================================================
+bool RunTest_Step26_CarTestSceneSimulate() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 26 TEST] DIAGNOSTIC CARTEST SCENE SIMULATION     " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::filesystem::path scenePath = "Editor/assets/scenes/CarTest.axlescene";
+    if (!std::filesystem::exists(scenePath)) {
+        scenePath = "assets/scenes/CarTest.axlescene";
+    }
+    std::cout << "[26.1] Checking scene file: " << scenePath << std::endl;
+    if (!std::filesystem::exists(scenePath)) {
+        std::cerr << "FAIL: CarTest.axlescene does not exist!" << std::endl;
+        return false;
+    }
+
+    // Initialize ScriptHotReloadManager to load AxleScripts.dll
+    std::filesystem::path dllPath = "build/Editor/Release/AxleScripts.dll";
+    if (!std::filesystem::exists(dllPath)) dllPath = "AxleScripts.dll";
+    bool initOK = Axle::ScriptHotReloadManager::Get().Initialize(dllPath);
+    std::cout << "[26.0] ScriptHotReloadManager::Initialize result: " << initOK << std::endl;
+    const auto* meta = Axle::ScriptRegistry::GetMetadata("CarController");
+    std::cout << "[26.0] ScriptRegistry::GetMetadata('CarController'): " << (meta ? "FOUND" : "NULL") << std::endl;
+
+    auto scene = std::make_shared<Axle::Scene>();
+    auto physicsScene = std::make_unique<Axle::PhysicsScene>();
+
+    Axle::SceneSerializer serializer(scene.get(), physicsScene.get());
+    bool loaded = serializer.Deserialize(scenePath);
+    if (!loaded) {
+        std::cerr << "FAIL: Could not deserialize " << scenePath << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Deserialized scene successfully. Total physics bodies: " 
+              << physicsScene->GetNumBodies() << std::endl;
+
+    // Check Ground entity
+    Axle::Entity ground;
+    Axle::Entity car;
+    auto tagView = scene->GetRegistry().view<Axle::TagComponent>();
+    for (auto e : tagView) {
+        if (tagView.get<Axle::TagComponent>(e).Tag == "Ground") ground = Axle::Entity{ e, scene.get() };
+        if (tagView.get<Axle::TagComponent>(e).Tag == "Car") car = Axle::Entity{ e, scene.get() };
+    }
+
+    if (ground) {
+        auto& tc = ground.GetComponent<Axle::TransformComponent>();
+        std::cout << "  -> Ground Translation: [" << tc.Translation.x << ", " << tc.Translation.y << ", " << tc.Translation.z << "]" << std::endl;
+        if (ground.HasComponent<Axle::CollisionShape3D>()) {
+            auto& cs = ground.GetComponent<Axle::CollisionShape3D>();
+            std::cout << "  -> Ground ShapeType: " << (int)cs.ShapeType << ", HalfExtent: [" 
+                      << cs.HalfExtent.x << ", " << cs.HalfExtent.y << ", " << cs.HalfExtent.z << "]"
+                      << ", Offset: [" << cs.Offset.x << ", " << cs.Offset.y << ", " << cs.Offset.z << "]" << std::endl;
+        }
+        if (ground.HasComponent<Axle::RigidBody3D>()) {
+            auto& rb = ground.GetComponent<Axle::RigidBody3D>();
+            std::cout << "  -> Ground BodyID: " << rb.RuntimeBodyID.GetIndexAndSequenceNumber() 
+                      << ", IsValid: " << physicsScene->IsBodyValid(rb.RuntimeBodyID) << std::endl;
+            if (physicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                glm::vec3 pos = physicsScene->GetBodyPosition(rb.RuntimeBodyID);
+                std::cout << "  -> Ground Physics Body Position: [" << pos.x << ", " << pos.y << ", " << pos.z << "]" << std::endl;
+            }
+        }
+    }
+
+    // Check Car entity
+    if (!car) {
+        std::cerr << "FAIL: Entity 'Car' not found!" << std::endl;
+        return false;
+    }
+    auto& carTC = car.GetComponent<Axle::TransformComponent>();
+    std::cout << "  -> Car Initial Translation: [" << carTC.Translation.x << ", " << carTC.Translation.y << ", " << carTC.Translation.z << "]" << std::endl;
+    std::cout << "  -> Car Child Count: " << car.GetChildCount() << std::endl;
+    for (auto child : car.GetChildren()) {
+        std::string tag = child.HasComponent<Axle::TagComponent>() ? child.GetComponent<Axle::TagComponent>().Tag : "Unknown";
+        auto& tc = child.GetComponent<Axle::TransformComponent>();
+        std::cout << "     * Child: " << tag << " Pos: [" << tc.Translation.x << ", " << tc.Translation.y << ", " << tc.Translation.z << "]";
+        if (child.HasComponent<Axle::WheelComponent>()) {
+            auto& wc = child.GetComponent<Axle::WheelComponent>();
+            std::cout << " [Radius: " << wc.Radius << ", Steer: " << wc.CanSteer << ", Driven: " << wc.IsDriven << "]";
+        }
+        std::cout << std::endl;
+    }
+
+    // Start Runtime
+    std::cout << "[26.2] Starting Runtime Simulation..." << std::endl;
+    scene->OnRuntimeStart(physicsScene.get());
+
+    auto* rv = scene->GetPrimaryRuntimeVehicle();
+    if (!rv) {
+        std::cerr << "FAIL: Primary runtime vehicle is null!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: Runtime vehicle created with " << rv->GetWheelCount() << " wheels." << std::endl;
+    std::cout << "  -> Initial vehicle pos: [" << rv->GetPosition().x << ", " << rv->GetPosition().y << ", " << rv->GetPosition().z << "]" << std::endl;
+
+    // Simulate 120 steps (2 seconds) under gravity with 0 throttle
+    std::cout << "[26.3] Stepping 60 frames (1 second) with 0 throttle (settling under gravity)..." << std::endl;
+    for (int step = 0; step < 60; ++step) {
+        physicsScene->Step(0.016f);
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    }
+
+    auto tele0 = rv->GetTelemetry();
+    std::cout << "  -> After 60 steps (settled): Pos: [" << tele0.Position.x << ", " << tele0.Position.y << ", " << tele0.Position.z 
+              << "] Speed: " << tele0.SpeedKmh << " km/h, Gear: " << tele0.CurrentGear << std::endl;
+    for (int i = 0; i < 4; ++i) {
+        std::cout << "     * Wheel " << i << ": Contact: " << (tele0.Wheels[i].HasContact ? "YES" : "NO")
+                  << ", SuspLength: " << tele0.Wheels[i].SuspensionLength 
+                  << ", WorldMat Y: " << tele0.Wheels[i].WorldTransform[3][1] << std::endl;
+    }
+
+    // Simulate 60 steps (1 second) with 100% throttle
+    std::cout << "[26.4] Applying 100% Throttle for 60 frames (1 second)..." << std::endl;
+    auto& vc = car.GetComponent<Axle::VehicleComponent>();
+    vc.SetDriverInput(1.0f, 0.0f, 0.0f, false);
+
+    for (int step = 0; step < 60; ++step) {
+        physicsScene->Step(0.016f);
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    }
+
+    auto tele1 = rv->GetTelemetry();
+    std::cout << "  -> After 60 steps with throttle: Pos: [" << tele1.Position.x << ", " << tele1.Position.y << ", " << tele1.Position.z 
+              << "] Speed: " << tele1.SpeedKmh << " km/h, RPM: " << tele1.EngineRPM << ", Gear: " << tele1.CurrentGear << std::endl;
+    for (int i = 0; i < 4; ++i) {
+        std::cout << "     * Wheel " << i << ": Contact: " << (tele1.Wheels[i].HasContact ? "YES" : "NO")
+                  << ", AngularVel: " << tele1.Wheels[i].AngularVelocity << std::endl;
+    }
+
+    scene->OnRuntimeStop(physicsScene.get());
+    std::cout << ">>> STEP 26 DIAGNOSTIC COMPLETE <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -3539,6 +3676,7 @@ int main(int argc, char** argv) {
         else if (arg == "23" || arg == "step23" || arg == "--step23" || arg == "--phase19.3") targetStep = 23;
         else if (arg == "24" || arg == "step24" || arg == "--step24" || arg == "--phase19.4") targetStep = 24;
         else if (arg == "25" || arg == "step25" || arg == "--step25" || arg == "--phase20" || arg == "--phase20.1") targetStep = 25;
+        else if (arg == "26" || arg == "step26" || arg == "--step26") targetStep = 26;
     }
 
     std::cout << "\n========================================================" << std::endl;
@@ -3627,10 +3765,14 @@ int main(int argc, char** argv) {
     if (targetStep == 0 || targetStep == 25) {
         if (!RunTest_Step25_Phase20_ComponentPerWheelVehicle()) allPassed = false;
     }
+    if (targetStep == 26) {
+        if (!RunTest_Step26_CarTestSceneSimulate()) allPassed = false;
+    }
 
     if (Axle::JobSystem::IsInitialized()) {
         Axle::JobSystem::Shutdown();
     }
+    Axle::ScriptHotReloadManager::Get().Shutdown();
 
     std::cout << "========================================================" << std::endl;
     if (allPassed) {

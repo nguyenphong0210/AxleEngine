@@ -36,6 +36,9 @@ EditorLayer::EditorLayer()
 void EditorLayer::OnAttach() {
     AXLE_INFO("EditorLayer attached - Initializing Axle Editor Environment");
 
+    auto& window = Axle::Application::Get().GetWindow();
+    Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(window.GetNativeWindow()));
+
     // Initialize Script Hot-Reload Manager and load AxleScripts.dll
     Axle::ScriptHotReloadManager::Get().Initialize("AxleScripts.dll");
 
@@ -51,7 +54,7 @@ void EditorLayer::OnAttach() {
     }
     AXLE_INFO("-----------------------------------------------------");
 
-    auto& window = Axle::Application::Get().GetWindow();
+    Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(window.GetNativeWindow()));
 
     // 1. Perspective Camera
     m_CameraController = std::make_unique<Axle::PerspectiveCameraController>(
@@ -617,11 +620,15 @@ void EditorLayer::OnAttach() {
 
 void EditorLayer::OnDetach() {
     AXLE_INFO("EditorLayer detached");
+    if (m_SceneState == SceneState::Play) {
+        OnSceneStop();
+    }
+    m_Scene.reset();
+    m_EditorScene.reset();
     Axle::ScriptHotReloadManager::Get().Shutdown();
     Axle::AssetManager::Shutdown();
     m_ShadowShader.reset();
     m_ShadowMap.reset();
-    m_Scene.reset();
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
     m_Framebuffer.reset();
@@ -748,6 +755,7 @@ void EditorLayer::OnScenePlay() {
     m_SceneHierarchyPanel.SetSelectedEntity({});
 
     m_SceneState = SceneState::Play;
+    Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(Axle::Application::Get().GetWindow().GetNativeWindow()));
     m_Scene->OnRuntimeStart(m_PhysicsScene.get());
     m_ChaseCamera = true;
     AXLE_INFO("Simulation started (Play Mode). Ephemeral Runtime Scene cloned from pristine Editor Scene.");
@@ -1398,6 +1406,33 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     // C++ Native Scripting Runtime Execution & Vehicle Simulation (Phase 20.3)
     if (m_SceneState == SceneState::Play) {
         m_Scene->OnUpdateRuntime(ts, m_PhysicsScene.get());
+
+        // Viewport Direct Driving Input (Guarantees WASD/Arrow driving responsiveness in Play Mode)
+        if (!ImGui::GetIO().WantTextInput) {
+            float throttle = 0.0f;
+            float steer = 0.0f;
+            float brake = 0.0f;
+            bool handbrake = false;
+
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::W) || Axle::Input::IsKeyPressed(Axle::KeyCode::Up)) throttle += 1.0f;
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::S) || Axle::Input::IsKeyPressed(Axle::KeyCode::Down)) throttle -= 1.0f;
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::A) || Axle::Input::IsKeyPressed(Axle::KeyCode::Left)) steer -= 1.0f;
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::D) || Axle::Input::IsKeyPressed(Axle::KeyCode::Right)) steer += 1.0f;
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) handbrake = true;
+
+            const bool hasKey = (throttle != 0.0f || steer != 0.0f || brake != 0.0f || handbrake);
+            if (hasKey) {
+                auto vehicleView = m_Scene->GetRegistry().view<Axle::VehicleComponent>();
+                for (auto entityID : vehicleView) {
+                    auto& vc = vehicleView.get<Axle::VehicleComponent>(entityID);
+                    vc.SetDriverInput(throttle, steer, brake, handbrake);
+                    if (auto* pv = m_Scene->GetRuntimeVehicle(Axle::Entity{ entityID, m_Scene.get() })) {
+                        pv->SetDriverInput(throttle, steer, brake, handbrake ? 1.0f : 0.0f);
+                    }
+                    break;
+                }
+            }
+        }
     }
 
     // Camera Update (Decoupled dynamic binding to active player vehicle or selected target entity)
@@ -1467,13 +1502,13 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         const Axle::f32 radPitch = glm::radians(m_OrbitPitch);
         constexpr Axle::f32 dist = 7.5f;
 
-        glm::vec3 offset;
-        offset.x = -std::sin(radYaw) * std::cos(radPitch) * dist;
-        offset.y = std::sin(radPitch) * dist + 1.2f;
-        offset.z = -std::cos(radYaw) * std::cos(radPitch) * dist;
-
         const glm::vec3 lookTarget = targetPos + glm::vec3(0.0f, 0.8f, 0.0f);
-        const glm::vec3 camPos = lookTarget - offset;
+
+        glm::vec3 camPos;
+        camPos.x = lookTarget.x + std::sin(radYaw) * std::cos(radPitch) * dist;
+        camPos.y = std::max(0.4f, lookTarget.y + std::sin(radPitch) * dist + 1.5f);
+        camPos.z = lookTarget.z + std::cos(radYaw) * std::cos(radPitch) * dist;
+
         const glm::vec3 lookDir = glm::normalize(lookTarget - camPos);
 
         const Axle::f32 pitch = glm::degrees(std::asin(std::clamp(lookDir.y, -0.999f, 0.999f)));

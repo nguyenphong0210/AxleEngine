@@ -3,6 +3,7 @@
 #include <Axle/ScriptModule.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/Input.hpp>
 #include <Axle/Log.hpp>
 #include <chrono>
 #include <system_error>
@@ -156,6 +157,9 @@ namespace Axle {
             return result;
         }
 
+        // Synchronize engine input context to newly loaded script DLL
+        SyncInputContext();
+
         // Phase 5: Query exports and register scripts into ScriptRegistry
         using GetCountFn = uint32_t(*)();
         using InitFn = void(*)(ScriptRegisterCallback);
@@ -208,6 +212,23 @@ namespace Axle {
         return fnGetCount ? fnGetCount() : 0;
 #else
         return 0;
+#endif
+    }
+
+    void ScriptHotReloadManager::SyncInputContext(void* windowContext) {
+        if (windowContext) {
+            m_WindowContext = windowContext;
+        } else if (!m_WindowContext) {
+            m_WindowContext = (void*)Input::GetContext();
+        }
+
+#ifdef _WIN32
+        if (!m_ModuleHandle || !m_WindowContext) return;
+        using SetInputFn = void(*)(void*);
+        auto fnSetInput = (SetInputFn)GetProcAddress((HMODULE)m_ModuleHandle, "Axle_SetInputContext");
+        if (fnSetInput) {
+            fnSetInput(m_WindowContext);
+        }
 #endif
     }
 

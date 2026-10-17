@@ -60,6 +60,7 @@ void EditorLayer::OnAttach() {
     AXLE_INFO("-----------------------------------------------------");
 
     Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(window.GetNativeWindow()));
+    Axle::ScriptHotReloadManager::Get().SyncImGuiContext(ImGui::GetCurrentContext());
 
     // 1. Perspective Camera
     m_CameraController = std::make_unique<Axle::PerspectiveCameraController>(
@@ -458,6 +459,7 @@ void EditorLayer::OnScenePlay() {
 
     m_SceneState = SceneState::Play;
     Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(Axle::Application::Get().GetWindow().GetNativeWindow()));
+    Axle::ScriptHotReloadManager::Get().SyncImGuiContext(ImGui::GetCurrentContext());
     m_Scene->OnRuntimeStart(m_PhysicsScene.get());
     m_UseEditorCameraInPlay = false;
     AXLE_INFO("Simulation started (Play Mode). Ephemeral Runtime Scene cloned from pristine Editor Scene.");
@@ -2422,6 +2424,11 @@ void EditorLayer::OnImGuiRender() {
         ImVec2 hintPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
         drawList->AddRectFilled(hintPos, ImVec2(hintPos.x + 440.0f, hintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
         drawList->AddText(ImVec2(hintPos.x + 8.0f, hintPos.y + 4.0f), IM_COL32(200, 210, 225, 255), "Gizmo: W/E/R | Q: Select | Click Mesh | RMB+WASD Fly");
+    }
+
+    // Dispatch General-Purpose ScriptableEntity::OnImGuiRender() for Active Simulation Scripts (Unity OnGUI / UE HUD style)
+    if (m_SceneState == SceneState::Play && m_Scene) {
+        m_Scene->OnImGuiRender();
     }
 
     ImGui::End();

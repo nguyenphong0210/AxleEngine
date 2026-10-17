@@ -77,6 +77,7 @@ namespace Axle {
         // Simulation runtime lifecycle & dynamic vehicle assembly (Phase 20.3 Stage 2)
         void OnRuntimeStart(PhysicsScene* physicsScene = nullptr);
         void OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene = nullptr);
+        void OnImGuiRender();
         void OnRuntimeStop(PhysicsScene* physicsScene = nullptr);
 
         // Dynamic vehicle query API

@@ -994,6 +994,16 @@ namespace Axle {
         }
     }
 
+    void Scene::OnImGuiRender() {
+        auto scriptView = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : scriptView) {
+            auto& nsc = scriptView.get<NativeScriptComponent>(entity);
+            if (nsc.Instance) {
+                nsc.Instance->OnImGuiRender();
+            }
+        }
+    }
+
     void Scene::OnRuntimeStop(PhysicsScene* physicsScene) {
         // Reset and clear runtime vehicles cleanly
         for (auto& rv : m_RuntimeVehicles) {

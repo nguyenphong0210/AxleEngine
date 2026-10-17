@@ -57,6 +57,7 @@ namespace Axle {
         uint32_t GetLoadedScriptCount() const;
 
         void SyncInputContext(void* windowContext = nullptr);
+        void SyncImGuiContext(void* imguiContext = nullptr);
 
         void SetActiveScene(std::shared_ptr<Scene> scene) { m_ActiveScene = scene; }
 
@@ -73,6 +74,7 @@ namespace Axle {
     private:
         void* m_ModuleHandle = nullptr;
         void* m_WindowContext = nullptr;
+        void* m_ImGuiContext = nullptr;
         std::filesystem::path m_SourceDllPath;
         std::filesystem::path m_CurrentRuntimeDllPath;
         std::vector<std::filesystem::path> m_OldRuntimeDlls;

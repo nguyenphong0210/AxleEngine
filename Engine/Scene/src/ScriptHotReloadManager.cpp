@@ -233,6 +233,23 @@ namespace Axle {
         if (fnSetInput) {
             fnSetInput(ctxToSend);
         }
+        if (m_ImGuiContext) {
+            SyncImGuiContext(m_ImGuiContext);
+        }
+#endif
+    }
+
+    void ScriptHotReloadManager::SyncImGuiContext(void* imguiContext) {
+        if (imguiContext) {
+            m_ImGuiContext = imguiContext;
+        }
+#ifdef _WIN32
+        if (!m_ModuleHandle || !m_ImGuiContext) return;
+        using SetImGuiFn = void(*)(void*);
+        auto fnSetImGui = (SetImGuiFn)GetProcAddress((HMODULE)m_ModuleHandle, "Axle_SetImGuiContext");
+        if (fnSetImGui) {
+            fnSetImGui(m_ImGuiContext);
+        }
 #endif
     }
 

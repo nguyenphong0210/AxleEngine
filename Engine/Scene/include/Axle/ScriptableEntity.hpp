@@ -24,6 +24,7 @@ namespace Axle {
         }
 
         Entity GetEntity() const { return m_Entity; }
+        void SetEntity(Entity entity) { m_Entity = entity; }
 
         // Hierarchy Traversal & Relationship Helpers
         Entity GetParent() const { return m_Entity.GetParent(); }
@@ -38,6 +39,7 @@ namespace Axle {
 
         virtual void OnCreate() {}
         virtual void OnUpdate(Timestep ts) {}
+        virtual void OnImGuiRender() {}
         virtual void OnDestroy() {}
 
     private:

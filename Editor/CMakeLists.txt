@@ -67,6 +67,7 @@ target_link_libraries(AxleScripts PRIVATE
     Axle::Scene
     Axle::Physics
     Axle::Vehicle
+    Axle::UI
 )
 
 # Synchronize Editor/assets to binary output directory on post-build

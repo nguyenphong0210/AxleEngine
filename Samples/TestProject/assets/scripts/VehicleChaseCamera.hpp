@@ -26,6 +26,10 @@ public:
     int CameraMode = 0;                 // 0: Third-Person Chase, 1: Cockpit Driver POV, 2: Hood/Bumper, 3: Free Orbit
 
     // Chase Camera Parameters
+    int DistanceLevel = 1;              // 0: Near, 1: Medium, 2: Far
+    float NearDistance = 5.2f;          // Close chase camera distance
+    float MediumDistance = 7.2f;        // Medium chase camera distance (default)
+    float FarDistance = 10.2f;          // Far chase camera distance
     float Distance = 7.2f;              // Orbit distance from chase target in meters
     float HeightOffset = 1.15f;         // Target focus point height above vehicle center
     float MinElevation = 0.35f;         // Minimum world Y height to prevent ground clipping
@@ -103,6 +107,9 @@ private:
     // Mode cycle hotkey debounce (Key V)
     bool m_VKeyWasPressed = false;
 
+    // Distance cycle hotkey debounce (Key C)
+    bool m_CKeyWasPressed = false;
+
     // Smooth transition interpolation between camera modes
     bool m_IsTransitioning = false;
     float m_TransitionTimer = 0.0f;
@@ -151,6 +158,16 @@ public:
             }
         } else {
             m_VKeyWasPressed = false;
+        }
+
+        // Hotkey 'C': Seamless cycle camera distance presets (Near -> Medium -> Far -> Near)
+        if (Axle::Input::IsKeyPressed(Axle::KeyCode::C)) {
+            if (!m_CKeyWasPressed) {
+                CycleDistancePreset();
+                m_CKeyWasPressed = true;
+            }
+        } else {
+            m_CKeyWasPressed = false;
         }
 
         // 2. Find target player vehicle in the scene
@@ -542,6 +559,38 @@ public:
         AXLE_INFO("VehicleChaseCamera: Switched to camera mode {0}", GetModeName(newMode));
     }
 
+    void CycleDistancePreset() {
+        DistanceLevel = (DistanceLevel + 1) % 3;
+        ApplyDistancePreset(DistanceLevel);
+    }
+
+    void ApplyDistancePreset(int level) {
+        DistanceLevel = std::clamp(level, 0, 2);
+        switch (DistanceLevel) {
+            case 0: // Near (Gần)
+                Distance = NearDistance;
+                ElevationOffset = 1.15f;
+                HeightOffset = 1.05f;
+                AXLE_INFO("VehicleChaseCamera: Distance set to Near ({0:.1f}m)", Distance);
+                break;
+            case 1: // Medium (Vừa)
+                Distance = MediumDistance;
+                ElevationOffset = 1.45f;
+                HeightOffset = 1.15f;
+                AXLE_INFO("VehicleChaseCamera: Distance set to Medium ({0:.1f}m)", Distance);
+                break;
+            case 2: // Far (Xa)
+                Distance = FarDistance;
+                ElevationOffset = 1.95f;
+                HeightOffset = 1.35f;
+                AXLE_INFO("VehicleChaseCamera: Distance set to Far ({0:.1f}m)", Distance);
+                break;
+        }
+        if (m_CurrentMode != VehicleCameraMode::ThirdPersonChase) {
+            SetCameraMode(VehicleCameraMode::ThirdPersonChase);
+        }
+    }
+
     VehicleCameraMode GetCameraMode() const { return m_CurrentMode; }
     bool IsTransitioning() const { return m_IsTransitioning; }
 
@@ -566,6 +615,10 @@ public:
         AXLE_FIELD(EnableRMBZoom, "Hold RMB to zoom in / cinematic focus (GTA style)"),
         AXLE_FIELD(RMBZoomFOV, 20.0f, 60.0f, "Target FOV when holding RMB focus"),
         AXLE_FIELD(AutoAlignDelay, 0.0f, 5.0f, "Seconds to wait before auto-aligning behind vehicle"),
+        AXLE_FIELD(DistanceLevel, 0, 2, "Distance Preset (0: Near, 1: Medium, 2: Far)"),
+        AXLE_FIELD(NearDistance, 2.0f, 15.0f, "Near distance preset in meters"),
+        AXLE_FIELD(MediumDistance, 3.0f, 20.0f, "Medium distance preset in meters"),
+        AXLE_FIELD(FarDistance, 5.0f, 30.0f, "Far distance preset in meters"),
         AXLE_FIELD(CameraMode, 0, 3, "Camera Mode (0: Chase, 1: Cockpit, 2: Hood, 3: Orbit)"),
         AXLE_FIELD(Distance, 2.0f, 30.0f, "Distance from chase target"),
         AXLE_FIELD(HeightOffset, -2.0f, 5.0f, "Height offset of focus point above target"),

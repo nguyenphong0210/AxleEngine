@@ -126,7 +126,7 @@ private:
     // Camera Viewport Mode (Phase 20.4: Game View vs Eject Free-Fly)
     bool m_UseEditorCameraInPlay = false;
     bool m_ActiveCameraIsSceneCamera = false;
-    bool m_CKeyWasPressed = false;
+    bool m_F2KeyWasPressed = false;
 
     // Scene & Entities (Phase 18.2: Safe Scene State Simulation)
     std::shared_ptr<Axle::Scene> m_Scene;        // Active Scene pointer

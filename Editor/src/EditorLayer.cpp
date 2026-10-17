@@ -1136,8 +1136,8 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         }
     }
 
-    if (Axle::Input::IsKeyPressed(Axle::KeyCode::C)) {
-        if (!m_CKeyWasPressed) {
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F2)) {
+        if (!m_F2KeyWasPressed) {
             m_UseEditorCameraInPlay = !m_UseEditorCameraInPlay;
             if (m_SceneState == SceneState::Play && m_UseEditorCameraInPlay && m_Scene) {
                 auto camEntity = m_Scene->GetPrimaryCameraEntity();
@@ -1151,10 +1151,10 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
                     m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
                 }
             }
-            m_CKeyWasPressed = true;
+            m_F2KeyWasPressed = true;
         }
     } else {
-        m_CKeyWasPressed = false;
+        m_F2KeyWasPressed = false;
     }
 
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::F1)) {
@@ -1808,13 +1808,13 @@ void EditorLayer::OnImGuiRender() {
         ImU32 badgeBorder = IM_COL32(46, 204, 113, 255);
 
         if (!m_UseEditorCameraInPlay && m_ActiveCameraIsSceneCamera) {
-            badgeText = "[ GAME VIEW: PRIMARY CAMERA ] - Press 'C' to Eject Free-Fly";
+            badgeText = "[ GAME VIEW: PRIMARY CAMERA ] - Press 'F2' to Eject Free-Fly";
             badgeBorder = IM_COL32(46, 204, 113, 255); // Green
         } else if (m_UseEditorCameraInPlay) {
-            badgeText = "[ EJECT FREE-FLY CAMERA ] - Press 'C' to Return to Game View";
+            badgeText = "[ EJECT FREE-FLY CAMERA ] - Press 'F2' to Return to Game View";
             badgeBorder = IM_COL32(241, 196, 15, 255); // Yellow
         } else {
-            badgeText = "[ NO PRIMARY CAMERA IN SCENE ] - Using Editor Camera (Press 'C')";
+            badgeText = "[ NO PRIMARY CAMERA IN SCENE ] - Using Editor Camera (Press 'F2')";
             badgeBorder = IM_COL32(231, 76, 60, 255);  // Red
         }
 
@@ -2416,8 +2416,8 @@ void EditorLayer::OnImGuiRender() {
             offsetX += 165.0f;
         }
         ImVec2 playHintPos = ImVec2(badgePos.x + offsetX, badgePos.y);
-        drawList->AddRectFilled(playHintPos, ImVec2(playHintPos.x + 550.0f, playHintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
-        drawList->AddText(ImVec2(playHintPos.x + 8.0f, playHintPos.y + 4.0f), IM_COL32(200, 210, 225, 255), "Drive: WASD / Space | Click LMB: Lock/Look | Esc / Shift+F1: Unlock | Hold RMB: Zoom | V: Cam");
+        drawList->AddRectFilled(playHintPos, ImVec2(playHintPos.x + 620.0f, playHintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
+        drawList->AddText(ImVec2(playHintPos.x + 8.0f, playHintPos.y + 4.0f), IM_COL32(200, 210, 225, 255), "Drive: WASD / Space | Click LMB: Lock/Look | Esc / Shift+F1: Unlock | C: Dist | F2: Free-Fly | V: Cam");
     } else if (m_SceneState == SceneState::Edit) {
         ImVec2 hintPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
         drawList->AddRectFilled(hintPos, ImVec2(hintPos.x + 440.0f, hintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);

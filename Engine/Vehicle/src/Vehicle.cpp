@@ -274,7 +274,16 @@ namespace Axle {
         if (!m_Constraint || wheelIndex >= static_cast<u32>(m_Constraint->GetWheels().size())) {
             return glm::mat4(1.0f);
         }
-        const JPH::RMat44 joltMat = m_Constraint->GetWheelWorldTransform(wheelIndex, JPH::Vec3::sAxisY(), JPH::Vec3::sAxisX());
+        const JPH::Wheel* wheel = m_Constraint->GetWheel(wheelIndex);
+        // Lateral position in vehicle space: +X is Left, -X is Right.
+        // For wheel models with circular profile in Y-Z and outer rim facing +X:
+        // - Left wheels (+X) face outward with inWheelRight = -sAxisX(), inWheelUp = sAxisY() -> Identity rotation.
+        // - Right wheels (-X) face outward with inWheelRight = +sAxisX(), inWheelUp = sAxisY() -> 180 deg yaw rotation.
+        const bool isLeft = (wheel && wheel->GetSettings() && wheel->GetSettings()->mPosition.GetX() >= 0.0f);
+        const JPH::Vec3 wheelRight = isLeft ? -JPH::Vec3::sAxisX() : JPH::Vec3::sAxisX();
+        const JPH::Vec3 wheelUp = JPH::Vec3::sAxisY();
+
+        const JPH::RMat44 joltMat = m_Constraint->GetWheelWorldTransform(wheelIndex, wheelRight, wheelUp);
         return ToGlm(joltMat.ToMat44());
     }
 

@@ -507,9 +507,26 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize HDR cubemap environment asset references.
   - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
     - Add Step 30 test in `Editor/src/Test.cpp` verifying HDR asset loading, cubemap generation, and `SkyboxComponent` serialization roundtrip.
-- [ ] **Phase 27: Audio System (`Engine/Audio`)**
-  - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
-  - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
+- [ ] **Phase 27: High-Fidelity 3D Audio System & Vehicle Acoustics (`Engine/Audio`)**
+  - [ ] **Step 1 - Core Audio Subsystem & `miniaudio` Integration (`Engine/Audio`)**:
+    - Integrate `miniaudio.h` (single-header C/C++ backend, zero external DLL dependencies) into `ThirdParty/miniaudio`.
+    - Implement decoupled RAII interfaces: `AudioEngine` (device lifecycle, master bus mixer, thread safety), `AudioClip` (preloaded PCM vs streaming WAV/MP3), `AudioSource` (voice control, gain, pitch, spatialization), and `AudioListener` (3D position, forward/up orientation, velocity).
+    - Provide realistic 3D spatial sound modeling: distance attenuation (Inverse / Linear / Exponential curves), stereo panning, Doppler shift, and directional cones (exhaust emission angles).
+  - [ ] **Step 2 - ECS Audio Components & Scene Serialization (`Engine/Scene`)**:
+    - Implement `AudioListenerComponent` (binds to active primary camera with automatic transform & velocity synchronization).
+    - Implement `AudioSourceComponent`: asset filepath, volume, pitch, loop toggle, 2D/3D mode, min/max attenuation distance, and directional cone parameters.
+    - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize all audio components in `.axlescene` and `.axle` formats.
+  - [ ] **Step 3 - Vehicle Audio Synthesizer & Physics Integration (`Engine/Vehicle`)**:
+    - Implement `VehicleAudioComponent`: real-time mechanical acoustics synchronized with Jolt Physics and `VehicleComponent`:
+      - **Granular Engine RPM Synthesizer**: RPM-driven pitch modulation and throttle load crossfading (On-Throttle power roar vs Off-Throttle coasting/exhaust overrun).
+      - **Tire Squeal & Slip Acoustics**: Automated tire screech triggered by Jolt wheel telemetry (`LongitudinalSlip` during burnouts/hard braking and `LateralSlip` during high-G drifts).
+      - **Suspension Travel Thuds**: Dynamic low-frequency damping thuds on hard landings and curb impacts based on suspension compression velocity.
+      - **Collision Impact System**: Physics contact impulse listener triggering metal crunch, scratch, and thud sound effects with pitch randomization.
+  - [ ] **Step 4 - Editor Inspector & Audio Preview UI (`Engine/UI`)**:
+    - Drag-and-drop audio assets (`.wav`, `.mp3`) from Content Browser directly into `AudioSourceComponent` slots in Scene Hierarchy.
+    - Interactive audio preview controls in Inspector: Play, Pause, Stop, Volume/Pitch sliders, and viewport gizmo visualization for 3D min/max hearing radius.
+  - [ ] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
+    - Add Step 31 test in `Editor/src/Test.cpp` verifying headless Audio Subsystem initialization, audio clip decoding, 3D spatial calculations, vehicle audio telemetry binding, and ECS serialization roundtrip.
 - [ ] **Phase 28: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
   - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.

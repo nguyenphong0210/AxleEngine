@@ -18,7 +18,6 @@
 #include <Axle/Scene.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/Entity.hpp>
-#include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/Texture2D.hpp>
 #include <Axle/ScriptCompiler.hpp>
@@ -73,8 +72,6 @@ public:
 private:
     void ResetSimulation();
     void RenderToolbar();
-    void DiscoverVehicleEntities();
-    void SetupVehiclePhysics(Axle::Entity chassisEntity);
 
 private:
     std::unique_ptr<Axle::PerspectiveCameraController> m_CameraController;
@@ -122,8 +119,7 @@ private:
     float m_SnapRotation = 45.0f;
     float m_SnapScale = 0.5f;
 
-    // Vehicle and chase camera (Runtime physics owned by Scene)
-    Axle::Vehicle* m_Vehicle = nullptr;
+    // Chase camera (Decoupled dynamic binding to target entity)
     bool m_ChaseCamera = false;
     bool m_CKeyWasPressed = false;
     Axle::f32 m_OrbitYaw = 180.0f;
@@ -135,8 +131,6 @@ private:
     std::shared_ptr<Axle::Scene> m_Scene;        // Active Scene pointer
     std::shared_ptr<Axle::Scene> m_EditorScene;  // Pristine Edit Mode Scene
     std::shared_ptr<Axle::Scene> m_RuntimeScene; // Ephemeral Simulation Scene
-    Axle::Entity m_ChassisEntity;
-    std::vector<Axle::Entity> m_WheelEntities;
 
     // Primitive Meshes & Shaders
     std::shared_ptr<Axle::VertexArray> m_CubeMesh;

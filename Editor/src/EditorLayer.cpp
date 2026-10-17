@@ -12,6 +12,7 @@
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/Vehicle.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -616,7 +617,6 @@ void EditorLayer::OnDetach() {
     Axle::AssetManager::Shutdown();
     m_ShadowShader.reset();
     m_ShadowMap.reset();
-    m_Vehicle = nullptr;
     m_Scene.reset();
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
@@ -743,12 +743,8 @@ void EditorLayer::OnScenePlay() {
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_SceneHierarchyPanel.SetSelectedEntity({});
 
-    // Discover vehicle entities dynamically from the active runtime scene
-    DiscoverVehicleEntities();
-
     m_SceneState = SceneState::Play;
     m_Scene->OnRuntimeStart(m_PhysicsScene.get());
-    m_Vehicle = m_Scene->GetPrimaryRuntimeVehicle();
     m_ChaseCamera = true;
     AXLE_INFO("Simulation started (Play Mode). Ephemeral Runtime Scene cloned from pristine Editor Scene.");
 }
@@ -864,12 +860,6 @@ void EditorLayer::NewScene() {
         OnSceneStop();
     }
 
-    // Release Vehicle before PhysicsScene is destroyed
-    m_Vehicle = nullptr;
-
-    // Clear cached entity handles
-    m_ChassisEntity = {};
-    m_WheelEntities.clear();
     m_InitialDynamicStates.clear();
 
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
@@ -900,72 +890,7 @@ void EditorLayer::NewScene() {
     AXLE_INFO("Editor: Created new empty scene");
 }
 
-void EditorLayer::DiscoverVehicleEntities() {
-    m_ChassisEntity = {};
-    m_WheelEntities.clear();
 
-    if (!m_Scene) return;
-
-    // 1. Discover active vehicle chassis dynamically by VehicleComponent
-    auto vehicleView = m_Scene->GetRegistry().view<Axle::VehicleComponent>();
-    for (auto entityID : vehicleView) {
-        m_ChassisEntity = Axle::Entity{ entityID, m_Scene.get() };
-        break; // Track primary vehicle chassis
-    }
-
-    if (!m_ChassisEntity) return;
-
-    // 2. Discover associated wheel entities
-    // Strategy A (Godot/Unity-style Component-per-Wheel): Search direct child entities with WheelComponent
-    for (auto child : m_ChassisEntity.GetChildren()) {
-        if (child && child.HasComponent<Axle::WheelComponent>()) {
-            m_WheelEntities.push_back(child);
-        }
-    }
-
-    // Strategy B: If no child wheels found via Hierarchy, search all entities in scene with WheelComponent
-    if (m_WheelEntities.empty()) {
-        auto wheelView = m_Scene->GetRegistry().view<Axle::WheelComponent>();
-        for (auto entityID : wheelView) {
-            m_WheelEntities.push_back(Axle::Entity{ entityID, m_Scene.get() });
-        }
-    }
-
-    // Strategy C (Legacy backward compatibility with playground tags "Wheel FL", "Wheel FR", etc.)
-    if (m_WheelEntities.empty()) {
-        m_WheelEntities.resize(4);
-        auto tagView = m_Scene->GetRegistry().view<Axle::TagComponent>();
-        for (auto entityID : tagView) {
-            const auto& tag = tagView.get<Axle::TagComponent>(entityID).Tag;
-            Axle::Entity e{ entityID, m_Scene.get() };
-            if (tag.find("FL") != std::string::npos || tag.find("FrontLeft") != std::string::npos) {
-                m_WheelEntities[0] = e;
-            } else if (tag.find("FR") != std::string::npos || tag.find("FrontRight") != std::string::npos) {
-                m_WheelEntities[1] = e;
-            } else if (tag.find("RL") != std::string::npos || tag.find("RearLeft") != std::string::npos) {
-                m_WheelEntities[2] = e;
-            } else if (tag.find("RR") != std::string::npos || tag.find("RearRight") != std::string::npos) {
-                m_WheelEntities[3] = e;
-            }
-        }
-        m_WheelEntities.erase(
-            std::remove_if(m_WheelEntities.begin(), m_WheelEntities.end(), [](const Axle::Entity& e) { return !e; }),
-            m_WheelEntities.end()
-        );
-    }
-}
-
-void EditorLayer::SetupVehiclePhysics(Axle::Entity chassisEntity) {
-    if (!chassisEntity || !m_PhysicsScene || !m_Scene) {
-        return;
-    }
-    m_ChassisEntity = chassisEntity;
-    m_Vehicle = m_Scene->GetRuntimeVehicle(m_ChassisEntity);
-    if (!m_Vehicle && m_SceneState == SceneState::Play) {
-        m_Scene->OnRuntimeStart(m_PhysicsScene.get());
-        m_Vehicle = m_Scene->GetRuntimeVehicle(m_ChassisEntity);
-    }
-}
 
 void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
     std::filesystem::path targetPath = filepath;
@@ -992,12 +917,6 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
         OnSceneStop();
     }
 
-    // 1. MUST destroy m_Vehicle BEFORE destroying m_PhysicsScene!
-    m_Vehicle = nullptr;
-
-    // 2. Clear cached entity handles
-    m_ChassisEntity = {};
-    m_WheelEntities.clear();
     m_InitialDynamicStates.clear();
 
     // 3. Create fresh PhysicsScene and maintain PhysicsDebugRenderer
@@ -1027,9 +946,6 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
     if (serializer.Deserialize(targetPath)) {
         m_CurrentScenePath = targetPath;
 
-        // Discover vehicle entities dynamically by component
-        DiscoverVehicleEntities();
-
         // Ensure loaded scene has a Directional Sun Light and Skybox
         Axle::DirectionalLightComponent sceneSunLight;
         if (!m_Scene->GetPrimaryDirectionalLight(sceneSunLight)) {
@@ -1057,11 +973,6 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
             if (rb.IsDynamic && !rb.RuntimeBodyID.IsInvalid()) {
                 m_InitialDynamicStates[rb.RuntimeBodyID.GetIndexAndSequenceNumber()] = { tc.Translation, tc.Rotation };
             }
-        }
-
-        // If the loaded scene contains a VehicleComponent, instantiate Vehicle physics and bind components
-        if (m_ChassisEntity) {
-            SetupVehiclePhysics(m_ChassisEntity);
         }
 
         m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
@@ -1256,7 +1167,6 @@ void EditorLayer::OnSceneStop() {
         m_RuntimeScene->OnRuntimeStop(m_PhysicsScene.get());
         m_RuntimeScene.reset();
     }
-    m_Vehicle = nullptr;
 
     // Restore pristine EditorScene (Phase 18.2: Zero Physics Drift)
     m_Scene = m_EditorScene;
@@ -1268,9 +1178,6 @@ void EditorLayer::OnSceneStop() {
 
     ResetSimulation();
 
-    // Rediscover vehicle entities in the restored EditorScene
-    DiscoverVehicleEntities();
-
     // Restore panel contexts to pristine EditorScene
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_SceneHierarchyPanel.SetSelectedEntity({});
@@ -1280,7 +1187,7 @@ void EditorLayer::OnSceneStop() {
 }
 
 void EditorLayer::ResetSimulation() {
-    AXLE_INFO("Resetting physics simulation and vehicle state");
+    AXLE_INFO("Resetting physics simulation state");
 
     // Reset all registered dynamic bodies (pyramid crates, cones, tires, demo shapes) to initial poses
     for (const auto& [bodyIDRaw, state] : m_InitialDynamicStates) {
@@ -1292,34 +1199,15 @@ void EditorLayer::ResetSimulation() {
         }
     }
 
-    if (m_Vehicle && m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::TransformComponent>()) {
-        glm::vec3 resetPos = m_ChassisEntity.GetComponent<Axle::TransformComponent>().Translation;
-        glm::quat resetRot = m_ChassisEntity.GetComponent<Axle::TransformComponent>().Rotation;
-        auto rawID = m_Vehicle->GetChassisBodyID().GetIndexAndSequenceNumber();
-        if (m_InitialDynamicStates.find(rawID) != m_InitialDynamicStates.end()) {
-            resetPos = m_InitialDynamicStates[rawID].Position;
-            resetRot = m_InitialDynamicStates[rawID].Rotation;
-        }
-        m_Vehicle->Reset(resetPos, resetRot);
-        m_Vehicle->SetDriverInput(0.0f, 0.0f, 0.0f, 0.0f);
-        auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
-        chassisTC.Translation = m_Vehicle->GetPosition();
-        chassisTC.Rotation = m_PhysicsScene->GetBodyRotation(m_Vehicle->GetChassisBodyID());
-
-        for (size_t i = 0; i < m_WheelEntities.size(); ++i) {
-            if (m_WheelEntities[i] && m_WheelEntities[i].HasComponent<Axle::TransformComponent>()) {
-                const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(static_cast<Axle::u32>(i));
-                auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
-                if (m_WheelEntities[i].HasComponent<Axle::HierarchyComponent>() &&
-                    m_WheelEntities[i].GetComponent<Axle::HierarchyComponent>().InheritTransform &&
-                    m_WheelEntities[i].GetParent() == m_ChassisEntity) {
-                    glm::mat4 chassisWorld = m_Vehicle->GetChassisTransform();
-                    glm::mat4 localWheelMat = glm::inverse(chassisWorld) * wheelMat;
-                    tc.Translation = glm::vec3(localWheelMat[3]);
-                    tc.Rotation = glm::quat_cast(localWheelMat);
-                } else {
-                    tc.Translation = glm::vec3(wheelMat[3]);
-                    tc.Rotation = glm::quat_cast(wheelMat);
+    // Reset any active runtime vehicles in the scene
+    if (m_Scene) {
+        for (const auto& rv : m_Scene->GetRuntimeVehicles()) {
+            if (rv.VehicleInstance && m_Scene->GetRegistry().valid(rv.ChassisEntityID)) {
+                Axle::Entity chassis{ rv.ChassisEntityID, m_Scene.get() };
+                if (chassis.HasComponent<Axle::TransformComponent>()) {
+                    auto& tc = chassis.GetComponent<Axle::TransformComponent>();
+                    rv.VehicleInstance->Reset(tc.Translation, tc.Rotation);
+                    rv.VehicleInstance->SetDriverInput(0.0f, 0.0f, 0.0f, 0.0f);
                 }
             }
         }
@@ -1503,47 +1391,28 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_F1KeyWasPressed = false;
     }
 
-    // C++ Native Scripting Runtime Execution & Vehicle Simulation (Phase 20.3 Stage 2)
+    // C++ Native Scripting Runtime Execution & Vehicle Simulation (Phase 20.3)
     if (m_SceneState == SceneState::Play) {
-        // Direct Driving Controls for Custom Vehicles without a script attached (Phase 20.2 & 20.3)
-        if (m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::VehicleComponent>()) {
-            bool hasScriptController = m_ChassisEntity.HasComponent<Axle::NativeScriptComponent>();
-            if (!hasScriptController && (m_ViewportHovered || m_ViewportFocused) && !ImGui::GetIO().WantTextInput) {
-                Axle::f32 forwardInput = 0.0f;
-                Axle::f32 rightInput = 0.0f;
-                Axle::f32 brakeInput = 0.0f;
-                bool handBrakeInput = false;
-
-                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Up) || Axle::Input::IsKeyPressed(Axle::KeyCode::W)) {
-                    forwardInput += 1.0f;
-                }
-                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Down) || Axle::Input::IsKeyPressed(Axle::KeyCode::S)) {
-                    forwardInput -= 1.0f;
-                }
-                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Left) || Axle::Input::IsKeyPressed(Axle::KeyCode::A)) {
-                    rightInput -= 1.0f;
-                }
-                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Right) || Axle::Input::IsKeyPressed(Axle::KeyCode::D)) {
-                    rightInput += 1.0f;
-                }
-                if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
-                    handBrakeInput = true;
-                }
-
-                auto& vc = m_ChassisEntity.GetComponent<Axle::VehicleComponent>();
-                vc.SetDriverInput(forwardInput, rightInput, brakeInput, handBrakeInput);
-            }
-        }
-
         m_Scene->OnUpdateRuntime(ts, m_PhysicsScene.get());
-        if (!m_Vehicle && m_Scene) {
-            m_Vehicle = m_Scene->GetPrimaryRuntimeVehicle();
+    }
+
+    // Camera Update (Decoupled dynamic binding to active player vehicle or selected target entity)
+    Axle::Entity chaseTarget;
+    if (m_SceneState == SceneState::Play && m_ChaseCamera && m_Scene) {
+        auto selected = m_SceneHierarchyPanel.GetSelectedEntity();
+        if (selected && selected.HasComponent<Axle::TransformComponent>()) {
+            chaseTarget = selected;
+        } else {
+            auto vehicleView = m_Scene->GetRegistry().view<Axle::VehicleComponent>();
+            for (auto entityID : vehicleView) {
+                chaseTarget = Axle::Entity{ entityID, m_Scene.get() };
+                break;
+            }
         }
     }
 
-    // Camera Update
-    if (m_SceneState == SceneState::Play && m_ChaseCamera && m_Vehicle) {
-        // Vehicle Chase Camera
+    if (chaseTarget && m_ChaseCamera) {
+        // Dynamic Entity Chase Camera
         const auto [mouseX, mouseY] = Axle::Input::GetMousePosition();
         const glm::vec2 currentMousePos{ mouseX, mouseY };
 
@@ -1565,18 +1434,29 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
             m_OrbitPitch = std::clamp(m_OrbitPitch, -45.0f, 75.0f);
         }
 
-        const glm::vec3 carPos = m_Vehicle->GetPosition();
-        const glm::vec3 carFwd = m_Vehicle->GetForwardVector();
+        glm::vec3 targetPos{ 0.0f };
+        glm::vec3 targetFwd{ 0.0f, 0.0f, 1.0f };
+        Axle::f32 targetSpeed = 0.0f;
 
-        if (!isDragging) {
-            const Axle::f32 carSpeed = glm::length(m_PhysicsScene->GetLinearVelocity(m_Vehicle->GetChassisBodyID()));
-            if (carSpeed > 0.5f) {
-                const Axle::f32 targetYaw = glm::degrees(std::atan2(-carFwd.x, -carFwd.z));
-                Axle::f32 diff = targetYaw - m_OrbitYaw;
-                while (diff < -180.0f) diff += 360.0f;
-                while (diff > 180.0f) diff -= 360.0f;
-                m_OrbitYaw += diff * std::min(1.0f, ts.GetSeconds() * 3.5f);
+        auto* runtimeVehicle = m_Scene->GetRuntimeVehicle(chaseTarget);
+        if (runtimeVehicle) {
+            targetPos = runtimeVehicle->GetPosition();
+            targetFwd = runtimeVehicle->GetForwardVector();
+            if (m_PhysicsScene) {
+                targetSpeed = glm::length(m_PhysicsScene->GetLinearVelocity(runtimeVehicle->GetChassisBodyID()));
             }
+        } else if (chaseTarget.HasComponent<Axle::TransformComponent>()) {
+            const auto& tc = chaseTarget.GetComponent<Axle::TransformComponent>();
+            targetPos = tc.Translation;
+            targetFwd = tc.Rotation * glm::vec3(0.0f, 0.0f, 1.0f);
+        }
+
+        if (!isDragging && targetSpeed > 0.5f) {
+            const Axle::f32 targetYaw = glm::degrees(std::atan2(-targetFwd.x, -targetFwd.z));
+            Axle::f32 diff = targetYaw - m_OrbitYaw;
+            while (diff < -180.0f) diff += 360.0f;
+            while (diff > 180.0f) diff -= 360.0f;
+            m_OrbitYaw += diff * std::min(1.0f, ts.GetSeconds() * 3.5f);
         }
 
         const Axle::f32 radYaw = glm::radians(m_OrbitYaw);
@@ -1588,7 +1468,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         offset.y = std::sin(radPitch) * dist + 1.2f;
         offset.z = -std::cos(radYaw) * std::cos(radPitch) * dist;
 
-        const glm::vec3 lookTarget = carPos + glm::vec3(0.0f, 0.8f, 0.0f);
+        const glm::vec3 lookTarget = targetPos + glm::vec3(0.0f, 0.8f, 0.0f);
         const glm::vec3 camPos = lookTarget - offset;
         const glm::vec3 lookDir = glm::normalize(lookTarget - camPos);
 
@@ -1630,7 +1510,12 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     // PASS 1: SHADOW MAP DEPTH PASS (Phase 11: Sub-step 1.1)
     // ==========================================
     if (castShadows && m_ShadowMap && m_ShadowShader && m_Scene) {
-        glm::vec3 focusCenter = (m_Vehicle && m_ChassisEntity) ? m_Vehicle->GetPosition() : glm::vec3(0.0f);
+        glm::vec3 focusCenter = glm::vec3(0.0f);
+        if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
+            focusCenter = pv->GetPosition();
+        } else {
+            focusCenter = m_CameraController->GetCamera().GetPosition();
+        }
         m_LightSpaceMatrix = m_ShadowMap->CalculateLightSpaceMatrix(m_LightDir, focusCenter);
 
         m_ShadowMap->Bind();
@@ -2544,24 +2429,10 @@ void EditorLayer::OnImGuiRender() {
                 }
 
                 // Real-time synchronization with Jolt Physics bodies
-                if (selectedEntity == m_ChassisEntity && m_Vehicle) {
-                    m_Vehicle->Reset(tc.Translation, tc.Rotation);
-                    for (size_t i = 0; i < m_WheelEntities.size(); ++i) {
-                        if (m_WheelEntities[i] && m_WheelEntities[i].HasComponent<Axle::TransformComponent>()) {
-                            const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(static_cast<Axle::u32>(i));
-                            auto& wtc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
-                            if (m_WheelEntities[i].HasComponent<Axle::HierarchyComponent>() &&
-                                m_WheelEntities[i].GetComponent<Axle::HierarchyComponent>().InheritTransform &&
-                                m_WheelEntities[i].GetParent() == m_ChassisEntity) {
-                                glm::mat4 chassisWorld = m_Vehicle->GetChassisTransform();
-                                glm::mat4 localWheelMat = glm::inverse(chassisWorld) * wheelMat;
-                                wtc.Translation = glm::vec3(localWheelMat[3]);
-                                wtc.Rotation = glm::quat_cast(localWheelMat);
-                            } else {
-                                wtc.Translation = glm::vec3(wheelMat[3]);
-                                wtc.Rotation = glm::quat_cast(wheelMat);
-                            }
-                        }
+                if (selectedEntity.HasComponent<Axle::VehicleComponent>()) {
+                    auto* rv = m_Scene ? m_Scene->GetRuntimeVehicle(selectedEntity) : nullptr;
+                    if (rv) {
+                        rv->Reset(tc.Translation, tc.Rotation);
                     }
                 } else if (selectedEntity.HasComponent<Axle::RigidBody3D>() && m_PhysicsScene) {
                     auto& rb = selectedEntity.GetComponent<Axle::RigidBody3D>();
@@ -2702,13 +2573,15 @@ void EditorLayer::OnImGuiRender() {
     drawList->AddRectFilled(badgePos, ImVec2(badgePos.x + 175.0f, badgePos.y + 24.0f), statusBg, 4.0f);
     drawList->AddText(ImVec2(badgePos.x + 8.0f, badgePos.y + 4.0f), IM_COL32(255, 255, 255, 255), statusText);
 
-    if (m_SceneState == SceneState::Play && m_Vehicle) {
-        const auto vTele = m_Vehicle->GetTelemetry();
-        char speedStr[48];
-        snprintf(speedStr, sizeof(speedStr), "%.1f KM/H | GEAR %d", vTele.SpeedKmh, vTele.CurrentGear);
-        ImVec2 speedPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
-        drawList->AddRectFilled(speedPos, ImVec2(speedPos.x + 155.0f, speedPos.y + 24.0f), IM_COL32(20, 30, 45, 220), 4.0f);
-        drawList->AddText(ImVec2(speedPos.x + 8.0f, speedPos.y + 4.0f), IM_COL32(0, 230, 180, 255), speedStr);
+    if (m_SceneState == SceneState::Play && m_Scene) {
+        if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
+            const auto vTele = pv->GetTelemetry();
+            char speedStr[48];
+            snprintf(speedStr, sizeof(speedStr), "%.1f KM/H | GEAR %d", vTele.SpeedKmh, vTele.CurrentGear);
+            ImVec2 speedPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
+            drawList->AddRectFilled(speedPos, ImVec2(speedPos.x + 155.0f, speedPos.y + 24.0f), IM_COL32(20, 30, 45, 220), 4.0f);
+            drawList->AddText(ImVec2(speedPos.x + 8.0f, speedPos.y + 4.0f), IM_COL32(0, 230, 180, 255), speedStr);
+        }
     } else if (m_SceneState == SceneState::Edit) {
         ImVec2 hintPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
         drawList->AddRectFilled(hintPos, ImVec2(hintPos.x + 440.0f, hintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
@@ -2753,18 +2626,22 @@ void EditorLayer::OnImGuiRender() {
             .DrawVelocity = m_PhysicsDrawSettings.DrawVelocity,
             .DrawCenterOfMass = m_PhysicsDrawSettings.DrawCenterOfMass,
             .DebugLineCount = m_PhysicsDebugRenderer ? m_PhysicsDebugRenderer->GetLineCount() : 0,
-            .HasVehicle = (m_Vehicle != nullptr),
+            .HasVehicle = false,
             .IsChaseCamera = m_ChaseCamera
         };
 
-        if (m_Vehicle && m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::TransformComponent>()) {
-            const auto vTele = m_Vehicle->GetTelemetry();
-            telemetry.VehicleSpeedKmh = vTele.SpeedKmh;
-            telemetry.VehicleRPM = vTele.EngineRPM;
-            telemetry.VehicleGear = vTele.CurrentGear;
-            for (Axle::u32 i = 0; i < 4; ++i) {
-                telemetry.WheelContacts[i] = vTele.Wheels[i].HasContact;
-                telemetry.WheelSuspension[i] = vTele.Wheels[i].SuspensionLength;
+        if (m_Scene) {
+            if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
+                telemetry.HasVehicle = true;
+                const auto vTele = pv->GetTelemetry();
+                telemetry.VehicleSpeedKmh = vTele.SpeedKmh;
+                telemetry.VehicleRPM = vTele.EngineRPM;
+                Axle::u32 wheelCount = pv->GetWheelCount();
+                Axle::u32 maxWheels = wheelCount < 4u ? wheelCount : 4u;
+                for (Axle::u32 i = 0; i < maxWheels; ++i) {
+                    telemetry.WheelContacts[i] = vTele.Wheels[i].HasContact;
+                    telemetry.WheelSuspension[i] = vTele.Wheels[i].SuspensionLength;
+                }
             }
         }
 

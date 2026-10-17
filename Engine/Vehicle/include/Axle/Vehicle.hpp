@@ -35,6 +35,10 @@ namespace Axle {
 
         BodyID GetChassisBodyID() const { return m_ChassisBodyID; }
         const VehicleConfig& GetConfig() const { return m_Config; }
+        u32 GetWheelCount() const {
+            if (m_Constraint) return static_cast<u32>(m_Constraint->GetWheels().size());
+            return m_Config.CustomWheels.empty() ? 4u : static_cast<u32>(m_Config.CustomWheels.size());
+        }
 
         JPH::VehicleConstraint* GetConstraint() { return m_Constraint.GetPtr(); }
         const JPH::VehicleConstraint* GetConstraint() const { return m_Constraint.GetPtr(); }

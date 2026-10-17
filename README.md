@@ -372,9 +372,9 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
       - [x] Dynamic N-wheel discovery (`VehicleUpdateColliders` equivalent): automatically discover all child entities holding `WheelComponent` attached to root chassis entity with `RigidBody3D` + `VehicleComponent`.
       - [x] Real-time cache-friendly wheel pose synchronization in `Scene::OnUpdateRuntime()`: update child wheel entity `TransformComponent` (suspension travel and wheel rotation) with local matrix inverse decomposition to prevent drift.
       - [x] Safe teardown and state restoration on simulation stop in `Scene::OnRuntimeStop()`.
-    - [ ] **Stage 3 - Complete `EditorLayer` Decoupling (100% Neutral Editor)**:
-      - Eliminate all vehicle physics hardcodes from `EditorLayer.cpp` (remove `SetupVehiclePhysics`, remove `m_Vehicle`, remove hardcoded WASD input polling, remove manual wheel transform copy loops).
-      - Decouple `ChaseCamera` from hardcoded vehicle instances, dynamically binding to active player vehicle entities.
+    - [x] **Stage 3 - Complete `EditorLayer` Decoupling (100% Neutral Editor)**:
+      - [x] Eliminate all vehicle physics hardcodes from `EditorLayer.cpp` (remove `SetupVehiclePhysics`, remove `m_Vehicle`, remove hardcoded WASD input polling, remove manual wheel transform copy loops).
+      - [x] Decouple `ChaseCamera` from hardcoded vehicle instances, dynamically binding to active player vehicle entities.
     - [ ] **Stage 4 - C++ Native Scripting Template (`CarController.hpp`) & Live Editor Reflection**:
       - Implement `CarController.hpp` template inheriting `Axle::ScriptableEntity`, reading keyboard/gamepad inputs and driving `VehicleComponent` cleanly.
       - Expose live-tunable fields (`Horsepower`, `MaxSteerAngle`, `BrakePower`, `AllWheelDrive`) using `AXLE_SCRIPT_FIELDS` for real-time Inspector tuning.

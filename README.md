@@ -363,10 +363,10 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - [x] **Direct Driving Controls**: Seamless W/A/S/D and Arrow key driving controls with Space handbrake in Play mode (`F5`), immediately operational on test scenes created from scratch without writing custom scripts.
     - [x] **Scene Serialization**: Full YAML serialization and deserialization for `VehicleComponent` tuning properties in `SceneSerializer.cpp`.
   - [ ] **Phase 20.3: Modern Unity ECS (`com.unity.vehicles`) Architecture & Full Scripting Decoupling**:
-    - [ ] **Stage 1 - Pure ECS Component Standardization (`WheelComponent` & `VehicleComponent`)**:
-      - Upgrade `WheelComponent` (mirroring Unity ECS `ControllableWheelAuthoring`): tire radius, width, suspension travel min/max, spring frequency/damping, steerable, driven, handbrake, `AutoSyncMesh` toggle, and live telemetry fields (`IsGrounded`, `SuspensionLength`, `AngularVelocity`, `SlipAngle`, `LateralSlip`).
-      - Refine `VehicleComponent` (mirroring Unity ECS `VehicleControlAuthoring`): pure drivetrain & control data container with driver inputs (`Throttle`, `Steering`, `Brake`, `Handbrake`), anti-roll bar stiffness, center-of-mass offset, and clean C++ API (`SetDriverInput`, `GetSpeedKmh`, `GetRPM`, `GetWheelCount`).
-      - Full YAML scene serialization/deserialization in `SceneSerializer.cpp`.
+    - [x] **Stage 1 - Pure ECS Component Standardization (`WheelComponent` & `VehicleComponent`)**:
+      - [x] Upgrade `WheelComponent` (mirroring Unity ECS `ControllableWheelAuthoring`): tire radius, width, suspension travel min/max, spring frequency/damping, steerable, driven, handbrake, `AutoSyncMesh` toggle, and live telemetry fields (`IsGrounded`, `SuspensionLength`, `AngularVelocity`, `SlipAngle`, `LateralSlip`).
+      - [x] Refine `VehicleComponent` (mirroring Unity ECS `VehicleControlAuthoring`): pure drivetrain & control data container with driver inputs (`Throttle`, `Steering`, `Brake`, `Handbrake`), anti-roll bar stiffness, center-of-mass offset, and clean C++ API (`SetDriverInput`, `GetSpeedKmh`, `GetRPM`, `GetWheelCount`).
+      - [x] Full YAML scene serialization/deserialization in `SceneSerializer.cpp` and unit test verification in Step 25 ([25.1], [25.2], [25.4]).
     - [ ] **Stage 2 - Core Scene Lifecycle & Dynamic Assembly (`VehicleUpdateColliders`)**:
       - Relocate Jolt vehicle constraint instantiation and physics setup from `EditorLayer` directly into `Scene::OnRuntimeStart()`.
       - Dynamic N-wheel discovery (`VehicleUpdateColliders` equivalent): automatically discover all child entities holding `WheelComponent` attached to root chassis entity with `RigidBody3D` + `VehicleComponent`.

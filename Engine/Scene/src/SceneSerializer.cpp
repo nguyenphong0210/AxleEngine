@@ -185,6 +185,7 @@ namespace Axle {
                 ss << "      MinRPM: " << vc.MinRPM << "\n";
                 ss << "      MaxBrakeTorque: " << vc.MaxBrakeTorque << "\n";
                 ss << "      MaxHandBrakeTorque: " << vc.MaxHandBrakeTorque << "\n";
+                ss << "      AntiRollBarStiffness: " << vc.AntiRollBarStiffness << "\n";
                 ss << "      DefaultSuspensionFrequency: " << vc.DefaultSuspensionFrequency << "\n";
                 ss << "      DefaultSuspensionDamping: " << vc.DefaultSuspensionDamping << "\n";
                 ss << "      FourWheelDrive: " << (vc.FourWheelDrive ? "true" : "false") << "\n";
@@ -207,6 +208,7 @@ namespace Axle {
                 ss << "      HasHandbrake: " << (wc.HasHandbrake ? "true" : "false") << "\n";
                 ss << "      BrakeTorque: " << wc.BrakeTorque << "\n";
                 ss << "      HandBrakeTorque: " << wc.HandBrakeTorque << "\n";
+                ss << "      AutoSyncMesh: " << (wc.AutoSyncMesh ? "true" : "false") << "\n";
             }
 
             // DirectionalLightComponent
@@ -687,6 +689,8 @@ namespace Axle {
                             wc.BrakeTorque = std::stof(Trim(trimmed.substr(12)));
                         } else if (trimmed.rfind("HandBrakeTorque:", 0) == 0) {
                             wc.HandBrakeTorque = std::stof(Trim(trimmed.substr(16)));
+                        } else if (trimmed.rfind("AutoSyncMesh:", 0) == 0) {
+                            wc.AutoSyncMesh = (Trim(trimmed.substr(13)) == "true");
                         }
                         break;
                     }
@@ -707,6 +711,8 @@ namespace Axle {
                             vc.MaxBrakeTorque = std::stof(Trim(trimmed.substr(15)));
                         } else if (trimmed.rfind("MaxHandBrakeTorque:", 0) == 0) {
                             vc.MaxHandBrakeTorque = std::stof(Trim(trimmed.substr(19)));
+                        } else if (trimmed.rfind("AntiRollBarStiffness:", 0) == 0) {
+                            vc.AntiRollBarStiffness = std::stof(Trim(trimmed.substr(21)));
                         } else if (trimmed.rfind("DefaultSuspensionFrequency:", 0) == 0) {
                             vc.DefaultSuspensionFrequency = std::stof(Trim(trimmed.substr(27)));
                         } else if (trimmed.rfind("DefaultSuspensionDamping:", 0) == 0) {

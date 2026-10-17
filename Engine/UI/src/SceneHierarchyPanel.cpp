@@ -1696,6 +1696,13 @@ namespace Axle {
                 }
             }
             ImGui::DragFloat3("Center of Mass Offset", &vc.CenterOfMassOffset.x, 0.01f, -5.0f, 5.0f, "%.2f");
+            ImGui::DragFloat("Anti-Roll Bar (N/m)", &vc.AntiRollBarStiffness, 25.0f, 0.0f, 10000.0f, "%.0f");
+
+            // Driver Input Monitor (ECS Data Buffer)
+            ImGui::Spacing();
+            ImGui::TextDisabled("Driver Inputs (ECS State):");
+            ImGui::Text("Throttle: %+.2f | Steer: %+.2f | Brake: %.2f | Handbrake: %s",
+                vc.Throttle, vc.Steering, vc.Brake, vc.Handbrake ? "ENGAGED" : "OFF");
 
             ImGui::Spacing();
             ImGui::TextDisabled("Powertrain & Torque:");
@@ -1709,6 +1716,7 @@ namespace Axle {
 
         // Wheel Component (VehicleWheel3D)
         DrawComponent<WheelComponent>("Vehicle Wheel (VehicleWheel3D)", entity, [&](WheelComponent& wc) {
+            ImGui::Checkbox("Auto-Sync Visual Mesh", &wc.AutoSyncMesh);
             ImGui::DragFloat("Radius (m)", &wc.Radius, 0.01f, 0.05f, 2.0f, "%.2f");
             ImGui::DragFloat("Width (m)", &wc.Width, 0.01f, 0.05f, 2.0f, "%.2f");
             ImGui::Separator();
@@ -1730,6 +1738,13 @@ namespace Axle {
                 wc.HandBrakeTorque = 6000.0f;
             } else if (!wc.HasHandbrake) {
                 wc.HandBrakeTorque = 0.0f;
+            }
+
+            if (wc.IsGrounded || wc.SuspensionLength > 0.0f || std::abs(wc.AngularVelocity) > 0.01f) {
+                ImGui::Separator();
+                ImGui::TextDisabled("Live Wheel Telemetry:");
+                ImGui::Text("Contact: %s | Length: %.2f m", wc.IsGrounded ? "GROUND" : "AIR", wc.SuspensionLength);
+                ImGui::Text("Angular Vel: %.1f rad/s | Slip: (%.2f, %.2f)", wc.AngularVelocity, wc.LongitudinalSlip, wc.LateralSlip);
             }
         }, /*canRemove=*/ true);
 

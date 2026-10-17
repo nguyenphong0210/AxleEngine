@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <algorithm>
 
 namespace Axle {
 
@@ -408,16 +409,24 @@ namespace Axle {
 
     class Vehicle;
 
+    // Modern Unity ECS-style Vehicle Root Component (VehicleControlAuthoring equivalent)
     struct VehicleComponent {
         Vehicle* VehicleInstance = nullptr;
 
-        // Chassis & Powertrain Tuning (Phase 20.2)
+        // Driver Input Buffer (Pure ECS Data)
+        float Throttle = 0.0f;              // -1.0 (Reverse) to +1.0 (Forward)
+        float Steering = 0.0f;              // -1.0 (Full Left) to +1.0 (Full Right)
+        float Brake = 0.0f;                 // 0.0 (None) to 1.0 (Full Brake)
+        bool Handbrake = false;             // Handbrake state
+
+        // Chassis & Powertrain Tuning (Phase 20.2 & 20.3)
         float ChassisMass = 1500.0f;        // Chassis mass in kg
         float MaxEngineTorque = 800.0f;     // Engine peak torque in N.m
         float MaxRPM = 7000.0f;             // Redline RPM
         float MinRPM = 1000.0f;             // Idle RPM
         float MaxBrakeTorque = 3000.0f;     // Service brake torque in N.m
         float MaxHandBrakeTorque = 6000.0f; // Handbrake torque in N.m
+        float AntiRollBarStiffness = 1000.0f; // Anti-roll bar stiffness (N/m)
 
         // Default suspension settings for child wheel spawning
         float DefaultSuspensionFrequency = 2.0f; // Spring frequency (Hz)
@@ -425,26 +434,62 @@ namespace Axle {
         bool FourWheelDrive = true;              // AWD vs RWD
         glm::vec3 CenterOfMassOffset{ 0.0f, 0.0f, 0.0f }; // Center of mass offset relative to geometric pivot
 
+        // Live Telemetry (Updated per-frame by Scene runtime physics sync)
+        float CurrentSpeedKmh = 0.0f;       // Vehicle linear speed in km/h
+        float CurrentSpeedMps = 0.0f;       // Vehicle linear speed in m/s
+        float CurrentRPM = 0.0f;            // Engine rotational speed in RPM
+        int CurrentGear = 1;                // Active transmission gear
+
         VehicleComponent() = default;
         VehicleComponent(Vehicle* vehicle)
             : VehicleInstance(vehicle) {}
+
+        // Clean C++ API for Scripts and Controllers
+        void SetDriverInput(float throttle, float steering, float brake, bool handbrake = false) {
+            Throttle = std::clamp(throttle, -1.0f, 1.0f);
+            Steering = std::clamp(steering, -1.0f, 1.0f);
+            Brake = std::clamp(brake, 0.0f, 1.0f);
+            Handbrake = handbrake;
+        }
+
+        float GetSpeedKmh() const { return CurrentSpeedKmh; }
+        float GetSpeedMps() const { return CurrentSpeedMps; }
+        float GetRPM() const { return CurrentRPM; }
+        int GetCurrentGear() const { return CurrentGear; }
+        bool HasActivePhysics() const { return VehicleInstance != nullptr; }
     };
 
-    // Godot/Unity-style Component-per-Wheel Architecture (VehicleWheel3D)
+    // Modern Unity ECS-style Wheel Component (ControllableWheelAuthoring / VehicleWheel3D equivalent)
     struct WheelComponent {
+        // Physical Geometry
         float Radius = 0.35f;               // Wheel tire radius (m)
         float Width = 0.25f;                // Wheel tire width (m)
-        float SuspensionMinLength = 0.15f;  // Maximum suspension compression (m)
-        float SuspensionMaxLength = 0.45f;  // Maximum suspension extension (m)
+
+        // Suspension Dynamics
+        float SuspensionMinLength = 0.15f;  // Maximum suspension compression limit (m)
+        float SuspensionMaxLength = 0.45f;  // Maximum suspension extension limit (m)
         float SpringFrequency = 2.0f;       // Spring oscillation frequency (Hz)
         float SpringDamping = 0.5f;         // Suspension damping ratio (0..1)
 
-        bool CanSteer = false;              // Steerable wheel (affected by driver steering input)
+        // Steering & Powertrain Control Flags
+        bool CanSteer = false;              // Steerable wheel (responds to steering input)
         float MaxSteerAngle = 32.0f;        // Peak steering angle (degrees)
         bool IsDriven = true;               // Driven wheel (receives powertrain engine torque)
         bool HasHandbrake = false;          // Locked by handbrake input
         float BrakeTorque = 3000.0f;        // Service brake torque (N.m)
         float HandBrakeTorque = 0.0f;       // Handbrake torque (N.m)
+
+        // Mesh & Transform Automation
+        bool AutoSyncMesh = true;           // Automatically sync Entity TransformComponent to physical wheel pose
+
+        // Live Dynamic Telemetry (Updated per-frame by Scene runtime physics sync)
+        bool IsGrounded = false;            // Ground contact flag
+        float SuspensionLength = 0.0f;      // Current suspension travel length (m)
+        float AngularVelocity = 0.0f;       // Wheel spin angular velocity (rad/s)
+        float SteerAngle = 0.0f;            // Current dynamic steering angle (rad)
+        float SlipAngle = 0.0f;             // Tire slip angle (degrees)
+        float LateralSlip = 0.0f;           // Sideways tire slip velocity
+        float LongitudinalSlip = 0.0f;      // Forward/rearward tire slip ratio
 
         WheelComponent() = default;
     };

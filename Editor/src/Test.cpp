@@ -3183,6 +3183,7 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
         wc.HasHandbrake = false;
         wc.BrakeTorque = 4200.0f;
         wc.HandBrakeTorque = 0.0f;
+        wc.AutoSyncMesh = false;
 
         Axle::SceneSerializer serializer(srcScene.get());
         bool serSuccess = serializer.Serialize(testScenePath);
@@ -3215,6 +3216,7 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
             assert(wc.IsDriven == true);
             assert(wc.HasHandbrake == false);
             assert(std::abs(wc.BrakeTorque - 4200.0f) < 0.001f);
+            assert(wc.AutoSyncMesh == false);
         }
         std::error_code ec;
         std::filesystem::remove(testScenePath, ec);
@@ -3237,6 +3239,7 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
         vc.MinRPM = 1100.0f;
         vc.MaxBrakeTorque = 3500.0f;
         vc.MaxHandBrakeTorque = 7000.0f;
+        vc.AntiRollBarStiffness = 1800.0f;
         vc.FourWheelDrive = true;
         vc.CenterOfMassOffset = glm::vec3(0.0f, -0.2f, 0.1f);
 
@@ -3264,6 +3267,7 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
             assert(std::abs(vc.MinRPM - 1100.0f) < 0.001f);
             assert(std::abs(vc.MaxBrakeTorque - 3500.0f) < 0.001f);
             assert(std::abs(vc.MaxHandBrakeTorque - 7000.0f) < 0.001f);
+            assert(std::abs(vc.AntiRollBarStiffness - 1800.0f) < 0.001f);
             assert(vc.FourWheelDrive == true);
             assert(glm::distance(vc.CenterOfMassOffset, glm::vec3(0.0f, -0.2f, 0.1f)) < 0.001f);
         }
@@ -3355,6 +3359,48 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
         std::cout << "  -> Final truck position after 30 simulation steps: ["
                   << finalPos.x << ", " << finalPos.y << ", " << finalPos.z << "]" << std::endl;
         std::cout << "  -> PASS: Dynamic powertrain differential and anti-roll bars simulated stably." << std::endl;
+    }
+
+    // -------------------------------------------------------------------------
+    // [25.4] Pure ECS VehicleComponent & WheelComponent API & Input Buffer (Phase 20.3 Stage 1)
+    // -------------------------------------------------------------------------
+    std::cout << "\n[25.4] Testing Pure ECS VehicleComponent & WheelComponent APIs..." << std::endl;
+    {
+        Axle::VehicleComponent vc;
+        assert(!vc.HasActivePhysics());
+        assert(vc.Throttle == 0.0f && vc.Steering == 0.0f && vc.Brake == 0.0f && !vc.Handbrake);
+
+        // Test SetDriverInput with standard ranges
+        vc.SetDriverInput(0.85f, -0.4f, 0.2f, true);
+        assert(std::abs(vc.Throttle - 0.85f) < 0.001f);
+        assert(std::abs(vc.Steering - -0.4f) < 0.001f);
+        assert(std::abs(vc.Brake - 0.2f) < 0.001f);
+        assert(vc.Handbrake == true);
+
+        // Test clamping behavior
+        vc.SetDriverInput(3.0f, -4.5f, 2.0f, false);
+        assert(vc.Throttle == 1.0f);
+        assert(vc.Steering == -1.0f);
+        assert(vc.Brake == 1.0f);
+        assert(!vc.Handbrake);
+
+        // Test telemetry state queries
+        vc.CurrentSpeedKmh = 105.4f;
+        vc.CurrentSpeedMps = 29.27f;
+        vc.CurrentRPM = 5400.0f;
+        vc.CurrentGear = 4;
+        assert(std::abs(vc.GetSpeedKmh() - 105.4f) < 0.001f);
+        assert(std::abs(vc.GetSpeedMps() - 29.27f) < 0.001f);
+        assert(std::abs(vc.GetRPM() - 5400.0f) < 0.001f);
+        assert(vc.GetCurrentGear() == 4);
+
+        // Test WheelComponent telemetry defaults
+        Axle::WheelComponent wc;
+        assert(wc.AutoSyncMesh == true);
+        assert(wc.IsGrounded == false);
+        assert(wc.SuspensionLength == 0.0f);
+        assert(wc.AngularVelocity == 0.0f);
+        std::cout << "  -> PASS: VehicleComponent and WheelComponent pure ECS input & telemetry interfaces validated." << std::endl;
     }
 
     std::cout << ">>> STEP 25 PASSED: Phase 20 Component-per-Wheel Vehicle Architecture verified! <<<\n" << std::endl;

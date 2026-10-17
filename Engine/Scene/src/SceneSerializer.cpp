@@ -263,6 +263,16 @@ namespace Axle {
                 ss << "      CustomElevation: " << sbc.CustomElevation << "\n";
                 ss << "      HemisphereAmbient: " << (sbc.HemisphereAmbient ? "true" : "false") << "\n";
             }
+
+            // CameraComponent
+            if (entity.HasComponent<CameraComponent>()) {
+                auto& cam = entity.GetComponent<CameraComponent>();
+                ss << "    CameraComponent:\n";
+                ss << "      Primary: " << (cam.Primary ? "true" : "false") << "\n";
+                ss << "      FOV: " << cam.FOV << "\n";
+                ss << "      NearClip: " << cam.NearClip << "\n";
+                ss << "      FarClip: " << cam.FarClip << "\n";
+            }
         }
 
         return ss.str();
@@ -315,6 +325,7 @@ namespace Axle {
             NativeScript,
             DirectionalLight,
             Skybox,
+            Camera,
             Wheel,
             Vehicle
         };
@@ -355,6 +366,11 @@ namespace Axle {
                 currentSection = ComponentSection::DirectionalLight;
             } else if (trimmed == "SkyboxComponent:") {
                 currentSection = ComponentSection::Skybox;
+            } else if (trimmed == "CameraComponent:") {
+                currentSection = ComponentSection::Camera;
+                if (!currentEntity.HasComponent<CameraComponent>()) {
+                    currentEntity.AddComponent<CameraComponent>();
+                }
             } else if (trimmed == "WheelComponent:" || trimmed == "VehicleWheel3D:") {
                 currentSection = ComponentSection::Wheel;
                 if (!currentEntity.HasComponent<WheelComponent>()) {
@@ -609,6 +625,22 @@ namespace Axle {
                             sbc.CustomElevation = std::stof(Trim(trimmed.substr(16)));
                         } else if (trimmed.rfind("HemisphereAmbient:", 0) == 0) {
                             sbc.HemisphereAmbient = (Trim(trimmed.substr(18)) == "true");
+                        }
+                        break;
+                    }
+                    case ComponentSection::Camera: {
+                        if (!currentEntity.HasComponent<CameraComponent>()) {
+                            currentEntity.AddComponent<CameraComponent>();
+                        }
+                        auto& cam = currentEntity.GetComponent<CameraComponent>();
+                        if (trimmed.rfind("Primary:", 0) == 0) {
+                            cam.Primary = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("FOV:", 0) == 0) {
+                            cam.FOV = std::stof(Trim(trimmed.substr(4)));
+                        } else if (trimmed.rfind("NearClip:", 0) == 0) {
+                            cam.NearClip = std::stof(Trim(trimmed.substr(9)));
+                        } else if (trimmed.rfind("FarClip:", 0) == 0) {
+                            cam.FarClip = std::stof(Trim(trimmed.substr(8)));
                         }
                         break;
                     }

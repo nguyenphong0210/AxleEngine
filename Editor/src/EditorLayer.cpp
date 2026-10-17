@@ -1231,6 +1231,10 @@ void EditorLayer::ResetSimulation() {
 void EditorLayer::OnUpdate(Axle::Timestep ts) {
     m_LastDeltaTime = ts.GetSeconds();
 
+    const bool isHoldingRMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight);
+    const bool isCtrlDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftControl) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightControl);
+    const bool isShiftDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift);
+
     // Hotkey Controls (debounced)
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::F5)) {
         if (!m_F5KeyWasPressed) {
@@ -1269,14 +1273,14 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_EscKeyWasPressed = false;
     }
 
-    if (Axle::Input::IsKeyPressed(Axle::KeyCode::O)) {
+    if (!isCtrlDown && Axle::Input::IsKeyPressed(Axle::KeyCode::O)) {
         if (!m_OKeyWasPressed) {
             if (m_SceneState == SceneState::Pause) {
                 m_StepSingleFrame = true;
             }
             m_OKeyWasPressed = true;
         }
-    } else {
+    } else if (!isCtrlDown) {
         m_OKeyWasPressed = false;
     }
 
@@ -1295,10 +1299,6 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     } else {
         m_F9KeyWasPressed = false;
     }
-
-    const bool isHoldingRMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight);
-    const bool isCtrlDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftControl) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightControl);
-    const bool isShiftDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift);
 
     // File Shortcut Hotkeys (Ctrl+S, Ctrl+Shift+S, Ctrl+O, Ctrl+N, Ctrl+B)
     if (isCtrlDown && !ImGui::GetIO().WantTextInput) {
@@ -1334,16 +1334,16 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         }
 
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::O)) {
-            if (!m_OKeyWasPressed) {
+            if (!m_CtrlOKeyWasPressed) {
                 if (isShiftDown) {
                     OpenProject();
                 } else {
                     OpenScene();
                 }
-                m_OKeyWasPressed = true;
+                m_CtrlOKeyWasPressed = true;
             }
         } else {
-            m_OKeyWasPressed = false;
+            m_CtrlOKeyWasPressed = false;
         }
     }
 
@@ -1400,7 +1400,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
             m_F11KeyWasPressed = true;
         }
     } else {
-        m_F1KeyWasPressed = false;
+        m_F11KeyWasPressed = false;
     }
 
     // C++ Native Scripting Runtime Execution & Vehicle Simulation (Phase 20.3)

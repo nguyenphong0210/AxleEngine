@@ -231,6 +231,16 @@ namespace Axle {
                     }
                 }
             }
+
+            // CameraComponent
+            if (entity.HasComponent<CameraComponent>()) {
+                auto& cam = entity.GetComponent<CameraComponent>();
+                fout << "    CameraComponent:\n";
+                fout << "      Primary: " << (cam.Primary ? "true" : "false") << "\n";
+                fout << "      FOV: " << cam.FOV << "\n";
+                fout << "      NearClip: " << cam.NearClip << "\n";
+                fout << "      FarClip: " << cam.FarClip << "\n";
+            }
         }
 
         fout.close();
@@ -264,6 +274,9 @@ namespace Axle {
         bool HasNativeScript = false;
         std::string ScriptName;
 
+        bool HasCamera = false;
+        CameraComponent Camera;
+
         bool HasHierarchy = false;
         u64 ParentOldUUID = 0;
         std::vector<u64> ChildrenOldUUIDs;
@@ -278,6 +291,7 @@ namespace Axle {
         RigidBody,
         Material,
         NativeScript,
+        Camera,
         Hierarchy,
         HierarchyChildren
     };
@@ -327,6 +341,7 @@ namespace Axle {
             if (trimmed == "RigidBody3D:" || trimmed == "RigidBodyComponent:") { currentSection = AsmSection::RigidBody; current.HasRigidBody = true; continue; }
             if (trimmed == "MaterialComponent:") { currentSection = AsmSection::Material; current.HasMaterial = true; continue; }
             if (trimmed == "NativeScriptComponent:") { currentSection = AsmSection::NativeScript; current.HasNativeScript = true; continue; }
+            if (trimmed == "CameraComponent:") { currentSection = AsmSection::Camera; current.HasCamera = true; continue; }
             if (trimmed == "HierarchyComponent:") { currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
 
             switch (currentSection) {
@@ -462,6 +477,18 @@ namespace Axle {
                 case AsmSection::NativeScript: {
                     if (trimmed.rfind("ScriptName:", 0) == 0) {
                         current.ScriptName = Trim(trimmed.substr(11));
+                    }
+                    break;
+                }
+                case AsmSection::Camera: {
+                    if (trimmed.rfind("Primary:", 0) == 0) {
+                        current.Camera.Primary = (Trim(trimmed.substr(8)) == "true");
+                    } else if (trimmed.rfind("FOV:", 0) == 0) {
+                        current.Camera.FOV = std::stof(Trim(trimmed.substr(4)));
+                    } else if (trimmed.rfind("NearClip:", 0) == 0) {
+                        current.Camera.NearClip = std::stof(Trim(trimmed.substr(9)));
+                    } else if (trimmed.rfind("FarClip:", 0) == 0) {
+                        current.Camera.FarClip = std::stof(Trim(trimmed.substr(8)));
                     }
                     break;
                 }
@@ -622,6 +649,11 @@ namespace Axle {
             // NativeScriptComponent
             if (raw.HasNativeScript && !raw.ScriptName.empty()) {
                 entity.AddComponent<NativeScriptComponent>(raw.ScriptName);
+            }
+
+            // CameraComponent
+            if (raw.HasCamera) {
+                entity.AddComponent<CameraComponent>(raw.Camera);
             }
         }
 

@@ -379,6 +379,21 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
       - [x] Implement `CarController.hpp` template inheriting `Axle::ScriptableEntity`, reading keyboard/gamepad inputs and driving `VehicleComponent` cleanly.
       - [x] Expose live-tunable fields (`Horsepower`, `MaxSteerAngle`, `BrakePower`, `AllWheelDrive`) using `AXLE_SCRIPT_FIELDS` for real-time Inspector tuning.
       - [x] Update `SceneHierarchyPanel` with dedicated vehicle telemetry cards (speedometer, tachometer, per-wheel contact & compression readouts).
+- [ ] **Phase 20.4: Editor Decoupling & Camera / Input Architecture Standardization (Unity / Unreal Style)**:
+  - [ ] **Decoupled Game View & Eject Mode (`Engine/Scene` & `Editor`)**:
+    - [ ] Integrate `CameraComponent` (Primary Camera) into runtime scene rendering during Play mode (`F5`).
+    - [ ] Implement Eject / Free-Fly mode (`C` key) allowing editor camera inspection while simulation is running.
+    - [ ] Graceful fallback to `EditorCamera` with viewport notification badge when no camera entity is present in scene.
+    - [ ] Auto-instantiate `"Main Camera"` entity with `CameraComponent` in `NewScene()` and `OpenScene()` if missing.
+  - [ ] **Script-Driven Vehicle & Camera Gameplay (`AxleScripts`)**:
+    - [ ] Eliminate direct driving input (`WASD`/`Space`) from `EditorLayer`. All driving logic is cleanly delegated to `CarController.hpp`.
+    - [x] Implement `VehicleChaseCamera.hpp` native script component with live reflection fields (`Distance`, `HeightOffset`, `MouseSensitivity`, `AutoAlignSpeed`) replacing hardcoded orbit/chase math in `EditorLayer`.
+  - [x] **ECS & Serialization Integrity**:
+    - [x] Full YAML serialization and deserialization for `CameraComponent` (`FOV`, `NearClip`, `FarClip`, `Primary`) in `SceneSerializer.cpp` and `AssemblySerializer.cpp`.
+    - [x] Helper API `Scene::GetPrimaryCameraEntity()` in `Engine/Scene`.
+  - [x] **Input System & Hotkey Hygiene**:
+    - [x] Fix debouncing bug on `F11` (proper toggle between Maximize and Restore).
+    - [x] Resolve hotkey conflict between single-frame step `O` in Pause mode and `Ctrl + O` (Open Scene/Project).
 - [ ] **Phase 21: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
@@ -457,7 +472,7 @@ cmake --build build --config Release --parallel
 | **F7 / Escape** | Stop Simulation (resets bodies & car to initial edit state) |
 | **O** | Step Single Frame (1/60s tick when paused) |
 | **R** | Reset Scene (reloads entity transforms & zero velocities) |
-| **C** | Toggle Camera Mode (Chase Camera vs Free-Fly Camera) |
+| **C** | Toggle Camera Mode (Game View / Primary Camera vs Eject Free-Fly Camera in Play Mode) |
 | **F1** | Toggle Jolt Physics Wireframe Colliders |
 
 ### Edit Mode / Free-Fly Camera (Viewport)

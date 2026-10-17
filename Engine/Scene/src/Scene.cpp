@@ -356,6 +356,21 @@ namespace Axle {
         return false;
     }
 
+    Entity Scene::GetPrimaryCameraEntity() {
+        auto view = m_Registry.view<CameraComponent>();
+        for (auto entityID : view) {
+            const auto& cam = view.get<CameraComponent>(entityID);
+            if (cam.Primary) {
+                return Entity{ entityID, this };
+            }
+        }
+        // Fallback: Return the first camera entity found if none explicitly marked Primary
+        for (auto entityID : view) {
+            return Entity{ entityID, this };
+        }
+        return Entity{};
+    }
+
     void Scene::OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,
                          const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, int shadowMapSlot) {
         (void)ts;

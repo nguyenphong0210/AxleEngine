@@ -106,6 +106,7 @@ private:
     bool m_F6KeyWasPressed = false;
     bool m_F7KeyWasPressed = false;
     bool m_OKeyWasPressed = false;
+    bool m_CtrlOKeyWasPressed = false;
     bool m_EscKeyWasPressed = false;
     bool m_RKeyWasPressed = false;
     bool m_SKeyWasPressed = false;

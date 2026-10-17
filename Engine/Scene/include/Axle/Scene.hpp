@@ -62,6 +62,9 @@ namespace Axle {
         // Query active atmospheric skybox in the scene (returns true if skybox found)
         bool GetPrimarySkybox(SkyboxComponent& outSkybox) const;
 
+        // Query primary camera entity in the scene (returns invalid Entity if none found)
+        Entity GetPrimaryCameraEntity();
+
         // Update physics synchronization and render all mesh components
         void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,
                       const glm::mat4& lightSpaceMatrix = glm::mat4(1.0f),

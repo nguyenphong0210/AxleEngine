@@ -6,6 +6,7 @@
 #include <Axle/RenderCommand.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/ParallelECS.hpp>
+#include <Axle/Vehicle.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -557,10 +558,33 @@ namespace Axle {
         }
     }
 
-    void Scene::OnRuntimeStart() {
-        auto view = m_Registry.view<NativeScriptComponent>();
-        for (auto entity : view) {
-            auto& nsc = view.get<NativeScriptComponent>(entity);
+    Vehicle* Scene::GetRuntimeVehicle(entt::entity chassisEntityID) const {
+        for (const auto& rv : m_RuntimeVehicles) {
+            if (rv.ChassisEntityID == chassisEntityID) {
+                return rv.VehicleInstance.get();
+            }
+        }
+        return nullptr;
+    }
+
+    Vehicle* Scene::GetRuntimeVehicle(Entity chassisEntity) const {
+        return GetRuntimeVehicle(static_cast<entt::entity>(chassisEntity));
+    }
+
+    Vehicle* Scene::GetPrimaryRuntimeVehicle() const {
+        if (!m_RuntimeVehicles.empty()) {
+            return m_RuntimeVehicles[0].VehicleInstance.get();
+        }
+        return nullptr;
+    }
+
+    void Scene::OnRuntimeStart(PhysicsScene* physicsScene) {
+        m_RuntimePhysicsScene = physicsScene;
+
+        // 1. Initialize C++ Native Scripting components
+        auto scriptView = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : scriptView) {
+            auto& nsc = scriptView.get<NativeScriptComponent>(entity);
             if (!nsc.InstantiateScript && !nsc.ScriptName.empty()) {
                 nsc.Bind(nsc.ScriptName);
             }
@@ -572,12 +596,150 @@ namespace Axle {
                 nsc.Instance->OnCreate();
             }
         }
+
+        // 2. Dynamic Vehicle Assembly & Jolt Physics Instantiation (Unity ECS com.unity.vehicles model)
+        if (physicsScene) {
+            m_RuntimeVehicles.clear();
+            auto vehicleView = m_Registry.view<VehicleComponent>();
+
+            for (auto entityID : vehicleView) {
+                Entity chassisEntity{ entityID, this };
+                if (!chassisEntity.HasComponent<TransformComponent>()) continue;
+
+                auto& chassisTC = chassisEntity.GetComponent<TransformComponent>();
+                auto& vc = chassisEntity.GetComponent<VehicleComponent>();
+
+                VehicleConfig config;
+                config.InitialPosition = chassisTC.Translation;
+                config.InitialRotation = chassisTC.Rotation;
+                config.ChassisMass = vc.ChassisMass;
+                config.MaxEngineTorque = vc.MaxEngineTorque;
+                config.MaxRPM = vc.MaxRPM;
+                config.MinRPM = vc.MinRPM;
+                config.MaxBrakeTorque = vc.MaxBrakeTorque;
+                config.MaxHandBrakeTorque = vc.MaxHandBrakeTorque;
+                config.FourWheelDrive = vc.FourWheelDrive;
+                config.CenterOfMassOffset = vc.CenterOfMassOffset;
+
+                if (chassisEntity.HasComponent<CollisionShape3D>()) {
+                    const auto& cs = chassisEntity.GetComponent<CollisionShape3D>();
+                    if (cs.ShapeType == CollisionShapeType::Box) {
+                        config.ChassisHalfExtent = cs.HalfExtent;
+                    } else {
+                        config.ChassisHalfExtent = glm::max(chassisTC.Scale * 0.5f, glm::vec3(0.1f));
+                    }
+                } else {
+                    config.ChassisHalfExtent = glm::max(chassisTC.Scale * 0.5f, glm::vec3(0.1f));
+                }
+
+                if (chassisEntity.HasComponent<RigidBody3D>()) {
+                    const auto& rb = chassisEntity.GetComponent<RigidBody3D>();
+                    if (rb.Mass > 0.0f) {
+                        config.ChassisMass = rb.Mass;
+                    }
+                }
+
+                // Dynamic Wheel Discovery (VehicleUpdateColliders equivalent):
+                // Strategy A: Direct child entities holding WheelComponent
+                std::vector<entt::entity> wheelEntityIDs;
+                for (auto child : chassisEntity.GetChildren()) {
+                    if (child && child.HasComponent<WheelComponent>()) {
+                        wheelEntityIDs.push_back(static_cast<entt::entity>(child));
+                    }
+                }
+
+                // Strategy B: Fallback search across registry if no direct children
+                if (wheelEntityIDs.empty()) {
+                    auto wheelView = m_Registry.view<WheelComponent>();
+                    for (auto wID : wheelView) {
+                        wheelEntityIDs.push_back(wID);
+                    }
+                }
+
+                // Build CustomWheels
+                if (!wheelEntityIDs.empty()) {
+                    config.CustomWheels.reserve(wheelEntityIDs.size());
+                    for (auto wID : wheelEntityIDs) {
+                        Entity wEnt{ wID, this };
+                        WheelConfig wc;
+                        if (wEnt.HasComponent<WheelComponent>()) {
+                            const auto& comp = wEnt.GetComponent<WheelComponent>();
+                            wc.Radius = comp.Radius;
+                            wc.Width = comp.Width;
+                            wc.SuspensionMinLength = comp.SuspensionMinLength;
+                            wc.SuspensionMaxLength = comp.SuspensionMaxLength;
+                            wc.SpringFrequency = comp.SpringFrequency;
+                            wc.SpringDamping = comp.SpringDamping;
+                            wc.CanSteer = comp.CanSteer;
+                            wc.MaxSteerAngleDegrees = comp.MaxSteerAngle;
+                            wc.IsDriven = comp.IsDriven;
+                            wc.MaxBrakeTorque = comp.BrakeTorque;
+                            wc.MaxHandBrakeTorque = comp.HasHandbrake ? comp.HandBrakeTorque : 0.0f;
+                        }
+
+                        if (wEnt.HasComponent<TransformComponent>()) {
+                            const auto& wtc = wEnt.GetComponent<TransformComponent>();
+                            if (wEnt.GetParent() == chassisEntity) {
+                                wc.Position = wtc.Translation;
+                            } else {
+                                glm::vec3 worldPos = glm::vec3(wEnt.GetWorldTransform()[3]);
+                                wc.Position = glm::inverse(chassisTC.Rotation) * (worldPos - chassisTC.Translation);
+                            }
+                        }
+
+                        // Ensure wheel visual mesh uses local coordinate mapping so roll rotation is visible
+                        if (wEnt.HasComponent<MeshInstance3D>()) {
+                            auto& mc = wEnt.GetComponent<MeshInstance3D>();
+                            if (mc.PatternMode == 0) {
+                                mc.PatternMode = 1;
+                                if (mc.TileScale <= 1.0f) mc.TileScale = 4.0f;
+                            }
+                        }
+
+                        config.CustomWheels.push_back(wc);
+                    }
+                }
+
+                // Destroy pre-existing chassis body in PhysicsScene to avoid duplicate overlapping rigid bodies
+                if (chassisEntity.HasComponent<RigidBody3D>()) {
+                    auto& rb = chassisEntity.GetComponent<RigidBody3D>();
+                    if (!rb.RuntimeBodyID.IsInvalid() && physicsScene->IsBodyValid(rb.RuntimeBodyID)) {
+                        physicsScene->DestroyBody(rb.RuntimeBodyID);
+                        rb.RuntimeBodyID = {};
+                    }
+                }
+
+                auto vehicleInstance = std::make_unique<Vehicle>(*physicsScene, config);
+                vehicleInstance->Reset(chassisTC.Translation, chassisTC.Rotation);
+
+                vc.VehicleInstance = vehicleInstance.get();
+
+                if (chassisEntity.HasComponent<RigidBody3D>()) {
+                    chassisEntity.GetComponent<RigidBody3D>().RuntimeBodyID = vehicleInstance->GetChassisBodyID();
+                } else {
+                    chassisEntity.AddComponent<RigidBody3D>(vehicleInstance->GetChassisBodyID(), true);
+                }
+
+                if (!chassisEntity.HasComponent<CollisionShape3D>()) {
+                    chassisEntity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, config.ChassisHalfExtent, 0.5f, 0.0f);
+                }
+
+                RuntimeVehicleData rvData;
+                rvData.ChassisEntityID = entityID;
+                rvData.VehicleInstance = std::move(vehicleInstance);
+                rvData.WheelEntityIDs = std::move(wheelEntityIDs);
+                m_RuntimeVehicles.push_back(std::move(rvData));
+            }
+        }
     }
 
-    void Scene::OnUpdateRuntime(Timestep ts) {
-        auto view = m_Registry.view<NativeScriptComponent>();
-        for (auto entity : view) {
-            auto& nsc = view.get<NativeScriptComponent>(entity);
+    void Scene::OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene) {
+        PhysicsScene* pScene = physicsScene ? physicsScene : m_RuntimePhysicsScene;
+
+        // 1. Update C++ Native Scripting components
+        auto scriptView = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : scriptView) {
+            auto& nsc = scriptView.get<NativeScriptComponent>(entity);
             if (!nsc.InstantiateScript && !nsc.ScriptName.empty()) {
                 nsc.Bind(nsc.ScriptName);
             }
@@ -593,9 +755,97 @@ namespace Axle {
                 nsc.Instance->OnUpdate(ts);
             }
         }
+
+        // 2. Real-time Cache-Friendly Vehicle Physics & Wheel Pose Synchronization
+        for (auto& rv : m_RuntimeVehicles) {
+            if (!rv.VehicleInstance || rv.ChassisEntityID == entt::null || !m_Registry.valid(rv.ChassisEntityID)) {
+                continue;
+            }
+
+            Entity chassisEntity{ rv.ChassisEntityID, this };
+            if (!chassisEntity.HasComponent<VehicleComponent>() || !chassisEntity.HasComponent<TransformComponent>()) {
+                continue;
+            }
+
+            auto& vc = chassisEntity.GetComponent<VehicleComponent>();
+            auto& chassisTC = chassisEntity.GetComponent<TransformComponent>();
+
+            // Dispatch ECS driver inputs to physics vehicle controller
+            rv.VehicleInstance->SetDriverInput(vc.Throttle, vc.Steering, vc.Brake, vc.Handbrake ? 1.0f : 0.0f);
+
+            // Sync chassis TransformComponent with vehicle physics body
+            chassisTC.Translation = rv.VehicleInstance->GetPosition();
+            if (pScene) {
+                chassisTC.Rotation = pScene->GetBodyRotation(rv.VehicleInstance->GetChassisBodyID());
+            }
+
+            // Sync vehicle telemetry to VehicleComponent buffer
+            auto telemetry = rv.VehicleInstance->GetTelemetry();
+            vc.CurrentSpeedKmh = telemetry.SpeedKmh;
+            vc.CurrentSpeedMps = telemetry.SpeedMps;
+            vc.CurrentRPM = telemetry.EngineRPM;
+            vc.CurrentGear = telemetry.CurrentGear;
+
+            // Sync child wheel entities (Transforms & Telemetry)
+            for (size_t i = 0; i < rv.WheelEntityIDs.size(); ++i) {
+                entt::entity wID = rv.WheelEntityIDs[i];
+                if (wID == entt::null || !m_Registry.valid(wID)) continue;
+
+                Entity wEnt{ wID, this };
+                const glm::mat4 wheelMat = rv.VehicleInstance->GetWheelTransform(static_cast<u32>(i));
+
+                if (wEnt.HasComponent<TransformComponent>()) {
+                    auto& wtc = wEnt.GetComponent<TransformComponent>();
+                    bool autoSync = true;
+                    if (wEnt.HasComponent<WheelComponent>()) {
+                        autoSync = wEnt.GetComponent<WheelComponent>().AutoSyncMesh;
+                    }
+
+                    if (autoSync) {
+                        if (wEnt.GetParent() == chassisEntity) {
+                            glm::mat4 chassisWorld = rv.VehicleInstance->GetChassisTransform();
+                            glm::mat4 localWheelMat = glm::inverse(chassisWorld) * wheelMat;
+                            wtc.Translation = glm::vec3(localWheelMat[3]);
+                            wtc.Rotation = glm::quat_cast(localWheelMat);
+                        } else {
+                            wtc.Translation = glm::vec3(wheelMat[3]);
+                            wtc.Rotation = glm::quat_cast(wheelMat);
+                        }
+                    }
+                }
+
+                if (wEnt.HasComponent<WheelComponent>() && i < 4) {
+                    auto& wc = wEnt.GetComponent<WheelComponent>();
+                    const auto& wData = telemetry.Wheels[i];
+                    wc.IsGrounded = wData.HasContact;
+                    wc.SuspensionLength = wData.SuspensionLength;
+                    wc.AngularVelocity = wData.AngularVelocity;
+                    wc.SteerAngle = wData.SteerAngle;
+                    wc.SlipAngle = glm::degrees(wData.SteerAngle);
+                    wc.LateralSlip = wData.LateralSlip;
+                    wc.LongitudinalSlip = wData.LongitudinalSlip;
+                }
+            }
+        }
     }
 
-    void Scene::OnRuntimeStop() {
+    void Scene::OnRuntimeStop(PhysicsScene* physicsScene) {
+        // Reset and clear runtime vehicles cleanly
+        for (auto& rv : m_RuntimeVehicles) {
+            if (rv.ChassisEntityID != entt::null && m_Registry.valid(rv.ChassisEntityID)) {
+                Entity chassisEntity{ rv.ChassisEntityID, this };
+                if (chassisEntity.HasComponent<VehicleComponent>()) {
+                    auto& vc = chassisEntity.GetComponent<VehicleComponent>();
+                    vc.VehicleInstance = nullptr;
+                    vc.Throttle = vc.Steering = vc.Brake = 0.0f;
+                    vc.Handbrake = false;
+                    vc.CurrentSpeedKmh = vc.CurrentSpeedMps = vc.CurrentRPM = 0.0f;
+                }
+            }
+        }
+        m_RuntimeVehicles.clear();
+        m_RuntimePhysicsScene = nullptr;
+
         auto view = m_Registry.view<NativeScriptComponent>();
         for (auto entity : view) {
             auto& nsc = view.get<NativeScriptComponent>(entity);

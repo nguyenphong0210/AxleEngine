@@ -15,8 +15,15 @@
 namespace Axle {
 
     class Entity;
+    class Vehicle;
     struct DirectionalLightComponent;
     struct SkyboxComponent;
+
+    struct RuntimeVehicleData {
+        entt::entity ChassisEntityID = entt::null;
+        std::unique_ptr<Vehicle> VehicleInstance;
+        std::vector<entt::entity> WheelEntityIDs;
+    };
 
     class Scene {
     public:
@@ -64,10 +71,16 @@ namespace Axle {
         // Render shadow depth pass from light's perspective
         void RenderShadowPass(Shader& shadowShader, const glm::mat4& lightSpaceMatrix);
 
-        // Scripting runtime lifecycle
-        void OnRuntimeStart();
-        void OnUpdateRuntime(Timestep ts);
-        void OnRuntimeStop();
+        // Simulation runtime lifecycle & dynamic vehicle assembly (Phase 20.3 Stage 2)
+        void OnRuntimeStart(PhysicsScene* physicsScene = nullptr);
+        void OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene = nullptr);
+        void OnRuntimeStop(PhysicsScene* physicsScene = nullptr);
+
+        // Dynamic vehicle query API
+        Vehicle* GetRuntimeVehicle(entt::entity chassisEntityID) const;
+        Vehicle* GetRuntimeVehicle(Entity chassisEntity) const;
+        Vehicle* GetPrimaryRuntimeVehicle() const;
+        const std::vector<RuntimeVehicleData>& GetRuntimeVehicles() const { return m_RuntimeVehicles; }
 
         // Hot Reload Lifecycle & Field State Preservation
         void OnPreScriptReload();
@@ -80,6 +93,8 @@ namespace Axle {
         void UpdateEntityTransformRecursive(entt::entity entity, const glm::mat4& parentWorld);
 
         entt::registry m_Registry;
+        std::vector<RuntimeVehicleData> m_RuntimeVehicles;
+        PhysicsScene* m_RuntimePhysicsScene = nullptr;
 
         friend class Entity;
     };

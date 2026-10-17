@@ -367,11 +367,11 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
       - [x] Upgrade `WheelComponent` (mirroring Unity ECS `ControllableWheelAuthoring`): tire radius, width, suspension travel min/max, spring frequency/damping, steerable, driven, handbrake, `AutoSyncMesh` toggle, and live telemetry fields (`IsGrounded`, `SuspensionLength`, `AngularVelocity`, `SlipAngle`, `LateralSlip`).
       - [x] Refine `VehicleComponent` (mirroring Unity ECS `VehicleControlAuthoring`): pure drivetrain & control data container with driver inputs (`Throttle`, `Steering`, `Brake`, `Handbrake`), anti-roll bar stiffness, center-of-mass offset, and clean C++ API (`SetDriverInput`, `GetSpeedKmh`, `GetRPM`, `GetWheelCount`).
       - [x] Full YAML scene serialization/deserialization in `SceneSerializer.cpp` and unit test verification in Step 25 ([25.1], [25.2], [25.4]).
-    - [ ] **Stage 2 - Core Scene Lifecycle & Dynamic Assembly (`VehicleUpdateColliders`)**:
-      - Relocate Jolt vehicle constraint instantiation and physics setup from `EditorLayer` directly into `Scene::OnRuntimeStart()`.
-      - Dynamic N-wheel discovery (`VehicleUpdateColliders` equivalent): automatically discover all child entities holding `WheelComponent` attached to root chassis entity with `RigidBody3D` + `VehicleComponent`.
-      - Real-time cache-friendly wheel pose synchronization in `Scene::OnUpdateRuntime()`: update child wheel entity `TransformComponent` (suspension travel and wheel rotation) directly within contiguous EnTT memory pool.
-      - Safe teardown and state restoration on simulation stop in `Scene::OnRuntimeStop()`.
+    - [x] **Stage 2 - Core Scene Lifecycle & Dynamic Assembly (`VehicleUpdateColliders`)**:
+      - [x] Relocate Jolt vehicle constraint instantiation and physics setup from `EditorLayer` directly into `Scene::OnRuntimeStart()`.
+      - [x] Dynamic N-wheel discovery (`VehicleUpdateColliders` equivalent): automatically discover all child entities holding `WheelComponent` attached to root chassis entity with `RigidBody3D` + `VehicleComponent`.
+      - [x] Real-time cache-friendly wheel pose synchronization in `Scene::OnUpdateRuntime()`: update child wheel entity `TransformComponent` (suspension travel and wheel rotation) with local matrix inverse decomposition to prevent drift.
+      - [x] Safe teardown and state restoration on simulation stop in `Scene::OnRuntimeStop()`.
     - [ ] **Stage 3 - Complete `EditorLayer` Decoupling (100% Neutral Editor)**:
       - Eliminate all vehicle physics hardcodes from `EditorLayer.cpp` (remove `SetupVehiclePhysics`, remove `m_Vehicle`, remove hardcoded WASD input polling, remove manual wheel transform copy loops).
       - Decouple `ChaseCamera` from hardcoded vehicle instances, dynamically binding to active player vehicle entities.

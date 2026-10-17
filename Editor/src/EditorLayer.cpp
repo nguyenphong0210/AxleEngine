@@ -616,7 +616,7 @@ void EditorLayer::OnDetach() {
     Axle::AssetManager::Shutdown();
     m_ShadowShader.reset();
     m_ShadowMap.reset();
-    m_Vehicle.reset();
+    m_Vehicle = nullptr;
     m_Scene.reset();
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
@@ -746,13 +746,9 @@ void EditorLayer::OnScenePlay() {
     // Discover vehicle entities dynamically from the active runtime scene
     DiscoverVehicleEntities();
 
-    // If an entity with VehicleComponent exists, ensure Jolt Vehicle physics is instantiated and bound
-    if (m_ChassisEntity && !m_Vehicle) {
-        SetupVehiclePhysics(m_ChassisEntity);
-    }
-
     m_SceneState = SceneState::Play;
-    m_Scene->OnRuntimeStart();
+    m_Scene->OnRuntimeStart(m_PhysicsScene.get());
+    m_Vehicle = m_Scene->GetPrimaryRuntimeVehicle();
     m_ChaseCamera = true;
     AXLE_INFO("Simulation started (Play Mode). Ephemeral Runtime Scene cloned from pristine Editor Scene.");
 }
@@ -869,7 +865,7 @@ void EditorLayer::NewScene() {
     }
 
     // Release Vehicle before PhysicsScene is destroyed
-    m_Vehicle.reset();
+    m_Vehicle = nullptr;
 
     // Clear cached entity handles
     m_ChassisEntity = {};
@@ -960,130 +956,14 @@ void EditorLayer::DiscoverVehicleEntities() {
 }
 
 void EditorLayer::SetupVehiclePhysics(Axle::Entity chassisEntity) {
-    if (!chassisEntity || !chassisEntity.HasComponent<Axle::TransformComponent>() || !m_PhysicsScene) {
+    if (!chassisEntity || !m_PhysicsScene || !m_Scene) {
         return;
     }
-
     m_ChassisEntity = chassisEntity;
-    auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
-
-    Axle::VehicleConfig config;
-    config.InitialPosition = chassisTC.Translation;
-    config.InitialRotation = chassisTC.Rotation;
-
-    if (m_ChassisEntity.HasComponent<Axle::CollisionShape3D>()) {
-        const auto& cs = m_ChassisEntity.GetComponent<Axle::CollisionShape3D>();
-        if (cs.ShapeType == Axle::CollisionShapeType::Box) {
-            config.ChassisHalfExtent = cs.HalfExtent;
-        } else {
-            config.ChassisHalfExtent = glm::max(chassisTC.Scale * 0.5f, glm::vec3(0.1f));
-        }
-    } else {
-        config.ChassisHalfExtent = glm::max(chassisTC.Scale * 0.5f, glm::vec3(0.1f));
-    }
-
-    if (m_ChassisEntity.HasComponent<Axle::RigidBody3D>()) {
-        const auto& rb = m_ChassisEntity.GetComponent<Axle::RigidBody3D>();
-        if (rb.Mass > 0.0f) {
-            config.ChassisMass = rb.Mass;
-        }
-    }
-
-    if (m_ChassisEntity.HasComponent<Axle::VehicleComponent>()) {
-        const auto& vc = m_ChassisEntity.GetComponent<Axle::VehicleComponent>();
-        config.ChassisMass = vc.ChassisMass;
-        config.MaxEngineTorque = vc.MaxEngineTorque;
-        config.MaxRPM = vc.MaxRPM;
-        config.MinRPM = vc.MinRPM;
-        config.MaxBrakeTorque = vc.MaxBrakeTorque;
-        config.MaxHandBrakeTorque = vc.MaxHandBrakeTorque;
-        config.FourWheelDrive = vc.FourWheelDrive;
-        config.CenterOfMassOffset = vc.CenterOfMassOffset;
-    }
-
-    // Build CustomWheels if any wheel entities have WheelComponent or custom geometry
-    if (!m_WheelEntities.empty()) {
-        bool hasWheelComponent = false;
-        for (const auto& wEnt : m_WheelEntities) {
-            if (wEnt && wEnt.HasComponent<Axle::WheelComponent>()) {
-                hasWheelComponent = true;
-                break;
-            }
-        }
-
-        if (hasWheelComponent) {
-            config.CustomWheels.reserve(m_WheelEntities.size());
-            for (auto wEnt : m_WheelEntities) {
-                if (!wEnt) continue;
-
-                Axle::WheelConfig wc;
-                if (wEnt.HasComponent<Axle::WheelComponent>()) {
-                    const auto& comp = wEnt.GetComponent<Axle::WheelComponent>();
-                    wc.Radius = comp.Radius;
-                    wc.Width = comp.Width;
-                    wc.SuspensionMinLength = comp.SuspensionMinLength;
-                    wc.SuspensionMaxLength = comp.SuspensionMaxLength;
-                    wc.SpringFrequency = comp.SpringFrequency;
-                    wc.SpringDamping = comp.SpringDamping;
-                    wc.CanSteer = comp.CanSteer;
-                    wc.MaxSteerAngleDegrees = comp.MaxSteerAngle;
-                    wc.IsDriven = comp.IsDriven;
-                    wc.MaxBrakeTorque = comp.BrakeTorque;
-                    wc.MaxHandBrakeTorque = comp.HasHandbrake ? comp.HandBrakeTorque : 0.0f;
-                }
-
-                if (wEnt.HasComponent<Axle::TransformComponent>()) {
-                    const auto& wtc = wEnt.GetComponent<Axle::TransformComponent>();
-                    if (wEnt.GetParent() == m_ChassisEntity) {
-                        wc.Position = wtc.Translation;
-                    } else {
-                        glm::vec3 worldPos = glm::vec3(wEnt.GetWorldTransform()[3]);
-                        wc.Position = glm::inverse(chassisTC.Rotation) * (worldPos - chassisTC.Translation);
-                    }
-                }
-
-                // Ensure wheel visual mesh uses local coordinate mapping so roll rotation is visible
-                if (wEnt.HasComponent<Axle::MeshInstance3D>()) {
-                    auto& mc = wEnt.GetComponent<Axle::MeshInstance3D>();
-                    if (mc.PatternMode == 0) {
-                        mc.PatternMode = 1;
-                        if (mc.TileScale <= 1.0f) mc.TileScale = 4.0f;
-                    }
-                }
-
-                config.CustomWheels.push_back(wc);
-            }
-        }
-    }
-
-    // Destroy any pre-existing body on chassis to prevent orphan overlapping collision body
-    if (m_ChassisEntity.HasComponent<Axle::RigidBody3D>()) {
-        auto& rb = m_ChassisEntity.GetComponent<Axle::RigidBody3D>();
-        if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-            m_PhysicsScene->DestroyBody(rb.RuntimeBodyID);
-            rb.RuntimeBodyID = {};
-        }
-    }
-
-    m_Vehicle = std::make_unique<Axle::Vehicle>(*m_PhysicsScene, config);
-    m_Vehicle->Reset(chassisTC.Translation, chassisTC.Rotation);
-
-    if (m_ChassisEntity.HasComponent<Axle::VehicleComponent>()) {
-        m_ChassisEntity.GetComponent<Axle::VehicleComponent>().VehicleInstance = m_Vehicle.get();
-    } else {
-        m_ChassisEntity.AddComponent<Axle::VehicleComponent>(m_Vehicle.get());
-    }
-
-    if (m_ChassisEntity.HasComponent<Axle::RigidBody3D>()) {
-        m_ChassisEntity.GetComponent<Axle::RigidBody3D>().RuntimeBodyID = m_Vehicle->GetChassisBodyID();
-    } else {
-        m_ChassisEntity.AddComponent<Axle::RigidBody3D>(m_Vehicle->GetChassisBodyID(), true);
-    }
-
-    m_InitialDynamicStates[m_Vehicle->GetChassisBodyID().GetIndexAndSequenceNumber()] = { chassisTC.Translation, chassisTC.Rotation };
-
-    if (!m_ChassisEntity.HasComponent<Axle::CollisionShape3D>()) {
-        m_ChassisEntity.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, config.ChassisHalfExtent, 0.5f, 0.0f);
+    m_Vehicle = m_Scene->GetRuntimeVehicle(m_ChassisEntity);
+    if (!m_Vehicle && m_SceneState == SceneState::Play) {
+        m_Scene->OnRuntimeStart(m_PhysicsScene.get());
+        m_Vehicle = m_Scene->GetRuntimeVehicle(m_ChassisEntity);
     }
 }
 
@@ -1113,7 +993,7 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
     }
 
     // 1. MUST destroy m_Vehicle BEFORE destroying m_PhysicsScene!
-    m_Vehicle.reset();
+    m_Vehicle = nullptr;
 
     // 2. Clear cached entity handles
     m_ChassisEntity = {};
@@ -1373,9 +1253,10 @@ void EditorLayer::OnSceneStop() {
     m_SceneState = SceneState::Edit;
 
     if (m_RuntimeScene) {
-        m_RuntimeScene->OnRuntimeStop();
+        m_RuntimeScene->OnRuntimeStop(m_PhysicsScene.get());
         m_RuntimeScene.reset();
     }
+    m_Vehicle = nullptr;
 
     // Restore pristine EditorScene (Phase 18.2: Zero Physics Drift)
     m_Scene = m_EditorScene;
@@ -1389,9 +1270,6 @@ void EditorLayer::OnSceneStop() {
 
     // Rediscover vehicle entities in the restored EditorScene
     DiscoverVehicleEntities();
-    if (m_ChassisEntity && !m_Vehicle) {
-        SetupVehiclePhysics(m_ChassisEntity);
-    }
 
     // Restore panel contexts to pristine EditorScene
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
@@ -1625,18 +1503,16 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_F1KeyWasPressed = false;
     }
 
-    // C++ Native Scripting Runtime Execution (Phase 8: CarPlayerScript, Camera, Hazard scripts)
+    // C++ Native Scripting Runtime Execution & Vehicle Simulation (Phase 20.3 Stage 2)
     if (m_SceneState == SceneState::Play) {
-        m_Scene->OnUpdateRuntime(ts);
-
-        // Direct Driving Controls for Custom Vehicles without a script attached (Phase 20.2)
-        if (m_Vehicle) {
-            bool hasScriptController = m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::NativeScriptComponent>();
+        // Direct Driving Controls for Custom Vehicles without a script attached (Phase 20.2 & 20.3)
+        if (m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::VehicleComponent>()) {
+            bool hasScriptController = m_ChassisEntity.HasComponent<Axle::NativeScriptComponent>();
             if (!hasScriptController && (m_ViewportHovered || m_ViewportFocused) && !ImGui::GetIO().WantTextInput) {
                 Axle::f32 forwardInput = 0.0f;
                 Axle::f32 rightInput = 0.0f;
                 Axle::f32 brakeInput = 0.0f;
-                Axle::f32 handBrakeInput = 0.0f;
+                bool handBrakeInput = false;
 
                 if (Axle::Input::IsKeyPressed(Axle::KeyCode::Up) || Axle::Input::IsKeyPressed(Axle::KeyCode::W)) {
                     forwardInput += 1.0f;
@@ -1651,11 +1527,17 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
                     rightInput += 1.0f;
                 }
                 if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
-                    handBrakeInput = 1.0f;
+                    handBrakeInput = true;
                 }
 
-                m_Vehicle->SetDriverInput(forwardInput, rightInput, brakeInput, handBrakeInput);
+                auto& vc = m_ChassisEntity.GetComponent<Axle::VehicleComponent>();
+                vc.SetDriverInput(forwardInput, rightInput, brakeInput, handBrakeInput);
             }
+        }
+
+        m_Scene->OnUpdateRuntime(ts, m_PhysicsScene.get());
+        if (!m_Vehicle && m_Scene) {
+            m_Vehicle = m_Scene->GetPrimaryRuntimeVehicle();
         }
     }
 
@@ -1734,35 +1616,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_StepSingleFrame = false;
     }
 
-    // Synchronize vehicle chassis and 4 wheel entities with physics simulation
-    if (m_Vehicle && m_ChassisEntity && m_ChassisEntity.HasComponent<Axle::TransformComponent>()) {
-        if (m_SceneState == SceneState::Edit) {
-            auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
-            m_Vehicle->Reset(chassisTC.Translation, chassisTC.Rotation);
-        } else {
-            auto& chassisTC = m_ChassisEntity.GetComponent<Axle::TransformComponent>();
-            chassisTC.Translation = m_Vehicle->GetPosition();
-            chassisTC.Rotation = m_PhysicsScene->GetBodyRotation(m_Vehicle->GetChassisBodyID());
-        }
-
-        for (size_t i = 0; i < m_WheelEntities.size(); ++i) {
-            if (m_WheelEntities[i] && m_WheelEntities[i].HasComponent<Axle::TransformComponent>()) {
-                const glm::mat4 wheelMat = m_Vehicle->GetWheelTransform(static_cast<Axle::u32>(i));
-                auto& tc = m_WheelEntities[i].GetComponent<Axle::TransformComponent>();
-                if (m_WheelEntities[i].HasComponent<Axle::HierarchyComponent>() &&
-                    m_WheelEntities[i].GetComponent<Axle::HierarchyComponent>().InheritTransform &&
-                    m_WheelEntities[i].GetParent() == m_ChassisEntity) {
-                    glm::mat4 chassisWorld = m_Vehicle->GetChassisTransform();
-                    glm::mat4 localWheelMat = glm::inverse(chassisWorld) * wheelMat;
-                    tc.Translation = glm::vec3(localWheelMat[3]);
-                    tc.Rotation = glm::quat_cast(localWheelMat);
-                } else {
-                    tc.Translation = glm::vec3(wheelMat[3]);
-                    tc.Rotation = glm::quat_cast(wheelMat);
-                }
-            }
-        }
-    }
+    // Note: Vehicle chassis and wheel transforms are automatically synchronized inside m_Scene->OnUpdateRuntime() (Phase 20.3 Stage 2)
 
     // Query active Directional Sun Light if present in scene
     Axle::DirectionalLightComponent activeSunLight;

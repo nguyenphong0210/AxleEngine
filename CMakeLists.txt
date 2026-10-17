@@ -41,8 +41,8 @@ add_subdirectory(Engine/Asset)
 add_subdirectory(Engine/Project)
 add_subdirectory(Engine/UI)
 add_subdirectory(Engine/Physics)
-add_subdirectory(Engine/Scene)
 add_subdirectory(Engine/Vehicle)
+add_subdirectory(Engine/Scene)
 
 # Load Axle Editor
 add_subdirectory(Editor)

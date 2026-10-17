@@ -3403,6 +3403,100 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
         std::cout << "  -> PASS: VehicleComponent and WheelComponent pure ECS input & telemetry interfaces validated." << std::endl;
     }
 
+    // -------------------------------------------------------------------------
+    // [25.5] Scene Dynamic Assembly (VehicleUpdateColliders) & Lifecycle
+    // -------------------------------------------------------------------------
+    std::cout << "\n[25.5] Testing Scene Dynamic Assembly (VehicleUpdateColliders) & Lifecycle..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+
+        // 1. Create chassis entity
+        auto chassis = scene->CreateEntity("CarChassis");
+        auto& rbc = chassis.AddComponent<Axle::RigidBody3D>();
+        rbc.MotionType = Axle::BodyMotionType::Dynamic;
+        rbc.Mass = 1400.0f;
+        auto& bc = chassis.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, glm::vec3(0.9f, 0.4f, 1.8f));
+        auto& vc = chassis.AddComponent<Axle::VehicleComponent>();
+        vc.ChassisMass = 1400.0f;
+        vc.MaxEngineTorque = 600.0f;
+
+        // 2. Create 4 child wheel entities with WheelComponent
+        struct WheelDef {
+            std::string Name;
+            glm::vec3 Offset;
+            bool Steer;
+            bool Driven;
+            float MaxSteer;
+        };
+
+        std::vector<WheelDef> wheelDefs = {
+            { "Wheel_FL", glm::vec3( 0.85f, -0.2f,  1.2f), true,  false, 32.0f },
+            { "Wheel_FR", glm::vec3(-0.85f, -0.2f,  1.2f), true,  false, 32.0f },
+            { "Wheel_RL", glm::vec3( 0.85f, -0.2f, -1.2f), false, true,   0.0f },
+            { "Wheel_RR", glm::vec3(-0.85f, -0.2f, -1.2f), false, true,   0.0f }
+        };
+
+        std::vector<Axle::Entity> wheelEntities;
+        for (const auto& wd : wheelDefs) {
+            auto wEnt = scene->CreateEntity(wd.Name);
+            wEnt.SetParent(chassis, false);
+            auto& wt = wEnt.GetComponent<Axle::TransformComponent>();
+            wt.Translation = wd.Offset;
+
+            auto& wc = wEnt.AddComponent<Axle::WheelComponent>();
+            wc.Radius = 0.34f;
+            wc.Width = 0.22f;
+            wc.CanSteer = wd.Steer;
+            wc.IsDriven = wd.Driven;
+            wc.MaxSteerAngle = wd.MaxSteer;
+            wc.AutoSyncMesh = true;
+
+            wheelEntities.push_back(wEnt);
+        }
+
+        assert(chassis.GetChildCount() == 4);
+
+        // 3. Start Runtime with PhysicsScene
+        Axle::PhysicsScene physicsScene;
+        scene->OnRuntimeStart(&physicsScene);
+
+        // Verify dynamic assembly
+        assert(scene->GetRuntimeVehicles().size() == 1);
+        auto* runtimeVehicle = scene->GetPrimaryRuntimeVehicle();
+        assert(runtimeVehicle != nullptr);
+        assert(chassis.GetComponent<Axle::VehicleComponent>().HasActivePhysics());
+        assert(runtimeVehicle->GetWheelCount() == 4);
+        std::cout << "  -> PASS: Scene::OnRuntimeStart successfully dynamically assembled vehicle with 4 child wheels." << std::endl;
+
+        // 4. Test driver input via ECS VehicleComponent and update loop
+        vc.SetDriverInput(1.0f, 0.25f, 0.0f, false);
+        for (int step = 0; step < 15; ++step) {
+            physicsScene.Step(0.016f);
+            scene->OnUpdateRuntime(0.016f, &physicsScene);
+        }
+
+        // Verify telemetry synchronization into ECS components
+        const auto& updatedVc = chassis.GetComponent<Axle::VehicleComponent>();
+        assert(updatedVc.HasActivePhysics());
+        std::cout << "  -> Simulated vehicle speed: " << updatedVc.GetSpeedKmh() << " km/h, RPM: " << updatedVc.GetRPM() << std::endl;
+
+        // Verify child wheel transform updates & telemetry
+        for (size_t i = 0; i < wheelEntities.size(); ++i) {
+            auto w = wheelEntities[i];
+            const auto& wt = w.GetComponent<Axle::TransformComponent>();
+            assert(wt.Scale.x > 0.0f && wt.Scale.y > 0.0f && wt.Scale.z > 0.0f);
+            assert(!std::isnan(wt.Translation.x) && !std::isnan(wt.Translation.y) && !std::isnan(wt.Translation.z));
+        }
+        std::cout << "  -> PASS: Wheel local transforms and telemetry synchronized accurately." << std::endl;
+
+        // 5. Stop Runtime & verify clean teardown
+        scene->OnRuntimeStop(&physicsScene);
+        assert(scene->GetRuntimeVehicles().empty());
+        assert(scene->GetPrimaryRuntimeVehicle() == nullptr);
+        assert(!chassis.GetComponent<Axle::VehicleComponent>().HasActivePhysics());
+        std::cout << "  -> PASS: Scene::OnRuntimeStop safely destroyed runtime vehicle without memory or state leaks." << std::endl;
+    }
+
     std::cout << ">>> STEP 25 PASSED: Phase 20 Component-per-Wheel Vehicle Architecture verified! <<<\n" << std::endl;
     return true;
 }

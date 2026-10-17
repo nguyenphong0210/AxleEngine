@@ -122,8 +122,8 @@ private:
     float m_SnapRotation = 45.0f;
     float m_SnapScale = 0.5f;
 
-    // Vehicle and chase camera
-    std::unique_ptr<Axle::Vehicle> m_Vehicle;
+    // Vehicle and chase camera (Runtime physics owned by Scene)
+    Axle::Vehicle* m_Vehicle = nullptr;
     bool m_ChaseCamera = false;
     bool m_CKeyWasPressed = false;
     Axle::f32 m_OrbitYaw = 180.0f;

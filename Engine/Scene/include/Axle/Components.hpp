@@ -437,6 +437,7 @@ namespace Axle {
         // Live Telemetry (Updated per-frame by Scene runtime physics sync)
         float CurrentSpeedKmh = 0.0f;       // Vehicle linear speed in km/h
         float CurrentSpeedMps = 0.0f;       // Vehicle linear speed in m/s
+        float ForwardSpeedKmh = 0.0f;       // Signed longitudinal forward speed in km/h (+forward, -reverse)
         float CurrentRPM = 0.0f;            // Engine rotational speed in RPM
         int CurrentGear = 1;                // Active transmission gear
 
@@ -454,6 +455,7 @@ namespace Axle {
 
         float GetSpeedKmh() const { return CurrentSpeedKmh; }
         float GetSpeedMps() const { return CurrentSpeedMps; }
+        float GetForwardSpeedKmh() const { return ForwardSpeedKmh; }
         float GetRPM() const { return CurrentRPM; }
         int GetCurrentGear() const { return CurrentGear; }
         bool HasActivePhysics() const { return VehicleInstance != nullptr; }

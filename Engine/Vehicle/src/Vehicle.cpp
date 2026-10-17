@@ -27,14 +27,9 @@ namespace Axle {
             }
         }
 
-        glm::vec3 comSpawnPos = config.InitialPosition;
-        if (hasComOffset) {
-            comSpawnPos += config.InitialRotation * config.CenterOfMassOffset;
-        }
-
         JPH::BodyCreationSettings bodySettings(
             chassisShape,
-            ToJolt(comSpawnPos),
+            ToJolt(config.InitialPosition),
             ToJolt(config.InitialRotation),
             JPH::EMotionType::Dynamic,
             Layers::MOVING
@@ -94,12 +89,8 @@ namespace Axle {
             vehicleSettings.mWheels.resize(numWheels);
             for (u32 i = 0; i < numWheels; ++i) {
                 const auto& cw = config.CustomWheels[i];
-                glm::vec3 mountPoint = cw.Position;
-                if (hasComOffset) {
-                    mountPoint -= config.CenterOfMassOffset;
-                }
                 JPH::WheelSettingsWV* w = new JPH::WheelSettingsWV();
-                w->mPosition = JPH::Vec3(mountPoint.x, mountPoint.y, mountPoint.z);
+                w->mPosition = JPH::Vec3(cw.Position.x, cw.Position.y, cw.Position.z);
                 w->mRadius = cw.Radius;
                 w->mWidth = cw.Width;
                 w->mSuspensionMinLength = cw.SuspensionMinLength;
@@ -138,16 +129,15 @@ namespace Axle {
             for (u32 p = 0; p < pairCount; ++p) {
                 vehicleSettings.mAntiRollBars[p].mLeftWheel = p * 2;
                 vehicleSettings.mAntiRollBars[p].mRightWheel = p * 2 + 1;
-                vehicleSettings.mAntiRollBars[p].mStiffness = 3000.0f;
+                vehicleSettings.mAntiRollBars[p].mStiffness = 10000.0f;
             }
         } else {
             // Default 4-wheel setup for backward compatibility
-            glm::vec3 comOffset = hasComOffset ? config.CenterOfMassOffset : glm::vec3(0.0f);
             vehicleSettings.mWheels.resize(4);
-            vehicleSettings.mWheels[Wheel_FrontLeft]  = createWheel( config.WheelOffsetLateral - comOffset.x, -config.WheelOffsetVertical - comOffset.y,  config.WheelOffsetHorizontal - comOffset.z, true);
-            vehicleSettings.mWheels[Wheel_FrontRight] = createWheel(-config.WheelOffsetLateral - comOffset.x, -config.WheelOffsetVertical - comOffset.y,  config.WheelOffsetHorizontal - comOffset.z, true);
-            vehicleSettings.mWheels[Wheel_RearLeft]   = createWheel( config.WheelOffsetLateral - comOffset.x, -config.WheelOffsetVertical - comOffset.y, -config.WheelOffsetHorizontal - comOffset.z, false);
-            vehicleSettings.mWheels[Wheel_RearRight]  = createWheel(-config.WheelOffsetLateral - comOffset.x, -config.WheelOffsetVertical - comOffset.y, -config.WheelOffsetHorizontal - comOffset.z, false);
+            vehicleSettings.mWheels[Wheel_FrontLeft]  = createWheel( config.WheelOffsetLateral, -config.WheelOffsetVertical,  config.WheelOffsetHorizontal, true);
+            vehicleSettings.mWheels[Wheel_FrontRight] = createWheel(-config.WheelOffsetLateral, -config.WheelOffsetVertical,  config.WheelOffsetHorizontal, true);
+            vehicleSettings.mWheels[Wheel_RearLeft]   = createWheel( config.WheelOffsetLateral, -config.WheelOffsetVertical, -config.WheelOffsetHorizontal, false);
+            vehicleSettings.mWheels[Wheel_RearRight]  = createWheel(-config.WheelOffsetLateral, -config.WheelOffsetVertical, -config.WheelOffsetHorizontal, false);
 
             if (config.FourWheelDrive) {
                 controllerSettings->mDifferentials.resize(2);
@@ -170,10 +160,10 @@ namespace Axle {
             vehicleSettings.mAntiRollBars.resize(2);
             vehicleSettings.mAntiRollBars[0].mLeftWheel = Wheel_FrontLeft;
             vehicleSettings.mAntiRollBars[0].mRightWheel = Wheel_FrontRight;
-            vehicleSettings.mAntiRollBars[0].mStiffness = 3000.0f;
+            vehicleSettings.mAntiRollBars[0].mStiffness = 10000.0f;
             vehicleSettings.mAntiRollBars[1].mLeftWheel = Wheel_RearLeft;
             vehicleSettings.mAntiRollBars[1].mRightWheel = Wheel_RearRight;
-            vehicleSettings.mAntiRollBars[1].mStiffness = 3000.0f;
+            vehicleSettings.mAntiRollBars[1].mStiffness = 10000.0f;
         }
 
         vehicleSettings.mController = controllerSettings;
@@ -226,11 +216,7 @@ namespace Axle {
 
     void Vehicle::Reset(const glm::vec3& position, const glm::quat& rotation) {
         if (m_PhysicsScene && !m_ChassisBodyID.IsInvalid()) {
-            glm::vec3 comPos = position;
-            if (glm::dot(m_Config.CenterOfMassOffset, m_Config.CenterOfMassOffset) > 1e-6f) {
-                comPos += rotation * m_Config.CenterOfMassOffset;
-            }
-            m_PhysicsScene->SetBodyPositionAndRotation(m_ChassisBodyID, comPos, rotation, true);
+            m_PhysicsScene->SetBodyPositionAndRotation(m_ChassisBodyID, position, rotation, true);
             m_PhysicsScene->SetLinearVelocity(m_ChassisBodyID, glm::vec3(0.0f));
             m_PhysicsScene->GetBodyInterface().ActivateBody(m_ChassisBodyID);
             if (m_Controller) {
@@ -279,11 +265,7 @@ namespace Axle {
 
     glm::mat4 Vehicle::GetChassisTransform() const {
         if (m_PhysicsScene && !m_ChassisBodyID.IsInvalid()) {
-            glm::mat4 comTransform = m_PhysicsScene->GetBodyTransform(m_ChassisBodyID);
-            if (glm::dot(m_Config.CenterOfMassOffset, m_Config.CenterOfMassOffset) > 1e-6f) {
-                return glm::translate(comTransform, -m_Config.CenterOfMassOffset);
-            }
-            return comTransform;
+            return m_PhysicsScene->GetBodyTransform(m_ChassisBodyID);
         }
         return glm::mat4(1.0f);
     }
@@ -298,12 +280,7 @@ namespace Axle {
 
     glm::vec3 Vehicle::GetPosition() const {
         if (m_PhysicsScene && !m_ChassisBodyID.IsInvalid()) {
-            glm::vec3 comPos = m_PhysicsScene->GetBodyPosition(m_ChassisBodyID);
-            if (glm::dot(m_Config.CenterOfMassOffset, m_Config.CenterOfMassOffset) > 1e-6f) {
-                glm::quat rot = m_PhysicsScene->GetBodyRotation(m_ChassisBodyID);
-                return comPos - rot * m_Config.CenterOfMassOffset;
-            }
-            return comPos;
+            return m_PhysicsScene->GetBodyPosition(m_ChassisBodyID);
         }
         return glm::vec3(0.0f);
     }

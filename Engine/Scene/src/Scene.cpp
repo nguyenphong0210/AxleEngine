@@ -810,6 +810,7 @@ namespace Axle {
             vc.CurrentSpeedMps = telemetry.SpeedMps;
             vc.CurrentRPM = telemetry.EngineRPM;
             vc.CurrentGear = telemetry.CurrentGear;
+            vc.ForwardSpeedKmh = glm::dot(telemetry.LinearVelocity, telemetry.ForwardVector) * 3.6f;
 
             // Sync child wheel entities (Transforms & Telemetry)
             for (size_t i = 0; i < rv.WheelEntityIDs.size(); ++i) {

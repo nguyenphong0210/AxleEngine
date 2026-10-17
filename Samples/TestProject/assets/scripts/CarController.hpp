@@ -72,9 +72,16 @@ public:
         float dt = ts.GetSeconds();
         m_CurrentSteering += (targetSteer - m_CurrentSteering) * std::min(1.0f, dt * SteerSpeed);
 
-        // Reverse gear handling: if moving forward and pressing backward, brake first
-        if (targetThrottle < 0.0f && vc.GetSpeedKmh() > 2.0f) {
+        // Automatic transmission brake vs reverse logic:
+        // - If moving forward (> 2.0 km/h) and pressing backward (S / Down), apply service brakes
+        // - If moving backward (< -2.0 km/h) and pressing forward (W / Up), apply service brakes
+        // - When nearly stopped (|forwardSpeed| <= 2.0 km/h), allow direct throttle into forward or reverse gear
+        const float forwardSpeed = vc.GetForwardSpeedKmh();
+        if (targetThrottle < 0.0f && forwardSpeed > 2.0f) {
             targetBrake = std::abs(targetThrottle);
+            targetThrottle = 0.0f;
+        } else if (targetThrottle > 0.0f && forwardSpeed < -2.0f) {
+            targetBrake = targetThrottle;
             targetThrottle = 0.0f;
         }
 

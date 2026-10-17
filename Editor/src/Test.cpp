@@ -3666,6 +3666,26 @@ bool RunTest_Step26_CarTestSceneSimulate() {
                   << ", AngularVel: " << tele1.Wheels[i].AngularVelocity << std::endl;
     }
 
+    // Stop car first
+    vc.SetDriverInput(0.0f, 0.0f, 1.0f, false);
+    for (int step = 0; step < 60; ++step) {
+        physicsScene->Step(0.016f);
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    }
+
+    // Apply Reverse Throttle for 60 frames (1 second)
+    std::cout << "[26.5] Applying -100% Throttle (Reverse) for 60 frames (1 second)..." << std::endl;
+    vc.SetDriverInput(-1.0f, 0.0f, 0.0f, false);
+    for (int step = 0; step < 60; ++step) {
+        physicsScene->Step(0.016f);
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    }
+
+    auto teleRev = rv->GetTelemetry();
+    std::cout << "  -> After 60 steps in reverse: Pos: [" << teleRev.Position.x << ", " << teleRev.Position.y << ", " << teleRev.Position.z 
+              << "] Speed: " << teleRev.SpeedKmh << " km/h, ForwardSpeed: " << vc.GetForwardSpeedKmh() 
+              << " km/h, RPM: " << teleRev.EngineRPM << ", Gear: " << teleRev.CurrentGear << std::endl;
+
     scene->OnRuntimeStop(physicsScene.get());
     std::cout << ">>> STEP 26 DIAGNOSTIC COMPLETE <<<\n" << std::endl;
     return true;

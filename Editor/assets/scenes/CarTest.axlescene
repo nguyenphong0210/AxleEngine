@@ -546,4 +546,17 @@ Entities:
       Active: true
     NativeScriptComponent:
       ScriptName: VehicleChaseCamera
+  - Entity: 13370000112233445566
+    TagComponent:
+      Tag: Racing HUD
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    NativeScriptComponent:
+      ScriptName: RacingHUD
 

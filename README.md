@@ -362,7 +362,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - [x] **Modular Manual Workflow**: Purely modular, decoupled vehicle authoring (Godot/Unity-style) where wheels are arbitrary child entities configured via `VehicleWheel3D` with individual suspension, steering, and traction tuning.
     - [x] **Direct Driving Controls**: Seamless W/A/S/D and Arrow key driving controls with Space handbrake in Play mode (`F5`), immediately operational on test scenes created from scratch without writing custom scripts.
     - [x] **Scene Serialization**: Full YAML serialization and deserialization for `VehicleComponent` tuning properties in `SceneSerializer.cpp`.
-  - [ ] **Phase 20.3: Modern Unity ECS (`com.unity.vehicles`) Architecture & Full Scripting Decoupling**:
+  - [x] **Phase 20.3: Modern Unity ECS (`com.unity.vehicles`) Architecture & Full Scripting Decoupling**:
     - [x] **Stage 1 - Pure ECS Component Standardization (`WheelComponent` & `VehicleComponent`)**:
       - [x] Upgrade `WheelComponent` (mirroring Unity ECS `ControllableWheelAuthoring`): tire radius, width, suspension travel min/max, spring frequency/damping, steerable, driven, handbrake, `AutoSyncMesh` toggle, and live telemetry fields (`IsGrounded`, `SuspensionLength`, `AngularVelocity`, `SlipAngle`, `LateralSlip`).
       - [x] Refine `VehicleComponent` (mirroring Unity ECS `VehicleControlAuthoring`): pure drivetrain & control data container with driver inputs (`Throttle`, `Steering`, `Brake`, `Handbrake`), anti-roll bar stiffness, center-of-mass offset, and clean C++ API (`SetDriverInput`, `GetSpeedKmh`, `GetRPM`, `GetWheelCount`).
@@ -375,10 +375,10 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - [x] **Stage 3 - Complete `EditorLayer` Decoupling (100% Neutral Editor)**:
       - [x] Eliminate all vehicle physics hardcodes from `EditorLayer.cpp` (remove `SetupVehiclePhysics`, remove `m_Vehicle`, remove hardcoded WASD input polling, remove manual wheel transform copy loops).
       - [x] Decouple `ChaseCamera` from hardcoded vehicle instances, dynamically binding to active player vehicle entities.
-    - [ ] **Stage 4 - C++ Native Scripting Template (`CarController.hpp`) & Live Editor Reflection**:
-      - Implement `CarController.hpp` template inheriting `Axle::ScriptableEntity`, reading keyboard/gamepad inputs and driving `VehicleComponent` cleanly.
-      - Expose live-tunable fields (`Horsepower`, `MaxSteerAngle`, `BrakePower`, `AllWheelDrive`) using `AXLE_SCRIPT_FIELDS` for real-time Inspector tuning.
-      - Update `SceneHierarchyPanel` with dedicated vehicle telemetry cards (speedometer, tachometer, per-wheel contact & compression readouts).
+    - [x] **Stage 4 - C++ Native Scripting Template (`CarController.hpp`) & Live Editor Reflection**:
+      - [x] Implement `CarController.hpp` template inheriting `Axle::ScriptableEntity`, reading keyboard/gamepad inputs and driving `VehicleComponent` cleanly.
+      - [x] Expose live-tunable fields (`Horsepower`, `MaxSteerAngle`, `BrakePower`, `AllWheelDrive`) using `AXLE_SCRIPT_FIELDS` for real-time Inspector tuning.
+      - [x] Update `SceneHierarchyPanel` with dedicated vehicle telemetry cards (speedometer, tachometer, per-wheel contact & compression readouts).
 - [ ] **Phase 21: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.

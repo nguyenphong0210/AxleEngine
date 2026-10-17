@@ -1,5 +1,0 @@
-# Axle Engine Project Configuration File
-Project:
-  Name: Vehicle Sandbox
-  StartScene: scenes/Playground.axlescene
-  AssetDirectory: assets

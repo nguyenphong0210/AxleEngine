@@ -1648,40 +1648,120 @@ namespace Axle {
 
         // Vehicle Component (Phase 20.2: Vehicle Inspector Tuning & Quick-Setup Presets)
         DrawComponent<VehicleComponent>("Vehicle Dynamics", entity, [&](VehicleComponent& vc) {
-            // Section 1: Live Simulation Telemetry (Active during Play mode)
-            if (vc.VehicleInstance) {
-                auto telemetry = vc.VehicleInstance->GetTelemetry();
-                ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.45f, 1.0f), "[ACTIVE] In-Game Vehicle Telemetry");
+            // Section 1: Dedicated Live Simulation Telemetry Cards (Active during Play mode)
+            Vehicle* runtimeVehicle = m_Scene ? m_Scene->GetRuntimeVehicle(entity) : nullptr;
+            bool isSimulating = (runtimeVehicle != nullptr) || vc.HasActivePhysics();
+
+            if (isSimulating) {
+                VehicleTelemetryData telemetry;
+                if (runtimeVehicle) {
+                    telemetry = runtimeVehicle->GetTelemetry();
+                } else {
+                    telemetry.SpeedKmh = vc.GetSpeedKmh();
+                    telemetry.SpeedMps = vc.GetSpeedMps();
+                    telemetry.EngineRPM = vc.GetRPM();
+                    telemetry.CurrentGear = vc.GetCurrentGear();
+                }
+
+                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.2f, 0.75f, 0.5f, 0.8f));
+                ImGui::BeginChild("##VehicleTelemetryCard", ImVec2(0.0f, 0.0f), true, ImGuiWindowFlags_NoScrollbar);
+                
+                ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.55f, 1.0f), "● SIMULATION ACTIVE");
+                ImGui::SameLine();
+                ImGui::TextDisabled("| Live Vehicle Telemetry");
                 ImGui::Separator();
 
-                // Speedometer & Visual Gauge
+                // 1. Digital Speedometer & Tachometer Card
                 float speedKmh = telemetry.SpeedKmh;
-                ImGui::Text("Speed: %.1f km/h (%.1f m/s)", speedKmh, telemetry.SpeedMps);
-                float speedFraction = std::clamp(speedKmh / 220.0f, 0.0f, 1.0f);
+                ImVec4 speedColor = (speedKmh > 160.0f) ? ImVec4(1.0f, 0.35f, 0.35f, 1.0f)
+                                  : (speedKmh > 90.0f)  ? ImVec4(1.0f, 0.85f, 0.35f, 1.0f)
+                                                        : ImVec4(0.35f, 0.95f, 0.75f, 1.0f);
+                ImGui::TextColored(speedColor, "SPEED: %.1f km/h", speedKmh);
+                ImGui::SameLine();
+                ImGui::TextDisabled("(%.1f m/s)", telemetry.SpeedMps);
+
+                float speedFraction = std::clamp(speedKmh / 240.0f, 0.0f, 1.0f);
                 char speedBuf[64];
-                snprintf(speedBuf, sizeof(speedBuf), "%.0f km/h", speedKmh);
-                ImGui::ProgressBar(speedFraction, ImVec2(-1.0f, 0.0f), speedBuf);
+                snprintf(speedBuf, sizeof(speedBuf), "%.0f / 240 km/h", speedKmh);
+                ImGui::ProgressBar(speedFraction, ImVec2(-1.0f, 18.0f), speedBuf);
 
-                // Tachometer (RPM) & Transmission Gear
+                // Tachometer & Automatic Transmission
                 float rpm = telemetry.EngineRPM;
-                float rpmFraction = (vc.MaxRPM > 0.0f) ? std::clamp(rpm / vc.MaxRPM, 0.0f, 1.0f) : 0.0f;
-                ImGui::Text("Engine RPM: %.0f / %.0f (Gear: %d)", rpm, vc.MaxRPM, telemetry.CurrentGear);
-                char rpmBuf[64];
-                snprintf(rpmBuf, sizeof(rpmBuf), "%.0f RPM", rpm);
-                ImGui::ProgressBar(rpmFraction, ImVec2(-1.0f, 0.0f), rpmBuf);
+                float maxRpm = (vc.MaxRPM > 0.0f) ? vc.MaxRPM : 7500.0f;
+                float rpmFraction = std::clamp(rpm / maxRpm, 0.0f, 1.0f);
+                ImVec4 rpmColor = (rpmFraction > 0.85f) ? ImVec4(1.0f, 0.25f, 0.25f, 1.0f) : ImVec4(0.4f, 0.8f, 1.0f, 1.0f);
 
-                // Per-Wheel Suspension & Ground Contact
+                int gear = telemetry.CurrentGear;
+                const char* gearStr = (gear == -1) ? "R (Reverse)" : (gear == 0) ? "N (Neutral)" : "D";
+                if (gear > 0) {
+                    ImGui::TextColored(rpmColor, "TACHOMETER: %.0f RPM | GEAR: %s %d", rpm, gearStr, gear);
+                } else {
+                    ImGui::TextColored(rpmColor, "TACHOMETER: %.0f RPM | GEAR: %s", rpm, gearStr);
+                }
+
+                char rpmBuf[64];
+                snprintf(rpmBuf, sizeof(rpmBuf), "%.0f / %.0f RPM", rpm, maxRpm);
+                ImGui::ProgressBar(rpmFraction, ImVec2(-1.0f, 18.0f), rpmBuf);
+
+                // 2. Driver Input Card (ECS Real-time Feed)
                 ImGui::Spacing();
-                if (ImGui::TreeNodeEx("Wheel Telemetry & Suspension", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    for (int w = 0; w < 4; ++w) {
-                        const auto& wheel = telemetry.Wheels[w];
-                        ImGui::Text("Wheel [%d]: Contact=%s | Slip=(%.2f, %.2f) | Steer=%.1f deg",
-                            w, wheel.HasContact ? "YES" : "AIR",
-                            wheel.LongitudinalSlip, wheel.LateralSlip,
-                            glm::degrees(wheel.SteerAngle));
+                ImGui::TextDisabled("Driver Inputs (ECS):");
+                ImGui::Columns(3, "##DriverInputsCols", false);
+                ImGui::Text("Throttle: %.0f%%", vc.Throttle * 100.0f);
+                ImGui::ProgressBar(std::clamp(vc.Throttle, 0.0f, 1.0f), ImVec2(-1.0f, 12.0f), "");
+                ImGui::NextColumn();
+                ImGui::Text("Steering: %+.0f%%", vc.Steering * 100.0f);
+                ImGui::ProgressBar(std::clamp((vc.Steering + 1.0f) * 0.5f, 0.0f, 1.0f), ImVec2(-1.0f, 12.0f), "");
+                ImGui::NextColumn();
+                ImGui::Text("Brake: %.0f%%", vc.Brake * 100.0f);
+                ImGui::ProgressBar(std::clamp(vc.Brake, 0.0f, 1.0f), ImVec2(-1.0f, 12.0f), "");
+                ImGui::Columns(1);
+
+                if (vc.Handbrake) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "[P] HANDBRAKE ENGAGED");
+                }
+
+                // 3. Per-Wheel Suspension & Ground Contact Readouts
+                ImGui::Spacing();
+                if (ImGui::TreeNodeEx("Wheel Telemetry & Suspension Readouts", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    u32 wheelCount = runtimeVehicle ? runtimeVehicle->GetWheelCount() : 0;
+                    if (wheelCount > 0) {
+                        for (u32 w = 0; w < wheelCount; ++w) {
+                            const auto& wheel = (w < 4) ? telemetry.Wheels[w] : runtimeVehicle->GetTelemetry().Wheels[0];
+                            bool grounded = wheel.HasContact;
+                            ImVec4 contactColor = grounded ? ImVec4(0.35f, 0.95f, 0.45f, 1.0f) : ImVec4(0.95f, 0.7f, 0.2f, 1.0f);
+
+                            ImGui::Text("Wheel [%u]:", w);
+                            ImGui::SameLine();
+                            ImGui::TextColored(contactColor, "[%s]", grounded ? "GROUND" : "AIR");
+                            ImGui::SameLine();
+                            ImGui::Text("Travel: %.3fm | Steer: %+.1f° | Slip: (%.2f, %.2f)",
+                                wheel.SuspensionLength,
+                                glm::degrees(wheel.SteerAngle),
+                                wheel.LongitudinalSlip,
+                                wheel.LateralSlip);
+                        }
+                    } else {
+                        // Scan child entities with WheelComponent
+                        int childIdx = 0;
+                        for (auto child : entity.GetChildren()) {
+                            if (child && child.HasComponent<WheelComponent>()) {
+                                const auto& wc = child.GetComponent<WheelComponent>();
+                                bool grounded = wc.IsGrounded;
+                                ImVec4 contactColor = grounded ? ImVec4(0.35f, 0.95f, 0.45f, 1.0f) : ImVec4(0.95f, 0.7f, 0.2f, 1.0f);
+                                ImGui::Text("Wheel [%d] '%s':", childIdx++, child.GetName().c_str());
+                                ImGui::SameLine();
+                                ImGui::TextColored(contactColor, "[%s]", grounded ? "GROUND" : "AIR");
+                                ImGui::SameLine();
+                                ImGui::Text("Travel: %.3fm | AngVel: %.1f rad/s", wc.SuspensionLength, wc.AngularVelocity);
+                            }
+                        }
                     }
                     ImGui::TreePop();
                 }
+
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
                 ImGui::Separator();
             } else {
                 ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "Status: Edit Mode (Press F5 to Simulate)");
@@ -1742,9 +1822,20 @@ namespace Axle {
 
             if (wc.IsGrounded || wc.SuspensionLength > 0.0f || std::abs(wc.AngularVelocity) > 0.01f) {
                 ImGui::Separator();
-                ImGui::TextDisabled("Live Wheel Telemetry:");
-                ImGui::Text("Contact: %s | Length: %.2f m", wc.IsGrounded ? "GROUND" : "AIR", wc.SuspensionLength);
-                ImGui::Text("Angular Vel: %.1f rad/s | Slip: (%.2f, %.2f)", wc.AngularVelocity, wc.LongitudinalSlip, wc.LateralSlip);
+                ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.55f, 1.0f), "Live Wheel Telemetry:");
+                ImVec4 contactCol = wc.IsGrounded ? ImVec4(0.2f, 0.9f, 0.4f, 1.0f) : ImVec4(0.95f, 0.7f, 0.2f, 1.0f);
+                ImGui::TextColored(contactCol, "Contact: %s", wc.IsGrounded ? "GROUNDED" : "IN AIR");
+                ImGui::SameLine();
+                ImGui::Text("| Travel: %.3f m", wc.SuspensionLength);
+
+                float maxLen = std::max(wc.SuspensionMaxLength, 0.01f);
+                float compFraction = std::clamp(wc.SuspensionLength / maxLen, 0.0f, 1.0f);
+                char compBuf[32];
+                snprintf(compBuf, sizeof(compBuf), "%.1f %%", compFraction * 100.0f);
+                ImGui::ProgressBar(compFraction, ImVec2(-1.0f, 14.0f), compBuf);
+
+                ImGui::Text("Angular Vel: %.1f rad/s (%.0f RPM)", wc.AngularVelocity, (wc.AngularVelocity * 60.0f) / (2.0f * 3.14159f));
+                ImGui::Text("Slip: Long=%.2f, Lat=%.2f | Angle=%.1f°", wc.LongitudinalSlip, wc.LateralSlip, wc.SlipAngle);
             }
         }, /*canRemove=*/ true);
 

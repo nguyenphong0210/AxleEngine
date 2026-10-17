@@ -36,6 +36,9 @@ EditorLayer::EditorLayer()
 void EditorLayer::OnAttach() {
     AXLE_INFO("EditorLayer attached - Initializing Axle Editor Environment");
 
+    // Initialize Script Hot-Reload Manager and load AxleScripts.dll
+    Axle::ScriptHotReloadManager::Get().Initialize("AxleScripts.dll");
+
     // Phase 13 Step 1 Verification
     const auto& scripts = Axle::ScriptRegistry::GetScripts();
     AXLE_INFO("--- [Phase 13 Step 1] ScriptRegistry Verification ---");
@@ -614,6 +617,7 @@ void EditorLayer::OnAttach() {
 
 void EditorLayer::OnDetach() {
     AXLE_INFO("EditorLayer detached");
+    Axle::ScriptHotReloadManager::Get().Shutdown();
     Axle::AssetManager::Shutdown();
     m_ShadowShader.reset();
     m_ShadowMap.reset();

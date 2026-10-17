@@ -165,6 +165,8 @@ Entities:
       Parent: 0
       InheritTransform: true
       InheritScale: true
+    NativeScriptComponent:
+      ScriptName: CarController
     VehicleComponent:
       ChassisMass: 1500.000000
       MaxEngineTorque: 800.000000

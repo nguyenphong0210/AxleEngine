@@ -91,6 +91,27 @@ namespace Axle {
                 uniform float u_ShadowBias;
                 uniform float u_ShadowFilterRadius;
 
+                // Point & Spot Lighting
+                struct PointLight {
+                    vec3 Position;
+                    vec3 Color;
+                    float Intensity;
+                    float Radius;
+                };
+                struct SpotLight {
+                    vec3 Position;
+                    vec3 Direction;
+                    vec3 Color;
+                    float Intensity;
+                    float Range;
+                    float InnerCutOff;
+                    float OuterCutOff;
+                };
+                uniform int u_NumPointLights;
+                uniform PointLight u_PointLights[4];
+                uniform int u_NumSpotLights;
+                uniform SpotLight u_SpotLights[4];
+
                 uniform int u_UseAlbedoMap;
                 uniform int u_UseNormalMap;
                 uniform float u_NormalStrength;
@@ -186,7 +207,8 @@ namespace Axle {
                     mat3 TBN = mat3(T / lenT, B / lenB, N);
                     return normalize(TBN * mapNormal);
                 }
-
+            )"
+            R"(
                 void main() {
                     vec2 uvScale = (u_UVScale.x != 0.0 && u_UVScale.y != 0.0) ? u_UVScale : vec2(1.0);
                     vec2 uv = v_TexCoord * uvScale;
@@ -283,6 +305,50 @@ namespace Axle {
 
                     vec3 radiance = u_LightColor * u_LightIntensity;
                     vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
+
+                    for (int i = 0; i < u_NumPointLights && i < 4; ++i) {
+                        vec3 lightVec = u_PointLights[i].Position - v_WorldPos;
+                        float dist = length(lightVec);
+                        if (dist > u_PointLights[i].Radius || dist < 0.001) continue;
+                        vec3 lDir = normalize(lightVec);
+                        vec3 hDir = normalize(V + lDir);
+                        float nDotL_p = max(dot(N, lDir), 0.0);
+                        if (nDotL_p <= 0.0) continue;
+                        float atten = clamp(1.0 - pow(dist / u_PointLights[i].Radius, 4.0), 0.0, 1.0);
+                        atten = (atten * atten) / (dist * dist + 1.0);
+                        float ndf_p = DistributionGGX(N, hDir, roughness);
+                        float g_p   = GeometrySmith(N, V, lDir, roughness);
+                        vec3  f_p   = FresnelSchlick(max(dot(hDir, V), 0.0), F0);
+                        vec3 spec_p = (ndf_p * g_p * f_p) / (4.0 * NdotV * nDotL_p + 0.0001);
+                        vec3 kS_p = f_p;
+                        vec3 kD_p = (vec3(1.0) - kS_p) * (1.0 - metallic);
+                        vec3 rad_p = u_PointLights[i].Color * u_PointLights[i].Intensity * atten;
+                        Lo += (kD_p * baseColor.rgb / PI + spec_p) * rad_p * nDotL_p;
+                    }
+
+                    for (int i = 0; i < u_NumSpotLights && i < 4; ++i) {
+                        vec3 lightVec = u_SpotLights[i].Position - v_WorldPos;
+                        float dist = length(lightVec);
+                        if (dist > u_SpotLights[i].Range || dist < 0.001) continue;
+                        vec3 lDir = normalize(lightVec);
+                        vec3 hDir = normalize(V + lDir);
+                        float nDotL_s = max(dot(N, lDir), 0.0);
+                        if (nDotL_s <= 0.0) continue;
+                        float cosTheta = dot(-lDir, normalize(u_SpotLights[i].Direction));
+                        float epsilon = u_SpotLights[i].InnerCutOff - u_SpotLights[i].OuterCutOff;
+                        float spotFactor = clamp((cosTheta - u_SpotLights[i].OuterCutOff) / max(epsilon, 0.0001), 0.0, 1.0);
+                        if (spotFactor <= 0.0) continue;
+                        float atten = clamp(1.0 - pow(dist / u_SpotLights[i].Range, 4.0), 0.0, 1.0);
+                        atten = (atten * atten) / (dist * dist + 1.0) * spotFactor;
+                        float ndf_s = DistributionGGX(N, hDir, roughness);
+                        float g_s   = GeometrySmith(N, V, lDir, roughness);
+                        vec3  f_s   = FresnelSchlick(max(dot(hDir, V), 0.0), F0);
+                        vec3 spec_s = (ndf_s * g_s * f_s) / (4.0 * NdotV * nDotL_s + 0.0001);
+                        vec3 kS_s = f_s;
+                        vec3 kD_s = (vec3(1.0) - kS_s) * (1.0 - metallic);
+                        vec3 rad_s = u_SpotLights[i].Color * u_SpotLights[i].Intensity * atten;
+                        Lo += (kD_s * baseColor.rgb / PI + spec_s) * rad_s * nDotL_s;
+                    }
                     vec3 ambient;
                     if (u_UseIBL == 1) {
                         vec3 F_ibl = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
@@ -397,6 +463,8 @@ namespace Axle {
         m_Shader->SetFloat3("u_SkyZenithColor", glm::vec3(0.18f, 0.42f, 0.78f));
         m_Shader->SetFloat3("u_SkyHorizonColor", glm::vec3(0.70f, 0.82f, 0.95f));
         m_Shader->SetFloat3("u_SkyGroundColor", glm::vec3(0.18f, 0.16f, 0.14f));
+        m_Shader->SetInt("u_NumPointLights", 0);
+        m_Shader->SetInt("u_NumSpotLights", 0);
 
         // 2. Load or fallback Shadow Depth shader
         std::string shadowVertSrc;

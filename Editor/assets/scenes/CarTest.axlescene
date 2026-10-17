@@ -231,13 +231,36 @@ Entities:
     TagComponent:
       Tag: Headlight_L
     TransformComponent:
-      Translation: [ 0.650000 , 0.250000 , 2.050000 ]
+      Translation: [ 0.650000 , 0.250000 , 2.180000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+      Scale: [ 0.220000 , 0.090000 , 0.040000 ]
     HierarchyComponent:
       Parent: 8959925798803133502
       InheritTransform: true
       InheritScale: true
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      Color2: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: 
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.100000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.000000
+      EmissionColor: [ 0.950000 , 0.980000 , 1.000000 ]
+      EmissionIntensity: 5.000000
+      UVScale: [ 1.000000 , 1.000000 ]
     SpotLightComponent:
       Enabled: true
       Color: [ 1.000000 , 0.980000 , 0.900000 ]
@@ -249,13 +272,36 @@ Entities:
     TagComponent:
       Tag: Headlight_R
     TransformComponent:
-      Translation: [ -0.650000 , 0.250000 , 2.050000 ]
+      Translation: [ -0.650000 , 0.250000 , 2.180000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+      Scale: [ 0.220000 , 0.090000 , 0.040000 ]
     HierarchyComponent:
       Parent: 8959925798803133502
       InheritTransform: true
       InheritScale: true
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      Color2: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: 
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.100000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.000000
+      EmissionColor: [ 0.950000 , 0.980000 , 1.000000 ]
+      EmissionIntensity: 5.000000
+      UVScale: [ 1.000000 , 1.000000 ]
     SpotLightComponent:
       Enabled: true
       Color: [ 1.000000 , 0.980000 , 0.900000 ]
@@ -267,13 +313,36 @@ Entities:
     TagComponent:
       Tag: Taillight_L
     TransformComponent:
-      Translation: [ 0.650000 , 0.350000 , -2.150000 ]
+      Translation: [ 0.650000 , 0.350000 , -2.180000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+      Scale: [ 0.240000 , 0.080000 , 0.040000 ]
     HierarchyComponent:
       Parent: 8959925798803133502
       InheritTransform: true
       InheritScale: true
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      Color2: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: 
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.200000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.000000
+      EmissionColor: [ 1.000000 , 0.050000 , 0.050000 ]
+      EmissionIntensity: 1.500000
+      UVScale: [ 1.000000 , 1.000000 ]
     PointLightComponent:
       Color: [ 1.000000 , 0.050000 , 0.020000 ]
       Intensity: 1.000000
@@ -283,13 +352,36 @@ Entities:
     TagComponent:
       Tag: Taillight_R
     TransformComponent:
-      Translation: [ -0.650000 , 0.350000 , -2.150000 ]
+      Translation: [ -0.650000 , 0.350000 , -2.180000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+      Scale: [ 0.240000 , 0.080000 , 0.040000 ]
     HierarchyComponent:
       Parent: 8959925798803133502
       InheritTransform: true
       InheritScale: true
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      Color2: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: 
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.200000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.000000
+      EmissionColor: [ 1.000000 , 0.050000 , 0.050000 ]
+      EmissionIntensity: 1.500000
+      UVScale: [ 1.000000 , 1.000000 ]
     PointLightComponent:
       Color: [ 1.000000 , 0.050000 , 0.020000 ]
       Intensity: 1.000000

@@ -532,6 +532,48 @@ namespace Axle {
         shader.SetFloat3("u_SkyHorizonColor", skyHorizon);
         shader.SetFloat3("u_SkyGroundColor", skyGround);
 
+        // Upload dynamic Point Lights
+        auto pointLightView = m_Registry.view<PointLightComponent, TransformComponent>();
+        int numPointLights = 0;
+        for (auto entity : pointLightView) {
+            if (numPointLights >= 4) break;
+            const auto& plc = pointLightView.get<PointLightComponent>(entity);
+            if (plc.Intensity <= 0.0f) continue;
+            glm::mat4 worldTransform = GetWorldTransform(entity);
+            glm::vec3 worldPos = glm::vec3(worldTransform[3]);
+
+            std::string prefix = "u_PointLights[" + std::to_string(numPointLights) + "].";
+            shader.SetFloat3(prefix + "Position", worldPos);
+            shader.SetFloat3(prefix + "Color", plc.Color);
+            shader.SetFloat(prefix + "Intensity", plc.Intensity);
+            shader.SetFloat(prefix + "Radius", plc.Radius);
+            numPointLights++;
+        }
+        shader.SetInt("u_NumPointLights", numPointLights);
+
+        // Upload dynamic Spot Lights (Vehicle Headlights)
+        auto spotLightView = m_Registry.view<SpotLightComponent, TransformComponent>();
+        int numSpotLights = 0;
+        for (auto entity : spotLightView) {
+            if (numSpotLights >= 4) break;
+            const auto& slc = spotLightView.get<SpotLightComponent>(entity);
+            if (!slc.Enabled || slc.Intensity <= 0.0f) continue;
+            glm::mat4 worldTransform = GetWorldTransform(entity);
+            glm::vec3 worldPos = glm::vec3(worldTransform[3]);
+            glm::vec3 worldDir = glm::normalize(glm::vec3(worldTransform * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f)));
+
+            std::string prefix = "u_SpotLights[" + std::to_string(numSpotLights) + "].";
+            shader.SetFloat3(prefix + "Position", worldPos);
+            shader.SetFloat3(prefix + "Direction", worldDir);
+            shader.SetFloat3(prefix + "Color", slc.Color);
+            shader.SetFloat(prefix + "Intensity", slc.Intensity);
+            shader.SetFloat(prefix + "Range", slc.Range);
+            shader.SetFloat(prefix + "InnerCutOff", std::cos(glm::radians(slc.InnerConeAngle)));
+            shader.SetFloat(prefix + "OuterCutOff", std::cos(glm::radians(slc.OuterConeAngle)));
+            numSpotLights++;
+        }
+        shader.SetInt("u_NumSpotLights", numSpotLights);
+
         // Texture sampler slot assignments
         shader.SetInt("u_AlbedoMap", 0);
         shader.SetInt("u_NormalMap", 2);

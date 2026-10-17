@@ -6,6 +6,7 @@ set -e
 # Configuration defaults
 BUILD_TYPE="Debug"
 RUN_APP=false
+RUN_RUNTIME=false
 CLEAN_BUILD=false
 BUILD_DIR="build"
 
@@ -20,6 +21,10 @@ for arg in "$@"; do
             RUN_APP=true
             shift
             ;;
+        --runtime|--game)
+            RUN_RUNTIME=true
+            shift
+            ;;
         --clean|-c)
             CLEAN_BUILD=true
             shift
@@ -30,6 +35,7 @@ for arg in "$@"; do
             echo "  --release, -r    Build in Release mode (default: Debug)"
             echo "  --clean, -c      Wipe build directory before compiling"
             echo "  --run            Execute AxleEditor after successful compilation"
+            echo "  --runtime, --game Execute AxleRuntime (Standalone Player) after compilation"
             echo "  --help, -h       Display this help message"
             exit 0
             ;;
@@ -62,7 +68,21 @@ cmake --build "$BUILD_DIR" --config "$BUILD_TYPE" --parallel "$NUM_CORES"
 echo "--> Build completed successfully!"
 
 # 3. Optional: Run executable
-if [ "$RUN_APP" = true ]; then
+if [ "$RUN_RUNTIME" = true ]; then
+    echo "=========================================="
+    echo " Running AxleRuntime (Standalone Player)..."
+    echo "=========================================="
+    if [ -f "$BUILD_DIR/Runtime/$BUILD_TYPE/AxleRuntime.exe" ]; then
+        ./"$BUILD_DIR/Runtime/$BUILD_TYPE/AxleRuntime.exe"
+    elif [ -f "$BUILD_DIR/Runtime/AxleRuntime.exe" ]; then
+        ./"$BUILD_DIR/Runtime/AxleRuntime.exe"
+    elif [ -f "$BUILD_DIR/Runtime/AxleRuntime" ]; then
+        ./"$BUILD_DIR/Runtime/AxleRuntime"
+    else
+        echo "Error: AxleRuntime executable not found in $BUILD_DIR/Runtime!"
+        exit 1
+    fi
+elif [ "$RUN_APP" = true ]; then
     echo "=========================================="
     echo " Running AxleEditor..."
     echo "=========================================="

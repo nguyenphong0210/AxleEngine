@@ -57,19 +57,15 @@ namespace Axle {
             }
         });
 
-        // 6. Initialize ImGui layer
-        m_ImGuiLayer = std::make_unique<ImGuiLayer>();
-        m_ImGuiLayer->Init(m_Window->GetNativeWindow());
-
         AXLE_CORE_INFO("Application '{0}' initialized successfully ({1}x{2})", spec.Name, spec.Width, spec.Height);
     }
 
     Application::~Application() {
         m_LayerStack.Clear();
 
-        if (m_ImGuiLayer) {
-            m_ImGuiLayer->Shutdown();
-            m_ImGuiLayer.reset();
+        if (m_UIContext) {
+            m_UIContext->Shutdown();
+            m_UIContext.reset();
         }
 
         if (PhysicsEngine::IsInitialized()) {
@@ -80,6 +76,16 @@ namespace Axle {
 
         AXLE_CORE_INFO("Application '{0}' shut down", m_Specification.Name);
         s_Instance = nullptr;
+    }
+
+    void Application::SetUIContext(std::unique_ptr<ApplicationUIContext> uiContext) {
+        if (m_UIContext) {
+            m_UIContext->Shutdown();
+        }
+        m_UIContext = std::move(uiContext);
+        if (m_UIContext && m_Window) {
+            m_UIContext->Init(m_Window->GetNativeWindow());
+        }
     }
 
     void Application::Close() {
@@ -108,12 +114,14 @@ namespace Axle {
                 layer->OnUpdate(ts);
             }
 
-            // Render ImGui overlay
-            m_ImGuiLayer->Begin();
-            for (auto& layer : m_LayerStack) {
-                layer->OnImGuiRender();
+            // Render UI overlay if present
+            if (m_UIContext) {
+                m_UIContext->Begin();
+                for (auto& layer : m_LayerStack) {
+                    layer->OnImGuiRender();
+                }
+                m_UIContext->End();
             }
-            m_ImGuiLayer->End();
 
             m_Window->SwapBuffers();
         }

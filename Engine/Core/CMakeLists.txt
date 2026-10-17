@@ -15,7 +15,6 @@ target_include_directories(AxleCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/glfw/include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/Engine/Platform/include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/Engine/Renderer/include>
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/Engine/UI/include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/Engine/Physics/include>
 )
 

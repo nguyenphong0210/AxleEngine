@@ -406,16 +406,16 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Step 3 - EditorLayer Refactoring**:
     - Replace 150+ lines of low-level OpenGL draw and texture binding loops in `EditorLayer::OnUpdate()` with high-level `m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer, ...)`.
     - Validate identical visual fidelity, zero performance regression, and clean separation of concerns.
-- [ ] **Phase 22: Standalone Game Runtime Player (`AxleRuntime.exe`)**
-  - [ ] **Step 1 - Standalone Executable Target (`Runtime/` or `Game/`)**:
+- [x] **Phase 22: Standalone Game Runtime Player (`AxleRuntime.exe`)**
+  - [x] **Step 1 - Standalone Executable Target (`Runtime/` or `Game/`)**:
     - Add CMake target `add_executable(AxleRuntime src/Main.cpp src/RuntimeLayer.cpp)` completely detached from `Axle::UI` (Zero ImGui / ImGuizmo dependency for minimal binary footprint and maximum FPS).
     - Link core engine libraries: `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, `Axle::Scene`, `Axle::Physics`, `Axle::Vehicle`, `Axle::Project`, `Axle::Asset`.
-  - [ ] **Step 2 - Clean Runtime Layer (`RuntimeLayer`)**:
+  - [x] **Step 2 - Clean Runtime Layer (`RuntimeLayer`)**:
     - Implement headless/fullscreen game window lifecycle matching active monitor display mode.
     - Load project configuration (`.axleproj`) and deserialize startup scene (`StartScene`).
     - Initialize runtime simulation: `Scene::OnRuntimeStart(m_PhysicsScene.get())`.
     - Main game loop: `m_PhysicsScene->Step(ts)`, `Scene::OnUpdateRuntime(ts)`, query `PrimaryCameraEntity`, and render directly to screen backbuffer via `m_SceneRenderer->RenderScene(...)`.
-  - [ ] **Step 3 - Game Controls & Windowing Ergonomics**:
+  - [x] **Step 3 - Game Controls & Windowing Ergonomics**:
     - Dynamic script hotkeys & input routing directly to `CarController.hpp` and active gameplay scripts.
     - Fullscreen toggle (`Alt+Enter` / `F11`), Pause menu toggle (`Escape`), and smooth exit handling.
     - Automated build script update in `build.sh` (`--game` or `--runtime` flag to compile and run `AxleRuntime.exe`).
@@ -468,11 +468,12 @@ git submodule update --init --recursive
 
 #### Using the build script:
 ```bash
-# Build and run in Debug mode
+# Build and run Axle Editor (Debug / Release)
 ./build.sh --run
-
-# Build and run in Release mode
 ./build.sh --release --run
+
+# Build and run Standalone Game Player (AxleRuntime)
+./build.sh --release --game
 ```
 
 #### Using CMake directly:
@@ -480,11 +481,14 @@ git submodule update --init --recursive
 # Configure
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-# Compile
+# Compile all targets
 cmake --build build --config Release --parallel
 
-# Execute Axle Editor
+# Execute Axle Editor (with ImGui & scene editing panels)
 ./build/Editor/Release/AxleEditor.exe
+
+# Execute Axle Standalone Game Player (pure headless game backbuffer)
+./build/Runtime/Release/AxleRuntime.exe [optional/path/to/project.axleproj]
 ```
 
 ---

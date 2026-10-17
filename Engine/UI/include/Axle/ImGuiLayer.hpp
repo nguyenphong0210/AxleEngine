@@ -1,20 +1,21 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/ApplicationUI.hpp>
 
 struct GLFWwindow;
 
 namespace Axle {
 
-    class ImGuiLayer {
+    class ImGuiLayer : public ApplicationUIContext {
     public:
         ImGuiLayer() = default;
-        ~ImGuiLayer();
+        ~ImGuiLayer() override;
 
-        void Init(GLFWwindow* window);
-        void Shutdown();
+        void Init(GLFWwindow* window) override;
+        void Shutdown() override;
 
-        void Begin();
-        void End();
+        void Begin() override;
+        void End() override;
 
         void SetDarkThemeColors();
 

@@ -46,3 +46,6 @@ add_subdirectory(Engine/Scene)
 
 # Load Axle Editor
 add_subdirectory(Editor)
+
+# Load Axle Standalone Runtime (Game Player)
+add_subdirectory(Runtime)

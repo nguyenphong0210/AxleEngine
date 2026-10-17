@@ -1,5 +1,6 @@
 #include <Axle/Application.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/ImGuiLayer.hpp>
 #include "EditorLayer.hpp"
 #include <exception>
 #include <csignal>
@@ -100,6 +101,7 @@ int main() {
         };
 
         auto app = std::make_unique<Axle::Application>(spec);
+        app->SetUIContext(std::make_unique<Axle::ImGuiLayer>());
         app->PushLayer(std::make_shared<EditorLayer>());
         app->Run();
     } catch (const std::exception& e) {

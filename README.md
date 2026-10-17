@@ -394,17 +394,17 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Input System & Hotkey Hygiene**:
     - [x] Fix debouncing bug on `F11` (proper toggle between Maximize and Restore).
     - [x] Resolve hotkey conflict between single-frame step `O` in Pause mode and `Ctrl + O` (Open Scene/Project).
-- [ ] **Phase 21: Decoupled Scene Renderer Architecture (`Engine/Renderer`)**
-  - [ ] **Step 1 - Core `SceneRenderer` Class**:
-    - Encapsulate the full OpenGL rendering pipeline into `Axle::SceneRenderer` (`Engine/Renderer/include/Axle/SceneRenderer.hpp` & `src/SceneRenderer.cpp`).
+- [x] **Phase 21: Decoupled Scene Renderer Architecture (`Engine/Scene`)**
+  - [x] **Step 1 - Core `SceneRenderer` Class**:
+    - Encapsulate the full OpenGL rendering pipeline into `Axle::SceneRenderer` (`Engine/Scene/include/Axle/SceneRenderer.hpp` & `src/SceneRenderer.cpp`).
     - Decouple Shadow Depth Pass (`RenderShadowPass`), PBR Lighting Pass (directional sunlight, Cook-Torrance BRDF, fallback textures 1x1), Atmospheric Skybox Pass, and Tonemapping/Gamma post-processing out of `EditorLayer.cpp`.
-    - Support flexible render targets: Render to offscreen `Framebuffer` (for Editor viewport) or render directly to Default Backbuffer / Screen (`nullptr` for standalone games).
-  - [ ] **Step 2 - Render Context & Multi-Pass Pipeline**:
+    - Support flexible render targets: Render to offscreen `Framebuffer` (for Editor viewport) or render directly to Default Backbuffer / Screen (`nullptr` for standalone games via `RenderCommand::BindDefaultFramebuffer()`).
+  - [x] **Step 2 - Render Context & Multi-Pass Pipeline**:
     - Define `SceneRenderSettings` (shadows toggle, skybox toggle, debug wireframes, tonemapping mode, exposure).
-    - Implement `SceneRenderer::BeginScene(const PerspectiveCamera& camera, const SceneRenderSettings& settings)`, `SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, const std::shared_ptr<Framebuffer>& targetFBO)`, and `SceneRenderer::EndScene()`.
+    - Implement `SceneRenderer::Init()`, `SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, const PerspectiveCamera& camera, const std::shared_ptr<Framebuffer>& targetFBO, ...)`.
     - Integrate `PhysicsDebugRenderer` directly into `SceneRenderer` optional debug pass.
-  - [ ] **Step 3 - EditorLayer Refactoring**:
-    - Replace 150+ lines of low-level OpenGL draw and texture binding loops in `EditorLayer::OnUpdate()` with high-level `m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer)`.
+  - [x] **Step 3 - EditorLayer Refactoring**:
+    - Replace 150+ lines of low-level OpenGL draw and texture binding loops in `EditorLayer::OnUpdate()` with high-level `m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer, ...)`.
     - Validate identical visual fidelity, zero performance regression, and clean separation of concerns.
 - [ ] **Phase 22: Standalone Game Runtime Player (`AxleRuntime.exe`)**
   - [ ] **Step 1 - Standalone Executable Target (`Runtime/` or `Game/`)**:

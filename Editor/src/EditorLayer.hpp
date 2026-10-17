@@ -16,6 +16,7 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
+#include <Axle/SceneRenderer.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/PrimitiveMesh.hpp>
@@ -136,12 +137,7 @@ private:
     std::shared_ptr<Axle::VertexArray> m_CylinderMesh;
     std::shared_ptr<Axle::VertexArray> m_ConeMesh;
     std::shared_ptr<Axle::VertexArray> m_PlaneMesh;
-    std::unique_ptr<Axle::Shader> m_Shader;
-    std::unique_ptr<Axle::ShadowMap> m_ShadowMap;
-    std::unique_ptr<Axle::Shader> m_ShadowShader;
-    std::unique_ptr<Axle::Skybox> m_Skybox;
-    glm::mat4 m_LightSpaceMatrix{ 1.0f };
-    glm::vec3 m_LightDir{ 0.45f, 1.0f, 0.65f };
+    std::unique_ptr<Axle::SceneRenderer> m_SceneRenderer;
     Axle::SceneSerializerContext m_SerializerContext;
 
     // Editor Panels

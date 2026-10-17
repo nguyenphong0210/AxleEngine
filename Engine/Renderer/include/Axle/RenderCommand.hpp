@@ -15,6 +15,7 @@ namespace Axle {
         static void SetViewport(u32 x, u32 y, u32 width, u32 height);
         static void SetClearColor(const glm::vec4& color);
         static void Clear();
+        static void BindDefaultFramebuffer();
 
         static void SetDepthMask(bool writeEnabled);
         static void SetDepthFuncLEqual();

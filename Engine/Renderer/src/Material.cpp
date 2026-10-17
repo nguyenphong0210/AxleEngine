@@ -152,6 +152,15 @@ namespace Axle {
         m_EmissionIntensity = 0.0f;
     }
 
+    void Material::SetPresetCarPaintSilver() {
+        ResetTextures();
+        m_AlbedoColor = glm::vec4(0.92f, 0.93f, 0.96f, 1.0f);
+        m_Roughness = 0.14f;
+        m_Metallic = 0.92f;
+        m_EmissionColor = glm::vec3(0.0f);
+        m_EmissionIntensity = 0.0f;
+    }
+
     void Material::SetPresetChrome() {
         ResetTextures();
         m_AlbedoColor = glm::vec4(0.95f, 0.95f, 0.95f, 1.0f);

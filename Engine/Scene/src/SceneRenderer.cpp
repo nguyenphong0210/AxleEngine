@@ -145,18 +145,22 @@ namespace Axle {
                     vec2 uvScale = (u_UVScale.x != 0.0 && u_UVScale.y != 0.0) ? u_UVScale : vec2(1.0);
                     vec2 uv = v_TexCoord * uvScale;
 
+                    // View direction in world space (surface to camera)
+                    vec3 viewDir = (length(u_CameraPos - v_WorldPos) > 1e-4) ? normalize(u_CameraPos - v_WorldPos) : vec3(0.0, 1.0, 0.0);
+
                     vec3 normal;
                     if (u_PatternMode == 2) {
                         normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
+                        if (dot(normal, viewDir) < 0.0) normal = -normal;
                     } else {
                         vec3 dx = dFdx(v_WorldPos);
                         vec3 dy = dFdy(v_WorldPos);
-                        normal = normalize(cross(dx, dy));
-                        if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
+                        vec3 crossN = cross(dx, dy);
+                        normal = (length(crossN) > 1e-6) ? normalize(crossN) : vec3(0.0, 1.0, 0.0);
+                        if (dot(normal, viewDir) < 0.0) normal = -normal;
                     }
 
                     if (u_UseNormalMap == 1) {
-                        vec3 viewDir = normalize(-v_WorldPos);
                         float normStrength = (u_NormalStrength >= 0.0) ? u_NormalStrength : 1.0;
                         normal = PerturbNormal(normal, viewDir, uv, normStrength);
                     }
@@ -173,12 +177,14 @@ namespace Axle {
                         } else if (u_PatternMode == 1) {
                             vec3 coord = floor((v_LocalPos + vec3(0.5)) * u_TileScale + vec3(0.0001));
                             pattern = mod(coord.x + coord.y + coord.z, 2.0);
-                        } else {
+                        } else if (u_PatternMode == 2) {
                             vec3 nLocal = normalize(v_LocalPos);
                             float uSph = atan(nLocal.z, nLocal.x) / (2.0 * 3.14159265359) + 0.5;
                             float vSph = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
                             vec2 coord = floor(vec2(uSph * u_TileScale, vSph * (u_TileScale * 0.5)));
                             pattern = mod(coord.x + coord.y, 2.0);
+                        } else {
+                            pattern = 0.0;
                         }
                         baseColor = mix(u_Color1, u_Color2, pattern);
                     }
@@ -195,7 +201,7 @@ namespace Axle {
                     float a = roughness * roughness;
                     float a2 = a * a;
                     vec3 N = normal;
-                    vec3 V = (length(u_CameraPos - v_WorldPos) > 1e-4) ? normalize(u_CameraPos - v_WorldPos) : normalize(-v_WorldPos);
+                    vec3 V = viewDir;
                     vec3 L = normalize(u_LightDir);
                     vec3 H = normalize(V + L);
                     float NdotH = max(dot(N, H), 0.0);
@@ -241,17 +247,30 @@ namespace Axle {
                         vec3 diffuseAmbient = hemisphereLight * baseColor.rgb * kD;
 
                         vec3 R = reflect(-V, N);
-                        float specUp = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
                         float specZenith = clamp(R.y, 0.0, 1.0);
                         vec3 specUpper = mix(u_SkyHorizonColor, u_SkyZenithColor, specZenith);
-                        vec3 specSky = mix(u_SkyGroundColor, specUpper, specUp);
+
+                        // Distinct horizon transition for realistic automotive metallic sheen
+                        float horizonFactor = smoothstep(-0.06, 0.06, R.y);
+                        vec3 specSky = mix(u_SkyGroundColor, specUpper, horizonFactor);
+
+                        // Environment sun reflection lobe (sharp highlight for smooth metals)
+                        float sunSpec = pow(max(dot(R, L), 0.0), mix(64.0, 8.0, roughness));
+                        specSky += u_LightColor * u_LightIntensity * sunSpec * (1.0 - roughness * 0.8) * 0.5;
 
                         vec3 F_ambient = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
-                        vec3 specularAmbient = specSky * F_ambient * (1.0 - roughness * 0.7);
+                        vec3 specularAmbient = specSky * F_ambient * (1.0 - roughness * 0.5);
 
-                        ambient = (diffuseAmbient + specularAmbient) * u_AmbientIntensity;
+                        // Physically accurate combination: diffuse is attenuated by ambient intensity,
+                        // specular environment reflections retain full Fresnel reflectivity
+                        ambient = diffuseAmbient * u_AmbientIntensity + specularAmbient;
                     } else {
-                        ambient = u_LightColor * u_AmbientIntensity * baseColor.rgb * (1.0 - metallic * 0.5);
+                        vec3 R = reflect(-V, N);
+                        vec3 specSky = mix(vec3(0.12), vec3(0.85, 0.90, 0.98), clamp(R.y * 0.5 + 0.5, 0.0, 1.0));
+                        vec3 F_ambient = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
+                        vec3 specularAmbient = specSky * F_ambient * (1.0 - roughness * 0.5);
+                        vec3 diffuseAmbient = u_LightColor * u_AmbientIntensity * baseColor.rgb * kD;
+                        ambient = diffuseAmbient + specularAmbient;
                     }
                     vec3 emissive = u_EmissionColor * max(u_EmissionIntensity, 0.0);
                     vec3 linearColor = ambient + Lo + emissive;

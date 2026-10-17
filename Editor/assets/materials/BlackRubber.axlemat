@@ -1,0 +1,17 @@
+MaterialAsset:
+  Name: BlackRubber
+  AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+  AlbedoPath: 
+  UseAlbedoMap: false
+  NormalPath: 
+  UseNormalMap: false
+  NormalStrength: 1.000000
+  Roughness: 0.750000
+  RoughnessPath: 
+  UseRoughnessMap: false
+  Metallic: 0.050000
+  MetallicPath: 
+  UseMetallicMap: false
+  EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+  EmissionIntensity: 0.000000
+  UVScale: [ 1.000000 , 1.000000 ]

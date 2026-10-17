@@ -93,6 +93,7 @@ namespace Axle {
         // Presets
         void SetPresetCarPaintRed();
         void SetPresetCarPaintBlue();
+        void SetPresetCarPaintSilver();
         void SetPresetChrome();
         void SetPresetGold();
         void SetPresetCopper();

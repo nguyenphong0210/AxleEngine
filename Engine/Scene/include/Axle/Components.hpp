@@ -66,7 +66,7 @@ namespace Axle {
         std::string AssetPath;
 
         // Visual Caro (Checkerboard) material properties
-        int PatternMode = 1; // 0: World XZ Caro (Floor only), 1: Local 3D Caro (Default for 3D meshes), 2: Spherical Caro
+        int PatternMode = 1; // 0: World XZ Caro (Floor only), 1: Local 3D Caro (Default for 3D meshes), 2: Spherical Caro, 3: Solid Color
         float TileScale = 4.0f; // Default 4.0 so procedural checker tiles are immediately visible
         glm::vec4 Color1{ 0.88f, 0.89f, 0.92f, 1.0f }; // Titanium Silver
         glm::vec4 Color2{ 0.45f, 0.48f, 0.52f, 1.0f }; // Slate Graphite
@@ -269,6 +269,16 @@ namespace Axle {
             AlbedoColor = glm::vec4(0.08f, 0.28f, 0.65f, 1.0f);
             Roughness = 0.22f;
             Metallic = 0.75f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+            if (HasAsset()) SyncToAsset();
+        }
+
+        void SetPresetCarPaintSilver() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.92f, 0.93f, 0.96f, 1.0f);
+            Roughness = 0.14f;
+            Metallic = 0.92f;
             EmissionColor = glm::vec3(0.0f);
             EmissionIntensity = 0.0f;
             if (HasAsset()) SyncToAsset();

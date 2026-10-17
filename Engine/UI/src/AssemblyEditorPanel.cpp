@@ -66,13 +66,19 @@ namespace Axle {
                 vec3 dy = dFdy(v_WorldPos);
                 normal = normalize(cross(dx, dy));
                 if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
-            } else {
+            } else if (u_PatternMode == 2) {
                 vec3 nLocal = normalize(v_LocalPos);
                 float u = atan(nLocal.z, nLocal.x) / (2.0 * 3.14159265359) + 0.5;
                 float v = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
                 vec2 coord = floor(vec2(u * u_TileScale, v * (u_TileScale * 0.5)));
                 pattern = mod(coord.x + coord.y, 2.0);
                 normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
+            } else {
+                vec3 dx = dFdx(v_WorldPos);
+                vec3 dy = dFdy(v_WorldPos);
+                normal = normalize(cross(dx, dy));
+                if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
+                pattern = 0.0;
             }
 
             vec4 baseColor = mix(u_Color1, u_Color2, pattern);
@@ -411,9 +417,9 @@ namespace Axle {
                     ImGui::EndDragDropTarget();
                 }
 
-                const char* patterns[] = { "0: World XZ Caro", "1: 3D Caro", "2: Spherical Caro" };
+                const char* patterns[] = { "0: World XZ Caro", "1: 3D Caro", "2: Spherical Caro", "3: Solid Color" };
                 int currentPat = node->Mesh.PatternMode;
-                if (ImGui::Combo("Pattern Mode", &currentPat, patterns, 3)) {
+                if (ImGui::Combo("Pattern Mode", &currentPat, patterns, 4)) {
                     node->Mesh.PatternMode = currentPat;
                     m_IsDirty = true;
                 }

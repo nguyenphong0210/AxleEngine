@@ -10,10 +10,27 @@ Entities:
       Scale: [ 0.350000 , 0.149995 , 0.350000 ]
     MeshInstance3D:
       AssetPath: builtin://cylinder
-      PatternMode: 1
+      PatternMode: 3
       TileScale: 4.000000
-      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
-      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.750000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.050000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
     HierarchyComponent:
       Parent: 8959925798803133502
       InheritTransform: true
@@ -40,10 +57,27 @@ Entities:
       Scale: [ 0.350000 , 0.149997 , 0.350000 ]
     MeshInstance3D:
       AssetPath: builtin://cylinder
-      PatternMode: 1
+      PatternMode: 3
       TileScale: 4.000000
-      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
-      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.750000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.050000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
     HierarchyComponent:
       Parent: 8959925798803133502
       InheritTransform: true
@@ -70,10 +104,27 @@ Entities:
       Scale: [ 0.350000 , 0.150000 , 0.350000 ]
     MeshInstance3D:
       AssetPath: builtin://cylinder
-      PatternMode: 1
+      PatternMode: 3
       TileScale: 4.000000
-      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
-      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.750000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.050000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
     HierarchyComponent:
       Parent: 8959925798803133502
       InheritTransform: true
@@ -100,10 +151,27 @@ Entities:
       Scale: [ 0.350000 , 0.150000 , 0.350000 ]
     MeshInstance3D:
       AssetPath: builtin://cylinder
-      PatternMode: 1
+      PatternMode: 3
       TileScale: 4.000000
-      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
-      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.750000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.050000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
     HierarchyComponent:
       Parent: 8959925798803133502
       InheritTransform: true
@@ -130,10 +198,27 @@ Entities:
       Scale: [ 1.800000 , 0.800000 , 4.200000 ]
     MeshInstance3D:
       AssetPath: builtin://cube
-      PatternMode: 1
+      PatternMode: 3
       TileScale: 6.000000
-      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
-      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+      Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+      Color2: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/GoldMetallic.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.180000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 1.000000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
     HierarchyComponent:
       Parent: 8959925798803133502
       InheritTransform: true

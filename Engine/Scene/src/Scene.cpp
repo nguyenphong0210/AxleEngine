@@ -503,9 +503,9 @@ namespace Axle {
                 if (m_Registry.all_of<MaterialComponent>(entity)) {
                     auto& mat = m_Registry.get<MaterialComponent>(entity);
                     mat.Bind(shader);
-                    shader.SetFloat4("u_Color2", mesh.Color2);
+                    shader.SetFloat4("u_Color2", (mesh.PatternMode == 3) ? mat.GetAlbedoColor() : mesh.Color2);
                 } else {
-                    Material::BindDefault(shader, mesh.Color1, mesh.Color2);
+                    Material::BindDefault(shader, mesh.Color1, (mesh.PatternMode == 3) ? mesh.Color1 : mesh.Color2);
                 }
 
                 RenderCommand::DrawIndexed(mesh.VAO);

@@ -1148,7 +1148,7 @@ namespace Axle {
                 ImGui::SetTooltip("Drag & Drop a 3D model (.obj) from Content Browser here to assign");
             }
 
-            const char* patternNames[] = { "0: World XZ Caro (Floor)", "1: Local 3D Caro (Box/Cyl)", "2: Spherical Caro (Sphere)" };
+            const char* patternNames[] = { "0: World XZ Caro (Floor)", "1: Local 3D Caro (Box/Cyl)", "2: Spherical Caro (Sphere)", "3: Solid Color (PBR Surface)" };
             int currentPattern = mc.PatternMode;
             if (ImGui::Combo("Pattern Mode", &currentPattern, patternNames, IM_ARRAYSIZE(patternNames))) {
                 mc.PatternMode = currentPattern;
@@ -1348,6 +1348,7 @@ namespace Axle {
                 "Choose Material Preset...",
                 "Automotive Paint (Red Clearcoat)",
                 "Automotive Paint (Metallic Blue)",
+                "Automotive Paint (Metallic Silver)",
                 "Chrome (Mirror Polished)",
                 "24K Gold (Polished)",
                 "Brushed Copper",
@@ -1364,16 +1365,17 @@ namespace Axle {
                 switch (selectedPreset) {
                     case 1: mat.SetPresetCarPaintRed(); break;
                     case 2: mat.SetPresetCarPaintBlue(); break;
-                    case 3: mat.SetPresetChrome(); break;
-                    case 4: mat.SetPresetGold(); break;
-                    case 5: mat.SetPresetCopper(); break;
-                    case 6: mat.SetPresetRubber(); break;
-                    case 7: mat.SetPresetPlastic(); break;
-                    case 8: mat.SetPresetCastIron(); break;
-                    case 9: mat.SetPresetAluminum(); break;
-                    case 10: mat.SetPresetObsidian(); break;
-                    case 11: mat.SetPresetHeadlightLED(); break;
-                    case 12: mat.SetPresetTaillightLED(); break;
+                    case 3: mat.SetPresetCarPaintSilver(); break;
+                    case 4: mat.SetPresetChrome(); break;
+                    case 5: mat.SetPresetGold(); break;
+                    case 6: mat.SetPresetCopper(); break;
+                    case 7: mat.SetPresetRubber(); break;
+                    case 8: mat.SetPresetPlastic(); break;
+                    case 9: mat.SetPresetCastIron(); break;
+                    case 10: mat.SetPresetAluminum(); break;
+                    case 11: mat.SetPresetObsidian(); break;
+                    case 12: mat.SetPresetHeadlightLED(); break;
+                    case 13: mat.SetPresetTaillightLED(); break;
                     default: break;
                 }
             }
@@ -1383,6 +1385,8 @@ namespace Axle {
             if (ImGui::SmallButton("Car Paint (Red)")) { mat.SetPresetCarPaintRed(); }
             ImGui::SameLine();
             if (ImGui::SmallButton("Car Paint (Blue)")) { mat.SetPresetCarPaintBlue(); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Car Paint (Silver)")) { mat.SetPresetCarPaintSilver(); }
             ImGui::SameLine();
             if (ImGui::SmallButton("Chrome")) { mat.SetPresetChrome(); }
             ImGui::SameLine();
@@ -3058,6 +3062,8 @@ namespace Axle {
             if (ImGui::Button("Paint Red", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCarPaintRed(); changed = true; }
             ImGui::SameLine();
             if (ImGui::Button("Paint Blue", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCarPaintBlue(); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Paint Silver", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCarPaintSilver(); changed = true; }
             ImGui::SameLine();
             if (ImGui::Button("Headlight", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetHeadlightLED(); changed = true; }
             ImGui::SameLine();

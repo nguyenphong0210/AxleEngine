@@ -1,0 +1,17 @@
+MaterialAsset:
+  Name: SilverCarPaint
+  AlbedoColor: [ 0.920000 , 0.930000 , 0.960000 , 1.000000 ]
+  AlbedoPath: 
+  UseAlbedoMap: false
+  NormalPath: 
+  UseNormalMap: false
+  NormalStrength: 1.000000
+  Roughness: 0.140000
+  RoughnessPath: 
+  UseRoughnessMap: false
+  Metallic: 0.920000
+  MetallicPath: 
+  UseMetallicMap: false
+  EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+  EmissionIntensity: 0.000000
+  UVScale: [ 1.000000 , 1.000000 ]

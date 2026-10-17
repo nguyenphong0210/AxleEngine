@@ -1,6 +1,7 @@
 #include <Axle/ShadowMap.hpp>
 #include <Axle/Log.hpp>
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 
@@ -12,13 +13,17 @@ namespace Axle {
     }
 
     ShadowMap::~ShadowMap() {
-        if (m_RendererID) {
+        if (m_RendererID && glfwGetCurrentContext() != nullptr) {
             glDeleteFramebuffers(1, &m_RendererID);
             glDeleteTextures(1, &m_DepthTexture);
         }
     }
 
     void ShadowMap::Invalidate() {
+        if (glfwGetCurrentContext() == nullptr) {
+            return;
+        }
+
         if (m_RendererID) {
             glDeleteFramebuffers(1, &m_RendererID);
             glDeleteTextures(1, &m_DepthTexture);
@@ -26,7 +31,7 @@ namespace Axle {
             m_DepthTexture = 0;
         }
 
-        // 1. Create 32-bit floating-point depth texture attachment
+        // 1. Create 32-bit floating-point depth texture attachment with hardware bilinear PCF
         glCreateTextures(GL_TEXTURE_2D, 1, &m_DepthTexture);
         glBindTexture(GL_TEXTURE_2D, m_DepthTexture);
         glTexImage2D(
@@ -40,6 +45,10 @@ namespace Axle {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+        // Hardware Bilinear PCF comparison mode: enables GPU 4-tap hardware depth interpolation
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
 
         // Border color 1.0 (white): Out-of-bounds coordinates will never be in shadow
         const float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -63,6 +72,7 @@ namespace Axle {
     }
 
     void ShadowMap::Bind() {
+        if (glfwGetCurrentContext() == nullptr) return;
         glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
         glViewport(0, 0, static_cast<GLsizei>(m_Specification.Width), static_cast<GLsizei>(m_Specification.Height));
         glEnable(GL_DEPTH_TEST);
@@ -74,22 +84,26 @@ namespace Axle {
     }
 
     void ShadowMap::Unbind() {
+        if (glfwGetCurrentContext() == nullptr) return;
         glDisable(GL_POLYGON_OFFSET_FILL);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     void ShadowMap::Clear() {
+        if (glfwGetCurrentContext() == nullptr) return;
         glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
         glClear(GL_DEPTH_BUFFER_BIT);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     void ShadowMap::BindTexture(u32 slot) const {
+        if (glfwGetCurrentContext() == nullptr) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, m_DepthTexture);
     }
 
     void ShadowMap::UnbindTexture(u32 slot) const {
+        if (glfwGetCurrentContext() == nullptr) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -108,7 +122,7 @@ namespace Axle {
         Invalidate();
     }
 
-    glm::mat4 ShadowMap::CalculateLightSpaceMatrix(const glm::vec3& lightDir, const glm::vec3& focusCenter) const {
+    glm::mat4 ShadowMap::CalculateLightSpaceMatrix(const glm::vec3& lightDir, const glm::vec3& focusCenter, float orthoSizeOverride) const {
         glm::vec3 normDir = glm::length(lightDir) > 1e-4f ? glm::normalize(lightDir) : glm::vec3(0.45f, 1.0f, 0.65f);
         
         glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -120,8 +134,18 @@ namespace Axle {
         glm::vec3 lightPos = focusCenter + normDir * 80.0f;
         glm::mat4 lightView = glm::lookAt(lightPos, focusCenter, up);
 
-        float s = m_Specification.OrthoSize;
+        float s = (orthoSizeOverride > 0.0f) ? orthoSizeOverride : m_Specification.OrthoSize;
         glm::mat4 lightProj = glm::ortho(-s, s, -s, s, m_Specification.NearPlane, m_Specification.FarPlane);
+
+        // Stabilize shadow edges with sub-texel snapping
+        glm::vec4 shadowOrigin = lightProj * lightView * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        shadowOrigin *= (static_cast<float>(m_Specification.Width) / 2.0f);
+        glm::vec4 roundedOrigin = glm::round(shadowOrigin);
+        glm::vec4 roundOffset = roundedOrigin - shadowOrigin;
+        roundOffset *= (2.0f / static_cast<float>(m_Specification.Width));
+        roundOffset.z = 0.0f;
+        roundOffset.w = 0.0f;
+        lightProj[3] += roundOffset;
 
         return lightProj * lightView;
     }

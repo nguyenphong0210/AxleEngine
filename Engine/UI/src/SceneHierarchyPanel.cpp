@@ -1921,6 +1921,34 @@ namespace Axle {
             // Cast Shadows Toggle
             ImGui::Checkbox("Cast Real-Time Shadows", &dlc.CastShadows);
 
+            if (dlc.CastShadows) {
+                ImGui::Indent(15.0f);
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Soft Shadow Settings:");
+
+                const char* shadowQualities[] = { "Low (1024x1024)", "High (2048x2048)", "Ultra (4096x4096)" };
+                int currentQuality = glm::clamp(dlc.ShadowQuality, 0, 2);
+                if (ImGui::Combo("Shadow Quality", &currentQuality, shadowQualities, IM_ARRAYSIZE(shadowQualities))) {
+                    dlc.ShadowQuality = currentQuality;
+                }
+
+                ImGui::SliderFloat("Coverage (Ortho Size)", &dlc.ShadowOrthoSize, 5.0f, 100.0f, "%.1f m");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Orthographic projection extent. Smaller values yield denser texel resolution for close-ups.");
+                }
+
+                ImGui::SliderFloat("Penumbra Softness", &dlc.ShadowFilterRadius, 0.5f, 6.0f, "%.1f");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("16-tap Vogel spiral PCF filter spread. Higher values produce smoother, softer penumbra edges.");
+                }
+
+                ImGui::DragFloat("Depth Bias", &dlc.ShadowBias, 0.0001f, 0.0001f, 0.01f, "%.5f");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Adaptive depth bias to eliminate shadow acne and moiré artifacts.");
+                }
+
+                ImGui::Unindent(15.0f);
+            }
+
             // Quick Atmosphere Presets
             ImGui::Spacing();
             ImGui::TextDisabled("Atmosphere Presets:");

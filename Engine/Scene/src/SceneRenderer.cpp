@@ -78,10 +78,13 @@ namespace Axle {
                 uniform mat4 u_Transform;
 
                 uniform sampler2D u_AlbedoMap;
-                uniform sampler2D u_ShadowMap;
+                uniform sampler2DShadow u_ShadowMap;
                 uniform sampler2D u_NormalMap;
                 uniform sampler2D u_RoughnessMap;
                 uniform sampler2D u_MetallicMap;
+
+                uniform float u_ShadowBias;
+                uniform float u_ShadowFilterRadius;
 
                 uniform int u_UseAlbedoMap;
                 uniform int u_UseNormalMap;
@@ -104,22 +107,60 @@ namespace Axle {
                 uniform vec3 u_SkyHorizonColor;
                 uniform vec3 u_SkyGroundColor;
 
+                const vec2 POISSON_DISK[16] = vec2[](
+                    vec2(-0.94201624, -0.39906216),
+                    vec2( 0.94558609, -0.76890725),
+                    vec2(-0.09418410, -0.92938870),
+                    vec2( 0.34495938,  0.29387760),
+                    vec2(-0.91588581,  0.45771432),
+                    vec2(-0.81544232, -0.87912464),
+                    vec2(-0.38277543,  0.27676845),
+                    vec2( 0.97484398,  0.75648377),
+                    vec2( 0.44323325, -0.97511554),
+                    vec2( 0.53742981, -0.47373420),
+                    vec2(-0.26496911, -0.41893023),
+                    vec2( 0.79197514,  0.19090188),
+                    vec2(-0.24188840,  0.99706507),
+                    vec2(-0.81409955,  0.91437590),
+                    vec2( 0.19984126,  0.78641367),
+                    vec2( 0.14383161, -0.14100790)
+                );
+
+                float InterleavedGradientNoise(vec2 screenPos) {
+                    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
+                    return fract(magic.z * fract(dot(screenPos, magic.xy)));
+                }
+
+                vec2 Rotate2D(vec2 v, float angle) {
+                    float s = sin(angle);
+                    float c = cos(angle);
+                    return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
+                }
+
                 float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
                     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
                     projCoords = projCoords * 0.5 + 0.5;
                     if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) {
                         return 0.0;
                     }
-                    float bias = max(0.0015 * (1.0 - dot(normal, lightDir)), 0.00015);
-                    float shadow = 0.0;
-                    vec2 texelSize = 1.0 / textureSize(u_ShadowMap, 0);
-                    for (int x = -1; x <= 1; ++x) {
-                        for (int y = -1; y <= 1; ++y) {
-                            float pcfDepth = texture(u_ShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-                            shadow += (projCoords.z - bias > pcfDepth) ? 1.0 : 0.0;
-                        }
+                    float baseBias = (u_ShadowBias > 0.0) ? u_ShadowBias : 0.0012;
+                    float filterSpread = (u_ShadowFilterRadius > 0.0) ? u_ShadowFilterRadius : 2.0;
+
+                    float cosTheta = clamp(dot(normal, lightDir), 0.0, 1.0);
+                    float bias = max(baseBias * (1.0 - cosTheta), baseBias * 0.15);
+
+                    vec2 texelSize = 1.0 / vec2(textureSize(u_ShadowMap, 0));
+                    vec2 filterRadius = texelSize * filterSpread;
+
+                    float randomAngle = InterleavedGradientNoise(gl_FragCoord.xy) * 6.28318530718;
+
+                    float shadowSum = 0.0;
+                    for (int i = 0; i < 16; ++i) {
+                        vec2 offset = Rotate2D(POISSON_DISK[i], randomAngle) * filterRadius;
+                        float lit = texture(u_ShadowMap, vec3(projCoords.xy + offset, projCoords.z - bias));
+                        shadowSum += (1.0 - lit);
                     }
-                    return shadow / 9.0;
+                    return shadowSum / 16.0;
                 }
 
                 vec3 PerturbNormal(vec3 N, vec3 V, vec2 texcoord, float strength) {
@@ -378,13 +419,23 @@ namespace Axle {
         // PASS 1: SHADOW MAP DEPTH PASS
         // ==========================================
         if (castShadows && m_ShadowMap && m_ShadowShader) {
+            uint32_t targetRes = 2048;
+            if (activeSunLight.ShadowQuality == 0) targetRes = 1024;
+            else if (activeSunLight.ShadowQuality == 1) targetRes = 2048;
+            else if (activeSunLight.ShadowQuality == 2) targetRes = 4096;
+
+            if (m_ShadowMap->GetWidth() != targetRes || m_ShadowMap->GetHeight() != targetRes) {
+                m_ShadowMap->Resize(targetRes, targetRes);
+            }
+
             glm::vec3 focusCenter = glm::vec3(0.0f);
             if (auto* pv = scene->GetPrimaryRuntimeVehicle()) {
                 focusCenter = pv->GetPosition();
             } else {
                 focusCenter = camera.GetPosition();
             }
-            m_LightSpaceMatrix = m_ShadowMap->CalculateLightSpaceMatrix(m_LightDir, focusCenter);
+            float orthoSize = activeSunLight.ShadowOrthoSize > 0.0f ? activeSunLight.ShadowOrthoSize : 25.0f;
+            m_LightSpaceMatrix = m_ShadowMap->CalculateLightSpaceMatrix(m_LightDir, focusCenter, orthoSize);
 
             m_ShadowMap->Bind();
             scene->RenderShadowPass(*m_ShadowShader, m_LightSpaceMatrix);

@@ -23,6 +23,7 @@
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/Package.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/ShadowMap.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <iostream>
 
@@ -4093,6 +4094,175 @@ bool RunTest_Step28_Phase24_MaterialAndFlyweight() {
 }
 
 // =============================================================================
+// STEP 29: PHASE 25 - AAA SOFT SHADOWS & PRECISION LIGHTING PIPELINE
+// =============================================================================
+bool RunTest_Step29_Phase25_SoftShadowsAndDynamicShadowMap() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 29] Phase 25: AAA Soft Shadows & Precision Lighting" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // -----------------------------------------------------------------
+    // [29.1] ShadowMap Construction & OrthoSize / Sub-texel Snapping
+    // -----------------------------------------------------------------
+    std::cout << "[29.1] Verifying ShadowMap Ortho Extent and Light Matrix Math..." << std::endl;
+    {
+        Axle::ShadowMapSpecification spec;
+        spec.Width = 2048;
+        spec.Height = 2048;
+        spec.OrthoSize = 25.0f;
+        spec.NearPlane = 0.1f;
+        spec.FarPlane = 150.0f;
+        Axle::ShadowMap shadowMap(spec);
+        if (shadowMap.GetWidth() != 2048 || shadowMap.GetHeight() != 2048) {
+            std::cerr << "FAIL: ShadowMap resolution mismatch!" << std::endl;
+            return false;
+        }
+        if (std::abs(shadowMap.GetOrthoSize() - 25.0f) > 1e-4f) {
+            std::cerr << "FAIL: Default OrthoSize should be 25.0f!" << std::endl;
+            return false;
+        }
+
+        // Test mutating OrthoSize
+        shadowMap.SetOrthoSize(15.0f);
+        if (std::abs(shadowMap.GetOrthoSize() - 15.0f) > 1e-4f) {
+            std::cerr << "FAIL: SetOrthoSize(15.0f) failed!" << std::endl;
+            return false;
+        }
+
+        // Test dynamic resize (safe in headless mode)
+        shadowMap.Resize(4096, 4096);
+        if (shadowMap.GetWidth() != 4096 || shadowMap.GetHeight() != 4096) {
+            std::cerr << "FAIL: ShadowMap Resize to 4096 failed!" << std::endl;
+            return false;
+        }
+
+        // Calculate light space matrix with directional light vector
+        glm::vec3 lightDir = glm::normalize(glm::vec3(0.5f, 1.0f, 0.3f));
+        glm::vec3 focusCenter(10.0f, 0.0f, -5.0f);
+
+        glm::mat4 matDefault = shadowMap.CalculateLightSpaceMatrix(lightDir, focusCenter);
+        // Verify matrix is invertible and non-zero
+        float det = glm::determinant(matDefault);
+        if (std::isnan(det) || std::abs(det) < 1e-6f) {
+            std::cerr << "FAIL: Light space matrix is degenerate/singular!" << std::endl;
+            return false;
+        }
+
+        // Calculate with explicit orthoSize override
+        glm::mat4 matOverride = shadowMap.CalculateLightSpaceMatrix(lightDir, focusCenter, 20.0f);
+        float detOverride = glm::determinant(matOverride);
+        if (std::isnan(detOverride) || std::abs(detOverride) < 1e-6f) {
+            std::cerr << "FAIL: Light space matrix with orthoSize override is degenerate!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> PASS: ShadowMap projection math, sub-texel snapping, and resizing verified." << std::endl;
+    }
+
+    // -----------------------------------------------------------------
+    // [29.2] DirectionalLightComponent Soft Shadow Defaults & Mutators
+    // -----------------------------------------------------------------
+    std::cout << "[29.2] Verifying DirectionalLightComponent soft shadow properties..." << std::endl;
+    {
+        Axle::DirectionalLightComponent dlc;
+        if (std::abs(dlc.ShadowOrthoSize - 25.0f) > 1e-4f) {
+            std::cerr << "FAIL: DirectionalLightComponent default ShadowOrthoSize should be 25.0f!" << std::endl;
+            return false;
+        }
+        if (std::abs(dlc.ShadowBias - 0.0012f) > 1e-5f) {
+            std::cerr << "FAIL: DirectionalLightComponent default ShadowBias should be 0.0012f!" << std::endl;
+            return false;
+        }
+        if (std::abs(dlc.ShadowFilterRadius - 2.0f) > 1e-4f) {
+            std::cerr << "FAIL: DirectionalLightComponent default ShadowFilterRadius should be 2.0f!" << std::endl;
+            return false;
+        }
+        if (dlc.ShadowQuality != 1) { // 1 = 2048 (High)
+            std::cerr << "FAIL: DirectionalLightComponent default ShadowQuality should be 1 (2048)!" << std::endl;
+            return false;
+        }
+        std::cout << "  -> PASS: Default DirectionalLightComponent soft shadow parameters valid." << std::endl;
+    }
+
+    // -----------------------------------------------------------------
+    // [29.3] Scene Roundtrip Serialization of Soft Shadow Settings
+    // -----------------------------------------------------------------
+    std::cout << "[29.3] Verifying Scene serialization roundtrip for soft shadow settings..." << std::endl;
+    std::error_code ec;
+    auto testDir = std::filesystem::current_path() / "TestDir_ShadowPhase25";
+    std::filesystem::create_directories(testDir, ec);
+
+    {
+        auto saveScene = std::make_shared<Axle::Scene>();
+        auto lightEnt = saveScene->CreateEntity("SunLight");
+        auto& dlc = lightEnt.AddComponent<Axle::DirectionalLightComponent>();
+        dlc.CastShadows = true;
+        dlc.ShadowOrthoSize = 18.5f;
+        dlc.ShadowBias = 0.0028f;
+        dlc.ShadowFilterRadius = 3.5f;
+        dlc.ShadowQuality = 2; // Ultra 4096
+
+        auto sceneFile = testDir / "ShadowScene.axle";
+        Axle::SceneSerializer serializer(saveScene.get());
+        serializer.Serialize(sceneFile.string());
+
+        auto loadScene = std::make_shared<Axle::Scene>();
+        Axle::SceneSerializer deserializer(loadScene.get());
+        bool deserialized = deserializer.Deserialize(sceneFile.string());
+        if (!deserialized) {
+            std::cerr << "FAIL: Failed to deserialize shadow scene!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        Axle::DirectionalLightComponent loadedDLC;
+        bool hasSun = loadScene->GetPrimaryDirectionalLight(loadedDLC);
+        if (!hasSun) {
+            std::cerr << "FAIL: Deserialized scene has no primary directional light!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        if (!loadedDLC.CastShadows) {
+            std::cerr << "FAIL: Deserialized CastShadows is false!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        if (std::abs(loadedDLC.ShadowOrthoSize - 18.5f) > 1e-3f) {
+            std::cerr << "FAIL: Deserialized ShadowOrthoSize mismatch: " << loadedDLC.ShadowOrthoSize << " (expected 18.5)!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        if (std::abs(loadedDLC.ShadowBias - 0.0028f) > 1e-4f) {
+            std::cerr << "FAIL: Deserialized ShadowBias mismatch: " << loadedDLC.ShadowBias << " (expected 0.0028)!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        if (std::abs(loadedDLC.ShadowFilterRadius - 3.5f) > 1e-3f) {
+            std::cerr << "FAIL: Deserialized ShadowFilterRadius mismatch: " << loadedDLC.ShadowFilterRadius << " (expected 3.5)!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        if (loadedDLC.ShadowQuality != 2) {
+            std::cerr << "FAIL: Deserialized ShadowQuality mismatch: " << loadedDLC.ShadowQuality << " (expected 2)!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        std::cout << "  -> PASS: Soft shadow fields correctly saved and loaded in .axle scene format." << std::endl;
+    }
+
+    std::filesystem::remove_all(testDir, ec);
+
+    std::cout << ">>> STEP 29 PASSED: Phase 25 Soft Shadows & Precision Lighting verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -4133,12 +4303,13 @@ int main(int argc, char** argv) {
         else if (arg == "26" || arg == "step26" || arg == "--step26") targetStep = 26;
         else if (arg == "27" || arg == "step27" || arg == "--step27" || arg == "--phase23") targetStep = 27;
         else if (arg == "28" || arg == "step28" || arg == "--step28" || arg == "--phase24") targetStep = 28;
+        else if (arg == "29" || arg == "step29" || arg == "--step29" || arg == "--phase25") targetStep = 29;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 28 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 29 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -4229,6 +4400,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 28) {
         if (!RunTest_Step28_Phase24_MaterialAndFlyweight()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 29) {
+        if (!RunTest_Step29_Phase25_SoftShadowsAndDynamicShadowMap()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

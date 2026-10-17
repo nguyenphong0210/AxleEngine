@@ -222,6 +222,10 @@ namespace Axle {
                 ss << "      Azimuth: " << dlc.Azimuth << "\n";
                 ss << "      Elevation: " << dlc.Elevation << "\n";
                 ss << "      CastShadows: " << (dlc.CastShadows ? "true" : "false") << "\n";
+                ss << "      ShadowOrthoSize: " << dlc.ShadowOrthoSize << "\n";
+                ss << "      ShadowBias: " << dlc.ShadowBias << "\n";
+                ss << "      ShadowFilterRadius: " << dlc.ShadowFilterRadius << "\n";
+                ss << "      ShadowQuality: " << dlc.ShadowQuality << "\n";
                 ss << "      Exposure: " << dlc.Exposure << "\n";
                 ss << "      ToneMappingMode: " << dlc.ToneMappingMode << "\n";
                 ss << "      Gamma: " << dlc.Gamma << "\n";
@@ -586,6 +590,14 @@ namespace Axle {
                             dlc.Elevation = std::stof(Trim(trimmed.substr(10)));
                         } else if (trimmed.rfind("CastShadows:", 0) == 0) {
                             dlc.CastShadows = (Trim(trimmed.substr(12)) == "true");
+                        } else if (trimmed.rfind("ShadowOrthoSize:", 0) == 0) {
+                            dlc.ShadowOrthoSize = std::stof(Trim(trimmed.substr(16)));
+                        } else if (trimmed.rfind("ShadowBias:", 0) == 0) {
+                            dlc.ShadowBias = std::stof(Trim(trimmed.substr(11)));
+                        } else if (trimmed.rfind("ShadowFilterRadius:", 0) == 0) {
+                            dlc.ShadowFilterRadius = std::stof(Trim(trimmed.substr(19)));
+                        } else if (trimmed.rfind("ShadowQuality:", 0) == 0) {
+                            dlc.ShadowQuality = std::stoi(Trim(trimmed.substr(14)));
                         } else if (trimmed.rfind("Exposure:", 0) == 0) {
                             dlc.Exposure = std::stof(Trim(trimmed.substr(9)));
                         } else if (trimmed.rfind("ToneMappingMode:", 0) == 0) {

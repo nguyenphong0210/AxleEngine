@@ -23,10 +23,13 @@ uniform mat4 u_Transform;
 
 // 3. Texture Sampler Slots
 uniform sampler2D u_AlbedoMap;     // Slot 0: Base Color / Diffuse Map
-uniform sampler2D u_ShadowMap;     // Slot 1: Directional Light Depth Texture
+uniform sampler2DShadow u_ShadowMap; // Slot 1: Directional Light Depth Texture (Hardware Bilinear PCF)
 uniform sampler2D u_NormalMap;     // Slot 2: Tangent-space Normal Map
 uniform sampler2D u_RoughnessMap;  // Slot 3: Micro-surface Roughness Map
 uniform sampler2D u_MetallicMap;   // Slot 4: Metallic Mask Map
+
+uniform float u_ShadowBias;         // Dynamic light depth bias
+uniform float u_ShadowFilterRadius; // Dynamic penumbra spread radius
 
 // 4. Texture Mapping & Material Controls
 uniform int u_UseAlbedoMap;        // 1: Sample u_AlbedoMap, 0: Procedural pattern
@@ -55,8 +58,38 @@ uniform vec3 u_SkyGroundColor;     // Terrain bounce radiance at ground (-Y)
 const float PI = 3.14159265358979323846;
 
 // ----------------------------------------------------------------------------
-// Shadow Calculation with 3x3 Percentage-Closer Filtering (PCF)
+// Shadow Calculation with 16-Tap Vogel Spiral / Poisson Disk PCF
 // ----------------------------------------------------------------------------
+const vec2 POISSON_DISK[16] = vec2[](
+    vec2(-0.94201624, -0.39906216),
+    vec2( 0.94558609, -0.76890725),
+    vec2(-0.09418410, -0.92938870),
+    vec2( 0.34495938,  0.29387760),
+    vec2(-0.91588581,  0.45771432),
+    vec2(-0.81544232, -0.87912464),
+    vec2(-0.38277543,  0.27676845),
+    vec2( 0.97484398,  0.75648377),
+    vec2( 0.44323325, -0.97511554),
+    vec2( 0.53742981, -0.47373420),
+    vec2(-0.26496911, -0.41893023),
+    vec2( 0.79197514,  0.19090188),
+    vec2(-0.24188840,  0.99706507),
+    vec2(-0.81409955,  0.91437590),
+    vec2( 0.19984126,  0.78641367),
+    vec2( 0.14383161, -0.14100790)
+);
+
+float InterleavedGradientNoise(vec2 screenPos) {
+    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
+    return fract(magic.z * fract(dot(screenPos, magic.xy)));
+}
+
+vec2 Rotate2D(vec2 v, float angle) {
+    float s = sin(angle);
+    float c = cos(angle);
+    return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
 float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
@@ -65,19 +98,24 @@ float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
         return 0.0;
     }
 
-    // Adaptive slope-scaled depth bias to eliminate acne and moiré artifacts
-    float bias = max(0.0015 * (1.0 - dot(normal, lightDir)), 0.00015);
+    float baseBias = (u_ShadowBias > 0.0) ? u_ShadowBias : 0.0012;
+    float filterSpread = (u_ShadowFilterRadius > 0.0) ? u_ShadowFilterRadius : 2.0;
 
-    // 3x3 Percentage-Closer Filtering (PCF) for smooth, high-quality penumbra
-    float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(u_ShadowMap, 0);
-    for (int x = -1; x <= 1; ++x) {
-        for (int y = -1; y <= 1; ++y) {
-            float pcfDepth = texture(u_ShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-            shadow += (projCoords.z - bias > pcfDepth) ? 1.0 : 0.0;
-        }
+    float cosTheta = clamp(dot(normal, lightDir), 0.0, 1.0);
+    float bias = max(baseBias * (1.0 - cosTheta), baseBias * 0.15);
+
+    vec2 texelSize = 1.0 / vec2(textureSize(u_ShadowMap, 0));
+    vec2 filterRadius = texelSize * filterSpread;
+
+    float randomAngle = InterleavedGradientNoise(gl_FragCoord.xy) * 6.28318530718;
+
+    float shadowSum = 0.0;
+    for (int i = 0; i < 16; ++i) {
+        vec2 offset = Rotate2D(POISSON_DISK[i], randomAngle) * filterRadius;
+        float lit = texture(u_ShadowMap, vec3(projCoords.xy + offset, projCoords.z - bias));
+        shadowSum += (1.0 - lit);
     }
-    return shadow / 9.0;
+    return shadowSum / 16.0;
 }
 
 // ----------------------------------------------------------------------------

@@ -10,7 +10,7 @@ namespace Axle {
         u32 Height = 2048;
         float NearPlane = 1.0f;
         float FarPlane = 160.0f;
-        float OrthoSize = 45.0f; // Half-size of orthographic frustum (90m x 90m coverage)
+        float OrthoSize = 25.0f; // Half-size of orthographic frustum (default 50m x 50m coverage)
     };
 
     class ShadowMap {
@@ -31,10 +31,15 @@ namespace Axle {
         u32 GetHeight() const { return m_Specification.Height; }
         const ShadowMapSpecification& GetSpecification() const { return m_Specification; }
 
+        void SetOrthoSize(float size) { m_Specification.OrthoSize = size; }
+        float GetOrthoSize() const { return m_Specification.OrthoSize; }
+        void SetNearPlane(float nearPlane) { m_Specification.NearPlane = nearPlane; }
+        void SetFarPlane(float farPlane) { m_Specification.FarPlane = farPlane; }
+
         void Resize(u32 width, u32 height);
 
-        // Calculate light-space view-projection matrix oriented towards focusCenter
-        glm::mat4 CalculateLightSpaceMatrix(const glm::vec3& lightDir, const glm::vec3& focusCenter = glm::vec3(0.0f)) const;
+        // Calculate light-space view-projection matrix oriented towards focusCenter with optional orthoSize override
+        glm::mat4 CalculateLightSpaceMatrix(const glm::vec3& lightDir, const glm::vec3& focusCenter = glm::vec3(0.0f), float orthoSizeOverride = 0.0f) const;
 
     private:
         void Invalidate();

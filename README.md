@@ -457,32 +457,31 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - Viewport drag-and-drop: dragging `.amat` / `.axlemat` onto an entity attaches the shared `MaterialHandle` rather than cloning values by-value.
   - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
     - Add Step 28 test verifying `Material` class lifecycle, `TextureCache` deduplication (1 texture loaded once across multiple materials), `MaterialCache` live updates, and `MaterialComponent` Flyweight handle serialization roundtrip.
-- [ ] **Phase 25: AAA Soft Shadows & Precision Lighting Pipeline (`Engine/Renderer`, `Engine/Scene` & `Engine/UI`)**
-  - [ ] **Step 1 - Hardware Bilinear PCF (`ShadowMap` in `Engine/Renderer`)**:
+- [x] **Phase 25: AAA Soft Shadows & Precision Lighting Pipeline (`Engine/Renderer`, `Engine/Scene` & `Engine/UI`)**
+  - [x] **Step 1 - Hardware Bilinear PCF (`ShadowMap` in `Engine/Renderer`)**:
     - Upgrade `Axle::ShadowMap`: configure depth texture with `GL_TEXTURE_COMPARE_MODE = GL_COMPARE_REF_TO_TEXTURE` and `GL_TEXTURE_COMPARE_FUNC = GL_LEQUAL`.
     - Enable hardware-accelerated 2x2 bilinear percentage-closer filtering natively on the GPU during texture comparison fetch (`sampler2DShadow`).
     - Add dynamic shadow map resolution configuration support (`1024`, `2048 High`, `4096 Ultra`).
-  - [ ] **Step 2 - 16-Tap Vogel Spiral / Poisson Disk Soft Shadows (`SceneRenderer` & Shaders)**:
+  - [x] **Step 2 - 16-Tap Vogel Spiral / Poisson Disk Soft Shadows (`SceneRenderer` & Shaders)**:
     - Upgrade embedded PBR shader in `SceneRenderer.cpp` and standalone shader `Checkerboard.frag`:
       - Replace rigid 3x3 box grid with a 16-tap Vogel Spiral / Poisson Disk distribution with randomized rotation per pixel (interleaved gradient noise) to eliminate banding and diagonal 45° staircases.
       - Calculate continuous depth comparison using `textureProj(u_ShadowMap, ...)` / `texture(u_ShadowMap, vec3(coords.xy, coords.z - bias))`.
       - Implement slope-scaled normal bias with normal offset push to eliminate shadow acne and light leaking on steep surfaces.
-  - [ ] **Step 3 - Dynamic Ortho Size & Shadow Distance in `DirectionalLightComponent` (`Engine/Scene`)**:
+  - [x] **Step 3 - Dynamic Ortho Size & Shadow Distance in `DirectionalLightComponent` (`Engine/Scene`)**:
     - Extend `DirectionalLightComponent` with configurable shadow properties:
-      - `ShadowOrthoSize` (default: `20.0f` for crisp near-field shadows, configurable from `5.0m` to `150.0m`).
-      - `ShadowBias` (depth bias multiplier) and `ShadowNormalBias` (normal offset multiplier).
-      - `ShadowNearPlane` and `ShadowFarPlane`.
+      - `ShadowOrthoSize` (default: `25.0f` for crisp near-field shadows, configurable from `5.0m` to `150.0m`).
+      - `ShadowBias` (depth bias multiplier) and `ShadowFilterRadius` (penumbra spread multiplier).
       - `ShadowQuality` (1024, 2048, 4096).
-    - Update `SceneRenderer::BeginFrame` to read light settings and pass dynamic `OrthoSize` into `CalculateLightSpaceMatrix`.
+    - Update `SceneRenderer::RenderScene` to read light settings, resize shadow map dynamically, and pass dynamic `OrthoSize` into `CalculateLightSpaceMatrix`.
     - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize the new shadow properties.
-  - [ ] **Step 4 - Interactive Inspector UI & Real-Time Tuning (`Engine/UI`)**:
+  - [x] **Step 4 - Interactive Inspector UI & Real-Time Tuning (`Engine/UI`)**:
     - Update `SceneHierarchyPanel`:
-      - Add dedicated **Shadow Settings** group inside `DirectionalLightComponent` inspector:
+      - Add dedicated **Soft Shadow Settings** group inside `DirectionalLightComponent` inspector:
         - `Shadow Coverage (Ortho Size)` slider (`5.0m` - `100.0m`).
-        - `Shadow Bias` & `Normal Offset` sliders.
-        - `Shadow Resolution` dropdown (`1024`, `2048 High`, `4096 Ultra`).
+        - `Penumbra Softness` & `Depth Bias` sliders.
+        - `Shadow Quality` dropdown (`Low 1024`, `High 2048`, `Ultra 4096`).
       - Real-time feedback on 3D Viewport when adjusting sliders.
-  - [ ] **Step 5 - Automated Regression & Verification (`AxleTests.exe`)**:
+  - [x] **Step 5 - Automated Regression & Verification (`AxleTests.exe`)**:
     - Add Step 29 test in `Editor/src/Test.cpp`:
       - Test `ShadowMap` hardware comparison modes and dynamic resolution resizing.
       - Test `DirectionalLightComponent` shadow tuning properties serialization roundtrip.

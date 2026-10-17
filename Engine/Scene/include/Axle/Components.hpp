@@ -662,6 +662,12 @@ namespace Axle {
         float Elevation = 50.0f;  // Sun altitude angle (5..90 deg)
         bool CastShadows = true;
 
+        // Soft Shadows & Shadow Map Precision (Phase 25)
+        float ShadowOrthoSize = 25.0f;       // Half-extent of shadow coverage (5m..100m, default 25m = 50x50m)
+        float ShadowBias = 0.0012f;          // Depth bias against shadow acne
+        float ShadowFilterRadius = 2.0f;     // 16-Tap Vogel Spiral penumbra spread multiplier
+        int ShadowQuality = 1;               // 0: 1024 Medium, 1: 2048 High (Default), 2: 4096 Ultra
+
         // Post-Processing & Photometric Tone Mapping (Phase 11: Sub-step 3.2)
         float Exposure = 1.0f;
         int ToneMappingMode = 0;  // 0: ACES Filmic, 1: Reinhard, 2: Uncharted 2, 3: Linear Bypass

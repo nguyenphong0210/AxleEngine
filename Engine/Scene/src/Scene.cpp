@@ -456,6 +456,8 @@ namespace Axle {
         shader.SetFloat("u_AmbientIntensity", activeAmbient);
         shader.SetInt("u_ShadowsEnabled", activeShadows);
         shader.SetInt("u_ShadowMap", shadowMapSlot);
+        shader.SetFloat("u_ShadowBias", (hasSunLight && sunLight.ShadowBias > 0.0f) ? sunLight.ShadowBias : 0.0012f);
+        shader.SetFloat("u_ShadowFilterRadius", (hasSunLight && sunLight.ShadowFilterRadius > 0.0f) ? sunLight.ShadowFilterRadius : 2.0f);
 
         // Tone Mapping & Photometric Controls (Phase 11: Sub-step 3.2)
         shader.SetFloat("u_Exposure", activeExposure);
@@ -497,14 +499,16 @@ namespace Axle {
             if (mesh.VAO) {
                 glm::mat4 worldTransform = GetWorldTransform(entity);
                 shader.SetMat4("u_Transform", worldTransform);
-                shader.SetInt("u_PatternMode", mesh.PatternMode);
-                shader.SetFloat("u_TileScale", mesh.TileScale);
 
                 if (m_Registry.all_of<MaterialComponent>(entity)) {
                     auto& mat = m_Registry.get<MaterialComponent>(entity);
                     mat.Bind(shader);
-                    shader.SetFloat4("u_Color2", (mesh.PatternMode == 3) ? mat.GetAlbedoColor() : mesh.Color2);
+                    shader.SetInt("u_PatternMode", 3); // Solid Color PBR Material
+                    shader.SetFloat4("u_Color1", mat.GetAlbedoColor());
+                    shader.SetFloat4("u_Color2", mat.GetAlbedoColor());
                 } else {
+                    shader.SetInt("u_PatternMode", mesh.PatternMode);
+                    shader.SetFloat("u_TileScale", mesh.TileScale);
                     Material::BindDefault(shader, mesh.Color1, (mesh.PatternMode == 3) ? mesh.Color1 : mesh.Color2);
                 }
 

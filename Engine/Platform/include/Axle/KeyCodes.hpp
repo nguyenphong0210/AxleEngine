@@ -67,4 +67,10 @@ namespace Axle {
         ButtonMiddle  = Button2
     };
 
+    enum class CursorMode : u8 {
+        Normal = 0,
+        Hidden = 1,
+        Locked = 2
+    };
+
 }

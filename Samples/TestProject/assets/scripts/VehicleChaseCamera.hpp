@@ -58,6 +58,14 @@ public:
     // Environment Collision Raycast
     bool EnableAntiClipping = true;     // Raycast query preventing wall/floor penetration
 
+    // Mouse Capture / Input Mode (Unreal Engine & GTA V Style)
+    bool ClickToLock = true;            // Click LMB in Viewport to capture/hide mouse
+    bool UnlockOnEscape = true;         // Press Escape to release/show mouse
+    bool UnlockOnShiftF1 = true;        // Press Shift+F1 (Unreal Engine PIE standard) to release/show mouse
+    bool EnableRMBZoom = true;          // Hold RMB to zoom in / cinematic focus (GTA style)
+    float RMBZoomFOV = 42.0f;           // Target FOV when holding RMB focus
+    float AutoAlignDelay = 1.0f;        // Seconds to wait after mouse movement before auto-aligning
+
 private:
     VehicleCameraMode m_CurrentMode = VehicleCameraMode::ThirdPersonChase;
 
@@ -73,9 +81,11 @@ private:
     float m_CockpitYaw = 0.0f;
     float m_CockpitPitch = 0.0f;
 
-    // Mouse tracking
+    // Mouse tracking & auto-alignment cooldown
     glm::vec2 m_LastMousePos{ 0.0f, 0.0f };
     bool m_FirstMouseUpdate = true;
+    bool m_WasDragging = false;
+    float m_AutoAlignTimer = 10.0f;
 
     // Smoothed spring-arm world position & velocity
     glm::vec3 m_SmoothedPos{ 0.0f };
@@ -201,7 +211,7 @@ public:
             }
         }
 
-        // 4. Mouse Look & Drag Processing
+        // 4. Mouse Capture & Look Processing (Unreal Engine & GTA V Style)
         const auto [mouseX, mouseY] = Axle::Input::GetMousePosition();
         const glm::vec2 currentMousePos{ mouseX, mouseY };
 
@@ -210,11 +220,54 @@ public:
             m_FirstMouseUpdate = false;
         }
 
-        const glm::vec2 mouseDelta = currentMousePos - m_LastMousePos;
+        bool isCursorLocked = (Axle::Input::GetCursorMode() == Axle::CursorMode::Locked);
+
+        const bool isShiftDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift);
+        const bool isF1Down = Axle::Input::IsKeyPressed(Axle::KeyCode::F1);
+        const bool isEscapeDown = Axle::Input::IsKeyPressed(Axle::KeyCode::Escape);
+
+        // Unreal Engine & GTA style:
+        // 1. Click LMB inside Viewport captures mouse cursor into game mode
+        if (ClickToLock && !isCursorLocked) {
+            if (Axle::Input::IsViewportHovered() && Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonLeft)) {
+                Axle::Input::SetCursorMode(Axle::CursorMode::Locked);
+                isCursorLocked = true;
+                m_LastMousePos = currentMousePos;
+                m_AutoAlignTimer = 10.0f;
+            }
+        } 
+        // 2. Escape or Shift+F1 (Unreal Engine PIE standard) releases cursor to Editor UI
+        else if (isCursorLocked) {
+            const bool requestUnlock = (UnlockOnEscape && isEscapeDown) || (UnlockOnShiftF1 && isShiftDown && isF1Down);
+            if (requestUnlock) {
+                Axle::Input::SetCursorMode(Axle::CursorMode::Normal);
+                isCursorLocked = false;
+            }
+        }
+
+        // When cursor is locked, any mouse movement free-looks / orbits around the car (GTA V style)
+        // If ClickToLock is disabled, fallback to legacy RMB drag
+        const bool isFreeLooking = isCursorLocked || (!ClickToLock && Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight));
+        glm::vec2 mouseDelta{ 0.0f, 0.0f };
+        if (isFreeLooking) {
+            if (!m_WasDragging) {
+                m_LastMousePos = currentMousePos;
+                m_WasDragging = true;
+            }
+            mouseDelta = currentMousePos - m_LastMousePos;
+        } else {
+            m_WasDragging = false;
+        }
         m_LastMousePos = currentMousePos;
 
-        const bool isDragging = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)
-                             || Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonLeft);
+        // Auto-align timer: resets when player actively moves mouse
+        if (glm::length(mouseDelta) > 0.02f) {
+            m_AutoAlignTimer = 0.0f;
+        } else {
+            m_AutoAlignTimer += ts.GetSeconds();
+        }
+
+        const bool isHoldingRMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight);
 
         // 5. Compute Mode-Specific Target Transform & Dynamic FOV
         glm::vec3 targetModePos{ 0.0f };
@@ -228,12 +281,15 @@ public:
             // MODE 0: SPRING-ARM THIRD-PERSON CHASE CAMERA
             // =========================================================================
             case VehicleCameraMode::ThirdPersonChase: {
-                // Dynamic FOV expansion proportional to vehicle speed
+                // Dynamic FOV expansion proportional to vehicle speed (with GTA V RMB Focus Zoom)
                 const float speedRatio = std::clamp(targetSpeedKmh / MaxSpeedForFOV, 0.0f, 1.0f);
                 targetFOV = BaseFOV + speedRatio * SpeedFOVExpansion;
+                if (isCursorLocked && EnableRMBZoom && isHoldingRMB) {
+                    targetFOV = RMBZoomFOV;
+                }
 
-                // Mouse look orbit
-                if (isDragging) {
+                // Mouse look orbit (GTA V style: active when free-looking and moving mouse)
+                if (isFreeLooking && glm::length(mouseDelta) > 0.0f) {
                     m_OrbitYaw -= mouseDelta.x * MouseSensitivity;
                     m_OrbitPitch -= mouseDelta.y * MouseSensitivity;
                     m_OrbitPitch = std::clamp(m_OrbitPitch, -30.0f, 75.0f);
@@ -242,8 +298,9 @@ public:
                 while (m_OrbitYaw < -180.0f) m_OrbitYaw += 360.0f;
                 while (m_OrbitYaw > 180.0f) m_OrbitYaw -= 360.0f;
 
-                // Auto-alignment behind car when driving forward
-                if (!isDragging && targetSpeedKmh > 1.5f && AutoAlignSpeed > 0.0f) {
+                // Auto-alignment behind car when driving forward (GTA V style: blends back when mouse is idle)
+                const bool canAutoAlign = (m_AutoAlignTimer >= AutoAlignDelay);
+                if (canAutoAlign && targetSpeedKmh > 1.5f && AutoAlignSpeed > 0.0f) {
                     const float targetYaw = glm::degrees(std::atan2(-targetFwd.x, -targetFwd.z));
                     float diff = targetYaw - m_OrbitYaw;
                     while (diff < -180.0f) diff += 360.0f;
@@ -305,14 +362,17 @@ public:
             // =========================================================================
             case VehicleCameraMode::Cockpit: {
                 targetFOV = BaseFOV + 8.0f; // Wide cockpit field of view
+                if (isCursorLocked && EnableRMBZoom && isHoldingRMB) {
+                    targetFOV = RMBZoomFOV;
+                }
 
                 // Glance look (left/right/mirrors)
-                if (isDragging) {
+                if (isFreeLooking && glm::length(mouseDelta) > 0.0f) {
                     m_CockpitYaw -= mouseDelta.x * MouseSensitivity;
                     m_CockpitPitch -= mouseDelta.y * MouseSensitivity;
                     m_CockpitYaw = std::clamp(m_CockpitYaw, -85.0f, 85.0f);
                     m_CockpitPitch = std::clamp(m_CockpitPitch, -35.0f, 35.0f);
-                } else {
+                } else if (m_AutoAlignTimer >= AutoAlignDelay) {
                     m_CockpitYaw = glm::mix(m_CockpitYaw, 0.0f, std::min(1.0f, ts.GetSeconds() * 4.0f));
                     m_CockpitPitch = glm::mix(m_CockpitPitch, 0.0f, std::min(1.0f, ts.GetSeconds() * 4.0f));
                 }
@@ -371,6 +431,9 @@ public:
                 // High sense of speed FOV
                 const float speedRatio = std::clamp(targetSpeedKmh / MaxSpeedForFOV, 0.0f, 1.0f);
                 targetFOV = BaseFOV + speedRatio * (SpeedFOVExpansion * 1.15f);
+                if (isCursorLocked && EnableRMBZoom && isHoldingRMB) {
+                    targetFOV = RMBZoomFOV;
+                }
 
                 const glm::vec3 hoodOffset(HoodOffsetX, HoodOffsetY, HoodOffsetZ);
                 targetModePos = targetPos + targetRot * hoodOffset;
@@ -400,7 +463,7 @@ public:
                 }
 
                 // 360-degree free orbit without snapping
-                if (isDragging) {
+                if (isFreeLooking && glm::length(mouseDelta) > 0.0f) {
                     m_FreeOrbitYaw -= mouseDelta.x * MouseSensitivity;
                     m_FreeOrbitPitch -= mouseDelta.y * MouseSensitivity;
                     m_FreeOrbitPitch = std::clamp(m_FreeOrbitPitch, -45.0f, 85.0f);
@@ -459,6 +522,9 @@ public:
     }
 
     void OnDestroy() override {
+        if (Axle::Input::GetCursorMode() == Axle::CursorMode::Locked) {
+            Axle::Input::SetCursorMode(Axle::CursorMode::Normal);
+        }
         AXLE_INFO("VehicleChaseCamera: Detached from entity '{0}'", GetEntityName());
     }
 
@@ -494,6 +560,12 @@ public:
     }
 
     AXLE_SCRIPT_FIELDS(VehicleChaseCamera,
+        AXLE_FIELD(ClickToLock, "Click LMB in Viewport to capture/hide mouse"),
+        AXLE_FIELD(UnlockOnEscape, "Press Escape to release/show mouse"),
+        AXLE_FIELD(UnlockOnShiftF1, "Press Shift+F1 (UE PIE standard) to release/show mouse"),
+        AXLE_FIELD(EnableRMBZoom, "Hold RMB to zoom in / cinematic focus (GTA style)"),
+        AXLE_FIELD(RMBZoomFOV, 20.0f, 60.0f, "Target FOV when holding RMB focus"),
+        AXLE_FIELD(AutoAlignDelay, 0.0f, 5.0f, "Seconds to wait before auto-aligning behind vehicle"),
         AXLE_FIELD(CameraMode, 0, 3, "Camera Mode (0: Chase, 1: Cockpit, 2: Hood, 3: Orbit)"),
         AXLE_FIELD(Distance, 2.0f, 30.0f, "Distance from chase target"),
         AXLE_FIELD(HeightOffset, -2.0f, 5.0f, "Height offset of focus point above target"),

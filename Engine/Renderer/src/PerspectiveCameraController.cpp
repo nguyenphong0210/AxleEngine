@@ -22,7 +22,7 @@ namespace Axle {
             m_FirstMouseUpdate = false;
         }
 
-        const bool isInteracting = Input::IsMouseButtonPressed(MouseCode::ButtonRight);
+        const bool isInteracting = Input::IsMouseButtonPressed(MouseCode::ButtonRight) || (Input::GetCursorMode() == CursorMode::Locked);
         if (isInteracting) {
             if (!m_WasInteracting) {
                 m_LastMousePosition = currentMousePos;

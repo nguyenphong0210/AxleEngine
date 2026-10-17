@@ -12,6 +12,11 @@ namespace Axle {
         bool (*IsMouseButtonPressedFn)(MouseCode button) = nullptr;
         std::pair<f32, f32> (*GetMousePositionFn)() = nullptr;
         f32 (*GetMouseScrollYFn)() = nullptr;
+        void (*SetCursorModeFn)(CursorMode mode) = nullptr;
+        CursorMode (*GetCursorModeFn)() = nullptr;
+        void (*SetCursorPositionFn)(f32 x, f32 y) = nullptr;
+        bool (*IsViewportHoveredFn)() = nullptr;
+        void (*SetViewportHoveredFn)(bool) = nullptr;
     };
 
     class Input {
@@ -30,6 +35,13 @@ namespace Axle {
 
         static f32 GetMouseScrollY();
         static void SetMouseScrollY(f32 scrollY);
+
+        static void SetCursorMode(CursorMode mode);
+        static CursorMode GetCursorMode();
+        static void SetCursorPosition(f32 x, f32 y);
+
+        static bool IsViewportHovered();
+        static void SetViewportHovered(bool hovered);
 
     private:
         inline static GLFWwindow* s_WindowContext = nullptr;

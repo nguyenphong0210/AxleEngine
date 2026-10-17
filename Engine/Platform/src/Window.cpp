@@ -227,4 +227,25 @@ namespace Axle {
         }
     }
 
+    void Window::SetCursorMode(CursorMode mode) {
+        if (!m_Window) return;
+        m_Data.CurrentCursorMode = mode;
+        int glfwMode = GLFW_CURSOR_NORMAL;
+        switch (mode) {
+            case CursorMode::Normal: glfwMode = GLFW_CURSOR_NORMAL; break;
+            case CursorMode::Hidden: glfwMode = GLFW_CURSOR_HIDDEN; break;
+            case CursorMode::Locked: glfwMode = GLFW_CURSOR_DISABLED; break;
+        }
+        glfwSetInputMode(m_Window, GLFW_CURSOR, glfwMode);
+
+        if (glfwRawMouseMotionSupported()) {
+            glfwSetInputMode(m_Window, GLFW_RAW_MOUSE_MOTION, (mode == CursorMode::Locked) ? GLFW_TRUE : GLFW_FALSE);
+        }
+    }
+
+    void Window::SetCursorPosition(f32 x, f32 y) {
+        if (!m_Window) return;
+        glfwSetCursorPos(m_Window, static_cast<double>(x), static_cast<double>(y));
+    }
+
 }

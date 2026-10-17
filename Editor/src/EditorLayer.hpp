@@ -98,6 +98,8 @@ private:
     Axle::u32 m_ViewportHeight = 720;
     bool m_ViewportFocused = false;
     bool m_ViewportHovered = false;
+    bool m_CursorCaptured = false;
+    glm::vec2 m_PreCaptureMousePos{ 0.0f, 0.0f };
 
     // Simulation Execution Control
     SceneState m_SceneState = SceneState::Edit;

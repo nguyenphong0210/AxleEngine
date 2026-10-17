@@ -50,6 +50,10 @@ namespace Axle {
         void SetTitle(const std::string& title);
         const std::string& GetTitle() const { return m_Data.Title; }
 
+        void SetCursorMode(CursorMode mode);
+        CursorMode GetCursorMode() const { return m_Data.CurrentCursorMode; }
+        void SetCursorPosition(f32 x, f32 y);
+
         u32 GetWidth() const { return m_Data.Width; }
         u32 GetHeight() const { return m_Data.Height; }
         GLFWwindow* GetNativeWindow() const { return m_Window; }
@@ -74,6 +78,7 @@ namespace Axle {
             u32 Width;
             u32 Height;
             bool VSync;
+            CursorMode CurrentCursorMode = CursorMode::Normal;
 
             std::function<void(const WindowResizeEvent&)> OnWindowResize;
             std::function<void(const WindowCloseEvent&)> OnWindowClose;

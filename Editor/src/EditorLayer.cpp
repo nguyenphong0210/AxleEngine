@@ -312,6 +312,11 @@ void EditorLayer::OnAttach() {
 
 void EditorLayer::OnDetach() {
     AXLE_INFO("EditorLayer detached");
+    if (m_CursorCaptured) {
+        Axle::Application::Get().GetWindow().SetCursorMode(Axle::CursorMode::Normal);
+        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+        m_CursorCaptured = false;
+    }
     if (m_SceneState == SceneState::Play) {
         OnSceneStop();
     }
@@ -883,11 +888,24 @@ void EditorLayer::UpdateWindowTitle() {
 
 void EditorLayer::OnScenePause() {
     m_SceneState = SceneState::Pause;
+    if (m_CursorCaptured) {
+        Axle::Application::Get().GetWindow().SetCursorMode(Axle::CursorMode::Normal);
+        Axle::Application::Get().GetWindow().SetCursorPosition(m_PreCaptureMousePos.x, m_PreCaptureMousePos.y);
+        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+        m_CursorCaptured = false;
+    }
     AXLE_INFO("Simulation paused. Viewport Free-Fly inspection enabled.");
 }
 
 void EditorLayer::OnSceneStop() {
     if (m_SceneState == SceneState::Edit) return;
+
+    if (m_CursorCaptured || Axle::Input::GetCursorMode() == Axle::CursorMode::Locked) {
+        Axle::Input::SetCursorMode(Axle::CursorMode::Normal);
+        Axle::Application::Get().GetWindow().SetCursorPosition(m_PreCaptureMousePos.x, m_PreCaptureMousePos.y);
+        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+        m_CursorCaptured = false;
+    }
 
     m_SceneState = SceneState::Edit;
 
@@ -949,8 +967,38 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     Axle::AudioEngine::Update();
 
     const bool isHoldingRMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight);
+    const bool isHoldingLMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonLeft);
     const bool isCtrlDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftControl) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightControl);
     const bool isShiftDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift);
+
+    // Editor Camera RMB Fly Navigation (Active in Edit Mode / Eject Free-Fly Mode)
+    if (m_SceneState != SceneState::Play || m_UseEditorCameraInPlay) {
+        if (m_ViewportHovered && isHoldingRMB && !m_CursorCaptured) {
+            m_PreCaptureMousePos = glm::vec2(Axle::Input::GetMouseX(), Axle::Input::GetMouseY());
+            Axle::Application::Get().GetWindow().SetCursorMode(Axle::CursorMode::Locked);
+            m_CursorCaptured = true;
+        } else if (!isHoldingRMB && m_CursorCaptured) {
+            Axle::Application::Get().GetWindow().SetCursorMode(Axle::CursorMode::Normal);
+            Axle::Application::Get().GetWindow().SetCursorPosition(m_PreCaptureMousePos.x, m_PreCaptureMousePos.y);
+            m_CursorCaptured = false;
+        }
+    }
+
+    // Safety: Emergency Escape or Shift+F1 Unlock (Unreal Engine PIE standard)
+    const bool isShiftDownEscape = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift);
+    const bool isF1Down = Axle::Input::IsKeyPressed(Axle::KeyCode::F1);
+    const bool isEscapeDown = Axle::Input::IsKeyPressed(Axle::KeyCode::Escape);
+    if ((isEscapeDown || (isShiftDownEscape && isF1Down)) && Axle::Input::GetCursorMode() == Axle::CursorMode::Locked) {
+        Axle::Input::SetCursorMode(Axle::CursorMode::Normal);
+        m_CursorCaptured = false;
+    }
+
+    // Synchronize ImGui mouse processing with Engine CursorMode (Unreal / Godot style)
+    if (Axle::Input::GetCursorMode() == Axle::CursorMode::Locked) {
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
+    } else {
+        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+    }
 
     // Hotkey Controls (debounced)
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::F5)) {
@@ -1139,7 +1187,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
 
     // Editor Free-Fly Camera (Active in Edit mode, Pause mode, or Eject Free-Fly mode during Play)
     if (m_SceneState != SceneState::Play || m_UseEditorCameraInPlay) {
-        if ((m_ViewportHovered || m_ViewportFocused) && !ImGui::GetIO().WantTextInput) {
+        if ((m_ViewportHovered || m_ViewportFocused || m_CursorCaptured) && !ImGui::GetIO().WantTextInput) {
             const bool isManipulatingGizmo = (m_SceneState == SceneState::Edit) && ImGuizmo::IsUsing();
             if (!isManipulatingGizmo) {
                 m_CameraController->OnUpdate(ts);
@@ -1725,6 +1773,7 @@ void EditorLayer::OnImGuiRender() {
 
     m_ViewportFocused = ImGui::IsWindowFocused();
     m_ViewportHovered = ImGui::IsWindowHovered();
+    Axle::Input::SetViewportHovered(m_ViewportHovered);
 
     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
     if (viewportSize.x > 0.0f && viewportSize.y > 0.0f &&
@@ -2356,14 +2405,19 @@ void EditorLayer::OnImGuiRender() {
     drawList->AddText(ImVec2(badgePos.x + 8.0f, badgePos.y + 4.0f), IM_COL32(255, 255, 255, 255), statusText);
 
     if (m_SceneState == SceneState::Play && m_Scene) {
+        float offsetX = 185.0f;
         if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
             const auto vTele = pv->GetTelemetry();
             char speedStr[48];
             snprintf(speedStr, sizeof(speedStr), "%.1f KM/H | GEAR %d", vTele.SpeedKmh, vTele.CurrentGear);
-            ImVec2 speedPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
+            ImVec2 speedPos = ImVec2(badgePos.x + offsetX, badgePos.y);
             drawList->AddRectFilled(speedPos, ImVec2(speedPos.x + 155.0f, speedPos.y + 24.0f), IM_COL32(20, 30, 45, 220), 4.0f);
             drawList->AddText(ImVec2(speedPos.x + 8.0f, speedPos.y + 4.0f), IM_COL32(0, 230, 180, 255), speedStr);
+            offsetX += 165.0f;
         }
+        ImVec2 playHintPos = ImVec2(badgePos.x + offsetX, badgePos.y);
+        drawList->AddRectFilled(playHintPos, ImVec2(playHintPos.x + 550.0f, playHintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
+        drawList->AddText(ImVec2(playHintPos.x + 8.0f, playHintPos.y + 4.0f), IM_COL32(200, 210, 225, 255), "Drive: WASD / Space | Click LMB: Lock/Look | Esc / Shift+F1: Unlock | Hold RMB: Zoom | V: Cam");
     } else if (m_SceneState == SceneState::Edit) {
         ImVec2 hintPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
         drawList->AddRectFilled(hintPos, ImVec2(hintPos.x + 440.0f, hintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);

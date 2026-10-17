@@ -5,6 +5,7 @@ namespace Axle {
 
     static InputContext s_LocalContext;
     static f32 s_MouseScrollY = 0.0f;
+    static bool s_ViewportHovered = true;
 
     void Input::SetContext(GLFWwindow* window) {
         s_WindowContext = window;
@@ -28,6 +29,33 @@ namespace Axle {
         };
         s_LocalContext.GetMouseScrollYFn = []() -> f32 {
             return s_MouseScrollY;
+        };
+        s_LocalContext.SetCursorModeFn = [](CursorMode mode) {
+            if (!s_LocalContext.Window) return;
+            int glfwMode = GLFW_CURSOR_NORMAL;
+            if (mode == CursorMode::Hidden) glfwMode = GLFW_CURSOR_HIDDEN;
+            else if (mode == CursorMode::Locked) glfwMode = GLFW_CURSOR_DISABLED;
+            glfwSetInputMode(s_LocalContext.Window, GLFW_CURSOR, glfwMode);
+            if (glfwRawMouseMotionSupported()) {
+                glfwSetInputMode(s_LocalContext.Window, GLFW_RAW_MOUSE_MOTION, (mode == CursorMode::Locked) ? GLFW_TRUE : GLFW_FALSE);
+            }
+        };
+        s_LocalContext.GetCursorModeFn = []() -> CursorMode {
+            if (!s_LocalContext.Window) return CursorMode::Normal;
+            int glfwMode = glfwGetInputMode(s_LocalContext.Window, GLFW_CURSOR);
+            if (glfwMode == GLFW_CURSOR_DISABLED) return CursorMode::Locked;
+            if (glfwMode == GLFW_CURSOR_HIDDEN) return CursorMode::Hidden;
+            return CursorMode::Normal;
+        };
+        s_LocalContext.SetCursorPositionFn = [](f32 x, f32 y) {
+            if (!s_LocalContext.Window) return;
+            glfwSetCursorPos(s_LocalContext.Window, static_cast<double>(x), static_cast<double>(y));
+        };
+        s_LocalContext.IsViewportHoveredFn = []() -> bool {
+            return s_ViewportHovered;
+        };
+        s_LocalContext.SetViewportHoveredFn = [](bool hovered) {
+            s_ViewportHovered = hovered;
         };
 
         s_SharedContext = &s_LocalContext;
@@ -93,6 +121,56 @@ namespace Axle {
 
     void Input::SetMouseScrollY(f32 scrollY) {
         s_MouseScrollY = scrollY;
+    }
+
+    void Input::SetCursorMode(CursorMode mode) {
+        if (s_SharedContext && s_SharedContext->SetCursorModeFn) {
+            s_SharedContext->SetCursorModeFn(mode);
+            return;
+        }
+        if (!s_WindowContext) return;
+        int glfwMode = GLFW_CURSOR_NORMAL;
+        if (mode == CursorMode::Hidden) glfwMode = GLFW_CURSOR_HIDDEN;
+        else if (mode == CursorMode::Locked) glfwMode = GLFW_CURSOR_DISABLED;
+        glfwSetInputMode(s_WindowContext, GLFW_CURSOR, glfwMode);
+        if (glfwRawMouseMotionSupported()) {
+            glfwSetInputMode(s_WindowContext, GLFW_RAW_MOUSE_MOTION, (mode == CursorMode::Locked) ? GLFW_TRUE : GLFW_FALSE);
+        }
+    }
+
+    CursorMode Input::GetCursorMode() {
+        if (s_SharedContext && s_SharedContext->GetCursorModeFn) {
+            return s_SharedContext->GetCursorModeFn();
+        }
+        if (!s_WindowContext) return CursorMode::Normal;
+        int glfwMode = glfwGetInputMode(s_WindowContext, GLFW_CURSOR);
+        if (glfwMode == GLFW_CURSOR_DISABLED) return CursorMode::Locked;
+        if (glfwMode == GLFW_CURSOR_HIDDEN) return CursorMode::Hidden;
+        return CursorMode::Normal;
+    }
+
+    void Input::SetCursorPosition(f32 x, f32 y) {
+        if (s_SharedContext && s_SharedContext->SetCursorPositionFn) {
+            s_SharedContext->SetCursorPositionFn(x, y);
+            return;
+        }
+        if (!s_WindowContext) return;
+        glfwSetCursorPos(s_WindowContext, static_cast<double>(x), static_cast<double>(y));
+    }
+
+    bool Input::IsViewportHovered() {
+        if (s_SharedContext && s_SharedContext->IsViewportHoveredFn) {
+            return s_SharedContext->IsViewportHoveredFn();
+        }
+        return s_ViewportHovered;
+    }
+
+    void Input::SetViewportHovered(bool hovered) {
+        if (s_SharedContext && s_SharedContext->SetViewportHoveredFn) {
+            s_SharedContext->SetViewportHoveredFn(hovered);
+            return;
+        }
+        s_ViewportHovered = hovered;
     }
 
 }

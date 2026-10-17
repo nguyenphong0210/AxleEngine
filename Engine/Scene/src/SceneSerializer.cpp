@@ -263,6 +263,10 @@ namespace Axle {
                 auto& sbc = entity.GetComponent<SkyboxComponent>();
                 ss << "    SkyboxComponent:\n";
                 ss << "      Enabled: " << (sbc.Enabled ? "true" : "false") << "\n";
+                ss << "      SkyboxType: " << (int)sbc.Type << "\n";
+                ss << "      HDRPath: " << sbc.HDRPath << "\n";
+                ss << "      Intensity: " << sbc.Intensity << "\n";
+                ss << "      Exposure: " << sbc.Exposure << "\n";
                 ss << "      ZenithColor: [ " << sbc.ZenithColor.r << " , " << sbc.ZenithColor.g << " , " << sbc.ZenithColor.b << " ]\n";
                 ss << "      HorizonColor: [ " << sbc.HorizonColor.r << " , " << sbc.HorizonColor.g << " , " << sbc.HorizonColor.b << " ]\n";
                 ss << "      GroundColor: [ " << sbc.GroundColor.r << " , " << sbc.GroundColor.g << " , " << sbc.GroundColor.b << " ]\n";
@@ -614,6 +618,14 @@ namespace Axle {
                         auto& sbc = currentEntity.GetComponent<SkyboxComponent>();
                         if (trimmed.rfind("Enabled:", 0) == 0) {
                             sbc.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("SkyboxType:", 0) == 0) {
+                            sbc.Type = static_cast<SkyboxType>(std::stoi(Trim(trimmed.substr(11))));
+                        } else if (trimmed.rfind("HDRPath:", 0) == 0) {
+                            sbc.HDRPath = Trim(trimmed.substr(8));
+                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                            sbc.Intensity = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("Exposure:", 0) == 0) {
+                            sbc.Exposure = std::stof(Trim(trimmed.substr(9)));
                         } else if (trimmed.rfind("ZenithColor:", 0) == 0) {
                             float r = 0.18f, g = 0.42f, b = 0.78f;
                             sscanf(trimmed.c_str(), "ZenithColor: [ %f , %f , %f ]", &r, &g, &b);

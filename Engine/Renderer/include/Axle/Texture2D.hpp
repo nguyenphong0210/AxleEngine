@@ -42,6 +42,7 @@ namespace Axle {
     public:
         Texture2D(const std::string& filepath, const TextureSpecification& spec = {});
         Texture2D(const TextureSpecification& spec, const void* data = nullptr);
+        Texture2D(u32 rendererID, u32 width, u32 height);
         ~Texture2D();
 
         Texture2D(const Texture2D&) = delete;
@@ -60,6 +61,7 @@ namespace Axle {
 
         static std::shared_ptr<Texture2D> Create(const std::string& filepath, const TextureSpecification& spec = {});
         static std::shared_ptr<Texture2D> Create(const TextureSpecification& spec, const void* data = nullptr);
+        static std::shared_ptr<Texture2D> CreateFromRendererID(u32 rendererID, u32 width, u32 height);
 
         // Pre-baked global 1x1 fallback textures for missing/unassigned material maps
         static std::shared_ptr<Texture2D> GetWhiteTexture();            // (255, 255, 255, 255) for Albedo / AO

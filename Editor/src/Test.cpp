@@ -24,6 +24,8 @@
 #include <Axle/Package.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/ShadowMap.hpp>
+#include <Axle/Cubemap.hpp>
+#include <Axle/Skybox.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <iostream>
 
@@ -4263,6 +4265,157 @@ bool RunTest_Step29_Phase25_SoftShadowsAndDynamicShadowMap() {
 }
 
 // =============================================================================
+// STEP 30: PHASE 26 - HDR SKYBOX CUBEMAP & IMAGE-BASED LIGHTING (IBL)
+// =============================================================================
+bool RunTest_Step30_Phase26_HDRCubemapAndIBL() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 30] Phase 26: HDR Skybox Cubemap & Image-Based Lighting" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // -----------------------------------------------------------------
+    // [30.1] HDR Equirectangular Data & Cubemap Creation
+    // -----------------------------------------------------------------
+    std::cout << "[30.1] Verifying HDR Equirectangular conversion and Cubemap spec..." << std::endl;
+    {
+        // Synthesize an equirectangular HDR radiance gradient (16x8 floats, RGB)
+        std::vector<float> hdrGradient(16 * 8 * 3, 0.5f);
+        // Sun hotspot at center
+        hdrGradient[(4 * 16 + 8) * 3 + 0] = 25.0f;
+        hdrGradient[(4 * 16 + 8) * 3 + 1] = 22.0f;
+        hdrGradient[(4 * 16 + 8) * 3 + 2] = 18.0f;
+
+        auto cubemap = Axle::Cubemap::CreateFromEquirectangularHDR(hdrGradient.data(), 16, 8, 32);
+        if (!cubemap) {
+            std::cerr << "FAIL: CreateFromEquirectangularHDR returned null!" << std::endl;
+            return false;
+        }
+
+        if (cubemap->GetWidth() != 32 || cubemap->GetHeight() != 32) {
+            std::cerr << "FAIL: Cubemap resolution mismatch!" << std::endl;
+            return false;
+        }
+
+        if (!cubemap->GetSpecification().IsHDR) {
+            std::cerr << "FAIL: Cubemap should be marked HDR!" << std::endl;
+            return false;
+        }
+
+        // Test static pre-baked fallbacks
+        auto blackCube = Axle::Cubemap::GetBlackCubemap();
+        if (!blackCube || blackCube->GetWidth() != 1 || blackCube->GetHeight() != 1) {
+            std::cerr << "FAIL: GetBlackCubemap invalid!" << std::endl;
+            return false;
+        }
+
+        auto brdfLUT = Axle::Cubemap::GetGlobalBRDFLUT();
+        if (!brdfLUT || brdfLUT->GetWidth() != 256 || brdfLUT->GetHeight() != 256) {
+            std::cerr << "FAIL: GetGlobalBRDFLUT invalid!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> PASS: HDR equirectangular processing and Cubemap IBL specifications verified." << std::endl;
+    }
+
+    // -----------------------------------------------------------------
+    // [30.2] Skybox Class Mode & Property Mutators
+    // -----------------------------------------------------------------
+    std::cout << "[30.2] Verifying Skybox mode transitions and IBL state..." << std::endl;
+    {
+        Axle::Skybox skybox;
+        if (skybox.GetMode() != Axle::SkyboxMode::ProceduralAtmospheric) {
+            std::cerr << "FAIL: Default Skybox mode should be ProceduralAtmospheric!" << std::endl;
+            return false;
+        }
+
+        skybox.SetMode(Axle::SkyboxMode::HDRCubemap);
+        skybox.SetHDRIntensity(2.75f);
+
+        if (skybox.GetMode() != Axle::SkyboxMode::HDRCubemap) {
+            std::cerr << "FAIL: SetMode(HDRCubemap) failed!" << std::endl;
+            return false;
+        }
+
+        if (std::abs(skybox.GetSpecification().HDRIntensity - 2.75f) > 1e-4f) {
+            std::cerr << "FAIL: SetHDRIntensity failed!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> PASS: Skybox HDRCubemap mode switching and radiance properties verified." << std::endl;
+    }
+
+    // -----------------------------------------------------------------
+    // [30.3] SkyboxComponent Serialization & Deserialization
+    // -----------------------------------------------------------------
+    std::cout << "[30.3] Verifying Scene serialization roundtrip for HDR SkyboxComponent..." << std::endl;
+    std::error_code ec;
+    auto testDir = std::filesystem::current_path() / "TestDir_IBLPhase26";
+    std::filesystem::create_directories(testDir, ec);
+
+    {
+        auto saveScene = std::make_shared<Axle::Scene>();
+        auto skyEnt = saveScene->CreateEntity("StudioSkybox");
+        auto& sbc = skyEnt.AddComponent<Axle::SkyboxComponent>();
+        sbc.Enabled = true;
+        sbc.Type = Axle::SkyboxType::HDRCubemap;
+        sbc.HDRPath = "Assets/Textures/Environment/IndustrialSunset.hdr";
+        sbc.Intensity = 1.65f;
+        sbc.Exposure = 1.35f;
+
+        auto sceneFile = testDir / "IBLScene.axle";
+        Axle::SceneSerializer serializer(saveScene.get());
+        serializer.Serialize(sceneFile.string());
+
+        auto loadScene = std::make_shared<Axle::Scene>();
+        Axle::SceneSerializer deserializer(loadScene.get());
+        bool deserialized = deserializer.Deserialize(sceneFile.string());
+        if (!deserialized) {
+            std::cerr << "FAIL: Failed to deserialize IBL scene!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        Axle::SkyboxComponent loadedSBC;
+        bool hasSky = loadScene->GetPrimarySkybox(loadedSBC);
+        if (!hasSky) {
+            std::cerr << "FAIL: Deserialized scene missing primary SkyboxComponent!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        if (loadedSBC.Type != Axle::SkyboxType::HDRCubemap) {
+            std::cerr << "FAIL: Deserialized SkyboxType mismatch!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        if (loadedSBC.HDRPath != "Assets/Textures/Environment/IndustrialSunset.hdr") {
+            std::cerr << "FAIL: Deserialized HDRPath mismatch: '" << loadedSBC.HDRPath << "'!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        if (std::abs(loadedSBC.Intensity - 1.65f) > 1e-3f) {
+            std::cerr << "FAIL: Deserialized Intensity mismatch: " << loadedSBC.Intensity << " (expected 1.65)!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        if (std::abs(loadedSBC.Exposure - 1.35f) > 1e-3f) {
+            std::cerr << "FAIL: Deserialized Exposure mismatch: " << loadedSBC.Exposure << " (expected 1.35)!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        std::cout << "  -> PASS: HDR SkyboxComponent serialized and deserialized with 100% fidelity." << std::endl;
+    }
+
+    std::filesystem::remove_all(testDir, ec);
+
+    std::cout << ">>> STEP 30 PASSED: Phase 26 HDR Skybox Cubemap & IBL verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -4304,12 +4457,13 @@ int main(int argc, char** argv) {
         else if (arg == "27" || arg == "step27" || arg == "--step27" || arg == "--phase23") targetStep = 27;
         else if (arg == "28" || arg == "step28" || arg == "--step28" || arg == "--phase24") targetStep = 28;
         else if (arg == "29" || arg == "step29" || arg == "--step29" || arg == "--phase25") targetStep = 29;
+        else if (arg == "30" || arg == "step30" || arg == "--step30" || arg == "--phase26") targetStep = 30;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 29 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 30 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -4403,6 +4557,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 29) {
         if (!RunTest_Step29_Phase25_SoftShadowsAndDynamicShadowMap()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 30) {
+        if (!RunTest_Step30_Phase26_HDRCubemapAndIBL()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

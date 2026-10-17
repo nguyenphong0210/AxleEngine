@@ -203,7 +203,7 @@ namespace Axle {
             vertices.push_back(0.0f);
         }
 
-        // Tube side faces
+        // Tube side faces (Counter-Clockwise winding order outwards)
         for (u32 i = 0; i < segments; ++i) {
             const u32 top1 = i * 2;
             const u32 bot1 = top1 + 1;
@@ -211,12 +211,12 @@ namespace Axle {
             const u32 bot2 = top2 + 1;
 
             indices.push_back(top1);
-            indices.push_back(bot1);
             indices.push_back(top2);
+            indices.push_back(bot1);
 
             indices.push_back(top2);
-            indices.push_back(bot1);
             indices.push_back(bot2);
+            indices.push_back(bot1);
         }
 
         // Top cap center vertex
@@ -240,11 +240,11 @@ namespace Axle {
             vertices.push_back(0.5f + 0.5f * z);
         }
 
-        // Top cap triangles
+        // Top cap triangles (Normal pointing +Y outwards)
         for (u32 i = 0; i < segments; ++i) {
             indices.push_back(topCenterIdx);
-            indices.push_back(topRimStart + i);
             indices.push_back(topRimStart + i + 1);
+            indices.push_back(topRimStart + i);
         }
 
         // Bottom cap center vertex
@@ -268,11 +268,11 @@ namespace Axle {
             vertices.push_back(0.5f + 0.5f * z);
         }
 
-        // Bottom cap triangles
+        // Bottom cap triangles (Normal pointing -Y outwards)
         for (u32 i = 0; i < segments; ++i) {
             indices.push_back(botCenterIdx);
-            indices.push_back(botRimStart + i + 1);
             indices.push_back(botRimStart + i);
+            indices.push_back(botRimStart + i + 1);
         }
 
         auto va = std::make_shared<VertexArray>();

@@ -13,6 +13,7 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/PhysicsMaterial.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/PlatformUtils.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -2039,55 +2040,104 @@ namespace Axle {
             ImGui::TextDisabled("Light Direction: (%.2f, %.2f, %.2f)", dir.x, dir.y, dir.z);
         }, /*canRemove=*/ true);
 
-        // Atmospheric Skybox Component (Phase 11: Sub-step 4.2)
-        DrawComponent<SkyboxComponent>("Atmospheric Skybox", entity, [&](SkyboxComponent& sbc) {
+        // Skybox Component (Procedural Atmospheric vs HDR Cubemap IBL)
+        DrawComponent<SkyboxComponent>("Skybox & Environment", entity, [&](SkyboxComponent& sbc) {
             ImGui::Checkbox("Enable Skybox", &sbc.Enabled);
-            ImGui::Checkbox("Hemisphere Ambient Lighting", &sbc.HemisphereAmbient);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Compute realistic ambient irradiance gradients (Zenith, Horizon, Ground) from atmospheric sky.");
+
+            const char* skyboxTypes[] = { "Procedural Atmospheric", "HDR Cubemap (IBL)" };
+            int currentType = (sbc.Type == SkyboxType::HDRCubemap) ? 1 : 0;
+            if (ImGui::Combo("Skybox Type", &currentType, skyboxTypes, IM_ARRAYSIZE(skyboxTypes))) {
+                sbc.Type = (currentType == 1) ? SkyboxType::HDRCubemap : SkyboxType::ProceduralAtmospheric;
             }
+
             ImGui::Spacing();
 
-            // Atmosphere Colors
-            ImGui::ColorEdit3("Zenith Color", glm::value_ptr(sbc.ZenithColor));
-            ImGui::ColorEdit3("Horizon Color", glm::value_ptr(sbc.HorizonColor));
-            ImGui::ColorEdit3("Ground Color", glm::value_ptr(sbc.GroundColor));
-            ImGui::Spacing();
+            if (sbc.Type == SkyboxType::HDRCubemap) {
+                ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), "HDR Environment Map (IBL):");
 
-            // Atmospheric Properties
-            ImGui::SliderFloat("Turbidity (Haze)", &sbc.Turbidity, 0.2f, 4.0f, "%.2f");
-            ImGui::SliderFloat("Sun Disk Size", &sbc.SunSize, 0.01f, 0.15f, "%.3f");
-            ImGui::SliderFloat("Sun Glow (Corona)", &sbc.SunGlow, 0.02f, 0.80f, "%.2f");
-            ImGui::Spacing();
+                char hdrBuf[260];
+                strncpy(hdrBuf, sbc.HDRPath.c_str(), sizeof(hdrBuf));
+                hdrBuf[sizeof(hdrBuf) - 1] = '\0';
+                if (ImGui::InputText("##HDRPath", hdrBuf, sizeof(hdrBuf))) {
+                    sbc.HDRPath = hdrBuf;
+                }
 
-            // Sun Alignment
-            ImGui::Checkbox("Sync with Directional Sun Light", &sbc.SyncWithSun);
-            if (!sbc.SyncWithSun) {
-                ImGui::SliderFloat("Custom Sun Azimuth", &sbc.CustomAzimuth, 0.0f, 360.0f, "%.1f deg");
-                ImGui::SliderFloat("Custom Sun Elevation", &sbc.CustomElevation, 1.0f, 89.0f, "%.1f deg");
-            }
-            ImGui::Spacing();
+                // Drag & Drop .hdr file from Content Browser
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = static_cast<const char*>(payload->Data);
+                        std::filesystem::path p(pathStr);
+                        std::string ext = p.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                        if (ext == ".hdr" || ext == ".exr") {
+                            sbc.HDRPath = p.string();
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
 
-            // Atmosphere Presets
-            ImGui::TextDisabled("Atmosphere Presets:");
-            if (ImGui::SmallButton("Clear Noon")) {
-                sbc.SetPresetNoon();
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Golden Sunset")) {
-                sbc.SetPresetSunset();
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Starry Night")) {
-                sbc.SetPresetNight();
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Overcast")) {
-                sbc.SetPresetOvercast();
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Mars Sky")) {
-                sbc.SetPresetAlienMars();
+                ImGui::SameLine();
+                if (ImGui::Button("Browse...")) {
+                    std::string selected = FileDialogs::OpenFile("Radiance HDR (*.hdr)\0*.hdr\0All Files (*.*)\0*.*\0");
+                    if (!selected.empty()) {
+                        sbc.HDRPath = selected;
+                    }
+                }
+
+                ImGui::SliderFloat("Radiance / Intensity", &sbc.Intensity, 0.0f, 5.0f, "%.2f");
+                ImGui::SliderFloat("Exposure", &sbc.Exposure, 0.1f, 5.0f, "%.2f");
+
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Image-Based Lighting provides real-time diffuse irradiance and pre-filtered GGX specular reflections.");
+                }
+            } else {
+                ImGui::Checkbox("Hemisphere Ambient Lighting", &sbc.HemisphereAmbient);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Compute realistic ambient irradiance gradients (Zenith, Horizon, Ground) from atmospheric sky.");
+                }
+                ImGui::Spacing();
+
+                // Atmosphere Colors
+                ImGui::ColorEdit3("Zenith Color", glm::value_ptr(sbc.ZenithColor));
+                ImGui::ColorEdit3("Horizon Color", glm::value_ptr(sbc.HorizonColor));
+                ImGui::ColorEdit3("Ground Color", glm::value_ptr(sbc.GroundColor));
+                ImGui::Spacing();
+
+                // Atmospheric Properties
+                ImGui::SliderFloat("Turbidity (Haze)", &sbc.Turbidity, 0.2f, 4.0f, "%.2f");
+                ImGui::SliderFloat("Sun Disk Size", &sbc.SunSize, 0.01f, 0.15f, "%.3f");
+                ImGui::SliderFloat("Sun Glow (Corona)", &sbc.SunGlow, 0.02f, 0.80f, "%.2f");
+                ImGui::Spacing();
+
+                // Sun Alignment
+                ImGui::Checkbox("Sync with Directional Sun Light", &sbc.SyncWithSun);
+                if (!sbc.SyncWithSun) {
+                    ImGui::SliderFloat("Custom Sun Azimuth", &sbc.CustomAzimuth, 0.0f, 360.0f, "%.1f deg");
+                    ImGui::SliderFloat("Custom Sun Elevation", &sbc.CustomElevation, 1.0f, 89.0f, "%.1f deg");
+                }
+                ImGui::Spacing();
+
+                // Atmosphere Presets
+                ImGui::TextDisabled("Atmosphere Presets:");
+                if (ImGui::SmallButton("Clear Noon")) {
+                    sbc.SetPresetNoon();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Golden Sunset")) {
+                    sbc.SetPresetSunset();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Starry Night")) {
+                    sbc.SetPresetNight();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Overcast")) {
+                    sbc.SetPresetOvercast();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Mars Sky")) {
+                    sbc.SetPresetAlienMars();
+                }
             }
         }, /*canRemove=*/ true);
 

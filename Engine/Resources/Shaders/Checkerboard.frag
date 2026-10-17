@@ -27,6 +27,11 @@ uniform sampler2DShadow u_ShadowMap; // Slot 1: Directional Light Depth Texture 
 uniform sampler2D u_NormalMap;     // Slot 2: Tangent-space Normal Map
 uniform sampler2D u_RoughnessMap;  // Slot 3: Micro-surface Roughness Map
 uniform sampler2D u_MetallicMap;   // Slot 4: Metallic Mask Map
+uniform samplerCube u_IrradianceMap; // Slot 5: Diffuse Irradiance Cubemap
+uniform samplerCube u_PrefilterMap;  // Slot 6: Specular Prefiltered Cubemap
+uniform sampler2D u_BRDFLUT;         // Slot 7: BRDF Integration 2D LUT
+uniform int u_UseIBL;                // 1: Enable HDR Image-Based Lighting, 0: Analytical
+uniform float u_EnvironmentIntensity;// Multiplier for IBL radiance
 
 uniform float u_ShadowBias;         // Dynamic light depth bias
 uniform float u_ShadowFilterRadius; // Dynamic penumbra spread radius
@@ -325,9 +330,25 @@ void main() {
     vec3 radiance = u_LightColor * u_LightIntensity;
     vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
 
-    // Hemisphere Ambient Irradiance & Environment Reflection (Phase 11: Sub-step 4.3)
+    // Ambient Irradiance & Environment Reflection (IBL or Hemisphere)
     vec3 ambient;
-    if (u_UseHemisphereAmbient == 1) {
+    if (u_UseIBL == 1) {
+        vec3 F_ibl = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
+        vec3 kS_ibl = F_ibl;
+        vec3 kD_ibl = (vec3(1.0) - kS_ibl) * (1.0 - metallic);
+
+        vec3 irradiance = texture(u_IrradianceMap, N).rgb;
+        vec3 diffuseAmbient = irradiance * baseColor.rgb * kD_ibl;
+
+        vec3 R = reflect(-V, N);
+        const float MAX_REFLECTION_LOD = 4.0;
+        vec3 prefilteredColor = textureLod(u_PrefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+        vec2 envBRDF = texture(u_BRDFLUT, vec2(max(NdotV, 0.0), roughness)).rg;
+        vec3 specularAmbient = prefilteredColor * (F_ibl * envBRDF.x + envBRDF.y);
+
+        float envIntensity = (u_EnvironmentIntensity > 0.0) ? u_EnvironmentIntensity : 1.0;
+        ambient = (diffuseAmbient + specularAmbient) * envIntensity;
+    } else if (u_UseHemisphereAmbient == 1) {
         // Vertical normal component maps [-1, 1] to [0, 1] for ground-to-sky gradient
         float upWeight = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
         float zenithWeight = clamp(N.y, 0.0, 1.0);

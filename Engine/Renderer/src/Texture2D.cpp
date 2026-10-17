@@ -2,6 +2,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
 #include <stb_image.h>
 #include <filesystem>
 
@@ -105,14 +106,25 @@ namespace Axle {
         m_IsLoaded = (data != nullptr);
     }
 
+    Texture2D::Texture2D(u32 rendererID, u32 width, u32 height)
+        : m_RendererID(rendererID), m_Width(width), m_Height(height), m_IsLoaded(true) {
+        m_Specification.Width = width;
+        m_Specification.Height = height;
+    }
+
     Texture2D::~Texture2D() {
-        if (m_RendererID) {
+        if (m_RendererID && glfwGetCurrentContext() != nullptr) {
             glDeleteTextures(1, &m_RendererID);
             m_RendererID = 0;
         }
     }
 
     void Texture2D::Invalidate(const void* initialData) {
+        if (glfwGetCurrentContext() == nullptr) {
+            m_RendererID = 0;
+            return;
+        }
+
         if (m_RendererID) {
             glDeleteTextures(1, &m_RendererID);
             m_RendererID = 0;
@@ -154,7 +166,7 @@ namespace Axle {
     }
 
     void Texture2D::SetData(const void* data, u32 size) {
-        if (!m_RendererID || !data) return;
+        if (glfwGetCurrentContext() == nullptr || !m_RendererID || !data) return;
 
         glBindTexture(GL_TEXTURE_2D, m_RendererID);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -180,11 +192,13 @@ namespace Axle {
     }
 
     void Texture2D::Bind(u32 slot) const {
+        if (glfwGetCurrentContext() == nullptr || m_RendererID == 0) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, m_RendererID);
     }
 
     void Texture2D::Unbind(u32 slot) const {
+        if (glfwGetCurrentContext() == nullptr) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -195,6 +209,10 @@ namespace Axle {
 
     std::shared_ptr<Texture2D> Texture2D::Create(const TextureSpecification& spec, const void* data) {
         return std::make_shared<Texture2D>(spec, data);
+    }
+
+    std::shared_ptr<Texture2D> Texture2D::CreateFromRendererID(u32 rendererID, u32 width, u32 height) {
+        return std::make_shared<Texture2D>(rendererID, width, height);
     }
 
     std::shared_ptr<Texture2D> Texture2D::GetWhiteTexture() {

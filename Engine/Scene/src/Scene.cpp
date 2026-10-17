@@ -483,6 +483,13 @@ namespace Axle {
         shader.SetInt("u_NormalMap", 2);
         shader.SetInt("u_RoughnessMap", 3);
         shader.SetInt("u_MetallicMap", 4);
+        shader.SetInt("u_IrradianceMap", 5);
+        shader.SetInt("u_PrefilterMap", 6);
+        shader.SetInt("u_BRDFLUT", 7);
+
+        int useIBL = (hasSkybox && skybox.Enabled && skybox.Type == SkyboxType::HDRCubemap && !skybox.HDRPath.empty()) ? 1 : 0;
+        shader.SetInt("u_UseIBL", useIBL);
+        shader.SetFloat("u_EnvironmentIntensity", hasSkybox ? skybox.Intensity : 1.0f);
 
         // Default texture & material parameters
         shader.SetInt("u_UseAlbedoMap", 0);

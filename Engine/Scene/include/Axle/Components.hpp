@@ -713,9 +713,19 @@ namespace Axle {
             : FOV(fov), NearClip(nearClip), FarClip(farClip), Primary(primary) {}
     };
 
+    enum class SkyboxType {
+        ProceduralAtmospheric = 0,
+        HDRCubemap = 1
+    };
+
     struct SkyboxComponent {
 
         bool Enabled = true;
+        SkyboxType Type = SkyboxType::ProceduralAtmospheric;
+        std::string HDRPath;
+        float Intensity = 1.0f;
+        float Exposure = 1.0f;
+
         glm::vec3 ZenithColor{ 0.18f, 0.42f, 0.78f };    // Deep sky blue at zenith
         glm::vec3 HorizonColor{ 0.70f, 0.82f, 0.95f };   // Soft atmospheric haze at horizon
         glm::vec3 GroundColor{ 0.18f, 0.16f, 0.14f };    // Warm terrain ground floor
@@ -728,6 +738,15 @@ namespace Axle {
         bool HemisphereAmbient = true;                    // Enable atmospheric hemisphere ambient irradiance
 
         SkyboxComponent() = default;
+
+        void SetHDR(const std::string& path) {
+            HDRPath = path;
+            Type = SkyboxType::HDRCubemap;
+        }
+
+        void SetProcedural() {
+            Type = SkyboxType::ProceduralAtmospheric;
+        }
 
         void SetPresetNoon() {
             ZenithColor = glm::vec3(0.18f, 0.42f, 0.78f);

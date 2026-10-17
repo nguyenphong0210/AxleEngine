@@ -82,6 +82,11 @@ namespace Axle {
                 uniform sampler2D u_NormalMap;
                 uniform sampler2D u_RoughnessMap;
                 uniform sampler2D u_MetallicMap;
+                uniform samplerCube u_IrradianceMap;
+                uniform samplerCube u_PrefilterMap;
+                uniform sampler2D u_BRDFLUT;
+                uniform int u_UseIBL;
+                uniform float u_EnvironmentIntensity;
 
                 uniform float u_ShadowBias;
                 uniform float u_ShadowFilterRadius;
@@ -279,7 +284,23 @@ namespace Axle {
                     vec3 radiance = u_LightColor * u_LightIntensity;
                     vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
                     vec3 ambient;
-                    if (u_UseHemisphereAmbient == 1) {
+                    if (u_UseIBL == 1) {
+                        vec3 F_ibl = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
+                        vec3 kS_ibl = F_ibl;
+                        vec3 kD_ibl = (vec3(1.0) - kS_ibl) * (1.0 - metallic);
+
+                        vec3 irradiance = texture(u_IrradianceMap, N).rgb;
+                        vec3 diffuseAmbient = irradiance * baseColor.rgb * kD_ibl;
+
+                        vec3 R = reflect(-V, N);
+                        const float MAX_REFLECTION_LOD = 4.0;
+                        vec3 prefilteredColor = textureLod(u_PrefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+                        vec2 envBRDF = texture(u_BRDFLUT, vec2(max(NdotV, 0.0), roughness)).rg;
+                        vec3 specularAmbient = prefilteredColor * (F_ibl * envBRDF.x + envBRDF.y);
+
+                        float envIntensity = (u_EnvironmentIntensity > 0.0) ? u_EnvironmentIntensity : 1.0;
+                        ambient = (diffuseAmbient + specularAmbient) * envIntensity;
+                    } else if (u_UseHemisphereAmbient == 1) {
                         float upWeight = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
                         float zenithWeight = clamp(N.y, 0.0, 1.0);
                         vec3 skyUpper = mix(u_SkyHorizonColor, u_SkyZenithColor, zenithWeight);
@@ -361,6 +382,11 @@ namespace Axle {
         m_Shader->SetInt("u_NormalMap", 2);
         m_Shader->SetInt("u_RoughnessMap", 3);
         m_Shader->SetInt("u_MetallicMap", 4);
+        m_Shader->SetInt("u_IrradianceMap", 5);
+        m_Shader->SetInt("u_PrefilterMap", 6);
+        m_Shader->SetInt("u_BRDFLUT", 7);
+        m_Shader->SetInt("u_UseIBL", 0);
+        m_Shader->SetFloat("u_EnvironmentIntensity", 1.0f);
         m_Shader->SetFloat("u_NormalStrength", 1.0f);
         m_Shader->SetFloat3("u_EmissionColor", glm::vec3(0.0f));
         m_Shader->SetFloat("u_EmissionIntensity", 0.0f);
@@ -469,42 +495,70 @@ namespace Axle {
         Texture2D::GetDefaultRoughnessTexture()->Bind(3);
         Texture2D::GetBlackTexture()->Bind(4);
 
+        // Bind IBL Environment maps if HDR Skybox is active (Slots 5: Irradiance, 6: Prefilter, 7: BRDF LUT)
+        SkyboxComponent activeSkybox;
+        bool hasSkybox = scene->GetPrimarySkybox(activeSkybox);
+        bool useIBL = false;
+        if (hasSkybox && activeSkybox.Enabled && activeSkybox.Type == SkyboxType::HDRCubemap && !activeSkybox.HDRPath.empty() && m_Skybox) {
+            if (m_Skybox->GetSpecification().HDRPath != activeSkybox.HDRPath) {
+                m_Skybox->LoadHDR(activeSkybox.HDRPath);
+            }
+            if (m_Skybox->GetIrradianceMap() && m_Skybox->GetPrefilterMap() && m_Skybox->GetBRDFLUT()) {
+                m_Skybox->GetIrradianceMap()->Bind(5);
+                m_Skybox->GetPrefilterMap()->Bind(6);
+                m_Skybox->GetBRDFLUT()->Bind(7);
+                m_Shader->SetInt("u_UseIBL", 1);
+                m_Shader->SetFloat("u_EnvironmentIntensity", activeSkybox.Intensity);
+                useIBL = true;
+            }
+        }
+        if (!useIBL) {
+            m_Shader->SetInt("u_UseIBL", 0);
+        }
+
         // Render all active meshes with PBR lighting & hierarchy transforms
         scene->OnUpdate(Timestep(0.0f), physicsScene, camera, *m_Shader,
                         m_LightSpaceMatrix, m_LightDir, 1);
 
         // ==========================================
-        // PASS 3: ATMOSPHERIC SKYBOX PASS
+        // PASS 3: SKYBOX PASS (Atmospheric or HDR Cubemap)
         // ==========================================
         if (settings.EnableSkybox && m_Skybox) {
-            SkyboxComponent activeSkybox;
-            bool hasSkybox = scene->GetPrimarySkybox(activeSkybox);
-
             if (hasSkybox && activeSkybox.Enabled) {
-                auto& spec = m_Skybox->GetSpecification();
-                spec.ZenithColor = activeSkybox.ZenithColor;
-                spec.HorizonColor = activeSkybox.HorizonColor;
-                spec.GroundColor = activeSkybox.GroundColor;
-                spec.SunSize = activeSkybox.SunSize;
-                spec.SunGlow = activeSkybox.SunGlow;
-                spec.Turbidity = activeSkybox.Turbidity;
+                if (activeSkybox.Type == SkyboxType::HDRCubemap) {
+                    m_Skybox->SetMode(SkyboxMode::HDRCubemap);
+                    m_Skybox->SetHDRIntensity(activeSkybox.Intensity);
+                    m_Skybox->SetExposure(activeSkybox.Exposure);
+                    if (m_Skybox->GetSpecification().HDRPath != activeSkybox.HDRPath) {
+                        m_Skybox->LoadHDR(activeSkybox.HDRPath);
+                    }
+                } else {
+                    m_Skybox->SetMode(SkyboxMode::ProceduralAtmospheric);
+                    auto& spec = m_Skybox->GetSpecification();
+                    spec.ZenithColor = activeSkybox.ZenithColor;
+                    spec.HorizonColor = activeSkybox.HorizonColor;
+                    spec.GroundColor = activeSkybox.GroundColor;
+                    spec.SunSize = activeSkybox.SunSize;
+                    spec.SunGlow = activeSkybox.SunGlow;
+                    spec.Turbidity = activeSkybox.Turbidity;
 
-                if (!activeSkybox.SyncWithSun) {
-                    float radAz = glm::radians(activeSkybox.CustomAzimuth);
-                    float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
-                    glm::vec3 customSunDir = glm::normalize(glm::vec3(
-                        std::cos(radEl) * std::sin(radAz),
-                        std::sin(radEl),
-                        std::cos(radEl) * std::cos(radAz)
-                    ));
-                    m_Skybox->SetSunDirection(customSunDir);
-                }
+                    if (!activeSkybox.SyncWithSun) {
+                        float radAz = glm::radians(activeSkybox.CustomAzimuth);
+                        float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
+                        glm::vec3 customSunDir = glm::normalize(glm::vec3(
+                            std::cos(radEl) * std::sin(radAz),
+                            std::sin(radEl),
+                            std::cos(radEl) * std::cos(radAz)
+                        ));
+                        m_Skybox->SetSunDirection(customSunDir);
+                    }
 
-                if (hasSunLight && activeSkybox.SyncWithSun) {
-                    m_Skybox->SetSunDirection(activeSunLight.GetDirection());
-                    m_Skybox->SetSunColor(activeSunLight.Color * activeSunLight.Intensity);
-                } else if (!hasSunLight) {
-                    m_Skybox->SetSunColor(glm::vec3(0.0f));
+                    if (hasSunLight && activeSkybox.SyncWithSun) {
+                        m_Skybox->SetSunDirection(activeSunLight.GetDirection());
+                        m_Skybox->SetSunColor(activeSunLight.Color * activeSunLight.Intensity);
+                    } else if (!hasSunLight) {
+                        m_Skybox->SetSunColor(glm::vec3(0.0f));
+                    }
                 }
 
                 if (hasSunLight) {
@@ -535,6 +589,12 @@ namespace Axle {
         Texture2D::GetFlatNormalTexture()->Unbind(2);
         Texture2D::GetDefaultRoughnessTexture()->Unbind(3);
         Texture2D::GetBlackTexture()->Unbind(4);
+
+        if (useIBL && m_Skybox) {
+            if (m_Skybox->GetIrradianceMap()) m_Skybox->GetIrradianceMap()->Unbind(5);
+            if (m_Skybox->GetPrefilterMap()) m_Skybox->GetPrefilterMap()->Unbind(6);
+            if (m_Skybox->GetBRDFLUT()) m_Skybox->GetBRDFLUT()->Unbind(7);
+        }
 
         if (targetFBO) {
             targetFBO->Unbind();

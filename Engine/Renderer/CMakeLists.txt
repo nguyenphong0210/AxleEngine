@@ -12,6 +12,7 @@ add_library(AxleRenderer STATIC
     src/stb_image.cpp
     src/Skybox.cpp
     src/Material.cpp
+    src/Cubemap.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

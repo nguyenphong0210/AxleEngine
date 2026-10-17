@@ -436,6 +436,12 @@ namespace Axle {
                 pointLight.AddComponent<PointLightComponent>();
                 m_SelectedEntity = pointLight;
             }
+            if (ImGui::MenuItem("Spot Light")) {
+                auto spotLight = m_Scene->CreateEntity("Spot Light");
+                spotLight.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 4.0f, 0.0f);
+                spotLight.AddComponent<SpotLightComponent>();
+                m_SelectedEntity = spotLight;
+            }
             ImGui::EndMenu();
         }
 
@@ -944,6 +950,22 @@ namespace Axle {
                     auto prim = CreatePrimitive(1, glm::vec3(0.0f, 2.0f, 0.0f), true);
                     prim.SetParent(entity);
                     m_SelectedEntity = prim;
+                }
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Light")) {
+                if (ImGui::MenuItem("Point Light")) {
+                    auto light = m_Scene->CreateEntity("Point Light");
+                    light.SetParent(entity);
+                    light.AddComponent<PointLightComponent>();
+                    m_SelectedEntity = light;
+                }
+                if (ImGui::MenuItem("Spot Light")) {
+                    auto light = m_Scene->CreateEntity("Spot Light");
+                    light.SetParent(entity);
+                    light.AddComponent<SpotLightComponent>();
+                    m_SelectedEntity = light;
                 }
                 ImGui::EndMenu();
             }
@@ -2164,6 +2186,16 @@ namespace Axle {
             ImGui::DragFloat("Falloff", &plc.Falloff, 0.05f, 0.1f, 10.0f, "%.2f");
         }, /*canRemove=*/ true);
 
+        // Spot Light Component
+        DrawComponent<SpotLightComponent>("Spot Light", entity, [&](SpotLightComponent& slc) {
+            ImGui::Checkbox("Enabled", &slc.Enabled);
+            ImGui::ColorEdit3("Light Color", glm::value_ptr(slc.Color));
+            ImGui::DragFloat("Intensity", &slc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
+            ImGui::DragFloat("Range", &slc.Range, 0.5f, 0.1f, 500.0f, "%.1f m");
+            ImGui::DragFloat("Inner Cone Angle", &slc.InnerConeAngle, 0.5f, 1.0f, 89.0f, "%.1f deg");
+            ImGui::DragFloat("Outer Cone Angle", &slc.OuterConeAngle, 0.5f, slc.InnerConeAngle, 89.9f, "%.1f deg");
+        }, /*canRemove=*/ true);
+
         // Camera Component
         DrawComponent<CameraComponent>("Camera", entity, [&](CameraComponent& cam) {
             ImGui::DragFloat("Field of View", &cam.FOV, 0.5f, 10.0f, 150.0f, "%.1f deg");
@@ -2679,6 +2711,11 @@ namespace Axle {
             "Rendering", "PointLightComponent", "Omnidirectional local point light source",
             entity.HasComponent<PointLightComponent>(), true,
             [&]() { entity.AddComponent<PointLightComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "SpotLightComponent", "Directional cone spot light source (e.g. vehicle headlights)",
+            entity.HasComponent<SpotLightComponent>(), true,
+            [&]() { entity.AddComponent<SpotLightComponent>(); }
         });
         items.push_back({
             "Rendering", "SkyboxComponent", "Procedural atmospheric Rayleigh/Mie sky dome",

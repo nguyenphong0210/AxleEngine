@@ -1,5 +1,6 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/Log.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -113,14 +114,14 @@ namespace Axle {
     }
 
     Texture2D::~Texture2D() {
-        if (m_RendererID && glfwGetCurrentContext() != nullptr) {
+        if (m_RendererID && Window::HasActiveContext()) {
             glDeleteTextures(1, &m_RendererID);
             m_RendererID = 0;
         }
     }
 
     void Texture2D::Invalidate(const void* initialData) {
-        if (glfwGetCurrentContext() == nullptr) {
+        if (!Window::HasActiveContext()) {
             m_RendererID = 0;
             return;
         }
@@ -166,7 +167,7 @@ namespace Axle {
     }
 
     void Texture2D::SetData(const void* data, u32 size) {
-        if (glfwGetCurrentContext() == nullptr || !m_RendererID || !data) return;
+        if (!Window::HasActiveContext() || !m_RendererID || !data) return;
 
         glBindTexture(GL_TEXTURE_2D, m_RendererID);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -192,13 +193,13 @@ namespace Axle {
     }
 
     void Texture2D::Bind(u32 slot) const {
-        if (glfwGetCurrentContext() == nullptr || m_RendererID == 0) return;
+        if (!Window::HasActiveContext() || m_RendererID == 0) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, m_RendererID);
     }
 
     void Texture2D::Unbind(u32 slot) const {
-        if (glfwGetCurrentContext() == nullptr) return;
+        if (!Window::HasActiveContext()) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, 0);
     }

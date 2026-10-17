@@ -13,6 +13,7 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/PhysicsMaterial.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -3048,7 +3049,7 @@ namespace Axle {
                 size_t pStart = p.find_first_not_of(" \t");
                 std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
                 mat.AlbedoPath = pathStr;
-                if (!pathStr.empty() && glfwGetCurrentContext() != nullptr) {
+                if (!pathStr.empty() && Window::HasActiveContext()) {
                     mat.SetAlbedo(pathStr);
                 }
             } else if (trimmed.rfind("UseAlbedoMap:", 0) == 0) {
@@ -3058,7 +3059,7 @@ namespace Axle {
                 size_t pStart = p.find_first_not_of(" \t");
                 std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
                 mat.NormalPath = pathStr;
-                if (!pathStr.empty() && glfwGetCurrentContext() != nullptr) {
+                if (!pathStr.empty() && Window::HasActiveContext()) {
                     mat.SetNormal(pathStr);
                 }
             } else if (trimmed.rfind("UseNormalMap:", 0) == 0) {
@@ -3072,7 +3073,7 @@ namespace Axle {
                 size_t pStart = p.find_first_not_of(" \t");
                 std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
                 mat.RoughnessPath = pathStr;
-                if (!pathStr.empty() && glfwGetCurrentContext() != nullptr) {
+                if (!pathStr.empty() && Window::HasActiveContext()) {
                     mat.SetRoughnessMap(pathStr);
                 }
             } else if (trimmed.rfind("UseRoughnessMap:", 0) == 0) {
@@ -3084,7 +3085,7 @@ namespace Axle {
                 size_t pStart = p.find_first_not_of(" \t");
                 std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
                 mat.MetallicPath = pathStr;
-                if (!pathStr.empty() && glfwGetCurrentContext() != nullptr) {
+                if (!pathStr.empty() && Window::HasActiveContext()) {
                     mat.SetMetallicMap(pathStr);
                 }
             } else if (trimmed.rfind("UseMetallicMap:", 0) == 0) {

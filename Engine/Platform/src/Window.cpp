@@ -6,9 +6,18 @@
 namespace Axle {
 
     static u32 s_GLFWWindowCount = 0;
+    static bool s_GLFWInitialized = false;
 
     static void GLFWErrorCallback(int error, const char* description) {
         AXLE_CORE_ERROR("[GLFW Error] ({0}): {1}", error, description);
+    }
+
+    bool Window::IsGLFWInitialized() {
+        return s_GLFWInitialized;
+    }
+
+    bool Window::HasActiveContext() {
+        return s_GLFWInitialized && (glfwGetCurrentContext() != nullptr);
     }
 
     Window::Window(const WindowProps& props) {
@@ -23,6 +32,7 @@ namespace Axle {
                 AXLE_CORE_CRITICAL("Failed to initialize GLFW!");
                 return;
             }
+            s_GLFWInitialized = true;
         }
 
         // OpenGL context hints (Core Profile 4.5)
@@ -167,7 +177,9 @@ namespace Axle {
         }
 
         if (s_GLFWWindowCount == 0) {
+            glfwSetErrorCallback(nullptr);
             glfwTerminate();
+            s_GLFWInitialized = false;
         }
     }
 

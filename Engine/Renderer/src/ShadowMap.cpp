@@ -1,4 +1,5 @@
 #include <Axle/ShadowMap.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/Log.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -13,14 +14,14 @@ namespace Axle {
     }
 
     ShadowMap::~ShadowMap() {
-        if (m_RendererID && glfwGetCurrentContext() != nullptr) {
+        if (m_RendererID && Window::HasActiveContext()) {
             glDeleteFramebuffers(1, &m_RendererID);
             glDeleteTextures(1, &m_DepthTexture);
         }
     }
 
     void ShadowMap::Invalidate() {
-        if (glfwGetCurrentContext() == nullptr) {
+        if (!Window::HasActiveContext()) {
             return;
         }
 
@@ -72,7 +73,7 @@ namespace Axle {
     }
 
     void ShadowMap::Bind() {
-        if (glfwGetCurrentContext() == nullptr) return;
+        if (!Window::HasActiveContext()) return;
         glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
         glViewport(0, 0, static_cast<GLsizei>(m_Specification.Width), static_cast<GLsizei>(m_Specification.Height));
         glEnable(GL_DEPTH_TEST);
@@ -84,26 +85,26 @@ namespace Axle {
     }
 
     void ShadowMap::Unbind() {
-        if (glfwGetCurrentContext() == nullptr) return;
+        if (!Window::HasActiveContext()) return;
         glDisable(GL_POLYGON_OFFSET_FILL);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     void ShadowMap::Clear() {
-        if (glfwGetCurrentContext() == nullptr) return;
+        if (!Window::HasActiveContext()) return;
         glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
         glClear(GL_DEPTH_BUFFER_BIT);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     void ShadowMap::BindTexture(u32 slot) const {
-        if (glfwGetCurrentContext() == nullptr) return;
+        if (!Window::HasActiveContext()) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, m_DepthTexture);
     }
 
     void ShadowMap::UnbindTexture(u32 slot) const {
-        if (glfwGetCurrentContext() == nullptr) return;
+        if (!Window::HasActiveContext()) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, 0);
     }

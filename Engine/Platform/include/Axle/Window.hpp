@@ -54,6 +54,9 @@ namespace Axle {
         u32 GetHeight() const { return m_Data.Height; }
         GLFWwindow* GetNativeWindow() const { return m_Window; }
 
+        static bool IsGLFWInitialized();
+        static bool HasActiveContext();
+
         // Event callbacks
         void SetWindowResizeCallback(std::function<void(const WindowResizeEvent&)> callback) { m_Data.OnWindowResize = callback; }
         void SetWindowCloseCallback(std::function<void(const WindowCloseEvent&)> callback) { m_Data.OnWindowClose = callback; }

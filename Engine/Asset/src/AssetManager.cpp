@@ -1,4 +1,5 @@
 #include <Axle/AssetManager.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <GLFW/glfw3.h>
@@ -269,7 +270,7 @@ namespace Axle {
         }
 
         // Only create texture if an active graphics context exists
-        if (glfwGetCurrentContext() == nullptr) {
+        if (!Window::HasActiveContext()) {
             return nullptr;
         }
 

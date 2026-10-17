@@ -3,6 +3,7 @@
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/Log.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -29,7 +30,7 @@ namespace Axle {
         GLuint g_QuadVBO = 0;
 
         void RenderQuad() {
-            if (glfwGetCurrentContext() == nullptr) return;
+            if (!Window::HasActiveContext()) return;
             if (g_QuadVAO == 0) {
                 float quadVertices[] = {
                     // positions        // texture Coords
@@ -60,14 +61,14 @@ namespace Axle {
     }
 
     Cubemap::~Cubemap() {
-        if (glfwGetCurrentContext() != nullptr && m_RendererID != 0) {
+        if (Window::HasActiveContext() && m_RendererID != 0) {
             glDeleteTextures(1, &m_RendererID);
             m_RendererID = 0;
         }
     }
 
     void Cubemap::Invalidate() {
-        if (glfwGetCurrentContext() == nullptr) {
+        if (!Window::HasActiveContext()) {
             m_RendererID = 0;
             return;
         }
@@ -104,13 +105,13 @@ namespace Axle {
     }
 
     void Cubemap::Bind(u32 slot) const {
-        if (glfwGetCurrentContext() == nullptr || m_RendererID == 0) return;
+        if (!Window::HasActiveContext() || m_RendererID == 0) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_CUBE_MAP, m_RendererID);
     }
 
     void Cubemap::Unbind(u32 slot) const {
-        if (glfwGetCurrentContext() == nullptr) return;
+        if (!Window::HasActiveContext()) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
     }
@@ -143,7 +144,7 @@ namespace Axle {
     }
 
     std::shared_ptr<Cubemap> Cubemap::CreateFromEquirectangularHDR(const float* hdrData, int width, int height, u32 resolution) {
-        if (glfwGetCurrentContext() == nullptr) {
+        if (!Window::HasActiveContext()) {
             // Headless / unit testing mode safe fallback
             CubemapSpecification spec;
             spec.Width = resolution;
@@ -251,7 +252,7 @@ namespace Axle {
     }
 
     std::shared_ptr<Cubemap> Cubemap::CreateIrradianceMap(const std::shared_ptr<Cubemap>& envMap, u32 size) {
-        if (glfwGetCurrentContext() == nullptr || !envMap || envMap->GetRendererID() == 0) {
+        if (!Window::HasActiveContext() || !envMap || envMap->GetRendererID() == 0) {
             CubemapSpecification spec;
             spec.Width = size;
             spec.Height = size;
@@ -345,7 +346,7 @@ namespace Axle {
     }
 
     std::shared_ptr<Cubemap> Cubemap::CreatePrefilterMap(const std::shared_ptr<Cubemap>& envMap, u32 size) {
-        if (glfwGetCurrentContext() == nullptr || !envMap || envMap->GetRendererID() == 0) {
+        if (!Window::HasActiveContext() || !envMap || envMap->GetRendererID() == 0) {
             CubemapSpecification spec;
             spec.Width = size;
             spec.Height = size;
@@ -486,7 +487,7 @@ namespace Axle {
     }
 
     std::shared_ptr<Texture2D> Cubemap::CreateBRDFLUT(u32 size) {
-        if (glfwGetCurrentContext() == nullptr) {
+        if (!Window::HasActiveContext()) {
             TextureSpecification spec;
             spec.Width = size;
             spec.Height = size;

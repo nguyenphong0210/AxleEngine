@@ -1,4 +1,5 @@
 #include <Axle/Material.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <GLFW/glfw3.h>
@@ -30,7 +31,7 @@ namespace Axle {
         if (path.empty()) {
             ClearAlbedoTexture();
         } else {
-            if (glfwGetCurrentContext() != nullptr) {
+            if (Window::HasActiveContext()) {
                 std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
                 m_AlbedoMap = Texture2D::Create(resolved.string());
                 m_UseAlbedoMap = (m_AlbedoMap && m_AlbedoMap->IsLoaded());
@@ -57,7 +58,7 @@ namespace Axle {
         if (path.empty()) {
             ClearNormalTexture();
         } else {
-            if (glfwGetCurrentContext() != nullptr) {
+            if (Window::HasActiveContext()) {
                 std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
                 m_NormalMap = Texture2D::Create(resolved.string());
                 m_UseNormalMap = (m_NormalMap && m_NormalMap->IsLoaded());
@@ -84,7 +85,7 @@ namespace Axle {
         if (path.empty()) {
             ClearRoughnessTexture();
         } else {
-            if (glfwGetCurrentContext() != nullptr) {
+            if (Window::HasActiveContext()) {
                 std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
                 m_RoughnessMap = Texture2D::Create(resolved.string());
                 m_UseRoughnessMap = (m_RoughnessMap && m_RoughnessMap->IsLoaded());
@@ -111,7 +112,7 @@ namespace Axle {
         if (path.empty()) {
             ClearMetallicTexture();
         } else {
-            if (glfwGetCurrentContext() != nullptr) {
+            if (Window::HasActiveContext()) {
                 std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
                 m_MetallicMap = Texture2D::Create(resolved.string());
                 m_UseMetallicMap = (m_MetallicMap && m_MetallicMap->IsLoaded());

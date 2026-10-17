@@ -1,4 +1,5 @@
 #include <Axle/Skybox.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/FileSystem.hpp>
@@ -12,7 +13,7 @@ namespace Axle {
     Skybox::Skybox(const SkyboxSpecification& spec)
         : m_Spec(spec)
     {
-        if (glfwGetCurrentContext() == nullptr) {
+        if (!Window::HasActiveContext()) {
             return;
         }
 
@@ -168,7 +169,7 @@ namespace Axle {
     }
 
     void Skybox::Render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix) {
-        if (glfwGetCurrentContext() == nullptr || !m_CubeVAO) return;
+        if (!Window::HasActiveContext() || !m_CubeVAO) return;
 
         // 1. Configure depth and culling states for skybox rendering
         GLboolean prevCullFace = glIsEnabled(GL_CULL_FACE);

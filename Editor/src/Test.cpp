@@ -20,6 +20,8 @@
 #include <Axle/Vehicle.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/PerspectiveCamera.hpp>
+#include <Axle/Package.hpp>
+#include <Axle/FileSystem.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <iostream>
 
@@ -3692,6 +3694,142 @@ bool RunTest_Step26_CarTestSceneSimulate() {
 }
 
 // =============================================================================
+// STEP 27: Phase 23 - Asset Packaging (.axlepak) & Virtual File System (VFS)
+// =============================================================================
+static bool RunTest_Step27_Phase23_PackageAndVFS() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 27 TEST] PHASE 23: PACKAGE & VFS PIPELINE       " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::filesystem::path testPakPath = "TestPackage.axlepak";
+    if (std::filesystem::exists(testPakPath)) {
+        std::filesystem::remove(testPakPath);
+    }
+
+    std::cout << "[27.1] Creating package archive via PackageWriter..." << std::endl;
+    {
+        Axle::PackageWriter writer;
+        if (!writer.Begin(testPakPath)) {
+            std::cerr << "FAIL: PackageWriter::Begin failed for " << testPakPath << std::endl;
+            return false;
+        }
+
+        // 1. Add text entry
+        std::string sampleText = "Hello from Axle Virtual File System!\nThis is a packed text asset.";
+        Axle::UUID textUUID(123456789ULL);
+        writer.AddData("assets/scenes/Sample.txt", sampleText.data(), sampleText.size(), textUUID, (uint16_t)Axle::AssetType::Scene);
+
+        // 2. Add binary entry
+        std::vector<uint8_t> sampleBinary(1024);
+        for (size_t i = 0; i < sampleBinary.size(); ++i) {
+            sampleBinary[i] = static_cast<uint8_t>(i % 256);
+        }
+        Axle::UUID binUUID(987654321ULL);
+        writer.AddData("assets/models/BinaryData.bin", sampleBinary.data(), sampleBinary.size(), binUUID, (uint16_t)Axle::AssetType::Mesh);
+
+        // 3. Write archive
+        if (!writer.Finish()) {
+            std::cerr << "FAIL: PackageWriter::Finish failed for " << testPakPath << std::endl;
+            return false;
+        }
+        std::cout << "  -> PASS: Package archive '" << testPakPath.string() << "' written successfully." << std::endl;
+    }
+
+    std::cout << "[27.2] Loading and validating package archive..." << std::endl;
+    {
+        auto package = std::make_shared<Axle::Package>();
+        if (!package->Open(testPakPath)) {
+            std::cerr << "FAIL: Axle::Package::Open failed!" << std::endl;
+            return false;
+        }
+        if (package->GetEntryCount() != 2) {
+            std::cerr << "FAIL: Expected 2 entries, got " << package->GetEntryCount() << std::endl;
+            return false;
+        }
+
+        // Verify direct path lookup & normalization
+        if (!package->HasEntry("assets/scenes/Sample.txt") || !package->HasEntry("scenes/Sample.txt")) {
+            std::cerr << "FAIL: Path normalization lookup failed for scenes/Sample.txt!" << std::endl;
+            return false;
+        }
+
+        // Verify UUID lookup
+        Axle::UUID textUUID(123456789ULL);
+        if (!package->HasEntry(textUUID)) {
+            std::cerr << "FAIL: UUID lookup failed for textUUID!" << std::endl;
+            return false;
+        }
+
+        // Verify content and CRC32
+        std::string extractedText = package->ReadEntryAsText("scenes/Sample.txt");
+        if (extractedText.find("Hello from Axle Virtual File System!") == std::string::npos) {
+            std::cerr << "FAIL: ReadEntryAsText content mismatch!" << std::endl;
+            return false;
+        }
+
+        std::vector<uint8_t> extractedBin = package->ReadEntry("assets/models/BinaryData.bin");
+        if (extractedBin.size() != 1024) {
+            std::cerr << "FAIL: ReadEntry size mismatch: " << extractedBin.size() << std::endl;
+            return false;
+        }
+        for (size_t i = 0; i < extractedBin.size(); ++i) {
+            if (extractedBin[i] != static_cast<uint8_t>(i % 256)) {
+                std::cerr << "FAIL: ReadEntry byte mismatch at index " << i << std::endl;
+                return false;
+            }
+        }
+        std::cout << "  -> PASS: Package contents and CRC32 validated with 100% data integrity." << std::endl;
+    }
+
+    std::cout << "[27.3] Testing VFS transparent fallback via FileSystem..." << std::endl;
+    {
+        // Mount
+        if (!Axle::FileSystem::MountPackage(testPakPath)) {
+            std::cerr << "FAIL: FileSystem::MountPackage failed!" << std::endl;
+            return false;
+        }
+        if (!Axle::FileSystem::HasMountedPackage()) {
+            std::cerr << "FAIL: HasMountedPackage() returned false!" << std::endl;
+            return false;
+        }
+
+        // Check Exists() on VFS
+        if (!Axle::FileSystem::Exists("scenes/Sample.txt")) {
+            std::cerr << "FAIL: FileSystem::Exists failed for mounted virtual path!" << std::endl;
+            return false;
+        }
+
+        // Check ReadTextFile() from VFS
+        std::string vfsText = Axle::FileSystem::ReadTextFile("scenes/Sample.txt");
+        if (vfsText.find("Hello from Axle Virtual File System!") == std::string::npos) {
+            std::cerr << "FAIL: FileSystem::ReadTextFile failed to extract from VFS!" << std::endl;
+            return false;
+        }
+
+        // Check ReadBinaryFile() from VFS
+        std::vector<uint8_t> vfsBin = Axle::FileSystem::ReadBinaryFile("models/BinaryData.bin");
+        if (vfsBin.size() != 1024 || vfsBin[50] != static_cast<uint8_t>(50 % 256)) {
+            std::cerr << "FAIL: FileSystem::ReadBinaryFile failed to extract from VFS!" << std::endl;
+            return false;
+        }
+
+        // Unmount
+        Axle::FileSystem::UnmountPackage();
+        if (Axle::FileSystem::HasMountedPackage()) {
+            std::cerr << "FAIL: UnmountPackage failed to clear mounted package!" << std::endl;
+            return false;
+        }
+
+        // Cleanup temp file
+        std::filesystem::remove(testPakPath);
+        std::cout << "  -> PASS: FileSystem VFS mount, lookup, binary reading, and unmount verified!" << std::endl;
+    }
+
+    std::cout << ">>> STEP 27 PASSED: Phase 23 Package & VFS Pipeline verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -3730,12 +3868,13 @@ int main(int argc, char** argv) {
         else if (arg == "24" || arg == "step24" || arg == "--step24" || arg == "--phase19.4") targetStep = 24;
         else if (arg == "25" || arg == "step25" || arg == "--step25" || arg == "--phase20" || arg == "--phase20.1") targetStep = 25;
         else if (arg == "26" || arg == "step26" || arg == "--step26") targetStep = 26;
+        else if (arg == "27" || arg == "step27" || arg == "--step27" || arg == "--phase23") targetStep = 27;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 25 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 26 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -3820,6 +3959,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 26) {
         if (!RunTest_Step26_CarTestSceneSimulate()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 27) {
+        if (!RunTest_Step27_Phase23_PackageAndVFS()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

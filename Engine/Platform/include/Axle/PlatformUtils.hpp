@@ -9,6 +9,7 @@ namespace Axle {
         // filter format: "Axle Scene (*.axlescene)\0*.axlescene\0All Files (*.*)\0*.*\0"
         static std::string OpenFile(const char* filter, const char* defaultPath = nullptr);
         static std::string SaveFile(const char* filter, const char* defaultPath = nullptr, const char* defaultExt = nullptr);
+        static std::string OpenFolder(const char* defaultPath = nullptr);
     };
 
 }

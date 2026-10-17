@@ -6,8 +6,16 @@
 
 namespace Axle {
 
+    class Package;
+
     class FileSystem {
     public:
+        // VFS Package Management
+        static bool MountPackage(const std::filesystem::path& packagePath);
+        static void UnmountPackage();
+        static bool HasMountedPackage();
+        static const Package* GetMountedPackage();
+
         // Configure or query asset directory root
         static void SetAssetDirectory(const std::filesystem::path& path);
         static const std::filesystem::path& GetAssetDirectory();

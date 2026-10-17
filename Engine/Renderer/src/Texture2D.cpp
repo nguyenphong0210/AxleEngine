@@ -1,4 +1,5 @@
 #include <Axle/Texture2D.hpp>
+#include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <glad/glad.h>
 #include <stb_image.h>
@@ -49,8 +50,9 @@ namespace Axle {
     Texture2D::Texture2D(const std::string& filepath, const TextureSpecification& spec)
         : m_FilePath(filepath), m_Specification(spec) {
         
-        if (!std::filesystem::exists(filepath)) {
-            AXLE_CORE_ERROR("Texture2D: File does not exist at '{0}'. Creating fallback texture.", filepath);
+        auto buffer = FileSystem::ReadBinaryFile(filepath);
+        if (buffer.empty()) {
+            AXLE_CORE_ERROR("Texture2D: File does not exist or empty at '{0}'. Creating fallback texture.", filepath);
             m_Specification.Width = 1;
             m_Specification.Height = 1;
             m_Specification.Format = ImageFormat::RGBA8;
@@ -62,7 +64,7 @@ namespace Axle {
         stbi_set_flip_vertically_on_load(spec.FlipVertically ? 1 : 0);
 
         int width = 0, height = 0, channels = 0;
-        stbi_uc* data = stbi_load(filepath.c_str(), &width, &height, &channels, 0);
+        stbi_uc* data = stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 0);
 
         if (!data) {
             AXLE_CORE_ERROR("Texture2D: Failed to decode image from '{0}' - {1}", filepath, stbi_failure_reason());

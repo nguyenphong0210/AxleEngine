@@ -419,18 +419,21 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - Dynamic script hotkeys & input routing directly to `CarController.hpp` and active gameplay scripts.
     - Fullscreen toggle (`Alt+Enter` / `F11`), Pause menu toggle (`Escape`), and smooth exit handling.
     - Automated build script update in `build.sh` (`--game` or `--runtime` flag to compile and run `AxleRuntime.exe`).
-- [ ] **Phase 23: Asset Packaging & Cooking Pipeline (`.axlepak` & VFS)**
-  - [ ] **Step 1 - Binary Package Specification (`.axlepak`)**:
-    - Design compact binary archive format with magic header (`AXPAK`), compression/encryption flags, asset table of contents (TOC: UUIDs, relative virtual paths, byte offsets, uncompressed/compressed sizes), and packed asset data blocks.
-  - [ ] **Step 2 - In-Editor Asset Cooker & Project Exporter (`Engine/Asset` & `Engine/UI`)**:
-    - Implement `AssetCooker`: Parse all referenced assets (`.axlescene`, `.axlebin`, pre-baked textures, shaders, scripts) in active project, compile text `.axle` to `.axlebin`, and serialize into a monolithic `Data.axlepak` file.
-    - Add Editor Main Menu action: `File -> Export Game / Package Project...` with destination folder selector, outputting standalone executable `AxleRuntime.exe`, `AxleScripts.dll`, and `Data.axlepak`.
-  - [ ] **Step 3 - Virtual File System (VFS) Integration (`Engine/Core` & `Engine/Asset`)**:
-    - Upgrade `Axle::FileSystem`: Seamless fallback mechanism.
-      - **Runtime Mode (Distribution)**: Mount `Data.axlepak` into memory-mapped VFS; transparently serve assets by virtual path or UUID.
-      - **Editor Mode (Development)**: Directly access loose files from disk (`Assets/`) for live editing and instant hot-reloading.
-  - [ ] **Step 4 - Distribution Build Hygiene (`#ifdef AXLE_EDITOR` / Shipping Mode)**:
-    - Eliminate unused editor reflection strings, tooltip buffers, and editor gizmo logic from runtime compilation to minimize binary size and memory footprint.
+- [x] **Phase 23: Asset Packaging & Cooking Pipeline (`.axlepak` & VFS)**
+  - [x] **Step 1 - Binary Package Specification (`.axlepak`)**:
+    - Design compact binary archive format (`Package.hpp` & `Package.cpp`) with magic header (`AXPK`), versioning, asset table of contents (TOC: 64-bit UUIDs, relative normalized virtual paths, byte offsets, uncompressed/compressed sizes, CRC32 checksums), and packed asset data blocks.
+  - [x] **Step 2 - In-Editor Asset Cooker & Project Exporter (`Engine/Asset` & `Engine/UI`)**:
+    - Implement `AssetCooker`: Recursively parse all referenced assets (`.axlescene`, textures, audio, shaders from `Engine/Resources/Shaders`), pre-compile text `.axle` models to binary `.axlebin`, serialize project configuration, and write out monolithic `Data.axlepak`.
+    - Provide dual export pathways:
+      - Interactive Editor UI: `File -> Export Standalone Game...` / `Build -> Export Standalone Game...` modal with Windows directory picker (`FileDialogs::OpenFolder`).
+      - Headless CLI cooker mode: `AxleEditor.exe --export <output_dir>` / `--cook <output_dir>` for automated CI/CD builds.
+    - Output 100% self-contained game bundle: `AxleRuntime.exe`, `AxleScripts.dll`, and `Data.axlepak`.
+  - [x] **Step 3 - Virtual File System (VFS) Integration (`Engine/Core` & `Engine/Asset`)**:
+    - Upgrade `Axle::FileSystem`: Seamless fallback mechanism (`MountPackage()`, `UnmountPackage()`, `ResolveAssetPath()`).
+      - **Runtime Mode (Distribution)**: Mount `Data.axlepak` into memory; transparently serve scenes, binary meshes, shaders, and textures in-memory via `stbi_load_from_memory` without temporary disk extraction.
+      - **Editor Mode (Development)**: Direct transparent fallback to loose files on disk (`Assets/`) for live editing and instant hot-reloading.
+  - [x] **Step 4 - Distribution Build Hygiene (`#ifdef AXLE_EDITOR` / Shipping Mode)**:
+    - Standalone `AxleRuntime.exe` runs completely self-contained directly from `Data.axlepak` with zero loose asset dependencies and zero editor UI overhead.
 - [ ] **Phase 24: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.

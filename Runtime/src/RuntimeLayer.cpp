@@ -1,5 +1,6 @@
 #include "RuntimeLayer.hpp"
 #include <Axle/Application.hpp>
+#include <Axle/Package.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
@@ -42,21 +43,38 @@ namespace Axle {
     }
 
     void RuntimeLayer::LoadProjectAndStartScene() {
+        // Step 0: Auto-mount monolithic asset package if available (e.g. Data.axlepak)
+        static const std::vector<std::filesystem::path> packageCandidates = {
+            "Data.axlepak",
+            "Game.axlepak",
+            "assets.axlepak",
+            "Export/Data.axlepak"
+        };
+        for (const auto& pkg : packageCandidates) {
+            if (std::filesystem::exists(pkg)) {
+                if (FileSystem::MountPackage(pkg)) {
+                    AXLE_INFO("Runtime: Mounted asset package '{0}' ({1} assets indexed)",
+                        pkg.string(), FileSystem::GetMountedPackage()->GetEntryCount());
+                    break;
+                }
+            }
+        }
+
         // Step A: Locate project configuration
         std::filesystem::path projPath = m_ProjectPath;
         if (projPath.empty()) {
-            if (std::filesystem::exists("Sandbox.axleproj")) {
+            if (FileSystem::Exists("Sandbox.axleproj")) {
                 projPath = "Sandbox.axleproj";
-            } else if (std::filesystem::exists("Project.axleproj")) {
+            } else if (FileSystem::Exists("Project.axleproj")) {
                 projPath = "Project.axleproj";
             } else {
                 auto resolved = FileSystem::ResolveAssetPath("Sandbox.axleproj");
-                if (std::filesystem::exists(resolved)) projPath = resolved;
+                if (FileSystem::Exists(resolved)) projPath = resolved;
             }
         }
 
         std::shared_ptr<Project> project = nullptr;
-        if (!projPath.empty() && std::filesystem::exists(projPath)) {
+        if (!projPath.empty() && FileSystem::Exists(projPath)) {
             project = Project::Load(projPath);
             if (project) {
                 AXLE_INFO("Runtime: Loaded project from '{0}'", projPath.string());
@@ -67,25 +85,35 @@ namespace Axle {
         std::filesystem::path startScenePath;
         if (project) {
             startScenePath = Project::GetAssetFileSystemPath(project->GetConfig().StartScene);
+            if (startScenePath.empty() || !FileSystem::Exists(startScenePath)) {
+                if (FileSystem::Exists(project->GetConfig().StartScene)) {
+                    startScenePath = project->GetConfig().StartScene;
+                }
+            }
         }
 
-        if (startScenePath.empty() || !std::filesystem::exists(startScenePath)) {
+        if (startScenePath.empty() || !FileSystem::Exists(startScenePath)) {
             std::vector<std::filesystem::path> candidateScenes = {
+                "scenes/CarTest.axlescene",
+                "scenes/VehicleSandbox.axlescene",
+                "scenes/SampleScene.axlescene",
+                FileSystem::ResolveAssetPath("scenes/CarTest.axlescene"),
                 FileSystem::ResolveAssetPath("scenes/VehicleSandbox.axlescene"),
                 FileSystem::ResolveAssetPath("scenes/SampleScene.axlescene"),
+                "assets/scenes/CarTest.axlescene",
                 "assets/scenes/VehicleSandbox.axlescene",
                 "assets/scenes/SampleScene.axlescene"
             };
 
             for (const auto& cand : candidateScenes) {
-                if (std::filesystem::exists(cand)) {
+                if (FileSystem::Exists(cand)) {
                     startScenePath = cand;
                     break;
                 }
             }
 
             // Fallback: search directory for first .axlescene file
-            if (startScenePath.empty() || !std::filesystem::exists(startScenePath)) {
+            if (startScenePath.empty() || !FileSystem::Exists(startScenePath)) {
                 auto scenesDir = FileSystem::ResolveAssetPath("scenes");
                 if (std::filesystem::exists(scenesDir)) {
                     for (const auto& entry : std::filesystem::directory_iterator(scenesDir)) {
@@ -102,7 +130,7 @@ namespace Axle {
 
         // Step C: Deserialize scene if found
         bool sceneLoaded = false;
-        if (!startScenePath.empty() && std::filesystem::exists(startScenePath)) {
+        if (!startScenePath.empty() && FileSystem::Exists(startScenePath)) {
             SceneSerializer serializer(m_Scene.get(), m_PhysicsScene.get());
             SceneSerializerContext ctx;
             ctx.CubeMesh = PrimitiveMesh::CreateCube();

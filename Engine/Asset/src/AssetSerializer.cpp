@@ -1,4 +1,5 @@
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/FileSystem.hpp>
 #include <Axle/Buffer.hpp>
 #include <Axle/Log.hpp>
 #include <fstream>
@@ -101,12 +102,13 @@ namespace Axle {
     }
 
     bool AssetSerializer::LoadFromAxleText(const std::filesystem::path& path, AxleMeshSource& outMesh) {
-        std::ifstream file(path);
-        if (!file.is_open()) {
-            AXLE_ERROR("AssetSerializer: Failed to open .axle text file: '{0}'", path.string());
+        std::string content = FileSystem::ReadTextFile(path);
+        if (content.empty()) {
+            AXLE_ERROR("AssetSerializer: Failed to read .axle text file: '{0}'", path.string());
             return false;
         }
 
+        std::istringstream file(content);
         outMesh = AxleMeshSource{};
         outMesh.Name = path.stem().string();
 
@@ -260,43 +262,65 @@ namespace Axle {
     }
 
     bool AssetSerializer::LoadFromAxleBinary(const std::filesystem::path& binaryPath, AxleMeshSource& outMesh) {
-        std::ifstream file(binaryPath, std::ios::binary);
-        if (!file.is_open()) return false;
+        auto buffer = FileSystem::ReadBinaryFile(binaryPath);
+        if (buffer.empty()) return false;
 
+        const uint8_t* ptr = buffer.data();
+        size_t remaining = buffer.size();
+
+        if (remaining < 8) return false;
         char magic[8];
-        u32 version = 0;
-        file.read(magic, 8);
+        memcpy(magic, ptr, 8);
+        ptr += 8; remaining -= 8;
         if (std::string(magic, 7) != "AXLEBIN") return false;
 
-        file.read(reinterpret_cast<char*>(&version), sizeof(version));
+        if (remaining < sizeof(u32)) return false;
+        u32 version = *reinterpret_cast<const u32*>(ptr);
+        ptr += sizeof(u32); remaining -= sizeof(u32);
         if (version != 1) return false;
 
-        u32 nameLen = 0;
-        file.read(reinterpret_cast<char*>(&nameLen), sizeof(nameLen));
+        if (remaining < sizeof(u32)) return false;
+        u32 nameLen = *reinterpret_cast<const u32*>(ptr);
+        ptr += sizeof(u32); remaining -= sizeof(u32);
         if (nameLen > 0) {
-            outMesh.Name.resize(nameLen);
-            file.read(&outMesh.Name[0], nameLen);
+            if (remaining < nameLen) return false;
+            outMesh.Name.assign(reinterpret_cast<const char*>(ptr), nameLen);
+            ptr += nameLen; remaining -= nameLen;
         }
 
-        file.read(reinterpret_cast<char*>(&outMesh.PatternMode), sizeof(outMesh.PatternMode));
-        file.read(reinterpret_cast<char*>(&outMesh.TileScale), sizeof(outMesh.TileScale));
-        file.read(reinterpret_cast<char*>(&outMesh.ColorPrimary), sizeof(outMesh.ColorPrimary));
-        file.read(reinterpret_cast<char*>(&outMesh.ColorSecondary), sizeof(outMesh.ColorSecondary));
-        file.read(reinterpret_cast<char*>(&outMesh.BoundingSize), sizeof(outMesh.BoundingSize));
-        file.read(reinterpret_cast<char*>(&outMesh.HalfExtent), sizeof(outMesh.HalfExtent));
+        struct HeaderProps {
+            i32 PatternMode;
+            f32 TileScale;
+            glm::vec4 ColorPrimary;
+            glm::vec4 ColorSecondary;
+            glm::vec3 BoundingSize;
+            glm::vec3 HalfExtent;
+        };
+        if (remaining < sizeof(HeaderProps)) return false;
+        const auto* props = reinterpret_cast<const HeaderProps*>(ptr);
+        outMesh.PatternMode = props->PatternMode;
+        outMesh.TileScale = props->TileScale;
+        outMesh.ColorPrimary = props->ColorPrimary;
+        outMesh.ColorSecondary = props->ColorSecondary;
+        outMesh.BoundingSize = props->BoundingSize;
+        outMesh.HalfExtent = props->HalfExtent;
+        ptr += sizeof(HeaderProps); remaining -= sizeof(HeaderProps);
 
-        u32 vertexCount = 0;
-        u32 indexCount = 0;
-        file.read(reinterpret_cast<char*>(&vertexCount), sizeof(vertexCount));
-        file.read(reinterpret_cast<char*>(&indexCount), sizeof(indexCount));
+        if (remaining < sizeof(u32) * 2) return false;
+        u32 vertexCount = *reinterpret_cast<const u32*>(ptr);
+        ptr += sizeof(u32); remaining -= sizeof(u32);
+        u32 indexCount = *reinterpret_cast<const u32*>(ptr);
+        ptr += sizeof(u32); remaining -= sizeof(u32);
 
         if (vertexCount == 0 || indexCount == 0) return false;
+        if (remaining < vertexCount * sizeof(glm::vec3) + indexCount * sizeof(u32)) return false;
 
         outMesh.Vertices.resize(vertexCount);
-        file.read(reinterpret_cast<char*>(outMesh.Vertices.data()), vertexCount * sizeof(glm::vec3));
+        memcpy(outMesh.Vertices.data(), ptr, vertexCount * sizeof(glm::vec3));
+        ptr += vertexCount * sizeof(glm::vec3);
 
         outMesh.Indices.resize(indexCount);
-        file.read(reinterpret_cast<char*>(outMesh.Indices.data()), indexCount * sizeof(u32));
+        memcpy(outMesh.Indices.data(), ptr, indexCount * sizeof(u32));
 
         return true;
     }
@@ -304,7 +328,7 @@ namespace Axle {
     AxleLoadedMesh AssetSerializer::LoadMesh(const std::filesystem::path& axleTextPath) {
         AxleLoadedMesh result;
 
-        if (!std::filesystem::exists(axleTextPath)) {
+        if (!FileSystem::Exists(axleTextPath)) {
             AXLE_ERROR("AssetSerializer: Asset path does not exist: '{0}'", axleTextPath.string());
             return result;
         }
@@ -312,11 +336,14 @@ namespace Axle {
         std::filesystem::path cachePath = GetCachePathFor(axleTextPath);
         bool needRebake = true;
 
-        std::error_code ec;
-        if (std::filesystem::exists(cachePath, ec)) {
+        if (FileSystem::Exists(cachePath)) {
+            std::error_code ec;
             auto textWriteTime = std::filesystem::last_write_time(axleTextPath, ec);
             auto cacheWriteTime = std::filesystem::last_write_time(cachePath, ec);
             if (!ec && cacheWriteTime >= textWriteTime) {
+                needRebake = false;
+            } else if (FileSystem::HasMountedPackage()) {
+                // In packaged VFS mode, cache is authoritative
                 needRebake = false;
             }
         }

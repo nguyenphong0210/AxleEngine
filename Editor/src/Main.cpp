@@ -1,6 +1,7 @@
 #include <Axle/Application.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/ImGuiLayer.hpp>
+#include <Axle/AssetCooker.hpp>
 #include "EditorLayer.hpp"
 #include <exception>
 #include <csignal>
@@ -84,7 +85,7 @@ static void AbortHandler(int sig) {
 }
 #endif
 
-int main() {
+int main(int argc, char** argv) {
 #ifdef _WIN32
     AddVectoredExceptionHandler(1, VectoredCrashHandler);
     SetUnhandledExceptionFilter(VectoredCrashHandler);
@@ -92,6 +93,35 @@ int main() {
     std::signal(SIGABRT, AbortHandler);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
+
+    // Headless CLI Cooker / Exporter
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--export" || arg == "--cook") {
+            Axle::Log::Init();
+            std::filesystem::path outDir = "Export";
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                outDir = argv[++i];
+            }
+            Axle::CookSettings settings;
+            settings.ProjectPath = "AxleEditor.axleproj";
+            settings.AssetDirectory = "Editor/assets";
+            settings.OutputDirectory = outDir;
+            settings.BakeMeshesToBinary = true;
+            settings.IncludeShaders = true;
+            settings.CopyExecutables = true;
+
+            auto res = Axle::AssetCooker::CookProject(settings);
+            if (res.Success) {
+                AXLE_INFO("CLI Export Succeeded! Created {0} ({1} assets, {2} KB)",
+                    res.PackagePath.string(), res.TotalAssetsCooked, res.PackageSizeBytes / 1024);
+                return 0;
+            } else {
+                AXLE_ERROR("CLI Export Failed: {0}", res.ErrorMessage);
+                return 1;
+            }
+        }
+    }
     try {
         Axle::ApplicationSpecification spec{
             .Name = "Axle Editor",

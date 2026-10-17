@@ -8,6 +8,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <commdlg.h>
+#include <shlobj.h>
 #endif
 
 namespace Axle {
@@ -64,6 +65,25 @@ namespace Axle {
 
         if (GetSaveFileNameA(&ofn) == TRUE) {
             return ofn.lpstrFile;
+        }
+#endif
+        return "";
+    }
+
+    std::string FileDialogs::OpenFolder(const char* defaultPath) {
+#ifdef _WIN32
+        BROWSEINFOA bi = { 0 };
+        bi.lpszTitle = "Select Destination Folder";
+        bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+        bi.hwndOwner = glfwGetWin32Window(Application::Get().GetWindow().GetNativeWindow());
+        LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
+        if (pidl != 0) {
+            CHAR path[MAX_PATH];
+            if (SHGetPathFromIDListA(pidl, path)) {
+                CoTaskMemFree(pidl);
+                return path;
+            }
+            CoTaskMemFree(pidl);
         }
 #endif
         return "";

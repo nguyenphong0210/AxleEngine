@@ -9,6 +9,7 @@
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/AssetCooker.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/Log.hpp>
@@ -1491,6 +1492,10 @@ void EditorLayer::OnImGuiRender() {
                 SaveSceneAs();
             }
             ImGui::Separator();
+            if (ImGui::MenuItem("Export Standalone Game...", "Ctrl+Shift+E")) {
+                m_ShowExportGameModal = true;
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Reset Simulation", "Ctrl+R")) {
                 ResetSimulation();
             }
@@ -1513,6 +1518,10 @@ void EditorLayer::OnImGuiRender() {
             bool canCompile = !Axle::ScriptCompiler::Get().IsCompiling();
             if (ImGui::MenuItem("Compile Scripts", "F9 / Ctrl+B", false, canCompile)) {
                 TriggerScriptCompilationAndReload();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Export Standalone Game (Package .axlepak)...", "Ctrl+Shift+E")) {
+                m_ShowExportGameModal = true;
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Open in Visual Studio")) {
@@ -2293,6 +2302,9 @@ void EditorLayer::OnImGuiRender() {
 
     // 10. 3D Model Asset Ingestion Confirmation Modal
     RenderImportModal();
+
+    // 11. Standalone Game Packaging & Export Modal (Phase 23)
+    RenderExportGameModal();
 }
 
 void EditorLayer::SetupNextImportModal() {
@@ -2550,3 +2562,90 @@ void EditorLayer::RenderImportModal() {
         }
     }
 }
+
+void EditorLayer::RenderExportGameModal() {
+    if (m_ShowExportGameModal) {
+        ImGui::OpenPopup("Export Standalone Game##Modal");
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
+
+    bool modalOpen = m_ShowExportGameModal;
+    if (ImGui::BeginPopupModal("Export Standalone Game##Modal", &modalOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Package Active Project into Standalone Distribution (.axlepak)");
+        ImGui::TextDisabled("Compiles assets, generates Data.axlepak, and bundles AxleRuntime.exe.");
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::TextUnformatted("Export Destination Directory:");
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
+        ImGui::InputText("##ExportDir", m_ExportDirectoryBuffer, sizeof(m_ExportDirectoryBuffer));
+        ImGui::SameLine();
+        if (ImGui::Button("Browse...", ImVec2(80.0f, 0.0f))) {
+            std::string folder = Axle::FileDialogs::OpenFolder();
+            if (!folder.empty()) {
+                strncpy_s(m_ExportDirectoryBuffer, sizeof(m_ExportDirectoryBuffer), folder.c_str(), _TRUNCATE);
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Checkbox("Pre-compile text meshes into binary .axlebin", &m_ExportBakeMeshes);
+        ImGui::Checkbox("Bundle Engine Shaders (PBR & Atmospheric Skybox)", &m_ExportIncludeShaders);
+        ImGui::Checkbox("Bundle Standalone Executables (AxleRuntime.exe & AxleScripts.dll)", &m_ExportCopyExecutables);
+
+        if (!m_ExportStatusMessage.empty()) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            if (m_ExportStatusSuccess) {
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "%s", m_ExportStatusMessage.c_str());
+            } else {
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", m_ExportStatusMessage.c_str());
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Export & Cook Game", ImVec2(180.0f, 32.0f))) {
+            Axle::CookSettings settings;
+            if (auto proj = Axle::Project::GetActive()) {
+                settings.ProjectPath = proj->GetProjectDirectoryPath() / "Project.axleproj";
+                settings.AssetDirectory = proj->GetAssetDirectory();
+            } else {
+                settings.AssetDirectory = Axle::FileSystem::GetAssetDirectory();
+            }
+            settings.OutputDirectory = m_ExportDirectoryBuffer;
+            settings.BakeMeshesToBinary = m_ExportBakeMeshes;
+            settings.IncludeShaders = m_ExportIncludeShaders;
+            settings.CopyExecutables = m_ExportCopyExecutables;
+
+            auto res = Axle::AssetCooker::CookProject(settings);
+            m_ExportStatusSuccess = res.Success;
+            if (res.Success) {
+                m_ExportStatusMessage = "Succeeded! Created " + res.PackagePath.filename().string() + " (" +
+                    std::to_string(res.TotalAssetsCooked) + " assets, " +
+                    std::to_string(res.PackageSizeBytes / 1024) + " KB)";
+                AXLE_INFO("Export Game: {0}", m_ExportStatusMessage);
+            } else {
+                m_ExportStatusMessage = "Failed: " + res.ErrorMessage;
+                AXLE_ERROR("Export Game: {0}", m_ExportStatusMessage);
+            }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Close", ImVec2(100.0f, 32.0f))) {
+            m_ShowExportGameModal = false;
+            m_ExportStatusMessage.clear();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    } else {
+        m_ShowExportGameModal = false;
+    }
+}
+

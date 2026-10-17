@@ -537,15 +537,15 @@ namespace Axle {
                                           const SceneSerializerContext* context) {
         if (!targetScene) return {};
 
-        std::ifstream fin(filepath);
-        if (!fin.is_open()) {
-            AXLE_ERROR("AssemblySerializer: Could not open '{0}' for reading", filepath.string());
+        std::string content = FileSystem::ReadTextFile(filepath);
+        if (content.empty()) {
+            AXLE_ERROR("AssemblySerializer: Could not read assembly file '{0}'", filepath.string());
             return {};
         }
 
+        std::istringstream fin(content);
         u64 rootOldUUID = 0;
         auto rawEntities = ParseAssemblyEntities(fin, rootOldUUID);
-        fin.close();
 
         if (rawEntities.empty()) {
             AXLE_ERROR("AssemblySerializer: No entities found in '{0}'", filepath.string());

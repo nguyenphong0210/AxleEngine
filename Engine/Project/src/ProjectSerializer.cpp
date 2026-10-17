@@ -1,4 +1,5 @@
 #include <Axle/ProjectSerializer.hpp>
+#include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <fstream>
 #include <sstream>
@@ -42,12 +43,13 @@ namespace Axle {
     bool ProjectSerializer::Deserialize(const std::filesystem::path& filepath) {
         if (!m_Project) return false;
 
-        std::ifstream fin(filepath);
-        if (!fin.is_open()) {
-            AXLE_ERROR("ProjectSerializer: Could not open file for reading: '{0}'", filepath.string());
+        std::string content = FileSystem::ReadTextFile(filepath);
+        if (content.empty() && !FileSystem::Exists(filepath)) {
+            AXLE_ERROR("ProjectSerializer: Could not read file: '{0}'", filepath.string());
             return false;
         }
 
+        std::istringstream fin(content);
         std::string line;
         bool inProjectSection = false;
 
@@ -70,8 +72,6 @@ namespace Axle {
                 }
             }
         }
-
-        fin.close();
 
         m_Project->m_ProjectDirectory = filepath.parent_path();
         if (m_Project->m_ProjectDirectory.empty()) {

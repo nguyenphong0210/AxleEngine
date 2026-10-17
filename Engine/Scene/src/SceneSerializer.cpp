@@ -279,17 +279,13 @@ namespace Axle {
     }
 
     bool SceneSerializer::Deserialize(const std::filesystem::path& filepath) {
-        std::ifstream fin(filepath);
-        if (!fin.is_open()) {
-            AXLE_ERROR("SceneSerializer: Could not open file for reading: '{0}'", filepath.string());
+        std::string content = FileSystem::ReadTextFile(filepath);
+        if (content.empty()) {
+            AXLE_ERROR("SceneSerializer: Could not read scene file: '{0}'", filepath.string());
             return false;
         }
 
-        std::stringstream ss;
-        ss << fin.rdbuf();
-        fin.close();
-
-        bool success = DeserializeFromString(ss.str());
+        bool success = DeserializeFromString(content);
         if (success) {
             AXLE_INFO("SceneSerializer: Successfully loaded scene from '{0}'", filepath.string());
         }

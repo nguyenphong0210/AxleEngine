@@ -1,4 +1,5 @@
 #include <Axle/FileSystem.hpp>
+#include <Axle/Package.hpp>
 #include <Axle/Log.hpp>
 #include <fstream>
 #include <sstream>
@@ -6,6 +7,31 @@
 namespace Axle {
 
     static std::filesystem::path s_AssetDirectory;
+    static std::unique_ptr<Package> s_MountedPackage = nullptr;
+
+    bool FileSystem::MountPackage(const std::filesystem::path& packagePath) {
+        auto pkg = std::make_unique<Package>();
+        if (pkg->Open(packagePath)) {
+            s_MountedPackage = std::move(pkg);
+            return true;
+        }
+        return false;
+    }
+
+    void FileSystem::UnmountPackage() {
+        if (s_MountedPackage) {
+            s_MountedPackage->Close();
+            s_MountedPackage.reset();
+        }
+    }
+
+    bool FileSystem::HasMountedPackage() {
+        return s_MountedPackage != nullptr && s_MountedPackage->IsOpen();
+    }
+
+    const Package* FileSystem::GetMountedPackage() {
+        return s_MountedPackage.get();
+    }
 
     void FileSystem::SetAssetDirectory(const std::filesystem::path& path) {
         s_AssetDirectory = path;
@@ -53,6 +79,14 @@ namespace Axle {
     }
 
     std::filesystem::path FileSystem::ResolveAssetPath(const std::filesystem::path& relativePath) {
+        // 0. If package is mounted and contains this virtual path, return it directly
+        if (s_MountedPackage && s_MountedPackage->IsOpen()) {
+            std::string norm = Package::NormalizePath(relativePath.generic_string());
+            if (s_MountedPackage->HasEntry(norm)) {
+                return relativePath;
+            }
+        }
+
         // If already an absolute path and exists, return directly
         if (relativePath.is_absolute() && std::filesystem::exists(relativePath)) {
             return relativePath;
@@ -99,8 +133,26 @@ namespace Axle {
     }
 
     std::string FileSystem::ReadTextFile(const std::filesystem::path& filepath) {
+        // 1. Check mounted VFS package first
+        if (s_MountedPackage && s_MountedPackage->IsOpen()) {
+            std::string norm = Package::NormalizePath(filepath.generic_string());
+            if (s_MountedPackage->HasEntry(norm)) {
+                return s_MountedPackage->ReadEntryAsText(norm);
+            }
+        }
+
+        // 2. Physical disk read
         std::ifstream file(filepath);
         if (!file.is_open()) {
+            auto resolved = ResolveAssetPath(filepath);
+            if (resolved != filepath && std::filesystem::exists(resolved)) {
+                std::ifstream resFile(resolved);
+                if (resFile.is_open()) {
+                    std::stringstream buffer;
+                    buffer << resFile.rdbuf();
+                    return buffer.str();
+                }
+            }
             AXLE_CORE_WARN("FileSystem: Unable to open file for reading: {0}", filepath.string());
             return "";
         }
@@ -111,8 +163,29 @@ namespace Axle {
     }
 
     std::vector<uint8_t> FileSystem::ReadBinaryFile(const std::filesystem::path& filepath) {
+        // 1. Check mounted VFS package first
+        if (s_MountedPackage && s_MountedPackage->IsOpen()) {
+            std::string norm = Package::NormalizePath(filepath.generic_string());
+            if (s_MountedPackage->HasEntry(norm)) {
+                return s_MountedPackage->ReadEntry(norm);
+            }
+        }
+
+        // 2. Physical disk read
         std::ifstream file(filepath, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
+            auto resolved = ResolveAssetPath(filepath);
+            if (resolved != filepath && std::filesystem::exists(resolved)) {
+                std::ifstream resFile(resolved, std::ios::binary | std::ios::ate);
+                if (resFile.is_open()) {
+                    std::streamsize size = resFile.tellg();
+                    resFile.seekg(0, std::ios::beg);
+                    std::vector<uint8_t> buffer(static_cast<size_t>(size));
+                    if (resFile.read(reinterpret_cast<char*>(buffer.data()), size)) {
+                        return buffer;
+                    }
+                }
+            }
             AXLE_CORE_WARN("FileSystem: Unable to open binary file for reading: {0}", filepath.string());
             return {};
         }
@@ -146,6 +219,12 @@ namespace Axle {
     }
 
     bool FileSystem::Exists(const std::filesystem::path& filepath) {
+        if (s_MountedPackage && s_MountedPackage->IsOpen()) {
+            std::string norm = Package::NormalizePath(filepath.generic_string());
+            if (s_MountedPackage->HasEntry(norm)) {
+                return true;
+            }
+        }
         return std::filesystem::exists(filepath);
     }
 

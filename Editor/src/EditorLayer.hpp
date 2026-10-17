@@ -186,4 +186,15 @@ private:
 
     void SetupNextImportModal();
     void RenderImportModal();
+
+    // Standalone Game Packaging & Exporting (Phase 23)
+    bool m_ShowExportGameModal = false;
+    char m_ExportDirectoryBuffer[260] = "Export";
+    bool m_ExportBakeMeshes = true;
+    bool m_ExportIncludeShaders = true;
+    bool m_ExportCopyExecutables = true;
+    std::string m_ExportStatusMessage;
+    bool m_ExportStatusSuccess = false;
+
+    void RenderExportGameModal();
 };

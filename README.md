@@ -507,7 +507,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize HDR cubemap environment asset references.
   - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
     - Add Step 30 test in `Editor/src/Test.cpp` verifying HDR asset loading, cubemap generation, and `SkyboxComponent` serialization roundtrip.
-- [ ] **Phase 27: High-Fidelity 3D Audio System & Vehicle Acoustics (`Engine/Audio`)**
+- [x] **Phase 27: High-Fidelity 3D Audio System & Vehicle Acoustics (`Engine/Audio`)**
   - [x] **Step 1 - Core Audio Subsystem & `miniaudio` Integration (`Engine/Audio`)**:
     - Integrate `miniaudio.h` (single-header C/C++ backend, zero external DLL dependencies) into `ThirdParty/miniaudio`.
     - Implement decoupled RAII interfaces: `AudioEngine` (device lifecycle, master bus mixer, thread safety), `AudioClip` (preloaded PCM vs streaming WAV/MP3), `AudioSource` (voice control, gain, pitch, spatialization), and `AudioListener` (3D position, forward/up orientation, velocity).
@@ -530,16 +530,38 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Vehicle Audio Sample Pack Deployment (`Editor/assets/audio/`)**:
     - Downloaded and configured open-source vehicle WAV sound clips (`Engine_Power.wav`, `Engine_Coast.wav`, `Tire_Squeal.wav`, `Suspension_Thud.wav`, `Collision_Impact.wav`) with `.meta` UUID companion files.
     - Assigned `VehicleAudioComponent` and `AudioListenerComponent` directly onto the Player Car and Main Camera in `Editor/assets/scenes/CarTest.axlescene`.
-- [ ] **Phase 28: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
-  - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
-  - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.
-  - [ ] **Splatmap Texture Painting**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
-  - [ ] **Chunked Grid & Multithreaded LOD**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
-  - [ ] **Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
-- [ ] **Phase 29: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
-  - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights via Assemblies.
-  - [ ] **Dynamic In-Car Dashboard & HUD**: Real-time tachometer (RPM), speedometer (km/h), current gear, and turbo boost indicator.
-  - [ ] **Multi-Angle Camera Controller**: Chase camera, first-person cockpit camera, hood camera, and free-orbit replay camera.
+- [ ] **Phase 28: Gameplay Polish, Multi-Part Vehicle Rigging & Dynamic HUD (`Engine/Vehicle`, `Engine/UI` & Content)**
+  - [ ] **Step 1 - Multi-Part 3D Car Rigging & Assembly Pipeline**:
+    - High-fidelity 3D vehicle asset integration: modular chassis body mesh, 4 separate wheel meshes (rim + tire), brake calipers, and cockpit interior.
+    - Automatic ECS hierarchy binding via Prefab Assembly (`.axle`): parent chassis entity holding `VehicleComponent`, `RigidBody3D`, `CollisionShape3D`, `VehicleAudioComponent`, and child wheel entities holding `WheelComponent`, `MeshInstance3D`, and `TransformComponent`.
+    - Animated visual wheel kinematics: real-time synchronization of wheel spin rotation based on Jolt Physics angular velocity (`AngularVelocity`) and steering angles (`SteerAngle`) with Ackerman geometry.
+    - Functional vehicle lighting system: toggleable headlights (SpotLight3D), tail lights / brake lights (PointLight3D + emissive material bloom on braking), and reverse lights on reverse gear.
+  - [ ] **Step 2 - Multi-Angle Dynamic Vehicle Camera Controller (`Engine/Scene` & Scripting)**:
+    - **Spring-Arm Third-Person Chase Camera**: Smooth position and rotation lag interpolation, dynamic FOV expansion proportional to vehicle speed, and physics environment raycast collision detection to prevent wall/ground clipping.
+    - **Cockpit / Interior First-Person Camera (Driver POV)**: Head-anchored camera inside the cabin with subtle G-force inertia lag, engine vibration tremor, and suspension compression bumps.
+    - **Hood / Bumper Camera**: Low-to-ground racing view providing maximum sense of speed and cornering precision.
+    - **Free Orbit / Replay Camera**: 360-degree mouse drag orbit around the vehicle with mouse-wheel zoom for inspecting vehicle aesthetics.
+    - **Seamless Camera Cycling**: One-key cycle toggle (hotkey `C` or `V`) with smooth transition interpolation.
+  - [ ] **Step 3 - Real-Time Racing HUD & Dashboard Instrumentation (`Engine/UI`)**:
+    - **Tachometer (RPM Gauge)**: Analog needle or circular arc display (0 to 8000+ RPM), dynamic redline zone, and shift-up flash indicator.
+    - **Digital Speedometer**: Crisp digital display showing instantaneous speed in km/h (with mph toggle).
+    - **Transmission Gear Indicator**: Prominent display of current gear (`R`, `N`, `1`, `2`, `3`, `4`, `5`, `6`).
+    - **Pedal & Telemetry Input Bars**: Real-time meters for Throttle input, Brake pressure, Handbrake engage, and steering angle.
+    - **G-Force & Boost Meter**: Lateral and longitudinal G-force display calculated from chassis accelerometers.
+    - **HUD Viewport Overlay**: ImGui-based non-intrusive HUD rendered over the game viewport, toggleable with hotkey `H` or auto-displayed during Play Mode simulation.
+  - [ ] **Step 4 - Scene Integration & Visual Polish (`CarTest.axlescene` & `VehicleSandbox.axlescene`)**:
+    - Replace temporary primitive cube/cylinder blocks in `CarTest.axlescene` with the fully rigged vehicle model and PBR materials (metallic car paint, roughness, glass windows, rubber tires).
+    - Calibrate vehicle suspension spring frequency, damping rates, center of mass offset (`CenterOfMassOffset`), and braking balance for satisfying arcade-sim handling.
+    - Verify seamless integration with the newly deployed `VehicleAudioComponent` (interior vs exterior audio volume attenuation).
+  - [ ] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
+    - Implement Step 32 test in `Editor/src/Test.cpp` validating multi-part vehicle assembly hierarchy, wheel visual rotational kinematics, camera mode transitions, and HUD telemetry data accuracy.
+- [ ] **Phase 29: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
+  - [ ] **Step 1 - Heightfield Physics Engine (`JPH::HeightFieldShape`)**: High-performance off-road surface using Jolt Physics heightfields for realistic wheel travel and suspension damping on irregular soil.
+  - [ ] **Step 2 - Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise, Lower, Smooth, Flatten) with real-time vertex buffer and Jolt collision updates.
+  - [ ] **Step 3 - Splatmap Texture Painting & Triplanar Shaders**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
+  - [ ] **Step 4 - Chunked Grid & Multithreaded LOD (`enkiTS`)**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
+  - [ ] **Step 5 - Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
+  - [ ] **Step 6 - Automated Test Suite Verification (`AxleTests.exe`)**: Step 33 automated headless tests for heightfield generation, brush deformation, and spline extrusion math.
 
 ---
 

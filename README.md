@@ -488,16 +488,36 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
       - Test `DirectionalLightComponent` shadow tuning properties serialization roundtrip.
       - Verify light space matrix calculation with variable ortho bounds.
       - Run full test suite with 100% pass rate.
-- [ ] **Phase 26: Audio System (`Engine/Audio`)**
+- [ ] **Phase 26: HDR Skybox Cubemap & Image-Based Lighting (IBL) Pipeline (`Engine/Renderer`, `Engine/Scene` & `Engine/UI`)**
+  - [ ] **Step 1 - HDR Image Loader & Equirectangular-to-Cubemap Converter (`Engine/Renderer`)**:
+    - Extend `Axle::Texture2D` / `Cubemap`: Load high-dynamic-range environment maps (`.hdr` / `.exr` via `stb_image.h` 32-bit float channels `stbi_loadf`).
+    - Implement equirectangular environment map projection into seamless 6-face OpenGL Cubemap texture (`GL_TEXTURE_CUBE_MAP`, `GL_RGB16F` / `GL_RGBA16F`).
+    - Render and display 360° HDR background skybox via dedicated `SkyboxCubemap` shader with tone mapping and exposure control.
+  - [ ] **Step 2 - Image-Based Lighting (IBL) Convolution Pipeline (`Engine/Renderer`)**:
+    - **Diffuse Irradiance Map**: Pre-compute hemisphere convolution for indirect diffuse ambient lighting, replacing flat analytical hemisphere gradients.
+    - **Specular Pre-filtered Environment Map**: Convolve cubemap across varying mipmap roughness levels using split-sum Cook-Torrance GGX approximation.
+    - **BRDF Integration LUT**: Generate 2D lookup texture ($256 \times 256$, `GL_RG16F`) encoding Fresnel scale and bias for arbitrary roughness and viewing angles.
+  - [ ] **Step 3 - Full PBR Material Shading Integration (`SceneRenderer` & Shaders)**:
+    - Upgrade PBR lighting calculations in `SceneRenderer.cpp` and `Checkerboard.frag`:
+      - Bind `u_IrradianceMap` (indirect diffuse for dielectrics: $k_D \times \text{Irradiance} \times \text{Albedo}$).
+      - Bind `u_PrefilteredMap` and `u_BRDFLUT` (indirect specular for metals: $F \times \text{PrefilteredColor}(\text{roughness}) \times (\text{scale} + \text{bias})$).
+      - Produce hyper-realistic metallic reflections: mirrors, chrome, gold, brass, and car paint reflect the actual surrounding HDR sky and environment instead of synthetic color gradients (Unreal / Unity style).
+  - [ ] **Step 4 - ECS Skybox Component & Editor Workflow (`Engine/Scene` & `Engine/UI`)**:
+    - Extend `SkyboxComponent`: add `SkyboxType` (Procedural Atmospheric vs. HDR Cubemap), `HDRPath`, `Exposure`, and `Intensity`.
+    - Update `SceneHierarchyPanel`: Drag-and-drop `.hdr` environment maps from Content Browser into Skybox slot with instant real-time live preview.
+    - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize HDR cubemap environment asset references.
+  - [ ] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
+    - Add Step 30 test in `Editor/src/Test.cpp` verifying HDR asset loading, cubemap generation, and `SkyboxComponent` serialization roundtrip.
+- [ ] **Phase 27: Audio System (`Engine/Audio`)**
   - [ ] Engine sound synthesis (RPM-dependent pitch/frequency).
   - [ ] Tire squeal on slip/drift, collision impact sounds, suspension compression thuds.
-- [ ] **Phase 27: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
+- [ ] **Phase 28: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.
   - [ ] **Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise / Lower / Smooth / Flatten) with real-time vertex buffer and Jolt collision updates.
   - [ ] **Splatmap Texture Painting**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
   - [ ] **Chunked Grid & Multithreaded LOD**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
   - [ ] **Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
-- [ ] **Phase 28: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
+- [ ] **Phase 29: Gameplay Polish & Realistic Vehicle Rigging (`Engine/Vehicle` & Content)**
   - [ ] **Realistic Vehicle Chassis & Multi-Part Car Rigging**: Bind imported 3D car models (e.g. Volkswagen Jetta GLI multi-part package) directly to Jolt Physics vehicle simulation — synchronizing chassis body, animated spinning/steering wheels, and functional toggleable headlights/taillights via Assemblies.
   - [ ] **Dynamic In-Car Dashboard & HUD**: Real-time tachometer (RPM), speedometer (km/h), current gear, and turbo boost indicator.
   - [ ] **Multi-Angle Camera Controller**: Chase camera, first-person cockpit camera, hood camera, and free-orbit replay camera.

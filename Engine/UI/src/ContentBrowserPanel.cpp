@@ -43,6 +43,7 @@ namespace Axle {
         Material,
         PhysicsMaterial,
         Script,
+        Audio,
         Document,
         Other
     };
@@ -91,6 +92,9 @@ namespace Axle {
         }
         if (ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".lua" || ext == ".py") {
             return { AssetKind::Script, "Source Code", "CODE", IM_COL32(75, 160, 245, 255) };
+        }
+        if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") {
+            return { AssetKind::Audio, "Audio Clip", "AUD", IM_COL32(255, 95, 160, 255) };
         }
         if (ext == ".md" || ext == ".txt" || ext == ".json" || ext == ".yaml") {
             return { AssetKind::Document, "Document", "DOC", IM_COL32(165, 180, 200, 255) };
@@ -365,6 +369,31 @@ namespace Axle {
 
         // Rim contour
         drawList->AddCircle(center, r, IM_COL32(255, 165, 95, 220), 24, 1.2f);
+    }
+
+    static void DrawAudioIcon(ImDrawList* drawList, ImVec2 center, float size) {
+        float r = size * 0.85f;
+        float bx = center.x - r * 0.35f;
+        float by = center.y;
+        float bw = r * 0.32f;
+        float bh = r * 0.48f;
+        ImVec2 boxMin(bx - bw * 0.5f, by - bh * 0.5f);
+        ImVec2 boxMax(bx + bw * 0.5f, by + bh * 0.5f);
+        drawList->AddRectFilled(boxMin, boxMax, IM_COL32(235, 75, 140, 255), 2.0f);
+
+        ImVec2 c1(bx + bw * 0.5f, by - bh * 0.5f);
+        ImVec2 c2(center.x + r * 0.12f, by - r * 0.65f);
+        ImVec2 c3(center.x + r * 0.12f, by + r * 0.65f);
+        ImVec2 c4(bx + bw * 0.5f, by + bh * 0.5f);
+        drawList->AddQuadFilled(c1, c2, c3, c4, IM_COL32(255, 95, 160, 255));
+
+        float arcX = center.x + r * 0.30f;
+        drawList->AddLine(ImVec2(arcX, by - r * 0.35f), ImVec2(arcX + r * 0.15f, by), IM_COL32(255, 180, 215, 240), 2.0f);
+        drawList->AddLine(ImVec2(arcX + r * 0.15f, by), ImVec2(arcX, by + r * 0.35f), IM_COL32(255, 180, 215, 240), 2.0f);
+
+        float arc2X = center.x + r * 0.55f;
+        drawList->AddLine(ImVec2(arc2X, by - r * 0.58f), ImVec2(arc2X + r * 0.20f, by), IM_COL32(255, 140, 190, 240), 2.0f);
+        drawList->AddLine(ImVec2(arc2X + r * 0.20f, by), ImVec2(arc2X, by + r * 0.58f), IM_COL32(255, 140, 190, 240), 2.0f);
     }
 
     static void DrawDocumentIcon(ImDrawList* drawList, ImVec2 center, float size, ImU32 lineCol) {
@@ -1048,6 +1077,7 @@ namespace Axle {
                             case AssetKind::Material:        
                             case AssetKind::PhysicsMaterial: DrawMaterialIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Script:          DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(75, 160, 245, 230)); break;
+                            case AssetKind::Audio:           DrawAudioIcon(drawList, iconCenter, iconScale); break;
                             case AssetKind::Document: DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(150, 165, 185, 230)); break;
                             default:                  DrawGenericFileIcon(drawList, iconCenter, iconScale); break;
                         }

@@ -439,6 +439,8 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
 void EditorLayer::OnScenePlay() {
     if (m_SceneState == SceneState::Play) return;
 
+    m_SceneHierarchyPanel.StopAudioPreview();
+
     CompileAndHotReloadAssets(false);
 
     // Deep clone EditorScene into an ephemeral RuntimeScene (Phase 18.2: Safe Scene State)
@@ -2099,6 +2101,130 @@ void EditorLayer::OnImGuiRender() {
                             m_PhysicsScene->SetLinearVelocity(rb.RuntimeBodyID, glm::vec3(0.0f));
                             m_PhysicsScene->GetBodyInterface().SetAngularVelocity(rb.RuntimeBodyID, JPH::Vec3::sZero());
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. 3D Audio Source & Attenuation Radius Gizmos (Phase 27 Step 4)
+    if (m_Scene && (m_SceneState != SceneState::Play || m_UseEditorCameraInPlay)) {
+        auto selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+        if (selectedEntity) {
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            glm::mat4 viewProj = cameraProj * cameraView;
+
+            auto ProjectWorldToScreen = [&](const glm::vec3& worldPos, ImVec2& outScreenPos) -> bool {
+                glm::vec4 clip = viewProj * glm::vec4(worldPos, 1.0f);
+                if (clip.w <= 0.001f) return false;
+                glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                if (ndc.z < -1.0f || ndc.z > 1.0f) return false;
+                outScreenPos.x = viewportMin.x + (ndc.x * 0.5f + 0.5f) * viewportBounds.x;
+                outScreenPos.y = viewportMin.y + (-ndc.y * 0.5f + 0.5f) * viewportBounds.y;
+                return true;
+            };
+
+            auto Draw3DAudioRadius = [&](const glm::vec3& center, float radius, ImU32 color, float thickness) {
+                if (radius <= 0.05f) return;
+                const int segments = 40;
+                for (int plane = 0; plane < 3; ++plane) {
+                    ImVec2 pts[segments + 1];
+                    int validCount = 0;
+                    bool anyBehind = false;
+                    for (int i = 0; i <= segments; ++i) {
+                        float a = (float)i / (float)segments * 6.283185307f;
+                        glm::vec3 pt = center;
+                        if (plane == 0) {
+                            pt.x += cosf(a) * radius;
+                            pt.z += sinf(a) * radius;
+                        } else if (plane == 1) {
+                            pt.x += cosf(a) * radius;
+                            pt.y += sinf(a) * radius;
+                        } else {
+                            pt.y += cosf(a) * radius;
+                            pt.z += sinf(a) * radius;
+                        }
+                        ImVec2 sp;
+                        if (!ProjectWorldToScreen(pt, sp)) {
+                            anyBehind = true;
+                            break;
+                        }
+                        pts[validCount++] = sp;
+                    }
+                    if (!anyBehind && validCount > 1) {
+                        drawList->AddPolyline(pts, validCount, color, 0, thickness);
+                    }
+                }
+            };
+
+            if (selectedEntity.HasComponent<Axle::AudioSourceComponent>()) {
+                const auto& asc = selectedEntity.GetComponent<Axle::AudioSourceComponent>();
+                if (asc.Spatialized) {
+                    glm::mat4 worldMat = m_Scene->GetWorldTransform(selectedEntity);
+                    glm::vec3 center = glm::vec3(worldMat[3]);
+                    glm::vec3 forward = glm::normalize(glm::vec3(worldMat * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f)));
+
+                    // Min Distance sphere (Cyan)
+                    Draw3DAudioRadius(center, asc.MinDistance, IM_COL32(0, 230, 210, 210), 1.6f);
+                    // Max Distance sphere (Amber Gold)
+                    Draw3DAudioRadius(center, asc.MaxDistance, IM_COL32(255, 175, 45, 160), 1.2f);
+
+                    // Directional Cone (if angles < 360)
+                    if (asc.InnerAngle < 359.0f || asc.OuterAngle < 359.0f) {
+                        float coneLength = glm::min(asc.MaxDistance, glm::max(asc.MinDistance * 3.0f, 6.0f));
+                        glm::vec3 coneApex = center;
+                        float outerRad = glm::radians(asc.OuterAngle * 0.5f);
+                        float coneR = tanf(outerRad) * coneLength;
+
+                        glm::vec3 right = glm::normalize(glm::vec3(worldMat * glm::vec4(1.0f, 0.0f, 0.0f, 0.0f)));
+                        glm::vec3 up = glm::normalize(glm::vec3(worldMat * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f)));
+
+                        glm::vec3 baseCenter = coneApex + forward * coneLength;
+                        glm::vec3 conePts[4] = {
+                            baseCenter + up * coneR,
+                            baseCenter - up * coneR,
+                            baseCenter + right * coneR,
+                            baseCenter - right * coneR
+                        };
+
+                        ImVec2 apexScreen;
+                        if (ProjectWorldToScreen(coneApex, apexScreen)) {
+                            for (int i = 0; i < 4; ++i) {
+                                ImVec2 baseScreen;
+                                if (ProjectWorldToScreen(conePts[i], baseScreen)) {
+                                    drawList->AddLine(apexScreen, baseScreen, IM_COL32(255, 215, 65, 180), 1.4f);
+                                }
+                            }
+                        }
+                    }
+
+                    // Center Icon / Label Badge
+                    ImVec2 centerScreen;
+                    if (ProjectWorldToScreen(center, centerScreen)) {
+                        drawList->AddCircleFilled(centerScreen, 5.0f, IM_COL32(0, 230, 210, 255));
+                        drawList->AddCircle(centerScreen, 7.0f, IM_COL32(255, 255, 255, 200), 12, 1.2f);
+                        std::string label = asc.AssetPath.empty() 
+                            ? "[3D Audio]" 
+                            : ("[Audio: " + std::filesystem::path(asc.AssetPath).filename().string() + "]");
+                        drawList->AddText(ImVec2(centerScreen.x + 10.0f, centerScreen.y - 7.0f), IM_COL32(255, 255, 255, 230), label.c_str());
+                    }
+                }
+            } else if (selectedEntity.HasComponent<Axle::VehicleAudioComponent>()) {
+                const auto& vac = selectedEntity.GetComponent<Axle::VehicleAudioComponent>();
+                if (vac.Spatialized) {
+                    glm::mat4 worldMat = m_Scene->GetWorldTransform(selectedEntity);
+                    glm::vec3 center = glm::vec3(worldMat[3]);
+
+                    // Min Distance sphere (Neon Green)
+                    Draw3DAudioRadius(center, vac.MinDistance, IM_COL32(75, 235, 120, 210), 1.6f);
+                    // Max Distance sphere (Orange)
+                    Draw3DAudioRadius(center, vac.MaxDistance, IM_COL32(255, 140, 45, 160), 1.2f);
+
+                    ImVec2 centerScreen;
+                    if (ProjectWorldToScreen(center, centerScreen)) {
+                        drawList->AddCircleFilled(centerScreen, 5.0f, IM_COL32(75, 235, 120, 255));
+                        drawList->AddCircle(centerScreen, 7.0f, IM_COL32(255, 255, 255, 200), 12, 1.2f);
+                        drawList->AddText(ImVec2(centerScreen.x + 10.0f, centerScreen.y - 7.0f), IM_COL32(255, 255, 255, 230), "[Vehicle Audio Synthesizer]");
                     }
                 }
             }

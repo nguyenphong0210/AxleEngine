@@ -13,6 +13,7 @@ namespace Axle {
 
     class VertexArray;
     class AssetPreviewPanel;
+    class AudioSource;
 
     enum class InspectorMode {
         Entity = 0,
@@ -51,6 +52,8 @@ namespace Axle {
         void SetSpawnAssetCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnSpawnAssetCallback = callback; }
         void SetOpenAssemblyEditorCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenAssemblyEditorCallback = callback; }
 
+        void StopAudioPreview();
+
         Entity CreatePrimitive(int primitiveType, const glm::vec3& position = glm::vec3(0.0f, 2.0f, 0.0f), bool isDynamic = false);
 
         static void DrawVec3Control(const std::string& label, glm::vec3& values, float resetValue = 0.0f, float columnWidth = 100.0f, float speed = 0.1f);
@@ -77,6 +80,9 @@ namespace Axle {
         std::filesystem::path m_LoadedMaterialPath;
         MaterialComponent m_ActiveMaterialAsset;
         bool m_MaterialAssetLoaded = false;
+
+        std::shared_ptr<AudioSource> m_EditorPreviewAudioSource;
+        std::string m_EditorPreviewPath;
 
         char m_SearchFilter[64] = "";
         char m_ComponentSearchFilter[64] = "";

@@ -522,10 +522,10 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
       - **Tire Squeal & Slip Acoustics**: Automated tire screech triggered by Jolt wheel telemetry (`LongitudinalSlip` during burnouts/hard braking and `LateralSlip` during high-G drifts).
       - **Suspension Travel Thuds**: Dynamic low-frequency damping thuds on hard landings and curb impacts based on suspension compression velocity.
       - **Collision Impact System**: Physics contact impulse listener triggering metal crunch, scratch, and thud sound effects with pitch randomization.
-  - [ ] **Step 4 - Editor Inspector & Audio Preview UI (`Engine/UI`)**:
+  - [x] **Step 4 - Editor Inspector & Audio Preview UI (`Engine/UI`)**:
     - Drag-and-drop audio assets (`.wav`, `.mp3`) from Content Browser directly into `AudioSourceComponent` slots in Scene Hierarchy.
     - Interactive audio preview controls in Inspector: Play, Pause, Stop, Volume/Pitch sliders, and viewport gizmo visualization for 3D min/max hearing radius.
-  - [ ] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
+  - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
     - Add Step 31 test in `Editor/src/Test.cpp` verifying headless Audio Subsystem initialization, audio clip decoding, 3D spatial calculations, vehicle audio telemetry binding, and ECS serialization roundtrip.
 - [ ] **Phase 28: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Heightfield Physics Engine**: High-performance off-road surface using `JPH::HeightFieldShape` for realistic wheel travel and suspension damping on irregular soil.

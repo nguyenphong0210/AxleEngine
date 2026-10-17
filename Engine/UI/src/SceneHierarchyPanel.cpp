@@ -15,6 +15,10 @@
 #include <Axle/AssetManager.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/PlatformUtils.hpp>
+#include <Axle/AudioEngine.hpp>
+#include <Axle/AudioSource.hpp>
+#include <Axle/AudioClip.hpp>
+#include <Axle/VehicleAudio.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -201,8 +205,18 @@ namespace Axle {
     }
 
     void SceneHierarchyPanel::SetSelectedEntity(Entity entity) {
+        if (m_SelectedEntity != entity) {
+            StopAudioPreview();
+        }
         m_SelectedEntity = entity;
         m_InspectorMode = InspectorMode::Entity;
+    }
+
+    void SceneHierarchyPanel::StopAudioPreview() {
+        if (m_EditorPreviewAudioSource) {
+            m_EditorPreviewAudioSource->Stop();
+            m_EditorPreviewAudioSource->Rewind();
+        }
     }
 
     void SceneHierarchyPanel::SetSelectedAsset(const std::filesystem::path& assetPath) {
@@ -2368,6 +2382,236 @@ namespace Axle {
             }
         });
 
+        // Audio Listener Component
+        DrawComponent<AudioListenerComponent>("Audio Listener", entity, [&](AudioListenerComponent& alc) {
+            ImGui::Checkbox("Active Listener", &alc.Active);
+            ImGui::SameLine();
+            if (alc.Active) {
+                ImGui::TextColored(ImVec4(0.25f, 0.85f, 0.45f, 1.0f), "[ Listening ]");
+            } else {
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[ Muted ]");
+            }
+            ImGui::TextDisabled("Listens to 3D spatial sounds from active camera/entity perspective.");
+        }, /*canRemove=*/ true);
+
+        // Audio Source Component
+        DrawComponent<AudioSourceComponent>("Audio Source", entity, [&](AudioSourceComponent& asc) {
+            // 1. Audio Asset Slot with Drag & Drop
+            ImGui::Text("Audio Clip:");
+            std::string displayName = asc.AssetPath.empty() 
+                ? "(None - Drop .wav / .mp3 here)" 
+                : std::filesystem::path(asc.AssetPath).filename().string();
+
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.28f, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.32f, 0.42f, 0.95f));
+            ImGui::Button(displayName.c_str(), ImVec2(-32.0f, 26.0f));
+            ImGui::PopStyleColor(2);
+
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    const char* pathStr = static_cast<const char*>(payload->Data);
+                    std::filesystem::path p(pathStr);
+                    std::string ext = p.extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return (char)std::tolower(c); });
+                    if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") {
+                        asc.AssetPath = p.string();
+                        StopAudioPreview();
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("X##ClearAudio", ImVec2(24.0f, 26.0f))) {
+                asc.AssetPath.clear();
+                StopAudioPreview();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear Audio Clip");
+
+            // 2. Interactive Preview Controls (Play, Pause, Stop)
+            ImGui::Spacing();
+            ImGui::TextDisabled("Editor Preview Controls:");
+            bool isPreviewing = m_EditorPreviewAudioSource && m_EditorPreviewAudioSource->IsPlaying() && m_EditorPreviewPath == asc.AssetPath;
+
+            if (isPreviewing) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.4f, 1.0f));
+            }
+            if (ImGui::Button(isPreviewing ? "Playing..." : "Play Preview", ImVec2(100.0f, 24.0f))) {
+                if (!asc.AssetPath.empty()) {
+                    if (!m_EditorPreviewAudioSource) {
+                        m_EditorPreviewAudioSource = std::make_shared<AudioSource>();
+                    }
+                    if (m_EditorPreviewPath != asc.AssetPath) {
+                        if (m_EditorPreviewAudioSource->Load(asc.AssetPath)) {
+                            m_EditorPreviewPath = asc.AssetPath;
+                        }
+                    }
+                    if (m_EditorPreviewAudioSource) {
+                        m_EditorPreviewAudioSource->SetVolume(asc.Volume);
+                        m_EditorPreviewAudioSource->SetPitch(asc.Pitch);
+                        m_EditorPreviewAudioSource->SetLooping(asc.Loop);
+                        m_EditorPreviewAudioSource->Play();
+                    }
+                }
+            }
+            if (isPreviewing) {
+                ImGui::PopStyleColor();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Pause", ImVec2(60.0f, 24.0f))) {
+                if (m_EditorPreviewAudioSource) m_EditorPreviewAudioSource->Pause();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Stop", ImVec2(60.0f, 24.0f))) {
+                StopAudioPreview();
+            }
+
+            // 3. Audio Parameters
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            if (ImGui::SliderFloat("Volume", &asc.Volume, 0.0f, 1.0f, "%.2f")) {
+                if (m_EditorPreviewAudioSource && m_EditorPreviewPath == asc.AssetPath) {
+                    m_EditorPreviewAudioSource->SetVolume(asc.Volume);
+                }
+                if (asc.Source) {
+                    asc.Source->SetVolume(asc.Volume);
+                }
+            }
+
+            if (ImGui::SliderFloat("Pitch", &asc.Pitch, 0.1f, 3.0f, "%.2f")) {
+                if (m_EditorPreviewAudioSource && m_EditorPreviewPath == asc.AssetPath) {
+                    m_EditorPreviewAudioSource->SetPitch(asc.Pitch);
+                }
+                if (asc.Source) {
+                    asc.Source->SetPitch(asc.Pitch);
+                }
+            }
+
+            ImGui::Checkbox("Looping", &asc.Loop);
+            ImGui::SameLine();
+            ImGui::Checkbox("Play On Awake", &asc.PlayOnAwake);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // 4. 3D Spatial Audio Settings
+            ImGui::Checkbox("3D Spatialized", &asc.Spatialized);
+            if (asc.Spatialized) {
+                const char* attenuationModels[] = { "Inverse", "Linear", "Exponential" };
+                int currentModel = static_cast<int>(asc.Attenuation);
+                if (ImGui::Combo("Attenuation Model", &currentModel, attenuationModels, IM_ARRAYSIZE(attenuationModels))) {
+                    asc.Attenuation = static_cast<AttenuationModel>(currentModel);
+                    if (asc.Source) asc.Source->SetAttenuationModel(asc.Attenuation);
+                }
+
+                if (ImGui::DragFloat("Min Distance", &asc.MinDistance, 0.2f, 0.1f, 100.0f, "%.1f m")) {
+                    asc.MinDistance = glm::max(0.1f, asc.MinDistance);
+                    if (asc.Source) asc.Source->SetMinDistance(asc.MinDistance);
+                }
+                if (ImGui::DragFloat("Max Distance", &asc.MaxDistance, 1.0f, asc.MinDistance + 0.1f, 1000.0f, "%.1f m")) {
+                    asc.MaxDistance = glm::max(asc.MinDistance + 0.1f, asc.MaxDistance);
+                    if (asc.Source) asc.Source->SetMaxDistance(asc.MaxDistance);
+                }
+                if (ImGui::DragFloat("Roll-Off Factor", &asc.RollOff, 0.05f, 0.0f, 10.0f, "%.2f")) {
+                    if (asc.Source) asc.Source->SetRollOff(asc.RollOff);
+                }
+
+                if (ImGui::CollapsingHeader("Directional Cone Settings")) {
+                    if (ImGui::SliderFloat("Inner Angle", &asc.InnerAngle, 0.0f, 360.0f, "%.0f deg") ||
+                        ImGui::SliderFloat("Outer Angle", &asc.OuterAngle, 0.0f, 360.0f, "%.0f deg") ||
+                        ImGui::SliderFloat("Outer Gain", &asc.OuterGain, 0.0f, 1.0f, "%.2f")) {
+                        if (asc.Source) {
+                            asc.Source->SetCone(glm::radians(asc.InnerAngle), glm::radians(asc.OuterAngle), asc.OuterGain);
+                        }
+                    }
+                    if (ImGui::DragFloat("Doppler Factor", &asc.DopplerFactor, 0.05f, 0.0f, 5.0f, "%.2f")) {
+                        if (asc.Source) asc.Source->SetDopplerFactor(asc.DopplerFactor);
+                    }
+                }
+            }
+        }, /*canRemove=*/ true);
+
+        // Vehicle Audio Component
+        DrawComponent<VehicleAudioComponent>("Vehicle Audio Synthesizer", entity, [&](VehicleAudioComponent& vac) {
+            ImGui::Checkbox("Synthesizer Enabled", &vac.Enabled);
+
+            auto DrawAudioClipSlot = [&](const char* label, std::string& path, const char* hint) {
+                ImGui::PushID(label);
+                ImGui::Text("%s:", label);
+                std::string disp = path.empty() ? std::string("(None - ") + hint + ")" : std::filesystem::path(path).filename().string();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.28f, 0.85f));
+                ImGui::Button(disp.c_str(), ImVec2(-32.0f, 24.0f));
+                ImGui::PopStyleColor();
+
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = static_cast<const char*>(payload->Data);
+                        std::filesystem::path p(pathStr);
+                        std::string ext = p.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return (char)std::tolower(c); });
+                        if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") {
+                            path = p.string();
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("X", ImVec2(24.0f, 24.0f))) {
+                    path.clear();
+                }
+                ImGui::PopID();
+            };
+
+            if (ImGui::CollapsingHeader("Audio Clips", ImGuiTreeNodeFlags_DefaultOpen)) {
+                DrawAudioClipSlot("Engine Power Clip", vac.EnginePowerClipPath, "Throttle roar .wav/.mp3");
+                DrawAudioClipSlot("Engine Coast Clip", vac.EngineCoastClipPath, "Off-throttle overrun");
+                DrawAudioClipSlot("Tire Squeal Clip", vac.TireSquealClipPath, "Burnout/drift screech");
+                DrawAudioClipSlot("Suspension Thud Clip", vac.SuspensionThudClipPath, "Hard landing thud");
+                DrawAudioClipSlot("Collision Impact Clip", vac.CollisionImpactClipPath, "Metal crash impulse");
+            }
+
+            if (ImGui::CollapsingHeader("Engine RPM Synthesizer", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::SliderFloat("Master Engine Volume", &vac.EngineMasterVolume, 0.0f, 1.0f, "%.2f");
+                ImGui::SliderFloat("Min Pitch (Idle)", &vac.MinEnginePitch, 0.1f, 1.5f, "%.2fx");
+                ImGui::SliderFloat("Max Pitch (Redline)", &vac.MaxEnginePitch, 1.5f, 4.0f, "%.2fx");
+                ImGui::SliderFloat("Throttle Smoothing", &vac.ThrottleSmoothing, 1.0f, 20.0f, "%.1f");
+            }
+
+            if (ImGui::CollapsingHeader("Tire Slip Acoustics")) {
+                ImGui::SliderFloat("Tire Squeal Volume", &vac.TireSquealMasterVolume, 0.0f, 1.0f, "%.2f");
+                ImGui::SliderFloat("Slip Threshold", &vac.SlipThreshold, 0.05f, 0.8f, "%.2f");
+                ImGui::SliderFloat("Squeal Fade Speed", &vac.TireSquealFadeSpeed, 2.0f, 30.0f, "%.1f");
+            }
+
+            if (ImGui::CollapsingHeader("Suspension & Collision Impacts")) {
+                ImGui::SliderFloat("Suspension Volume", &vac.SuspensionMasterVolume, 0.0f, 1.0f, "%.2f");
+                ImGui::SliderFloat("Suspension Velocity Threshold", &vac.SuspensionThudThreshold, 0.5f, 5.0f, "%.2f m/s");
+                ImGui::SliderFloat("Collision Impact Volume", &vac.CollisionMasterVolume, 0.0f, 1.0f, "%.2f");
+                ImGui::SliderFloat("Collision Decel Threshold", &vac.CollisionDecelThreshold, 5.0f, 50.0f, "%.1f m/s²");
+            }
+
+            if (ImGui::CollapsingHeader("3D Spatial Settings")) {
+                ImGui::Checkbox("Spatialized", &vac.Spatialized);
+                ImGui::DragFloat("Min Distance", &vac.MinDistance, 0.2f, 0.5f, 50.0f, "%.1f m");
+                ImGui::DragFloat("Max Distance", &vac.MaxDistance, 1.0f, 10.0f, 500.0f, "%.1f m");
+            }
+
+            // Live Runtime Synthesizer Telemetry Monitor
+            if (vac.RuntimeAudio && vac.RuntimeAudio->IsPlaying()) {
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.25f, 0.85f, 0.45f, 1.0f), "Live Audio Telemetry:");
+                ImGui::Text("Engine Pitch: %.2fx", vac.RuntimeAudio->GetCurrentPitch());
+                ImGui::Text("Engine Volume: %.2f", vac.RuntimeAudio->GetCurrentEngineVolume());
+                ImGui::Text("Tire Squeal Volume: %.2f", vac.RuntimeAudio->GetCurrentTireVolume());
+            }
+        }, /*canRemove=*/ true);
+
         // --- ADD COMPONENT BUTTON ---
         ImGui::Spacing();
         ImGui::Separator();
@@ -2573,12 +2817,19 @@ namespace Axle {
 
         // --- AUDIO / VFX CATEGORY ---
         items.push_back({
-            "Audio/VFX", "AudioSource3D (Phase 20)", "Positional 3D spatial sound emitter",
-            false, false, nullptr
+            "Audio/VFX", "AudioSourceComponent", "Positional 3D / 2D audio emitter with attenuation",
+            entity.HasComponent<AudioSourceComponent>(), true,
+            [&]() { entity.AddComponent<AudioSourceComponent>(); }
         });
         items.push_back({
-            "Audio/VFX", "AudioListener (Phase 20)", "3D audio microphone listener",
-            false, false, nullptr
+            "Audio/VFX", "AudioListenerComponent", "3D microphone listener (attach to primary Camera)",
+            entity.HasComponent<AudioListenerComponent>(), true,
+            [&]() { entity.AddComponent<AudioListenerComponent>(true); }
+        });
+        items.push_back({
+            "Audio/VFX", "VehicleAudioComponent", "Granular engine RPM synthesizer, slip acoustics & impact thuds",
+            entity.HasComponent<VehicleAudioComponent>(), true,
+            [&]() { entity.AddComponent<VehicleAudioComponent>(); }
         });
         items.push_back({
             "Audio/VFX", "ParticleEmitter3D (Phase 20)", "Dynamic particle system (Dust, smoke, sparks)",

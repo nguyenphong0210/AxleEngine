@@ -35,6 +35,7 @@ target_link_libraries(AxleUI
         Axle::Physics
         Axle::Scene
         Axle::Vehicle
+        Axle::Audio
     PRIVATE
         glfw
         glad

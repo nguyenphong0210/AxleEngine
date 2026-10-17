@@ -8,6 +8,7 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/AudioSource.hpp>
 #include <Axle/AudioListener.hpp>
+#include <Axle/VehicleAudio.hpp>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -897,6 +898,85 @@ namespace Axle {
             Source->SetRollOff(RollOff);
             Source->SetDopplerFactor(DopplerFactor);
             Source->SetCone(glm::radians(InnerAngle), glm::radians(OuterAngle), OuterGain);
+        }
+    };
+
+    struct VehicleAudioComponent {
+        bool Enabled = true;
+
+        // Granular Engine RPM Synthesizer
+        std::string EnginePowerClipPath;
+        std::string EngineCoastClipPath;
+        float MinEnginePitch = 0.6f;
+        float MaxEnginePitch = 2.4f;
+        float EngineMasterVolume = 0.8f;
+        float ThrottleSmoothing = 6.0f;
+
+        // Tire Squeal & Slip Acoustics
+        std::string TireSquealClipPath;
+        float SlipThreshold = 0.22f;
+        float TireSquealMasterVolume = 0.7f;
+        float TireSquealFadeSpeed = 10.0f;
+
+        // Suspension Travel Thuds
+        std::string SuspensionThudClipPath;
+        float SuspensionThudThreshold = 1.8f;
+        float SuspensionMasterVolume = 0.6f;
+
+        // Collision Impact System
+        std::string CollisionImpactClipPath;
+        float CollisionDecelThreshold = 18.0f;
+        float CollisionMasterVolume = 0.9f;
+
+        // 3D Spatial Audio
+        bool Spatialized = true;
+        float MinDistance = 2.0f;
+        float MaxDistance = 80.0f;
+
+        // Runtime audio synthesizer (excluded from scene file serialization)
+        std::shared_ptr<VehicleAudio> RuntimeAudio;
+
+        VehicleAudioComponent() = default;
+
+        void InitRuntime(float idleRPM = 1000.0f, float maxRPM = 7000.0f) {
+            VehicleAudioConfig config;
+            config.EnginePowerClipPath = EnginePowerClipPath;
+            config.EngineCoastClipPath = EngineCoastClipPath;
+            config.MinEnginePitch = MinEnginePitch;
+            config.MaxEnginePitch = MaxEnginePitch;
+            config.EngineMasterVolume = EngineMasterVolume;
+            config.ThrottleSmoothing = ThrottleSmoothing;
+            config.IdleRPM = idleRPM;
+            config.MaxRPM = maxRPM;
+
+            config.TireSquealClipPath = TireSquealClipPath;
+            config.SlipThreshold = SlipThreshold;
+            config.TireSquealMasterVolume = TireSquealMasterVolume;
+            config.TireSquealFadeSpeed = TireSquealFadeSpeed;
+
+            config.SuspensionThudClipPath = SuspensionThudClipPath;
+            config.SuspensionThudThreshold = SuspensionThudThreshold;
+            config.SuspensionMasterVolume = SuspensionMasterVolume;
+
+            config.CollisionImpactClipPath = CollisionImpactClipPath;
+            config.CollisionDecelThreshold = CollisionDecelThreshold;
+            config.CollisionMasterVolume = CollisionMasterVolume;
+
+            config.Spatialized = Spatialized;
+            config.MinDistance = MinDistance;
+            config.MaxDistance = MaxDistance;
+
+            RuntimeAudio = std::make_shared<VehicleAudio>(config);
+            if (Enabled) {
+                RuntimeAudio->Start();
+            }
+        }
+
+        void StopRuntime() {
+            if (RuntimeAudio) {
+                RuntimeAudio->Stop();
+                RuntimeAudio.reset();
+            }
         }
     };
 

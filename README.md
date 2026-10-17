@@ -516,7 +516,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - Implement `AudioListenerComponent` (binds to active primary camera with automatic transform & velocity synchronization).
     - Implement `AudioSourceComponent`: asset filepath, volume, pitch, loop toggle, 2D/3D mode, min/max attenuation distance, and directional cone parameters.
     - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize all audio components in `.axlescene` and `.axle` formats.
-  - [ ] **Step 3 - Vehicle Audio Synthesizer & Physics Integration (`Engine/Vehicle`)**:
+  - [x] **Step 3 - Vehicle Audio Synthesizer & Physics Integration (`Engine/Vehicle`)**:
     - Implement `VehicleAudioComponent`: real-time mechanical acoustics synchronized with Jolt Physics and `VehicleComponent`:
       - **Granular Engine RPM Synthesizer**: RPM-driven pitch modulation and throttle load crossfading (On-Throttle power roar vs Off-Throttle coasting/exhaust overrun).
       - **Tire Squeal & Slip Acoustics**: Automated tire screech triggered by Jolt wheel telemetry (`LongitudinalSlip` during burnouts/hard braking and `LateralSlip` during high-G drifts).

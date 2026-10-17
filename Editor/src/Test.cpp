@@ -4763,8 +4763,207 @@ bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
     }
     std::cout << "  -> PASS: Assembly export and instantiation preserved AudioSourceComponent properties." << std::endl;
 
-    // 9. Subsystem Shutdown
-    std::cout << "[31.9] Verifying AudioEngine shutdown..." << std::endl;
+    // 9. Vehicle Audio Synthesizer & Physics Telemetry Integration
+    std::cout << "[31.9] Verifying VehicleAudio granular synthesizer, slip acoustics, and impact response..." << std::endl;
+    Axle::VehicleAudioConfig vaConfig;
+    vaConfig.EnginePowerClipPath = wavPath.string();
+    vaConfig.EngineCoastClipPath = wavPath.string();
+    vaConfig.TireSquealClipPath = wavPath.string();
+    vaConfig.SuspensionThudClipPath = wavPath.string();
+    vaConfig.CollisionImpactClipPath = wavPath.string();
+    vaConfig.MinEnginePitch = 0.6f;
+    vaConfig.MaxEnginePitch = 2.4f;
+    vaConfig.EngineMasterVolume = 0.8f;
+    vaConfig.IdleRPM = 1000.0f;
+    vaConfig.MaxRPM = 7000.0f;
+    vaConfig.SlipThreshold = 0.22f;
+    vaConfig.TireSquealMasterVolume = 0.7f;
+    vaConfig.SuspensionThudThreshold = 1.8f;
+    vaConfig.CollisionDecelThreshold = 18.0f;
+
+    Axle::VehicleAudio va(vaConfig);
+    va.Start();
+    if (!va.IsPlaying()) {
+        std::cerr << "FAIL: VehicleAudio failed to start playback!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Test Idle RPM (1000 RPM, throttle 0)
+    Axle::VehicleTelemetryData telem;
+    telem.EngineRPM = 1000.0f;
+    telem.LinearVelocity = glm::vec3(0.0f);
+    telem.ForwardVector = glm::vec3(0.0f, 0.0f, 1.0f);
+    for (int i = 0; i < 4; ++i) {
+        telem.Wheels[i].HasContact = true;
+        telem.Wheels[i].SuspensionLength = 0.25f;
+        telem.Wheels[i].LongitudinalSlip = 0.0f;
+        telem.Wheels[i].LateralSlip = 0.0f;
+    }
+    va.Update(Axle::Timestep(0.016f), telem, 0.0f, 0.0f, false, glm::vec3(0.0f), telem.ForwardVector);
+    if (std::abs(va.GetCurrentPitch() - 0.6f) > 0.05f) {
+        std::cerr << "FAIL: VehicleAudio idle pitch mismatch! Expected ~0.6, Got: " << va.GetCurrentPitch() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    if (va.GetCurrentTireVolume() > 0.001f) {
+        std::cerr << "FAIL: VehicleAudio tire volume should be 0 without slip!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Test Max RPM (7000 RPM, full throttle)
+    telem.EngineRPM = 7000.0f;
+    for (int tick = 0; tick < 20; ++tick) {
+        va.Update(Axle::Timestep(0.05f), telem, 1.0f, 0.0f, false, glm::vec3(0.0f), telem.ForwardVector);
+    }
+    if (std::abs(va.GetCurrentPitch() - 2.4f) > 0.05f) {
+        std::cerr << "FAIL: VehicleAudio max RPM pitch mismatch! Expected ~2.4, Got: " << va.GetCurrentPitch() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Test Slip-Induced Tire Squeal
+    telem.Wheels[0].LateralSlip = 0.85f;
+    for (int tick = 0; tick < 10; ++tick) {
+        va.Update(Axle::Timestep(0.05f), telem, 1.0f, 0.0f, false, glm::vec3(0.0f), telem.ForwardVector);
+    }
+    if (va.GetCurrentTireVolume() < 0.2f) {
+        std::cerr << "FAIL: VehicleAudio tire volume did not ramp up during drift slip!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Test Suspension Compression Velocity Thud
+    // Previous suspension length was 0.25f. Compress rapidly to 0.05f in 16ms -> velocity = 0.20 / 0.016 = 12.5 m/s > 1.8 threshold
+    telem.Wheels[0].SuspensionLength = 0.05f;
+    va.Update(Axle::Timestep(0.016f), telem, 0.5f, 0.0f, false, glm::vec3(0.0f), telem.ForwardVector);
+
+    // Test Sudden Deceleration Impact (Collision)
+    // Set high speed then drop suddenly:
+    telem.LinearVelocity = glm::vec3(0.0f, 0.0f, 30.0f);
+    va.Update(Axle::Timestep(0.016f), telem, 0.0f, 1.0f, false, glm::vec3(0.0f), telem.ForwardVector);
+    // Instant drop to 0 -> decel = 30 / 0.016 = 1875 m/s^2 > 18 threshold
+    telem.LinearVelocity = glm::vec3(0.0f);
+    va.Update(Axle::Timestep(0.016f), telem, 0.0f, 1.0f, false, glm::vec3(0.0f), telem.ForwardVector);
+
+    va.Stop();
+    std::cout << "  -> PASS: Granular RPM synthesizer, slip acoustics, suspension thud & collision impact verified." << std::endl;
+
+    // 10. VehicleAudioComponent ECS Lifecycle & Serialization Roundtrip
+    std::cout << "[31.10] Verifying VehicleAudioComponent ECS lifecycle, SceneSerializer and AssemblySerializer roundtrip..." << std::endl;
+    auto vehicleScene = std::make_shared<Axle::Scene>();
+    auto carEntity = vehicleScene->CreateEntity("SportsCarChassis");
+    carEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(10.0f, 1.0f, 20.0f);
+
+    auto& vac = carEntity.AddComponent<Axle::VehicleAudioComponent>();
+    vac.EnginePowerClipPath = wavPath.string();
+    vac.EngineCoastClipPath = wavPath.string();
+    vac.TireSquealClipPath = wavPath.string();
+    vac.SuspensionThudClipPath = wavPath.string();
+    vac.CollisionImpactClipPath = wavPath.string();
+    vac.MinEnginePitch = 0.55f;
+    vac.MaxEnginePitch = 2.65f;
+    vac.EngineMasterVolume = 0.85f;
+    vac.SlipThreshold = 0.25f;
+    vac.TireSquealMasterVolume = 0.65f;
+    vac.SuspensionThudThreshold = 2.1f;
+    vac.CollisionDecelThreshold = 22.0f;
+    vac.Spatialized = true;
+    vac.MinDistance = 3.0f;
+    vac.MaxDistance = 90.0f;
+
+    // Test Scene Runtime Lifecycle
+    vehicleScene->OnRuntimeStart();
+    if (!vac.RuntimeAudio || !vac.RuntimeAudio->IsPlaying()) {
+        std::cerr << "FAIL: VehicleAudioComponent RuntimeAudio was not initialized and playing on OnRuntimeStart()!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    vehicleScene->OnUpdateRuntime(Axle::Timestep(0.016f));
+    vehicleScene->OnRuntimeStop();
+    if (vac.RuntimeAudio != nullptr) {
+        std::cerr << "FAIL: VehicleAudioComponent RuntimeAudio was not released on OnRuntimeStop()!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: VehicleAudioComponent runtime start/update/stop lifecycle validated." << std::endl;
+
+    // Test Scene Serialization Roundtrip (.axlescene)
+    std::filesystem::path carScenePath = testDir / "CarAudioScene.axlescene";
+    Axle::SceneSerializer sceneSerializer(vehicleScene.get());
+    sceneSerializer.Serialize(carScenePath);
+
+    auto loadedVehicleScene = std::make_shared<Axle::Scene>();
+    Axle::SceneSerializer loadedSerializer(loadedVehicleScene.get());
+    if (!loadedSerializer.Deserialize(carScenePath)) {
+        std::cerr << "FAIL: Failed to deserialize CarAudioScene.axlescene!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    bool foundVehicleAudio = false;
+    auto carView = loadedVehicleScene->GetRegistry().view<Axle::TagComponent>();
+    for (auto entID : carView) {
+        Axle::Entity e{ entID, loadedVehicleScene.get() };
+        if (e.HasComponent<Axle::VehicleAudioComponent>()) {
+            foundVehicleAudio = true;
+            const auto& loadedVac = e.GetComponent<Axle::VehicleAudioComponent>();
+            if (loadedVac.EnginePowerClipPath != wavPath.string() ||
+                loadedVac.EngineCoastClipPath != wavPath.string() ||
+                loadedVac.TireSquealClipPath != wavPath.string() ||
+                loadedVac.SuspensionThudClipPath != wavPath.string() ||
+                loadedVac.CollisionImpactClipPath != wavPath.string() ||
+                std::abs(loadedVac.MinEnginePitch - 0.55f) > 0.01f ||
+                std::abs(loadedVac.MaxEnginePitch - 2.65f) > 0.01f ||
+                std::abs(loadedVac.EngineMasterVolume - 0.85f) > 0.01f ||
+                std::abs(loadedVac.SlipThreshold - 0.25f) > 0.01f ||
+                std::abs(loadedVac.TireSquealMasterVolume - 0.65f) > 0.01f ||
+                std::abs(loadedVac.SuspensionThudThreshold - 2.1f) > 0.01f ||
+                std::abs(loadedVac.CollisionDecelThreshold - 22.0f) > 0.01f ||
+                !loadedVac.Spatialized ||
+                std::abs(loadedVac.MinDistance - 3.0f) > 0.01f ||
+                std::abs(loadedVac.MaxDistance - 90.0f) > 0.01f) {
+                std::cerr << "FAIL: Deserialized VehicleAudioComponent parameters corrupted!" << std::endl;
+                std::filesystem::remove_all(testDir, ec);
+                return false;
+            }
+        }
+    }
+    if (!foundVehicleAudio) {
+        std::cerr << "FAIL: VehicleAudioComponent not found in deserialized scene!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: SceneSerializer saved and restored VehicleAudioComponent with 100% precision." << std::endl;
+
+    // Test Assembly Prefab Roundtrip (.axle)
+    std::filesystem::path carAsmPath = testDir / "SportsCarChassis.axle";
+    if (!Axle::AssemblySerializer::Serialize(carAsmPath, carEntity, nullptr)) {
+        std::cerr << "FAIL: AssemblySerializer failed to export SportsCarChassis assembly!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    auto asmCarScene = std::make_shared<Axle::Scene>();
+    Axle::Entity instantiatedCar = Axle::AssemblySerializer::Deserialize(carAsmPath, asmCarScene.get(), nullptr);
+    if (!instantiatedCar || !instantiatedCar.HasComponent<Axle::VehicleAudioComponent>()) {
+        std::cerr << "FAIL: AssemblySerializer failed to instantiate entity with VehicleAudioComponent!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    const auto& asmVac = instantiatedCar.GetComponent<Axle::VehicleAudioComponent>();
+    if (asmVac.EnginePowerClipPath != wavPath.string() ||
+        std::abs(asmVac.MaxEnginePitch - 2.65f) > 0.01f ||
+        std::abs(asmVac.CollisionDecelThreshold - 22.0f) > 0.01f) {
+        std::cerr << "FAIL: AssemblySerializer instantiated VehicleAudioComponent parameters mismatch!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: AssemblySerializer roundtrip preserved VehicleAudioComponent properties." << std::endl;
+
+    // 11. Subsystem Shutdown
+    std::cout << "[31.11] Verifying AudioEngine shutdown..." << std::endl;
     Axle::AudioEngine::Shutdown();
     if (Axle::AudioEngine::IsInitialized()) {
         std::cerr << "FAIL: AudioEngine still reports initialized after Shutdown()!" << std::endl;

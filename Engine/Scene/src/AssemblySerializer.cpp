@@ -275,6 +275,32 @@ namespace Axle {
                 fout << "      OuterGain: " << asc.OuterGain << "\n";
                 fout << "      DopplerFactor: " << asc.DopplerFactor << "\n";
             }
+
+            // VehicleAudioComponent
+            if (entity.HasComponent<VehicleAudioComponent>()) {
+                auto& vac = entity.GetComponent<VehicleAudioComponent>();
+                fout << "    VehicleAudioComponent:\n";
+                fout << "      Enabled: " << (vac.Enabled ? "true" : "false") << "\n";
+                fout << "      EnginePowerClipPath: " << vac.EnginePowerClipPath << "\n";
+                fout << "      EngineCoastClipPath: " << vac.EngineCoastClipPath << "\n";
+                fout << "      MinEnginePitch: " << vac.MinEnginePitch << "\n";
+                fout << "      MaxEnginePitch: " << vac.MaxEnginePitch << "\n";
+                fout << "      EngineMasterVolume: " << vac.EngineMasterVolume << "\n";
+                fout << "      ThrottleSmoothing: " << vac.ThrottleSmoothing << "\n";
+                fout << "      TireSquealClipPath: " << vac.TireSquealClipPath << "\n";
+                fout << "      SlipThreshold: " << vac.SlipThreshold << "\n";
+                fout << "      TireSquealMasterVolume: " << vac.TireSquealMasterVolume << "\n";
+                fout << "      TireSquealFadeSpeed: " << vac.TireSquealFadeSpeed << "\n";
+                fout << "      SuspensionThudClipPath: " << vac.SuspensionThudClipPath << "\n";
+                fout << "      SuspensionThudThreshold: " << vac.SuspensionThudThreshold << "\n";
+                fout << "      SuspensionMasterVolume: " << vac.SuspensionMasterVolume << "\n";
+                fout << "      CollisionImpactClipPath: " << vac.CollisionImpactClipPath << "\n";
+                fout << "      CollisionDecelThreshold: " << vac.CollisionDecelThreshold << "\n";
+                fout << "      CollisionMasterVolume: " << vac.CollisionMasterVolume << "\n";
+                fout << "      Spatialized: " << (vac.Spatialized ? "true" : "false") << "\n";
+                fout << "      MinDistance: " << vac.MinDistance << "\n";
+                fout << "      MaxDistance: " << vac.MaxDistance << "\n";
+            }
         }
 
         fout.close();
@@ -317,6 +343,9 @@ namespace Axle {
         bool HasAudioSource = false;
         AudioSourceComponent AudioSource;
 
+        bool HasVehicleAudio = false;
+        VehicleAudioComponent VehicleAudio;
+
         bool HasHierarchy = false;
         u64 ParentOldUUID = 0;
         std::vector<u64> ChildrenOldUUIDs;
@@ -334,6 +363,7 @@ namespace Axle {
         Camera,
         AudioListener,
         AudioSource,
+        VehicleAudio,
         Hierarchy,
         HierarchyChildren
     };
@@ -386,6 +416,7 @@ namespace Axle {
             if (trimmed == "CameraComponent:") { currentSection = AsmSection::Camera; current.HasCamera = true; continue; }
             if (trimmed == "AudioListenerComponent:") { currentSection = AsmSection::AudioListener; current.HasAudioListener = true; continue; }
             if (trimmed == "AudioSourceComponent:") { currentSection = AsmSection::AudioSource; current.HasAudioSource = true; continue; }
+            if (trimmed == "VehicleAudioComponent:") { currentSection = AsmSection::VehicleAudio; current.HasVehicleAudio = true; continue; }
             if (trimmed == "HierarchyComponent:") { currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
 
             switch (currentSection) {
@@ -584,6 +615,50 @@ namespace Axle {
                     }
                     break;
                 }
+                case AsmSection::VehicleAudio: {
+                    if (trimmed.rfind("Enabled:", 0) == 0) {
+                        current.VehicleAudio.Enabled = (Trim(trimmed.substr(8)) == "true");
+                    } else if (trimmed.rfind("EnginePowerClipPath:", 0) == 0) {
+                        current.VehicleAudio.EnginePowerClipPath = Trim(trimmed.substr(20));
+                    } else if (trimmed.rfind("EngineCoastClipPath:", 0) == 0) {
+                        current.VehicleAudio.EngineCoastClipPath = Trim(trimmed.substr(20));
+                    } else if (trimmed.rfind("MinEnginePitch:", 0) == 0) {
+                        try { current.VehicleAudio.MinEnginePitch = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
+                    } else if (trimmed.rfind("MaxEnginePitch:", 0) == 0) {
+                        try { current.VehicleAudio.MaxEnginePitch = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
+                    } else if (trimmed.rfind("EngineMasterVolume:", 0) == 0) {
+                        try { current.VehicleAudio.EngineMasterVolume = std::stof(Trim(trimmed.substr(19))); } catch (...) {}
+                    } else if (trimmed.rfind("ThrottleSmoothing:", 0) == 0) {
+                        try { current.VehicleAudio.ThrottleSmoothing = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
+                    } else if (trimmed.rfind("TireSquealClipPath:", 0) == 0) {
+                        current.VehicleAudio.TireSquealClipPath = Trim(trimmed.substr(19));
+                    } else if (trimmed.rfind("SlipThreshold:", 0) == 0) {
+                        try { current.VehicleAudio.SlipThreshold = std::stof(Trim(trimmed.substr(14))); } catch (...) {}
+                    } else if (trimmed.rfind("TireSquealMasterVolume:", 0) == 0) {
+                        try { current.VehicleAudio.TireSquealMasterVolume = std::stof(Trim(trimmed.substr(23))); } catch (...) {}
+                    } else if (trimmed.rfind("TireSquealFadeSpeed:", 0) == 0) {
+                        try { current.VehicleAudio.TireSquealFadeSpeed = std::stof(Trim(trimmed.substr(20))); } catch (...) {}
+                    } else if (trimmed.rfind("SuspensionThudClipPath:", 0) == 0) {
+                        current.VehicleAudio.SuspensionThudClipPath = Trim(trimmed.substr(23));
+                    } else if (trimmed.rfind("SuspensionThudThreshold:", 0) == 0) {
+                        try { current.VehicleAudio.SuspensionThudThreshold = std::stof(Trim(trimmed.substr(24))); } catch (...) {}
+                    } else if (trimmed.rfind("SuspensionMasterVolume:", 0) == 0) {
+                        try { current.VehicleAudio.SuspensionMasterVolume = std::stof(Trim(trimmed.substr(23))); } catch (...) {}
+                    } else if (trimmed.rfind("CollisionImpactClipPath:", 0) == 0) {
+                        current.VehicleAudio.CollisionImpactClipPath = Trim(trimmed.substr(24));
+                    } else if (trimmed.rfind("CollisionDecelThreshold:", 0) == 0) {
+                        try { current.VehicleAudio.CollisionDecelThreshold = std::stof(Trim(trimmed.substr(24))); } catch (...) {}
+                    } else if (trimmed.rfind("CollisionMasterVolume:", 0) == 0) {
+                        try { current.VehicleAudio.CollisionMasterVolume = std::stof(Trim(trimmed.substr(22))); } catch (...) {}
+                    } else if (trimmed.rfind("Spatialized:", 0) == 0) {
+                        current.VehicleAudio.Spatialized = (Trim(trimmed.substr(12)) == "true");
+                    } else if (trimmed.rfind("MinDistance:", 0) == 0) {
+                        try { current.VehicleAudio.MinDistance = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
+                    } else if (trimmed.rfind("MaxDistance:", 0) == 0) {
+                        try { current.VehicleAudio.MaxDistance = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
+                    }
+                    break;
+                }
                 case AsmSection::Hierarchy: {
                     if (trimmed.rfind("Parent:", 0) == 0) {
                         try {
@@ -756,6 +831,11 @@ namespace Axle {
             // AudioSourceComponent
             if (raw.HasAudioSource) {
                 entity.AddComponent<AudioSourceComponent>(raw.AudioSource);
+            }
+
+            // VehicleAudioComponent
+            if (raw.HasVehicleAudio) {
+                entity.AddComponent<VehicleAudioComponent>(raw.VehicleAudio);
             }
         }
 

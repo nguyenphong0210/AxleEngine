@@ -1,5 +1,6 @@
 add_library(AxleVehicle STATIC
     src/Vehicle.cpp
+    src/VehicleAudio.cpp
 )
 add_library(Axle::Vehicle ALIAS AxleVehicle)
 
@@ -13,5 +14,6 @@ target_link_libraries(AxleVehicle
         Axle::Core
         Axle::Physics
         Axle::Renderer
+        Axle::Audio
         Jolt
 )

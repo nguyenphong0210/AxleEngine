@@ -168,6 +168,32 @@ namespace Axle {
             dstAsc.DopplerFactor = srcAsc.DopplerFactor;
         }
 
+        // Copy VehicleAudioComponent
+        if (entity.HasComponent<VehicleAudioComponent>()) {
+            const auto& srcVac = entity.GetComponent<VehicleAudioComponent>();
+            auto& dstVac = newEntity.AddComponent<VehicleAudioComponent>();
+            dstVac.Enabled = srcVac.Enabled;
+            dstVac.EnginePowerClipPath = srcVac.EnginePowerClipPath;
+            dstVac.EngineCoastClipPath = srcVac.EngineCoastClipPath;
+            dstVac.MinEnginePitch = srcVac.MinEnginePitch;
+            dstVac.MaxEnginePitch = srcVac.MaxEnginePitch;
+            dstVac.EngineMasterVolume = srcVac.EngineMasterVolume;
+            dstVac.ThrottleSmoothing = srcVac.ThrottleSmoothing;
+            dstVac.TireSquealClipPath = srcVac.TireSquealClipPath;
+            dstVac.SlipThreshold = srcVac.SlipThreshold;
+            dstVac.TireSquealMasterVolume = srcVac.TireSquealMasterVolume;
+            dstVac.TireSquealFadeSpeed = srcVac.TireSquealFadeSpeed;
+            dstVac.SuspensionThudClipPath = srcVac.SuspensionThudClipPath;
+            dstVac.SuspensionThudThreshold = srcVac.SuspensionThudThreshold;
+            dstVac.SuspensionMasterVolume = srcVac.SuspensionMasterVolume;
+            dstVac.CollisionImpactClipPath = srcVac.CollisionImpactClipPath;
+            dstVac.CollisionDecelThreshold = srcVac.CollisionDecelThreshold;
+            dstVac.CollisionMasterVolume = srcVac.CollisionMasterVolume;
+            dstVac.Spatialized = srcVac.Spatialized;
+            dstVac.MinDistance = srcVac.MinDistance;
+            dstVac.MaxDistance = srcVac.MaxDistance;
+        }
+
         // Copy CollisionShape3D and create new body in PhysicsScene
         if (entity.HasComponent<CollisionShape3D>()) {
             newEntity.AddComponent<CollisionShape3D>(entity.GetComponent<CollisionShape3D>());
@@ -749,6 +775,20 @@ namespace Axle {
                 }
             }
         }
+
+        // 4. Vehicle Audio Synthesizer Initialization
+        auto vehicleAudioView = m_Registry.view<VehicleAudioComponent>();
+        for (auto entityID : vehicleAudioView) {
+            auto& vac = vehicleAudioView.get<VehicleAudioComponent>(entityID);
+            float minRPM = 1000.0f;
+            float maxRPM = 7000.0f;
+            if (m_Registry.all_of<VehicleComponent>(entityID)) {
+                const auto& vc = m_Registry.get<VehicleComponent>(entityID);
+                minRPM = vc.MinRPM;
+                maxRPM = vc.MaxRPM;
+            }
+            vac.InitRuntime(minRPM, maxRPM);
+        }
     }
 
     void Scene::OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene) {
@@ -845,6 +885,14 @@ namespace Axle {
                     wc.LongitudinalSlip = wData.LongitudinalSlip;
                 }
             }
+
+            // Synchronize vehicle audio acoustics
+            if (chassisEntity.HasComponent<VehicleAudioComponent>()) {
+                auto& vac = chassisEntity.GetComponent<VehicleAudioComponent>();
+                if (vac.Enabled && vac.RuntimeAudio) {
+                    vac.RuntimeAudio->Update(ts, telemetry, vc.Throttle, vc.Brake, vc.Handbrake, chassisTC.Translation, telemetry.ForwardVector);
+                }
+            }
         }
 
         // 3. Audio Listener & 3D Spatial Audio Synchronization
@@ -924,6 +972,13 @@ namespace Axle {
             auto& asc = audioSourceView.get<AudioSourceComponent>(entityID);
             asc.Stop();
             asc.Source = nullptr;
+        }
+
+        // Stop all vehicle audio synthesizers on simulation exit
+        auto vehicleAudioView = m_Registry.view<VehicleAudioComponent>();
+        for (auto entityID : vehicleAudioView) {
+            auto& vac = vehicleAudioView.get<VehicleAudioComponent>(entityID);
+            vac.StopRuntime();
         }
 
         auto view = m_Registry.view<NativeScriptComponent>();
@@ -1101,6 +1156,32 @@ namespace Axle {
                 dstAsc.OuterAngle = srcAsc.OuterAngle;
                 dstAsc.OuterGain = srcAsc.OuterGain;
                 dstAsc.DopplerFactor = srcAsc.DopplerFactor;
+            }
+
+            // VehicleAudioComponent
+            if (srcEntity.HasComponent<VehicleAudioComponent>()) {
+                const auto& srcVac = srcEntity.GetComponent<VehicleAudioComponent>();
+                auto& dstVac = dstEntity.AddComponent<VehicleAudioComponent>();
+                dstVac.Enabled = srcVac.Enabled;
+                dstVac.EnginePowerClipPath = srcVac.EnginePowerClipPath;
+                dstVac.EngineCoastClipPath = srcVac.EngineCoastClipPath;
+                dstVac.MinEnginePitch = srcVac.MinEnginePitch;
+                dstVac.MaxEnginePitch = srcVac.MaxEnginePitch;
+                dstVac.EngineMasterVolume = srcVac.EngineMasterVolume;
+                dstVac.ThrottleSmoothing = srcVac.ThrottleSmoothing;
+                dstVac.TireSquealClipPath = srcVac.TireSquealClipPath;
+                dstVac.SlipThreshold = srcVac.SlipThreshold;
+                dstVac.TireSquealMasterVolume = srcVac.TireSquealMasterVolume;
+                dstVac.TireSquealFadeSpeed = srcVac.TireSquealFadeSpeed;
+                dstVac.SuspensionThudClipPath = srcVac.SuspensionThudClipPath;
+                dstVac.SuspensionThudThreshold = srcVac.SuspensionThudThreshold;
+                dstVac.SuspensionMasterVolume = srcVac.SuspensionMasterVolume;
+                dstVac.CollisionImpactClipPath = srcVac.CollisionImpactClipPath;
+                dstVac.CollisionDecelThreshold = srcVac.CollisionDecelThreshold;
+                dstVac.CollisionMasterVolume = srcVac.CollisionMasterVolume;
+                dstVac.Spatialized = srcVac.Spatialized;
+                dstVac.MinDistance = srcVac.MinDistance;
+                dstVac.MaxDistance = srcVac.MaxDistance;
             }
         }
 

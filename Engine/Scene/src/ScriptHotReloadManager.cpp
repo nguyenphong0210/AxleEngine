@@ -223,11 +223,15 @@ namespace Axle {
         }
 
 #ifdef _WIN32
-        if (!m_ModuleHandle || !m_WindowContext) return;
+        if (!m_ModuleHandle) return;
+        const auto* inputCtx = Input::GetInputContext();
+        void* ctxToSend = (inputCtx && inputCtx->IsKeyPressedFn) ? (void*)inputCtx : m_WindowContext;
+        if (!ctxToSend) return;
+
         using SetInputFn = void(*)(void*);
         auto fnSetInput = (SetInputFn)GetProcAddress((HMODULE)m_ModuleHandle, "Axle_SetInputContext");
         if (fnSetInput) {
-            fnSetInput(m_WindowContext);
+            fnSetInput(ctxToSend);
         }
 #endif
     }

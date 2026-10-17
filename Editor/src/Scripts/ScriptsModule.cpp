@@ -10,10 +10,16 @@ struct GLFWwindow;
 
 extern "C" {
 
-    AXLE_SCRIPT_API void Axle_SetInputContext(void* window) {
-        if (window) {
-            Axle::Input::SetContext(static_cast<GLFWwindow*>(window));
-            AXLE_INFO("AxleScripts.dll: Input context synchronized (window: {0})", window);
+    AXLE_SCRIPT_API void Axle_SetInputContext(void* context) {
+        if (context) {
+            const auto* inputCtx = static_cast<const Axle::InputContext*>(context);
+            if (inputCtx->IsKeyPressedFn != nullptr) {
+                Axle::Input::SetInputContext(inputCtx);
+                AXLE_INFO("AxleScripts.dll: Input context synchronized (delegated via window: {0})", (void*)inputCtx->Window);
+            } else {
+                Axle::Input::SetContext(static_cast<GLFWwindow*>(context));
+                AXLE_INFO("AxleScripts.dll: Input context synchronized (window: {0})", context);
+            }
         }
     }
 

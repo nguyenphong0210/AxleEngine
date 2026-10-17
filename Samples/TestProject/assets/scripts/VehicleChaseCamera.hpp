@@ -80,7 +80,7 @@ public:
         if (runtimeVehicle) {
             targetPos = runtimeVehicle->GetPosition();
             targetFwd = runtimeVehicle->GetForwardVector();
-            targetSpeed = runtimeVehicle->GetSpeedKmh() / 3.6f;
+            targetSpeed = runtimeVehicle->GetTelemetry().SpeedKmh / 3.6f;
         } else if (target.HasComponent<Axle::TransformComponent>()) {
             const auto& tc = target.GetComponent<Axle::TransformComponent>();
             targetPos = tc.Translation;

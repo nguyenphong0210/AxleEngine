@@ -255,3 +255,22 @@ Entities:
       Exposure: 1.000000
       ToneMappingMode: 0
       Gamma: 2.200000
+  - Entity: 12485920194857201942
+    TagComponent:
+      Tag: Main Camera
+    TransformComponent:
+      Translation: [ 0.000000 , 6.000000 , 18.000000 ]
+      Rotation: [ 0.994522 , -0.104528 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    CameraComponent:
+      Primary: true
+      FOV: 45.000000
+      NearClip: 0.100000
+      FarClip: 1000.000000
+    NativeScriptComponent:
+      ScriptName: VehicleChaseCamera
+

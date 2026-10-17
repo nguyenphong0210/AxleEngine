@@ -757,7 +757,7 @@ void EditorLayer::OnScenePlay() {
     m_SceneState = SceneState::Play;
     Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(Axle::Application::Get().GetWindow().GetNativeWindow()));
     m_Scene->OnRuntimeStart(m_PhysicsScene.get());
-    m_ChaseCamera = true;
+    m_UseEditorCameraInPlay = false;
     AXLE_INFO("Simulation started (Play Mode). Ephemeral Runtime Scene cloned from pristine Editor Scene.");
 }
 
@@ -893,6 +893,14 @@ void EditorLayer::NewScene() {
     auto skyEntity = m_Scene->CreateEntity("Skybox Environment");
     skyEntity.AddComponent<Axle::SkyboxComponent>();
 
+    // Create default Main Camera (Unity / Unreal style default scene)
+    auto cameraEntity = m_Scene->CreateEntity("Main Camera");
+    auto& camTc = cameraEntity.AddComponent<Axle::TransformComponent>();
+    camTc.Translation = glm::vec3(0.0f, 6.0f, 18.0f);
+    camTc.Rotation = glm::quat(glm::vec3(glm::radians(-12.0f), 0.0f, 0.0f));
+    cameraEntity.AddComponent<Axle::CameraComponent>(45.0f, 0.1f, 1000.0f, true);
+    cameraEntity.AddComponent<Axle::NativeScriptComponent>("VehicleChaseCamera");
+
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
     m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
@@ -975,6 +983,17 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
                     break;
                 }
             }
+        }
+
+        // Ensure loaded scene has a Primary Camera
+        if (!m_Scene->GetPrimaryCameraEntity()) {
+            auto camEntity = m_Scene->CreateEntity("Main Camera");
+            auto& camTc = camEntity.AddComponent<Axle::TransformComponent>();
+            camTc.Translation = glm::vec3(0.0f, 6.0f, 18.0f);
+            camTc.Rotation = glm::quat(glm::vec3(glm::radians(-12.0f), 0.0f, 0.0f));
+            camEntity.AddComponent<Axle::CameraComponent>(45.0f, 0.1f, 1000.0f, true);
+            camEntity.AddComponent<Axle::NativeScriptComponent>("VehicleChaseCamera");
+            AXLE_INFO("Editor: Auto-instantiated 'Main Camera' with VehicleChaseCamera for loaded scene");
         }
 
         // Cache initial dynamic states for ResetSimulation()
@@ -1194,7 +1213,7 @@ void EditorLayer::OnSceneStop() {
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_SceneHierarchyPanel.SetSelectedEntity({});
 
-    m_ChaseCamera = false;
+    m_UseEditorCameraInPlay = false;
     AXLE_INFO("Simulation stopped (Edit Mode). Restored pristine Editor Scene with zero physics drift.");
 }
 
@@ -1224,8 +1243,6 @@ void EditorLayer::ResetSimulation() {
             }
         }
     }
-    m_OrbitYaw = 180.0f;
-    m_OrbitPitch = 15.0f;
 }
 
 void EditorLayer::OnUpdate(Axle::Timestep ts) {
@@ -1373,7 +1390,18 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
 
     if (Axle::Input::IsKeyPressed(Axle::KeyCode::C)) {
         if (!m_CKeyWasPressed) {
-            m_ChaseCamera = !m_ChaseCamera;
+            m_UseEditorCameraInPlay = !m_UseEditorCameraInPlay;
+            if (m_SceneState == SceneState::Play && m_UseEditorCameraInPlay && m_Scene) {
+                auto camEntity = m_Scene->GetPrimaryCameraEntity();
+                if (camEntity && camEntity.HasComponent<Axle::TransformComponent>()) {
+                    glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
+                    glm::vec3 camPos = glm::vec3(worldMat[3]);
+                    glm::quat camRot = glm::quat_cast(worldMat);
+                    glm::vec3 camEuler = glm::degrees(glm::eulerAngles(camRot));
+                    m_CameraController->SetPosition(camPos);
+                    m_CameraController->SetRotation(camEuler);
+                }
+            }
             m_CKeyWasPressed = true;
         }
     } else {
@@ -1406,118 +1434,10 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     // C++ Native Scripting Runtime Execution & Vehicle Simulation (Phase 20.3)
     if (m_SceneState == SceneState::Play) {
         m_Scene->OnUpdateRuntime(ts, m_PhysicsScene.get());
-
-        // Viewport Direct Driving Input (Guarantees WASD/Arrow driving responsiveness in Play Mode)
-        if (!ImGui::GetIO().WantTextInput) {
-            float throttle = 0.0f;
-            float steer = 0.0f;
-            float brake = 0.0f;
-            bool handbrake = false;
-
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::W) || Axle::Input::IsKeyPressed(Axle::KeyCode::Up)) throttle += 1.0f;
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::S) || Axle::Input::IsKeyPressed(Axle::KeyCode::Down)) throttle -= 1.0f;
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::A) || Axle::Input::IsKeyPressed(Axle::KeyCode::Left)) steer -= 1.0f;
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::D) || Axle::Input::IsKeyPressed(Axle::KeyCode::Right)) steer += 1.0f;
-            if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) handbrake = true;
-
-            const bool hasKey = (throttle != 0.0f || steer != 0.0f || brake != 0.0f || handbrake);
-            if (hasKey) {
-                auto vehicleView = m_Scene->GetRegistry().view<Axle::VehicleComponent>();
-                for (auto entityID : vehicleView) {
-                    auto& vc = vehicleView.get<Axle::VehicleComponent>(entityID);
-                    vc.SetDriverInput(throttle, steer, brake, handbrake);
-                    if (auto* pv = m_Scene->GetRuntimeVehicle(Axle::Entity{ entityID, m_Scene.get() })) {
-                        pv->SetDriverInput(throttle, steer, brake, handbrake ? 1.0f : 0.0f);
-                    }
-                    break;
-                }
-            }
-        }
     }
 
-    // Camera Update (Decoupled dynamic binding to active player vehicle or selected target entity)
-    Axle::Entity chaseTarget;
-    if (m_SceneState == SceneState::Play && m_ChaseCamera && m_Scene) {
-        auto selected = m_SceneHierarchyPanel.GetSelectedEntity();
-        if (selected && selected.HasComponent<Axle::TransformComponent>()) {
-            chaseTarget = selected;
-        } else {
-            auto vehicleView = m_Scene->GetRegistry().view<Axle::VehicleComponent>();
-            for (auto entityID : vehicleView) {
-                chaseTarget = Axle::Entity{ entityID, m_Scene.get() };
-                break;
-            }
-        }
-    }
-
-    if (chaseTarget && m_ChaseCamera) {
-        // Dynamic Entity Chase Camera
-        const auto [mouseX, mouseY] = Axle::Input::GetMousePosition();
-        const glm::vec2 currentMousePos{ mouseX, mouseY };
-
-        if (m_FirstMouseUpdate) {
-            m_LastMousePos = currentMousePos;
-            m_FirstMouseUpdate = false;
-        }
-
-        const glm::vec2 mouseDelta = currentMousePos - m_LastMousePos;
-        m_LastMousePos = currentMousePos;
-
-        const bool isDragging = (m_ViewportHovered || m_ViewportFocused) 
-                             && (Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)
-                              || Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonLeft));
-
-        if (isDragging) {
-            m_OrbitYaw -= mouseDelta.x * 0.25f;
-            m_OrbitPitch -= mouseDelta.y * 0.25f;
-            m_OrbitPitch = std::clamp(m_OrbitPitch, -45.0f, 75.0f);
-        }
-
-        glm::vec3 targetPos{ 0.0f };
-        glm::vec3 targetFwd{ 0.0f, 0.0f, 1.0f };
-        Axle::f32 targetSpeed = 0.0f;
-
-        auto* runtimeVehicle = m_Scene->GetRuntimeVehicle(chaseTarget);
-        if (runtimeVehicle) {
-            targetPos = runtimeVehicle->GetPosition();
-            targetFwd = runtimeVehicle->GetForwardVector();
-            if (m_PhysicsScene) {
-                targetSpeed = glm::length(m_PhysicsScene->GetLinearVelocity(runtimeVehicle->GetChassisBodyID()));
-            }
-        } else if (chaseTarget.HasComponent<Axle::TransformComponent>()) {
-            const auto& tc = chaseTarget.GetComponent<Axle::TransformComponent>();
-            targetPos = tc.Translation;
-            targetFwd = tc.Rotation * glm::vec3(0.0f, 0.0f, 1.0f);
-        }
-
-        if (!isDragging && targetSpeed > 0.5f) {
-            const Axle::f32 targetYaw = glm::degrees(std::atan2(-targetFwd.x, -targetFwd.z));
-            Axle::f32 diff = targetYaw - m_OrbitYaw;
-            while (diff < -180.0f) diff += 360.0f;
-            while (diff > 180.0f) diff -= 360.0f;
-            m_OrbitYaw += diff * std::min(1.0f, ts.GetSeconds() * 3.5f);
-        }
-
-        const Axle::f32 radYaw = glm::radians(m_OrbitYaw);
-        const Axle::f32 radPitch = glm::radians(m_OrbitPitch);
-        constexpr Axle::f32 dist = 7.5f;
-
-        const glm::vec3 lookTarget = targetPos + glm::vec3(0.0f, 0.8f, 0.0f);
-
-        glm::vec3 camPos;
-        camPos.x = lookTarget.x + std::sin(radYaw) * std::cos(radPitch) * dist;
-        camPos.y = std::max(0.4f, lookTarget.y + std::sin(radPitch) * dist + 1.5f);
-        camPos.z = lookTarget.z + std::cos(radYaw) * std::cos(radPitch) * dist;
-
-        const glm::vec3 lookDir = glm::normalize(lookTarget - camPos);
-
-        const Axle::f32 pitch = glm::degrees(std::asin(std::clamp(lookDir.y, -0.999f, 0.999f)));
-        const Axle::f32 yaw = glm::degrees(std::atan2(-lookDir.x, -lookDir.z));
-
-        m_CameraController->SetPosition(camPos);
-        m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
-    } else {
-        // Editor Free-Fly Camera (Active in Edit mode, Pause mode, or Free-Fly mode)
+    // Editor Free-Fly Camera (Active in Edit mode, Pause mode, or Eject Free-Fly mode during Play)
+    if (m_SceneState != SceneState::Play || m_UseEditorCameraInPlay) {
         if ((m_ViewportHovered || m_ViewportFocused) && !ImGui::GetIO().WantTextInput) {
             const bool isManipulatingGizmo = (m_SceneState == SceneState::Edit) && ImGuizmo::IsUsing();
             if (!isManipulatingGizmo) {
@@ -1537,6 +1457,32 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
 
     // Note: Vehicle chassis and wheel transforms are automatically synchronized inside m_Scene->OnUpdateRuntime() (Phase 20.3 Stage 2)
 
+    // ----------------------------------------------------
+    // Active Camera Selection: Game View (Primary Camera) vs Editor Camera (Phase 20.4)
+    // ----------------------------------------------------
+    Axle::PerspectiveCamera activeCamera = m_CameraController->GetCamera();
+    bool usingEditorCamera = (m_SceneState != SceneState::Play || m_UseEditorCameraInPlay);
+    m_ActiveCameraIsSceneCamera = false;
+
+    if (!usingEditorCamera && m_Scene) {
+        Axle::Entity camEntity = m_Scene->GetPrimaryCameraEntity();
+        if (camEntity && camEntity.HasComponent<Axle::CameraComponent>()) {
+            m_ActiveCameraIsSceneCamera = true;
+            const auto& camComp = camEntity.GetComponent<Axle::CameraComponent>();
+            glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
+            glm::vec3 camPos = glm::vec3(worldMat[3]);
+            glm::quat camRot = glm::quat_cast(worldMat);
+            glm::vec3 camEuler = glm::degrees(glm::eulerAngles(camRot));
+
+            const float aspect = (m_ViewportHeight > 0) ? (static_cast<float>(m_ViewportWidth) / static_cast<float>(m_ViewportHeight)) : (16.0f / 9.0f);
+            activeCamera.SetProjection(camComp.FOV, aspect, camComp.NearClip, camComp.FarClip);
+            activeCamera.SetPosition(camPos);
+            activeCamera.SetRotation(camEuler);
+        } else {
+            usingEditorCamera = true;
+        }
+    }
+
     // Query active Directional Sun Light if present in scene
     Axle::DirectionalLightComponent activeSunLight;
     bool hasSunLight = m_Scene && m_Scene->GetPrimaryDirectionalLight(activeSunLight);
@@ -1553,7 +1499,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
             focusCenter = pv->GetPosition();
         } else {
-            focusCenter = m_CameraController->GetCamera().GetPosition();
+            focusCenter = activeCamera.GetPosition();
         }
         m_LightSpaceMatrix = m_ShadowMap->CalculateLightSpaceMatrix(m_LightDir, focusCenter);
 
@@ -1581,7 +1527,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         Axle::Texture2D::GetBlackTexture()->Bind(4);
 
         // 1. Render all ECS entities
-        m_Scene->OnUpdate(ts, m_PhysicsScene.get(), m_CameraController->GetCamera(), *m_Shader,
+        m_Scene->OnUpdate(ts, m_PhysicsScene.get(), activeCamera, *m_Shader,
                           m_LightSpaceMatrix, m_LightDir, 1);
 
         // 2. Render Atmospheric Skybox (Phase 11: Sub-step 4.1 & 4.2)
@@ -1621,16 +1567,16 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
                     m_Skybox->SetToneMapping(activeSunLight.ToneMappingMode, activeSunLight.Gamma);
                 }
 
-                m_Skybox->Render(m_CameraController->GetCamera().GetViewMatrix(),
-                                 m_CameraController->GetCamera().GetProjectionMatrix());
+                m_Skybox->Render(activeCamera.GetViewMatrix(),
+                                 activeCamera.GetProjectionMatrix());
             }
         }
 
         // 3. Render JPH::DebugRenderer physics collider wireframes when enabled
         if (m_ShowPhysicsDebug && m_PhysicsDebugRenderer && m_PhysicsScene) {
-            m_PhysicsDebugRenderer->Begin(m_CameraController->GetCamera().GetPosition());
+            m_PhysicsDebugRenderer->Begin(activeCamera.GetPosition());
             m_PhysicsScene->DrawDebug(*m_PhysicsDebugRenderer, m_PhysicsDrawSettings);
-            m_PhysicsDebugRenderer->End(m_CameraController->GetCamera().GetViewProjectionMatrix());
+            m_PhysicsDebugRenderer->End(activeCamera.GetViewProjectionMatrix());
         }
 
         Axle::Texture2D::GetWhiteTexture()->Unbind(0);
@@ -1876,9 +1822,20 @@ void EditorLayer::RenderToolbar() {
 
         // --- 7. CAMERA MODE TOGGLE ---
         ImGui::SameLine();
-        const char* camBtnText = m_ChaseCamera ? "Cam: Chase [C]" : "Cam: Free-Fly [C]";
+        const char* camBtnText = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay) ? "Cam: Game [C]" : "Cam: Free-Fly [C]";
         if (ImGui::Button(camBtnText, ImVec2(125.0f, 26.0f))) {
-            m_ChaseCamera = !m_ChaseCamera;
+            m_UseEditorCameraInPlay = !m_UseEditorCameraInPlay;
+            if (m_SceneState == SceneState::Play && m_UseEditorCameraInPlay && m_Scene) {
+                auto camEntity = m_Scene->GetPrimaryCameraEntity();
+                if (camEntity && camEntity.HasComponent<Axle::TransformComponent>()) {
+                    glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
+                    glm::vec3 camPos = glm::vec3(worldMat[3]);
+                    glm::quat camRot = glm::quat_cast(worldMat);
+                    glm::vec3 camEuler = glm::degrees(glm::eulerAngles(camRot));
+                    m_CameraController->SetPosition(camPos);
+                    m_CameraController->SetRotation(camEuler);
+                }
+            }
         }
 
         // --- 8. WIREFRAME TOGGLE ---
@@ -2071,11 +2028,23 @@ void EditorLayer::OnImGuiRender() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Camera")) {
-            if (ImGui::MenuItem("Vehicle Chase Camera", "C", m_ChaseCamera)) {
-                m_ChaseCamera = true;
+            bool isGameCam = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay);
+            if (ImGui::MenuItem("Game View (Primary Camera)", "C", isGameCam)) {
+                m_UseEditorCameraInPlay = false;
             }
-            if (ImGui::MenuItem("Free-Fly Camera", "C", !m_ChaseCamera)) {
-                m_ChaseCamera = false;
+            if (ImGui::MenuItem("Eject Free-Fly Camera", "C", !isGameCam)) {
+                m_UseEditorCameraInPlay = true;
+                if (m_SceneState == SceneState::Play && m_Scene) {
+                    auto camEntity = m_Scene->GetPrimaryCameraEntity();
+                    if (camEntity && camEntity.HasComponent<Axle::TransformComponent>()) {
+                        glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
+                        glm::vec3 camPos = glm::vec3(worldMat[3]);
+                        glm::quat camRot = glm::quat_cast(worldMat);
+                        glm::vec3 camEuler = glm::degrees(glm::eulerAngles(camRot));
+                        m_CameraController->SetPosition(camPos);
+                        m_CameraController->SetRotation(camEuler);
+                    }
+                }
             }
             ImGui::EndMenu();
         }
@@ -2162,6 +2131,37 @@ void EditorLayer::OnImGuiRender() {
     ImVec2 viewportMin = ImGui::GetItemRectMin();
     ImVec2 viewportMax = ImGui::GetItemRectMax();
     ImVec2 viewportBounds = ImGui::GetItemRectSize();
+
+    // Viewport Camera Mode Overlay Badge (Phase 20.4)
+    if (m_SceneState == SceneState::Play) {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImVec2 badgePos = ImVec2(viewportMin.x + 14.0f, viewportMin.y + 14.0f);
+
+        const char* badgeText = nullptr;
+        ImU32 badgeBorder = IM_COL32(46, 204, 113, 255);
+
+        if (!m_UseEditorCameraInPlay && m_ActiveCameraIsSceneCamera) {
+            badgeText = "[ GAME VIEW: PRIMARY CAMERA ] - Press 'C' to Eject Free-Fly";
+            badgeBorder = IM_COL32(46, 204, 113, 255); // Green
+        } else if (m_UseEditorCameraInPlay) {
+            badgeText = "[ EJECT FREE-FLY CAMERA ] - Press 'C' to Return to Game View";
+            badgeBorder = IM_COL32(241, 196, 15, 255); // Yellow
+        } else {
+            badgeText = "[ NO PRIMARY CAMERA IN SCENE ] - Using Editor Camera (Press 'C')";
+            badgeBorder = IM_COL32(231, 76, 60, 255);  // Red
+        }
+
+        if (badgeText) {
+            ImVec2 textSize = ImGui::CalcTextSize(badgeText);
+            ImVec2 padding(10.0f, 6.0f);
+            ImVec2 boxMin = badgePos;
+            ImVec2 boxMax = ImVec2(badgePos.x + textSize.x + padding.x * 2.0f, badgePos.y + textSize.y + padding.y * 2.0f);
+
+            drawList->AddRectFilled(boxMin, boxMax, IM_COL32(15, 18, 24, 210), 4.0f);
+            drawList->AddRect(boxMin, boxMax, badgeBorder, 4.0f, 0, 1.5f);
+            drawList->AddText(ImVec2(boxMin.x + padding.x, boxMin.y + padding.y), IM_COL32(240, 240, 240, 255), badgeText);
+        }
+    }
 
     // Drag & Drop Target: Drag 3D models (.obj) from Content Browser into Viewport to instantiate
     if (ImGui::BeginDragDropTarget()) {
@@ -2666,7 +2666,7 @@ void EditorLayer::OnImGuiRender() {
             .DrawCenterOfMass = m_PhysicsDrawSettings.DrawCenterOfMass,
             .DebugLineCount = m_PhysicsDebugRenderer ? m_PhysicsDebugRenderer->GetLineCount() : 0,
             .HasVehicle = false,
-            .IsChaseCamera = m_ChaseCamera
+            .IsChaseCamera = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay)
         };
 
         if (m_Scene) {

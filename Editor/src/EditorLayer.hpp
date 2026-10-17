@@ -120,13 +120,10 @@ private:
     float m_SnapRotation = 45.0f;
     float m_SnapScale = 0.5f;
 
-    // Chase camera (Decoupled dynamic binding to target entity)
-    bool m_ChaseCamera = false;
+    // Camera Viewport Mode (Phase 20.4: Game View vs Eject Free-Fly)
+    bool m_UseEditorCameraInPlay = false;
+    bool m_ActiveCameraIsSceneCamera = false;
     bool m_CKeyWasPressed = false;
-    Axle::f32 m_OrbitYaw = 180.0f;
-    Axle::f32 m_OrbitPitch = 15.0f;
-    glm::vec2 m_LastMousePos{ 0.0f, 0.0f };
-    bool m_FirstMouseUpdate = true;
 
     // Scene & Entities (Phase 18.2: Safe Scene State Simulation)
     std::shared_ptr<Axle::Scene> m_Scene;        // Active Scene pointer

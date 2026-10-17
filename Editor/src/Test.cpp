@@ -535,7 +535,13 @@ bool RunTest_Step6_Phase15_ArchetypePresets() {
         std::cerr << "FAIL: CameraComponent field values mismatch!" << std::endl;
         return false;
     }
-    std::cout << "  -> PASS: PointLightComponent and CameraComponent validated." << std::endl;
+
+    auto primaryCam = scene->GetPrimaryCameraEntity();
+    if (!primaryCam || primaryCam != camera) {
+        std::cerr << "FAIL: GetPrimaryCameraEntity() did not return the primary camera entity!" << std::endl;
+        return false;
+    }
+    std::cout << "  -> PASS: PointLightComponent, CameraComponent, and GetPrimaryCameraEntity validated." << std::endl;
 
     // -----------------------------------------------------------------
     // [6.2] Create Empty & Create Empty Child Hierarchy Workflow

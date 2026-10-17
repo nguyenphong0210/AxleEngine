@@ -4,6 +4,7 @@
 namespace Axle {
 
     static InputContext s_LocalContext;
+    static f32 s_MouseScrollY = 0.0f;
 
     void Input::SetContext(GLFWwindow* window) {
         s_WindowContext = window;
@@ -24,6 +25,9 @@ namespace Axle {
             double xPos, yPos;
             glfwGetCursorPos(s_LocalContext.Window, &xPos, &yPos);
             return { static_cast<f32>(xPos), static_cast<f32>(yPos) };
+        };
+        s_LocalContext.GetMouseScrollYFn = []() -> f32 {
+            return s_MouseScrollY;
         };
 
         s_SharedContext = &s_LocalContext;
@@ -78,6 +82,17 @@ namespace Axle {
 
     f32 Input::GetMouseY() {
         return GetMousePosition().second;
+    }
+
+    f32 Input::GetMouseScrollY() {
+        if (s_SharedContext && s_SharedContext->GetMouseScrollYFn) {
+            return s_SharedContext->GetMouseScrollYFn();
+        }
+        return s_MouseScrollY;
+    }
+
+    void Input::SetMouseScrollY(f32 scrollY) {
+        s_MouseScrollY = scrollY;
     }
 
 }

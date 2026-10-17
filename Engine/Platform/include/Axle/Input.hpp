@@ -11,6 +11,7 @@ namespace Axle {
         bool (*IsKeyPressedFn)(KeyCode key) = nullptr;
         bool (*IsMouseButtonPressedFn)(MouseCode button) = nullptr;
         std::pair<f32, f32> (*GetMousePositionFn)() = nullptr;
+        f32 (*GetMouseScrollYFn)() = nullptr;
     };
 
     class Input {
@@ -26,6 +27,9 @@ namespace Axle {
         static std::pair<f32, f32> GetMousePosition();
         static f32 GetMouseX();
         static f32 GetMouseY();
+
+        static f32 GetMouseScrollY();
+        static void SetMouseScrollY(f32 scrollY);
 
     private:
         inline static GLFWwindow* s_WindowContext = nullptr;

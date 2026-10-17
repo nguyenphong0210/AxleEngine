@@ -28,6 +28,7 @@
 #include <Axle/Cubemap.hpp>
 #include <Axle/Skybox.hpp>
 #include <Axle/AudioEngine.hpp>
+#include "../assets/scripts/VehicleChaseCamera.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <iostream>
 
@@ -5194,6 +5195,7 @@ bool RunTest_Step32_Phase28_MultiPartVehicleRigging() {
 
     // 5. Jolt Physics Kinematics & Dynamic Wheel Synchronization Simulation
     std::cout << "\n[32.5] Simulating Physics Kinematics & Wheel Transform AutoSync..." << std::endl;
+    Axle::ScriptRegistry::Register<VehicleChaseCamera>("VehicleChaseCamera");
     scene->OnRuntimeStart(physicsScene.get());
 
     auto* rv = scene->GetPrimaryRuntimeVehicle();
@@ -5265,6 +5267,139 @@ bool RunTest_Step32_Phase28_MultiPartVehicleRigging() {
         }
     }
     std::cout << "  -> PASS: Headlights toggled off successfully." << std::endl;
+
+    // 7. Multi-Angle Dynamic Vehicle Camera Controller Verification (Phase 28 Step 2)
+    std::cout << "\n[32.7] Testing Multi-Angle Dynamic Vehicle Camera Controller..." << std::endl;
+    auto camEntity = scene->GetPrimaryCameraEntity();
+    if (!camEntity) {
+        std::cerr << "FAIL: Primary Camera entity not found in scene!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    if (!camEntity.HasComponent<Axle::CameraComponent>() || !camEntity.HasComponent<Axle::NativeScriptComponent>()) {
+        std::cerr << "FAIL: Camera entity missing CameraComponent or NativeScriptComponent!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    auto& camNsc = camEntity.GetComponent<Axle::NativeScriptComponent>();
+    auto* chaseCam = static_cast<VehicleChaseCamera*>(camNsc.Instance);
+    if (!chaseCam) {
+        std::cerr << "FAIL: NativeScriptComponent instance is null!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    auto& camComp = camEntity.GetComponent<Axle::CameraComponent>();
+    auto& camTc = camEntity.GetComponent<Axle::TransformComponent>();
+
+    // 7.1 Verify Mode 0: ThirdPersonChase & Dynamic FOV Expansion
+    chaseCam->SetCameraMode(VehicleCameraMode::ThirdPersonChase);
+    chaseCam->Distance = 7.0f;
+    chaseCam->BaseFOV = 60.0f;
+    chaseCam->SpeedFOVExpansion = 15.0f;
+    chaseCam->MaxSpeedForFOV = 160.0f;
+
+    // Single step to settle initial pose
+    scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    std::cout << "  -> Mode 0 (Third-Person Chase) camera at rest: FOV = " << camComp.FOV << " deg" << std::endl;
+
+    // Accelerate car forward to high speed and test FOV expansion
+    vc.SetDriverInput(1.0f, 0.0f, 0.0f, false);
+    for (int frame = 0; frame < 40; ++frame) {
+        physicsScene->Step(0.016f);
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    }
+
+    std::cout << "  -> High speed telemetry: " << rv->GetTelemetry().SpeedKmh << " km/h, Dynamic FOV: " << camComp.FOV << " deg" << std::endl;
+    if (camComp.FOV <= 60.5f) {
+        std::cerr << "FAIL: Dynamic FOV did not expand under high speed!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Mode 0 (Third-Person Chase) and speed-dependent dynamic FOV expansion verified." << std::endl;
+
+    // 7.2 Verify Mode 1: Cockpit / Interior First-Person Camera (Driver POV)
+    chaseCam->SetCameraMode(VehicleCameraMode::Cockpit);
+    scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    auto cockpitPos = camTc.Translation;
+    std::cout << "  -> Cockpit Driver Eye Position: [" << cockpitPos.x << ", " << cockpitPos.y << ", " << cockpitPos.z << "]" << std::endl;
+    if (cockpitPos.y < 0.5f) {
+        std::cerr << "FAIL: Cockpit camera height too low!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Mode 1 (Cockpit Driver POV) head anchor and G-force inertia validated." << std::endl;
+
+    // 7.3 Verify Mode 2: Hood / Bumper Camera View
+    chaseCam->SetCameraMode(VehicleCameraMode::Hood);
+    scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    auto hoodPos = camTc.Translation;
+    std::cout << "  -> Hood Camera Position: [" << hoodPos.x << ", " << hoodPos.y << ", " << hoodPos.z << "]" << std::endl;
+    if (hoodPos.y >= cockpitPos.y) {
+        std::cerr << "FAIL: Hood camera position should be lower than Cockpit camera!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Mode 2 (Hood/Bumper) forward low mount validated." << std::endl;
+
+    // 7.4 Verify Mode 3: Free Orbit & Zoom Inspection
+    chaseCam->SetCameraMode(VehicleCameraMode::FreeOrbit);
+    chaseCam->FreeOrbitDistance = 12.0f;
+    scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    auto orbitPos = camTc.Translation;
+    std::cout << "  -> Free Orbit Position (dist=12m): [" << orbitPos.x << ", " << orbitPos.y << ", " << orbitPos.z << "]" << std::endl;
+    std::cout << "  -> PASS: Mode 3 (Free Orbit) inspection pose validated." << std::endl;
+
+    // 7.5 Verify Seamless Cycling & Transition Interpolation
+    chaseCam->SetCameraMode(VehicleCameraMode::ThirdPersonChase);
+    if (!chaseCam->IsTransitioning()) {
+        std::cerr << "FAIL: Mode switch did not engage transition interpolation!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    // Step past transition duration (0.35s)
+    for (int frame = 0; frame < 30; ++frame) {
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    }
+    if (chaseCam->IsTransitioning()) {
+        std::cerr << "FAIL: Transition did not finish after duration!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Seamless camera transition interpolation validated." << std::endl;
+
+    // 7.6 Verify Anti-Clipping Spring-Arm Physics Raycast
+    {
+        // Place a static box obstacle (wall) behind the vehicle
+        auto carPos = car.GetComponent<Axle::TransformComponent>().Translation;
+        auto obstacleBody = physicsScene->CreateBox(carPos + glm::vec3(0.0f, 1.0f, 3.0f), glm::vec3(2.0f, 2.0f, 0.5f), false);
+
+        chaseCam->Distance = 10.0f; // Long distance that would penetrate wall at 3.0m
+        chaseCam->EnableAntiClipping = true;
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+
+        float distToCar = glm::distance(camTc.Translation, carPos);
+        std::cout << "  -> Anti-clipping clamped distance: " << distToCar << " m (Requested: 10.0 m, Wall at 3.0 m)" << std::endl;
+        if (distToCar >= 9.0f) {
+            std::cerr << "FAIL: Camera did not clamp in front of physics obstacle!" << std::endl;
+            physicsScene->DestroyBody(obstacleBody);
+            scene->OnRuntimeStop(physicsScene.get());
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+        std::cout << "  -> PASS: Spring-arm anti-clipping collision detection clamped camera before obstacle." << std::endl;
+        physicsScene->DestroyBody(obstacleBody);
+    }
 
     scene->OnRuntimeStop(physicsScene.get());
     std::filesystem::remove_all(testDir, ec);

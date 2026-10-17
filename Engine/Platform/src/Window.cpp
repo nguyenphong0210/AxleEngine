@@ -142,6 +142,7 @@ namespace Axle {
 
         // Mouse scroll callback
         glfwSetScrollCallback(m_Window, [](GLFWwindow* window, double xOffset, double yOffset) {
+            Input::SetMouseScrollY(static_cast<f32>(yOffset));
             auto* data = static_cast<WindowData*>(glfwGetWindowUserPointer(window));
             if (data->OnMouseScrolled) {
                 data->OnMouseScrolled({ static_cast<f32>(xOffset), static_cast<f32>(yOffset) });

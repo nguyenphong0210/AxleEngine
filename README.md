@@ -536,7 +536,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - Automatic ECS hierarchy binding via Prefab Assembly (`.axle`): parent chassis entity holding `VehicleComponent`, `RigidBody3D`, `CollisionShape3D`, `VehicleAudioComponent`, and child wheel entities holding `WheelComponent`, `MeshInstance3D`, and `TransformComponent`.
     - Animated visual wheel kinematics: real-time synchronization of wheel spin rotation based on Jolt Physics angular velocity (`AngularVelocity`) and steering angles (`SteerAngle`) with Ackerman geometry.
     - Functional vehicle lighting system: toggleable headlights (SpotLight3D), tail lights / brake lights (PointLight3D + emissive material bloom on braking), and reverse lights on reverse gear.
-  - [ ] **Step 2 - Multi-Angle Dynamic Vehicle Camera Controller (`Engine/Scene` & Scripting)**:
+  - [x] **Step 2 - Multi-Angle Dynamic Vehicle Camera Controller (`Engine/Scene` & Scripting)**:
     - **Spring-Arm Third-Person Chase Camera**: Smooth position and rotation lag interpolation, dynamic FOV expansion proportional to vehicle speed, and physics environment raycast collision detection to prevent wall/ground clipping.
     - **Cockpit / Interior First-Person Camera (Driver POV)**: Head-anchored camera inside the cabin with subtle G-force inertia lag, engine vibration tremor, and suspension compression bumps.
     - **Hood / Bumper Camera**: Low-to-ground racing view providing maximum sense of speed and cornering precision.

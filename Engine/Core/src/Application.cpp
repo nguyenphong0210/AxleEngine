@@ -1,4 +1,5 @@
 #include <Axle/Application.hpp>
+#include <Axle/Input.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/JobSystem.hpp>
 #include <Axle/RenderCommand.hpp>
@@ -102,6 +103,7 @@ namespace Axle {
 
     void Application::Run() {
         while (m_Running && !m_Window->ShouldClose()) {
+            Input::SetMouseScrollY(0.0f);
             m_Window->PollEvents();
             JobSystem::RunPinnedTasks();
 

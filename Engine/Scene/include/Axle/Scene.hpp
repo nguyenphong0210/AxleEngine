@@ -84,6 +84,7 @@ namespace Axle {
         Vehicle* GetRuntimeVehicle(Entity chassisEntity) const;
         Vehicle* GetPrimaryRuntimeVehicle() const;
         const std::vector<RuntimeVehicleData>& GetRuntimeVehicles() const { return m_RuntimeVehicles; }
+        PhysicsScene* GetPhysicsScene() const { return m_RuntimePhysicsScene; }
 
         // Hot Reload Lifecycle & Field State Preservation
         void OnPreScriptReload();

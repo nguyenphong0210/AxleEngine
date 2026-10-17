@@ -6,6 +6,7 @@
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/AudioEngine.hpp>
 #include <GLFW/glfw3.h>
 
 namespace Axle {
@@ -16,6 +17,9 @@ namespace Axle {
 
     void RuntimeLayer::OnAttach() {
         AXLE_INFO("RuntimeLayer attached - Initializing Axle Standalone Game Player");
+
+        // Initialize Audio Subsystem
+        AudioEngine::Init();
 
         auto& window = Application::Get().GetWindow();
         m_WindowWidth = window.GetWidth();
@@ -188,6 +192,9 @@ namespace Axle {
     }
 
     void RuntimeLayer::OnUpdate(Timestep ts) {
+        // 0. Update Audio Subsystem
+        AudioEngine::Update();
+
         // 1. Hotkey Controls
         if (Input::IsKeyPressed(KeyCode::F11)) {
             if (!m_F11KeyWasPressed) {
@@ -265,6 +272,7 @@ namespace Axle {
         m_PhysicsScene.reset();
         m_SceneRenderer.reset();
         ScriptHotReloadManager::Get().Shutdown();
+        AudioEngine::Shutdown();
     }
 
 }

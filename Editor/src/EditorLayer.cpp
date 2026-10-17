@@ -14,6 +14,7 @@
 #include <Axle/Project.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/Vehicle.hpp>
+#include <Axle/AudioEngine.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -36,6 +37,9 @@ EditorLayer::EditorLayer()
 
 void EditorLayer::OnAttach() {
     AXLE_INFO("EditorLayer attached - Initializing Axle Editor Environment");
+
+    // Initialize Audio Subsystem
+    Axle::AudioEngine::Init();
 
     auto& window = Axle::Application::Get().GetWindow();
     Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(window.GetNativeWindow()));
@@ -315,6 +319,7 @@ void EditorLayer::OnDetach() {
     m_EditorScene.reset();
     Axle::ScriptHotReloadManager::Get().Shutdown();
     Axle::AssetManager::Shutdown();
+    Axle::AudioEngine::Shutdown();
     m_SceneRenderer.reset();
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
@@ -937,6 +942,9 @@ void EditorLayer::ResetSimulation() {
 
 void EditorLayer::OnUpdate(Axle::Timestep ts) {
     m_LastDeltaTime = ts.GetSeconds();
+
+    // 0. Update Audio Subsystem
+    Axle::AudioEngine::Update();
 
     const bool isHoldingRMB = Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight);
     const bool isCtrlDown = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftControl) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightControl);

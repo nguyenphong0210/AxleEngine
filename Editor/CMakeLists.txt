@@ -11,6 +11,7 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::Core
     Axle::Platform
     Axle::Renderer
+    Axle::Audio
     Axle::Asset
     Axle::UI
     Axle::Physics
@@ -100,6 +101,7 @@ target_link_libraries(AxleTests PRIVATE
     Axle::Core
     Axle::Platform
     Axle::Renderer
+    Axle::Audio
     Axle::Asset
     Axle::UI
     Axle::Physics

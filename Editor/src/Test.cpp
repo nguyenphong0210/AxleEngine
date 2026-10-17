@@ -26,6 +26,7 @@
 #include <Axle/ShadowMap.hpp>
 #include <Axle/Cubemap.hpp>
 #include <Axle/Skybox.hpp>
+#include <Axle/AudioEngine.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <iostream>
 
@@ -4416,6 +4417,214 @@ bool RunTest_Step30_Phase26_HDRCubemapAndIBL() {
 }
 
 // =============================================================================
+// TEST STEP 31: Phase 27.1 Core Audio Subsystem & miniaudio Integration
+// =============================================================================
+bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 31] Phase 27: Core Audio Subsystem & miniaudio   " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    std::error_code ec;
+    std::filesystem::path testDir = "TestDir_AudioPhase27";
+    std::filesystem::create_directories(testDir, ec);
+
+    // 1. AudioEngine Lifecycle & Safe Headless Verification
+    std::cout << "[31.1] Verifying AudioEngine lifecycle and master volume..." << std::endl;
+    Axle::AudioEngineSpecification audioSpec;
+    audioSpec.SampleRate = 48000;
+    audioSpec.Channels = 2;
+    audioSpec.MasterVolume = 1.0f;
+    audioSpec.HeadlessSafe = true;
+
+    bool initSuccess = Axle::AudioEngine::Init(audioSpec);
+    if (!initSuccess || !Axle::AudioEngine::IsInitialized()) {
+        std::cerr << "FAIL: AudioEngine failed to initialize!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    Axle::AudioEngine::SetMasterVolume(0.75f);
+    if (std::abs(Axle::AudioEngine::GetMasterVolume() - 0.75f) > 1e-3f) {
+        std::cerr << "FAIL: MasterVolume setting failed! Got: " << Axle::AudioEngine::GetMasterVolume() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    // Clamp tests
+    Axle::AudioEngine::SetMasterVolume(1.8f);
+    if (std::abs(Axle::AudioEngine::GetMasterVolume() - 1.0f) > 1e-3f) {
+        std::cerr << "FAIL: MasterVolume upper clamp failed!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    Axle::AudioEngine::SetMasterVolume(-0.5f);
+    if (std::abs(Axle::AudioEngine::GetMasterVolume() - 0.0f) > 1e-3f) {
+        std::cerr << "FAIL: MasterVolume lower clamp failed!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    Axle::AudioEngine::SetMasterVolume(1.0f);
+    std::cout << "  -> PASS: AudioEngine initialized cleanly with master volume control." << std::endl;
+
+    // 2. AudioListener 3D Orientation, Position & Velocity
+    std::cout << "[31.2] Verifying AudioListener 3D spatial properties..." << std::endl;
+    Axle::AudioListener::SetPosition({ 12.0f, 3.5f, -8.0f });
+    Axle::AudioListener::SetOrientation({ 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f, 0.0f });
+    Axle::AudioListener::SetVelocity({ 0.0f, 0.0f, 25.0f });
+
+    if (glm::distance(Axle::AudioListener::GetPosition(), glm::vec3(12.0f, 3.5f, -8.0f)) > 1e-3f ||
+        glm::distance(Axle::AudioListener::GetForward(), glm::vec3(0.0f, 0.0f, -1.0f)) > 1e-3f ||
+        glm::distance(Axle::AudioListener::GetUp(), glm::vec3(0.0f, 1.0f, 0.0f)) > 1e-3f ||
+        glm::distance(Axle::AudioListener::GetVelocity(), glm::vec3(0.0f, 0.0f, 25.0f)) > 1e-3f) {
+        std::cerr << "FAIL: AudioListener property mismatch!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: AudioListener 3D position, orientation, and velocity verified." << std::endl;
+
+    // 3. AudioSource 3D Spatial Properties & Attenuation Models
+    std::cout << "[31.3] Verifying AudioSource 3D spatial configuration..." << std::endl;
+    auto source = std::make_shared<Axle::AudioSource>();
+    source->SetVolume(0.85f);
+    source->SetPitch(1.25f);
+    source->SetLooping(true);
+    source->SetSpatial(true);
+    source->SetPosition({ 5.0f, 0.5f, 2.0f });
+    source->SetVelocity({ 10.0f, 0.0f, 0.0f });
+    source->SetDirection({ 0.0f, 0.0f, -1.0f });
+    source->SetAttenuationModel(Axle::AttenuationModel::Linear);
+    source->SetMinDistance(2.0f);
+    source->SetMaxDistance(120.0f);
+    source->SetRollOff(1.8f);
+    source->SetDopplerFactor(2.5f);
+    source->SetCone(glm::radians(45.0f), glm::radians(90.0f), 0.25f);
+
+    if (std::abs(source->GetVolume() - 0.85f) > 1e-3f ||
+        std::abs(source->GetPitch() - 1.25f) > 1e-3f ||
+        !source->IsLooping() || !source->IsSpatial() ||
+        glm::distance(source->GetPosition(), glm::vec3(5.0f, 0.5f, 2.0f)) > 1e-3f ||
+        glm::distance(source->GetVelocity(), glm::vec3(10.0f, 0.0f, 0.0f)) > 1e-3f ||
+        source->GetAttenuationModel() != Axle::AttenuationModel::Linear ||
+        std::abs(source->GetMinDistance() - 2.0f) > 1e-3f ||
+        std::abs(source->GetMaxDistance() - 120.0f) > 1e-3f ||
+        std::abs(source->GetRollOff() - 1.8f) > 1e-3f ||
+        std::abs(source->GetDopplerFactor() - 2.5f) > 1e-3f ||
+        std::abs(source->GetConeOuterGain() - 0.25f) > 1e-3f) {
+        std::cerr << "FAIL: AudioSource properties mismatch!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: AudioSource 3D spatial properties and directional cones verified." << std::endl;
+
+    // 4. Synthetic WAV File Generation & AudioClip Decoding Verification
+    std::cout << "[31.4] Generating synthetic WAV asset and verifying decoder..." << std::endl;
+    std::filesystem::path wavPath = testDir / "SyntheticEngineTone.wav";
+    {
+        std::ofstream fout(wavPath, std::ios::binary);
+        if (!fout.is_open()) {
+            std::cerr << "FAIL: Unable to create temporary synthetic WAV file!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
+        }
+
+        const uint32_t sampleRate = 44100;
+        const uint16_t numChannels = 1;
+        const uint16_t bitsPerSample = 16;
+        const float durationSeconds = 0.5f;
+        const uint32_t numSamples = static_cast<uint32_t>(sampleRate * durationSeconds);
+        const uint32_t dataBytes = numSamples * numChannels * (bitsPerSample / 8);
+        const uint32_t overallSize = dataBytes + 36;
+        const uint32_t byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+        const uint16_t blockAlign = numChannels * (bitsPerSample / 8);
+
+        // RIFF chunk
+        fout.write("RIFF", 4);
+        fout.write(reinterpret_cast<const char*>(&overallSize), 4);
+        fout.write("WAVE", 4);
+
+        // fmt subchunk
+        fout.write("fmt ", 4);
+        uint32_t fmtSize = 16;
+        uint16_t formatPCM = 1;
+        fout.write(reinterpret_cast<const char*>(&fmtSize), 4);
+        fout.write(reinterpret_cast<const char*>(&formatPCM), 2);
+        fout.write(reinterpret_cast<const char*>(&numChannels), 2);
+        fout.write(reinterpret_cast<const char*>(&sampleRate), 4);
+        fout.write(reinterpret_cast<const char*>(&byteRate), 4);
+        fout.write(reinterpret_cast<const char*>(&blockAlign), 2);
+        fout.write(reinterpret_cast<const char*>(&bitsPerSample), 2);
+
+        // data subchunk
+        fout.write("data", 4);
+        fout.write(reinterpret_cast<const char*>(&dataBytes), 4);
+
+        // Write 440 Hz sine wave
+        const double twoPi = 6.28318530717958647692;
+        for (uint32_t i = 0; i < numSamples; ++i) {
+            double t = static_cast<double>(i) / static_cast<double>(sampleRate);
+            int16_t sample = static_cast<int16_t>(std::sin(twoPi * 440.0 * t) * 16000.0);
+            fout.write(reinterpret_cast<const char*>(&sample), 2);
+        }
+        fout.close();
+    }
+
+    auto clip = Axle::AudioClip::Create(wavPath.string(), false);
+    if (!clip || !clip->IsLoaded()) {
+        std::cerr << "FAIL: AudioClip failed to load synthetic WAV file!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    if (clip->GetChannels() != 1 || clip->GetSampleRate() != 44100 ||
+        clip->GetFormat() != Axle::AudioFormat::WAV ||
+        std::abs(clip->GetLengthSeconds() - 0.5f) > 0.05f) {
+        std::cerr << "FAIL: AudioClip metadata mismatch! Channels: " << clip->GetChannels()
+                  << ", SampleRate: " << clip->GetSampleRate()
+                  << ", Length: " << clip->GetLengthSeconds() << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: AudioClip successfully decoded " << clip->GetChannels() << "ch, "
+              << clip->GetSampleRate() << "Hz WAV (" << clip->GetLengthSeconds() << "s)." << std::endl;
+
+    // Load into AudioSource and verify state transitions
+    bool loadClipOk = source->Load(clip);
+    if (!loadClipOk) {
+        std::cerr << "FAIL: AudioSource::Load failed with valid AudioClip!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    source->Play();
+    source->Pause();
+    source->Stop();
+    source->Rewind();
+    std::cout << "  -> PASS: AudioSource playback control state transitions verified." << std::endl;
+
+    // 5. One-Shot Audio and Engine Shutdown
+    std::cout << "[31.5] Verifying One-Shot playback and subsystem shutdown..." << std::endl;
+    Axle::AudioEngine::PlayOneShot(wavPath.string(), 0.9f, 1.1f);
+    Axle::AudioEngine::PlayOneShot3D(wavPath.string(), glm::vec3(0.0f, 1.0f, 0.0f), 0.8f, 1.0f);
+    Axle::AudioEngine::Update();
+
+    source->Unload();
+    source.reset();
+    clip.reset();
+
+    Axle::AudioEngine::Shutdown();
+    if (Axle::AudioEngine::IsInitialized()) {
+        std::cerr << "FAIL: AudioEngine still reports initialized after Shutdown()!" << std::endl;
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: One-shot playback and AudioEngine::Shutdown validated." << std::endl;
+
+    std::filesystem::remove_all(testDir, ec);
+
+    std::cout << ">>> STEP 31 PASSED: Phase 27.1 Core Audio Subsystem & miniaudio verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -4458,12 +4667,13 @@ int main(int argc, char** argv) {
         else if (arg == "28" || arg == "step28" || arg == "--step28" || arg == "--phase24") targetStep = 28;
         else if (arg == "29" || arg == "step29" || arg == "--step29" || arg == "--phase25") targetStep = 29;
         else if (arg == "30" || arg == "step30" || arg == "--step30" || arg == "--phase26") targetStep = 30;
+        else if (arg == "31" || arg == "step31" || arg == "--step31" || arg == "--phase27") targetStep = 31;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 30 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 31 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -4560,6 +4770,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 30) {
         if (!RunTest_Step30_Phase26_HDRCubemapAndIBL()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 31) {
+        if (!RunTest_Step31_Phase27_CoreAudioSubsystem()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

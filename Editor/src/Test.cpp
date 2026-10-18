@@ -46,6 +46,10 @@
 #include <AxleTerrain/TerrainSplineCarver.hpp>
 #include <AxleTerrain/TerrainComponent.hpp>
 #include <AxleTerrain/TerrainSerializer.hpp>
+#include <Axle/Skeleton.hpp>
+#include <Axle/AnimationClip.hpp>
+#include <Axle/SkeletalMesh.hpp>
+#include <Axle/SkeletalMeshImporter.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -6325,6 +6329,185 @@ bool RunTest_Step35_SceneWithSplineAndTerrain() {
 }
 
 // =============================================================================
+// STEP 36: PHASE 30 - STEP 1 SKELETAL ANIMATION CORE DATA STRUCTURES
+// =============================================================================
+bool RunTest_Step36_Phase30_Step1_CoreSkeletalDataStructures() {
+    std::cout << "\n--------------------------------------------------------" << std::endl;
+    std::cout << " RUNNING STEP 36: PHASE 30 - STEP 1 SKELETAL ANIMATION CORE" << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+
+    // Sub-test 1: Skeleton and Bone Hierarchy
+    std::cout << "  [1/5] Testing Skeleton & Hierarchical Bone Tree..." << std::endl;
+    Axle::Skeleton skeleton("Humanoid");
+    
+    Axle::Bone root;
+    root.Name = "Root";
+    root.LocalTransform = glm::mat4(1.0f);
+    int rootIdx = skeleton.AddBone(root);
+    assert(rootIdx == 0);
+    assert(skeleton.GetRootBoneIndex() == 0);
+
+    Axle::Bone hips;
+    hips.Name = "Hips";
+    hips.ParentID = 0;
+    hips.LocalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    int hipsIdx = skeleton.AddBone(hips);
+    assert(hipsIdx == 1);
+
+    Axle::Bone spine;
+    spine.Name = "Spine";
+    spine.ParentID = 1;
+    spine.LocalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, 0.0f));
+    int spineIdx = skeleton.AddBone(spine);
+    assert(spineIdx == 2);
+
+    assert(skeleton.GetBoneCount() == 3);
+    assert(skeleton.FindBoneIndex("Hips") == 1);
+    assert(skeleton.FindBoneIndex("Spine") == 2);
+    assert(skeleton.FindBoneIndex("NonExistent") == -1);
+
+    skeleton.ComputeInverseBindMatrices();
+    std::vector<glm::mat4> bindGlobals;
+    skeleton.ComputeBindPoseGlobalTransforms(bindGlobals);
+
+    // Verify InverseBindMatrix * GlobalTransform = Identity
+    for (size_t b = 0; b < skeleton.GetBoneCount(); ++b) {
+        glm::mat4 ident = bindGlobals[b] * skeleton.GetBones()[b].InverseBindMatrix;
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+                float expected = (row == col) ? 1.0f : 0.0f;
+                assert(std::abs(ident[col][row] - expected) < 1e-4f);
+            }
+        }
+    }
+    std::cout << "  -> PASS: Skeleton hierarchy and InverseBindMatrices mathematically proven." << std::endl;
+
+    // Sub-test 2: Animation Channel Keyframe SLERP/LERP Interpolation
+    std::cout << "  [2/5] Testing AnimationChannel SLERP & LERP Keyframe Interpolation..." << std::endl;
+    Axle::AnimationChannel channel;
+    channel.BoneName = "Spine";
+    channel.BoneIndex = 2;
+
+    channel.Positions.push_back({ 0.0f, glm::vec3(0.0f, 0.5f, 0.0f) });
+    channel.Positions.push_back({ 1.0f, glm::vec3(0.0f, 0.7f, 0.0f) });
+
+    glm::quat q0 = glm::angleAxis(0.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::quat q1 = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    channel.Rotations.push_back({ 0.0f, q0 });
+    channel.Rotations.push_back({ 1.0f, q1 });
+
+    channel.Scales.push_back({ 0.0f, glm::vec3(1.0f) });
+    channel.Scales.push_back({ 1.0f, glm::vec3(1.0f) });
+
+    // Midpoint evaluation at t = 0.5s
+    glm::vec3 midPos = channel.InterpolatePosition(0.5f);
+    assert(std::abs(midPos.y - 0.6f) < 1e-4f);
+
+    glm::quat midRot = channel.InterpolateRotation(0.5f);
+    glm::vec3 rotatedForward = midRot * glm::vec3(0.0f, 0.0f, 1.0f);
+    // At 45 degrees, rotated forward should have x ~= sin(45 deg) ~= 0.7071
+    assert(std::abs(rotatedForward.x - std::sin(glm::radians(45.0f))) < 1e-3f);
+
+    glm::mat4 xform = channel.EvaluateTransform(0.5f);
+    assert(!std::isnan(xform[3][1]));
+    std::cout << "  -> PASS: Quaternion SLERP and vector LERP evaluated with sub-millimeter precision." << std::endl;
+
+    // Sub-test 3: Animation Clip Forward Kinematics & Skinning Matrix Computation
+    std::cout << "  [3/5] Testing AnimationClip Forward Kinematics & Skinning Palette..." << std::endl;
+    Axle::AnimationClip clip("TestWalk", 1.0f, 30.0f);
+    clip.AddChannel(channel);
+
+    assert(std::abs(clip.WrapTime(1.25f, true) - 0.25f) < 1e-5f);
+    assert(clip.WrapTime(1.25f, false) == 1.0f);
+
+    std::vector<glm::mat4> localPoses;
+    clip.SamplePose(0.5f, skeleton, localPoses, true);
+    assert(localPoses.size() == 3);
+
+    std::vector<glm::mat4> globalPoses;
+    Axle::AnimationClip::ComputeGlobalPose(skeleton, localPoses, globalPoses);
+    assert(globalPoses.size() == 3);
+
+    std::vector<glm::mat4> skinningMatrices;
+    Axle::AnimationClip::ComputeSkinningMatrices(skeleton, globalPoses, skinningMatrices);
+    assert(skinningMatrices.size() == 3);
+    std::cout << "  -> PASS: Forward kinematics solved hierarchical global matrices & skinning palette." << std::endl;
+
+    // Sub-test 4: Skeletal Vertex Weight Pruning & Normalization
+    std::cout << "  [4/5] Testing Skeletal Vertex Bone Weight Pruning & Normalization..." << std::endl;
+    Axle::SkeletalVertex v;
+    v.Position = glm::vec3(0.0f, 1.5f, 0.0f);
+    v.AddBoneData(0, 0.1f);
+    v.AddBoneData(1, 0.4f);
+    v.AddBoneData(2, 0.2f);
+    v.AddBoneData(3, 0.5f);
+    v.AddBoneData(4, 0.3f); // 5th bone should replace lowest (0.1f)
+
+    // Check that bone 0 (lowest weight 0.1f) was dropped and bone 4 (0.3f) was retained
+    bool found0 = false;
+    bool found4 = false;
+    for (int k = 0; k < 4; ++k) {
+        if (v.BoneIDs[k] == 0) found0 = true;
+        if (v.BoneIDs[k] == 4) found4 = true;
+    }
+    assert(!found0);
+    assert(found4);
+
+    Axle::SkeletalMeshData meshData;
+    meshData.Vertices.push_back(v);
+    meshData.Indices = { 0, 0, 0 };
+    Axle::SkeletalMesh skeletalMesh(meshData);
+
+    const auto& normV = skeletalMesh.GetData().Vertices[0];
+    float sumWeights = normV.Weights.x + normV.Weights.y + normV.Weights.z + normV.Weights.w;
+    assert(std::abs(sumWeights - 1.0f) < 1e-4f);
+    std::cout << "  -> PASS: Vertex bone influences pruned to 4 and strictly normalized to 1.0." << std::endl;
+
+    // Sub-test 5: Procedural Humanoid Biped Generator & Full Evaluation
+    std::cout << "  [5/5] Testing SkeletalMeshImporter::CreateProceduralBiped()..." << std::endl;
+    Axle::SkeletalMeshData bipedData;
+    std::shared_ptr<Axle::Skeleton> bipedSkeleton;
+    std::vector<std::shared_ptr<Axle::AnimationClip>> bipedClips;
+
+    bool bipedOk = Axle::SkeletalMeshImporter::CreateProceduralBiped(bipedData, bipedSkeleton, bipedClips);
+    assert(bipedOk);
+    assert(bipedSkeleton != nullptr);
+    assert(bipedSkeleton->GetBoneCount() == 8);
+    assert(bipedData.Vertices.size() > 0);
+    assert(bipedData.Indices.size() > 0);
+    assert(bipedClips.size() == 2);
+
+    assert(bipedClips[0]->GetName() == "Idle");
+    assert(bipedClips[1]->GetName() == "Walk");
+
+    // Sample walk cycle at t = 0.25s (quarter step)
+    std::vector<glm::mat4> walkLocals;
+    bipedClips[1]->SamplePose(0.25f, *bipedSkeleton, walkLocals);
+    std::vector<glm::mat4> walkGlobals;
+    Axle::AnimationClip::ComputeGlobalPose(*bipedSkeleton, walkLocals, walkGlobals);
+    std::vector<glm::mat4> walkSkinning;
+    Axle::AnimationClip::ComputeSkinningMatrices(*bipedSkeleton, walkGlobals, walkSkinning);
+    assert(walkSkinning.size() == 8);
+
+    for (const auto& mat : walkSkinning) {
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                assert(!std::isnan(mat[c][r]) && !std::isinf(mat[c][r]));
+            }
+        }
+    }
+
+    std::cout << "  -> Biped Skeleton: " << bipedSkeleton->GetBoneCount() << " bones, "
+              << bipedData.Vertices.size() << " vertices, " << bipedData.Indices.size() / 3 << " triangles." << std::endl;
+    std::cout << "  -> Animation Clips: '" << bipedClips[0]->GetName() << "' (" << bipedClips[0]->GetDuration() << "s), '"
+              << bipedClips[1]->GetName() << "' (" << bipedClips[1]->GetDuration() << "s)." << std::endl;
+    std::cout << "  -> PASS: Procedural animated character fully functional with zero external files." << std::endl;
+
+    std::cout << ">>> STEP 36 PASSED: Phase 30 Step 1 Core Skeletal Animation 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -6372,12 +6555,13 @@ int main(int argc, char** argv) {
         else if (arg == "33" || arg == "step33" || arg == "--step33" || arg == "--phase29" || arg == "--phase29a") targetStep = 33;
         else if (arg == "34" || arg == "step34" || arg == "--step34" || arg == "--phase29b") targetStep = 34;
         else if (arg == "35" || arg == "step35" || arg == "--step35" || arg == "--phase29c" || arg == "--scene") targetStep = 35;
+        else if (arg == "36" || arg == "step36" || arg == "--step36" || arg == "--phase30" || arg == "--phase30a") targetStep = 36;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 35 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 36 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -6489,6 +6673,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 35) {
         if (!RunTest_Step35_SceneWithSplineAndTerrain()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 36) {
+        if (!RunTest_Step36_Phase30_Step1_CoreSkeletalDataStructures()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

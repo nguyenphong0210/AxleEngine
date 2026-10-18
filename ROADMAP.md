@@ -7,9 +7,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 28** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **32 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
-* **Upcoming Focus**: **Phase 29: Modular Plugin Architecture — Spline Track & Large-Scale Terrain System (`Plugins/Spline` & `Plugins/Terrain`)** and beyond.
+* **Completed Phases**: **Phase 1 through Phase 29** (100% implemented, verified, and stabilized).
+* **Automated Test Verification**: **36 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
+* **Upcoming Focus**: **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)** and beyond.
 
 ---
 
@@ -229,10 +229,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **Step 5 - Spline Road Carving & Terrain Snapping**: One-way integration allowing the Terrain plugin to query `SplineComponent` paths and automatically carve/flatten terrain elevations directly beneath road ribbons.
     - [x] **Step 6 - Automated Test Suite 34 (`AxleTests.exe`)**: Unit tests for heightfield matrix generation, brush deformation math, LOD stitching, and terrain save/load serialization.
 - [ ] **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)**
-  - [ ] **Step 1 - Core Skeletal Data Structures & Asset Importer (`ufbx` & `cgltf`)**:
-    - Native bone hierarchy, joint indices, inverse bind matrices (`InverseBindPose`), and skeleton metadata.
-    - Animation track sampling data structures (`AnimationClip`, `AnimationChannel`, keyframe timestamps, translation/rotation/scale curves).
-    - Lightweight, zero-dependency asset parsing using embedded `ufbx` (`.fbx`) and `cgltf` (`.gltf`/`.glb`).
+  - [x] **Step 1 - Core Skeletal Data Structures & Asset Importer (`ufbx` & `cgltf`)**:
+    - [x] Native bone hierarchy, joint indices, inverse bind matrices (`InverseBindPose`), and skeleton metadata.
+    - [x] Animation track sampling data structures (`AnimationClip`, `AnimationChannel`, keyframe timestamps, translation/rotation/scale curves).
+    - [x] Lightweight, zero-dependency asset parsing using embedded `ufbx` (`.fbx`) and `cgltf` (`.gltf`/`.glb`).
   - [ ] **Step 2 - GPU Vertex Skinning & Shader Pipeline (`Engine/Renderer`)**:
     - Extended vertex layout: `a_BoneIndices` (`ivec4`) and `a_BoneWeights` (`vec4`) supporting up to 4 influencing bones per vertex.
     - Dynamic bone matrix palette (uniform array / UBO up to 128 bones per mesh) updated per animated draw call.

@@ -56,14 +56,27 @@ namespace Axle {
         const auto& layout = vertexBuffer->GetLayout();
         for (const auto& element : layout.GetElements()) {
             glEnableVertexAttribArray(m_VertexBufferIndex);
-            glVertexAttribPointer(
-                m_VertexBufferIndex,
-                static_cast<GLint>(element.GetComponentCount()),
-                ShaderDataTypeToOpenGLBaseType(element.Type),
-                element.Normalized ? GL_TRUE : GL_FALSE,
-                static_cast<GLsizei>(layout.GetStride()),
-                reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset))
-            );
+            if (element.Type == ShaderDataType::Int || element.Type == ShaderDataType::Int2 ||
+                element.Type == ShaderDataType::Int3 || element.Type == ShaderDataType::Int4) {
+                if (glad_glVertexAttribIPointer) {
+                    glVertexAttribIPointer(
+                        m_VertexBufferIndex,
+                        static_cast<GLint>(element.GetComponentCount()),
+                        ShaderDataTypeToOpenGLBaseType(element.Type),
+                        static_cast<GLsizei>(layout.GetStride()),
+                        reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset))
+                    );
+                }
+            } else {
+                glVertexAttribPointer(
+                    m_VertexBufferIndex,
+                    static_cast<GLint>(element.GetComponentCount()),
+                    ShaderDataTypeToOpenGLBaseType(element.Type),
+                    element.Normalized ? GL_TRUE : GL_FALSE,
+                    static_cast<GLsizei>(layout.GetStride()),
+                    reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset))
+                );
+            }
             m_VertexBufferIndex++;
         }
 

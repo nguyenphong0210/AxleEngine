@@ -235,9 +235,12 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 - [ ] **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**
   - [ ] GPU-instanced particle emitters for smoke, dust trails, sparks, fire, tire burnout smoke, and water splashes.
   - [ ] Curl noise vector fields, collision planes, and texture sheet animations.
-- [ ] **Phase 32: Multi-Platform Portability & Vulkan Backend Exploration**
-  - [ ] Modern Vulkan 1.3 / Direct3D 12 rendering abstraction layer alongside OpenGL 4.5.
-  - [ ] Clang / GCC Linux build matrix validation.
+- [ ] **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)**
+  - [ ] **Step 1 - Low-Overhead RHI Integration (NVIDIA NRI)**: Embed lightweight NVIDIA Rendering Interface (MIT) as the unified hardware abstraction layer for Vulkan 1.3 and Direct3D 12 alongside OpenGL 4.5 legacy/fallback.
+  - [ ] **Step 2 - ECS-Driven Data-Oriented Memory Streaming**: Connect `EnTT` packed component arrays directly to NRI dynamic staging buffers, structured instance buffers (SSBOs), and GPU indirect draw calls (`CmdDrawIndexedIndirect`).
+  - [ ] **Step 3 - PSO Caching & Explicit Barrier Management**: High-performance Pipeline State Object (PSO) hashing/caching and seamless resource layout transitions (Shadow Pass, Deferred/Forward Pass, Post-FX) via NRI command lists.
+  - [ ] **Step 4 - Multi-Platform Build Matrix & Linux Portability**: Validate Clang / GCC Linux compilation with native Vulkan 1.3 backend, alongside MSVC native D3D12/Vulkan backends on Windows.
+  - [ ] **Step 5 - Automated Test Suite**: Headless tests validating physical device enumeration, swapchain/framebuffer allocation, multi-threaded command buffer recording, and GPU barrier execution.
 - [ ] **Phase 33: Dedicated 2D Canvas & In-Game UI Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
   - [ ] **Hardware-Accelerated 2D Batch Renderer (`Canvas2D`)**: High-performance sprite, quad, and line batch rendering with z-index sorting and clipping rectangles.
   - [ ] **Zero-ImGui Shipping Runtime**: Pure decoupled UI pipeline for commercial game releases without ImGui library linkage.

@@ -2831,13 +2831,31 @@ void EditorLayer::RenderExportGameModal() {
             auto res = Axle::AssetCooker::CookProject(settings);
             m_ExportStatusSuccess = res.Success;
             if (res.Success) {
+                m_ExportLastOutputDir = res.PackagePath.parent_path().string();
+                std::string extraBundle;
+                if (res.RuntimeCopied && res.ScriptsCopied) {
+                    extraBundle = " + AxleRuntime.exe & AxleScripts.dll";
+                } else if (res.RuntimeCopied) {
+                    extraBundle = " + AxleRuntime.exe";
+                }
                 m_ExportStatusMessage = "Succeeded! Created " + res.PackagePath.filename().string() + " (" +
                     std::to_string(res.TotalAssetsCooked) + " assets, " +
-                    std::to_string(res.PackageSizeBytes / 1024) + " KB)";
+                    std::to_string(res.PackageSizeBytes / 1024) + " KB)" + extraBundle +
+                    "\nOutput Folder: " + m_ExportLastOutputDir;
                 AXLE_INFO("Export Game: {0}", m_ExportStatusMessage);
             } else {
+                m_ExportLastOutputDir.clear();
                 m_ExportStatusMessage = "Failed: " + res.ErrorMessage;
                 AXLE_ERROR("Export Game: {0}", m_ExportStatusMessage);
+            }
+        }
+
+        if (m_ExportStatusSuccess && !m_ExportLastOutputDir.empty()) {
+            ImGui::SameLine();
+            if (ImGui::Button("Open Output Folder", ImVec2(160.0f, 32.0f))) {
+#ifdef _WIN32
+                ShellExecuteA(NULL, "open", m_ExportLastOutputDir.c_str(), NULL, NULL, SW_SHOWNORMAL);
+#endif
             }
         }
 

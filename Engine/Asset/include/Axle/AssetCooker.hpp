@@ -24,6 +24,8 @@ namespace Axle {
         size_t TotalAssetsCooked = 0;
         uint64_t PackageSizeBytes = 0;
         std::string ErrorMessage;
+        bool RuntimeCopied = false;
+        bool ScriptsCopied = false;
     };
 
     class AssetCooker {

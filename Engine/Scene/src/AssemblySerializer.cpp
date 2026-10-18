@@ -23,10 +23,12 @@ namespace Axle {
     }
 
     bool AssemblySerializer::IsAssemblyFile(const std::filesystem::path& filepath) {
-        if (!std::filesystem::exists(filepath)) return false;
+        if (!FileSystem::Exists(filepath)) return false;
 
-        std::ifstream file(filepath);
-        if (!file.is_open()) return false;
+        std::string content = FileSystem::ReadTextFile(filepath);
+        if (content.empty()) return false;
+
+        std::istringstream file(content);
 
         std::string line;
         int count = 0;
@@ -939,7 +941,7 @@ namespace Axle {
                 else if (path == "builtin://plane" && context) vao = context->PlaneMesh;
                 else if (!path.empty()) {
                     auto resolved = FileSystem::ResolveAssetPath(path);
-                    if (std::filesystem::exists(resolved)) {
+                    if (FileSystem::Exists(resolved)) {
                         auto loaded = AssetSerializer::LoadMesh(resolved);
                         if (loaded.Success) vao = loaded.VAO;
                     }
@@ -975,7 +977,7 @@ namespace Axle {
                 mat = raw.Material;
                 if (!mat.AlbedoPath.empty() && mat.UseAlbedoMap) {
                     auto resolved = FileSystem::ResolveAssetPath(mat.AlbedoPath);
-                    if (std::filesystem::exists(resolved)) {
+                    if (FileSystem::Exists(resolved)) {
                         mat.AlbedoMap = Texture2D::Create(resolved.string());
                     }
                 }

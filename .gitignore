@@ -45,6 +45,7 @@ build/
 bin/
 lib/
 out/
+Export/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake

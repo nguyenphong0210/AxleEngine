@@ -40,7 +40,7 @@ namespace Axle {
         auto parentDir = axleTextPath.parent_path();
         auto cacheDir = parentDir / ".cache";
         std::error_code ec;
-        if (!std::filesystem::exists(cacheDir, ec)) {
+        if (!FileSystem::HasMountedPackage() && !std::filesystem::exists(cacheDir, ec)) {
             std::filesystem::create_directories(cacheDir, ec);
         }
         return cacheDir / (axleTextPath.stem().string() + ".axlebin");

@@ -471,7 +471,7 @@ namespace Axle {
         std::string shadowFragSrc;
         auto shadowVertPath = FileSystem::ResolveAssetPath("shaders/ShadowDepth.vert");
         auto shadowFragPath = FileSystem::ResolveAssetPath("shaders/ShadowDepth.frag");
-        if (std::filesystem::exists(shadowVertPath) && std::filesystem::exists(shadowFragPath)) {
+        if (FileSystem::Exists(shadowVertPath) && FileSystem::Exists(shadowFragPath)) {
             shadowVertSrc = FileSystem::ReadTextFile(shadowVertPath);
             shadowFragSrc = FileSystem::ReadTextFile(shadowFragPath);
         }

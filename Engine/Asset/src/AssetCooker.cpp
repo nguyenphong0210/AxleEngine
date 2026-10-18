@@ -8,6 +8,13 @@
 #include <fstream>
 #include <system_error>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace Axle {
 
     static std::filesystem::path FindExecutable(const std::string& name) {
@@ -23,12 +30,59 @@ namespace Axle {
             "."
         };
 
+        // 1. Check relative to current working directory
         for (const auto& dir : searchPaths) {
             auto candidate = dir / name;
-            if (std::filesystem::exists(candidate)) {
-                return candidate;
+            std::error_code ec;
+            if (std::filesystem::exists(candidate, ec) && !std::filesystem::is_directory(candidate, ec)) {
+                return std::filesystem::canonical(candidate, ec);
             }
         }
+
+        // 2. Check relative to running executable directory (e.g. build/Editor/Release)
+#ifdef _WIN32
+        wchar_t exePathBuf[MAX_PATH];
+        if (GetModuleFileNameW(NULL, exePathBuf, MAX_PATH)) {
+            std::filesystem::path exeDir = std::filesystem::path(exePathBuf).parent_path();
+            const std::vector<std::filesystem::path> relToExe = {
+                exeDir / name,
+                exeDir / ".." / name,
+                exeDir / ".." / "Runtime" / "Release" / name,
+                exeDir / ".." / "Runtime" / name,
+                exeDir / ".." / ".." / "Runtime" / "Release" / name,
+                exeDir / ".." / ".." / "Runtime" / name,
+                exeDir / ".." / ".." / "build" / "Runtime" / "Release" / name,
+                exeDir / ".." / ".." / "build" / "Runtime" / name,
+                exeDir / ".." / ".." / "bin" / "Release" / name,
+                exeDir / ".." / ".." / "bin" / name
+            };
+            for (const auto& p : relToExe) {
+                std::error_code ec;
+                if (std::filesystem::exists(p, ec) && !std::filesystem::is_directory(p, ec)) {
+                    return std::filesystem::canonical(p, ec);
+                }
+            }
+        }
+#endif
+
+        // 3. Check relative to project or asset directory root
+        auto assetDir = FileSystem::GetAssetDirectory();
+        if (!assetDir.empty()) {
+            std::vector<std::filesystem::path> roots = {
+                assetDir.parent_path(),
+                assetDir.parent_path().parent_path()
+            };
+            for (const auto& root : roots) {
+                for (const auto& dir : searchPaths) {
+                    auto candidate = root / dir / name;
+                    std::error_code ec;
+                    if (std::filesystem::exists(candidate, ec) && !std::filesystem::is_directory(candidate, ec)) {
+                        return std::filesystem::canonical(candidate, ec);
+                    }
+                }
+            }
+        }
+
         return {};
     }
 
@@ -39,6 +93,23 @@ namespace Axle {
         std::filesystem::path outputDir = settings.OutputDirectory;
         if (outputDir.empty()) {
             outputDir = "Export";
+        }
+
+        // If outputDir is relative, anchor it to project directory or project root instead of build binary folder
+        if (outputDir.is_relative()) {
+            if (!settings.ProjectPath.empty()) {
+                outputDir = settings.ProjectPath.parent_path() / outputDir;
+            } else {
+                auto assetDir = FileSystem::GetAssetDirectory();
+                if (!assetDir.empty()) {
+                    auto candidateRoot = assetDir.parent_path().parent_path();
+                    if (std::filesystem::exists(candidateRoot / "CMakeLists.txt")) {
+                        outputDir = candidateRoot / outputDir;
+                    } else if (std::filesystem::exists(assetDir.parent_path() / "CMakeLists.txt")) {
+                        outputDir = assetDir.parent_path() / outputDir;
+                    }
+                }
+            }
         }
 
         std::error_code ec;
@@ -118,7 +189,7 @@ namespace Axle {
                 UUID uuid = AssetManager::GetAssetUUID(path);
                 uint16_t assetType = static_cast<uint16_t>(GetAssetTypeFromPath(path));
 
-                if (ext == ".axle" && settings.BakeMeshesToBinary) {
+                if ((ext == ".axle" || ext == ".axlemesh") && settings.BakeMeshesToBinary) {
                     // Pre-bake or ensure binary cache exists
                     auto cachePath = AssetSerializer::GetCachePathFor(path);
                     if (!std::filesystem::exists(cachePath)) {
@@ -193,7 +264,10 @@ namespace Axle {
                 auto targetExe = outputDir / "AxleRuntime.exe";
                 std::filesystem::copy_file(runtimeExe, targetExe, std::filesystem::copy_options::overwrite_existing, ec);
                 if (!ec) {
-                    AXLE_INFO("AssetCooker: Bundled standalone player '{0}'", targetExe.string());
+                    result.RuntimeCopied = true;
+                    AXLE_INFO("AssetCooker: Bundled standalone player '{0}' (from '{1}')", targetExe.string(), runtimeExe.string());
+                } else {
+                    AXLE_ERROR("AssetCooker: Failed to copy AxleRuntime.exe to '{0}': {1}", targetExe.string(), ec.message());
                 }
             } else {
                 AXLE_WARN("AssetCooker: AxleRuntime.exe not found in search paths. Standalone player was not copied.");
@@ -204,10 +278,24 @@ namespace Axle {
                 auto targetDll = outputDir / "AxleScripts.dll";
                 std::filesystem::copy_file(scriptsDll, targetDll, std::filesystem::copy_options::overwrite_existing, ec);
                 if (!ec) {
-                    AXLE_INFO("AssetCooker: Bundled scripts module '{0}'", targetDll.string());
+                    result.ScriptsCopied = true;
+                    AXLE_INFO("AssetCooker: Bundled scripts module '{0}' (from '{1}')", targetDll.string(), scriptsDll.string());
+                } else {
+                    AXLE_ERROR("AssetCooker: Failed to copy AxleScripts.dll to '{0}': {1}", targetDll.string(), ec.message());
                 }
             } else {
                 AXLE_WARN("AssetCooker: AxleScripts.dll not found in search paths.");
+            }
+
+            // Copy audio assets directory loose if present so miniaudio disk streaming operates without hitch
+            auto audioSrcDir = assetDir / "audio";
+            if (std::filesystem::exists(audioSrcDir, ec)) {
+                auto audioDstDir = outputDir / "assets" / "audio";
+                std::filesystem::create_directories(audioDstDir, ec);
+                std::filesystem::copy(audioSrcDir, audioDstDir, std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
+                if (!ec) {
+                    AXLE_INFO("AssetCooker: Bundled companion audio assets to '{0}'", audioDstDir.string());
+                }
             }
         }
 

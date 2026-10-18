@@ -539,7 +539,7 @@ namespace Axle {
                             else if (mc.AssetPath == "builtin://plane") mc.VAO = m_Context.PlaneMesh;
                             else if (!mc.AssetPath.empty()) {
                                 auto fullPath = FileSystem::ResolveAssetPath(mc.AssetPath);
-                                if (std::filesystem::exists(fullPath)) {
+                                if (FileSystem::Exists(fullPath)) {
                                     auto loaded = AssetSerializer::LoadMesh(fullPath);
                                     if (loaded.Success) {
                                         mc.VAO = loaded.VAO;

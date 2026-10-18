@@ -27,34 +27,59 @@ namespace Axle {
         m_Name = resolved.stem().string();
         m_Format = DetectFormat(resolved);
 
-        if (!std::filesystem::exists(resolved)) {
+        if (!FileSystem::Exists(resolved)) {
             AXLE_CORE_WARN("AudioClip: File not found at '{0}' (resolved: '{1}')", filepath, resolved.string());
             m_IsLoaded = false;
             return;
         }
 
-        // Query metadata through miniaudio decoder
-        ma_decoder decoder;
-        ma_result result = ma_decoder_init_file(resolved.string().c_str(), nullptr, &decoder);
-        if (result != MA_SUCCESS) {
-            AXLE_CORE_WARN("AudioClip: Failed to open or decode audio file '{0}' (error: {1})", filepath, (int)result);
-            m_IsLoaded = false;
-            return;
+        // Try direct file decode if physically present on disk
+        if (std::filesystem::exists(resolved)) {
+            ma_decoder decoder;
+            ma_result result = ma_decoder_init_file(resolved.string().c_str(), nullptr, &decoder);
+            if (result == MA_SUCCESS) {
+                m_Channels = decoder.outputChannels;
+                m_SampleRate = decoder.outputSampleRate;
+
+                ma_uint64 totalFrames = 0;
+                if (ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames) == MA_SUCCESS && m_SampleRate > 0) {
+                    m_LengthSeconds = static_cast<f32>(totalFrames) / static_cast<f32>(m_SampleRate);
+                }
+
+                ma_decoder_uninit(&decoder);
+                m_IsLoaded = true;
+
+                AXLE_CORE_INFO("AudioClip: Loaded '{0}' ({1}ch, {2}Hz, {3:.2f}s, Stream: {4})",
+                    m_Name, m_Channels, m_SampleRate, m_LengthSeconds, m_StreamFromDisk ? "Yes" : "No");
+                return;
+            }
         }
 
-        m_Channels = decoder.outputChannels;
-        m_SampleRate = decoder.outputSampleRate;
+        // Fallback: Read binary through FileSystem (e.g. from mounted package) and decode from memory
+        auto buffer = FileSystem::ReadBinaryFile(resolved);
+        if (!buffer.empty()) {
+            ma_decoder decoder;
+            ma_result result = ma_decoder_init_memory(buffer.data(), buffer.size(), nullptr, &decoder);
+            if (result == MA_SUCCESS) {
+                m_Channels = decoder.outputChannels;
+                m_SampleRate = decoder.outputSampleRate;
 
-        ma_uint64 totalFrames = 0;
-        if (ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames) == MA_SUCCESS && m_SampleRate > 0) {
-            m_LengthSeconds = static_cast<f32>(totalFrames) / static_cast<f32>(m_SampleRate);
+                ma_uint64 totalFrames = 0;
+                if (ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames) == MA_SUCCESS && m_SampleRate > 0) {
+                    m_LengthSeconds = static_cast<f32>(totalFrames) / static_cast<f32>(m_SampleRate);
+                }
+
+                ma_decoder_uninit(&decoder);
+                m_IsLoaded = true;
+
+                AXLE_CORE_INFO("AudioClip: Loaded '{0}' from package memory ({1}ch, {2}Hz, {3:.2f}s)",
+                    m_Name, m_Channels, m_SampleRate, m_LengthSeconds);
+                return;
+            }
         }
 
-        ma_decoder_uninit(&decoder);
-        m_IsLoaded = true;
-
-        AXLE_CORE_INFO("AudioClip: Loaded '{0}' ({1}ch, {2}Hz, {3:.2f}s, Stream: {4})",
-            m_Name, m_Channels, m_SampleRate, m_LengthSeconds, m_StreamFromDisk ? "Yes" : "No");
+        AXLE_CORE_WARN("AudioClip: Failed to open or decode audio file '{0}'", filepath);
+        m_IsLoaded = false;
     }
 
     AudioClip::~AudioClip() = default;

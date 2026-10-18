@@ -197,6 +197,7 @@ private:
     bool m_ExportCopyExecutables = true;
     std::string m_ExportStatusMessage;
     bool m_ExportStatusSuccess = false;
+    std::string m_ExportLastOutputDir;
 
     void RenderExportGameModal();
 };

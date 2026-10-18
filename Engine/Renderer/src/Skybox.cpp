@@ -153,7 +153,7 @@ namespace Axle {
         }
 
         auto resolved = FileSystem::ResolveAssetPath(filepath);
-        if (!std::filesystem::exists(resolved)) {
+        if (!FileSystem::Exists(resolved)) {
             AXLE_CORE_WARN("Skybox: HDR environment file '{0}' not found, falling back to procedural sky.", filepath);
             m_Spec.Mode = SkyboxMode::ProceduralAtmospheric;
             return;

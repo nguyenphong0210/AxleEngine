@@ -18,6 +18,7 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::Scene
     Axle::Vehicle
     Axle::Project
+    Axle::Spline
 )
 
 # ==============================================================================
@@ -109,6 +110,7 @@ target_link_libraries(AxleTests PRIVATE
     Axle::Scene
     Axle::Vehicle
     Axle::Project
+    Axle::Spline
 )
 
 add_dependencies(AxleTests AxleScripts)

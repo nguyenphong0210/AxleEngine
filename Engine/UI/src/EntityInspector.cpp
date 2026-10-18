@@ -1728,6 +1728,11 @@ namespace Axle {
             }
         }, /*canRemove=*/ true);
 
+        // Custom Plugin Components
+        if (m_CustomComponentDrawer) {
+            m_CustomComponentDrawer(entity);
+        }
+
         // --- ADD COMPONENT BUTTON ---
         ImGui::Spacing();
         ImGui::Separator();
@@ -2027,6 +2032,11 @@ namespace Axle {
                     ImGui::EndMenu();
                 }
             }
+        }
+
+        if (m_CustomAddComponentDrawer) {
+            ImGui::Separator();
+            m_CustomAddComponentDrawer(entity);
         }
 
         ImGui::EndPopup();

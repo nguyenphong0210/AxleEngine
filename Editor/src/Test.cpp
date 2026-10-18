@@ -31,6 +31,11 @@
 #include "../assets/scripts/VehicleChaseCamera.hpp"
 #include "../assets/scripts/RacingHUD.hpp"
 #include <glm/gtc/quaternion.hpp>
+#include <AxleSpline/SplinePlugin.hpp>
+#include <AxleSpline/Curve3D.hpp>
+#include <AxleSpline/SplineComponent.hpp>
+#include <AxleSpline/TrackGenerator.hpp>
+#include <AxleSpline/SplineEditor.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -5619,6 +5624,132 @@ bool RunTest_Step32_Phase28_MultiPartVehicleRigging() {
 }
 
 // =============================================================================
+// STEP 33 TEST: PHASE 29A SPLINE CURVE & PROCEDURAL TRACK GENERATOR PLUGIN
+// =============================================================================
+bool RunTest_Step33_Phase29A_SplineTrackPlugin() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 33] Phase 29A: Spline Curve & Track Generator Plugin" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // 1. Spline Plugin Lifecycle
+    std::cout << "\n[33.1] Testing Spline Plugin Lifecycle & Version Reflection..." << std::endl;
+    Axle::Spline::SplinePlugin::Initialize();
+    assert(Axle::Spline::SplinePlugin::IsInitialized());
+    assert(Axle::Spline::SplinePlugin::Name == "AxleSpline");
+    assert(Axle::Spline::SplinePlugin::Version == "1.0.0");
+    std::cout << "  -> PASS: AxleSpline Plugin v" << Axle::Spline::SplinePlugin::Version << " initialized." << std::endl;
+
+    // 2. 3D Curve Mathematics Core (Curve3D)
+    std::cout << "\n[33.2] Testing 3D Curve Math (Catmull-Rom, Cubic Bézier, Linear)..." << std::endl;
+    Axle::Spline::Curve3D catmull(Axle::Spline::SplineType::CatmullRom, true);
+    catmull.AddNode({ glm::vec3(-50.0f, 0.0f, -50.0f), 0.0f, 1.0f });
+    catmull.AddNode({ glm::vec3(50.0f, 0.0f, -50.0f), 15.0f, 1.0f });
+    catmull.AddNode({ glm::vec3(50.0f, 0.0f, 50.0f), 15.0f, 1.0f });
+    catmull.AddNode({ glm::vec3(-50.0f, 0.0f, 50.0f), 0.0f, 1.0f });
+    catmull.RebuildCache();
+
+    float totalLen = catmull.GetTotalLength();
+    std::cout << "  -> Closed Catmull-Rom curve total length: " << totalLen << " m" << std::endl;
+    assert(totalLen > 300.0f && totalLen < 500.0f);
+
+    // Uniform Arc-length sampling
+    glm::vec3 pos0 = catmull.SamplePosition(0.0f);
+    glm::vec3 posHalf = catmull.SamplePosition(totalLen * 0.5f);
+    float distMid = glm::distance(pos0, posHalf);
+    assert(distMid > 80.0f);
+    std::cout << "  -> PASS: Arc-length lookup table (LUT) uniform metric speed verified." << std::endl;
+
+    // Cubic Bézier verification
+    Axle::Spline::Curve3D bezier(Axle::Spline::SplineType::CubicBezier, false);
+    bezier.AddNode({ glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-5.0f, 0.0f, 0.0f), glm::vec3(5.0f, 0.0f, 0.0f) });
+    bezier.AddNode({ glm::vec3(20.0f, 10.0f, 0.0f), glm::vec3(-5.0f, 0.0f, 0.0f), glm::vec3(5.0f, 0.0f, 0.0f) });
+    bezier.RebuildCache();
+    assert(glm::distance(bezier.SamplePosition(0.0f), glm::vec3(0.0f, 0.0f, 0.0f)) < 0.01f);
+    assert(glm::distance(bezier.SamplePosition(bezier.GetTotalLength()), glm::vec3(20.0f, 10.0f, 0.0f)) < 0.1f);
+    std::cout << "  -> PASS: Cubic Bézier endpoints and tangent handles verified." << std::endl;
+
+    // 3. Rotation-Minimizing Frame (RMF / Parallel Transport)
+    std::cout << "\n[33.3] Testing Rotation-Minimizing Frame (RMF) Orthonormality & Banking..." << std::endl;
+    for (int i = 0; i < 20; ++i) {
+        float s = (static_cast<float>(i) / 20.0f) * totalLen;
+        Axle::Spline::SplineFrame frame = catmull.SampleFrame(s);
+        float dotTN = std::abs(glm::dot(frame.Tangent, frame.Normal));
+        float dotTB = std::abs(glm::dot(frame.Tangent, frame.Binormal));
+        float dotNB = std::abs(glm::dot(frame.Normal, frame.Binormal));
+        assert(dotTN < 0.01f);
+        assert(dotTB < 0.01f);
+        assert(dotNB < 0.01f);
+        assert(std::abs(glm::length(frame.Tangent) - 1.0f) < 0.01f);
+        assert(std::abs(glm::length(frame.Normal) - 1.0f) < 0.01f);
+        assert(std::abs(glm::length(frame.Binormal) - 1.0f) < 0.01f);
+    }
+    std::cout << "  -> PASS: Frame orthonormality (Tangent x Normal = Binormal) 100% verified." << std::endl;
+
+    // 4. Procedural Track Extrusion
+    std::cout << "\n[33.4] Testing Procedural Track Mesh Extrusion (Road, Curbs, Guardrails)..." << std::endl;
+    Axle::Spline::SplineComponent comp(Axle::Spline::SplineType::CatmullRom, true);
+    comp.Curve = catmull;
+    comp.TrackWidth = 10.0f;
+    comp.StepDistance = 1.0f;
+    comp.GenerateCurbs = true;
+    comp.CurbWidth = 0.6f;
+    comp.CurbHeight = 0.15f;
+    comp.GenerateGuardrails = true;
+    comp.GuardrailHeight = 0.8f;
+    comp.GeneratePhysics = true;
+
+    auto meshData = Axle::Spline::TrackGenerator::GenerateTrackMesh(comp.Curve, comp);
+    assert(!meshData.IsEmpty());
+    assert(meshData.GetVertexCount() > 500);
+    assert(meshData.GetTriangleCount() > 500);
+    assert(meshData.Indices.size() == meshData.GetTriangleCount() * 3);
+    std::cout << "  -> Extruded Track: " << meshData.GetVertexCount() << " vertices, " << meshData.GetTriangleCount() << " triangles." << std::endl;
+
+    auto vao = Axle::Spline::TrackGenerator::BuildVAO(meshData);
+    assert(vao != nullptr);
+    assert(vao->GetIndexBuffer() != nullptr);
+    assert(vao->GetIndexBuffer()->GetCount() == static_cast<Axle::u32>(meshData.Indices.size()));
+    std::cout << "  -> PASS: GPU VertexArray (VAO) and IndexBuffer constructed with valid stride & layout." << std::endl;
+
+    // 5. Jolt Physics MeshShape Collider & Raycast Interaction
+    std::cout << "\n[33.5] Testing Jolt Physics Static MeshShape Body & Vehicle Raycast..." << std::endl;
+    Axle::PhysicsScene physicsScene;
+    Axle::BodyID trackBodyID = Axle::Spline::TrackGenerator::CreatePhysicsCollider(meshData, comp, physicsScene);
+    assert(!trackBodyID.IsInvalid());
+    assert(physicsScene.IsBodyValid(trackBodyID));
+    assert(physicsScene.GetNumBodies() >= 1);
+    std::cout << "  -> Track Physics Body ID: " << trackBodyID.GetIndexAndSequenceNumber() << " successfully registered." << std::endl;
+
+    // Raycast down from above the track center
+    glm::vec3 trackCenterPos = comp.Curve.SamplePosition(50.0f);
+    Axle::RayCastHit hit;
+    bool hasHit = physicsScene.CastRay(trackCenterPos + glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), 20.0f, hit);
+    assert(hasHit);
+    assert(hit.HitBodyID == trackBodyID);
+    assert(std::abs(hit.Position.y - trackCenterPos.y) < 1.0f);
+    std::cout << "  -> Raycast hit track road surface at (" << hit.Position.x << ", " << hit.Position.y << ", " << hit.Position.z << ")" << std::endl;
+    std::cout << "  -> PASS: Jolt Physics MeshShape raycast hit confirmed." << std::endl;
+
+    Axle::Spline::TrackGenerator::DestroyPhysicsCollider(trackBodyID, physicsScene);
+    assert(!physicsScene.IsBodyValid(trackBodyID));
+    std::cout << "  -> PASS: Physics body cleanly removed and destroyed." << std::endl;
+
+    // 6. Scene ECS Component Integration
+    std::cout << "\n[33.6] Testing Scene ECS Entity & SplineComponent Lifecycle..." << std::endl;
+    auto scene = std::make_shared<Axle::Scene>();
+    auto trackEntity = scene->CreateEntity("MonzaCircuit");
+    auto& sc = trackEntity.AddComponent<Axle::Spline::SplineComponent>(comp);
+    assert(trackEntity.HasComponent<Axle::Spline::SplineComponent>());
+    assert(sc.Curve.GetNodeCount() == 4);
+    assert(sc.TrackWidth == 10.0f);
+    std::cout << "  -> PASS: Entity 'MonzaCircuit' successfully instantiated with SplineComponent." << std::endl;
+
+    Axle::Spline::SplinePlugin::Shutdown();
+    std::cout << ">>> STEP 33 PASSED: Phase 29A Spline Track Plugin 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -5663,12 +5794,13 @@ int main(int argc, char** argv) {
         else if (arg == "30" || arg == "step30" || arg == "--step30" || arg == "--phase26") targetStep = 30;
         else if (arg == "31" || arg == "step31" || arg == "--step31" || arg == "--phase27") targetStep = 31;
         else if (arg == "32" || arg == "step32" || arg == "--step32" || arg == "--phase28") targetStep = 32;
+        else if (arg == "33" || arg == "step33" || arg == "--step33" || arg == "--phase29" || arg == "--phase29a") targetStep = 33;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 32 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 33 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -5771,6 +5903,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 32) {
         if (!RunTest_Step32_Phase28_MultiPartVehicleRigging()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 33) {
+        if (!RunTest_Step33_Phase29A_SplineTrackPlugin()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

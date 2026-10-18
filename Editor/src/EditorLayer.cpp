@@ -15,6 +15,9 @@
 #include <Axle/Log.hpp>
 #include <Axle/Vehicle.hpp>
 #include <Axle/AudioEngine.hpp>
+#include <AxleSpline/SplineComponent.hpp>
+#include <AxleSpline/SplineEditor.hpp>
+#include <AxleSpline/TrackGenerator.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -256,6 +259,40 @@ void EditorLayer::OnAttach() {
     m_SceneHierarchyPanel.SetOpenAssemblyEditorCallback([this](const std::filesystem::path& path) {
         m_AssemblyEditorPanel.SetAssembly(path);
         m_ShowAssemblyEditor = true;
+    });
+
+    // Register Plugin Component Drawers (Phase 29A: Spline Track Plugin)
+    m_SceneHierarchyPanel.SetCustomComponentDrawer([this](Axle::Entity entity) {
+        if (entity && entity.HasComponent<Axle::Spline::SplineComponent>()) {
+            Axle::Spline::SplineEditor::DrawInspector(entity, m_PhysicsScene.get());
+        }
+    });
+
+    m_SceneHierarchyPanel.SetCustomAddComponentDrawer([this](Axle::Entity entity) {
+        if (ImGui::BeginMenu("Environment Plugins")) {
+            bool hasSpline = entity.HasComponent<Axle::Spline::SplineComponent>();
+            if (hasSpline) ImGui::BeginDisabled();
+            if (ImGui::MenuItem("🛣️ Spline Track (SplineComponent)")) {
+                auto& sc = entity.AddComponent<Axle::Spline::SplineComponent>(Axle::Spline::SplineType::CatmullRom, true);
+                sc.Curve.AddNode({ glm::vec3(-40.0f, 0.0f, -20.0f), 0.0f, 1.0f });
+                sc.Curve.AddNode({ glm::vec3(40.0f, 0.0f, -20.0f), 15.0f, 1.0f });
+                sc.Curve.AddNode({ glm::vec3(40.0f, 0.0f, 20.0f), 15.0f, 1.0f });
+                sc.Curve.AddNode({ glm::vec3(-40.0f, 0.0f, 20.0f), 0.0f, 1.0f });
+                sc.Curve.RebuildCache();
+                auto mesh = Axle::Spline::TrackGenerator::GenerateTrackMesh(sc.Curve, sc);
+                sc.TrackVAO = Axle::Spline::TrackGenerator::BuildVAO(mesh);
+                sc.VertexCount = static_cast<Axle::u32>(mesh.GetVertexCount());
+                sc.TriangleCount = static_cast<Axle::u32>(mesh.GetTriangleCount());
+                if (!entity.HasComponent<Axle::MeshInstance3D>()) {
+                    entity.AddComponent<Axle::MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+                } else {
+                    entity.GetComponent<Axle::MeshInstance3D>().VAO = sc.TrackVAO;
+                }
+                ImGui::CloseCurrentPopup();
+            }
+            if (hasSpline) ImGui::EndDisabled();
+            ImGui::EndMenu();
+        }
     });
 
     // Initialize Project Configuration System (AxleEditor.axleproj)
@@ -2285,6 +2322,19 @@ void EditorLayer::OnImGuiRender() {
                         drawList->AddText(ImVec2(centerScreen.x + 10.0f, centerScreen.y - 7.0f), IM_COL32(255, 255, 255, 230), "[Vehicle Audio Synthesizer]");
                     }
                 }
+            }
+
+            // 3D Spline Track & Control Points Gizmo (Phase 29A Step 5)
+            if (selectedEntity.HasComponent<Axle::Spline::SplineComponent>()) {
+                Axle::Spline::SplineEditor::DrawViewportGizmo(
+                    selectedEntity,
+                    cameraView,
+                    cameraProj,
+                    glm::vec2(viewportMin.x, viewportMin.y),
+                    glm::vec2(viewportMin.x + viewportBounds.x, viewportMin.y + viewportBounds.y),
+                    m_GizmoType,
+                    m_PhysicsScene.get()
+                );
             }
         }
     }

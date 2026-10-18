@@ -2789,7 +2789,7 @@ void EditorLayer::RenderExportGameModal() {
         ImGui::InputText("##ExportDir", m_ExportDirectoryBuffer, sizeof(m_ExportDirectoryBuffer));
         ImGui::SameLine();
         if (ImGui::Button("Browse...", ImVec2(80.0f, 0.0f))) {
-            std::string folder = Axle::FileDialogs::OpenFolder();
+            std::string folder = Axle::FileDialogs::OpenFolder(m_ExportDirectoryBuffer);
             if (!folder.empty()) {
                 strncpy_s(m_ExportDirectoryBuffer, sizeof(m_ExportDirectoryBuffer), folder.c_str(), _TRUNCATE);
             }

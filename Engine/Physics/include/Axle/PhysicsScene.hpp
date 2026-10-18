@@ -165,6 +165,9 @@ namespace Axle {
         JobSystemEnkiTS* GetJobSystem() { return m_JobSystem.get(); }
         const JobSystemEnkiTS* GetJobSystem() const { return m_JobSystem.get(); }
 
+        JPH::TempAllocator* GetTempAllocator() { return m_TempAllocator.get(); }
+        const JPH::TempAllocator* GetTempAllocator() const { return m_TempAllocator.get(); }
+
     private:
         PhysicsSettings m_Settings;
 

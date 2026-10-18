@@ -3,6 +3,7 @@ add_library(AxlePhysics STATIC
     src/PhysicsScene.cpp
     src/PhysicsDebugRenderer.cpp
     src/JobSystemEnkiTS.cpp
+    src/CharacterController.cpp
 )
 add_library(Axle::Physics ALIAS AxlePhysics)
 

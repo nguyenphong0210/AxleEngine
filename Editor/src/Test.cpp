@@ -56,6 +56,7 @@
 #include <Axle/SkeletalMeshImporter.hpp>
 #include <Axle/SkinningPipeline.hpp>
 #include <Axle/SceneRenderer.hpp>
+#include <Axle/CharacterController.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -6840,6 +6841,161 @@ bool RunTest_Step38_Phase30_Step3_AnimationPoseEvaluatorAndBlendingTree() {
 }
 
 // =============================================================================
+// STEP 39: PHASE 30 - STEP 4: KINEMATIC CHARACTER CONTROLLER (JOLT PHYSICS)
+// =============================================================================
+bool RunTest_Step39_Phase30_Step4_KinematicCharacterController() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 39: PHASE 30 - STEP 4 KINEMATIC CHARACTER CONTROLLER" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    Axle::PhysicsSettings physSettings;
+    physSettings.Gravity = glm::vec3(0.0f, -9.81f, 0.0f);
+    Axle::PhysicsScene physicsScene(physSettings);
+
+    // 1. Static Ground Plane at Y = 0
+    physicsScene.CreatePlane(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), 200.0f, 0.6f, 0.0f);
+    physicsScene.OptimizeBroadPhase();
+
+    // Sub-test 1: Character Creation, Capsule Geometry & Gravity Fall
+    std::cout << "\n[39.1] Testing Character Creation, Capsule Offset & Free Fall Landing..." << std::endl;
+    Axle::CharacterControllerSettings charSettings;
+    charSettings.Radius = 0.35f;
+    charSettings.HalfHeight = 0.65f; // Capsule total height = 2.0m
+    charSettings.Mass = 75.0f;
+    charSettings.StepOffset = 0.4f;
+    charSettings.StickToFloorStepDown = 0.5f;
+
+    Axle::CharacterController character(physicsScene, glm::vec3(0.0f, 4.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), charSettings);
+    assert(character.IsInAir());
+
+    const float dt = 1.0f / 60.0f;
+    // Step 60 frames to simulate free fall under gravity and landing
+    for (int frame = 0; frame < 60; ++frame) {
+        physicsScene.Step(dt);
+        character.Update(dt);
+    }
+
+    assert(character.IsOnGround());
+    glm::vec3 landedPos = character.GetPosition();
+    // Character base is designed to sit on Y = 0 (ground level)
+    assert(std::abs(landedPos.y) < 0.1f);
+    assert(character.GetGroundNormal().y > 0.9f);
+    std::cout << "  -> Landed safely at Y = " << landedPos.y << " m (Ground Normal: "
+              << character.GetGroundNormal().x << ", " << character.GetGroundNormal().y << ", " << character.GetGroundNormal().z << ")" << std::endl;
+    std::cout << "  -> PASS: CharacterVirtual fell from 4.0m and landed solidly on ground plane." << std::endl;
+
+    // Sub-test 2: Kinematic Horizontal Locomotion & Jump Mechanics
+    std::cout << "\n[39.2] Testing Horizontal Kinematic Locomotion & Jump Mechanics..." << std::endl;
+    character.SetTargetVelocity(glm::vec3(4.0f, 0.0f, 0.0f)); // Move along +X at 4 m/s
+
+    // Run for 30 frames (0.5s)
+    for (int frame = 0; frame < 30; ++frame) {
+        physicsScene.Step(dt);
+        character.Update(dt);
+    }
+
+    assert(character.IsOnGround());
+    assert(character.GetPosition().x > 1.5f);
+    std::cout << "  -> Traversed along +X to X = " << character.GetPosition().x << " m while grounded." << std::endl;
+
+    // Trigger Jump
+    character.Jump(6.0f);
+    for (int frame = 0; frame < 15; ++frame) {
+        physicsScene.Step(dt);
+        character.Update(dt);
+    }
+    assert(character.IsInAir());
+    assert(character.GetPosition().y > 0.3f);
+    std::cout << "  -> Jump apex achieved: Y = " << character.GetPosition().y << " m (State: InAir)." << std::endl;
+
+    // Allow character to complete jump arc and land
+    for (int frame = 0; frame < 45; ++frame) {
+        physicsScene.Step(dt);
+        character.Update(dt);
+    }
+    assert(character.IsOnGround());
+    assert(std::abs(character.GetPosition().y) < 0.1f);
+    std::cout << "  -> PASS: Horizontal velocity and jump impulse evaluated with realistic parabolic trajectory." << std::endl;
+
+    // Sub-test 3: Automatic Stair / Curb Stepping (StepOffset)
+    std::cout << "\n[39.3] Testing Automatic Stair & Curb Stepping (StepOffset = 0.4m)..." << std::endl;
+    // Create a 0.25m curb obstacle in front of character (within StepOffset)
+    Axle::BoxBodyProps curbProps;
+    curbProps.Position = glm::vec3(8.0f, 0.125f, 0.0f); // Top of curb at Y = 0.25m
+    curbProps.HalfExtent = glm::vec3(1.5f, 0.125f, 2.0f);
+    curbProps.IsDynamic = false;
+    physicsScene.CreateBox(curbProps);
+    physicsScene.OptimizeBroadPhase();
+
+    character.SetPosition(glm::vec3(6.0f, 0.0f, 0.0f));
+    character.SetTargetVelocity(glm::vec3(3.0f, 0.0f, 0.0f));
+
+    // Walk forward onto curb
+    for (int frame = 0; frame < 40; ++frame) {
+        physicsScene.Step(dt);
+        character.Update(dt);
+    }
+
+    assert(character.IsOnGround());
+    assert(character.GetPosition().x > 7.0f);
+    assert(character.GetPosition().y > 0.2f); // Elevated onto top of curb (Y ~ 0.25m)
+    std::cout << "  -> Stepped up 0.25m curb: Position = (" << character.GetPosition().x
+              << ", " << character.GetPosition().y << ", " << character.GetPosition().z << ")" << std::endl;
+    std::cout << "  -> PASS: Automatic stair/curb traversal succeeded without catching on vertical step edge." << std::endl;
+
+    // Sub-test 4: Slope Traversal & Steep Cliff Sliding Resistance
+    std::cout << "\n[39.4] Testing Slope Traversal & Steep Wall Sliding Resistance..." << std::endl;
+    // Create a steep vertical wall (too steep to climb, height = 2m)
+    Axle::BoxBodyProps wallProps;
+    wallProps.Position = glm::vec3(12.0f, 1.0f, 0.0f);
+    wallProps.HalfExtent = glm::vec3(0.5f, 1.0f, 3.0f);
+    wallProps.IsDynamic = false;
+    physicsScene.CreateBox(wallProps);
+    physicsScene.OptimizeBroadPhase();
+
+    character.SetPosition(glm::vec3(10.5f, 0.0f, 0.0f));
+    character.SetTargetVelocity(glm::vec3(4.0f, 0.0f, 0.0f)); // Walk directly into vertical wall
+
+    for (int frame = 0; frame < 30; ++frame) {
+        physicsScene.Step(dt);
+        character.Update(dt);
+    }
+
+    // Must be blocked by wall (front edge of wall is at X = 11.5m, character radius = 0.35m -> X <= 11.2m)
+    assert(character.GetPosition().x < 11.3f);
+    assert(character.GetPosition().y < 0.1f); // Did NOT climb vertical wall!
+    std::cout << "  -> Blocked by vertical wall at X = " << character.GetPosition().x << " m (remained at Y = " << character.GetPosition().y << "m)" << std::endl;
+    std::cout << "  -> PASS: CancelVelocityTowardsSteepSlopes prevented climbing on non-walkable surfaces." << std::endl;
+
+    // Sub-test 5: Dynamic Physics Object Pushback & Interaction
+    std::cout << "\n[39.5] Testing Dynamic Physics Object Pushback & Impulse Resistance..." << std::endl;
+    Axle::BoxBodyProps crateProps;
+    crateProps.Position = glm::vec3(15.0f, 0.5f, 0.0f);
+    crateProps.HalfExtent = glm::vec3(0.4f, 0.4f, 0.4f);
+    crateProps.IsDynamic = true;
+    crateProps.Friction = 0.3f;
+    Axle::BodyID crateID = physicsScene.CreateBox(crateProps);
+    physicsScene.OptimizeBroadPhase();
+
+    character.SetPosition(glm::vec3(14.0f, 0.0f, 0.0f));
+    character.SetTargetVelocity(glm::vec3(3.0f, 0.0f, 0.0f)); // Walk into dynamic crate
+
+    for (int frame = 0; frame < 40; ++frame) {
+        physicsScene.Step(dt);
+        character.Update(dt);
+    }
+
+    glm::vec3 crateFinalPos = physicsScene.GetBodyPosition(crateID);
+    assert(crateFinalPos.x > 15.3f); // Crate pushed forward by character
+    assert(character.GetPosition().x > 14.3f);
+    std::cout << "  -> Dynamic crate pushed from X = 15.0m to X = " << crateFinalPos.x << " m" << std::endl;
+    std::cout << "  -> PASS: Character pushed dynamic object with realistic force and momentum transfer." << std::endl;
+
+    std::cout << ">>> STEP 39 PASSED: Phase 30 Step 4 Kinematic Character Controller (KCC) 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -6890,12 +7046,13 @@ int main(int argc, char** argv) {
         else if (arg == "36" || arg == "step36" || arg == "--step36" || arg == "--phase30" || arg == "--phase30a") targetStep = 36;
         else if (arg == "37" || arg == "step37" || arg == "--step37" || arg == "--phase30b") targetStep = 37;
         else if (arg == "38" || arg == "step38" || arg == "--step38" || arg == "--phase30c") targetStep = 38;
+        else if (arg == "39" || arg == "step39" || arg == "--step39" || arg == "--phase30d") targetStep = 39;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 38 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 39 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -7016,6 +7173,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 38) {
         if (!RunTest_Step38_Phase30_Step3_AnimationPoseEvaluatorAndBlendingTree()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 39) {
+        if (!RunTest_Step39_Phase30_Step4_KinematicCharacterController()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

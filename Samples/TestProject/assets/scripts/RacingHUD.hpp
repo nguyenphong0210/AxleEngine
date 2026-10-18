@@ -8,7 +8,6 @@
 #include <Axle/Vehicle.hpp>
 #include <Axle/Scene.hpp>
 #include <imgui.h>
-#include <imgui_internal.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -180,15 +179,14 @@ public:
     void OnImGuiRender() override {
         if (!Visible) return;
 
-        ImGuiContext* g = ImGui::GetCurrentContext();
-        if (!g) return;
+        if (!ImGui::GetCurrentContext()) return;
 
-        ImDrawList* drawList = g->CurrentWindow ? ImGui::GetWindowDrawList() : ImGui::GetForegroundDrawList();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
         if (!drawList) return;
 
         // Viewport boundaries
-        ImVec2 vMin = g->CurrentWindow ? ImGui::GetWindowPos() : ImVec2(0.0f, 0.0f);
-        ImVec2 vSize = g->CurrentWindow ? ImGui::GetWindowSize() : g->IO.DisplaySize;
+        const ImVec2 vMin = ImGui::GetWindowPos();
+        const ImVec2 vSize = ImGui::GetWindowSize();
         if (vSize.x < 300.0f || vSize.y < 200.0f) return;
 
         const float scale = std::clamp(HUDScale, 0.6f, 2.0f);

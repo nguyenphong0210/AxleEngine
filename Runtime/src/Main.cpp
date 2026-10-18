@@ -1,4 +1,5 @@
 #include <Axle/Application.hpp>
+#include <Axle/ImGuiLayer.hpp>
 #include <Axle/Log.hpp>
 #include "RuntimeLayer.hpp"
 #include <exception>
@@ -106,6 +107,7 @@ int main(int argc, char** argv) {
         };
 
         auto app = std::make_unique<Axle::Application>(spec);
+        app->SetUIContext(std::make_unique<Axle::ImGuiLayer>());
         app->PushLayer(std::make_shared<Axle::RuntimeLayer>(projectPath));
         app->Run();
     } catch (const std::exception& e) {

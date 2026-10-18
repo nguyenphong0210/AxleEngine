@@ -205,6 +205,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 3 - Real-Time Racing HUD & Dashboard Instrumentation**: Analog/circular Tachometer, Digital Speedometer (km/h & mph), Gear Indicator, G-Force meter, and input telemetry meters.
   - [x] **Step 4 - Scene Integration & Visual Polish**: Completed `CarTest.axlescene` and `VehicleSandbox.axlescene` automotive testing playground (Launch Ramp, Landing Pad, Washboard Bumps, Slalom Cones, Destructible Crates Pyramid), with Cabin Acoustic Insulation (Cockpit volume attenuation).
   - [x] **Step 5 - Automated Test Suite Verification**: Step 32 test in `Editor/src/Test.cpp` validating multi-part rigging, kinematics, lighting, camera modes, HUD rendering, cabin acoustics, and sandbox deserialization.
+  - [x] **Step 6 - Runtime HUD Canvas & Public API Hardening (Fast-Follow)**:
+    - [x] Deploy Direction A: In-game transparent HUD canvas overlay (`##GameHUDCanvas`) in `AxleRuntime.exe` via `Axle::ImGuiLayer`.
+    - [x] Standardize `RacingHUD.hpp` on 100% public ImGui APIs (eliminate `#include <imgui_internal.h>` and private struct access).
+    - [x] Fix input edge cases: Shift+F1 physics wireframe toggle guard, Esc cursor unlock vs scene stop frame consumption, and mouse scroll Y accumulation.
 
 ---
 
@@ -226,3 +230,26 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 - [ ] **Phase 32: Multi-Platform Portability & Vulkan Backend Exploration**
   - [ ] Modern Vulkan 1.3 / Direct3D 12 rendering abstraction layer alongside OpenGL 4.5.
   - [ ] Clang / GCC Linux build matrix validation.
+- [ ] **Phase 33: Dedicated 2D Canvas & In-Game UI Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
+  - [ ] **Hardware-Accelerated 2D Batch Renderer (`Canvas2D`)**: High-performance sprite, quad, and line batch rendering with z-index sorting and clipping rectangles.
+  - [ ] **Zero-ImGui Shipping Runtime**: Pure decoupled UI pipeline for commercial game releases without ImGui library linkage.
+  - [ ] **Font Glyphs & Distance Fields (MSDF)**: Dynamic FreeType and Multi-channel Signed Distance Field font rendering with sharp scaling across resolutions.
+  - [ ] **Anchor & Flex Layout Engine**: Responsive anchor anchors (TopLeft, Center, Stretch, Margins), UI Containers, and automatic DPI scaling.
+  - [ ] **UI Event Dispatching**: First-class support for `OnClick`, `OnHover`, `OnFocus`, and gamepad UI navigation.
+  - [ ] **In-Game HUD Migration**: Seamlessly port `RacingHUD` and in-game dashboards to the native `Canvas2D` subsystem.
+
+---
+
+### 🛠️ Technical Debt Resolution & Core Architecture Hardening
+- [ ] **Unified Cursor & Input Manager (`CursorManager`)**:
+  - Centralize cursor mode state (`Normal`, `Hidden`, `Locked`) across Editor viewport, gameplay scripts (`VehicleChaseCamera`), and ImGui IO flags.
+  - Eliminate state desynchronization and double-unlocking bugs.
+- [ ] **Monolithic Code Decomposition**:
+  - Partition `Test.cpp` (>5.7k lines) into modular step test suites (`TestSteps/Step01_Core.cpp` ... `TestSteps/Step32_VehicleRigging.cpp`).
+  - Refactor `EditorLayer.cpp` (>2.8k lines) and `SceneHierarchyPanel.cpp` (>2.7k lines) into focused controller sub-panels.
+- [ ] **Automated Cross-Project Asset Synchronization**:
+  - Implement automated CMake build rules to continuously synchronize `Editor/assets` scenes (`CarTest.axlescene`, `VehicleSandbox.axlescene`) and prefabs to `Samples/TestProject`.
+- [ ] **Scene Render Pass Separation**:
+  - Decouple `Scene::OnUpdate()` into explicit distinct stages: `SyncPhysicsTransforms()` and `RenderGeometryPass()`, improving modularity and rendering pass extensibility.
+- [ ] **Cross-Platform Script Hot-Reloading**:
+  - Extend dynamic scripting subsystem (`ScriptHotReloadManager`) beyond Windows MSVC to Linux and macOS using `dlopen`/`dlsym` and background compilation jobs.

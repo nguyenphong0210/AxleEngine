@@ -44,7 +44,7 @@ Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Phys
   * Dynamic DLL hot-reloading (`AxleScripts.dll`) with shadow-copy anti-locking (`F9` / `[🔨 Compile]`)—edit code and reload without restarting the editor.
 * **Dual Runtime Targets**:
   * **`AxleEditor.exe`**: Multi-window docking IDE with ImGuizmo 3D gizmos, viewport mouse picking, asset browser, prefab authoring, and safe 3-state simulation (Play, Pause, Step, Stop).
-  * **`AxleRuntime.exe`**: Standalone, lightweight game runner stripped of all editor/ImGui overhead, capable of booting directly from monolithic cooked packages (`Data.axlepak`).
+  * **`AxleRuntime.exe`**: Standalone, lightweight game player executing direct backbuffer rendering, transparent in-game HUD overlay canvas (`ScriptableEntity::OnImGuiRender()`), and zero-overhead distribution booting directly from monolithic cooked packages (`Data.axlepak`).
 * **First-Class Domain Toolkits**:
   * **Modular Vehicle Physics Toolkit**: N-wheeled vehicle constraints, Ackermann steering, 4WD powertrain, suspension springs/dampers, and granular procedural engine RPM audio synthesis.
   * **Multi-Angle Camera Toolkit**: Spring-Arm Chase Camera, First-Person Cockpit (Driver POV), Hood Camera, and 360° Free Orbit Inspection.
@@ -177,6 +177,7 @@ cmake --build build --config Release --parallel
 | **C** | **Cycle Chase Camera Distance** (Near $\rightarrow$ Medium $\rightarrow$ Far preset) |
 | **V** | **Cycle Camera Angle** (Third-Person Chase $\rightarrow$ Cockpit POV $\rightarrow$ Hood $\rightarrow$ Free Orbit) |
 | **H** | **Toggle Racing HUD** Telemetry Overlay |
+| **U** | **Toggle Speed Units** (KM/H $\leftrightarrow$ MPH) |
 
 ### 3D Viewport Navigation (Edit Mode)
 | Action | Description |

@@ -8,6 +8,7 @@
 #include <Axle/RenderCommand.hpp>
 #include <Axle/AudioEngine.hpp>
 #include <GLFW/glfw3.h>
+#include <imgui.h>
 
 namespace Axle {
 
@@ -25,9 +26,10 @@ namespace Axle {
         m_WindowWidth = window.GetWidth();
         m_WindowHeight = window.GetHeight();
 
-        // 1. Sync GLFW input context and initialize gameplay scripts module
+        // 1. Sync GLFW input context, initialize gameplay scripts module, and sync ImGui context
         ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(window.GetNativeWindow()));
         ScriptHotReloadManager::Get().Initialize("AxleScripts.dll");
+        ScriptHotReloadManager::Get().SyncImGuiContext(ImGui::GetCurrentContext());
 
         // 2. Initialize Physics Scene
         m_PhysicsScene = std::make_unique<PhysicsScene>();
@@ -248,6 +250,28 @@ namespace Axle {
 
             m_SceneRenderer->RenderScene(m_Scene, activeCamera, nullptr, m_PhysicsScene.get(), nullptr, settings);
         }
+    }
+
+    void RuntimeLayer::OnImGuiRender() {
+        if (!m_Scene) return;
+
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(vp->WorkPos);
+        ImGui::SetNextWindowSize(vp->WorkSize);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
+                                 ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoSavedSettings |
+                                 ImGuiWindowFlags_NoBackground |
+                                 ImGuiWindowFlags_NoFocusOnAppearing |
+                                 ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                 ImGuiWindowFlags_NoInputs;
+        if (ImGui::Begin("##GameHUDCanvas", nullptr, flags)) {
+            m_Scene->OnImGuiRender();
+        }
+        ImGui::End();
+        ImGui::PopStyleVar(2);
     }
 
     void RuntimeLayer::OnWindowResize(u32 width, u32 height) {

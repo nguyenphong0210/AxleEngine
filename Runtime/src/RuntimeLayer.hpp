@@ -26,6 +26,7 @@ namespace Axle {
         void OnAttach() override;
         void OnDetach() override;
         void OnUpdate(Timestep ts) override;
+        void OnImGuiRender() override;
         void OnWindowResize(u32 width, u32 height) override;
 
     private:

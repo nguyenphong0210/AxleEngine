@@ -17,6 +17,7 @@ target_link_libraries(AxleRuntime PRIVATE
     Axle::Vehicle
     Axle::Scene
     Axle::Project
+    Axle::UI
 )
 
 add_dependencies(AxleRuntime AxleScripts)

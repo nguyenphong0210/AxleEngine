@@ -990,9 +990,14 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     const bool isShiftDownEscape = Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) || Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift);
     const bool isF1Down = Axle::Input::IsKeyPressed(Axle::KeyCode::F1);
     const bool isEscapeDown = Axle::Input::IsKeyPressed(Axle::KeyCode::Escape);
+    bool escapeConsumed = false;
     if ((isEscapeDown || (isShiftDownEscape && isF1Down)) && Axle::Input::GetCursorMode() == Axle::CursorMode::Locked) {
         Axle::Input::SetCursorMode(Axle::CursorMode::Normal);
         m_CursorCaptured = false;
+        if (isEscapeDown) {
+            escapeConsumed = true;
+            m_EscKeyWasPressed = true;
+        }
     }
 
     // Synchronize ImGui mouse processing with Engine CursorMode (Unreal / Godot style)
@@ -1027,16 +1032,20 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_F6KeyWasPressed = false;
     }
 
-    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F7) || Axle::Input::IsKeyPressed(Axle::KeyCode::Escape)) {
-        if (!m_F7KeyWasPressed && !m_EscKeyWasPressed) {
+    const bool isF7Down = Axle::Input::IsKeyPressed(Axle::KeyCode::F7);
+    if (isF7Down || (isEscapeDown && !escapeConsumed)) {
+        if ((isF7Down && !m_F7KeyWasPressed) || (isEscapeDown && !m_EscKeyWasPressed)) {
             if (m_SceneState != SceneState::Edit) {
                 OnSceneStop();
             }
-            m_F7KeyWasPressed = true;
-            m_EscKeyWasPressed = true;
+            if (isF7Down) m_F7KeyWasPressed = true;
+            if (isEscapeDown) m_EscKeyWasPressed = true;
         }
-    } else {
+    }
+    if (!isF7Down) {
         m_F7KeyWasPressed = false;
+    }
+    if (!isEscapeDown) {
         m_EscKeyWasPressed = false;
     }
 
@@ -1159,12 +1168,12 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_F2KeyWasPressed = false;
     }
 
-    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F1)) {
+    if (Axle::Input::IsKeyPressed(Axle::KeyCode::F1) && !isShiftDownEscape) {
         if (!m_F1KeyWasPressed) {
             m_ShowPhysicsDebug = !m_ShowPhysicsDebug;
             m_F1KeyWasPressed = true;
         }
-    } else {
+    } else if (!Axle::Input::IsKeyPressed(Axle::KeyCode::F1)) {
         m_F1KeyWasPressed = false;
     }
 

@@ -19,11 +19,13 @@
 #include <AxleSpline/SplineEditor.hpp>
 #include <AxleSpline/TrackGenerator.hpp>
 #include <AxleSpline/SplinePlugin.hpp>
+#include <AxleSpline/SplineSerializer.hpp>
 #include <AxleTerrain/TerrainPlugin.hpp>
 #include <AxleTerrain/TerrainComponent.hpp>
 #include <AxleTerrain/TerrainEditor.hpp>
 #include <AxleTerrain/TerrainMesh.hpp>
 #include <AxleTerrain/TerrainCollider.hpp>
+#include <AxleTerrain/TerrainSerializer.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -157,6 +159,15 @@ void EditorLayer::OnAttach() {
         } else {
             entity.GetComponent<Axle::NativeScriptComponent>().Bind(scriptName);
         }
+    };
+    m_SerializerContext.CustomEntitySerializer = [](Axle::Entity entity, std::ostream& out) {
+        Axle::Spline::SplineSerializer::Serialize(entity, out);
+        Axle::Terrain::TerrainSerializer::Serialize(entity, out);
+    };
+    m_SerializerContext.CustomSectionDeserializer = [](Axle::Entity entity, const std::string& sectionName, const std::vector<std::string>& lines) -> bool {
+        if (Axle::Spline::SplineSerializer::Deserialize(entity, sectionName, lines)) return true;
+        if (Axle::Terrain::TerrainSerializer::Deserialize(entity, sectionName, lines)) return true;
+        return false;
     };
 
     m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
@@ -735,20 +746,7 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
     }
 
     Axle::SceneSerializer serializer(m_Scene.get(), m_PhysicsScene.get());
-    Axle::SceneSerializerContext ctx;
-    ctx.CubeMesh = m_CubeMesh;
-    ctx.SphereMesh = m_SphereMesh;
-    ctx.CylinderMesh = m_CylinderMesh;
-    ctx.ConeMesh = m_ConeMesh;
-    ctx.PlaneMesh = m_PlaneMesh;
-    ctx.ScriptBinder = [](Axle::Entity entity, const std::string& scriptName) {
-        if (!entity.HasComponent<Axle::NativeScriptComponent>()) {
-            entity.AddComponent<Axle::NativeScriptComponent>().Bind(scriptName);
-        } else {
-            entity.GetComponent<Axle::NativeScriptComponent>().Bind(scriptName);
-        }
-    };
-    serializer.SetContext(ctx);
+    serializer.SetContext(m_SerializerContext);
 
     if (serializer.Deserialize(targetPath)) {
         m_CurrentScenePath = targetPath;
@@ -793,6 +791,41 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
             }
         }
 
+        // Rebuild Track & Terrain runtime meshes/colliders for loaded scene
+        auto splineView = m_Scene->GetRegistry().view<Axle::Spline::SplineComponent>();
+        for (auto e : splineView) {
+            auto& sc = splineView.get<Axle::Spline::SplineComponent>(e);
+            auto mesh = Axle::Spline::TrackGenerator::GenerateTrackMesh(sc.Curve, sc);
+            sc.TrackVAO = Axle::Spline::TrackGenerator::BuildVAO(mesh);
+            sc.VertexCount = static_cast<Axle::u32>(mesh.GetVertexCount());
+            sc.TriangleCount = static_cast<Axle::u32>(mesh.GetTriangleCount());
+            sc.Dirty = false;
+            Axle::Entity ent{ e, m_Scene.get() };
+            if (!ent.HasComponent<Axle::MeshInstance3D>()) {
+                ent.AddComponent<Axle::MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+            } else {
+                ent.GetComponent<Axle::MeshInstance3D>().VAO = sc.TrackVAO;
+            }
+            if (m_PhysicsScene && sc.GeneratePhysics) {
+                sc.RuntimeBodyID = Axle::Spline::TrackGenerator::CreatePhysicsCollider(mesh, sc, *m_PhysicsScene);
+            }
+        }
+
+        auto terrainView = m_Scene->GetRegistry().view<Axle::Terrain::TerrainComponent>();
+        for (auto e : terrainView) {
+            auto& tc = terrainView.get<Axle::Terrain::TerrainComponent>(e);
+            tc.CombinedVAO = Axle::Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
+            Axle::Entity ent{ e, m_Scene.get() };
+            if (!ent.HasComponent<Axle::MeshInstance3D>()) {
+                ent.AddComponent<Axle::MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
+            } else {
+                ent.GetComponent<Axle::MeshInstance3D>().VAO = tc.CombinedVAO;
+            }
+            if (m_PhysicsScene && tc.GeneratePhysics) {
+                tc.PhysicsBodyID = Axle::Terrain::TerrainCollider::CreateTerrainCollider(tc.Data, *m_PhysicsScene, tc.Friction, tc.Restitution);
+            }
+        }
+
         m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
         m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
         m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
@@ -814,20 +847,7 @@ void EditorLayer::SaveScene(const std::filesystem::path& filepath) {
 
     // Always serialize pristine EditorScene even if simulation is active (Phase 18.2)
     Axle::SceneSerializer serializer(m_EditorScene ? m_EditorScene.get() : m_Scene.get(), m_PhysicsScene.get());
-    Axle::SceneSerializerContext ctx;
-    ctx.CubeMesh = m_CubeMesh;
-    ctx.SphereMesh = m_SphereMesh;
-    ctx.CylinderMesh = m_CylinderMesh;
-    ctx.ConeMesh = m_ConeMesh;
-    ctx.PlaneMesh = m_PlaneMesh;
-    ctx.ScriptBinder = [](Axle::Entity entity, const std::string& scriptName) {
-        if (!entity.HasComponent<Axle::NativeScriptComponent>()) {
-            entity.AddComponent<Axle::NativeScriptComponent>().Bind(scriptName);
-        } else {
-            entity.GetComponent<Axle::NativeScriptComponent>().Bind(scriptName);
-        }
-    };
-    serializer.SetContext(ctx);
+    serializer.SetContext(m_SerializerContext);
 
     if (serializer.Serialize(targetPath)) {
         m_CurrentScenePath = targetPath;

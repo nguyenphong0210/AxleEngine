@@ -1,0 +1,368 @@
+# Axle Scene Definition File
+Scene: Untitled
+Entities:
+  - Entity: 17636057666135594275
+    TagComponent:
+      Tag: RacingHUD
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    NativeScriptComponent:
+      ScriptName: RacingHUD
+  - Entity: 17955913094801571276
+    TagComponent:
+      Tag: Main Camera
+    TransformComponent:
+      Translation: [ 0.000000 , 12.000000 , -95.000000 ]
+      Rotation: [ 0.991445 , -0.130526 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    NativeScriptComponent:
+      ScriptName: VehicleChaseCamera
+    CameraComponent:
+      Primary: true
+      FOV: 45.000000
+      NearClip: 0.100000
+      FarClip: 1000.000000
+  - Entity: 14862192819158126107
+    TagComponent:
+      Tag: BodyMesh
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Chassis.axlemesh
+      PatternMode: 1
+      TileScale: 6.000000
+      Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+      Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 2916776672136291418
+      InheritTransform: true
+      InheritScale: true
+  - Entity: 6081481763646760067
+    TagComponent:
+      Tag: Wheel_RR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.100000 , -1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
+    HierarchyComponent:
+      Parent: 2916776672136291418
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.150000
+      SuspensionMaxLength: 0.450000
+      SpringFrequency: 2.000000
+      SpringDamping: 0.500000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: true
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+  - Entity: 1970615393908194290
+    TagComponent:
+      Tag: Wheel_RL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.100000 , -1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
+    HierarchyComponent:
+      Parent: 2916776672136291418
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.150000
+      SuspensionMaxLength: 0.450000
+      SpringFrequency: 2.000000
+      SpringDamping: 0.500000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: true
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+  - Entity: 15472570962204412978
+    TagComponent:
+      Tag: Wheel_FR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.100000 , 1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
+    HierarchyComponent:
+      Parent: 2916776672136291418
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.150000
+      SuspensionMaxLength: 0.450000
+      SpringFrequency: 2.000000
+      SpringDamping: 0.500000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+  - Entity: 9221941925100960660
+    TagComponent:
+      Tag: Wheel_FL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.100000 , 1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
+    HierarchyComponent:
+      Parent: 2916776672136291418
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.150000
+      SuspensionMaxLength: 0.450000
+      SpringFrequency: 2.000000
+      SpringDamping: 0.500000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+  - Entity: 2916776672136291418
+    TagComponent:
+      Tag: Car
+    TransformComponent:
+      Translation: [ 0.000000 , 7.500000 , -80.000000 ]
+      Rotation: [ 0.707107 , 0.000000 , 0.707107 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 1500.000000
+      LinearDamping: 0.050000
+      AngularDamping: 0.050000
+      GravityFactor: 1.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.900000 , 0.400000 , 2.100000 ]
+      Radius: 0.500000
+      HalfHeight: 0.500000
+      Offset: [ 0.000000 , 0.000000 , 0.000000 ]
+      Friction: 0.200000
+      Restitution: 0.000000
+      IsTrigger: false
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    NativeScriptComponent:
+      ScriptName: CarController
+    VehicleComponent:
+      ChassisMass: 1500.000000
+      MaxEngineTorque: 900.000000
+      MaxRPM: 7500.000000
+      MinRPM: 1000.000000
+      MaxBrakeTorque: 3000.000000
+      MaxHandBrakeTorque: 6000.000000
+      AntiRollBarStiffness: 1000.000000
+      DefaultSuspensionFrequency: 2.000000
+      DefaultSuspensionDamping: 0.500000
+      FourWheelDrive: true
+      CenterOfMassOffset: [ 0.000000 , 0.000000 , 0.000000 ]
+    VehicleAudioComponent:
+      Enabled: true
+      EnginePowerClipPath: 
+      EngineCoastClipPath: 
+      MinEnginePitch: 0.600000
+      MaxEnginePitch: 2.400000
+      EngineMasterVolume: 0.800000
+      ThrottleSmoothing: 6.000000
+      TireSquealClipPath: 
+      SlipThreshold: 0.220000
+      TireSquealMasterVolume: 0.700000
+      TireSquealFadeSpeed: 10.000000
+      SuspensionThudClipPath: 
+      SuspensionThudThreshold: 1.800000
+      SuspensionMasterVolume: 0.600000
+      CollisionImpactClipPath: 
+      CollisionDecelThreshold: 18.000000
+      CollisionMasterVolume: 0.900000
+      Spatialized: true
+      MinDistance: 2.000000
+      MaxDistance: 80.000000
+  - Entity: 10188154611227519001
+    TagComponent:
+      Tag: SplineTrack
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    SplineComponent:
+      SplineType: CatmullRom
+      ClosedLoop: true
+      SubdivisionsPerSegment: 32
+      TrackWidth: 8.000000
+      StepDistance: 1.000000
+      TextureRepeatV: 0.250000
+      GenerateCurbs: true
+      CurbWidth: 0.600000
+      CurbHeight: 0.150000
+      GenerateGuardrails: true
+      GuardrailHeight: 0.900000
+      GuardrailThickness: 0.150000
+      GeneratePhysics: true
+      Friction: 0.850000
+      Restitution: 0.050000
+      Nodes:
+        - Position: [ 0.000000 , 6.000000 , -80.000000 ]
+          HandleIn: [ -2.000000 , 0.000000 , 0.000000 ]
+          HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
+          Roll: 0.000000
+          Scale: 1.000000
+        - Position: [ 55.000000 , 9.000000 , -55.000000 ]
+          HandleIn: [ -2.000000 , 0.000000 , 0.000000 ]
+          HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
+          Roll: 6.000000
+          Scale: 1.000000
+        - Position: [ 80.000000 , 13.000000 , 0.000000 ]
+          HandleIn: [ -2.000000 , 0.000000 , 0.000000 ]
+          HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
+          Roll: 4.000000
+          Scale: 1.000000
+        - Position: [ 60.000000 , 17.000000 , 55.000000 ]
+          HandleIn: [ -2.000000 , 0.000000 , 0.000000 ]
+          HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
+          Roll: -8.000000
+          Scale: 1.000000
+        - Position: [ 0.000000 , 12.000000 , 80.000000 ]
+          HandleIn: [ -2.000000 , 0.000000 , 0.000000 ]
+          HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
+          Roll: 0.000000
+          Scale: 1.000000
+        - Position: [ -55.000000 , 8.000000 , 55.000000 ]
+          HandleIn: [ -2.000000 , 0.000000 , 0.000000 ]
+          HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
+          Roll: 8.000000
+          Scale: 1.000000
+        - Position: [ -80.000000 , 5.000000 , 0.000000 ]
+          HandleIn: [ -2.000000 , 0.000000 , 0.000000 ]
+          HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
+          Roll: -6.000000
+          Scale: 1.000000
+        - Position: [ -55.000000 , 5.500000 , -55.000000 ]
+          HandleIn: [ -2.000000 , 0.000000 , 0.000000 ]
+          HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
+          Roll: 0.000000
+          Scale: 1.000000
+  - Entity: 12744393980521143570
+    TagComponent:
+      Tag: OffRoadTerrain
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    TerrainComponent:
+      ResolutionX: 128
+      ResolutionZ: 128
+      SpacingX: 2.000000
+      SpacingZ: 2.000000
+      DataFilePath: assets/terrain/OffRoadTerrain.axleterrain
+      UseChunkedLOD: false
+      ChunkSize: 32
+      GeneratePhysics: true
+      Friction: 0.850000
+      Restitution: 0.050000
+  - Entity: 9312516032444705674
+    TagComponent:
+      Tag: Sun Light
+    TransformComponent:
+      Translation: [ 0.000000 , 100.000000 , 0.000000 ]
+      Rotation: [ 0.864361 , 0.403058 , -0.272532 , 0.127084 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    DirectionalLightComponent:
+      Color: [ 1.000000 , 0.950000 , 0.850000 ]
+      Intensity: 2.000000
+      AmbientIntensity: 0.280000
+      Azimuth: 45.000000
+      Elevation: 50.000000
+      CastShadows: true
+      ShadowOrthoSize: 25.000000
+      ShadowBias: 0.001200
+      ShadowFilterRadius: 2.000000
+      ShadowQuality: 1
+      Exposure: 1.000000
+      ToneMappingMode: 0
+      Gamma: 2.200000
+    SkyboxComponent:
+      Enabled: true
+      SkyboxType: 0
+      HDRPath: 
+      Intensity: 1.000000
+      Exposure: 1.000000
+      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
+      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
+      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
+      SunSize: 0.045000
+      SunGlow: 0.160000
+      Turbidity: 1.000000
+      SyncWithSun: true
+      CustomAzimuth: 45.000000
+      CustomElevation: 50.000000
+      HemisphereAmbient: true

@@ -363,6 +363,11 @@ namespace Axle {
                 ss << "      MinDistance: " << vac.MinDistance << "\n";
                 ss << "      MaxDistance: " << vac.MaxDistance << "\n";
             }
+
+            // Custom Entity Serializer Hook (for plugins e.g. SplineComponent, TerrainComponent)
+            if (m_Context.CustomEntitySerializer) {
+                m_Context.CustomEntitySerializer(entity, ss);
+            }
         }
 
         return ss.str();
@@ -418,15 +423,29 @@ namespace Axle {
             Vehicle,
             AudioListener,
             AudioSource,
-            VehicleAudio
+            VehicleAudio,
+            Custom
         };
         ComponentSection currentSection = ComponentSection::None;
+        std::string currentCustomSectionName;
+        std::vector<std::string> customSectionLines;
+
+        auto flushCustomSection = [&]() {
+            if (currentSection == ComponentSection::Custom && currentEntity && !currentCustomSectionName.empty()) {
+                if (m_Context.CustomSectionDeserializer) {
+                    m_Context.CustomSectionDeserializer(currentEntity, currentCustomSectionName, customSectionLines);
+                }
+                customSectionLines.clear();
+                currentCustomSectionName.clear();
+            }
+        };
 
         while (std::getline(stream, line)) {
             std::string trimmed = Trim(line);
             if (trimmed.empty() || trimmed[0] == '#') continue;
 
             if (trimmed.rfind("- Entity:", 0) == 0) {
+                flushCustomSection();
                 u64 uuid = 0;
                 try {
                     uuid = std::stoull(Trim(trimmed.substr(9)));
@@ -438,65 +457,87 @@ namespace Axle {
             } else if (!currentEntity) {
                 continue;
             } else if (trimmed == "TagComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::Tag;
             } else if (trimmed == "TransformComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::Transform;
             } else if (trimmed == "MeshInstance3D:" || trimmed == "MeshComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::Mesh;
             } else if (trimmed == "MaterialComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::Material;
             } else if (trimmed == "RigidBody3D:" || trimmed == "RigidBodyComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::RigidBody;
             } else if (trimmed == "CollisionShape3D:" || trimmed == "CollisionShape:") {
+                flushCustomSection();
                 currentSection = ComponentSection::CollisionShape;
             } else if (trimmed == "HierarchyComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::Hierarchy;
             } else if (trimmed == "NativeScriptComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::NativeScript;
             } else if (trimmed == "DirectionalLightComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::DirectionalLight;
             } else if (trimmed == "PointLightComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::PointLight;
                 if (!currentEntity.HasComponent<PointLightComponent>()) {
                     currentEntity.AddComponent<PointLightComponent>();
                 }
             } else if (trimmed == "SpotLightComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::SpotLight;
                 if (!currentEntity.HasComponent<SpotLightComponent>()) {
                     currentEntity.AddComponent<SpotLightComponent>();
                 }
             } else if (trimmed == "SkyboxComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::Skybox;
             } else if (trimmed == "CameraComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::Camera;
                 if (!currentEntity.HasComponent<CameraComponent>()) {
                     currentEntity.AddComponent<CameraComponent>();
                 }
             } else if (trimmed == "AudioListenerComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::AudioListener;
                 if (!currentEntity.HasComponent<AudioListenerComponent>()) {
                     currentEntity.AddComponent<AudioListenerComponent>();
                 }
             } else if (trimmed == "AudioSourceComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::AudioSource;
                 if (!currentEntity.HasComponent<AudioSourceComponent>()) {
                     currentEntity.AddComponent<AudioSourceComponent>();
                 }
             } else if (trimmed == "VehicleAudioComponent:") {
+                flushCustomSection();
                 currentSection = ComponentSection::VehicleAudio;
                 if (!currentEntity.HasComponent<VehicleAudioComponent>()) {
                     currentEntity.AddComponent<VehicleAudioComponent>();
                 }
             } else if (trimmed == "WheelComponent:" || trimmed == "VehicleWheel3D:") {
+                flushCustomSection();
                 currentSection = ComponentSection::Wheel;
                 if (!currentEntity.HasComponent<WheelComponent>()) {
                     currentEntity.AddComponent<WheelComponent>();
                 }
             } else if (trimmed == "VehicleComponent:" || trimmed == "VehicleComponent: true") {
+                flushCustomSection();
                 currentSection = ComponentSection::Vehicle;
                 if (!currentEntity.HasComponent<VehicleComponent>()) {
                     currentEntity.AddComponent<VehicleComponent>();
                 }
+            } else if (trimmed.back() == ':' && ((trimmed.length() >= 10 && trimmed.substr(trimmed.length() - 10) == "Component:") || (line.find_first_not_of(" \t") == 4 && trimmed.find(' ') == std::string::npos))) {
+                flushCustomSection();
+                currentSection = ComponentSection::Custom;
+                currentCustomSectionName = trimmed.substr(0, trimmed.length() - 1);
             } else {
                 switch (currentSection) {
                     case ComponentSection::Tag: {
@@ -1035,11 +1076,17 @@ namespace Axle {
                         }
                         break;
                     }
+                    case ComponentSection::Custom: {
+                        customSectionLines.push_back(line);
+                        break;
+                    }
                     default:
                         break;
                 }
             }
         }
+
+        flushCustomSection();
 
         // Recreate Physics Bodies in PhysicsScene if active
         if (m_PhysicsScene) {

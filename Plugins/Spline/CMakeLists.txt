@@ -9,6 +9,7 @@ set(SPLINE_SOURCES
     src/Curve3D.cpp
     src/TrackGenerator.cpp
     src/SplineEditor.cpp
+    src/SplineSerializer.cpp
 )
 
 set(SPLINE_HEADERS
@@ -17,6 +18,7 @@ set(SPLINE_HEADERS
     include/AxleSpline/SplineComponent.hpp
     include/AxleSpline/TrackGenerator.hpp
     include/AxleSpline/SplineEditor.hpp
+    include/AxleSpline/SplineSerializer.hpp
 )
 
 add_library(AxleSpline STATIC

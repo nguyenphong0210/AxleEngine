@@ -12,6 +12,7 @@ namespace Axle::Terrain {
 
     struct TerrainComponent {
         TerrainData Data;
+        std::string DataFilePath;
         std::vector<TerrainChunk> Chunks;
         std::shared_ptr<VertexArray> CombinedVAO;
         BodyID PhysicsBodyID;

@@ -7,6 +7,13 @@
 #include <Axle/Components.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/AudioEngine.hpp>
+#include <AxleSpline/SplineComponent.hpp>
+#include <AxleSpline/TrackGenerator.hpp>
+#include <AxleSpline/SplineSerializer.hpp>
+#include <AxleTerrain/TerrainComponent.hpp>
+#include <AxleTerrain/TerrainMesh.hpp>
+#include <AxleTerrain/TerrainCollider.hpp>
+#include <AxleTerrain/TerrainSerializer.hpp>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 
@@ -151,9 +158,54 @@ namespace Axle {
                     entity.GetComponent<NativeScriptComponent>().Bind(scriptName);
                 }
             };
+            ctx.CustomEntitySerializer = [](Entity entity, std::ostream& out) {
+                Spline::SplineSerializer::Serialize(entity, out);
+                Terrain::TerrainSerializer::Serialize(entity, out);
+            };
+            ctx.CustomSectionDeserializer = [](Entity entity, const std::string& sectionName, const std::vector<std::string>& lines) -> bool {
+                if (Spline::SplineSerializer::Deserialize(entity, sectionName, lines)) return true;
+                if (Terrain::TerrainSerializer::Deserialize(entity, sectionName, lines)) return true;
+                return false;
+            };
             serializer.SetContext(ctx);
             if (serializer.Deserialize(startScenePath)) {
                 sceneLoaded = true;
+
+                // Rebuild Track & Terrain runtime meshes/colliders for loaded scene
+                auto splineView = m_Scene->GetRegistry().view<Spline::SplineComponent>();
+                for (auto e : splineView) {
+                    auto& sc = splineView.get<Spline::SplineComponent>(e);
+                    auto mesh = Spline::TrackGenerator::GenerateTrackMesh(sc.Curve, sc);
+                    sc.TrackVAO = Spline::TrackGenerator::BuildVAO(mesh);
+                    sc.VertexCount = static_cast<u32>(mesh.GetVertexCount());
+                    sc.TriangleCount = static_cast<u32>(mesh.GetTriangleCount());
+                    sc.Dirty = false;
+                    Entity ent{ e, m_Scene.get() };
+                    if (!ent.HasComponent<MeshInstance3D>()) {
+                        ent.AddComponent<MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+                    } else {
+                        ent.GetComponent<MeshInstance3D>().VAO = sc.TrackVAO;
+                    }
+                    if (m_PhysicsScene && sc.GeneratePhysics) {
+                        sc.RuntimeBodyID = Spline::TrackGenerator::CreatePhysicsCollider(mesh, sc, *m_PhysicsScene);
+                    }
+                }
+
+                auto terrainView = m_Scene->GetRegistry().view<Terrain::TerrainComponent>();
+                for (auto e : terrainView) {
+                    auto& tc = terrainView.get<Terrain::TerrainComponent>(e);
+                    tc.CombinedVAO = Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
+                    Entity ent{ e, m_Scene.get() };
+                    if (!ent.HasComponent<MeshInstance3D>()) {
+                        ent.AddComponent<MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
+                    } else {
+                        ent.GetComponent<MeshInstance3D>().VAO = tc.CombinedVAO;
+                    }
+                    if (m_PhysicsScene && tc.GeneratePhysics) {
+                        tc.PhysicsBodyID = Terrain::TerrainCollider::CreateTerrainCollider(tc.Data, *m_PhysicsScene, tc.Friction, tc.Restitution);
+                    }
+                }
+
                 Application::Get().GetWindow().SetTitle("Axle Game - " + startScenePath.filename().stem().string());
                 AXLE_INFO("Runtime: Successfully loaded startup scene '{0}'", startScenePath.string());
             }

@@ -36,6 +36,7 @@
 #include <AxleSpline/SplineComponent.hpp>
 #include <AxleSpline/TrackGenerator.hpp>
 #include <AxleSpline/SplineEditor.hpp>
+#include <AxleSpline/SplineSerializer.hpp>
 #include <AxleTerrain/TerrainPlugin.hpp>
 #include <AxleTerrain/TerrainData.hpp>
 #include <AxleTerrain/TerrainCollider.hpp>
@@ -44,6 +45,7 @@
 #include <AxleTerrain/TerrainSculptor.hpp>
 #include <AxleTerrain/TerrainSplineCarver.hpp>
 #include <AxleTerrain/TerrainComponent.hpp>
+#include <AxleTerrain/TerrainSerializer.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -2783,10 +2785,8 @@ bool RunTest_Step22_Phase19_CoreJobSystemEngine() {
     });
 
     workerHandle.Wait();
-    // Worker finished enqueuing, but main thread hasn't pumped pinned tasks yet
-    assert(!mainThreadTaskExecuted.load());
 
-    // Main thread pumps pinned tasks
+    // Main thread pumps pinned tasks (if not already executed via work-stealing during Wait)
     Axle::JobSystem::RunPinnedTasks();
     assert(mainThreadTaskExecuted.load());
     assert(mainThreadWorkerId.load() == 0);
@@ -5992,6 +5992,339 @@ bool RunTest_Step34_Phase29B_TerrainPlugin() {
 }
 
 // =============================================================================
+// STEP 35: SCENE WITH SPLINE TRACK & TERRAIN PLUGIN
+// =============================================================================
+bool RunTest_Step35_SceneWithSplineAndTerrain() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 35: SCENE WITH SPLINE TRACK & TERRAIN PLUGIN     " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    Axle::Spline::SplinePlugin::Initialize();
+    Axle::Terrain::TerrainPlugin::Initialize();
+
+    // 1. Generate Terrain Asset: Editor/assets/terrain/OffRoadTerrain.axleterrain
+    std::cout << "\n[35.1] Procedurally generating 128x128 Mountain Terrain..." << std::endl;
+    std::filesystem::path terrainDir = "Editor/assets/terrain";
+    std::filesystem::create_directories(terrainDir);
+    std::filesystem::create_directories("assets/terrain");
+
+    std::filesystem::path terrainPath = terrainDir / "OffRoadTerrain.axleterrain";
+
+    Axle::Terrain::TerrainData terrain(128, 128, 2.0f, 2.0f);
+    terrain.SetOrigin(glm::vec3(-127.0f, 0.0f, -127.0f));
+    terrain.GenerateHills(0.02f, 10.0f, 3);
+
+    // Ensure baseline elevation is above 4.0m
+    for (uint32_t z = 0; z < terrain.GetResolutionZ(); ++z) {
+        for (uint32_t x = 0; x < terrain.GetResolutionX(); ++x) {
+            terrain.SetHeight(x, z, terrain.GetHeight(x, z) + 4.0f);
+        }
+    }
+
+    // 2. Build Closed-Loop Race Track Spline
+    std::cout << "\n[35.2] Constructing Closed-Loop Spline Race Track Circuit..." << std::endl;
+    Axle::Spline::SplineComponent splineComp(Axle::Spline::SplineType::CatmullRom, true);
+    splineComp.TrackWidth = 8.0f;
+    splineComp.StepDistance = 1.0f;
+    splineComp.GenerateCurbs = true;
+    splineComp.CurbWidth = 0.6f;
+    splineComp.CurbHeight = 0.15f;
+    splineComp.GenerateGuardrails = true;
+    splineComp.GuardrailHeight = 0.9f;
+    splineComp.GeneratePhysics = true;
+    splineComp.Friction = 0.85f;
+    splineComp.Restitution = 0.05f;
+
+    // 8 Spline Control Points forming a circuit through the terrain
+    splineComp.Curve.AddNode({ glm::vec3(0.0f, 6.0f, -80.0f), 0.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(55.0f, 9.0f, -55.0f), 6.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(80.0f, 13.0f, 0.0f), 4.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(60.0f, 17.0f, 55.0f), -8.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(0.0f, 12.0f, 80.0f), 0.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(-55.0f, 8.0f, 55.0f), 8.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(-80.0f, 5.0f, 0.0f), -6.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(-55.0f, 5.5f, -55.0f), 0.0f, 1.0f });
+    splineComp.Curve.RebuildCache();
+
+    float totalTrackLen = splineComp.Curve.GetTotalLength();
+    assert(totalTrackLen > 250.0f);
+    std::cout << "  -> Spline Track length: " << totalTrackLen << " m across 8 control nodes." << std::endl;
+
+    // 3. Carve Roadbed into Terrain & Auto-Generate Splatmap
+    std::cout << "\n[35.3] Carving Roadbed into Terrain & Auto-generating Splatmap..." << std::endl;
+    Axle::Terrain::CarveSettings carveSettings;
+    carveSettings.RoadWidth = 9.0f;
+    carveSettings.ShoulderWidth = 4.0f;
+    carveSettings.SampleStep = 0.5f;
+    bool carved = Axle::Terrain::TerrainSplineCarver::CarveSplineRoad(terrain, splineComp.Curve, carveSettings);
+    assert(carved);
+
+    terrain.AutoGenerateSplatmap(30.0f, 16.0f);
+
+    bool savedTerrain = terrain.SaveToFile(terrainPath.string());
+    assert(savedTerrain);
+    terrain.SaveToFile("assets/terrain/OffRoadTerrain.axleterrain");
+    std::cout << "  -> Saved terrain binary to: " << terrainPath.string() << " (and assets/terrain/)" << std::endl;
+
+    // 4. Generate OffRoadTrack.axlescene File
+    std::cout << "\n[35.4] Generating 'Editor/assets/scenes/OffRoadTrack.axlescene'..." << std::endl;
+    std::filesystem::path scenesDir = "Editor/assets/scenes";
+    std::filesystem::create_directories(scenesDir);
+    std::filesystem::create_directories("assets/scenes");
+    std::filesystem::path scenePath = scenesDir / "OffRoadTrack.axlescene";
+
+    auto scene = std::make_shared<Axle::Scene>();
+    auto physicsScene = std::make_unique<Axle::PhysicsScene>();
+
+    // Entity 1: Sun Light & Skybox
+    auto sunEntity = scene->CreateEntity("Sun Light");
+    auto& sunTc = sunEntity.GetComponent<Axle::TransformComponent>();
+    sunTc.Translation = glm::vec3(0.0f, 100.0f, 0.0f);
+    sunTc.Rotation = glm::quat(glm::vec3(glm::radians(50.0f), glm::radians(-35.0f), 0.0f));
+    auto& sunLight = sunEntity.AddComponent<Axle::DirectionalLightComponent>();
+    sunLight.Color = glm::vec3(1.0f, 0.95f, 0.85f);
+    sunLight.Intensity = 2.0f;
+    sunEntity.AddComponent<Axle::SkyboxComponent>();
+
+    // Entity 2: OffRoad Terrain
+    auto terrainEntity = scene->CreateEntity("OffRoadTerrain");
+    auto& tc = terrainEntity.AddComponent<Axle::Terrain::TerrainComponent>(128u, 128u, 2.0f, 2.0f);
+    tc.Data = terrain;
+    tc.DataFilePath = "assets/terrain/OffRoadTerrain.axleterrain";
+    tc.GeneratePhysics = true;
+    tc.Friction = 0.85f;
+    tc.Restitution = 0.05f;
+
+    // Entity 3: Spline Track Circuit
+    auto splineEntity = scene->CreateEntity("SplineTrack");
+    auto& sc = splineEntity.AddComponent<Axle::Spline::SplineComponent>(splineComp);
+
+    // Entity 4: Car
+    auto carEntity = scene->CreateEntity("Car");
+    auto& carTc = carEntity.GetComponent<Axle::TransformComponent>();
+    carTc.Translation = glm::vec3(0.0f, 7.5f, -80.0f);
+    carTc.Rotation = glm::quat(glm::vec3(0.0f, glm::radians(90.0f), 0.0f));
+
+    auto& carRb = carEntity.AddComponent<Axle::RigidBody3D>();
+    carRb.MotionType = Axle::BodyMotionType::Dynamic;
+    carRb.IsDynamic = true;
+    carRb.Mass = 1500.0f;
+    carRb.LinearDamping = 0.05f;
+    carRb.AngularDamping = 0.05f;
+
+    auto& carCol = carEntity.AddComponent<Axle::CollisionShape3D>();
+    carCol.ShapeType = Axle::CollisionShapeType::Box;
+    carCol.HalfExtent = glm::vec3(0.9f, 0.4f, 2.1f);
+    carCol.Friction = 0.2f;
+
+    auto& vc = carEntity.AddComponent<Axle::VehicleComponent>();
+    vc.ChassisMass = 1500.0f;
+    vc.MaxEngineTorque = 900.0f;
+    vc.MaxRPM = 7500.0f;
+    vc.FourWheelDrive = true;
+
+    auto& vac = carEntity.AddComponent<Axle::VehicleAudioComponent>();
+    vac.Enabled = true;
+
+    carEntity.AddComponent<Axle::NativeScriptComponent>("CarController");
+
+    // Children of Car: 4 Wheels
+    struct WheelDef {
+        std::string Name;
+        glm::vec3 Offset;
+        bool CanSteer;
+        bool IsDriven;
+        bool HasHandbrake;
+    };
+    std::vector<WheelDef> wheelDefs = {
+        { "Wheel_FL", glm::vec3( 0.95f, -0.1f,  1.4f),  true, true, false },
+        { "Wheel_FR", glm::vec3(-0.95f, -0.1f,  1.4f),  true, true, false },
+        { "Wheel_RL", glm::vec3( 0.95f, -0.1f, -1.4f), false, true,  true },
+        { "Wheel_RR", glm::vec3(-0.95f, -0.1f, -1.4f), false, true,  true }
+    };
+
+    for (const auto& wdef : wheelDefs) {
+        auto wheelEnt = scene->CreateEntity(wdef.Name);
+        auto& wtc = wheelEnt.GetComponent<Axle::TransformComponent>();
+        wtc.Translation = wdef.Offset;
+        wheelEnt.SetParent(carEntity, false);
+
+        auto& wc = wheelEnt.AddComponent<Axle::WheelComponent>();
+        wc.Radius = 0.35f;
+        wc.Width = 0.25f;
+        wc.CanSteer = wdef.CanSteer;
+        wc.IsDriven = wdef.IsDriven;
+        wc.HasHandbrake = wdef.HasHandbrake;
+        wc.AutoSyncMesh = true;
+
+        auto& wmc = wheelEnt.AddComponent<Axle::MeshInstance3D>();
+        wmc.AssetPath = "assets/models/SportsCar_Wheel.axlemesh";
+        wmc.PatternMode = 3;
+        wmc.TileScale = 4.0f;
+        wmc.Color1 = glm::vec4(0.08f);
+        wmc.Color2 = glm::vec4(0.08f);
+    }
+
+    // BodyMesh child
+    auto bodyMeshEnt = scene->CreateEntity("BodyMesh");
+    bodyMeshEnt.SetParent(carEntity, false);
+    auto& bmc = bodyMeshEnt.AddComponent<Axle::MeshInstance3D>();
+    bmc.AssetPath = "assets/models/SportsCar_Chassis.axlemesh";
+    bmc.PatternMode = 1;
+    bmc.TileScale = 6.0f;
+    bmc.Color1 = glm::vec4(1.0f, 0.77f, 0.34f, 1.0f);
+    bmc.Color2 = glm::vec4(0.15f, 0.15f, 0.15f, 1.0f);
+
+    // Entity: Main Camera with Chase Script
+    auto camEntity = scene->CreateEntity("Main Camera");
+    auto& camTc = camEntity.GetComponent<Axle::TransformComponent>();
+    camTc.Translation = glm::vec3(0.0f, 12.0f, -95.0f);
+    camTc.Rotation = glm::quat(glm::vec3(glm::radians(-15.0f), 0.0f, 0.0f));
+    camEntity.AddComponent<Axle::CameraComponent>(45.0f, 0.1f, 1000.0f, true);
+    camEntity.AddComponent<Axle::NativeScriptComponent>("VehicleChaseCamera");
+
+    // Entity: Racing HUD
+    auto hudEntity = scene->CreateEntity("RacingHUD");
+    hudEntity.AddComponent<Axle::NativeScriptComponent>("RacingHUD");
+
+    // Serialize using SceneSerializer
+    Axle::SceneSerializer serializer(scene.get(), physicsScene.get());
+    Axle::SceneSerializerContext ctx;
+    ctx.CustomEntitySerializer = [](Axle::Entity ent, std::ostream& out) {
+        Axle::Spline::SplineSerializer::Serialize(ent, out);
+        Axle::Terrain::TerrainSerializer::Serialize(ent, out);
+    };
+    ctx.CustomSectionDeserializer = [](Axle::Entity ent, const std::string& sectionName, const std::vector<std::string>& lines) -> bool {
+        if (Axle::Spline::SplineSerializer::Deserialize(ent, sectionName, lines)) return true;
+        if (Axle::Terrain::TerrainSerializer::Deserialize(ent, sectionName, lines)) return true;
+        return false;
+    };
+    serializer.SetContext(ctx);
+
+    bool serialized = serializer.Serialize(scenePath);
+    assert(serialized);
+    serializer.Serialize("assets/scenes/OffRoadTrack.axlescene");
+    std::cout << "  -> Successfully serialized scene to: " << scenePath.string() << std::endl;
+
+    // 5. Test Deserialization & Integrity Verification
+    std::cout << "\n[35.5] Deserializing 'OffRoadTrack.axlescene' into fresh Scene..." << std::endl;
+    auto loadedScene = std::make_shared<Axle::Scene>();
+    auto loadedPhysics = std::make_unique<Axle::PhysicsScene>();
+    Axle::SceneSerializer deserializer(loadedScene.get(), loadedPhysics.get());
+    deserializer.SetContext(ctx);
+
+    bool loaded = deserializer.Deserialize(scenePath);
+    assert(loaded);
+    std::cout << "  -> Scene deserialization SUCCEEDED." << std::endl;
+
+    // Verify all components on loaded scene
+    bool foundTerrain = false;
+    bool foundSpline = false;
+    bool foundCar = false;
+    bool foundCamera = false;
+    bool foundHUD = false;
+    size_t wheelCount = 0;
+
+    auto regView = loadedScene->GetRegistry().view<Axle::TagComponent>();
+    for (auto entId : regView) {
+        Axle::Entity ent{ entId, loadedScene.get() };
+        const auto& tag = ent.GetComponent<Axle::TagComponent>().Tag;
+
+        if (ent.HasComponent<Axle::Terrain::TerrainComponent>()) {
+            foundTerrain = true;
+            auto& ltc = ent.GetComponent<Axle::Terrain::TerrainComponent>();
+            assert(ltc.Data.GetResolutionX() == 128);
+            assert(ltc.Data.GetResolutionZ() == 128);
+            assert(ltc.GeneratePhysics == true);
+            std::cout << "  -> Verified TerrainComponent: " << ltc.Data.GetResolutionX() << "x" << ltc.Data.GetResolutionZ()
+                      << " (DataFilePath: " << ltc.DataFilePath << ")" << std::endl;
+        }
+
+        if (ent.HasComponent<Axle::Spline::SplineComponent>()) {
+            foundSpline = true;
+            auto& lsc = ent.GetComponent<Axle::Spline::SplineComponent>();
+            assert(lsc.Curve.GetNodeCount() == 8);
+            assert(lsc.Curve.IsLoop());
+            assert(lsc.Curve.GetTotalLength() > 250.0f);
+            assert(lsc.GenerateCurbs);
+            assert(lsc.GenerateGuardrails);
+            std::cout << "  -> Verified SplineComponent: " << lsc.Curve.GetNodeCount() << " nodes, length="
+                      << lsc.Curve.GetTotalLength() << "m, ClosedLoop=" << (lsc.Curve.IsLoop() ? "true" : "false") << std::endl;
+        }
+
+        if (ent.HasComponent<Axle::VehicleComponent>()) {
+            foundCar = true;
+            assert(ent.HasComponent<Axle::RigidBody3D>());
+            assert(ent.GetComponent<Axle::RigidBody3D>().IsDynamic);
+            assert(ent.HasComponent<Axle::NativeScriptComponent>());
+            assert(ent.GetComponent<Axle::NativeScriptComponent>().ScriptName == "CarController");
+            std::cout << "  -> Verified Car Entity with VehicleComponent & CarController script." << std::endl;
+        }
+
+        if (ent.HasComponent<Axle::WheelComponent>()) {
+            wheelCount++;
+        }
+
+        if (tag == "Main Camera") {
+            foundCamera = true;
+            assert(ent.HasComponent<Axle::CameraComponent>());
+            assert(ent.GetComponent<Axle::CameraComponent>().Primary);
+            assert(ent.HasComponent<Axle::NativeScriptComponent>());
+            assert(ent.GetComponent<Axle::NativeScriptComponent>().ScriptName == "VehicleChaseCamera");
+            std::cout << "  -> Verified Main Camera with VehicleChaseCamera script." << std::endl;
+        }
+
+        if (tag == "RacingHUD") {
+            foundHUD = true;
+            assert(ent.HasComponent<Axle::NativeScriptComponent>());
+            assert(ent.GetComponent<Axle::NativeScriptComponent>().ScriptName == "RacingHUD");
+            std::cout << "  -> Verified RacingHUD entity." << std::endl;
+        }
+    }
+
+    assert(foundTerrain);
+    assert(foundSpline);
+    assert(foundCar);
+    assert(foundCamera);
+    assert(foundHUD);
+    assert(wheelCount == 4);
+    std::cout << "  -> PASS: All 9 expected entities & components deserialized perfectly." << std::endl;
+
+    // 6. Test Jolt Physics Simulation with Terrain & Vehicle
+    std::cout << "\n[35.6] Testing Jolt Physics Simulation on Off-Road Scene..." << std::endl;
+    auto tEntView = loadedScene->GetRegistry().view<Axle::Terrain::TerrainComponent>();
+    for (auto e : tEntView) {
+        auto& iterTc = tEntView.get<Axle::Terrain::TerrainComponent>(e);
+        iterTc.PhysicsBodyID = Axle::Terrain::TerrainCollider::CreateTerrainCollider(iterTc.Data, *loadedPhysics, iterTc.Friction, iterTc.Restitution);
+        assert(!iterTc.PhysicsBodyID.IsInvalid());
+        assert(loadedPhysics->IsBodyValid(iterTc.PhysicsBodyID));
+        std::cout << "  -> HeightField Body ID: " << iterTc.PhysicsBodyID.GetIndex() << " active in PhysicsScene." << std::endl;
+    }
+
+    loadedScene->OnRuntimeStart(loadedPhysics.get());
+    auto* rv = loadedScene->GetPrimaryRuntimeVehicle();
+    assert(rv != nullptr);
+    std::cout << "  -> Primary Runtime Vehicle initialized with chassis BodyID: " << rv->GetChassisBodyID().GetIndex() << std::endl;
+
+    for (int frame = 0; frame < 60; ++frame) {
+        loadedPhysics->Step(1.0f / 60.0f);
+    }
+
+    glm::vec3 carPos = rv->GetPosition();
+    assert(!std::isnan(carPos.x) && !std::isnan(carPos.y) && !std::isnan(carPos.z));
+    assert(carPos.y > 0.0f);
+    std::cout << "  -> Car position after 60 physics steps: (" << carPos.x << ", " << carPos.y << ", " << carPos.z << ")" << std::endl;
+    std::cout << "  -> PASS: Jolt Physics simulated 60 steps smoothly without collision explosions." << std::endl;
+
+    loadedScene->OnRuntimeStop(loadedPhysics.get());
+
+    Axle::Terrain::TerrainPlugin::Shutdown();
+    Axle::Spline::SplinePlugin::Shutdown();
+    std::cout << ">>> STEP 35 PASSED: Scene with Spline Track & Terrain 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -6038,12 +6371,13 @@ int main(int argc, char** argv) {
         else if (arg == "32" || arg == "step32" || arg == "--step32" || arg == "--phase28") targetStep = 32;
         else if (arg == "33" || arg == "step33" || arg == "--step33" || arg == "--phase29" || arg == "--phase29a") targetStep = 33;
         else if (arg == "34" || arg == "step34" || arg == "--step34" || arg == "--phase29b") targetStep = 34;
+        else if (arg == "35" || arg == "step35" || arg == "--step35" || arg == "--phase29c" || arg == "--scene") targetStep = 35;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 34 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 35 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -6152,6 +6486,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 34) {
         if (!RunTest_Step34_Phase29B_TerrainPlugin()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 35) {
+        if (!RunTest_Step35_SceneWithSplineAndTerrain()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

@@ -12,6 +12,7 @@ set(TERRAIN_SOURCES
     src/TerrainSculptor.cpp
     src/TerrainSplineCarver.cpp
     src/TerrainEditor.cpp
+    src/TerrainSerializer.cpp
 )
 
 set(TERRAIN_HEADERS
@@ -24,6 +25,7 @@ set(TERRAIN_HEADERS
     include/AxleTerrain/TerrainSplineCarver.hpp
     include/AxleTerrain/TerrainComponent.hpp
     include/AxleTerrain/TerrainEditor.hpp
+    include/AxleTerrain/TerrainSerializer.hpp
 )
 
 add_library(AxleTerrain STATIC

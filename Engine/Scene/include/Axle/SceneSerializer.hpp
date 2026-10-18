@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 #include <functional>
+#include <vector>
+#include <ostream>
 
 namespace Axle {
 
@@ -18,6 +20,8 @@ namespace Axle {
         std::shared_ptr<VertexArray> ConeMesh;
         std::shared_ptr<VertexArray> PlaneMesh;
         std::function<void(Entity, const std::string&)> ScriptBinder;
+        std::function<void(Entity, std::ostream&)> CustomEntitySerializer;
+        std::function<bool(Entity, const std::string&, const std::vector<std::string>&)> CustomSectionDeserializer;
     };
 
     class SceneSerializer {

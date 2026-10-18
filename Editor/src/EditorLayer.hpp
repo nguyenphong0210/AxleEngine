@@ -73,6 +73,8 @@ public:
 private:
     void ResetSimulation();
     void RenderToolbar();
+    void UnlockCursor();
+    bool IsCursorLocked() const;
 
 private:
     std::unique_ptr<Axle::PerspectiveCameraController> m_CameraController;

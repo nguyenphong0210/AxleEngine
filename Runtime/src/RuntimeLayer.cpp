@@ -216,6 +216,9 @@ namespace Axle {
             if (!m_EscapeKeyWasPressed) {
                 m_IsPaused = !m_IsPaused;
                 AXLE_INFO("Runtime: Simulation {0}", m_IsPaused ? "PAUSED" : "RESUMED");
+                if (m_IsPaused) {
+                    Input::SetCursorMode(CursorMode::Normal);
+                }
                 m_EscapeKeyWasPressed = true;
             }
         } else {
@@ -289,6 +292,7 @@ namespace Axle {
 
     void RuntimeLayer::OnDetach() {
         AXLE_INFO("RuntimeLayer detached - Shutting down Game Player");
+        Input::SetCursorMode(CursorMode::Normal);
         if (m_Scene) {
             m_Scene->OnRuntimeStop(m_PhysicsScene.get());
         }

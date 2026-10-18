@@ -311,13 +311,24 @@ void EditorLayer::OnAttach() {
     AXLE_INFO("Axle Editor initialized successfully");
 }
 
+bool EditorLayer::IsCursorLocked() const {
+    return Axle::Input::GetCursorMode() == Axle::CursorMode::Locked;
+}
+
+void EditorLayer::UnlockCursor() {
+    if (Axle::Input::GetCursorMode() == Axle::CursorMode::Locked || m_CursorCaptured) {
+        Axle::Input::SetCursorMode(Axle::CursorMode::Normal);
+        if (m_CursorCaptured) {
+            Axle::Application::Get().GetWindow().SetCursorPosition(m_PreCaptureMousePos.x, m_PreCaptureMousePos.y);
+            m_CursorCaptured = false;
+        }
+        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+    }
+}
+
 void EditorLayer::OnDetach() {
     AXLE_INFO("EditorLayer detached");
-    if (m_CursorCaptured) {
-        Axle::Application::Get().GetWindow().SetCursorMode(Axle::CursorMode::Normal);
-        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
-        m_CursorCaptured = false;
-    }
+    UnlockCursor();
     if (m_SceneState == SceneState::Play) {
         OnSceneStop();
     }
@@ -890,24 +901,14 @@ void EditorLayer::UpdateWindowTitle() {
 
 void EditorLayer::OnScenePause() {
     m_SceneState = SceneState::Pause;
-    if (m_CursorCaptured) {
-        Axle::Application::Get().GetWindow().SetCursorMode(Axle::CursorMode::Normal);
-        Axle::Application::Get().GetWindow().SetCursorPosition(m_PreCaptureMousePos.x, m_PreCaptureMousePos.y);
-        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
-        m_CursorCaptured = false;
-    }
+    UnlockCursor();
     AXLE_INFO("Simulation paused. Viewport Free-Fly inspection enabled.");
 }
 
 void EditorLayer::OnSceneStop() {
     if (m_SceneState == SceneState::Edit) return;
 
-    if (m_CursorCaptured || Axle::Input::GetCursorMode() == Axle::CursorMode::Locked) {
-        Axle::Input::SetCursorMode(Axle::CursorMode::Normal);
-        Axle::Application::Get().GetWindow().SetCursorPosition(m_PreCaptureMousePos.x, m_PreCaptureMousePos.y);
-        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
-        m_CursorCaptured = false;
-    }
+    UnlockCursor();
 
     m_SceneState = SceneState::Edit;
 
@@ -977,12 +978,10 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     if (m_SceneState != SceneState::Play || m_UseEditorCameraInPlay) {
         if (m_ViewportHovered && isHoldingRMB && !m_CursorCaptured) {
             m_PreCaptureMousePos = glm::vec2(Axle::Input::GetMouseX(), Axle::Input::GetMouseY());
-            Axle::Application::Get().GetWindow().SetCursorMode(Axle::CursorMode::Locked);
+            Axle::Input::SetCursorMode(Axle::CursorMode::Locked);
             m_CursorCaptured = true;
         } else if (!isHoldingRMB && m_CursorCaptured) {
-            Axle::Application::Get().GetWindow().SetCursorMode(Axle::CursorMode::Normal);
-            Axle::Application::Get().GetWindow().SetCursorPosition(m_PreCaptureMousePos.x, m_PreCaptureMousePos.y);
-            m_CursorCaptured = false;
+            UnlockCursor();
         }
     }
 
@@ -991,9 +990,8 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     const bool isF1Down = Axle::Input::IsKeyPressed(Axle::KeyCode::F1);
     const bool isEscapeDown = Axle::Input::IsKeyPressed(Axle::KeyCode::Escape);
     bool escapeConsumed = false;
-    if ((isEscapeDown || (isShiftDownEscape && isF1Down)) && Axle::Input::GetCursorMode() == Axle::CursorMode::Locked) {
-        Axle::Input::SetCursorMode(Axle::CursorMode::Normal);
-        m_CursorCaptured = false;
+    if ((isEscapeDown || (isShiftDownEscape && isF1Down)) && IsCursorLocked()) {
+        UnlockCursor();
         if (isEscapeDown) {
             escapeConsumed = true;
             m_EscKeyWasPressed = true;
@@ -1001,7 +999,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     }
 
     // Synchronize ImGui mouse processing with Engine CursorMode (Unreal / Godot style)
-    if (Axle::Input::GetCursorMode() == Axle::CursorMode::Locked) {
+    if (IsCursorLocked()) {
         ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
     } else {
         ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
@@ -1198,7 +1196,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
 
     // Editor Free-Fly Camera (Active in Edit mode, Pause mode, or Eject Free-Fly mode during Play)
     if (m_SceneState != SceneState::Play || m_UseEditorCameraInPlay) {
-        if ((m_ViewportHovered || m_ViewportFocused || m_CursorCaptured) && !ImGui::GetIO().WantTextInput) {
+        if ((m_ViewportHovered || m_ViewportFocused || m_CursorCaptured || IsCursorLocked()) && !ImGui::GetIO().WantTextInput) {
             const bool isManipulatingGizmo = (m_SceneState == SceneState::Edit) && ImGuizmo::IsUsing();
             if (!isManipulatingGizmo) {
                 m_CameraController->OnUpdate(ts);

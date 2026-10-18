@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 29** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **37 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
+* **Automated Test Verification**: **38 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)** and beyond.
 
 ---
@@ -239,10 +239,13 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Optimized Linear Blend Skinning (LBS) vertex shaders (`SkeletalMesh.vert` and `SkeletalShadowDepth.vert`) for PBR lighting pass and directional shadow depth pass.
     - [x] Dedicated `SkinningPipeline` decoupled renderer class integrated directly into `SceneRenderer`.
     - [x] Automated test suite Step 37 in `Editor/src/Test.cpp` verifying shader compilation, dynamic bone palette upload, 64-byte layout verification, and animated skinning dispatch.
-  - [ ] **Step 3 - Animation Pose Evaluator & Blending Tree (`Engine/Animation`)**:
-    - Runtime track sampling with spherical linear interpolation (`glm::slerp`) for quaternions and linear interpolation (`glm::mix`) for translation/scale.
-    - Hierarchical forward kinematics solving global bone transform matrices from local bone transforms.
-    - Animation Blend Tree & State Machine: 1D blend spaces (Idle $\leftrightarrow$ Walk $\leftrightarrow$ Run based on speed parameter), cross-fading, and transition states (Jump, Fall, Land).
+  - [x] **Step 3 - Animation Pose Evaluator & Blending Tree (`Engine/Animation`)**:
+    - [x] Runtime track sampling with shortest-path spherical linear interpolation (`glm::slerp`) for quaternions and linear interpolation (`glm::mix`) for translation/scale via `BoneTransform` & `AnimationPose`.
+    - [x] Hierarchical forward kinematics solving global bone transform matrices and GPU skinning palettes from local bone transforms.
+    - [x] 1D Blend Spaces (`BlendSpace1D`): Smooth locomotion interpolation (Idle $\leftrightarrow$ Walk $\leftrightarrow$ Run) with phase-matched footstep time synchronization.
+    - [x] Hierarchical Animation State Machine (`AnimationStateMachine`): Clip & BlendSpace states, parameter control (`Speed`, `IsGrounded`, `VerticalVelocity`, triggers), smooth cross-fading, exit times, and state transitions (Locomotion $\leftrightarrow$ Jump $\leftrightarrow$ Fall $\leftrightarrow$ Land).
+    - [x] High-level runtime `Animator` controller with direct GPU skinning palette upload to `SkinningPipeline`.
+    - [x] Automated test suite Step 38 in `Editor/src/Test.cpp` verifying SLERP/LERP arithmetic, 1D blend spaces, crossfades, complete jump lifecycle, and GPU skinning dispatch.
   - [ ] **Step 4 - Kinematic Character Controller (KCC) via Jolt Physics (`Engine/Physics`)**:
     - Robust character physics integration using `JPH::CharacterVirtual` with capsule collision shape.
     - Slope traversal handling (`MaxSlopeAngle`), automatic stair/curb stepping (`StepOffset`), and ground snapping (`StickToFloor`).

@@ -48,6 +48,10 @@
 #include <AxleTerrain/TerrainSerializer.hpp>
 #include <Axle/Skeleton.hpp>
 #include <Axle/AnimationClip.hpp>
+#include <Axle/AnimationPose.hpp>
+#include <Axle/BlendSpace1D.hpp>
+#include <Axle/AnimationStateMachine.hpp>
+#include <Axle/Animator.hpp>
 #include <Axle/SkeletalMesh.hpp>
 #include <Axle/SkeletalMeshImporter.hpp>
 #include <Axle/SkinningPipeline.hpp>
@@ -6610,6 +6614,232 @@ bool RunTest_Step37_Phase30_Step2_GPUSkinningAndShaderPipeline() {
 }
 
 // =============================================================================
+// STEP 38: PHASE 30 - STEP 3: ANIMATION POSE EVALUATOR & BLENDING TREE
+// =============================================================================
+bool RunTest_Step38_Phase30_Step3_AnimationPoseEvaluatorAndBlendingTree() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 38: PHASE 30 - STEP 3 POSE EVALUATOR & BLEND TREE" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // Sub-test 1: BoneTransform & AnimationPose Evaluation & Shortest-Path SLERP
+    std::cout << "\n[38.1] Testing BoneTransform Arithmetic & Shortest-Path SLERP..." << std::endl;
+    Axle::BoneTransform xformA(glm::vec3(0.0f, 1.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
+    glm::quat rot90Y = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    Axle::BoneTransform xformB(glm::vec3(0.0f, 3.0f, 0.0f), rot90Y, glm::vec3(2.0f));
+
+    // Midpoint blend
+    Axle::BoneTransform mid = Axle::BoneTransform::Blend(xformA, xformB, 0.5f);
+    assert(std::abs(mid.Translation.y - 2.0f) < 1e-4f);
+    assert(std::abs(mid.Scale.x - 1.5f) < 1e-4f);
+    glm::vec3 fwd = mid.Rotation * glm::vec3(0.0f, 0.0f, 1.0f);
+    assert(std::abs(fwd.x - std::sin(glm::radians(45.0f))) < 1e-3f);
+
+    // Opposite hemisphere shortest path test (negated quaternion representing same orientation)
+    Axle::BoneTransform xformNeg(glm::vec3(0.0f, 3.0f, 0.0f), -rot90Y, glm::vec3(2.0f));
+    Axle::BoneTransform midNeg = Axle::BoneTransform::Blend(xformA, xformNeg, 0.5f);
+    glm::vec3 fwdNeg = midNeg.Rotation * glm::vec3(0.0f, 0.0f, 1.0f);
+    assert(std::abs(fwdNeg.x - std::sin(glm::radians(45.0f))) < 1e-3f); // Must follow shortest arc
+
+    // Matrix roundtrip
+    glm::mat4 mat = mid.ToMatrix();
+    Axle::BoneTransform reconstructed = Axle::BoneTransform::FromMatrix(mat);
+    assert(std::abs(reconstructed.Translation.y - mid.Translation.y) < 1e-3f);
+    assert(std::abs(reconstructed.Scale.x - mid.Scale.x) < 1e-3f);
+    std::cout << "  -> PASS: BoneTransform arithmetic, matrix roundtrip, and shortest-path SLERP mathematically verified." << std::endl;
+
+    // Sub-test 2: 1D Blend Space Locomotion (Idle <-> Walk <-> Run)
+    std::cout << "\n[38.2] Testing 1D Locomotion Blend Space (Idle <-> Walk <-> Run)..." << std::endl;
+    Axle::SkeletalMeshData bipedData;
+    std::shared_ptr<Axle::Skeleton> bipedSkeleton;
+    std::vector<std::shared_ptr<Axle::AnimationClip>> clips;
+    bool bipedOk = Axle::SkeletalMeshImporter::CreateProceduralBiped(bipedData, bipedSkeleton, clips);
+    assert(bipedOk);
+
+    std::vector<std::shared_ptr<Axle::AnimationClip>> fullClips;
+    Axle::SkeletalMeshImporter::GenerateHumanoidClips(*bipedSkeleton, fullClips);
+    assert(fullClips.size() == 6);
+
+    std::shared_ptr<Axle::AnimationClip> idleClip, walkClip, runClip, jumpClip, fallClip, landClip;
+    for (const auto& c : fullClips) {
+        if (c->GetName() == "Idle") idleClip = c;
+        else if (c->GetName() == "Walk") walkClip = c;
+        else if (c->GetName() == "Run") runClip = c;
+        else if (c->GetName() == "Jump") jumpClip = c;
+        else if (c->GetName() == "Fall") fallClip = c;
+        else if (c->GetName() == "Land") landClip = c;
+    }
+    assert(idleClip && walkClip && runClip && jumpClip && fallClip && landClip);
+
+    auto locomotion = std::make_shared<Axle::BlendSpace1D>("Locomotion");
+    locomotion->AddPoint(0.0f, idleClip);  // Speed 0.0 m/s
+    locomotion->AddPoint(1.8f, walkClip);  // Speed 1.8 m/s
+    locomotion->AddPoint(4.5f, runClip);   // Speed 4.5 m/s
+
+    assert(locomotion->GetPointCount() == 3);
+
+    // Boundary sampling
+    Axle::AnimationPose poseIdle(bipedSkeleton->GetBoneCount());
+    locomotion->SamplePose(0.0f, 0.5f, *bipedSkeleton, poseIdle);
+
+    Axle::AnimationPose poseRun(bipedSkeleton->GetBoneCount());
+    locomotion->SamplePose(4.5f, 0.3f, *bipedSkeleton, poseRun);
+
+    // In-between sampling (Speed = 0.9 m/s, 50% Idle / 50% Walk)
+    Axle::AnimationPose poseHalf(bipedSkeleton->GetBoneCount());
+    locomotion->SamplePose(0.9f, 0.25f, *bipedSkeleton, poseHalf);
+    for (const auto& xf : poseHalf.Transforms) {
+        assert(!std::isnan(xf.Translation.x) && !std::isnan(xf.Rotation.w));
+    }
+
+    // In-between sampling (Speed = 3.15 m/s, 50% Walk / 50% Run)
+    Axle::AnimationPose poseWalkRun(bipedSkeleton->GetBoneCount());
+    locomotion->SamplePose(3.15f, 0.2f, *bipedSkeleton, poseWalkRun);
+    assert(std::abs(locomotion->GetBlendedDuration(3.15f) - 0.8f) < 1e-3f);
+    std::cout << "  -> PASS: 1D Blend Space evaluated with phase-matched time synchronization." << std::endl;
+
+    // Sub-test 3: Animation State Machine Setup
+    std::cout << "\n[38.3] Setting up Character Animation State Machine..." << std::endl;
+    auto sm = std::make_shared<Axle::AnimationStateMachine>("CharacterController");
+
+    Axle::AnimationState stateLoco;
+    stateLoco.Name = "Locomotion";
+    stateLoco.Type = Axle::AnimationNodeType::BlendSpace1D;
+    stateLoco.BlendSpace = locomotion;
+    stateLoco.BlendParameterName = "Speed";
+    stateLoco.Loop = true;
+    sm->AddState(stateLoco);
+
+    Axle::AnimationState stateJump;
+    stateJump.Name = "Jump";
+    stateJump.Type = Axle::AnimationNodeType::Clip;
+    stateJump.Clip = jumpClip;
+    stateJump.Loop = false;
+    sm->AddState(stateJump);
+
+    Axle::AnimationState stateFall;
+    stateFall.Name = "Fall";
+    stateFall.Type = Axle::AnimationNodeType::Clip;
+    stateFall.Clip = fallClip;
+    stateFall.Loop = true;
+    sm->AddState(stateFall);
+
+    Axle::AnimationState stateLand;
+    stateLand.Name = "Land";
+    stateLand.Type = Axle::AnimationNodeType::Clip;
+    stateLand.Clip = landClip;
+    stateLand.Loop = false;
+    sm->AddState(stateLand);
+
+    // Transitions
+    // 1. Locomotion -> Jump (Triggered by IsJumping)
+    Axle::AnimationTransition tJump;
+    tJump.FromState = "Locomotion";
+    tJump.ToState = "Jump";
+    tJump.Duration = 0.15f;
+    tJump.Condition = [sm]() { return sm->GetBool("IsJumping"); };
+    sm->AddTransition(tJump);
+
+    // 2. Jump -> Fall (Wait until jump is 70% completed and vertical velocity < 0)
+    Axle::AnimationTransition tFall;
+    tFall.FromState = "Jump";
+    tFall.ToState = "Fall";
+    tFall.Duration = 0.15f;
+    tFall.HasExitTime = true;
+    tFall.ExitTime = 0.7f;
+    tFall.Condition = [sm]() { return sm->GetFloat("VerticalVelocity") < 0.0f; };
+    sm->AddTransition(tFall);
+
+    // 3. Fall -> Land (Triggered by IsGrounded)
+    Axle::AnimationTransition tLand;
+    tLand.FromState = "Fall";
+    tLand.ToState = "Land";
+    tLand.Duration = 0.1f;
+    tLand.Condition = [sm]() { return sm->GetBool("IsGrounded"); };
+    sm->AddTransition(tLand);
+
+    // 4. Land -> Locomotion (Automatic exit after landing recovery)
+    Axle::AnimationTransition tLoco;
+    tLoco.FromState = "Land";
+    tLoco.ToState = "Locomotion";
+    tLoco.Duration = 0.15f;
+    tLoco.HasExitTime = true;
+    tLoco.ExitTime = 0.85f;
+    sm->AddTransition(tLoco);
+
+    assert(sm->GetCurrentStateName() == "Locomotion");
+    std::cout << "  -> PASS: 4 Animation states and 4 transition rules configured with predicates and exit times." << std::endl;
+
+    // Sub-test 4: Animation State Machine Simulation Cycle (Locomotion -> Jump -> Fall -> Land -> Locomotion)
+    std::cout << "\n[38.4] Simulating State Machine Lifecycle with Dynamic Cross-Fades..." << std::endl;
+    sm->SetFloat("Speed", 3.0f);
+    sm->Update(0.1f, *bipedSkeleton);
+    assert(sm->GetCurrentStateName() == "Locomotion");
+    assert(!sm->IsTransitioning());
+
+    // Trigger Jump
+    sm->SetBool("IsJumping", true);
+    sm->Update(0.05f, *bipedSkeleton);
+    assert(sm->IsTransitioning());
+    assert(sm->GetTransitionProgress() > 0.0f && sm->GetTransitionProgress() < 1.0f);
+
+    // Finish crossfade into Jump
+    sm->Update(0.15f, *bipedSkeleton);
+    assert(sm->GetCurrentStateName() == "Jump");
+    assert(!sm->IsTransitioning());
+
+    // Trigger Fall
+    sm->SetBool("IsJumping", false);
+    sm->SetFloat("VerticalVelocity", -4.0f);
+    sm->Update(0.35f, *bipedSkeleton); // Past exit time
+    sm->Update(0.15f, *bipedSkeleton); // Crossfade to Fall
+    assert(sm->GetCurrentStateName() == "Fall");
+
+    // Trigger Land
+    sm->SetBool("IsGrounded", true);
+    sm->Update(0.05f, *bipedSkeleton);
+    assert(sm->IsTransitioning());
+    sm->Update(0.1f, *bipedSkeleton);
+    assert(sm->GetCurrentStateName() == "Land");
+
+    // Rebound back to Locomotion
+    sm->Update(0.35f, *bipedSkeleton); // Past landing exit time
+    sm->Update(0.15f, *bipedSkeleton); // Crossfade back to Locomotion
+    assert(sm->GetCurrentStateName() == "Locomotion");
+    assert(sm->GetSkinningMatrices().size() == 8);
+
+    for (const auto& mat : sm->GetSkinningMatrices()) {
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                assert(!std::isnan(mat[c][r]) && !std::isinf(mat[c][r]));
+            }
+        }
+    }
+    std::cout << "  -> PASS: Complete character locomotion-jump-fall-land-locomotion lifecycle executed flawlessly." << std::endl;
+
+    // Sub-test 5: High-Level Animator Controller & GPU Skinning Pipeline Upload
+    std::cout << "\n[38.5] Testing High-Level Animator Controller & GPU Skinning Upload..." << std::endl;
+    Axle::Animator animator(bipedSkeleton);
+    animator.SetStateMachine(sm);
+    animator.SetFloat("Speed", 2.2f);
+    animator.Update(0.016f); // 60 FPS tick
+
+    assert(animator.GetSkinningMatrices().size() == 8);
+
+    Axle::SkeletalMesh bipedMesh(bipedData);
+    Axle::SkinningPipeline skinningPipeline;
+    skinningPipeline.Init();
+
+    animator.UploadToPipeline(skinningPipeline, *skinningPipeline.GetShader());
+    skinningPipeline.RenderSkinned(*skinningPipeline.GetShader(), bipedMesh.GetVAO(), glm::mat4(1.0f), animator.GetSkinningMatrices());
+    skinningPipeline.RenderSkinned(*skinningPipeline.GetShadowShader(), bipedMesh.GetVAO(), glm::mat4(1.0f), animator.GetSkinningMatrices());
+
+    std::cout << "  -> PASS: Animator controller evaluated poses and dispatched GPU skinning draw call." << std::endl;
+
+    std::cout << ">>> STEP 38 PASSED: Phase 30 Step 3 Animation Pose Evaluator & Blending Tree 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -6659,12 +6889,13 @@ int main(int argc, char** argv) {
         else if (arg == "35" || arg == "step35" || arg == "--step35" || arg == "--phase29c" || arg == "--scene") targetStep = 35;
         else if (arg == "36" || arg == "step36" || arg == "--step36" || arg == "--phase30" || arg == "--phase30a") targetStep = 36;
         else if (arg == "37" || arg == "step37" || arg == "--step37" || arg == "--phase30b") targetStep = 37;
+        else if (arg == "38" || arg == "step38" || arg == "--step38" || arg == "--phase30c") targetStep = 38;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 37 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 38 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -6782,6 +7013,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 37) {
         if (!RunTest_Step37_Phase30_Step2_GPUSkinningAndShaderPipeline()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 38) {
+        if (!RunTest_Step38_Phase30_Step3_AnimationPoseEvaluatorAndBlendingTree()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

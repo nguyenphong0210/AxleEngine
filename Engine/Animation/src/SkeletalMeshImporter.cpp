@@ -634,4 +634,271 @@ namespace Axle {
         return true;
     }
 
+    void SkeletalMeshImporter::GenerateHumanoidClips(const Skeleton& skeleton,
+                                                     std::vector<std::shared_ptr<AnimationClip>>& outClips) {
+        float twoPi = 6.2831853f;
+
+        // 1. Idle (2.0s)
+        auto idleClip = std::make_shared<AnimationClip>("Idle", 2.0f, 30.0f);
+        {
+            AnimationChannel spineCh;
+            spineCh.BoneName = "Spine";
+            spineCh.BoneIndex = skeleton.FindBoneIndex("Spine");
+            for (int i = 0; i <= 20; ++i) {
+                float t = i * 0.1f;
+                float breath = std::sin(t * 3.14159f);
+                spineCh.Rotations.push_back({ t, glm::angleAxis(glm::radians(breath * 3.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                spineCh.Positions.push_back({ t, glm::vec3(0.0f, 0.4f, 0.0f) });
+                spineCh.Scales.push_back({ t, glm::vec3(1.0f) });
+            }
+            idleClip->AddChannel(spineCh);
+
+            AnimationChannel hipsCh;
+            hipsCh.BoneName = "Hips";
+            hipsCh.BoneIndex = skeleton.FindBoneIndex("Hips");
+            for (int i = 0; i <= 20; ++i) {
+                float t = i * 0.1f;
+                float bob = std::sin(t * 3.14159f) * 0.015f;
+                hipsCh.Positions.push_back({ t, glm::vec3(0.0f, 1.0f + bob, 0.0f) });
+                hipsCh.Rotations.push_back({ t, glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+                hipsCh.Scales.push_back({ t, glm::vec3(1.0f) });
+            }
+            idleClip->AddChannel(hipsCh);
+        }
+        outClips.push_back(idleClip);
+
+        // 2. Walk (1.0s)
+        auto walkClip = std::make_shared<AnimationClip>("Walk", 1.0f, 30.0f);
+        {
+            AnimationChannel lLegCh;
+            lLegCh.BoneName = "LeftLeg";
+            lLegCh.BoneIndex = skeleton.FindBoneIndex("LeftLeg");
+            AnimationChannel rLegCh;
+            rLegCh.BoneName = "RightLeg";
+            rLegCh.BoneIndex = skeleton.FindBoneIndex("RightLeg");
+            AnimationChannel lArmCh;
+            lArmCh.BoneName = "LeftArm";
+            lArmCh.BoneIndex = skeleton.FindBoneIndex("LeftArm");
+            AnimationChannel rArmCh;
+            rArmCh.BoneName = "RightArm";
+            rArmCh.BoneIndex = skeleton.FindBoneIndex("RightArm");
+            AnimationChannel hipsCh;
+            hipsCh.BoneName = "Hips";
+            hipsCh.BoneIndex = skeleton.FindBoneIndex("Hips");
+
+            for (int i = 0; i <= 20; ++i) {
+                float t = i * 0.05f;
+                float phase = t * twoPi;
+
+                lLegCh.Rotations.push_back({ t, glm::angleAxis(std::sin(phase) * glm::radians(30.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                lLegCh.Positions.push_back({ t, glm::vec3(-0.18f, -0.45f, 0.0f) });
+                lLegCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                rLegCh.Rotations.push_back({ t, glm::angleAxis(-std::sin(phase) * glm::radians(30.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                rLegCh.Positions.push_back({ t, glm::vec3(0.18f, -0.45f, 0.0f) });
+                rLegCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                lArmCh.Rotations.push_back({ t, glm::angleAxis(-std::sin(phase) * glm::radians(25.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                lArmCh.Positions.push_back({ t, glm::vec3(-0.35f, 0.15f, 0.0f) });
+                lArmCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                rArmCh.Rotations.push_back({ t, glm::angleAxis(std::sin(phase) * glm::radians(25.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                rArmCh.Positions.push_back({ t, glm::vec3(0.35f, 0.15f, 0.0f) });
+                rArmCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                float bounce = std::cos(phase * 2.0f) * 0.03f;
+                hipsCh.Positions.push_back({ t, glm::vec3(0.0f, 1.0f + bounce, 0.0f) });
+                hipsCh.Rotations.push_back({ t, glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+                hipsCh.Scales.push_back({ t, glm::vec3(1.0f) });
+            }
+            walkClip->AddChannel(lLegCh);
+            walkClip->AddChannel(rLegCh);
+            walkClip->AddChannel(lArmCh);
+            walkClip->AddChannel(rArmCh);
+            walkClip->AddChannel(hipsCh);
+        }
+        outClips.push_back(walkClip);
+
+        // 3. Run (0.6s)
+        auto runClip = std::make_shared<AnimationClip>("Run", 0.6f, 30.0f);
+        {
+            AnimationChannel lLegCh;
+            lLegCh.BoneName = "LeftLeg";
+            lLegCh.BoneIndex = skeleton.FindBoneIndex("LeftLeg");
+            AnimationChannel rLegCh;
+            rLegCh.BoneName = "RightLeg";
+            rLegCh.BoneIndex = skeleton.FindBoneIndex("RightLeg");
+            AnimationChannel lArmCh;
+            lArmCh.BoneName = "LeftArm";
+            lArmCh.BoneIndex = skeleton.FindBoneIndex("LeftArm");
+            AnimationChannel rArmCh;
+            rArmCh.BoneName = "RightArm";
+            rArmCh.BoneIndex = skeleton.FindBoneIndex("RightArm");
+            AnimationChannel hipsCh;
+            hipsCh.BoneName = "Hips";
+            hipsCh.BoneIndex = skeleton.FindBoneIndex("Hips");
+            AnimationChannel spineCh;
+            spineCh.BoneName = "Spine";
+            spineCh.BoneIndex = skeleton.FindBoneIndex("Spine");
+
+            for (int i = 0; i <= 20; ++i) {
+                float t = i * (0.6f / 20.0f);
+                float phase = (t / 0.6f) * twoPi;
+
+                lLegCh.Rotations.push_back({ t, glm::angleAxis(std::sin(phase) * glm::radians(50.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                lLegCh.Positions.push_back({ t, glm::vec3(-0.18f, -0.45f, 0.0f) });
+                lLegCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                rLegCh.Rotations.push_back({ t, glm::angleAxis(-std::sin(phase) * glm::radians(50.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                rLegCh.Positions.push_back({ t, glm::vec3(0.18f, -0.45f, 0.0f) });
+                rLegCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                lArmCh.Rotations.push_back({ t, glm::angleAxis(-std::sin(phase) * glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                lArmCh.Positions.push_back({ t, glm::vec3(-0.35f, 0.15f, 0.0f) });
+                lArmCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                rArmCh.Rotations.push_back({ t, glm::angleAxis(std::sin(phase) * glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                rArmCh.Positions.push_back({ t, glm::vec3(0.35f, 0.15f, 0.0f) });
+                rArmCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                float bounce = std::cos(phase * 2.0f) * 0.06f;
+                hipsCh.Positions.push_back({ t, glm::vec3(0.0f, 1.0f + bounce, 0.0f) });
+                hipsCh.Rotations.push_back({ t, glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+                hipsCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                // Athletic forward torso lean (12 degrees)
+                spineCh.Rotations.push_back({ t, glm::angleAxis(glm::radians(12.0f), glm::vec3(1.0f, 0.0f, 0.0f)) });
+                spineCh.Positions.push_back({ t, glm::vec3(0.0f, 0.4f, 0.0f) });
+                spineCh.Scales.push_back({ t, glm::vec3(1.0f) });
+            }
+            runClip->AddChannel(lLegCh);
+            runClip->AddChannel(rLegCh);
+            runClip->AddChannel(lArmCh);
+            runClip->AddChannel(rArmCh);
+            runClip->AddChannel(hipsCh);
+            runClip->AddChannel(spineCh);
+        }
+        outClips.push_back(runClip);
+
+        // 4. Jump (0.5s)
+        auto jumpClip = std::make_shared<AnimationClip>("Jump", 0.5f, 30.0f);
+        {
+            AnimationChannel hipsCh;
+            hipsCh.BoneName = "Hips";
+            hipsCh.BoneIndex = skeleton.FindBoneIndex("Hips");
+            AnimationChannel lArmCh;
+            lArmCh.BoneName = "LeftArm";
+            lArmCh.BoneIndex = skeleton.FindBoneIndex("LeftArm");
+            AnimationChannel rArmCh;
+            rArmCh.BoneName = "RightArm";
+            rArmCh.BoneIndex = skeleton.FindBoneIndex("RightArm");
+            AnimationChannel lLegCh;
+            lLegCh.BoneName = "LeftLeg";
+            lLegCh.BoneIndex = skeleton.FindBoneIndex("LeftLeg");
+            AnimationChannel rLegCh;
+            rLegCh.BoneName = "RightLeg";
+            rLegCh.BoneIndex = skeleton.FindBoneIndex("RightLeg");
+
+            for (int i = 0; i <= 20; ++i) {
+                float t = i * (0.5f / 20.0f);
+                float lift = std::sin((t / 0.5f) * 3.14159f) * 0.25f;
+
+                hipsCh.Positions.push_back({ t, glm::vec3(0.0f, 1.0f + lift, 0.0f) });
+                hipsCh.Rotations.push_back({ t, glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+                hipsCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                // Arms raised upward for momentum
+                glm::quat armUp = glm::angleAxis(glm::radians(-40.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+                lArmCh.Rotations.push_back({ t, armUp });
+                lArmCh.Positions.push_back({ t, glm::vec3(-0.35f, 0.15f, 0.0f) });
+                lArmCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                rArmCh.Rotations.push_back({ t, armUp });
+                rArmCh.Positions.push_back({ t, glm::vec3(0.35f, 0.15f, 0.0f) });
+                rArmCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                // Legs tucked slightly up/back
+                glm::quat legTuck = glm::angleAxis(glm::radians(20.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+                lLegCh.Rotations.push_back({ t, legTuck });
+                lLegCh.Positions.push_back({ t, glm::vec3(-0.18f, -0.45f, 0.0f) });
+                lLegCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                rLegCh.Rotations.push_back({ t, legTuck });
+                rLegCh.Positions.push_back({ t, glm::vec3(0.18f, -0.45f, 0.0f) });
+                rLegCh.Scales.push_back({ t, glm::vec3(1.0f) });
+            }
+            jumpClip->AddChannel(hipsCh);
+            jumpClip->AddChannel(lArmCh);
+            jumpClip->AddChannel(rArmCh);
+            jumpClip->AddChannel(lLegCh);
+            jumpClip->AddChannel(rLegCh);
+        }
+        outClips.push_back(jumpClip);
+
+        // 5. Fall (0.8s)
+        auto fallClip = std::make_shared<AnimationClip>("Fall", 0.8f, 30.0f);
+        {
+            AnimationChannel hipsCh;
+            hipsCh.BoneName = "Hips";
+            hipsCh.BoneIndex = skeleton.FindBoneIndex("Hips");
+            AnimationChannel lArmCh;
+            lArmCh.BoneName = "LeftArm";
+            lArmCh.BoneIndex = skeleton.FindBoneIndex("LeftArm");
+            AnimationChannel rArmCh;
+            rArmCh.BoneName = "RightArm";
+            rArmCh.BoneIndex = skeleton.FindBoneIndex("RightArm");
+
+            for (int i = 0; i <= 20; ++i) {
+                float t = i * (0.8f / 20.0f);
+                hipsCh.Positions.push_back({ t, glm::vec3(0.0f, 1.0f, 0.0f) });
+                hipsCh.Rotations.push_back({ t, glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+                hipsCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                // Arms spread out sideways for aerodynamic balance
+                lArmCh.Rotations.push_back({ t, glm::angleAxis(glm::radians(-25.0f), glm::vec3(0.0f, 0.0f, 1.0f)) });
+                lArmCh.Positions.push_back({ t, glm::vec3(-0.35f, 0.15f, 0.0f) });
+                lArmCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                rArmCh.Rotations.push_back({ t, glm::angleAxis(glm::radians(25.0f), glm::vec3(0.0f, 0.0f, 1.0f)) });
+                rArmCh.Positions.push_back({ t, glm::vec3(0.35f, 0.15f, 0.0f) });
+                rArmCh.Scales.push_back({ t, glm::vec3(1.0f) });
+            }
+            fallClip->AddChannel(hipsCh);
+            fallClip->AddChannel(lArmCh);
+            fallClip->AddChannel(rArmCh);
+        }
+        outClips.push_back(fallClip);
+
+        // 6. Land (0.4s)
+        auto landClip = std::make_shared<AnimationClip>("Land", 0.4f, 30.0f);
+        {
+            AnimationChannel hipsCh;
+            hipsCh.BoneName = "Hips";
+            hipsCh.BoneIndex = skeleton.FindBoneIndex("Hips");
+            AnimationChannel spineCh;
+            spineCh.BoneName = "Spine";
+            spineCh.BoneIndex = skeleton.FindBoneIndex("Spine");
+
+            for (int i = 0; i <= 20; ++i) {
+                float t = i * (0.4f / 20.0f);
+                float normT = t / 0.4f;
+                // Compression curve: dips down to -0.15m at t=0.15s, then rebounds
+                float dip = std::sin(normT * 3.14159f) * 0.15f;
+
+                hipsCh.Positions.push_back({ t, glm::vec3(0.0f, 1.0f - dip, 0.0f) });
+                hipsCh.Rotations.push_back({ t, glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+                hipsCh.Scales.push_back({ t, glm::vec3(1.0f) });
+
+                // Torso crouch pitch
+                float pitch = std::sin(normT * 3.14159f) * glm::radians(18.0f);
+                spineCh.Rotations.push_back({ t, glm::angleAxis(pitch, glm::vec3(1.0f, 0.0f, 0.0f)) });
+                spineCh.Positions.push_back({ t, glm::vec3(0.0f, 0.4f, 0.0f) });
+                spineCh.Scales.push_back({ t, glm::vec3(1.0f) });
+            }
+            landClip->AddChannel(hipsCh);
+            landClip->AddChannel(spineCh);
+        }
+        outClips.push_back(landClip);
+    }
+
 }

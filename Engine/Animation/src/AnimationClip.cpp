@@ -74,6 +74,14 @@ namespace Axle {
         return t * r * s;
     }
 
+    BoneTransform AnimationChannel::EvaluateBoneTransform(float time) const {
+        BoneTransform xform;
+        xform.Translation = InterpolatePosition(time);
+        xform.Rotation = InterpolateRotation(time);
+        xform.Scale = InterpolateScale(time);
+        return xform;
+    }
+
     void AnimationClip::AddChannel(const AnimationChannel& channel) {
         size_t index = m_Channels.size();
         m_Channels.push_back(channel);
@@ -123,6 +131,27 @@ namespace Axle {
                 outLocalTransforms[i] = channel->EvaluateTransform(animTime);
             } else {
                 outLocalTransforms[i] = bone.LocalTransform;
+            }
+        }
+    }
+
+    void AnimationClip::SamplePose(float time, const Skeleton& skeleton, AnimationPose& outPose, bool loop) const {
+        size_t boneCount = skeleton.GetBoneCount();
+        outPose.Resize(boneCount);
+
+        float animTime = WrapTime(time, loop);
+
+        for (size_t i = 0; i < boneCount; ++i) {
+            const Bone& bone = skeleton.GetBones()[i];
+            const AnimationChannel* channel = FindChannel(bone.Name);
+            if (!channel && bone.ID >= 0) {
+                channel = FindChannel(bone.ID);
+            }
+
+            if (channel) {
+                outPose.Transforms[i] = channel->EvaluateBoneTransform(animTime);
+            } else {
+                outPose.Transforms[i] = BoneTransform::FromMatrix(bone.LocalTransform);
             }
         }
     }

@@ -1,6 +1,10 @@
 add_library(AxleAnimation STATIC
     src/Skeleton.cpp
     src/AnimationClip.cpp
+    src/AnimationPose.cpp
+    src/BlendSpace1D.cpp
+    src/AnimationStateMachine.cpp
+    src/Animator.cpp
     src/SkeletalMesh.cpp
     src/SkeletalMeshImporter.cpp
 )

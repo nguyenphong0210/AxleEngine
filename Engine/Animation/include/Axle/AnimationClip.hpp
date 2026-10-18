@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Skeleton.hpp>
+#include <Axle/AnimationPose.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <string>
@@ -27,6 +28,7 @@ namespace Axle {
         glm::quat InterpolateRotation(float time) const;
         glm::vec3 InterpolateScale(float time) const;
         glm::mat4 EvaluateTransform(float time) const;
+        BoneTransform EvaluateBoneTransform(float time) const;
     };
 
     class AnimationClip {
@@ -55,8 +57,9 @@ namespace Axle {
         // Wrap or clamp time to clip duration
         float WrapTime(float time, bool loop = true) const;
 
-        // Sample local bone poses at time t for a given skeleton
+        // Sample local bone poses at time t for a given skeleton (into raw matrices or AnimationPose)
         void SamplePose(float time, const Skeleton& skeleton, std::vector<glm::mat4>& outLocalTransforms, bool loop = true) const;
+        void SamplePose(float time, const Skeleton& skeleton, AnimationPose& outPose, bool loop = true) const;
 
         // Hierarchical forward kinematics solving global transforms: Global[i] = Global[parent] * Local[i]
         static void ComputeGlobalPose(const Skeleton& skeleton, const std::vector<glm::mat4>& localTransforms, std::vector<glm::mat4>& outGlobalMatrices);

@@ -31,6 +31,10 @@ namespace Axle {
         static bool CreateProceduralBiped(SkeletalMeshData& outMesh,
                                           std::shared_ptr<Skeleton>& outSkeleton,
                                           std::vector<std::shared_ptr<AnimationClip>>& outClips);
+
+        // Generate complete humanoid animation suite (Idle, Walk, Run, Jump, Fall, Land)
+        static void GenerateHumanoidClips(const Skeleton& skeleton,
+                                          std::vector<std::shared_ptr<AnimationClip>>& outClips);
     };
 
 }

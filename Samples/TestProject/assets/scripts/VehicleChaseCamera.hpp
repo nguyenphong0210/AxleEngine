@@ -534,7 +534,15 @@ public:
             cam.FOV = glm::mix(cam.FOV, targetFOV, std::min(1.0f, ts.GetSeconds() * 6.0f));
         }
 
-        // 8. Update history for next frame acceleration derivative
+        // 8. Acoustic Insulation (Interior Cockpit vs Exterior Roar)
+        if (target && target.HasComponent<Axle::VehicleAudioComponent>()) {
+            auto& vac = target.GetComponent<Axle::VehicleAudioComponent>();
+            const float targetVol = (m_CurrentMode == VehicleCameraMode::Cockpit) ? 0.55f : 0.85f;
+            float newVol = glm::mix(vac.EngineMasterVolume, targetVol, std::min(1.0f, ts.GetSeconds() * 8.0f));
+            vac.SetEngineMasterVolume(newVol);
+        }
+
+        // 9. Update history for next frame acceleration derivative
         m_PrevVehicleVelocity = targetVelocity;
     }
 

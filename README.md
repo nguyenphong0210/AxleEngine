@@ -530,7 +530,7 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
   - [x] **Vehicle Audio Sample Pack Deployment (`Editor/assets/audio/`)**:
     - Downloaded and configured open-source vehicle WAV sound clips (`Engine_Power.wav`, `Engine_Coast.wav`, `Tire_Squeal.wav`, `Suspension_Thud.wav`, `Collision_Impact.wav`) with `.meta` UUID companion files.
     - Assigned `VehicleAudioComponent` and `AudioListenerComponent` directly onto the Player Car and Main Camera in `Editor/assets/scenes/CarTest.axlescene`.
-- [ ] **Phase 28: Gameplay Polish, Multi-Part Vehicle Rigging & Dynamic HUD (`Engine/Vehicle`, `Engine/UI` & Content)**
+- [x] **Phase 28: Gameplay Polish, Multi-Part Vehicle Rigging & Dynamic HUD (`Engine/Vehicle`, `Engine/UI` & Content)**
   - [x] **Step 1 - Multi-Part 3D Car Rigging & Assembly Pipeline**:
     - High-fidelity 3D vehicle asset integration: modular chassis body mesh, 4 separate wheel meshes (rim + tire), brake calipers, and cockpit interior.
     - Automatic ECS hierarchy binding via Prefab Assembly (`.axle`): parent chassis entity holding `VehicleComponent`, `RigidBody3D`, `CollisionShape3D`, `VehicleAudioComponent`, and child wheel entities holding `WheelComponent`, `MeshInstance3D`, and `TransformComponent`.
@@ -549,11 +549,11 @@ AxleEngine implements a strict, commercial-grade architectural separation betwee
     - **Pedal & Telemetry Input Bars**: Real-time meters for Throttle input, Brake pressure, Handbrake engage, and steering angle.
     - **G-Force & Boost Meter**: Lateral and longitudinal G-force display calculated from chassis accelerometers.
     - **HUD Viewport Overlay**: ImGui-based non-intrusive HUD rendered over the game viewport, toggleable with hotkey `H` or auto-displayed during Play Mode simulation.
-  - [ ] **Step 4 - Scene Integration & Visual Polish (`CarTest.axlescene` & `VehicleSandbox.axlescene`)**:
+  - [x] **Step 4 - Scene Integration & Visual Polish (`CarTest.axlescene` & `VehicleSandbox.axlescene`)**:
     - Replace temporary primitive cube/cylinder blocks in `CarTest.axlescene` with the fully rigged vehicle model and PBR materials (metallic car paint, roughness, glass windows, rubber tires).
     - Calibrate vehicle suspension spring frequency, damping rates, center of mass offset (`CenterOfMassOffset`), and braking balance for satisfying arcade-sim handling.
     - Verify seamless integration with the newly deployed `VehicleAudioComponent` (interior vs exterior audio volume attenuation).
-  - [ ] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
+  - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
     - Implement Step 32 test in `Editor/src/Test.cpp` validating multi-part vehicle assembly hierarchy, wheel visual rotational kinematics, camera mode transitions, and HUD telemetry data accuracy.
 - [ ] **Phase 29: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
   - [ ] **Step 1 - Heightfield Physics Engine (`JPH::HeightFieldShape`)**: High-performance off-road surface using Jolt Physics heightfields for realistic wheel travel and suspension damping on irregular soil.

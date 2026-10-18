@@ -993,6 +993,17 @@ namespace Axle {
                 RuntimeAudio.reset();
             }
         }
+
+        void SetEngineMasterVolume(float vol) {
+            EngineMasterVolume = vol;
+            if (RuntimeAudio) {
+                RuntimeAudio->SetEngineMasterVolume(vol);
+            }
+        }
+
+        float GetEngineMasterVolume() const {
+            return EngineMasterVolume;
+        }
     };
 
 }

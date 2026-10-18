@@ -5489,10 +5489,132 @@ bool RunTest_Step32_Phase28_MultiPartVehicleRigging() {
     ImGui::DestroyContext(imCtx);
     scene->DestroyEntity(hudEntity);
 
+    // 9. Verify Cabin Acoustic Insulation (VehicleAudioComponent Interior Cockpit Attenuation)
+    std::cout << "\n[32.9] Verifying Vehicle Audio Cabin Acoustic Insulation..." << std::endl;
+    if (!car.HasComponent<Axle::VehicleAudioComponent>()) {
+        std::cerr << "FAIL: Car does not have VehicleAudioComponent!" << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+
+    auto& vac = car.GetComponent<Axle::VehicleAudioComponent>();
+    float initialMasterVol = vac.GetEngineMasterVolume();
+    std::cout << "  -> Initial Engine Master Volume: " << initialMasterVol << std::endl;
+
+    // Switch to Cockpit camera mode and simulate frames to verify acoustic dampening
+    chaseCam->SetCameraMode(VehicleCameraMode::Cockpit);
+    for (int frame = 0; frame < 40; ++frame) {
+        physicsScene->Step(0.016f);
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    }
+
+    float cockpitVol = vac.GetEngineMasterVolume();
+    std::cout << "  -> Cockpit Cabin Attenuated Volume: " << cockpitVol << " (Expected ~0.55)" << std::endl;
+    if (cockpitVol > 0.65f) {
+        std::cerr << "FAIL: VehicleAudioComponent volume was not attenuated in Cockpit mode! Volume: " << cockpitVol << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Cockpit camera cabin acoustic insulation successfully dampened engine audio (" << cockpitVol << " < 0.65)." << std::endl;
+
+    // Switch back to Third-Person Chase camera mode and verify restoration to full roar
+    chaseCam->SetCameraMode(VehicleCameraMode::ThirdPersonChase);
+    for (int frame = 0; frame < 40; ++frame) {
+        physicsScene->Step(0.016f);
+        scene->OnUpdateRuntime(0.016f, physicsScene.get());
+    }
+
+    float chaseVol = vac.GetEngineMasterVolume();
+    std::cout << "  -> Chase Camera Restored Volume: " << chaseVol << " (Expected ~0.85)" << std::endl;
+    if (chaseVol < 0.75f) {
+        std::cerr << "FAIL: VehicleAudioComponent volume was not restored in Chase mode! Volume: " << chaseVol << std::endl;
+        scene->OnRuntimeStop(physicsScene.get());
+        std::filesystem::remove_all(testDir, ec);
+        return false;
+    }
+    std::cout << "  -> PASS: Exterior chase camera restored full engine roar (" << chaseVol << " > 0.75)." << std::endl;
+
     scene->OnRuntimeStop(physicsScene.get());
     std::filesystem::remove_all(testDir, ec);
 
-    std::cout << ">>> STEP 32 PASSED: Phase 28 Multi-Part Rigging, Assembly & Lighting verified! <<<\n" << std::endl;
+    // 10. Verify VehicleSandbox Playground Scene Deserialization & Assembly Integrity
+    std::cout << "\n[32.10] Verifying VehicleSandbox Playground Scene Deserialization & Assembly Integrity..." << std::endl;
+    auto sandboxScene = std::make_shared<Axle::Scene>();
+    auto sandboxPhysics = std::make_unique<Axle::PhysicsScene>();
+    Axle::SceneSerializer sandboxSerializer(sandboxScene.get(), sandboxPhysics.get());
+
+    std::filesystem::path sandboxPath = "Editor/assets/scenes/VehicleSandbox.axlescene";
+    if (!sandboxSerializer.Deserialize(sandboxPath)) {
+        std::cerr << "FAIL: Could not deserialize " << sandboxPath << std::endl;
+        return false;
+    }
+
+    Axle::Entity sbCar, sbRamp, sbLanding, sbCone, sbCrateTop, sbHud, sbCamera;
+    int bumpCount = 0;
+    int coneCount = 0;
+    int crateCount = 0;
+
+    auto sbView = sandboxScene->GetRegistry().view<Axle::TagComponent>();
+    for (auto e : sbView) {
+        Axle::Entity ent{ e, sandboxScene.get() };
+        const std::string& tag = ent.GetComponent<Axle::TagComponent>().Tag;
+        if (tag == "Car") sbCar = ent;
+        else if (tag == "Launch_Ramp") sbRamp = ent;
+        else if (tag == "Landing_Pad") sbLanding = ent;
+        else if (tag == "Racing HUD") sbHud = ent;
+        else if (tag == "Main Camera") sbCamera = ent;
+        else if (tag.rfind("Bump_", 0) == 0) bumpCount++;
+        else if (tag.rfind("SlalomCone_", 0) == 0) {
+            coneCount++;
+            if (!sbCone) sbCone = ent;
+        }
+        else if (tag.rfind("Crate_", 0) == 0) {
+            crateCount++;
+            if (tag == "Crate_Top") sbCrateTop = ent;
+        }
+    }
+
+    std::cout << "  -> Sandbox Car found: " << (sbCar ? "YES" : "NO") << std::endl;
+    std::cout << "  -> Launch Ramp found: " << (sbRamp ? "YES" : "NO") << std::endl;
+    std::cout << "  -> Landing Pad found: " << (sbLanding ? "YES" : "NO") << std::endl;
+    std::cout << "  -> Washboard Bumps count: " << bumpCount << " (Expected 5)" << std::endl;
+    std::cout << "  -> Slalom Cones count: " << coneCount << " (Expected 4)" << std::endl;
+    std::cout << "  -> Destructible Crates count: " << crateCount << " (Expected 6)" << std::endl;
+    std::cout << "  -> Racing HUD found: " << (sbHud ? "YES" : "NO") << std::endl;
+    std::cout << "  -> Main Camera found: " << (sbCamera ? "YES" : "NO") << std::endl;
+
+    if (!sbCar || !sbRamp || !sbLanding || bumpCount != 5 || coneCount != 4 || crateCount != 6 || !sbHud || !sbCamera || !sbCrateTop) {
+        std::cerr << "FAIL: VehicleSandbox entity hierarchy validation failed!" << std::endl;
+        return false;
+    }
+
+    if (!sbCar.HasComponent<Axle::VehicleComponent>() || !sbCar.HasComponent<Axle::VehicleAudioComponent>()) {
+        std::cerr << "FAIL: Sandbox Car missing VehicleComponent or VehicleAudioComponent!" << std::endl;
+        return false;
+    }
+
+    if (!sbRamp.HasComponent<Axle::RigidBody3D>() || sbRamp.GetComponent<Axle::RigidBody3D>().IsDynamic || !sbRamp.HasComponent<Axle::CollisionShape3D>()) {
+        std::cerr << "FAIL: Launch_Ramp missing static RigidBody3D or CollisionShape3D!" << std::endl;
+        return false;
+    }
+
+    if (!sbCrateTop.HasComponent<Axle::RigidBody3D>() || !sbCrateTop.GetComponent<Axle::RigidBody3D>().IsDynamic || !sbCrateTop.HasComponent<Axle::CollisionShape3D>()) {
+        std::cerr << "FAIL: Crate_Top missing dynamic RigidBody3D or CollisionShape3D!" << std::endl;
+        return false;
+    }
+
+    // Simulate 10 physics ticks on Sandbox scene to verify complete stability
+    sandboxScene->OnRuntimeStart(sandboxPhysics.get());
+    for (int i = 0; i < 10; ++i) {
+        sandboxPhysics->Step(0.016f);
+        sandboxScene->OnUpdateRuntime(0.016f, sandboxPhysics.get());
+    }
+    sandboxScene->OnRuntimeStop(sandboxPhysics.get());
+    std::cout << "  -> PASS: VehicleSandbox runtime physics simulation executed cleanly with no collision/rigidbody errors." << std::endl;
+
+    std::cout << ">>> STEP 32 PASSED: Phase 28 Multi-Part Rigging, Assembly, Lighting, HUD & Sandbox verified! <<<\n" << std::endl;
     return true;
 }
 

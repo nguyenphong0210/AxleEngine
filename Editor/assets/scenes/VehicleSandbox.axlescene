@@ -1,0 +1,802 @@
+# Axle Scene Definition File
+Scene: VehicleSandbox
+Entities:
+  - Entity: 15027978107127069824
+    TagComponent:
+      Tag: Wheel_RR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.100000 , -1.400000 ]
+      Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Roughness: 0.750000
+      Metallic: 0.050000
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: true
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 6000.000000
+      AutoSyncMesh: true
+  - Entity: 6128542852897491018
+    TagComponent:
+      Tag: Wheel_RL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.100000 , -1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Roughness: 0.750000
+      Metallic: 0.050000
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: true
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 6000.000000
+      AutoSyncMesh: true
+  - Entity: 4716918885181481269
+    TagComponent:
+      Tag: Wheel_FR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.100000 , 1.400000 ]
+      Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Roughness: 0.750000
+      Metallic: 0.050000
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+  - Entity: 7782791376365683938
+    TagComponent:
+      Tag: Wheel_FL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.100000 , 1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/BlackRubber.axlemat
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Roughness: 0.750000
+      Metallic: 0.050000
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+  - Entity: 2479544764548422800
+    TagComponent:
+      Tag: BodyMesh
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Chassis.axlemesh
+      PatternMode: 1
+      TileScale: 6.000000
+      Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+      Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: assets/materials/GoldMetallic.axlemat
+      AlbedoColor: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+      Roughness: 0.180000
+      Metallic: 1.000000
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+  - Entity: 1100220033004400101
+    TagComponent:
+      Tag: Headlight_L
+    TransformComponent:
+      Translation: [ 0.650000 , 0.250000 , 2.180000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 0.220000 , 0.090000 , 0.040000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      Color2: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+    MaterialComponent:
+      AlbedoColor: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      Roughness: 0.100000
+      Metallic: 0.000000
+      EmissionColor: [ 0.950000 , 0.980000 , 1.000000 ]
+      EmissionIntensity: 5.000000
+    SpotLightComponent:
+      Enabled: true
+      Color: [ 1.000000 , 0.980000 , 0.900000 ]
+      Intensity: 15.000000
+      Range: 45.000000
+      InnerConeAngle: 18.000000
+      OuterConeAngle: 32.000000
+  - Entity: 1100220033004400102
+    TagComponent:
+      Tag: Headlight_R
+    TransformComponent:
+      Translation: [ -0.650000 , 0.250000 , 2.180000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 0.220000 , 0.090000 , 0.040000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      Color2: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+    MaterialComponent:
+      AlbedoColor: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      Roughness: 0.100000
+      Metallic: 0.000000
+      EmissionColor: [ 0.950000 , 0.980000 , 1.000000 ]
+      EmissionIntensity: 5.000000
+    SpotLightComponent:
+      Enabled: true
+      Color: [ 1.000000 , 0.980000 , 0.900000 ]
+      Intensity: 15.000000
+      Range: 45.000000
+      InnerConeAngle: 18.000000
+      OuterConeAngle: 32.000000
+  - Entity: 1100220033004400103
+    TagComponent:
+      Tag: Taillight_L
+    TransformComponent:
+      Translation: [ 0.650000 , 0.350000 , -2.180000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 0.240000 , 0.080000 , 0.040000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      Color2: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+    MaterialComponent:
+      AlbedoColor: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      Roughness: 0.200000
+      Metallic: 0.000000
+      EmissionColor: [ 1.000000 , 0.050000 , 0.050000 ]
+      EmissionIntensity: 1.500000
+    PointLightComponent:
+      Color: [ 1.000000 , 0.050000 , 0.020000 ]
+      Intensity: 1.000000
+      Radius: 8.000000
+      Falloff: 1.500000
+  - Entity: 1100220033004400104
+    TagComponent:
+      Tag: Taillight_R
+    TransformComponent:
+      Translation: [ -0.650000 , 0.350000 , -2.180000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 0.240000 , 0.080000 , 0.040000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      Color2: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+    MaterialComponent:
+      AlbedoColor: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      Roughness: 0.200000
+      Metallic: 0.000000
+      EmissionColor: [ 1.000000 , 0.050000 , 0.050000 ]
+      EmissionIntensity: 1.500000
+    PointLightComponent:
+      Color: [ 1.000000 , 0.050000 , 0.020000 ]
+      Intensity: 1.000000
+      Radius: 8.000000
+      Falloff: 1.500000
+  - Entity: 8959925798803133502
+    TagComponent:
+      Tag: Car
+    TransformComponent:
+      Translation: [ 0.000000 , 0.750000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 1500.000000
+      LinearDamping: 0.050000
+      AngularDamping: 0.050000
+      GravityFactor: 1.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.900000 , 0.400000 , 2.100000 ]
+      Friction: 0.200000
+      Restitution: 0.000000
+      IsTrigger: false
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    NativeScriptComponent:
+      ScriptName: CarController
+    VehicleComponent:
+      ChassisMass: 1500.000000
+      MaxEngineTorque: 800.000000
+      MaxRPM: 7000.000000
+      MinRPM: 1000.000000
+      MaxBrakeTorque: 3000.000000
+      MaxHandBrakeTorque: 6000.000000
+      AutoSyncMesh: true
+      DefaultSuspensionFrequency: 2.200000
+      DefaultSuspensionDamping: 0.700000
+      FourWheelDrive: true
+      CenterOfMassOffset: [ 0.000000 , -0.200000 , 0.000000 ]
+    VehicleAudioComponent:
+      Enabled: true
+      EnginePowerClipPath: assets/audio/Engine_Power.wav
+      EngineCoastClipPath: assets/audio/Engine_Coast.wav
+      MinEnginePitch: 0.800000
+      MaxEnginePitch: 2.600000
+      EngineMasterVolume: 0.850000
+      ThrottleSmoothing: 8.000000
+      TireSquealClipPath: assets/audio/Tire_Squeal.wav
+      SlipThreshold: 0.200000
+      TireSquealMasterVolume: 0.700000
+      TireSquealFadeSpeed: 12.000000
+      SuspensionThudClipPath: assets/audio/Suspension_Thud.wav
+      SuspensionThudThreshold: 1.500000
+      SuspensionMasterVolume: 0.800000
+      CollisionImpactClipPath: assets/audio/Collision_Impact.wav
+      CollisionDecelThreshold: 15.000000
+      CollisionMasterVolume: 1.000000
+      Spatialized: true
+      MinDistance: 2.000000
+      MaxDistance: 60.000000
+  - Entity: 14508017990534648314
+    TagComponent:
+      Tag: Ground
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 300.000000 , 1.000000 , 300.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://plane
+      PatternMode: 1
+      TileScale: 16.000000
+      Color1: [ 0.250000 , 0.270000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.160000 , 0.180000 , 0.200000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 1.000000
+    CollisionShape3D:
+      ShapeType: Plane
+      HalfExtent: [ 150.000000 , 0.500000 , 150.000000 ]
+      Friction: 0.850000
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 14539758737335856244
+    TagComponent:
+      Tag: Skybox Environment
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+    SkyboxComponent:
+      Enabled: true
+      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
+      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
+      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
+      SunSize: 0.045000
+      SunGlow: 0.160000
+      Turbidity: 1.000000
+      SyncWithSun: true
+      CustomAzimuth: 45.000000
+      CustomElevation: 50.000000
+      HemisphereAmbient: true
+  - Entity: 17853323863493946772
+    TagComponent:
+      Tag: Directional Light
+    TransformComponent:
+      Translation: [ 0.000000 , 15.000000 , 0.000000 ]
+      Rotation: [ 0.875426 , 0.408218 , -0.234570 , 0.109382 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+    DirectionalLightComponent:
+      Color: [ 1.000000 , 0.980000 , 0.920000 ]
+      Intensity: 1.100000
+      AmbientIntensity: 0.280000
+      Azimuth: 45.000000
+      Elevation: 50.000000
+      CastShadows: true
+      ShadowOrthoSize: 40.000000
+      Exposure: 1.000000
+      ToneMappingMode: 0
+      Gamma: 2.200000
+  - Entity: 12485920194857201942
+    TagComponent:
+      Tag: Main Camera
+    TransformComponent:
+      Translation: [ 0.000000 , 6.000000 , 18.000000 ]
+      Rotation: [ 0.994522 , -0.104528 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+    CameraComponent:
+      Primary: true
+      FOV: 45.000000
+      NearClip: 0.100000
+      FarClip: 1000.000000
+    AudioListenerComponent:
+      Active: true
+    NativeScriptComponent:
+      ScriptName: VehicleChaseCamera
+  - Entity: 13370000112233445566
+    TagComponent:
+      Tag: Racing HUD
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+    NativeScriptComponent:
+      ScriptName: RacingHUD
+
+  # ============================================================================
+  # AUTOMOTIVE PLAYGROUND & OBSTACLE COURSE (Phase 7 & Phase 28 Step 4)
+  # ============================================================================
+
+  # --- 1. JUMP LAUNCH RAMP ---
+  - Entity: 7001000000000000001
+    TagComponent:
+      Tag: Launch_Ramp
+    TransformComponent:
+      Translation: [ 0.000000 , 1.600000 , 40.000000 ]
+      Rotation: [ 0.976296 , -0.216440 , 0.000000 , 0.000000 ]
+      Scale: [ 8.000000 , 0.600000 , 14.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 2
+      TileScale: 4.000000
+      Color1: [ 0.950000 , 0.550000 , 0.100000 , 1.000000 ]
+      Color2: [ 0.150000 , 0.150000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 1.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 4.000000 , 0.300000 , 7.000000 ]
+      Friction: 0.900000
+    HierarchyComponent:
+      Parent: 0
+
+  # --- 2. LANDING PAD RAMP ---
+  - Entity: 7001000000000000002
+    TagComponent:
+      Tag: Landing_Pad
+    TransformComponent:
+      Translation: [ 0.000000 , 1.400000 , 75.000000 ]
+      Rotation: [ 0.984808 , 0.173648 , 0.000000 , 0.000000 ]
+      Scale: [ 10.000000 , 0.600000 , 16.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 2
+      TileScale: 4.000000
+      Color1: [ 0.200000 , 0.750000 , 0.450000 , 1.000000 ]
+      Color2: [ 0.120000 , 0.150000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 1.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 5.000000 , 0.300000 , 8.000000 ]
+      Friction: 0.900000
+    HierarchyComponent:
+      Parent: 0
+
+  # --- 3. WASHBOARD RUMBLE BUMPS (Suspension Travel Testing) ---
+  - Entity: 7002000000000000001
+    TagComponent:
+      Tag: Bump_1
+    TransformComponent:
+      Translation: [ 0.000000 , 0.080000 , -15.000000 ]
+      Scale: [ 8.000000 , 0.160000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [ 0.950000 , 0.850000 , 0.100000 , 1.000000 ]
+      Color2: [ 0.100000 , 0.100000 , 0.100000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 4.000000 , 0.080000 , 0.300000 ]
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7002000000000000002
+    TagComponent:
+      Tag: Bump_2
+    TransformComponent:
+      Translation: [ 0.000000 , 0.080000 , -18.500000 ]
+      Scale: [ 8.000000 , 0.160000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [ 0.950000 , 0.850000 , 0.100000 , 1.000000 ]
+      Color2: [ 0.100000 , 0.100000 , 0.100000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 4.000000 , 0.080000 , 0.300000 ]
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7002000000000000003
+    TagComponent:
+      Tag: Bump_3
+    TransformComponent:
+      Translation: [ 0.000000 , 0.080000 , -22.000000 ]
+      Scale: [ 8.000000 , 0.160000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [ 0.950000 , 0.850000 , 0.100000 , 1.000000 ]
+      Color2: [ 0.100000 , 0.100000 , 0.100000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 4.000000 , 0.080000 , 0.300000 ]
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7002000000000000004
+    TagComponent:
+      Tag: Bump_4
+    TransformComponent:
+      Translation: [ 0.000000 , 0.080000 , -25.500000 ]
+      Scale: [ 8.000000 , 0.160000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [ 0.950000 , 0.850000 , 0.100000 , 1.000000 ]
+      Color2: [ 0.100000 , 0.100000 , 0.100000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 4.000000 , 0.080000 , 0.300000 ]
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7002000000000000005
+    TagComponent:
+      Tag: Bump_5
+    TransformComponent:
+      Translation: [ 0.000000 , 0.080000 , -29.000000 ]
+      Scale: [ 8.000000 , 0.160000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [ 0.950000 , 0.850000 , 0.100000 , 1.000000 ]
+      Color2: [ 0.100000 , 0.100000 , 0.100000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 4.000000 , 0.080000 , 0.300000 ]
+    HierarchyComponent:
+      Parent: 0
+
+  # --- 4. SLALOM AGILITY CONES (Lane X = 16) ---
+  - Entity: 7003000000000000001
+    TagComponent:
+      Tag: SlalomCone_1
+    TransformComponent:
+      Translation: [ 16.000000 , 0.450000 , 5.000000 ]
+      Scale: [ 0.600000 , 0.900000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cone
+      PatternMode: 3
+      Color1: [ 0.980000 , 0.450000 , 0.080000 , 1.000000 ]
+      Color2: [ 0.950000 , 0.950000 , 0.950000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 4.000000
+    CollisionShape3D:
+      ShapeType: Cone
+      Radius: 0.300000
+      HalfHeight: 0.450000
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7003000000000000002
+    TagComponent:
+      Tag: SlalomCone_2
+    TransformComponent:
+      Translation: [ 16.000000 , 0.450000 , 18.000000 ]
+      Scale: [ 0.600000 , 0.900000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cone
+      PatternMode: 3
+      Color1: [ 0.980000 , 0.450000 , 0.080000 , 1.000000 ]
+      Color2: [ 0.950000 , 0.950000 , 0.950000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 4.000000
+    CollisionShape3D:
+      ShapeType: Cone
+      Radius: 0.300000
+      HalfHeight: 0.450000
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7003000000000000003
+    TagComponent:
+      Tag: SlalomCone_3
+    TransformComponent:
+      Translation: [ 16.000000 , 0.450000 , 31.000000 ]
+      Scale: [ 0.600000 , 0.900000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cone
+      PatternMode: 3
+      Color1: [ 0.980000 , 0.450000 , 0.080000 , 1.000000 ]
+      Color2: [ 0.950000 , 0.950000 , 0.950000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 4.000000
+    CollisionShape3D:
+      ShapeType: Cone
+      Radius: 0.300000
+      HalfHeight: 0.450000
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7003000000000000004
+    TagComponent:
+      Tag: SlalomCone_4
+    TransformComponent:
+      Translation: [ 16.000000 , 0.450000 , 44.000000 ]
+      Scale: [ 0.600000 , 0.900000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cone
+      PatternMode: 3
+      Color1: [ 0.980000 , 0.450000 , 0.080000 , 1.000000 ]
+      Color2: [ 0.950000 , 0.950000 , 0.950000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 4.000000
+    CollisionShape3D:
+      ShapeType: Cone
+      Radius: 0.300000
+      HalfHeight: 0.450000
+    HierarchyComponent:
+      Parent: 0
+
+  # --- 5. DESTRUCTIBLE WOODEN CRATES PYRAMID (Crash Barriers at X = -16) ---
+  - Entity: 7004000000000000001
+    TagComponent:
+      Tag: Crate_Base_1
+    TransformComponent:
+      Translation: [ -18.000000 , 0.550000 , 30.000000 ]
+      Scale: [ 1.100000 , 1.100000 , 1.100000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 4
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 25.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.550000 , 0.550000 , 0.550000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7004000000000000002
+    TagComponent:
+      Tag: Crate_Base_2
+    TransformComponent:
+      Translation: [ -16.800000 , 0.550000 , 30.000000 ]
+      Scale: [ 1.100000 , 1.100000 , 1.100000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 4
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 25.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.550000 , 0.550000 , 0.550000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7004000000000000003
+    TagComponent:
+      Tag: Crate_Base_3
+    TransformComponent:
+      Translation: [ -15.600000 , 0.550000 , 30.000000 ]
+      Scale: [ 1.100000 , 1.100000 , 1.100000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 4
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 25.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.550000 , 0.550000 , 0.550000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7004000000000000004
+    TagComponent:
+      Tag: Crate_Mid_1
+    TransformComponent:
+      Translation: [ -17.400000 , 1.650000 , 30.000000 ]
+      Scale: [ 1.100000 , 1.100000 , 1.100000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 4
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 25.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.550000 , 0.550000 , 0.550000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7004000000000000005
+    TagComponent:
+      Tag: Crate_Mid_2
+    TransformComponent:
+      Translation: [ -16.200000 , 1.650000 , 30.000000 ]
+      Scale: [ 1.100000 , 1.100000 , 1.100000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 4
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 25.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.550000 , 0.550000 , 0.550000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 7004000000000000006
+    TagComponent:
+      Tag: Crate_Top
+    TransformComponent:
+      Translation: [ -16.800000 , 2.750000 , 30.000000 ]
+      Scale: [ 1.100000 , 1.100000 , 1.100000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 4
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 25.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.550000 , 0.550000 , 0.550000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0

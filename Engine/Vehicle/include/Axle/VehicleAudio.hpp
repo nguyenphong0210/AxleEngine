@@ -62,6 +62,9 @@ namespace Axle {
         const VehicleAudioConfig& GetConfig() const { return m_Config; }
         void SetConfig(const VehicleAudioConfig& config) { m_Config = config; }
 
+        void SetEngineMasterVolume(float vol) { m_Config.EngineMasterVolume = vol; }
+        float GetEngineMasterVolume() const { return m_Config.EngineMasterVolume; }
+
         float GetCurrentPitch() const { return m_CurrentEnginePitch; }
         float GetCurrentEngineVolume() const { return m_CurrentEngineVolume; }
         float GetCurrentTireVolume() const { return m_CurrentTireVolume; }

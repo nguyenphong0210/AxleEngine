@@ -239,17 +239,3 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **In-Game HUD Migration**: Seamlessly port `RacingHUD` and in-game dashboards to the native `Canvas2D` subsystem.
 
 ---
-
-### 🛠️ Technical Debt Resolution & Core Architecture Hardening
-- [ ] **Unified Cursor & Input Manager (`CursorManager`)**:
-  - Centralize cursor mode state (`Normal`, `Hidden`, `Locked`) across Editor viewport, gameplay scripts (`VehicleChaseCamera`), and ImGui IO flags.
-  - Eliminate state desynchronization and double-unlocking bugs.
-- [ ] **Monolithic Code Decomposition**:
-  - Partition `Test.cpp` (>5.7k lines) into modular step test suites (`TestSteps/Step01_Core.cpp` ... `TestSteps/Step32_VehicleRigging.cpp`).
-  - Refactor `EditorLayer.cpp` (>2.8k lines) and `SceneHierarchyPanel.cpp` (>2.7k lines) into focused controller sub-panels.
-- [ ] **Automated Cross-Project Asset Synchronization**:
-  - Implement automated CMake build rules to continuously synchronize `Editor/assets` scenes (`CarTest.axlescene`, `VehicleSandbox.axlescene`) and prefabs to `Samples/TestProject`.
-- [ ] **Scene Render Pass Separation**:
-  - Decouple `Scene::OnUpdate()` into explicit distinct stages: `SyncPhysicsTransforms()` and `RenderGeometryPass()`, improving modularity and rendering pass extensibility.
-- [ ] **Cross-Platform Script Hot-Reloading**:
-  - Extend dynamic scripting subsystem (`ScriptHotReloadManager`) beyond Windows MSVC to Linux and macOS using `dlopen`/`dlsym` and background compilation jobs.

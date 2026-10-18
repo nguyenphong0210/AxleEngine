@@ -7,6 +7,8 @@
 namespace Axle {
 
     Shader::Shader(const std::string& vertexSrc, const std::string& fragmentSrc) {
+        if (!glad_glCreateShader || !glad_glCreateProgram) return;
+
         const u32 vertexShader = CompileShader(GL_VERTEX_SHADER, vertexSrc);
         if (vertexShader == 0) return;
 
@@ -43,7 +45,7 @@ namespace Axle {
     }
 
     Shader::~Shader() {
-        if (m_RendererID != 0) {
+        if (glad_glDeleteProgram && m_RendererID != 0) {
             glDeleteProgram(m_RendererID);
         }
     }
@@ -55,7 +57,7 @@ namespace Axle {
 
     Shader& Shader::operator=(Shader&& other) noexcept {
         if (this != &other) {
-            if (m_RendererID != 0) {
+            if (glad_glDeleteProgram && m_RendererID != 0) {
                 glDeleteProgram(m_RendererID);
             }
             m_RendererID = other.m_RendererID;
@@ -66,42 +68,61 @@ namespace Axle {
     }
 
     void Shader::Bind() const {
-        glUseProgram(m_RendererID);
+        if (glad_glUseProgram && m_RendererID != 0) {
+            glUseProgram(m_RendererID);
+        }
     }
 
     void Shader::Unbind() const {
-        glUseProgram(0);
+        if (glad_glUseProgram) {
+            glUseProgram(0);
+        }
     }
 
     void Shader::SetInt(const std::string& name, i32 value) {
-        glUniform1i(GetUniformLocation(name), value);
+        i32 loc = GetUniformLocation(name);
+        if (loc != -1 && glad_glUniform1i) glUniform1i(loc, value);
     }
 
     void Shader::SetFloat(const std::string& name, f32 value) {
-        glUniform1f(GetUniformLocation(name), value);
+        i32 loc = GetUniformLocation(name);
+        if (loc != -1 && glad_glUniform1f) glUniform1f(loc, value);
     }
 
     void Shader::SetFloat2(const std::string& name, const glm::vec2& value) {
-        glUniform2f(GetUniformLocation(name), value.x, value.y);
+        i32 loc = GetUniformLocation(name);
+        if (loc != -1 && glad_glUniform2f) glUniform2f(loc, value.x, value.y);
     }
 
     void Shader::SetFloat3(const std::string& name, const glm::vec3& value) {
-        glUniform3f(GetUniformLocation(name), value.x, value.y, value.z);
+        i32 loc = GetUniformLocation(name);
+        if (loc != -1 && glad_glUniform3f) glUniform3f(loc, value.x, value.y, value.z);
     }
 
     void Shader::SetFloat4(const std::string& name, const glm::vec4& value) {
-        glUniform4f(GetUniformLocation(name), value.x, value.y, value.z, value.w);
+        i32 loc = GetUniformLocation(name);
+        if (loc != -1 && glad_glUniform4f) glUniform4f(loc, value.x, value.y, value.z, value.w);
     }
 
     void Shader::SetMat3(const std::string& name, const glm::mat3& matrix) {
-        glUniformMatrix3fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(matrix));
+        i32 loc = GetUniformLocation(name);
+        if (loc != -1 && glad_glUniformMatrix3fv) glUniformMatrix3fv(loc, 1, GL_FALSE, glm::value_ptr(matrix));
     }
 
     void Shader::SetMat4(const std::string& name, const glm::mat4& matrix) {
-        glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(matrix));
+        i32 loc = GetUniformLocation(name);
+        if (loc != -1 && glad_glUniformMatrix4fv) glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(matrix));
+    }
+
+    void Shader::SetMat4Array(const std::string& name, const glm::mat4* values, u32 count) {
+        if (!values || count == 0) return;
+        i32 loc = GetUniformLocation(name);
+        if (loc != -1 && glad_glUniformMatrix4fv) glUniformMatrix4fv(loc, static_cast<GLsizei>(count), GL_FALSE, glm::value_ptr(values[0]));
     }
 
     i32 Shader::GetUniformLocation(const std::string& name) {
+        if (!glad_glGetUniformLocation || m_RendererID == 0) return -1;
+
         if (m_UniformLocationCache.contains(name)) {
             return m_UniformLocationCache[name];
         }

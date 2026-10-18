@@ -491,6 +491,10 @@ namespace Axle {
             )";
         }
         m_ShadowShader = std::make_shared<Shader>(shadowVertSrc, shadowFragSrc);
+
+        // 3. Initialize GPU Skinning Pipeline for Skeletal Meshes
+        m_SkinningPipeline = std::make_shared<SkinningPipeline>();
+        m_SkinningPipeline->Init();
     }
 
     void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene,

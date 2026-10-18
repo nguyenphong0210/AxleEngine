@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 29** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **36 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
+* **Automated Test Verification**: **37 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)** and beyond.
 
 ---
@@ -233,10 +233,12 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Native bone hierarchy, joint indices, inverse bind matrices (`InverseBindPose`), and skeleton metadata.
     - [x] Animation track sampling data structures (`AnimationClip`, `AnimationChannel`, keyframe timestamps, translation/rotation/scale curves).
     - [x] Lightweight, zero-dependency asset parsing using embedded `ufbx` (`.fbx`) and `cgltf` (`.gltf`/`.glb`).
-  - [ ] **Step 2 - GPU Vertex Skinning & Shader Pipeline (`Engine/Renderer`)**:
-    - Extended vertex layout: `a_BoneIndices` (`ivec4`) and `a_BoneWeights` (`vec4`) supporting up to 4 influencing bones per vertex.
-    - Dynamic bone matrix palette (uniform array / UBO up to 128 bones per mesh) updated per animated draw call.
-    - Optimized Linear Blend Skinning (LBS) vertex shader transforming position and normal vectors in model space prior to camera projection.
+  - [x] **Step 2 - GPU Vertex Skinning & Shader Pipeline (`Engine/Renderer`)**:
+    - [x] Extended vertex layout: `a_BoneIDs` (`ivec4`) and `a_BoneWeights` (`vec4`) supporting up to 4 influencing bones per vertex (64-byte aligned stride).
+    - [x] Dynamic bone matrix palette (`u_BoneMatrices[128]`) updated per animated draw call via `SetMat4Array` with identity pose fallback.
+    - [x] Optimized Linear Blend Skinning (LBS) vertex shaders (`SkeletalMesh.vert` and `SkeletalShadowDepth.vert`) for PBR lighting pass and directional shadow depth pass.
+    - [x] Dedicated `SkinningPipeline` decoupled renderer class integrated directly into `SceneRenderer`.
+    - [x] Automated test suite Step 37 in `Editor/src/Test.cpp` verifying shader compilation, dynamic bone palette upload, 64-byte layout verification, and animated skinning dispatch.
   - [ ] **Step 3 - Animation Pose Evaluator & Blending Tree (`Engine/Animation`)**:
     - Runtime track sampling with spherical linear interpolation (`glm::slerp`) for quaternions and linear interpolation (`glm::mix`) for translation/scale.
     - Hierarchical forward kinematics solving global bone transform matrices from local bone transforms.

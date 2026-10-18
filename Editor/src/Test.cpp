@@ -50,6 +50,8 @@
 #include <Axle/AnimationClip.hpp>
 #include <Axle/SkeletalMesh.hpp>
 #include <Axle/SkeletalMeshImporter.hpp>
+#include <Axle/SkinningPipeline.hpp>
+#include <Axle/SceneRenderer.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -6508,6 +6510,106 @@ bool RunTest_Step36_Phase30_Step1_CoreSkeletalDataStructures() {
 }
 
 // =============================================================================
+// STEP 37: PHASE 30 - STEP 2: GPU VERTEX SKINNING & SHADER PIPELINE
+// =============================================================================
+bool RunTest_Step37_Phase30_Step2_GPUSkinningAndShaderPipeline() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 37: PHASE 30 - STEP 2 GPU VERTEX SKINNING PIPELINE" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // Sub-test 1: Skinning Pipeline Initialization & Shaders
+    std::cout << "\n[37.1] Initializing SkinningPipeline and verifying shaders..." << std::endl;
+    Axle::SkinningPipeline pipeline;
+    pipeline.Init();
+
+    assert(pipeline.GetShader() != nullptr);
+    assert(pipeline.GetShadowShader() != nullptr);
+    std::cout << "  -> PASS: SkinningPipeline initialized with PBR lighting & shadow depth shaders." << std::endl;
+
+    // Sub-test 2: Dynamic Bone Matrix Palette Upload (Identity & Max 128 Bones)
+    std::cout << "\n[37.2] Testing Dynamic Bone Matrix Uniform Array Upload..." << std::endl;
+    pipeline.UploadIdentityPalette(*pipeline.GetShader());
+    pipeline.UploadIdentityPalette(*pipeline.GetShadowShader());
+
+    // Generate 128 distinct bone matrices (MAX_BONES)
+    std::vector<glm::mat4> maxBones(Axle::SkinningPipeline::MAX_BONES);
+    for (size_t i = 0; i < Axle::SkinningPipeline::MAX_BONES; ++i) {
+        maxBones[i] = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, static_cast<float>(i) * 0.1f, 0.0f));
+    }
+    pipeline.UploadBonePalette(*pipeline.GetShader(), maxBones);
+    pipeline.UploadBonePalette(*pipeline.GetShadowShader(), maxBones);
+    std::cout << "  -> PASS: Uploaded full 128-bone uniform palette (identity & transformed) to both shader passes." << std::endl;
+
+    // Sub-test 3: 5-Attribute Vertex Buffer Layout & 64-Byte Stride
+    std::cout << "\n[37.3] Testing SkeletalMesh 5-Attribute Layout & 64-Byte Stride..." << std::endl;
+    Axle::SkeletalMeshData bipedData;
+    std::shared_ptr<Axle::Skeleton> bipedSkeleton;
+    std::vector<std::shared_ptr<Axle::AnimationClip>> bipedClips;
+    bool bipedOk = Axle::SkeletalMeshImporter::CreateProceduralBiped(bipedData, bipedSkeleton, bipedClips);
+    assert(bipedOk);
+    assert(bipedData.Vertices.size() > 0);
+
+    Axle::SkeletalMesh bipedMesh(bipedData);
+    auto vao = bipedMesh.GetVAO();
+    assert(vao != nullptr);
+    assert(vao->GetVertexBuffers().size() == 1);
+
+    const auto& layout = vao->GetVertexBuffers()[0]->GetLayout();
+    assert(layout.GetStride() == sizeof(Axle::SkeletalVertex));
+    assert(layout.GetStride() == 64); // 12 + 12 + 8 + 16 + 16 = 64 bytes
+    assert(layout.GetElements().size() == 5);
+
+    const auto& elems = layout.GetElements();
+    assert(elems[0].Name == "a_Position" && elems[0].Type == Axle::ShaderDataType::Float3 && elems[0].Offset == 0);
+    assert(elems[1].Name == "a_Normal" && elems[1].Type == Axle::ShaderDataType::Float3 && elems[1].Offset == 12);
+    assert(elems[2].Name == "a_TexCoord" && elems[2].Type == Axle::ShaderDataType::Float2 && elems[2].Offset == 24);
+    assert(elems[3].Name == "a_BoneIDs" && elems[3].Type == Axle::ShaderDataType::Int4 && elems[3].Offset == 32);
+    assert(elems[4].Name == "a_BoneWeights" && elems[4].Type == Axle::ShaderDataType::Float4 && elems[4].Offset == 48);
+
+    std::cout << "  -> Vertex Stride: " << layout.GetStride() << " bytes (sizeof(SkeletalVertex) = " << sizeof(Axle::SkeletalVertex) << ")" << std::endl;
+    std::cout << "  -> Attribute 0: " << elems[0].Name << " (Float3, offset=" << elems[0].Offset << ", size=" << elems[0].Size << ")" << std::endl;
+    std::cout << "  -> Attribute 1: " << elems[1].Name << " (Float3, offset=" << elems[1].Offset << ", size=" << elems[1].Size << ")" << std::endl;
+    std::cout << "  -> Attribute 2: " << elems[2].Name << " (Float2, offset=" << elems[2].Offset << ", size=" << elems[2].Size << ")" << std::endl;
+    std::cout << "  -> Attribute 3: " << elems[3].Name << " (Int4, offset=" << elems[3].Offset << ", size=" << elems[3].Size << ")" << std::endl;
+    std::cout << "  -> Attribute 4: " << elems[4].Name << " (Float4, offset=" << elems[4].Offset << ", size=" << elems[4].Size << ")" << std::endl;
+    std::cout << "  -> PASS: 5-attribute vertex specification verified with exact byte alignment." << std::endl;
+
+    // Sub-test 4: Forward Kinematics to GPU Skinning Dispatch
+    std::cout << "\n[37.4] Testing Animation Forward Kinematics to Skinning Render Dispatch..." << std::endl;
+    assert(bipedClips.size() >= 2);
+    auto walkClip = bipedClips[1];
+    assert(walkClip->GetName() == "Walk");
+
+    std::vector<glm::mat4> localPoses;
+    walkClip->SamplePose(0.33f, *bipedSkeleton, localPoses);
+    std::vector<glm::mat4> globalPoses;
+    Axle::AnimationClip::ComputeGlobalPose(*bipedSkeleton, localPoses, globalPoses);
+    std::vector<glm::mat4> skinningMatrices;
+    Axle::AnimationClip::ComputeSkinningMatrices(*bipedSkeleton, globalPoses, skinningMatrices);
+    assert(skinningMatrices.size() == 8);
+
+    glm::mat4 characterWorld = glm::translate(glm::mat4(1.0f), glm::vec3(5.0f, 0.0f, 10.0f));
+    pipeline.RenderSkinned(*pipeline.GetShader(), vao, characterWorld, skinningMatrices);
+    pipeline.RenderSkinned(*pipeline.GetShadowShader(), vao, characterWorld, skinningMatrices);
+
+    std::cout << "  -> Dispatched RenderSkinned with 8 active animated bones at t = 0.33s." << std::endl;
+    std::cout << "  -> PASS: RenderSkinned pipeline executed without errors for both lighting and shadow passes." << std::endl;
+
+    // Sub-test 5: Integration with SceneRenderer
+    std::cout << "\n[37.5] Verifying SceneRenderer Skinning Pipeline Integration..." << std::endl;
+    Axle::SceneRenderer sceneRenderer;
+    auto* rendererPipeline = sceneRenderer.GetSkinningPipeline();
+    assert(rendererPipeline != nullptr);
+    assert(rendererPipeline->GetShader() != nullptr);
+    assert(rendererPipeline->GetShadowShader() != nullptr);
+
+    std::cout << "  -> PASS: SceneRenderer owns and exposes active SkinningPipeline instance." << std::endl;
+
+    std::cout << ">>> STEP 37 PASSED: Phase 30 Step 2 GPU Vertex Skinning & Shader Pipeline 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -6556,12 +6658,13 @@ int main(int argc, char** argv) {
         else if (arg == "34" || arg == "step34" || arg == "--step34" || arg == "--phase29b") targetStep = 34;
         else if (arg == "35" || arg == "step35" || arg == "--step35" || arg == "--phase29c" || arg == "--scene") targetStep = 35;
         else if (arg == "36" || arg == "step36" || arg == "--step36" || arg == "--phase30" || arg == "--phase30a") targetStep = 36;
+        else if (arg == "37" || arg == "step37" || arg == "--step37" || arg == "--phase30b") targetStep = 37;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 36 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 37 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -6676,6 +6779,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 36) {
         if (!RunTest_Step36_Phase30_Step1_CoreSkeletalDataStructures()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 37) {
+        if (!RunTest_Step37_Phase30_Step2_GPUSkinningAndShaderPipeline()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

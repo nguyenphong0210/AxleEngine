@@ -7,6 +7,7 @@
 #include <Axle/Skybox.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
+#include <Axle/SkinningPipeline.hpp>
 
 #include <memory>
 #include <glm/glm.hpp>
@@ -54,6 +55,7 @@ namespace Axle {
         Shader* GetShadowShader() const { return m_ShadowShader.get(); }
         ShadowMap* GetShadowMap() const { return m_ShadowMap.get(); }
         Skybox* GetSkybox() const { return m_Skybox.get(); }
+        SkinningPipeline* GetSkinningPipeline() const { return m_SkinningPipeline.get(); }
 
         const glm::mat4& GetLightSpaceMatrix() const { return m_LightSpaceMatrix; }
         const glm::vec3& GetLightDirection() const { return m_LightDir; }
@@ -64,6 +66,7 @@ namespace Axle {
     private:
         std::shared_ptr<Shader> m_Shader;
         std::shared_ptr<Shader> m_ShadowShader;
+        std::shared_ptr<SkinningPipeline> m_SkinningPipeline;
         std::shared_ptr<ShadowMap> m_ShadowMap;
         std::shared_ptr<Skybox> m_Skybox;
 

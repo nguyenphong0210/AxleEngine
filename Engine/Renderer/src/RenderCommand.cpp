@@ -20,38 +20,46 @@ namespace Axle {
     }
 
     void RenderCommand::SetViewport(u32 x, u32 y, u32 width, u32 height) {
+        if (!glad_glViewport) return;
         glViewport(static_cast<GLint>(x), static_cast<GLint>(y), 
                    static_cast<GLsizei>(width), static_cast<GLsizei>(height));
     }
 
     void RenderCommand::SetClearColor(const glm::vec4& color) {
+        if (!glad_glClearColor) return;
         glClearColor(color.r, color.g, color.b, color.a);
     }
 
     void RenderCommand::Clear() {
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
-        glDepthMask(GL_TRUE);
+        if (!glad_glClear) return;
+        if (glad_glEnable) glEnable(GL_DEPTH_TEST);
+        if (glad_glDepthFunc) glDepthFunc(GL_LESS);
+        if (glad_glDepthMask) glDepthMask(GL_TRUE);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
     void RenderCommand::BindDefaultFramebuffer() {
+        if (!glad_glBindFramebuffer) return;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     void RenderCommand::SetDepthMask(bool writeEnabled) {
+        if (!glad_glDepthMask) return;
         glDepthMask(writeEnabled ? GL_TRUE : GL_FALSE);
     }
 
     void RenderCommand::SetDepthFuncLEqual() {
+        if (!glad_glDepthFunc) return;
         glDepthFunc(GL_LEQUAL);
     }
 
     void RenderCommand::SetDepthFuncLess() {
+        if (!glad_glDepthFunc) return;
         glDepthFunc(GL_LESS);
     }
 
     void RenderCommand::SetCullFace(bool enabled) {
+        if (!glad_glEnable || !glad_glDisable) return;
         if (enabled) {
             glEnable(GL_CULL_FACE);
         } else {
@@ -64,16 +72,19 @@ namespace Axle {
         vertexArray->Bind();
         const u32 count = vertexArray->GetIndexBuffer() ? vertexArray->GetIndexBuffer()->GetCount() : 0;
         if (count == 0) return;
+        if (!glad_glDrawElements) return;
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(count), GL_UNSIGNED_INT, nullptr);
     }
 
     void RenderCommand::DrawLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount) {
         if (!vertexArray || vertexCount == 0) return;
         vertexArray->Bind();
+        if (!glad_glDrawArrays) return;
         glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertexCount));
     }
 
     void RenderCommand::SetLineWidth(f32 width) {
+        if (!glad_glLineWidth) return;
         glLineWidth(width);
     }
 

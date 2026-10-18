@@ -13,6 +13,7 @@ add_library(AxleRenderer STATIC
     src/Skybox.cpp
     src/Material.cpp
     src/Cubemap.cpp
+    src/SkinningPipeline.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

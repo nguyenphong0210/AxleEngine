@@ -65,7 +65,16 @@ namespace Axle {
         // Query primary camera entity in the scene (returns invalid Entity if none found)
         Entity GetPrimaryCameraEntity();
 
-        // Update physics synchronization and render all mesh components
+        // Synchronize physics simulation transforms into TransformComponents & propagate hierarchy
+        void SynchronizePhysicsTransforms(PhysicsScene* physicsScene);
+
+        // Render geometry pass with active lighting, materials & shadow sampling
+        void RenderGeometryPass(const PerspectiveCamera& camera, Shader& shader,
+                                const glm::mat4& lightSpaceMatrix = glm::mat4(1.0f),
+                                const glm::vec3& lightDir = glm::vec3(0.45f, 1.0f, 0.65f),
+                                int shadowMapSlot = 1);
+
+        // Update physics synchronization and render all mesh components (legacy/convenience wrapper)
         void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,
                       const glm::mat4& lightSpaceMatrix = glm::mat4(1.0f),
                       const glm::vec3& lightDir = glm::vec3(0.45f, 1.0f, 0.65f),

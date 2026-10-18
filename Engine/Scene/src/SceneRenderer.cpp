@@ -509,6 +509,9 @@ namespace Axle {
         }
         bool castShadows = settings.EnableShadows && hasSunLight && activeSunLight.CastShadows;
 
+        // 0. Synchronize physics simulation transforms into TransformComponents & propagate hierarchy
+        scene->SynchronizePhysicsTransforms(physicsScene);
+
         // ==========================================
         // PASS 1: SHADOW MAP DEPTH PASS
         // ==========================================
@@ -585,8 +588,7 @@ namespace Axle {
         }
 
         // Render all active meshes with PBR lighting & hierarchy transforms
-        scene->OnUpdate(Timestep(0.0f), physicsScene, camera, *m_Shader,
-                        m_LightSpaceMatrix, m_LightDir, 1);
+        scene->RenderGeometryPass(camera, *m_Shader, m_LightSpaceMatrix, m_LightDir, 1);
 
         // ==========================================
         // PASS 3: SKYBOX PASS (Atmospheric or HDR Cubemap)

@@ -425,10 +425,7 @@ namespace Axle {
         return Entity{};
     }
 
-    void Scene::OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,
-                         const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, int shadowMapSlot) {
-        (void)ts;
-
+    void Scene::SynchronizePhysicsTransforms(PhysicsScene* physicsScene) {
         // 1. Synchronize physics simulation transforms into TransformComponents
         if (physicsScene) {
             auto physicsView = m_Registry.view<RigidBody3D, TransformComponent>();
@@ -482,16 +479,17 @@ namespace Axle {
             }
         }
 
-
         // 2. Propagate scene graph hierarchy transforms (Root -> Children)
         UpdateWorldTransformsParallel(64);
+    }
 
-        // 3. Query active directional sun light in scene
-
+    void Scene::RenderGeometryPass(const PerspectiveCamera& camera, Shader& shader,
+                                   const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, int shadowMapSlot) {
+        // 1. Query active directional sun light in scene
         DirectionalLightComponent sunLight;
         bool hasSunLight = GetPrimaryDirectionalLight(sunLight);
 
-        glm::vec3 activeLightDir = hasSunLight ? sunLight.GetDirection() : glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 activeLightDir = hasSunLight ? sunLight.GetDirection() : lightDir;
         glm::vec3 activeLightColor = hasSunLight ? sunLight.Color : glm::vec3(0.0f);
         float activeIntensity = hasSunLight ? sunLight.Intensity : 0.0f;
         float activeAmbient = hasSunLight ? sunLight.AmbientIntensity : 0.0f;
@@ -500,7 +498,7 @@ namespace Axle {
         int activeToneMapping = hasSunLight ? sunLight.ToneMappingMode : 0;
         float activeGamma = hasSunLight ? sunLight.Gamma : 2.2f;
 
-        // 3. Render all entities with MeshInstance3D and TransformComponent (with hierarchy propagation)
+        // 2. Bind shader & setup camera and light uniforms
         shader.Bind();
         shader.SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix());
         shader.SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
@@ -532,7 +530,7 @@ namespace Axle {
         shader.SetFloat3("u_SkyHorizonColor", skyHorizon);
         shader.SetFloat3("u_SkyGroundColor", skyGround);
 
-        // Upload dynamic Point Lights
+        // 4. Upload dynamic Point Lights
         auto pointLightView = m_Registry.view<PointLightComponent, TransformComponent>();
         int numPointLights = 0;
         for (auto entity : pointLightView) {
@@ -551,7 +549,7 @@ namespace Axle {
         }
         shader.SetInt("u_NumPointLights", numPointLights);
 
-        // Upload dynamic Spot Lights (Vehicle Headlights)
+        // 5. Upload dynamic Spot Lights (Vehicle Headlights)
         auto spotLightView = m_Registry.view<SpotLightComponent, TransformComponent>();
         int numSpotLights = 0;
         for (auto entity : spotLightView) {
@@ -596,6 +594,7 @@ namespace Axle {
         shader.SetFloat("u_Roughness", 0.5f);
         shader.SetFloat("u_Metallic", 0.0f);
 
+        // 6. Render all entities with MeshInstance3D and TransformComponent
         auto renderView = m_Registry.view<MeshInstance3D, TransformComponent>();
         for (auto entity : renderView) {
             auto& mesh = m_Registry.get<MeshInstance3D>(entity);
@@ -618,6 +617,13 @@ namespace Axle {
                 RenderCommand::DrawIndexed(mesh.VAO);
             }
         }
+    }
+
+    void Scene::OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,
+                         const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, int shadowMapSlot) {
+        (void)ts;
+        SynchronizePhysicsTransforms(physicsScene);
+        RenderGeometryPass(camera, shader, lightSpaceMatrix, lightDir, shadowMapSlot);
     }
 
     void Scene::RenderShadowPass(Shader& shadowShader, const glm::mat4& lightSpaceMatrix) {

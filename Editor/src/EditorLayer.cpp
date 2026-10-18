@@ -18,6 +18,12 @@
 #include <AxleSpline/SplineComponent.hpp>
 #include <AxleSpline/SplineEditor.hpp>
 #include <AxleSpline/TrackGenerator.hpp>
+#include <AxleSpline/SplinePlugin.hpp>
+#include <AxleTerrain/TerrainPlugin.hpp>
+#include <AxleTerrain/TerrainComponent.hpp>
+#include <AxleTerrain/TerrainEditor.hpp>
+#include <AxleTerrain/TerrainMesh.hpp>
+#include <AxleTerrain/TerrainCollider.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -43,6 +49,10 @@ void EditorLayer::OnAttach() {
 
     // Initialize Audio Subsystem
     Axle::AudioEngine::Init();
+
+    // Initialize Plugin Subsystems
+    Axle::Spline::SplinePlugin::Initialize();
+    Axle::Terrain::TerrainPlugin::Initialize();
 
     auto& window = Axle::Application::Get().GetWindow();
     Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(window.GetNativeWindow()));
@@ -261,10 +271,13 @@ void EditorLayer::OnAttach() {
         m_ShowAssemblyEditor = true;
     });
 
-    // Register Plugin Component Drawers (Phase 29A: Spline Track Plugin)
+    // Register Plugin Component Drawers (Phase 29A: Spline Track & Phase 29B: Terrain Plugin)
     m_SceneHierarchyPanel.SetCustomComponentDrawer([this](Axle::Entity entity) {
         if (entity && entity.HasComponent<Axle::Spline::SplineComponent>()) {
             Axle::Spline::SplineEditor::DrawInspector(entity, m_PhysicsScene.get());
+        }
+        if (entity && entity.HasComponent<Axle::Terrain::TerrainComponent>()) {
+            Axle::Terrain::TerrainEditor::DrawInspector(entity, m_PhysicsScene.get(), m_Scene.get());
         }
     });
 
@@ -291,6 +304,26 @@ void EditorLayer::OnAttach() {
                 ImGui::CloseCurrentPopup();
             }
             if (hasSpline) ImGui::EndDisabled();
+
+            bool hasTerrain = entity.HasComponent<Axle::Terrain::TerrainComponent>();
+            if (hasTerrain) ImGui::BeginDisabled();
+            if (ImGui::MenuItem("🏔️ Off-Road Terrain (TerrainComponent)")) {
+                auto& tc = entity.AddComponent<Axle::Terrain::TerrainComponent>(128u, 128u, 1.0f, 1.0f);
+                tc.Data.GenerateHills(0.025f, 8.0f, 3);
+                tc.Data.AutoGenerateSplatmap(32.0f, 18.0f);
+                tc.CombinedVAO = Axle::Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
+                if (!entity.HasComponent<Axle::MeshInstance3D>()) {
+                    entity.AddComponent<Axle::MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
+                } else {
+                    entity.GetComponent<Axle::MeshInstance3D>().VAO = tc.CombinedVAO;
+                }
+                if (m_PhysicsScene && tc.GeneratePhysics) {
+                    tc.PhysicsBodyID = Axle::Terrain::TerrainCollider::CreateTerrainCollider(tc.Data, *m_PhysicsScene, tc.Friction, tc.Restitution);
+                }
+                ImGui::CloseCurrentPopup();
+            }
+            if (hasTerrain) ImGui::EndDisabled();
+
             ImGui::EndMenu();
         }
     });
@@ -374,6 +407,8 @@ void EditorLayer::OnDetach() {
     Axle::ScriptHotReloadManager::Get().Shutdown();
     Axle::AssetManager::Shutdown();
     Axle::AudioEngine::Shutdown();
+    Axle::Terrain::TerrainPlugin::Shutdown();
+    Axle::Spline::SplinePlugin::Shutdown();
     m_SceneRenderer.reset();
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();

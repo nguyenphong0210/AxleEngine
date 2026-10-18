@@ -19,6 +19,7 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::Vehicle
     Axle::Project
     Axle::Spline
+    Axle::Terrain
 )
 
 # ==============================================================================
@@ -111,6 +112,7 @@ target_link_libraries(AxleTests PRIVATE
     Axle::Vehicle
     Axle::Project
     Axle::Spline
+    Axle::Terrain
 )
 
 add_dependencies(AxleTests AxleScripts)

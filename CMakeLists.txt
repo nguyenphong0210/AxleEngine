@@ -47,6 +47,7 @@ add_subdirectory(Engine/Scene)
 
 # Load Engine Plugins
 add_subdirectory(Plugins/Spline)
+add_subdirectory(Plugins/Terrain)
 
 # Load Axle Editor
 add_subdirectory(Editor)

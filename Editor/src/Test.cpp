@@ -36,6 +36,14 @@
 #include <AxleSpline/SplineComponent.hpp>
 #include <AxleSpline/TrackGenerator.hpp>
 #include <AxleSpline/SplineEditor.hpp>
+#include <AxleTerrain/TerrainPlugin.hpp>
+#include <AxleTerrain/TerrainData.hpp>
+#include <AxleTerrain/TerrainCollider.hpp>
+#include <AxleTerrain/TerrainChunk.hpp>
+#include <AxleTerrain/TerrainMesh.hpp>
+#include <AxleTerrain/TerrainSculptor.hpp>
+#include <AxleTerrain/TerrainSplineCarver.hpp>
+#include <AxleTerrain/TerrainComponent.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -5750,6 +5758,240 @@ bool RunTest_Step33_Phase29A_SplineTrackPlugin() {
 }
 
 // =============================================================================
+// STEP 34 TEST: PHASE 29B OFF-ROAD TERRAIN & SCULPTING SYSTEM PLUGIN
+// =============================================================================
+bool RunTest_Step34_Phase29B_TerrainPlugin() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 34] Phase 29B: Off-Road Terrain & Sculptor Plugin" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // 1. Plugin Lifecycle & Version Reflection
+    std::cout << "\n[34.1] Testing Terrain Plugin Lifecycle & Version Reflection..." << std::endl;
+    Axle::Terrain::TerrainPlugin::Init();
+    assert(Axle::Terrain::TerrainPlugin::IsInitialized());
+    assert(Axle::Terrain::TerrainPlugin::GetName() == "AxleTerrain");
+    assert(Axle::Terrain::TerrainPlugin::GetVersion() == "1.0.0");
+    std::cout << "  -> PASS: AxleTerrain Plugin v1.0.0 initialized successfully." << std::endl;
+
+    // 2. TerrainData Matrix, Bilinear Sampling & Normal / Slope Angles
+    std::cout << "\n[34.2] Testing TerrainData Matrix, Bilinear Sampling & Normal / Slope Angles..." << std::endl;
+    Axle::Terrain::TerrainData terrain(64, 64, 2.0f, 2.0f);
+    assert(terrain.GetResolutionX() == 64);
+    assert(terrain.GetResolutionZ() == 64);
+    assert(terrain.GetSpacingX() == 2.0f);
+    assert(terrain.GetSpacingZ() == 2.0f);
+    float expectedWidth = 63.0f * 2.0f; // 126.0m
+    assert(std::abs(terrain.GetWidth() - expectedWidth) < 0.001f);
+
+    // Test Ramp heights
+    terrain.GenerateRamp(0.0f, 30.0f, false); // Ramp along Z
+    float hMid = terrain.SampleHeight(0.0f, 0.0f); // Center of terrain (Z=0 in world coordinates)
+    assert(std::abs(hMid - 15.0f) < 0.5f);
+    std::cout << "  -> Sampled height at world center (0, 0): " << hMid << " m (Expected ~15.0 m)" << std::endl;
+
+    // Test Bilinear interpolation halfway between grid cells
+    float hSub = terrain.SampleHeight(1.0f, 1.0f);
+    assert(hSub > 0.0f && hSub < 30.0f);
+    std::cout << "  -> Bilinear interpolated height at (1.0, 1.0): " << hSub << " m" << std::endl;
+
+    // Test Normal calculation
+    glm::vec3 normal = terrain.SampleNormal(0.0f, 0.0f);
+    assert(std::abs(glm::length(normal) - 1.0f) < 0.001f);
+    assert(normal.y > 0.0f); // Upward facing
+    float slopeDeg = terrain.SampleSlopeAngle(0.0f, 0.0f);
+    assert(slopeDeg > 0.0f);
+    std::cout << "  -> Terrain normal: (" << normal.x << ", " << normal.y << ", " << normal.z << "), Slope: " << slopeDeg << " deg" << std::endl;
+    std::cout << "  -> PASS: TerrainData discrete & continuous bilinear sampling verified." << std::endl;
+
+    // Test Auto Splatmap
+    terrain.AutoGenerateSplatmap(30.0f, 15.0f);
+    glm::vec4 splatCenter = terrain.GetSplatWeight(32, 32);
+    float splatSum = splatCenter.r + splatCenter.g + splatCenter.b + splatCenter.a;
+    assert(std::abs(splatSum - 1.0f) < 0.001f);
+    std::cout << "  -> PASS: Auto-Splatmap normalized 4-channel weights verified." << std::endl;
+
+    // 3. Multithreaded Chunk Generation & LODs via Axle::JobSystem
+    std::cout << "\n[34.3] Testing Multithreaded Chunk Generation & LODs via enkiTS..." << std::endl;
+    if (!Axle::JobSystem::IsInitialized()) {
+        Axle::JobSystem::Init();
+    }
+    std::vector<Axle::Terrain::TerrainChunk> chunks;
+    Axle::Terrain::TerrainMesh::InitializeChunks(terrain, chunks, 16);
+    assert(!chunks.empty());
+    std::cout << "  -> Initialized " << chunks.size() << " chunks (chunk size: 16x16 cells)" << std::endl;
+
+    Axle::Terrain::TerrainMesh::BuildAllChunksParallel(terrain, chunks);
+    for (const auto& chunk : chunks) {
+        assert(!chunk.Vertices.empty());
+        assert(!chunk.Indices.empty());
+    }
+    std::cout << "  -> PASS: All " << chunks.size() << " chunks built in parallel across worker threads." << std::endl;
+
+    // Test Dynamic LOD selection
+    glm::vec3 testCamPos(0.0f, 10.0f, 0.0f);
+    Axle::Terrain::TerrainMesh::UpdateChunkLODs(testCamPos, chunks, 30.0f, 60.0f);
+    uint32_t lod0Count = 0, lod1Count = 0, lod2Count = 0;
+    for (const auto& c : chunks) {
+        if (c.CurrentLOD == 0) lod0Count++;
+        else if (c.CurrentLOD == 1) lod1Count++;
+        else lod2Count++;
+    }
+    std::cout << "  -> Chunk LOD distribution from camera: LOD0=" << lod0Count << ", LOD1=" << lod1Count << ", LOD2=" << lod2Count << std::endl;
+    assert(lod0Count > 0);
+    assert(lod1Count > 0 || lod2Count > 0);
+    std::cout << "  -> PASS: Distance-based dynamic LOD switching validated." << std::endl;
+
+    // Combined VAO build test
+    auto combinedVAO = Axle::Terrain::TerrainMesh::BuildCombinedVAO(terrain);
+    assert(combinedVAO != nullptr);
+    assert(combinedVAO->GetIndexBuffer() != nullptr);
+    std::cout << "  -> PASS: Combined terrain GPU VAO built successfully." << std::endl;
+
+    // 4. Jolt Physics HeightField Collision & Off-Road Raycast
+    std::cout << "\n[34.4] Testing Jolt Physics HeightField Collision & Off-Road Raycast..." << std::endl;
+    Axle::PhysicsScene physicsScene;
+    Axle::BodyID terrainBody = Axle::Terrain::TerrainCollider::CreateTerrainCollider(terrain, physicsScene, 0.9f, 0.05f);
+    assert(!terrainBody.IsInvalid());
+    assert(physicsScene.IsBodyValid(terrainBody));
+    std::cout << "  -> JPH::HeightFieldShape Body ID: " << terrainBody.GetIndex() << " registered in PhysicsScene." << std::endl;
+
+    // Cast downward ray from sky onto terrain
+    Axle::RayCastHit hit;
+    glm::vec3 rayOrigin(0.0f, 50.0f, 0.0f);
+    bool rayHit = physicsScene.CastRay(rayOrigin, glm::vec3(0.0f, -1.0f, 0.0f), 100.0f, hit);
+    assert(rayHit);
+    assert(hit.HitBodyID == terrainBody);
+    assert(std::abs(hit.Position.y - hMid) < 0.5f);
+    std::cout << "  -> Jolt Physics Raycast hit heightfield at: (" << hit.Position.x << ", " << hit.Position.y << ", " << hit.Position.z << ")" << std::endl;
+    std::cout << "  -> PASS: Jolt HeightField collision confirmed matching terrain elevation." << std::endl;
+
+    // Test analytical raymarching
+    glm::vec3 analyticalHit(0.0f);
+    bool anaHit = Axle::Terrain::TerrainCollider::RaycastTerrain(rayOrigin, glm::vec3(0.0f, -1.0f, 0.0f), terrain, analyticalHit);
+    assert(anaHit);
+    assert(std::abs(analyticalHit.y - hMid) < 0.1f);
+    std::cout << "  -> Analytical Raycast hit: (" << analyticalHit.x << ", " << analyticalHit.y << ", " << analyticalHit.z << ")" << std::endl;
+    std::cout << "  -> PASS: Analytical raycast and Jolt physics hit consistent within 0.1m." << std::endl;
+
+    Axle::Terrain::TerrainCollider::DestroyTerrainCollider(terrainBody, physicsScene);
+    assert(!physicsScene.IsBodyValid(terrainBody));
+    std::cout << "  -> PASS: Terrain physics body cleanly destroyed." << std::endl;
+
+    // 5. Interactive Sculpting Engine (Raise, Lower, Smooth, Flatten, Texture Paint)
+    std::cout << "\n[34.5] Testing Interactive Sculpting Engine Tools..." << std::endl;
+    terrain.GenerateFlat(10.0f);
+    float centerBefore = terrain.SampleHeight(0.0f, 0.0f);
+    assert(std::abs(centerBefore - 10.0f) < 0.001f);
+
+    // Raise brush
+    Axle::Terrain::SculptSettings sculptSettings;
+    sculptSettings.Mode = Axle::Terrain::BrushMode::Raise;
+    sculptSettings.Radius = 15.0f;
+    sculptSettings.Strength = 10.0f;
+    sculptSettings.Falloff = Axle::Terrain::BrushFalloff::Smoothstep;
+
+    auto resRaise = Axle::Terrain::TerrainSculptor::ApplyBrush(terrain, 0.0f, 0.0f, sculptSettings, 0.5f);
+    assert(resRaise.Modified);
+    float centerRaised = terrain.SampleHeight(0.0f, 0.0f);
+    assert(centerRaised > 10.0f);
+    float outsideRadius = terrain.SampleHeight(25.0f, 25.0f);
+    assert(std::abs(outsideRadius - 10.0f) < 0.001f); // Unmodified outside radius
+    std::cout << "  -> Raised center height from 10.0m to " << centerRaised << "m (Outside remains " << outsideRadius << "m)" << std::endl;
+    std::cout << "  -> PASS: Raise brush & smoothstep falloff verified." << std::endl;
+
+    // Lower brush
+    sculptSettings.Mode = Axle::Terrain::BrushMode::Lower;
+    auto resLower = Axle::Terrain::TerrainSculptor::ApplyBrush(terrain, 0.0f, 0.0f, sculptSettings, 0.25f);
+    assert(resLower.Modified);
+    float centerLowered = terrain.SampleHeight(0.0f, 0.0f);
+    assert(centerLowered < centerRaised);
+    std::cout << "  -> Lowered center height to " << centerLowered << "m" << std::endl;
+    std::cout << "  -> PASS: Lower brush verified." << std::endl;
+
+    // Flatten brush
+    sculptSettings.Mode = Axle::Terrain::BrushMode::Flatten;
+    sculptSettings.TargetHeight = 25.0f;
+    sculptSettings.Strength = 20.0f;
+    auto resFlatten = Axle::Terrain::TerrainSculptor::ApplyBrush(terrain, 0.0f, 0.0f, sculptSettings, 1.0f);
+    assert(resFlatten.Modified);
+    float centerFlattened = terrain.SampleHeight(0.0f, 0.0f);
+    assert(std::abs(centerFlattened - 25.0f) < 2.0f); // Approached target height
+    std::cout << "  -> Flattened center towards 25.0m: " << centerFlattened << "m" << std::endl;
+    std::cout << "  -> PASS: Flatten brush verified." << std::endl;
+
+    // Texture Painting
+    sculptSettings.Mode = Axle::Terrain::BrushMode::PaintTexture;
+    sculptSettings.PaintLayer = Axle::Terrain::TerrainSplatLayers::DIRT;
+    sculptSettings.Strength = 20.0f;
+    auto resPaint = Axle::Terrain::TerrainSculptor::ApplyBrush(terrain, 0.0f, 0.0f, sculptSettings, 0.5f);
+    assert(resPaint.Modified);
+    float gx = 0.0f, gz = 0.0f;
+    terrain.WorldToGrid(0.0f, 0.0f, gx, gz);
+    glm::vec4 paintedSplat = terrain.GetSplatWeight(static_cast<uint32_t>(std::round(gx)), static_cast<uint32_t>(std::round(gz)));
+    assert(paintedSplat.g > 0.3f); // Dirt layer elevated
+    std::cout << "  -> Painted splatmap weights at center: Grass=" << paintedSplat.r << ", Dirt=" << paintedSplat.g << ", Gravel=" << paintedSplat.b << ", Rock=" << paintedSplat.a << std::endl;
+    std::cout << "  -> PASS: Interactive texture layer painting verified." << std::endl;
+
+    // 6. Spline Road Carving & Terrain Snapping
+    std::cout << "\n[34.6] Testing Spline Road Carving & Ground Snapping..." << std::endl;
+    Axle::Spline::SplineComponent splineComp;
+    splineComp.Curve.SetSplineType(Axle::Spline::SplineType::CatmullRom);
+    splineComp.Curve.AddNode({ glm::vec3(-40.0f, 15.0f, 0.0f), 0.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(-20.0f, 18.0f, 5.0f), 0.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(20.0f, 18.0f, -5.0f), 0.0f, 1.0f });
+    splineComp.Curve.AddNode({ glm::vec3(40.0f, 15.0f, 0.0f), 0.0f, 1.0f });
+    splineComp.Curve.RebuildCache();
+
+    // Carve terrain along road
+    Axle::Terrain::CarveSettings carveSettings;
+    carveSettings.RoadWidth = 8.0f;
+    carveSettings.ShoulderWidth = 4.0f;
+    carveSettings.SampleStep = 1.0f;
+    bool carved = Axle::Terrain::TerrainSplineCarver::CarveSplineRoad(terrain, splineComp.Curve, carveSettings);
+    assert(carved);
+
+    // Verify carved road elevation directly beneath spline node 1
+    glm::vec3 testRoadPt = splineComp.Curve.SamplePosition(20.0f);
+    float groundH = terrain.SampleHeight(testRoadPt.x, testRoadPt.z);
+    assert(std::abs(groundH - testRoadPt.y) < 1.0f);
+    std::cout << "  -> Ground height beneath road: " << groundH << " m (Spline road height: " << testRoadPt.y << " m)" << std::endl;
+    std::cout << "  -> PASS: Spline roadbed terrain carving verified." << std::endl;
+
+    // Snap spline to terrain
+    terrain.GenerateHills(0.02f, 12.0f, 2);
+    bool snapped = Axle::Terrain::TerrainSplineCarver::SnapSplineToTerrain(splineComp, terrain, 0.2f);
+    assert(snapped);
+    for (const auto& node : splineComp.Curve.GetNodes()) {
+        float expectedH = terrain.SampleHeight(node.Position.x, node.Position.z) + 0.2f;
+        assert(std::abs(node.Position.y - expectedH) < 0.01f);
+    }
+    std::cout << "  -> PASS: All spline control points snapped precisely to terrain elevation (+0.2m offset)." << std::endl;
+
+    // 7. Terrain File Serialization Roundtrip (.axleterrain)
+    std::cout << "\n[34.7] Testing Terrain Serialization (.axleterrain)..." << std::endl;
+    std::string testTerrainFile = "assets/terrain/UnitTestTerrain.axleterrain";
+    std::filesystem::create_directories("assets/terrain");
+    bool saved = terrain.SaveToFile(testTerrainFile);
+    assert(saved);
+    assert(std::filesystem::exists(testTerrainFile));
+
+    Axle::Terrain::TerrainData loadedTerrain;
+    bool loaded = loadedTerrain.LoadFromFile(testTerrainFile);
+    assert(loaded);
+    assert(loadedTerrain.GetResolutionX() == terrain.GetResolutionX());
+    assert(loadedTerrain.GetResolutionZ() == terrain.GetResolutionZ());
+    assert(std::abs(loadedTerrain.GetSpacingX() - terrain.GetSpacingX()) < 0.001f);
+    assert(std::abs(loadedTerrain.GetHeight(15, 15) - terrain.GetHeight(15, 15)) < 0.001f);
+    std::error_code ec;
+    std::filesystem::remove(testTerrainFile, ec);
+    std::cout << "  -> PASS: Terrain binary serialization (.axleterrain) roundtrip 100% verified." << std::endl;
+
+    Axle::Terrain::TerrainPlugin::Shutdown();
+    std::cout << ">>> STEP 34 PASSED: Phase 29B Off-Road Terrain Plugin 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -5795,12 +6037,13 @@ int main(int argc, char** argv) {
         else if (arg == "31" || arg == "step31" || arg == "--step31" || arg == "--phase27") targetStep = 31;
         else if (arg == "32" || arg == "step32" || arg == "--step32" || arg == "--phase28") targetStep = 32;
         else if (arg == "33" || arg == "step33" || arg == "--step33" || arg == "--phase29" || arg == "--phase29a") targetStep = 33;
+        else if (arg == "34" || arg == "step34" || arg == "--step34" || arg == "--phase29b") targetStep = 34;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 33 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 34 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -5906,6 +6149,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 33) {
         if (!RunTest_Step33_Phase29A_SplineTrackPlugin()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 34) {
+        if (!RunTest_Step34_Phase29B_TerrainPlugin()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

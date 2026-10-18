@@ -229,9 +229,28 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **Step 5 - Spline Road Carving & Terrain Snapping**: One-way integration allowing the Terrain plugin to query `SplineComponent` paths and automatically carve/flatten terrain elevations directly beneath road ribbons.
     - [x] **Step 6 - Automated Test Suite 34 (`AxleTests.exe`)**: Unit tests for heightfield matrix generation, brush deformation math, LOD stitching, and terrain save/load serialization.
 - [ ] **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)**
-  - [ ] Bone skinning vertex shader, skeletal hierarchy, Assimp animation importer.
-  - [ ] Animation blending tree (Idle, Walk, Run, Jump, Fall).
-  - [ ] Kinematic Character Controller (KCC) using Jolt Physics character virtual body.
+  - [ ] **Step 1 - Core Skeletal Data Structures & Asset Importer (`ufbx` & `cgltf`)**:
+    - Native bone hierarchy, joint indices, inverse bind matrices (`InverseBindPose`), and skeleton metadata.
+    - Animation track sampling data structures (`AnimationClip`, `AnimationChannel`, keyframe timestamps, translation/rotation/scale curves).
+    - Lightweight, zero-dependency asset parsing using embedded `ufbx` (`.fbx`) and `cgltf` (`.gltf`/`.glb`).
+  - [ ] **Step 2 - GPU Vertex Skinning & Shader Pipeline (`Engine/Renderer`)**:
+    - Extended vertex layout: `a_BoneIndices` (`ivec4`) and `a_BoneWeights` (`vec4`) supporting up to 4 influencing bones per vertex.
+    - Dynamic bone matrix palette (uniform array / UBO up to 128 bones per mesh) updated per animated draw call.
+    - Optimized Linear Blend Skinning (LBS) vertex shader transforming position and normal vectors in model space prior to camera projection.
+  - [ ] **Step 3 - Animation Pose Evaluator & Blending Tree (`Engine/Animation`)**:
+    - Runtime track sampling with spherical linear interpolation (`glm::slerp`) for quaternions and linear interpolation (`glm::mix`) for translation/scale.
+    - Hierarchical forward kinematics solving global bone transform matrices from local bone transforms.
+    - Animation Blend Tree & State Machine: 1D blend spaces (Idle $\leftrightarrow$ Walk $\leftrightarrow$ Run based on speed parameter), cross-fading, and transition states (Jump, Fall, Land).
+  - [ ] **Step 4 - Kinematic Character Controller (KCC) via Jolt Physics (`Engine/Physics`)**:
+    - Robust character physics integration using `JPH::CharacterVirtual` with capsule collision shape.
+    - Slope traversal handling (`MaxSlopeAngle`), automatic stair/curb stepping (`StepOffset`), and ground snapping (`StickToFloor`).
+    - Collision response with static terrain (`HeightFieldShape`), spline tracks (`MeshShape`), and dynamic physics objects with pushback resistance.
+  - [ ] **Step 5 - ECS Integration & Third-Person Gameplay Controller**:
+    - Decoupled ECS components: `SkeletalMeshComponent`, `AnimatorComponent`, and `CharacterControllerComponent`.
+    - Third-person player controller logic supporting directional movement, smooth yaw turning toward velocity, jump action, and smooth chase camera follow.
+  - [ ] **Step 6 - Automated Test Suite 36 (`AxleTests.exe`)**:
+    - Unit tests validating skeletal tree traversal, quaternion SLERP interpolation precision, animation time wrapping, and blend weight calculations.
+    - Headless 60-step Jolt `CharacterVirtual` simulation tests verifying gravity, ground collision, slope navigation, and jump state transitions.
 - [ ] **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**
   - [ ] GPU-instanced particle emitters for smoke, dust trails, sparks, fire, tire burnout smoke, and water splashes.
   - [ ] Curl noise vector fields, collision planes, and texture sheet animations.

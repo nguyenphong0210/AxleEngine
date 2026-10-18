@@ -1693,10 +1693,10 @@ void EditorLayer::OnImGuiRender() {
         }
         if (ImGui::BeginMenu("Camera")) {
             bool isGameCam = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay);
-            if (ImGui::MenuItem("Game View (Primary Camera)", "C", isGameCam)) {
+            if (ImGui::MenuItem("Game View (Primary Camera)", "F2", isGameCam)) {
                 m_UseEditorCameraInPlay = false;
             }
-            if (ImGui::MenuItem("Eject Free-Fly Camera", "C", !isGameCam)) {
+            if (ImGui::MenuItem("Eject Free-Fly Camera", "F2", !isGameCam)) {
                 m_UseEditorCameraInPlay = true;
                 if (m_SceneState == SceneState::Play && m_Scene) {
                     auto camEntity = m_Scene->GetPrimaryCameraEntity();

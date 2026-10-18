@@ -2,62 +2,98 @@
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
 [![OpenGL](https://img.shields.io/badge/OpenGL-4.5%20Core-green.svg)](https://www.opengl.org/)
-[![CMake](https://img.shields.io/badge/CMake-3.22%2B-orange.svg)](https://cmake.org/)
+[![Jolt Physics](https://img.shields.io/badge/Physics-Jolt%205.2-orange.svg)](https://github.com/jrouwe/JoltPhysics)
+[![EnTT ECS](https://img.shields.io/badge/ECS-EnTT%20v3.14-purple.svg)](https://github.com/skypjack/entt)
+[![miniaudio](https://img.shields.io/badge/Audio-miniaudio-yellow.svg)](https://miniaud.io/)
+[![CMake](https://img.shields.io/badge/CMake-3.22%2B-red.svg)](https://cmake.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-32%2F32%20Passing%20(100%25)-brightgreen.svg)]()
 
-**AxleEngine** is a modern, modular 3D game engine written in **C++20**, focused on realistic **Vehicle Physics Simulation** powered by **Jolt Physics**.
+**AxleEngine** is a modern, modular, high-performance **General-Purpose 3D Game Engine** written in **C++20**. 
 
-The engine adheres to strict modular design principles, zero raw OpenGL exposure outside the renderer, and modern RAII resource management.
+Engineered with a **Data-Oriented Design (DOD)** philosophy, AxleEngine blends the ergonomics, component-driven workflows, and WYSIWYG tooling of commercial game engines (such as Godot and Unity) with native C++ execution speed, lock-free multithreaded task scheduling, and zero bloat.
+
+Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Physics Sandboxes, Mechanical Simulators, or Racing Games**, AxleEngine provides a clean, robust, and extensible architectural foundation.
+
+---
+
+## 🌟 Key Architectural Highlights
+
+* **Data-Oriented Entity Component System (ECS)**:
+  * Powered by **[EnTT](https://github.com/skypjack/entt)** for contiguous, cache-friendly component storage with zero virtual function dispatch in bulk updates.
+  * Hierarchical **Parent-Child Scene Graph** (`HierarchyComponent`) with world-space matrix propagation and transform cycle prevention.
+  * Multithreaded batch processing via `Axle::ParallelECS` utilizing worker threads without lock contention.
+* **Modern Physically Based Rendering (PBR) Pipeline**:
+  * Pure **OpenGL 4.5 Core Profile** abstraction with zero graphics API leaks outside the renderer.
+  * **Cook-Torrance Microfacet Specular BRDF** (GGX normal distribution, Smith-Schlick shadowing, Fresnel-Schlick reflectance).
+  * **16-Tap Vogel Spiral / Poisson Disk Soft Shadows** with hardware bilinear PCF and slope-scaled normal bias.
+  * **Atmospheric Skybox** (analytical Rayleigh/Mie scattering) and **HDR Cubemaps with Image-Based Lighting (IBL)** (Irradiance, Pre-filtered Specular, 2D BRDF LUT).
+  * **ACES Filmic Tone Mapping** and linear-to-sRGB gamma correction.
+  * Automated **`.axlebin` Flat Binary Mesh Cache** with microsecond GPU upload times.
+* **Multithreaded 3D Physics Simulation**:
+  * Powered by **[Jolt Physics](https://github.com/jrouwe/JoltPhysics)** (v5.2.0).
+  * Lock-free task scheduling via **[enkiTS](https://github.com/dougbinks/enkiTS)** (`JobSystemEnkiTS`), eliminating thread oversubscription.
+  * Decoupled body dynamics (`RigidBody3D`: Static, Kinematic, Dynamic) and collision geometries (`CollisionShape3D`: Box, Sphere, Capsule, Cylinder, ConvexHull, MeshShape).
+  * Multi-layer raycasting and camera spring-arm anti-clipping collision detection.
+* **Spatial 3D Audio Subsystem**:
+  * Built on **[miniaudio](https://miniaud.io/)** with zero dynamic library dependencies.
+  * Full 3D spatial attenuation (Inverse, Linear, Exponential), Doppler shift, directional sound emission cones, and ear listener tracking.
+* **Native C++ Scripting with In-Editor Hot-Reloading**:
+  * Write clean, type-safe gameplay code in C++20 inheriting `ScriptableEntity` (`OnCreate`, `OnUpdate`, `OnImGuiRender`, `OnDestroy`).
+  * Lightweight static reflection via `AXLE_SCRIPT_FIELDS` macro exposing live sliders, checkboxes, colors, and entity references in the Inspector.
+  * Dynamic DLL hot-reloading (`AxleScripts.dll`) with shadow-copy anti-locking (`F9` / `[🔨 Compile]`)—edit code and reload without restarting the editor.
+* **Dual Runtime Targets**:
+  * **`AxleEditor.exe`**: Multi-window docking IDE with ImGuizmo 3D gizmos, viewport mouse picking, asset browser, prefab authoring, and safe 3-state simulation (Play, Pause, Step, Stop).
+  * **`AxleRuntime.exe`**: Standalone, lightweight game runner stripped of all editor/ImGui overhead, capable of booting directly from monolithic cooked packages (`Data.axlepak`).
+* **First-Class Domain Toolkits**:
+  * **Modular Vehicle Physics Toolkit**: N-wheeled vehicle constraints, Ackermann steering, 4WD powertrain, suspension springs/dampers, and granular procedural engine RPM audio synthesis.
+  * **Multi-Angle Camera Toolkit**: Spring-Arm Chase Camera, First-Person Cockpit (Driver POV), Hood Camera, and 360° Free Orbit Inspection.
 
 ---
 
 ## 🏛️ Architecture Stack
 
-AxleEngine is organized into a strictly layered architecture to decouple graphics, physics, UI, and vehicle gameplay logic:
-
 ```plaintext
-Level 4:  [ Sandbox / Game Client ]
-Level 3:  [ Engine/Scene ]            [ Engine/Vehicle ]
-Level 2:  [ Engine/Physics ]          [ Engine/Renderer ] [ Engine/Asset ]    [ Engine/UI ]
-Level 1:  [ Engine/Platform ]
-Level 0:  [ Engine/Core ]
+Level 4:  [ AxleEditor (IDE) ]           [ AxleRuntime (Game Player) ]  [ AxleTests (CI/CD) ]
+Level 3:  [ Engine/Scene (ECS) ]         [ Engine/Vehicle (Toolkit) ]   [ AxleScripts (DLL) ]
+Level 2:  [ Engine/Physics (Jolt) ]      [ Engine/Renderer (PBR) ]      [ Engine/Audio (miniaudio) ]
+          [ Engine/Asset (VFS & Cache) ] [ Engine/UI (ImGui) ]          [ Engine/Project (.axleproj) ]
+Level 1:  [ Engine/Platform (GLFW, Input, DynamicLibrary) ]
+Level 0:  [ Engine/Core (JobSystem enkiTS, spdlog Log, Timestep, UUID, FileSystem) ]
 ```
-
-### Module Breakdown:
-- **Level 0 - `Engine/Core`**: Application lifecycle orchestrator (`Axle::Application`, `Axle::Layer`, `Axle::LayerStack`), primitive typedefs (`Axle::f32`, `Axle::u32`), lock-free multithreaded Job System via **enkiTS** (`Axle::JobSystem`), high-performance multithreaded logging via **spdlog** (`Axle::Log`, `AXLE_CORE_*`), frame timing (`Axle::Timestep`), and debugging assertion macros.
-- **Level 1 - `Engine/Platform`**: Window lifecycle, OpenGL context creation, event dispatching, and static input polling (`Axle::Input`) via **GLFW**.
-- **Level 2 - Core Subsystems**:
-  - **`Engine/Renderer`**: Complete OpenGL 4.5 Core Profile abstraction (Buffers, Vertex Arrays, Shaders with uniform caches, Perspective Camera & Free-Fly Controller).
-  - **`Engine/UI`**: Dedicated **Dear ImGui** (docking-enabled) integration with telemetry overlay (`DebugPanel`) for FPS, frametime, and camera statistics.
-  - **`Engine/Physics`**: Multithreaded physics simulation bridge using **Jolt Physics** (JobSystem, BroadPhase, RigidBodies, collision math bridge).
-  - **`Engine/Asset`**: 3D mesh loaders (`.gltf`/`.obj`) and image texture loading into GPU memory.
-- **Level 3 - High-Level Systems**:
-  - **`Engine/Scene`**: Entity Component System (ECS) synchronizing Jolt physics bodies with renderer transforms.
-  - **`Engine/Vehicle`**: Specialized vehicle dynamics (Ackermann steering, suspension spring dampening, tire slip, engine torque curve, and transmission).
-- **Level 4 - `Sandbox`**: Client applications demonstrating simulation scenarios.
 
 ---
 
-## ⚙️ C++ Native Scripting: ECS Component Attachment & Hierarchy Traversal
+## 📚 Comprehensive Documentation Hub
 
-AxleEngine adopts a high-performance **Hybrid ECS / DOD Scripting Architecture** designed specifically for physics-driven mechanical sandbox games and vehicle simulations:
+For in-depth guides, API references, and architectural walk-throughs, refer to the documentation suite in `docs/`:
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                              AXLE ENGINE SCRIPTING STACK                               │
-├───────────────────────────────────┬────────────────────────────────────────────────────┤
-│    LAYER A: MACHINE CONTROLLERS   │            LAYER B: MECHANICAL SYSTEMS             │
-│      (OOP - ScriptableEntity)     │            (DOD - Pure EnTT Component)             │
-├───────────────────────────────────┼────────────────────────────────────────────────────┤
-│ • Low entity count (1 - 10)       │ • Massive bulk entity count (100 - 50,000 parts)   │
-│ • Vehicles, Player Camera, Turrets│ • Mechanical Hinges, Pistons, Rotors, Welds        │
-│ • Intuitive OnCreate / OnUpdate   │ • Batch memory iteration via registry.view().each()│
-│ • Unity-like Component Attachment │ • 100% Cache-friendly, Zero vtable, Maximum SIMD   │
-└───────────────────────────────────┴────────────────────────────────────────────────────┘
-```
+| Document | Description |
+| :--- | :--- |
+| **[Architecture Overview](docs/ARCHITECTURE.md)** | Core design principles, layered stack, application lifecycle, memory strategy, and thread scheduling. |
+| **[Subsystems & Module Reference](docs/SUBSYSTEMS.md)** | Detailed breakdown of every engine module (`Core`, `Platform`, `Renderer`, `Physics`, `Audio`, `Scene`, `UI`, `Asset`). |
+| **[ECS & Scene Graph Guide](docs/ECS_AND_SCENE_GRAPH.md)** | EnTT component schemas, parent-child transform propagation, prefab assemblies (`.axle`), and `ParallelECS`. |
+| **[C++ Native Scripting Guide](docs/SCRIPTING_GUIDE.md)** | `ScriptableEntity` lifecycle, reflection macros (`AXLE_SCRIPT_FIELDS`), and dynamic DLL hot-reloading (`F9`). |
+| **[Rendering Pipeline & Shading](docs/RENDERER_AND_PIPELINE.md)** | Multi-pass rendering, Cook-Torrance BRDF, Vogel spiral soft shadows, atmospheric skybox, and `.axlebin` caching. |
+| **[Physics & Simulation Guide](docs/PHYSICS_AND_SIMULATION.md)** | Jolt Physics integration, rigid body dynamics, collision shapes, raycasting, and vehicle constraint mechanics. |
+| **[AI Agent & Developer Handbook](docs/AI_DEVELOPER_GUIDE.md)** | Engineering handbook for AI agents and developers: non-negotiable rules, extension recipes, and common pitfalls. |
 
-### 1. The 4-Step Closed-Loop Editor Workflow
-AxleEngine brings the seamless ergonomics of commercial engines to high-performance native C++:
+---
+
+## 🗺️ Project Milestones & Roadmap
+
+AxleEngine has undergone extensive architectural development and rigorous quality assurance:
+* **Completed Milestones**: **Phase 1 through Phase 28** are 100% complete and fully verified.
+* **Automated Test Suite**: **32 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
+* **Upcoming Focus**: **Phase 29: Off-Road Terrain & Spline Track System**, followed by Skeletal Animation and VFX.
+
+👉 **For the complete phase-by-phase development history, detailed feature checklists, and upcoming roadmap, see [ROADMAP.md](ROADMAP.md).**
+
+---
+
+## ⚙️ Closed-Loop Scripting Workflow
+
+AxleEngine brings the seamless ergonomics of commercial game engines to high-performance native C++:
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────────┐
@@ -68,592 +104,92 @@ AxleEngine brings the seamless ergonomics of commercial engines to high-performa
 │ • Auto-generates clean boilerplate inheriting ScriptableEntity with reflection        │
 │                                           ▼                                           │
 │ STEP 2: DRAG & DROP ATTACHMENT                                                        │
-│ • Drag TankController.hpp from Content Browser directly onto Entity in Viewport/Tree   │
+│ • Drag TurretController.hpp from Content Browser directly onto Entity in Viewport     │
 │ • Automatically attaches NativeScriptComponent and binds script metadata              │
 │                                           ▼                                           │
 │ STEP 3: LIVE INSPECTOR TUNING                                                         │
 │ • Properties panel dynamically generates sliders, checkboxes, and Vec3 widgets       │
 │ • Live parameter edits (Speed, Torque, Angle) are saved in component edit buffer      │
 │                                           ▼                                           │
-│ STEP 4: PACKAGE INTO UNIFIED `.axle` PREFAB                                           │
+│ STEP 4: PACKAGE INTO REUSABLE `.axle` PREFAB                                          │
 │ • Click "Save Assembly" -> packages meshes, physics colliders, joints, and scripts    │
-│ • Drag Tank.axle into ANY scene -> fully functional machine drives immediately!       │
+│ • Drag Assembly into ANY scene -> fully functional machine drives immediately!        │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
-
-### 2. Reference Script Implementation (`TankController.hpp`)
-```cpp
-#pragma once
-#include <Axle/ScriptableEntity.hpp>
-#include <Axle/ScriptRegistry.hpp>
-#include <Axle/Input/Input.hpp>
-
-class TankController : public Axle::ScriptableEntity {
-public:
-    // Exposed live-tunable fields
-    float MoveSpeed = 12.0f;
-    float TurretRotationSpeed = 45.0f;
-    bool EnableNitro = false;
-
-    // Cached child part entity handles (O(1) access)
-    Axle::Entity m_Turret;
-    Axle::Entity m_Barrel;
-    Axle::Entity m_WheelFL;
-
-    void OnCreate() override {
-        // Hierarchy Traversal: resolve once at spawn time
-        m_Turret  = FindChildByTag("Turret");
-        m_Barrel  = FindChildByTag("Barrel");
-        m_WheelFL = FindChildByTag("Wheel_FL");
-    }
-
-    void OnUpdate(Axle::Timestep ts) override {
-        // O(1) Instant EnTT component query without string lookups
-        if (m_Turret && Axle::Input::IsKeyPressed(Axle::KeyCode::Left)) {
-            auto& tc = m_Turret.GetComponent<Axle::TransformComponent>();
-            tc.Rotation = glm::rotate(tc.Rotation, glm::radians(TurretRotationSpeed * ts), glm::vec3(0, 1, 0));
-        }
-    }
-
-    // Static Field Reflection (auto-generates Editor UI controls)
-    static void RegisterFields(Axle::ScriptFieldRegistry& reg) {
-        reg.AddField("MoveSpeed", &TankController::MoveSpeed, 1.0f, 50.0f, "Maximum forward drive speed (m/s)");
-        reg.AddField("TurretRotationSpeed", &TankController::TurretRotationSpeed, 10.0f, 180.0f, "Turret yaw rotation speed (deg/s)");
-        reg.AddField("EnableNitro", &TankController::EnableNitro, "Enable nitro speed boost");
-    }
-};
-
-AXLE_REGISTER_SCRIPT(TankController);
-```
-
-### 3. Hierarchy Traversal & Zero-Cost $O(1)$ Caching
-In complex mechanical vehicles (assemblies with dozens of connected wheels, suspension arms, and weapon turrets), manually binding individual object slots in the Inspector is tedious and prone to broken references. AxleEngine solves this with **Hierarchy Traversal**:
-- **Traversal API**: `FindChildByTag(tag, recursive)`, `GetParent()`, `GetChildren()`, and `ForEachChild(callback)` safely navigate the entity tree via [HierarchyComponent](file:///d:/WorkSpace/AxleEngine/Engine/Scene/include/Axle/Components.hpp).
-- **$O(1)$ Caching Pattern**: Child entities are resolved once in `OnCreate()` and stored in 8-byte `Axle::Entity` handles. In `OnUpdate()`, component queries execute directly on EnTT Sparse Sets with zero string comparisons.
-
-### 4. Performance Benchmark: AxleEngine vs Unreal Engine vs Unity
-
-| Feature / Metric | 🔷 Unreal Engine (`AActor`) | 🟩 Unity (`MonoBehaviour`) | ⚙️ AxleEngine (Hybrid EnTT ECS) |
-| :--- | :--- | :--- | :--- |
-| **Object Representation**| Heavy `UObject` base class | Managed C# Object on Heap | **32-bit Integer (`uint32_t`) ID** |
-| **Metadata Overhead** | **~200 - 1,000+ bytes** per Actor | ~64 - 128 bytes + GC Header | **0 bytes** (Components are pure Plain Old Data) |
-| **Component Lookup** | `GetComponentByClass<T>()` RTTI lookup | `GetComponent<T>()` C# search | **$O(1)$ Direct Sparse Set Index** (Inlined assembly) |
-| **Memory Locality** | Heap fragmented, high cache misses | Managed heap, cache misses | **Contiguous Packed Arrays** (High L1/L2 Cache hit) |
-| **Garbage Collector** | Periodic GC sweeps (micro-stutters) | Mono/Boehm GC (frametime spikes)| **Zero GC** (Standard C++ RAII deterministic freeing) |
-| **Child Part Wiring** | Manual pointer assignment | Manual Drag-and-Drop Inspector slots | **Hierarchy Traversal** + $O(1)$ cached handle resolution |
-
----
-
-## 🖥️ Modern Editor Architecture & Tri-Panel Ecosystem
-
-AxleEngine implements a strict, commercial-grade architectural separation between **Runtime Execution Memory (ECS Registry)** and **Persistent Disk Storage (Asset Pipeline)** across three core editor panels:
-
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                              AXLE ENGINE EDITOR ARCHITECTURE                           │
-├──────────────────────────┬─────────────────────────────┬───────────────────────────────┤
-│    1. CONTENT BROWSER    │     2. SCENE HIERARCHY      │      3. PROPERTIES PANEL      │
-│  (Asset Pipeline / Disk) │  (Active Entities / RAM)    │  (Component Data Inspector)   │
-├──────────────────────────┼─────────────────────────────┼───────────────────────────────┤
-│ • Disk Storage (Assets/) │ • RAM (entt::registry)      │ • RAM (Component Sparse Sets) │
-│ • Flyweight UUID Handles │ • Parent-Child Transforms   │ • ImGui Sliders & ColorEdit   │
-│ • Binary Cache (.axlebin)│ • Archetype & Presets       │ • C++ Script Field Reflection │
-│ • Right-Click: Create    │ • + Create: Entity Presets  │ • + Add Component (Categories)│
-│   Folder, Scene, Script, │   (Empty, Primitives, Sun,  │ • Drag & Drop Asset Assignment│
-│   Material, Prefab       │    Atmosphere, Camera, Rig) │   (Model, Texture, Material)  │
-└──────────────────────────┴─────────────────────────────┴───────────────────────────────┘
-```
-
-### 1. Architectural Boundaries & Responsibility Matrix
-
-| Editor Panel | ECS / Engine Underlying Nature | Storage Location | Creation Target (`Create / Add`) |
-| :--- | :--- | :--- | :--- |
-| **Scene Hierarchy** | Live `Entity` list (`uint32_t` / `entt::entity`) in active Scene | **RAM** (`ECS Registry`) & serialized into `.axlescene` | Spawns a new Entity ID with an Archetype/Preset of baseline components. |
-| **Properties (Inspector)** | Data reader/writer (Reflection / ImGui) for components on selected Entity | **RAM** (Component structs in contiguous sparse sets) | Emplaces a new component struct or binds a C++ Script to the active Entity (`registry.emplace<T>()`). |
-| **Content Browser** | Physical Asset Manager and project directory explorer (`Assets/`) | **Disk Storage** & managed via `AssetManager` (`UUID` handles) | Generates new physical files on disk (Material, Prefab, Scene, C++ Script) or re-bakes binary assets (`F9`). |
-
-### 2. Core Architectural Principles
-* **The Flyweight Asset Pattern**: Heavy binary payloads (vertex arrays, raw textures, sound buffers) are **NEVER** stored directly inside ECS components. Components (e.g., `MeshInstance3D`, `MaterialComponent`) only store an 8-byte `AssetHandle` (`Axle::UUID`). Multiple scene entities sharing the same 3D mesh share a single cached GPU buffer.
-* **World Position Stays**: When reparenting or unparenting an entity in the hierarchy, local transforms are automatically recomputed via inverted parent matrices (`Local = Inverse(ParentWorld) * ChildWorld`) and decomposed to ensure zero visual displacement in 3D space, fortified by graph cycle detection.
-* **Deferred & Recursive Lifecycle**: Entity destruction is queued safely to the end of the frame to prevent ImGui iterator invalidation, recursively freeing all child entities and associated physics bodies. Duplication (`Ctrl+D`) deep-copies child hierarchies with freshly minted UUIDs.
-* **Dual-Context Inspector**: The Properties panel automatically toggles between `InspectorMode::Entity` (when an entity is selected in the Scene Hierarchy) and `InspectorMode::Asset` (when an asset file such as `.axlemat` or `.axle` is selected in the Content Browser).
-* **Safe Scene State Simulation (Edit vs Play)**: Clicking `Play (F5)` deep-clones `m_EditorScene` into an ephemeral `m_RuntimeScene` using UUID remapping (`std::unordered_map<UUID, EntityID>`) for hierarchy and script references. Clicking `Stop (F7 / Esc)` discards the runtime state and restores the editor scene with zero lingering physics drift.
-* **In-Editor Live Coding & Script Hot-Reload (Shadow-Copy DLL)**: User C++ scripts are compiled into an isolated `AxleScripts.dll`. When clicking `Compile (F9)`, the Editor triggers an async CMake build and loads a timestamped shadow copy (`AxleScripts_Runtime_<timestamp>.dll`) using `LoadLibrary()`. This bypasses Windows file locking (`LNK1104`), reloads new script code, and preserves existing field property values across reload without restarting the editor.
-
-### 3. Drag & Drop Workflow (Unified ImGui Payloads)
-
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        STANDARDIZED DRAG & DROP PIPELINE                               │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│ FLOW 1: Content Browser ──["CONTENT_BROWSER_ITEM"]──> Viewport / Scene Hierarchy       │
-│ • Drag .axle / .obj model file into 3D Viewport -> Raycast spawn at ground coordinates │
-│ • Automatically calls registry.create(), binds TransformComponent + MeshInstance3D    │
-│                                                                                        │
-│ FLOW 2: Content Browser ──["CONTENT_BROWSER_ITEM"]──> Properties Panel                 │
-│ • Drag .obj/.axle into Mesh slot -> Instant model swap                                 │
-│ • Drag .png into Texture slot -> Instant PBR albedo map binding                        │
-│ • Drag .hpp script into Inspector -> Binds NativeScriptComponent                       │
-│                                                                                        │
-│ FLOW 3: Scene Hierarchy ──["SCENE_HIERARCHY_ENTITY"]──> Properties Panel / Hierarchy   │
-│ • Drag Entity A onto Entity B -> Re-parents Entity A under Entity B (Scene Graph)      │
-│ • Drag Entity into Script Target slot -> Injects target Entity UUID into C++ Script    │
-│ • Drag Entity to Content Browser -> Packages entity & children into reusable .prefab   │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🗺️ Project Roadmap
-
-- [x] **Phase 1: UI & Telemetry Overlay (`Engine/UI`)**
-  - [x] Integrate Dear ImGui (docking branch) as a submodule.
-  - [x] Encapsulate `ImGuiLayer` (lifecycle, modern dark theme, multi-viewport support).
-  - [x] Implement `DebugPanel` to display real-time FPS, delta time, and camera transform.
-- [x] **Phase 2: Physics Engine Foundation (`Engine/Physics`)**
-  - [x] Integrate Jolt Physics submodule into `ThirdParty/JoltPhysics` (v5.2.0).
-  - [x] Configure CMake build options for Jolt Physics and `Axle::Physics`.
-  - [x] Implement `PhysicsSystem` & `PhysicsScene` (multithreaded job system, gravity, collision layers).
-  - [x] Simulate static ground plane, dynamic falling box, and bouncy sphere.
-  - [x] Integrate `JPH::DebugRenderer` (`PhysicsDebugRenderer`) to draw collider wireframes in OpenGL.
-- [x] **Phase 3: Scene & Transform Synchronization (`Engine/Scene`)**
-  - [x] Integrate header-only ECS library (EnTT v3.14.0) via submodule in `ThirdParty/entt`.
-  - [x] Define `TagComponent`, `TransformComponent`, `MeshInstance3D` (Godot-style, alias `MeshComponent`), `RigidBody3D` (Godot-style body dynamics), and `CollisionShape3D` (Godot-style decoupled collider geometry with Box, Sphere, Cylinder, Cone, Plane, Mesh shapes).
-  - [x] Implement `Scene::OnUpdate()` to automatically bind Jolt physics transforms to render meshes.
-- [x] **Phase 4: Automotive Mechanics (`Engine/Vehicle`)**
-  - [x] Implement `Vehicle` utilizing Jolt Physics' `VehicleConstraint` and `WheeledVehicleController`.
-  - [x] Configure 4-wheel suspension springs (frequency & damping), anti-roll bars, and tire slip models.
-  - [x] Build powertrain model (engine torque curve, automatic transmission, differentials, throttle & brake).
-  - [x] Wire vehicle telemetry (speedometer, tachometer progress bar, gear indicator, 4-wheel contact status) and smooth chase camera into ImGui and Sandbox.
-- [x] **Phase 5: Editor Ecosystem & Simulation Lifecycle (`Engine/UI` & `Engine/Renderer`)**
-  - [x] Offscreen Viewport with Framebuffer (OpenGL FBO, auto-resize, aspect ratio handling).
-  - [x] 3-State Simulation Lifecycle: Edit (Stop), Play, Pause, Step 1 Frame (1/60s), Live Speed Scaling (0.1x - 2.0x).
-  - [x] Fixed Top Control Toolbar & Global Main Menu Bar.
-  - [x] Scene Hierarchy Panel (Entity tree, create/delete entity).
-  - [x] Properties / Inspector Panel (Tag rename, Transform X/Y/Z controls, Mesh & Material color/pattern, RigidBody3D with Motion Type & Damping, CollisionShape3D with Shape Type & dimensions live tweaking, Sleeping controls).
-  - [x] Vehicle Live Tuner Panel (springs, dampers, steering, torque, 4-wheel telemetry table).
-  - [x] Engine Console Panel (spdlog integration, log levels, search & auto-scroll).
-  - [x] Procedural Primitive Meshes: Plane, Cube, Sphere, Cylinder, Cone with procedural shader patterns.
-- [x] **Phase 6: Interactive 3D Viewport & Transform Gizmos (`Engine/UI` & `Sandbox`)**
-  - [x] **3D Transform Gizmo (ImGuizmo)**: Manipulate Entity Translation (`W`), Rotation (`E`), and Scale (`R`) directly inside the 3D Viewport with interactive coordinate arrows and real-time sync with Jolt Physics.
-  - [x] **Viewport Mouse Picking**: Raycast query directly on 3D physics meshes in the viewport to select them in the Hierarchy & Inspector, with background click-to-deselect.
-  - [x] **Gizmo Controls Toolbar & Snapping**: Dedicated toolbar buttons for Select (`Q`), Translate (`W`), Rotate (`E`), Scale (`R`), Local/World coordinate system toggle, and adjustable distance/angle snapping (`0.5m` / `45°`).
-  - [x] **Grid & World Coordinates**: Render dynamic infinite metric grid floor using `ImGuizmo::DrawGrid` in Edit mode.
-- [x] **Phase 7: Automotive Test Playground & Obstacle Course (`Engine/Physics` & `Sandbox`)**
-  - [x] **Jump Ramps & Inclines**: Multi-height ramps (Runway Launch Ramp, Landing Pad, Stunt Mega Ramp) testing airborne trajectories, flight pitch, and suspension landing cushion.
-  - [x] **Washboard & Bumps Track**: 10 transverse rhythmic rumble bumps along test lane causing rapid suspension oscillation, spring frequency, and damper rebound.
-  - [x] **Banked Curved Track**: Multi-segment high-speed camber turn (22° inward banking) testing centrifugal road holding and lateral tire slip.
-  - [x] **Dynamic Destruction / Crash Barriers**: Destructible 10-crate wooden pyramid, 6 slalom agility cones, and 6 dynamic tire impact barriers with one-click full scene reset (`R`).
-- [x] **Phase 8: C++ Native Scripting & Vehicle Component (`Engine/Scene`)**
-  - [x] **VehicleComponent in ECS**: Encapsulated vehicle configuration and physics handle as an entity component.
-  - [x] **`ScriptableEntity` Lifecycle**: Base C++ class exposing `OnCreate()`, `OnUpdate(Timestep)`, and `OnDestroy()`.
-  - [x] **`NativeScriptComponent`**: Template-based script binding to entities with zero runtime overhead.
-  - [x] **Modular Gameplay Scripts**: Decoupled vehicle input (`CarPlayerScript`) into clean, reusable C++ scripts.
-  - [x] **Editor Component Management**: Interactive `+ Add Component` popup in Properties panel, component removal options (`Remove Component`), prominent `+ Create` button with Search filter in Scene Hierarchy, and File menu actions (`Ctrl+S`, `Ctrl+O`, `Ctrl+N`).
-  - [x] **Window Work Area & Fullscreen**: Automatic maximized window startup matching OS work area (zero taskbar overlap) and `F11` Maximize/Restore toggle.
-- [x] **Phase 9: Asset System & 3D Model Ingest Pipeline (`Engine/Asset` & `Sandbox/assets`)**
-  - [x] **Project Asset Architecture**: Standardized `Sandbox/assets/` structure (`models/`, `textures/`, `scenes/`, `materials/`, `shaders/`) and `Axle::FileSystem` resolver - separating game project assets from engine core.
-  - [x] **Content Browser Panel (`Engine/UI`)**: ImGui-based visual asset browser with directory navigation, file type icons, search filter, path breadcrumbs, Explorer integration, and Drag & Drop payload support.
-  - [x] **Drag & Drop Workflow**: Drag 3D model files from Content Browser directly into Viewport or Properties panel to instantiate meshes with zero-gap ground snapping and centered pivots.
-  - [x] **3D Asset Thumbnails & Interactive Asset Preview (`Engine/UI`)**: On-demand studio-lit 3D thumbnails rendered directly on Content Browser cards with frame-sliced caching, plus a dedicated interactive 3D Asset Preview window with turntable auto-orbit, wireframe inspection, geometry stats, and direct scene instantiation.
-  - [x] **Unified `.axle` Asset Pipeline & Auto-Conversion**:
-    - [x] **Step 1: Core Engine/Asset Module & AssetSerializer**: Structured text format `.axle` (AI-friendly & human-editable) + Automated flat binary caching `.axlebin` (<1ms GPU loading) with smart timestamp validation (`last_write_time`) for automatic re-baking when text is modified. Seamless drag & drop support for `.axle` assets into Viewport, Scene Hierarchy, and Mesh Inspector.
-    - [x] **Step 2: Ingest & Auto-Conversion Pipeline**: Dragging external 3D files (`.obj`, `.gltf`, `.glb`, `.fbx`) directly from Windows Explorer into Content Browser or Viewport automatically ingests and converts them into engine-standard `.axle` format with instant background `.axlebin` cache generation and seamless scene instantiation.
-    - [x] **Step 3: AI Mesh Mutation & Hot-Reload**: AI agents and developers can edit `.axle` files as text; the Engine features a dedicated Editor Compiler button (`F9`), auto-compile before simulation Play (`F5`), and instant GPU VertexArray and material hot-reloading in real time without restart.
-    - [x] **Step 4: Reverse Mesh Export (`.obj`)**: Export `.axle` / `.axlebin` meshes back into standard Wavefront `.obj` format with full material libraries (`.mtl`), grouped subparts, and smooth vertex normals for external DCC (Blender, Maya) interop and mesh inspection via right-click context menu.
-- [x] **Phase 10: Scene Serialization & Project Management (`Engine/Scene` & `Engine/Project`)**
-  - [x] **Step 1: Core SceneSerializer (`.axlescene`)**: Built-in structured YAML-like scene serializer saving and restoring complete ECS scene state (UUIDs, TagComponents, TransformComponents, `MeshInstance3D` with builtin/custom models, Jolt `RigidBody3D` with decoupled `CollisionShape3D` shapes and backward-compatible auto-migration, HierarchyComponents parent-child links, and NativeScriptComponents; backward-compatible with legacy names).
-  - [x] **Step 2: Interactive Save/Open Workflows**: Connect `Ctrl+S` (Save Scene), `Ctrl+Shift+S` (Save Scene As), `Ctrl+O` (Open Scene), `Ctrl+N` (New Scene) with native OS file dialogs (`Axle::FileDialogs`), dynamic window title indicator (`Axle Engine - Project - [SceneName.axlescene]`), and full Main Menu Bar integration (`File -> New / Open / Save / Save As / Exit`).
-  - [x] **Step 3: Content Browser Scene Loading**: Double-click scene files (`.axlescene`) in Content Browser to instantly load them into the active Viewport, with right-click context menu ("Open Scene in Viewport"), dedicated Scene clapperboard icon (`SCN`), and drag-and-drop scene loading onto the Viewport.
-  - [x] **Step 4: Project Configuration System (`.axleproj`)**: Project file storing project name, asset directory root, and start scene with `File -> New Project`, `File -> Open Project` (`Ctrl+Shift+O`), `File -> Save Project`, Content Browser `.axleproj` project blueprint icon (`PRJ`), and dynamic window title synchronization.
-- [x] **Phase 11: Lighting, Dynamic Shadows & PBR Materials**
-  - [x] **Directional Sun Light & Real-Time Shadow Mapping**:
-    - [x] **Sub-step 1.1**: Core Depth Framebuffer (`GL_DEPTH_COMPONENT32F`, 2048x2048, border clamped), Light Space Matrix calculation, and `Scene::RenderShadowPass()`.
-    - [x] **Sub-step 1.2**: Two-pass rendering pipeline with 3x3 Percentage-Closer Filtering (PCF) soft shadows and hardware polygon offset slope-scaled depth bias to eliminate shadow acne.
-    - [x] **Sub-step 1.3**: ECS `DirectionalLightComponent`, Sun Light entity management, interactive Inspector controls (Sun Azimuth & Elevation sliders, Color picker, Intensity, Ambient fill, Cast Shadows toggle, Atmosphere presets), and full scene serialization.
-  - [x] **Texture Mapping (`stb_image`)**:
-    - [x] **Sub-step 2.1**: Integrate standard `stb_image.h` (v2.30) library, implement OpenGL 4.5 Core Profile `Axle::Texture2D` abstraction (support PNG/JPG/TGA/BMP, RGBA8/RGB8/RG8/R8 formats, auto mipmap generation, configurable wrap & filter modes, slot binding management), with pre-baked 1x1 fallback textures (White, Flat Normal, Black, Roughness).
-    - [x] **Sub-step 2.2**: Upgrade Vertex Layout & UV coordinates (`a_TexCoord`) across Primitive Meshes and `.axle` loaders; configure Texture Sampler Slots in Shader (`u_AlbedoMap`, `u_ShadowMap`, `u_NormalMap`, `u_RoughnessMap`, `u_MetallicMap`) with screen-space cotangent-frame normal perturbation, roughness/metallic sampling, and 1x1 fallback texture slot binding.
-    - [x] **Sub-step 2.3**: Add `MaterialComponent` in ECS, integrate Inspector UI with texture map slots (Albedo, Normal, Roughness, Metallic), live thumbnail previews, drag-and-drop assignment from Content Browser, quick presets, and complete scene serialization (`.axlescene`).
-  - [x] **PBR Material System (Cook-Torrance Microfacet BRDF)**:
-    - [x] **Sub-step 3.1**: Physically based Cook-Torrance microfacet specular BRDF (Trowbridge-Reitz GGX normal distribution $D$, Smith-Schlick shadowing/masking $G$, Fresnel-Schlick reflectance $F$), energy conservation ($k_D + k_S = 1$), metallic workflow, and directional sun radiance integration with PCF soft shadows.
-    - [x] **Sub-step 3.2**: HDR Filmic Tone Mapping (ACES Narkowicz approximation, Reinhard, Uncharted 2 Hable, and Linear Bypass modes) & Linear-to-sRGB display gamma correction ($1/\gamma$), with real-time Exposure and Tone Mapping controls in Sun Light Inspector and complete scene serialization.
-  - [x] **Atmospheric Skybox**:
-    - [x] **Sub-step 4.1**: Procedural atmospheric Rayleigh / Mie scattering skybox pipeline (`Axle::Skybox`), camera-centric unit cube renderer at infinity (`glDepthFunc(GL_LEQUAL)`, $z/w = 1.0$), analytical sharp sun disk with anti-aliasing, sunset/sunrise golden horizon warming, night darkening with procedural twinkling stars, and full HDR ACES filmic tone mapping.
-    - [x] **Sub-step 4.2**: ECS `SkyboxComponent`, dynamic Sun Light orientation & photometric post-process synchronization, interactive Inspector controls (Zenith, Horizon, Ground colors, Turbidity, Sun Disk Size & Corona Glow, Sync with Sun toggle, Atmosphere presets), and complete scene serialization (`.axlescene`).
-    - [x] **Sub-step 4.3**: Ambient hemisphere irradiance calculation from atmospheric sky.
-- [x] **Phase 12: Assembly Pipeline & Unified `.axle` Prefab System (`Engine/Asset`, `Engine/Scene` & `Engine/UI`)**
-  - [x] **Step 1: Unified `.axle` Assembly Specification (`AssetType: Assembly`) & Serializer**:
-    - Standardize unified asset specification in `.axle` format with `AssetType: Assembly` header (YAML-like structured text, optimized for both human editing and AI prompt mutation, eliminating file format fragmentation).
-    - Implement `AssemblySerializer::Serialize()` to recursively save complete entity hierarchies (Root + Children) preserving all ECS components (`TransformComponent`, `MeshInstance3D`, `CollisionShape3D`, `RigidBody3D`, `HierarchyComponent`, `MaterialComponent`, `VehicleComponent`, `NativeScriptComponent`).
-    - Implement `AssemblySerializer::Deserialize()` with automatic **UUID Remapping** to guarantee collision-free instantiation when spawning multiple assembly instances in the same scene.
-  - [x] **Step 2: Scene Assembly Instantiation & Physics Binding**:
-    - Implement `Scene::InstantiateAssembly()` spawning assemblies at arbitrary world/raycast positions with ground snapping and centered pivot alignment.
-    - Automatically establish parent-child transform hierarchies (`HierarchyComponent`) and instantiate corresponding Jolt runtime bodies and shapes (`RigidBody3D` + `CollisionShape3D`).
-    - Add `AssemblyComponent` tracking metadata (`SourceAssetPath`, `AssetUUID`) for asset linkage management.
-  - [x] **Step 3: Editor Drag-and-Drop & Hierarchy Integration**:
-    - Right-click context menu in Content Browser blank space: **`Create -> Assembly (.axle)`** to quickly generate a new assembly template in the active folder.
-    - Drag & drop entities from `Scene Hierarchy Panel` into `Content Browser` to package and export as `.axle` (Type: Assembly).
-    - Drag & drop `.axle` Assembly assets from `Content Browser` into `3D Viewport` or `Scene Hierarchy` for instant scene instantiation.
-    - Add entity context menu actions: *"Save as Assembly..."* and *"Unpack Assembly"*.
-  - [x] **Step 4: Dedicated Assembly Editor Window (`AssemblyEditorPanel`)**:
-    - Double-clicking an `.axle` Assembly in Content Browser opens a dedicated **Assembly Editor** window for isolated inspection and modification (similar to dedicated Material and Physics inspectors).
-    - Features an isolated 3D viewport with orbit camera, interactive hierarchy tree, and inspectors for `TransformComponent`, `MeshInstance3D`, `CollisionShape3D`, and `RigidBody3D`.
-    - Includes "Save Assembly" back to disk and "Add to Scene" action, allowing users to configure assemblies thoroughly before dragging them into the active scene.
-    - Content Browser visual identification with a dedicated `ASY` badge and distinct styling.
-- [x] **Phase 13: C++ Native Scripting Ecosystem & Mechanical Assembly Architecture (`Engine/Scene` & `Engine/UI`)**
-  - [x] **Step 1: Core Static Reflection & Script Registry (`ScriptField` & `ScriptRegistry`)**:
-    - Implement lightweight memory-offset reflection system (`ScriptField`) supporting `Float`, `Int`, `Bool`, `Vec3`, and `String` with min/max slider ranges and tooltips.
-    - Build thread-safe `ScriptRegistry` singleton with automated `AXLE_REGISTER_SCRIPT(ClassName)` macro registration.
-    - Upgrade `NativeScriptComponent` with Edit-mode field maps (`FloatFields`, `IntFields`, `BoolFields`, `Vec3Fields`) and bidirectional instance synchronization (`SyncFieldsToInstance()` / `SyncFieldsFromInstance()`).
-  - [x] **Step 2: ECS Component Attachment & Hierarchy Traversal**:
-    - Equip `Entity` and `ScriptableEntity` with robust hierarchy traversal helpers (`FindChildByTag`, `GetParent`, `GetChildren`, `ForEachChild`) utilizing `HierarchyComponent`.
-    - Enforce $O(1)$ zero-cost caching pattern inside `OnCreate()` — resolving child entities once at spawn time to eliminate expensive runtime string lookups.
-    - Decouple assembly mechanics: allow individual child parts (turrets, robotic arms, steering linkages) to be queried and actuated directly from root scripts.
-  - [x] **Step 3: Editor Workflow & Intuitive Drag-and-Drop (Unity-like Component Attachment)**:
-    - Add right-click context menu in Content Browser: **`Create -> C++ Script (.hpp)`** to automatically generate boilerplate C++ scripts inheriting `ScriptableEntity` with registration macros.
-    - Support drag-and-drop workflow: drag `.hpp`/`.cpp` script files from Content Browser directly onto Scene Hierarchy entities or Viewport meshes to instantly attach `NativeScriptComponent`.
-    - Auto-generate dynamic Inspector UI in `SceneHierarchyPanel`: ComboBox script selector, interactive drag sliders with custom ranges, checkboxes, color-coded Vec3 axis inputs, tooltips, and "Reset to Default" (`↺`) actions.
-  - [x] **Step 4: Unified Assembly Prefab Packaging & Gameplay Vehicle Implementation**:
-    - Upgrade `AssemblySerializer` (`.axle`) and `SceneSerializer` (`.axlescene`) to serialize and restore `NativeScriptComponent` and live-tuned field values.
-    - Refactor `CarPlayerScript` with exposed drive torque, max steer angle, and child part control (headlights and wheels); implement smooth chase `CameraFollowScript`.
-    - Verify complete roundtrip: create script $\rightarrow$ attach to vehicle $\rightarrow$ tune parameters $\rightarrow$ save as `.axle` prefab $\rightarrow$ instantiate in any scene and drive instantly upon pressing Play (`F5`).
-- [x] **Phase 14: Core ECS & Relationship Hierarchy (Parent - Child & Scene Graph)**
-  - [x] **UUID & Standard Component Integrity**: Enforce automatic attachment of `IDComponent` (64-bit UUID), `TagComponent`, `TransformComponent`, and `RelationshipComponent` across all entities created via `Scene::CreateEntity()`.
-  - [x] **Scene Graph Matrix Propagation**: Traverse root entities (`Parent == NullEntity`), computing `WorldMatrix = LocalMatrix`, and recursively propagate down child trees: $\text{WorldMatrix}_{\text{Child}} = \text{WorldMatrix}_{\text{Parent}} \times \text{LocalMatrix}_{\text{Child}}$.
-  - [x] **World Position Stays & Cycle Check**: Implement `Scene::SetParent(child, parent)` computing $\text{Local} = \text{Inverse}(\text{ParentWorld}) \times \text{ChildWorld}$ with local translation/rotation/scale decomposition to prevent 3D displacement, reinforced with ancestor graph cycle detection.
-- [x] **Phase 15: Scene Hierarchy Panel Upgrade (Presets, Tree UI & Drag-and-Drop Reparenting)**
-  - [x] **Comprehensive Archetype Presets**: Complete `+ Create` menu (Unity/Godot style) with `Create Empty`, `Create Empty Child`, 3D Objects (`Cube`, `Sphere`, `Cylinder`, `Cone`, `Plane`), Light (`Directional Light`, `Point Light`), `Camera`, and Environment (`Atmospheric Skybox`).
-  - [x] **Hierarchical Tree View**: Render only root entities at the top level, displaying children via collapsible arrow nodes (`ImGuiTreeNodeFlags_OpenOnArrow`).
-  - [x] **Visual Drag & Drop Reparenting**: Register `"SCENE_HIERARCHY_ENTITY"` payload on entity nodes to allow intuitive mouse drag-and-drop reparenting between entities.
-  - [x] **Deferred & Recursive Lifecycle**: Implement end-of-frame deferred deletion queue (`m_EntitiesToDestroy`) with recursive child cleanup; implement deep recursive duplication (`Ctrl+D`) with fresh UUID generation.
-- [x] **Phase 16: Properties Panel & C++ Scripting Reflection (Category Component Adder & Macro Fields)**
-  - [x] **Structured Component Widgets**: Encapsulate components in collapsible headers with custom context menus (`Remove Component`), and implement color-coded, draggable 3-axis `DrawVec3Control` for transforms.
-  - [x] **Categorized `+ Add Component` Popup**: Group available components into *Rendering*, *Physics*, *Scripts*, and *Audio/VFX* with real-time search filtering.
-  - [x] **C++ Script Reflection Macro**: Support `RegisterFields()` / `AXLE_SCRIPT_FIELDS(...)` macros in `ScriptableEntity` for automatic Editor reflection of `Float`, `Int`, `Bool`, `Vec3`, `String`, and `Entity Reference` (UUID).
-  - [x] **Dual-Context Properties Inspector**: Support seamless switching between `InspectorMode::Entity` (inspecting active scene entity) and `InspectorMode::Asset` (inspecting `.axlemat` materials or `.axle` assemblies from Content Browser).
-- [x] **Phase 17: Content Browser & Material/Asset System (.meta & Physical Asset Creation)**
-  - [x] **Asset UUID & `.meta` File Pipeline**: Auto-generate `.meta` companion files storing persistent 64-bit UUIDs for assets in `Assets/` for path-independent referencing.
-  - [x] **Right-Click Asset Creation**: Right-click blank space in Content Browser to create `New Folder`, `Scene (.axlescene)`, `Material Asset (.amat / .axlemat)`, `C++ Script (.hpp)`, and `Physics Material (.physmat)`.
-  - [x] **Dedicated Material Inspector**: Selecting `.amat` in Content Browser switches Properties panel into interactive PBR Material editor (Albedo, Roughness, Metallic, Texture slots).
-- [x] **Phase 18: Integrated Drag & Drop, Safe Simulation & In-Editor Live Coding (Hot-Reload DLL)**
-  - [x] **Full 3-Flow ImGui Drag & Drop**: Connect `"CONTENT_BROWSER_ITEM"` to Viewport/Hierarchy (Flow 1) and Properties (Flow 2); connect `"SCENE_HIERARCHY_ENTITY"` to Hierarchy reparenting, Script Target slots, and Content Browser prefab packaging (Flow 3), with dual C++ Script (`.hpp`) and Class (`.hpp + .cpp`) creation.
-  - [x] **Safe Scene State Simulation (Play / Stop Mode)**: Clicking `Play (F5)` deep-clones `m_EditorScene` into an ephemeral `m_RuntimeScene` using UUID remapping (`std::unordered_map<UUID, EntityID>`); clicking `Stop (F7 / Esc)` restores the pristine editor scene with zero physics drift.
-  - [x] **In-Editor C++ Script Hot-Reload & Live Coding (Unreal / Hazel Style)**:
-    - [x] **Decoupled `AxleScripts.dll` Shared Module**: Separate user scripts into an auto-globbed dynamic library with export macros (`AXLE_SCRIPT_API`) and standardized lifecycle entry points (`Axle_InitializeScripts`, `Axle_ShutdownScripts`).
-    - [x] **Anti-Lock Shadow-Copy & State Preservation**: Implement `ScriptHotReloadManager` copying `AxleScripts.dll` to runtime timestamped DLLs (`AxleScripts_Runtime_<timestamp>.dll`) to prevent Windows file locking (`LNK1104`), serializing and re-binding field properties on active entities seamlessly.
-    - [x] **Async Background Compiler (`ScriptCompiler`)**: Spawn background worker thread executing `cmake --build build --config Release --target AxleScripts` with real-time stdout/stderr capture and error parsing without UI freezing.
-    - [x] **Editor UI Integration (Compile Button & Menu)**: Unreal-style `[🔨 Compile] (F9 / Ctrl+B)` toolbar button with dynamic status animations (`Compiling...`, `[OK] Reloaded in X.Xs`, `[X] Failed`), along with `Build` menu bar items (`Open in Visual Studio`, `Open Scripts Directory`).
-- [x] **Phase 19: Multithreaded Job System & enkiTS Integration (`Engine/Core` & `Engine/Physics`)**
-  - [x] **ThirdParty Integration**: Embed `enkiTS` (Enki Task Scheduler) submodule/library into `ThirdParty/enkiTS` with modern CMake configuration.
-  - [x] **Core JobSystem Engine**: Implement unified `Axle::JobSystem` in `Engine/Core` managing persistent lock-free worker threads (`enki::TaskScheduler`) matching CPU hardware concurrency.
-  - [x] **Jolt Physics Bridge (`JobSystemEnkiTS`)**: Implement custom `JPH::JobSystem` backend routing Jolt Physics constraint solving and collision tasks into enkiTS, eliminating separate thread pools and thread oversubscription.
-  - [x] **Parallel ECS Processing**: Implement `ParallelFor` utilities for `entt::registry` batch iteration, distributing bulk mechanical parts and transform evaluations across all worker cores without lock contention.
-- [x] **Phase 20: Component-Driven Vehicle Creation from Scratch (`Engine/Vehicle`, `Engine/Scene` & `Engine/UI`)**
-  - [x] **Phase 20.1: Decouple Hardcoded Tags & Component-per-Wheel Architecture (Godot/Unity-style N-Wheeled)**:
-    - [x] **Decouple Hardcoded Tags**: Completely eliminate fixed name queries (`"Vehicle Chassis"`, `"Wheel FL/FR/RL/RR"`). All vehicle lifecycle logic is 100% component-driven via `VehicleComponent` in `SceneSerializer.cpp` and `EditorLayer.cpp`.
-    - [x] **Component-per-Wheel (`WheelComponent` / `VehicleWheel3D`)**: Define `WheelComponent` for child wheel entities, exposing tire radius, width, suspension spring/damper, steerable flag, driven/traction flag, and handbrake settings.
-    - [x] **Arbitrary N-Wheeled Jolt Constraint**: Support arbitrary wheel counts (2-wheel bike, 4-wheel car, 6x6 heavy truck, 8x8 APC) via `VehicleConfig.CustomWheels` with automatic differential torque splitting and anti-roll bar distribution.
-    - [x] **Scene Serialization**: Full YAML serialization and deserialization for `WheelComponent` in `SceneSerializer.cpp`.
-    - [x] **Runtime Simulation & Wheel Sync**: Dynamic discovery via `HierarchyComponent` and automatic synchronization of arbitrary N wheels with Jolt Physics in `EditorLayer.cpp` (preserving local transforms relative to chassis with zero drift).
-    - [x] **Verification**: Step 25 in `AxleTests.exe` validating `WheelComponent` serialization and 6x6 all-wheel-drive truck physics simulation.
-  - [x] **Phase 20.2: Vehicle Inspector Tuning & Modular Component-Driven Workflow (`Engine/UI`)**:
-    - [x] **Interactive Sliders & Live Telemetry**: Sliders in `SceneHierarchyPanel` for chassis mass, peak engine torque, RPM limits, and brake/handbrake torque with live Speedometer & Tachometer progress bars and per-wheel suspension contact indicators.
-    - [x] **Modular Manual Workflow**: Purely modular, decoupled vehicle authoring (Godot/Unity-style) where wheels are arbitrary child entities configured via `VehicleWheel3D` with individual suspension, steering, and traction tuning.
-    - [x] **Direct Driving Controls**: Seamless W/A/S/D and Arrow key driving controls with Space handbrake in Play mode (`F5`), immediately operational on test scenes created from scratch without writing custom scripts.
-    - [x] **Scene Serialization**: Full YAML serialization and deserialization for `VehicleComponent` tuning properties in `SceneSerializer.cpp`.
-  - [x] **Phase 20.3: Modern Unity ECS (`com.unity.vehicles`) Architecture & Full Scripting Decoupling**:
-    - [x] **Stage 1 - Pure ECS Component Standardization (`WheelComponent` & `VehicleComponent`)**:
-      - [x] Upgrade `WheelComponent` (mirroring Unity ECS `ControllableWheelAuthoring`): tire radius, width, suspension travel min/max, spring frequency/damping, steerable, driven, handbrake, `AutoSyncMesh` toggle, and live telemetry fields (`IsGrounded`, `SuspensionLength`, `AngularVelocity`, `SlipAngle`, `LateralSlip`).
-      - [x] Refine `VehicleComponent` (mirroring Unity ECS `VehicleControlAuthoring`): pure drivetrain & control data container with driver inputs (`Throttle`, `Steering`, `Brake`, `Handbrake`), anti-roll bar stiffness, center-of-mass offset, and clean C++ API (`SetDriverInput`, `GetSpeedKmh`, `GetRPM`, `GetWheelCount`).
-      - [x] Full YAML scene serialization/deserialization in `SceneSerializer.cpp` and unit test verification in Step 25 ([25.1], [25.2], [25.4]).
-    - [x] **Stage 2 - Core Scene Lifecycle & Dynamic Assembly (`VehicleUpdateColliders`)**:
-      - [x] Relocate Jolt vehicle constraint instantiation and physics setup from `EditorLayer` directly into `Scene::OnRuntimeStart()`.
-      - [x] Dynamic N-wheel discovery (`VehicleUpdateColliders` equivalent): automatically discover all child entities holding `WheelComponent` attached to root chassis entity with `RigidBody3D` + `VehicleComponent`.
-      - [x] Real-time cache-friendly wheel pose synchronization in `Scene::OnUpdateRuntime()`: update child wheel entity `TransformComponent` (suspension travel and wheel rotation) with local matrix inverse decomposition to prevent drift.
-      - [x] Safe teardown and state restoration on simulation stop in `Scene::OnRuntimeStop()`.
-    - [x] **Stage 3 - Complete `EditorLayer` Decoupling (100% Neutral Editor)**:
-      - [x] Eliminate all vehicle physics hardcodes from `EditorLayer.cpp` (remove `SetupVehiclePhysics`, remove `m_Vehicle`, remove hardcoded WASD input polling, remove manual wheel transform copy loops).
-      - [x] Decouple `ChaseCamera` from hardcoded vehicle instances, dynamically binding to active player vehicle entities.
-    - [x] **Stage 4 - C++ Native Scripting Template (`CarController.hpp`) & Live Editor Reflection**:
-      - [x] Implement `CarController.hpp` template inheriting `Axle::ScriptableEntity`, reading keyboard/gamepad inputs and driving `VehicleComponent` cleanly.
-      - [x] Expose live-tunable fields (`Horsepower`, `MaxSteerAngle`, `BrakePower`, `AllWheelDrive`) using `AXLE_SCRIPT_FIELDS` for real-time Inspector tuning.
-      - [x] Update `SceneHierarchyPanel` with dedicated vehicle telemetry cards (speedometer, tachometer, per-wheel contact & compression readouts).
-- [x] **Phase 20.4: Editor Decoupling & Camera / Input Architecture Standardization (Unity / Unreal Style)**:
-  - [x] **Decoupled Game View & Eject Mode (`Engine/Scene` & `Editor`)**:
-    - [x] Integrate `CameraComponent` (Primary Camera) into runtime scene rendering during Play mode (`F5`).
-    - [x] Implement Eject / Free-Fly mode (`C` key) allowing editor camera inspection while simulation is running.
-    - [x] Graceful fallback to `EditorCamera` with viewport notification badge when no camera entity is present in scene.
-    - [x] Auto-instantiate `"Main Camera"` entity with `CameraComponent` in `NewScene()` and `OpenScene()` if missing.
-  - [x] **Script-Driven Vehicle & Camera Gameplay (`AxleScripts`)**:
-    - [x] Eliminate direct driving input (`WASD`/`Space`) from `EditorLayer`. All driving logic is cleanly delegated to `CarController.hpp`.
-    - [x] Implement `VehicleChaseCamera.hpp` native script component with live reflection fields (`Distance`, `HeightOffset`, `MouseSensitivity`, `AutoAlignSpeed`) replacing hardcoded orbit/chase math in `EditorLayer`.
-  - [x] **ECS & Serialization Integrity**:
-    - [x] Full YAML serialization and deserialization for `CameraComponent` (`FOV`, `NearClip`, `FarClip`, `Primary`) in `SceneSerializer.cpp` and `AssemblySerializer.cpp`.
-    - [x] Helper API `Scene::GetPrimaryCameraEntity()` in `Engine/Scene`.
-  - [x] **Input System & Hotkey Hygiene**:
-    - [x] Fix debouncing bug on `F11` (proper toggle between Maximize and Restore).
-    - [x] Resolve hotkey conflict between single-frame step `O` in Pause mode and `Ctrl + O` (Open Scene/Project).
-- [x] **Phase 21: Decoupled Scene Renderer Architecture (`Engine/Scene`)**
-  - [x] **Step 1 - Core `SceneRenderer` Class**:
-    - Encapsulate the full OpenGL rendering pipeline into `Axle::SceneRenderer` (`Engine/Scene/include/Axle/SceneRenderer.hpp` & `src/SceneRenderer.cpp`).
-    - Decouple Shadow Depth Pass (`RenderShadowPass`), PBR Lighting Pass (directional sunlight, Cook-Torrance BRDF, fallback textures 1x1), Atmospheric Skybox Pass, and Tonemapping/Gamma post-processing out of `EditorLayer.cpp`.
-    - Support flexible render targets: Render to offscreen `Framebuffer` (for Editor viewport) or render directly to Default Backbuffer / Screen (`nullptr` for standalone games via `RenderCommand::BindDefaultFramebuffer()`).
-  - [x] **Step 2 - Render Context & Multi-Pass Pipeline**:
-    - Define `SceneRenderSettings` (shadows toggle, skybox toggle, debug wireframes, tonemapping mode, exposure).
-    - Implement `SceneRenderer::Init()`, `SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, const PerspectiveCamera& camera, const std::shared_ptr<Framebuffer>& targetFBO, ...)`.
-    - Integrate `PhysicsDebugRenderer` directly into `SceneRenderer` optional debug pass.
-  - [x] **Step 3 - EditorLayer Refactoring**:
-    - Replace 150+ lines of low-level OpenGL draw and texture binding loops in `EditorLayer::OnUpdate()` with high-level `m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer, ...)`.
-    - Validate identical visual fidelity, zero performance regression, and clean separation of concerns.
-- [x] **Phase 22: Standalone Game Runtime Player (`AxleRuntime.exe`)**
-  - [x] **Step 1 - Standalone Executable Target (`Runtime/` or `Game/`)**:
-    - Add CMake target `add_executable(AxleRuntime src/Main.cpp src/RuntimeLayer.cpp)` completely detached from `Axle::UI` (Zero ImGui / ImGuizmo dependency for minimal binary footprint and maximum FPS).
-    - Link core engine libraries: `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, `Axle::Scene`, `Axle::Physics`, `Axle::Vehicle`, `Axle::Project`, `Axle::Asset`.
-  - [x] **Step 2 - Clean Runtime Layer (`RuntimeLayer`)**:
-    - Implement headless/fullscreen game window lifecycle matching active monitor display mode.
-    - Load project configuration (`.axleproj`) and deserialize startup scene (`StartScene`).
-    - Initialize runtime simulation: `Scene::OnRuntimeStart(m_PhysicsScene.get())`.
-    - Main game loop: `m_PhysicsScene->Step(ts)`, `Scene::OnUpdateRuntime(ts)`, query `PrimaryCameraEntity`, and render directly to screen backbuffer via `m_SceneRenderer->RenderScene(...)`.
-  - [x] **Step 3 - Game Controls & Windowing Ergonomics**:
-    - Dynamic script hotkeys & input routing directly to `CarController.hpp` and active gameplay scripts.
-    - Fullscreen toggle (`Alt+Enter` / `F11`), Pause menu toggle (`Escape`), and smooth exit handling.
-    - Automated build script update in `build.sh` (`--game` or `--runtime` flag to compile and run `AxleRuntime.exe`).
-- [x] **Phase 23: Asset Packaging & Cooking Pipeline (`.axlepak` & VFS)**
-  - [x] **Step 1 - Binary Package Specification (`.axlepak`)**:
-    - Design compact binary archive format (`Package.hpp` & `Package.cpp`) with magic header (`AXPK`), versioning, asset table of contents (TOC: 64-bit UUIDs, relative normalized virtual paths, byte offsets, uncompressed/compressed sizes, CRC32 checksums), and packed asset data blocks.
-  - [x] **Step 2 - In-Editor Asset Cooker & Project Exporter (`Engine/Asset` & `Engine/UI`)**:
-    - Implement `AssetCooker`: Recursively parse all referenced assets (`.axlescene`, textures, audio, shaders from `Engine/Resources/Shaders`), pre-compile text `.axle` models to binary `.axlebin`, serialize project configuration, and write out monolithic `Data.axlepak`.
-    - Provide dual export pathways:
-      - Interactive Editor UI: `File -> Export Standalone Game...` / `Build -> Export Standalone Game...` modal with Windows directory picker (`FileDialogs::OpenFolder`).
-      - Headless CLI cooker mode: `AxleEditor.exe --export <output_dir>` / `--cook <output_dir>` for automated CI/CD builds.
-    - Output 100% self-contained game bundle: `AxleRuntime.exe`, `AxleScripts.dll`, and `Data.axlepak`.
-  - [x] **Step 3 - Virtual File System (VFS) Integration (`Engine/Core` & `Engine/Asset`)**:
-    - Upgrade `Axle::FileSystem`: Seamless fallback mechanism (`MountPackage()`, `UnmountPackage()`, `ResolveAssetPath()`).
-      - **Runtime Mode (Distribution)**: Mount `Data.axlepak` into memory; transparently serve scenes, binary meshes, shaders, and textures in-memory via `stbi_load_from_memory` without temporary disk extraction.
-      - **Editor Mode (Development)**: Direct transparent fallback to loose files on disk (`Assets/`) for live editing and instant hot-reloading.
-  - [x] **Step 4 - Distribution Build Hygiene (`#ifdef AXLE_EDITOR` / Shipping Mode)**:
-    - Standalone `AxleRuntime.exe` runs completely self-contained directly from `Data.axlepak` with zero loose asset dependencies and zero editor UI overhead.
-- [x] **Phase 24: Decoupled Material Asset System & Flyweight Architecture (`Engine/Renderer`, `Engine/Asset` & `Engine/Scene`)**
-  - [x] **Step 1 - Core `Axle::Material` Asset Class (`Engine/Renderer`)**:
-    - Decouple material logic from UI/Scene into a first-class rendering asset: `Axle::Material` (`Engine/Renderer/include/Axle/Material.hpp` & `src/Material.cpp`).
-    - Encapsulate PBR properties (AlbedoColor, Roughness, Metallic, NormalStrength, EmissionColor, EmissionIntensity, UVScale) and texture maps (`AlbedoMap`, `NormalMap`, `RoughnessMap`, `MetallicMap`).
-    - Implement `Material::Bind(Shader& shader, ...)` encapsulating sampler binding slots (0: Albedo, 2: Normal, 3: Roughness, 4: Metallic) and uniform uploads.
-    - Provide `Material::BindDefault(Shader& shader, ...)` replacing repetitive manual fallback texture binding logic across `Scene.cpp` and `SceneRenderer.cpp`.
-    - Support built-in presets (Car Paint Red/Blue, Chrome, Gold, Copper, Rubber, Aluminum, Obsidian, Plastic, Cast Iron, LED Headlights/Taillights).
-    - Implement standalone serialization & deserialization (`Save(path)` / `Load(path)`) supporting both loose disk files and VFS packages (`.amat` / `.axlemat`).
-  - [x] **Step 2 - Centralized Asset Caching in `AssetManager` (`TextureCache` & `MaterialCache`)**:
-    - Implement `TextureCache` in `Axle::AssetManager`: `GetTexture(const std::filesystem::path&)` and `GetTexture(UUID)`. Reuse already-loaded `Texture2D` instances across all materials and entities to eliminate duplicate GPU texture allocations.
-    - Implement `MaterialCache` in `Axle::AssetManager`: `GetMaterial(const std::filesystem::path&)` and `GetMaterial(UUID)`.
-    - Add real-time live reloading: `AssetManager::ReloadMaterial(handle)` automatically reloads modified properties in-place, instantly updating all entities in the active scene sharing that material without reloading the scene.
-  - [x] **Step 3 - Flyweight `MaterialComponent` in ECS (`Engine/Scene`)**:
-    - Refactor `MaterialComponent`: store `UUID MaterialHandle` (8-byte asset handle) and a cached `std::shared_ptr<Material>` reference instead of duplicating bulky material parameter blocks per entity.
-    - Support instance overrides / unique materials via `MakeUnique()` (Unity/Unreal style).
-    - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize `MaterialHandle` with seamless backward-compatible fallback for legacy inline material parameters.
-  - [x] **Step 4 - Unified Editor Workflow & Real-Time Sync (`Engine/UI` & `Editor`)**:
-    - Update `SceneHierarchyPanel`:
-      - Properties panel displays the bound Material Asset slot (Name, UUID badge, clear/unlink button) with drag-and-drop support from Content Browser.
-      - Tuning sliders on a shared Material Asset immediately propagate visual updates to all scene entities referencing that material in real time.
-    - Viewport drag-and-drop: dragging `.amat` / `.axlemat` onto an entity attaches the shared `MaterialHandle` rather than cloning values by-value.
-  - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
-    - Add Step 28 test verifying `Material` class lifecycle, `TextureCache` deduplication (1 texture loaded once across multiple materials), `MaterialCache` live updates, and `MaterialComponent` Flyweight handle serialization roundtrip.
-- [x] **Phase 25: AAA Soft Shadows & Precision Lighting Pipeline (`Engine/Renderer`, `Engine/Scene` & `Engine/UI`)**
-  - [x] **Step 1 - Hardware Bilinear PCF (`ShadowMap` in `Engine/Renderer`)**:
-    - Upgrade `Axle::ShadowMap`: configure depth texture with `GL_TEXTURE_COMPARE_MODE = GL_COMPARE_REF_TO_TEXTURE` and `GL_TEXTURE_COMPARE_FUNC = GL_LEQUAL`.
-    - Enable hardware-accelerated 2x2 bilinear percentage-closer filtering natively on the GPU during texture comparison fetch (`sampler2DShadow`).
-    - Add dynamic shadow map resolution configuration support (`1024`, `2048 High`, `4096 Ultra`).
-  - [x] **Step 2 - 16-Tap Vogel Spiral / Poisson Disk Soft Shadows (`SceneRenderer` & Shaders)**:
-    - Upgrade embedded PBR shader in `SceneRenderer.cpp` and standalone shader `Checkerboard.frag`:
-      - Replace rigid 3x3 box grid with a 16-tap Vogel Spiral / Poisson Disk distribution with randomized rotation per pixel (interleaved gradient noise) to eliminate banding and diagonal 45° staircases.
-      - Calculate continuous depth comparison using `textureProj(u_ShadowMap, ...)` / `texture(u_ShadowMap, vec3(coords.xy, coords.z - bias))`.
-      - Implement slope-scaled normal bias with normal offset push to eliminate shadow acne and light leaking on steep surfaces.
-  - [x] **Step 3 - Dynamic Ortho Size & Shadow Distance in `DirectionalLightComponent` (`Engine/Scene`)**:
-    - Extend `DirectionalLightComponent` with configurable shadow properties:
-      - `ShadowOrthoSize` (default: `25.0f` for crisp near-field shadows, configurable from `5.0m` to `150.0m`).
-      - `ShadowBias` (depth bias multiplier) and `ShadowFilterRadius` (penumbra spread multiplier).
-      - `ShadowQuality` (1024, 2048, 4096).
-    - Update `SceneRenderer::RenderScene` to read light settings, resize shadow map dynamically, and pass dynamic `OrthoSize` into `CalculateLightSpaceMatrix`.
-    - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize the new shadow properties.
-  - [x] **Step 4 - Interactive Inspector UI & Real-Time Tuning (`Engine/UI`)**:
-    - Update `SceneHierarchyPanel`:
-      - Add dedicated **Soft Shadow Settings** group inside `DirectionalLightComponent` inspector:
-        - `Shadow Coverage (Ortho Size)` slider (`5.0m` - `100.0m`).
-        - `Penumbra Softness` & `Depth Bias` sliders.
-        - `Shadow Quality` dropdown (`Low 1024`, `High 2048`, `Ultra 4096`).
-      - Real-time feedback on 3D Viewport when adjusting sliders.
-  - [x] **Step 5 - Automated Regression & Verification (`AxleTests.exe`)**:
-    - Add Step 29 test in `Editor/src/Test.cpp`:
-      - Test `ShadowMap` hardware comparison modes and dynamic resolution resizing.
-      - Test `DirectionalLightComponent` shadow tuning properties serialization roundtrip.
-      - Verify light space matrix calculation with variable ortho bounds.
-      - Run full test suite with 100% pass rate.
-- [x] **Phase 26: HDR Skybox Cubemap & Image-Based Lighting (IBL) Pipeline (`Engine/Renderer`, `Engine/Scene` & `Engine/UI`)**
-  - [x] **Step 1 - HDR Image Loader & Equirectangular-to-Cubemap Converter (`Engine/Renderer`)**:
-    - Extend `Axle::Texture2D` / `Cubemap`: Load high-dynamic-range environment maps (`.hdr` / `.exr` via `stb_image.h` 32-bit float channels `stbi_loadf`).
-    - Implement equirectangular environment map projection into seamless 6-face OpenGL Cubemap texture (`GL_TEXTURE_CUBE_MAP`, `GL_RGB16F` / `GL_RGBA16F`).
-    - Render and display 360° HDR background skybox via dedicated `SkyboxCubemap` shader with tone mapping and exposure control.
-  - [x] **Step 2 - Image-Based Lighting (IBL) Convolution Pipeline (`Engine/Renderer`)**:
-    - **Diffuse Irradiance Map**: Pre-compute hemisphere convolution for indirect diffuse ambient lighting, replacing flat analytical hemisphere gradients.
-    - **Specular Pre-filtered Environment Map**: Convolve cubemap across varying mipmap roughness levels using split-sum Cook-Torrance GGX approximation.
-    - **BRDF Integration LUT**: Generate 2D lookup texture ($256 \times 256$, `GL_RG16F`) encoding Fresnel scale and bias for arbitrary roughness and viewing angles.
-  - [x] **Step 3 - Full PBR Material Shading Integration (`SceneRenderer` & Shaders)**:
-    - Upgrade PBR lighting calculations in `SceneRenderer.cpp` and `Checkerboard.frag`:
-      - Bind `u_IrradianceMap` (indirect diffuse for dielectrics: $k_D \times \text{Irradiance} \times \text{Albedo}$).
-      - Bind `u_PrefilteredMap` and `u_BRDFLUT` (indirect specular for metals: $F \times \text{PrefilteredColor}(\text{roughness}) \times (\text{scale} + \text{bias})$).
-      - Produce hyper-realistic metallic reflections: mirrors, chrome, gold, brass, and car paint reflect the actual surrounding HDR sky and environment instead of synthetic color gradients (Unreal / Unity style).
-  - [x] **Step 4 - ECS Skybox Component & Editor Workflow (`Engine/Scene` & `Engine/UI`)**:
-    - Extend `SkyboxComponent`: add `SkyboxType` (Procedural Atmospheric vs. HDR Cubemap), `HDRPath`, `Exposure`, and `Intensity`.
-    - Update `SceneHierarchyPanel`: Drag-and-drop `.hdr` environment maps from Content Browser into Skybox slot with instant real-time live preview.
-    - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize HDR cubemap environment asset references.
-  - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
-    - Add Step 30 test in `Editor/src/Test.cpp` verifying HDR asset loading, cubemap generation, and `SkyboxComponent` serialization roundtrip.
-- [x] **Phase 27: High-Fidelity 3D Audio System & Vehicle Acoustics (`Engine/Audio`)**
-  - [x] **Step 1 - Core Audio Subsystem & `miniaudio` Integration (`Engine/Audio`)**:
-    - Integrate `miniaudio.h` (single-header C/C++ backend, zero external DLL dependencies) into `ThirdParty/miniaudio`.
-    - Implement decoupled RAII interfaces: `AudioEngine` (device lifecycle, master bus mixer, thread safety), `AudioClip` (preloaded PCM vs streaming WAV/MP3), `AudioSource` (voice control, gain, pitch, spatialization), and `AudioListener` (3D position, forward/up orientation, velocity).
-    - Provide realistic 3D spatial sound modeling: distance attenuation (Inverse / Linear / Exponential curves), stereo panning, Doppler shift, and directional cones (exhaust emission angles).
-  - [x] **Step 2 - ECS Audio Components & Scene Serialization (`Engine/Scene`)**:
-    - Implement `AudioListenerComponent` (binds to active primary camera with automatic transform & velocity synchronization).
-    - Implement `AudioSourceComponent`: asset filepath, volume, pitch, loop toggle, 2D/3D mode, min/max attenuation distance, and directional cone parameters.
-    - Update `SceneSerializer.cpp` and `AssemblySerializer.cpp` to serialize/deserialize all audio components in `.axlescene` and `.axle` formats.
-  - [x] **Step 3 - Vehicle Audio Synthesizer & Physics Integration (`Engine/Vehicle`)**:
-    - Implement `VehicleAudioComponent`: real-time mechanical acoustics synchronized with Jolt Physics and `VehicleComponent`:
-      - **Granular Engine RPM Synthesizer**: RPM-driven pitch modulation and throttle load crossfading (On-Throttle power roar vs Off-Throttle coasting/exhaust overrun).
-      - **Tire Squeal & Slip Acoustics**: Automated tire screech triggered by Jolt wheel telemetry (`LongitudinalSlip` during burnouts/hard braking and `LateralSlip` during high-G drifts).
-      - **Suspension Travel Thuds**: Dynamic low-frequency damping thuds on hard landings and curb impacts based on suspension compression velocity.
-      - **Collision Impact System**: Physics contact impulse listener triggering metal crunch, scratch, and thud sound effects with pitch randomization.
-  - [x] **Step 4 - Editor Inspector & Audio Preview UI (`Engine/UI`)**:
-    - Drag-and-drop audio assets (`.wav`, `.mp3`) from Content Browser directly into `AudioSourceComponent` slots in Scene Hierarchy.
-    - Interactive audio preview controls in Inspector: Play, Pause, Stop, Volume/Pitch sliders, and viewport gizmo visualization for 3D min/max hearing radius.
-  - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
-    - Add Step 31 test in `Editor/src/Test.cpp` verifying headless Audio Subsystem initialization, audio clip decoding, 3D spatial calculations, vehicle audio telemetry binding, and ECS serialization roundtrip.
-  - [x] **Vehicle Audio Sample Pack Deployment (`Editor/assets/audio/`)**:
-    - Downloaded and configured open-source vehicle WAV sound clips (`Engine_Power.wav`, `Engine_Coast.wav`, `Tire_Squeal.wav`, `Suspension_Thud.wav`, `Collision_Impact.wav`) with `.meta` UUID companion files.
-    - Assigned `VehicleAudioComponent` and `AudioListenerComponent` directly onto the Player Car and Main Camera in `Editor/assets/scenes/CarTest.axlescene`.
-- [x] **Phase 28: Gameplay Polish, Multi-Part Vehicle Rigging & Dynamic HUD (`Engine/Vehicle`, `Engine/UI` & Content)**
-  - [x] **Step 1 - Multi-Part 3D Car Rigging & Assembly Pipeline**:
-    - High-fidelity 3D vehicle asset integration: modular chassis body mesh, 4 separate wheel meshes (rim + tire), brake calipers, and cockpit interior.
-    - Automatic ECS hierarchy binding via Prefab Assembly (`.axle`): parent chassis entity holding `VehicleComponent`, `RigidBody3D`, `CollisionShape3D`, `VehicleAudioComponent`, and child wheel entities holding `WheelComponent`, `MeshInstance3D`, and `TransformComponent`.
-    - Animated visual wheel kinematics: real-time synchronization of wheel spin rotation based on Jolt Physics angular velocity (`AngularVelocity`) and steering angles (`SteerAngle`) with Ackerman geometry.
-    - Functional vehicle lighting system: toggleable headlights (SpotLight3D), tail lights / brake lights (PointLight3D + emissive material bloom on braking), and reverse lights on reverse gear.
-  - [x] **Step 2 - Multi-Angle Dynamic Vehicle Camera Controller (`Engine/Scene` & Scripting)**:
-    - **Spring-Arm Third-Person Chase Camera**: Smooth position and rotation lag interpolation, dynamic FOV expansion proportional to vehicle speed, and physics environment raycast collision detection to prevent wall/ground clipping.
-    - **Cockpit / Interior First-Person Camera (Driver POV)**: Head-anchored camera inside the cabin with subtle G-force inertia lag, engine vibration tremor, and suspension compression bumps.
-    - **Hood / Bumper Camera**: Low-to-ground racing view providing maximum sense of speed and cornering precision.
-    - **Free Orbit / Replay Camera**: 360-degree mouse drag orbit around the vehicle with mouse-wheel zoom for inspecting vehicle aesthetics.
-    - **Seamless Camera Cycling**: One-key cycle toggle (hotkey `C` or `V`) with smooth transition interpolation.
-  - [x] **Step 3 - Real-Time Racing HUD & Dashboard Instrumentation (`Engine/UI`)**:
-    - **Tachometer (RPM Gauge)**: Analog needle or circular arc display (0 to 8000+ RPM), dynamic redline zone, and shift-up flash indicator.
-    - **Digital Speedometer**: Crisp digital display showing instantaneous speed in km/h (with mph toggle).
-    - **Transmission Gear Indicator**: Prominent display of current gear (`R`, `N`, `1`, `2`, `3`, `4`, `5`, `6`).
-    - **Pedal & Telemetry Input Bars**: Real-time meters for Throttle input, Brake pressure, Handbrake engage, and steering angle.
-    - **G-Force & Boost Meter**: Lateral and longitudinal G-force display calculated from chassis accelerometers.
-    - **HUD Viewport Overlay**: ImGui-based non-intrusive HUD rendered over the game viewport, toggleable with hotkey `H` or auto-displayed during Play Mode simulation.
-  - [x] **Step 4 - Scene Integration & Visual Polish (`CarTest.axlescene` & `VehicleSandbox.axlescene`)**:
-    - Replace temporary primitive cube/cylinder blocks in `CarTest.axlescene` with the fully rigged vehicle model and PBR materials (metallic car paint, roughness, glass windows, rubber tires).
-    - Calibrate vehicle suspension spring frequency, damping rates, center of mass offset (`CenterOfMassOffset`), and braking balance for satisfying arcade-sim handling.
-    - Verify seamless integration with the newly deployed `VehicleAudioComponent` (interior vs exterior audio volume attenuation).
-  - [x] **Step 5 - Automated Test Suite Verification (`AxleTests.exe`)**:
-    - Implement Step 32 test in `Editor/src/Test.cpp` validating multi-part vehicle assembly hierarchy, wheel visual rotational kinematics, camera mode transitions, and HUD telemetry data accuracy.
-- [ ] **Phase 29: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
-  - [ ] **Step 1 - Heightfield Physics Engine (`JPH::HeightFieldShape`)**: High-performance off-road surface using Jolt Physics heightfields for realistic wheel travel and suspension damping on irregular soil.
-  - [ ] **Step 2 - Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise, Lower, Smooth, Flatten) with real-time vertex buffer and Jolt collision updates.
-  - [ ] **Step 3 - Splatmap Texture Painting & Triplanar Shaders**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
-  - [ ] **Step 4 - Chunked Grid & Multithreaded LOD (`enkiTS`)**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
-  - [ ] **Step 5 - Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
-  - [ ] **Step 6 - Automated Test Suite Verification (`AxleTests.exe`)**: Step 33 automated headless tests for heightfield generation, brush deformation, and spline extrusion math.
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- **Compiler**: C++20 capable compiler (MSVC 2022 v19.30+, Clang 13+, GCC 11+)
-- **Build System**: CMake 3.22 or higher
-- **Git**
+* **Compiler**: Modern C++20 compiler (MSVC 2022 v19.30+, Clang 16+, GCC 12+)
+* **Build System**: CMake 3.22 or higher
+* **Git** (with submodule support)
 
 ### Clone Repository (with Submodules)
 ```bash
 git clone --recursive https://github.com/nguyenphong0210/AxleEngine.git
 cd AxleEngine
 ```
-*If cloned without `--recursive`, initialize submodules:*
+*If cloned without `--recursive`, initialize submodules manually:*
 ```bash
 git submodule update --init --recursive
 ```
 
-### Build & Run
+### Build via CMake
 
-#### Using the build script:
 ```bash
-# Build and run Axle Editor (Debug / Release)
-./build.sh --run
-./build.sh --release --run
-
-# Build and run Standalone Game Player (AxleRuntime)
-./build.sh --release --game
-```
-
-#### Using CMake directly:
-```bash
-# Configure
+# 1. Configure CMake in Release mode
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-# Compile all targets
+# 2. Build all engine targets in parallel
 cmake --build build --config Release --parallel
 
-# Execute Axle Editor (with ImGui & scene editing panels)
+# 3. Launch the Axle Editor (WYSIWYG IDE)
 ./build/Editor/Release/AxleEditor.exe
 
-# Execute Axle Standalone Game Player (pure headless game backbuffer)
-./build/Runtime/Release/AxleRuntime.exe [optional/path/to/project.axleproj]
+# 4. Launch Standalone Game Player (Optional)
+./build/Runtime/Release/AxleRuntime.exe
+
+# 5. Run the Automated Headless Test Suite (32 Verified Suites)
+./build/Editor/Release/AxleTests.exe
 ```
 
 ---
 
-## 🎮 Controls
+## 🎮 Controls & Shortcuts
 
-### Scene & Project Hotkeys
-| Input | Action |
+### Editor Hotkeys
+| Hotkey | Action |
 | :--- | :--- |
 | **Ctrl + N** | New Empty Scene |
 | **Ctrl + O** | Open Scene (`.axlescene`) via native OS file dialog |
-| **Ctrl + S** | Quick Save active scene (or Save As if untitled) |
-| **Ctrl + Shift + S** | Save Scene As... via native OS file dialog |
-| **F9** | Compile & Hot-Reload modified `.axle` asset meshes |
-| **F11** | Toggle Window Maximize / Restore (work-area aware) |
+| **Ctrl + S** | Quick Save active scene |
+| **Ctrl + Shift + S** | Save Scene As... |
+| **F5** | **Play Simulation** (Starts physics, scripts, and runtime vehicles) |
+| **F6** | **Pause Simulation** (Freezes physics for inspection) |
+| **F7 / Escape** | **Stop Simulation** (Restores pristine editor scene with zero physics drift) |
+| **O** | Single Frame Step (1/60s tick when paused) |
+| **F9 / Ctrl + B** | **Compile & Hot-Reload C++ Scripts** (`AxleScripts.dll`) |
+| **F11** | Toggle Window Fullscreen / Maximize |
+| **F1** | Toggle Jolt Physics Collision Wireframes |
+| **F2** | **Toggle Camera Mode** (Game View / Primary Camera vs Eject Free-Fly Camera in Play Mode) |
+| **C** | **Cycle Chase Camera Distance** (Near $\rightarrow$ Medium $\rightarrow$ Far preset) |
+| **V** | **Cycle Camera Angle** (Third-Person Chase $\rightarrow$ Cockpit POV $\rightarrow$ Hood $\rightarrow$ Free Orbit) |
+| **H** | **Toggle Racing HUD** Telemetry Overlay |
 
-### Simulation State & Toolbar Hotkeys
-| Input | Action |
+### 3D Viewport Navigation (Edit Mode)
+| Action | Description |
 | :--- | :--- |
-| **F5** | Play Simulation (starts physics & car driving) |
-| **F6** | Pause Simulation (freezes physics for free camera inspection) |
-| **F7 / Escape** | Stop Simulation (resets bodies & car to initial edit state) |
-| **O** | Step Single Frame (1/60s tick when paused) |
-| **R** | Reset Scene (reloads entity transforms & zero velocities) |
-| **C** | Toggle Camera Mode (Game View / Primary Camera vs Eject Free-Fly Camera in Play Mode) |
-| **F1** | Toggle Jolt Physics Wireframe Colliders |
-
-### Edit Mode / Free-Fly Camera (Viewport)
-| Input | Action |
-| :--- | :--- |
-| **Right Mouse Button + Drag** | Look / Rotate Camera (Pitch & Yaw) |
+| **Right Mouse + Drag** | Look / Rotate Camera (Pitch & Yaw) |
 | **W / A / S / D** | Fly Camera Forward / Left / Backward / Right |
 | **E / Q** | Fly Camera Up / Down |
 | **Left Shift (Hold)** | Sprint Boost (2.5x speed) |
-| **Left Click** | Select entity in Hierarchy or adjust UI widgets |
-
-### Play Mode / Vehicle Driving
-| Input | Action |
-| :--- | :--- |
-| **W / Up Arrow** | Throttle (Accelerate forward) |
-| **S / Down Arrow** | Brake / Reverse |
-| **A / Left Arrow** | Steer Left |
-| **D / Right Arrow** | Steer Right |
-| **Space** | Handbrake (Rear-wheel lock drift) |
-| **Mouse Drag** | Orbit around car (3rd-Person Chase Cam) |
+| **Left Click** | Raycast select entity in 3D Viewport |
+| **W / E / R** | Switch Gizmo to Translate (`W`), Rotate (`E`), Scale (`R`) |
 
 ---
 
 ## 📜 License
-This project is open-source under the MIT License.
+
+AxleEngine is open-source software licensed under the [MIT License](LICENSE).

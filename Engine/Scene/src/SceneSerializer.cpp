@@ -364,6 +364,46 @@ namespace Axle {
                 ss << "      MaxDistance: " << vac.MaxDistance << "\n";
             }
 
+            // SkeletalMeshComponent
+            if (entity.HasComponent<SkeletalMeshComponent>()) {
+                auto& smc = entity.GetComponent<SkeletalMeshComponent>();
+                ss << "    SkeletalMeshComponent:\n";
+                ss << "      AssetPath: " << smc.AssetPath << "\n";
+                ss << "      PatternMode: " << smc.PatternMode << "\n";
+                ss << "      TileScale: " << smc.TileScale << "\n";
+                ss << "      Color1: [ " << smc.Color1.r << " , " << smc.Color1.g << " , " << smc.Color1.b << " , " << smc.Color1.a << " ]\n";
+                ss << "      Color2: [ " << smc.Color2.r << " , " << smc.Color2.g << " , " << smc.Color2.b << " , " << smc.Color2.a << " ]\n";
+                ss << "      CastShadows: " << (smc.CastShadows ? "true" : "false") << "\n";
+                ss << "      Visible: " << (smc.Visible ? "true" : "false") << "\n";
+            }
+
+            // AnimatorComponent
+            if (entity.HasComponent<AnimatorComponent>()) {
+                auto& ac = entity.GetComponent<AnimatorComponent>();
+                ss << "    AnimatorComponent:\n";
+                ss << "      Playing: " << (ac.Playing ? "true" : "false") << "\n";
+                ss << "      PlaybackSpeed: " << ac.PlaybackSpeed << "\n";
+                ss << "      Speed: " << ac.Speed << "\n";
+                ss << "      IsGrounded: " << (ac.IsGrounded ? "true" : "false") << "\n";
+                ss << "      VerticalVelocity: " << ac.VerticalVelocity << "\n";
+            }
+
+            // CharacterControllerComponent
+            if (entity.HasComponent<CharacterControllerComponent>()) {
+                auto& ccc = entity.GetComponent<CharacterControllerComponent>();
+                ss << "    CharacterControllerComponent:\n";
+                ss << "      WalkSpeed: " << ccc.WalkSpeed << "\n";
+                ss << "      RunSpeed: " << ccc.RunSpeed << "\n";
+                ss << "      JumpSpeed: " << ccc.JumpSpeed << "\n";
+                ss << "      TurnSmoothing: " << ccc.TurnSmoothing << "\n";
+                ss << "      OrientRotationToMovement: " << (ccc.OrientRotationToMovement ? "true" : "false") << "\n";
+                ss << "      Radius: " << ccc.Settings.Radius << "\n";
+                ss << "      HalfHeight: " << ccc.Settings.HalfHeight << "\n";
+                ss << "      Mass: " << ccc.Settings.Mass << "\n";
+                ss << "      MaxSlopeAngle: " << ccc.Settings.MaxSlopeAngle << "\n";
+                ss << "      StepOffset: " << ccc.Settings.StepOffset << "\n";
+            }
+
             // Custom Entity Serializer Hook (for plugins e.g. SplineComponent, TerrainComponent)
             if (m_Context.CustomEntitySerializer) {
                 m_Context.CustomEntitySerializer(entity, ss);
@@ -424,6 +464,9 @@ namespace Axle {
             AudioListener,
             AudioSource,
             VehicleAudio,
+            SkeletalMesh,
+            Animator,
+            CharacterController,
             Custom
         };
         ComponentSection currentSection = ComponentSection::None;
@@ -533,6 +576,24 @@ namespace Axle {
                 currentSection = ComponentSection::Vehicle;
                 if (!currentEntity.HasComponent<VehicleComponent>()) {
                     currentEntity.AddComponent<VehicleComponent>();
+                }
+            } else if (trimmed == "SkeletalMeshComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::SkeletalMesh;
+                if (!currentEntity.HasComponent<SkeletalMeshComponent>()) {
+                    currentEntity.AddComponent<SkeletalMeshComponent>();
+                }
+            } else if (trimmed == "AnimatorComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::Animator;
+                if (!currentEntity.HasComponent<AnimatorComponent>()) {
+                    currentEntity.AddComponent<AnimatorComponent>();
+                }
+            } else if (trimmed == "CharacterControllerComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::CharacterController;
+                if (!currentEntity.HasComponent<CharacterControllerComponent>()) {
+                    currentEntity.AddComponent<CharacterControllerComponent>();
                 }
             } else if (trimmed.back() == ':' && ((trimmed.length() >= 10 && trimmed.substr(trimmed.length() - 10) == "Component:") || (line.find_first_not_of(" \t") == 4 && trimmed.find(' ') == std::string::npos))) {
                 flushCustomSection();
@@ -1076,6 +1137,78 @@ namespace Axle {
                         }
                         break;
                     }
+                    case ComponentSection::SkeletalMesh: {
+                        if (!currentEntity.HasComponent<SkeletalMeshComponent>()) {
+                            currentEntity.AddComponent<SkeletalMeshComponent>();
+                        }
+                        auto& smc = currentEntity.GetComponent<SkeletalMeshComponent>();
+                        if (trimmed.rfind("AssetPath:", 0) == 0) {
+                            smc.AssetPath = Trim(trimmed.substr(10));
+                        } else if (trimmed.rfind("PatternMode:", 0) == 0) {
+                            smc.PatternMode = std::stoi(Trim(trimmed.substr(12)));
+                        } else if (trimmed.rfind("TileScale:", 0) == 0) {
+                            smc.TileScale = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("Color1:", 0) == 0) {
+                            float r = 1, g = 1, b = 1, a = 1;
+                            sscanf(trimmed.c_str(), "Color1: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
+                            smc.Color1 = glm::vec4(r, g, b, a);
+                        } else if (trimmed.rfind("Color2:", 0) == 0) {
+                            float r = 0, g = 0, b = 0, a = 1;
+                            sscanf(trimmed.c_str(), "Color2: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
+                            smc.Color2 = glm::vec4(r, g, b, a);
+                        } else if (trimmed.rfind("CastShadows:", 0) == 0) {
+                            smc.CastShadows = (Trim(trimmed.substr(12)) == "true");
+                        } else if (trimmed.rfind("Visible:", 0) == 0) {
+                            smc.Visible = (Trim(trimmed.substr(8)) == "true");
+                        }
+                        break;
+                    }
+                    case ComponentSection::Animator: {
+                        if (!currentEntity.HasComponent<AnimatorComponent>()) {
+                            currentEntity.AddComponent<AnimatorComponent>();
+                        }
+                        auto& ac = currentEntity.GetComponent<AnimatorComponent>();
+                        if (trimmed.rfind("Playing:", 0) == 0) {
+                            ac.Playing = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("PlaybackSpeed:", 0) == 0) {
+                            ac.PlaybackSpeed = std::stof(Trim(trimmed.substr(14)));
+                        } else if (trimmed.rfind("Speed:", 0) == 0) {
+                            ac.Speed = std::stof(Trim(trimmed.substr(6)));
+                        } else if (trimmed.rfind("IsGrounded:", 0) == 0) {
+                            ac.IsGrounded = (Trim(trimmed.substr(11)) == "true");
+                        } else if (trimmed.rfind("VerticalVelocity:", 0) == 0) {
+                            ac.VerticalVelocity = std::stof(Trim(trimmed.substr(17)));
+                        }
+                        break;
+                    }
+                    case ComponentSection::CharacterController: {
+                        if (!currentEntity.HasComponent<CharacterControllerComponent>()) {
+                            currentEntity.AddComponent<CharacterControllerComponent>();
+                        }
+                        auto& ccc = currentEntity.GetComponent<CharacterControllerComponent>();
+                        if (trimmed.rfind("WalkSpeed:", 0) == 0) {
+                            ccc.WalkSpeed = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("RunSpeed:", 0) == 0) {
+                            ccc.RunSpeed = std::stof(Trim(trimmed.substr(9)));
+                        } else if (trimmed.rfind("JumpSpeed:", 0) == 0) {
+                            ccc.JumpSpeed = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("TurnSmoothing:", 0) == 0) {
+                            ccc.TurnSmoothing = std::stof(Trim(trimmed.substr(14)));
+                        } else if (trimmed.rfind("OrientRotationToMovement:", 0) == 0) {
+                            ccc.OrientRotationToMovement = (Trim(trimmed.substr(25)) == "true");
+                        } else if (trimmed.rfind("Radius:", 0) == 0) {
+                            ccc.Settings.Radius = std::stof(Trim(trimmed.substr(7)));
+                        } else if (trimmed.rfind("HalfHeight:", 0) == 0) {
+                            ccc.Settings.HalfHeight = std::stof(Trim(trimmed.substr(11)));
+                        } else if (trimmed.rfind("Mass:", 0) == 0) {
+                            ccc.Settings.Mass = std::stof(Trim(trimmed.substr(5)));
+                        } else if (trimmed.rfind("MaxSlopeAngle:", 0) == 0) {
+                            ccc.Settings.MaxSlopeAngle = std::stof(Trim(trimmed.substr(14)));
+                        } else if (trimmed.rfind("StepOffset:", 0) == 0) {
+                            ccc.Settings.StepOffset = std::stof(Trim(trimmed.substr(11)));
+                        }
+                        break;
+                    }
                     case ComponentSection::Custom: {
                         customSectionLines.push_back(line);
                         break;
@@ -1095,8 +1228,8 @@ namespace Axle {
                 auto& rb = rbView.get<RigidBody3D>(entityID);
                 auto& tc = rbView.get<TransformComponent>(entityID);
 
-                if (m_Scene->GetRegistry().all_of<VehicleComponent>(entityID)) {
-                    continue; // Skip static body creation; handled by Vehicle physics controller
+                if (m_Scene->GetRegistry().all_of<VehicleComponent>(entityID) || m_Scene->GetRegistry().all_of<CharacterControllerComponent>(entityID)) {
+                    continue; // Skip static body creation; handled by Vehicle or CharacterController
                 }
 
                 // Retrieve or initialize CollisionShape3D

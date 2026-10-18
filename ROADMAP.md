@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 29** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **39 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
+* **Automated Test Verification**: **40 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)** and beyond.
 
 ---
@@ -251,12 +251,16 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Slope traversal handling (`MaxSlopeAngle`), automatic stair/curb stepping (`StepOffset`), and ground snapping (`StickToFloor`).
     - [x] Dynamic collision response with dynamic physics objects (pushback resistance and forward impulse transfer to rigid bodies).
     - [x] Automated test suite Step 39 in `Editor/src/Test.cpp` verifying freefall landing, kinematic movement & jump trajectory, stair stepping, steep wall blocking, and dynamic box pushing.
-  - [ ] **Step 5 - ECS Integration & Third-Person Gameplay Controller**:
-    - Decoupled ECS components: `SkeletalMeshComponent`, `AnimatorComponent`, and `CharacterControllerComponent`.
-    - Third-person player controller logic supporting directional movement, smooth yaw turning toward velocity, jump action, and smooth chase camera follow.
+  - [x] **Step 5 - ECS Integration & Third-Person Gameplay Controller**:
+    - [x] Decoupled ECS components: `SkeletalMeshComponent`, `AnimatorComponent`, and `CharacterControllerComponent` in `Engine/Scene`.
+    - [x] Third-person player controller script (`ThirdPersonController.hpp`) supporting camera-relative directional movement, smooth yaw turning toward velocity, jump action, and automatic animator parameter synchronization (`Speed`, `IsGrounded`, `VerticalVelocity`).
+    - [x] Third-person chase camera script (`ThirdPersonCamera.hpp`) with spring-arm orbit, mouse look, pitch clamping, target tracking, and height offset.
+    - [x] Scene renderer integration: `Scene::RenderSkeletalMeshes` dispatches dynamic GPU bone palettes to both forward PBR lighting and shadow depth passes.
+    - [x] Scene serialization & deserialization support for all 3 components in `SceneSerializer`.
+    - [x] Automated test suite Step 40 in `Editor/src/Test.cpp` validating component attachment, kinematics, animator sync, camera-relative movement vectors, spring-arm camera, and full serialization fidelity.
   - [ ] **Step 6 - Character Sandbox Playground & Scene Integration**:
     - Interactive 3D scene (`CharacterSandbox.axlescene`) integrating animated skeletal mesh, third-person camera, stairs, slopes, and dynamic obstacles.
-    - Automated test suite Step 40 in `Editor/src/Test.cpp` validating full ECS animation & character controller lifecycle.
+    - Automated test suite Step 41 in `Editor/src/Test.cpp` validating full character sandbox scene and gameplay loop.
 - [ ] **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**
   - [ ] GPU-instanced particle emitters for smoke, dust trails, sparks, fire, tire burnout smoke, and water splashes.
   - [ ] Curl noise vector fields, collision planes, and texture sheet animations.

@@ -16,6 +16,7 @@ namespace Axle {
 
     class Entity;
     class Vehicle;
+    class SkinningPipeline;
     struct DirectionalLightComponent;
     struct SkyboxComponent;
 
@@ -82,6 +83,12 @@ namespace Axle {
 
         // Render shadow depth pass from light's perspective
         void RenderShadowPass(Shader& shadowShader, const glm::mat4& lightSpaceMatrix);
+
+        // Render skeletal/skinned mesh components (forward pass and shadow pass)
+        void RenderSkeletalMeshes(SkinningPipeline& skinningPipeline, const PerspectiveCamera& camera,
+                                 const glm::mat4& lightSpaceMatrix = glm::mat4(1.0f),
+                                 const glm::vec3& lightDir = glm::vec3(0.45f, 1.0f, 0.65f),
+                                 bool shadowPass = false);
 
         // Simulation runtime lifecycle & dynamic vehicle assembly (Phase 20.3 Stage 2)
         void OnRuntimeStart(PhysicsScene* physicsScene = nullptr);

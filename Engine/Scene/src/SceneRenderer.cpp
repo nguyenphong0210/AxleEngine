@@ -540,6 +540,9 @@ namespace Axle {
 
             m_ShadowMap->Bind();
             scene->RenderShadowPass(*m_ShadowShader, m_LightSpaceMatrix);
+            if (m_SkinningPipeline) {
+                scene->RenderSkeletalMeshes(*m_SkinningPipeline, camera, m_LightSpaceMatrix, m_LightDir, true);
+            }
             m_ShadowMap->Unbind();
         }
 
@@ -593,6 +596,10 @@ namespace Axle {
 
         // Render all active meshes with PBR lighting & hierarchy transforms
         scene->RenderGeometryPass(camera, *m_Shader, m_LightSpaceMatrix, m_LightDir, 1);
+
+        if (m_SkinningPipeline) {
+            scene->RenderSkeletalMeshes(*m_SkinningPipeline, camera, m_LightSpaceMatrix, m_LightDir, false);
+        }
 
         // ==========================================
         // PASS 3: SKYBOX PASS (Atmospheric or HDR Cubemap)

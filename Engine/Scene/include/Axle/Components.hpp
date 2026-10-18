@@ -9,6 +9,9 @@
 #include <Axle/AudioSource.hpp>
 #include <Axle/AudioListener.hpp>
 #include <Axle/VehicleAudio.hpp>
+#include <Axle/SkeletalMesh.hpp>
+#include <Axle/Animator.hpp>
+#include <Axle/CharacterController.hpp>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -1003,6 +1006,133 @@ namespace Axle {
 
         float GetEngineMasterVolume() const {
             return EngineMasterVolume;
+        }
+    };
+
+    struct SkeletalMeshComponent {
+        std::shared_ptr<SkeletalMesh> Mesh = nullptr;
+        std::string AssetPath;
+
+        // Visual pattern & material properties matching MeshInstance3D
+        int PatternMode = 3; // 3: Solid Color (default for characters)
+        float TileScale = 1.0f;
+        glm::vec4 Color1{ 0.20f, 0.45f, 0.85f, 1.0f }; // Primary color
+        glm::vec4 Color2{ 0.15f, 0.20f, 0.30f, 1.0f }; // Accent color
+        bool CastShadows = true;
+        bool Visible = true;
+
+        SkeletalMeshComponent() = default;
+        explicit SkeletalMeshComponent(const std::shared_ptr<SkeletalMesh>& mesh, const std::string& assetPath = "")
+            : Mesh(mesh), AssetPath(assetPath) {}
+    };
+
+    struct AnimatorComponent {
+        std::shared_ptr<Animator> AnimatorInstance = nullptr;
+
+        // Animation playback state
+        bool Playing = true;
+        float PlaybackSpeed = 1.0f;
+
+        // Common state machine parameters (cached buffer for ECS serialization and live scripting)
+        float Speed = 0.0f;
+        bool IsGrounded = true;
+        float VerticalVelocity = 0.0f;
+
+        AnimatorComponent() = default;
+        explicit AnimatorComponent(const std::shared_ptr<Animator>& animator)
+            : AnimatorInstance(animator) {}
+
+        void SetFloat(const std::string& name, float value) {
+            if (name == "Speed") Speed = value;
+            if (name == "VerticalVelocity") VerticalVelocity = value;
+            if (AnimatorInstance) {
+                AnimatorInstance->SetFloat(name, value);
+            }
+        }
+
+        void SetBool(const std::string& name, bool value) {
+            if (name == "IsGrounded") IsGrounded = value;
+            if (AnimatorInstance) {
+                AnimatorInstance->SetBool(name, value);
+            }
+        }
+
+        void SetTrigger(const std::string& name) {
+            if (AnimatorInstance) {
+                AnimatorInstance->SetTrigger(name);
+            }
+        }
+
+        void Update(float dt) {
+            if (Playing && AnimatorInstance) {
+                AnimatorInstance->Update(dt * PlaybackSpeed);
+            }
+        }
+    };
+
+    struct CharacterControllerComponent {
+        // Controller Configuration & Physics Settings
+        CharacterControllerSettings Settings;
+
+        // Runtime Jolt CharacterController instance
+        std::shared_ptr<CharacterController> RuntimeController = nullptr;
+
+        // Pure ECS Input Buffer (Target movement intent populated by player input or AI scripts)
+        glm::vec3 MoveDirection{ 0.0f };      // Desired movement direction in horizontal plane (X, Z), normalized
+        float WalkSpeed = 3.5f;               // Walking target speed (m/s)
+        float RunSpeed = 7.0f;                // Sprinting / Running target speed (m/s)
+        bool IsRunning = false;               // Sprint / Run toggle
+        bool JumpRequested = false;           // Trigger jump impulse
+        float JumpSpeed = 6.0f;               // Vertical jump impulse speed (m/s)
+        float TurnSmoothing = 12.0f;          // Smooth yaw rotation rate (s^-1)
+        bool OrientRotationToMovement = true; // Automatically align yaw towards MoveDirection
+
+        // Live Telemetry (Synchronized per physics/render step)
+        bool IsGrounded = true;
+        CharacterGroundState GroundState = CharacterGroundState::OnGround;
+        float CurrentSpeed = 0.0f;            // Horizontal ground speed (m/s)
+        glm::vec3 Velocity{ 0.0f };           // Full 3D velocity
+        float VerticalVelocity = 0.0f;        // Y velocity
+        glm::vec3 GroundNormal{ 0.0f, 1.0f, 0.0f };
+
+        CharacterControllerComponent() = default;
+
+        void InitRuntime(PhysicsScene& scene, const glm::vec3& position, const glm::quat& rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f)) {
+            RuntimeController = std::make_shared<CharacterController>(scene, position, rotation, Settings);
+        }
+
+        void StopRuntime() {
+            RuntimeController.reset();
+        }
+
+        void Update(float dt) {
+            if (!RuntimeController) return;
+
+            // 1. Calculate target horizontal velocity
+            float targetSpeed = IsRunning ? RunSpeed : WalkSpeed;
+            glm::vec3 targetVel = MoveDirection * targetSpeed;
+            targetVel.y = 0.0f;
+
+            RuntimeController->SetTargetVelocity(targetVel);
+
+            // 2. Handle jump impulse
+            if (JumpRequested) {
+                RuntimeController->Jump(JumpSpeed);
+                JumpRequested = false;
+            }
+
+            // 3. Step physics simulation
+            RuntimeController->Update(dt);
+
+            // 4. Update telemetry buffer
+            GroundState = RuntimeController->GetGroundState();
+            IsGrounded = RuntimeController->IsOnGround();
+            Velocity = RuntimeController->GetLinearVelocity();
+            VerticalVelocity = Velocity.y;
+            GroundNormal = RuntimeController->GetGroundNormal();
+
+            glm::vec3 horizVel(Velocity.x, 0.0f, Velocity.z);
+            CurrentSpeed = glm::length(horizVel);
         }
     };
 

@@ -7,6 +7,7 @@
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/ParallelECS.hpp>
 #include <Axle/Vehicle.hpp>
+#include <Axle/SkinningPipeline.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -249,6 +250,17 @@ namespace Axle {
             }
         }
 
+        // Copy SkeletalMeshComponent, AnimatorComponent, CharacterControllerComponent
+        if (entity.HasComponent<SkeletalMeshComponent>()) {
+            newEntity.AddComponent<SkeletalMeshComponent>(entity.GetComponent<SkeletalMeshComponent>());
+        }
+        if (entity.HasComponent<AnimatorComponent>()) {
+            newEntity.AddComponent<AnimatorComponent>(entity.GetComponent<AnimatorComponent>());
+        }
+        if (entity.HasComponent<CharacterControllerComponent>()) {
+            newEntity.AddComponent<CharacterControllerComponent>(entity.GetComponent<CharacterControllerComponent>());
+        }
+
         // Parent relationship: preserve parent if source entity has a parent
         Entity parent = entity.GetParent();
         if (parent) {
@@ -430,8 +442,8 @@ namespace Axle {
         if (physicsScene) {
             auto physicsView = m_Registry.view<RigidBody3D, TransformComponent>();
             for (auto entity : physicsView) {
-                if (m_Registry.all_of<VehicleComponent>(entity)) {
-                    continue; // Skip vehicle chassis; transform is managed by Vehicle physics controller with COM compensation
+                if (m_Registry.all_of<VehicleComponent>(entity) || m_Registry.all_of<CharacterControllerComponent>(entity)) {
+                    continue; // Skip vehicle chassis and character controller; transform is managed by their respective controllers
                 }
                 const auto& rb = m_Registry.get<RigidBody3D>(entity);
                 if (rb.MotionType == BodyMotionType::Static) {
@@ -641,6 +653,52 @@ namespace Axle {
         }
     }
 
+    void Scene::RenderSkeletalMeshes(SkinningPipeline& skinningPipeline, const PerspectiveCamera& camera,
+                                     const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, bool shadowPass) {
+        auto view = m_Registry.view<SkeletalMeshComponent, TransformComponent>();
+        if (view.begin() == view.end()) return;
+
+        auto shader = shadowPass ? skinningPipeline.GetShadowShader() : skinningPipeline.GetShader();
+        if (!shader) return;
+
+        shader->Bind();
+        if (shadowPass) {
+            shader->SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
+        } else {
+            shader->SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix());
+            shader->SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
+            shader->SetFloat3("u_LightDir", lightDir);
+            shader->SetFloat3("u_LightColor", glm::vec3(1.0f));
+        }
+
+        for (auto entity : view) {
+            const auto& smc = view.get<SkeletalMeshComponent>(entity);
+            if (!smc.Visible || !smc.Mesh || !smc.Mesh->GetVAO()) continue;
+            if (shadowPass && !smc.CastShadows) continue;
+
+            glm::mat4 worldTransform = GetWorldTransform(entity);
+            shader->SetMat4("u_Transform", worldTransform);
+
+            if (!shadowPass) {
+                shader->SetFloat4("u_Color1", smc.Color1);
+            }
+
+            if (m_Registry.all_of<AnimatorComponent>(entity)) {
+                const auto& ac = m_Registry.get<AnimatorComponent>(entity);
+                if (ac.AnimatorInstance) {
+                    const auto& skinningMatrices = ac.AnimatorInstance->GetSkinningMatrices();
+                    skinningPipeline.UploadBonePalette(*shader, skinningMatrices);
+                } else {
+                    skinningPipeline.UploadIdentityPalette(*shader);
+                }
+            } else {
+                skinningPipeline.UploadIdentityPalette(*shader);
+            }
+
+            RenderCommand::DrawIndexed(smc.Mesh->GetVAO());
+        }
+    }
+
     Vehicle* Scene::GetRuntimeVehicle(entt::entity chassisEntityID) const {
         for (const auto& rv : m_RuntimeVehicles) {
             if (rv.ChassisEntityID == chassisEntityID) {
@@ -840,6 +898,16 @@ namespace Axle {
             }
             vac.InitRuntime(minRPM, maxRPM);
         }
+
+        // 5. Kinematic Character Controller Initialization
+        if (physicsScene) {
+            auto ccView = m_Registry.view<CharacterControllerComponent, TransformComponent>();
+            for (auto entityID : ccView) {
+                auto& ccc = ccView.get<CharacterControllerComponent>(entityID);
+                const auto& tc = ccView.get<TransformComponent>(entityID);
+                ccc.InitRuntime(*physicsScene, tc.Translation, tc.Rotation);
+            }
+        }
     }
 
     void Scene::OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene) {
@@ -998,6 +1066,39 @@ namespace Axle {
                 }
             }
         }
+
+        // 4. Kinematic Character Controller Updates
+        auto ccView = m_Registry.view<CharacterControllerComponent, TransformComponent>();
+        for (auto entityID : ccView) {
+            auto& ccc = ccView.get<CharacterControllerComponent>(entityID);
+            auto& tc = ccView.get<TransformComponent>(entityID);
+
+            ccc.Update(ts.GetSeconds());
+
+            if (ccc.RuntimeController) {
+                tc.Translation = ccc.RuntimeController->GetPosition();
+
+                if (ccc.OrientRotationToMovement && glm::length(ccc.MoveDirection) > 0.001f) {
+                    glm::quat targetRot = glm::angleAxis(std::atan2(ccc.MoveDirection.x, ccc.MoveDirection.z), glm::vec3(0.0f, 1.0f, 0.0f));
+                    tc.Rotation = glm::slerp(tc.Rotation, targetRot, std::min(1.0f, ts.GetSeconds() * ccc.TurnSmoothing));
+                }
+            }
+
+            // Sync with AnimatorComponent if present on entity
+            if (m_Registry.all_of<AnimatorComponent>(entityID)) {
+                auto& ac = m_Registry.get<AnimatorComponent>(entityID);
+                ac.SetFloat("Speed", ccc.CurrentSpeed);
+                ac.SetBool("IsGrounded", ccc.IsGrounded);
+                ac.SetFloat("VerticalVelocity", ccc.VerticalVelocity);
+            }
+        }
+
+        // 5. Standalone or Character-Attached Animator Component Updates
+        auto animView = m_Registry.view<AnimatorComponent>();
+        for (auto entityID : animView) {
+            auto& ac = animView.get<AnimatorComponent>(entityID);
+            ac.Update(ts.GetSeconds());
+        }
     }
 
     void Scene::OnImGuiRender() {
@@ -1026,6 +1127,13 @@ namespace Axle {
         }
         m_RuntimeVehicles.clear();
         m_RuntimePhysicsScene = nullptr;
+
+        // Stop all Character Controller instances
+        auto ccStopView = m_Registry.view<CharacterControllerComponent>();
+        for (auto entityID : ccStopView) {
+            auto& ccc = ccStopView.get<CharacterControllerComponent>(entityID);
+            ccc.StopRuntime();
+        }
 
         // Stop all audio sources on simulation exit
         auto audioSourceView = m_Registry.view<AudioSourceComponent>();

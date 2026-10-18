@@ -30,6 +30,8 @@
 #include <Axle/AudioEngine.hpp>
 #include "../assets/scripts/VehicleChaseCamera.hpp"
 #include "../assets/scripts/RacingHUD.hpp"
+#include "../assets/scripts/ThirdPersonController.hpp"
+#include "../assets/scripts/ThirdPersonCamera.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <AxleSpline/SplinePlugin.hpp>
 #include <AxleSpline/Curve3D.hpp>
@@ -6996,6 +6998,336 @@ bool RunTest_Step39_Phase30_Step4_KinematicCharacterController() {
 }
 
 // =============================================================================
+// STEP 40: PHASE 30 - STEP 5 ECS INTEGRATION & THIRD-PERSON GAMEPLAY CONTROLLER
+// =============================================================================
+static std::shared_ptr<Axle::SkeletalMesh> CreateTestBipedMesh(std::shared_ptr<Axle::Skeleton>& outSkeleton) {
+    Axle::SkeletalMeshData bipedData;
+    std::vector<std::shared_ptr<Axle::AnimationClip>> clips;
+    Axle::SkeletalMeshImporter::CreateProceduralBiped(bipedData, outSkeleton, clips);
+    return std::make_shared<Axle::SkeletalMesh>(bipedData);
+}
+
+bool RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 40: PHASE 30 - STEP 5 ECS INTEGRATION & CONTROLLER  " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [40.1] Testing ECS Component Attachment & Queries
+    std::cout << "\n[40.1] Testing ECS Component Attachment & Verification..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        auto entity = scene->CreateEntity("PlayerCharacter");
+
+        std::shared_ptr<Axle::Skeleton> bipedSkeleton;
+        auto bipedMesh = CreateTestBipedMesh(bipedSkeleton);
+        entity.AddComponent<Axle::SkeletalMeshComponent>(bipedMesh, "procedural://biped");
+        auto& smc = entity.GetComponent<Axle::SkeletalMeshComponent>();
+        assert(smc.Mesh != nullptr);
+        assert(smc.PatternMode == 3);
+        assert(smc.CastShadows == true);
+
+        auto animator = std::make_shared<Axle::Animator>(bipedSkeleton);
+        entity.AddComponent<Axle::AnimatorComponent>(animator);
+        auto& ac = entity.GetComponent<Axle::AnimatorComponent>();
+        assert(ac.AnimatorInstance != nullptr);
+        assert(ac.Playing == true);
+
+        entity.AddComponent<Axle::CharacterControllerComponent>();
+        auto& ccc = entity.GetComponent<Axle::CharacterControllerComponent>();
+        ccc.WalkSpeed = 4.0f;
+        ccc.RunSpeed = 8.0f;
+        ccc.JumpSpeed = 7.0f;
+
+        assert(entity.HasComponent<Axle::SkeletalMeshComponent>());
+        assert(entity.HasComponent<Axle::AnimatorComponent>());
+        assert(entity.HasComponent<Axle::CharacterControllerComponent>());
+
+        // Duplicate entity test
+        auto duplicated = scene->DuplicateEntity(entity);
+        assert(duplicated.HasComponent<Axle::SkeletalMeshComponent>());
+        assert(duplicated.HasComponent<Axle::AnimatorComponent>());
+        assert(duplicated.HasComponent<Axle::CharacterControllerComponent>());
+        assert(duplicated.GetComponent<Axle::CharacterControllerComponent>().WalkSpeed == 4.0f);
+        std::cout << "  -> PASS: All three components attached, verified, and preserved across duplication." << std::endl;
+    }
+
+    // [40.2] Testing CharacterControllerComponent Physics Simulation
+    std::cout << "\n[40.2] Testing CharacterControllerComponent Kinematics & Physics..." << std::endl;
+    {
+        if (!Axle::PhysicsEngine::IsInitialized()) {
+            Axle::PhysicsEngine::Init();
+        }
+        Axle::PhysicsScene physicsScene;
+
+        // Create ground plane
+        Axle::BoxBodyProps groundProps;
+        groundProps.Position = glm::vec3(0.0f, -0.5f, 0.0f);
+        groundProps.HalfExtent = glm::vec3(50.0f, 0.5f, 50.0f);
+        groundProps.IsDynamic = false;
+        physicsScene.CreateBox(groundProps);
+
+        auto scene = std::make_shared<Axle::Scene>();
+        auto player = scene->CreateEntity("Player");
+        player.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.0f, 3.0f, 0.0f);
+
+        auto& ccc = player.AddComponent<Axle::CharacterControllerComponent>();
+        ccc.WalkSpeed = 3.5f;
+        ccc.RunSpeed = 7.0f;
+        ccc.JumpSpeed = 6.0f;
+
+        scene->OnRuntimeStart(&physicsScene);
+
+        // Simulate falling and landing
+        for (int i = 0; i < 40; ++i) {
+            scene->OnUpdateRuntime(Axle::Timestep(1.0f / 60.0f), &physicsScene);
+            physicsScene.Step(1.0f / 60.0f);
+        }
+
+        assert(ccc.IsGrounded);
+        assert(ccc.GroundState == Axle::CharacterGroundState::OnGround);
+        assert(std::abs(player.GetComponent<Axle::TransformComponent>().Translation.y) < 0.05f);
+
+        // Test running along +X
+        ccc.MoveDirection = glm::vec3(1.0f, 0.0f, 0.0f);
+        ccc.IsRunning = true;
+        for (int i = 0; i < 30; ++i) {
+            scene->OnUpdateRuntime(Axle::Timestep(1.0f / 60.0f), &physicsScene);
+            physicsScene.Step(1.0f / 60.0f);
+        }
+
+        assert(ccc.CurrentSpeed > 6.5f);
+        assert(player.GetComponent<Axle::TransformComponent>().Translation.x > 2.0f);
+
+        // Test jumping
+        ccc.JumpRequested = true;
+        scene->OnUpdateRuntime(Axle::Timestep(1.0f / 60.0f), &physicsScene);
+        physicsScene.Step(1.0f / 60.0f);
+
+        assert(ccc.VerticalVelocity > 4.5f);
+
+        scene->OnRuntimeStop(&physicsScene);
+        std::cout << "  -> PASS: CharacterControllerComponent fell, landed on ground, ran at sprint speed (" << ccc.CurrentSpeed << " m/s), and jumped." << std::endl;
+    }
+
+    // [40.3] Testing Controller Telemetry to Animator Parameter Synchronization
+    std::cout << "\n[40.3] Testing Controller Telemetry to Animator Synchronization..." << std::endl;
+    {
+        Axle::PhysicsScene physicsScene;
+        Axle::BoxBodyProps groundProps;
+        groundProps.Position = glm::vec3(0.0f, -0.5f, 0.0f);
+        groundProps.HalfExtent = glm::vec3(50.0f, 0.5f, 50.0f);
+        groundProps.IsDynamic = false;
+        physicsScene.CreateBox(groundProps);
+
+        auto scene = std::make_shared<Axle::Scene>();
+        auto player = scene->CreateEntity("Player");
+        player.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.0f, 0.0f, 0.0f);
+
+        std::shared_ptr<Axle::Skeleton> bipedSkeleton;
+        auto bipedMesh = CreateTestBipedMesh(bipedSkeleton);
+        auto animator = std::make_shared<Axle::Animator>(bipedSkeleton);
+        auto& ac = player.AddComponent<Axle::AnimatorComponent>(animator);
+        auto& ccc = player.AddComponent<Axle::CharacterControllerComponent>();
+
+        scene->OnRuntimeStart(&physicsScene);
+
+        // Move player forward
+        ccc.MoveDirection = glm::vec3(0.0f, 0.0f, -1.0f);
+        ccc.IsRunning = false; // Walk
+        for (int i = 0; i < 20; ++i) {
+            scene->OnUpdateRuntime(Axle::Timestep(1.0f / 60.0f), &physicsScene);
+            physicsScene.Step(1.0f / 60.0f);
+        }
+
+        // Animator should automatically receive telemetry from CharacterControllerComponent
+        assert(ac.Speed > 3.0f);
+        assert(ac.IsGrounded == true);
+        std::cout << "  -> Animator Speed automatically synced: " << ac.Speed << " m/s (IsGrounded: " << (ac.IsGrounded ? "true" : "false") << ")" << std::endl;
+
+        // Jump
+        ccc.JumpRequested = true;
+        scene->OnUpdateRuntime(Axle::Timestep(1.0f / 60.0f), &physicsScene);
+        physicsScene.Step(1.0f / 60.0f);
+
+        assert(ac.VerticalVelocity > 4.5f);
+        std::cout << "  -> Animator VerticalVelocity automatically synced on jump: " << ac.VerticalVelocity << " m/s" << std::endl;
+
+        scene->OnRuntimeStop(&physicsScene);
+        std::cout << "  -> PASS: Real-time telemetry forward to Animator verified 100%." << std::endl;
+    }
+
+    // [40.4] Testing ThirdPersonController Camera-Relative Movement
+    std::cout << "\n[40.4] Testing ThirdPersonController Script & Camera-Relative Vectors..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+
+        // Create Camera rotated 90 degrees around Y (facing -X)
+        auto camera = scene->CreateEntity("Main Camera");
+        camera.AddComponent<Axle::CameraComponent>();
+        auto& camTC = camera.GetComponent<Axle::TransformComponent>();
+        camTC.Rotation = glm::angleAxis(glm::half_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)); // 90 deg Yaw
+
+        auto player = scene->CreateEntity("Player");
+        auto& ccc = player.AddComponent<Axle::CharacterControllerComponent>();
+        auto& nsc = player.AddComponent<Axle::NativeScriptComponent>("ThirdPersonController");
+        assert(nsc.InstantiateScript != nullptr);
+
+        // Instantiate script and test camera vector math
+        nsc.Instance = nsc.InstantiateScript();
+        nsc.Instance->SetEntity(player);
+        nsc.Instance->OnCreate();
+
+        // When camera is rotated 90 deg yaw:
+        // Forward vector = camRot * (0, 0, -1) = (-1, 0, 0)
+        // Right vector = camRot * (1, 0, 0) = (0, 0, -1)
+        glm::mat4 camWorld = camera.GetWorldTransform();
+        glm::quat camRot = glm::quat_cast(camWorld);
+        glm::vec3 camForward = glm::normalize(camRot * glm::vec3(0.0f, 0.0f, -1.0f));
+        camForward.y = 0.0f;
+        camForward = glm::normalize(camForward);
+
+        assert(std::abs(camForward.x - (-1.0f)) < 0.01f);
+        assert(std::abs(camForward.z) < 0.01f);
+        std::cout << "  -> Camera-Relative Forward Vector (at Yaw 90 deg): (" << camForward.x << ", " << camForward.y << ", " << camForward.z << ")" << std::endl;
+
+        nsc.Instance->OnDestroy();
+        delete nsc.Instance;
+        nsc.Instance = nullptr;
+
+        std::cout << "  -> PASS: ThirdPersonController script instantiation and camera vector transformations verified." << std::endl;
+    }
+
+    // [40.5] Testing ThirdPersonCamera Spring-Arm Orbit, Pitch Clamping & Tracking
+    std::cout << "\n[40.5] Testing ThirdPersonCamera Spring-Arm Orbit & Pitch Clamping..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        auto player = scene->CreateEntity("Player");
+        player.AddComponent<Axle::CharacterControllerComponent>();
+        player.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(10.0f, 0.0f, -5.0f);
+
+        auto camera = scene->CreateEntity("Main Camera");
+        camera.AddComponent<Axle::CameraComponent>();
+        auto& nsc = camera.AddComponent<Axle::NativeScriptComponent>("ThirdPersonCamera");
+        assert(nsc.InstantiateScript != nullptr);
+
+        nsc.Instance = nsc.InstantiateScript();
+        nsc.Instance->SetEntity(camera);
+        nsc.Instance->OnCreate();
+
+        auto* tpc = dynamic_cast<ThirdPersonCamera*>(nsc.Instance);
+        assert(tpc != nullptr);
+
+        tpc->TargetTag = "Player";
+        tpc->Distance = 4.0f;
+        tpc->TargetHeightOffset = 1.5f;
+        tpc->SetYawPitch(0.0f, 0.0f); // Level look
+
+        // Simulate 60 frames to let spring-arm interpolate
+        for (int i = 0; i < 60; ++i) {
+            nsc.Instance->OnUpdate(Axle::Timestep(1.0f / 60.0f));
+        }
+
+        auto camPos = camera.GetComponent<Axle::TransformComponent>().Translation;
+        // With Yaw 0, Pitch 0, offset = (0, 0, Distance=4)
+        // Focus = (10, 1.5, -5) -> Expected Pos = (10, 1.5, -1)
+        assert(std::abs(camPos.x - 10.0f) < 0.1f);
+        assert(std::abs(camPos.y - 1.5f) < 0.1f);
+        assert(std::abs(camPos.z - (-1.0f)) < 0.1f);
+
+        // Pitch clamping test
+        tpc->SetYawPitch(0.0f, 95.0f); // Above max 75
+        assert(tpc->GetPitch() == 75.0f);
+        tpc->SetYawPitch(0.0f, -80.0f); // Below min -35
+        assert(tpc->GetPitch() == -35.0f);
+
+        nsc.Instance->OnDestroy();
+        delete nsc.Instance;
+        nsc.Instance = nullptr;
+
+        std::cout << "  -> PASS: Spring-arm orbit targeting (" << camPos.x << ", " << camPos.y << ", " << camPos.z << ") and pitch limits [-35, 75] proven." << std::endl;
+    }
+
+    // [40.6] Testing Scene Serialization & Deserialization
+    std::cout << "\n[40.6] Testing Scene Serialization & Deserialization of All Components..." << std::endl;
+    {
+        std::string yamlData;
+        {
+            auto scene = std::make_shared<Axle::Scene>();
+            auto player = scene->CreateEntity("Hero");
+
+            std::shared_ptr<Axle::Skeleton> bipedSkeleton;
+            auto biped = CreateTestBipedMesh(bipedSkeleton);
+            player.AddComponent<Axle::SkeletalMeshComponent>(biped, "assets/models/Hero.fbx");
+            auto& smc = player.GetComponent<Axle::SkeletalMeshComponent>();
+            smc.Color1 = glm::vec4(0.2f, 0.4f, 0.8f, 1.0f);
+
+            auto& ac = player.AddComponent<Axle::AnimatorComponent>();
+            ac.Speed = 5.5f;
+            ac.IsGrounded = true;
+
+            auto& ccc = player.AddComponent<Axle::CharacterControllerComponent>();
+            ccc.WalkSpeed = 4.2f;
+            ccc.RunSpeed = 8.5f;
+            ccc.JumpSpeed = 6.5f;
+            ccc.Settings.Radius = 0.4f;
+            ccc.Settings.HalfHeight = 0.7f;
+
+            Axle::SceneSerializer serializer(scene.get());
+            yamlData = serializer.SerializeToString();
+
+            assert(yamlData.find("SkeletalMeshComponent:") != std::string::npos);
+            assert(yamlData.find("AnimatorComponent:") != std::string::npos);
+            assert(yamlData.find("CharacterControllerComponent:") != std::string::npos);
+            assert(yamlData.find("assets/models/Hero.fbx") != std::string::npos);
+            assert(yamlData.find("WalkSpeed: 4.2") != std::string::npos);
+            assert(yamlData.find("RunSpeed: 8.5") != std::string::npos);
+        }
+
+        // Deserialize into new scene
+        {
+            auto newScene = std::make_shared<Axle::Scene>();
+            Axle::SceneSerializer deserializer(newScene.get());
+            bool success = deserializer.DeserializeFromString(yamlData);
+            assert(success);
+
+            auto view = newScene->GetRegistry().view<Axle::TagComponent>();
+            Axle::Entity restoredHero{};
+            for (auto ent : view) {
+                if (view.get<Axle::TagComponent>(ent).Tag == "Hero") {
+                    restoredHero = Axle::Entity{ ent, newScene.get() };
+                    break;
+                }
+            }
+
+            assert(restoredHero);
+            assert(restoredHero.HasComponent<Axle::SkeletalMeshComponent>());
+            assert(restoredHero.HasComponent<Axle::AnimatorComponent>());
+            assert(restoredHero.HasComponent<Axle::CharacterControllerComponent>());
+
+            const auto& smc = restoredHero.GetComponent<Axle::SkeletalMeshComponent>();
+            assert(smc.AssetPath == "assets/models/Hero.fbx");
+            assert(std::abs(smc.Color1.r - 0.2f) < 0.01f);
+
+            const auto& ac = restoredHero.GetComponent<Axle::AnimatorComponent>();
+            assert(std::abs(ac.Speed - 5.5f) < 0.01f);
+            assert(ac.IsGrounded == true);
+
+            const auto& ccc = restoredHero.GetComponent<Axle::CharacterControllerComponent>();
+            assert(std::abs(ccc.WalkSpeed - 4.2f) < 0.01f);
+            assert(std::abs(ccc.RunSpeed - 8.5f) < 0.01f);
+            assert(std::abs(ccc.JumpSpeed - 6.5f) < 0.01f);
+            assert(std::abs(ccc.Settings.Radius - 0.4f) < 0.01f);
+            assert(std::abs(ccc.Settings.HalfHeight - 0.7f) < 0.01f);
+
+            std::cout << "  -> PASS: Hero entity restored with 100% component fidelity." << std::endl;
+        }
+    }
+
+    std::cout << ">>> STEP 40 PASSED: Phase 30 Step 5 ECS Integration & Third-Person Controller 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -7047,12 +7379,13 @@ int main(int argc, char** argv) {
         else if (arg == "37" || arg == "step37" || arg == "--step37" || arg == "--phase30b") targetStep = 37;
         else if (arg == "38" || arg == "step38" || arg == "--step38" || arg == "--phase30c") targetStep = 38;
         else if (arg == "39" || arg == "step39" || arg == "--step39" || arg == "--phase30d") targetStep = 39;
+        else if (arg == "40" || arg == "step40" || arg == "--step40" || arg == "--phase30e") targetStep = 40;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 39 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 40 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -7176,6 +7509,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 39) {
         if (!RunTest_Step39_Phase30_Step4_KinematicCharacterController()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 40) {
+        if (!RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

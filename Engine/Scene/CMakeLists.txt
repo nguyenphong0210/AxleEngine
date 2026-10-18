@@ -19,6 +19,7 @@ target_link_libraries(AxleScene
     PUBLIC
         Axle::Core
         Axle::Renderer
+        Axle::Animation
         Axle::Physics
         Axle::Vehicle
         Axle::Asset

@@ -9,7 +9,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 28** (100% implemented, verified, and stabilized).
 * **Automated Test Verification**: **32 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
-* **Upcoming Focus**: **Phase 29: Off-Road Terrain & Spline Track System** and beyond.
+* **Upcoming Focus**: **Phase 29: Modular Plugin Architecture — Spline Track & Large-Scale Terrain System (`Plugins/Spline` & `Plugins/Terrain`)** and beyond.
 
 ---
 
@@ -213,13 +213,21 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ---
 
 ### Milestone 7: Large-Scale Terrain, Splines & Future Frontiers
-- [ ] **Phase 29: Off-Road Terrain & Spline Track System (`Engine/Terrain` & `Engine/UI`)**
-  - [ ] **Step 1 - Heightfield Physics Engine (`JPH::HeightFieldShape`)**: High-performance off-road surface using Jolt Physics heightfields for realistic wheel travel and suspension damping on irregular soil.
-  - [ ] **Step 2 - Interactive Sculpting Tool (Editor)**: Viewport circular brushes (Raise, Lower, Smooth, Flatten) with real-time vertex buffer and Jolt collision updates.
-  - [ ] **Step 3 - Splatmap Texture Painting & Triplanar Shaders**: Layer blending for Grass, Dirt, Gravel, Mud, and Asphalt with slope-based triplanar material shaders.
-  - [ ] **Step 4 - Chunked Grid & Multithreaded LOD (`enkiTS`)**: Chunk-based terrain mesh division with distance-dependent level of detail, generated asynchronously via enkiTS worker jobs.
-  - [ ] **Step 5 - Spline Road & Track Generator**: Extrude 3D race track and barrier meshes dynamically along Bézier / Catmull-Rom spline paths (modular Godot-style track builder).
-  - [ ] **Step 6 - Automated Test Suite Verification (`AxleTests.exe`)**: Step 33 automated headless tests for heightfield generation, brush deformation, and spline extrusion math.
+- [ ] **Phase 29: Modular Plugin Architecture — Spline Track & Large-Scale Terrain System (`Plugins/Spline` & `Plugins/Terrain`)**
+  - [ ] **Phase 29A: Spline Curve & Procedural Track Generator Plugin (`Plugins/Spline`)**
+    - [ ] **Step 1 - Plugin Infrastructure & CMake Integration**: Establish the modular static plugin standard under `Plugins/Spline/` with clean linkage into `AxleEditor`, `AxleRuntime`, and `AxleTests`.
+    - [ ] **Step 2 - 3D Curve Mathematics Core (`Curve3D`)**: Parametric curves (Catmull-Rom & Cubic Bézier), arc-length reparameterization (uniform speed sampling), and Rotation Minimizing Frame (RMF / Parallel Transport) to prevent 180° flipping on steep loops and banked turns.
+    - [ ] **Step 3 - `SplineComponent` & Procedural Track Extrusion**: Extrude custom 2D cross-sections (Asphalt road, curbs, rumble strips, guardrails) along 3D splines with variable width, roll/banking angles, and continuous texture UV mapping.
+    - [ ] **Step 4 - Physics Scene Integration**: Dynamically generate high-performance static collision meshes (`JPH::MeshShape`) via `Axle::Physics` so vehicles can drive, bank, and collide on the generated tracks.
+    - [ ] **Step 5 - Viewport Spline Gizmo & Editor Tooling**: Interactive Editor gizmos for selecting, adding, moving, and curving control points directly within the 3D Viewport.
+    - [ ] **Step 6 - Automated Test Suite 33 (`AxleTests.exe`)**: Unit tests for curve arc-length interpolation, tangent/normal frame continuity, track mesh triangle generation, and serialization.
+  - [ ] **Phase 29B: Off-Road Terrain & Sculpting System Plugin (`Plugins/Terrain`)**
+    - [ ] **Step 1 - Plugin Setup & Heightfield Physics Engine**: Establish `Plugins/Terrain/` and integrate high-performance `JPH::HeightFieldShape` for realistic off-road vehicle suspension travel and tire damping on irregular soil.
+    - [ ] **Step 2 - Multithreaded Chunked Grid & LOD (`enkiTS`)**: Divide large terrains into hierarchical chunks with distance-based Level of Detail (LOD), dynamically generated without hitching via `enkiTS` worker threads.
+    - [ ] **Step 3 - Interactive Sculpting Tools (Editor)**: Viewport circular brushes (Raise, Lower, Smooth, Flatten) with real-time vertex buffer deforming and asynchronous Jolt physics shape re-baking.
+    - [ ] **Step 4 - Multi-Layer Splatmap & Triplanar Shaders**: Dynamic multi-texture blending (Grass, Dirt, Gravel, Mud, Rock) with slope-based triplanar projection shaders and texture painting brush tools.
+    - [ ] **Step 5 - Spline Road Carving & Terrain Snapping**: One-way integration allowing the Terrain plugin to query `SplineComponent` paths and automatically carve/flatten terrain elevations directly beneath road ribbons.
+    - [ ] **Step 6 - Automated Test Suite 34 (`AxleTests.exe`)**: Unit tests for heightfield matrix generation, brush deformation math, LOD stitching, and terrain save/load serialization.
 - [ ] **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)**
   - [ ] Bone skinning vertex shader, skeletal hierarchy, Assimp animation importer.
   - [ ] Animation blending tree (Idle, Walk, Run, Jump, Fall).

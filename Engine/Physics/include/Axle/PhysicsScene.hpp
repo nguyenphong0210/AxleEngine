@@ -41,6 +41,7 @@ namespace Axle {
         f32 Friction = 0.5f;
         f32 Restitution = 0.0f;
         bool AllowSleeping = true;
+        f32 Mass = 0.0f;
     };
 
     struct SphereBodyProps {
@@ -51,6 +52,7 @@ namespace Axle {
         f32 Friction = 0.5f;
         f32 Restitution = 0.0f;
         bool AllowSleeping = true;
+        f32 Mass = 0.0f;
     };
 
     struct CylinderBodyProps {
@@ -62,6 +64,7 @@ namespace Axle {
         f32 Friction = 0.5f;
         f32 Restitution = 0.0f;
         bool AllowSleeping = true;
+        f32 Mass = 0.0f;
     };
 
     struct ConeBodyProps {
@@ -73,6 +76,7 @@ namespace Axle {
         f32 Friction = 0.5f;
         f32 Restitution = 0.0f;
         bool AllowSleeping = true;
+        f32 Mass = 0.0f;
     };
 
     struct PlaneBodyProps {
@@ -107,16 +111,16 @@ namespace Axle {
 
         // Body creation and management
         BodyID CreateBox(const BoxBodyProps& props);
-        BodyID CreateBox(const glm::vec3& position, const glm::vec3& halfExtent, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f);
+        BodyID CreateBox(const glm::vec3& position, const glm::vec3& halfExtent, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f, f32 mass = 0.0f);
 
         BodyID CreateSphere(const SphereBodyProps& props);
-        BodyID CreateSphere(const glm::vec3& position, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f);
+        BodyID CreateSphere(const glm::vec3& position, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f, f32 mass = 0.0f);
 
         BodyID CreateCylinder(const CylinderBodyProps& props);
-        BodyID CreateCylinder(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f);
+        BodyID CreateCylinder(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f, f32 mass = 0.0f);
 
         BodyID CreateCone(const ConeBodyProps& props);
-        BodyID CreateCone(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f);
+        BodyID CreateCone(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic = true, f32 friction = 0.5f, f32 restitution = 0.0f, f32 mass = 0.0f);
 
         BodyID CreatePlane(const PlaneBodyProps& props);
         BodyID CreatePlane(const glm::vec3& position, const glm::vec3& normal = glm::vec3(0.0f, 1.0f, 0.0f), f32 halfExtent = 100.0f, f32 friction = 0.6f, f32 restitution = 0.0f);

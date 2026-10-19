@@ -217,6 +217,7 @@ namespace Axle {
                         bProps.IsDynamic = srcRb.IsDynamic;
                         bProps.Friction = shape.Friction;
                         bProps.Restitution = shape.Restitution;
+                        bProps.Mass = srcRb.Mass;
                         newBodyID = physicsScene->CreateBox(bProps);
                         break;
                     }
@@ -227,6 +228,7 @@ namespace Axle {
                         sProps.IsDynamic = srcRb.IsDynamic;
                         sProps.Friction = shape.Friction;
                         sProps.Restitution = shape.Restitution;
+                        sProps.Mass = srcRb.Mass;
                         newBodyID = physicsScene->CreateSphere(sProps);
                         break;
                     }
@@ -238,6 +240,7 @@ namespace Axle {
                         cProps.IsDynamic = srcRb.IsDynamic;
                         cProps.Friction = shape.Friction;
                         cProps.Restitution = shape.Restitution;
+                        cProps.Mass = srcRb.Mass;
                         newBodyID = physicsScene->CreateCylinder(cProps);
                         break;
                     }
@@ -255,10 +258,19 @@ namespace Axle {
             newEntity.AddComponent<SkeletalMeshComponent>(entity.GetComponent<SkeletalMeshComponent>());
         }
         if (entity.HasComponent<AnimatorComponent>()) {
-            newEntity.AddComponent<AnimatorComponent>(entity.GetComponent<AnimatorComponent>());
+            const auto& srcAc = entity.GetComponent<AnimatorComponent>();
+            auto& dstAc = newEntity.AddComponent<AnimatorComponent>(srcAc);
+            if (srcAc.AnimatorInstance && srcAc.AnimatorInstance->GetSkeleton()) {
+                auto newAnim = std::make_shared<Animator>(srcAc.AnimatorInstance->GetSkeleton());
+                newAnim->SetStateMachine(srcAc.AnimatorInstance->GetStateMachine());
+                newAnim->Update(0.0f);
+                dstAc.AnimatorInstance = newAnim;
+            }
         }
         if (entity.HasComponent<CharacterControllerComponent>()) {
-            newEntity.AddComponent<CharacterControllerComponent>(entity.GetComponent<CharacterControllerComponent>());
+            auto cccCopy = entity.GetComponent<CharacterControllerComponent>();
+            cccCopy.RuntimeController.reset();
+            newEntity.AddComponent<CharacterControllerComponent>(cccCopy);
         }
 
         // Parent relationship: preserve parent if source entity has a parent
@@ -1356,6 +1368,30 @@ namespace Axle {
                 dstVac.Spatialized = srcVac.Spatialized;
                 dstVac.MinDistance = srcVac.MinDistance;
                 dstVac.MaxDistance = srcVac.MaxDistance;
+            }
+
+            // SkeletalMeshComponent
+            if (srcEntity.HasComponent<SkeletalMeshComponent>()) {
+                dstEntity.AddComponent<SkeletalMeshComponent>(srcEntity.GetComponent<SkeletalMeshComponent>());
+            }
+
+            // AnimatorComponent
+            if (srcEntity.HasComponent<AnimatorComponent>()) {
+                const auto& srcAc = srcEntity.GetComponent<AnimatorComponent>();
+                auto& dstAc = dstEntity.AddComponent<AnimatorComponent>(srcAc);
+                if (srcAc.AnimatorInstance && srcAc.AnimatorInstance->GetSkeleton()) {
+                    auto newAnim = std::make_shared<Animator>(srcAc.AnimatorInstance->GetSkeleton());
+                    newAnim->SetStateMachine(srcAc.AnimatorInstance->GetStateMachine());
+                    newAnim->Update(0.0f);
+                    dstAc.AnimatorInstance = newAnim;
+                }
+            }
+
+            // CharacterControllerComponent
+            if (srcEntity.HasComponent<CharacterControllerComponent>()) {
+                auto cccCopy = srcEntity.GetComponent<CharacterControllerComponent>();
+                cccCopy.RuntimeController.reset();
+                dstEntity.AddComponent<CharacterControllerComponent>(cccCopy);
             }
         }
 

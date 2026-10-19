@@ -22,6 +22,15 @@ public:
     std::string CameraTag = "Main Camera";// Tag used to find camera entity for camera-relative movement
     float JumpCooldown = 0.2f;            // Cooldown between jumps in seconds
 
+    // Virtual / Synthetic input injection (useful for AI, automated tests, cutscenes)
+    bool UseVirtualInput = false;
+    float VirtualInputX = 0.0f;
+    float VirtualInputZ = 0.0f;
+    bool VirtualSprint = false;
+    bool VirtualJump = false;
+    bool DirectVirtualDirection = false;
+    glm::vec3 VirtualMoveDirection{ 0.0f };
+
 private:
     float m_JumpTimer = 0.0f;
     bool m_PrevSpace = false;
@@ -44,71 +53,92 @@ public:
         // 1. Sync live Inspector parameters to CharacterControllerComponent
         ApplyTuning();
 
-        // 2. Poll directional player inputs (WASD / Arrow Keys)
+        // 2. Poll directional player inputs (WASD / Arrow Keys or Virtual Input)
         float inputX = 0.0f; // Strafe Right (+1) / Left (-1)
         float inputZ = 0.0f; // Forward (+1) / Backward (-1)
-
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::W) || Axle::Input::IsKeyPressed(Axle::KeyCode::Up)) {
-            inputZ += 1.0f;
-        }
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::S) || Axle::Input::IsKeyPressed(Axle::KeyCode::Down)) {
-            inputZ -= 1.0f;
-        }
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::D) || Axle::Input::IsKeyPressed(Axle::KeyCode::Right)) {
-            inputX += 1.0f;
-        }
-        if (Axle::Input::IsKeyPressed(Axle::KeyCode::A) || Axle::Input::IsKeyPressed(Axle::KeyCode::Left)) {
-            inputX -= 1.0f;
-        }
-
-        // Sprinting (Left Shift)
-        bool isSprinting = EnableSprint && (Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) ||
-                                            Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift));
-
-        // Jump (Space key)
-        bool spacePressed = Axle::Input::IsKeyPressed(Axle::KeyCode::Space);
+        bool isSprinting = false;
         bool jumpTriggered = false;
-        if (spacePressed && !m_PrevSpace && m_JumpTimer <= 0.0f && ccc.IsGrounded) {
-            jumpTriggered = true;
-            m_JumpTimer = JumpCooldown;
+
+        if (UseVirtualInput) {
+            inputX = VirtualInputX;
+            inputZ = VirtualInputZ;
+            isSprinting = EnableSprint && VirtualSprint;
+            if (VirtualJump && m_JumpTimer <= 0.0f && ccc.IsGrounded) {
+                jumpTriggered = true;
+                m_JumpTimer = JumpCooldown;
+            }
+        } else {
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::W) || Axle::Input::IsKeyPressed(Axle::KeyCode::Up)) {
+                inputZ += 1.0f;
+            }
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::S) || Axle::Input::IsKeyPressed(Axle::KeyCode::Down)) {
+                inputZ -= 1.0f;
+            }
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::D) || Axle::Input::IsKeyPressed(Axle::KeyCode::Right)) {
+                inputX += 1.0f;
+            }
+            if (Axle::Input::IsKeyPressed(Axle::KeyCode::A) || Axle::Input::IsKeyPressed(Axle::KeyCode::Left)) {
+                inputX -= 1.0f;
+            }
+
+            // Sprinting (Left Shift)
+            isSprinting = EnableSprint && (Axle::Input::IsKeyPressed(Axle::KeyCode::LeftShift) ||
+                                           Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift));
+
+            // Jump (Space key)
+            bool spacePressed = Axle::Input::IsKeyPressed(Axle::KeyCode::Space);
+            if (spacePressed && !m_PrevSpace && m_JumpTimer <= 0.0f && ccc.IsGrounded) {
+                jumpTriggered = true;
+                m_JumpTimer = JumpCooldown;
+            }
+            m_PrevSpace = spacePressed;
         }
-        m_PrevSpace = spacePressed;
 
         // 3. Transform input into camera-relative world direction
         glm::vec3 wishDir{ 0.0f };
-        glm::vec3 camForward{ 0.0f, 0.0f, -1.0f };
-        glm::vec3 camRight{ 1.0f, 0.0f, 0.0f };
-
-        // Attempt to find camera orientation
-        Axle::Entity camEntity = FindCameraEntity();
-        if (camEntity && camEntity.HasComponent<Axle::TransformComponent>()) {
-            glm::mat4 camWorld = camEntity.GetWorldTransform();
-            glm::quat camRot = glm::quat_cast(camWorld);
-
-            // Forward in OpenGL/AxleEngine is -Z
-            camForward = glm::normalize(camRot * glm::vec3(0.0f, 0.0f, -1.0f));
-            camForward.y = 0.0f;
-            if (glm::length(camForward) > 1e-4f) {
-                camForward = glm::normalize(camForward);
+        if (DirectVirtualDirection) {
+            wishDir = VirtualMoveDirection;
+            float inputMag = glm::length(wishDir);
+            if (inputMag > 1e-4f) {
+                wishDir /= inputMag;
             } else {
-                camForward = glm::vec3(0.0f, 0.0f, -1.0f);
+                wishDir = glm::vec3(0.0f);
             }
-
-            camRight = glm::normalize(camRot * glm::vec3(1.0f, 0.0f, 0.0f));
-            camRight.y = 0.0f;
-            if (glm::length(camRight) > 1e-4f) {
-                camRight = glm::normalize(camRight);
-            } else {
-                camRight = glm::vec3(1.0f, 0.0f, 0.0f);
-            }
-        }
-
-        wishDir = camForward * inputZ + camRight * inputX;
-        float inputMag = glm::length(wishDir);
-        if (inputMag > 1e-4f) {
-            wishDir /= inputMag;
         } else {
-            wishDir = glm::vec3(0.0f);
+            glm::vec3 camForward{ 0.0f, 0.0f, -1.0f };
+            glm::vec3 camRight{ 1.0f, 0.0f, 0.0f };
+
+            // Attempt to find camera orientation
+            Axle::Entity camEntity = FindCameraEntity();
+            if (camEntity && camEntity.HasComponent<Axle::TransformComponent>()) {
+                glm::mat4 camWorld = camEntity.GetWorldTransform();
+                glm::quat camRot = glm::quat_cast(camWorld);
+
+                // Forward in OpenGL/AxleEngine is -Z
+                camForward = glm::normalize(camRot * glm::vec3(0.0f, 0.0f, -1.0f));
+                camForward.y = 0.0f;
+                if (glm::length(camForward) > 1e-4f) {
+                    camForward = glm::normalize(camForward);
+                } else {
+                    camForward = glm::vec3(0.0f, 0.0f, -1.0f);
+                }
+
+                camRight = glm::normalize(camRot * glm::vec3(1.0f, 0.0f, 0.0f));
+                camRight.y = 0.0f;
+                if (glm::length(camRight) > 1e-4f) {
+                    camRight = glm::normalize(camRight);
+                } else {
+                    camRight = glm::vec3(1.0f, 0.0f, 0.0f);
+                }
+            }
+
+            wishDir = camForward * inputZ + camRight * inputX;
+            float inputMag = glm::length(wishDir);
+            if (inputMag > 1e-4f) {
+                wishDir /= inputMag;
+            } else {
+                wishDir = glm::vec3(0.0f);
+            }
         }
 
         // 4. Dispatch to CharacterControllerComponent

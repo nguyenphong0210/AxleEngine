@@ -109,6 +109,10 @@ namespace Axle {
         bodySettings.mFriction = props.Friction;
         bodySettings.mRestitution = props.Restitution;
         bodySettings.mAllowSleeping = props.AllowSleeping;
+        if (props.Mass > 0.0f && props.IsDynamic) {
+            bodySettings.mMassPropertiesOverride.mMass = props.Mass;
+            bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+        }
 
         const JPH::EActivation activation = props.IsDynamic ? JPH::EActivation::Activate : JPH::EActivation::DontActivate;
         const BodyID bodyID = m_PhysicsSystem.GetBodyInterface().CreateAndAddBody(bodySettings, activation);
@@ -118,13 +122,14 @@ namespace Axle {
         return bodyID;
     }
 
-    BodyID PhysicsScene::CreateBox(const glm::vec3& position, const glm::vec3& halfExtent, bool isDynamic, f32 friction, f32 restitution) {
+    BodyID PhysicsScene::CreateBox(const glm::vec3& position, const glm::vec3& halfExtent, bool isDynamic, f32 friction, f32 restitution, f32 mass) {
         BoxBodyProps props;
         props.Position = position;
         props.HalfExtent = halfExtent;
         props.IsDynamic = isDynamic;
         props.Friction = friction;
         props.Restitution = restitution;
+        props.Mass = mass;
         return CreateBox(props);
     }
 
@@ -149,6 +154,10 @@ namespace Axle {
         bodySettings.mFriction = props.Friction;
         bodySettings.mRestitution = props.Restitution;
         bodySettings.mAllowSleeping = props.AllowSleeping;
+        if (props.Mass > 0.0f && props.IsDynamic) {
+            bodySettings.mMassPropertiesOverride.mMass = props.Mass;
+            bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+        }
 
         const JPH::EActivation activation = props.IsDynamic ? JPH::EActivation::Activate : JPH::EActivation::DontActivate;
         const BodyID bodyID = m_PhysicsSystem.GetBodyInterface().CreateAndAddBody(bodySettings, activation);
@@ -158,13 +167,14 @@ namespace Axle {
         return bodyID;
     }
 
-    BodyID PhysicsScene::CreateSphere(const glm::vec3& position, f32 radius, bool isDynamic, f32 friction, f32 restitution) {
+    BodyID PhysicsScene::CreateSphere(const glm::vec3& position, f32 radius, bool isDynamic, f32 friction, f32 restitution, f32 mass) {
         SphereBodyProps props;
         props.Position = position;
         props.Radius = radius;
         props.IsDynamic = isDynamic;
         props.Friction = friction;
         props.Restitution = restitution;
+        props.Mass = mass;
         return CreateSphere(props);
     }
 
@@ -189,6 +199,10 @@ namespace Axle {
         bodySettings.mFriction = props.Friction;
         bodySettings.mRestitution = props.Restitution;
         bodySettings.mAllowSleeping = props.AllowSleeping;
+        if (props.Mass > 0.0f && props.IsDynamic) {
+            bodySettings.mMassPropertiesOverride.mMass = props.Mass;
+            bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+        }
 
         const JPH::EActivation activation = props.IsDynamic ? JPH::EActivation::Activate : JPH::EActivation::DontActivate;
         const BodyID bodyID = m_PhysicsSystem.GetBodyInterface().CreateAndAddBody(bodySettings, activation);
@@ -198,7 +212,7 @@ namespace Axle {
         return bodyID;
     }
 
-    BodyID PhysicsScene::CreateCylinder(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic, f32 friction, f32 restitution) {
+    BodyID PhysicsScene::CreateCylinder(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic, f32 friction, f32 restitution, f32 mass) {
         CylinderBodyProps props;
         props.Position = position;
         props.HalfHeight = halfHeight;
@@ -206,6 +220,7 @@ namespace Axle {
         props.IsDynamic = isDynamic;
         props.Friction = friction;
         props.Restitution = restitution;
+        props.Mass = mass;
         return CreateCylinder(props);
     }
 
@@ -230,6 +245,10 @@ namespace Axle {
         bodySettings.mFriction = props.Friction;
         bodySettings.mRestitution = props.Restitution;
         bodySettings.mAllowSleeping = props.AllowSleeping;
+        if (props.Mass > 0.0f && props.IsDynamic) {
+            bodySettings.mMassPropertiesOverride.mMass = props.Mass;
+            bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+        }
 
         const JPH::EActivation activation = props.IsDynamic ? JPH::EActivation::Activate : JPH::EActivation::DontActivate;
         const BodyID bodyID = m_PhysicsSystem.GetBodyInterface().CreateAndAddBody(bodySettings, activation);
@@ -239,7 +258,7 @@ namespace Axle {
         return bodyID;
     }
 
-    BodyID PhysicsScene::CreateCone(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic, f32 friction, f32 restitution) {
+    BodyID PhysicsScene::CreateCone(const glm::vec3& position, f32 halfHeight, f32 radius, bool isDynamic, f32 friction, f32 restitution, f32 mass) {
         ConeBodyProps props;
         props.Position = position;
         props.HalfHeight = halfHeight;
@@ -247,6 +266,7 @@ namespace Axle {
         props.IsDynamic = isDynamic;
         props.Friction = friction;
         props.Restitution = restitution;
+        props.Mass = mass;
         return CreateCone(props);
     }
 

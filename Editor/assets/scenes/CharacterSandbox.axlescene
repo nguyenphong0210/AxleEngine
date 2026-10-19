@@ -1,0 +1,423 @@
+# Axle Scene Definition File
+Scene: CharacterSandbox
+Entities:
+  # ==============================================================================
+  # 1. ENVIRONMENT (Atmosphere, Sunlight, Ground Plane)
+  # ==============================================================================
+  - Entity: 9001000000000000001
+    TagComponent:
+      Tag: Skybox
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    SkyboxComponent:
+      Enabled: true
+      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
+      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
+      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
+      SunSize: 0.045000
+      SunGlow: 0.160000
+      Turbidity: 1.000000
+      SyncWithSun: true
+      CustomAzimuth: 45.000000
+      CustomElevation: 50.000000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9001000000000000002
+    TagComponent:
+      Tag: SunLight
+    TransformComponent:
+      Translation: [ 0.000000 , 20.000000 , 0.000000 ]
+      Rotation: [ 0.892399 , 0.382683 , -0.158393 , 0.187313 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    DirectionalLightComponent:
+      Color: [ 1.000000 , 0.980000 , 0.920000 ]
+      Intensity: 1.100000
+      AmbientIntensity: 0.280000
+      Azimuth: 45.000000
+      Elevation: 50.000000
+      CastShadows: true
+      ShadowOrthoSize: 40.000000
+      Exposure: 1.000000
+      ToneMappingMode: 0
+      Gamma: 2.200000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9001000000000000003
+    TagComponent:
+      Tag: Ground
+    TransformComponent:
+      Translation: [ 0.000000 , -0.500000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 100.000000 , 1.000000 , 100.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 2
+      TileScale: 25.000000
+      Color1: [ 0.220000 , 0.240000 , 0.260000 , 1.000000 ]
+      Color2: [ 0.160000 , 0.170000 , 0.190000 , 1.000000 ]
+    MaterialComponent:
+      Roughness: 0.800000
+      Metallic: 0.100000
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 0.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 50.000000 , 0.500000 , 50.000000 ]
+      Friction: 0.700000
+    HierarchyComponent:
+      Parent: 0
+
+  # ==============================================================================
+  # 2. STAIRCASE (StepOffset = 0.35m, Step Rise = 0.25m, Along -Z)
+  # ==============================================================================
+  - Entity: 9002000000000000001
+    TagComponent:
+      Tag: Stair_1
+    TransformComponent:
+      Translation: [ 0.000000 , 0.125000 , -4.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 4.000000 , 0.250000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 1
+      Color1: [ 0.600000 , 0.600000 , 0.650000 , 1.000000 ]
+      Color2: [ 0.500000 , 0.500000 , 0.550000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 0.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 2.000000 , 0.125000 , 0.300000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9002000000000000002
+    TagComponent:
+      Tag: Stair_2
+    TransformComponent:
+      Translation: [ 0.000000 , 0.375000 , -4.600000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 4.000000 , 0.500000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 1
+      Color1: [ 0.600000 , 0.600000 , 0.650000 , 1.000000 ]
+      Color2: [ 0.500000 , 0.500000 , 0.550000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 0.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 2.000000 , 0.250000 , 0.300000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9002000000000000003
+    TagComponent:
+      Tag: Stair_3
+    TransformComponent:
+      Translation: [ 0.000000 , 0.625000 , -5.200000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 4.000000 , 0.750000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 1
+      Color1: [ 0.600000 , 0.600000 , 0.650000 , 1.000000 ]
+      Color2: [ 0.500000 , 0.500000 , 0.550000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 0.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 2.000000 , 0.375000 , 0.300000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9002000000000000004
+    TagComponent:
+      Tag: Stair_4
+    TransformComponent:
+      Translation: [ 0.000000 , 0.875000 , -5.800000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 4.000000 , 1.000000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 1
+      Color1: [ 0.600000 , 0.600000 , 0.650000 , 1.000000 ]
+      Color2: [ 0.500000 , 0.500000 , 0.550000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 0.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 2.000000 , 0.500000 , 0.300000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9002000000000000005
+    TagComponent:
+      Tag: Stair_5
+    TransformComponent:
+      Translation: [ 0.000000 , 1.125000 , -6.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 4.000000 , 1.250000 , 0.600000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 1
+      Color1: [ 0.600000 , 0.600000 , 0.650000 , 1.000000 ]
+      Color2: [ 0.500000 , 0.500000 , 0.550000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 0.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 2.000000 , 0.625000 , 0.300000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9002000000000000006
+    TagComponent:
+      Tag: ElevatedPlatform
+    TransformComponent:
+      Translation: [ 0.000000 , 1.125000 , -9.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 6.000000 , 1.250000 , 5.400000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 2
+      TileScale: 4.000000
+      Color1: [ 0.400000 , 0.420000 , 0.450000 , 1.000000 ]
+      Color2: [ 0.350000 , 0.370000 , 0.400000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 0.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 3.000000 , 0.625000 , 2.700000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  # ==============================================================================
+  # 3. WALKABLE SLOPED RAMP (Slope Angle = 20 degrees <= 50 degrees MaxSlopeAngle)
+  # ==============================================================================
+  - Entity: 9003000000000000001
+    TagComponent:
+      Tag: SlopedRamp
+    TransformComponent:
+      Translation: [ -6.000000 , 0.600000 , 0.000000 ]
+      Rotation: [ 0.984808 , -0.173648 , 0.000000 , 0.000000 ]
+      Scale: [ 3.000000 , 0.200000 , 6.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 1
+      Color1: [ 0.500000 , 0.600000 , 0.500000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.550000 , 0.450000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 0.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 1.500000 , 0.100000 , 3.000000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  # ==============================================================================
+  # 4. UNWALKABLE STEEP WALL (90 degrees Vertical Barrier)
+  # ==============================================================================
+  - Entity: 9004000000000000001
+    TagComponent:
+      Tag: SteepWall
+    TransformComponent:
+      Translation: [ 6.000000 , 1.500000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 0.500000 , 3.000000 , 6.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 1
+      Color1: [ 0.700000 , 0.300000 , 0.250000 , 1.000000 ]
+      Color2: [ 0.600000 , 0.250000 , 0.200000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 0.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.250000 , 1.500000 , 3.000000 ]
+      Friction: 0.500000
+    HierarchyComponent:
+      Parent: 0
+
+  # ==============================================================================
+  # 5. DYNAMIC PUSHABLE PHYSICS CRATES (Mass = 20kg, Dynamic Impulse Transfer)
+  # ==============================================================================
+  - Entity: 9005000000000000001
+    TagComponent:
+      Tag: Crate_Base_1
+    TransformComponent:
+      Translation: [ -1.200000 , 0.500000 , 4.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 20.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.500000 , 0.500000 , 0.500000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9005000000000000002
+    TagComponent:
+      Tag: Crate_Base_2
+    TransformComponent:
+      Translation: [ 0.000000 , 0.500000 , 4.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 20.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.500000 , 0.500000 , 0.500000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9005000000000000003
+    TagComponent:
+      Tag: Crate_Base_3
+    TransformComponent:
+      Translation: [ 1.200000 , 0.500000 , 4.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 20.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.500000 , 0.500000 , 0.500000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  - Entity: 9005000000000000004
+    TagComponent:
+      Tag: Crate_Top
+    TransformComponent:
+      Translation: [ 0.000000 , 1.500000 , 4.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [ 0.720000 , 0.520000 , 0.300000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.320000 , 0.180000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Dynamic
+      IsDynamic: true
+      Mass: 15.000000
+    CollisionShape3D:
+      ShapeType: Box
+      HalfExtent: [ 0.500000 , 0.500000 , 0.500000 ]
+      Friction: 0.600000
+    HierarchyComponent:
+      Parent: 0
+
+  # ==============================================================================
+  # 6. HERO CHARACTER (Skeletal Mesh, Animator, KCC, ThirdPersonController)
+  # ==============================================================================
+  - Entity: 8888000011112222333
+    TagComponent:
+      Tag: Player
+    TransformComponent:
+      Translation: [ 0.000000 , 0.500000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    SkeletalMeshComponent:
+      AssetPath: procedural://biped
+      PatternMode: 2
+      TileScale: 1.000000
+      Color1: [ 0.150000 , 0.450000 , 0.850000 , 1.000000 ]
+      Color2: [ 0.900000 , 0.900000 , 0.950000 , 1.000000 ]
+      CastShadows: true
+      Visible: true
+    AnimatorComponent:
+      Playing: true
+      PlaybackSpeed: 1.000000
+      Speed: 0.000000
+      IsGrounded: true
+      VerticalVelocity: 0.000000
+    CharacterControllerComponent:
+      WalkSpeed: 3.500000
+      RunSpeed: 7.000000
+      JumpSpeed: 6.000000
+      TurnSmoothing: 12.000000
+      OrientRotationToMovement: true
+      Radius: 0.350000
+      HalfHeight: 0.750000
+      Mass: 75.000000
+      MaxSlopeAngle: 50.000000
+      StepOffset: 0.350000
+    NativeScriptComponent:
+      ScriptName: ThirdPersonController
+    HierarchyComponent:
+      Parent: 0
+
+  # ==============================================================================
+  # 7. THIRD-PERSON CHASE CAMERA
+  # ==============================================================================
+  - Entity: 8888000044445555666
+    TagComponent:
+      Tag: Main Camera
+    TransformComponent:
+      Translation: [ 0.000000 , 2.500000 , 3.500000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    CameraComponent:
+      Primary: true
+      FOV: 65.000000
+      NearClip: 0.100000
+      FarClip: 1000.000000
+    NativeScriptComponent:
+      ScriptName: ThirdPersonCamera
+    HierarchyComponent:
+      Parent: 0

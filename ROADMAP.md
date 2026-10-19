@@ -7,9 +7,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 29** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **40 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
-* **Upcoming Focus**: **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)** and beyond.
+* **Completed Phases**: **Phase 1 through Phase 30** (100% implemented, verified, and stabilized).
+* **Automated Test Verification**: **41 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
+* **Upcoming Focus**: **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)** and beyond.
 
 ---
 
@@ -228,7 +228,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **Step 4 - Multi-Layer Splatmap & Triplanar Shaders**: Dynamic multi-texture blending (Grass, Dirt, Gravel, Mud, Rock) with slope-based triplanar projection shaders and texture painting brush tools.
     - [x] **Step 5 - Spline Road Carving & Terrain Snapping**: One-way integration allowing the Terrain plugin to query `SplineComponent` paths and automatically carve/flatten terrain elevations directly beneath road ribbons.
     - [x] **Step 6 - Automated Test Suite 34 (`AxleTests.exe`)**: Unit tests for heightfield matrix generation, brush deformation math, LOD stitching, and terrain save/load serialization.
-- [ ] **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)**
+- [x] **Phase 30: Skeletal Animation & Character Controller System (`Engine/Animation`)**
   - [x] **Step 1 - Core Skeletal Data Structures & Asset Importer (`ufbx` & `cgltf`)**:
     - [x] Native bone hierarchy, joint indices, inverse bind matrices (`InverseBindPose`), and skeleton metadata.
     - [x] Animation track sampling data structures (`AnimationClip`, `AnimationChannel`, keyframe timestamps, translation/rotation/scale curves).
@@ -258,9 +258,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Scene renderer integration: `Scene::RenderSkeletalMeshes` dispatches dynamic GPU bone palettes to both forward PBR lighting and shadow depth passes.
     - [x] Scene serialization & deserialization support for all 3 components in `SceneSerializer`.
     - [x] Automated test suite Step 40 in `Editor/src/Test.cpp` validating component attachment, kinematics, animator sync, camera-relative movement vectors, spring-arm camera, and full serialization fidelity.
-  - [ ] **Step 6 - Character Sandbox Playground & Scene Integration**:
-    - Interactive 3D scene (`CharacterSandbox.axlescene`) integrating animated skeletal mesh, third-person camera, stairs, slopes, and dynamic obstacles.
-    - Automated test suite Step 41 in `Editor/src/Test.cpp` validating full character sandbox scene and gameplay loop.
+  - [x] **Step 6 - Character Sandbox Playground & Scene Integration**:
+    - [x] Interactive 3D scene (`CharacterSandbox.axlescene`) integrating animated skeletal mesh, third-person camera, stairs, slopes, and dynamic obstacles.
+    - [x] Automated test suite Step 41 in `Editor/src/Test.cpp` validating full character sandbox scene, staircase ascent via `StepOffset`, 90-degree wall blocking, dynamic crate push, spring-arm follow, and multi-pass skeletal mesh rendering.
 - [ ] **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**
   - [ ] GPU-instanced particle emitters for smoke, dust trails, sparks, fire, tire burnout smoke, and water splashes.
   - [ ] Curl noise vector fields, collision planes, and texture sheet animations.

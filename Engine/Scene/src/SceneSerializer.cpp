@@ -5,6 +5,12 @@
 #include <Axle/AssetManager.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/SkeletalMesh.hpp>
+#include <Axle/SkeletalMeshImporter.hpp>
+#include <Axle/Skeleton.hpp>
+#include <Axle/AnimationClip.hpp>
+#include <Axle/Animator.hpp>
+#include <Axle/AnimationStateMachine.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -1221,6 +1227,120 @@ namespace Axle {
 
         flushCustomSection();
 
+        // 1. Resolve MeshInstance3D meshes if VAO is null
+        auto meshView = m_Scene->GetRegistry().view<MeshInstance3D>();
+        for (auto entityID : meshView) {
+            auto& mc = meshView.get<MeshInstance3D>(entityID);
+            if (!mc.VAO) {
+                if (mc.AssetPath == "builtin://cube" || mc.AssetPath.empty()) {
+                    mc.VAO = m_Context.CubeMesh;
+                    if (mc.AssetPath.empty()) mc.AssetPath = "builtin://cube";
+                } else if (mc.AssetPath == "builtin://sphere") {
+                    mc.VAO = m_Context.SphereMesh;
+                } else if (mc.AssetPath == "builtin://cylinder") {
+                    mc.VAO = m_Context.CylinderMesh;
+                } else if (mc.AssetPath == "builtin://cone") {
+                    mc.VAO = m_Context.ConeMesh;
+                } else if (mc.AssetPath == "builtin://plane") {
+                    mc.VAO = m_Context.PlaneMesh;
+                } else {
+                    auto fullPath = FileSystem::ResolveAssetPath(mc.AssetPath);
+                    if (FileSystem::Exists(fullPath)) {
+                        auto loaded = AssetSerializer::LoadMesh(fullPath);
+                        if (loaded.Success) {
+                            mc.VAO = loaded.VAO;
+                        }
+                    }
+                    if (!mc.VAO) {
+                        mc.VAO = m_Context.CubeMesh;
+                    }
+                }
+            }
+        }
+
+        // 2. Resolve SkeletalMeshComponent and AnimatorComponent
+        auto skeletalView = m_Scene->GetRegistry().view<SkeletalMeshComponent>();
+        for (auto entityID : skeletalView) {
+            auto& smc = skeletalView.get<SkeletalMeshComponent>(entityID);
+            if (!smc.Mesh) {
+                bool isProcedural = (smc.AssetPath == "procedural://biped" || smc.AssetPath.empty());
+                bool fileLoaded = false;
+                if (!isProcedural) {
+                    auto fullPath = FileSystem::ResolveAssetPath(smc.AssetPath);
+                    if (FileSystem::Exists(fullPath)) {
+                        SkeletalMeshData meshData;
+                        std::shared_ptr<Skeleton> skeleton;
+                        std::vector<std::shared_ptr<AnimationClip>> clips;
+                        if (SkeletalMeshImporter::Load(fullPath, meshData, skeleton, clips)) {
+                            smc.Mesh = std::make_shared<SkeletalMesh>(meshData);
+                            fileLoaded = true;
+                            if (m_Scene->GetRegistry().all_of<AnimatorComponent>(entityID)) {
+                                auto& ac = m_Scene->GetRegistry().get<AnimatorComponent>(entityID);
+                                if (!ac.AnimatorInstance && skeleton) {
+                                    ac.AnimatorInstance = std::make_shared<Animator>(skeleton);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!fileLoaded) {
+                    // Fallback to procedural biped generator
+                    SkeletalMeshData bipedData;
+                    std::shared_ptr<Skeleton> bipedSkeleton;
+                    std::vector<std::shared_ptr<AnimationClip>> bipedClips;
+                    if (SkeletalMeshImporter::CreateProceduralBiped(bipedData, bipedSkeleton, bipedClips)) {
+                        smc.Mesh = std::make_shared<SkeletalMesh>(bipedData);
+                        if (smc.AssetPath.empty()) {
+                            smc.AssetPath = "procedural://biped";
+                        }
+
+                        if (m_Scene->GetRegistry().all_of<AnimatorComponent>(entityID)) {
+                            auto& ac = m_Scene->GetRegistry().get<AnimatorComponent>(entityID);
+                            if (!ac.AnimatorInstance) {
+                                auto animator = std::make_shared<Animator>(bipedSkeleton);
+                                auto stateMachine = std::make_shared<AnimationStateMachine>("LocomotionStateMachine");
+
+                                if (bipedClips.size() >= 2) {
+                                    AnimationState stateIdle;
+                                    stateIdle.Name = "Idle";
+                                    stateIdle.Type = AnimationNodeType::Clip;
+                                    stateIdle.Clip = bipedClips[0];
+                                    stateIdle.Loop = true;
+                                    stateMachine->AddState(stateIdle);
+
+                                    AnimationState stateWalk;
+                                    stateWalk.Name = "Walk";
+                                    stateWalk.Type = AnimationNodeType::Clip;
+                                    stateWalk.Clip = bipedClips[1];
+                                    stateWalk.Loop = true;
+                                    stateMachine->AddState(stateWalk);
+
+                                    AnimationTransition tIdleToWalk;
+                                    tIdleToWalk.FromState = "Idle";
+                                    tIdleToWalk.ToState = "Walk";
+                                    tIdleToWalk.Duration = 0.2f;
+                                    tIdleToWalk.Condition = [stateMachine]() { return stateMachine->GetFloat("Speed") > 0.1f; };
+                                    stateMachine->AddTransition(tIdleToWalk);
+
+                                    AnimationTransition tWalkToIdle;
+                                    tWalkToIdle.FromState = "Walk";
+                                    tWalkToIdle.ToState = "Idle";
+                                    tWalkToIdle.Duration = 0.2f;
+                                    tWalkToIdle.Condition = [stateMachine]() { return stateMachine->GetFloat("Speed") <= 0.1f; };
+                                    stateMachine->AddTransition(tWalkToIdle);
+
+                                    animator->SetStateMachine(stateMachine);
+                                    animator->Update(0.0f);
+                                }
+                                ac.AnimatorInstance = animator;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Recreate Physics Bodies in PhysicsScene if active
         if (m_PhysicsScene) {
             auto rbView = m_Scene->GetRegistry().view<RigidBody3D, TransformComponent>();
@@ -1279,17 +1399,17 @@ namespace Axle {
                         bodyID = m_PhysicsScene->CreatePlane(spawnPos, glm::vec3(0, 1, 0), tc.Scale.x * 0.5f, friction, restitution);
                         break;
                     case CollisionShapeType::Sphere:
-                        bodyID = m_PhysicsScene->CreateSphere(spawnPos, radius, isDynamic, friction, restitution);
+                        bodyID = m_PhysicsScene->CreateSphere(spawnPos, radius, isDynamic, friction, restitution, rb.Mass);
                         break;
                     case CollisionShapeType::Cylinder:
-                        bodyID = m_PhysicsScene->CreateCylinder(spawnPos, halfHeight, radius, isDynamic, friction, restitution);
+                        bodyID = m_PhysicsScene->CreateCylinder(spawnPos, halfHeight, radius, isDynamic, friction, restitution, rb.Mass);
                         break;
                     case CollisionShapeType::Cone:
-                        bodyID = m_PhysicsScene->CreateCone(spawnPos, halfHeight, radius, isDynamic, friction, restitution);
+                        bodyID = m_PhysicsScene->CreateCone(spawnPos, halfHeight, radius, isDynamic, friction, restitution, rb.Mass);
                         break;
                     case CollisionShapeType::Box:
                     default:
-                        bodyID = m_PhysicsScene->CreateBox(spawnPos, halfExtent, isDynamic, friction, restitution);
+                        bodyID = m_PhysicsScene->CreateBox(spawnPos, halfExtent, isDynamic, friction, restitution, rb.Mass);
                         break;
                 }
 

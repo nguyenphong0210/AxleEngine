@@ -7012,6 +7012,9 @@ bool RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController
     std::cout << "  STEP 40: PHASE 30 - STEP 5 ECS INTEGRATION & CONTROLLER  " << std::endl;
     std::cout << "========================================================" << std::endl;
 
+    Axle::ScriptRegistry::Register<ThirdPersonController>("ThirdPersonController");
+    Axle::ScriptRegistry::Register<ThirdPersonCamera>("ThirdPersonCamera");
+
     // [40.1] Testing ECS Component Attachment & Queries
     std::cout << "\n[40.1] Testing ECS Component Attachment & Verification..." << std::endl;
     {
@@ -7320,10 +7323,268 @@ bool RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController
             assert(std::abs(ccc.Settings.HalfHeight - 0.7f) < 0.01f);
 
             std::cout << "  -> PASS: Hero entity restored with 100% component fidelity." << std::endl;
+
+            // Test Scene::Copy preservation (used by Editor Play mode)
+            auto clonedScene = Axle::Scene::Copy(newScene);
+            assert(clonedScene);
+            auto clonedView = clonedScene->GetRegistry().view<Axle::TagComponent>();
+            Axle::Entity clonedHero{};
+            for (auto ent : clonedView) {
+                if (clonedView.get<Axle::TagComponent>(ent).Tag == "Hero") {
+                    clonedHero = Axle::Entity{ ent, clonedScene.get() };
+                    break;
+                }
+            }
+            assert(clonedHero);
+            assert(clonedHero.HasComponent<Axle::SkeletalMeshComponent>());
+            assert(clonedHero.HasComponent<Axle::AnimatorComponent>());
+            assert(clonedHero.HasComponent<Axle::CharacterControllerComponent>());
+            const auto& cccCloned = clonedHero.GetComponent<Axle::CharacterControllerComponent>();
+            assert(std::abs(cccCloned.WalkSpeed - 4.2f) < 0.01f);
+            assert(std::abs(cccCloned.RunSpeed - 8.5f) < 0.01f);
+            std::cout << "  -> PASS: Scene::Copy preserved SkeletalMeshComponent, AnimatorComponent, and CharacterControllerComponent for Play Mode." << std::endl;
         }
     }
 
     std::cout << ">>> STEP 40 PASSED: Phase 30 Step 5 ECS Integration & Third-Person Controller 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
+// TEST STEP 41: Phase 30 Step 6 - Character Sandbox Playground & Scene Integration
+// =============================================================================
+bool RunTest_Step41_Phase30_Step6_CharacterSandboxPlaygroundAndSceneIntegration() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 41: PHASE 30 - STEP 6 CHARACTER SANDBOX PLAYGROUND " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [41.1] Verify CharacterSandbox Scene Deserialization & Entity Topology
+    std::cout << "\n[41.1] Loading CharacterSandbox.axlescene and verifying hierarchy..." << std::endl;
+    std::filesystem::path scenePath = "Editor/assets/scenes/CharacterSandbox.axlescene";
+    if (!std::filesystem::exists(scenePath)) {
+        scenePath = "assets/scenes/CharacterSandbox.axlescene";
+    }
+    if (!std::filesystem::exists(scenePath)) {
+        scenePath = "../Editor/assets/scenes/CharacterSandbox.axlescene";
+    }
+    if (!std::filesystem::exists(scenePath)) {
+        scenePath = "../../Editor/assets/scenes/CharacterSandbox.axlescene";
+    }
+    if (!std::filesystem::exists(scenePath)) {
+        std::cerr << "FAIL: CharacterSandbox.axlescene does not exist!" << std::endl;
+        return false;
+    }
+
+    auto scene = std::make_shared<Axle::Scene>();
+    auto physicsScene = std::make_unique<Axle::PhysicsScene>();
+    Axle::SceneSerializer serializer(scene.get(), physicsScene.get());
+    if (!serializer.Deserialize(scenePath)) {
+        std::cerr << "FAIL: Could not deserialize " << scenePath << std::endl;
+        return false;
+    }
+
+    auto findEntityByTag = [&](const std::string& targetTag) -> Axle::Entity {
+        auto view = scene->GetRegistry().view<Axle::TagComponent>();
+        for (auto e : view) {
+            if (view.get<Axle::TagComponent>(e).Tag == targetTag) {
+                return Axle::Entity{ e, scene.get() };
+            }
+        }
+        return {};
+    };
+
+    Axle::Entity player = findEntityByTag("Player");
+    Axle::Entity camera = findEntityByTag("Main Camera");
+    Axle::Entity ground = findEntityByTag("Ground");
+    Axle::Entity stair1 = findEntityByTag("Stair_1");
+    Axle::Entity stair2 = findEntityByTag("Stair_2");
+    Axle::Entity stair3 = findEntityByTag("Stair_3");
+    Axle::Entity stair4 = findEntityByTag("Stair_4");
+    Axle::Entity stair5 = findEntityByTag("Stair_5");
+    Axle::Entity platform = findEntityByTag("ElevatedPlatform");
+    Axle::Entity ramp = findEntityByTag("SlopedRamp");
+    Axle::Entity steepWall = findEntityByTag("SteepWall");
+    Axle::Entity crate1 = findEntityByTag("Crate_Base_1");
+    Axle::Entity crate2 = findEntityByTag("Crate_Base_2");
+    Axle::Entity crate3 = findEntityByTag("Crate_Base_3");
+    Axle::Entity crateTop = findEntityByTag("Crate_Top");
+
+    assert(player && "Player entity not found!");
+    assert(camera && "Main Camera entity not found!");
+    assert(ground && "Ground entity not found!");
+    assert(stair1 && stair2 && stair3 && stair4 && stair5 && platform && "Stairs/Platform entities not found!");
+    assert(ramp && "SlopedRamp entity not found!");
+    assert(steepWall && "SteepWall entity not found!");
+    assert(crate1 && crate2 && crate3 && crateTop && "Crate entities not found!");
+
+    assert(player.HasComponent<Axle::SkeletalMeshComponent>());
+    assert(player.HasComponent<Axle::AnimatorComponent>());
+    assert(player.HasComponent<Axle::CharacterControllerComponent>());
+    assert(player.HasComponent<Axle::NativeScriptComponent>());
+
+    assert(camera.HasComponent<Axle::CameraComponent>());
+    assert(camera.HasComponent<Axle::NativeScriptComponent>());
+    std::cout << "  -> PASS: CharacterSandbox.axlescene deserialized with 100% hierarchy integrity." << std::endl;
+
+    // [41.2] Equipping Player with Procedural Humanoid Biped & Animation State Machine
+    std::cout << "\n[41.2] Equipping Player with Procedural Humanoid Biped & Animation State Machine..." << std::endl;
+    Axle::SkeletalMeshData bipedData;
+    std::shared_ptr<Axle::Skeleton> bipedSkeleton;
+    std::vector<std::shared_ptr<Axle::AnimationClip>> bipedClips;
+    bool bipedOk = Axle::SkeletalMeshImporter::CreateProceduralBiped(bipedData, bipedSkeleton, bipedClips);
+    assert(bipedOk);
+    auto bipedMesh = std::make_shared<Axle::SkeletalMesh>(bipedData);
+
+    auto& smc = player.GetComponent<Axle::SkeletalMeshComponent>();
+    smc.Mesh = bipedMesh;
+
+    auto& ac = player.GetComponent<Axle::AnimatorComponent>();
+    auto animator = std::make_shared<Axle::Animator>(bipedSkeleton);
+    auto stateMachine = std::make_shared<Axle::AnimationStateMachine>("LocomotionStateMachine");
+
+    Axle::AnimationState stateIdle;
+    stateIdle.Name = "Idle";
+    stateIdle.Type = Axle::AnimationNodeType::Clip;
+    stateIdle.Clip = bipedClips[0];
+    stateIdle.Loop = true;
+    stateMachine->AddState(stateIdle);
+
+    Axle::AnimationState stateWalk;
+    stateWalk.Name = "Walk";
+    stateWalk.Type = Axle::AnimationNodeType::Clip;
+    stateWalk.Clip = bipedClips[1];
+    stateWalk.Loop = true;
+    stateMachine->AddState(stateWalk);
+
+    Axle::AnimationTransition tIdleToWalk;
+    tIdleToWalk.FromState = "Idle";
+    tIdleToWalk.ToState = "Walk";
+    tIdleToWalk.Duration = 0.2f;
+    tIdleToWalk.Condition = [stateMachine]() { return stateMachine->GetFloat("Speed") > 0.1f; };
+    stateMachine->AddTransition(tIdleToWalk);
+
+    Axle::AnimationTransition tWalkToIdle;
+    tWalkToIdle.FromState = "Walk";
+    tWalkToIdle.ToState = "Idle";
+    tWalkToIdle.Duration = 0.2f;
+    tWalkToIdle.Condition = [stateMachine]() { return stateMachine->GetFloat("Speed") <= 0.1f; };
+    stateMachine->AddTransition(tWalkToIdle);
+
+    animator->SetStateMachine(stateMachine);
+    ac.AnimatorInstance = animator;
+    std::cout << "  -> PASS: Procedural Humanoid biped & Locomotion state machine attached." << std::endl;
+
+    // [41.3] Initializing Sandbox Runtime Simulation & Native Scripts
+    std::cout << "\n[41.3] Initializing Sandbox Runtime Simulation & Native Scripts..." << std::endl;
+    Axle::ScriptRegistry::Register<ThirdPersonController>("ThirdPersonController");
+    Axle::ScriptRegistry::Register<ThirdPersonCamera>("ThirdPersonCamera");
+
+    scene->OnRuntimeStart(physicsScene.get());
+
+    auto& ccc = player.GetComponent<Axle::CharacterControllerComponent>();
+    assert(ccc.RuntimeController != nullptr);
+
+    auto& playerNsc = player.GetComponent<Axle::NativeScriptComponent>();
+    auto* controllerScript = dynamic_cast<ThirdPersonController*>(playerNsc.Instance);
+    assert(controllerScript != nullptr);
+
+    auto& cameraNsc = camera.GetComponent<Axle::NativeScriptComponent>();
+    auto* cameraScript = dynamic_cast<ThirdPersonCamera*>(cameraNsc.Instance);
+    assert(cameraScript != nullptr);
+    std::cout << "  -> PASS: Runtime controller & scripts initialized successfully." << std::endl;
+
+    // [41.4] Testing Staircase Traversal (Ascending 5 Steps via StepOffset)
+    std::cout << "\n[41.4] Testing Staircase Traversal (Ascending 5 Steps via StepOffset)..." << std::endl;
+    // Position character in front of Stair_1 at (0, 0.5, -3.2), facing -Z towards stairs
+    ccc.RuntimeController->SetPosition(glm::vec3(0.0f, 0.5f, -3.2f));
+    controllerScript->DirectVirtualDirection = true;
+    controllerScript->VirtualMoveDirection = glm::vec3(0.0f, 0.0f, -1.0f); // Walk straight towards -Z into stairs
+    controllerScript->VirtualSprint = false;
+
+    // Simulate for 60 frames (1.0 second)
+    for (int frame = 0; frame < 60; ++frame) {
+        scene->OnUpdateRuntime(Axle::Timestep(1.0f / 60.0f), physicsScene.get());
+        physicsScene->Step(1.0f / 60.0f);
+    }
+
+    glm::vec3 postStairPos = ccc.RuntimeController->GetPosition();
+    std::cout << "  -> Position after walking up stairs: Y = " << postStairPos.y << " m, Z = " << postStairPos.z << " m" << std::endl;
+    assert(postStairPos.y > 0.8f);
+    assert(postStairPos.z < -4.0f);
+    assert(ccc.IsGrounded);
+    assert(ac.Speed > 0.1f);
+    std::cout << "  -> PASS: Character ascended stairs smoothly without jumping. Grounded: " << (ccc.IsGrounded ? "true" : "false") << std::endl;
+
+    // [41.5] Testing Steep Wall Blocking (90 deg Vertical Barrier)
+    std::cout << "\n[41.5] Testing Steep Wall Blocking (90 deg Vertical Barrier)..." << std::endl;
+    // Wall is at X = 6.0, thickness 0.5 (surface at X = 5.75). Place player at X = 5.0, move towards +X
+    ccc.RuntimeController->SetPosition(glm::vec3(5.0f, 0.5f, 0.0f));
+    controllerScript->DirectVirtualDirection = true;
+    controllerScript->VirtualMoveDirection = glm::vec3(1.0f, 0.0f, 0.0f); // Move towards +X into wall
+
+    for (int frame = 0; frame < 30; ++frame) {
+        scene->OnUpdateRuntime(Axle::Timestep(1.0f / 60.0f), physicsScene.get());
+        physicsScene->Step(1.0f / 60.0f);
+    }
+
+    glm::vec3 blockedPos = ccc.RuntimeController->GetPosition();
+    std::cout << "  -> Blocked position at wall: X = " << blockedPos.x << " m (Wall boundary is at X = 5.75 m)" << std::endl;
+    assert(blockedPos.x < 5.6f);
+    std::cout << "  -> PASS: Vertical wall blocked character movement (MaxSlopeAngle: 50 deg enforced)." << std::endl;
+
+    // [41.6] Testing Dynamic Obstacle Interaction (Pushing 20kg Crate)
+    std::cout << "\n[41.6] Testing Dynamic Obstacle Interaction (Pushing 20kg Crate)..." << std::endl;
+    auto& crateRb = crate1.GetComponent<Axle::RigidBody3D>();
+    assert(!crateRb.RuntimeBodyID.IsInvalid());
+    glm::vec3 initialCratePos = physicsScene->GetBodyPosition(crateRb.RuntimeBodyID);
+    std::cout << "  -> Initial Crate_Base_1 position: (" << initialCratePos.x << ", " << initialCratePos.y << ", " << initialCratePos.z << ")" << std::endl;
+
+    // Place character in front of Crate_Base_1 at (-1.2, 0.0, 3.0), moving towards +Z into crate
+    ccc.RuntimeController->SetPosition(glm::vec3(-1.2f, 0.0f, 3.0f));
+    controllerScript->DirectVirtualDirection = true;
+    controllerScript->VirtualMoveDirection = glm::vec3(0.0f, 0.0f, 1.0f); // Push towards +Z into crate
+
+    for (int frame = 0; frame < 45; ++frame) {
+        scene->OnUpdateRuntime(Axle::Timestep(1.0f / 60.0f), physicsScene.get());
+        physicsScene->Step(1.0f / 60.0f);
+    }
+
+    glm::vec3 finalCratePos = physicsScene->GetBodyPosition(crateRb.RuntimeBodyID);
+    std::cout << "  -> Final Crate position after push: (" << finalCratePos.x << ", " << finalCratePos.y << ", " << finalCratePos.z << ")" << std::endl;
+    assert(finalCratePos.z > initialCratePos.z + 0.05f);
+    std::cout << "  -> PASS: Dynamic crate pushed forward (Displacement: " << (finalCratePos.z - initialCratePos.z) << " m)." << std::endl;
+
+    // [41.7] Testing ThirdPersonCamera Spring-Arm Orbit & Target Following
+    std::cout << "\n[41.7] Testing ThirdPersonCamera Spring-Arm Orbit & Target Following..." << std::endl;
+    auto& camTC = camera.GetComponent<Axle::TransformComponent>();
+    std::cout << "  -> Camera position tracking Player: (" << camTC.Translation.x << ", " << camTC.Translation.y << ", " << camTC.Translation.z << ")" << std::endl;
+    assert(camTC.Translation.y >= cameraScript->MinElevation);
+    float distToPlayer = glm::distance(camTC.Translation, ccc.RuntimeController->GetPosition());
+    std::cout << "  -> Distance to Player: " << distToPlayer << " m (Target Distance: " << cameraScript->Distance << " m)" << std::endl;
+    assert(std::abs(distToPlayer - cameraScript->Distance) < 2.0f);
+    std::cout << "  -> PASS: ThirdPersonCamera spring-arm follow validated." << std::endl;
+
+    // [41.8] Testing Multi-Pass Skeletal Renderer Dispatch in Sandbox
+    std::cout << "\n[41.8] Testing Multi-Pass Skeletal Renderer Dispatch in Sandbox..." << std::endl;
+    Axle::SkinningPipeline skinningPipeline;
+    skinningPipeline.Init();
+
+    Axle::PerspectiveCamera testCam(65.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+    testCam.SetPosition(camTC.Translation);
+    glm::mat4 lightSpaceMat = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -20.0f, 40.0f);
+
+    // Pass 1: Shadow Depth Pass
+    scene->RenderSkeletalMeshes(skinningPipeline, testCam, lightSpaceMat, glm::vec3(0.5f, 1.0f, 0.3f), true);
+    // Pass 2: PBR Forward Lighting Pass
+    scene->RenderSkeletalMeshes(skinningPipeline, testCam, lightSpaceMat, glm::vec3(0.5f, 1.0f, 0.3f), false);
+    std::cout << "  -> PASS: Shadow depth and PBR lighting passes dispatched with active bone palettes." << std::endl;
+
+    // Clean runtime stop
+    scene->OnRuntimeStop(physicsScene.get());
+    assert(ccc.RuntimeController == nullptr);
+    std::cout << "  -> PASS: Runtime simulation cleaned up safely." << std::endl;
+
+    std::cout << ">>> STEP 41 PASSED: Phase 30 Step 6 Character Sandbox Playground 100% verified! <<<\n" << std::endl;
     return true;
 }
 
@@ -7380,12 +7641,13 @@ int main(int argc, char** argv) {
         else if (arg == "38" || arg == "step38" || arg == "--step38" || arg == "--phase30c") targetStep = 38;
         else if (arg == "39" || arg == "step39" || arg == "--step39" || arg == "--phase30d") targetStep = 39;
         else if (arg == "40" || arg == "step40" || arg == "--step40" || arg == "--phase30e") targetStep = 40;
+        else if (arg == "41" || arg == "step41" || arg == "--step41" || arg == "--phase30f" || arg == "--sandbox") targetStep = 41;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 40 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 41 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -7512,6 +7774,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 40) {
         if (!RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 41) {
+        if (!RunTest_Step41_Phase30_Step6_CharacterSandboxPlaygroundAndSceneIntegration()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

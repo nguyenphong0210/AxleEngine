@@ -297,11 +297,34 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Dedicated ImGui VFX Editor panel: live bezier curve tweaking (size, alpha, color gradient over time), texture slot assignment, burst controls, and instant viewport preview.
     - [x] Automated test suites (Steps 42-47) in `Editor/src/Test.cpp`: validating particle pool memory allocation, GPU instancing, curl noise determinism, physics collisions, emitter serialization fidelity, and gameplay slip event triggering.
 - [ ] **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)**
-  - [ ] **Step 1 - Low-Overhead RHI Integration (NVIDIA NRI)**: Embed lightweight NVIDIA Rendering Interface (MIT) as the unified hardware abstraction layer for Vulkan 1.3 and Direct3D 12 alongside OpenGL 4.5 legacy/fallback.
-  - [ ] **Step 2 - ECS-Driven Data-Oriented Memory Streaming**: Connect `EnTT` packed component arrays directly to NRI dynamic staging buffers, structured instance buffers (SSBOs), and GPU indirect draw calls (`CmdDrawIndexedIndirect`).
-  - [ ] **Step 3 - PSO Caching & Explicit Barrier Management**: High-performance Pipeline State Object (PSO) hashing/caching and seamless resource layout transitions (Shadow Pass, Deferred/Forward Pass, Post-FX) via NRI command lists.
-  - [ ] **Step 4 - Multi-Platform Build Matrix & Linux Portability**: Validate Clang / GCC Linux compilation with native Vulkan 1.3 backend, alongside MSVC native D3D12/Vulkan backends on Windows.
-  - [ ] **Step 5 - Automated Test Suite**: Headless tests validating physical device enumeration, swapchain/framebuffer allocation, multi-threaded command buffer recording, and GPU barrier execution.
+  - [ ] **Step 1 - NRI Core Submodule & RHI Device Lifecycle (`Engine/RHI`)**:
+    - [ ] Integrate lightweight NVIDIA Rendering Interface (MIT) into `ThirdParty/NRI` (Core, Helper, and Streamer modules).
+    - [ ] Unified Device Abstraction: Physical GPU enumeration, hardware capability query (Ray Tracing, Mesh Shaders, Bindless Resources), and dynamic backend selection (Direct3D 12, Vulkan 1.3, with OpenGL 4.5 legacy fallback).
+    - [ ] Native Windowing & Surface Integration: Bind GLFW window handles to native surfaces (`HWND` for D3D12 on Windows / `VkSurfaceKHR` for Vulkan).
+  - [ ] **Step 2 - Swapchain, Command Allocators & Frames-in-Flight Orchestration**:
+    - [ ] High-performance double/triple buffered swapchain (`nri::SwapChainDesc`) with configurable presentation modes (VSync vs Low-Latency Mailbox).
+    - [ ] Frame Synchronization Engine: 2-3 Frames-in-Flight architecture with per-frame Command Allocators, Fences, and Semaphores to eliminate CPU stalls and prevent GPU read/write hazards.
+    - [ ] Dynamic window resize handling, minimized window guard, and seamless borderless/exclusive fullscreen toggle without resource leaks.
+  - [ ] **Step 3 - Unified Cross-API Shader Pipeline & Bytecode Toolchain**:
+    - [ ] Cross-API shader compilation pipeline (Slang or DXC + `glslang`/SPIRV-Cross) compiling single-source shaders into SPIR-V (Vulkan 1.3) and DXIL/DXBC (Direct3D 12).
+    - [ ] Automated bytecode caching (`.spv` and `.dxil`) with `last_write_time` dependency validation in asset directory.
+    - [ ] Shader Reflection Subsystem: Automatically extract Root Signatures (D3D12) and Descriptor Set Layouts (Vulkan) directly from compiled shader reflection metadata.
+  - [ ] **Step 4 - Pipeline State Objects (PSO) & Explicit Barrier Management**:
+    - [ ] 64-bit PSO hashing and LRU memory cache for Graphics and Compute pipelines (Rasterizer, Depth/Stencil, Blend States, Shaders).
+    - [ ] Explicit resource layout transitions (D3D12 `ResourceBarrier` / Vulkan `VkImageMemoryBarrier`) via unified NRI command lists (Color Attachment $\leftrightarrow$ Shader Resource $\leftrightarrow$ Depth/Stencil Write).
+    - [ ] Unified Pipeline Layout abstraction supporting Push Constants, Root Descriptors, and Descriptor Tables.
+  - [ ] **Step 5 - GPU Memory Management & Dynamic Staging Streamer**:
+    - [ ] Device-local VRAM allocation vs Host-visible Staging Ring Buffer management utilizing `NRIHelper` and `StreamerInterface`.
+    - [ ] High-throughput asynchronous texture streaming and non-blocking vertex/index buffer uploads.
+    - [ ] Direct EnTT ECS memory streaming: packed component data streamed into GPU dynamic buffers and structured buffers (SSBOs) with GPU indirect draw dispatch (`CmdDrawIndexedIndirect`).
+  - [ ] **Step 6 - Editor ImGui Viewport Integration & Multi-Backend Coexistence**:
+    - [ ] Multi-backend ImGui rendering: equip `ImGuiLayer` with `imgui_impl_dx12` and `imgui_impl_vulkan` backends alongside legacy `imgui_impl_opengl3`.
+    - [ ] Viewport Descriptor Binding: Register offscreen scene render targets (`nri::Texture`) into ImGui GPU Descriptor Heap as valid `ImTextureID`.
+    - [ ] Engine RHI Switcher: Configurable startup flag (`--rhi=dx12`, `--rhi=vulkan`, `--rhi=opengl`) with graceful fallback.
+  - [ ] **Step 7 - Automated Headless Test Suite & Multi-Backend Validation**:
+    - [ ] Headless RHI test suite in `AxleTests.exe`: Device initialization (WARP for D3D12, SwiftShader/Mock ICD for Vulkan).
+    - [ ] Multithreaded command recording verification: worker threads via `enkiTS` recording into secondary command buffers concurrently.
+    - [ ] Validation of pipeline barrier state machines, PSO cache hit rate, and swapchain recreation stability.
 - [ ] **Phase 33: Dedicated 2D Canvas & In-Game UI Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
   - [ ] **Hardware-Accelerated 2D Batch Renderer (`Canvas2D`)**: High-performance sprite, quad, and line batch rendering with z-index sorting and clipping rectangles.
   - [ ] **Zero-ImGui Shipping Runtime**: Pure decoupled UI pipeline for commercial game releases without ImGui library linkage.

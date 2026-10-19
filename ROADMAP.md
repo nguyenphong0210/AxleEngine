@@ -25,7 +25,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 │ [x] MILESTONE 4: Scene Graph, Hot-Reloading & Multithreaded Jobs (Phases 14 - 19)      │
 │ [x] MILESTONE 5: Component-Driven Architecture & Standalone Runtime (Phases 20 - 23)   │
 │ [x] MILESTONE 6: AAA PBR Lighting, Soft Shadows, IBL & Audio (Phases 24 - 28)          │
-│ [ ] MILESTONE 7: Large-Scale Terrain, Splines & Future Frontiers (Phase 29+)           │
+│ [x] MILESTONE 7: Large-Scale Terrain, Splines & Character Systems (Phases 29 - 30)     │
+│ [ ] MILESTONE 8: Visual Effects, Modern RHI & Cross-Platform Engine (Phases 31+)      │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -212,7 +213,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 ---
 
-### Milestone 7: Large-Scale Terrain, Splines & Future Frontiers
+### Milestone 7: Large-Scale Terrain, Spline Tracks & Skeletal Character Systems (Phases 29 - 30)
 - [x] **Phase 29: Modular Plugin Architecture — Spline Track & Large-Scale Terrain System (`Plugins/Spline` & `Plugins/Terrain`)**
   - [x] **Phase 29A: Spline Curve & Procedural Track Generator Plugin (`Plugins/Spline`)**
     - [x] **Step 1 - Plugin Infrastructure & CMake Integration**: Establish the modular static plugin standard under `Plugins/Spline/` with clean linkage into `AxleEditor`, `AxleRuntime`, and `AxleTests`.
@@ -261,9 +262,40 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 6 - Character Sandbox Playground & Scene Integration**:
     - [x] Interactive 3D scene (`CharacterSandbox.axlescene`) integrating animated skeletal mesh, third-person camera, stairs, slopes, and dynamic obstacles.
     - [x] Automated test suite Step 41 in `Editor/src/Test.cpp` validating full character sandbox scene, staircase ascent via `StepOffset`, 90-degree wall blocking, dynamic crate push, spring-arm follow, and multi-pass skeletal mesh rendering.
+---
+
+### Milestone 8: Visual Effects, Modern RHI & Cross-Platform Engine (Phases 31+)
 - [ ] **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**
-  - [ ] GPU-instanced particle emitters for smoke, dust trails, sparks, fire, tire burnout smoke, and water splashes.
-  - [ ] Curl noise vector fields, collision planes, and texture sheet animations.
+  - [ ] **Step 1 - Core VFX Architecture, Particle Emitter Data & Memory Model (`Engine/VFX`)**:
+    - [ ] High-performance Data-Oriented Struct-of-Arrays (SoA) particle pool (`ParticlePool`) with pre-allocated contiguous memory to eliminate dynamic heap allocations.
+    - [ ] Particle lifecycle management (`ParticleSystem`): spawn rate, lifetime duration, position, velocity, acceleration, rotational speed, size-over-lifetime curve, and RGBA color/alpha curves.
+    - [ ] Emitter geometric shapes: Point, Sphere/Hemisphere, Box volume, Cone (for exhaust/burnout), and directional spray nozzles.
+  - [ ] **Step 2 - High-Performance GPU Instancing & Billboarding Pipeline (`Engine/Renderer`)**:
+    - [ ] Hardware instanced quad rendering (`glDrawElementsInstanced` / instance VBO layout) streaming compact instance data (`vec3 Position`, `float Size`, `vec4 Color`, `float Rotation`, `vec4 UVOffsetScale`).
+    - [ ] Dynamic billboarding orientations: Spherical Camera-Facing (standard smoke/dust), Cylindrical/Axial (Y-axis aligned for rising plumes), and Velocity-Aligned stretched quads (high-speed sparks, rain drops, debris).
+    - [ ] Multi-mode blending: Additive (fire, embers, energy sparks), Alpha Blending (dense smoke, fog, clouds), and Premultiplied Alpha.
+    - [ ] Soft Particles: Sample linear depth from `u_SceneDepthBuffer` to compute depth-difference fade factor, eliminating hard intersection edges where particles clip into terrain and geometry.
+  - [ ] **Step 3 - Advanced Simulation Dynamics: Curl Noise, Physics Collisions & Fields**:
+    - [ ] 3D Simplex / Curl Noise vector fields providing divergence-free fluid turbulence for organic smoke billows, flame wisps, and floating dust motes.
+    - [ ] Particle physics collisions: static ground plane and raycast collision detection with restitution (bounciness damping) and tangential friction.
+    - [ ] Environmental forces: directional wind vector, buoyancy/updraft, drag/air resistance, and point gravity attractors/vortices.
+  - [ ] **Step 4 - Texture Sheet Flipbooks & Shading Polish**:
+    - [ ] Texture sheet / flipbook animations ($N \times M$ grid) with automatic frame progression and smooth sub-frame interpolation over particle lifetime.
+    - [ ] Normal-mapped particle lighting: approximate volumetric lighting from directional sun and point lights with self-shadowing factor.
+    - [ ] Dedicated VFX shaders (`Particle.vert` and `Particle.frag`) with smooth softness curve, distance fading, and camera near-plane fade.
+  - [ ] **Step 5 - ECS Integration & Gameplay Event VFX Emitters (`Engine/Scene`)**:
+    - [ ] `ParticleEmitterComponent` in EnTT ECS: linking emitter assets to scene entities with local/world simulation space toggles.
+    - [ ] Vehicle gameplay FX hooks:
+      - [ ] Tire burnout smoke and skid debris generated dynamically based on lateral/longitudinal tire slip.
+      - [ ] Off-road dirt/gravel rooster tails kicked up dynamically based on speed and terrain surface splatmap material.
+      - [ ] Exhaust backfire flames and popping sparks triggered by high engine RPM and throttle lift-off.
+    - [ ] Character gameplay FX hooks:
+      - [ ] Footstep ground impact dust puffs on walking/running.
+      - [ ] Landing shockwave dust ripples upon landing from jump/freefall.
+    - [ ] Scene serialization & deserialization support for `ParticleEmitterComponent` in `SceneSerializer`.
+  - [ ] **Step 6 - Visual FX Editor Panel & Automated Test Suite 42 (`AxleTests.exe`)**:
+    - [ ] Dedicated ImGui VFX Editor panel: live bezier curve tweaking (size, alpha, color gradient over time), texture slot assignment, burst controls, and instant viewport preview.
+    - [ ] Automated test suite Step 42 in `Editor/src/Test.cpp`: validating particle pool memory allocation, particle recycling, GPU instance buffer formatting, curl noise determinism, emitter serialization fidelity, and gameplay slip event triggering.
 - [ ] **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)**
   - [ ] **Step 1 - Low-Overhead RHI Integration (NVIDIA NRI)**: Embed lightweight NVIDIA Rendering Interface (MIT) as the unified hardware abstraction layer for Vulkan 1.3 and Direct3D 12 alongside OpenGL 4.5 legacy/fallback.
   - [ ] **Step 2 - ECS-Driven Data-Oriented Memory Streaming**: Connect `EnTT` packed component arrays directly to NRI dynamic staging buffers, structured instance buffers (SSBOs), and GPU indirect draw calls (`CmdDrawIndexedIndirect`).

@@ -7,7 +7,7 @@
 [![miniaudio](https://img.shields.io/badge/Audio-miniaudio-yellow.svg)](https://miniaud.io/)
 [![CMake](https://img.shields.io/badge/CMake-3.22%2B-red.svg)](https://cmake.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-32%2F32%20Passing%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-41%2F41%20Passing%20(100%25)-brightgreen.svg)]()
 
 **AxleEngine** is a modern, modular, high-performance **General-Purpose 3D Game Engine** written in **C++20**. 
 
@@ -45,6 +45,16 @@ Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Phys
 * **Dual Runtime Targets**:
   * **`AxleEditor.exe`**: Multi-window docking IDE with ImGuizmo 3D gizmos, viewport mouse picking, asset browser, prefab authoring, and safe 3-state simulation (Play, Pause, Step, Stop).
   * **`AxleRuntime.exe`**: Standalone, lightweight game player executing direct backbuffer rendering, transparent in-game HUD overlay canvas (`ScriptableEntity::OnImGuiRender()`), and zero-overhead distribution booting directly from monolithic cooked packages (`Data.axlepak`).
+* **Skeletal Animation & GPU Vertex Skinning (`Engine/Animation`)**:
+  * Embedded zero-dependency asset parsing using **[ufbx](https://github.com/bqqbarbhg/ufbx)** (`.fbx`) and **[cgltf](https://github.com/jkuhlmann/cgltf)** (`.gltf`/`.glb`) with procedural biped fallback skeleton.
+  * **Linear Blend Skinning (LBS)** pipeline (`SkinningPipeline`) with 64-byte vertex stride (`ivec4 BoneIDs`, `vec4 BoneWeights`) supporting up to 128 bones per palette in both forward PBR and directional shadow depth passes.
+  * **1D Blend Spaces** (`BlendSpace1D`) with phase-matched footstep time synchronization and **Hierarchical Animation State Machines** (`AnimationStateMachine`) with smooth crossfades and parameter-driven transitions (Locomotion, Jump, Fall, Land).
+* **Kinematic Character Controller (KCC) & Third-Person Gameplay**:
+  * Powered by **Jolt Physics** `JPH::CharacterVirtual` with capsule collision, slope traversal limits, automatic curb/stair step-up (`StepOffset`), ground snapping (`StickToFloor`), and dynamic push impulse transfer.
+  * Decoupled `CharacterControllerComponent`, smooth camera-relative `ThirdPersonController.hpp`, and spring-arm chase camera (`ThirdPersonCamera.hpp`).
+* **Modular Plugin Architecture (`Plugins/Spline` & `Plugins/Terrain`)**:
+  * **Spline Curves & Procedural Tracks (`Plugins/Spline`)**: Parametric Catmull-Rom & Cubic Bézier 3D curves with Rotation Minimizing Frames (RMF / Parallel Transport) to prevent flipping, continuous cross-section extrusion (road ribbons, curbs, guardrails), interactive editor spline gizmos, and auto-generated static Jolt `MeshShape` collision.
+  * **Off-Road Terrain & Sculpting (`Plugins/Terrain`)**: Multithreaded chunked heightfields (`enkiTS`), dynamic Level of Detail (LOD), viewport sculpting brushes (Raise, Lower, Smooth, Flatten), slope-based triplanar splatmap multi-texturing, procedural road path carving, and native Jolt `HeightFieldShape` suspension travel simulation.
 * **First-Class Domain Toolkits**:
   * **Modular Vehicle Physics Toolkit**: N-wheeled vehicle constraints, Ackermann steering, 4WD powertrain, suspension springs/dampers, and granular procedural engine RPM audio synthesis.
   * **Multi-Angle Camera Toolkit**: Spring-Arm Chase Camera, First-Person Cockpit (Driver POV), Hood Camera, and 360° Free Orbit Inspection.
@@ -56,6 +66,7 @@ Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Phys
 ```plaintext
 Level 4:  [ AxleEditor (IDE) ]           [ AxleRuntime (Game Player) ]  [ AxleTests (CI/CD) ]
 Level 3:  [ Engine/Scene (ECS) ]         [ Engine/Vehicle (Toolkit) ]   [ AxleScripts (DLL) ]
+          [ Plugins/Spline ]             [ Plugins/Terrain ]            [ Engine/Animation ]
 Level 2:  [ Engine/Physics (Jolt) ]      [ Engine/Renderer (PBR) ]      [ Engine/Audio (miniaudio) ]
           [ Engine/Asset (VFS & Cache) ] [ Engine/UI (ImGui) ]          [ Engine/Project (.axleproj) ]
 Level 1:  [ Engine/Platform (GLFW, Input, DynamicLibrary) ]
@@ -83,9 +94,9 @@ For in-depth guides, API references, and architectural walk-throughs, refer to t
 ## 🗺️ Project Milestones & Roadmap
 
 AxleEngine has undergone extensive architectural development and rigorous quality assurance:
-* **Completed Milestones**: **Phase 1 through Phase 28** are 100% complete and fully verified.
-* **Automated Test Suite**: **32 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
-* **Upcoming Focus**: **Phase 29: Off-Road Terrain & Spline Track System**, followed by Skeletal Animation and VFX.
+* **Completed Milestones**: **Phase 1 through Phase 30** are 100% complete, battle-tested, and fully verified.
+* **Automated Test Suite**: **41 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
+* **Upcoming Focus**: **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**, followed by Low-Overhead RHI Abstraction (NVIDIA NRI — Vulkan 1.3 & Direct3D 12) and Native 2D Canvas UI.
 
 👉 **For the complete phase-by-phase development history, detailed feature checklists, and upcoming roadmap, see [ROADMAP.md](ROADMAP.md).**
 
@@ -151,7 +162,7 @@ cmake --build build --config Release --parallel
 # 4. Launch Standalone Game Player (Optional)
 ./build/Runtime/Release/AxleRuntime.exe
 
-# 5. Run the Automated Headless Test Suite (32 Verified Suites)
+# 5. Run the Automated Headless Test Suite (41 Verified Suites)
 ./build/Editor/Release/AxleTests.exe
 ```
 

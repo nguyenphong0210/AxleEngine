@@ -59,6 +59,10 @@
 #include <Axle/SkinningPipeline.hpp>
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/CharacterController.hpp>
+#include <Axle/VFXCommon.hpp>
+#include <Axle/ParticlePool.hpp>
+#include <Axle/ParticleEmitter.hpp>
+#include <Axle/ParticleSystem.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -7589,6 +7593,331 @@ bool RunTest_Step41_Phase30_Step6_CharacterSandboxPlaygroundAndSceneIntegration(
 }
 
 // =============================================================================
+// TEST STEP 42: Phase 31 Step 1 - Core VFX Architecture, Particle Emitter Data & Memory Model
+// =============================================================================
+bool RunTest_Step42_Phase31_Step1_CoreVFXArchitectureAndParticlePool() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 42: PHASE 31 - STEP 1 CORE VFX ARCHITECTURE & PARTICLE POOL " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [42.1] Test ParticlePool Pre-allocation & Zero-Heap Reallocation
+    std::cout << "\n[42.1] Testing ParticlePool Pre-allocation & Capacity Guarantees..." << std::endl;
+    {
+        constexpr uint32_t TEST_CAPACITY = 100;
+        Axle::ParticlePool pool(TEST_CAPACITY);
+        assert(pool.GetCapacity() == TEST_CAPACITY);
+        assert(pool.GetActiveCount() == 0);
+        assert(pool.IsEmpty());
+        assert(!pool.IsFull());
+
+        const void* initialPositionsPtr = pool.GetPositions().data();
+        const void* initialVelocitiesPtr = pool.GetVelocities().data();
+        const void* initialColorsPtr = pool.GetColors().data();
+        const void* initialSizesPtr = pool.GetSizes().data();
+
+        // Spawn to maximum capacity
+        for (uint32_t i = 0; i < TEST_CAPACITY; ++i) {
+            Axle::ParticleSpawnData data;
+            data.Position = glm::vec3(static_cast<float>(i), 0.0f, 0.0f);
+            data.Lifetime = 2.0f;
+            data.CustomFlags = i;
+            uint32_t idx = pool.Spawn(data);
+            assert(idx == i);
+        }
+
+        assert(pool.GetActiveCount() == TEST_CAPACITY);
+        assert(pool.IsFull());
+        assert(!pool.IsEmpty());
+
+        // Attempting to spawn past capacity must return INVALID_INDEX and not reallocate
+        Axle::ParticleSpawnData overflowData;
+        uint32_t overflowIdx = pool.Spawn(overflowData);
+        assert(overflowIdx == Axle::ParticlePool::INVALID_INDEX);
+        assert(pool.GetActiveCount() == TEST_CAPACITY);
+
+        // Verify pointers remain completely unchanged (zero reallocation)
+        assert(pool.GetPositions().data() == initialPositionsPtr);
+        assert(pool.GetVelocities().data() == initialVelocitiesPtr);
+        assert(pool.GetColors().data() == initialColorsPtr);
+        assert(pool.GetSizes().data() == initialSizesPtr);
+        std::cout << "  -> PASS: ParticlePool pre-allocated " << TEST_CAPACITY << " particles with zero heap reallocations." << std::endl;
+    }
+
+    // [42.2] Test ParticlePool O(1) Swap-and-Pop Recycling
+    std::cout << "\n[42.2] Testing ParticlePool O(1) Swap-and-Pop Lifecycle & Contiguity..." << std::endl;
+    {
+        constexpr uint32_t TEST_CAPACITY = 50;
+        Axle::ParticlePool pool(TEST_CAPACITY);
+        for (uint32_t i = 0; i < 20; ++i) {
+            Axle::ParticleSpawnData data;
+            data.Position = glm::vec3(0.0f, static_cast<float>(i), 0.0f);
+            data.CustomFlags = 1000 + i;
+            pool.Spawn(data);
+        }
+        assert(pool.GetActiveCount() == 20);
+
+        // Particle at index 5 has flag 1005, particle at index 19 (last) has flag 1019
+        assert(pool.GetCustomFlags()[5] == 1005);
+        assert(pool.GetCustomFlags()[19] == 1019);
+
+        // Kill index 5
+        pool.Kill(5);
+        assert(pool.GetActiveCount() == 19);
+        // Slot 5 must now contain the particle that was at index 19
+        assert(pool.GetCustomFlags()[5] == 1019);
+
+        // Reset
+        pool.Reset();
+        assert(pool.GetActiveCount() == 0);
+        assert(pool.IsEmpty());
+        std::cout << "  -> PASS: O(1) swap-and-pop recycling maintains contiguous active range." << std::endl;
+    }
+
+    // [42.3] Test Emitter Geometric Shapes Sampling
+    std::cout << "\n[42.3] Testing Emitter Geometric Shapes Sampling..." << std::endl;
+    {
+        // Point Shape
+        Axle::ParticleEmitterShape pointShape;
+        pointShape.Type = Axle::ParticleEmitterShapeType::Point;
+        pointShape.Direction = glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 offset, dir;
+        pointShape.Sample(offset, dir);
+        assert(glm::length(offset) < 0.0001f);
+        assert(std::abs(dir.y - 1.0f) < 0.0001f);
+
+        // Sphere Shape (Radius 2.0f)
+        Axle::ParticleEmitterShape sphereShape;
+        sphereShape.Type = Axle::ParticleEmitterShapeType::Sphere;
+        sphereShape.Radius = 2.0f;
+        for (int i = 0; i < 50; ++i) {
+            sphereShape.Sample(offset, dir);
+            float dist = glm::length(offset);
+            assert(dist <= 2.0001f);
+        }
+
+        // Hemisphere Shape (Direction = +Y)
+        Axle::ParticleEmitterShape hemiShape;
+        hemiShape.Type = Axle::ParticleEmitterShapeType::Hemisphere;
+        hemiShape.Direction = glm::vec3(0.0f, 1.0f, 0.0f);
+        hemiShape.Radius = 3.0f;
+        for (int i = 0; i < 50; ++i) {
+            hemiShape.Sample(offset, dir);
+            assert(glm::length(offset) <= 3.0001f);
+            assert(dir.y >= -0.0001f);
+        }
+
+        // Box Shape (Extents = (1, 2, 3))
+        Axle::ParticleEmitterShape boxShape;
+        boxShape.Type = Axle::ParticleEmitterShapeType::Box;
+        boxShape.BoxExtents = glm::vec3(1.0f, 2.0f, 3.0f);
+        for (int i = 0; i < 50; ++i) {
+            boxShape.Sample(offset, dir);
+            assert(std::abs(offset.x) <= 1.0001f);
+            assert(std::abs(offset.y) <= 2.0001f);
+            assert(std::abs(offset.z) <= 3.0001f);
+        }
+
+        // Cone Shape (Direction = +Z, Angle = 30 deg)
+        Axle::ParticleEmitterShape coneShape;
+        coneShape.Type = Axle::ParticleEmitterShapeType::Cone;
+        coneShape.Direction = glm::vec3(0.0f, 0.0f, 1.0f);
+        coneShape.ConeAngle = glm::radians(30.0f);
+        coneShape.Radius = 0.5f;
+        float minCos = std::cos(glm::radians(30.0f));
+        for (int i = 0; i < 50; ++i) {
+            coneShape.Sample(offset, dir);
+            float dotZ = glm::dot(dir, glm::vec3(0.0f, 0.0f, 1.0f));
+            assert(dotZ >= minCos - 0.001f);
+        }
+
+        // Line Shape (Length = 4.0f)
+        Axle::ParticleEmitterShape lineShape;
+        lineShape.Type = Axle::ParticleEmitterShapeType::Line;
+        lineShape.LineLength = 4.0f;
+        for (int i = 0; i < 50; ++i) {
+            lineShape.Sample(offset, dir);
+            assert(std::abs(offset.x) <= 2.0001f);
+            assert(std::abs(offset.y) < 0.0001f);
+            assert(std::abs(offset.z) < 0.0001f);
+        }
+        std::cout << "  -> PASS: All 6 emitter geometric shapes (Point, Sphere, Hemisphere, Box, Cone, Line) validated." << std::endl;
+    }
+
+    // [42.4] Test ParticleSystem Spawning Rates & Bursts
+    std::cout << "\n[42.4] Testing ParticleSystem Spawning Rates & Bursts..." << std::endl;
+    {
+        Axle::ParticleEmitterConfig cfg;
+        cfg.EmissionRate = 50.0f;
+        cfg.BurstCount = 0;
+        cfg.BurstInterval = 0.0f;
+        cfg.MaxParticles = 1000;
+        cfg.Lifetime = Axle::FloatRange(2.0f, 2.0f);
+
+        Axle::ParticleSystem sys(cfg);
+        assert(sys.GetActiveParticleCount() == 0);
+
+        // Update 0.1s -> should spawn exactly 5 particles (50 * 0.1)
+        sys.Update(0.1f);
+        assert(sys.GetActiveParticleCount() == 5);
+
+        // Update another 0.1s -> should spawn 5 more -> 10 total
+        sys.Update(0.1f);
+        assert(sys.GetActiveParticleCount() == 10);
+
+        // Emit instant burst of 25 particles
+        sys.EmitBurst(25);
+        assert(sys.GetActiveParticleCount() == 35);
+
+        // Test periodic burst
+        cfg.EmissionRate = 0.0f; // Turn off continuous
+        cfg.BurstCount = 15;
+        cfg.BurstInterval = 0.5f;
+        sys.SetConfig(cfg);
+        sys.Reset();
+        assert(sys.GetActiveParticleCount() == 0);
+
+        // Update 0.4s -> no burst yet
+        sys.Update(0.4f);
+        assert(sys.GetActiveParticleCount() == 0);
+
+        // Update 0.15s (total 0.55s) -> burst triggers!
+        sys.Update(0.15f);
+        assert(sys.GetActiveParticleCount() == 15);
+        std::cout << "  -> PASS: Continuous spawn accumulator and periodic/manual bursts verified." << std::endl;
+    }
+
+    // [42.5] Test Kinematics Integration, Drag & Gravity
+    std::cout << "\n[42.5] Testing Kinematics Integration, Drag & Gravity..." << std::endl;
+    {
+        Axle::ParticleEmitterConfig cfg;
+        cfg.EmissionRate = 0.0f;
+        cfg.MaxParticles = 100;
+        cfg.ConstantAcceleration = glm::vec3(5.0f, 0.0f, 0.0f);
+        cfg.GravityModifier = 1.0f; // -9.81 on Y
+        cfg.Drag = 0.0f;
+        cfg.Lifetime = Axle::FloatRange(5.0f, 5.0f);
+        cfg.InitialSpeed = Axle::FloatRange(0.0f, 0.0f);
+        cfg.Shape.Type = Axle::ParticleEmitterShapeType::Point;
+
+        Axle::ParticleSystem sys(cfg);
+        sys.EmitBurst(1, glm::vec3(0.0f, 10.0f, 0.0f));
+        assert(sys.GetActiveParticleCount() == 1);
+
+        // Update dt = 1.0s
+        sys.Update(1.0f);
+        const auto& pos = sys.GetPool().GetPositions()[0];
+        const auto& vel = sys.GetPool().GetVelocities()[0];
+
+        // Velocity should be: initial(0) + (accel(5, -9.81, 0)) * 1 = (5.0, -9.81, 0)
+        assert(std::abs(vel.x - 5.0f) < 0.01f);
+        assert(std::abs(vel.y - (-9.81f)) < 0.01f);
+        // Position: initial(0, 10, 0) + vel * 1 = (5.0, 10 - 9.81 = 0.19, 0)
+        assert(std::abs(pos.x - 5.0f) < 0.01f);
+        assert(std::abs(pos.y - 0.19f) < 0.01f);
+
+        // Now test drag
+        cfg.Drag = 0.5f; // 50% speed reduction per second approx
+        sys.SetConfig(cfg);
+        sys.Reset();
+        sys.EmitBurst(1, glm::vec3(0.0f));
+        sys.GetPool().GetVelocities()[0] = glm::vec3(10.0f, 0.0f, 0.0f);
+        cfg.ConstantAcceleration = glm::vec3(0.0f);
+        cfg.GravityModifier = 0.0f;
+        sys.SetConfig(cfg);
+
+        sys.Update(1.0f);
+        float speedAfterDrag = sys.GetPool().GetVelocities()[0].x;
+        assert(speedAfterDrag < 10.0f);
+        assert(std::abs(speedAfterDrag - 5.0f) < 0.1f);
+        std::cout << "  -> PASS: Kinematics (acceleration, gravity modifier, drag damping) verified." << std::endl;
+    }
+
+    // [42.6] Test Dynamic Curves & Texture Flipbook Calculation
+    std::cout << "\n[42.6] Testing Dynamic Curves (Size, Color) & Flipbook UV Calculation..." << std::endl;
+    {
+        Axle::ParticleEmitterConfig cfg;
+        cfg.EmissionRate = 0.0f;
+        cfg.MaxParticles = 10;
+        cfg.Lifetime = Axle::FloatRange(2.0f, 2.0f);
+        cfg.StartSize = Axle::FloatRange(1.0f, 1.0f);
+        cfg.EndSize = Axle::FloatRange(5.0f, 5.0f);
+        cfg.ColorOverLifetime = Axle::ColorGradient(
+            glm::vec4(1.0f, 0.8f, 0.2f, 1.0f),
+            glm::vec4(0.0f, 0.0f, 0.0f, 0.0f)
+        );
+        cfg.TextureRows = 2;
+        cfg.TextureCols = 2;
+        cfg.TotalFrames = 4;
+        cfg.AnimationCycles = 1.0f;
+
+        Axle::ParticleSystem sys(cfg);
+        sys.EmitBurst(1);
+        assert(sys.GetActiveParticleCount() == 1);
+
+        // At t = 0 (immediately after spawn)
+        assert(std::abs(sys.GetPool().GetSizes()[0] - 1.0f) < 0.01f);
+        assert(std::abs(sys.GetPool().GetColors()[0].a - 1.0f) < 0.01f);
+
+        // Advance by dt = 1.0s (normalized progress t = 0.5)
+        sys.Update(1.0f);
+        assert(sys.GetActiveParticleCount() == 1);
+        float halfSize = sys.GetPool().GetSizes()[0];
+        glm::vec4 halfColor = sys.GetPool().GetColors()[0];
+        glm::vec4 halfUV = sys.GetPool().GetUVOffsetScales()[0];
+
+        // Size: lerp(1.0, 5.0, 0.5) = 3.0
+        assert(std::abs(halfSize - 3.0f) < 0.01f);
+        // Alpha: lerp(1.0, 0.0, 0.5) = 0.5
+        assert(std::abs(halfColor.a - 0.5f) < 0.01f);
+        // Frame 2 in 2x2 grid (frames 0, 1, 2, 3): frame 2 is col 0, row 1
+        // Offset: (0.0 * 0.5, 1.0 * 0.5) = (0.0, 0.5), Scale: (0.5, 0.5)
+        assert(std::abs(halfUV.x - 0.0f) < 0.01f);
+        assert(std::abs(halfUV.y - 0.5f) < 0.01f);
+        assert(std::abs(halfUV.z - 0.5f) < 0.01f);
+        assert(std::abs(halfUV.w - 0.5f) < 0.01f);
+
+        // Advance by dt = 1.1s (total 2.1s > lifetime 2.0s) -> particle expires and is reaped
+        sys.Update(1.1f);
+        assert(sys.GetActiveParticleCount() == 0);
+        std::cout << "  -> PASS: Size/Color interpolation and Flipbook UV frame progression verified." << std::endl;
+    }
+
+    // [42.7] Test Factory Presets
+    std::cout << "\n[42.7] Testing Gameplay Presets (Smoke, Fire, Sparks, Burnout, Dust, Backfire)..." << std::endl;
+    {
+        auto smoke = Axle::ParticleEmitterConfig::CreateSmoke();
+        assert(smoke.BlendMode == Axle::ParticleBlendMode::AlphaBlend);
+        assert(smoke.EmissionRate > 0.0f);
+        assert(smoke.GravityModifier < 0.0f); // Buoyancy
+
+        auto fire = Axle::ParticleEmitterConfig::CreateFire();
+        assert(fire.BlendMode == Axle::ParticleBlendMode::Additive);
+        assert(fire.EndSize.Max < fire.StartSize.Min); // Shrinks as it burns
+
+        auto sparks = Axle::ParticleEmitterConfig::CreateSparks();
+        assert(sparks.BlendMode == Axle::ParticleBlendMode::Additive);
+        assert(sparks.Orientation == Axle::ParticleOrientation::VelocityAligned);
+        assert(sparks.GravityModifier > 0.0f); // Gravity pulls down
+
+        auto burnout = Axle::ParticleEmitterConfig::CreateTireBurnout();
+        assert(burnout.Shape.Type == Axle::ParticleEmitterShapeType::Box);
+        assert(burnout.EmissionRate >= 100.0f);
+
+        auto dust = Axle::ParticleEmitterConfig::CreateDustTrail();
+        assert(dust.Shape.Type == Axle::ParticleEmitterShapeType::Sphere);
+        assert(dust.EndSize.Max > 2.0f);
+
+        auto backfire = Axle::ParticleEmitterConfig::CreateExhaustBackfire();
+        assert(backfire.BurstCount > 0);
+        assert(backfire.Lifetime.Max < 0.5f); // Very short lived
+        std::cout << "  -> PASS: All 6 gameplay factory presets verified." << std::endl;
+    }
+
+    std::cout << ">>> STEP 42 PASSED: Phase 31 Step 1 Core VFX Architecture & Particle Pool 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -7642,6 +7971,7 @@ int main(int argc, char** argv) {
         else if (arg == "39" || arg == "step39" || arg == "--step39" || arg == "--phase30d") targetStep = 39;
         else if (arg == "40" || arg == "step40" || arg == "--step40" || arg == "--phase30e") targetStep = 40;
         else if (arg == "41" || arg == "step41" || arg == "--step41" || arg == "--phase30f" || arg == "--sandbox") targetStep = 41;
+        else if (arg == "42" || arg == "step42" || arg == "--step42" || arg == "--phase31" || arg == "--phase31a" || arg == "--vfx") targetStep = 42;
     }
 
     std::cout << "\n========================================================" << std::endl;
@@ -7777,6 +8107,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 41) {
         if (!RunTest_Step41_Phase30_Step6_CharacterSandboxPlaygroundAndSceneIntegration()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 42) {
+        if (!RunTest_Step42_Phase31_Step1_CoreVFXArchitectureAndParticlePool()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

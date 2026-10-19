@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 30** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **41 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
+* **Automated Test Verification**: **42 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)** and beyond.
 
 ---
@@ -266,10 +266,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 ### Milestone 8: Visual Effects, Modern RHI & Cross-Platform Engine (Phases 31+)
 - [ ] **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**
-  - [ ] **Step 1 - Core VFX Architecture, Particle Emitter Data & Memory Model (`Engine/VFX`)**:
-    - [ ] High-performance Data-Oriented Struct-of-Arrays (SoA) particle pool (`ParticlePool`) with pre-allocated contiguous memory to eliminate dynamic heap allocations.
-    - [ ] Particle lifecycle management (`ParticleSystem`): spawn rate, lifetime duration, position, velocity, acceleration, rotational speed, size-over-lifetime curve, and RGBA color/alpha curves.
-    - [ ] Emitter geometric shapes: Point, Sphere/Hemisphere, Box volume, Cone (for exhaust/burnout), and directional spray nozzles.
+  - [x] **Step 1 - Core VFX Architecture, Particle Emitter Data & Memory Model (`Engine/VFX`)**:
+    - [x] High-performance Data-Oriented Struct-of-Arrays (SoA) particle pool (`ParticlePool`) with pre-allocated contiguous memory to eliminate dynamic heap allocations.
+    - [x] Particle lifecycle management (`ParticleSystem`): spawn rate, lifetime duration, position, velocity, acceleration, rotational speed, size-over-lifetime curve, and RGBA color/alpha curves.
+    - [x] Emitter geometric shapes: Point, Sphere/Hemisphere, Box volume, Cone (for exhaust/burnout), and directional spray nozzles.
   - [ ] **Step 2 - High-Performance GPU Instancing & Billboarding Pipeline (`Engine/Renderer`)**:
     - [ ] Hardware instanced quad rendering (`glDrawElementsInstanced` / instance VBO layout) streaming compact instance data (`vec3 Position`, `float Size`, `vec4 Color`, `float Rotation`, `vec4 UVOffsetScale`).
     - [ ] Dynamic billboarding orientations: Spherical Camera-Facing (standard smoke/dust), Cylindrical/Axial (Y-axis aligned for rising plumes), and Velocity-Aligned stretched quads (high-speed sparks, rain drops, debris).

@@ -21,6 +21,7 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::Spline
     Axle::Terrain
     Axle::Animation
+    Axle::VFX
 )
 
 # ==============================================================================
@@ -115,6 +116,7 @@ target_link_libraries(AxleTests PRIVATE
     Axle::Spline
     Axle::Terrain
     Axle::Animation
+    Axle::VFX
 )
 
 add_dependencies(AxleTests AxleScripts)

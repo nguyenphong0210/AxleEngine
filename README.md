@@ -7,7 +7,7 @@
 [![miniaudio](https://img.shields.io/badge/Audio-miniaudio-yellow.svg)](https://miniaud.io/)
 [![CMake](https://img.shields.io/badge/CMake-3.22%2B-red.svg)](https://cmake.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-41%2F41%20Passing%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-42%2F42%20Passing%20(100%25)-brightgreen.svg)]()
 
 **AxleEngine** is a modern, modular, high-performance **General-Purpose 3D Game Engine** written in **C++20**. 
 
@@ -95,7 +95,7 @@ For in-depth guides, API references, and architectural walk-throughs, refer to t
 
 AxleEngine has undergone extensive architectural development and rigorous quality assurance:
 * **Completed Milestones**: **Phase 1 through Phase 30** are 100% complete, battle-tested, and fully verified.
-* **Automated Test Suite**: **41 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
+* **Automated Test Suite**: **42 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
 * **Upcoming Focus**: **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**, followed by Low-Overhead RHI Abstraction (NVIDIA NRI — Vulkan 1.3 & Direct3D 12) and Native 2D Canvas UI.
 
 👉 **For the complete phase-by-phase development history, detailed feature checklists, and upcoming roadmap, see [ROADMAP.md](ROADMAP.md).**
@@ -162,7 +162,7 @@ cmake --build build --config Release --parallel
 # 4. Launch Standalone Game Player (Optional)
 ./build/Runtime/Release/AxleRuntime.exe
 
-# 5. Run the Automated Headless Test Suite (41 Verified Suites)
+# 5. Run the Automated Headless Test Suite (42 Verified Suites)
 ./build/Editor/Release/AxleTests.exe
 ```
 

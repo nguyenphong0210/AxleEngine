@@ -21,6 +21,7 @@ target_link_libraries(AxleRuntime PRIVATE
     Axle::Spline
     Axle::Terrain
     Axle::Animation
+    Axle::VFX
 )
 
 add_dependencies(AxleRuntime AxleScripts)

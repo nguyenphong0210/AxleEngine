@@ -18,6 +18,10 @@
 #include <Axle/AudioSource.hpp>
 #include <Axle/AudioClip.hpp>
 #include <Axle/VehicleAudio.hpp>
+#include <Axle/ParticleEmitter.hpp>
+#include <Axle/ParticleSystem.hpp>
+#include <Axle/VehicleVFX.hpp>
+#include <Axle/CharacterVFX.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -1728,6 +1732,255 @@ namespace Axle {
             }
         }, /*canRemove=*/ true);
 
+        // Particle Emitter Component (VFX)
+        DrawComponent<ParticleEmitterComponent>("Particle Emitter (VFX)", entity, [&](ParticleEmitterComponent& pec) {
+            // Live Playback & Testing Bar
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
+            if (ImGui::Button(pec.Active ? "Pause Emitter" : "Play Emitter", ImVec2(100.0f, 24.0f))) {
+                if (pec.Active) pec.Stop(); else pec.Play();
+            }
+            ImGui::PopStyleColor();
+            ImGui::SameLine();
+            if (ImGui::Button("Reset", ImVec2(60.0f, 24.0f))) {
+                pec.Reset();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Burst 25", ImVec2(75.0f, 24.0f))) {
+                pec.EmitBurst(25);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Burst 100", ImVec2(75.0f, 24.0f))) {
+                pec.EmitBurst(100);
+            }
+
+            ImGui::Checkbox("Active", &pec.Active);
+            ImGui::SameLine();
+            ImGui::Checkbox("Auto Play on Start", &pec.AutoPlay);
+
+            const char* spaceModes[] = { "World Space", "Local Space" };
+            int currentSpace = (pec.SimulationSpace == ParticleSimulationSpace::Local) ? 1 : 0;
+            if (ImGui::Combo("Simulation Space", &currentSpace, spaceModes, IM_ARRAYSIZE(spaceModes))) {
+                pec.SetSimulationSpace((currentSpace == 1) ? ParticleSimulationSpace::Local : ParticleSimulationSpace::World);
+            }
+
+            // Presets quick loader
+            if (ImGui::TreeNodeEx("Presets (Quick Setup)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto PresetBtn = [&](const char* label, const ParticleEmitterConfig& cfg) {
+                    if (ImGui::Button(label, ImVec2(ImGui::GetContentRegionAvail().x * 0.48f, 24.0f))) {
+                        pec.Config = cfg;
+                        pec.Initialize();
+                        pec.Play();
+                    }
+                };
+                PresetBtn("Fire", ParticleEmitterConfig::CreateFire());
+                ImGui::SameLine();
+                PresetBtn("Smoke", ParticleEmitterConfig::CreateSmoke());
+                PresetBtn("Sparks", ParticleEmitterConfig::CreateSparks());
+                ImGui::SameLine();
+                PresetBtn("Tire Burnout", ParticleEmitterConfig::CreateTireBurnout());
+                PresetBtn("Dirt Rooster", ParticleEmitterConfig::CreateDustTrail());
+                ImGui::SameLine();
+                PresetBtn("Backfire", ParticleEmitterConfig::CreateExhaustBackfire());
+                ImGui::TreePop();
+            }
+
+            // Spawn & Kinematics
+            if (ImGui::TreeNodeEx("Lifecycle & Spawning", ImGuiTreeNodeFlags_DefaultOpen)) {
+                int maxP = static_cast<int>(pec.Config.MaxParticles);
+                if (ImGui::DragInt("Max Particles (Pool)", &maxP, 50, 10, 50000)) {
+                    pec.Config.MaxParticles = static_cast<uint32_t>(std::max(10, maxP));
+                    pec.Initialize();
+                }
+                ImGui::DragFloat("Emission Rate (P/sec)", &pec.Config.EmissionRate, 1.0f, 0.0f, 2000.0f, "%.1f");
+                ImGui::DragFloatRange2("Lifetime (sec)", &pec.Config.Lifetime.Min, &pec.Config.Lifetime.Max, 0.05f, 0.05f, 30.0f, "Min: %.2f", "Max: %.2f");
+                ImGui::DragFloatRange2("Speed (m/s)", &pec.Config.InitialSpeed.Min, &pec.Config.InitialSpeed.Max, 0.1f, 0.0f, 100.0f, "Min: %.1f", "Max: %.1f");
+                ImGui::DragFloat("Gravity Modifier", &pec.Config.GravityModifier, 0.05f, -10.0f, 10.0f, "%.2fx");
+                ImGui::SliderFloat("Drag", &pec.Config.Drag, 0.0f, 1.0f, "%.2f");
+                ImGui::TreePop();
+            }
+
+            // Shape
+            if (ImGui::TreeNodeEx("Emitter Shape", ImGuiTreeNodeFlags_DefaultOpen)) {
+                const char* shapeTypes[] = { "Point", "Sphere", "Box", "Cone", "Directional" };
+                int currentShape = static_cast<int>(pec.Config.Shape.Type);
+                if (ImGui::Combo("Shape Type", &currentShape, shapeTypes, IM_ARRAYSIZE(shapeTypes))) {
+                    pec.Config.Shape.Type = static_cast<ParticleEmitterShapeType>(currentShape);
+                }
+                switch (pec.Config.Shape.Type) {
+                    case ParticleEmitterShapeType::Sphere:
+                        ImGui::DragFloat("Sphere Radius", &pec.Config.Shape.Radius, 0.05f, 0.01f, 50.0f, "%.2f m");
+                        ImGui::Checkbox("Surface Shell Only", &pec.Config.Shape.SurfaceOnly);
+                        break;
+                    case ParticleEmitterShapeType::Box:
+                        ImGui::DragFloat3("Box Half-Extents", glm::value_ptr(pec.Config.Shape.BoxExtents), 0.05f, 0.01f, 50.0f, "%.2f m");
+                        ImGui::Checkbox("Surface Shell Only", &pec.Config.Shape.SurfaceOnly);
+                        break;
+                    case ParticleEmitterShapeType::Cone:
+                        ImGui::DragFloat("Cone Angle (Rad)", &pec.Config.Shape.ConeAngle, 0.02f, 0.01f, 1.57f, "%.2f rad");
+                        ImGui::DragFloat("Cone Base Radius", &pec.Config.Shape.Radius, 0.05f, 0.0f, 20.0f, "%.2f m");
+                        break;
+                    case ParticleEmitterShapeType::Line:
+                        ImGui::DragFloat("Line Length", &pec.Config.Shape.LineLength, 0.05f, 0.01f, 50.0f, "%.2f m");
+                        break;
+                    default:
+                        break;
+                }
+                ImGui::TreePop();
+            }
+
+            // Size & Color Curves
+            if (ImGui::TreeNodeEx("Curves (Size & Color/Alpha)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::DragFloatRange2("Start Size Range", &pec.Config.StartSize.Min, &pec.Config.StartSize.Max, 0.02f, 0.01f, 20.0f, "Min: %.2f", "Max: %.2f");
+                ImGui::DragFloatRange2("End Size Range", &pec.Config.EndSize.Min, &pec.Config.EndSize.Max, 0.02f, 0.01f, 20.0f, "Min: %.2f", "Max: %.2f");
+                ImGui::ColorEdit4("Start Color & Alpha", glm::value_ptr(pec.Config.ColorOverLifetime.StartColor), ImGuiColorEditFlags_AlphaBar);
+                ImGui::ColorEdit4("End Color & Alpha", glm::value_ptr(pec.Config.ColorOverLifetime.EndColor), ImGuiColorEditFlags_AlphaBar);
+                ImGui::DragFloatRange2("Angular Velocity", &pec.Config.AngularVelocity.Min, &pec.Config.AngularVelocity.Max, 0.1f, -20.0f, 20.0f, "Min: %.2f", "Max: %.2f");
+                ImGui::TreePop();
+            }
+
+            // Texture & Flipbook
+            if (ImGui::TreeNodeEx("Texture & Flipbook")) {
+                std::string disp = pec.TexturePath.empty() ? "(None - Procedural Dot)" : std::filesystem::path(pec.TexturePath).filename().string();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.28f, 0.85f));
+                ImGui::Button(disp.c_str(), ImVec2(-32.0f, 24.0f));
+                ImGui::PopStyleColor();
+
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = static_cast<const char*>(payload->Data);
+                        std::filesystem::path p(pathStr);
+                        std::string ext = p.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return (char)std::tolower(c); });
+                        if (ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".bmp") {
+                            pec.TexturePath = p.string();
+                            pec.Texture = Texture2D::Create(p.string());
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("X##ClearPecTex", ImVec2(24.0f, 24.0f))) {
+                    pec.TexturePath.clear();
+                    pec.Texture.reset();
+                }
+
+                int rows = static_cast<int>(pec.Config.TextureRows);
+                int cols = static_cast<int>(pec.Config.TextureCols);
+                if (ImGui::DragInt("Flipbook Rows", &rows, 1, 1, 16)) {
+                    pec.Config.TextureRows = static_cast<uint32_t>(std::max(1, rows));
+                    pec.Config.TotalFrames = pec.Config.TextureRows * pec.Config.TextureCols;
+                }
+                if (ImGui::DragInt("Flipbook Columns", &cols, 1, 1, 16)) {
+                    pec.Config.TextureCols = static_cast<uint32_t>(std::max(1, cols));
+                    pec.Config.TotalFrames = pec.Config.TextureRows * pec.Config.TextureCols;
+                }
+                ImGui::Checkbox("Subframe Smooth Blending", &pec.Config.SubFrameBlending);
+                ImGui::TreePop();
+            }
+
+            // Dynamics, Collisions & Forces
+            if (ImGui::TreeNodeEx("Dynamics & Forces")) {
+                ImGui::Checkbox("Curl Noise Turbulence", &pec.Config.CurlNoise.Enabled);
+                if (pec.Config.CurlNoise.Enabled) {
+                    ImGui::DragFloat("Curl Frequency", &pec.Config.CurlNoise.Frequency, 0.05f, 0.05f, 10.0f, "%.2f");
+                    ImGui::DragFloat("Curl Strength", &pec.Config.CurlNoise.Strength, 0.1f, 0.0f, 20.0f, "%.2f m/s²");
+                }
+                ImGui::Checkbox("Ground Collisions", &pec.Config.Collision.Enabled);
+                if (pec.Config.Collision.Enabled) {
+                    ImGui::SliderFloat("Restitution (Bounce)", &pec.Config.Collision.Restitution, 0.0f, 1.0f, "%.2f");
+                    ImGui::SliderFloat("Friction", &pec.Config.Collision.Friction, 0.0f, 1.0f, "%.2f");
+                    ImGui::Checkbox("Kill on Collision", &pec.Config.Collision.KillOnCollision);
+                }
+                ImGui::DragFloat3("Wind Vector", glm::value_ptr(pec.Config.Wind), 0.1f, -50.0f, 50.0f, "%.1f m/s");
+                ImGui::DragFloat("Thermal Buoyancy", &pec.Config.Buoyancy, 0.1f, -20.0f, 20.0f, "%.1f m/s²");
+                ImGui::TreePop();
+            }
+
+            // Shading & Billboarding
+            if (ImGui::TreeNodeEx("Shading & Billboarding")) {
+                const char* orientations[] = { "Spherical (Camera-Facing)", "Cylindrical (Axial-Y)", "Velocity-Aligned" };
+                int currentOrient = static_cast<int>(pec.Config.Orientation);
+                if (ImGui::Combo("Orientation", &currentOrient, orientations, IM_ARRAYSIZE(orientations))) {
+                    pec.Config.Orientation = static_cast<ParticleOrientation>(currentOrient);
+                }
+
+                const char* blendModes[] = { "Additive", "Alpha Blend", "Premultiplied Alpha" };
+                int currentBlend = static_cast<int>(pec.Config.BlendMode);
+                if (ImGui::Combo("Blend Mode", &currentBlend, blendModes, IM_ARRAYSIZE(blendModes))) {
+                    pec.Config.BlendMode = static_cast<ParticleBlendMode>(currentBlend);
+                }
+                ImGui::DragFloat("Softness Distance", &pec.Config.SoftnessDistance, 0.05f, 0.05f, 5.0f, "%.2f m");
+                ImGui::TreePop();
+            }
+
+            // Live Telemetry
+            if (pec.System) {
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "Live Particle Telemetry:");
+                ImGui::Text("Active Particles: %u / %u", pec.System->GetActiveParticleCount(), pec.System->GetPool().GetCapacity());
+                ImGui::Text("Collisions Registered: %u", pec.System->GetCollisionCount());
+            }
+        }, /*canRemove=*/ true);
+
+        // Vehicle VFX Component
+        DrawComponent<VehicleVFXComponent>("Vehicle Visual Effects (VFX)", entity, [&](VehicleVFXComponent& vvfx) {
+            ImGui::Checkbox("VFX Enabled", &vvfx.Enabled);
+
+            const char* surfaceNames[] = { "Asphalt", "Dirt", "Gravel", "Mud", "Grass", "Sand" };
+            int currentSurface = static_cast<int>(vvfx.Config.SurfaceType);
+            if (ImGui::Combo("Ground Surface Type", &currentSurface, surfaceNames, IM_ARRAYSIZE(surfaceNames))) {
+                vvfx.Config.SurfaceType = static_cast<SurfaceVFXType>(currentSurface);
+                if (vvfx.RuntimeVFX) vvfx.RuntimeVFX->SetSurfaceType(vvfx.Config.SurfaceType);
+            }
+
+            ImGui::SliderFloat("Burnout Slip Threshold", &vvfx.Config.BurnoutSlipThreshold, 0.05f, 0.8f, "%.2f");
+            ImGui::SliderFloat("Skid Slip Threshold", &vvfx.Config.SkidSlipThreshold, 0.05f, 0.8f, "%.2f");
+            ImGui::SliderFloat("Min Speed for Rooster Tail", &vvfx.Config.MinSpeedForRoosterTail, 0.0f, 20.0f, "%.1f m/s");
+            ImGui::SliderFloat("Backfire Min RPM", &vvfx.Config.BackfireMinRPM, 3000.0f, 9000.0f, "%.0f RPM");
+
+            // Live Runtime Telemetry
+            if (vvfx.RuntimeVFX) {
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "Live Vehicle VFX Telemetry:");
+                uint32_t burnoutTotal = 0;
+                uint32_t roosterTotal = 0;
+                for (int i = 0; i < 4; ++i) {
+                    if (vvfx.RuntimeVFX->GetWheelSmokeSystem(i)) burnoutTotal += vvfx.RuntimeVFX->GetWheelSmokeSystem(i)->GetActiveParticleCount();
+                    if (vvfx.RuntimeVFX->GetWheelRoosterSystem(i)) roosterTotal += vvfx.RuntimeVFX->GetWheelRoosterSystem(i)->GetActiveParticleCount();
+                }
+                uint32_t flames = vvfx.RuntimeVFX->GetExhaustFlameSystem() ? vvfx.RuntimeVFX->GetExhaustFlameSystem()->GetActiveParticleCount() : 0;
+                uint32_t sparks = vvfx.RuntimeVFX->GetExhaustSparkSystem() ? vvfx.RuntimeVFX->GetExhaustSparkSystem()->GetActiveParticleCount() : 0;
+
+                ImGui::Text("Tire Burnout Smoke: %u particles", burnoutTotal);
+                ImGui::Text("Rooster Tails: %u particles", roosterTotal);
+                ImGui::Text("Backfire Flames: %u | Sparks: %u", flames, sparks);
+            }
+        }, /*canRemove=*/ true);
+
+        // Character VFX Component
+        DrawComponent<CharacterVFXComponent>("Character Visual Effects (VFX)", entity, [&](CharacterVFXComponent& cvfx) {
+            ImGui::Checkbox("VFX Enabled", &cvfx.Enabled);
+
+            ImGui::SliderFloat("Stride Length", &cvfx.Config.StrideLength, 0.5f, 3.0f, "%.2f m");
+            ImGui::SliderFloat("Footstep Min Speed", &cvfx.Config.FootstepMinSpeed, 0.1f, 2.0f, "%.2f m/s");
+            ImGui::SliderFloat("Landing Impact Threshold", &cvfx.Config.LandingImpactThreshold, 1.0f, 10.0f, "%.1f m/s");
+            ImGui::SliderFloat("Heavy Landing Threshold", &cvfx.Config.HeavyLandingThreshold, 4.0f, 20.0f, "%.1f m/s");
+
+            // Live Runtime Telemetry
+            if (cvfx.RuntimeVFX) {
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "Live Character VFX Telemetry:");
+                uint32_t footsteps = cvfx.RuntimeVFX->GetFootstepSystem() ? cvfx.RuntimeVFX->GetFootstepSystem()->GetActiveParticleCount() : 0;
+                uint32_t shockwave = cvfx.RuntimeVFX->GetLandingShockwaveSystem() ? cvfx.RuntimeVFX->GetLandingShockwaveSystem()->GetActiveParticleCount() : 0;
+
+                ImGui::Text("Footstep Dust Puffs: %u particles", footsteps);
+                ImGui::Text("Landing Shockwave: %u particles", shockwave);
+            }
+        }, /*canRemove=*/ true);
+
         // Custom Plugin Components
         if (m_CustomComponentDrawer) {
             m_CustomComponentDrawer(entity);
@@ -1958,8 +2211,23 @@ namespace Axle {
             [&]() { entity.AddComponent<VehicleAudioComponent>(); }
         });
         items.push_back({
-            "Audio/VFX", "ParticleEmitter3D (Phase 20)", "Dynamic particle system (Dust, smoke, sparks)",
-            false, false, nullptr
+            "Audio/VFX", "ParticleEmitterComponent", "GPU-instanced particle emitter (Smoke, Fire, Sparks, Dust, Flipbooks)",
+            entity.HasComponent<ParticleEmitterComponent>(), true,
+            [&]() {
+                auto& pec = entity.AddComponent<ParticleEmitterComponent>(ParticleEmitterConfig::CreateFire());
+                pec.Initialize();
+                pec.Play();
+            }
+        });
+        items.push_back({
+            "Audio/VFX", "VehicleVFXComponent", "Gameplay VFX: Tire burnout smoke, off-road rooster tails & exhaust backfire",
+            entity.HasComponent<VehicleVFXComponent>(), true,
+            [&]() { entity.AddComponent<VehicleVFXComponent>(); }
+        });
+        items.push_back({
+            "Audio/VFX", "CharacterVFXComponent", "Gameplay VFX: Ground footstep dust puffs & landing shockwave ripples",
+            entity.HasComponent<CharacterVFXComponent>(), true,
+            [&]() { entity.AddComponent<CharacterVFXComponent>(); }
         });
 
         // Rendering logic:

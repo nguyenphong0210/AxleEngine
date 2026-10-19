@@ -1,0 +1,90 @@
+#pragma once
+#include <Axle/Types.hpp>
+#include <Axle/ParticleEmitter.hpp>
+#include <Axle/ParticleSystem.hpp>
+#include <Axle/ParticleRenderer.hpp>
+#include <Axle/Framebuffer.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/PerspectiveCamera.hpp>
+#include <glm/glm.hpp>
+#include <memory>
+#include <string>
+#include <vector>
+#include <filesystem>
+
+namespace Axle {
+
+    class Scene;
+
+    class VFXEditorPanel {
+    public:
+        VFXEditorPanel();
+        ~VFXEditorPanel();
+
+        void OnUpdate(Timestep ts);
+        void OnImGuiRender(bool* p_open = nullptr);
+
+        void SetSceneContext(Scene* scene) { m_Scene = scene; }
+        void SetSelectedEntity(Entity entity);
+        void SetEmitterConfig(const ParticleEmitterConfig& config);
+
+        bool IsOpen() const { return m_IsOpen; }
+        void SetOpen(bool open) { m_IsOpen = open; }
+
+        void TriggerBurst(uint32_t count);
+        void ResetPreview();
+        void PlayPreview();
+        void PausePreview();
+        void StopPreview();
+
+        ParticleEmitterConfig& GetConfig() { return m_Config; }
+        const ParticleEmitterConfig& GetConfig() const { return m_Config; }
+        ParticleSystem* GetPreviewSystem() const { return m_PreviewSystem.get(); }
+
+    private:
+        void RenderPreview3D(float width, float height);
+        void DrawGrid(const glm::mat4& viewProj, float radius = 5.0f);
+        void DrawPresetSelector();
+        void DrawLifecycleAndSpawnControls();
+        void DrawShapeControls();
+        void DrawCurvesControls();
+        void DrawTextureFlipbookControls();
+        void DrawDynamicsAndForceFields();
+        void DrawShadingAndBillboarding();
+        void DrawSceneActions();
+
+    private:
+        ParticleEmitterConfig m_Config;
+        std::unique_ptr<ParticleSystem> m_PreviewSystem;
+        std::unique_ptr<ParticleRenderer> m_ParticleRenderer;
+        std::shared_ptr<Framebuffer> m_Framebuffer;
+
+        bool m_IsOpen = false;
+        bool m_IsPlaying = true;
+        bool m_IsLooping = true;
+        bool m_ShowGroundGrid = true;
+        bool m_ShowBounds = false;
+
+        // Viewport resolution & Orbit Camera
+        u32 m_ViewportWidth = 640;
+        u32 m_ViewportHeight = 480;
+        float m_CameraDistance = 5.0f;
+        float m_CameraPitch = 20.0f;
+        float m_CameraYaw = 45.0f;
+        glm::vec3 m_CameraTarget = glm::vec3(0.0f, 1.0f, 0.0f);
+        bool m_ViewportHovered = false;
+        bool m_ViewportFocused = false;
+
+        // Scene linkage
+        Scene* m_Scene = nullptr;
+        Entity m_SelectedEntity{};
+        bool m_AutoSyncWithSelectedEntity = false;
+
+        // Simple line drawing shader for reference ground grid
+        u32 m_GridVAO = 0;
+        u32 m_GridVBO = 0;
+        std::unique_ptr<class Shader> m_GridShader;
+        void InitGridShader();
+    };
+
+}

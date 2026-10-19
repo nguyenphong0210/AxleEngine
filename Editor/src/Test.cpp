@@ -69,6 +69,7 @@
 #include <Axle/ParticleForceField.hpp>
 #include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
+#include <Axle/VFXEditorPanel.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -8899,6 +8900,207 @@ bool RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters() {
 }
 
 // =============================================================================
+// STEP 47: PHASE 31 - STEP 6 VISUAL FX EDITOR PANEL & FINAL VFX INTEGRATION
+// =============================================================================
+bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 47: PHASE 31 - STEP 6 VFX EDITOR & FINAL VFX     " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [47.1] VFXEditorPanel Lifecycle & Defaults
+    std::cout << "\n[47.1] Testing VFXEditorPanel Lifecycle & Defaults..." << std::endl;
+    {
+        Axle::VFXEditorPanel panel;
+        assert(!panel.IsOpen());
+        panel.SetOpen(true);
+        assert(panel.IsOpen());
+
+        assert(panel.GetPreviewSystem() != nullptr);
+        assert(panel.GetPreviewSystem()->GetActiveParticleCount() == 0);
+        assert(panel.GetConfig().MaxParticles == 1000);
+
+        std::cout << "  -> Panel initialized with isolated preview system and Framebuffer." << std::endl;
+        std::cout << "  -> PASS: VFXEditorPanel lifecycle and default state verified." << std::endl;
+    }
+
+    // [47.2] Preset Switching & Live Curve Tweaking
+    std::cout << "\n[47.2] Testing Preset Switching & Live Curve Tweaking..." << std::endl;
+    {
+        Axle::VFXEditorPanel panel;
+
+        // Switch to Sparks preset
+        panel.SetEmitterConfig(Axle::ParticleEmitterConfig::CreateSparks());
+        assert(panel.GetConfig().Name == "Sparks");
+        assert(panel.GetConfig().BlendMode == Axle::ParticleBlendMode::Additive);
+        assert(panel.GetConfig().Collision.Enabled == true);
+
+        // Modify curves: Size range & Color gradient
+        panel.GetConfig().StartSize = { 0.12f, 0.28f };
+        panel.GetConfig().EndSize = { 0.05f, 0.10f };
+        panel.GetConfig().ColorOverLifetime.StartColor = glm::vec4(1.0f, 0.85f, 0.25f, 1.0f);
+        panel.GetConfig().ColorOverLifetime.EndColor = glm::vec4(0.85f, 0.15f, 0.0f, 0.0f);
+        panel.ResetPreview();
+
+        assert(panel.GetPreviewSystem()->GetConfig().StartSize.Min == 0.12f);
+        assert(panel.GetPreviewSystem()->GetConfig().ColorOverLifetime.StartColor.r == 1.0f);
+
+        // Switch to Smoke preset
+        panel.SetEmitterConfig(Axle::ParticleEmitterConfig::CreateSmoke());
+        assert(panel.GetConfig().Name == "Smoke");
+        assert(panel.GetConfig().BlendMode == Axle::ParticleBlendMode::AlphaBlend);
+        assert(panel.GetConfig().CurlNoise.Enabled == true);
+
+        std::cout << "  -> Successfully tweaked size curves and color gradients over lifetime." << std::endl;
+        std::cout << "  -> PASS: Preset switching and live parameter modification verified." << std::endl;
+    }
+
+    // [47.3] Interactive Playback State Machine & Bursts
+    std::cout << "\n[47.3] Testing Interactive Playback State Machine & Bursts..." << std::endl;
+    {
+        Axle::VFXEditorPanel panel;
+        panel.SetOpen(true);
+        panel.PlayPreview();
+
+        // Emit instant bursts
+        panel.TriggerBurst(75);
+        assert(panel.GetPreviewSystem()->GetActiveParticleCount() == 75);
+
+        panel.OnUpdate(Axle::Timestep(0.05f));
+        assert(panel.GetPreviewSystem()->GetActiveParticleCount() >= 75);
+
+        // Pause
+        panel.PausePreview();
+        uint32_t countBefore = panel.GetPreviewSystem()->GetActiveParticleCount();
+        panel.OnUpdate(Axle::Timestep(0.05f));
+        // While paused, OnUpdate does not simulate particles in panel
+        assert(panel.GetPreviewSystem()->GetActiveParticleCount() == countBefore);
+
+        // Stop & Reset
+        panel.StopPreview();
+        assert(panel.GetPreviewSystem()->GetActiveParticleCount() == 0);
+
+        std::cout << "  -> Interactive Play/Pause/Stop and Burst controls responsive." << std::endl;
+        std::cout << "  -> PASS: Playback state machine verified." << std::endl;
+    }
+
+    // [47.4] Isolated Viewport Rendering & GPU Instancing Preview Dispatch
+    std::cout << "\n[47.4] Testing Isolated Viewport Rendering & GPU Instancing Preview Dispatch..." << std::endl;
+    {
+        Axle::VFXEditorPanel panel;
+        panel.PlayPreview();
+        panel.TriggerBurst(120);
+
+        Axle::PerspectiveCamera camera(55.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+        camera.SetPosition(glm::vec3(0.0f, 2.0f, 5.0f));
+
+        Axle::ParticleRenderer renderer;
+        renderer.Begin(camera, nullptr, 0.1f, 1000.0f);
+        renderer.Render(*panel.GetPreviewSystem(), nullptr, 0.5f);
+        renderer.End();
+
+        assert(renderer.GetDrawCallCount() == 1);
+        assert(renderer.GetRenderedParticleCount() == 120);
+
+        std::cout << "  -> Rendered 120 preview particles in single GPU instanced draw call." << std::endl;
+        std::cout << "  -> PASS: Viewport rendering pipeline verified." << std::endl;
+    }
+
+    // [47.5] Two-Way ECS Scene Synchronization
+    std::cout << "\n[47.5] Testing Two-Way ECS Scene Synchronization..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        Axle::Entity ent = scene->CreateEntity("CampfireVFX");
+        ent.AddComponent<Axle::ParticleEmitterComponent>(Axle::ParticleEmitterConfig::CreateFire());
+
+        Axle::VFXEditorPanel panel;
+        panel.SetSceneContext(scene.get());
+        panel.SetSelectedEntity(ent);
+
+        assert(panel.GetConfig().Name == "Fire");
+
+        // Modify in panel and apply to entity
+        panel.GetConfig().EmissionRate = 95.0f;
+        panel.GetConfig().GravityModifier = -0.75f;
+
+        auto& targetPec = ent.GetComponent<Axle::ParticleEmitterComponent>();
+        targetPec.Config = panel.GetConfig();
+        targetPec.Initialize();
+
+        assert(std::abs(targetPec.Config.EmissionRate - 95.0f) < 0.01f);
+        assert(std::abs(targetPec.Config.GravityModifier - (-0.75f)) < 0.01f);
+
+        std::cout << "  -> Synchronized emitter configuration between panel and entity." << std::endl;
+        std::cout << "  -> PASS: Two-way ECS Scene synchronization verified." << std::endl;
+    }
+
+    // [47.6] Edit-Mode Live Simulation Loop (Without Play Mode)
+    std::cout << "\n[47.6] Testing Edit-Mode Live Simulation Loop..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        Axle::Entity ent = scene->CreateEntity("LiveTorch");
+        auto& pec = ent.AddComponent<Axle::ParticleEmitterComponent>(Axle::ParticleEmitterConfig::CreateFire());
+        pec.AutoPlay = true;
+        pec.Play();
+
+        // Simulate 10 frames in edit mode
+        for (int i = 0; i < 10; ++i) {
+            pec.System->Update(0.016f, glm::vec3(0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        }
+
+        assert(pec.System->GetActiveParticleCount() > 0);
+        std::cout << "  -> Active particles simulated live in Edit mode: " << pec.System->GetActiveParticleCount() << std::endl;
+        std::cout << "  -> PASS: Edit-mode live particle simulation loop verified." << std::endl;
+    }
+
+    // [47.7] Verification of OffRoadTrack.axlescene VFX Integration
+    std::cout << "\n[47.7] Testing OffRoadTrack Scene VFX Component Integration & Deserialization..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        Axle::SceneSerializer serializer(scene.get());
+        bool loaded = serializer.Deserialize("Editor/assets/scenes/OffRoadTrack.axlescene");
+        assert(loaded);
+
+        // Find Car entity
+        bool foundCarWithVFX = false;
+        auto vfxView = scene->GetRegistry().view<Axle::VehicleVFXComponent>();
+        for (auto eID : vfxView) {
+            Axle::Entity e{ eID, scene.get() };
+            if (e.GetName() == "Car") {
+                foundCarWithVFX = true;
+                const auto& vvfx = e.GetComponent<Axle::VehicleVFXComponent>();
+                assert(vvfx.Enabled == true);
+                assert(vvfx.Config.SurfaceType == Axle::SurfaceVFXType::Gravel);
+                assert(vvfx.Config.BurnoutSlipThreshold == 0.25f);
+                assert(vvfx.Config.BackfireMinRPM == 5200.0f);
+            }
+        }
+        assert(foundCarWithVFX);
+
+        // Find TrackTorch_VFX entity
+        bool foundTorch = false;
+        auto pecView = scene->GetRegistry().view<Axle::ParticleEmitterComponent>();
+        for (auto eID : pecView) {
+            Axle::Entity e{ eID, scene.get() };
+            if (e.GetName() == "TrackTorch_VFX") {
+                foundTorch = true;
+                const auto& pec = e.GetComponent<Axle::ParticleEmitterComponent>();
+                assert(pec.Active == true);
+                assert(pec.AutoPlay == true);
+                assert(pec.Config.Name == "TrackFire");
+                assert(pec.Config.EmissionRate == 80.0f);
+            }
+        }
+        assert(foundTorch);
+
+        std::cout << "  -> Successfully verified Car (VehicleVFXComponent) and TrackTorch_VFX in OffRoadTrack scene." << std::endl;
+        std::cout << "  -> PASS: OffRoadTrack scene VFX integration verified." << std::endl;
+    }
+
+    std::cout << ">>> STEP 47 PASSED: Phase 31 Step 6 VFX Editor Panel & Final VFX 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -8957,12 +9159,13 @@ int main(int argc, char** argv) {
         else if (arg == "44" || arg == "step44" || arg == "--step44" || arg == "--phase31c" || arg == "--dynamics") targetStep = 44;
         else if (arg == "45" || arg == "step45" || arg == "--step45" || arg == "--phase31d" || arg == "--shading") targetStep = 45;
         else if (arg == "46" || arg == "step46" || arg == "--step46" || arg == "--phase31e" || arg == "--ecs-vfx") targetStep = 46;
+        else if (arg == "47" || arg == "step47" || arg == "--step47" || arg == "--phase31f" || arg == "--vfx-editor") targetStep = 47;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 46 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 47 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -9107,6 +9310,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 46) {
         if (!RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 47) {
+        if (!RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

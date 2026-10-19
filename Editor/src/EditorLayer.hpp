@@ -13,6 +13,7 @@
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/AssemblyEditorPanel.hpp>
+#include <Axle/VFXEditorPanel.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
@@ -150,6 +151,7 @@ private:
     Axle::ContentBrowserPanel m_ContentBrowserPanel;
     Axle::AssetPreviewPanel m_AssetPreviewPanel;
     Axle::AssemblyEditorPanel m_AssemblyEditorPanel;
+    Axle::VFXEditorPanel m_VFXEditorPanel;
     Axle::DebugPanel m_DebugPanel;
 
     // Panel Visibility Flags
@@ -158,6 +160,7 @@ private:
     bool m_ShowConsole = true;
     bool m_ShowContentBrowser = true;
     bool m_ShowAssemblyEditor = false;
+    bool m_ShowVFXEditor = false;
     bool m_ShowTelemetry = false;
     bool m_ResetLayout = true;
 

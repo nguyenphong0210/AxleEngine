@@ -1284,7 +1284,25 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     // C++ Native Scripting Runtime Execution & Vehicle Simulation (Phase 20.3)
     if (m_SceneState == SceneState::Play) {
         m_Scene->OnUpdateRuntime(ts, m_PhysicsScene.get());
+    } else if (m_Scene) {
+        // Live VFX Viewport Preview in Edit/Pause Mode (Phase 31 Step 6)
+        auto particleView = m_Scene->GetRegistry().view<Axle::ParticleEmitterComponent, Axle::TransformComponent>();
+        for (auto entityID : particleView) {
+            auto& pec = particleView.get<Axle::ParticleEmitterComponent>(entityID);
+            if (!pec.System) {
+                pec.Initialize();
+                if (pec.AutoPlay) pec.Play();
+            }
+            if (pec.Active && pec.System) {
+                glm::mat4 worldMat = m_Scene->GetWorldTransform(entityID);
+                glm::vec3 worldPos = glm::vec3(worldMat[3]);
+                glm::quat worldRot = glm::quat_cast(worldMat);
+                pec.System->Update(ts.GetSeconds(), worldPos, worldRot);
+            }
+        }
     }
+
+    m_VFXEditorPanel.OnUpdate(ts);
 
     // Editor Free-Fly Camera (Active in Edit mode, Pause mode, or Eject Free-Fly mode during Play)
     if (m_SceneState != SceneState::Play || m_UseEditorCameraInPlay) {
@@ -1774,6 +1792,7 @@ void EditorLayer::OnImGuiRender() {
             ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
             ImGui::MenuItem("Content Browser", nullptr, &m_ShowContentBrowser);
             ImGui::MenuItem("Assembly Editor", nullptr, &m_ShowAssemblyEditor);
+            ImGui::MenuItem("Visual FX (VFX) Editor", nullptr, &m_ShowVFXEditor);
             ImGui::MenuItem("Performance & Debug", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             ImGui::Separator();
@@ -2559,6 +2578,13 @@ void EditorLayer::OnImGuiRender() {
 
     // 10. Assembly Editor Panel (Phase 12)
     m_AssemblyEditorPanel.OnImGuiRender(&m_ShowAssemblyEditor);
+
+    // 10b. Visual FX (VFX) Editor Panel (Phase 31 Step 6)
+    if (m_ShowVFXEditor) {
+        m_VFXEditorPanel.SetSceneContext(m_Scene.get());
+        m_VFXEditorPanel.SetSelectedEntity(m_SceneHierarchyPanel.GetSelectedEntity());
+        m_VFXEditorPanel.OnImGuiRender(&m_ShowVFXEditor);
+    }
 
     // 11. Performance & Telemetry Panel
     if (m_ShowTelemetry) {

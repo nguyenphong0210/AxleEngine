@@ -9,6 +9,7 @@ add_library(AxleUI STATIC
     src/AssetThumbnailManager.cpp
     src/AssetPreviewPanel.cpp
     src/AssemblyEditorPanel.cpp
+    src/VFXEditorPanel.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_draw.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_tables.cpp
@@ -38,6 +39,7 @@ target_link_libraries(AxleUI
         Axle::Scene
         Axle::Vehicle
         Axle::Audio
+        Axle::VFX
     PRIVATE
         glfw
         glad

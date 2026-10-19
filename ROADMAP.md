@@ -265,7 +265,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ---
 
 ### Milestone 8: Visual Effects, Modern RHI & Cross-Platform Engine (Phases 31+)
-- [ ] **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**
+- [x] **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**
   - [x] **Step 1 - Core VFX Architecture, Particle Emitter Data & Memory Model (`Engine/VFX`)**:
     - [x] High-performance Data-Oriented Struct-of-Arrays (SoA) particle pool (`ParticlePool`) with pre-allocated contiguous memory to eliminate dynamic heap allocations.
     - [x] Particle lifecycle management (`ParticleSystem`): spawn rate, lifetime duration, position, velocity, acceleration, rotational speed, size-over-lifetime curve, and RGBA color/alpha curves.
@@ -293,9 +293,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
       - [x] Footstep ground impact dust puffs on walking/running.
       - [x] Landing shockwave dust ripples upon landing from jump/freefall.
     - [x] Scene serialization & deserialization support for `ParticleEmitterComponent` in `SceneSerializer`.
-  - [ ] **Step 6 - Visual FX Editor Panel & Final VFX Integration**:
-    - [ ] Dedicated ImGui VFX Editor panel: live bezier curve tweaking (size, alpha, color gradient over time), texture slot assignment, burst controls, and instant viewport preview.
-    - [ ] Automated test suites (Steps 42-47) in `Editor/src/Test.cpp`: validating particle pool memory allocation, GPU instancing, curl noise determinism, physics collisions, emitter serialization fidelity, and gameplay slip event triggering.
+  - [x] **Step 6 - Visual FX Editor Panel & Final VFX Integration**:
+    - [x] Dedicated ImGui VFX Editor panel: live bezier curve tweaking (size, alpha, color gradient over time), texture slot assignment, burst controls, and instant viewport preview.
+    - [x] Automated test suites (Steps 42-47) in `Editor/src/Test.cpp`: validating particle pool memory allocation, GPU instancing, curl noise determinism, physics collisions, emitter serialization fidelity, and gameplay slip event triggering.
 - [ ] **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)**
   - [ ] **Step 1 - Low-Overhead RHI Integration (NVIDIA NRI)**: Embed lightweight NVIDIA Rendering Interface (MIT) as the unified hardware abstraction layer for Vulkan 1.3 and Direct3D 12 alongside OpenGL 4.5 legacy/fallback.
   - [ ] **Step 2 - ECS-Driven Data-Oriented Memory Streaming**: Connect `EnTT` packed component arrays directly to NRI dynamic staging buffers, structured instance buffers (SSBOs), and GPU indirect draw calls (`CmdDrawIndexedIndirect`).

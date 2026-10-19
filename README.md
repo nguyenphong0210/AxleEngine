@@ -7,7 +7,7 @@
 [![miniaudio](https://img.shields.io/badge/Audio-miniaudio-yellow.svg)](https://miniaud.io/)
 [![CMake](https://img.shields.io/badge/CMake-3.22%2B-red.svg)](https://cmake.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-46%2F46%20Passing%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-47%2F47%20Passing%20(100%25)-brightgreen.svg)]()
 
 **AxleEngine** is a modern, modular, high-performance **General-Purpose 3D Game Engine** written in **C++20**. 
 
@@ -58,6 +58,13 @@ Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Phys
 * **First-Class Domain Toolkits**:
   * **Modular Vehicle Physics Toolkit**: N-wheeled vehicle constraints, Ackermann steering, 4WD powertrain, suspension springs/dampers, and granular procedural engine RPM audio synthesis.
   * **Multi-Angle Camera Toolkit**: Spring-Arm Chase Camera, First-Person Cockpit (Driver POV), Hood Camera, and 360° Free Orbit Inspection.
+* **Advanced Particle & Visual Effects Subsystem (`Engine/VFX`)**:
+  * High-performance Data-Oriented **Struct-of-Arrays (SoA)** particle pool (`ParticlePool`) eliminating dynamic heap allocations.
+  * **GPU Instanced Particle Rendering** (`ParticleRenderer`) streaming 84-byte compact instance vertex buffers (`glDrawElementsInstanced`).
+  * Dynamic billboarding orientations (Spherical Camera-Facing, Cylindrical/Axial Y-aligned, and Velocity-Aligned stretched quads) with Multi-mode blending (Additive, Alpha, Premultiplied) and depth-tested soft particles.
+  * **Curl Noise Turbulence**, raycast physics collision planes with bounce restitution, buoyancy/updraft, and environmental wind fields.
+  * Texture sheet flipbook animations with sub-frame blending, normal-mapped volumetric lighting, near-plane anti-pop, and camera distance haze.
+  * First-class gameplay FX integration (`VehicleVFXComponent`, `CharacterVFXComponent`) and dedicated **Visual FX Editor Panel** with live curve tweaking, 3D orbit viewport, and ECS synchronization.
 
 ---
 
@@ -95,9 +102,9 @@ For in-depth guides, API references, and architectural walk-throughs, refer to t
 ## 🗺️ Project Milestones & Roadmap
 
 AxleEngine has undergone extensive architectural development and rigorous quality assurance:
-* **Completed Milestones**: **Phase 1 through Phase 30** are 100% complete, battle-tested, and fully verified.
-* **Automated Test Suite**: **45 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
-* **Upcoming Focus**: **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**, followed by Low-Overhead RHI Abstraction (NVIDIA NRI — Vulkan 1.3 & Direct3D 12) and Native 2D Canvas UI.
+* **Completed Milestones**: **Phase 1 through Phase 31** are 100% complete, battle-tested, and fully verified.
+* **Automated Test Suite**: **47 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
+* **Upcoming Focus**: **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)** and **Phase 33: Dedicated 2D Canvas & In-Game UI Subsystem**.
 
 👉 **For the complete phase-by-phase development history, detailed feature checklists, and upcoming roadmap, see [ROADMAP.md](ROADMAP.md).**
 

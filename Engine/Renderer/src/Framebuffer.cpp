@@ -12,7 +12,7 @@ namespace Axle {
         }
 
         ~OpenGLFramebuffer() override {
-            if (m_RendererID) {
+            if (glad_glDeleteFramebuffers && m_RendererID) {
                 glDeleteFramebuffers(1, &m_RendererID);
                 glDeleteTextures(1, &m_ColorAttachment);
                 glDeleteTextures(1, &m_DepthAttachment);
@@ -20,6 +20,8 @@ namespace Axle {
         }
 
         void Invalidate() {
+            if (!glad_glCreateFramebuffers || !glad_glBindFramebuffer) return;
+
             if (m_RendererID) {
                 glDeleteFramebuffers(1, &m_RendererID);
                 glDeleteTextures(1, &m_ColorAttachment);
@@ -62,11 +64,15 @@ namespace Axle {
         }
 
         void Bind() override {
+            if (!glad_glBindFramebuffer) return;
             glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
-            glViewport(0, 0, static_cast<GLsizei>(m_Specification.Width), static_cast<GLsizei>(m_Specification.Height));
+            if (glad_glViewport) {
+                glViewport(0, 0, static_cast<GLsizei>(m_Specification.Width), static_cast<GLsizei>(m_Specification.Height));
+            }
         }
 
         void Unbind() override {
+            if (!glad_glBindFramebuffer) return;
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
 
@@ -85,6 +91,7 @@ namespace Axle {
         }
 
         u32 GetColorAttachmentRendererID() const override { return m_ColorAttachment; }
+        u32 GetDepthAttachmentRendererID() const override { return m_DepthAttachment; }
         const FramebufferSpecification& GetSpecification() const override { return m_Specification; }
 
     private:

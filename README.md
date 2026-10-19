@@ -7,7 +7,7 @@
 [![miniaudio](https://img.shields.io/badge/Audio-miniaudio-yellow.svg)](https://miniaud.io/)
 [![CMake](https://img.shields.io/badge/CMake-3.22%2B-red.svg)](https://cmake.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-42%2F42%20Passing%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-44%2F44%20Passing%20(100%25)-brightgreen.svg)]()
 
 **AxleEngine** is a modern, modular, high-performance **General-Purpose 3D Game Engine** written in **C++20**. 
 
@@ -67,6 +67,7 @@ Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Phys
 Level 4:  [ AxleEditor (IDE) ]           [ AxleRuntime (Game Player) ]  [ AxleTests (CI/CD) ]
 Level 3:  [ Engine/Scene (ECS) ]         [ Engine/Vehicle (Toolkit) ]   [ AxleScripts (DLL) ]
           [ Plugins/Spline ]             [ Plugins/Terrain ]            [ Engine/Animation ]
+          [ Engine/VFX ]
 Level 2:  [ Engine/Physics (Jolt) ]      [ Engine/Renderer (PBR) ]      [ Engine/Audio (miniaudio) ]
           [ Engine/Asset (VFS & Cache) ] [ Engine/UI (ImGui) ]          [ Engine/Project (.axleproj) ]
 Level 1:  [ Engine/Platform (GLFW, Input, DynamicLibrary) ]
@@ -82,7 +83,7 @@ For in-depth guides, API references, and architectural walk-throughs, refer to t
 | Document | Description |
 | :--- | :--- |
 | **[Architecture Overview](docs/ARCHITECTURE.md)** | Core design principles, layered stack, application lifecycle, memory strategy, and thread scheduling. |
-| **[Subsystems & Module Reference](docs/SUBSYSTEMS.md)** | Detailed breakdown of every engine module (`Core`, `Platform`, `Renderer`, `Physics`, `Audio`, `Scene`, `UI`, `Asset`). |
+| **[Subsystems & Module Reference](docs/SUBSYSTEMS.md)** | Detailed breakdown of every engine module (`Core`, `Platform`, `Renderer`, `Physics`, `Audio`, `Scene`, `UI`, `Asset`, `VFX`). |
 | **[ECS & Scene Graph Guide](docs/ECS_AND_SCENE_GRAPH.md)** | EnTT component schemas, parent-child transform propagation, prefab assemblies (`.axle`), and `ParallelECS`. |
 | **[C++ Native Scripting Guide](docs/SCRIPTING_GUIDE.md)** | `ScriptableEntity` lifecycle, reflection macros (`AXLE_SCRIPT_FIELDS`), and dynamic DLL hot-reloading (`F9`). |
 | **[Rendering Pipeline & Shading](docs/RENDERER_AND_PIPELINE.md)** | Multi-pass rendering, Cook-Torrance BRDF, Vogel spiral soft shadows, atmospheric skybox, and `.axlebin` caching. |
@@ -95,7 +96,7 @@ For in-depth guides, API references, and architectural walk-throughs, refer to t
 
 AxleEngine has undergone extensive architectural development and rigorous quality assurance:
 * **Completed Milestones**: **Phase 1 through Phase 30** are 100% complete, battle-tested, and fully verified.
-* **Automated Test Suite**: **42 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
+* **Automated Test Suite**: **44 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
 * **Upcoming Focus**: **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)**, followed by Low-Overhead RHI Abstraction (NVIDIA NRI — Vulkan 1.3 & Direct3D 12) and Native 2D Canvas UI.
 
 👉 **For the complete phase-by-phase development history, detailed feature checklists, and upcoming roadmap, see [ROADMAP.md](ROADMAP.md).**

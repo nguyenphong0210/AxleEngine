@@ -76,6 +76,15 @@ namespace Axle {
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(count), GL_UNSIGNED_INT, nullptr);
     }
 
+    void RenderCommand::DrawIndexedInstanced(const std::shared_ptr<VertexArray>& vertexArray, u32 instanceCount) {
+        if (!vertexArray || instanceCount == 0) return;
+        vertexArray->Bind();
+        const u32 count = vertexArray->GetIndexBuffer() ? vertexArray->GetIndexBuffer()->GetCount() : 0;
+        if (count == 0) return;
+        if (!glad_glDrawElementsInstanced) return;
+        glDrawElementsInstanced(GL_TRIANGLES, static_cast<GLsizei>(count), GL_UNSIGNED_INT, nullptr, static_cast<GLsizei>(instanceCount));
+    }
+
     void RenderCommand::DrawLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount) {
         if (!vertexArray || vertexCount == 0) return;
         vertexArray->Bind();
@@ -86,6 +95,30 @@ namespace Axle {
     void RenderCommand::SetLineWidth(f32 width) {
         if (!glad_glLineWidth) return;
         glLineWidth(width);
+    }
+
+    void RenderCommand::SetBlendEnabled(bool enabled) {
+        if (!glad_glEnable || !glad_glDisable) return;
+        if (enabled) {
+            glEnable(GL_BLEND);
+        } else {
+            glDisable(GL_BLEND);
+        }
+    }
+
+    void RenderCommand::SetBlendAdditive() {
+        if (!glad_glBlendFunc) return;
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    }
+
+    void RenderCommand::SetBlendAlpha() {
+        if (!glad_glBlendFunc) return;
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    void RenderCommand::SetBlendMultiply() {
+        if (!glad_glBlendFunc) return;
+        glBlendFunc(GL_DST_COLOR, GL_ZERO);
     }
 
 }

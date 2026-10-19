@@ -1,6 +1,9 @@
 #pragma once
 
 #include <Axle/VFXCommon.hpp>
+#include <Axle/CurlNoise.hpp>
+#include <Axle/ParticleCollision.hpp>
+#include <Axle/ParticleForceField.hpp>
 #include <string>
 
 namespace Axle {
@@ -55,6 +58,18 @@ namespace Axle {
 
         // Shape
         ParticleEmitterShape Shape;
+
+        // Simulation Dynamics: Curl Noise Turbulence
+        CurlNoiseConfig CurlNoise;
+
+        // Environmental Forces & Fields
+        glm::vec3 Wind = glm::vec3(0.0f);
+        float WindInfluence = 0.5f;
+        float Buoyancy = 0.0f;
+        std::vector<ParticleForceField> ForceFields;
+
+        // Particle Physics Collisions
+        ParticleCollisionConfig Collision;
 
         // Factory Presets for common automotive & character gameplay VFX
         static ParticleEmitterConfig CreateSmoke(const glm::vec3& color = glm::vec3(0.8f));

@@ -31,6 +31,8 @@ namespace Axle {
         void SetConfig(const ParticleEmitterConfig& config);
 
         uint32_t GetActiveParticleCount() const { return m_Pool.GetActiveCount(); }
+        float GetTotalSimulationTime() const { return m_TotalSimulationTime; }
+        uint64_t GetCollisionCount() const { return m_CollisionCount; }
 
     private:
         void SpawnParticle(const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot);
@@ -41,6 +43,8 @@ namespace Axle {
 
         float m_SpawnAccumulator = 0.0f;
         float m_BurstTimer = 0.0f;
+        float m_TotalSimulationTime = 0.0f;
+        uint64_t m_CollisionCount = 0;
         bool m_IsEmitting = true;
     };
 

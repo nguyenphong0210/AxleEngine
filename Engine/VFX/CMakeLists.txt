@@ -2,6 +2,10 @@ add_library(AxleVFX STATIC
     src/ParticlePool.cpp
     src/ParticleEmitter.cpp
     src/ParticleSystem.cpp
+    src/ParticleRenderer.cpp
+    src/CurlNoise.cpp
+    src/ParticleCollision.cpp
+    src/ParticleForceField.cpp
 )
 add_library(Axle::VFX ALIAS AxleVFX)
 
@@ -13,4 +17,7 @@ target_include_directories(AxleVFX PUBLIC
 target_link_libraries(AxleVFX
     PUBLIC
         Axle::Core
+        Axle::Renderer
+    PRIVATE
+        glad
 )

@@ -14,6 +14,7 @@ namespace Axle {
         void Unbind() const;
 
         void AddVertexBuffer(const std::shared_ptr<VertexBuffer>& vertexBuffer);
+        void AddInstancedVertexBuffer(const std::shared_ptr<VertexBuffer>& vertexBuffer, u32 divisor = 1);
         void SetIndexBuffer(const std::shared_ptr<IndexBuffer>& indexBuffer);
 
         const std::vector<std::shared_ptr<VertexBuffer>>& GetVertexBuffers() const { return m_VertexBuffers; }

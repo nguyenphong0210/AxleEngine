@@ -1,5 +1,6 @@
 #include <Axle/ParticleSystem.hpp>
 #include <cmath>
+#include <algorithm>
 
 namespace Axle {
 
@@ -18,6 +19,8 @@ namespace Axle {
         m_Pool.Reset();
         m_SpawnAccumulator = 0.0f;
         m_BurstTimer = 0.0f;
+        m_TotalSimulationTime = 0.0f;
+        m_CollisionCount = 0;
     }
 
     void ParticleSystem::EmitBurst(uint32_t count, const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot) {
@@ -63,6 +66,8 @@ namespace Axle {
     void ParticleSystem::Update(float dt, const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot) {
         if (dt <= 0.0f) return;
 
+        m_TotalSimulationTime += dt;
+
         // Continuous particle spawning
         if (m_IsEmitting && m_Config.EmissionRate > 0.0f) {
             m_SpawnAccumulator += dt * m_Config.EmissionRate;
@@ -100,7 +105,11 @@ namespace Axle {
         auto& uvOffsets = m_Pool.GetUVOffsetScales();
 
         glm::vec3 gravityAccel = glm::vec3(0.0f, -9.81f, 0.0f) * m_Config.GravityModifier;
-        glm::vec3 netAccel = m_Config.ConstantAcceleration + gravityAccel;
+        glm::vec3 baseAccel = m_Config.ConstantAcceleration + gravityAccel;
+        if (m_Config.Buoyancy != 0.0f) {
+            baseAccel.y += m_Config.Buoyancy;
+        }
+
         float dragFactor = (m_Config.Drag > 0.0f) ? glm::clamp(1.0f - m_Config.Drag * dt, 0.0f, 1.0f) : 1.0f;
 
         while (i < m_Pool.GetActiveCount()) {
@@ -112,10 +121,72 @@ namespace Axle {
 
             float t = glm::clamp(ages[i] / lifetimes[i], 0.0f, 1.0f);
 
+            glm::vec3 particleAccel = baseAccel;
+
+            // Environmental Wind drag force
+            if (glm::length(m_Config.Wind) > 1e-5f) {
+                glm::vec3 relWind = m_Config.Wind - velocities[i];
+                particleAccel += relWind * m_Config.WindInfluence;
+            }
+
+            // Force Fields (Wind, Buoyancy, Attractor, Vortex)
+            for (const auto& field : m_Config.ForceFields) {
+                particleAccel += field.Evaluate(positions[i], velocities[i], m_TotalSimulationTime);
+            }
+
+            // Divergence-free Curl Noise turbulence
+            if (m_Config.CurlNoise.Enabled) {
+                particleAccel += CurlNoise::EvaluateAnimated(positions[i], m_TotalSimulationTime, m_Config.CurlNoise);
+            }
+
             // Kinematics integration
             velocities[i] *= dragFactor;
-            velocities[i] += netAccel * dt;
-            positions[i] += velocities[i] * dt;
+            velocities[i] += particleAccel * dt;
+
+            glm::vec3 prevPos = positions[i];
+            glm::vec3 nextPos = positions[i] + velocities[i] * dt;
+
+            // Physics collisions
+            if (m_Config.Collision.Enabled) {
+                bool collided = false;
+                float radius = (m_Config.Collision.ParticleRadius > 0.0f) ? m_Config.Collision.ParticleRadius : (sizes[i] * 0.5f);
+                float rest = m_Config.Collision.Restitution;
+                float fric = m_Config.Collision.Friction;
+                float minBounce = m_Config.Collision.MinBounceSpeed;
+
+                // 1. Continuous swept raycast
+                if (m_Config.Collision.WorldRaycast) {
+                    if (ParticleCollisionSolver::ResolveRaycast(m_Config.Collision.WorldRaycast, prevPos, nextPos, velocities[i], radius, rest, fric, minBounce)) {
+                        collided = true;
+                    }
+                }
+
+                // 2. Static Collision Planes
+                for (const auto& plane : m_Config.Collision.Planes) {
+                    if (ParticleCollisionSolver::ResolvePlane(plane, nextPos, velocities[i], radius, rest, fric, minBounce)) {
+                        collided = true;
+                        if (plane.KillOnCollision) break;
+                    }
+                }
+
+                // 3. Collision Boxes
+                for (const auto& box : m_Config.Collision.Boxes) {
+                    if (ParticleCollisionSolver::ResolveBox(box, nextPos, velocities[i], radius, rest, fric, minBounce)) {
+                        collided = true;
+                        if (box.KillOnCollision) break;
+                    }
+                }
+
+                if (collided) {
+                    m_CollisionCount++;
+                    if (m_Config.Collision.KillOnCollision) {
+                        m_Pool.Kill(i);
+                        continue;
+                    }
+                }
+            }
+
+            positions[i] = nextPos;
             rotations[i] += angVels[i] * dt;
 
             // Size & Color curves

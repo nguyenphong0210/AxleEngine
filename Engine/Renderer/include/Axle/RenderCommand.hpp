@@ -25,9 +25,18 @@ namespace Axle {
         // Submit indexed draw call from a VertexArray
         static void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray);
 
+        // Submit instanced indexed draw call from a VertexArray
+        static void DrawIndexedInstanced(const std::shared_ptr<VertexArray>& vertexArray, u32 instanceCount);
+
         // Submit non-indexed line draw call
         static void DrawLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount);
         static void SetLineWidth(f32 width);
+
+        // Blending controls
+        static void SetBlendEnabled(bool enabled);
+        static void SetBlendAdditive();
+        static void SetBlendAlpha();
+        static void SetBlendMultiply();
     };
 
 }

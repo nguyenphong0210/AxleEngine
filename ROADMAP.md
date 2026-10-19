@@ -270,15 +270,15 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] High-performance Data-Oriented Struct-of-Arrays (SoA) particle pool (`ParticlePool`) with pre-allocated contiguous memory to eliminate dynamic heap allocations.
     - [x] Particle lifecycle management (`ParticleSystem`): spawn rate, lifetime duration, position, velocity, acceleration, rotational speed, size-over-lifetime curve, and RGBA color/alpha curves.
     - [x] Emitter geometric shapes: Point, Sphere/Hemisphere, Box volume, Cone (for exhaust/burnout), and directional spray nozzles.
-  - [ ] **Step 2 - High-Performance GPU Instancing & Billboarding Pipeline (`Engine/Renderer`)**:
-    - [ ] Hardware instanced quad rendering (`glDrawElementsInstanced` / instance VBO layout) streaming compact instance data (`vec3 Position`, `float Size`, `vec4 Color`, `float Rotation`, `vec4 UVOffsetScale`).
-    - [ ] Dynamic billboarding orientations: Spherical Camera-Facing (standard smoke/dust), Cylindrical/Axial (Y-axis aligned for rising plumes), and Velocity-Aligned stretched quads (high-speed sparks, rain drops, debris).
-    - [ ] Multi-mode blending: Additive (fire, embers, energy sparks), Alpha Blending (dense smoke, fog, clouds), and Premultiplied Alpha.
-    - [ ] Soft Particles: Sample linear depth from `u_SceneDepthBuffer` to compute depth-difference fade factor, eliminating hard intersection edges where particles clip into terrain and geometry.
-  - [ ] **Step 3 - Advanced Simulation Dynamics: Curl Noise, Physics Collisions & Fields**:
-    - [ ] 3D Simplex / Curl Noise vector fields providing divergence-free fluid turbulence for organic smoke billows, flame wisps, and floating dust motes.
-    - [ ] Particle physics collisions: static ground plane and raycast collision detection with restitution (bounciness damping) and tangential friction.
-    - [ ] Environmental forces: directional wind vector, buoyancy/updraft, drag/air resistance, and point gravity attractors/vortices.
+  - [x] **Step 2 - High-Performance GPU Instancing & Billboarding Pipeline (`Engine/Renderer`)**:
+    - [x] Hardware instanced quad rendering (`glDrawElementsInstanced` / instance VBO layout) streaming compact instance data (`vec3 Position`, `float Size`, `vec4 Color`, `float Rotation`, `vec4 UVOffsetScale`).
+    - [x] Dynamic billboarding orientations: Spherical Camera-Facing (standard smoke/dust), Cylindrical/Axial (Y-axis aligned for rising plumes), and Velocity-Aligned stretched quads (high-speed sparks, rain drops, debris).
+    - [x] Multi-mode blending: Additive (fire, embers, energy sparks), Alpha Blending (dense smoke, fog, clouds), and Premultiplied Alpha.
+    - [x] Soft Particles: Sample linear depth from `u_SceneDepthBuffer` to compute depth-difference fade factor, eliminating hard intersection edges where particles clip into terrain and geometry.
+  - [x] **Step 3 - Advanced Simulation Dynamics: Curl Noise, Physics Collisions & Fields (`Engine/VFX`)**:
+    - [x] 3D Simplex / Curl Noise vector fields providing divergence-free fluid turbulence for organic smoke billows, flame wisps, and floating dust motes.
+    - [x] Particle physics collisions: static ground plane and raycast collision detection with restitution (bounciness damping) and tangential friction.
+    - [x] Environmental forces: directional wind vector, buoyancy/updraft, drag/air resistance, and point gravity attractors/vortices.
   - [ ] **Step 4 - Texture Sheet Flipbooks & Shading Polish**:
     - [ ] Texture sheet / flipbook animations ($N \times M$ grid) with automatic frame progression and smooth sub-frame interpolation over particle lifetime.
     - [ ] Normal-mapped particle lighting: approximate volumetric lighting from directional sun and point lights with self-shadowing factor.
@@ -293,9 +293,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
       - [ ] Footstep ground impact dust puffs on walking/running.
       - [ ] Landing shockwave dust ripples upon landing from jump/freefall.
     - [ ] Scene serialization & deserialization support for `ParticleEmitterComponent` in `SceneSerializer`.
-  - [ ] **Step 6 - Visual FX Editor Panel & Automated Test Suite 42 (`AxleTests.exe`)**:
+  - [ ] **Step 6 - Visual FX Editor Panel & Final VFX Integration**:
     - [ ] Dedicated ImGui VFX Editor panel: live bezier curve tweaking (size, alpha, color gradient over time), texture slot assignment, burst controls, and instant viewport preview.
-    - [ ] Automated test suite Step 42 in `Editor/src/Test.cpp`: validating particle pool memory allocation, particle recycling, GPU instance buffer formatting, curl noise determinism, emitter serialization fidelity, and gameplay slip event triggering.
+    - [ ] Automated test suites (Steps 42-47) in `Editor/src/Test.cpp`: validating particle pool memory allocation, GPU instancing, curl noise determinism, physics collisions, emitter serialization fidelity, and gameplay slip event triggering.
 - [ ] **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)**
   - [ ] **Step 1 - Low-Overhead RHI Integration (NVIDIA NRI)**: Embed lightweight NVIDIA Rendering Interface (MIT) as the unified hardware abstraction layer for Vulkan 1.3 and Direct3D 12 alongside OpenGL 4.5 legacy/fallback.
   - [ ] **Step 2 - ECS-Driven Data-Oriented Memory Streaming**: Connect `EnTT` packed component arrays directly to NRI dynamic staging buffers, structured instance buffers (SSBOs), and GPU indirect draw calls (`CmdDrawIndexedIndirect`).

@@ -83,6 +83,48 @@ namespace Axle {
         m_VertexBuffers.push_back(vertexBuffer);
     }
 
+    void VertexArray::AddInstancedVertexBuffer(const std::shared_ptr<VertexBuffer>& vertexBuffer, u32 divisor) {
+        if (!glad_glBindVertexArray) {
+            m_VertexBuffers.push_back(vertexBuffer);
+            return;
+        }
+
+        glBindVertexArray(m_RendererID);
+        vertexBuffer->Bind();
+
+        const auto& layout = vertexBuffer->GetLayout();
+        for (const auto& element : layout.GetElements()) {
+            glEnableVertexAttribArray(m_VertexBufferIndex);
+            if (element.Type == ShaderDataType::Int || element.Type == ShaderDataType::Int2 ||
+                element.Type == ShaderDataType::Int3 || element.Type == ShaderDataType::Int4) {
+                if (glad_glVertexAttribIPointer) {
+                    glVertexAttribIPointer(
+                        m_VertexBufferIndex,
+                        static_cast<GLint>(element.GetComponentCount()),
+                        ShaderDataTypeToOpenGLBaseType(element.Type),
+                        static_cast<GLsizei>(layout.GetStride()),
+                        reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset))
+                    );
+                }
+            } else {
+                glVertexAttribPointer(
+                    m_VertexBufferIndex,
+                    static_cast<GLint>(element.GetComponentCount()),
+                    ShaderDataTypeToOpenGLBaseType(element.Type),
+                    element.Normalized ? GL_TRUE : GL_FALSE,
+                    static_cast<GLsizei>(layout.GetStride()),
+                    reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset))
+                );
+            }
+            if (glad_glVertexAttribDivisor) {
+                glVertexAttribDivisor(m_VertexBufferIndex, divisor);
+            }
+            m_VertexBufferIndex++;
+        }
+
+        m_VertexBuffers.push_back(vertexBuffer);
+    }
+
     void VertexArray::SetIndexBuffer(const std::shared_ptr<IndexBuffer>& indexBuffer) {
         if (glad_glBindVertexArray) {
             glBindVertexArray(m_RendererID);

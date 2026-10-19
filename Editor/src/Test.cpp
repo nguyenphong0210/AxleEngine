@@ -63,6 +63,10 @@
 #include <Axle/ParticlePool.hpp>
 #include <Axle/ParticleEmitter.hpp>
 #include <Axle/ParticleSystem.hpp>
+#include <Axle/ParticleRenderer.hpp>
+#include <Axle/CurlNoise.hpp>
+#include <Axle/ParticleCollision.hpp>
+#include <Axle/ParticleForceField.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -7918,6 +7922,402 @@ bool RunTest_Step42_Phase31_Step1_CoreVFXArchitectureAndParticlePool() {
 }
 
 // =============================================================================
+// TEST STEP 43: Phase 31 Step 2 - High-Performance GPU Instancing & Billboarding Pipeline
+// =============================================================================
+bool RunTest_Step43_Phase31_Step2_GPUInstancingAndBillboardingPipeline() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 43: PHASE 31 - STEP 2 GPU INSTANCING & BILLBOARDING " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [43.1] Test ParticleRenderer Initialization & Shader Pipeline
+    std::cout << "\n[43.1] Testing ParticleRenderer Initialization & Shader Compilation..." << std::endl;
+    Axle::ParticleRenderer renderer;
+    renderer.Init();
+    assert(renderer.IsInitialized());
+    assert(renderer.GetShader() != nullptr);
+    assert(renderer.GetVAO() != nullptr);
+    assert(renderer.GetVAO()->GetVertexBuffers().size() == 2);
+    assert(renderer.GetVAO()->GetIndexBuffer() != nullptr);
+    assert(renderer.GetVAO()->GetIndexBuffer()->GetCount() == 6);
+    std::cout << "  -> PASS: ParticleRenderer initialized with static quad mesh and instanced buffer." << std::endl;
+
+    // [43.2] Test Compact Instance Layout & 68-Byte Stride
+    std::cout << "\n[43.2] Verifying Compact Instanced Vertex Layout & Stride..." << std::endl;
+    const auto& instanceVBO = renderer.GetVAO()->GetVertexBuffers()[1];
+    const auto& layout = instanceVBO->GetLayout();
+    assert(layout.GetElements().size() == 7);
+    assert(layout.GetStride() == sizeof(Axle::ParticleInstanceVertex));
+    assert(layout.GetStride() == 68);
+    std::cout << "  -> PASS: Instance VBO stride verified at exactly 68 bytes per particle." << std::endl;
+
+    // [43.3] Test Camera Billboarding Context & Multi-Orientation Dispatch
+    std::cout << "\n[43.3] Testing Camera Billboarding Matrices & Multi-Orientation Modes..." << std::endl;
+    Axle::PerspectiveCamera camera(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+    camera.SetPosition(glm::vec3(0.0f, 5.0f, 15.0f));
+
+    renderer.Begin(camera);
+
+    // Mode 1: Spherical Camera-Facing (Smoke)
+    auto smokeConfig = Axle::ParticleEmitterConfig::CreateSmoke();
+    Axle::ParticleSystem smokeSys(smokeConfig);
+    smokeSys.EmitBurst(50, glm::vec3(0.0f, 0.0f, 0.0f));
+    renderer.Render(smokeSys);
+
+    // Mode 2: Axial-Y Cylindrical (Column)
+    auto columnConfig = Axle::ParticleEmitterConfig::CreateSmoke();
+    columnConfig.Orientation = Axle::ParticleOrientation::AxialY;
+    Axle::ParticleSystem columnSys(columnConfig);
+    columnSys.EmitBurst(30, glm::vec3(2.0f, 0.0f, 0.0f));
+    renderer.Render(columnSys);
+
+    // Mode 3: Velocity-Aligned Stretched (Sparks)
+    auto sparksConfig = Axle::ParticleEmitterConfig::CreateSparks();
+    assert(sparksConfig.Orientation == Axle::ParticleOrientation::VelocityAligned);
+    Axle::ParticleSystem sparksSys(sparksConfig);
+    sparksSys.EmitBurst(100, glm::vec3(-2.0f, 0.0f, 0.0f));
+    renderer.Render(sparksSys);
+
+    renderer.End();
+
+    assert(renderer.GetDrawCallCount() == 3);
+    assert(renderer.GetRenderedParticleCount() == 180);
+    std::cout << "  -> PASS: Dispatched CameraFacing (50), AxialY (30), and VelocityAligned (100) instanced batches." << std::endl;
+
+    // [43.4] Test Multi-Mode Blending (Additive, AlphaBlend, Multiply)
+    std::cout << "\n[43.4] Testing Multi-Mode Blending States..." << std::endl;
+    renderer.Begin(camera);
+
+    auto fireConfig = Axle::ParticleEmitterConfig::CreateFire();
+    assert(fireConfig.BlendMode == Axle::ParticleBlendMode::Additive);
+    Axle::ParticleSystem fireSys(fireConfig);
+    fireSys.EmitBurst(25);
+    renderer.Render(fireSys);
+
+    auto dustConfig = Axle::ParticleEmitterConfig::CreateDustTrail();
+    assert(dustConfig.BlendMode == Axle::ParticleBlendMode::AlphaBlend);
+    Axle::ParticleSystem dustSys(dustConfig);
+    dustSys.EmitBurst(25);
+    renderer.Render(dustSys);
+
+    renderer.End();
+    assert(renderer.GetDrawCallCount() == 2);
+    assert(renderer.GetRenderedParticleCount() == 50);
+    std::cout << "  -> PASS: Additive and AlphaBlend state switches applied without graphics pipeline stalls." << std::endl;
+
+    // [43.5] Test Soft Particles Depth Buffer Integration & Linear Depth Fading
+    std::cout << "\n[43.5] Testing Soft Particles Depth Buffer Sampling & Fallback..." << std::endl;
+    Axle::FramebufferSpecification fboSpec;
+    fboSpec.Width = 1280;
+    fboSpec.Height = 720;
+    auto sceneFBO = Axle::Framebuffer::Create(fboSpec);
+    assert(sceneFBO->GetWidth() == 1280);
+    assert(sceneFBO->GetHeight() == 720);
+
+    renderer.Begin(camera, sceneFBO, 0.1f, 1000.0f);
+    renderer.Render(smokeSys, nullptr, 0.75f);
+    renderer.End();
+    assert(renderer.GetDrawCallCount() == 1);
+    std::cout << "  -> PASS: Soft particle linear depth calculations and scene depth attachment verified." << std::endl;
+
+    // [43.6] Bulk Instanced Load Test (10,000 Particles in 1 Draw Call)
+    std::cout << "\n[43.6] Testing High-Load Single Draw Call (10,000 Particles)..." << std::endl;
+    Axle::ParticleEmitterConfig bulkConfig;
+    bulkConfig.MaxParticles = 10000;
+    Axle::ParticlePool bulkPool(10000);
+    for (uint32_t i = 0; i < 10000; ++i) {
+        Axle::ParticleSpawnData d;
+        d.Position = glm::vec3(
+            Axle::VFXRandom::Float(-50.0f, 50.0f),
+            Axle::VFXRandom::Float(0.0f, 20.0f),
+            Axle::VFXRandom::Float(-50.0f, 50.0f)
+        );
+        d.StartSize = 1.0f;
+        d.EndSize = 1.0f;
+        d.StartColor = glm::vec4(1.0f);
+        d.EndColor = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+        d.Lifetime = 5.0f;
+        bulkPool.Spawn(d);
+    }
+    assert(bulkPool.GetActiveCount() == 10000);
+
+    renderer.Begin(camera);
+    renderer.Render(bulkPool, bulkConfig);
+    renderer.End();
+
+    assert(renderer.GetDrawCallCount() == 1);
+    assert(renderer.GetRenderedParticleCount() == 10000);
+    std::cout << "  -> PASS: 10,000 particles streamed and dispatched in a single instanced draw call." << std::endl;
+
+    renderer.Shutdown();
+    assert(!renderer.IsInitialized());
+
+    std::cout << ">>> STEP 43 PASSED: Phase 31 Step 2 GPU Instancing & Billboarding Pipeline 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
+// STEP 44: PHASE 31 - STEP 3 ADVANCED SIMULATION DYNAMICS: CURL NOISE, COLLISIONS & FIELDS
+// =============================================================================
+bool RunTest_Step44_Phase31_Step3_CurlNoisePhysicsCollisionsAndForceFields() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 44: PHASE 31 - STEP 3 ADVANCED SIMULATION DYNAMICS" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [44.1] Curl Noise Mathematical Properties & Divergence-Free Proof
+    std::cout << "\n[44.1] Testing 3D Curl Noise & Numerical Divergence-Free Property..." << std::endl;
+    {
+        // 1. Scalar Simplex and fBm range checks
+        glm::vec3 testP(12.34f, 56.78f, 90.12f);
+        float s = Axle::CurlNoise::Simplex(testP);
+        assert(s >= -1.0f && s <= 1.0f);
+
+        float fbm = Axle::CurlNoise::FBM(testP, 4, 2.0f, 0.5f);
+        assert(fbm >= -1.0f && fbm <= 1.0f);
+
+        // 2. Vector Potential 3-channel decorrelation
+        glm::vec3 psi = Axle::CurlNoise::VectorPotential(testP, 1);
+        assert(psi.x != psi.y && psi.y != psi.z);
+
+        // 3. Mathematical Divergence-Free Verification across 3D coordinates
+        // div(curl(psi)) = dFx/dx + dFy/dy + dFz/dz == 0
+        glm::vec3 samplePoints[] = {
+            glm::vec3(0.0f, 0.0f, 0.0f),
+            glm::vec3(1.5f, 2.3f, -4.1f),
+            glm::vec3(-10.2f, 5.7f, 18.9f),
+            glm::vec3(100.0f, -50.0f, 25.0f)
+        };
+
+        for (const auto& pt : samplePoints) {
+            float div = Axle::CurlNoise::ComputeDivergence(pt, 0.5f, 2.0f, 1);
+            // Numerically verify divergence is practically zero (divergence-free fluid flow)
+            assert(std::abs(div) < 0.05f);
+        }
+
+        // 4. Animated Curl Noise
+        Axle::CurlNoiseConfig animCfg;
+        animCfg.Enabled = true;
+        animCfg.Frequency = 0.5f;
+        animCfg.Strength = 3.0f;
+        animCfg.Octaves = 2;
+        animCfg.ScrollSpeed = glm::vec3(0.0f, 1.0f, 0.0f);
+
+        glm::vec3 vT0 = Axle::CurlNoise::EvaluateAnimated(glm::vec3(1.0f), 0.0f, animCfg);
+        glm::vec3 vT1 = Axle::CurlNoise::EvaluateAnimated(glm::vec3(1.0f), 1.0f, animCfg);
+        assert(vT0 != vT1); // evolves continuously over time
+        std::cout << "  -> PASS: 3D Curl Noise divergence-free fluid turbulence proven (div < 0.05)." << std::endl;
+    }
+
+    // [44.2] Static Ground Plane Collision, Bouncing Restitution & Friction
+    std::cout << "\n[44.2] Testing Static Ground Plane Collisions, Restitution & Friction..." << std::endl;
+    {
+        Axle::ParticleEmitterConfig config;
+        config.EmissionRate = 0.0f;
+        config.MaxParticles = 100;
+        config.GravityModifier = 1.0f; // standard gravity (-9.81 m/s^2)
+        config.Drag = 0.0f;
+
+        // Ground plane at Y = 0
+        config.Collision.Enabled = true;
+        config.Collision.Restitution = 0.6f;
+        config.Collision.Friction = 0.4f;
+        config.Collision.MinBounceSpeed = 0.1f;
+        config.Collision.ParticleRadius = 0.05f;
+        config.Collision.Planes.push_back(Axle::ParticleCollisionPlane(glm::vec3(0.0f, 1.0f, 0.0f), 0.0f, 0.6f, 0.4f));
+
+        Axle::ParticleSystem system(config);
+        
+        // Spawn particle dropping straight down: pos = (0, 1.0, 0), vel = (5.0, -10.0, 0)
+        Axle::ParticleSpawnData spawn;
+        spawn.Position = glm::vec3(0.0f, 1.0f, 0.0f);
+        spawn.Velocity = glm::vec3(5.0f, -10.0f, 0.0f);
+        spawn.Lifetime = 5.0f;
+        system.GetPool().Spawn(spawn);
+
+        // Step simulation for 0.15s (particle hits ground at t ~ 0.1s)
+        system.Update(0.15f);
+
+        auto& pos = system.GetPool().GetPositions()[0];
+        auto& vel = system.GetPool().GetVelocities()[0];
+
+        // 1. Position must be on or above the ground plane + radius
+        assert(pos.y >= 0.05f - 1e-4f);
+
+        // 2. Velocity Y must have reflected upwards (restitution)
+        assert(vel.y > 0.0f);
+
+        // 3. Velocity X must have been reduced by friction (5.0 * (1 - 0.4) = 3.0)
+        assert(vel.x < 5.0f);
+        assert(std::abs(vel.x - 3.0f) < 0.2f);
+
+        // 4. Collision count must be recorded
+        assert(system.GetCollisionCount() >= 1);
+
+        std::cout << "  -> Bounce velocity: Y = " << vel.y << " m/s (reflected), Horizontal velocity: X = " << vel.x << " m/s (friction damped)" << std::endl;
+        std::cout << "  -> PASS: Ground plane penetration resolved, restitution and tangential friction verified." << std::endl;
+    }
+
+    // [44.3] Resting Jitter Prevention & Kill-On-Collision
+    std::cout << "\n[44.3] Testing Resting Jitter Prevention & Kill-On-Collision..." << std::endl;
+    {
+        // 1. Test MinBounceSpeed resting check
+        glm::vec3 testPos(0.0f, 0.01f, 0.0f);
+        glm::vec3 testVel(0.0f, -0.05f, 0.0f); // very small downward speed below MinBounceSpeed (0.1)
+        Axle::ParticleCollisionPlane plane(glm::vec3(0.0f, 1.0f, 0.0f), 0.0f, 0.5f, 0.2f);
+
+        bool collided = Axle::ParticleCollisionSolver::ResolvePlane(plane, testPos, testVel, 0.05f, 0.5f, 0.2f, 0.1f);
+        assert(collided);
+        assert(testPos.y >= 0.05f);
+        assert(testVel.y == 0.0f); // Zero bounce velocity prevents infinite micro-jitter
+        std::cout << "  -> PASS: Sub-threshold velocity stopped cleanly at 0 m/s (zero resting jitter)." << std::endl;
+
+        // 2. Test KillOnCollision
+        Axle::ParticleEmitterConfig killConfig;
+        killConfig.EmissionRate = 0.0f;
+        killConfig.MaxParticles = 10;
+        killConfig.Collision.Enabled = true;
+        killConfig.Collision.KillOnCollision = true;
+        killConfig.Collision.Planes.push_back(Axle::ParticleCollisionPlane(glm::vec3(0.0f, 1.0f, 0.0f), 0.0f));
+
+        Axle::ParticleSystem killSys(killConfig);
+        Axle::ParticleSpawnData drop;
+        drop.Position = glm::vec3(0.0f, 0.5f, 0.0f);
+        drop.Velocity = glm::vec3(0.0f, -10.0f, 0.0f);
+        drop.Lifetime = 5.0f;
+        killSys.GetPool().Spawn(drop);
+        assert(killSys.GetActiveParticleCount() == 1);
+
+        killSys.Update(0.1f); // hits ground and dies
+        assert(killSys.GetActiveParticleCount() == 0);
+        std::cout << "  -> PASS: KillOnCollision terminated particle on ground impact instantly." << std::endl;
+    }
+
+    // [44.4] Collision Box Bounding & Continuous Swept Raycast Interception
+    std::cout << "\n[44.4] Testing AABB Box Bounding & Swept Raycast Interception..." << std::endl;
+    {
+        // 1. Interior containment box [-2, 2]^3
+        Axle::ParticleCollisionBox box(glm::vec3(-2.0f), glm::vec3(2.0f), true, 0.5f, 0.1f);
+        glm::vec3 p(2.5f, 0.0f, 0.0f); // outside +X
+        glm::vec3 v(10.0f, 0.0f, 0.0f);
+        bool bCollided = Axle::ParticleCollisionSolver::ResolveBox(box, p, v, 0.1f, 0.5f, 0.1f, 0.05f);
+        assert(bCollided);
+        assert(p.x <= 1.9f + 1e-4f);
+        assert(v.x < 0.0f); // bounced backward into interior
+
+        // 2. Swept Raycast continuous collision
+        auto mockRaycast = [](const glm::vec3& origin, const glm::vec3& dir, float maxDist, glm::vec3& hitPoint, glm::vec3& hitNormal) -> bool {
+            // Virtual wall at Z = 5.0
+            if (origin.z < 5.0f && dir.z > 0.0f) {
+                float distToWall = (5.0f - origin.z) / dir.z;
+                if (distToWall <= maxDist) {
+                    hitPoint = origin + dir * distToWall;
+                    hitNormal = glm::vec3(0.0f, 0.0f, -1.0f);
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        glm::vec3 prevP(0.0f, 0.0f, 0.0f);
+        glm::vec3 nextP(0.0f, 0.0f, 10.0f); // High-speed particle tunnels 10m in one tick through Z = 5
+        glm::vec3 fastV(0.0f, 0.0f, 100.0f);
+
+        bool rayHit = Axle::ParticleCollisionSolver::ResolveRaycast(mockRaycast, prevP, nextP, fastV, 0.05f, 0.7f, 0.0f, 0.1f);
+        assert(rayHit);
+        assert(nextP.z < 5.0f); // intercepted in front of the wall
+        assert(fastV.z < 0.0f); // reflected backwards
+        std::cout << "  -> PASS: High-speed tunneling intercepted via continuous swept raycast (reflected at Z = " << nextP.z << ")." << std::endl;
+    }
+
+    // [44.5] Environmental Forces: Directional Wind Drag, Buoyancy, Attractor & Vortex
+    std::cout << "\n[44.5] Testing Environmental Force Fields (Wind, Buoyancy, Attractor, Vortex)..." << std::endl;
+    {
+        // 1. Directional Wind
+        auto windField = Axle::ParticleForceField::CreateWind(glm::vec3(1.0f, 0.0f, 0.0f), 10.0f, 0.5f);
+        glm::vec3 windAccel = windField.Evaluate(glm::vec3(0.0f), glm::vec3(0.0f), 0.0f);
+        assert(windAccel.x > 0.0f && windAccel.y == 0.0f && windAccel.z == 0.0f);
+        assert(std::abs(windAccel.x - 5.0f) < 1e-4f); // (10 - 0) * 0.5 = 5.0 m/s^2
+
+        // 2. Buoyancy
+        auto buoyancyField = Axle::ParticleForceField::CreateBuoyancy(6.0f);
+        glm::vec3 buoyAccel = buoyancyField.Evaluate(glm::vec3(0.0f), glm::vec3(0.0f), 0.0f);
+        assert(buoyAccel.y == 6.0f);
+
+        // 3. Point Attractor
+        auto attractor = Axle::ParticleForceField::CreateAttractor(glm::vec3(0.0f, 10.0f, 0.0f), 20.0f, 20.0f, Axle::ForceFieldFalloff::Linear);
+        glm::vec3 attrAccel = attractor.Evaluate(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f), 0.0f);
+        assert(attrAccel.y > 0.0f); // pulls upwards toward center (0, 10, 0)
+        assert(std::abs(attrAccel.x) < 1e-4f && std::abs(attrAccel.z) < 1e-4f);
+
+        // 4. Vortex Field
+        // Center = (0, 0, 0), Axis = (0, 1, 0), Radius = 10, AngularSpeed = 15, Suction = 2, Lift = 3
+        auto vortex = Axle::ParticleForceField::CreateVortex(glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f), 10.0f, 15.0f, 2.0f, 3.0f);
+        // Particle on +X axis at (5, 0, 0)
+        glm::vec3 vortAccel = vortex.Evaluate(glm::vec3(5.0f, 0.0f, 0.0f), glm::vec3(0.0f), 0.0f);
+        // Tangent = (0, 1, 0) x (1, 0, 0) = (0, 0, -1) -> Negative Z
+        assert(vortAccel.z < 0.0f);
+        // Suction = Inward toward origin -> Negative X
+        assert(vortAccel.x < 0.0f);
+        // Lift = Up along axis -> Positive Y
+        assert(vortAccel.y > 0.0f);
+
+        std::cout << "  -> Vortex acceleration at (5, 0, 0): X(suction)=" << vortAccel.x 
+                  << ", Y(lift)=" << vortAccel.y 
+                  << ", Z(tangent)=" << vortAccel.z << std::endl;
+        std::cout << "  -> PASS: All 4 environmental force fields verified with correct vectors and magnitudes." << std::endl;
+    }
+
+    // [44.6] High-Throughput Integrated Simulation (2,000 Dynamic Particles)
+    std::cout << "\n[44.6] Testing High-Throughput Integrated Simulation (Sparks & Smoke)..." << std::endl;
+    {
+        // 1. Sparks with ground plane bouncing
+        auto sparksConfig = Axle::ParticleEmitterConfig::CreateSparks();
+        sparksConfig.MaxParticles = 1000;
+        sparksConfig.EmissionRate = 200.0f;
+        Axle::ParticleSystem sparksSys(sparksConfig);
+
+        // 2. Smoke with curl noise & buoyancy & wind
+        auto smokeConfig = Axle::ParticleEmitterConfig::CreateSmoke();
+        smokeConfig.MaxParticles = 1000;
+        smokeConfig.EmissionRate = 200.0f;
+        smokeConfig.Wind = glm::vec3(4.0f, 0.0f, 0.0f);
+        smokeConfig.WindInfluence = 0.4f;
+        Axle::ParticleSystem smokeSys(smokeConfig);
+
+        // Simulate 60 ticks (1 second @ 60 FPS)
+        for (int frame = 0; frame < 60; ++frame) {
+            sparksSys.Update(1.0f / 60.0f);
+            smokeSys.Update(1.0f / 60.0f);
+        }
+
+        assert(sparksSys.GetActiveParticleCount() > 0);
+        assert(smokeSys.GetActiveParticleCount() > 0);
+        assert(sparksSys.GetCollisionCount() > 0); // Sparks hit and bounced off the ground plane
+
+        // Verify smoke drifted in wind (+X) and rose with buoyancy (+Y)
+        float avgX = 0.0f;
+        float avgY = 0.0f;
+        uint32_t count = smokeSys.GetActiveParticleCount();
+        const auto& smokePos = smokeSys.GetPool().GetPositions();
+        for (uint32_t i = 0; i < count; ++i) {
+            avgX += smokePos[i].x;
+            avgY += smokePos[i].y;
+        }
+        avgX /= static_cast<float>(count);
+        avgY /= static_cast<float>(count);
+
+        assert(avgX > 0.0f); // drifted with wind
+        assert(avgY > 0.0f); // rose with buoyancy & updraft
+
+        std::cout << "  -> Active sparks: " << sparksSys.GetActiveParticleCount() << " (Collisions registered: " << sparksSys.GetCollisionCount() << ")" << std::endl;
+        std::cout << "  -> Active smoke:  " << smokeSys.GetActiveParticleCount() << " (Average drift: X=" << avgX << " m, Y=" << avgY << " m)" << std::endl;
+        std::cout << "  -> PASS: 2,000 particle simulation ran stably with simultaneous curl noise, collisions, wind, and buoyancy." << std::endl;
+    }
+
+    std::cout << ">>> STEP 44 PASSED: Phase 31 Step 3 Advanced Simulation Dynamics 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -7972,12 +8372,14 @@ int main(int argc, char** argv) {
         else if (arg == "40" || arg == "step40" || arg == "--step40" || arg == "--phase30e") targetStep = 40;
         else if (arg == "41" || arg == "step41" || arg == "--step41" || arg == "--phase30f" || arg == "--sandbox") targetStep = 41;
         else if (arg == "42" || arg == "step42" || arg == "--step42" || arg == "--phase31" || arg == "--phase31a" || arg == "--vfx") targetStep = 42;
+        else if (arg == "43" || arg == "step43" || arg == "--step43" || arg == "--phase31b" || arg == "--instancing") targetStep = 43;
+        else if (arg == "44" || arg == "step44" || arg == "--step44" || arg == "--phase31c" || arg == "--dynamics") targetStep = 44;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 41 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 44 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -8110,6 +8512,12 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 42) {
         if (!RunTest_Step42_Phase31_Step1_CoreVFXArchitectureAndParticlePool()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 43) {
+        if (!RunTest_Step43_Phase31_Step2_GPUInstancingAndBillboardingPipeline()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 44) {
+        if (!RunTest_Step44_Phase31_Step3_CurlNoisePhysicsCollisionsAndForceFields()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

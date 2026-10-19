@@ -139,6 +139,15 @@ namespace Axle {
         cfg.Shape.Radius = 0.15f;
         cfg.Shape.ConeAngle = 0.45f;
         cfg.Shape.Direction = glm::vec3(0.0f, 1.0f, 0.0f);
+
+        // Simulation Dynamics: Curl noise turbulence & thermal buoyancy
+        cfg.CurlNoise.Enabled = true;
+        cfg.CurlNoise.Frequency = 0.5f;
+        cfg.CurlNoise.Strength = 1.2f;
+        cfg.CurlNoise.Octaves = 2;
+        cfg.CurlNoise.ScrollSpeed = glm::vec3(0.0f, 0.5f, 0.0f);
+        cfg.Buoyancy = 1.0f;
+
         return cfg;
     }
 
@@ -167,6 +176,13 @@ namespace Axle {
         cfg.Shape.Radius = 0.2f;
         cfg.Shape.ConeAngle = 0.35f;
         cfg.Shape.Direction = glm::vec3(0.0f, 1.0f, 0.0f);
+
+        // Simulation Dynamics: Fast chaotic turbulence & high buoyancy
+        cfg.CurlNoise.Enabled = true;
+        cfg.CurlNoise.Frequency = 1.0f;
+        cfg.CurlNoise.Strength = 2.5f;
+        cfg.Buoyancy = 3.0f;
+
         return cfg;
     }
 
@@ -194,6 +210,15 @@ namespace Axle {
         cfg.Shape.Type = ParticleEmitterShapeType::Hemisphere;
         cfg.Shape.Radius = 0.05f;
         cfg.Shape.Direction = glm::vec3(0.0f, 1.0f, 0.0f);
+
+        // Physics Collisions: Ground plane bounce
+        cfg.Collision.Enabled = true;
+        cfg.Collision.Restitution = 0.6f;
+        cfg.Collision.Friction = 0.25f;
+        cfg.Collision.MinBounceSpeed = 0.15f;
+        cfg.Collision.ParticleRadius = 0.02f;
+        cfg.Collision.Planes.push_back(ParticleCollisionPlane(glm::vec3(0.0f, 1.0f, 0.0f), 0.0f, 0.6f, 0.25f));
+
         return cfg;
     }
 

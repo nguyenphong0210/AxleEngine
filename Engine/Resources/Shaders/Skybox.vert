@@ -7,10 +7,10 @@ uniform mat4 u_View;
 uniform mat4 u_Projection;
 
 void main() {
-    v_TexCoord = a_Position;
-    // Strip translation component from camera view matrix so skybox is centered at infinity
-    mat4 rotView = mat4(mat3(u_View));
-    vec4 clipPos = u_Projection * rotView * vec4(a_Position, 1.0);
-    // Setting z = w ensures NDC depth (z/w) is exactly 1.0 on the far clipping plane
-    gl_Position = clipPos.xyww;
+    // a_Position is in NDC [-1, 1]. Render on far plane (z=1.0, w=1.0)
+    gl_Position = vec4(a_Position.x, a_Position.y, 1.0, 1.0);
+
+    // Unproject NDC coordinates to world-space view ray direction
+    vec4 viewRay = inverse(u_Projection) * vec4(a_Position.x, a_Position.y, 1.0, 1.0);
+    v_TexCoord = transpose(mat3(u_View)) * viewRay.xyz;
 }

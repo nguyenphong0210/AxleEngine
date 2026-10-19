@@ -20,6 +20,7 @@ namespace Axle {
         m_Ages.resize(capacity, 0.0f);
         m_Lifetimes.resize(capacity, 1.0f);
         m_UVOffsetScales.resize(capacity, glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
+        m_UVSubFrames.resize(capacity, glm::vec4(0.0f));
         m_StartColors.resize(capacity, glm::vec4(1.0f));
         m_EndColors.resize(capacity, glm::vec4(1.0f));
         m_StartSizes.resize(capacity, 1.0f);
@@ -51,6 +52,7 @@ namespace Axle {
         m_Ages[idx] = 0.0f;
         m_Lifetimes[idx] = (data.Lifetime > 0.0001f) ? data.Lifetime : 1.0f;
         m_UVOffsetScales[idx] = data.UVOffsetScale;
+        m_UVSubFrames[idx] = data.UVSubFrame;
         m_CustomFlags[idx] = data.CustomFlags;
 
         return idx;
@@ -73,6 +75,7 @@ namespace Axle {
             m_Ages[index] = m_Ages[lastIdx];
             m_Lifetimes[index] = m_Lifetimes[lastIdx];
             m_UVOffsetScales[index] = m_UVOffsetScales[lastIdx];
+            m_UVSubFrames[index] = m_UVSubFrames[lastIdx];
             m_StartColors[index] = m_StartColors[lastIdx];
             m_EndColors[index] = m_EndColors[lastIdx];
             m_StartSizes[index] = m_StartSizes[lastIdx];

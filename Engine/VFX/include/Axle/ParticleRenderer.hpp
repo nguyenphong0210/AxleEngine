@@ -22,6 +22,21 @@ namespace Axle {
         int Orientation = 0; // 0=CameraFacing, 1=AxialY, 2=VelocityAligned
         glm::vec3 Velocity = glm::vec3(0.0f);
         glm::vec4 UVOffsetScale = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+        glm::vec4 UVSubFrame = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // xy: next UV offset, z: subframe blend weight, w: lighting factor
+    };
+
+    struct ParticlePointLight {
+        glm::vec3 Position = glm::vec3(0.0f);
+        glm::vec3 Color = glm::vec3(1.0f);
+        float Radius = 10.0f;
+        float Intensity = 1.0f;
+    };
+
+    struct ParticleLightEnvironment {
+        glm::vec3 SunDirection = glm::normalize(glm::vec3(0.5f, 1.0f, 0.3f));
+        glm::vec3 SunColor = glm::vec3(1.0f, 0.95f, 0.9f);
+        glm::vec3 AmbientColor = glm::vec3(0.25f, 0.28f, 0.32f);
+        std::vector<ParticlePointLight> PointLights;
     };
 
     class ParticleRenderer {
@@ -46,13 +61,33 @@ namespace Axle {
         // Render an active ParticleSystem
         void Render(const ParticleSystem& system,
                     const std::shared_ptr<Texture2D>& texture = nullptr,
+                    const std::shared_ptr<Texture2D>& normalMap = nullptr,
                     float softnessDistance = 0.5f);
+
+        void Render(const ParticleSystem& system,
+                    const std::shared_ptr<Texture2D>& texture,
+                    float softnessDistance) {
+            Render(system, texture, nullptr, softnessDistance);
+        }
 
         // Render directly from ParticlePool & ParticleEmitterConfig
         void Render(const ParticlePool& pool,
                     const ParticleEmitterConfig& config,
                     const std::shared_ptr<Texture2D>& texture = nullptr,
+                    const std::shared_ptr<Texture2D>& normalMap = nullptr,
                     float softnessDistance = 0.5f);
+
+        void Render(const ParticlePool& pool,
+                    const ParticleEmitterConfig& config,
+                    const std::shared_ptr<Texture2D>& texture,
+                    float softnessDistance) {
+            Render(pool, config, texture, nullptr, softnessDistance);
+        }
+
+        // Environment lighting
+        void SetLightEnvironment(const ParticleLightEnvironment& env) { m_LightEnvironment = env; }
+        const ParticleLightEnvironment& GetLightEnvironment() const { return m_LightEnvironment; }
+        ParticleLightEnvironment& GetLightEnvironment() { return m_LightEnvironment; }
 
         // Accessors
         std::shared_ptr<Shader> GetShader() const { return m_Shader; }
@@ -74,6 +109,7 @@ namespace Axle {
         std::shared_ptr<IndexBuffer> m_QuadIBO;
 
         std::vector<ParticleInstanceVertex> m_InstanceStagingBuffer;
+        ParticleLightEnvironment m_LightEnvironment;
 
         // Active pass context
         glm::mat4 m_ViewMatrix = glm::mat4(1.0f);

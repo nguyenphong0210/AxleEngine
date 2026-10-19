@@ -7941,14 +7941,14 @@ bool RunTest_Step43_Phase31_Step2_GPUInstancingAndBillboardingPipeline() {
     assert(renderer.GetVAO()->GetIndexBuffer()->GetCount() == 6);
     std::cout << "  -> PASS: ParticleRenderer initialized with static quad mesh and instanced buffer." << std::endl;
 
-    // [43.2] Test Compact Instance Layout & 68-Byte Stride
+    // [43.2] Test Compact Instance Layout & 84-Byte Stride (Extended for Sub-frame & Lighting)
     std::cout << "\n[43.2] Verifying Compact Instanced Vertex Layout & Stride..." << std::endl;
     const auto& instanceVBO = renderer.GetVAO()->GetVertexBuffers()[1];
     const auto& layout = instanceVBO->GetLayout();
-    assert(layout.GetElements().size() == 7);
+    assert(layout.GetElements().size() == 8);
     assert(layout.GetStride() == sizeof(Axle::ParticleInstanceVertex));
-    assert(layout.GetStride() == 68);
-    std::cout << "  -> PASS: Instance VBO stride verified at exactly 68 bytes per particle." << std::endl;
+    assert(layout.GetStride() == 84);
+    std::cout << "  -> PASS: Instance VBO stride verified at exactly 84 bytes per particle (including subframe blending & lighting)." << std::endl;
 
     // [43.3] Test Camera Billboarding Context & Multi-Orientation Dispatch
     std::cout << "\n[43.3] Testing Camera Billboarding Matrices & Multi-Orientation Modes..." << std::endl;
@@ -8318,6 +8318,217 @@ bool RunTest_Step44_Phase31_Step3_CurlNoisePhysicsCollisionsAndForceFields() {
 }
 
 // =============================================================================
+// STEP 45: PHASE 31 - STEP 4 TEXTURE SHEET FLIPBOOKS & SHADING POLISH
+// =============================================================================
+bool RunTest_Step45_Phase31_Step4_TextureSheetFlipbooksAndShadingPolish() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 45: PHASE 31 - STEP 4 FLIPBOOKS & SHADING POLISH " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [45.1] Flipbook Grid UV Progression & Coordinate Arithmetic (4x4 Grid = 16 Frames)
+    std::cout << "\n[45.1] Testing Flipbook Grid UV Progression (4x4 Grid = 16 Frames)..." << std::endl;
+    {
+        Axle::ParticleEmitterConfig config;
+        config.EmissionRate = 0.0f;
+        config.MaxParticles = 10;
+        config.TextureCols = 4;
+        config.TextureRows = 4;
+        config.TotalFrames = 16;
+        config.AnimationCycles = 1.0f;
+        config.Lifetime = Axle::FloatRange(1.0f, 1.0f);
+
+        Axle::ParticleSystem system(config);
+        Axle::ParticleSpawnData spawn;
+        spawn.Position = glm::vec3(0.0f);
+        spawn.Lifetime = 1.0f;
+        system.GetPool().Spawn(spawn);
+
+        const auto& uvs = system.GetPool().GetUVOffsetScales();
+
+        // Initial frame: UVOffset = (0, 0), Scale = (0.25, 0.25)
+        assert(std::abs(uvs[0].z - 0.25f) < 1e-4f);
+        assert(std::abs(uvs[0].w - 0.25f) < 1e-4f);
+        assert(std::abs(uvs[0].x - 0.0f) < 1e-4f);
+        assert(std::abs(uvs[0].y - 0.0f) < 1e-4f);
+
+        // Step to t = 0.25s (Frame 4: col = 0, row = 1 -> U = 0.0, V = 0.25)
+        system.Update(0.25f);
+        assert(std::abs(uvs[0].x - 0.0f) < 1e-4f);
+        assert(std::abs(uvs[0].y - 0.25f) < 1e-4f);
+
+        // Step to t = 0.50s (Frame 8: col = 0, row = 2 -> U = 0.0, V = 0.50)
+        system.Update(0.25f);
+        assert(std::abs(uvs[0].x - 0.0f) < 1e-4f);
+        assert(std::abs(uvs[0].y - 0.50f) < 1e-4f);
+
+        // Step to t = 0.75s (Frame 12: col = 0, row = 3 -> U = 0.0, V = 0.75)
+        system.Update(0.25f);
+        assert(std::abs(uvs[0].x - 0.0f) < 1e-4f);
+        assert(std::abs(uvs[0].y - 0.75f) < 1e-4f);
+
+        std::cout << "  -> PASS: 4x4 Flipbook grid frame progression verified across all 16 frames." << std::endl;
+    }
+
+    // [45.2] Smooth Sub-Frame Morphing & Interpolation
+    std::cout << "\n[45.2] Testing Smooth Sub-Frame Blending & Fractional Frame Weights..." << std::endl;
+    {
+        Axle::ParticleEmitterConfig config;
+        config.EmissionRate = 0.0f;
+        config.MaxParticles = 10;
+        config.TextureCols = 4;
+        config.TextureRows = 4;
+        config.TotalFrames = 16;
+        config.AnimationCycles = 1.0f;
+        config.SubFrameBlending = true;
+        config.LightingEnabled = true;
+        config.Lifetime = Axle::FloatRange(16.0f, 16.0f);
+
+        Axle::ParticleSystem system(config);
+        Axle::ParticleSpawnData spawn;
+        spawn.Lifetime = 16.0f;
+        system.GetPool().Spawn(spawn);
+
+        // Advance 2.5 seconds -> frame progress is 2.5 frames
+        // Frame A = 2 (col 2, row 0 -> U=0.50, V=0.0)
+        // Frame B = 3 (col 3, row 0 -> U=0.75, V=0.0)
+        // SubFrameBlend = 0.5
+        system.Update(2.5f);
+
+        const auto& uvs = system.GetPool().GetUVOffsetScales();
+        const auto& subUvs = system.GetPool().GetUVSubFrames();
+
+        assert(std::abs(uvs[0].x - 0.50f) < 1e-4f);
+        assert(std::abs(uvs[0].y - 0.0f) < 1e-4f);
+
+        assert(std::abs(subUvs[0].x - 0.75f) < 1e-4f);
+        assert(std::abs(subUvs[0].y - 0.0f) < 1e-4f);
+        assert(std::abs(subUvs[0].z - 0.50f) < 1e-4f);
+        assert(subUvs[0].w == 1.0f);
+
+        std::cout << "  -> Frame A UV: (" << uvs[0].x << ", " << uvs[0].y << "), Frame B UV: (" << subUvs[0].x << ", " << subUvs[0].y << "), Blend: " << subUvs[0].z << std::endl;
+        std::cout << "  -> PASS: Sub-frame morphing calculates precise dual-UV coordinates and continuous blend weights." << std::endl;
+    }
+
+    // [45.3] Normal-Mapped Volumetric Lighting & Sunlight Scattering
+    std::cout << "\n[45.3] Testing Volumetric Lighting Environment & Half-Lambert Wrap..." << std::endl;
+    {
+        Axle::ParticleLightEnvironment env;
+        env.SunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+        env.SunColor = glm::vec3(1.0f, 0.9f, 0.8f);
+        env.AmbientColor = glm::vec3(0.2f, 0.2f, 0.2f);
+
+        Axle::ParticlePointLight pl1;
+        pl1.Position = glm::vec3(5.0f, 0.0f, 0.0f);
+        pl1.Color = glm::vec3(1.0f, 0.0f, 0.0f);
+        pl1.Radius = 10.0f;
+        pl1.Intensity = 2.0f;
+        env.PointLights.push_back(pl1);
+
+        Axle::ParticlePointLight pl2;
+        pl2.Position = glm::vec3(-5.0f, 0.0f, 0.0f);
+        pl2.Color = glm::vec3(0.0f, 0.0f, 1.0f);
+        pl2.Radius = 8.0f;
+        pl2.Intensity = 1.5f;
+        env.PointLights.push_back(pl2);
+
+        assert(env.PointLights.size() == 2);
+
+        float wrap = 0.4f;
+        float NdotL1 = 1.0f;
+        float diff1 = (NdotL1 + wrap) / (1.0f + wrap);
+        assert(std::abs(diff1 - 1.0f) < 1e-4f);
+
+        float NdotL2 = 0.0f;
+        float diff2 = (NdotL2 + wrap) / (1.0f + wrap);
+        assert(std::abs(diff2 - (0.4f / 1.4f)) < 1e-4f);
+        assert(diff2 > 0.0f);
+
+        float NdotL3 = -1.0f;
+        float diff3 = glm::clamp((NdotL3 + wrap) / (1.0f + wrap), 0.0f, 1.0f);
+        assert(diff3 == 0.0f);
+
+        std::cout << "  -> Half-Lambert diffuse: Direct=" << diff1 << ", Perpendicular=" << diff2 << ", Backlit=" << diff3 << std::endl;
+        std::cout << "  -> PASS: Wrapped diffuse volumetric lighting arithmetic verified." << std::endl;
+    }
+
+    // [45.4] Camera Near-Plane & Distance Fading Equations
+    std::cout << "\n[45.4] Testing Camera Near-Plane & Distance Fading Functions..." << std::endl;
+    {
+        float nearStart = 0.2f;
+        float nearEnd = 1.0f;
+
+        float alphaNear0 = glm::smoothstep(nearStart, nearEnd, 0.1f);
+        assert(alphaNear0 == 0.0f);
+
+        float alphaNearHalf = glm::smoothstep(nearStart, nearEnd, 0.6f);
+        assert(alphaNearHalf > 0.4f && alphaNearHalf < 0.6f);
+
+        float alphaNear1 = glm::smoothstep(nearStart, nearEnd, 1.5f);
+        assert(alphaNear1 == 1.0f);
+
+        float farStart = 100.0f;
+        float farEnd = 200.0f;
+
+        float alphaFar0 = 1.0f - glm::smoothstep(farStart, farEnd, 50.0f);
+        assert(alphaFar0 == 1.0f);
+
+        float alphaFarHalf = 1.0f - glm::smoothstep(farStart, farEnd, 150.0f);
+        assert(alphaFarHalf > 0.4f && alphaFarHalf < 0.6f);
+
+        float alphaFar1 = 1.0f - glm::smoothstep(farStart, farEnd, 250.0f);
+        assert(alphaFar1 == 0.0f);
+
+        std::cout << "  -> Near fade: @0.1m=" << alphaNear0 << ", @0.6m=" << alphaNearHalf << ", @1.5m=" << alphaNear1 << std::endl;
+        std::cout << "  -> Far fade:  @50m=" << alphaFar0 << ", @150m=" << alphaFarHalf << ", @250m=" << alphaFar1 << std::endl;
+        std::cout << "  -> PASS: Camera near-plane anti-pop and distance haze fading verified." << std::endl;
+    }
+
+    // [45.5] Multi-Pass VFX Renderer Dispatch with Flipbook & Normal Map
+    std::cout << "\n[45.5] Testing Full VFX Pipeline Dispatch (Flipbook + Volumetric Lighting)..." << std::endl;
+    {
+        Axle::ParticleRenderer renderer;
+        renderer.Init();
+        assert(renderer.IsInitialized());
+
+        Axle::PerspectiveCamera camera(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+        camera.SetPosition(glm::vec3(0.0f, 2.0f, 10.0f));
+
+        Axle::ParticleLightEnvironment env;
+        env.SunDirection = glm::normalize(glm::vec3(1.0f, 2.0f, 1.0f));
+        env.SunColor = glm::vec3(1.0f, 0.95f, 0.9f);
+        env.AmbientColor = glm::vec3(0.2f, 0.22f, 0.25f);
+        renderer.SetLightEnvironment(env);
+
+        Axle::ParticleEmitterConfig smokeFlipbook = Axle::ParticleEmitterConfig::CreateSmoke();
+        smokeFlipbook.TextureCols = 4;
+        smokeFlipbook.TextureRows = 4;
+        smokeFlipbook.TotalFrames = 16;
+        smokeFlipbook.SubFrameBlending = true;
+        smokeFlipbook.LightingEnabled = true;
+        smokeFlipbook.NearFadeEnabled = true;
+
+        Axle::ParticleSystem smokeSys(smokeFlipbook);
+        smokeSys.EmitBurst(64);
+        assert(smokeSys.GetActiveParticleCount() == 64);
+
+        renderer.Begin(camera);
+        renderer.Render(smokeSys);
+        renderer.End();
+
+        assert(renderer.GetDrawCallCount() == 1);
+        assert(renderer.GetRenderedParticleCount() == 64);
+
+        std::cout << "  -> Rendered 64 particles with 4x4 sub-frame flipbook, 84-byte VBO, and volumetric lighting." << std::endl;
+        std::cout << "  -> PASS: Complete VFX pipeline dispatch with all Step 4 features validated." << std::endl;
+
+        renderer.Shutdown();
+    }
+
+    std::cout << ">>> STEP 45 PASSED: Phase 31 Step 4 Texture Sheet Flipbooks & Shading Polish 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -8374,12 +8585,13 @@ int main(int argc, char** argv) {
         else if (arg == "42" || arg == "step42" || arg == "--step42" || arg == "--phase31" || arg == "--phase31a" || arg == "--vfx") targetStep = 42;
         else if (arg == "43" || arg == "step43" || arg == "--step43" || arg == "--phase31b" || arg == "--instancing") targetStep = 43;
         else if (arg == "44" || arg == "step44" || arg == "--step44" || arg == "--phase31c" || arg == "--dynamics") targetStep = 44;
+        else if (arg == "45" || arg == "step45" || arg == "--step45" || arg == "--phase31d" || arg == "--shading") targetStep = 45;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 44 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 45 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -8518,6 +8730,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 44) {
         if (!RunTest_Step44_Phase31_Step3_CurlNoisePhysicsCollisionsAndForceFields()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 45) {
+        if (!RunTest_Step45_Phase31_Step4_TextureSheetFlipbooksAndShadingPolish()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

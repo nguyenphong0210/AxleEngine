@@ -45,11 +45,27 @@ namespace Axle {
         // Color & Alpha
         ColorGradient ColorOverLifetime = { glm::vec4(1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.0f) };
 
-        // Flipbook Texture Sheet Animation
+        // Flipbook Texture Sheet Animation & Sub-Frame Interpolation
         uint32_t TextureRows = 1;
         uint32_t TextureCols = 1;
         uint32_t TotalFrames = 1;
         float AnimationCycles = 1.0f;
+        bool SubFrameBlending = false;
+
+        // Volumetric Lighting & Shading
+        bool LightingEnabled = false;
+        float WrapLighting = 0.4f;
+        float ScatteringFactor = 0.25f;
+        float NormalMapStrength = 1.0f;
+
+        // Camera Near-Plane & Distance Fading
+        bool NearFadeEnabled = true;
+        float NearFadeStart = 0.2f;
+        float NearFadeEnd = 1.0f;
+        bool FarFadeEnabled = false;
+        float FarFadeStart = 100.0f;
+        float FarFadeEnd = 200.0f;
+        float SoftnessDistance = 0.5f;
 
         // Space, Blend Mode & Orientation
         ParticleSimulationSpace SimulationSpace = ParticleSimulationSpace::World;

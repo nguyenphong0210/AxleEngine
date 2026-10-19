@@ -18,6 +18,7 @@ namespace Axle {
         float AngularVelocity = 0.0f;
         float Lifetime = 1.0f;
         glm::vec4 UVOffsetScale = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+        glm::vec4 UVSubFrame = glm::vec4(0.0f);
         uint32_t CustomFlags = 0;
     };
 
@@ -73,6 +74,9 @@ namespace Axle {
         std::vector<glm::vec4>& GetUVOffsetScales() { return m_UVOffsetScales; }
         const std::vector<glm::vec4>& GetUVOffsetScales() const { return m_UVOffsetScales; }
 
+        std::vector<glm::vec4>& GetUVSubFrames() { return m_UVSubFrames; }
+        const std::vector<glm::vec4>& GetUVSubFrames() const { return m_UVSubFrames; }
+
         std::vector<glm::vec4>& GetStartColors() { return m_StartColors; }
         const std::vector<glm::vec4>& GetStartColors() const { return m_StartColors; }
 
@@ -103,6 +107,7 @@ namespace Axle {
         std::vector<float> m_Ages;
         std::vector<float> m_Lifetimes;
         std::vector<glm::vec4> m_UVOffsetScales;
+        std::vector<glm::vec4> m_UVSubFrames;
         std::vector<glm::vec4> m_StartColors;
         std::vector<glm::vec4> m_EndColors;
         std::vector<float> m_StartSizes;

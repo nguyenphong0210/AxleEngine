@@ -279,10 +279,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] 3D Simplex / Curl Noise vector fields providing divergence-free fluid turbulence for organic smoke billows, flame wisps, and floating dust motes.
     - [x] Particle physics collisions: static ground plane and raycast collision detection with restitution (bounciness damping) and tangential friction.
     - [x] Environmental forces: directional wind vector, buoyancy/updraft, drag/air resistance, and point gravity attractors/vortices.
-  - [ ] **Step 4 - Texture Sheet Flipbooks & Shading Polish**:
-    - [ ] Texture sheet / flipbook animations ($N \times M$ grid) with automatic frame progression and smooth sub-frame interpolation over particle lifetime.
-    - [ ] Normal-mapped particle lighting: approximate volumetric lighting from directional sun and point lights with self-shadowing factor.
-    - [ ] Dedicated VFX shaders (`Particle.vert` and `Particle.frag`) with smooth softness curve, distance fading, and camera near-plane fade.
+  - [x] **Step 4 - Texture Sheet Flipbooks & Shading Polish (`Engine/Renderer` & `Engine/VFX`)**:
+    - [x] Texture sheet / flipbook animations ($N \times M$ grid) with automatic frame progression and smooth sub-frame interpolation over particle lifetime.
+    - [x] Normal-mapped particle lighting: approximate volumetric lighting from directional sun and point lights with self-shadowing factor.
+    - [x] Dedicated VFX shaders (`Particle.vert` and `Particle.frag`) with smooth softness curve, distance fading, and camera near-plane fade.
   - [ ] **Step 5 - ECS Integration & Gameplay Event VFX Emitters (`Engine/Scene`)**:
     - [ ] `ParticleEmitterComponent` in EnTT ECS: linking emitter assets to scene entities with local/world simulation space toggles.
     - [ ] Vehicle gameplay FX hooks:

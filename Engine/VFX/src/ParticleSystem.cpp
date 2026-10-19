@@ -52,12 +52,18 @@ namespace Axle {
         data.AngularVelocity = m_Config.AngularVelocity.Sample();
         data.Lifetime = m_Config.Lifetime.Sample();
 
+        float lightingFlag = m_Config.LightingEnabled ? 1.0f : 0.0f;
         if (m_Config.TotalFrames > 1 && m_Config.TextureCols > 0 && m_Config.TextureRows > 0) {
             float scaleU = 1.0f / static_cast<float>(m_Config.TextureCols);
             float scaleV = 1.0f / static_cast<float>(m_Config.TextureRows);
             data.UVOffsetScale = glm::vec4(0.0f, 0.0f, scaleU, scaleV);
+            uint32_t frameB = (m_Config.TotalFrames > 1) ? 1 : 0;
+            data.UVSubFrame = glm::vec4((frameB % m_Config.TextureCols) * scaleU,
+                                        (frameB / m_Config.TextureCols) * scaleV,
+                                        0.0f, lightingFlag);
         } else {
             data.UVOffsetScale = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+            data.UVSubFrame = glm::vec4(0.0f, 0.0f, 0.0f, lightingFlag);
         }
 
         m_Pool.Spawn(data);
@@ -103,6 +109,7 @@ namespace Axle {
         auto& startColors = m_Pool.GetStartColors();
         auto& endColors = m_Pool.GetEndColors();
         auto& uvOffsets = m_Pool.GetUVOffsetScales();
+        auto& uvSubFrames = m_Pool.GetUVSubFrames();
 
         glm::vec3 gravityAccel = glm::vec3(0.0f, -9.81f, 0.0f) * m_Config.GravityModifier;
         glm::vec3 baseAccel = m_Config.ConstantAcceleration + gravityAccel;
@@ -193,18 +200,33 @@ namespace Axle {
             sizes[i] = glm::mix(startSizes[i], endSizes[i], t);
             colors[i] = glm::mix(startColors[i], endColors[i], t);
 
-            // Flipbook UV frame interpolation
+            // Flipbook UV frame interpolation & sub-frame blending
+            float lightingFlag = m_Config.LightingEnabled ? 1.0f : 0.0f;
             if (m_Config.TotalFrames > 1 && m_Config.TextureCols > 0 && m_Config.TextureRows > 0) {
                 float cycleProgress = std::fmod(t * m_Config.AnimationCycles, 1.0f);
-                uint32_t frame = static_cast<uint32_t>(cycleProgress * static_cast<float>(m_Config.TotalFrames));
-                if (frame >= m_Config.TotalFrames) frame = m_Config.TotalFrames - 1;
+                float continuousFrame = cycleProgress * static_cast<float>(m_Config.TotalFrames);
+                uint32_t frameA = static_cast<uint32_t>(continuousFrame);
+                if (frameA >= m_Config.TotalFrames) frameA = m_Config.TotalFrames - 1;
 
-                uint32_t col = frame % m_Config.TextureCols;
-                uint32_t row = frame / m_Config.TextureCols;
+                uint32_t frameB = (frameA + 1) % m_Config.TotalFrames;
+                float subFrameBlend = continuousFrame - static_cast<float>(frameA);
+
+                uint32_t colA = frameA % m_Config.TextureCols;
+                uint32_t rowA = frameA / m_Config.TextureCols;
 
                 float scaleU = 1.0f / static_cast<float>(m_Config.TextureCols);
                 float scaleV = 1.0f / static_cast<float>(m_Config.TextureRows);
-                uvOffsets[i] = glm::vec4(col * scaleU, row * scaleV, scaleU, scaleV);
+                uvOffsets[i] = glm::vec4(colA * scaleU, rowA * scaleV, scaleU, scaleV);
+
+                if (m_Config.SubFrameBlending) {
+                    uint32_t colB = frameB % m_Config.TextureCols;
+                    uint32_t rowB = frameB / m_Config.TextureCols;
+                    uvSubFrames[i] = glm::vec4(colB * scaleU, rowB * scaleV, subFrameBlend, lightingFlag);
+                } else {
+                    uvSubFrames[i] = glm::vec4(0.0f, 0.0f, 0.0f, lightingFlag);
+                }
+            } else {
+                uvSubFrames[i] = glm::vec4(0.0f, 0.0f, 0.0f, lightingFlag);
             }
 
             ++i;

@@ -12,6 +12,10 @@
 #include <Axle/SkeletalMesh.hpp>
 #include <Axle/Animator.hpp>
 #include <Axle/CharacterController.hpp>
+#include <Axle/ParticleSystem.hpp>
+#include <Axle/ParticleEmitter.hpp>
+#include <Axle/VehicleVFX.hpp>
+#include <Axle/CharacterVFX.hpp>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -1133,6 +1137,135 @@ namespace Axle {
 
             glm::vec3 horizVel(Velocity.x, 0.0f, Velocity.z);
             CurrentSpeed = glm::length(horizVel);
+        }
+    };
+
+    struct ParticleEmitterComponent {
+        ParticleEmitterConfig Config;
+        std::shared_ptr<ParticleSystem> System = nullptr;
+
+        UUID TextureAsset = 0;
+        std::string TexturePath;
+        std::shared_ptr<Texture2D> Texture = nullptr;
+
+        UUID NormalMapAsset = 0;
+        std::string NormalMapPath;
+        std::shared_ptr<Texture2D> NormalMap = nullptr;
+
+        bool Active = true;
+        bool AutoPlay = true;
+        bool Visible = true;
+        ParticleSimulationSpace SimulationSpace = ParticleSimulationSpace::World;
+
+        ParticleEmitterComponent() {
+            Initialize();
+        }
+
+        explicit ParticleEmitterComponent(const ParticleEmitterConfig& config)
+            : Config(config), SimulationSpace(config.SimulationSpace) {
+            Initialize();
+        }
+
+        void Initialize() {
+            Config.SimulationSpace = SimulationSpace;
+            if (!System) {
+                System = std::make_shared<ParticleSystem>(Config);
+            } else {
+                System->SetConfig(Config);
+            }
+        }
+
+        void SetSimulationSpace(ParticleSimulationSpace space) {
+            SimulationSpace = space;
+            Config.SimulationSpace = space;
+            if (System) {
+                System->GetConfig().SimulationSpace = space;
+            }
+        }
+
+        void Play() {
+            Active = true;
+            if (System) System->SetEmitting(true);
+        }
+
+        void Stop() {
+            Active = false;
+            if (System) System->SetEmitting(false);
+        }
+
+        void Reset() {
+            if (System) System->Reset();
+        }
+
+        void EmitBurst(uint32_t count, const glm::vec3& worldPos = glm::vec3(0.0f), const glm::quat& worldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f)) {
+            if (System) System->EmitBurst(count, worldPos, worldRot);
+        }
+
+        void Update(float dt, const glm::vec3& worldPos = glm::vec3(0.0f), const glm::quat& worldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f)) {
+            if (Active && System) {
+                System->Update(dt, worldPos, worldRot);
+            }
+        }
+    };
+
+    struct VehicleVFXComponent {
+        bool Enabled = true;
+        VehicleVFXConfig Config;
+        std::shared_ptr<VehicleVFX> RuntimeVFX = nullptr;
+
+        VehicleVFXComponent() = default;
+        explicit VehicleVFXComponent(const VehicleVFXConfig& config)
+            : Config(config) {}
+
+        void InitRuntime() {
+            RuntimeVFX = std::make_shared<VehicleVFX>(Config);
+        }
+
+        void StopRuntime() {
+            RuntimeVFX.reset();
+        }
+
+        void Update(Timestep ts,
+                    const VehicleTelemetryData& telemetry,
+                    float throttle,
+                    float brake,
+                    bool handbrake,
+                    const glm::vec3& worldPos,
+                    const glm::vec3& forwardDir,
+                    const glm::quat& worldRot) {
+            if (Enabled && RuntimeVFX) {
+                RuntimeVFX->Update(ts, telemetry, throttle, brake, handbrake, worldPos, forwardDir, worldRot);
+            }
+        }
+    };
+
+    struct CharacterVFXComponent {
+        bool Enabled = true;
+        CharacterVFXConfig Config;
+        std::shared_ptr<CharacterVFX> RuntimeVFX = nullptr;
+
+        CharacterVFXComponent() = default;
+        explicit CharacterVFXComponent(const CharacterVFXConfig& config)
+            : Config(config) {}
+
+        void InitRuntime() {
+            RuntimeVFX = std::make_shared<CharacterVFX>(Config);
+        }
+
+        void StopRuntime() {
+            RuntimeVFX.reset();
+        }
+
+        void Update(Timestep ts,
+                    const glm::vec3& characterPos,
+                    const glm::quat& characterRot,
+                    const glm::vec3& linearVelocity,
+                    bool isGrounded,
+                    float currentSpeed,
+                    const glm::vec3& groundNormal = glm::vec3(0.0f, 1.0f, 0.0f)) {
+            if (Enabled && RuntimeVFX) {
+                RuntimeVFX->Update(ts, characterPos, characterRot, linearVelocity, isGrounded, currentSpeed, groundNormal);
+            }
         }
     };
 

@@ -283,16 +283,16 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Texture sheet / flipbook animations ($N \times M$ grid) with automatic frame progression and smooth sub-frame interpolation over particle lifetime.
     - [x] Normal-mapped particle lighting: approximate volumetric lighting from directional sun and point lights with self-shadowing factor.
     - [x] Dedicated VFX shaders (`Particle.vert` and `Particle.frag`) with smooth softness curve, distance fading, and camera near-plane fade.
-  - [ ] **Step 5 - ECS Integration & Gameplay Event VFX Emitters (`Engine/Scene`)**:
-    - [ ] `ParticleEmitterComponent` in EnTT ECS: linking emitter assets to scene entities with local/world simulation space toggles.
-    - [ ] Vehicle gameplay FX hooks:
-      - [ ] Tire burnout smoke and skid debris generated dynamically based on lateral/longitudinal tire slip.
-      - [ ] Off-road dirt/gravel rooster tails kicked up dynamically based on speed and terrain surface splatmap material.
-      - [ ] Exhaust backfire flames and popping sparks triggered by high engine RPM and throttle lift-off.
-    - [ ] Character gameplay FX hooks:
-      - [ ] Footstep ground impact dust puffs on walking/running.
-      - [ ] Landing shockwave dust ripples upon landing from jump/freefall.
-    - [ ] Scene serialization & deserialization support for `ParticleEmitterComponent` in `SceneSerializer`.
+  - [x] **Step 5 - ECS Integration & Gameplay Event VFX Emitters (`Engine/Scene`)**:
+    - [x] `ParticleEmitterComponent` in EnTT ECS: linking emitter assets to scene entities with local/world simulation space toggles.
+    - [x] Vehicle gameplay FX hooks:
+      - [x] Tire burnout smoke and skid debris generated dynamically based on lateral/longitudinal tire slip.
+      - [x] Off-road dirt/gravel rooster tails kicked up dynamically based on speed and terrain surface splatmap material.
+      - [x] Exhaust backfire flames and popping sparks triggered by high engine RPM and throttle lift-off.
+    - [x] Character gameplay FX hooks:
+      - [x] Footstep ground impact dust puffs on walking/running.
+      - [x] Landing shockwave dust ripples upon landing from jump/freefall.
+    - [x] Scene serialization & deserialization support for `ParticleEmitterComponent` in `SceneSerializer`.
   - [ ] **Step 6 - Visual FX Editor Panel & Final VFX Integration**:
     - [ ] Dedicated ImGui VFX Editor panel: live bezier curve tweaking (size, alpha, color gradient over time), texture slot assignment, burst controls, and instant viewport preview.
     - [ ] Automated test suites (Steps 42-47) in `Editor/src/Test.cpp`: validating particle pool memory allocation, GPU instancing, curl noise determinism, physics collisions, emitter serialization fidelity, and gameplay slip event triggering.

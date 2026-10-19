@@ -15,6 +15,7 @@
 namespace Axle {
 
     class Scene;
+    class ParticleRenderer;
 
     struct SceneRenderSettings {
         bool EnableShadows = true;
@@ -56,6 +57,7 @@ namespace Axle {
         ShadowMap* GetShadowMap() const { return m_ShadowMap.get(); }
         Skybox* GetSkybox() const { return m_Skybox.get(); }
         SkinningPipeline* GetSkinningPipeline() const { return m_SkinningPipeline.get(); }
+        ParticleRenderer* GetParticleRenderer() const { return m_ParticleRenderer.get(); }
 
         const glm::mat4& GetLightSpaceMatrix() const { return m_LightSpaceMatrix; }
         const glm::vec3& GetLightDirection() const { return m_LightDir; }
@@ -67,6 +69,7 @@ namespace Axle {
         std::shared_ptr<Shader> m_Shader;
         std::shared_ptr<Shader> m_ShadowShader;
         std::shared_ptr<SkinningPipeline> m_SkinningPipeline;
+        std::shared_ptr<ParticleRenderer> m_ParticleRenderer;
         std::shared_ptr<ShadowMap> m_ShadowMap;
         std::shared_ptr<Skybox> m_Skybox;
 

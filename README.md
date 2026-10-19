@@ -7,7 +7,7 @@
 [![miniaudio](https://img.shields.io/badge/Audio-miniaudio-yellow.svg)](https://miniaud.io/)
 [![CMake](https://img.shields.io/badge/CMake-3.22%2B-red.svg)](https://cmake.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-45%2F45%20Passing%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-46%2F46%20Passing%20(100%25)-brightgreen.svg)]()
 
 **AxleEngine** is a modern, modular, high-performance **General-Purpose 3D Game Engine** written in **C++20**. 
 

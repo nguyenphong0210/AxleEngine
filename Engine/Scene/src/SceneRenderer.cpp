@@ -6,6 +6,7 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/Vehicle.hpp>
+#include <Axle/ParticleRenderer.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -24,6 +25,9 @@ namespace Axle {
 
         // Initialize Procedural Atmospheric Skybox
         m_Skybox = std::make_shared<Skybox>();
+
+        // Initialize GPU-Instanced Particle Renderer (Phase 31)
+        m_ParticleRenderer = std::make_shared<ParticleRenderer>();
 
         AXLE_CORE_INFO("SceneRenderer: Decoupled Multi-Pass Graphics Pipeline successfully initialized.");
     }
@@ -652,7 +656,14 @@ namespace Axle {
         }
 
         // ==========================================
-        // PASS 4: PHYSICS DEBUG WIREFRAMES (OPTIONAL)
+        // PASS 4: PARTICLE & VISUAL EFFECTS (VFX) PASS
+        // ==========================================
+        if (m_ParticleRenderer && scene) {
+            scene->RenderParticles(*m_ParticleRenderer, camera, targetFBO);
+        }
+
+        // ==========================================
+        // PASS 5: PHYSICS DEBUG WIREFRAMES (OPTIONAL)
         // ==========================================
         if (settings.ShowPhysicsDebug && physicsDebugRenderer && physicsScene) {
             physicsDebugRenderer->Begin(camera.GetPosition());
@@ -661,7 +672,7 @@ namespace Axle {
         }
 
         // ==========================================
-        // PASS 5: UNBIND & CLEANUP
+        // PASS 6: UNBIND & CLEANUP
         // ==========================================
         Texture2D::GetWhiteTexture()->Unbind(0);
         if (m_ShadowMap) {

@@ -8,6 +8,7 @@
 #include <Axle/ParallelECS.hpp>
 #include <Axle/Vehicle.hpp>
 #include <Axle/SkinningPipeline.hpp>
+#include <Axle/ParticleRenderer.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -271,6 +272,21 @@ namespace Axle {
             auto cccCopy = entity.GetComponent<CharacterControllerComponent>();
             cccCopy.RuntimeController.reset();
             newEntity.AddComponent<CharacterControllerComponent>(cccCopy);
+        }
+        if (entity.HasComponent<ParticleEmitterComponent>()) {
+            auto pecCopy = entity.GetComponent<ParticleEmitterComponent>();
+            pecCopy.Initialize();
+            newEntity.AddComponent<ParticleEmitterComponent>(pecCopy);
+        }
+        if (entity.HasComponent<VehicleVFXComponent>()) {
+            auto vvfxCopy = entity.GetComponent<VehicleVFXComponent>();
+            vvfxCopy.RuntimeVFX.reset();
+            newEntity.AddComponent<VehicleVFXComponent>(vvfxCopy);
+        }
+        if (entity.HasComponent<CharacterVFXComponent>()) {
+            auto cvfxCopy = entity.GetComponent<CharacterVFXComponent>();
+            cvfxCopy.RuntimeVFX.reset();
+            newEntity.AddComponent<CharacterVFXComponent>(cvfxCopy);
         }
 
         // Parent relationship: preserve parent if source entity has a parent
@@ -920,6 +936,30 @@ namespace Axle {
                 ccc.InitRuntime(*physicsScene, tc.Translation, tc.Rotation);
             }
         }
+
+        // 6. Vehicle VFX Subsystem Initialization
+        auto vehicleVFXView = m_Registry.view<VehicleVFXComponent>();
+        for (auto entityID : vehicleVFXView) {
+            auto& vvfx = vehicleVFXView.get<VehicleVFXComponent>(entityID);
+            vvfx.InitRuntime();
+        }
+
+        // 7. Character VFX Subsystem Initialization
+        auto characterVFXView = m_Registry.view<CharacterVFXComponent>();
+        for (auto entityID : characterVFXView) {
+            auto& cvfx = characterVFXView.get<CharacterVFXComponent>(entityID);
+            cvfx.InitRuntime();
+        }
+
+        // 8. Particle Emitter AutoPlay Initialization
+        auto particleView = m_Registry.view<ParticleEmitterComponent>();
+        for (auto entityID : particleView) {
+            auto& pec = particleView.get<ParticleEmitterComponent>(entityID);
+            pec.Initialize();
+            if (pec.AutoPlay) {
+                pec.Play();
+            }
+        }
     }
 
     void Scene::OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene) {
@@ -1024,6 +1064,14 @@ namespace Axle {
                     vac.RuntimeAudio->Update(ts, telemetry, vc.Throttle, vc.Brake, vc.Handbrake, chassisTC.Translation, telemetry.ForwardVector);
                 }
             }
+
+            // Synchronize vehicle gameplay visual effects (burnout, rooster tails, backfire)
+            if (chassisEntity.HasComponent<VehicleVFXComponent>()) {
+                auto& vvfx = chassisEntity.GetComponent<VehicleVFXComponent>();
+                if (vvfx.Enabled && vvfx.RuntimeVFX) {
+                    vvfx.RuntimeVFX->Update(ts, telemetry, vc.Throttle, vc.Brake, vc.Handbrake, chassisTC.Translation, telemetry.ForwardVector, chassisTC.Rotation);
+                }
+            }
         }
 
         // 3. Audio Listener & 3D Spatial Audio Synchronization
@@ -1103,6 +1151,14 @@ namespace Axle {
                 ac.SetBool("IsGrounded", ccc.IsGrounded);
                 ac.SetFloat("VerticalVelocity", ccc.VerticalVelocity);
             }
+
+            // Sync with CharacterVFXComponent if present on entity
+            if (m_Registry.all_of<CharacterVFXComponent>(entityID)) {
+                auto& cvfx = m_Registry.get<CharacterVFXComponent>(entityID);
+                if (cvfx.Enabled && cvfx.RuntimeVFX) {
+                    cvfx.RuntimeVFX->Update(ts, tc.Translation, tc.Rotation, ccc.Velocity, ccc.IsGrounded, ccc.CurrentSpeed, ccc.GroundNormal);
+                }
+            }
         }
 
         // 5. Standalone or Character-Attached Animator Component Updates
@@ -1110,6 +1166,19 @@ namespace Axle {
         for (auto entityID : animView) {
             auto& ac = animView.get<AnimatorComponent>(entityID);
             ac.Update(ts.GetSeconds());
+        }
+
+        // 6. Particle Emitter System Updates
+        auto particleUpdateView = m_Registry.view<ParticleEmitterComponent, TransformComponent>();
+        for (auto entityID : particleUpdateView) {
+            auto& pec = particleUpdateView.get<ParticleEmitterComponent>(entityID);
+            if (!pec.Active || !pec.System) continue;
+
+            glm::mat4 worldMat = GetWorldTransform(entityID);
+            glm::vec3 worldPos = glm::vec3(worldMat[3]);
+            glm::quat worldRot = glm::quat_cast(worldMat);
+
+            pec.System->Update(ts.GetSeconds(), worldPos, worldRot);
         }
     }
 
@@ -1160,6 +1229,25 @@ namespace Axle {
         for (auto entityID : vehicleAudioView) {
             auto& vac = vehicleAudioView.get<VehicleAudioComponent>(entityID);
             vac.StopRuntime();
+        }
+
+        // Stop all Vehicle & Character VFX instances
+        auto vvfxStopView = m_Registry.view<VehicleVFXComponent>();
+        for (auto entityID : vvfxStopView) {
+            auto& vvfx = vvfxStopView.get<VehicleVFXComponent>(entityID);
+            vvfx.StopRuntime();
+        }
+
+        auto cvfxStopView = m_Registry.view<CharacterVFXComponent>();
+        for (auto entityID : cvfxStopView) {
+            auto& cvfx = cvfxStopView.get<CharacterVFXComponent>(entityID);
+            cvfx.StopRuntime();
+        }
+
+        auto pecStopView = m_Registry.view<ParticleEmitterComponent>();
+        for (auto entityID : pecStopView) {
+            auto& pec = pecStopView.get<ParticleEmitterComponent>(entityID);
+            pec.Reset();
         }
 
         auto view = m_Registry.view<NativeScriptComponent>();
@@ -1393,6 +1481,27 @@ namespace Axle {
                 cccCopy.RuntimeController.reset();
                 dstEntity.AddComponent<CharacterControllerComponent>(cccCopy);
             }
+
+            // ParticleEmitterComponent
+            if (srcEntity.HasComponent<ParticleEmitterComponent>()) {
+                auto pecCopy = srcEntity.GetComponent<ParticleEmitterComponent>();
+                pecCopy.Initialize();
+                dstEntity.AddComponent<ParticleEmitterComponent>(pecCopy);
+            }
+
+            // VehicleVFXComponent
+            if (srcEntity.HasComponent<VehicleVFXComponent>()) {
+                auto vvfxCopy = srcEntity.GetComponent<VehicleVFXComponent>();
+                vvfxCopy.RuntimeVFX.reset();
+                dstEntity.AddComponent<VehicleVFXComponent>(vvfxCopy);
+            }
+
+            // CharacterVFXComponent
+            if (srcEntity.HasComponent<CharacterVFXComponent>()) {
+                auto cvfxCopy = srcEntity.GetComponent<CharacterVFXComponent>();
+                cvfxCopy.RuntimeVFX.reset();
+                dstEntity.AddComponent<CharacterVFXComponent>(cvfxCopy);
+            }
         }
 
         // Pass 3: Remap Hierarchy Relationships using UUID mapping
@@ -1440,6 +1549,96 @@ namespace Axle {
                 physicsScene->GetBodyInterface().SetAngularVelocity(rb.RuntimeBodyID, JPH::Vec3::sZero());
             }
         }
+    }
+
+    void Scene::RenderParticles(ParticleRenderer& particleRenderer, const PerspectiveCamera& camera,
+                                const std::shared_ptr<Framebuffer>& targetFBO) {
+        auto view = m_Registry.view<ParticleEmitterComponent, TransformComponent>();
+
+        bool hasParticles = false;
+        for (auto entityID : view) {
+            auto& pec = view.get<ParticleEmitterComponent>(entityID);
+            if (pec.Visible && pec.System && pec.System->GetActiveParticleCount() > 0) {
+                hasParticles = true;
+                break;
+            }
+        }
+        if (!hasParticles) {
+            auto vvfxView = m_Registry.view<VehicleVFXComponent>();
+            for (auto entityID : vvfxView) {
+                auto& vvfx = vvfxView.get<VehicleVFXComponent>(entityID);
+                if (vvfx.Enabled && vvfx.RuntimeVFX && vvfx.RuntimeVFX->GetTotalActiveParticles() > 0) {
+                    hasParticles = true;
+                    break;
+                }
+            }
+        }
+        if (!hasParticles) {
+            auto cvfxView = m_Registry.view<CharacterVFXComponent>();
+            for (auto entityID : cvfxView) {
+                auto& cvfx = cvfxView.get<CharacterVFXComponent>(entityID);
+                if (cvfx.Enabled && cvfx.RuntimeVFX && cvfx.RuntimeVFX->GetTotalActiveParticles() > 0) {
+                    hasParticles = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasParticles) return;
+
+        particleRenderer.Begin(camera, targetFBO, camera.GetNearClip(), camera.GetFarClip());
+
+        // 1. Render standalone ParticleEmitterComponents
+        for (auto entityID : view) {
+            auto& pec = view.get<ParticleEmitterComponent>(entityID);
+            if (!pec.Visible || !pec.System || pec.System->GetActiveParticleCount() == 0) continue;
+
+            particleRenderer.Render(*pec.System, pec.Texture, pec.NormalMap, pec.Config.SoftnessDistance);
+        }
+
+        // 2. Render Vehicle VFX particle systems
+        auto vvfxView = m_Registry.view<VehicleVFXComponent>();
+        for (auto entityID : vvfxView) {
+            auto& vvfx = vvfxView.get<VehicleVFXComponent>(entityID);
+            if (!vvfx.Enabled || !vvfx.RuntimeVFX) continue;
+
+            for (uint32_t i = 0; i < 4; ++i) {
+                auto smoke = vvfx.RuntimeVFX->GetWheelSmokeSystem(i);
+                if (smoke && smoke->GetActiveParticleCount() > 0) {
+                    particleRenderer.Render(*smoke, nullptr, nullptr, 0.5f);
+                }
+                auto rooster = vvfx.RuntimeVFX->GetWheelRoosterSystem(i);
+                if (rooster && rooster->GetActiveParticleCount() > 0) {
+                    particleRenderer.Render(*rooster, nullptr, nullptr, 0.5f);
+                }
+            }
+            auto flame = vvfx.RuntimeVFX->GetExhaustFlameSystem();
+            if (flame && flame->GetActiveParticleCount() > 0) {
+                particleRenderer.Render(*flame, nullptr, nullptr, 0.5f);
+            }
+            auto sparks = vvfx.RuntimeVFX->GetExhaustSparkSystem();
+            if (sparks && sparks->GetActiveParticleCount() > 0) {
+                particleRenderer.Render(*sparks, nullptr, nullptr, 0.5f);
+            }
+        }
+
+        // 3. Render Character VFX particle systems
+        auto cvfxView = m_Registry.view<CharacterVFXComponent>();
+        for (auto entityID : cvfxView) {
+            auto& cvfx = cvfxView.get<CharacterVFXComponent>(entityID);
+            if (!cvfx.Enabled || !cvfx.RuntimeVFX) continue;
+
+            auto footstep = cvfx.RuntimeVFX->GetFootstepSystem();
+            if (footstep && footstep->GetActiveParticleCount() > 0) {
+                particleRenderer.Render(*footstep, nullptr, nullptr, 0.5f);
+            }
+            auto shockwave = cvfx.RuntimeVFX->GetLandingShockwaveSystem();
+            if (shockwave && shockwave->GetActiveParticleCount() > 0) {
+                particleRenderer.Render(*shockwave, nullptr, nullptr, 0.5f);
+            }
+        }
+
+        particleRenderer.End();
     }
 
 }

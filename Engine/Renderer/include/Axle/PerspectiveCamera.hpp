@@ -22,6 +22,9 @@ namespace Axle {
         const glm::mat4& GetViewMatrix() const { return m_ViewMatrix; }
         const glm::mat4& GetViewProjectionMatrix() const { return m_ViewProjectionMatrix; }
 
+        float GetNearClip() const { return m_NearClip; }
+        float GetFarClip() const { return m_FarClip; }
+
     private:
         void RecalculateViewMatrix();
 
@@ -32,6 +35,9 @@ namespace Axle {
 
         glm::vec3 m_Position{ 0.0f, 0.0f, 3.5f };
         glm::vec3 m_Rotation{ 0.0f, 0.0f, 0.0f }; // Degrees
+
+        float m_NearClip = 0.1f;
+        float m_FarClip = 1000.0f;
     };
 
 }

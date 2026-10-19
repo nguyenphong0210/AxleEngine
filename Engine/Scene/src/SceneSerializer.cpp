@@ -410,6 +410,97 @@ namespace Axle {
                 ss << "      StepOffset: " << ccc.Settings.StepOffset << "\n";
             }
 
+            // ParticleEmitterComponent
+            if (entity.HasComponent<ParticleEmitterComponent>()) {
+                auto& pec = entity.GetComponent<ParticleEmitterComponent>();
+                ss << "    ParticleEmitterComponent:\n";
+                ss << "      Name: " << pec.Config.Name << "\n";
+                ss << "      Active: " << (pec.Active ? "true" : "false") << "\n";
+                ss << "      AutoPlay: " << (pec.AutoPlay ? "true" : "false") << "\n";
+                ss << "      Visible: " << (pec.Visible ? "true" : "false") << "\n";
+                ss << "      SimulationSpace: " << (pec.SimulationSpace == ParticleSimulationSpace::World ? "World" : "Local") << "\n";
+                ss << "      EmissionRate: " << pec.Config.EmissionRate << "\n";
+                ss << "      BurstCount: " << pec.Config.BurstCount << "\n";
+                ss << "      BurstInterval: " << pec.Config.BurstInterval << "\n";
+                ss << "      MaxParticles: " << pec.Config.MaxParticles << "\n";
+                ss << "      Lifetime: [ " << pec.Config.Lifetime.Min << " , " << pec.Config.Lifetime.Max << " ]\n";
+                ss << "      InitialSpeed: [ " << pec.Config.InitialSpeed.Min << " , " << pec.Config.InitialSpeed.Max << " ]\n";
+                ss << "      StartSize: [ " << pec.Config.StartSize.Min << " , " << pec.Config.StartSize.Max << " ]\n";
+                ss << "      EndSize: [ " << pec.Config.EndSize.Min << " , " << pec.Config.EndSize.Max << " ]\n";
+                ss << "      StartRotation: [ " << pec.Config.StartRotation.Min << " , " << pec.Config.StartRotation.Max << " ]\n";
+                ss << "      AngularVelocity: [ " << pec.Config.AngularVelocity.Min << " , " << pec.Config.AngularVelocity.Max << " ]\n";
+                ss << "      GravityModifier: " << pec.Config.GravityModifier << "\n";
+                ss << "      Drag: " << pec.Config.Drag << "\n";
+                ss << "      StartColor: [ " << pec.Config.ColorOverLifetime.StartColor.r << " , " << pec.Config.ColorOverLifetime.StartColor.g << " , " << pec.Config.ColorOverLifetime.StartColor.b << " , " << pec.Config.ColorOverLifetime.StartColor.a << " ]\n";
+                ss << "      EndColor: [ " << pec.Config.ColorOverLifetime.EndColor.r << " , " << pec.Config.ColorOverLifetime.EndColor.g << " , " << pec.Config.ColorOverLifetime.EndColor.b << " , " << pec.Config.ColorOverLifetime.EndColor.a << " ]\n";
+                ss << "      BlendMode: " << static_cast<int>(pec.Config.BlendMode) << "\n";
+                ss << "      Orientation: " << static_cast<int>(pec.Config.Orientation) << "\n";
+                ss << "      ShapeType: " << static_cast<int>(pec.Config.Shape.Type) << "\n";
+                ss << "      ShapeRadius: " << pec.Config.Shape.Radius << "\n";
+                ss << "      ShapeConeAngle: " << pec.Config.Shape.ConeAngle << "\n";
+                ss << "      ShapeBoxExtents: [ " << pec.Config.Shape.BoxExtents.x << " , " << pec.Config.Shape.BoxExtents.y << " , " << pec.Config.Shape.BoxExtents.z << " ]\n";
+                ss << "      ShapeLineLength: " << pec.Config.Shape.LineLength << "\n";
+                ss << "      ShapeDirection: [ " << pec.Config.Shape.Direction.x << " , " << pec.Config.Shape.Direction.y << " , " << pec.Config.Shape.Direction.z << " ]\n";
+                ss << "      ShapeSurfaceOnly: " << (pec.Config.Shape.SurfaceOnly ? "true" : "false") << "\n";
+                ss << "      TexturePath: " << pec.TexturePath << "\n";
+                ss << "      NormalMapPath: " << pec.NormalMapPath << "\n";
+                ss << "      TextureRows: " << pec.Config.TextureRows << "\n";
+                ss << "      TextureCols: " << pec.Config.TextureCols << "\n";
+                ss << "      TotalFrames: " << pec.Config.TotalFrames << "\n";
+                ss << "      SubFrameBlending: " << (pec.Config.SubFrameBlending ? "true" : "false") << "\n";
+                ss << "      LightingEnabled: " << (pec.Config.LightingEnabled ? "true" : "false") << "\n";
+                ss << "      WrapLighting: " << pec.Config.WrapLighting << "\n";
+                ss << "      ScatteringFactor: " << pec.Config.ScatteringFactor << "\n";
+                ss << "      NormalMapStrength: " << pec.Config.NormalMapStrength << "\n";
+                ss << "      NearFadeEnabled: " << (pec.Config.NearFadeEnabled ? "true" : "false") << "\n";
+                ss << "      NearFadeStart: " << pec.Config.NearFadeStart << "\n";
+                ss << "      NearFadeEnd: " << pec.Config.NearFadeEnd << "\n";
+                ss << "      FarFadeEnabled: " << (pec.Config.FarFadeEnabled ? "true" : "false") << "\n";
+                ss << "      FarFadeStart: " << pec.Config.FarFadeStart << "\n";
+                ss << "      FarFadeEnd: " << pec.Config.FarFadeEnd << "\n";
+                ss << "      SoftnessDistance: " << pec.Config.SoftnessDistance << "\n";
+                ss << "      CurlNoiseEnabled: " << (pec.Config.CurlNoise.Enabled ? "true" : "false") << "\n";
+                ss << "      CurlNoiseStrength: " << pec.Config.CurlNoise.Strength << "\n";
+                ss << "      CurlNoiseFrequency: " << pec.Config.CurlNoise.Frequency << "\n";
+                ss << "      CollisionEnabled: " << (pec.Config.Collision.Enabled ? "true" : "false") << "\n";
+                ss << "      CollisionRestitution: " << pec.Config.Collision.Restitution << "\n";
+                ss << "      CollisionFriction: " << pec.Config.Collision.Friction << "\n";
+                ss << "      CollisionParticleRadius: " << pec.Config.Collision.ParticleRadius << "\n";
+            }
+
+            // VehicleVFXComponent
+            if (entity.HasComponent<VehicleVFXComponent>()) {
+                auto& vvfx = entity.GetComponent<VehicleVFXComponent>();
+                ss << "    VehicleVFXComponent:\n";
+                ss << "      Enabled: " << (vvfx.Enabled ? "true" : "false") << "\n";
+                ss << "      BurnoutSlipThreshold: " << vvfx.Config.BurnoutSlipThreshold << "\n";
+                ss << "      SkidSlipThreshold: " << vvfx.Config.SkidSlipThreshold << "\n";
+                ss << "      MinSpeedForRoosterTail: " << vvfx.Config.MinSpeedForRoosterTail << "\n";
+                ss << "      SurfaceType: " << static_cast<int>(vvfx.Config.SurfaceType) << "\n";
+                ss << "      BackfireMinRPM: " << vvfx.Config.BackfireMinRPM << "\n";
+                ss << "      BackfireThrottleLiftThreshold: " << vvfx.Config.BackfireThrottleLiftThreshold << "\n";
+                ss << "      BackfireHighThrottleMin: " << vvfx.Config.BackfireHighThrottleMin << "\n";
+                ss << "      BackfireCooldown: " << vvfx.Config.BackfireCooldown << "\n";
+                ss << "      BackfireFlameCount: " << vvfx.Config.BackfireFlameCount << "\n";
+                ss << "      BackfireSparkCount: " << vvfx.Config.BackfireSparkCount << "\n";
+            }
+
+            // CharacterVFXComponent
+            if (entity.HasComponent<CharacterVFXComponent>()) {
+                auto& cvfx = entity.GetComponent<CharacterVFXComponent>();
+                ss << "    CharacterVFXComponent:\n";
+                ss << "      Enabled: " << (cvfx.Enabled ? "true" : "false") << "\n";
+                ss << "      FootstepMinSpeed: " << cvfx.Config.FootstepMinSpeed << "\n";
+                ss << "      StrideLength: " << cvfx.Config.StrideLength << "\n";
+                ss << "      FootSpread: " << cvfx.Config.FootSpread << "\n";
+                ss << "      WalkPuffCount: " << cvfx.Config.WalkPuffCount << "\n";
+                ss << "      RunPuffCount: " << cvfx.Config.RunPuffCount << "\n";
+                ss << "      LandingImpactThreshold: " << cvfx.Config.LandingImpactThreshold << "\n";
+                ss << "      HeavyLandingThreshold: " << cvfx.Config.HeavyLandingThreshold << "\n";
+                ss << "      NormalLandingCount: " << cvfx.Config.NormalLandingCount << "\n";
+                ss << "      HeavyLandingCount: " << cvfx.Config.HeavyLandingCount << "\n";
+            }
+
             // Custom Entity Serializer Hook (for plugins e.g. SplineComponent, TerrainComponent)
             if (m_Context.CustomEntitySerializer) {
                 m_Context.CustomEntitySerializer(entity, ss);
@@ -473,6 +564,9 @@ namespace Axle {
             SkeletalMesh,
             Animator,
             CharacterController,
+            ParticleEmitter,
+            VehicleVFX,
+            CharacterVFX,
             Custom
         };
         ComponentSection currentSection = ComponentSection::None;
@@ -600,6 +694,24 @@ namespace Axle {
                 currentSection = ComponentSection::CharacterController;
                 if (!currentEntity.HasComponent<CharacterControllerComponent>()) {
                     currentEntity.AddComponent<CharacterControllerComponent>();
+                }
+            } else if (trimmed == "ParticleEmitterComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::ParticleEmitter;
+                if (!currentEntity.HasComponent<ParticleEmitterComponent>()) {
+                    currentEntity.AddComponent<ParticleEmitterComponent>();
+                }
+            } else if (trimmed == "VehicleVFXComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::VehicleVFX;
+                if (!currentEntity.HasComponent<VehicleVFXComponent>()) {
+                    currentEntity.AddComponent<VehicleVFXComponent>();
+                }
+            } else if (trimmed == "CharacterVFXComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::CharacterVFX;
+                if (!currentEntity.HasComponent<CharacterVFXComponent>()) {
+                    currentEntity.AddComponent<CharacterVFXComponent>();
                 }
             } else if (trimmed.back() == ':' && ((trimmed.length() >= 10 && trimmed.substr(trimmed.length() - 10) == "Component:") || (line.find_first_not_of(" \t") == 4 && trimmed.find(' ') == std::string::npos))) {
                 flushCustomSection();
@@ -1212,6 +1324,198 @@ namespace Axle {
                             ccc.Settings.MaxSlopeAngle = std::stof(Trim(trimmed.substr(14)));
                         } else if (trimmed.rfind("StepOffset:", 0) == 0) {
                             ccc.Settings.StepOffset = std::stof(Trim(trimmed.substr(11)));
+                        }
+                        break;
+                    }
+                    case ComponentSection::ParticleEmitter: {
+                        if (!currentEntity.HasComponent<ParticleEmitterComponent>()) {
+                            currentEntity.AddComponent<ParticleEmitterComponent>();
+                        }
+                        auto& pec = currentEntity.GetComponent<ParticleEmitterComponent>();
+                        if (trimmed.rfind("Name:", 0) == 0) {
+                            pec.Config.Name = Trim(trimmed.substr(5));
+                        } else if (trimmed.rfind("Active:", 0) == 0) {
+                            pec.Active = (Trim(trimmed.substr(7)) == "true");
+                        } else if (trimmed.rfind("AutoPlay:", 0) == 0) {
+                            pec.AutoPlay = (Trim(trimmed.substr(9)) == "true");
+                        } else if (trimmed.rfind("Visible:", 0) == 0) {
+                            pec.Visible = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("SimulationSpace:", 0) == 0) {
+                            std::string spaceStr = Trim(trimmed.substr(16));
+                            pec.SetSimulationSpace(spaceStr == "Local" ? ParticleSimulationSpace::Local : ParticleSimulationSpace::World);
+                        } else if (trimmed.rfind("EmissionRate:", 0) == 0) {
+                            try { pec.Config.EmissionRate = std::stof(Trim(trimmed.substr(13))); } catch (...) {}
+                        } else if (trimmed.rfind("BurstCount:", 0) == 0) {
+                            try { pec.Config.BurstCount = std::stoul(Trim(trimmed.substr(11))); } catch (...) {}
+                        } else if (trimmed.rfind("BurstInterval:", 0) == 0) {
+                            try { pec.Config.BurstInterval = std::stof(Trim(trimmed.substr(14))); } catch (...) {}
+                        } else if (trimmed.rfind("MaxParticles:", 0) == 0) {
+                            try { pec.Config.MaxParticles = std::stoul(Trim(trimmed.substr(13))); } catch (...) {}
+                        } else if (trimmed.rfind("Lifetime:", 0) == 0) {
+                            float minV = 1.0f, maxV = 2.0f;
+                            sscanf(trimmed.c_str(), "Lifetime: [ %f , %f ]", &minV, &maxV);
+                            pec.Config.Lifetime = FloatRange(minV, maxV);
+                        } else if (trimmed.rfind("InitialSpeed:", 0) == 0) {
+                            float minV = 2.0f, maxV = 5.0f;
+                            sscanf(trimmed.c_str(), "InitialSpeed: [ %f , %f ]", &minV, &maxV);
+                            pec.Config.InitialSpeed = FloatRange(minV, maxV);
+                        } else if (trimmed.rfind("StartSize:", 0) == 0) {
+                            float minV = 0.2f, maxV = 0.4f;
+                            sscanf(trimmed.c_str(), "StartSize: [ %f , %f ]", &minV, &maxV);
+                            pec.Config.StartSize = FloatRange(minV, maxV);
+                        } else if (trimmed.rfind("EndSize:", 0) == 0) {
+                            float minV = 0.8f, maxV = 1.2f;
+                            sscanf(trimmed.c_str(), "EndSize: [ %f , %f ]", &minV, &maxV);
+                            pec.Config.EndSize = FloatRange(minV, maxV);
+                        } else if (trimmed.rfind("StartRotation:", 0) == 0) {
+                            float minV = 0.0f, maxV = 6.283f;
+                            sscanf(trimmed.c_str(), "StartRotation: [ %f , %f ]", &minV, &maxV);
+                            pec.Config.StartRotation = FloatRange(minV, maxV);
+                        } else if (trimmed.rfind("AngularVelocity:", 0) == 0) {
+                            float minV = -1.5f, maxV = 1.5f;
+                            sscanf(trimmed.c_str(), "AngularVelocity: [ %f , %f ]", &minV, &maxV);
+                            pec.Config.AngularVelocity = FloatRange(minV, maxV);
+                        } else if (trimmed.rfind("GravityModifier:", 0) == 0) {
+                            try { pec.Config.GravityModifier = std::stof(Trim(trimmed.substr(16))); } catch (...) {}
+                        } else if (trimmed.rfind("Drag:", 0) == 0) {
+                            try { pec.Config.Drag = std::stof(Trim(trimmed.substr(5))); } catch (...) {}
+                        } else if (trimmed.rfind("StartColor:", 0) == 0) {
+                            float r = 1, g = 1, b = 1, a = 1;
+                            sscanf(trimmed.c_str(), "StartColor: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
+                            pec.Config.ColorOverLifetime.StartColor = glm::vec4(r, g, b, a);
+                        } else if (trimmed.rfind("EndColor:", 0) == 0) {
+                            float r = 1, g = 1, b = 1, a = 0;
+                            sscanf(trimmed.c_str(), "EndColor: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
+                            pec.Config.ColorOverLifetime.EndColor = glm::vec4(r, g, b, a);
+                        } else if (trimmed.rfind("BlendMode:", 0) == 0) {
+                            try { pec.Config.BlendMode = static_cast<ParticleBlendMode>(std::stoi(Trim(trimmed.substr(10)))); } catch (...) {}
+                        } else if (trimmed.rfind("Orientation:", 0) == 0) {
+                            try { pec.Config.Orientation = static_cast<ParticleOrientation>(std::stoi(Trim(trimmed.substr(12)))); } catch (...) {}
+                        } else if (trimmed.rfind("ShapeType:", 0) == 0) {
+                            try { pec.Config.Shape.Type = static_cast<ParticleEmitterShapeType>(std::stoi(Trim(trimmed.substr(10)))); } catch (...) {}
+                        } else if (trimmed.rfind("ShapeRadius:", 0) == 0) {
+                            try { pec.Config.Shape.Radius = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
+                        } else if (trimmed.rfind("ShapeConeAngle:", 0) == 0) {
+                            try { pec.Config.Shape.ConeAngle = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
+                        } else if (trimmed.rfind("ShapeBoxExtents:", 0) == 0) {
+                            float x = 1, y = 1, z = 1;
+                            sscanf(trimmed.c_str(), "ShapeBoxExtents: [ %f , %f , %f ]", &x, &y, &z);
+                            pec.Config.Shape.BoxExtents = glm::vec3(x, y, z);
+                        } else if (trimmed.rfind("ShapeLineLength:", 0) == 0) {
+                            try { pec.Config.Shape.LineLength = std::stof(Trim(trimmed.substr(16))); } catch (...) {}
+                        } else if (trimmed.rfind("ShapeDirection:", 0) == 0) {
+                            float x = 0, y = 1, z = 0;
+                            sscanf(trimmed.c_str(), "ShapeDirection: [ %f , %f , %f ]", &x, &y, &z);
+                            pec.Config.Shape.Direction = glm::vec3(x, y, z);
+                        } else if (trimmed.rfind("ShapeSurfaceOnly:", 0) == 0) {
+                            pec.Config.Shape.SurfaceOnly = (Trim(trimmed.substr(17)) == "true");
+                        } else if (trimmed.rfind("TexturePath:", 0) == 0) {
+                            pec.TexturePath = Trim(trimmed.substr(12));
+                        } else if (trimmed.rfind("NormalMapPath:", 0) == 0) {
+                            pec.NormalMapPath = Trim(trimmed.substr(14));
+                        } else if (trimmed.rfind("TextureRows:", 0) == 0) {
+                            try { pec.Config.TextureRows = std::stoul(Trim(trimmed.substr(12))); } catch (...) {}
+                        } else if (trimmed.rfind("TextureCols:", 0) == 0) {
+                            try { pec.Config.TextureCols = std::stoul(Trim(trimmed.substr(12))); } catch (...) {}
+                        } else if (trimmed.rfind("TotalFrames:", 0) == 0) {
+                            try { pec.Config.TotalFrames = std::stoul(Trim(trimmed.substr(12))); } catch (...) {}
+                        } else if (trimmed.rfind("SubFrameBlending:", 0) == 0) {
+                            pec.Config.SubFrameBlending = (Trim(trimmed.substr(17)) == "true");
+                        } else if (trimmed.rfind("LightingEnabled:", 0) == 0) {
+                            pec.Config.LightingEnabled = (Trim(trimmed.substr(16)) == "true");
+                        } else if (trimmed.rfind("WrapLighting:", 0) == 0) {
+                            try { pec.Config.WrapLighting = std::stof(Trim(trimmed.substr(13))); } catch (...) {}
+                        } else if (trimmed.rfind("ScatteringFactor:", 0) == 0) {
+                            try { pec.Config.ScatteringFactor = std::stof(Trim(trimmed.substr(17))); } catch (...) {}
+                        } else if (trimmed.rfind("NormalMapStrength:", 0) == 0) {
+                            try { pec.Config.NormalMapStrength = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
+                        } else if (trimmed.rfind("NearFadeEnabled:", 0) == 0) {
+                            pec.Config.NearFadeEnabled = (Trim(trimmed.substr(16)) == "true");
+                        } else if (trimmed.rfind("NearFadeStart:", 0) == 0) {
+                            try { pec.Config.NearFadeStart = std::stof(Trim(trimmed.substr(14))); } catch (...) {}
+                        } else if (trimmed.rfind("NearFadeEnd:", 0) == 0) {
+                            try { pec.Config.NearFadeEnd = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
+                        } else if (trimmed.rfind("FarFadeEnabled:", 0) == 0) {
+                            pec.Config.FarFadeEnabled = (Trim(trimmed.substr(15)) == "true");
+                        } else if (trimmed.rfind("FarFadeStart:", 0) == 0) {
+                            try { pec.Config.FarFadeStart = std::stof(Trim(trimmed.substr(13))); } catch (...) {}
+                        } else if (trimmed.rfind("FarFadeEnd:", 0) == 0) {
+                            try { pec.Config.FarFadeEnd = std::stof(Trim(trimmed.substr(11))); } catch (...) {}
+                        } else if (trimmed.rfind("SoftnessDistance:", 0) == 0) {
+                            try { pec.Config.SoftnessDistance = std::stof(Trim(trimmed.substr(17))); } catch (...) {}
+                        } else if (trimmed.rfind("CurlNoiseEnabled:", 0) == 0) {
+                            pec.Config.CurlNoise.Enabled = (Trim(trimmed.substr(17)) == "true");
+                        } else if (trimmed.rfind("CurlNoiseStrength:", 0) == 0) {
+                            try { pec.Config.CurlNoise.Strength = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
+                        } else if (trimmed.rfind("CurlNoiseFrequency:", 0) == 0) {
+                            try { pec.Config.CurlNoise.Frequency = std::stof(Trim(trimmed.substr(19))); } catch (...) {}
+                        } else if (trimmed.rfind("CollisionEnabled:", 0) == 0) {
+                            pec.Config.Collision.Enabled = (Trim(trimmed.substr(17)) == "true");
+                        } else if (trimmed.rfind("CollisionRestitution:", 0) == 0 || trimmed.rfind("CollisionBounciness:", 0) == 0) {
+                            try { pec.Config.Collision.Restitution = std::stof(Trim(trimmed.substr(trimmed.find(':') + 1))); } catch (...) {}
+                        } else if (trimmed.rfind("CollisionFriction:", 0) == 0) {
+                            try { pec.Config.Collision.Friction = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
+                        } else if (trimmed.rfind("CollisionParticleRadius:", 0) == 0) {
+                            try { pec.Config.Collision.ParticleRadius = std::stof(Trim(trimmed.substr(24))); } catch (...) {}
+                        }
+                        pec.Initialize();
+                        break;
+                    }
+                    case ComponentSection::VehicleVFX: {
+                        if (!currentEntity.HasComponent<VehicleVFXComponent>()) {
+                            currentEntity.AddComponent<VehicleVFXComponent>();
+                        }
+                        auto& vvfx = currentEntity.GetComponent<VehicleVFXComponent>();
+                        if (trimmed.rfind("Enabled:", 0) == 0) {
+                            vvfx.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("BurnoutSlipThreshold:", 0) == 0) {
+                            try { vvfx.Config.BurnoutSlipThreshold = std::stof(Trim(trimmed.substr(21))); } catch (...) {}
+                        } else if (trimmed.rfind("SkidSlipThreshold:", 0) == 0) {
+                            try { vvfx.Config.SkidSlipThreshold = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
+                        } else if (trimmed.rfind("MinSpeedForRoosterTail:", 0) == 0) {
+                            try { vvfx.Config.MinSpeedForRoosterTail = std::stof(Trim(trimmed.substr(23))); } catch (...) {}
+                        } else if (trimmed.rfind("SurfaceType:", 0) == 0) {
+                            try { vvfx.Config.SurfaceType = static_cast<SurfaceVFXType>(std::stoi(Trim(trimmed.substr(12)))); } catch (...) {}
+                        } else if (trimmed.rfind("BackfireMinRPM:", 0) == 0) {
+                            try { vvfx.Config.BackfireMinRPM = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
+                        } else if (trimmed.rfind("BackfireThrottleLiftThreshold:", 0) == 0) {
+                            try { vvfx.Config.BackfireThrottleLiftThreshold = std::stof(Trim(trimmed.substr(30))); } catch (...) {}
+                        } else if (trimmed.rfind("BackfireHighThrottleMin:", 0) == 0) {
+                            try { vvfx.Config.BackfireHighThrottleMin = std::stof(Trim(trimmed.substr(24))); } catch (...) {}
+                        } else if (trimmed.rfind("BackfireCooldown:", 0) == 0) {
+                            try { vvfx.Config.BackfireCooldown = std::stof(Trim(trimmed.substr(17))); } catch (...) {}
+                        } else if (trimmed.rfind("BackfireFlameCount:", 0) == 0) {
+                            try { vvfx.Config.BackfireFlameCount = std::stoul(Trim(trimmed.substr(19))); } catch (...) {}
+                        } else if (trimmed.rfind("BackfireSparkCount:", 0) == 0) {
+                            try { vvfx.Config.BackfireSparkCount = std::stoul(Trim(trimmed.substr(19))); } catch (...) {}
+                        }
+                        break;
+                    }
+                    case ComponentSection::CharacterVFX: {
+                        if (!currentEntity.HasComponent<CharacterVFXComponent>()) {
+                            currentEntity.AddComponent<CharacterVFXComponent>();
+                        }
+                        auto& cvfx = currentEntity.GetComponent<CharacterVFXComponent>();
+                        if (trimmed.rfind("Enabled:", 0) == 0) {
+                            cvfx.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("FootstepMinSpeed:", 0) == 0) {
+                            try { cvfx.Config.FootstepMinSpeed = std::stof(Trim(trimmed.substr(17))); } catch (...) {}
+                        } else if (trimmed.rfind("StrideLength:", 0) == 0) {
+                            try { cvfx.Config.StrideLength = std::stof(Trim(trimmed.substr(13))); } catch (...) {}
+                        } else if (trimmed.rfind("FootSpread:", 0) == 0) {
+                            try { cvfx.Config.FootSpread = std::stof(Trim(trimmed.substr(11))); } catch (...) {}
+                        } else if (trimmed.rfind("WalkPuffCount:", 0) == 0) {
+                            try { cvfx.Config.WalkPuffCount = std::stoul(Trim(trimmed.substr(14))); } catch (...) {}
+                        } else if (trimmed.rfind("RunPuffCount:", 0) == 0) {
+                            try { cvfx.Config.RunPuffCount = std::stoul(Trim(trimmed.substr(13))); } catch (...) {}
+                        } else if (trimmed.rfind("LandingImpactThreshold:", 0) == 0) {
+                            try { cvfx.Config.LandingImpactThreshold = std::stof(Trim(trimmed.substr(23))); } catch (...) {}
+                        } else if (trimmed.rfind("HeavyLandingThreshold:", 0) == 0) {
+                            try { cvfx.Config.HeavyLandingThreshold = std::stof(Trim(trimmed.substr(22))); } catch (...) {}
+                        } else if (trimmed.rfind("NormalLandingCount:", 0) == 0) {
+                            try { cvfx.Config.NormalLandingCount = std::stoul(Trim(trimmed.substr(19))); } catch (...) {}
+                        } else if (trimmed.rfind("HeavyLandingCount:", 0) == 0) {
+                            try { cvfx.Config.HeavyLandingCount = std::stoul(Trim(trimmed.substr(18))); } catch (...) {}
                         }
                         break;
                     }

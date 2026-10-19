@@ -11,6 +11,8 @@ namespace Axle {
     }
 
     void PerspectiveCamera::SetProjection(f32 fovDegrees, f32 aspectRatio, f32 nearClip, f32 farClip) {
+        m_NearClip = nearClip;
+        m_FarClip = farClip;
         m_ProjectionMatrix = glm::perspective(glm::radians(fovDegrees), aspectRatio, nearClip, farClip);
         m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
     }

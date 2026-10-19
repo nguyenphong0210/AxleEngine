@@ -17,6 +17,7 @@ namespace Axle {
     class Entity;
     class Vehicle;
     class SkinningPipeline;
+    class ParticleRenderer;
     struct DirectionalLightComponent;
     struct SkyboxComponent;
 
@@ -89,6 +90,10 @@ namespace Axle {
                                  const glm::mat4& lightSpaceMatrix = glm::mat4(1.0f),
                                  const glm::vec3& lightDir = glm::vec3(0.45f, 1.0f, 0.65f),
                                  bool shadowPass = false);
+
+        // Render particle emitters (GPU-instanced billboarding)
+        void RenderParticles(ParticleRenderer& particleRenderer, const PerspectiveCamera& camera,
+                             const std::shared_ptr<class Framebuffer>& targetFBO = nullptr);
 
         // Simulation runtime lifecycle & dynamic vehicle assembly (Phase 20.3 Stage 2)
         void OnRuntimeStart(PhysicsScene* physicsScene = nullptr);

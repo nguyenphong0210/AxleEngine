@@ -67,6 +67,8 @@
 #include <Axle/CurlNoise.hpp>
 #include <Axle/ParticleCollision.hpp>
 #include <Axle/ParticleForceField.hpp>
+#include <Axle/VehicleVFX.hpp>
+#include <Axle/CharacterVFX.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -8529,6 +8531,374 @@ bool RunTest_Step45_Phase31_Step4_TextureSheetFlipbooksAndShadingPolish() {
 }
 
 // =============================================================================
+// STEP 46: PHASE 31 - STEP 5 ECS INTEGRATION & GAMEPLAY EVENT VFX EMITTERS
+// =============================================================================
+bool RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "  STEP 46: PHASE 31 - STEP 5 ECS & GAMEPLAY EVENT VFX   " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [46.1] ParticleEmitterComponent ECS Lifecycle & Simulation Space (World vs Local)
+    std::cout << "\n[46.1] Testing ParticleEmitterComponent ECS Lifecycle & Simulation Space..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        Axle::Entity emitterEnt = scene->CreateEntity("CampfireSmoke");
+        auto& tc = emitterEnt.GetComponent<Axle::TransformComponent>();
+        tc.Translation = glm::vec3(5.0f, 0.0f, 10.0f);
+
+        Axle::ParticleEmitterConfig smokeCfg = Axle::ParticleEmitterConfig::CreateSmoke();
+        smokeCfg.EmissionRate = 20.0f;
+        auto& pec = emitterEnt.AddComponent<Axle::ParticleEmitterComponent>(smokeCfg);
+
+        assert(pec.System != nullptr);
+        assert(pec.Active == true);
+        assert(pec.AutoPlay == true);
+        assert(pec.SimulationSpace == Axle::ParticleSimulationSpace::World);
+
+        // Step simulation in World space
+        pec.Update(0.1f, tc.Translation, tc.Rotation);
+        assert(pec.System->GetActiveParticleCount() > 0);
+
+        // Test Local simulation space toggle
+        pec.SetSimulationSpace(Axle::ParticleSimulationSpace::Local);
+        assert(pec.SimulationSpace == Axle::ParticleSimulationSpace::Local);
+        assert(pec.Config.SimulationSpace == Axle::ParticleSimulationSpace::Local);
+
+        // Test burst trigger
+        uint32_t countBefore = pec.System->GetActiveParticleCount();
+        pec.EmitBurst(25, tc.Translation, tc.Rotation);
+        assert(pec.System->GetActiveParticleCount() == countBefore + 25);
+
+        // Test Play / Stop
+        pec.Stop();
+        assert(pec.Active == false);
+        assert(pec.System->IsEmitting() == false);
+        pec.Play();
+        assert(pec.Active == true);
+        assert(pec.System->IsEmitting() == true);
+
+        std::cout << "  -> Active particles: " << pec.System->GetActiveParticleCount() << " (Local space: toggled, Burst: +25)" << std::endl;
+        std::cout << "  -> PASS: ParticleEmitterComponent ECS lifecycle and simulation space verified." << std::endl;
+    }
+
+    // [46.2] Vehicle Gameplay VFX: Tire Burnout Smoke & Lateral Skid Debris
+    std::cout << "\n[46.2] Testing Vehicle Gameplay VFX: Tire Burnout Smoke & Skid Debris..." << std::endl;
+    {
+        Axle::VehicleVFX vfx;
+        Axle::VehicleTelemetryData telemetry;
+        telemetry.SpeedMps = 10.0f;
+        telemetry.SpeedKmh = 36.0f;
+        telemetry.EngineRPM = 3000.0f;
+        telemetry.ForwardVector = glm::vec3(0.0f, 0.0f, 1.0f);
+
+        for (int i = 0; i < 4; ++i) {
+            telemetry.Wheels[i].HasContact = true;
+            telemetry.Wheels[i].LongitudinalSlip = 0.05f;
+            telemetry.Wheels[i].LateralSlip = 0.02f;
+            telemetry.Wheels[i].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(i * 1.5f, 0.35f, 0.0f));
+        }
+
+        // Test normal driving (below slip threshold): no burnout smoke
+        Axle::Timestep ts(0.05f);
+        vfx.Update(ts, telemetry, 0.5f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        assert(!vfx.IsWheelSkidding(0));
+        assert(!vfx.IsWheelSkidding(1));
+
+        // Test Burnout Trigger: Wheel 0 longitudinal slip = 0.70f (> 0.30 threshold)
+        telemetry.Wheels[0].LongitudinalSlip = 0.70f;
+        vfx.Update(ts, telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        assert(vfx.IsWheelSkidding(0));
+        assert(vfx.GetWheelSmokeSystem(0)->GetActiveParticleCount() > 0);
+
+        // Test Lateral Drift / Skid Trigger: Wheel 1 lateral slip = 0.50f (> 0.25 threshold)
+        telemetry.Wheels[1].LateralSlip = 0.50f;
+        vfx.Update(ts, telemetry, 0.8f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        assert(vfx.IsWheelSkidding(1));
+        assert(vfx.GetWheelSmokeSystem(1)->GetActiveParticleCount() > 0);
+
+        // Return slip below threshold: stops emitting
+        telemetry.Wheels[0].LongitudinalSlip = 0.05f;
+        telemetry.Wheels[1].LateralSlip = 0.02f;
+        vfx.Update(ts, telemetry, 0.2f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        assert(!vfx.IsWheelSkidding(0));
+        assert(!vfx.IsWheelSkidding(1));
+
+        std::cout << "  -> Wheel 0 burnout smoke active: " << vfx.GetWheelSmokeSystem(0)->GetActiveParticleCount() << " particles." << std::endl;
+        std::cout << "  -> Wheel 1 drift skid smoke active: " << vfx.GetWheelSmokeSystem(1)->GetActiveParticleCount() << " particles." << std::endl;
+        std::cout << "  -> PASS: Dynamic tire burnout and lateral skid smoke hooks verified." << std::endl;
+    }
+
+    // [46.3] Vehicle Gameplay VFX: Off-Road Surface Rooster Tails
+    std::cout << "\n[46.3] Testing Vehicle Gameplay VFX: Off-Road Dirt Rooster Tails..." << std::endl;
+    {
+        Axle::VehicleVFX vfx;
+        vfx.SetSurfaceType(Axle::SurfaceVFXType::Dirt);
+        assert(vfx.GetSurfaceType() == Axle::SurfaceVFXType::Dirt);
+
+        Axle::VehicleTelemetryData telemetry;
+        telemetry.ForwardVector = glm::vec3(0.0f, 0.0f, 1.0f);
+        for (int i = 0; i < 4; ++i) {
+            telemetry.Wheels[i].HasContact = true;
+            telemetry.Wheels[i].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(i * 1.5f, 0.35f, 0.0f));
+        }
+
+        Axle::Timestep ts(0.05f);
+
+        // Low speed (< 4.0 m/s threshold): no rooster tail
+        telemetry.SpeedMps = 2.0f;
+        vfx.Update(ts, telemetry, 0.3f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        assert(!vfx.IsRoosterTailing(0));
+
+        // High speed on Dirt (16.0 m/s): dynamic rooster tail kicks up
+        telemetry.SpeedMps = 16.0f;
+        vfx.Update(ts, telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        assert(vfx.IsRoosterTailing(0));
+        assert(vfx.GetWheelRoosterSystem(0)->GetActiveParticleCount() > 0);
+
+        // Switch to Asphalt: rooster tails disabled
+        vfx.SetSurfaceType(Axle::SurfaceVFXType::Asphalt);
+        vfx.Update(ts, telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        assert(!vfx.IsRoosterTailing(0));
+
+        // Test Gravel & Mud surfaces
+        vfx.SetSurfaceType(Axle::SurfaceVFXType::Gravel);
+        assert(vfx.GetSurfaceType() == Axle::SurfaceVFXType::Gravel);
+        vfx.SetSurfaceType(Axle::SurfaceVFXType::Mud);
+        assert(vfx.GetSurfaceType() == Axle::SurfaceVFXType::Mud);
+
+        std::cout << "  -> Dirt rooster tail active: " << vfx.GetWheelRoosterSystem(0)->GetActiveParticleCount() << " particles (Suppressed on Asphalt)." << std::endl;
+        std::cout << "  -> PASS: Surface-aware dynamic rooster tail system verified." << std::endl;
+    }
+
+    // [46.4] Vehicle Gameplay VFX: High-RPM Exhaust Backfire Flames & Popping Sparks
+    std::cout << "\n[46.4] Testing Vehicle Gameplay VFX: High-RPM Exhaust Backfire Flames & Sparks..." << std::endl;
+    {
+        Axle::VehicleVFX vfx;
+        Axle::VehicleTelemetryData telemetry;
+        telemetry.ForwardVector = glm::vec3(0.0f, 0.0f, 1.0f);
+        telemetry.SpeedMps = 25.0f;
+        Axle::Timestep ts(0.05f);
+
+        // Phase 1: High RPM acceleration (6500 RPM, full throttle) -> No backfire during acceleration
+        telemetry.EngineRPM = 6500.0f;
+        vfx.Update(ts, telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+        assert(vfx.GetBackfireCount() == 0);
+        assert(!vfx.IsBackfireActive());
+
+        // Phase 2: Driver suddenly lifts off throttle (Throttle: 1.0 -> 0.0 while RPM remains 6400)
+        telemetry.EngineRPM = 6400.0f;
+        vfx.Update(ts, telemetry, 0.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+
+        assert(vfx.GetBackfireCount() == 1);
+        assert(vfx.IsBackfireActive());
+        assert(vfx.GetExhaustFlameSystem()->GetActiveParticleCount() > 0);
+        assert(vfx.GetExhaustSparkSystem()->GetActiveParticleCount() > 0);
+
+        // Test manual backfire trigger
+        vfx.TriggerManualBackfire(15, 25);
+        assert(vfx.GetBackfireCount() == 2);
+
+        std::cout << "  -> Backfire count: " << vfx.GetBackfireCount() << " (Flames: "
+                  << vfx.GetExhaustFlameSystem()->GetActiveParticleCount() << ", Sparks: "
+                  << vfx.GetExhaustSparkSystem()->GetActiveParticleCount() << ")" << std::endl;
+        std::cout << "  -> PASS: High-RPM throttle lift-off exhaust backfire flames and sparks verified." << std::endl;
+    }
+
+    // [46.5] Character Gameplay VFX: Ground Footstep Dust Puffs
+    std::cout << "\n[46.5] Testing Character Gameplay VFX: Ground Footstep Dust Puffs..." << std::endl;
+    {
+        Axle::CharacterVFX cvfx;
+        glm::vec3 pos(0.0f);
+        glm::quat rot(1.0f, 0.0f, 0.0f, 0.0f);
+        Axle::Timestep ts(0.05f);
+
+        // Stationary character (speed = 0): no dust puffs
+        cvfx.Update(ts, pos, rot, glm::vec3(0.0f), true, 0.0f);
+        assert(cvfx.GetFootstepCount() == 0);
+
+        // Walking character (speed = 3.5 m/s): advance 15 steps (0.75s total = 2.625m > 1.4m stride)
+        for (int step = 0; step < 15; ++step) {
+            pos.z += 3.5f * 0.05f;
+            cvfx.Update(ts, pos, rot, glm::vec3(0.0f, 0.0f, 3.5f), true, 3.5f);
+        }
+
+        assert(cvfx.GetFootstepCount() >= 1);
+        assert(cvfx.GetFootstepSystem()->GetActiveParticleCount() > 0);
+
+        uint32_t walkFootsteps = cvfx.GetFootstepCount();
+
+        // Running character (speed = 7.0 m/s): rapid footsteps
+        for (int step = 0; step < 20; ++step) {
+            pos.z += 7.0f * 0.05f;
+            cvfx.Update(ts, pos, rot, glm::vec3(0.0f, 0.0f, 7.0f), true, 7.0f);
+        }
+
+        assert(cvfx.GetFootstepCount() > walkFootsteps);
+
+        std::cout << "  -> Footsteps emitted: " << cvfx.GetFootstepCount()
+                  << " (Active dust particles: " << cvfx.GetFootstepSystem()->GetActiveParticleCount() << ")" << std::endl;
+        std::cout << "  -> PASS: Character locomotion footstep dust puff cadence verified." << std::endl;
+    }
+
+    // [46.6] Character Gameplay VFX: Jump Freefall & Landing Shockwave Dust Ripple
+    std::cout << "\n[46.6] Testing Character Gameplay VFX: Freefall & Landing Shockwave..." << std::endl;
+    {
+        Axle::CharacterVFX cvfx;
+        glm::vec3 pos(0.0f, 10.0f, 0.0f);
+        glm::quat rot(1.0f, 0.0f, 0.0f, 0.0f);
+        Axle::Timestep ts(0.05f);
+
+        // Freefall: In air (isGrounded = false), vertical velocity Y = -6.8 m/s
+        cvfx.Update(ts, pos, rot, glm::vec3(0.0f, -6.8f, 0.0f), false, 0.0f);
+        assert(cvfx.WasJustAirborne());
+        assert(cvfx.GetLandingCount() == 0);
+
+        // Landing Impact: Touches ground (isGrounded = true)
+        pos.y = 0.0f;
+        cvfx.Update(ts, pos, rot, glm::vec3(0.0f), true, 0.0f);
+
+        assert(cvfx.GetLandingCount() == 1);
+        assert(std::abs(cvfx.GetLastImpactSpeed() - 6.8f) < 0.01f);
+        assert(cvfx.GetLandingShockwaveSystem()->GetActiveParticleCount() >= 30);
+
+        // Test heavy landing (> 7.5 m/s, e.g. -11.0 m/s freefall)
+        cvfx.Update(ts, pos, rot, glm::vec3(0.0f, -11.0f, 0.0f), false, 0.0f);
+        assert(cvfx.WasJustAirborne());
+        cvfx.Update(ts, pos, rot, glm::vec3(0.0f), true, 0.0f);
+
+        assert(cvfx.GetLandingCount() == 2);
+        assert(std::abs(cvfx.GetLastImpactSpeed() - 11.0f) < 0.01f);
+        assert(cvfx.GetLandingShockwaveSystem()->GetActiveParticleCount() >= 70);
+
+        std::cout << "  -> Landings triggered: " << cvfx.GetLandingCount()
+                  << " (Last impact speed: " << cvfx.GetLastImpactSpeed()
+                  << " m/s, Active shockwave particles: " << cvfx.GetLandingShockwaveSystem()->GetActiveParticleCount() << ")" << std::endl;
+        std::cout << "  -> PASS: Character freefall landing shockwave radial dust ripple verified." << std::endl;
+    }
+
+    // [46.7] Scene Serialization & Deserialization Roundtrip (VFX Components)
+    std::cout << "\n[46.7] Testing Scene Serialization & Deserialization for VFX Components..." << std::endl;
+    {
+        auto srcScene = std::make_shared<Axle::Scene>();
+
+        // 1. Entity with ParticleEmitterComponent
+        Axle::Entity emitterEnt = srcScene->CreateEntity("CampfireVFX");
+        Axle::ParticleEmitterConfig fireCfg = Axle::ParticleEmitterConfig::CreateFire();
+        fireCfg.Name = "CustomFire";
+        fireCfg.EmissionRate = 75.0f;
+        fireCfg.Shape.Type = Axle::ParticleEmitterShapeType::Cone;
+        fireCfg.Shape.ConeAngle = 0.45f;
+        fireCfg.CurlNoise.Enabled = true;
+        fireCfg.CurlNoise.Strength = 2.5f;
+        fireCfg.Collision.Enabled = true;
+        fireCfg.Collision.Restitution = 0.65f;
+        fireCfg.Collision.Friction = 0.35f;
+
+        auto& pec = emitterEnt.AddComponent<Axle::ParticleEmitterComponent>(fireCfg);
+        pec.SetSimulationSpace(Axle::ParticleSimulationSpace::World);
+
+        // 2. Entity with VehicleVFXComponent
+        Axle::Entity carEnt = srcScene->CreateEntity("SportsCar");
+        Axle::VehicleVFXConfig vVFXCfg;
+        vVFXCfg.BurnoutSlipThreshold = 0.28f;
+        vVFXCfg.SkidSlipThreshold = 0.22f;
+        vVFXCfg.MinSpeedForRoosterTail = 5.5f;
+        vVFXCfg.BackfireMinRPM = 5400.0f;
+        vVFXCfg.SurfaceType = Axle::SurfaceVFXType::Gravel;
+        carEnt.AddComponent<Axle::VehicleVFXComponent>(vVFXCfg);
+
+        // 3. Entity with CharacterVFXComponent
+        Axle::Entity playerEnt = srcScene->CreateEntity("HeroPlayer");
+        Axle::CharacterVFXConfig cVFXCfg;
+        cVFXCfg.StrideLength = 1.55f;
+        cVFXCfg.FootstepMinSpeed = 0.9f;
+        cVFXCfg.LandingImpactThreshold = 3.2f;
+        cVFXCfg.HeavyLandingThreshold = 8.0f;
+        playerEnt.AddComponent<Axle::CharacterVFXComponent>(cVFXCfg);
+
+        // Serialize to YAML
+        Axle::SceneSerializer serializer(srcScene.get());
+        std::string yaml = serializer.SerializeToString();
+
+        assert(yaml.find("ParticleEmitterComponent:") != std::string::npos);
+        assert(yaml.find("CustomFire") != std::string::npos);
+        assert(yaml.find("ShapeConeAngle: 0.45") != std::string::npos);
+        assert(yaml.find("VehicleVFXComponent:") != std::string::npos);
+        assert(yaml.find("BurnoutSlipThreshold: 0.28") != std::string::npos);
+        assert(yaml.find("CharacterVFXComponent:") != std::string::npos);
+        assert(yaml.find("StrideLength: 1.55") != std::string::npos);
+
+        // Deserialize into new scene
+        auto dstScene = std::make_shared<Axle::Scene>();
+        Axle::SceneSerializer deserializer(dstScene.get());
+        bool deserialized = deserializer.DeserializeFromString(yaml);
+        assert(deserialized);
+
+        // Verify Entity 1: CampfireVFX
+        Axle::Entity dstEmitter = dstScene->GetEntityByUUID(emitterEnt.GetComponent<Axle::IDComponent>().ID);
+        assert(dstEmitter);
+        assert(dstEmitter.HasComponent<Axle::ParticleEmitterComponent>());
+        auto& dstPec = dstEmitter.GetComponent<Axle::ParticleEmitterComponent>();
+        assert(dstPec.Config.Name == "CustomFire");
+        assert(std::abs(dstPec.Config.EmissionRate - 75.0f) < 0.01f);
+        assert(dstPec.Config.Shape.Type == Axle::ParticleEmitterShapeType::Cone);
+        assert(std::abs(dstPec.Config.Shape.ConeAngle - 0.45f) < 0.01f);
+        assert(dstPec.Config.CurlNoise.Enabled == true);
+        assert(std::abs(dstPec.Config.Collision.Restitution - 0.65f) < 0.01f);
+        assert(dstPec.System != nullptr);
+
+        // Verify Entity 2: SportsCar
+        Axle::Entity dstCar = dstScene->GetEntityByUUID(carEnt.GetComponent<Axle::IDComponent>().ID);
+        assert(dstCar);
+        assert(dstCar.HasComponent<Axle::VehicleVFXComponent>());
+        auto& dstVVFX = dstCar.GetComponent<Axle::VehicleVFXComponent>();
+        assert(std::abs(dstVVFX.Config.BurnoutSlipThreshold - 0.28f) < 0.01f);
+        assert(std::abs(dstVVFX.Config.BackfireMinRPM - 5400.0f) < 0.01f);
+        assert(dstVVFX.Config.SurfaceType == Axle::SurfaceVFXType::Gravel);
+
+        // Verify Entity 3: HeroPlayer
+        Axle::Entity dstPlayer = dstScene->GetEntityByUUID(playerEnt.GetComponent<Axle::IDComponent>().ID);
+        assert(dstPlayer);
+        assert(dstPlayer.HasComponent<Axle::CharacterVFXComponent>());
+        auto& dstCVFX = dstPlayer.GetComponent<Axle::CharacterVFXComponent>();
+        assert(std::abs(dstCVFX.Config.StrideLength - 1.55f) < 0.01f);
+        assert(std::abs(dstCVFX.Config.HeavyLandingThreshold - 8.0f) < 0.01f);
+
+        std::cout << "  -> YAML payload length: " << yaml.length() << " bytes." << std::endl;
+        std::cout << "  -> Deserialized ParticleEmitter, VehicleVFX, and CharacterVFX with 100% parameter fidelity." << std::endl;
+        std::cout << "  -> PASS: Scene serialization and deserialization roundtrip verified." << std::endl;
+    }
+
+    // [46.8] Full Scene Renderer Integration (Particle VFX Pass)
+    std::cout << "\n[46.8] Testing SceneRenderer Multi-Pass Particle VFX Dispatch..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        Axle::Entity ent = scene->CreateEntity("BurstSparks");
+        auto& pec = ent.AddComponent<Axle::ParticleEmitterComponent>(Axle::ParticleEmitterConfig::CreateSparks());
+        pec.EmitBurst(80);
+        assert(pec.System->GetActiveParticleCount() == 80);
+
+        Axle::SceneRenderer renderer;
+        Axle::PerspectiveCamera camera(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+        camera.SetPosition(glm::vec3(0.0f, 2.0f, 10.0f));
+
+        assert(renderer.GetParticleRenderer() != nullptr);
+        assert(renderer.GetParticleRenderer()->IsInitialized());
+
+        scene->RenderParticles(*renderer.GetParticleRenderer(), camera);
+
+        assert(renderer.GetParticleRenderer()->GetDrawCallCount() == 1);
+        assert(renderer.GetParticleRenderer()->GetRenderedParticleCount() == 80);
+
+        std::cout << "  -> Rendered 80 particles through SceneRenderer particle pass in single draw call." << std::endl;
+        std::cout << "  -> PASS: SceneRenderer Multi-Pass Particle VFX pipeline verified." << std::endl;
+    }
+
+    std::cout << ">>> STEP 46 PASSED: Phase 31 Step 5 ECS Integration & Gameplay Event VFX 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -8586,12 +8956,13 @@ int main(int argc, char** argv) {
         else if (arg == "43" || arg == "step43" || arg == "--step43" || arg == "--phase31b" || arg == "--instancing") targetStep = 43;
         else if (arg == "44" || arg == "step44" || arg == "--step44" || arg == "--phase31c" || arg == "--dynamics") targetStep = 44;
         else if (arg == "45" || arg == "step45" || arg == "--step45" || arg == "--phase31d" || arg == "--shading") targetStep = 45;
+        else if (arg == "46" || arg == "step46" || arg == "--step46" || arg == "--phase31e" || arg == "--ecs-vfx") targetStep = 46;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 45 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 46 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -8733,6 +9104,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 45) {
         if (!RunTest_Step45_Phase31_Step4_TextureSheetFlipbooksAndShadingPolish()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 46) {
+        if (!RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

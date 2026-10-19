@@ -7,6 +7,7 @@ add_library(AxleScene STATIC
     src/ScriptHotReloadManager.cpp
     src/ScriptCompiler.cpp
     src/SceneRenderer.cpp
+    src/CharacterVFX.cpp
 )
 add_library(Axle::Scene ALIAS AxleScene)
 
@@ -24,4 +25,6 @@ target_link_libraries(AxleScene
         Axle::Vehicle
         Axle::Asset
         Axle::Audio
+        Axle::VFX
 )
+

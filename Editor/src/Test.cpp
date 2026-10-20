@@ -70,6 +70,9 @@
 #include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
 #include <Axle/VFXEditorPanel.hpp>
+#include <Axle/RHI/RHICommon.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHISurface.hpp>
 #include <iostream>
 
 // =============================================================================
@@ -9101,6 +9104,156 @@ bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
 }
 
 // =============================================================================
+// STEP 48: PHASE 32 STEP 1 - NRI CORE SUBMODULE & RHI DEVICE LIFECYCLE (ENGINE/RHI)
+// =============================================================================
+bool RunTest_Step48_Phase32_Step1_NRICoreAndRHIDeviceLifecycle() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " RUNNING STEP 48: Phase 32 Step 1 - NRI Core & RHI Device Lifecycle" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [48.1] Physical GPU Adapter Enumeration
+    std::cout << "\n[48.1] Testing Physical GPU Adapter Enumeration..." << std::endl;
+    {
+        auto adapters = Axle::RHI::RHIDevice::EnumerateAdapters();
+        std::cout << "  -> Physical GPU Adapters found: " << adapters.size() << std::endl;
+        assert(!adapters.empty() && "Expected at least one graphics adapter!");
+
+        bool foundValidAdapter = false;
+        for (size_t i = 0; i < adapters.size(); ++i) {
+            const auto& a = adapters[i];
+            std::cout << "  -> Adapter [" << i << "]: " << a.Name
+                      << " | Vendor: " << a.VendorName
+                      << " | VRAM: " << (a.DedicatedVideoMemory / (1024 * 1024)) << " MB"
+                      << " | Discrete: " << (a.IsDiscreteGPU ? "Yes" : "No")
+                      << " | D3D12: " << (a.SupportsD3D12 ? "Yes" : "No")
+                      << " | Vulkan: " << (a.SupportsVulkan ? "Yes" : "No") << std::endl;
+
+            assert(!a.Name.empty());
+            foundValidAdapter = true;
+        }
+        assert(foundValidAdapter);
+        std::cout << "  -> PASS: GPU Adapter Enumeration and capability reporting verified." << std::endl;
+    }
+
+    // [48.2] RHI Device Lifecycle with Preferred Backend (Direct3D 12)
+    std::cout << "\n[48.2] Testing RHI Device Initialization (Direct3D 12)..." << std::endl;
+    {
+        auto& rhi = Axle::RHI::RHIDevice::Get();
+        Axle::RHI::RHIDeviceDesc desc;
+        desc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+        desc.EnableValidation = false;
+        desc.AllowFallback = true;
+
+        bool ok = rhi.Init(desc);
+        assert(ok);
+        assert(rhi.IsInitialized());
+
+        const auto& caps = rhi.GetCapabilities();
+        std::cout << "  -> Active Backend: " << Axle::RHI::RHITypeToString(caps.ActiveBackend) << std::endl;
+        std::cout << "  -> Active GPU: " << caps.AdapterName << std::endl;
+        std::cout << "  -> Dedicated VRAM: " << (caps.DedicatedVideoMemory / (1024 * 1024)) << " MB" << std::endl;
+
+        if (caps.ActiveBackend == Axle::RHI::RHIType::Direct3D12 || caps.ActiveBackend == Axle::RHI::RHIType::Vulkan) {
+            assert(rhi.GetNRIDevice() != nullptr);
+            assert(rhi.GetNRICore().GetDeviceDesc != nullptr);
+        }
+        std::cout << "  -> PASS: RHIDevice initialization and NRI interface binding verified." << std::endl;
+    }
+
+    // [48.3] Hardware Capability Query (Ray Tracing, Mesh Shaders, Bindless)
+    std::cout << "\n[48.3] Testing Hardware Capability Query..." << std::endl;
+    {
+        auto& rhi = Axle::RHI::RHIDevice::Get();
+        const auto& caps = rhi.GetCapabilities();
+
+        std::cout << "  -> Hardware Ray Tracing: " << (caps.IsRayTracingSupported ? "YES" : "NO")
+                  << " (Tier " << caps.RayTracingTier << ")" << std::endl;
+        std::cout << "  -> Mesh Shaders: " << (caps.IsMeshShaderSupported ? "YES" : "NO") << std::endl;
+        std::cout << "  -> Bindless Resources: " << (caps.IsBindlessSupported ? "YES" : "NO")
+                  << " (Tier " << caps.BindlessTier << ")" << std::endl;
+        std::cout << "  -> Conservative Raster: " << (caps.IsConservativeRasterSupported ? "YES" : "NO")
+                  << " (Tier " << caps.ConservativeRasterTier << ")" << std::endl;
+        std::cout << "  -> Enhanced Barriers: " << (caps.IsEnhancedBarriersSupported ? "YES" : "NO") << std::endl;
+        std::cout << "  -> Max 2D Texture Dimension: " << caps.MaxTextureDimension2D << std::endl;
+        std::cout << "  -> Max Compute Invocations/Group: " << caps.MaxComputeWorkGroupInvocations << std::endl;
+
+        assert(caps.MaxTextureDimension2D > 0);
+        assert(caps.MaxComputeWorkGroupInvocations > 0);
+        std::cout << "  -> PASS: Modern Hardware Capability queries successfully validated." << std::endl;
+    }
+
+    // [48.4] Native Windowing & Surface Integration
+    std::cout << "\n[48.4] Testing Native Windowing & Surface Integration (HWND / GLFW)..." << std::endl;
+    {
+        Axle::WindowProps props;
+        props.Title = "Axle RHI Surface Test";
+        props.Width = 960;
+        props.Height = 540;
+        props.Maximized = false;
+
+        Axle::Window window(props);
+        Axle::RHI::RHISurface surface;
+        bool surfaceOk = surface.Init(window);
+        assert(surfaceOk);
+        assert(surface.IsValid());
+        assert(surface.GetNativeHandle() != nullptr);
+        assert(surface.GetWidth() > 0 && surface.GetHeight() > 0);
+
+        nri::Window nriWindow = surface.GetNRIWindow();
+#if defined(_WIN32)
+        assert(nriWindow.windows.hwnd == surface.GetNativeHandle());
+        std::cout << "  -> Verified Native Win32 Surface HWND: " << nriWindow.windows.hwnd << std::endl;
+#endif
+
+        surface.Resize(1280, 720);
+        assert(surface.GetWidth() == 1280);
+        assert(surface.GetHeight() == 720);
+
+        surface.Shutdown();
+        assert(!surface.IsValid());
+        std::cout << "  -> PASS: GLFW to Native Surface (HWND) binding and resize verified." << std::endl;
+    }
+
+    // [48.5] Dynamic Backend Selection & OpenGL Fallback
+    std::cout << "\n[48.5] Testing Dynamic Backend Selection & OpenGL Fallback..." << std::endl;
+    {
+        auto& rhi = Axle::RHI::RHIDevice::Get();
+        rhi.Shutdown();
+        assert(!rhi.IsInitialized());
+
+        Axle::RHI::RHIDeviceDesc glDesc;
+        glDesc.PreferredBackend = Axle::RHI::RHIType::OpenGL;
+        bool ok = rhi.Init(glDesc);
+        assert(ok);
+        assert(rhi.IsInitialized());
+        assert(rhi.GetBackend() == Axle::RHI::RHIType::OpenGL);
+
+        const auto& glCaps = rhi.GetCapabilities();
+        assert(glCaps.ActiveBackend == Axle::RHI::RHIType::OpenGL);
+        assert(glCaps.MaxTextureDimension2D >= 16384);
+        assert(glCaps.MaxComputeWorkGroupInvocations >= 1024);
+
+        // Re-initialize default backend to verify re-entrance
+        rhi.Shutdown();
+        assert(!rhi.IsInitialized());
+
+        Axle::RHI::RHIDeviceDesc defaultDesc;
+        defaultDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+        defaultDesc.AllowFallback = true;
+        ok = rhi.Init(defaultDesc);
+        assert(ok);
+        assert(rhi.IsInitialized());
+
+        rhi.Shutdown();
+        assert(!rhi.IsInitialized());
+        std::cout << "  -> PASS: Dynamic Backend Selection, OpenGL Fallback, and Clean Shutdown verified." << std::endl;
+    }
+
+    std::cout << "\n>>> STEP 48 PASSED: Phase 32 Step 1 NRI Core Submodule & RHI Device Lifecycle 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -9160,12 +9313,13 @@ int main(int argc, char** argv) {
         else if (arg == "45" || arg == "step45" || arg == "--step45" || arg == "--phase31d" || arg == "--shading") targetStep = 45;
         else if (arg == "46" || arg == "step46" || arg == "--step46" || arg == "--phase31e" || arg == "--ecs-vfx") targetStep = 46;
         else if (arg == "47" || arg == "step47" || arg == "--step47" || arg == "--phase31f" || arg == "--vfx-editor") targetStep = 47;
+        else if (arg == "48" || arg == "step48" || arg == "--step48" || arg == "--phase32" || arg == "--phase32a" || arg == "--rhi") targetStep = 48;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 47 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 48 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -9313,6 +9467,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 47) {
         if (!RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 48) {
+        if (!RunTest_Step48_Phase32_Step1_NRICoreAndRHIDeviceLifecycle()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

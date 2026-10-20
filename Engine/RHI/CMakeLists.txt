@@ -1,5 +1,6 @@
 add_library(AxleRHI STATIC
     src/RHIDevice.cpp
+    src/RHISurface.cpp
 )
 add_library(Axle::RHI ALIAS AxleRHI)
 

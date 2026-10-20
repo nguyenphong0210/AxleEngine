@@ -52,8 +52,12 @@ namespace Axle::RHI {
         // Resize the swapchain
         bool Resize(uint32_t width, uint32_t height);
 
+        // Reconfigure presentation mode (VSync vs Low-Latency Mailbox)
+        void SetVSync(bool vsync);
+
         bool IsValid() const { return m_Initialized && (m_SwapChain != nullptr || m_IsLegacyOpenGL); }
         bool NeedsResize() const { return m_NeedsResize; }
+        bool IsMinimized() const { return m_IsMinimized; }
 
         uint32_t GetWidth() const { return m_Desc.Width; }
         uint32_t GetHeight() const { return m_Desc.Height; }
@@ -78,12 +82,15 @@ namespace Axle::RHI {
     private:
         bool CreateNRIResources(const RHISurface& surface);
         void DestroyNRIResources();
+        bool RecreateSwapChain();
 
     private:
         bool m_Initialized = false;
         bool m_IsLegacyOpenGL = false;
         bool m_NeedsResize = false;
+        bool m_IsMinimized = false;
 
+        const RHISurface* m_Surface = nullptr;
         RHISwapChainDesc m_Desc;
         nri::SwapChain* m_SwapChain = nullptr;
         nri::Fence* m_FrameFence = nullptr;

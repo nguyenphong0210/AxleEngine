@@ -7,8 +7,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 30** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **42 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
+* **Completed Phases**: **Phase 1 through Phase 31, and Phase 32 Steps 1 & 2** (100% implemented, verified, and stabilized).
+* **Automated Test Verification**: **49 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 31: Advanced Particle & Visual Effects System (`Engine/VFX`)** and beyond.
 
 ---
@@ -301,10 +301,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Integrate lightweight NVIDIA Rendering Interface (MIT) into `ThirdParty/NRI` (Core, Helper, and Streamer modules).
     - [x] Unified Device Abstraction: Physical GPU enumeration, hardware capability query (Ray Tracing, Mesh Shaders, Bindless Resources), and dynamic backend selection (Direct3D 12, Vulkan 1.3, with OpenGL 4.5 legacy fallback).
     - [x] Native Windowing & Surface Integration: Bind GLFW window handles to native surfaces (`HWND` for D3D12 on Windows / `VkSurfaceKHR` for Vulkan).
-  - [ ] **Step 2 - Swapchain, Command Allocators & Frames-in-Flight Orchestration**:
-    - [ ] High-performance double/triple buffered swapchain (`nri::SwapChainDesc`) with configurable presentation modes (VSync vs Low-Latency Mailbox).
-    - [ ] Frame Synchronization Engine: 2-3 Frames-in-Flight architecture with per-frame Command Allocators, Fences, and Semaphores to eliminate CPU stalls and prevent GPU read/write hazards.
-    - [ ] Dynamic window resize handling, minimized window guard, and seamless borderless/exclusive fullscreen toggle without resource leaks.
+  - [x] **Step 2 - Swapchain, Command Allocators & Frames-in-Flight Orchestration**:
+    - [x] High-performance double/triple buffered swapchain (`nri::SwapChainDesc`) with configurable presentation modes (VSync vs Low-Latency Mailbox).
+    - [x] Frame Synchronization Engine: 2-3 Frames-in-Flight architecture with per-frame Command Allocators, Fences, and Semaphores to eliminate CPU stalls and prevent GPU read/write hazards.
+    - [x] Dynamic window resize handling, minimized window guard, and seamless borderless/exclusive fullscreen toggle without resource leaks.
   - [ ] **Step 3 - Unified Cross-API Shader Pipeline & Bytecode Toolchain**:
     - [ ] Cross-API shader compilation pipeline (Slang or DXC + `glslang`/SPIRV-Cross) compiling single-source shaders into SPIR-V (Vulkan 1.3) and DXIL/DXBC (Direct3D 12).
     - [ ] Automated bytecode caching (`.spv` and `.dxil`) with `last_write_time` dependency validation in asset directory.

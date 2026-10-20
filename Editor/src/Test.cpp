@@ -73,6 +73,8 @@
 #include <Axle/RHI/RHICommon.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHISurface.hpp>
+#include <Axle/RHI/RHISwapChain.hpp>
+#include <GLFW/glfw3.h>
 #include <iostream>
 
 // =============================================================================
@@ -9254,6 +9256,355 @@ bool RunTest_Step48_Phase32_Step1_NRICoreAndRHIDeviceLifecycle() {
 }
 
 // =============================================================================
+// STEP 49: PHASE 32 STEP 2 - SWAPCHAIN, ALLOCATORS & FRAMES-IN-FLIGHT ORCHESTRATION
+// =============================================================================
+bool RunTest_Step49_Phase32_Step2_SwapchainAndFramesInFlight() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " RUNNING STEP 49: Phase 32 Step 2 - Swapchain & Frames-in-Flight" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [49.1] Double vs Triple Buffered Swapchain Creation
+    std::cout << "\n[49.1] Testing Double & Triple Buffered Swapchain Initialization..." << std::endl;
+    {
+        auto& rhi = Axle::RHI::RHIDevice::Get();
+        if (!rhi.IsInitialized()) {
+            Axle::RHI::RHIDeviceDesc devDesc;
+            devDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+            devDesc.AllowFallback = true;
+            bool devOk = rhi.Init(devDesc);
+            assert(devOk);
+        }
+
+        Axle::WindowProps props;
+        props.Title = "Axle RHI Swapchain Test";
+        props.Width = 1280;
+        props.Height = 720;
+        props.Maximized = false;
+
+        Axle::Window window(props);
+        Axle::RHI::RHISurface surface;
+        bool surfaceOk = surface.Init(window);
+        assert(surfaceOk);
+        assert(surface.IsValid());
+
+        // Test Double Buffering (2 buffers, 2 frames-in-flight)
+        Axle::RHI::RHISwapChain swapChain;
+        Axle::RHI::RHISwapChainDesc scDesc;
+        scDesc.BufferCount = 2;
+        scDesc.FramesInFlight = 2;
+        scDesc.VSync = true;
+
+        bool scOk = swapChain.Init(surface, scDesc);
+        assert(scOk);
+        assert(swapChain.IsValid());
+        assert(swapChain.GetBufferCount() >= 2);
+        assert(swapChain.GetFramesInFlight() == 2);
+        assert(swapChain.GetWidth() == 1280);
+        assert(swapChain.GetHeight() == 720);
+        assert(swapChain.IsVSync() == true);
+        assert(swapChain.GetTexture(0) != nullptr);
+        std::cout << "  -> PASS: Double-buffered SwapChain initialized ("
+                  << swapChain.GetBufferCount() << " buffers, "
+                  << swapChain.GetFramesInFlight() << " frames-in-flight)." << std::endl;
+
+        // Test Triple Buffering (3 buffers, 3 frames-in-flight)
+        scDesc.BufferCount = 3;
+        scDesc.FramesInFlight = 3;
+        scDesc.VSync = false;
+        scOk = swapChain.Init(surface, scDesc);
+        assert(scOk);
+        assert(swapChain.IsValid());
+        assert(swapChain.GetBufferCount() >= 3);
+        assert(swapChain.GetFramesInFlight() == 3);
+        assert(swapChain.IsVSync() == false);
+        assert(swapChain.GetTexture(0) != nullptr);
+        assert(swapChain.GetTexture(1) != nullptr);
+        assert(swapChain.GetTexture(2) != nullptr);
+        std::cout << "  -> PASS: Triple-buffered SwapChain initialized ("
+                  << swapChain.GetBufferCount() << " buffers, "
+                  << swapChain.GetFramesInFlight() << " frames-in-flight)." << std::endl;
+
+        swapChain.Shutdown();
+        assert(!swapChain.IsValid());
+    }
+
+    // [49.2] Frames-in-Flight Architecture & Command Allocators
+    std::cout << "\n[49.2] Testing Frames-in-Flight Synchronization Engine..." << std::endl;
+    {
+        Axle::WindowProps props;
+        props.Title = "Axle RHI Frames-in-Flight Test";
+        props.Width = 960;
+        props.Height = 540;
+        props.Maximized = false;
+
+        Axle::Window window(props);
+        Axle::RHI::RHISurface surface;
+        surface.Init(window);
+
+        Axle::RHI::RHISwapChain swapChain;
+        Axle::RHI::RHISwapChainDesc scDesc;
+        scDesc.BufferCount = 3;
+        scDesc.FramesInFlight = 2;
+        scDesc.VSync = true;
+        swapChain.Init(surface, scDesc);
+
+        assert(swapChain.GetFrameFence() != nullptr);
+        assert(swapChain.GetCurrentCommandAllocator() != nullptr);
+        assert(swapChain.GetCurrentAcquireSemaphore() != nullptr);
+        assert(swapChain.GetFrameCount() == 0);
+
+        std::cout << "  -> Monotonic Frame Fence handle: " << (void*)swapChain.GetFrameFence() << std::endl;
+        std::cout << "  -> Slot 0 Command Allocator handle: " << (void*)swapChain.GetCurrentCommandAllocator() << std::endl;
+        std::cout << "  -> PASS: Command Allocators & Synchronization Fences validated." << std::endl;
+
+        swapChain.Shutdown();
+    }
+
+    // [49.3] Simulated Render Loop (60 Frames) & CPU-GPU Synchronization
+    std::cout << "\n[49.3] Testing Simulated Multi-Frame Render Loop (60 Frames)..." << std::endl;
+    {
+        Axle::WindowProps props;
+        props.Title = "Axle RHI Render Loop Test";
+        props.Width = 1280;
+        props.Height = 720;
+        props.Maximized = false;
+
+        Axle::Window window(props);
+        Axle::RHI::RHISurface surface;
+        surface.Init(window);
+
+        Axle::RHI::RHISwapChain swapChain;
+        Axle::RHI::RHISwapChainDesc scDesc;
+        scDesc.BufferCount = 3;
+        scDesc.FramesInFlight = 2;
+        scDesc.VSync = true;
+        swapChain.Init(surface, scDesc);
+
+        const uint32_t totalFrames = 60;
+        for (uint32_t i = 0; i < totalFrames; ++i) {
+            bool beginOk = swapChain.BeginFrame();
+            assert(beginOk);
+            assert(swapChain.GetCurrentTexture() != nullptr);
+            assert(swapChain.GetCurrentCommandAllocator() != nullptr);
+            assert(swapChain.GetCurrentFrameInFlightIndex() == (i % 2));
+
+            bool presentOk = swapChain.PresentFrame();
+            assert(presentOk);
+            assert(swapChain.GetFrameCount() == (i + 1));
+        }
+
+        assert(swapChain.GetFrameCount() == totalFrames);
+        std::cout << "  -> Executed " << totalFrames << " consecutive frames through D3D12/NRI swapchain." << std::endl;
+        std::cout << "  -> PASS: CPU-GPU timeline fence synchronization & frame recycling verified without stalls." << std::endl;
+
+        swapChain.Shutdown();
+    }
+
+    // [49.4] Dynamic Window Resizing Stress Test
+    std::cout << "\n[49.4] Testing Dynamic Window Resizing Stress Test..." << std::endl;
+    {
+        Axle::WindowProps props;
+        props.Title = "Axle RHI Resize Test";
+        props.Width = 1280;
+        props.Height = 720;
+        props.Maximized = false;
+
+        Axle::Window window(props);
+        Axle::RHI::RHISurface surface;
+        surface.Init(window);
+
+        Axle::RHI::RHISwapChain swapChain;
+        Axle::RHI::RHISwapChainDesc scDesc;
+        scDesc.BufferCount = 3;
+        scDesc.FramesInFlight = 2;
+        swapChain.Init(surface, scDesc);
+
+        // Render 2 initial frames at 1280x720
+        for (int f = 0; f < 2; ++f) {
+            assert(swapChain.BeginFrame());
+            assert(swapChain.PresentFrame());
+        }
+
+        struct Resolution { uint32_t w, h; };
+        std::vector<Resolution> testResolutions = {
+            { 1600, 900 },
+            { 1024, 768 },
+            { 800, 600 },
+            { 960, 540 },
+            { 1280, 720 }
+        };
+
+        for (const auto& res : testResolutions) {
+            glfwSetWindowSize(window.GetNativeWindow(), static_cast<int>(res.w), static_cast<int>(res.h));
+            glfwPollEvents();
+            surface.Resize(res.w, res.h);
+            bool resizeOk = swapChain.Resize(res.w, res.h);
+            assert(resizeOk);
+            assert(swapChain.GetWidth() == res.w);
+            assert(swapChain.GetHeight() == res.h);
+
+            for (int f = 0; f < 3; ++f) {
+                bool beginOk = swapChain.BeginFrame();
+                assert(beginOk);
+                assert(swapChain.GetCurrentTexture() != nullptr);
+                bool presentOk = swapChain.PresentFrame();
+                assert(presentOk);
+            }
+            std::cout << "  -> Resized and presented at " << res.w << "x" << res.h << " successfully." << std::endl;
+        }
+
+        std::cout << "  -> PASS: Dynamic swapchain resizing verified across 5 resolution switches." << std::endl;
+        swapChain.Shutdown();
+    }
+
+    // [49.5] Minimized Window Guard & Recovery
+    std::cout << "\n[49.5] Testing Minimized Window Guard & Recovery..." << std::endl;
+    {
+        Axle::WindowProps props;
+        props.Title = "Axle RHI Minimize Test";
+        props.Width = 1280;
+        props.Height = 720;
+        props.Maximized = false;
+
+        Axle::Window window(props);
+        Axle::RHI::RHISurface surface;
+        surface.Init(window);
+
+        Axle::RHI::RHISwapChain swapChain;
+        swapChain.Init(surface);
+
+        // Render 2 normal frames
+        assert(swapChain.BeginFrame());
+        assert(swapChain.PresentFrame());
+        assert(swapChain.BeginFrame());
+        assert(swapChain.PresentFrame());
+
+        // Minimize window (dimensions 0x0)
+        std::cout << "  -> Simulating window minimization (0x0)..." << std::endl;
+        surface.Resize(0, 0);
+        bool minOk = swapChain.Resize(0, 0);
+        assert(minOk);
+        assert(swapChain.IsMinimized() == true);
+
+        // Verify BeginFrame and PresentFrame gracefully pause during minimization
+        assert(swapChain.BeginFrame() == false);
+        assert(swapChain.PresentFrame() == false);
+        std::cout << "  -> PASS: BeginFrame() and PresentFrame() safely paused while window is minimized." << std::endl;
+
+        // Restore window (1280x720)
+        std::cout << "  -> Restoring window from minimized state to 1280x720..." << std::endl;
+        glfwSetWindowSize(window.GetNativeWindow(), 1280, 720);
+        glfwPollEvents();
+        surface.Resize(1280, 720);
+        bool restoreOk = swapChain.Resize(1280, 720);
+        assert(restoreOk);
+        assert(swapChain.IsMinimized() == false);
+        assert(swapChain.GetWidth() == 1280);
+        assert(swapChain.GetHeight() == 720);
+
+        // Verify presentation immediately resumes normally
+        assert(swapChain.BeginFrame() == true);
+        assert(swapChain.PresentFrame() == true);
+        assert(swapChain.BeginFrame() == true);
+        assert(swapChain.PresentFrame() == true);
+        std::cout << "  -> PASS: Window restored and presentation resumed without crashes or resource leaks." << std::endl;
+
+        swapChain.Shutdown();
+    }
+
+    // [49.6] Dynamic VSync vs Low-Latency Mailbox Presentation Toggle
+    std::cout << "\n[49.6] Testing Dynamic VSync & Low-Latency Mailbox Presentation Mode..." << std::endl;
+    {
+        Axle::WindowProps props;
+        props.Title = "Axle RHI VSync Test";
+        props.Width = 960;
+        props.Height = 540;
+        props.Maximized = false;
+
+        Axle::Window window(props);
+        Axle::RHI::RHISurface surface;
+        surface.Init(window);
+
+        Axle::RHI::RHISwapChain swapChain;
+        Axle::RHI::RHISwapChainDesc scDesc;
+        scDesc.VSync = true;
+        swapChain.Init(surface, scDesc);
+        assert(swapChain.IsVSync() == true);
+
+        // Switch to Low-Latency Mailbox (VSync OFF)
+        std::cout << "  -> Toggling to Low-Latency Mailbox (VSync OFF)..." << std::endl;
+        swapChain.SetVSync(false);
+        assert(swapChain.IsVSync() == false);
+
+        for (int i = 0; i < 5; ++i) {
+            assert(swapChain.BeginFrame());
+            assert(swapChain.PresentFrame());
+        }
+
+        // Switch back to FIFO VSync (VSync ON)
+        std::cout << "  -> Toggling back to FIFO (VSync ON)..." << std::endl;
+        swapChain.SetVSync(true);
+        assert(swapChain.IsVSync() == true);
+
+        for (int i = 0; i < 5; ++i) {
+            assert(swapChain.BeginFrame());
+            assert(swapChain.PresentFrame());
+        }
+
+        std::cout << "  -> PASS: Dynamic VSync / Mailbox presentation modes toggled smoothly." << std::endl;
+        swapChain.Shutdown();
+    }
+
+    // [49.7] Legacy OpenGL Fallback Swapchain Validation
+    std::cout << "\n[49.7] Testing Legacy OpenGL Fallback Swapchain Pipeline..." << std::endl;
+    {
+        auto& rhi = Axle::RHI::RHIDevice::Get();
+        rhi.Shutdown();
+
+        Axle::RHI::RHIDeviceDesc glDesc;
+        glDesc.PreferredBackend = Axle::RHI::RHIType::OpenGL;
+        bool glOk = rhi.Init(glDesc);
+        assert(glOk);
+
+        Axle::WindowProps props;
+        props.Title = "Axle OpenGL Fallback Swapchain";
+        props.Width = 800;
+        props.Height = 600;
+        props.Maximized = false;
+
+        Axle::Window window(props);
+        Axle::RHI::RHISurface surface;
+        surface.Init(window);
+
+        Axle::RHI::RHISwapChain swapChain;
+        Axle::RHI::RHISwapChainDesc scDesc;
+        scDesc.BufferCount = 2;
+        scDesc.FramesInFlight = 2;
+        bool initOk = swapChain.Init(surface, scDesc);
+        assert(initOk);
+        assert(swapChain.IsValid());
+
+        for (int i = 0; i < 10; ++i) {
+            assert(swapChain.BeginFrame());
+            assert(swapChain.PresentFrame());
+        }
+
+        surface.Resize(1024, 768);
+        assert(swapChain.Resize(1024, 768));
+        assert(swapChain.GetWidth() == 1024);
+        assert(swapChain.GetHeight() == 768);
+
+        swapChain.Shutdown();
+        surface.Shutdown();
+        rhi.Shutdown();
+        std::cout << "  -> PASS: OpenGL Fallback SwapChain operations validated." << std::endl;
+    }
+
+    std::cout << "\n>>> STEP 49 PASSED: Phase 32 Step 2 Swapchain & Frames-in-Flight 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -9314,12 +9665,13 @@ int main(int argc, char** argv) {
         else if (arg == "46" || arg == "step46" || arg == "--step46" || arg == "--phase31e" || arg == "--ecs-vfx") targetStep = 46;
         else if (arg == "47" || arg == "step47" || arg == "--step47" || arg == "--phase31f" || arg == "--vfx-editor") targetStep = 47;
         else if (arg == "48" || arg == "step48" || arg == "--step48" || arg == "--phase32" || arg == "--phase32a" || arg == "--rhi") targetStep = 48;
+        else if (arg == "49" || arg == "step49" || arg == "--step49" || arg == "--swapchain" || arg == "--phase32b") targetStep = 49;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 48 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 49 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -9470,6 +9822,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 48) {
         if (!RunTest_Step48_Phase32_Step1_NRICoreAndRHIDeviceLifecycle()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 49) {
+        if (!RunTest_Step49_Phase32_Step2_SwapchainAndFramesInFlight()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

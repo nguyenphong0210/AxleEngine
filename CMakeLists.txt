@@ -52,6 +52,7 @@ add_subdirectory(ThirdParty/NRI)
 # Load engine modules according to architectural hierarchy
 add_subdirectory(Engine/Core)
 add_subdirectory(Engine/Platform)
+add_subdirectory(Engine/RHI)
 add_subdirectory(Engine/Renderer)
 add_subdirectory(Engine/Audio)
 add_subdirectory(Engine/Asset)

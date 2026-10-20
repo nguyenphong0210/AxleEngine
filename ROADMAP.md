@@ -299,7 +299,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 - [ ] **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)**
   - [ ] **Step 1 - NRI Core Submodule & RHI Device Lifecycle (`Engine/RHI`)**:
     - [x] Integrate lightweight NVIDIA Rendering Interface (MIT) into `ThirdParty/NRI` (Core, Helper, and Streamer modules).
-    - [ ] Unified Device Abstraction: Physical GPU enumeration, hardware capability query (Ray Tracing, Mesh Shaders, Bindless Resources), and dynamic backend selection (Direct3D 12, Vulkan 1.3, with OpenGL 4.5 legacy fallback).
+    - [x] Unified Device Abstraction: Physical GPU enumeration, hardware capability query (Ray Tracing, Mesh Shaders, Bindless Resources), and dynamic backend selection (Direct3D 12, Vulkan 1.3, with OpenGL 4.5 legacy fallback).
     - [ ] Native Windowing & Surface Integration: Bind GLFW window handles to native surfaces (`HWND` for D3D12 on Windows / `VkSurfaceKHR` for Vulkan).
   - [ ] **Step 2 - Swapchain, Command Allocators & Frames-in-Flight Orchestration**:
     - [ ] High-performance double/triple buffered swapchain (`nri::SwapChainDesc`) with configurable presentation modes (VSync vs Low-Latency Mailbox).

@@ -10,6 +10,7 @@ target_include_directories(AxleEditor PRIVATE
 target_link_libraries(AxleEditor PRIVATE
     Axle::Core
     Axle::Platform
+    Axle::RHI
     Axle::Renderer
     Axle::Audio
     Axle::Asset
@@ -105,6 +106,7 @@ target_include_directories(AxleTests PRIVATE
 target_link_libraries(AxleTests PRIVATE
     Axle::Core
     Axle::Platform
+    Axle::RHI
     Axle::Renderer
     Axle::Audio
     Axle::Asset

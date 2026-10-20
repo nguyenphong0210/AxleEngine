@@ -5,6 +5,7 @@
 #include <Extensions/NRIDeviceCreation.h>
 #include <Extensions/NRIHelper.h>
 #include <Extensions/NRIStreamer.h>
+#include <Extensions/NRISwapChain.h>
 
 #include <memory>
 #include <vector>
@@ -15,6 +16,7 @@ namespace Axle::RHI {
         nri::CoreInterface Core = {};
         nri::HelperInterface Helper = {};
         nri::StreamerInterface Streamer = {};
+        nri::SwapChainInterface SwapChain = {};
     };
 
     class RHIDevice {
@@ -44,9 +46,11 @@ namespace Axle::RHI {
 
         // Access underlying NRI device and interfaces
         nri::Device* GetNRIDevice() const { return m_Device; }
+        nri::Queue* GetGraphicsQueue() const { return m_GraphicsQueue; }
         const nri::CoreInterface& GetNRICore() const { return m_NRI.Core; }
         const nri::HelperInterface& GetNRIHelper() const { return m_NRI.Helper; }
         const nri::StreamerInterface& GetNRIStreamer() const { return m_NRI.Streamer; }
+        const nri::SwapChainInterface& GetNRISwapChain() const { return m_NRI.SwapChain; }
 
     private:
         bool TryInitNRI(RHIType backend, const RHIDeviceDesc& desc, const nri::AdapterDesc* adapterDesc);
@@ -60,6 +64,7 @@ namespace Axle::RHI {
         std::vector<RHIAdapterInfo> m_Adapters;
 
         nri::Device* m_Device = nullptr;
+        nri::Queue* m_GraphicsQueue = nullptr;
         NRIInterfaces m_NRI;
     };
 

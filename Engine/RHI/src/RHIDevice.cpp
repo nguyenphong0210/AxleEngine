@@ -211,6 +211,16 @@ namespace Axle::RHI {
             AXLE_CORE_WARN("Failed to query nri::StreamerInterface (staging streaming may be unavailable).");
         }
 
+        res = nri::nriGetInterface(*m_Device, NRI_INTERFACE(nri::SwapChainInterface), (void*)&m_NRI.SwapChain);
+        if (res != nri::Result::SUCCESS) {
+            AXLE_CORE_WARN("Failed to query nri::SwapChainInterface (presentation may be unavailable).");
+        }
+
+        res = m_NRI.Core.GetQueue(*m_Device, nri::QueueType::GRAPHICS, 0, m_GraphicsQueue);
+        if (res != nri::Result::SUCCESS || !m_GraphicsQueue) {
+            AXLE_CORE_ERROR("Failed to obtain primary Graphics Queue!");
+        }
+
         m_Capabilities.ActiveBackend = backend;
         PopulateCapabilities();
         return true;
@@ -300,6 +310,7 @@ namespace Axle::RHI {
             m_Device = nullptr;
         }
 
+        m_GraphicsQueue = nullptr;
         m_NRI = {};
         m_Capabilities = {};
         m_Adapters.clear();

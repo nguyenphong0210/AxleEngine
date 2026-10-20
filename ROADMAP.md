@@ -298,7 +298,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Automated test suites (Steps 42-47) in `Editor/src/Test.cpp`: validating particle pool memory allocation, GPU instancing, curl noise determinism, physics collisions, emitter serialization fidelity, and gameplay slip event triggering.
 - [ ] **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)**
   - [ ] **Step 1 - NRI Core Submodule & RHI Device Lifecycle (`Engine/RHI`)**:
-    - [ ] Integrate lightweight NVIDIA Rendering Interface (MIT) into `ThirdParty/NRI` (Core, Helper, and Streamer modules).
+    - [x] Integrate lightweight NVIDIA Rendering Interface (MIT) into `ThirdParty/NRI` (Core, Helper, and Streamer modules).
     - [ ] Unified Device Abstraction: Physical GPU enumeration, hardware capability query (Ray Tracing, Mesh Shaders, Bindless Resources), and dynamic backend selection (Direct3D 12, Vulkan 1.3, with OpenGL 4.5 legacy fallback).
     - [ ] Native Windowing & Surface Integration: Bind GLFW window handles to native surfaces (`HWND` for D3D12 on Windows / `VkSurfaceKHR` for Vulkan).
   - [ ] **Step 2 - Swapchain, Command Allocators & Frames-in-Flight Orchestration**:

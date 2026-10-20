@@ -26,12 +26,28 @@ set(OVERRIDE_CXX_FLAGS OFF CACHE BOOL "" FORCE)
 set(ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
 
+# Configure NVIDIA Rendering Interface (NRI) options
+set(NRI_STATIC_LIBRARY ON CACHE BOOL "" FORCE)
+set(NRI_ENABLE_D3D11_SUPPORT OFF CACHE BOOL "" FORCE)
+set(NRI_ENABLE_D3D12_SUPPORT ON CACHE BOOL "" FORCE)
+set(NRI_ENABLE_VK_SUPPORT ON CACHE BOOL "" FORCE)
+set(NRI_ENABLE_WGPU_SUPPORT OFF CACHE BOOL "" FORCE)
+set(NRI_ENABLE_METAL_SUPPORT OFF CACHE BOOL "" FORCE)
+set(NRI_ENABLE_NONE_SUPPORT ON CACHE BOOL "" FORCE)
+set(NRI_ENABLE_VALIDATION_SUPPORT ON CACHE BOOL "" FORCE)
+set(NRI_ENABLE_NVTX_SUPPORT OFF CACHE BOOL "" FORCE)
+set(NRI_ENABLE_AMDAGS OFF CACHE BOOL "" FORCE)
+set(NRI_ENABLE_NVAPI OFF CACHE BOOL "" FORCE)
+set(NRI_ENABLE_AGILITY_SDK_SUPPORT ON CACHE BOOL "" FORCE)
+
 # Embed ThirdParty libraries directly into the build tree
 add_subdirectory(ThirdParty/glfw)
 add_subdirectory(ThirdParty/glad)
 add_subdirectory(ThirdParty/spdlog)
 add_subdirectory(ThirdParty/enkiTS)
 add_subdirectory(ThirdParty/JoltPhysics/Build ThirdParty/JoltPhysics)
+add_subdirectory(ThirdParty/NRI)
+
 
 # Load engine modules according to architectural hierarchy
 add_subdirectory(Engine/Core)

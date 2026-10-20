@@ -23,3 +23,6 @@
 [submodule "ThirdParty/enkiTS"]
 	path = ThirdParty/enkiTS
 	url = https://github.com/dougbinks/enkiTS.git
+[submodule "ThirdParty/NRI"]
+	path = ThirdParty/NRI
+	url = https://github.com/NVIDIA-RTX/NRI.git

@@ -78,6 +78,7 @@ private:
     void ResetSimulation();
     void RenderToolbar();
     void UnlockCursor();
+    void ClearRHIViewport();
     bool IsCursorLocked() const;
 
 private:
@@ -101,7 +102,6 @@ private:
     // Viewport & Offscreen Framebuffer (OpenGL) / RHI Viewport Descriptor (D3D12/Vulkan)
     std::shared_ptr<Axle::Framebuffer> m_Framebuffer;
     std::unique_ptr<Axle::RHIViewportDescriptor> m_RHIViewport;
-    Axle::RHI::RHIResourceLayout m_RHIViewportLayout = Axle::RHI::RHIResourceLayout::Undefined;
     Axle::u32 m_ViewportWidth = 1280;
     Axle::u32 m_ViewportHeight = 720;
     bool m_ViewportFocused = false;

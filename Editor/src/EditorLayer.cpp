@@ -149,6 +149,7 @@ void EditorLayer::OnAttach() {
             vpDesc.DepthFormat = Axle::RHI::RHITextureFormat::D32_FLOAT;
             vpDesc.DebugName = "EditorMainViewport";
             m_RHIViewport->Init(uiContext, vpDesc);
+            ClearRHIViewport();
         }
     }
     if (m_SceneRenderer) {
@@ -1394,40 +1395,6 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer,
                                      m_PhysicsScene.get(), m_PhysicsDebugRenderer.get(),
                                      renderSettings);
-    } else if (m_RHIViewport && m_RHIViewport->IsValid()) {
-        auto& rhiDevice = Axle::RHI::RHIDevice::Get();
-        if (rhiDevice.IsInitialized()) {
-            auto* queue = rhiDevice.GetGraphicsQueue();
-            Axle::RHI::RHICommandBuffer cmd;
-            if (cmd.Init(queue) && cmd.Begin()) {
-                cmd.TransitionTexture(m_RHIViewport->GetColorTexture()->GetNative(),
-                                      m_RHIViewportLayout,
-                                      Axle::RHI::RHIResourceLayout::ColorAttachment);
-                m_RHIViewportLayout = Axle::RHI::RHIResourceLayout::ColorAttachment;
-
-                nri::AttachmentDesc colorAttachment = {};
-                colorAttachment.descriptor = m_RHIViewport->GetColorTexture()->GetRTV();
-                colorAttachment.loadOp = nri::LoadOp::CLEAR;
-                colorAttachment.storeOp = nri::StoreOp::STORE;
-                colorAttachment.clearValue.color.f = { 0.12f, 0.14f, 0.18f, 1.0f };
-
-                nri::RenderingDesc renderingDesc = {};
-                renderingDesc.colors = &colorAttachment;
-                renderingDesc.colorNum = 1;
-
-                cmd.BeginRendering(renderingDesc);
-                cmd.EndRendering();
-
-                cmd.TransitionTexture(m_RHIViewport->GetColorTexture()->GetNative(),
-                                      m_RHIViewportLayout,
-                                      Axle::RHI::RHIResourceLayout::ShaderResource);
-                m_RHIViewportLayout = Axle::RHI::RHIResourceLayout::ShaderResource;
-
-                cmd.End();
-                cmd.Submit(queue);
-                cmd.Shutdown();
-            }
-        }
     }
 }
 
@@ -1974,7 +1941,7 @@ void EditorLayer::OnImGuiRender() {
         }
         if (m_RHIViewport && m_RHIViewport->IsValid()) {
             m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
-            m_RHIViewportLayout = Axle::RHI::RHIResourceLayout::Undefined;
+            ClearRHIViewport();
         }
         m_CameraController->OnResize(m_ViewportWidth, m_ViewportHeight);
         if (m_SceneRenderer) {
@@ -3077,6 +3044,44 @@ void EditorLayer::RenderExportGameModal() {
         ImGui::EndPopup();
     } else {
         m_ShowExportGameModal = false;
+    }
+}
+
+void EditorLayer::ClearRHIViewport() {
+    if (!m_RHIViewport || !m_RHIViewport->IsValid()) return;
+    auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+    if (!rhiDevice.IsInitialized()) return;
+
+    auto* queue = rhiDevice.GetGraphicsQueue();
+    if (!queue) return;
+
+    Axle::RHI::RHICommandBuffer cmd;
+    if (cmd.Init(queue) && cmd.Begin()) {
+        cmd.TransitionTexture(m_RHIViewport->GetColorTexture()->GetNative(),
+                              Axle::RHI::RHIResourceLayout::Undefined,
+                              Axle::RHI::RHIResourceLayout::ColorAttachment);
+
+        nri::AttachmentDesc colorAttachment = {};
+        colorAttachment.descriptor = m_RHIViewport->GetColorTexture()->GetRTV();
+        colorAttachment.loadOp = nri::LoadOp::CLEAR;
+        colorAttachment.storeOp = nri::StoreOp::STORE;
+        colorAttachment.clearValue.color.f = { 0.12f, 0.14f, 0.18f, 1.0f };
+
+        nri::RenderingDesc renderingDesc = {};
+        renderingDesc.colors = &colorAttachment;
+        renderingDesc.colorNum = 1;
+
+        cmd.BeginRendering(renderingDesc);
+        cmd.EndRendering();
+
+        cmd.TransitionTexture(m_RHIViewport->GetColorTexture()->GetNative(),
+                              Axle::RHI::RHIResourceLayout::ColorAttachment,
+                              Axle::RHI::RHIResourceLayout::ShaderResource);
+
+        cmd.End();
+        cmd.Submit(queue);
+        rhiDevice.GetNRICore().QueueWaitIdle(queue);
+        cmd.Shutdown();
     }
 }
 

@@ -26,6 +26,8 @@
 #include <AxleTerrain/TerrainMesh.hpp>
 #include <AxleTerrain/TerrainCollider.hpp>
 #include <AxleTerrain/TerrainSerializer.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHICommandBuffer.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -91,7 +93,9 @@ void EditorLayer::OnAttach() {
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
 
     // 3. Decoupled Multi-Pass Scene Renderer (Phase 21)
-    m_SceneRenderer = std::make_unique<Axle::SceneRenderer>();
+    if (window.GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
+        m_SceneRenderer = std::make_unique<Axle::SceneRenderer>();
+    }
 
 
     // 4. Primitive Mesh Data (for legacy OpenGL SceneRenderer)
@@ -152,7 +156,9 @@ void EditorLayer::OnAttach() {
     }
 
     // 6. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
-    m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+    if (window.GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
+        m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+    }
 
     // 7. ECS Scene Initialization (Phase 18.2: Safe Scene State Simulation)
     m_EditorScene = std::make_shared<Axle::Scene>();
@@ -697,10 +703,12 @@ void EditorLayer::NewScene() {
     m_InitialDynamicStates.clear();
 
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
-    if (!m_PhysicsDebugRenderer) {
-        m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
-    } else {
-        m_PhysicsDebugRenderer->Clear();
+    if (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
+        if (!m_PhysicsDebugRenderer) {
+            m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+        } else {
+            m_PhysicsDebugRenderer->Clear();
+        }
     }
     m_Scene->Clear();
     m_CurrentScenePath.clear();
@@ -763,10 +771,12 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
 
     // 3. Create fresh PhysicsScene and maintain PhysicsDebugRenderer
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
-    if (!m_PhysicsDebugRenderer) {
-        m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
-    } else {
-        m_PhysicsDebugRenderer->Clear();
+    if (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
+        if (!m_PhysicsDebugRenderer) {
+            m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
+        } else {
+            m_PhysicsDebugRenderer->Clear();
+        }
     }
 
     Axle::SceneSerializer serializer(m_Scene.get(), m_PhysicsScene.get());
@@ -1384,6 +1394,40 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer,
                                      m_PhysicsScene.get(), m_PhysicsDebugRenderer.get(),
                                      renderSettings);
+    } else if (m_RHIViewport && m_RHIViewport->IsValid()) {
+        auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+        if (rhiDevice.IsInitialized()) {
+            auto* queue = rhiDevice.GetGraphicsQueue();
+            Axle::RHI::RHICommandBuffer cmd;
+            if (cmd.Init(queue) && cmd.Begin()) {
+                cmd.TransitionTexture(m_RHIViewport->GetColorTexture()->GetNative(),
+                                      m_RHIViewportLayout,
+                                      Axle::RHI::RHIResourceLayout::ColorAttachment);
+                m_RHIViewportLayout = Axle::RHI::RHIResourceLayout::ColorAttachment;
+
+                nri::AttachmentDesc colorAttachment = {};
+                colorAttachment.descriptor = m_RHIViewport->GetColorTexture()->GetRTV();
+                colorAttachment.loadOp = nri::LoadOp::CLEAR;
+                colorAttachment.storeOp = nri::StoreOp::STORE;
+                colorAttachment.clearValue.color.f = { 0.12f, 0.14f, 0.18f, 1.0f };
+
+                nri::RenderingDesc renderingDesc = {};
+                renderingDesc.colors = &colorAttachment;
+                renderingDesc.colorNum = 1;
+
+                cmd.BeginRendering(renderingDesc);
+                cmd.EndRendering();
+
+                cmd.TransitionTexture(m_RHIViewport->GetColorTexture()->GetNative(),
+                                      m_RHIViewportLayout,
+                                      Axle::RHI::RHIResourceLayout::ShaderResource);
+                m_RHIViewportLayout = Axle::RHI::RHIResourceLayout::ShaderResource;
+
+                cmd.End();
+                cmd.Submit(queue);
+                cmd.Shutdown();
+            }
+        }
     }
 }
 
@@ -1930,6 +1974,7 @@ void EditorLayer::OnImGuiRender() {
         }
         if (m_RHIViewport && m_RHIViewport->IsValid()) {
             m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
+            m_RHIViewportLayout = Axle::RHI::RHIResourceLayout::Undefined;
         }
         m_CameraController->OnResize(m_ViewportWidth, m_ViewportHeight);
         if (m_SceneRenderer) {

@@ -27,24 +27,39 @@ namespace Axle {
     }
 
     std::filesystem::path ScriptHotReloadManager::ResolveSourceDllPath(const std::filesystem::path& requestedPath) const {
-        if (!requestedPath.empty() && std::filesystem::exists(requestedPath)) {
+        if (!requestedPath.empty() && requestedPath.is_absolute() && std::filesystem::exists(requestedPath)) {
             return std::filesystem::absolute(requestedPath);
         }
 
-        std::vector<std::filesystem::path> searchCandidates = {
-            "AxleScripts.dll",
-            "build/Editor/Release/AxleScripts.dll",
-            "build/Editor/Debug/AxleScripts.dll",
-            "../Editor/Release/AxleScripts.dll"
-        };
+        std::vector<std::filesystem::path> searchCandidates;
 
 #ifdef _WIN32
         char exePath[MAX_PATH] = { 0 };
         if (GetModuleFileNameA(NULL, exePath, MAX_PATH) > 0) {
             std::filesystem::path exeDir = std::filesystem::path(exePath).parent_path();
+            if (!requestedPath.empty()) {
+                searchCandidates.push_back(exeDir / requestedPath.filename());
+            }
             searchCandidates.push_back(exeDir / "AxleScripts.dll");
         }
 #endif
+
+        if (!requestedPath.empty() && std::filesystem::exists(requestedPath)) {
+            return std::filesystem::absolute(requestedPath);
+        }
+
+#ifdef _DEBUG
+        searchCandidates.push_back("build/Editor/Debug/AxleScripts.dll");
+        searchCandidates.push_back("../Editor/Debug/AxleScripts.dll");
+        searchCandidates.push_back("build/Editor/Release/AxleScripts.dll");
+        searchCandidates.push_back("../Editor/Release/AxleScripts.dll");
+#else
+        searchCandidates.push_back("build/Editor/Release/AxleScripts.dll");
+        searchCandidates.push_back("../Editor/Release/AxleScripts.dll");
+        searchCandidates.push_back("build/Editor/Debug/AxleScripts.dll");
+        searchCandidates.push_back("../Editor/Debug/AxleScripts.dll");
+#endif
+        searchCandidates.push_back("AxleScripts.dll");
 
         for (const auto& candidate : searchCandidates) {
             if (std::filesystem::exists(candidate)) {

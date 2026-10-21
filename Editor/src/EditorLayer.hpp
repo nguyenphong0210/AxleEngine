@@ -25,6 +25,7 @@
 #include <Axle/ScriptCompiler.hpp>
 #include <Axle/ScriptHotReloadManager.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
+#include <Axle/RHI/RHIBarrier.hpp>
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <memory>
@@ -100,6 +101,7 @@ private:
     // Viewport & Offscreen Framebuffer (OpenGL) / RHI Viewport Descriptor (D3D12/Vulkan)
     std::shared_ptr<Axle::Framebuffer> m_Framebuffer;
     std::unique_ptr<Axle::RHIViewportDescriptor> m_RHIViewport;
+    Axle::RHI::RHIResourceLayout m_RHIViewportLayout = Axle::RHI::RHIResourceLayout::Undefined;
     Axle::u32 m_ViewportWidth = 1280;
     Axle::u32 m_ViewportHeight = 720;
     bool m_ViewportFocused = false;

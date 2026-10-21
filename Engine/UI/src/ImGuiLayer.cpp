@@ -10,6 +10,8 @@
 #if defined(APIENTRY)
 #undef APIENTRY
 #endif
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <imgui_impl_dx12.h>
@@ -259,7 +261,73 @@ namespace Axle {
             return;
         }
 
-        AXLE_CORE_INFO("ImGui Layer initialized successfully for Direct3D 12 (SRV Heap: 1024 descriptors)");
+        // Create native D3D12 SwapChain for the GLFW window if m_Window is valid
+        if (m_Window) {
+            HWND hwnd = glfwGetWin32Window(m_Window);
+            if (hwnd) {
+                int w = 0, h = 0;
+                glfwGetFramebufferSize(m_Window, &w, &h);
+                m_D3D12Width = static_cast<uint32_t>(w > 0 ? w : 1280);
+                m_D3D12Height = static_cast<uint32_t>(h > 0 ? h : 720);
+
+                IDXGIFactory4* dxgiFactory = nullptr;
+                HRESULT scHr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
+                if (SUCCEEDED(scHr) && dxgiFactory) {
+                    DXGI_SWAP_CHAIN_DESC1 sd = {};
+                    sd.BufferCount = 3;
+                    sd.Width = m_D3D12Width;
+                    sd.Height = m_D3D12Height;
+                    sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                    sd.Flags = 0;
+                    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+                    sd.SampleDesc.Count = 1;
+                    sd.SampleDesc.Quality = 0;
+                    sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+                    sd.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+                    sd.Scaling = DXGI_SCALING_STRETCH;
+                    sd.Stereo = FALSE;
+
+                    IDXGISwapChain1* swapChain1 = nullptr;
+                    scHr = dxgiFactory->CreateSwapChainForHwnd(d3d12Queue, hwnd, &sd, nullptr, nullptr, &swapChain1);
+                    if (SUCCEEDED(scHr) && swapChain1) {
+                        swapChain1->QueryInterface(IID_PPV_ARGS(&m_D3D12SwapChain));
+                        swapChain1->Release();
+                    }
+                    dxgiFactory->Release();
+                }
+
+                if (m_D3D12SwapChain) {
+                    // Create RTV Descriptor Heap
+                    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+                    rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+                    rtvHeapDesc.NumDescriptors = 3;
+                    rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+                    d3d12Device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_D3D12RtvHeap));
+                    m_D3D12RtvDescriptorSize = d3d12Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+                    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_D3D12RtvHeap->GetCPUDescriptorHandleForHeapStart();
+                    for (UINT i = 0; i < 3; ++i) {
+                        m_D3D12SwapChain->GetBuffer(i, IID_PPV_ARGS(&m_D3D12RenderTargets[i]));
+                        d3d12Device->CreateRenderTargetView(m_D3D12RenderTargets[i], nullptr, rtvHandle);
+                        rtvHandle.ptr += m_D3D12RtvDescriptorSize;
+                    }
+
+                    // Create Command Allocators & List
+                    for (UINT i = 0; i < 3; ++i) {
+                        d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_D3D12CommandAllocators[i]));
+                    }
+                    d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_D3D12CommandAllocators[0], nullptr, IID_PPV_ARGS(&m_D3D12CommandList));
+                    m_D3D12CommandList->Close();
+
+                    // Create Frame Synchronization Fence
+                    d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_D3D12Fence));
+                    m_D3D12FenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+                }
+            }
+        }
+
+        AXLE_CORE_INFO("ImGui Layer initialized successfully for Direct3D 12 (SRV Heap: 1024 descriptors{0})",
+                       m_D3D12SwapChain ? ", Window SwapChain: Active" : "");
 #else
         AXLE_CORE_WARN("D3D12 ImGui backend requested but not supported on this platform; falling back to OpenGL!");
         InitOpenGL();
@@ -310,10 +378,54 @@ namespace Axle {
 
     void ImGuiLayer::ShutdownD3D12() {
 #if defined(AXLE_HAS_D3D12)
+        auto& rhiDevice = RHI::RHIDevice::Get();
+        if (rhiDevice.IsInitialized() && m_D3D12Fence && m_D3D12FenceEvent) {
+            const auto& core = rhiDevice.GetNRICore();
+            auto* d3d12Queue = static_cast<ID3D12CommandQueue*>(core.GetQueueNativeObject(rhiDevice.GetGraphicsQueue()));
+            if (d3d12Queue) {
+                m_D3D12FenceValueCounter++;
+                d3d12Queue->Signal(m_D3D12Fence, m_D3D12FenceValueCounter);
+                m_D3D12Fence->SetEventOnCompletion(m_D3D12FenceValueCounter, (HANDLE)m_D3D12FenceEvent);
+                WaitForSingleObject((HANDLE)m_D3D12FenceEvent, INFINITE);
+            }
+        }
+
         ImGui_ImplDX12_Shutdown();
         if (m_Window) {
             ImGui_ImplGlfw_Shutdown();
         }
+
+        if (m_D3D12FenceEvent) {
+            CloseHandle((HANDLE)m_D3D12FenceEvent);
+            m_D3D12FenceEvent = nullptr;
+        }
+        if (m_D3D12Fence) {
+            m_D3D12Fence->Release();
+            m_D3D12Fence = nullptr;
+        }
+        if (m_D3D12CommandList) {
+            m_D3D12CommandList->Release();
+            m_D3D12CommandList = nullptr;
+        }
+        for (UINT i = 0; i < 3; ++i) {
+            if (m_D3D12CommandAllocators[i]) {
+                m_D3D12CommandAllocators[i]->Release();
+                m_D3D12CommandAllocators[i] = nullptr;
+            }
+            if (m_D3D12RenderTargets[i]) {
+                m_D3D12RenderTargets[i]->Release();
+                m_D3D12RenderTargets[i] = nullptr;
+            }
+        }
+        if (m_D3D12RtvHeap) {
+            m_D3D12RtvHeap->Release();
+            m_D3D12RtvHeap = nullptr;
+        }
+        if (m_D3D12SwapChain) {
+            m_D3D12SwapChain->Release();
+            m_D3D12SwapChain = nullptr;
+        }
+
         if (m_D3D12SrvHeap) {
             m_D3D12SrvHeap->Release();
             m_D3D12SrvHeap = nullptr;
@@ -363,6 +475,96 @@ namespace Axle {
         if (m_BackendType == ImGuiBackendType::OpenGL) {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
+#if defined(AXLE_HAS_D3D12)
+        else if (m_BackendType == ImGuiBackendType::Direct3D12 && m_D3D12SwapChain && m_D3D12CommandList) {
+            auto& rhiDevice = RHI::RHIDevice::Get();
+            if (!rhiDevice.IsInitialized()) return;
+            const auto& core = rhiDevice.GetNRICore();
+            auto* d3d12Device = static_cast<ID3D12Device*>(core.GetDeviceNativeObject(rhiDevice.GetNRIDevice()));
+            auto* d3d12Queue = static_cast<ID3D12CommandQueue*>(core.GetQueueNativeObject(rhiDevice.GetGraphicsQueue()));
+            if (!d3d12Device || !d3d12Queue) return;
+
+            // Handle window resize for D3D12 swapchain
+            if (m_Window) {
+                int fbW = 0, fbH = 0;
+                glfwGetFramebufferSize(m_Window, &fbW, &fbH);
+                uint32_t curW = static_cast<uint32_t>(fbW > 0 ? fbW : 1280);
+                uint32_t curH = static_cast<uint32_t>(fbH > 0 ? fbH : 720);
+
+                if ((curW != m_D3D12Width || curH != m_D3D12Height) && curW > 0 && curH > 0) {
+                    m_D3D12FenceValueCounter++;
+                    d3d12Queue->Signal(m_D3D12Fence, m_D3D12FenceValueCounter);
+                    m_D3D12Fence->SetEventOnCompletion(m_D3D12FenceValueCounter, (HANDLE)m_D3D12FenceEvent);
+                    WaitForSingleObject((HANDLE)m_D3D12FenceEvent, INFINITE);
+
+                    for (UINT i = 0; i < 3; ++i) {
+                        if (m_D3D12RenderTargets[i]) {
+                            m_D3D12RenderTargets[i]->Release();
+                            m_D3D12RenderTargets[i] = nullptr;
+                        }
+                    }
+                    m_D3D12Width = curW;
+                    m_D3D12Height = curH;
+                    m_D3D12SwapChain->ResizeBuffers(3, m_D3D12Width, m_D3D12Height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+
+                    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_D3D12RtvHeap->GetCPUDescriptorHandleForHeapStart();
+                    for (UINT i = 0; i < 3; ++i) {
+                        m_D3D12SwapChain->GetBuffer(i, IID_PPV_ARGS(&m_D3D12RenderTargets[i]));
+                        d3d12Device->CreateRenderTargetView(m_D3D12RenderTargets[i], nullptr, rtvHandle);
+                        rtvHandle.ptr += m_D3D12RtvDescriptorSize;
+                    }
+                }
+            }
+
+            UINT backBufferIdx = m_D3D12SwapChain->GetCurrentBackBufferIndex();
+
+            // Wait for frame fence
+            if (m_D3D12Fence->GetCompletedValue() < m_D3D12FenceValues[backBufferIdx]) {
+                m_D3D12Fence->SetEventOnCompletion(m_D3D12FenceValues[backBufferIdx], (HANDLE)m_D3D12FenceEvent);
+                WaitForSingleObject((HANDLE)m_D3D12FenceEvent, INFINITE);
+            }
+
+            m_D3D12CommandAllocators[backBufferIdx]->Reset();
+            m_D3D12CommandList->Reset(m_D3D12CommandAllocators[backBufferIdx], nullptr);
+
+            // Transition to RENDER_TARGET
+            D3D12_RESOURCE_BARRIER barrier = {};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Transition.pResource = m_D3D12RenderTargets[backBufferIdx];
+            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            m_D3D12CommandList->ResourceBarrier(1, &barrier);
+
+            // Clear and bind RTV
+            D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_D3D12RtvHeap->GetCPUDescriptorHandleForHeapStart();
+            rtvHandle.ptr += backBufferIdx * m_D3D12RtvDescriptorSize;
+            const float clearColor[4] = { 0.10f, 0.11f, 0.13f, 1.0f };
+            m_D3D12CommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+            m_D3D12CommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+
+            // Set descriptor heap and render ImGui
+            ID3D12DescriptorHeap* heaps[] = { m_D3D12SrvHeap };
+            m_D3D12CommandList->SetDescriptorHeaps(1, heaps);
+            ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_D3D12CommandList);
+
+            // Transition to PRESENT
+            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+            m_D3D12CommandList->ResourceBarrier(1, &barrier);
+
+            m_D3D12CommandList->Close();
+
+            ID3D12CommandList* ppCommandLists[] = { m_D3D12CommandList };
+            d3d12Queue->ExecuteCommandLists(1, ppCommandLists);
+
+            m_D3D12SwapChain->Present(1, 0);
+
+            m_D3D12FenceValueCounter++;
+            m_D3D12FenceValues[backBufferIdx] = m_D3D12FenceValueCounter;
+            d3d12Queue->Signal(m_D3D12Fence, m_D3D12FenceValueCounter);
+        }
+#endif
     }
 
     void ImGuiLayer::Render(RHI::RHICommandBuffer* cmdBuffer) {

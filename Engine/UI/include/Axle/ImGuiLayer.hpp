@@ -5,8 +5,12 @@
 #include <vector>
 
 struct GLFWwindow;
+struct IDXGISwapChain3;
+struct ID3D12Resource;
+struct ID3D12CommandAllocator;
 struct ID3D12DescriptorHeap;
 struct ID3D12GraphicsCommandList;
+struct ID3D12Fence;
 
 namespace Axle {
 
@@ -79,6 +83,20 @@ namespace Axle {
         uint32_t m_D3D12DescriptorSize = 0;
         uint32_t m_AllocatedDescriptorCount = 0;
         std::vector<uint32_t> m_FreeDescriptorIndices;
+
+        // D3D12 Window Swapchain & Presentation
+        IDXGISwapChain3* m_D3D12SwapChain = nullptr;
+        ID3D12DescriptorHeap* m_D3D12RtvHeap = nullptr;
+        uint32_t m_D3D12RtvDescriptorSize = 0;
+        ID3D12Resource* m_D3D12RenderTargets[3] = {};
+        ID3D12CommandAllocator* m_D3D12CommandAllocators[3] = {};
+        ID3D12GraphicsCommandList* m_D3D12CommandList = nullptr;
+        ID3D12Fence* m_D3D12Fence = nullptr;
+        void* m_D3D12FenceEvent = nullptr;
+        uint64_t m_D3D12FenceValues[3] = {};
+        uint64_t m_D3D12FenceValueCounter = 0;
+        uint32_t m_D3D12Width = 0;
+        uint32_t m_D3D12Height = 0;
     };
 
 }

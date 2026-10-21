@@ -1,10 +1,16 @@
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/Window.hpp>
 
 namespace Axle {
 
     PhysicsDebugRenderer::PhysicsDebugRenderer()
         : JPH::DebugRendererSimple() {
+        if (!Window::HasActiveContext()) {
+            sInstance = this;
+            return;
+        }
+
         const std::string vertexSrc = R"(
             #version 450 core
             layout(location = 0) in vec3 a_Position;
@@ -105,7 +111,7 @@ namespace Axle {
     }
 
     void PhysicsDebugRenderer::Flush(const glm::mat4& viewProjection) {
-        if (m_LineVertices.empty()) {
+        if (!Window::HasActiveContext() || !m_Shader || !m_VertexBuffer || !m_VertexArray || m_LineVertices.empty()) {
             return;
         }
 

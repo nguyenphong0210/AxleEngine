@@ -1,5 +1,6 @@
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <glad/glad.h>
@@ -18,6 +19,7 @@ namespace Axle {
 
     void ParticleRenderer::Init() {
         if (m_Initialized) return;
+        if (!Window::HasActiveContext()) return;
 
         LoadShaders();
         CreateBuffers();

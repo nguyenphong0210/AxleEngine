@@ -1,5 +1,6 @@
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/FileSystem.hpp>
@@ -107,12 +108,14 @@ namespace Axle {
     )";
 
     AssetPreviewPanel::AssetPreviewPanel() {
-        FramebufferSpecification spec;
-        spec.Width = m_ViewportWidth;
-        spec.Height = m_ViewportHeight;
-        m_Framebuffer = Framebuffer::Create(spec);
+        if (Window::HasActiveContext()) {
+            FramebufferSpecification spec;
+            spec.Width = m_ViewportWidth;
+            spec.Height = m_ViewportHeight;
+            m_Framebuffer = Framebuffer::Create(spec);
 
-        m_Shader = std::make_unique<Shader>(s_PreviewVertSrc, s_PreviewFragSrc);
+            m_Shader = std::make_unique<Shader>(s_PreviewVertSrc, s_PreviewFragSrc);
+        }
     }
 
     void AssetPreviewPanel::SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh, const SceneSerializerContext* serializerContext) {
@@ -343,6 +346,8 @@ namespace Axle {
     }
 
     void AssetPreviewPanel::RenderPreview3D(float width, float height) {
+        if (!Window::HasActiveContext() || !m_Framebuffer || !m_Shader) return;
+
         u32 w = static_cast<u32>(std::max(width, 64.0f));
         u32 h = static_cast<u32>(std::max(height, 64.0f));
 
@@ -574,8 +579,22 @@ namespace Axle {
 
         RenderPreview3D(availW, viewportH);
 
-        u32 texID = m_Framebuffer->GetColorAttachmentRendererID();
-        ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(availW, viewportH), ImVec2(0, 1), ImVec2(1, 0));
+        if (m_Framebuffer) {
+            u32 texID = m_Framebuffer->GetColorAttachmentRendererID();
+            ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(availW, viewportH), ImVec2(0, 1), ImVec2(1, 0));
+        } else {
+            ImVec2 dummySize(availW, viewportH);
+            ImVec2 p0 = ImGui::GetCursorScreenPos();
+            ImVec2 p1 = ImVec2(p0.x + dummySize.x, p0.y + dummySize.y);
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->AddRectFilled(p0, p1, IM_COL32(22, 24, 28, 255));
+            drawList->AddRect(p0, p1, IM_COL32(45, 49, 58, 255));
+            const char* txt = "Preview available under OpenGL backend";
+            ImVec2 txtSize = ImGui::CalcTextSize(txt);
+            ImVec2 txtPos = ImVec2(p0.x + (dummySize.x - txtSize.x) * 0.5f, p0.y + (dummySize.y - txtSize.y) * 0.5f);
+            drawList->AddText(txtPos, IM_COL32(140, 145, 155, 255), txt);
+            ImGui::Dummy(dummySize);
+        }
 
         m_IsViewportHovered = ImGui::IsItemHovered();
 

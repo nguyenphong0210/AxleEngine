@@ -2,6 +2,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Texture2D.hpp>
 #include <Axle/Log.hpp>
@@ -507,7 +508,7 @@ namespace Axle {
                                    PhysicsScene* physicsScene,
                                    PhysicsDebugRenderer* physicsDebugRenderer,
                                    const SceneRenderSettings& settings) {
-        if (!scene) return;
+        if (!scene || !Window::HasActiveContext() || !targetFBO || !m_Shader) return;
 
         // Query active Directional Sun Light if present in scene
         DirectionalLightComponent activeSunLight;

@@ -1,6 +1,7 @@
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/Shader.hpp>
 #include <Axle/Texture2D.hpp>
 #include <Axle/FileSystem.hpp>
@@ -44,26 +45,30 @@ namespace Axle {
         m_Config.MaxParticles = 1000;
         m_PreviewSystem = std::make_unique<ParticleSystem>(m_Config);
 
-        // Initialize GPU Framebuffer for 3D Viewport preview
-        FramebufferSpecification spec;
-        spec.Width = m_ViewportWidth;
-        spec.Height = m_ViewportHeight;
-        m_Framebuffer = Framebuffer::Create(spec);
+        if (Window::HasActiveContext()) {
+            // Initialize GPU Framebuffer for 3D Viewport preview
+            FramebufferSpecification spec;
+            spec.Width = m_ViewportWidth;
+            spec.Height = m_ViewportHeight;
+            m_Framebuffer = Framebuffer::Create(spec);
 
-        // Initialize GPU Particle Renderer
-        m_ParticleRenderer = std::make_unique<ParticleRenderer>();
+            // Initialize GPU Particle Renderer
+            m_ParticleRenderer = std::make_unique<ParticleRenderer>();
 
-        InitGridShader();
+            InitGridShader();
+        }
     }
 
     VFXEditorPanel::~VFXEditorPanel() {
-        if (glad_glDeleteVertexArrays && m_GridVAO) {
-            glDeleteVertexArrays(1, &m_GridVAO);
-            m_GridVAO = 0;
-        }
-        if (glad_glDeleteBuffers && m_GridVBO) {
-            glDeleteBuffers(1, &m_GridVBO);
-            m_GridVBO = 0;
+        if (Window::HasActiveContext()) {
+            if (glad_glDeleteVertexArrays && m_GridVAO) {
+                glDeleteVertexArrays(1, &m_GridVAO);
+                m_GridVAO = 0;
+            }
+            if (glad_glDeleteBuffers && m_GridVBO) {
+                glDeleteBuffers(1, &m_GridVBO);
+                m_GridVBO = 0;
+            }
         }
     }
 
@@ -476,8 +481,21 @@ namespace Axle {
                 ImVec2 avail = ImGui::GetContentRegionAvail();
                 RenderPreview3D(avail.x, avail.y);
 
-                ImTextureID texID = (ImTextureID)(intptr_t)m_Framebuffer->GetColorAttachmentRendererID();
-                ImGui::Image(texID, avail, ImVec2(0, 1), ImVec2(1, 0));
+                if (m_Framebuffer) {
+                    ImTextureID texID = (ImTextureID)(intptr_t)m_Framebuffer->GetColorAttachmentRendererID();
+                    ImGui::Image(texID, avail, ImVec2(0, 1), ImVec2(1, 0));
+                } else {
+                    ImVec2 p0 = ImGui::GetCursorScreenPos();
+                    ImVec2 p1 = ImVec2(p0.x + avail.x, p0.y + avail.y);
+                    ImDrawList* drawList = ImGui::GetWindowDrawList();
+                    drawList->AddRectFilled(p0, p1, IM_COL32(20, 22, 26, 255));
+                    drawList->AddRect(p0, p1, IM_COL32(40, 44, 52, 255));
+                    const char* txt = "VFX preview requires OpenGL context";
+                    ImVec2 txtSize = ImGui::CalcTextSize(txt);
+                    ImVec2 txtPos = ImVec2(p0.x + (avail.x - txtSize.x) * 0.5f, p0.y + (avail.y - txtSize.y) * 0.5f);
+                    drawList->AddText(txtPos, IM_COL32(130, 135, 145, 255), txt);
+                    ImGui::Dummy(avail);
+                }
 
                 m_ViewportHovered = ImGui::IsItemHovered();
                 m_ViewportFocused = ImGui::IsItemFocused();

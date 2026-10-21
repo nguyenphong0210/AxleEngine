@@ -1,5 +1,6 @@
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/Window.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssemblySerializer.hpp>
@@ -97,18 +98,22 @@ namespace Axle {
     )";
 
     AssetThumbnailManager::AssetThumbnailManager() {
-        InitRenderer();
+        if (Window::HasActiveContext()) {
+            InitRenderer();
+        }
     }
 
     AssetThumbnailManager::~AssetThumbnailManager() {
         Clear();
-        if (m_RBO) {
-            glDeleteRenderbuffers(1, &m_RBO);
-            m_RBO = 0;
-        }
-        if (m_FBO) {
-            glDeleteFramebuffers(1, &m_FBO);
-            m_FBO = 0;
+        if (Window::HasActiveContext()) {
+            if (m_RBO) {
+                glDeleteRenderbuffers(1, &m_RBO);
+                m_RBO = 0;
+            }
+            if (m_FBO) {
+                glDeleteFramebuffers(1, &m_FBO);
+                m_FBO = 0;
+            }
         }
     }
 
@@ -127,9 +132,11 @@ namespace Axle {
     }
 
     void AssetThumbnailManager::Clear() {
-        for (u32 texID : m_GeneratedTextures) {
-            if (texID != 0) {
-                glDeleteTextures(1, &texID);
+        if (Window::HasActiveContext()) {
+            for (u32 texID : m_GeneratedTextures) {
+                if (texID != 0) {
+                    glDeleteTextures(1, &texID);
+                }
             }
         }
         m_GeneratedTextures.clear();
@@ -149,6 +156,10 @@ namespace Axle {
     }
 
     u32 AssetThumbnailManager::GetOrCreateThumbnail(const std::filesystem::path& path) {
+        if (!Window::HasActiveContext()) {
+            return 0;
+        }
+
         std::string key = path.lexically_normal().string();
         auto it = m_ThumbnailCache.find(key);
         if (it != m_ThumbnailCache.end()) {
@@ -200,7 +211,7 @@ namespace Axle {
     }
 
     void AssetThumbnailManager::OnUpdate() {
-        if (m_PendingQueue.empty()) return;
+        if (!Window::HasActiveContext() || m_PendingQueue.empty()) return;
 
         size_t count = 0;
         while (!m_PendingQueue.empty() && count < m_MaxGenerationsPerFrame) {
@@ -226,7 +237,7 @@ namespace Axle {
     }
 
     bool AssetThumbnailManager::RenderThumbnail(const std::filesystem::path& path, u32& outTexID, AssetCachedMeta& outMeta) {
-        if (!std::filesystem::exists(path)) return false;
+        if (!Window::HasActiveContext() || !m_Shader || !std::filesystem::exists(path)) return false;
 
         auto ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });

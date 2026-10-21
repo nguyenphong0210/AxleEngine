@@ -321,10 +321,35 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Multi-backend ImGui rendering: equip `ImGuiLayer` with `imgui_impl_dx12` and `imgui_impl_vulkan` backends alongside legacy `imgui_impl_opengl3`.
     - [x] Viewport Descriptor Binding: Register offscreen scene render targets (`nri::Texture`) into ImGui GPU Descriptor Heap as valid `ImTextureID`.
     - [x] Engine RHI Switcher: Configurable startup flag (`--rhi=dx12`, `--rhi=vulkan`, `--rhi=opengl`) with graceful fallback.
+    - [x] Native D3D12 Swapchain Presentation: Direct backbuffer presentation (`IDXGISwapChain3`, 3 backbuffers flip-discard) resolving unpainted OS window canvas.
   - [ ] **Step 7 - Automated Headless Test Suite & Multi-Backend Validation**:
     - [ ] Headless RHI test suite in `AxleTests.exe`: Device initialization (WARP for D3D12, SwiftShader/Mock ICD for Vulkan).
     - [ ] Multithreaded command recording verification: worker threads via `enkiTS` recording into secondary command buffers concurrently.
     - [ ] Validation of pipeline barrier state machines, PSO cache hit rate, and swapchain recreation stability.
+  - [ ] **Step 8 - Complete Multi-Backend 3D Viewport Scene Renderer (Direct3D 12 & Vulkan)**:
+    - [ ] **Sub-step 8.1: Core Geometry, Mesh VRAM Sub-Allocation & Dynamic ECS Transforms**:
+      - Stream 3D scene geometry (SportsCar chassis OBJ/axlemesh, racing wheels, primitive shapes, and procedural terrain heightfield) into GPU-resident `RHIBuffer` vertex/index buffers via `RHIStreamer`.
+      - Comprehensive vertex layouts: Position (`vec3`), Normal (`vec3`), Tangent/Bitangent (`vec4`), UV Coordinates (`vec2`), Color (`vec4`), and Skeletal Joint Weights/IDs (`vec4`/`uvec4`).
+      - High-performance transform streaming: Bind Camera View-Projection matrices, Camera World Position, and Per-Entity Model Transforms dynamically via Push Constants / Root Descriptors without CPU-GPU pipeline stalls.
+    - [ ] **Sub-step 8.2: PBR Materials, Bindless Textures & Multi-Light Subsystem**:
+      - Industry-standard Metallic-Roughness PBR pipeline: Albedo/BaseColor, Normal (MikkTSpace tangent space), Roughness, Metallic, Ambient Occlusion (AO), and Emissive maps.
+      - Bindless Texture Descriptors & Anisotropic Filtering: Tier 2 descriptor indexing (`nri::DescriptorPool`), Anisotropic 16x filtering, and trilinear mipmap sampling across all material slots.
+      - Forward+ Multi-Light GPU Buffer: 1 Primary Directional Sun Light with physical illuminance (Lux), up to 16 Point Lights (vehicle brake/reverse lights, environment lamps) with inverse-square falloff, and up to 16 Spot Lights (vehicle dual headlights, high-beams) with inner/outer cone cutoff angles.
+    - [ ] **Sub-step 8.3: Cascaded Shadow Mapping (CSM) & Atmospheric Skybox / IBL Passes**:
+      - Real-Time Directional Shadow Mapping (1024x1024 to 4096x4096) with Percentage-Closer Filtering (PCF 5x5) and slope-scaled depth bias to eliminate shadow acne and light bleeding.
+      - Image-Based Lighting (IBL) & Environment Maps: Pre-filtered environment radiance cubemap, diffuse irradiance cubemap, and split-sum BRDF LUT integration for realistic automotive metallic sheen.
+      - Procedural Atmospheric Skybox Pass: Rayleigh & Mie atmospheric scattering simulation with dynamic sun elevation/azimuth synchronized with directional sun light vector.
+    - [ ] **Sub-step 8.4: Post-Processing, HDR Tone Mapping & Anti-Aliasing (FXAA/MSAA)**:
+      - Floating-point offscreen HDR render target (`RGBA16_FLOAT` / `RGBA8_UNORM`) with depth-stencil (`D32_FLOAT`).
+      - Exposure Control & Film-Grade Tone Mapping: ACES Filmic (Narkowicz fit), Reinhard, and Uncharted 2 curves with adjustable exposure compensation and gamma correction (sRGB EOTF).
+      - Anti-Aliasing Integration: Fast Approximate Anti-Aliasing (FXAA) and hardware MSAA (2x/4x/8x) to eliminate jagged specular edges and aliased wireframes.
+    - [ ] **Sub-step 8.5: Secondary Visual Passes (GPU Particle VFX, Physics Wireframes & GPU Object Picking)**:
+      - GPU Instanced Particle VFX Pass: Port `ParticleRenderer` (Phase 31) to RHI instanced draw commands (`CmdDraw`), rendering tire smoke, drift dust, exhaust backfire flames, and ground impacts directly in the D3D12/Vulkan viewport.
+      - Jolt Physics Debug Wireframe Pass: Line-topology graphics pipeline rendering collision shapes, wheel suspension raycasts, and chassis bounding boxes when toggling F1 / `ShowPhysicsDebug`.
+      - Interactive Viewport GPU Object ID Picking: Secondary integer render target (`R32_UINT`) encoding Entity IDs per pixel, enabling instantaneous single-click entity selection in Viewport on DX12, Vulkan, and OpenGL without CPU raycast overhead.
+    - [ ] **Sub-step 8.6: Triple-Backend Seamless Switching & Verification (100% Visual Parity)**:
+      - Seamless CLI switcher verification: `--rhi=dx12`, `--rhi=vulkan`, and `--rhi=opengl` producing pixel-accurate scene renders, lighting, shadows, and physics interactions.
+      - Automated test suites (Step 64) in `AxleTests.exe` validating mesh upload bandwidth, draw call dispatch rates, descriptor recycling, and zero memory leaks upon scene reload.
 - [ ] **Phase 33: Dedicated 2D Canvas & In-Game UI Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
   - [ ] **Hardware-Accelerated 2D Batch Renderer (`Canvas2D`)**: High-performance sprite, quad, and line batch rendering with z-index sorting and clipping rectangles.
   - [ ] **Zero-ImGui Shipping Runtime**: Pure decoupled UI pipeline for commercial game releases without ImGui library linkage.

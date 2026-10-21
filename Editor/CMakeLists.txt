@@ -83,6 +83,12 @@ add_custom_command(TARGET AxleEditor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/Engine/Resources
     $<TARGET_FILE_DIR:AxleEditor>/Resources
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll
+    $<TARGET_FILE_DIR:AxleEditor>/dxcompiler.dll
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll
+    $<TARGET_FILE_DIR:AxleEditor>/dxil.dll
 )
 
 add_dependencies(AxleEditor AxleScripts)
@@ -96,6 +102,12 @@ add_custom_command(TARGET AxleTests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/Engine/Resources
     $<TARGET_FILE_DIR:AxleTests>/Resources
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll
+    $<TARGET_FILE_DIR:AxleTests>/dxcompiler.dll
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll
+    $<TARGET_FILE_DIR:AxleTests>/dxil.dll
 )
 
 target_include_directories(AxleTests PRIVATE

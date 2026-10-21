@@ -74,8 +74,10 @@
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHISurface.hpp>
 #include <Axle/RHI/RHISwapChain.hpp>
+#include <Axle/RHI/RHIShader.hpp>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <cstring>
 
 // =============================================================================
 // Test Mock Script for Testing Reflection & Serialization
@@ -9605,6 +9607,288 @@ bool RunTest_Step49_Phase32_Step2_SwapchainAndFramesInFlight() {
 }
 
 // =============================================================================
+// TEST STEP 50: Phase 32 Step 3 - Cross-API Shader Compilation Pipeline
+// =============================================================================
+bool RunTest_Step50_Phase32_Step3_CrossAPIShaderCompiler() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 50 TEST] CROSS-API SHADER COMPILER (DXIL & SPIR-V)" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    auto& compiler = Axle::RHI::RHIShaderCompiler::Get();
+    std::cout << "[50.1] Initializing RHIShaderCompiler..." << std::endl;
+    if (!compiler.Init()) {
+        std::cerr << "FAIL: Failed to initialize RHIShaderCompiler!" << std::endl;
+        return false;
+    }
+    assert(compiler.IsInitialized());
+    std::cout << "  -> PASS: RHIShaderCompiler initialized with dxcompiler.dll & dxil.dll." << std::endl;
+
+    // [50.2] Single-Source Vertex Shader -> DXIL & SPIR-V
+    std::cout << "\n[50.2] Compiling Single-Source Vertex Shader to DXIL and SPIR-V..." << std::endl;
+    const std::string vertexShaderSource = R"(
+        struct VSInput {
+            float3 Position : POSITION;
+            float2 TexCoord : TEXCOORD0;
+            float3 Normal   : NORMAL;
+        };
+
+        struct VSOutput {
+            float4 Position : SV_Position;
+            float2 TexCoord : TEXCOORD0;
+            float3 Normal   : NORMAL;
+        };
+
+        cbuffer CameraConstants : register(b0) {
+            float4x4 ViewProjection;
+            float4x4 Model;
+        };
+
+        VSOutput VSMain(VSInput input) {
+            VSOutput output;
+            float4 worldPos = mul(Model, float4(input.Position, 1.0f));
+            output.Position = mul(ViewProjection, worldPos);
+            output.TexCoord = input.TexCoord;
+            output.Normal = mul((float3x3)Model, input.Normal);
+            return output;
+        }
+    )";
+
+    // Compile to Direct3D 12 DXIL
+    Axle::RHI::RHIShaderCompileDesc vsDescDXIL;
+    vsDescDXIL.Source = vertexShaderSource;
+    vsDescDXIL.EntryPoint = "VSMain";
+    vsDescDXIL.Stage = Axle::RHI::RHIShaderStage::Vertex;
+    vsDescDXIL.Format = Axle::RHI::RHIShaderFormat::DXIL;
+    vsDescDXIL.ShaderModel = "6_0";
+    vsDescDXIL.Optimization = true;
+
+    auto vsResDXIL = compiler.Compile(vsDescDXIL);
+    if (!vsResDXIL.Success) {
+        std::cerr << "FAIL: Vertex Shader DXIL compilation failed: " << vsResDXIL.ErrorMessage << std::endl;
+        return false;
+    }
+    assert(vsResDXIL.Bytecode.IsValid());
+    assert(vsResDXIL.Bytecode.GetSize() > 0);
+    // Check DXIL container magic "DXBC" (0x43425844)
+    const uint8_t* dxilData = vsResDXIL.Bytecode.GetData();
+    assert(dxilData[0] == 'D' && dxilData[1] == 'X' && dxilData[2] == 'B' && dxilData[3] == 'C');
+    std::cout << "  -> PASS: Vertex Shader compiled to Direct3D 12 DXIL (" << vsResDXIL.Bytecode.GetSize() << " bytes, Magic: 'DXBC')" << std::endl;
+
+    // Compile to Vulkan 1.3 SPIR-V
+    Axle::RHI::RHIShaderCompileDesc vsDescSPV = vsDescDXIL;
+    vsDescSPV.Format = Axle::RHI::RHIShaderFormat::SPIRV;
+    vsDescSPV.EnableVulkanDXLayout = true;
+    vsDescSPV.VulkanTargetEnv = "vulkan1.3";
+
+    auto vsResSPV = compiler.Compile(vsDescSPV);
+    if (!vsResSPV.Success) {
+        std::cerr << "FAIL: Vertex Shader SPIR-V compilation failed: " << vsResSPV.ErrorMessage << std::endl;
+        return false;
+    }
+    assert(vsResSPV.Bytecode.IsValid());
+    assert(vsResSPV.Bytecode.GetSize() > 0);
+    // Check SPIR-V Magic Number 0x07230203
+    assert(vsResSPV.Bytecode.GetSize() >= 4);
+    uint32_t spvMagic = *reinterpret_cast<const uint32_t*>(vsResSPV.Bytecode.GetData());
+    assert(spvMagic == 0x07230203);
+    std::cout << "  -> PASS: Vertex Shader compiled to Vulkan 1.3 SPIR-V (" << vsResSPV.Bytecode.GetSize() << " bytes, Magic: 0x" << std::hex << spvMagic << std::dec << ")" << std::endl;
+
+    // [50.3] Single-Source Pixel Shader with Preprocessor Macros & NRI descriptor conversion
+    std::cout << "\n[50.3] Compiling Pixel Shader with Preprocessor Macros & NRI desc conversion..." << std::endl;
+    const std::string pixelShaderSource = R"(
+        struct PSInput {
+            float4 Position : SV_Position;
+            float2 TexCoord : TEXCOORD0;
+            float3 Normal   : NORMAL;
+        };
+
+        Texture2D g_AlbedoTexture : register(t0);
+        SamplerState g_Sampler    : register(s0);
+
+        float4 PSMain(PSInput input) : SV_Target {
+            float4 color = g_AlbedoTexture.Sample(g_Sampler, input.TexCoord);
+        #ifdef USE_COLOR_TINT
+            color.rgb *= TINT_COLOR;
+        #endif
+        #ifdef INVERT_CHANNELS
+            color.rgb = 1.0f - color.rgb;
+        #endif
+            return color;
+        }
+    )";
+
+    Axle::RHI::RHIShaderCompileDesc psDesc;
+    psDesc.Source = pixelShaderSource;
+    psDesc.EntryPoint = "PSMain";
+    psDesc.Stage = Axle::RHI::RHIShaderStage::Fragment;
+    psDesc.Format = Axle::RHI::RHIShaderFormat::DXIL;
+    psDesc.Macros.push_back({ "USE_COLOR_TINT", "1" });
+    psDesc.Macros.push_back({ "TINT_COLOR", "float3(1.0f, 0.8f, 0.4f)" });
+
+    auto psResDXIL = compiler.Compile(psDesc);
+    if (!psResDXIL.Success) {
+        std::cerr << "FAIL: Pixel Shader DXIL compilation with macros failed: " << psResDXIL.ErrorMessage << std::endl;
+        return false;
+    }
+    assert(psResDXIL.Bytecode.IsValid());
+
+    // Convert to NRI ShaderDesc
+    nri::ShaderDesc nriDescDXIL = psResDXIL.Bytecode.ToNRIShaderDesc();
+    assert(nriDescDXIL.stage == nri::StageBits::FRAGMENT_SHADER);
+    assert(nriDescDXIL.bytecode == psResDXIL.Bytecode.GetData());
+    assert(nriDescDXIL.size == psResDXIL.Bytecode.GetSize());
+    assert(std::string(nriDescDXIL.entryPointName) == "PSMain");
+    std::cout << "  -> PASS: Pixel Shader DXIL with macros (" << psResDXIL.Bytecode.GetSize() << " bytes) -> NRI ShaderDesc validated." << std::endl;
+
+    // Pixel Shader SPIR-V with macros
+    psDesc.Format = Axle::RHI::RHIShaderFormat::SPIRV;
+    auto psResSPV = compiler.Compile(psDesc);
+    if (!psResSPV.Success) {
+        std::cerr << "FAIL: Pixel Shader SPIR-V compilation with macros failed: " << psResSPV.ErrorMessage << std::endl;
+        return false;
+    }
+    assert(psResSPV.Bytecode.IsValid());
+    nri::ShaderDesc nriDescSPV = psResSPV.Bytecode.ToNRIShaderDesc();
+    assert(nriDescSPV.stage == nri::StageBits::FRAGMENT_SHADER);
+    assert(nriDescSPV.size == psResSPV.Bytecode.GetSize());
+    std::cout << "  -> PASS: Pixel Shader SPIR-V with macros (" << psResSPV.Bytecode.GetSize() << " bytes) -> NRI ShaderDesc validated." << std::endl;
+
+    // [50.4] Single-Source Compute Shader with Thread Groups
+    std::cout << "\n[50.4] Compiling Single-Source Compute Shader ([numthreads(64, 1, 1)])..." << std::endl;
+    const std::string computeShaderSource = R"(
+        RWStructuredBuffer<float> g_OutputBuffer : register(u0);
+
+        cbuffer ComputeParams : register(b0) {
+            uint ElementCount;
+            float Multiplier;
+        };
+
+        [numthreads(64, 1, 1)]
+        void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
+            if (dispatchThreadId.x >= ElementCount) return;
+            g_OutputBuffer[dispatchThreadId.x] = (float)dispatchThreadId.x * Multiplier;
+        }
+    )";
+
+    Axle::RHI::RHIShaderCompileDesc csDesc;
+    csDesc.Source = computeShaderSource;
+    csDesc.EntryPoint = "CSMain";
+    csDesc.Stage = Axle::RHI::RHIShaderStage::Compute;
+    csDesc.Format = Axle::RHI::RHIShaderFormat::DXIL;
+
+    auto csResDXIL = compiler.Compile(csDesc);
+    if (!csResDXIL.Success) {
+        std::cerr << "FAIL: Compute Shader DXIL compilation failed: " << csResDXIL.ErrorMessage << std::endl;
+        return false;
+    }
+    assert(csResDXIL.Bytecode.IsValid());
+    std::cout << "  -> PASS: Compute Shader compiled to Direct3D 12 DXIL (" << csResDXIL.Bytecode.GetSize() << " bytes)" << std::endl;
+
+    csDesc.Format = Axle::RHI::RHIShaderFormat::SPIRV;
+    auto csResSPV = compiler.Compile(csDesc);
+    if (!csResSPV.Success) {
+        std::cerr << "FAIL: Compute Shader SPIR-V compilation failed: " << csResSPV.ErrorMessage << std::endl;
+        return false;
+    }
+    assert(csResSPV.Bytecode.IsValid());
+    std::cout << "  -> PASS: Compute Shader compiled to Vulkan 1.3 SPIR-V (" << csResSPV.Bytecode.GetSize() << " bytes)" << std::endl;
+
+    // [50.5] Unified Header Integration with #include "NRI.hlsl"
+    std::cout << "\n[50.5] Compiling shader with unified header #include \"NRI.hlsl\"..." << std::endl;
+    const std::string nriShaderSource = R"(
+        #include "NRI.hlsl"
+
+        struct PushConstants {
+            float4 ScaleOffset;
+        };
+        NRI_ROOT_CONSTANTS(PushConstants, g_Constants, 0, 0);
+
+        struct VSOut {
+            float4 Pos : SV_Position;
+        };
+
+        VSOut VSMain(uint vertexId : SV_VertexID) {
+            VSOut outVal;
+            float2 pos = float2((vertexId << 1) & 2, vertexId & 2);
+            outVal.Pos = float4(pos * g_Constants.ScaleOffset.xy + g_Constants.ScaleOffset.zw, 0.0f, 1.0f);
+            return outVal;
+        }
+    )";
+
+    Axle::RHI::RHIShaderCompileDesc nriShaderDesc;
+    nriShaderDesc.Source = nriShaderSource;
+    nriShaderDesc.EntryPoint = "VSMain";
+    nriShaderDesc.Stage = Axle::RHI::RHIShaderStage::Vertex;
+    nriShaderDesc.Format = Axle::RHI::RHIShaderFormat::DXIL;
+
+    auto nriResDXIL = compiler.Compile(nriShaderDesc);
+    if (!nriResDXIL.Success) {
+        std::cerr << "FAIL: Shader with #include \"NRI.hlsl\" DXIL compilation failed: " << nriResDXIL.ErrorMessage << std::endl;
+        return false;
+    }
+    assert(nriResDXIL.Bytecode.IsValid());
+    std::cout << "  -> PASS: Shader with #include \"NRI.hlsl\" compiled to DXIL (" << nriResDXIL.Bytecode.GetSize() << " bytes)" << std::endl;
+
+    nriShaderDesc.Format = Axle::RHI::RHIShaderFormat::SPIRV;
+    auto nriResSPV = compiler.Compile(nriShaderDesc);
+    if (!nriResSPV.Success) {
+        std::cerr << "FAIL: Shader with #include \"NRI.hlsl\" SPIR-V compilation failed: " << nriResSPV.ErrorMessage << std::endl;
+        return false;
+    }
+    assert(nriResSPV.Bytecode.IsValid());
+    std::cout << "  -> PASS: Shader with #include \"NRI.hlsl\" compiled to SPIR-V (" << nriResSPV.Bytecode.GetSize() << " bytes)" << std::endl;
+
+    // [50.6] Bytecode Persistence & Disk Cache Roundtrip
+    std::cout << "\n[50.6] Testing Bytecode Persistence & Disk Cache Roundtrip..." << std::endl;
+    std::filesystem::path cacheDir = "test_cache";
+    std::filesystem::path dxilPath = cacheDir / "triangle.dxil";
+    std::filesystem::path spvPath = cacheDir / "triangle.spv";
+
+    assert(vsResDXIL.Bytecode.SaveToFile(dxilPath));
+    assert(vsResSPV.Bytecode.SaveToFile(spvPath));
+    assert(std::filesystem::exists(dxilPath));
+    assert(std::filesystem::exists(spvPath));
+
+    auto loadedDXIL = Axle::RHI::RHIShaderBytecode::LoadFromFile(dxilPath, Axle::RHI::RHIShaderFormat::DXIL, Axle::RHI::RHIShaderStage::Vertex, "VSMain");
+    assert(loadedDXIL.IsValid());
+    assert(loadedDXIL.GetSize() == vsResDXIL.Bytecode.GetSize());
+    assert(std::memcmp(loadedDXIL.GetData(), vsResDXIL.Bytecode.GetData(), loadedDXIL.GetSize()) == 0);
+
+    auto loadedSPV = Axle::RHI::RHIShaderBytecode::LoadFromFile(spvPath, Axle::RHI::RHIShaderFormat::SPIRV, Axle::RHI::RHIShaderStage::Vertex, "VSMain");
+    assert(loadedSPV.IsValid());
+    assert(loadedSPV.GetSize() == vsResSPV.Bytecode.GetSize());
+    assert(std::memcmp(loadedSPV.GetData(), vsResSPV.Bytecode.GetData(), loadedSPV.GetSize()) == 0);
+
+    std::filesystem::remove_all(cacheDir);
+    std::cout << "  -> PASS: SaveToFile and LoadFromFile roundtrip verified (100% bitwise parity)" << std::endl;
+
+    // [50.7] Dynamic Backend Target Selection
+    std::cout << "\n[50.7] Testing CompileForActiveBackend Dynamic Selection..." << std::endl;
+    auto autoRes = compiler.CompileForActiveBackend(vsDescDXIL);
+    assert(autoRes.Success);
+    assert(autoRes.Bytecode.IsValid());
+    std::cout << "  -> PASS: CompileForActiveBackend succeeded (" << autoRes.Bytecode.GetSize() << " bytes, Format: "
+              << Axle::RHI::RHIShaderCompiler::FormatToString(autoRes.Bytecode.Format) << ")" << std::endl;
+
+    // [50.8] Compilation Error Diagnostic Capture
+    std::cout << "\n[50.8] Testing Compilation Error Diagnostic Capture..." << std::endl;
+    Axle::RHI::RHIShaderCompileDesc badDesc;
+    badDesc.Source = "float4 BadShader() { return UndefinedVariable + 1.0; }";
+    badDesc.EntryPoint = "BadShader";
+    badDesc.Stage = Axle::RHI::RHIShaderStage::Fragment;
+    badDesc.Format = Axle::RHI::RHIShaderFormat::DXIL;
+
+    auto badRes = compiler.Compile(badDesc);
+    assert(!badRes.Success);
+    assert(!badRes.ErrorMessage.empty());
+    std::cout << "  -> PASS: Compilation failure correctly caught without crash:" << std::endl;
+    std::cout << "     Error snippet: " << badRes.ErrorMessage.substr(0, std::min<size_t>(badRes.ErrorMessage.size(), 120)) << "..." << std::endl;
+
+    std::cout << "\n>>> STEP 50 PASSED: Phase 32 Step 3 Cross-API Shader Pipeline 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -9666,12 +9950,13 @@ int main(int argc, char** argv) {
         else if (arg == "47" || arg == "step47" || arg == "--step47" || arg == "--phase31f" || arg == "--vfx-editor") targetStep = 47;
         else if (arg == "48" || arg == "step48" || arg == "--step48" || arg == "--phase32" || arg == "--phase32a" || arg == "--rhi") targetStep = 48;
         else if (arg == "49" || arg == "step49" || arg == "--step49" || arg == "--swapchain" || arg == "--phase32b") targetStep = 49;
+        else if (arg == "50" || arg == "step50" || arg == "--step50" || arg == "--shader" || arg == "--phase32c") targetStep = 50;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 49 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 50 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -9825,6 +10110,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 49) {
         if (!RunTest_Step49_Phase32_Step2_SwapchainAndFramesInFlight()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 50) {
+        if (!RunTest_Step50_Phase32_Step3_CrossAPIShaderCompiler()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

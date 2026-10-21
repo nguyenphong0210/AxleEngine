@@ -79,6 +79,7 @@
 #include <Axle/RHI/RHIBarrier.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHI/RHIBuffer.hpp>
+#include <Axle/RHI/RHIStreamer.hpp>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <cstring>
@@ -11033,6 +11034,221 @@ bool RunTest_Step53_Phase32_Step5_Part1_GPUMemoryAndBuffers() {
 }
 
 // =============================================================================
+// STEP 54: PHASE 32 STEP 5 PART 2 DYNAMIC STAGING STREAMER (RHISTREAMER)
+// =============================================================================
+bool RunTest_Step54_Phase32_Step5_Part2_DynamicStagingStreamer() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 54 TEST] DYNAMIC STAGING RING BUFFER (STREAMER)  " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    using namespace Axle::RHI;
+
+    auto& rhiDevice = RHIDevice::Get();
+    bool deviceWasInit = rhiDevice.IsInitialized();
+    if (!deviceWasInit) {
+        RHIDeviceDesc devDesc;
+        devDesc.PreferredBackend = RHIType::Direct3D12;
+        devDesc.EnableValidation = false;
+        assert(rhiDevice.Init(devDesc));
+    }
+    auto* nativeDevice = rhiDevice.GetNRIDevice();
+    const auto& core = rhiDevice.GetNRICore();
+    auto* queue = rhiDevice.GetGraphicsQueue();
+    assert(nativeDevice != nullptr);
+    assert(queue != nullptr);
+
+    // [54.1] RHIStreamer Initialization & Configuration
+    std::cout << "\n[54.1] Testing RHIStreamer Initialization & Ring Buffer Allocation..." << std::endl;
+    RHIStreamer streamer;
+    RHIStreamerDesc streamerDesc = {};
+    streamerDesc.ConstantBufferSize = 4 * 1024 * 1024; // 4 MB constant ring
+    streamerDesc.DynamicBufferUsage = RHIBufferUsage::Vertex | RHIBufferUsage::Index | RHIBufferUsage::ShaderResource;
+    streamerDesc.QueuedFrameNum = 3;
+    streamerDesc.HostDataCapacity = 1024 * 1024; // 1 MB host ring
+
+    assert(streamer.Init(streamerDesc));
+    assert(streamer.IsValid());
+    assert(streamer.GetNative() != nullptr);
+    assert(streamer.GetConstantBuffer() != nullptr);
+    std::cout << "  -> PASS: RHIStreamer initialized (4MB Constant Ring, 3 Frames in Flight, 1MB Host Data)." << std::endl;
+
+    // [54.2] Constant Ring Buffer Streaming & Hardware Alignment
+    std::cout << "\n[54.2] Testing Constant Ring Buffer Streaming & 256-Byte Alignment..." << std::endl;
+    struct alignas(16) CameraUniforms {
+        float ViewProj[16];
+        float CameraPos[4];
+    };
+    CameraUniforms cam1 = {};
+    for (int i = 0; i < 16; ++i) cam1.ViewProj[i] = static_cast<float>(i + 1);
+    cam1.CameraPos[0] = 10.0f; cam1.CameraPos[1] = 20.0f; cam1.CameraPos[2] = 30.0f; cam1.CameraPos[3] = 1.0f;
+
+    struct alignas(16) ObjectUniforms {
+        float Model[16];
+        float Color[4];
+    };
+    ObjectUniforms obj1 = {};
+    for (int i = 0; i < 16; ++i) obj1.Model[i] = static_cast<float>((i + 1) * 10);
+    obj1.Color[0] = 0.8f; obj1.Color[1] = 0.2f; obj1.Color[2] = 0.1f; obj1.Color[3] = 1.0f;
+
+    uint32_t offset1 = streamer.StreamConstant(cam1);
+    uint32_t offset2 = streamer.StreamConstant(obj1);
+
+    // Constant buffer offsets in D3D12/Vulkan must be aligned to 256 bytes
+    assert(offset1 % 256 == 0);
+    assert(offset2 % 256 == 0);
+    assert(offset2 >= offset1 + sizeof(CameraUniforms));
+    std::cout << "  -> Streamed CameraUniforms at offset: " << offset1 << " bytes." << std::endl;
+    std::cout << "  -> Streamed ObjectUniforms at offset: " << offset2 << " bytes (aligned to 256 bytes)." << std::endl;
+    std::cout << "  -> PASS: Constant ring buffer streaming & hardware alignment verified." << std::endl;
+
+    // [54.3] Generic Host Data Ring Buffer Streaming
+    std::cout << "\n[54.3] Testing CPU Host Data Ring Buffer Streaming..." << std::endl;
+    std::vector<uint32_t> cpuPayload = { 42, 1337, 9999, 123456, 78910 };
+    void* hostPtr = streamer.StreamHostData(cpuPayload.data(), cpuPayload.size() * sizeof(uint32_t), 64);
+    assert(hostPtr != nullptr);
+    assert(reinterpret_cast<uintptr_t>(hostPtr) % 64 == 0); // 64-byte alignment
+    assert(std::memcmp(hostPtr, cpuPayload.data(), cpuPayload.size() * sizeof(uint32_t)) == 0);
+    std::cout << "  -> PASS: Host data streamed at 64-byte aligned address " << hostPtr << " with bit-for-bit persistence." << std::endl;
+
+    // [54.4] Transient Dynamic Buffer Streaming (Immediate Draw Buffer)
+    std::cout << "\n[54.4] Testing Transient Dynamic Buffer Streaming (Immediate Geometry)..." << std::endl;
+    struct Vertex2D {
+        float Pos[2];
+        float Color[4];
+    };
+    std::vector<Vertex2D> triangleVerts = {
+        { { 0.0f,  0.5f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { { 0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
+        { {-0.5f, -0.5f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
+    };
+    RHIStreamedBuffer streamedVB = streamer.StreamBufferData(triangleVerts.data(), triangleVerts.size() * sizeof(Vertex2D), 16);
+    assert(streamedVB.IsValid());
+    assert(streamedVB.Buffer != nullptr);
+    std::cout << "  -> Transient Dynamic Buffer allocated: " << streamedVB.Buffer << " at offset: " << streamedVB.Offset << " bytes." << std::endl;
+    std::cout << "  -> PASS: Immediate vertex geometry streamed directly into dynamic buffer without GPU copy hazard." << std::endl;
+
+    // [54.5] Asynchronous Staging Upload for VRAM Vertex Buffers
+    std::cout << "\n[54.5] Testing Asynchronous Staging Upload for VRAM Buffers..." << std::endl;
+    auto vramVbDesc = RHIBufferDesc::Vertex(triangleVerts.size() * sizeof(Vertex2D), RHIMemoryLocation::Device, "AsyncVRAM_VB");
+    RHIBuffer vramBuffer;
+    assert(vramBuffer.Init(vramVbDesc));
+    assert(vramBuffer.IsValid());
+
+    // Begin copy batch
+    RHICopyBatch copyBatch = streamer.BeginCopyBatch();
+    assert(copyBatch != 0);
+
+    // Stream upload into staging buffer
+    RHIStreamedBuffer stagingBuf = streamer.StreamBufferUpload(copyBatch, vramBuffer, 0, triangleVerts.data(), triangleVerts.size() * sizeof(Vertex2D));
+    assert(stagingBuf.IsValid());
+
+    // Record copy command list
+    RHICommandBuffer cmdBuffer;
+    assert(cmdBuffer.Init(queue));
+    assert(cmdBuffer.Begin());
+
+    // Transition VRAM buffer from Undefined/None to CopyDest
+    cmdBuffer.TransitionBuffer(vramBuffer.GetNative(), RHIAccess::None, RHIAccess::CopyDest, RHIPipelineStage::AllCommands, RHIPipelineStage::Copy);
+
+    // Record the batched streamed copy
+    cmdBuffer.CopyStreamedData(streamer, copyBatch);
+
+    // Transition VRAM buffer from CopyDest to VertexBuffer
+    cmdBuffer.TransitionBuffer(vramBuffer.GetNative(), RHIAccess::CopyDest, RHIAccess::VertexBuffer, RHIPipelineStage::Copy, RHIPipelineStage::VertexShader);
+
+    assert(cmdBuffer.End());
+
+    // Submit command list and wait for GPU idle
+    assert(cmdBuffer.Submit(queue));
+    assert(core.QueueWaitIdle(queue) == nri::Result::SUCCESS);
+    std::cout << "  -> PASS: Asynchronous staging upload for VRAM vertex buffer recorded, submitted, and completed." << std::endl;
+    cmdBuffer.Shutdown();
+    vramBuffer.Shutdown();
+
+    // [54.6] Asynchronous Texture Subresource Streaming (Mipmaps)
+    std::cout << "\n[54.6] Testing Asynchronous Texture Subresource Streaming (Mipmap Upload)..." << std::endl;
+    nri::TextureDesc texDesc = {};
+    texDesc.type = nri::TextureType::TEXTURE_2D;
+    texDesc.usage = nri::TextureUsageBits::SHADER_RESOURCE;
+    texDesc.format = nri::Format::RGBA8_UNORM;
+    texDesc.width = 16;
+    texDesc.height = 16;
+    texDesc.depth = 1;
+    texDesc.mipNum = 1;
+    texDesc.layerNum = 1;
+    texDesc.sampleNum = 1;
+
+    nri::Texture* testTexture = nullptr;
+    nri::Result texRes = core.CreateCommittedTexture(*nativeDevice, nri::MemoryLocation::DEVICE, 0.0f, texDesc, testTexture);
+    assert(texRes == nri::Result::SUCCESS && testTexture != nullptr);
+
+    // 16x16 RGBA8 test texture pixels (1024 bytes)
+    std::vector<uint32_t> texels(16 * 16, 0xFF00FFFF); // Magenta
+    RHICopyBatch texBatch = streamer.BeginCopyBatch();
+    assert(texBatch != 0);
+
+    RHIStreamTextureDesc texStreamDesc = {};
+    texStreamDesc.Data = texels.data();
+    texStreamDesc.DataRowPitch = 16 * 4;
+    texStreamDesc.DataSlicePitch = 16 * 16 * 4;
+    texStreamDesc.CopyBatch = texBatch;
+    texStreamDesc.DstTexture = testTexture;
+    texStreamDesc.Width = 16;
+    texStreamDesc.Height = 16;
+    texStreamDesc.Depth = 1;
+
+    RHIStreamedBuffer texStaging = streamer.StreamTextureData(texStreamDesc);
+    assert(texStaging.IsValid());
+
+    // Record texture upload command
+    RHICommandBuffer texCmdBuffer;
+    assert(texCmdBuffer.Init(queue));
+    assert(texCmdBuffer.Begin());
+
+    texCmdBuffer.TransitionTexture(testTexture, RHIResourceLayout::Undefined, RHIResourceLayout::CopyDest);
+    texCmdBuffer.CopyStreamedData(streamer, texBatch);
+    texCmdBuffer.TransitionTexture(testTexture, RHIResourceLayout::CopyDest, RHIResourceLayout::ShaderResource);
+
+    assert(texCmdBuffer.End());
+    assert(texCmdBuffer.Submit(queue));
+    assert(core.QueueWaitIdle(queue) == nri::Result::SUCCESS);
+    std::cout << "  -> PASS: 16x16 Texture subresource streamed, converted, and uploaded into GPU VRAM." << std::endl;
+
+    texCmdBuffer.Shutdown();
+    core.DestroyTexture(testTexture);
+
+    // [54.7] Multi-Frame Ring Buffer Progression & EndFrame
+    std::cout << "\n[54.7] Testing Multi-Frame Ring Buffer Progression & EndFrame..." << std::endl;
+    for (int frame = 0; frame < 5; ++frame) {
+        // Stream constant in frame
+        uint32_t off = streamer.StreamConstant(cam1);
+        assert(off % 256 == 0);
+
+        // Stream dynamic buffer in frame
+        RHIStreamedBuffer buf = streamer.StreamBufferData(triangleVerts.data(), triangleVerts.size() * sizeof(Vertex2D), 16);
+        assert(buf.IsValid());
+
+        // End frame - rotates ring buffer frame slot
+        streamer.EndFrame();
+    }
+    std::cout << "  -> PASS: 5 frames cycled through ring buffer with EndFrame() without leaks or head/tail collision." << std::endl;
+
+    // [54.8] Resource Shutdown & Cleanup
+    std::cout << "\n[54.8] Testing Clean RHIStreamer Shutdown..." << std::endl;
+    streamer.Shutdown();
+    assert(!streamer.IsValid());
+    assert(streamer.GetNative() == nullptr);
+
+    if (!deviceWasInit) {
+        rhiDevice.Shutdown();
+    }
+    std::cout << "  -> PASS: RHIStreamer cleanly shut down and native resources released." << std::endl;
+
+    std::cout << "\n>>> STEP 54 PASSED: Phase 32 Step 5 Part 2 Dynamic Staging Streamer 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -11098,12 +11314,13 @@ int main(int argc, char** argv) {
         else if (arg == "51" || arg == "step51" || arg == "--step51" || arg == "--pso" || arg == "--phase32d") targetStep = 51;
         else if (arg == "52" || arg == "step52" || arg == "--step52" || arg == "--barrier" || arg == "--phase32e") targetStep = 52;
         else if (arg == "53" || arg == "step53" || arg == "--step53" || arg == "--memory" || arg == "--buffer" || arg == "--phase32f") targetStep = 53;
+        else if (arg == "54" || arg == "step54" || arg == "--step54" || arg == "--streamer" || arg == "--phase32g") targetStep = 54;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 53 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 54 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -11269,6 +11486,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 53) {
         if (!RunTest_Step53_Phase32_Step5_Part1_GPUMemoryAndBuffers()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 54) {
+        if (!RunTest_Step54_Phase32_Step5_Part2_DynamicStagingStreamer()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

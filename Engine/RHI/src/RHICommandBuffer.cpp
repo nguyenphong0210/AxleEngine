@@ -1,4 +1,5 @@
 #include <Axle/RHI/RHICommandBuffer.hpp>
+#include <Axle/RHI/RHIStreamer.hpp>
 #include <Axle/Log.hpp>
 
 namespace Axle::RHI {
@@ -198,6 +199,20 @@ namespace Axle::RHI {
             return true;
         }
         return false;
+    }
+
+    void RHICommandBuffer::TransitionBuffer(nri::Buffer* buffer, RHIAccess beforeAccess, RHIAccess afterAccess,
+                                            RHIPipelineStage beforeStage, RHIPipelineStage afterStage)
+    {
+        if (!buffer || !m_CommandBuffer || !m_IsRecording) return;
+        RHIBarrierGroup group;
+        group.AddBuffer(buffer, beforeAccess, afterAccess, beforeStage, afterStage);
+        PipelineBarrier(group);
+    }
+
+    void RHICommandBuffer::CopyStreamedData(RHIStreamer& streamer, uint64_t copyBatch) {
+        if (!m_CommandBuffer || !m_IsRecording || copyBatch == 0) return;
+        streamer.CmdCopyStreamedData(*m_CommandBuffer, copyBatch);
     }
 
     void RHICommandBuffer::SetPipeline(nri::Pipeline* pipeline) {

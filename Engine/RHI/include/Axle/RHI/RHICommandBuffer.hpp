@@ -45,6 +45,12 @@ namespace Axle::RHI {
         void PipelineBarrier(const RHIBarrierGroup& barrierGroup);
         void TransitionTexture(nri::Texture* texture, RHIResourceLayout before, RHIResourceLayout after);
         bool TransitionTexture(RHIResourceStateTracker& tracker, nri::Texture* texture, RHIResourceLayout targetLayout);
+        void TransitionBuffer(nri::Buffer* buffer, RHIAccess beforeAccess, RHIAccess afterAccess,
+                              RHIPipelineStage beforeStage = RHIPipelineStage::AllCommands,
+                              RHIPipelineStage afterStage = RHIPipelineStage::AllCommands);
+
+        // Staging & Dynamic Streamer
+        void CopyStreamedData(class RHIStreamer& streamer, uint64_t copyBatch);
 
         // Pipeline & Resource Binding
         void SetPipeline(nri::Pipeline* pipeline);

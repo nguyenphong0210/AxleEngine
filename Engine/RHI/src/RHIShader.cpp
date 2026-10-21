@@ -12,14 +12,25 @@
 #ifdef GetProfileString
 #undef GetProfileString
 #endif
+#ifdef FindResource
+#undef FindResource
+#endif
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
 
 #include <dxcapi.h>
+#include <d3d12shader.h>
 
 #include <fstream>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <unordered_set>
+#include <map>
 
 namespace Axle::RHI {
 
@@ -376,6 +387,21 @@ namespace Axle::RHI {
                 AXLE_CORE_INFO("RHIShaderCompiler: Compiled {0} shader '{1}' to {2} ({3} bytes)",
                     StageToString(desc.Stage), desc.EntryPoint, FormatToString(desc.Format), dataSize);
             }
+
+            // Extract reflection metadata
+            if (desc.Format == RHIShaderFormat::SPIRV) {
+                // When compiling to SPIR-V, DXC doesn't output DXIL reflection blob.
+                // We reflect using HLSL source directly to get unified spaces, registers, variables and thread groups!
+                result.Reflection = ReflectFromSource(desc);
+            } else {
+                IDxcBlob* pReflBlob = nullptr;
+                if (SUCCEEDED(pCompileResult->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&pReflBlob), nullptr)) && pReflBlob) {
+                    result.Reflection = Reflect(pReflBlob->GetBufferPointer(), pReflBlob->GetBufferSize(), desc.Stage, desc.Format, desc.EntryPoint);
+                    pReflBlob->Release();
+                } else if (!result.Bytecode.Data.empty()) {
+                    result.Reflection = Reflect(result.Bytecode);
+                }
+            }
         } else {
             AXLE_CORE_ERROR("RHIShaderCompiler compilation failed for {0} shader '{1}':\n{2}",
                 StageToString(desc.Stage), desc.EntryPoint, result.ErrorMessage);
@@ -573,6 +599,22 @@ namespace Axle::RHI {
                         result.Success = true;
                         result.Bytecode = std::move(cachedBytecode);
                         result.IsCacheHit = true;
+
+                        // Populate reflection metadata
+                        if (desc.Format == RHIShaderFormat::SPIRV) {
+                            std::ifstream sf(filepath);
+                            if (sf.is_open()) {
+                                std::stringstream sbuf;
+                                sbuf << sf.rdbuf();
+                                RHIShaderCompileDesc reflDesc = desc;
+                                reflDesc.Source = sbuf.str();
+                                reflDesc.SourcePath = filepath.string();
+                                result.Reflection = ReflectFromSource(reflDesc);
+                            }
+                        } else {
+                            result.Reflection = Reflect(result.Bytecode);
+                        }
+
                         AXLE_CORE_INFO("RHIShaderCompiler: Cache hit for {0} shader '{1}' ({2} bytes) from '{3}'",
                             StageToString(desc.Stage), desc.EntryPoint, result.Bytecode.GetSize(), cachePath.string());
                         return result;
@@ -718,4 +760,458 @@ namespace Axle::RHI {
         }
     }
 
+    // =========================================================================
+    // Shader Reflection & Pipeline Layout Implementation
+    // =========================================================================
+
+    nri::PipelineLayoutDesc RHIAutoPipelineLayout::GetDesc() const {
+        NRIDescriptorSets.clear();
+        NRIDescriptorSets.reserve(DescriptorSets.size());
+        for (const auto& setStorage : DescriptorSets) {
+            nri::DescriptorSetDesc setDesc = {};
+            setDesc.registerSpace = setStorage.RegisterSpace;
+            setDesc.ranges = setStorage.Ranges.data();
+            setDesc.rangeNum = static_cast<uint32_t>(setStorage.Ranges.size());
+            setDesc.flags = nri::DescriptorSetBits::NONE;
+            NRIDescriptorSets.push_back(setDesc);
+        }
+
+        nri::PipelineLayoutDesc desc = {};
+        desc.rootRegisterSpace = RootRegisterSpace;
+        desc.rootConstants = RootConstants.empty() ? nullptr : RootConstants.data();
+        desc.rootConstantNum = static_cast<uint32_t>(RootConstants.size());
+        desc.rootDescriptors = RootDescriptors.empty() ? nullptr : RootDescriptors.data();
+        desc.rootDescriptorNum = static_cast<uint32_t>(RootDescriptors.size());
+        desc.rootSamplers = RootSamplers.empty() ? nullptr : RootSamplers.data();
+        desc.rootSamplerNum = static_cast<uint32_t>(RootSamplers.size());
+        desc.descriptorSets = NRIDescriptorSets.empty() ? nullptr : NRIDescriptorSets.data();
+        desc.descriptorSetNum = static_cast<uint32_t>(NRIDescriptorSets.size());
+        desc.shaderStages = ShaderStages;
+        desc.flags = Flags;
+        return desc;
+    }
+
+    const RHIShaderResourceBinding* RHIShaderReflection::FindResource(const std::string& name) const {
+        for (const auto& res : Resources) {
+            if (res.Name == name) return &res;
+        }
+        return nullptr;
+    }
+
+    const RHIShaderConstantBuffer* RHIShaderReflection::FindConstantBuffer(const std::string& name) const {
+        for (const auto& cb : ConstantBuffers) {
+            if (cb.Name == name) return &cb;
+        }
+        return nullptr;
+    }
+
+    RHIAutoPipelineLayout RHIShaderReflection::BuildPipelineLayoutDesc(uint32_t rootRegisterSpace) const {
+        RHIAutoPipelineLayout layout;
+        layout.ShaderStages = RHIShaderCompiler::StageToNRI(Stage);
+
+        auto isPushConstantName = [](const std::string& name) {
+            std::string lower = name;
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return (lower.find("pushconstant") != std::string::npos || lower.find("rootconstant") != std::string::npos ||
+                    lower.find("push_constant") != std::string::npos || lower.find("root_constant") != std::string::npos);
+        };
+
+        std::map<uint32_t, std::vector<nri::DescriptorRangeDesc>> setMap;
+        uint32_t maxSpace = 0;
+
+        for (const auto& res : Resources) {
+            if (res.Space > maxSpace) {
+                maxSpace = res.Space;
+            }
+
+            // Check if this resource is a Root/Push Constant
+            if (res.Type == RHIResourceType::ConstantBuffer && isPushConstantName(res.Name)) {
+                const auto* cb = FindConstantBuffer(res.Name);
+                uint32_t size = cb ? cb->Size : 128;
+                if (size == 0) size = 128;
+                size = (size + 3) & ~3; // multiple of 4
+
+                bool found = false;
+                for (auto& existingRc : layout.RootConstants) {
+                    if (existingRc.registerIndex == res.BindPoint) {
+                        existingRc.shaderStages |= RHIShaderCompiler::StageToNRI(res.Stage);
+                        existingRc.size = std::max(existingRc.size, size);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    nri::RootConstantDesc rc = {};
+                    rc.registerIndex = res.BindPoint;
+                    rc.size = size;
+                    rc.shaderStages = RHIShaderCompiler::StageToNRI(res.Stage);
+                    layout.RootConstants.push_back(rc);
+                }
+                continue;
+            }
+
+            // Map resource type to NRI DescriptorType
+            nri::DescriptorType nriType = nri::DescriptorType::CONSTANT_BUFFER;
+            switch (res.Type) {
+                case RHIResourceType::ConstantBuffer:
+                    nriType = nri::DescriptorType::CONSTANT_BUFFER;
+                    break;
+                case RHIResourceType::Texture:
+                    nriType = nri::DescriptorType::TEXTURE;
+                    break;
+                case RHIResourceType::Sampler:
+                    nriType = nri::DescriptorType::SAMPLER;
+                    break;
+                case RHIResourceType::StorageTexture:
+                    nriType = nri::DescriptorType::STORAGE_TEXTURE;
+                    break;
+                case RHIResourceType::StructuredBuffer:
+                    nriType = nri::DescriptorType::STRUCTURED_BUFFER;
+                    break;
+                case RHIResourceType::StorageBuffer:
+                    nriType = nri::DescriptorType::STORAGE_STRUCTURED_BUFFER;
+                    break;
+                case RHIResourceType::AccelerationStructure:
+                    nriType = nri::DescriptorType::ACCELERATION_STRUCTURE;
+                    break;
+                default:
+                    nriType = nri::DescriptorType::CONSTANT_BUFFER;
+                    break;
+            }
+
+            auto& ranges = setMap[res.Space];
+            bool mergedRange = false;
+            for (auto& existingRange : ranges) {
+                if (existingRange.baseRegisterIndex == res.BindPoint && existingRange.descriptorType == nriType) {
+                    existingRange.shaderStages |= RHIShaderCompiler::StageToNRI(res.Stage);
+                    existingRange.descriptorNum = std::max(existingRange.descriptorNum, res.BindCount);
+                    mergedRange = true;
+                    break;
+                }
+            }
+
+            if (!mergedRange) {
+                nri::DescriptorRangeDesc range = {};
+                range.baseRegisterIndex = res.BindPoint;
+                range.descriptorNum = res.BindCount;
+                range.descriptorType = nriType;
+                range.shaderStages = RHIShaderCompiler::StageToNRI(res.Stage);
+                range.flags = nri::DescriptorRangeBits::NONE;
+                ranges.push_back(range);
+            }
+        }
+
+        // NRI requires rootRegisterSpace to avoid collisions with descriptor set spaces
+        if (rootRegisterSpace == 0 && !layout.RootConstants.empty() && setMap.find(0) != setMap.end()) {
+            layout.RootRegisterSpace = maxSpace + 1;
+        } else {
+            layout.RootRegisterSpace = rootRegisterSpace;
+        }
+
+        for (auto& [space, ranges] : setMap) {
+            RHIAutoPipelineLayout::DescriptorSetStorage setStorage;
+            setStorage.RegisterSpace = space;
+            setStorage.Ranges = std::move(ranges);
+            layout.DescriptorSets.push_back(std::move(setStorage));
+        }
+
+        return layout;
+    }
+
+    RHIShaderReflection RHIShaderReflection::Merge(const std::vector<RHIShaderReflection>& reflections) {
+        RHIShaderReflection merged;
+        if (reflections.empty()) return merged;
+
+        merged.Format = reflections.front().Format;
+        merged.Stage = reflections.front().Stage;
+        merged.EntryPoint = reflections.front().EntryPoint;
+
+        for (const auto& refl : reflections) {
+            // Merge Resources
+            for (const auto& res : refl.Resources) {
+                bool found = false;
+                for (auto& existing : merged.Resources) {
+                    if (existing.Name == res.Name && existing.Space == res.Space && existing.BindPoint == res.BindPoint) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    merged.Resources.push_back(res);
+                }
+            }
+
+            // Merge Constant Buffers
+            for (const auto& cb : refl.ConstantBuffers) {
+                bool found = false;
+                for (auto& existingCb : merged.ConstantBuffers) {
+                    if (existingCb.Name == cb.Name) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    merged.ConstantBuffers.push_back(cb);
+                }
+            }
+
+            // Merge Vertex Inputs (from Vertex Shader)
+            if (refl.Stage == RHIShaderStage::Vertex && !refl.VertexInputs.empty()) {
+                merged.VertexInputs = refl.VertexInputs;
+            }
+
+            // Merge Thread Group Dimensions (from Compute Shader)
+            if (refl.Stage == RHIShaderStage::Compute) {
+                merged.ThreadGroupSizeX = refl.ThreadGroupSizeX;
+                merged.ThreadGroupSizeY = refl.ThreadGroupSizeY;
+                merged.ThreadGroupSizeZ = refl.ThreadGroupSizeZ;
+            }
+        }
+
+        return merged;
+    }
+
+    RHIShaderReflection RHIShaderCompiler::Reflect(
+        const void* reflectionData,
+        size_t reflectionSize,
+        RHIShaderStage stage,
+        RHIShaderFormat format,
+        const std::string& entryPoint)
+    {
+        RHIShaderReflection reflection;
+        reflection.Stage = stage;
+        reflection.Format = format;
+        reflection.EntryPoint = entryPoint;
+
+        if (!m_Initialized) {
+            if (!Init()) return reflection;
+        }
+        if (!reflectionData || reflectionSize == 0) return reflection;
+
+        auto* pUtils = static_cast<IDxcUtils*>(m_DxcUtils);
+        if (!pUtils) return reflection;
+
+        DxcBuffer buffer = {};
+        buffer.Ptr = reflectionData;
+        buffer.Size = reflectionSize;
+        buffer.Encoding = 0;
+
+        static const GUID IID_ID3D12ShaderReflection_Val = {
+            0x5A58797D, 0xA72C, 0x478D, { 0x8B, 0xA2, 0xEF, 0xC6, 0xB0, 0xEF, 0xE8, 0x8E }
+        };
+
+        ID3D12ShaderReflection* pShaderReflection = nullptr;
+        HRESULT hr = pUtils->CreateReflection(&buffer, IID_ID3D12ShaderReflection_Val, reinterpret_cast<void**>(&pShaderReflection));
+        if (FAILED(hr) || !pShaderReflection) {
+            AXLE_CORE_WARN("RHIShaderCompiler::Reflect: CreateReflection failed with HRESULT 0x{0:x}", static_cast<uint32_t>(hr));
+            return reflection;
+        }
+
+        D3D12_SHADER_DESC shaderDesc = {};
+        if (SUCCEEDED(pShaderReflection->GetDesc(&shaderDesc))) {
+            // 1. Thread group size (for compute shaders)
+            pShaderReflection->GetThreadGroupSize(
+                &reflection.ThreadGroupSizeX,
+                &reflection.ThreadGroupSizeY,
+                &reflection.ThreadGroupSizeZ
+            );
+
+            // 2. Bound resources (SRV, UAV, CBV, Sampler)
+            for (UINT i = 0; i < shaderDesc.BoundResources; ++i) {
+                D3D12_SHADER_INPUT_BIND_DESC bindDesc = {};
+                if (FAILED(pShaderReflection->GetResourceBindingDesc(i, &bindDesc))) continue;
+
+                RHIShaderResourceBinding binding;
+                binding.Name = bindDesc.Name ? bindDesc.Name : "";
+                binding.BindPoint = bindDesc.BindPoint;
+                binding.BindCount = bindDesc.BindCount;
+                binding.Space = bindDesc.Space;
+                binding.Stage = stage;
+
+                switch (bindDesc.Type) {
+                    case D3D_SIT_CBUFFER:
+                    case D3D_SIT_TBUFFER:
+                        binding.Type = RHIResourceType::ConstantBuffer;
+                        break;
+                    case D3D_SIT_TEXTURE:
+                        binding.Type = RHIResourceType::Texture;
+                        break;
+                    case D3D_SIT_SAMPLER:
+                        binding.Type = RHIResourceType::Sampler;
+                        break;
+                    case D3D_SIT_UAV_RWTYPED:
+                        binding.Type = RHIResourceType::StorageTexture;
+                        break;
+                    case D3D_SIT_STRUCTURED:
+                    case D3D_SIT_BYTEADDRESS:
+                        binding.Type = RHIResourceType::StructuredBuffer;
+                        break;
+                    case D3D_SIT_UAV_RWSTRUCTURED:
+                    case D3D_SIT_UAV_RWBYTEADDRESS:
+                    case D3D_SIT_UAV_APPEND_STRUCTURED:
+                    case D3D_SIT_UAV_CONSUME_STRUCTURED:
+                    case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
+                        binding.Type = RHIResourceType::StorageBuffer;
+                        break;
+                    case D3D_SIT_RTACCELERATIONSTRUCTURE:
+                        binding.Type = RHIResourceType::AccelerationStructure;
+                        break;
+                    default:
+                        binding.Type = RHIResourceType::Unknown;
+                        break;
+                }
+
+                reflection.Resources.push_back(std::move(binding));
+            }
+
+            // 3. Constant buffers and their variables
+            for (UINT i = 0; i < shaderDesc.ConstantBuffers; ++i) {
+                ID3D12ShaderReflectionConstantBuffer* pCb = pShaderReflection->GetConstantBufferByIndex(i);
+                if (!pCb) continue;
+
+                D3D12_SHADER_BUFFER_DESC cbDesc = {};
+                if (FAILED(pCb->GetDesc(&cbDesc))) continue;
+
+                RHIShaderConstantBuffer cb;
+                cb.Name = cbDesc.Name ? cbDesc.Name : "";
+                cb.Size = cbDesc.Size;
+
+                // Match with bound resources to extract bind point & space
+                for (const auto& res : reflection.Resources) {
+                    if (res.Type == RHIResourceType::ConstantBuffer && res.Name == cb.Name) {
+                        cb.BindPoint = res.BindPoint;
+                        cb.Space = res.Space;
+                        break;
+                    }
+                }
+
+                for (UINT v = 0; v < cbDesc.Variables; ++v) {
+                    ID3D12ShaderReflectionVariable* pVar = pCb->GetVariableByIndex(v);
+                    if (!pVar) continue;
+
+                    D3D12_SHADER_VARIABLE_DESC varDesc = {};
+                    if (FAILED(pVar->GetDesc(&varDesc))) continue;
+
+                    RHIShaderVariable var;
+                    var.Name = varDesc.Name ? varDesc.Name : "";
+                    var.Offset = varDesc.StartOffset;
+                    var.Size = varDesc.Size;
+                    cb.Variables.push_back(std::move(var));
+                }
+
+                reflection.ConstantBuffers.push_back(std::move(cb));
+            }
+
+            // 4. Vertex inputs (Input Parameters)
+            for (UINT i = 0; i < shaderDesc.InputParameters; ++i) {
+                D3D12_SIGNATURE_PARAMETER_DESC paramDesc = {};
+                if (FAILED(pShaderReflection->GetInputParameterDesc(i, &paramDesc))) continue;
+
+                RHIVertexAttribute attr;
+                attr.SemanticName = paramDesc.SemanticName ? paramDesc.SemanticName : "";
+                attr.SemanticIndex = paramDesc.SemanticIndex;
+                attr.Register = paramDesc.Register;
+
+                uint32_t count = 0;
+                BYTE mask = paramDesc.Mask;
+                while (mask > 0) {
+                    if (mask & 1) count++;
+                    mask >>= 1;
+                }
+                attr.ComponentCount = count > 0 ? count : 4;
+
+                reflection.VertexInputs.push_back(std::move(attr));
+            }
+        }
+
+        pShaderReflection->Release();
+        return reflection;
+    }
+
+    RHIShaderReflection RHIShaderCompiler::Reflect(const RHIShaderBytecode& bytecode) {
+        if (!bytecode.IsValid()) return RHIShaderReflection{};
+        return Reflect(bytecode.GetData(), bytecode.GetSize(), bytecode.Stage, bytecode.Format, bytecode.EntryPoint);
+    }
+
+    RHIShaderReflection RHIShaderCompiler::ReflectFromSource(const RHIShaderCompileDesc& desc) {
+        if (!m_Initialized) {
+            if (!Init()) return RHIShaderReflection{};
+        }
+
+        auto* pCompiler = static_cast<IDxcCompiler3*>(m_DxcCompiler);
+        auto* pIncludeHandler = static_cast<IDxcIncludeHandler*>(m_DxcIncludeHandler);
+        if (!pCompiler) return RHIShaderReflection{};
+
+        DxcBuffer sourceBuffer = {};
+        sourceBuffer.Ptr = desc.Source.data();
+        sourceBuffer.Size = desc.Source.size();
+        sourceBuffer.Encoding = DXC_CP_UTF8;
+
+        std::vector<std::wstring> wargs;
+        wargs.push_back(L"-E");
+        wargs.push_back(ToWide(desc.EntryPoint));
+        wargs.push_back(L"-T");
+        wargs.push_back(ToWide(GetProfileTarget(desc.Stage, desc.ShaderModel)));
+        wargs.push_back(L"-O0");
+        wargs.push_back(L"-Zpc");
+
+        for (const auto& macro : desc.Macros) {
+            std::wstring def = ToWide(macro.Name);
+            if (!macro.Definition.empty()) {
+                def += L"=" + ToWide(macro.Definition);
+            }
+            wargs.push_back(L"-D");
+            wargs.push_back(def);
+        }
+        for (const auto& incDir : desc.IncludeDirs) {
+            wargs.push_back(L"-I");
+            wargs.push_back(ToWide(incDir));
+        }
+        if (!desc.SourcePath.empty()) {
+            std::filesystem::path p(desc.SourcePath);
+            if (p.has_parent_path()) {
+                wargs.push_back(L"-I");
+                wargs.push_back(ToWide(p.parent_path().string()));
+            }
+        }
+
+        std::vector<LPCWSTR> pszArgs;
+        pszArgs.reserve(wargs.size());
+        for (const auto& w : wargs) {
+            pszArgs.push_back(w.c_str());
+        }
+
+        IDxcResult* pCompileResult = nullptr;
+        HRESULT hr = pCompiler->Compile(
+            &sourceBuffer,
+            pszArgs.data(),
+            static_cast<UINT32>(pszArgs.size()),
+            pIncludeHandler,
+            IID_PPV_ARGS(&pCompileResult)
+        );
+
+        RHIShaderReflection reflection;
+        reflection.Stage = desc.Stage;
+        reflection.Format = desc.Format;
+        reflection.EntryPoint = desc.EntryPoint;
+
+        if (SUCCEEDED(hr) && pCompileResult) {
+            IDxcBlob* pReflBlob = nullptr;
+            if (SUCCEEDED(pCompileResult->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&pReflBlob), nullptr)) && pReflBlob) {
+                reflection = Reflect(pReflBlob->GetBufferPointer(), pReflBlob->GetBufferSize(), desc.Stage, desc.Format, desc.EntryPoint);
+                pReflBlob->Release();
+            } else {
+                IDxcBlob* pObjBlob = nullptr;
+                if (SUCCEEDED(pCompileResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&pObjBlob), nullptr)) && pObjBlob) {
+                    reflection = Reflect(pObjBlob->GetBufferPointer(), pObjBlob->GetBufferSize(), desc.Stage, desc.Format, desc.EntryPoint);
+                    pObjBlob->Release();
+                }
+            }
+            pCompileResult->Release();
+        }
+
+        return reflection;
+    }
+
 }
+

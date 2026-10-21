@@ -77,6 +77,96 @@ namespace Axle::RHI {
                                               const std::string& entryPoint = "main");
     };
 
+    enum class RHIResourceType : uint8_t {
+        ConstantBuffer,        // CBV / cbuffer (b#)
+        Texture,               // SRV / Texture2D, TextureCube (t#)
+        Sampler,               // Sampler / SamplerState (s#)
+        StorageTexture,        // UAV / RWTexture2D (u#)
+        StructuredBuffer,      // SRV / StructuredBuffer (t#)
+        StorageBuffer,         // UAV / RWStructuredBuffer (u#)
+        AccelerationStructure, // Ray tracing TLAS (t#)
+        Unknown
+    };
+
+    struct RHIShaderVariable {
+        std::string Name;
+        uint32_t Offset = 0;
+        uint32_t Size = 0;
+    };
+
+    struct RHIShaderConstantBuffer {
+        std::string Name;
+        uint32_t BindPoint = 0;
+        uint32_t Space = 0;
+        uint32_t Size = 0;
+        std::vector<RHIShaderVariable> Variables;
+    };
+
+    struct RHIShaderResourceBinding {
+        std::string Name;
+        RHIResourceType Type = RHIResourceType::Unknown;
+        uint32_t BindPoint = 0;
+        uint32_t BindCount = 1;
+        uint32_t Space = 0;
+        RHIShaderStage Stage = RHIShaderStage::Vertex;
+    };
+
+    struct RHIVertexAttribute {
+        std::string SemanticName;
+        uint32_t SemanticIndex = 0;
+        uint32_t Register = 0;
+        uint32_t ComponentCount = 4;
+    };
+
+    struct RHIAutoPipelineLayout {
+        std::vector<nri::RootConstantDesc> RootConstants;
+        std::vector<nri::RootDescriptorDesc> RootDescriptors;
+        std::vector<nri::RootSamplerDesc> RootSamplers;
+
+        struct DescriptorSetStorage {
+            uint32_t RegisterSpace = 0;
+            std::vector<nri::DescriptorRangeDesc> Ranges;
+        };
+        std::vector<DescriptorSetStorage> DescriptorSets;
+
+        mutable std::vector<nri::DescriptorSetDesc> NRIDescriptorSets;
+        nri::StageBits ShaderStages = nri::StageBits::ALL;
+        nri::PipelineLayoutBits Flags = nri::PipelineLayoutBits::NONE;
+        uint32_t RootRegisterSpace = 0;
+
+        nri::PipelineLayoutDesc GetDesc() const;
+    };
+
+    struct RHIShaderReflection {
+        RHIShaderStage Stage = RHIShaderStage::Vertex;
+        RHIShaderFormat Format = RHIShaderFormat::DXIL;
+        std::string EntryPoint = "main";
+
+        std::vector<RHIShaderResourceBinding> Resources;
+        std::vector<RHIShaderConstantBuffer> ConstantBuffers;
+        std::vector<RHIVertexAttribute> VertexInputs;
+
+        uint32_t ThreadGroupSizeX = 1;
+        uint32_t ThreadGroupSizeY = 1;
+        uint32_t ThreadGroupSizeZ = 1;
+
+#ifdef FindResource
+#undef FindResource
+#endif
+
+        const RHIShaderResourceBinding* FindResource(const std::string& name) const;
+        const RHIShaderConstantBuffer* FindConstantBuffer(const std::string& name) const;
+
+        const RHIShaderResourceBinding* GetResource(const std::string& name) const { return FindResource(name); }
+        const RHIShaderConstantBuffer* GetConstantBuffer(const std::string& name) const { return FindConstantBuffer(name); }
+
+        // Build unified NRI PipelineLayoutDesc layout data (Root Signatures for D3D12 & Descriptor Set Layouts for Vulkan)
+        RHIAutoPipelineLayout BuildPipelineLayoutDesc(uint32_t rootRegisterSpace = 0) const;
+
+        // Merge multiple shader reflections (e.g. VS + PS) into a unified cross-stage reflection
+        static RHIShaderReflection Merge(const std::vector<RHIShaderReflection>& reflections);
+    };
+
     struct RHIShaderCompileResult {
         bool Success = false;
         RHIShaderBytecode Bytecode;
@@ -84,6 +174,7 @@ namespace Axle::RHI {
         std::string WarningMessage;
         bool IsCacheHit = false;             // True if loaded directly from valid bytecode cache
         std::filesystem::path CachedPath;    // Filepath to the cached .dxil or .spv bytecode
+        RHIShaderReflection Reflection;      // Extracted shader reflection metadata
     };
 
     class RHIShaderCompiler {
@@ -117,6 +208,11 @@ namespace Axle::RHI {
         const std::filesystem::path& GetDefaultCacheDirectory() const { return m_DefaultCacheDirectory; }
         void SetDefaultCacheDirectory(const std::filesystem::path& dir) { m_DefaultCacheDirectory = dir; }
 
+        // Extract recursive #include dependencies for dependency tracking
+        static std::vector<std::filesystem::path> ExtractIncludeDependencies(
+            const std::filesystem::path& filepath,
+            const std::vector<std::string>& includeDirs = {});
+
         // Compute deterministic cache file path for given shader file and compile parameters
         std::filesystem::path ComputeCachePath(const std::filesystem::path& sourcePath,
                                                const RHIShaderCompileDesc& desc,
@@ -143,9 +239,14 @@ namespace Axle::RHI {
         // Clear all cached shader bytecode files (.dxil and .spv) in cache directory
         size_t ClearCache(const std::filesystem::path& cacheDir = {});
 
-        // Extract recursive #include dependencies for a given shader file
-        static std::vector<std::filesystem::path> ExtractIncludeDependencies(const std::filesystem::path& filepath,
-                                                                             const std::vector<std::string>& includeDirs);
+        // Extract shader reflection directly from compiled shader reflection blob or DXIL container
+        RHIShaderReflection Reflect(const void* reflectionData, size_t reflectionSize, RHIShaderStage stage, RHIShaderFormat format, const std::string& entryPoint = "main");
+
+        // Extract shader reflection from compiled bytecode
+        RHIShaderReflection Reflect(const RHIShaderBytecode& bytecode);
+
+        // Extract shader reflection directly from HLSL source description
+        RHIShaderReflection ReflectFromSource(const RHIShaderCompileDesc& desc);
 
         // Convert shader stage enum to DXC profile target string (e.g. "vs_6_0", "ps_6_0", "cs_6_0")
         static std::string GetProfileTarget(RHIShaderStage stage, const std::string& shaderModel = "6_0");

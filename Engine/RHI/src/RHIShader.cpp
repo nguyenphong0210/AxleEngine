@@ -807,7 +807,7 @@ namespace Axle::RHI {
 
     RHIAutoPipelineLayout RHIShaderReflection::BuildPipelineLayoutDesc(uint32_t rootRegisterSpace) const {
         RHIAutoPipelineLayout layout;
-        layout.ShaderStages = RHIShaderCompiler::StageToNRI(Stage);
+        layout.ShaderStages = nri::StageBits::ALL;
 
         auto isPushConstantName = [](const std::string& name) {
             std::string lower = name;

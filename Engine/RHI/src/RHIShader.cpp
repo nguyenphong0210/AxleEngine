@@ -17,6 +17,9 @@
 
 #include <fstream>
 #include <sstream>
+#include <iomanip>
+#include <algorithm>
+#include <unordered_set>
 
 namespace Axle::RHI {
 
@@ -414,6 +417,235 @@ namespace Axle::RHI {
             activeDesc.Format = RHIShaderFormat::DXIL;
         }
         return Compile(activeDesc);
+    }
+
+    static uint32_t FNV1aHash(const std::string& str, uint32_t seed = 2166136261u) {
+        uint32_t hash = seed;
+        for (char c : str) {
+            hash ^= static_cast<uint8_t>(c);
+            hash *= 16777619u;
+        }
+        return hash;
+    }
+
+    std::filesystem::path RHIShaderCompiler::ComputeCachePath(
+        const std::filesystem::path& sourcePath,
+        const RHIShaderCompileDesc& desc,
+        const std::filesystem::path& cacheDir) const
+    {
+        std::filesystem::path targetDir = cacheDir.empty() ? m_DefaultCacheDirectory : cacheDir;
+        std::string ext = (desc.Format == RHIShaderFormat::SPIRV) ? ".spv" : ".dxil";
+        std::string formatTag = (desc.Format == RHIShaderFormat::SPIRV) ? "spv" : "dxil";
+
+        // Build deterministic configuration hash
+        uint32_t hash = 2166136261u;
+        hash = FNV1aHash(desc.EntryPoint, hash);
+        hash = FNV1aHash(GetProfileTarget(desc.Stage, desc.ShaderModel), hash);
+        hash = FNV1aHash(desc.ShaderModel, hash);
+        hash = FNV1aHash(desc.Optimization ? "O3" : "O0", hash);
+        hash = FNV1aHash(desc.EnableVulkanDXLayout ? "dxlayout" : "stdlayout", hash);
+        hash = FNV1aHash(desc.VulkanTargetEnv, hash);
+
+        // Sort macros for deterministic hash
+        auto sortedMacros = desc.Macros;
+        std::sort(sortedMacros.begin(), sortedMacros.end(), [](const RHIShaderMacro& a, const RHIShaderMacro& b) {
+            return a.Name < b.Name;
+        });
+        for (const auto& macro : sortedMacros) {
+            hash = FNV1aHash(macro.Name + "=" + macro.Definition + ";", hash);
+        }
+
+        std::stringstream ss;
+        ss << std::hex << std::setfill('0') << std::setw(8) << hash;
+        std::string hashStr = ss.str();
+
+        std::string stem = sourcePath.stem().string();
+        std::string stageTag = StageToString(desc.Stage);
+        std::string filename = stem + "_" + desc.EntryPoint + "_" + stageTag + "_" + formatTag + "_" + hashStr + ext;
+
+        return targetDir / filename;
+    }
+
+    static void ExtractDependenciesInternal(
+        const std::filesystem::path& filepath,
+        const std::vector<std::string>& includeDirs,
+        std::unordered_set<std::string>& visited,
+        std::vector<std::filesystem::path>& result)
+    {
+        std::string canonicalKey = filepath.lexically_normal().string();
+        if (visited.count(canonicalKey)) return;
+        visited.insert(canonicalKey);
+
+        if (!std::filesystem::exists(filepath)) return;
+
+        std::ifstream file(filepath);
+        if (!file.is_open()) return;
+
+        std::vector<std::filesystem::path> searchDirs;
+        if (filepath.has_parent_path()) {
+            searchDirs.push_back(filepath.parent_path());
+        }
+        for (const auto& inc : includeDirs) {
+            searchDirs.push_back(inc);
+        }
+        searchDirs.push_back("ThirdParty/NRI/Include");
+        searchDirs.push_back("../ThirdParty/NRI/Include");
+        searchDirs.push_back("../../ThirdParty/NRI/Include");
+
+        std::string line;
+        while (std::getline(file, line)) {
+            size_t start = line.find_first_not_of(" \t");
+            if (start == std::string::npos) continue;
+
+            if (line.compare(start, 8, "#include") == 0) {
+                size_t quoteStart = line.find_first_of("\"<", start + 8);
+                if (quoteStart == std::string::npos) continue;
+                char closeQuote = (line[quoteStart] == '\"') ? '\"' : '>';
+                size_t quoteEnd = line.find_first_of(closeQuote, quoteStart + 1);
+                if (quoteEnd == std::string::npos) continue;
+
+                std::string incName = line.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+                for (const auto& searchDir : searchDirs) {
+                    std::filesystem::path candidate = searchDir / incName;
+                    if (std::filesystem::exists(candidate)) {
+                        std::filesystem::path normCandidate = candidate.lexically_normal();
+                        result.push_back(normCandidate);
+                        ExtractDependenciesInternal(normCandidate, includeDirs, visited, result);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    std::vector<std::filesystem::path> RHIShaderCompiler::ExtractIncludeDependencies(
+        const std::filesystem::path& filepath,
+        const std::vector<std::string>& includeDirs)
+    {
+        std::vector<std::filesystem::path> dependencies;
+        std::unordered_set<std::string> visited;
+        ExtractDependenciesInternal(filepath, includeDirs, visited, dependencies);
+        return dependencies;
+    }
+
+    RHIShaderCompileResult RHIShaderCompiler::LoadOrCompileFromFile(
+        const std::filesystem::path& filepath,
+        const RHIShaderCompileDesc& desc,
+        const std::filesystem::path& cacheDir,
+        bool forceRecompile)
+    {
+        RHIShaderCompileResult result;
+        if (!std::filesystem::exists(filepath)) {
+            result.ErrorMessage = "Shader source file does not exist: " + filepath.string();
+            return result;
+        }
+
+        std::filesystem::path cachePath = ComputeCachePath(filepath, desc, cacheDir);
+        result.CachedPath = cachePath;
+
+        bool needsCompile = forceRecompile;
+
+        if (!needsCompile && std::filesystem::exists(cachePath)) {
+            std::error_code ec;
+            auto cacheTime = std::filesystem::last_write_time(cachePath, ec);
+            auto sourceTime = std::filesystem::last_write_time(filepath, ec);
+
+            if (!ec && sourceTime <= cacheTime) {
+                // Validate all include dependencies
+                auto deps = ExtractIncludeDependencies(filepath, desc.IncludeDirs);
+                bool depStale = false;
+                for (const auto& dep : deps) {
+                    if (std::filesystem::exists(dep)) {
+                        auto depTime = std::filesystem::last_write_time(dep, ec);
+                        if (!ec && depTime > cacheTime) {
+                            depStale = true;
+                            AXLE_CORE_INFO("RHIShaderCompiler: Dependency '{0}' is newer than cache for '{1}'. Triggering recompile.",
+                                dep.filename().string(), filepath.filename().string());
+                            break;
+                        }
+                    }
+                }
+
+                if (!depStale) {
+                    // CACHE HIT!
+                    auto cachedBytecode = RHIShaderBytecode::LoadFromFile(cachePath, desc.Format, desc.Stage, desc.EntryPoint);
+                    if (cachedBytecode.IsValid()) {
+                        result.Success = true;
+                        result.Bytecode = std::move(cachedBytecode);
+                        result.IsCacheHit = true;
+                        AXLE_CORE_INFO("RHIShaderCompiler: Cache hit for {0} shader '{1}' ({2} bytes) from '{3}'",
+                            StageToString(desc.Stage), desc.EntryPoint, result.Bytecode.GetSize(), cachePath.string());
+                        return result;
+                    }
+                }
+            }
+        }
+
+        // Cache Miss, Stale, or Forced Recompile
+        AXLE_CORE_INFO("RHIShaderCompiler: Cache miss for {0} shader '{1}'. Compiling from source '{2}'...",
+            StageToString(desc.Stage), desc.EntryPoint, filepath.string());
+
+        result = CompileFromFile(filepath, desc);
+        result.CachedPath = cachePath;
+        result.IsCacheHit = false;
+
+        if (result.Success) {
+            if (result.Bytecode.SaveToFile(cachePath)) {
+                AXLE_CORE_INFO("RHIShaderCompiler: Successfully cached bytecode to '{0}'", cachePath.string());
+            } else {
+                AXLE_CORE_WARN("RHIShaderCompiler: Failed to write bytecode cache to '{0}'", cachePath.string());
+            }
+        }
+
+        return result;
+    }
+
+    RHIShaderCompileResult RHIShaderCompiler::LoadOrCompileForActiveBackend(
+        const std::filesystem::path& filepath,
+        const RHIShaderCompileDesc& desc,
+        const std::filesystem::path& cacheDir,
+        bool forceRecompile)
+    {
+        RHIShaderCompileDesc activeDesc = desc;
+        auto backend = RHIDevice::Get().GetBackend();
+        if (backend == RHIType::Vulkan) {
+            activeDesc.Format = RHIShaderFormat::SPIRV;
+        } else {
+            activeDesc.Format = RHIShaderFormat::DXIL;
+        }
+        return LoadOrCompileFromFile(filepath, activeDesc, cacheDir, forceRecompile);
+    }
+
+    bool RHIShaderCompiler::InvalidateCache(
+        const std::filesystem::path& sourcePath,
+        const RHIShaderCompileDesc& desc,
+        const std::filesystem::path& cacheDir)
+    {
+        std::filesystem::path cachePath = ComputeCachePath(sourcePath, desc, cacheDir);
+        if (std::filesystem::exists(cachePath)) {
+            std::error_code ec;
+            return std::filesystem::remove(cachePath, ec);
+        }
+        return false;
+    }
+
+    size_t RHIShaderCompiler::ClearCache(const std::filesystem::path& cacheDir) {
+        std::filesystem::path targetDir = cacheDir.empty() ? m_DefaultCacheDirectory : cacheDir;
+        if (!std::filesystem::exists(targetDir)) return 0;
+
+        size_t count = 0;
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(targetDir, ec)) {
+            if (entry.is_regular_file()) {
+                std::string ext = entry.path().extension().string();
+                if (ext == ".dxil" || ext == ".spv" || ext == ".bin") {
+                    if (std::filesystem::remove(entry.path(), ec)) {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
     }
 
     std::string RHIShaderCompiler::GetProfileTarget(RHIShaderStage stage, const std::string& shaderModel) {

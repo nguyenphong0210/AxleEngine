@@ -307,7 +307,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Dynamic window resize handling, minimized window guard, and seamless borderless/exclusive fullscreen toggle without resource leaks.
   - [ ] **Step 3 - Unified Cross-API Shader Pipeline & Bytecode Toolchain**:
     - [x] Cross-API shader compilation pipeline (Slang or DXC + `glslang`/SPIRV-Cross) compiling single-source shaders into SPIR-V (Vulkan 1.3) and DXIL/DXBC (Direct3D 12).
-    - [ ] Automated bytecode caching (`.spv` and `.dxil`) with `last_write_time` dependency validation in asset directory.
+    - [x] Automated bytecode caching (`.spv` and `.dxil`) with `last_write_time` dependency validation in asset directory.
     - [ ] Shader Reflection Subsystem: Automatically extract Root Signatures (D3D12) and Descriptor Set Layouts (Vulkan) directly from compiled shader reflection metadata.
   - [ ] **Step 4 - Pipeline State Objects (PSO) & Explicit Barrier Management**:
     - [ ] 64-bit PSO hashing and LRU memory cache for Graphics and Compute pipelines (Rasterizer, Depth/Stencil, Blend States, Shaders).

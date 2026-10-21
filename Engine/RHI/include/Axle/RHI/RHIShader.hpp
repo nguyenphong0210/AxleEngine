@@ -82,6 +82,8 @@ namespace Axle::RHI {
         RHIShaderBytecode Bytecode;
         std::string ErrorMessage;
         std::string WarningMessage;
+        bool IsCacheHit = false;             // True if loaded directly from valid bytecode cache
+        std::filesystem::path CachedPath;    // Filepath to the cached .dxil or .spv bytecode
     };
 
     class RHIShaderCompiler {
@@ -111,6 +113,40 @@ namespace Axle::RHI {
         // Compile shader targeting the currently active RHI backend (D3D12 -> DXIL, Vulkan -> SPIR-V)
         RHIShaderCompileResult CompileForActiveBackend(const RHIShaderCompileDesc& desc);
 
+        // Default shader cache directory (e.g. "assets/cache/shaders")
+        const std::filesystem::path& GetDefaultCacheDirectory() const { return m_DefaultCacheDirectory; }
+        void SetDefaultCacheDirectory(const std::filesystem::path& dir) { m_DefaultCacheDirectory = dir; }
+
+        // Compute deterministic cache file path for given shader file and compile parameters
+        std::filesystem::path ComputeCachePath(const std::filesystem::path& sourcePath,
+                                               const RHIShaderCompileDesc& desc,
+                                               const std::filesystem::path& cacheDir = {}) const;
+
+        // Compile HLSL shader file with automated bytecode caching & last_write_time dependency validation
+        // Returns cached bytecode if cache file is newer than source file and its include dependencies.
+        RHIShaderCompileResult LoadOrCompileFromFile(const std::filesystem::path& filepath,
+                                                    const RHIShaderCompileDesc& desc,
+                                                    const std::filesystem::path& cacheDir = {},
+                                                    bool forceRecompile = false);
+
+        // Compile or load cached shader targeting the active RHI backend (D3D12 -> DXIL, Vulkan -> SPIR-V)
+        RHIShaderCompileResult LoadOrCompileForActiveBackend(const std::filesystem::path& filepath,
+                                                           const RHIShaderCompileDesc& desc,
+                                                           const std::filesystem::path& cacheDir = {},
+                                                           bool forceRecompile = false);
+
+        // Invalidate specific cached bytecode
+        bool InvalidateCache(const std::filesystem::path& sourcePath,
+                             const RHIShaderCompileDesc& desc,
+                             const std::filesystem::path& cacheDir = {});
+
+        // Clear all cached shader bytecode files (.dxil and .spv) in cache directory
+        size_t ClearCache(const std::filesystem::path& cacheDir = {});
+
+        // Extract recursive #include dependencies for a given shader file
+        static std::vector<std::filesystem::path> ExtractIncludeDependencies(const std::filesystem::path& filepath,
+                                                                             const std::vector<std::string>& includeDirs);
+
         // Convert shader stage enum to DXC profile target string (e.g. "vs_6_0", "ps_6_0", "cs_6_0")
         static std::string GetProfileTarget(RHIShaderStage stage, const std::string& shaderModel = "6_0");
 
@@ -128,6 +164,7 @@ namespace Axle::RHI {
 
     private:
         bool m_Initialized = false;
+        std::filesystem::path m_DefaultCacheDirectory = "assets/cache/shaders";
         void* m_DxcDll = nullptr;
         void* m_DxilDll = nullptr;
         void* m_DxcUtils = nullptr;          // IDxcUtils*

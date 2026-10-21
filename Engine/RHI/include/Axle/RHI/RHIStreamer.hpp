@@ -28,9 +28,9 @@ namespace Axle::RHI {
         RHIMemoryLocation ConstantMemoryLocation = RHIMemoryLocation::HostUpload;
         uint64_t ConstantBufferSize = 16 * 1024 * 1024; // 16 MB ring buffer for uniform constants
 
-        // Dynamically grown ring-buffer for staging uploads and immediate drawing
+        // Dynamically grown ring-buffer for staging uploads, immediate drawing, and indirect arguments
         RHIMemoryLocation DynamicMemoryLocation = RHIMemoryLocation::HostUpload;
-        RHIBufferUsage DynamicBufferUsage = RHIBufferUsage::Vertex | RHIBufferUsage::Index | RHIBufferUsage::ShaderResource;
+        RHIBufferUsage DynamicBufferUsage = RHIBufferUsage::Vertex | RHIBufferUsage::Index | RHIBufferUsage::ShaderResource | RHIBufferUsage::Argument;
         uint32_t QueuedFrameNum = 3; // Frames-in-flight (matches swapchain synchronization)
 
         // Statically allocated read/write ring-buffer for generic CPU data

@@ -15,6 +15,9 @@
 
 namespace Axle::RHI {
 
+    class RHIBuffer;
+    struct RHIStreamedBuffer;
+
     class RHICommandBuffer {
     public:
         RHICommandBuffer() = default;
@@ -77,6 +80,19 @@ namespace Axle::RHI {
         void DrawIndexed(uint32_t indexNum, uint32_t instanceNum = 1, uint32_t baseIndex = 0, int32_t baseVertex = 0, uint32_t baseInstance = 0);
         void Dispatch(const nri::DispatchDesc& dispatchDesc);
         void Dispatch(uint32_t x, uint32_t y = 1, uint32_t z = 1);
+
+        // Indirect Draw & Dispatch
+        void DrawIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride = sizeof(nri::DrawDesc), const nri::Buffer* countBuffer = nullptr, uint64_t countBufferOffset = 0);
+        void DrawIndirect(const RHIBuffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride = sizeof(nri::DrawDesc), const RHIBuffer* countBuffer = nullptr, uint64_t countBufferOffset = 0);
+        void DrawIndirect(const RHIStreamedBuffer& streamBuffer, uint32_t drawNum, uint32_t stride = sizeof(nri::DrawDesc));
+
+        void DrawIndexedIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride = sizeof(nri::DrawIndexedDesc), const nri::Buffer* countBuffer = nullptr, uint64_t countBufferOffset = 0);
+        void DrawIndexedIndirect(const RHIBuffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride = sizeof(nri::DrawIndexedDesc), const RHIBuffer* countBuffer = nullptr, uint64_t countBufferOffset = 0);
+        void DrawIndexedIndirect(const RHIStreamedBuffer& streamBuffer, uint32_t drawNum, uint32_t stride = sizeof(nri::DrawIndexedDesc));
+
+        void DispatchIndirect(const nri::Buffer& buffer, uint64_t offset);
+        void DispatchIndirect(const RHIBuffer& buffer, uint64_t offset);
+        void DispatchIndirect(const RHIStreamedBuffer& streamBuffer);
 
         // Submission helper (submits this command buffer to the target queue)
         bool Submit(nri::Queue* queue = nullptr, nri::Fence* waitFence = nullptr, uint64_t waitValue = 0, nri::Fence* signalFence = nullptr, uint64_t signalValue = 0);

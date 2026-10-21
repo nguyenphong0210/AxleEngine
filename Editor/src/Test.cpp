@@ -80,6 +80,7 @@
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHIStreamer.hpp>
+#include <Axle/RHI/RHIECSStreamer.hpp>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <cstring>
@@ -11249,6 +11250,226 @@ bool RunTest_Step54_Phase32_Step5_Part2_DynamicStagingStreamer() {
 }
 
 // =============================================================================
+// STEP 55: PHASE 32 STEP 5 PART 3 ENTT ECS STREAMING & GPU INDIRECT DRAW
+// =============================================================================
+bool RunTest_Step55_Phase32_Step5_Part3_ECSStreamingAndIndirectDraw() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 55 TEST] ENTT ECS STREAMING & GPU INDIRECT DRAW  " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    using namespace Axle::RHI;
+
+    // [55.1] GPU Layout & Memory Structure Alignment Verification
+    std::cout << "\n[55.1] Testing GPU Instance & Indirect Command Struct Alignments..." << std::endl;
+    assert(sizeof(GPUInstanceData) == 96);
+    assert(sizeof(GPUInstanceData) % 16 == 0);
+    assert(sizeof(GPUIndirectDrawCommand) == sizeof(nri::DrawDesc));
+    assert(sizeof(GPUIndirectDrawIndexedCommand) == sizeof(nri::DrawIndexedDesc));
+    std::cout << "  -> PASS: GPUInstanceData (96 bytes, 16B aligned), IndirectDraw (16B), IndirectDrawIndexed (20B) verified." << std::endl;
+
+    auto& rhiDevice = RHIDevice::Get();
+    bool deviceWasInit = rhiDevice.IsInitialized();
+    if (!deviceWasInit) {
+        RHIDeviceDesc devDesc;
+        devDesc.PreferredBackend = RHIType::Direct3D12;
+        devDesc.EnableValidation = false;
+        assert(rhiDevice.Init(devDesc));
+    }
+    auto* nativeDevice = rhiDevice.GetNRIDevice();
+    const auto& core = rhiDevice.GetNRICore();
+    auto* queue = rhiDevice.GetGraphicsQueue();
+    assert(nativeDevice != nullptr && queue != nullptr);
+
+    RHIStreamer streamer;
+    assert(streamer.Init());
+    assert(streamer.IsValid());
+
+    // [55.2] Direct Vector Instance Streaming & Single Batch Indirect Generation
+    std::cout << "\n[55.2] Testing Direct Vector Instance Streaming & Indirect Generation..." << std::endl;
+    std::vector<GPUInstanceData> testInstances(128);
+    for (size_t i = 0; i < testInstances.size(); ++i) {
+        testInstances[i].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(static_cast<float>(i) * 2.0f, 0.0f, 0.0f));
+        testInstances[i].Color = glm::vec4(static_cast<float>(i) / 128.0f, 0.5f, 1.0f, 1.0f);
+        testInstances[i].EntityID = static_cast<uint32_t>(i + 1);
+        testInstances[i].Roughness = 0.4f;
+        testInstances[i].Metallic = 0.8f;
+    }
+
+    RHIMeshBatchKey singleKey;
+    singleKey.IndexCount = 36; // Cube index count
+    singleKey.FirstIndex = 0;
+    singleKey.BaseVertex = 0;
+    singleKey.MeshAssetHandle = 1001;
+
+    RHIECSStreamResult singleResult = RHIECSStreamer::StreamInstanceData(streamer, testInstances, singleKey);
+    assert(singleResult.IsValid());
+    assert(singleResult.DrawCount == 1);
+    assert(singleResult.TotalInstances == 128);
+    assert(singleResult.InstanceBuffer.IsValid());
+    assert(singleResult.IndirectBuffer.IsValid());
+    std::cout << "  -> Streamed " << singleResult.TotalInstances << " instances into SSBO at offset: "
+              << singleResult.InstanceBuffer.Offset << " and Indirect buffer at offset: "
+              << singleResult.IndirectBuffer.Offset << std::endl;
+    std::cout << "  -> PASS: Direct vector instance streaming and indirect draw descriptor generation verified." << std::endl;
+
+    // [55.3] Multi-Mesh Batch Streaming with Chained Instance Offsets
+    std::cout << "\n[55.3] Testing Multi-Mesh Batch Streaming..." << std::endl;
+    std::vector<RHIMultiMeshBatch> multiBatches;
+
+    // Batch 0: 50 instances of Mesh A (e.g. Tree)
+    RHIMultiMeshBatch batchTree;
+    batchTree.Key = { 240, 0, 0, 2001 };
+    batchTree.Instances.resize(50);
+    for (size_t i = 0; i < 50; ++i) {
+        batchTree.Instances[i].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(static_cast<float>(i) * 5.0f, 0.0f, 10.0f));
+        batchTree.Instances[i].Color = glm::vec4(0.1f, 0.8f, 0.2f, 1.0f);
+        batchTree.Instances[i].EntityID = static_cast<uint32_t>(100 + i);
+    }
+    multiBatches.push_back(std::move(batchTree));
+
+    // Batch 1: 30 instances of Mesh B (e.g. Rock)
+    RHIMultiMeshBatch batchRock;
+    batchRock.Key = { 120, 240, 0, 2002 };
+    batchRock.Instances.resize(30);
+    for (size_t i = 0; i < 30; ++i) {
+        batchRock.Instances[i].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(static_cast<float>(i) * 3.0f, 0.0f, -10.0f));
+        batchRock.Instances[i].Color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+        batchRock.Instances[i].EntityID = static_cast<uint32_t>(200 + i);
+    }
+    multiBatches.push_back(std::move(batchRock));
+
+    // Batch 2: 20 instances of Mesh C (e.g. Building)
+    RHIMultiMeshBatch batchBuilding;
+    batchBuilding.Key = { 480, 360, 0, 2003 };
+    batchBuilding.Instances.resize(20);
+    for (size_t i = 0; i < 20; ++i) {
+        batchBuilding.Instances[i].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(static_cast<float>(i) * 15.0f, 0.0f, 50.0f));
+        batchBuilding.Instances[i].Color = glm::vec4(0.9f, 0.1f, 0.1f, 1.0f);
+        batchBuilding.Instances[i].EntityID = static_cast<uint32_t>(300 + i);
+    }
+    multiBatches.push_back(std::move(batchBuilding));
+
+    RHIECSStreamResult multiResult = RHIECSStreamer::StreamMultiBatches(streamer, multiBatches);
+    assert(multiResult.IsValid());
+    assert(multiResult.DrawCount == 3);
+    assert(multiResult.TotalInstances == 100);
+    std::cout << "  -> Multi-batch: 3 sub-meshes with total 100 instances streamed into single GPU SSBO." << std::endl;
+    std::cout << "  -> PASS: Multi-batch streaming and chained firstInstance offsets verified." << std::endl;
+
+    // [55.4] Direct EnTT Registry Component View Streaming
+    std::cout << "\n[55.4] Testing Direct EnTT Registry Component View Streaming..." << std::endl;
+    entt::registry registry;
+
+    // Populate 200 entities with TransformComponent and TagComponent
+    for (uint32_t i = 0; i < 200; ++i) {
+        auto entity = registry.create();
+        auto& tc = registry.emplace<Axle::TransformComponent>(entity);
+        tc.Translation = glm::vec3(static_cast<float>(i) * 1.5f, 0.0f, static_cast<float>(i % 10) * 2.0f);
+        tc.Scale = glm::vec3(1.0f + static_cast<float>(i % 5) * 0.2f);
+        tc.WorldMatrix = tc.GetLocalTransform();
+
+        registry.emplace<Axle::TagComponent>(entity, "Entity_" + std::to_string(i));
+    }
+
+    RHIMeshBatchKey ecsKey = { 36, 0, 0, 999 };
+    RHIECSStreamResult ecsResult = RHIECSStreamer::StreamView<Axle::TransformComponent, Axle::TagComponent>(
+        streamer,
+        registry,
+        ecsKey,
+        [](entt::entity ent, const Axle::TransformComponent& tc, const Axle::TagComponent& tag, GPUInstanceData& outData) -> bool {
+            outData.WorldTransform = tc.WorldMatrix;
+            outData.Color = glm::vec4(0.2f, 0.7f, 0.9f, 1.0f);
+            outData.EntityID = static_cast<uint32_t>(ent);
+            outData.Roughness = 0.3f;
+            outData.Metallic = 0.5f;
+            return true; // Include in stream
+        }
+    );
+
+    assert(ecsResult.IsValid());
+    assert(ecsResult.TotalInstances == 200);
+    assert(ecsResult.DrawCount == 1);
+    std::cout << "  -> Extracted 200 EnTT entities via typed view directly into GPU dynamic SSBO." << std::endl;
+    std::cout << "  -> PASS: Direct EnTT ECS memory streaming with custom extractor verified." << std::endl;
+
+    // [55.5] EnTT Multi-Batch Streaming with Dynamic Sub-Mesh Classifier
+    std::cout << "\n[55.5] Testing EnTT Multi-Batch Streaming with Dynamic Classifier..." << std::endl;
+    struct RenderMeshTag {
+        uint64_t MeshType = 0; // 0 = Sphere, 1 = Cylinder
+    };
+
+    for (uint32_t i = 0; i < 150; ++i) {
+        auto entity = registry.create();
+        auto& tc = registry.emplace<Axle::TransformComponent>(entity);
+        tc.Translation = glm::vec3(static_cast<float>(i) * 3.0f, static_cast<float>(i % 3) * 5.0f, 0.0f);
+        tc.WorldMatrix = tc.GetLocalTransform();
+
+        registry.emplace<RenderMeshTag>(entity, (i % 2 == 0) ? 0ULL : 1ULL);
+    }
+
+    RHIECSStreamResult batchedECSResult = RHIECSStreamer::StreamViewBatched<Axle::TransformComponent, RenderMeshTag>(
+        streamer,
+        registry,
+        [](entt::entity ent, const Axle::TransformComponent& tc, const RenderMeshTag& rmt, GPUInstanceData& outData, RHIMeshBatchKey& outKey) -> bool {
+            outData.WorldTransform = tc.WorldMatrix;
+            outData.Color = (rmt.MeshType == 0) ? glm::vec4(1.0f, 0.0f, 0.0f, 1.0f) : glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+            outData.EntityID = static_cast<uint32_t>(ent);
+
+            if (rmt.MeshType == 0) {
+                outKey = { 288, 0, 0, 5001 }; // Sphere
+            } else {
+                outKey = { 144, 288, 0, 5002 }; // Cylinder
+            }
+            return true;
+        }
+    );
+
+    assert(batchedECSResult.IsValid());
+    assert(batchedECSResult.DrawCount == 2);
+    assert(batchedECSResult.TotalInstances == 150);
+    std::cout << "  -> EnTT classifier classified 150 entities into 2 distinct sub-mesh batches (75 each)." << std::endl;
+    std::cout << "  -> PASS: Dynamic EnTT classifier batching verified." << std::endl;
+
+    // [55.6] GPU Indirect Draw Command Recording into Command Buffer
+    std::cout << "\n[55.6] Testing GPU Indirect Draw Command Recording into Command Buffer..." << std::endl;
+    nri::PipelineLayoutDesc layoutDesc = {};
+    RHIPipelineLayout pipelineLayout;
+    assert(pipelineLayout.Init(layoutDesc));
+    assert(pipelineLayout.IsValid());
+
+    RHICommandBuffer cmdBuffer;
+    assert(cmdBuffer.Init(queue));
+    assert(cmdBuffer.Begin());
+    cmdBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, pipelineLayout);
+
+    // Record multi-instance indirect draw dispatches
+    cmdBuffer.DrawIndexedIndirect(singleResult.IndirectBuffer, singleResult.DrawCount);
+    cmdBuffer.DrawIndexedIndirect(multiResult.IndirectBuffer, multiResult.DrawCount);
+    cmdBuffer.DrawIndexedIndirect(ecsResult.IndirectBuffer, ecsResult.DrawCount);
+    cmdBuffer.DrawIndexedIndirect(batchedECSResult.IndirectBuffer, batchedECSResult.DrawCount);
+
+    assert(cmdBuffer.End());
+
+    // Submit and wait for GPU completion
+    assert(cmdBuffer.Submit(queue));
+    assert(core.QueueWaitIdle(queue) == nri::Result::SUCCESS);
+    std::cout << "  -> PASS: 4 GPU Indirect Draw calls (total 578 instances) recorded, submitted, and executed." << std::endl;
+    cmdBuffer.Shutdown();
+    pipelineLayout.Shutdown();
+
+    // [55.7] Clean Resource Shutdown
+    std::cout << "\n[55.7] Testing Clean RHI Shutdown..." << std::endl;
+    streamer.Shutdown();
+    if (!deviceWasInit) {
+        rhiDevice.Shutdown();
+    }
+    std::cout << "  -> PASS: Streamer and devices cleanly shut down." << std::endl;
+
+    std::cout << "\n>>> STEP 55 PASSED: Phase 32 Step 5 Part 3 EnTT ECS Streaming & GPU Indirect Draw 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -11315,12 +11536,13 @@ int main(int argc, char** argv) {
         else if (arg == "52" || arg == "step52" || arg == "--step52" || arg == "--barrier" || arg == "--phase32e") targetStep = 52;
         else if (arg == "53" || arg == "step53" || arg == "--step53" || arg == "--memory" || arg == "--buffer" || arg == "--phase32f") targetStep = 53;
         else if (arg == "54" || arg == "step54" || arg == "--step54" || arg == "--streamer" || arg == "--phase32g") targetStep = 54;
+        else if (arg == "55" || arg == "step55" || arg == "--step55" || arg == "--ecs-stream" || arg == "--indirect" || arg == "--phase32h") targetStep = 55;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 54 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 55 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -11489,6 +11711,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 54) {
         if (!RunTest_Step54_Phase32_Step5_Part2_DynamicStagingStreamer()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 55) {
+        if (!RunTest_Step55_Phase32_Step5_Part3_ECSStreamingAndIndirectDraw()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

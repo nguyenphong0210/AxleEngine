@@ -328,6 +328,63 @@ namespace Axle::RHI {
         Dispatch(desc);
     }
 
+    void RHICommandBuffer::DrawIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const nri::Buffer* countBuffer, uint64_t countBufferOffset) {
+        if (!m_CommandBuffer || !m_IsRecording || drawNum == 0) return;
+        auto& rhiDevice = RHIDevice::Get();
+        const auto& core = rhiDevice.GetNRICore();
+        if (core.CmdDrawIndirect) {
+            core.CmdDrawIndirect(*m_CommandBuffer, buffer, offset, drawNum, stride, countBuffer, countBufferOffset);
+        }
+    }
+
+    void RHICommandBuffer::DrawIndirect(const RHIBuffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const RHIBuffer* countBuffer, uint64_t countBufferOffset) {
+        if (!buffer.GetNative()) return;
+        DrawIndirect(*buffer.GetNative(), offset, drawNum, stride, countBuffer ? countBuffer->GetNative() : nullptr, countBufferOffset);
+    }
+
+    void RHICommandBuffer::DrawIndirect(const RHIStreamedBuffer& streamBuffer, uint32_t drawNum, uint32_t stride) {
+        if (!streamBuffer.Buffer) return;
+        DrawIndirect(*streamBuffer.Buffer, streamBuffer.Offset, drawNum, stride);
+    }
+
+    void RHICommandBuffer::DrawIndexedIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const nri::Buffer* countBuffer, uint64_t countBufferOffset) {
+        if (!m_CommandBuffer || !m_IsRecording || drawNum == 0) return;
+        auto& rhiDevice = RHIDevice::Get();
+        const auto& core = rhiDevice.GetNRICore();
+        if (core.CmdDrawIndexedIndirect) {
+            core.CmdDrawIndexedIndirect(*m_CommandBuffer, buffer, offset, drawNum, stride, countBuffer, countBufferOffset);
+        }
+    }
+
+    void RHICommandBuffer::DrawIndexedIndirect(const RHIBuffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const RHIBuffer* countBuffer, uint64_t countBufferOffset) {
+        if (!buffer.GetNative()) return;
+        DrawIndexedIndirect(*buffer.GetNative(), offset, drawNum, stride, countBuffer ? countBuffer->GetNative() : nullptr, countBufferOffset);
+    }
+
+    void RHICommandBuffer::DrawIndexedIndirect(const RHIStreamedBuffer& streamBuffer, uint32_t drawNum, uint32_t stride) {
+        if (!streamBuffer.Buffer) return;
+        DrawIndexedIndirect(*streamBuffer.Buffer, streamBuffer.Offset, drawNum, stride);
+    }
+
+    void RHICommandBuffer::DispatchIndirect(const nri::Buffer& buffer, uint64_t offset) {
+        if (!m_CommandBuffer || !m_IsRecording) return;
+        auto& rhiDevice = RHIDevice::Get();
+        const auto& core = rhiDevice.GetNRICore();
+        if (core.CmdDispatchIndirect) {
+            core.CmdDispatchIndirect(*m_CommandBuffer, buffer, offset);
+        }
+    }
+
+    void RHICommandBuffer::DispatchIndirect(const RHIBuffer& buffer, uint64_t offset) {
+        if (!buffer.GetNative()) return;
+        DispatchIndirect(*buffer.GetNative(), offset);
+    }
+
+    void RHICommandBuffer::DispatchIndirect(const RHIStreamedBuffer& streamBuffer) {
+        if (!streamBuffer.Buffer) return;
+        DispatchIndirect(*streamBuffer.Buffer, streamBuffer.Offset);
+    }
+
     bool RHICommandBuffer::Submit(nri::Queue* queue, nri::Fence* waitFence, uint64_t waitValue, nri::Fence* signalFence, uint64_t signalValue) {
         if (!m_CommandBuffer || m_IsRecording) return false;
 

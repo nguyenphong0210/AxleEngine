@@ -98,6 +98,10 @@ add_executable(AxleTests
     src/Test.cpp
 )
 
+if (MSVC)
+    target_compile_options(AxleTests PRIVATE /bigobj)
+endif()
+
 add_custom_command(TARGET AxleTests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/Engine/Resources

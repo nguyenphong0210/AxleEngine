@@ -24,6 +24,7 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/ScriptCompiler.hpp>
 #include <Axle/ScriptHotReloadManager.hpp>
+#include <Axle/RHIViewportDescriptor.hpp>
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <memory>
@@ -70,6 +71,7 @@ public:
     void UpdateWindowTitle();
     const std::filesystem::path& GetCurrentScenePath() const { return m_CurrentScenePath; }
     const std::filesystem::path& GetCurrentProjectPath() const { return m_CurrentProjectPath; }
+    Axle::RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
 
 private:
     void ResetSimulation();
@@ -95,8 +97,9 @@ private:
     std::filesystem::path m_CurrentScenePath;
     std::filesystem::path m_CurrentProjectPath;
 
-    // Viewport & Offscreen Framebuffer
+    // Viewport & Offscreen Framebuffer (OpenGL) / RHI Viewport Descriptor (D3D12/Vulkan)
     std::shared_ptr<Axle::Framebuffer> m_Framebuffer;
+    std::unique_ptr<Axle::RHIViewportDescriptor> m_RHIViewport;
     Axle::u32 m_ViewportWidth = 1280;
     Axle::u32 m_ViewportHeight = 720;
     bool m_ViewportFocused = false;

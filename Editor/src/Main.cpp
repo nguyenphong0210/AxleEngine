@@ -2,6 +2,7 @@
 #include <Axle/Log.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/AssetCooker.hpp>
+#include <Axle/RHI/RHISwitcher.hpp>
 #include "EditorLayer.hpp"
 #include <exception>
 #include <csignal>
@@ -122,16 +123,31 @@ int main(int argc, char** argv) {
             }
         }
     }
+    // Parse RHI Switcher command line flags (--rhi=dx12, --rhi=vulkan, --rhi=opengl)
+    Axle::RHI::RHIBackendConfig rhiConfig = Axle::RHI::RHISwitcher::ParseCommandLine(argc, argv);
+    Axle::GraphicsAPI activeAPI = Axle::GraphicsAPI::OpenGL;
+
+    if (rhiConfig.PreferredBackend != Axle::RHI::RHIType::OpenGL) {
+        if (Axle::RHI::RHISwitcher::ResolveAndInitialize(rhiConfig)) {
+            activeAPI = Axle::RHI::RHISwitcher::GetActiveGraphicsAPI();
+        } else {
+            AXLE_WARN("RHI Switcher failed to initialize preferred backend; falling back to OpenGL.");
+            activeAPI = Axle::GraphicsAPI::OpenGL;
+        }
+    }
+
     try {
         Axle::ApplicationSpecification spec{
             .Name = "Axle Editor",
             .Width = 1280,
             .Height = 720,
-            .VSync = true
+            .VSync = true,
+            .Maximized = true,
+            .GraphicsBackend = activeAPI
         };
 
         auto app = std::make_unique<Axle::Application>(spec);
-        app->SetUIContext(std::make_unique<Axle::ImGuiLayer>());
+        app->SetUIContext(std::make_unique<Axle::ImGuiLayer>(Axle::ToImGuiBackend(activeAPI)));
         app->PushLayer(std::make_shared<EditorLayer>());
         app->Run();
     } catch (const std::exception& e) {

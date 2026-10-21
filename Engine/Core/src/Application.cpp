@@ -32,19 +32,24 @@ namespace Axle {
         props.Height = spec.Height;
         props.VSync = spec.VSync;
         props.Maximized = spec.Maximized;
+        props.GraphicsBackend = spec.GraphicsBackend;
 
         m_Window = std::make_unique<Window>(props);
 
-        // 4. Initialize renderer context
-        if (!RenderCommand::Init(reinterpret_cast<GLProcAddressFn>(glfwGetProcAddress))) {
-            AXLE_CORE_CRITICAL("Failed to initialize renderer context in Application!");
+        // 4. Initialize renderer context (for OpenGL legacy / fallback)
+        if (m_Window->GetGraphicsBackend() == GraphicsAPI::OpenGL) {
+            if (!RenderCommand::Init(reinterpret_cast<GLProcAddressFn>(glfwGetProcAddress))) {
+                AXLE_CORE_CRITICAL("Failed to initialize renderer context in Application!");
+            }
+            RenderCommand::SetViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
         }
-        RenderCommand::SetViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
 
         // 5. Setup window resize callback
         m_Window->SetWindowResizeCallback([this](const WindowResizeEvent& e) {
             if (e.Width > 0 && e.Height > 0) {
-                RenderCommand::SetViewport(0, 0, e.Width, e.Height);
+                if (m_Window->GetGraphicsBackend() == GraphicsAPI::OpenGL) {
+                    RenderCommand::SetViewport(0, 0, e.Width, e.Height);
+                }
                 for (auto& layer : m_LayerStack) {
                     layer->OnWindowResize(e.Width, e.Height);
                 }

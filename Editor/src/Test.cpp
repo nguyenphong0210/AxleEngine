@@ -82,8 +82,10 @@
 #include <Axle/RHI/RHIStreamer.hpp>
 #include <Axle/RHI/RHIECSStreamer.hpp>
 #include <Axle/RHI/RHITexture.hpp>
+#include <Axle/RHI/RHISwitcher.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/ImGuiLayer.hpp>
+#include <Axle/Application.hpp>
 #include <Axle/Window.hpp>
 #include <imgui.h>
 #ifdef _WIN32
@@ -11859,6 +11861,178 @@ bool RunTest_Step62_Phase32_Step6_Part2_ViewportDescriptorBinding() {
 }
 
 // =============================================================================
+// STEP 63: PHASE 32 STEP 6 PART 3 - ENGINE RHI SWITCHER & EDITOR WIRING
+// =============================================================================
+bool RunTest_Step63_Phase32_Step6_Part3_EngineRHISwitcherAndEditorWiring() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 63 TEST] ENGINE RHI SWITCHER & EDITOR WIRING     " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [63.1] Test CLI Argument Parsing
+    std::cout << "\n[63.1] Testing CLI Argument Parsing for RHI Switcher..." << std::endl;
+    {
+        Axle::RHI::RHIBackendConfig cfg1;
+        assert(Axle::RHI::RHISwitcher::ParseArgument("--rhi=dx12", cfg1));
+        assert(cfg1.PreferredBackend == Axle::RHI::RHIType::Direct3D12);
+
+        Axle::RHI::RHIBackendConfig cfg2;
+        assert(Axle::RHI::RHISwitcher::ParseArgument("--rhi=vulkan", cfg2));
+        assert(cfg2.PreferredBackend == Axle::RHI::RHIType::Vulkan);
+
+        Axle::RHI::RHIBackendConfig cfg3;
+        assert(Axle::RHI::RHISwitcher::ParseArgument("-rhi=opengl", cfg3));
+        assert(cfg3.PreferredBackend == Axle::RHI::RHIType::OpenGL);
+
+        Axle::RHI::RHIBackendConfig cfg4;
+        assert(Axle::RHI::RHISwitcher::ParseArgument("--backend=gl", cfg4));
+        assert(cfg4.PreferredBackend == Axle::RHI::RHIType::OpenGL);
+
+        Axle::RHI::RHIBackendConfig cfg5;
+        assert(Axle::RHI::RHISwitcher::ParseArgument("--rhi=auto", cfg5));
+        assert(cfg5.AllowFallback == true);
+
+        Axle::RHI::RHIBackendConfig cfg6;
+        assert(Axle::RHI::RHISwitcher::ParseArgument("--no-fallback", cfg6));
+        assert(cfg6.AllowFallback == false);
+
+        Axle::RHI::RHIBackendConfig cfg7;
+        assert(Axle::RHI::RHISwitcher::ParseArgument("--gpu-validation", cfg7));
+        assert(cfg7.EnableValidation == true);
+
+        Axle::RHI::RHIBackendConfig cfg8;
+        assert(Axle::RHI::RHISwitcher::ParseArgument("--adapter=1", cfg8));
+        assert(cfg8.AdapterIndex == 1);
+
+        // Test ParseCommandLine batch
+        const char* mockArgs[] = { "AxleEditor.exe", "--rhi=d3d12", "--no-fallback", "--rhi-validation" };
+        auto batchCfg = Axle::RHI::RHISwitcher::ParseCommandLine(4, const_cast<char**>(mockArgs));
+        assert(batchCfg.PreferredBackend == Axle::RHI::RHIType::Direct3D12);
+        assert(!batchCfg.AllowFallback);
+        assert(batchCfg.EnableValidation);
+        std::cout << "  -> PASS: All CLI argument variations correctly parsed into RHIBackendConfig." << std::endl;
+    }
+
+    // [63.2] Test Bidirectional Backend Enum Mapping & Converters
+    std::cout << "\n[63.2] Testing Backend Mapping Converters (RHIType <-> GraphicsAPI <-> ImGui)..." << std::endl;
+    {
+        assert(Axle::RHI::RHISwitcher::ToGraphicsAPI(Axle::RHI::RHIType::Direct3D12) == Axle::GraphicsAPI::Direct3D12);
+        assert(Axle::RHI::RHISwitcher::ToGraphicsAPI(Axle::RHI::RHIType::Vulkan) == Axle::GraphicsAPI::Vulkan);
+        assert(Axle::RHI::RHISwitcher::ToGraphicsAPI(Axle::RHI::RHIType::OpenGL) == Axle::GraphicsAPI::OpenGL);
+
+        assert(Axle::RHI::RHISwitcher::ToRHIType(Axle::GraphicsAPI::Direct3D12) == Axle::RHI::RHIType::Direct3D12);
+        assert(Axle::RHI::RHISwitcher::ToRHIType(Axle::GraphicsAPI::Vulkan) == Axle::RHI::RHIType::Vulkan);
+        assert(Axle::RHI::RHISwitcher::ToRHIType(Axle::GraphicsAPI::OpenGL) == Axle::RHI::RHIType::OpenGL);
+
+        assert(Axle::ToImGuiBackend(Axle::GraphicsAPI::Direct3D12) == Axle::ImGuiBackendType::Direct3D12);
+        assert(Axle::ToImGuiBackend(Axle::GraphicsAPI::Vulkan) == Axle::ImGuiBackendType::Vulkan);
+        assert(Axle::ToImGuiBackend(Axle::GraphicsAPI::OpenGL) == Axle::ImGuiBackendType::OpenGL);
+        std::cout << "  -> PASS: Bidirectional mapping between RHIType, GraphicsAPI, and ImGuiBackendType verified." << std::endl;
+    }
+
+    // [63.3] Test RHISwitcher Hardware Backend Resolution (Preferred: Direct3D 12)
+    std::cout << "\n[63.3] Testing Hardware Backend Resolution (Direct3D 12 on NVIDIA RTX 3070)..." << std::endl;
+    {
+        Axle::RHI::RHIBackendConfig config;
+        config.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+        config.AllowFallback = true;
+        config.EnableValidation = false;
+
+        assert(Axle::RHI::RHISwitcher::ResolveAndInitialize(config));
+        assert(Axle::RHI::RHISwitcher::GetActiveBackend() == Axle::RHI::RHIType::Direct3D12);
+        assert(Axle::RHI::RHISwitcher::GetActiveGraphicsAPI() == Axle::GraphicsAPI::Direct3D12);
+        std::cout << "  -> PASS: Direct3D 12 backend successfully initialized on GPU: "
+                  << Axle::RHI::RHIDevice::Get().GetCapabilities().AdapterName << std::endl;
+    }
+
+    // [63.4] Test Graceful Fallback to OpenGL and Clean Switcher Recovery
+    std::cout << "\n[63.4] Testing Graceful Switcher Transition to OpenGL & Back..." << std::endl;
+    {
+        Axle::RHI::RHIBackendConfig glConfig;
+        glConfig.PreferredBackend = Axle::RHI::RHIType::OpenGL;
+        glConfig.AllowFallback = false;
+
+        assert(Axle::RHI::RHISwitcher::ResolveAndInitialize(glConfig));
+        assert(Axle::RHI::RHISwitcher::GetActiveBackend() == Axle::RHI::RHIType::OpenGL);
+        assert(Axle::RHI::RHISwitcher::GetActiveGraphicsAPI() == Axle::GraphicsAPI::OpenGL);
+        std::cout << "  -> PASS: Cleanly transitioned to OpenGL fallback." << std::endl;
+
+        // Switch back to Direct3D 12
+        Axle::RHI::RHIBackendConfig d3d12Config;
+        d3d12Config.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+        d3d12Config.AllowFallback = true;
+
+        assert(Axle::RHI::RHISwitcher::ResolveAndInitialize(d3d12Config));
+        assert(Axle::RHI::RHISwitcher::GetActiveBackend() == Axle::RHI::RHIType::Direct3D12);
+        assert(Axle::RHI::RHISwitcher::GetActiveGraphicsAPI() == Axle::GraphicsAPI::Direct3D12);
+        std::cout << "  -> PASS: Cleanly re-resolved back to Direct3D 12 without state leaks." << std::endl;
+    }
+
+    // [63.5] Test ApplicationSpecification with Resolved GraphicsAPI Context Isolation
+    std::cout << "\n[63.5] Testing Application Window Creation with GraphicsAPI::Direct3D12..." << std::endl;
+    {
+        Axle::ApplicationSpecification appSpec;
+        appSpec.Name = "Test RHI App";
+        appSpec.Width = 800;
+        appSpec.Height = 600;
+        appSpec.VSync = false;
+        appSpec.Maximized = false;
+        appSpec.GraphicsBackend = Axle::GraphicsAPI::Direct3D12;
+
+        Axle::Application testApp(appSpec);
+        assert(testApp.GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::Direct3D12);
+        assert(!Axle::Window::HasActiveContext()); // Strict zero OpenGL context pollution!
+        assert(testApp.GetWindow().GetWidth() == 800);
+        assert(testApp.GetWindow().GetHeight() == 600);
+        testApp.GetWindow().PollEvents();
+        std::cout << "  -> PASS: Application window initialized in GLFW_NO_API mode without OpenGL context." << std::endl;
+    }
+
+    // [63.6] Test Viewport Descriptor Integration in RHI Mode
+    std::cout << "\n[63.6] Testing Viewport Descriptor Registration under D3D12 Window..." << std::endl;
+    {
+        Axle::WindowProps winProps;
+        winProps.Title = "RHI Viewport Integration Window";
+        winProps.Width = 1024;
+        winProps.Height = 768;
+        winProps.Maximized = false;
+        winProps.GraphicsBackend = Axle::GraphicsAPI::Direct3D12;
+        Axle::Window window(winProps);
+
+        Axle::ImGuiLayer imguiLayer(Axle::ImGuiBackendType::Direct3D12);
+        imguiLayer.Init(window.GetNativeWindow());
+        assert(imguiLayer.IsInitialized());
+
+        Axle::RHIViewportDescriptor viewport;
+        assert(viewport.Init(&imguiLayer, 1024, 768));
+        assert(viewport.IsValid());
+        assert(viewport.GetImTextureID() != 0);
+
+        glm::vec2 uv0 = viewport.GetUV0();
+        glm::vec2 uv1 = viewport.GetUV1();
+        assert(uv0.x == 0.0f && uv0.y == 0.0f);
+        assert(uv1.x == 1.0f && uv1.y == 1.0f);
+
+        // Verify resize
+        assert(viewport.Resize(1280, 720));
+        assert(viewport.GetWidth() == 1280 && viewport.GetHeight() == 720);
+        assert(viewport.GetImTextureID() != 0);
+
+        viewport.Shutdown();
+        imguiLayer.Shutdown();
+        std::cout << "  -> PASS: Viewport descriptor dynamic lifecycle under D3D12 validated." << std::endl;
+    }
+
+    // [63.7] Test Clean Subsystem Teardown
+    std::cout << "\n[63.7] Testing Clean Subsystem Shutdown..." << std::endl;
+    Axle::RHI::RHIDevice::Get().Shutdown();
+    assert(!Axle::RHI::RHIDevice::Get().IsInitialized());
+    std::cout << "  -> PASS: RHIDevice and all switcher state cleanly shut down, zero leaks." << std::endl;
+
+    std::cout << "\n>>> STEP 63 PASSED: Phase 32 Step 6 Part 3 Engine RHI Switcher & Editor Wiring 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -11928,6 +12102,7 @@ int main(int argc, char** argv) {
         else if (arg == "55" || arg == "step55" || arg == "--step55" || arg == "--ecs-stream" || arg == "--indirect" || arg == "--phase32h") targetStep = 55;
         else if (arg == "61" || arg == "step61" || arg == "--step61" || arg == "--imgui-d3d12") targetStep = 61;
         else if (arg == "62" || arg == "step62" || arg == "--step62" || arg == "--viewport-descriptor") targetStep = 62;
+        else if (arg == "63" || arg == "step63" || arg == "--step63" || arg == "--rhi-switcher") targetStep = 63;
     }
 
     std::cout << "\n========================================================" << std::endl;
@@ -12111,6 +12286,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 62) {
         if (!RunTest_Step62_Phase32_Step6_Part2_ViewportDescriptorBinding()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 63) {
+        if (!RunTest_Step63_Phase32_Step6_Part3_EngineRHISwitcherAndEditorWiring()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

@@ -17,6 +17,7 @@ namespace Axle {
         u32 Height = 720;
         bool VSync = true;
         bool Maximized = true;
+        GraphicsAPI GraphicsBackend = GraphicsAPI::OpenGL;
     };
 
     class Application {

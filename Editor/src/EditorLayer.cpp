@@ -94,42 +94,62 @@ void EditorLayer::OnAttach() {
     m_SceneRenderer = std::make_unique<Axle::SceneRenderer>();
 
 
-    // 4. Primitive Mesh Data (Cube, Sphere, Cylinder, Cone, Plane)
-    m_CubeMesh = Axle::PrimitiveMesh::CreateCube();
-    m_SphereMesh = Axle::PrimitiveMesh::CreateSphere(24, 32);
-    m_CylinderMesh = Axle::PrimitiveMesh::CreateCylinder(32);
-    m_ConeMesh = Axle::PrimitiveMesh::CreateCone(32);
-    m_PlaneMesh = Axle::PrimitiveMesh::CreatePlane();
+    // 4. Primitive Mesh Data (for legacy OpenGL SceneRenderer)
+    if (window.GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
+        m_CubeMesh = Axle::PrimitiveMesh::CreateCube();
+        m_SphereMesh = Axle::PrimitiveMesh::CreateSphere(24, 32);
+        m_CylinderMesh = Axle::PrimitiveMesh::CreateCylinder(32);
+        m_ConeMesh = Axle::PrimitiveMesh::CreateCone(32);
+        m_PlaneMesh = Axle::PrimitiveMesh::CreatePlane();
 
-    // 4.1 Asset Pipeline Validation: Load SportsCar_Body.axlemesh
-    auto carAxlePath = Axle::FileSystem::ResolveAssetPath("models/SportsCar_Body.axlemesh");
-    if (std::filesystem::exists(carAxlePath)) {
-        auto loaded = Axle::AssetSerializer::LoadMesh(carAxlePath);
-        if (loaded.Success) {
-            AXLE_INFO("Asset Pipeline: Loaded '{0}' [Cache: {1}] ({2} vertices, {3} indices)", 
-                carAxlePath.filename().string(), 
-                loaded.LoadedFromCache ? "HIT" : "MISS (Auto-baked cache)",
-                loaded.SourceData.Vertices.size(), loaded.SourceData.Indices.size());
+        // 4.1 Asset Pipeline Validation: Load SportsCar_Body.axlemesh
+        auto carAxlePath = Axle::FileSystem::ResolveAssetPath("models/SportsCar_Body.axlemesh");
+        if (std::filesystem::exists(carAxlePath)) {
+            auto loaded = Axle::AssetSerializer::LoadMesh(carAxlePath);
+            if (loaded.Success) {
+                AXLE_INFO("Asset Pipeline: Loaded '{0}' [Cache: {1}] ({2} vertices, {3} indices)", 
+                    carAxlePath.filename().string(), 
+                    loaded.LoadedFromCache ? "HIT" : "MISS (Auto-baked cache)",
+                    loaded.SourceData.Vertices.size(), loaded.SourceData.Indices.size());
+            }
+        }
+
+        // 4.2 Texture Mapping Pipeline Validation (Phase 11: Sub-step 2.1)
+        auto testTexPath = Axle::FileSystem::ResolveAssetPath("textures/Prototype_Grid.png");
+        if (std::filesystem::exists(testTexPath)) {
+            auto testTex = Axle::Texture2D::Create(testTexPath.string());
+            if (testTex && testTex->IsLoaded()) {
+                AXLE_INFO("Texture Pipeline: Verified stb_image loader with '{0}' ({1}x{2}, ID: {3})",
+                    testTexPath.filename().string(), testTex->GetWidth(), testTex->GetHeight(), testTex->GetRendererID());
+            }
         }
     }
+    // 5. Offscreen Viewport Target (Framebuffer for OpenGL, RHIViewportDescriptor for D3D12/Vulkan)
+    m_ViewportWidth = window.GetWidth();
+    m_ViewportHeight = window.GetHeight();
 
-    // 4.2 Texture Mapping Pipeline Validation (Phase 11: Sub-step 2.1)
-    auto testTexPath = Axle::FileSystem::ResolveAssetPath("textures/Prototype_Grid.png");
-    if (std::filesystem::exists(testTexPath)) {
-        auto testTex = Axle::Texture2D::Create(testTexPath.string());
-        if (testTex && testTex->IsLoaded()) {
-            AXLE_INFO("Texture Pipeline: Verified stb_image loader with '{0}' ({1}x{2}, ID: {3})",
-                testTexPath.filename().string(), testTex->GetWidth(), testTex->GetHeight(), testTex->GetRendererID());
+    if (window.GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
+        Axle::FramebufferSpecification fbSpec;
+        fbSpec.Width = m_ViewportWidth;
+        fbSpec.Height = m_ViewportHeight;
+        m_Framebuffer = Axle::Framebuffer::Create(fbSpec);
+    } else {
+        auto* uiContext = dynamic_cast<Axle::ImGuiLayer*>(Axle::Application::Get().GetUIContext());
+        if (uiContext) {
+            m_RHIViewport = std::make_unique<Axle::RHIViewportDescriptor>();
+            Axle::RHIViewportDesc vpDesc;
+            vpDesc.Width = m_ViewportWidth;
+            vpDesc.Height = m_ViewportHeight;
+            vpDesc.ColorFormat = Axle::RHI::RHITextureFormat::RGBA8_UNORM;
+            vpDesc.EnableDepth = true;
+            vpDesc.DepthFormat = Axle::RHI::RHITextureFormat::D32_FLOAT;
+            vpDesc.DebugName = "EditorMainViewport";
+            m_RHIViewport->Init(uiContext, vpDesc);
         }
     }
-    // 5. Offscreen Framebuffer for Viewport
-    Axle::FramebufferSpecification fbSpec;
-    fbSpec.Width = window.GetWidth();
-    fbSpec.Height = window.GetHeight();
-    m_Framebuffer = Axle::Framebuffer::Create(fbSpec);
-    m_ViewportWidth = fbSpec.Width;
-    m_ViewportHeight = fbSpec.Height;
-    m_SceneRenderer->SetViewportSize(m_ViewportWidth, m_ViewportHeight);
+    if (m_SceneRenderer) {
+        m_SceneRenderer->SetViewportSize(m_ViewportWidth, m_ViewportHeight);
+    }
 
     // 6. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
     m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
@@ -424,6 +444,10 @@ void EditorLayer::OnDetach() {
     m_PhysicsDebugRenderer.reset();
     m_PhysicsScene.reset();
     m_Framebuffer.reset();
+    if (m_RHIViewport) {
+        m_RHIViewport->Shutdown();
+        m_RHIViewport.reset();
+    }
     m_CubeMesh.reset();
     m_SphereMesh.reset();
     m_CylinderMesh.reset();
@@ -1901,14 +1925,24 @@ void EditorLayer::OnImGuiRender() {
          m_ViewportHeight != static_cast<Axle::u32>(viewportSize.y))) {
         m_ViewportWidth = static_cast<Axle::u32>(viewportSize.x);
         m_ViewportHeight = static_cast<Axle::u32>(viewportSize.y);
-        m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+        if (m_Framebuffer) {
+            m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+        }
+        if (m_RHIViewport && m_RHIViewport->IsValid()) {
+            m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
+        }
         m_CameraController->OnResize(m_ViewportWidth, m_ViewportHeight);
         if (m_SceneRenderer) {
             m_SceneRenderer->SetViewportSize(m_ViewportWidth, m_ViewportHeight);
         }
     }
 
-    if (m_Framebuffer) {
+    if (m_RHIViewport && m_RHIViewport->IsValid()) {
+        glm::vec2 uv0 = m_RHIViewport->GetUV0();
+        glm::vec2 uv1 = m_RHIViewport->GetUV1();
+        ImGui::Image((ImTextureID)(intptr_t)m_RHIViewport->GetImTextureID(),
+                     viewportSize, ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
+    } else if (m_Framebuffer) {
         uint32_t textureID = m_Framebuffer->GetColorAttachmentRendererID();
         // Flip UV coordinates vertically for OpenGL
         ImGui::Image(reinterpret_cast<void*>(static_cast<intptr_t>(textureID)), 

@@ -1,6 +1,7 @@
 #pragma once
 #include <Axle/Types.hpp>
 #include <Axle/ApplicationUI.hpp>
+#include <Axle/Window.hpp>
 #include <vector>
 
 struct GLFWwindow;
@@ -18,6 +19,15 @@ namespace Axle {
         Direct3D12,
         Vulkan
     };
+
+    inline ImGuiBackendType ToImGuiBackend(GraphicsAPI api) {
+        switch (api) {
+            case GraphicsAPI::Direct3D12: return ImGuiBackendType::Direct3D12;
+            case GraphicsAPI::Vulkan:     return ImGuiBackendType::Vulkan;
+            case GraphicsAPI::OpenGL:     return ImGuiBackendType::OpenGL;
+            default:                      return ImGuiBackendType::OpenGL;
+        }
+    }
 
     class ImGuiLayer : public ApplicationUIContext {
     public:

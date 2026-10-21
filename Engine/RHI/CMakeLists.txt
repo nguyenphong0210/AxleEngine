@@ -4,6 +4,8 @@ add_library(AxleRHI STATIC
     src/RHISwapChain.cpp
     src/RHIShader.cpp
     src/RHIPipeline.cpp
+    src/RHIBarrier.cpp
+    src/RHICommandBuffer.cpp
 )
 add_library(Axle::RHI ALIAS AxleRHI)
 

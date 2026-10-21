@@ -309,10 +309,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Cross-API shader compilation pipeline (Slang or DXC + `glslang`/SPIRV-Cross) compiling single-source shaders into SPIR-V (Vulkan 1.3) and DXIL/DXBC (Direct3D 12).
     - [x] Automated bytecode caching (`.spv` and `.dxil`) with `last_write_time` dependency validation in asset directory.
     - [x] Shader Reflection Subsystem: Automatically extract Root Signatures (D3D12) and Descriptor Set Layouts (Vulkan) directly from compiled shader reflection metadata.
-  - [ ] **Step 4 - Pipeline State Objects (PSO) & Explicit Barrier Management**:
-    - [ ] 64-bit PSO hashing and LRU memory cache for Graphics and Compute pipelines (Rasterizer, Depth/Stencil, Blend States, Shaders).
-    - [ ] Explicit resource layout transitions (D3D12 `ResourceBarrier` / Vulkan `VkImageMemoryBarrier`) via unified NRI command lists (Color Attachment $\leftrightarrow$ Shader Resource $\leftrightarrow$ Depth/Stencil Write).
-    - [ ] Unified Pipeline Layout abstraction supporting Push Constants, Root Descriptors, and Descriptor Tables.
+  - [x] **Step 4 - Pipeline State Objects (PSO) & Explicit Barrier Management**:
+    - [x] 64-bit PSO hashing and LRU memory cache for Graphics and Compute pipelines (Rasterizer, Depth/Stencil, Blend States, Shaders).
+    - [x] Explicit resource layout transitions (D3D12 `ResourceBarrier` / Vulkan `VkImageMemoryBarrier`) via unified NRI command lists (Color Attachment $\leftrightarrow$ Shader Resource $\leftrightarrow$ Depth/Stencil Write).
+    - [x] Unified Pipeline Layout abstraction supporting Push Constants, Root Descriptors, and Descriptor Tables.
   - [ ] **Step 5 - GPU Memory Management & Dynamic Staging Streamer**:
     - [ ] Device-local VRAM allocation vs Host-visible Staging Ring Buffer management utilizing `NRIHelper` and `StreamerInterface`.
     - [ ] High-throughput asynchronous texture streaming and non-blocking vertex/index buffer uploads.

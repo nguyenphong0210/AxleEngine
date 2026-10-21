@@ -42,8 +42,8 @@
 
 # CMake Build Directories & Artifacts
 build/
-bin/
-lib/
+/bin/
+/lib/
 out/
 Export/
 CMakeFiles/
@@ -77,3 +77,13 @@ imgui.ini
 
 # Test Generated Directories
 sandbox_dragdrop_*/
+
+# ThirdParty Prebuilt Binaries Whitelist (DXC for RHI Shader Compilation)
+!ThirdParty/dxc/
+!ThirdParty/dxc/bin/
+!ThirdParty/dxc/bin/**
+!ThirdParty/dxc/lib/
+!ThirdParty/dxc/lib/**
+!ThirdParty/dxc/**/*.dll
+!ThirdParty/dxc/**/*.lib
+!ThirdParty/dxc/**/*.exe

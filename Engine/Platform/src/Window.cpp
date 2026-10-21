@@ -25,6 +25,7 @@ namespace Axle {
         m_Data.Width = props.Width;
         m_Data.Height = props.Height;
         m_Data.VSync = props.VSync;
+        m_Data.GraphicsBackend = props.GraphicsBackend;
 
         if (s_GLFWWindowCount == 0) {
             glfwSetErrorCallback(GLFWErrorCallback);
@@ -35,10 +36,17 @@ namespace Axle {
             s_GLFWInitialized = true;
         }
 
-        // OpenGL context hints (Core Profile 4.5)
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        if (props.GraphicsBackend == GraphicsAPI::OpenGL) {
+            // OpenGL context hints (Core Profile 4.5)
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        } else {
+            // Direct3D 12 / Vulkan / NRI: do not create an OpenGL context
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        }
+
         if (props.Maximized) {
             glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
         }
@@ -69,8 +77,10 @@ namespace Axle {
 
         ++s_GLFWWindowCount;
 
-        glfwMakeContextCurrent(m_Window);
-        SetVSync(m_Data.VSync);
+        if (m_Data.GraphicsBackend == GraphicsAPI::OpenGL) {
+            glfwMakeContextCurrent(m_Window);
+            SetVSync(m_Data.VSync);
+        }
 
         // Bind WindowData pointer to GLFW window user pointer for callbacks
         glfwSetWindowUserPointer(m_Window, &m_Data);
@@ -189,7 +199,9 @@ namespace Axle {
     }
 
     void Window::SwapBuffers() {
-        glfwSwapBuffers(m_Window);
+        if (m_Data.GraphicsBackend == GraphicsAPI::OpenGL) {
+            glfwSwapBuffers(m_Window);
+        }
     }
 
     bool Window::ShouldClose() const {
@@ -197,8 +209,10 @@ namespace Axle {
     }
 
     void Window::SetVSync(bool enabled) {
-        glfwSwapInterval(enabled ? 1 : 0);
         m_Data.VSync = enabled;
+        if (m_Data.GraphicsBackend == GraphicsAPI::OpenGL && HasActiveContext()) {
+            glfwSwapInterval(enabled ? 1 : 0);
+        }
     }
 
     void Window::Maximize() {

@@ -40,7 +40,30 @@ target_link_libraries(AxleUI
         Axle::Vehicle
         Axle::Audio
         Axle::VFX
+        Axle::RHI
     PRIVATE
         glfw
         glad
 )
+
+if (WIN32)
+    target_sources(AxleUI PRIVATE
+        ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/backends/imgui_impl_dx12.cpp
+    )
+    target_link_libraries(AxleUI PRIVATE
+        d3d12
+        dxgi
+        d3dcompiler
+    )
+    target_compile_definitions(AxleUI PUBLIC AXLE_HAS_D3D12=1)
+endif()
+
+find_package(Vulkan QUIET)
+if (Vulkan_FOUND)
+    target_sources(AxleUI PRIVATE
+        ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/backends/imgui_impl_vulkan.cpp
+    )
+    target_link_libraries(AxleUI PRIVATE Vulkan::Vulkan)
+    target_compile_definitions(AxleUI PUBLIC AXLE_HAS_VULKAN=1)
+endif()
+

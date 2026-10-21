@@ -318,7 +318,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] High-throughput asynchronous texture streaming and non-blocking vertex/index buffer uploads.
     - [x] Direct EnTT ECS memory streaming: packed component data streamed into GPU dynamic buffers and structured buffers (SSBOs) with GPU indirect draw dispatch (`CmdDrawIndexedIndirect`).
   - [ ] **Step 6 - Editor ImGui Viewport Integration & Multi-Backend Coexistence**:
-    - [ ] Multi-backend ImGui rendering: equip `ImGuiLayer` with `imgui_impl_dx12` and `imgui_impl_vulkan` backends alongside legacy `imgui_impl_opengl3`.
+    - [x] Multi-backend ImGui rendering: equip `ImGuiLayer` with `imgui_impl_dx12` and `imgui_impl_vulkan` backends alongside legacy `imgui_impl_opengl3`.
     - [ ] Viewport Descriptor Binding: Register offscreen scene render targets (`nri::Texture`) into ImGui GPU Descriptor Heap as valid `ImTextureID`.
     - [ ] Engine RHI Switcher: Configurable startup flag (`--rhi=dx12`, `--rhi=vulkan`, `--rhi=opengl`) with graceful fallback.
   - [ ] **Step 7 - Automated Headless Test Suite & Multi-Backend Validation**:

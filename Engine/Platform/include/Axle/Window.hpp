@@ -8,12 +8,20 @@ struct GLFWwindow;
 
 namespace Axle {
 
+    enum class GraphicsAPI {
+        OpenGL,
+        Direct3D12,
+        Vulkan,
+        None
+    };
+
     struct WindowProps {
         std::string Title = "Axle Engine";
         u32 Width = 1280;
         u32 Height = 720;
         bool VSync = true;
         bool Maximized = true;
+        GraphicsAPI GraphicsBackend = GraphicsAPI::OpenGL;
     };
 
     class Window {
@@ -57,6 +65,7 @@ namespace Axle {
         u32 GetWidth() const { return m_Data.Width; }
         u32 GetHeight() const { return m_Data.Height; }
         GLFWwindow* GetNativeWindow() const { return m_Window; }
+        GraphicsAPI GetGraphicsBackend() const { return m_Data.GraphicsBackend; }
 
         static bool IsGLFWInitialized();
         static bool HasActiveContext();
@@ -78,6 +87,7 @@ namespace Axle {
             u32 Width;
             u32 Height;
             bool VSync;
+            GraphicsAPI GraphicsBackend = GraphicsAPI::OpenGL;
             CursorMode CurrentCursorMode = CursorMode::Normal;
 
             std::function<void(const WindowResizeEvent&)> OnWindowResize;

@@ -9,6 +9,7 @@ add_library(AxleRHI STATIC
     src/RHIBuffer.cpp
     src/RHIStreamer.cpp
     src/RHIECSStreamer.cpp
+    src/RHITexture.cpp
 )
 add_library(Axle::RHI ALIAS AxleRHI)
 

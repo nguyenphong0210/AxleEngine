@@ -10,6 +10,7 @@ add_library(AxleUI STATIC
     src/AssetPreviewPanel.cpp
     src/AssemblyEditorPanel.cpp
     src/VFXEditorPanel.cpp
+    src/RHIViewportDescriptor.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_draw.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_tables.cpp

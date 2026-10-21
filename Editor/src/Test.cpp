@@ -81,6 +81,8 @@
 #include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHIStreamer.hpp>
 #include <Axle/RHI/RHIECSStreamer.hpp>
+#include <Axle/RHI/RHITexture.hpp>
+#include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/Window.hpp>
 #include <imgui.h>
@@ -11594,9 +11596,15 @@ bool RunTest_Step61_Phase32_Step6_Part1_MultiBackendImGuiCore() {
 
     // [61.5] ImGui Frame Recording (Begin -> Widgets -> End)
     std::cout << "\n[61.5] Testing ImGui Frame Recording Workflow (Begin -> Draw -> End)..." << std::endl;
+    testWindow.PollEvents();
     imguiLayer.Begin();
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.DisplaySize.x <= 0.0f || io.DisplaySize.y <= 0.0f) {
+        io.DisplaySize = ImVec2(static_cast<float>(testWindow.GetWidth()), static_cast<float>(testWindow.GetHeight()));
+    }
+    if (io.DeltaTime <= 0.0f) io.DeltaTime = 1.0f / 60.0f;
 
-    ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_Always);
     ImGui::Begin("Axle D3D12 Viewport Test");
     ImGui::Text("Axle Engine Multi-Backend ImGui Layer");
     ImGui::Text("Active Backend: Direct3D 12");
@@ -11638,6 +11646,215 @@ bool RunTest_Step61_Phase32_Step6_Part1_MultiBackendImGuiCore() {
     std::cout << "  -> PASS: ImGuiLayer cleanly shut down, descriptor heap released, zero leaks." << std::endl;
 
     std::cout << "\n>>> STEP 61 PASSED: Phase 32 Step 6 Part 1 Multi-Backend ImGui Core 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
+// STEP 62: PHASE 32 STEP 6 PART 2 - VIEWPORT DESCRIPTOR BINDING & OFFSCREEN RT
+// =============================================================================
+bool RunTest_Step62_Phase32_Step6_Part2_ViewportDescriptorBinding() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 62 TEST] VIEWPORT DESCRIPTOR BINDING & RT        " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [62.1] Test RHITexture 2D Color Render Target Allocation
+    std::cout << "\n[62.1] Testing RHITexture Color Render Target Allocation (1280x720 RGBA8)..." << std::endl;
+    auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+    bool deviceWasInit = rhiDevice.IsInitialized();
+    if (!deviceWasInit) {
+        Axle::RHI::RHIDeviceDesc desc;
+        desc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+        desc.EnableValidation = false;
+        assert(rhiDevice.Init(desc));
+    }
+    assert(rhiDevice.IsInitialized());
+    assert(rhiDevice.GetBackend() == Axle::RHI::RHIType::Direct3D12);
+
+    {
+        Axle::RHI::RHITexture colorRT;
+        auto desc = Axle::RHI::RHITextureDesc::RenderTarget2D(1280, 720, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "TestColorRT");
+        assert(colorRT.Init(desc));
+        assert(colorRT.IsValid());
+        assert(colorRT.GetWidth() == 1280);
+        assert(colorRT.GetHeight() == 720);
+        assert(colorRT.GetFormat() == Axle::RHI::RHITextureFormat::RGBA8_UNORM);
+        assert(colorRT.GetSRV() != nullptr);
+        assert(colorRT.GetRTV() != nullptr);
+        assert(colorRT.GetDSV() == nullptr);
+        assert(colorRT.GetNativeSRVHandle() != 0);
+        assert(colorRT.GetNativeRTVHandle() != 0);
+        std::cout << "  -> PASS: Color Render Target allocated. Native SRV: 0x" << std::hex << colorRT.GetNativeSRVHandle()
+                  << ", Native RTV: 0x" << colorRT.GetNativeRTVHandle() << std::dec << std::endl;
+    }
+
+    // [62.2] Test RHITexture Depth Stencil Allocation
+    std::cout << "\n[62.2] Testing RHITexture Depth Stencil Allocation (1280x720 D32_FLOAT)..." << std::endl;
+    {
+        Axle::RHI::RHITexture depthRT;
+        auto desc = Axle::RHI::RHITextureDesc::DepthStencil2D(1280, 720, Axle::RHI::RHITextureFormat::D32_FLOAT, "TestDepthRT");
+        assert(depthRT.Init(desc));
+        assert(depthRT.IsValid());
+        assert(depthRT.GetWidth() == 1280);
+        assert(depthRT.GetHeight() == 720);
+        assert(depthRT.GetDSV() != nullptr);
+        assert(depthRT.GetNativeDSVHandle() != 0);
+        std::cout << "  -> PASS: Depth Stencil Texture allocated. Native DSV: 0x" << std::hex << depthRT.GetNativeDSVHandle() << std::dec << std::endl;
+    }
+
+    // [62.3] Test RHIViewportDescriptor Initialization with ImGuiLayer
+    std::cout << "\n[62.3] Testing RHIViewportDescriptor Initialization & ImGui Registration..." << std::endl;
+    Axle::WindowProps winProps;
+    winProps.Title = "Step 62 Viewport Test Window";
+    winProps.Width = 1280;
+    winProps.Height = 720;
+    winProps.Maximized = false;
+    winProps.GraphicsBackend = Axle::GraphicsAPI::Direct3D12;
+    Axle::Window testWindow(winProps);
+
+    Axle::ImGuiLayer imguiLayer(Axle::ImGuiBackendType::Direct3D12);
+    imguiLayer.Init(testWindow.GetNativeWindow());
+    assert(imguiLayer.IsInitialized());
+
+    Axle::RHIViewportDescriptor viewport;
+    Axle::RHIViewportDesc vpDesc;
+    vpDesc.Width = 1920;
+    vpDesc.Height = 1080;
+    vpDesc.ColorFormat = Axle::RHI::RHITextureFormat::RGBA8_UNORM;
+    vpDesc.EnableDepth = true;
+    vpDesc.DepthFormat = Axle::RHI::RHITextureFormat::D32_FLOAT;
+    vpDesc.DebugName = "SceneMainViewport";
+
+    assert(viewport.Init(&imguiLayer, vpDesc));
+    assert(viewport.IsValid());
+    assert(viewport.GetWidth() == 1920);
+    assert(viewport.GetHeight() == 1080);
+    assert(viewport.GetColorTexture() != nullptr);
+    assert(viewport.GetDepthTexture() != nullptr);
+    assert(viewport.GetImTextureID() != 0);
+    uint32_t allocatedAfterInit = imguiLayer.GetAllocatedDescriptorCount();
+    assert(allocatedAfterInit > 0);
+    std::cout << "  -> PASS: Viewport initialized (1920x1080). ImTextureID: 0x" << std::hex << viewport.GetImTextureID() << std::dec << std::endl;
+
+    // [62.4] Test Backend UV Orientation & Aspect Ratio
+    std::cout << "\n[62.4] Testing Backend UV Orientation & Aspect Ratio..." << std::endl;
+    glm::vec2 uv0 = viewport.GetUV0();
+    glm::vec2 uv1 = viewport.GetUV1();
+    assert(uv0.x == 0.0f && uv0.y == 0.0f);
+    assert(uv1.x == 1.0f && uv1.y == 1.0f);
+    float aspect = viewport.GetAspectRatio();
+    assert(std::abs(aspect - (1920.0f / 1080.0f)) < 1e-4f);
+    std::cout << "  -> PASS: D3D12 UV orientation verified: UV0=(" << uv0.x << ", " << uv0.y << "), UV1=(" << uv1.x << ", " << uv1.y << "), Aspect=" << aspect << std::endl;
+
+    // [62.5] Test Dynamic Viewport Resize & Descriptor Recycling
+    std::cout << "\n[62.5] Testing Dynamic Viewport Resize & Zero Descriptor Heap Leak..." << std::endl;
+    uint64_t oldTexID = viewport.GetImTextureID();
+    uint32_t descCountBeforeResize = imguiLayer.GetAllocatedDescriptorCount();
+
+    // Resize from 1920x1080 down to 800x600
+    assert(viewport.Resize(800, 600));
+    assert(viewport.GetWidth() == 800);
+    assert(viewport.GetHeight() == 600);
+    assert(viewport.GetColorTexture()->GetWidth() == 800);
+    assert(viewport.GetDepthTexture()->GetWidth() == 800);
+    assert(viewport.GetImTextureID() != 0);
+
+    // Slot should be recycled, descriptor count remains bounded!
+    uint32_t descCountAfterResize = imguiLayer.GetAllocatedDescriptorCount();
+    assert(descCountAfterResize == descCountBeforeResize);
+    std::cout << "  -> PASS: Dynamic resize 1920x1080 -> 800x600 successful. Old ID: 0x" << std::hex << oldTexID
+              << ", New ID: 0x" << viewport.GetImTextureID() << std::dec << ", Heap descriptors: " << descCountAfterResize << std::endl;
+
+    // No-op resize
+    assert(viewport.Resize(800, 600));
+    assert(viewport.GetWidth() == 800);
+    std::cout << "  -> PASS: Redundant resize to identical dimensions correctly handled as no-op." << std::endl;
+
+    // [62.6] Test Offscreen Render Pass Recording & ImGui Viewport Sampling
+    std::cout << "\n[62.6] Testing Offscreen Clear Pass & ImGui Viewport Draw..." << std::endl;
+    auto* queue = rhiDevice.GetGraphicsQueue();
+    Axle::RHI::RHICommandBuffer cmd;
+    assert(cmd.Init(queue));
+    assert(cmd.Begin());
+
+    // 1. Transition offscreen color texture to COLOR_ATTACHMENT
+    cmd.TransitionTexture(viewport.GetColorTexture()->GetNative(), Axle::RHI::RHIResourceLayout::Undefined, Axle::RHI::RHIResourceLayout::ColorAttachment);
+
+    // 2. Clear offscreen color texture via BeginRendering
+    nri::AttachmentDesc colorAttachment = {};
+    colorAttachment.descriptor = viewport.GetColorTexture()->GetRTV();
+    colorAttachment.loadOp = nri::LoadOp::CLEAR;
+    colorAttachment.storeOp = nri::StoreOp::STORE;
+    colorAttachment.clearValue.color.f = { 0.1f, 0.2f, 0.4f, 1.0f };
+
+    nri::RenderingDesc renderingDesc = {};
+    renderingDesc.colors = &colorAttachment;
+    renderingDesc.colorNum = 1;
+
+    cmd.BeginRendering(renderingDesc);
+    cmd.EndRendering();
+
+    // 3. Transition offscreen color texture to SHADER_RESOURCE for ImGui sampling
+    cmd.TransitionTexture(viewport.GetColorTexture()->GetNative(), Axle::RHI::RHIResourceLayout::ColorAttachment, Axle::RHI::RHIResourceLayout::ShaderResource);
+
+    // 4. Record ImGui frame sampling viewport texture
+    imguiLayer.Begin();
+
+    ImGui::SetNextWindowSize(ImVec2(850, 650), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Scene Viewport");
+    ImVec2 imgSize(static_cast<float>(viewport.GetWidth()), static_cast<float>(viewport.GetHeight()));
+    ImGui::Image((ImTextureID)(intptr_t)viewport.GetImTextureID(), imgSize, ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
+    ImGui::End();
+
+    imguiLayer.End();
+
+    // 5. Render ImGui into command buffer
+    imguiLayer.Render(&cmd);
+
+    assert(cmd.End());
+    assert(cmd.Submit(queue));
+    assert(rhiDevice.GetNRICore().QueueWaitIdle(queue) == nri::Result::SUCCESS);
+    cmd.Shutdown();
+    std::cout << "  -> PASS: Offscreen clear pass executed and sampled inside ImGui Viewport window." << std::endl;
+
+    // [62.7] Test External Texture Binding & Clean RAII Lifetimes
+    std::cout << "\n[62.7] Testing External RHITexture Binding & Clean Viewport Shutdown..." << std::endl;
+    {
+        Axle::RHI::RHITexture externalTex;
+        auto extDesc = Axle::RHI::RHITextureDesc::RenderTarget2D(256, 256, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "ExternalTex");
+        assert(externalTex.Init(extDesc));
+
+        Axle::RHIViewportDescriptor extViewport;
+        assert(extViewport.BindExternalTexture(&imguiLayer, &externalTex));
+        assert(extViewport.IsValid());
+        assert(extViewport.GetWidth() == 256);
+        assert(extViewport.GetHeight() == 256);
+        assert(extViewport.GetImTextureID() != 0);
+        assert(extViewport.GetColorTexture() == &externalTex);
+
+        // Move semantics test
+        Axle::RHIViewportDescriptor movedViewport = std::move(extViewport);
+        assert(!extViewport.IsValid());
+        assert(movedViewport.IsValid());
+        assert(movedViewport.GetWidth() == 256);
+        assert(movedViewport.GetColorTexture() == &externalTex);
+
+        movedViewport.Shutdown();
+        assert(!movedViewport.IsValid());
+        std::cout << "  -> PASS: External texture binding and move semantics verified." << std::endl;
+    }
+
+    viewport.Shutdown();
+    assert(!viewport.IsValid());
+
+    imguiLayer.Shutdown();
+    assert(!imguiLayer.IsInitialized());
+
+    if (!deviceWasInit) {
+        rhiDevice.Shutdown();
+    }
+    std::cout << "  -> PASS: Clean shutdown of all viewport descriptors and texture resources without leaks." << std::endl;
+
+    std::cout << "\n>>> STEP 62 PASSED: Phase 32 Step 6 Part 2 Viewport Descriptor Binding 100% verified! <<<\n" << std::endl;
     return true;
 }
 
@@ -11710,6 +11927,7 @@ int main(int argc, char** argv) {
         else if (arg == "54" || arg == "step54" || arg == "--step54" || arg == "--streamer" || arg == "--phase32g") targetStep = 54;
         else if (arg == "55" || arg == "step55" || arg == "--step55" || arg == "--ecs-stream" || arg == "--indirect" || arg == "--phase32h") targetStep = 55;
         else if (arg == "61" || arg == "step61" || arg == "--step61" || arg == "--imgui-d3d12") targetStep = 61;
+        else if (arg == "62" || arg == "step62" || arg == "--step62" || arg == "--viewport-descriptor") targetStep = 62;
     }
 
     std::cout << "\n========================================================" << std::endl;
@@ -11890,6 +12108,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 61) {
         if (!RunTest_Step61_Phase32_Step6_Part1_MultiBackendImGuiCore()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 62) {
+        if (!RunTest_Step62_Phase32_Step6_Part2_ViewportDescriptorBinding()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

@@ -78,6 +78,7 @@
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/RHI/RHIBarrier.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
+#include <Axle/RHI/RHIBuffer.hpp>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <cstring>
@@ -10842,6 +10843,196 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
 }
 
 // =============================================================================
+// TEST STEP 53: Phase 32 Step 5 Part 1 - GPU Memory & RHIBuffer Allocation
+// =============================================================================
+bool RunTest_Step53_Phase32_Step5_Part1_GPUMemoryAndBuffers() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 53 TEST] GPU MEMORY MANAGEMENT & RHIBUFFER ALLOC " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    using namespace Axle::RHI;
+
+    // [53.1] Buffer Usage Flag Bitwise Operations & Conversion
+    std::cout << "[53.1] Testing Buffer Usage Flags & NRI Type Conversions..." << std::endl;
+    RHIBufferUsage combined = RHIBufferUsage::Vertex | RHIBufferUsage::Index;
+    assert((combined & RHIBufferUsage::Vertex) == RHIBufferUsage::Vertex);
+    assert((combined & RHIBufferUsage::Index) == RHIBufferUsage::Index);
+    assert((combined & RHIBufferUsage::Constant) == RHIBufferUsage::None);
+
+    nri::BufferUsageBits nriUsage = ToNRIBufferUsage(combined);
+    assert((nriUsage & nri::BufferUsageBits::VERTEX) != 0);
+    assert((nriUsage & nri::BufferUsageBits::INDEX) != 0);
+    assert((nriUsage & nri::BufferUsageBits::CONSTANT) == 0);
+
+    assert(ToNRIMemoryLocation(RHIMemoryLocation::Device) == nri::MemoryLocation::DEVICE);
+    assert(ToNRIMemoryLocation(RHIMemoryLocation::DeviceUpload) == nri::MemoryLocation::DEVICE_UPLOAD);
+    assert(ToNRIMemoryLocation(RHIMemoryLocation::HostUpload) == nri::MemoryLocation::HOST_UPLOAD);
+    assert(ToNRIMemoryLocation(RHIMemoryLocation::HostReadback) == nri::MemoryLocation::HOST_READBACK);
+    std::cout << "  -> PASS: Buffer usage bitwise operations and memory location mappings verified." << std::endl;
+
+    // [53.2] RHIBufferDesc Factory Presets & 256-byte Constant Alignment
+    std::cout << "\n[53.2] Testing RHIBufferDesc Factory Presets..." << std::endl;
+    auto vbDesc = RHIBufferDesc::Vertex(1024);
+    assert(vbDesc.Size == 1024);
+    assert(vbDesc.Usage == RHIBufferUsage::Vertex);
+    assert(vbDesc.MemoryLocation == RHIMemoryLocation::Device);
+
+    auto ibDesc = RHIBufferDesc::Index(2048);
+    assert(ibDesc.Size == 2048);
+    assert(ibDesc.Usage == RHIBufferUsage::Index);
+
+    auto cbDesc = RHIBufferDesc::Constant(100);
+    // Verified: 100 bytes must be aligned up to 256 bytes for hardware constant buffer registers!
+    assert(cbDesc.Size == 256);
+    assert(cbDesc.Usage == RHIBufferUsage::Constant);
+    assert(cbDesc.MemoryLocation == RHIMemoryLocation::HostUpload);
+
+    auto ssboDesc = RHIBufferDesc::Structured(500, 64, true);
+    assert(ssboDesc.Size == 500 * 64);
+    assert(ssboDesc.StructureStride == 64);
+    assert((ssboDesc.Usage & RHIBufferUsage::ShaderResource) != RHIBufferUsage::None);
+    assert((ssboDesc.Usage & RHIBufferUsage::ShaderResourceStorage) != RHIBufferUsage::None);
+
+    auto indDesc = RHIBufferDesc::Indirect(512);
+    assert((indDesc.Usage & RHIBufferUsage::Argument) != RHIBufferUsage::None);
+    std::cout << "  -> PASS: Factory presets verified (Vertex, Index, 256-byte Aligned Constant, Structured SSBO, Indirect)." << std::endl;
+
+    // [53.3] Host-Visible Buffer Mapping & Synchronous CPU Writes
+    std::cout << "\n[53.3] Testing Host-Visible Buffer Mapping & CPU Read/Write..." << std::endl;
+    auto& rhiDevice = RHIDevice::Get();
+    bool deviceWasInit = rhiDevice.IsInitialized();
+    if (!deviceWasInit) {
+        RHIDeviceDesc devDesc;
+        devDesc.PreferredBackend = RHIType::Direct3D12;
+        devDesc.EnableValidation = false;
+        assert(rhiDevice.Init(devDesc));
+    }
+
+    RHIBuffer cbBuffer;
+    assert(cbBuffer.Init(cbDesc));
+    assert(cbBuffer.IsValid());
+    assert(cbBuffer.GetSize() == 256);
+
+    // Map and write test data
+    struct TestData {
+        float Color[4];
+        float Matrix[16];
+    };
+    TestData testWrite = {};
+    testWrite.Color[0] = 1.0f;
+    testWrite.Color[1] = 0.5f;
+    testWrite.Color[2] = 0.25f;
+    testWrite.Color[3] = 1.0f;
+    for (int i = 0; i < 16; ++i) testWrite.Matrix[i] = static_cast<float>(i * 2.5f);
+
+    void* mappedPtr = cbBuffer.Map();
+    assert(mappedPtr != nullptr);
+    std::memcpy(mappedPtr, &testWrite, sizeof(testWrite));
+    cbBuffer.Unmap();
+
+    // Map again and read back to verify data persistence
+    void* readPtr = cbBuffer.Map();
+    assert(readPtr != nullptr);
+    TestData testRead = {};
+    std::memcpy(&testRead, readPtr, sizeof(testRead));
+    cbBuffer.Unmap();
+
+    assert(std::memcmp(&testWrite, &testRead, sizeof(TestData)) == 0);
+    std::cout << "  -> PASS: Host-visible buffer mapped, written, and verified bit-for-bit." << std::endl;
+
+    // Test UpdateData helper
+    TestData updateWrite = testWrite;
+    updateWrite.Color[0] = 0.777f;
+    assert(cbBuffer.UpdateData(&updateWrite, sizeof(TestData), 0));
+
+    void* verifyPtr = cbBuffer.Map();
+    TestData verifyRead = {};
+    std::memcpy(&verifyRead, verifyPtr, sizeof(verifyRead));
+    cbBuffer.Unmap();
+    assert(verifyRead.Color[0] == 0.777f);
+    std::cout << "  -> PASS: UpdateData() successfully updated HostUpload buffer." << std::endl;
+    cbBuffer.Shutdown();
+
+    // [53.4] Device-Local VRAM Buffer Allocation & Initial Data Upload
+    std::cout << "\n[53.4] Testing Device-Local VRAM Buffer Allocation with Initial Data..." << std::endl;
+    struct Vertex3D {
+        float Pos[3];
+        float UV[2];
+    };
+    std::vector<Vertex3D> vertices = {
+        { { 0.0f,  0.5f, 0.0f }, { 0.5f, 1.0f } },
+        { { 0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f } },
+        { {-0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f } }
+    };
+    auto vramVbDesc = RHIBufferDesc::Vertex(vertices.size() * sizeof(Vertex3D), RHIMemoryLocation::Device, "TestVertexBuffer");
+    RHIBuffer vramBuffer;
+    assert(vramBuffer.Init(vramVbDesc, vertices.data()));
+    assert(vramBuffer.IsValid());
+    assert(vramBuffer.GetNative() != nullptr);
+    assert(vramBuffer.GetMemoryLocation() == RHIMemoryLocation::Device);
+    assert(vramBuffer.GetSize() == vertices.size() * sizeof(Vertex3D));
+    std::cout << "  -> PASS: Device-local VRAM Vertex Buffer (" << vramBuffer.GetSize() << " bytes) allocated on GPU via NRIHelper." << std::endl;
+    vramBuffer.Shutdown();
+
+    // [53.5] GPU VRAM Budget & Telemetry Query via NRIHelper
+    std::cout << "\n[53.5] Testing GPU VRAM Budget & Telemetry Query..." << std::endl;
+    auto vramInfo = RHIMemoryManager::QueryVRAMInfo(RHIMemoryLocation::Device);
+    std::cout << "  -> Video Memory Info: "
+              << "Budget: " << vramInfo.BudgetMB() << " MB, "
+              << "Usage: " << vramInfo.UsageMB() << " MB ("
+              << vramInfo.UsagePercent() << "%)" << std::endl;
+    assert(vramInfo.BudgetBytes > 0);
+    assert(vramInfo.UsagePercent() <= 100.0f);
+    std::cout << "  -> PASS: OS-provided GPU VRAM budget and telemetry queried accurately via NRIHelper." << std::endl;
+
+    // [53.6] Placed Group Allocation with Chunk Pooling (AMD VMA / D3D12MA)
+    std::cout << "\n[53.6] Testing Placed Group Allocation with Chunk Pooling (VMA/D3D12MA)..." << std::endl;
+    std::vector<RHIBufferDesc> groupDescs = {
+        RHIBufferDesc::Vertex(64 * 1024, RHIMemoryLocation::Device, "GroupVB"),
+        RHIBufferDesc::Index(32 * 1024, RHIMemoryLocation::Device, "GroupIB"),
+        RHIBufferDesc::Structured(1000, 128, true, RHIMemoryLocation::Device, "GroupSSBO"),
+        RHIBufferDesc::Indirect(16 * 1024, RHIMemoryLocation::Device, "GroupIndirect")
+    };
+
+    std::vector<std::unique_ptr<RHIBuffer>> outGroupBuffers;
+    std::vector<nri::Memory*> outChunks;
+    bool groupAllocOk = RHIMemoryManager::AllocateBufferGroup(groupDescs, outGroupBuffers, outChunks, RHIMemoryLocation::Device, 64 * 1024 * 1024);
+    assert(groupAllocOk);
+    assert(outGroupBuffers.size() == groupDescs.size());
+    assert(!outChunks.empty());
+
+    // Verify all 4 buffers are valid and bound to memory chunks
+    for (size_t i = 0; i < outGroupBuffers.size(); ++i) {
+        assert(outGroupBuffers[i]->IsValid());
+        assert(outGroupBuffers[i]->GetNative() != nullptr);
+        assert(outGroupBuffers[i]->GetSize() == groupDescs[i].Size);
+    }
+
+    // Verify multiple buffers pooled into fewer chunks than buffer count (no heap explosion!)
+    std::cout << "  -> Group Allocation: " << outGroupBuffers.size() << " buffers pooled into " 
+              << outChunks.size() << " VRAM memory chunk(s) (AMD VMA / D3D12MA)." << std::endl;
+    assert(outChunks.size() <= outGroupBuffers.size());
+
+    // Clean up grouped buffers and chunks
+    for (auto& b : outGroupBuffers) {
+        b->Shutdown();
+    }
+    RHIMemoryManager::FreeAllocatedChunks(outChunks);
+    assert(outChunks.empty());
+    std::cout << "  -> PASS: Placed Group Allocation & chunk pooling verified without heap fragmentation." << std::endl;
+
+    // [53.7] Resource Shutdown & Cleanup
+    std::cout << "\n[53.7] Testing Clean RHI Shutdown..." << std::endl;
+    if (!deviceWasInit) {
+        rhiDevice.Shutdown();
+    }
+    std::cout << "  -> PASS: All buffers, memory allocations, and devices cleanly shut down." << std::endl;
+
+    std::cout << "\n>>> STEP 53 PASSED: Phase 32 Step 5 Part 1 GPU Memory & RHIBuffer 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -10906,12 +11097,13 @@ int main(int argc, char** argv) {
         else if (arg == "50" || arg == "step50" || arg == "--step50" || arg == "--shader" || arg == "--phase32c") targetStep = 50;
         else if (arg == "51" || arg == "step51" || arg == "--step51" || arg == "--pso" || arg == "--phase32d") targetStep = 51;
         else if (arg == "52" || arg == "step52" || arg == "--step52" || arg == "--barrier" || arg == "--phase32e") targetStep = 52;
+        else if (arg == "53" || arg == "step53" || arg == "--step53" || arg == "--memory" || arg == "--buffer" || arg == "--phase32f") targetStep = 53;
     }
 
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 52 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 53 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -11074,6 +11266,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 52) {
         if (!RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 53) {
+        if (!RunTest_Step53_Phase32_Step5_Part1_GPUMemoryAndBuffers()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

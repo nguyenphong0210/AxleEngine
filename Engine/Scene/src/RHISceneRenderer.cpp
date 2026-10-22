@@ -3,6 +3,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RHI/RHIVertexLayout.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 
@@ -432,6 +433,24 @@ namespace Axle {
                     pushConsts.ColorSecondary = mc.Color2;
                     pushConsts.Params = glm::vec4(mc.TileScale, static_cast<float>(mc.PatternMode), 0.5f, 0.0f);
                     pushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
+
+                    // Apply PBR Material parameters if present
+                    if (mc.RHIMaterialAsset) {
+                        mc.RHIMaterialAsset->ApplyToPushConstants(pushConsts);
+                        pushConsts.ModelViewProjection = mvp;
+                        pushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
+                    } else if (registry.all_of<MaterialComponent>(entityID)) {
+                        const auto& mat = registry.get<MaterialComponent>(entityID);
+                        if (mat.RHIMaterialAsset) {
+                            mat.RHIMaterialAsset->ApplyToPushConstants(pushConsts);
+                            pushConsts.ModelViewProjection = mvp;
+                            pushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
+                        } else {
+                            pushConsts.ColorPrimary = mat.GetAlbedoColor();
+                            pushConsts.ColorSecondary = glm::vec4(mat.GetEmissionColor(), mat.GetEmissionIntensity());
+                            pushConsts.Params = glm::vec4(mat.GetUVScale().x, 0.0f, mat.GetRoughness(), mat.GetMetallic());
+                        }
+                    }
 
                     // Bind per-entity transform directly to Root Constants (Zero CPU-GPU stalls!)
                     m_CommandBuffer.SetRootConstants(0, &pushConsts, sizeof(pushConsts));

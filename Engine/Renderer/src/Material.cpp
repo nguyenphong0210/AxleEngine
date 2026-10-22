@@ -128,11 +128,67 @@ namespace Axle {
         m_UseMetallicMap = false;
     }
 
+    void Material::SetAOTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path) {
+        m_AOMap = texture;
+        m_AOPath = path;
+        m_UseAOMap = (texture != nullptr && texture->IsLoaded());
+    }
+
+    void Material::SetAOPath(const std::string& path) {
+        m_AOPath = path;
+        if (path.empty()) {
+            ClearAOTexture();
+        } else {
+            if (Window::HasActiveContext()) {
+                std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
+                m_AOMap = Texture2D::Create(resolved.string());
+                m_UseAOMap = (m_AOMap && m_AOMap->IsLoaded());
+            } else {
+                m_UseAOMap = true;
+            }
+        }
+    }
+
+    void Material::ClearAOTexture() {
+        m_AOPath.clear();
+        m_AOMap = nullptr;
+        m_UseAOMap = false;
+    }
+
+    void Material::SetEmissiveTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path) {
+        m_EmissiveMap = texture;
+        m_EmissivePath = path;
+        m_UseEmissiveMap = (texture != nullptr && texture->IsLoaded());
+    }
+
+    void Material::SetEmissivePath(const std::string& path) {
+        m_EmissivePath = path;
+        if (path.empty()) {
+            ClearEmissiveTexture();
+        } else {
+            if (Window::HasActiveContext()) {
+                std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
+                m_EmissiveMap = Texture2D::Create(resolved.string());
+                m_UseEmissiveMap = (m_EmissiveMap && m_EmissiveMap->IsLoaded());
+            } else {
+                m_UseEmissiveMap = true;
+            }
+        }
+    }
+
+    void Material::ClearEmissiveTexture() {
+        m_EmissivePath.clear();
+        m_EmissiveMap = nullptr;
+        m_UseEmissiveMap = false;
+    }
+
     void Material::ResetTextures() {
         ClearAlbedoTexture();
         ClearNormalTexture();
         ClearRoughnessTexture();
         ClearMetallicTexture();
+        ClearAOTexture();
+        ClearEmissiveTexture();
     }
 
     void Material::SetPresetCarPaintRed() {
@@ -338,6 +394,11 @@ namespace Axle {
         fout << "  Metallic: " << m_Metallic << "\n";
         fout << "  MetallicPath: " << m_MetallicPath << "\n";
         fout << "  UseMetallicMap: " << (m_UseMetallicMap ? "true" : "false") << "\n";
+        fout << "  AO: " << m_AOStrength << "\n";
+        fout << "  AOPath: " << m_AOPath << "\n";
+        fout << "  UseAOMap: " << (m_UseAOMap ? "true" : "false") << "\n";
+        fout << "  EmissivePath: " << m_EmissivePath << "\n";
+        fout << "  UseEmissiveMap: " << (m_UseEmissiveMap ? "true" : "false") << "\n";
         fout << "  EmissionColor: [ " << m_EmissionColor.r << " , " << m_EmissionColor.g << " , " << m_EmissionColor.b << " ]\n";
         fout << "  EmissionIntensity: " << m_EmissionIntensity << "\n";
         fout << "  UVScale: [ " << m_UVScale.x << " , " << m_UVScale.y << " ]\n";
@@ -366,7 +427,7 @@ namespace Axle {
             std::string trimmed = Trim(line);
             if (trimmed.empty() || trimmed[0] == '#') continue;
 
-            if (trimmed == "MaterialAsset:" || trimmed == "MaterialComponent:") {
+            if (trimmed == "MaterialAsset:" || trimmed == "MaterialComponent:" || trimmed == "RHIMaterial:") {
                 inSection = true;
                 continue;
             }
@@ -408,6 +469,20 @@ namespace Axle {
                     m_UseMetallicMap = (Trim(trimmed.substr(15)) == "true");
                 } else if (trimmed.rfind("Metallic:", 0) == 0) {
                     m_Metallic = std::stof(Trim(trimmed.substr(9)));
+                } else if (trimmed.rfind("AOPath:", 0) == 0) {
+                    std::string p = Trim(trimmed.substr(7));
+                    if (!p.empty()) SetAOPath(p);
+                    else ClearAOTexture();
+                } else if (trimmed.rfind("UseAOMap:", 0) == 0) {
+                    m_UseAOMap = (Trim(trimmed.substr(9)) == "true");
+                } else if (trimmed.rfind("AO:", 0) == 0) {
+                    m_AOStrength = std::stof(Trim(trimmed.substr(3)));
+                } else if (trimmed.rfind("EmissivePath:", 0) == 0) {
+                    std::string p = Trim(trimmed.substr(13));
+                    if (!p.empty()) SetEmissivePath(p);
+                    else ClearEmissiveTexture();
+                } else if (trimmed.rfind("UseEmissiveMap:", 0) == 0) {
+                    m_UseEmissiveMap = (Trim(trimmed.substr(15)) == "true");
                 } else if (trimmed.rfind("EmissionColor:", 0) == 0) {
                     float r = 0, g = 0, b = 0;
                     std::sscanf(trimmed.c_str(), "EmissionColor: [ %f , %f , %f ]", &r, &g, &b);

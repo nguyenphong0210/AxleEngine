@@ -30,6 +30,7 @@ namespace Axle {
 
     namespace RHI {
         class RHIMesh;
+        class RHIMaterial;
     }
 
     struct IDComponent {
@@ -79,6 +80,7 @@ namespace Axle {
         std::shared_ptr<VertexArray> VAO;
         std::string AssetPath;
         std::shared_ptr<RHI::RHIMesh> RHIMeshAsset = nullptr; // Multi-backend RHI Mesh (Direct3D 12 / Vulkan)
+        std::shared_ptr<RHI::RHIMaterial> RHIMaterialAsset = nullptr; // Multi-backend RHI PBR Material
 
         // Visual Caro (Checkerboard) material properties
         int PatternMode = 1; // 0: World XZ Caro (Floor only), 1: Local 3D Caro (Default for 3D meshes), 2: Spherical Caro, 3: Solid Color
@@ -95,12 +97,15 @@ namespace Axle {
             : RHIMeshAsset(rhiMesh), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
         MeshInstance3D(const std::shared_ptr<RHI::RHIMesh>& rhiMesh, const std::string& assetPath, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
             : RHIMeshAsset(rhiMesh), AssetPath(assetPath), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
+        MeshInstance3D(const std::shared_ptr<RHI::RHIMesh>& rhiMesh, const std::shared_ptr<RHI::RHIMaterial>& rhiMat)
+            : RHIMeshAsset(rhiMesh), RHIMaterialAsset(rhiMat) {}
     };
     using MeshComponent = MeshInstance3D; // Backward compatibility alias
 
     struct MaterialComponent {
         UUID MaterialHandle = 0; // AssetHandle (0 = inline / custom / unlinked)
         std::shared_ptr<Material> MaterialAsset = nullptr; // Cached pointer for zero runtime lookup cost
+        std::shared_ptr<RHI::RHIMaterial> RHIMaterialAsset = nullptr; // Multi-backend RHI PBR Material
 
         // Local instance properties (active when MaterialHandle == 0 or when editing local values)
         std::string AlbedoPath;
@@ -122,6 +127,15 @@ namespace Axle {
         std::shared_ptr<Texture2D> MetallicMap;
         bool UseMetallicMap = false;
         float Metallic = 0.0f;
+
+        std::string AOPath;
+        std::shared_ptr<Texture2D> AOMap;
+        bool UseAOMap = false;
+        float AOStrength = 1.0f;
+
+        std::string EmissivePath;
+        std::shared_ptr<Texture2D> EmissiveMap;
+        bool UseEmissiveMap = false;
 
         glm::vec3 EmissionColor{ 0.0f, 0.0f, 0.0f };
         float EmissionIntensity = 0.0f;
@@ -165,6 +179,15 @@ namespace Axle {
             MetallicMap = MaterialAsset->GetMetallicMap();
             UseMetallicMap = MaterialAsset->UseMetallicMap();
 
+            AOStrength = MaterialAsset->GetAO();
+            AOPath = MaterialAsset->GetAOPath();
+            AOMap = MaterialAsset->GetAOMap();
+            UseAOMap = MaterialAsset->UseAOMap();
+
+            EmissivePath = MaterialAsset->GetEmissivePath();
+            EmissiveMap = MaterialAsset->GetEmissiveMap();
+            UseEmissiveMap = MaterialAsset->UseEmissiveMap();
+
             EmissionColor = MaterialAsset->GetEmissionColor();
             EmissionIntensity = MaterialAsset->GetEmissionIntensity();
             UVScale = MaterialAsset->GetUVScale();
@@ -188,6 +211,13 @@ namespace Axle {
             MaterialAsset->SetMetallicTexture(MetallicMap, MetallicPath);
             MaterialAsset->SetUseMetallicMap(UseMetallicMap);
 
+            MaterialAsset->SetAO(AOStrength);
+            MaterialAsset->SetAOTexture(AOMap, AOPath);
+            MaterialAsset->SetUseAOMap(UseAOMap);
+
+            MaterialAsset->SetEmissiveTexture(EmissiveMap, EmissivePath);
+            MaterialAsset->SetUseEmissiveMap(UseEmissiveMap);
+
             MaterialAsset->SetEmissionColor(EmissionColor);
             MaterialAsset->SetEmissionIntensity(EmissionIntensity);
             MaterialAsset->SetUVScale(UVScale);
@@ -200,6 +230,7 @@ namespace Axle {
 
         float GetRoughness() const { return MaterialAsset ? MaterialAsset->GetRoughness() : Roughness; }
         float GetMetallic() const { return MaterialAsset ? MaterialAsset->GetMetallic() : Metallic; }
+        float GetAO() const { return MaterialAsset ? MaterialAsset->GetAO() : AOStrength; }
         const glm::vec4& GetAlbedoColor() const { return MaterialAsset ? MaterialAsset->GetAlbedoColor() : AlbedoColor; }
         float GetNormalStrength() const { return MaterialAsset ? MaterialAsset->GetNormalStrength() : NormalStrength; }
         const glm::vec3& GetEmissionColor() const { return MaterialAsset ? MaterialAsset->GetEmissionColor() : EmissionColor; }
@@ -269,6 +300,15 @@ namespace Axle {
             MetallicPath.clear();
             MetallicMap = nullptr;
             UseMetallicMap = false;
+
+            AOPath.clear();
+            AOMap = nullptr;
+            UseAOMap = false;
+            AOStrength = 1.0f;
+
+            EmissivePath.clear();
+            EmissiveMap = nullptr;
+            UseEmissiveMap = false;
 
             if (HasAsset()) SyncToAsset();
         }

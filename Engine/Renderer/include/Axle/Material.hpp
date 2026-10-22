@@ -88,6 +88,25 @@ namespace Axle {
         void SetMetallicPath(const std::string& path);
         void ClearMetallicTexture();
 
+        float GetAO() const { return m_AOStrength; }
+        float& GetAORef() { return m_AOStrength; }
+        void SetAO(float ao) { m_AOStrength = std::clamp(ao, 0.0f, 1.0f); }
+        const std::string& GetAOPath() const { return m_AOPath; }
+        const std::shared_ptr<Texture2D>& GetAOMap() const { return m_AOMap; }
+        bool UseAOMap() const { return m_UseAOMap && (m_AOMap != nullptr); }
+        void SetUseAOMap(bool use) { m_UseAOMap = use; }
+        void SetAOTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path = "");
+        void SetAOPath(const std::string& path);
+        void ClearAOTexture();
+
+        const std::string& GetEmissivePath() const { return m_EmissivePath; }
+        const std::shared_ptr<Texture2D>& GetEmissiveMap() const { return m_EmissiveMap; }
+        bool UseEmissiveMap() const { return m_UseEmissiveMap && (m_EmissiveMap != nullptr); }
+        void SetUseEmissiveMap(bool use) { m_UseEmissiveMap = use; }
+        void SetEmissiveTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path = "");
+        void SetEmissivePath(const std::string& path);
+        void ClearEmissiveTexture();
+
         void ResetTextures();
 
         // Presets
@@ -146,6 +165,15 @@ namespace Axle {
         std::string m_MetallicPath;
         std::shared_ptr<Texture2D> m_MetallicMap;
         bool m_UseMetallicMap = false;
+
+        float m_AOStrength = 1.0f;
+        std::string m_AOPath;
+        std::shared_ptr<Texture2D> m_AOMap;
+        bool m_UseAOMap = false;
+
+        std::string m_EmissivePath;
+        std::shared_ptr<Texture2D> m_EmissiveMap;
+        bool m_UseEmissiveMap = false;
     };
 
 }

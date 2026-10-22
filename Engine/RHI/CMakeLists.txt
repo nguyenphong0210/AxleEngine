@@ -12,6 +12,7 @@ add_library(AxleRHI STATIC
     src/RHITexture.cpp
     src/RHISwitcher.cpp
     src/RHIMesh.cpp
+    src/RHIMaterial.cpp
 )
 add_library(Axle::RHI ALIAS AxleRHI)
 

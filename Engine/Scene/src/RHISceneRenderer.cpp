@@ -120,6 +120,43 @@ namespace Axle {
             return false;
         }
 
+        // Initialize 16x Anisotropic Trilinear Sampler
+        if (!m_AnisoSampler.Init(RHISamplerDesc::Anisotropic16x())) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize 16x Anisotropic Sampler, using defaults.");
+        }
+
+        // Initialize Tier 2 Descriptor Pool (2048 textures, 64 sets)
+        if (!m_DescriptorPool.Init(RHIDescriptorPoolDesc::Tier2Bindless(2048, 64))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize RHIDescriptorPool!");
+        } else {
+            // Allocate Default PBR Material Descriptor Set (Space 1)
+            m_DefaultDescriptorSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 0);
+            if (m_DefaultDescriptorSet) {
+                // Bind 16x Anisotropic Sampler to slot 0 of Range 1
+                if (m_AnisoSampler.IsValid()) {
+                    m_DescriptorPool.UpdateSampler(m_DefaultDescriptorSet, 1, 0, m_AnisoSampler.GetNative());
+                }
+
+                // Bind Fallback 1x1 GPU resident textures to Range 0 (t0..t5)
+                auto whiteTex = RHIMaterial::GetDefaultWhiteTexture();
+                auto normalTex = RHIMaterial::GetDefaultFlatNormalTexture();
+                auto roughTex = RHIMaterial::GetDefaultRoughnessTexture();
+                auto blackTex = RHIMaterial::GetDefaultBlackTexture();
+
+                if (whiteTex && normalTex && roughTex && blackTex) {
+                    std::vector<nri::Descriptor*> defaultSRVs = {
+                        whiteTex->GetSRV(),  // t0: Albedo (1x1 White)
+                        normalTex->GetSRV(), // t1: Normal (1x1 Flat Normal)
+                        roughTex->GetSRV(),  // t2: Roughness (1x1 0.5 Rough)
+                        blackTex->GetSRV(),  // t3: Metallic (1x1 Black)
+                        whiteTex->GetSRV(),  // t4: AO (1x1 White)
+                        blackTex->GetSRV()   // t5: Emissive (1x1 Black)
+                    };
+                    m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 0, defaultSRVs);
+                }
+            }
+        }
+
         // Create Graphics Pipeline
         if (!CreateGraphicsPipeline(device)) {
             AXLE_CORE_ERROR("RHISceneRenderer: Failed to create graphics pipeline!");
@@ -127,7 +164,7 @@ namespace Axle {
         }
 
         m_Initialized = true;
-        AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming.");
+        AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering & Descriptor Pools.");
         return true;
     }
 
@@ -138,6 +175,10 @@ namespace Axle {
             m_Device->GetNRICore().DestroyPipeline(m_Pipeline);
             m_Pipeline = nullptr;
         }
+
+        m_DefaultDescriptorSet = nullptr;
+        m_DescriptorPool.Shutdown();
+        m_AnisoSampler.Shutdown();
 
         m_PipelineLayout.Shutdown();
         m_CommandBuffer.Shutdown();
@@ -390,6 +431,14 @@ namespace Axle {
         // Bind Graphics Pipeline & Layout
         m_CommandBuffer.SetPipeline(m_Pipeline);
         m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+
+        // Bind Descriptor Pool & Material Descriptor Set (Space 1: 6 PBR textures + 16x Aniso Sampler)
+        if (m_DescriptorPool.IsValid()) {
+            m_DescriptorPool.Bind(m_CommandBuffer.GetNative());
+            if (m_DefaultDescriptorSet) {
+                RHIDescriptorPool::BindDescriptorSet(m_CommandBuffer.GetNative(), 0, m_DefaultDescriptorSet);
+            }
+        }
 
         // 4. Iterate Scene Entities & Stream Transforms via Root Constants
         if (scene) {

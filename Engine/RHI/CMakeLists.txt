@@ -13,6 +13,9 @@ add_library(AxleRHI STATIC
     src/RHISwitcher.cpp
     src/RHIMesh.cpp
     src/RHIMaterial.cpp
+    src/RHISampler.cpp
+    src/RHIDescriptorPool.cpp
+    src/RHIBindless.cpp
 )
 add_library(Axle::RHI ALIAS AxleRHI)
 

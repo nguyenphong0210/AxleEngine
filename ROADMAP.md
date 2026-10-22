@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **55 Comprehensive Headless Test Suites** (`AxleTests.exe`, 62 individual test steps) passing with **100% pass rate**.
+* **Automated Test Verification**: **56 Comprehensive Headless Test Suites** (`AxleTests.exe`, 63 individual test steps) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 33 (Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline)** and beyond.
 
 ---
@@ -336,7 +336,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **Step 2 - PBR Materials, Bindless Textures & Multi-Light Subsystem**:
     - [x] Unified HLSL Shader Pipeline: Standardized HLSL 2021 shader codebase (`ForwardPBR.hlsl`) compiled at runtime or offline via DXC (`RHIShader`) into DXIL for D3D12 and SPIR-V for Vulkan.
     - [x] Industry-standard Metallic-Roughness PBR pipeline: Albedo/BaseColor, Normal (MikkTSpace tangent space), Roughness, Metallic, Ambient Occlusion (AO), and Emissive maps.
-    - [ ] Bindless Texture Descriptors & Anisotropic Filtering: Tier 2 descriptor indexing (`nri::DescriptorPool`), Anisotropic 16x filtering, and trilinear mipmap sampling across all material slots.
+    - [x] Bindless Texture Descriptors & Anisotropic Filtering: Tier 2 descriptor indexing (`nri::DescriptorPool`), Anisotropic 16x filtering, and trilinear mipmap sampling across all material slots.
     - [ ] Forward+ Multi-Light GPU Buffer: 1 Primary Directional Sun Light with physical illuminance (Lux), up to 16 Point Lights (vehicle brake/reverse lights, environment lamps) with inverse-square falloff, and up to 16 Spot Lights (vehicle dual headlights, high-beams) with inner/outer cone cutoff angles.
   - [ ] **Step 3 - Cascaded Shadow Mapping (CSM) & Atmospheric Skybox / IBL Passes**:
     - [ ] Real-Time Directional Shadow Mapping (1024x1024 to 4096x4096) with 4-cascade frustum splits, Percentage-Closer Filtering (PCF 5x5), and slope-scaled depth bias to eliminate shadow acne.

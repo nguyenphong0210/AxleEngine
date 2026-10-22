@@ -1,4 +1,6 @@
 #include <Axle/RHI/RHIMaterial.hpp>
+#include <Axle/RHI/RHIDescriptorPool.hpp>
+#include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/Log.hpp>
 #include <fstream>
 #include <sstream>
@@ -364,6 +366,34 @@ namespace Axle::RHI {
             return mat;
         }
         return nullptr;
+    }
+
+    nri::DescriptorSet* RHIMaterial::CreateDescriptorSet(RHIDescriptorPool& pool, const RHIPipelineLayout& layout, nri::Descriptor* sampler) {
+        if (!pool.IsValid() || !layout.IsValid()) return nullptr;
+
+        nri::DescriptorSet* set = pool.AllocateDescriptorSet(layout, 0);
+        if (!set) return nullptr;
+
+        auto whiteTex = GetDefaultWhiteTexture();
+        auto normalTex = GetDefaultFlatNormalTexture();
+        auto roughTex = GetDefaultRoughnessTexture();
+        auto blackTex = GetDefaultBlackTexture();
+
+        nri::Descriptor* albedoSRV = m_Textures[0] ? m_Textures[0]->GetSRV() : (whiteTex ? whiteTex->GetSRV() : nullptr);
+        nri::Descriptor* normalSRV = m_Textures[1] ? m_Textures[1]->GetSRV() : (normalTex ? normalTex->GetSRV() : nullptr);
+        nri::Descriptor* roughSRV  = m_Textures[2] ? m_Textures[2]->GetSRV() : (roughTex ? roughTex->GetSRV() : nullptr);
+        nri::Descriptor* metalSRV  = m_Textures[3] ? m_Textures[3]->GetSRV() : (blackTex ? blackTex->GetSRV() : nullptr);
+        nri::Descriptor* aoSRV     = m_Textures[4] ? m_Textures[4]->GetSRV() : (whiteTex ? whiteTex->GetSRV() : nullptr);
+        nri::Descriptor* emissSRV  = m_Textures[5] ? m_Textures[5]->GetSRV() : (blackTex ? blackTex->GetSRV() : nullptr);
+
+        std::vector<nri::Descriptor*> srvs = { albedoSRV, normalSRV, roughSRV, metalSRV, aoSRV, emissSRV };
+        pool.UpdateTextureRange(set, 0, 0, srvs);
+
+        if (sampler) {
+            pool.UpdateSampler(set, 1, 0, sampler);
+        }
+
+        return set;
     }
 
 }

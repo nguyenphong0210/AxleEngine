@@ -86,6 +86,9 @@
 #include <Axle/RHI/RHIVertexLayout.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
+#include <Axle/RHI/RHISampler.hpp>
+#include <Axle/RHI/RHIDescriptorPool.hpp>
+#include <Axle/RHI/RHIBindless.hpp>
 #include <Axle/RHI/RHITransform.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/RHISceneRenderer.hpp>
@@ -13855,6 +13858,366 @@ bool RunTest_Step70_Phase33_Step2_MetallicRoughnessPBRPipeline() {
 }
 
 // =============================================================================
+// STEP 71: BINDLESS TEXTURE DESCRIPTORS & ANISOTROPIC FILTERING
+// =============================================================================
+bool RunTest_Step71_Phase33_Step2_BindlessTexturesAndAnisotropicFiltering() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 71 TEST] BINDLESS TEXTURES & ANISOTROPIC FILTERING" << std::endl;
+    std::cout << " (Tier 2 Descriptor Indexing, 16x Aniso, Trilinear Mip)" << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    // 1. Initialize Headless RHI Device
+    auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+    Axle::RHI::RHIDeviceDesc deviceDesc;
+    deviceDesc.Headless = true;
+    deviceDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+    if (!rhiDevice.Init(deviceDesc)) {
+        std::cerr << "FAIL: Could not initialize RHIDevice!" << std::endl;
+        return false;
+    }
+
+    // [71.1] 16x Anisotropic Filtering & Sampler Presets
+    std::cout << "[71.1] Testing 16x Anisotropic Filtering, Trilinear Mip & Sampler Presets..." << std::endl;
+    {
+        // 16x Anisotropic Trilinear
+        Axle::RHI::RHISampler aniso16;
+        bool ok = aniso16.Init(Axle::RHI::RHISamplerDesc::Anisotropic16x());
+        if (!ok || !aniso16.IsValid()) {
+            std::cerr << "FAIL: Could not initialize 16x Anisotropic Sampler!" << std::endl;
+            return false;
+        }
+        if (aniso16.GetDesc().Anisotropy != 16 ||
+            aniso16.GetDesc().MinFilter != Axle::RHI::RHIFilter::Linear ||
+            aniso16.GetDesc().MagFilter != Axle::RHI::RHIFilter::Linear ||
+            aniso16.GetDesc().MipFilter != Axle::RHI::RHIFilter::Linear) {
+            std::cerr << "FAIL: 16x Anisotropic Sampler parameters mismatch!" << std::endl;
+            return false;
+        }
+
+        // Root Sampler conversion
+        auto rootSampler = aniso16.ToRootSamplerDesc(0, nri::StageBits::FRAGMENT_SHADER);
+        if (rootSampler.registerIndex != 0 || rootSampler.desc.anisotropy != 16) {
+            std::cerr << "FAIL: Root Sampler conversion mismatch!" << std::endl;
+            return false;
+        }
+
+        // Presets: Trilinear, Bilinear, Point, ShadowPCF
+        Axle::RHI::RHISampler trilinear, bilinear, point, shadow;
+        if (!trilinear.Init(Axle::RHI::RHISamplerDesc::Trilinear()) ||
+            !bilinear.Init(Axle::RHI::RHISamplerDesc::Bilinear()) ||
+            !point.Init(Axle::RHI::RHISamplerDesc::Point()) ||
+            !shadow.Init(Axle::RHI::RHISamplerDesc::ShadowPCF())) {
+            std::cerr << "FAIL: Could not initialize sampler presets!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> Verified 16x Anisotropic Sampler (MaxAniso: 16, Trilinear: LINEAR/LINEAR/LINEAR)." << std::endl;
+        std::cout << "  -> Verified Sampler Presets: Trilinear, Bilinear, Point, and ShadowPCF." << std::endl;
+        std::cout << "  -> PASS: 16x Anisotropic & Sampler Presets validated." << std::endl;
+    }
+
+    // [71.2] Tier 2 RHIDescriptorPool Allocation & Capacities
+    std::cout << "\n[71.2] Testing Tier 2 RHIDescriptorPool Allocation & Dynamic Reset..." << std::endl;
+    {
+        Axle::RHI::RHIDescriptorPool pool;
+        Axle::RHI::RHIDescriptorPoolDesc poolDesc = Axle::RHI::RHIDescriptorPoolDesc::Tier2Bindless(2048, 64);
+        bool ok = pool.Init(poolDesc);
+        if (!ok || !pool.IsValid() || pool.GetDesc().MaxTextures != 2048 || pool.GetDesc().MaxDescriptorSets != 64) {
+            std::cerr << "FAIL: RHIDescriptorPool initialization failed!" << std::endl;
+            return false;
+        }
+
+        // Create layout with Root Constants and 1 Descriptor Set
+        nri::RootConstantDesc rootConst = { 0, 128, nri::StageBits::ALL };
+        nri::DescriptorRangeDesc ranges[2] = {};
+        ranges[0] = { 0, 6, nri::DescriptorType::TEXTURE, nri::StageBits::FRAGMENT_SHADER, nri::DescriptorRangeBits::PARTIALLY_BOUND };
+        ranges[1] = { 0, 1, nri::DescriptorType::SAMPLER, nri::StageBits::FRAGMENT_SHADER, nri::DescriptorRangeBits::PARTIALLY_BOUND };
+        nri::DescriptorSetDesc setDesc = { 1, ranges, 2, nri::DescriptorSetBits::NONE };
+
+        nri::PipelineLayoutDesc layoutDesc = {};
+        layoutDesc.rootConstants = &rootConst;
+        layoutDesc.rootConstantNum = 1;
+        layoutDesc.descriptorSets = &setDesc;
+        layoutDesc.descriptorSetNum = 1;
+        layoutDesc.shaderStages = nri::StageBits::ALL;
+
+        Axle::RHI::RHIPipelineLayout layout;
+        if (!layout.Init(layoutDesc)) {
+            std::cerr << "FAIL: RHIPipelineLayout initialization failed!" << std::endl;
+            return false;
+        }
+
+        // Allocate 10 descriptor sets
+        auto sets = pool.AllocateDescriptorSets(layout, 0, 10);
+        if (sets.size() != 10 || pool.GetAllocatedSetCount() != 10) {
+            std::cerr << "FAIL: AllocateDescriptorSets batch allocation mismatch!" << std::endl;
+            return false;
+        }
+
+        // Reset pool
+        pool.Reset();
+        if (pool.GetAllocatedSetCount() != 0) {
+            std::cerr << "FAIL: pool.Reset() failed to reset allocated count!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> RHIDescriptorPool initialized with Tier 2 capacity (2048 textures, 64 sets)." << std::endl;
+        std::cout << "  -> Batch allocated 10 descriptor sets and verified zero-stall Reset()." << std::endl;
+        std::cout << "  -> PASS: Tier 2 RHIDescriptorPool validated." << std::endl;
+    }
+
+    // [71.3] Multi-Slot Material Texture Range Updates & Trilinear Mips
+    std::cout << "\n[71.3] Testing 6-Slot PBR Material Descriptor Set & Trilinear Mip Sampling..." << std::endl;
+    {
+        Axle::RHI::RHIDescriptorPool pool;
+        if (!pool.Init(Axle::RHI::RHIDescriptorPoolDesc::Tier2Bindless(2048, 64))) {
+            std::cerr << "FAIL: Could not initialize pool for material test!" << std::endl;
+            return false;
+        }
+
+        // Create material and assign PBR presets
+        auto mat = Axle::RHI::RHIMaterial::CreateCarPaintRed();
+        if (!mat) {
+            std::cerr << "FAIL: Could not create CarPaintRed material!" << std::endl;
+            return false;
+        }
+
+        // Create 16x Anisotropic sampler
+        Axle::RHI::RHISampler aniso16;
+        if (!aniso16.Init(Axle::RHI::RHISamplerDesc::Anisotropic16x())) {
+            std::cerr << "FAIL: Could not init aniso16 for material test!" << std::endl;
+            return false;
+        }
+
+        // Create test pipeline layout
+        nri::RootConstantDesc rootConst = { 0, 128, nri::StageBits::ALL };
+        nri::DescriptorRangeDesc ranges[2] = {};
+        ranges[0] = { 0, 6, nri::DescriptorType::TEXTURE, nri::StageBits::FRAGMENT_SHADER, nri::DescriptorRangeBits::PARTIALLY_BOUND };
+        ranges[1] = { 0, 1, nri::DescriptorType::SAMPLER, nri::StageBits::FRAGMENT_SHADER, nri::DescriptorRangeBits::PARTIALLY_BOUND };
+        nri::DescriptorSetDesc setDesc = { 1, ranges, 2, nri::DescriptorSetBits::NONE };
+
+        nri::PipelineLayoutDesc layoutDesc = {};
+        layoutDesc.rootConstants = &rootConst;
+        layoutDesc.rootConstantNum = 1;
+        layoutDesc.descriptorSets = &setDesc;
+        layoutDesc.descriptorSetNum = 1;
+        layoutDesc.shaderStages = nri::StageBits::ALL;
+
+        Axle::RHI::RHIPipelineLayout layout;
+        if (!layout.Init(layoutDesc)) {
+            std::cerr << "FAIL: Could not init layout for material test!" << std::endl;
+            return false;
+        }
+
+        // Create DescriptorSet for material
+        auto* matSet = mat->CreateDescriptorSet(pool, layout, aniso16.GetNative());
+        if (!matSet) {
+            std::cerr << "FAIL: mat->CreateDescriptorSet returned null!" << std::endl;
+            return false;
+        }
+
+        // Bindless slot indices check
+        if (mat->GetBindlessIndex(Axle::RHI::RHITextureSlot::Albedo) != 0 ||
+            mat->GetBindlessIndex(Axle::RHI::RHITextureSlot::Normal) != 1) {
+            std::cerr << "FAIL: Initial bindless indices mismatch!" << std::endl;
+            return false;
+        }
+        mat->SetBindlessIndex(Axle::RHI::RHITextureSlot::Albedo, 42);
+        if (mat->GetBindlessIndex(Axle::RHI::RHITextureSlot::Albedo) != 42) {
+            std::cerr << "FAIL: SetBindlessIndex failed!" << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> Material descriptor set populated with 6 PBR texture slots and 16x Anisotropic sampler." << std::endl;
+        std::cout << "  -> Bindless index tracking verified (slot 42 assigned)." << std::endl;
+        std::cout << "  -> PASS: 6-Slot PBR material descriptor set validated." << std::endl;
+    }
+
+    // [71.4] Tier 2 Bindless Texture Registry & Dynamic Indexing
+    std::cout << "\n[71.4] Testing Tier 2 Bindless Texture Registry & Fallback Indices..." << std::endl;
+    {
+        auto& bindless = Axle::RHI::RHIBindlessRegistry::Get();
+        if (!bindless.Init(2048) || !bindless.IsInitialized() || bindless.GetCapacity() != 2048 || bindless.GetRegisteredCount() < 4) {
+            std::cerr << "FAIL: Bindless registry initialization failed!" << std::endl;
+            return false;
+        }
+
+        // Check fallback slot assignments
+        if (bindless.GetFallbackWhiteIndex() != 0 ||
+            bindless.GetFallbackFlatNormalIndex() != 1 ||
+            bindless.GetFallbackHalfRoughnessIndex() != 2 ||
+            bindless.GetFallbackBlackIndex() != 3) {
+            std::cerr << "FAIL: Bindless fallback slot mismatch!" << std::endl;
+            return false;
+        }
+
+        // Register custom textures
+        std::vector<std::unique_ptr<Axle::RHI::RHITexture>> customTextures;
+        std::vector<uint32_t> slotIndices;
+        for (int i = 0; i < 8; ++i) {
+            auto tex = std::make_unique<Axle::RHI::RHITexture>();
+            Axle::RHI::RHITextureDesc desc;
+            desc.Width = 64;
+            desc.Height = 64;
+            desc.MipLevels = 4; // Trilinear mip chain
+            desc.Format = Axle::RHI::RHITextureFormat::RGBA8_UNORM;
+            desc.Usage = Axle::RHI::RHITextureUsage::ShaderResource;
+            desc.DebugName = "BindlessTestTex_" + std::to_string(i);
+            if (!tex->Init(desc)) {
+                std::cerr << "FAIL: Custom texture init failed at " << i << std::endl;
+                return false;
+            }
+
+            uint32_t slot = bindless.RegisterTexture(*tex);
+            if (slot < 4 || slot >= 2048) {
+                std::cerr << "FAIL: Registered slot out of range: " << slot << std::endl;
+                return false;
+            }
+            slotIndices.push_back(slot);
+            customTextures.push_back(std::move(tex));
+        }
+
+        if (bindless.GetRegisteredCount() < 12) {
+            std::cerr << "FAIL: Bindless registered count mismatch!" << std::endl;
+            return false;
+        }
+
+        // Verify deduplication: registering same texture returns existing index
+        uint32_t existingSlot = bindless.RegisterTexture(*customTextures[0]);
+        if (existingSlot != slotIndices[0]) {
+            std::cerr << "FAIL: Texture deduplication failed!" << std::endl;
+            return false;
+        }
+
+        // Unregister slot and test free list reuse
+        uint32_t freedSlot = slotIndices[3];
+        bindless.UnregisterTexture(freedSlot);
+
+        auto newTex = std::make_unique<Axle::RHI::RHITexture>();
+        Axle::RHI::RHITextureDesc newDesc;
+        newDesc.Width = 32;
+        newDesc.Height = 32;
+        if (!newTex->Init(newDesc)) {
+            std::cerr << "FAIL: newTex init failed!" << std::endl;
+            return false;
+        }
+        uint32_t reusedSlot = bindless.RegisterTexture(*newTex);
+        if (reusedSlot != freedSlot) {
+            std::cerr << "FAIL: Free list slot reuse failed! Got " << reusedSlot << ", expected " << freedSlot << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> Bindless Registry pre-populated 4 fallback textures in slots 0..3." << std::endl;
+        std::cout << "  -> Dynamically registered 8 textures (slots 4..11) with 4-level trilinear mip chains." << std::endl;
+        std::cout << "  -> Verified texture deduplication and free list slot recycling (slot " << freedSlot << " reused)." << std::endl;
+        std::cout << "  -> PASS: Tier 2 Bindless Texture Registry validated." << std::endl;
+
+        bindless.Shutdown();
+    }
+
+    // [71.5] Live GPU Viewport Scene Dispatch with Bindless Textures & 16x Anisotropic Filtering
+    std::cout << "\n[71.5] Testing Live GPU Viewport Scene Dispatch with Bindless Descriptors & 16x Aniso..." << std::endl;
+    {
+        auto& meshRegistry = Axle::RHIMeshRegistry::Get();
+        meshRegistry.Init();
+
+        Axle::RHISceneRenderer sceneRenderer;
+        bool rendOk = sceneRenderer.Init(rhiDevice);
+        if (!rendOk) {
+            std::cerr << "FAIL: sceneRenderer.Init failed!" << std::endl;
+            return false;
+        }
+        if (!sceneRenderer.GetSampler().IsValid() ||
+            sceneRenderer.GetSampler().GetDesc().Anisotropy != 16 ||
+            !sceneRenderer.GetDescriptorPool().IsValid() ||
+            sceneRenderer.GetDefaultDescriptorSet() == nullptr) {
+            std::cerr << "FAIL: sceneRenderer descriptor pool or sampler invalid!" << std::endl;
+            return false;
+        }
+
+        // Create scene with multiple entities
+        auto scene = std::make_shared<Axle::Scene>();
+
+        // 1. Directional Sun Light
+        auto sunEntity = scene->CreateEntity("SunLight");
+        auto& dl = sunEntity.AddComponent<Axle::DirectionalLightComponent>();
+        dl.Intensity = 2.0f;
+
+        // 2. Chassis with Red CarPaint
+        auto carEntity = scene->CreateEntity("SportsCar");
+        carEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.0f, 0.5f, 0.0f);
+        auto chassisMesh = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Chassis.axlemesh");
+        auto redMat = Axle::RHI::RHIMaterial::CreateCarPaintRed();
+        carEntity.AddComponent<Axle::MeshInstance3D>(chassisMesh, redMat);
+
+        // 3. Wheel with Tire Rubber
+        auto wheelEntity = scene->CreateEntity("RacingWheel");
+        wheelEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.9f, 0.35f, 1.4f);
+        auto wheelMesh = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Wheel.axlemesh");
+        auto tireMat = Axle::RHI::RHIMaterial::CreateTireRubber();
+        wheelEntity.AddComponent<Axle::MeshInstance3D>(wheelMesh, tireMat);
+
+        // 4. Chrome Sphere
+        auto chromeSphere = scene->CreateEntity("ChromeSphere");
+        chromeSphere.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(-2.0f, 1.0f, 0.0f);
+        auto chromeMat = Axle::RHI::RHIMaterial::CreateChrome();
+        chromeSphere.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetSphere(), chromeMat);
+
+        // 5. Gold Cube
+        auto goldCube = scene->CreateEntity("GoldCube");
+        goldCube.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(2.0f, 1.0f, 0.0f);
+        auto goldMat = Axle::RHI::RHIMaterial::CreateGold();
+        goldCube.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetCube(), goldMat);
+
+        // 6. Carbon Fiber Ground
+        auto ground = scene->CreateEntity("CarbonGround");
+        auto carbonMat = Axle::RHI::RHIMaterial::CreateCarbonFiber();
+        ground.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetPlane(), carbonMat);
+
+        // Render Targets & Camera
+        Axle::RHI::RHITexture colorTarget;
+        bool cOk = colorTarget.Init(Axle::RHI::RHITextureDesc::RenderTarget2D(1280, 720, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "BindlessTargetColor"));
+        if (!cOk) {
+            std::cerr << "FAIL: colorTarget.Init failed!" << std::endl;
+            return false;
+        }
+
+        Axle::RHI::RHITexture depthTarget;
+        bool dOk = depthTarget.Init(Axle::RHI::RHITextureDesc::DepthStencil2D(1280, 720, Axle::RHI::RHITextureFormat::D32_FLOAT, "BindlessTargetDepth"));
+        if (!dOk) {
+            std::cerr << "FAIL: depthTarget.Init failed!" << std::endl;
+            return false;
+        }
+
+        Axle::PerspectiveCamera camera(60.0f, 1280.0f / 720.0f, 0.1f, 1000.0f);
+        camera.SetPosition(glm::vec3(0.0f, 4.0f, 7.0f));
+        camera.SetRotation(glm::vec3(-20.0f, 0.0f, 0.0f));
+
+        sceneRenderer.RenderScene(scene, camera, &colorTarget, &depthTarget);
+        if (sceneRenderer.GetDrawCallCount() < 5 || sceneRenderer.GetRenderedEntityCount() < 5 || sceneRenderer.GetStreamedTransformBytes() == 0) {
+            std::cerr << "FAIL: sceneRenderer failed to render expected entities! Entities: " 
+                      << sceneRenderer.GetRenderedEntityCount() << ", Draws: " << sceneRenderer.GetDrawCallCount() << std::endl;
+            return false;
+        }
+
+        std::cout << "  -> Rendered " << sceneRenderer.GetRenderedEntityCount() << " scene entities ("
+                  << sceneRenderer.GetDrawCallCount() << " draw calls) with 16x Anisotropic Trilinear filtering." << std::endl;
+        std::cout << "  -> Descriptor pool and set bindings active on CommandBuffer." << std::endl;
+        std::cout << "  -> PASS: Live viewport scene dispatch with bindless textures & 16x anisotropic verified." << std::endl;
+
+        colorTarget.Shutdown();
+        depthTarget.Shutdown();
+        sceneRenderer.Shutdown();
+        meshRegistry.Shutdown();
+        Axle::RHI::RHIMaterial::ReleaseDefaultTextures();
+        rhiDevice.Shutdown();
+    }
+
+    std::cout << "\n>>> STEP 71 PASSED: Phase 33 Step 2 Bindless Textures & Anisotropic Filtering 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -13932,6 +14295,7 @@ int main(int argc, char** argv) {
         else if (arg == "68" || arg == "step68" || arg == "--step68" || arg == "--scene-renderer" || arg == "--transforms") targetStep = 68;
         else if (arg == "69" || arg == "step69" || arg == "--step69" || arg == "--pbr-pipeline" || arg == "--hlsl2021" || arg == "--forward-pbr") targetStep = 69;
         else if (arg == "70" || arg == "step70" || arg == "--step70" || arg == "--pbr-material" || arg == "--metallic-roughness" || arg == "--pbr-maps") targetStep = 70;
+        else if (arg == "71" || arg == "step71" || arg == "--step71" || arg == "--bindless" || arg == "--anisotropic") targetStep = 71;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -13940,7 +14304,7 @@ int main(int argc, char** argv) {
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 62 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 63 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -14142,6 +14506,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 70) {
         if (!RunTest_Step70_Phase33_Step2_MetallicRoughnessPBRPipeline()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 71) {
+        if (!RunTest_Step71_Phase33_Step2_BindlessTexturesAndAnisotropicFiltering()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

@@ -14,6 +14,9 @@
 
 namespace Axle::RHI {
 
+    class RHIDescriptorPool;
+    class RHIPipelineLayout;
+
     // Shading model selector matching ForwardPBR.hlsl
     enum class RHIShadingModel : uint32_t {
         MetallicRoughness = 0, // Solid / local Cook-Torrance GGX PBR
@@ -132,6 +135,21 @@ namespace Axle::RHI {
         static std::shared_ptr<RHIMaterial> CreateCastIron();
         static std::shared_ptr<RHIMaterial> CreateHeadlightLED();
 
+        // Bindless Tier 2 indexing slot indices
+        uint32_t GetBindlessIndex(RHITextureSlot slot) const {
+            size_t idx = static_cast<size_t>(slot);
+            return idx < m_BindlessIndices.size() ? m_BindlessIndices[idx] : 0;
+        }
+        void SetBindlessIndex(RHITextureSlot slot, uint32_t index) {
+            size_t idx = static_cast<size_t>(slot);
+            if (idx < m_BindlessIndices.size()) {
+                m_BindlessIndices[idx] = index;
+            }
+        }
+
+        // Builds or updates a 6-texture DescriptorSet for this material from RHIDescriptorPool
+        nri::DescriptorSet* CreateDescriptorSet(RHIDescriptorPool& pool, const RHIPipelineLayout& layout, nri::Descriptor* sampler = nullptr);
+
         // Serialization
         bool Save(const std::filesystem::path& filepath) const;
         bool Load(const std::filesystem::path& filepath);
@@ -140,6 +158,7 @@ namespace Axle::RHI {
     private:
         RHIMaterialDesc m_Desc;
         std::array<std::shared_ptr<RHITexture>, static_cast<size_t>(RHITextureSlot::Count)> m_Textures;
+        std::array<uint32_t, static_cast<size_t>(RHITextureSlot::Count)> m_BindlessIndices = { 0, 1, 2, 3, 0, 3 };
     };
 
 }

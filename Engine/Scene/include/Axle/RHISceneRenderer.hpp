@@ -10,6 +10,8 @@
 #include <Axle/RHI/RHIStreamer.hpp>
 #include <Axle/RHI/RHITransform.hpp>
 #include <Axle/RHI/RHITexture.hpp>
+#include <Axle/RHI/RHISampler.hpp>
+#include <Axle/RHI/RHIDescriptorPool.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
 
 #include <memory>
@@ -61,6 +63,9 @@ namespace Axle {
         RHI::RHIPipelineLayout& GetPipelineLayout() { return m_PipelineLayout; }
         nri::Pipeline* GetPipeline() const { return m_Pipeline; }
         RHI::RHIStreamer* GetStreamer() const { return m_Streamer.get(); }
+        RHI::RHISampler& GetSampler() { return m_AnisoSampler; }
+        RHI::RHIDescriptorPool& GetDescriptorPool() { return m_DescriptorPool; }
+        nri::DescriptorSet* GetDefaultDescriptorSet() const { return m_DefaultDescriptorSet; }
 
     private:
         bool CompileShaders(RHI::RHIDevice& device);
@@ -71,6 +76,10 @@ namespace Axle {
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
         nri::Pipeline* m_Pipeline = nullptr;
+
+        RHI::RHISampler m_AnisoSampler;
+        RHI::RHIDescriptorPool m_DescriptorPool;
+        nri::DescriptorSet* m_DefaultDescriptorSet = nullptr;
 
         RHI::RHIShaderBytecode m_VertexShader;
         RHI::RHIShaderBytecode m_PixelShader;

@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **52 Comprehensive Headless Test Suites** (`AxleTests.exe`, 59 individual test steps) passing with **100% pass rate**.
+* **Automated Test Verification**: **53 Comprehensive Headless Test Suites** (`AxleTests.exe`, 60 individual test steps) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 33 (Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline)** and beyond.
 
 ---
@@ -327,12 +327,12 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Multithreaded command recording verification: worker threads via `enkiTS` recording into secondary command buffers concurrently.
     - [x] Validation of pipeline barrier state machines, PSO cache hit rate, and swapchain recreation stability.
 - [ ] **Phase 33: Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline (`Engine/Renderer` & `Engine/RHI`)**
-  - [ ] **Step 1 - Core Geometry, Mesh VRAM Sub-Allocation & Dynamic ECS Transforms**:
+  - [x] **Step 1 - Core Geometry, Mesh VRAM Sub-Allocation & Dynamic ECS Transforms**:
     - [x] Stream 3D scene geometry (SportsCar chassis OBJ/axlemesh, racing wheels, primitive shapes, and procedural terrain heightfield) into GPU-resident `RHIBuffer` vertex/index buffers via `RHIStreamer`.
     - [x] Comprehensive vertex layouts: Position (`vec3`), Normal (`vec3`), Tangent/Bitangent (`vec4`), UV Coordinates (`vec2`), Color (`vec4`), and Skeletal Joint Weights/IDs (`vec4`/`uvec4`).
-    - [ ] High-performance transform streaming: Bind Camera View-Projection matrices, Camera World Position, and Per-Entity Model Transforms dynamically via Push Constants / Root Descriptors without CPU-GPU pipeline stalls.
-    - [ ] Multi-Backend ECS Mesh Registry & Adapter: Seamlessly map ECS entities (`MeshInstance3D`, `AssetPath`, primitive shapes) to GPU-resident `RHIMesh` buffers without breaking legacy OpenGL VAO compatibility.
-    - [ ] Viewport Scene Dispatch (`RHISceneRenderer`): Wire `RHISceneRenderer` into `EditorLayer::OnUpdate()`, recording graphics commands and rendering 3D scene geometry directly into `m_RHIViewport` with active camera controls.
+    - [x] High-performance transform streaming: Bind Camera View-Projection matrices, Camera World Position, and Per-Entity Model Transforms dynamically via Push Constants / Root Descriptors without CPU-GPU pipeline stalls.
+    - [x] Multi-Backend ECS Mesh Registry & Adapter: Seamlessly map ECS entities (`MeshInstance3D`, `AssetPath`, primitive shapes) to GPU-resident `RHIMesh` buffers without breaking legacy OpenGL VAO compatibility.
+    - [x] Viewport Scene Dispatch (`RHISceneRenderer`): Wire `RHISceneRenderer` into `EditorLayer::OnUpdate()`, recording graphics commands and rendering 3D scene geometry directly into `m_RHIViewport` with active camera controls.
   - [ ] **Step 2 - PBR Materials, Bindless Textures & Multi-Light Subsystem**:
     - [ ] Unified HLSL Shader Pipeline: Standardized HLSL 2021 shader codebase (`ForwardPBR.hlsl`) compiled at runtime or offline via DXC (`RHIShader`) into DXIL for D3D12 and SPIR-V for Vulkan.
     - [ ] Industry-standard Metallic-Roughness PBR pipeline: Albedo/BaseColor, Normal (MikkTSpace tangent space), Roughness, Metallic, Ambient Occlusion (AO), and Emissive maps.

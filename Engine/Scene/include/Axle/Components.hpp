@@ -28,6 +28,10 @@
 
 namespace Axle {
 
+    namespace RHI {
+        class RHIMesh;
+    }
+
     struct IDComponent {
         UUID ID;
 
@@ -74,6 +78,7 @@ namespace Axle {
     struct MeshInstance3D {
         std::shared_ptr<VertexArray> VAO;
         std::string AssetPath;
+        std::shared_ptr<RHI::RHIMesh> RHIMeshAsset = nullptr; // Multi-backend RHI Mesh (Direct3D 12 / Vulkan)
 
         // Visual Caro (Checkerboard) material properties
         int PatternMode = 1; // 0: World XZ Caro (Floor only), 1: Local 3D Caro (Default for 3D meshes), 2: Spherical Caro, 3: Solid Color
@@ -86,6 +91,10 @@ namespace Axle {
             : VAO(vao), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
         MeshInstance3D(const std::shared_ptr<VertexArray>& vao, const std::string& assetPath, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
             : VAO(vao), AssetPath(assetPath), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
+        MeshInstance3D(const std::shared_ptr<RHI::RHIMesh>& rhiMesh, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
+            : RHIMeshAsset(rhiMesh), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
+        MeshInstance3D(const std::shared_ptr<RHI::RHIMesh>& rhiMesh, const std::string& assetPath, int patternMode, float tileScale, const glm::vec4& c1, const glm::vec4& c2)
+            : RHIMeshAsset(rhiMesh), AssetPath(assetPath), PatternMode(patternMode), TileScale(tileScale), Color1(c1), Color2(c2) {}
     };
     using MeshComponent = MeshInstance3D; // Backward compatibility alias
 

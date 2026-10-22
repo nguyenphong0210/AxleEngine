@@ -104,6 +104,9 @@ endif()
 
 add_custom_command(TARGET AxleTests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets
+    $<TARGET_FILE_DIR:AxleTests>/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/Engine/Resources
     $<TARGET_FILE_DIR:AxleTests>/Resources
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

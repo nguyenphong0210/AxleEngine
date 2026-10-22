@@ -7,6 +7,8 @@ add_library(AxleScene STATIC
     src/ScriptHotReloadManager.cpp
     src/ScriptCompiler.cpp
     src/SceneRenderer.cpp
+    src/RHISceneRenderer.cpp
+    src/RHIMeshRegistry.cpp
     src/CharacterVFX.cpp
 )
 add_library(Axle::Scene ALIAS AxleScene)
@@ -19,6 +21,7 @@ target_include_directories(AxleScene PUBLIC
 target_link_libraries(AxleScene
     PUBLIC
         Axle::Core
+        Axle::RHI
         Axle::Renderer
         Axle::Animation
         Axle::Physics

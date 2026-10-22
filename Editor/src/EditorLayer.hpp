@@ -26,6 +26,7 @@
 #include <Axle/ScriptHotReloadManager.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/RHI/RHIBarrier.hpp>
+#include <Axle/RHISceneRenderer.hpp>
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <memory>
@@ -73,6 +74,7 @@ public:
     const std::filesystem::path& GetCurrentScenePath() const { return m_CurrentScenePath; }
     const std::filesystem::path& GetCurrentProjectPath() const { return m_CurrentProjectPath; }
     Axle::RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
+    Axle::RHISceneRenderer* GetRHISceneRenderer() const { return m_RHISceneRenderer.get(); }
 
 private:
     void ResetSimulation();
@@ -148,6 +150,7 @@ private:
     std::shared_ptr<Axle::VertexArray> m_ConeMesh;
     std::shared_ptr<Axle::VertexArray> m_PlaneMesh;
     std::unique_ptr<Axle::SceneRenderer> m_SceneRenderer;
+    std::unique_ptr<Axle::RHISceneRenderer> m_RHISceneRenderer;
     Axle::SceneSerializerContext m_SerializerContext;
 
     // Editor Panels

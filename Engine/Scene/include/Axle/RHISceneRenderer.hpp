@@ -1,0 +1,88 @@
+#pragma once
+#include <Axle/Types.hpp>
+#include <Axle/PerspectiveCamera.hpp>
+#include <Axle/SceneRenderer.hpp>
+
+#include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHICommandBuffer.hpp>
+#include <Axle/RHI/RHIPipeline.hpp>
+#include <Axle/RHI/RHIShader.hpp>
+#include <Axle/RHI/RHIStreamer.hpp>
+#include <Axle/RHI/RHITransform.hpp>
+#include <Axle/RHI/RHITexture.hpp>
+#include <Axle/RHIMeshRegistry.hpp>
+
+#include <memory>
+#include <string>
+#include <glm/glm.hpp>
+
+namespace Axle {
+
+    class Scene;
+
+    class RHISceneRenderer {
+    public:
+        RHISceneRenderer();
+        ~RHISceneRenderer();
+
+        RHISceneRenderer(const RHISceneRenderer&) = delete;
+        RHISceneRenderer& operator=(const RHISceneRenderer&) = delete;
+
+        // Initialize shader compilation, pipeline layouts, and graphics pipelines
+        bool Init(RHI::RHIDevice& device = RHI::RHIDevice::Get());
+
+        // Release GPU pipelines, shaders, and command buffers
+        void Shutdown();
+
+        bool IsInitialized() const { return m_Initialized; }
+
+        // Render entire 3D scene into offscreen RHITexture color & depth targets
+        void RenderScene(const std::shared_ptr<Scene>& scene,
+                         const PerspectiveCamera& camera,
+                         RHI::RHITexture* colorTarget,
+                         RHI::RHITexture* depthTarget = nullptr,
+                         const SceneRenderSettings& settings = SceneRenderSettings{});
+
+        // Render entire 3D scene into specific render targets (Headless tests / custom FBO)
+        void RenderScene(const std::shared_ptr<Scene>& scene,
+                         const PerspectiveCamera& camera,
+                         nri::Texture* colorTarget,
+                         nri::Descriptor* colorRTV,
+                         nri::Texture* depthTarget,
+                         nri::Descriptor* depthDSV,
+                         uint32_t width, uint32_t height,
+                         const SceneRenderSettings& settings = SceneRenderSettings{});
+
+        // Performance & Telemetry metrics
+        uint32_t GetDrawCallCount() const { return m_LastDrawCallCount; }
+        uint32_t GetRenderedEntityCount() const { return m_LastRenderedEntityCount; }
+        uint64_t GetStreamedTransformBytes() const { return m_LastStreamedTransformBytes; }
+
+        RHI::RHIPipelineLayout& GetPipelineLayout() { return m_PipelineLayout; }
+        nri::Pipeline* GetPipeline() const { return m_Pipeline; }
+        RHI::RHIStreamer* GetStreamer() const { return m_Streamer.get(); }
+
+    private:
+        bool CompileShaders(RHI::RHIDevice& device);
+        bool CreatePipelineLayout(RHI::RHIDevice& device);
+        bool CreateGraphicsPipeline(RHI::RHIDevice& device);
+
+    private:
+        RHI::RHIDevice* m_Device = nullptr;
+        RHI::RHIPipelineLayout m_PipelineLayout;
+        nri::Pipeline* m_Pipeline = nullptr;
+
+        RHI::RHIShaderBytecode m_VertexShader;
+        RHI::RHIShaderBytecode m_PixelShader;
+
+        RHI::RHICommandBuffer m_CommandBuffer;
+        std::unique_ptr<RHI::RHIStreamer> m_Streamer;
+
+        uint32_t m_LastDrawCallCount = 0;
+        uint32_t m_LastRenderedEntityCount = 0;
+        uint64_t m_LastStreamedTransformBytes = 0;
+
+        bool m_Initialized = false;
+    };
+
+}

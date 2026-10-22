@@ -149,6 +149,10 @@ void EditorLayer::OnAttach() {
             vpDesc.DepthFormat = Axle::RHI::RHITextureFormat::D32_FLOAT;
             vpDesc.DebugName = "EditorMainViewport";
             m_RHIViewport->Init(uiContext, vpDesc);
+
+            m_RHISceneRenderer = std::make_unique<Axle::RHISceneRenderer>();
+            m_RHISceneRenderer->Init();
+
             ClearRHIViewport();
         }
     }
@@ -454,6 +458,10 @@ void EditorLayer::OnDetach() {
     if (m_RHIViewport) {
         m_RHIViewport->Shutdown();
         m_RHIViewport.reset();
+    }
+    if (m_RHISceneRenderer) {
+        m_RHISceneRenderer->Shutdown();
+        m_RHISceneRenderer.reset();
     }
     m_CubeMesh.reset();
     m_SphereMesh.reset();
@@ -1383,18 +1391,27 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     }
 
     // ----------------------------------------------------
-    // Multi-Pass Scene Rendering via Decoupled SceneRenderer (Phase 21)
+    // Multi-Pass Scene Rendering (OpenGL vs Direct3D 12 / Vulkan)
     // ----------------------------------------------------
-    if (m_SceneRenderer && m_Framebuffer) {
-        Axle::SceneRenderSettings renderSettings;
-        renderSettings.EnableShadows = true;
-        renderSettings.EnableSkybox = true;
-        renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
-        renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
+    Axle::SceneRenderSettings renderSettings;
+    renderSettings.EnableShadows = true;
+    renderSettings.EnableSkybox = true;
+    renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
+    renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
 
-        m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer,
-                                     m_PhysicsScene.get(), m_PhysicsDebugRenderer.get(),
-                                     renderSettings);
+    if (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
+        if (m_SceneRenderer && m_Framebuffer) {
+            m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer,
+                                         m_PhysicsScene.get(), m_PhysicsDebugRenderer.get(),
+                                         renderSettings);
+        }
+    } else {
+        if (m_RHISceneRenderer && m_RHIViewport && m_RHIViewport->IsValid()) {
+            m_RHISceneRenderer->RenderScene(m_Scene, activeCamera,
+                                            m_RHIViewport->GetColorTexture(),
+                                            m_RHIViewport->GetDepthTexture(),
+                                            renderSettings);
+        }
     }
 }
 

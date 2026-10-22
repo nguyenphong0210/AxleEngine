@@ -61,6 +61,7 @@ namespace Axle::RHI {
         uint32_t GetIndexCount() const { return m_IndexCount; }
 
         const std::vector<RHISubmesh>& GetSubmeshes() const { return m_Submeshes; }
+        size_t GetSubmeshCount() const { return m_Submeshes.size(); }
         void AddSubmesh(const RHISubmesh& submesh) { m_Submeshes.push_back(submesh); }
 
         const glm::vec3& GetBoundingMin() const { return m_BoundingMin; }

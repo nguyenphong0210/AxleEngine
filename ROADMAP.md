@@ -331,16 +331,19 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Stream 3D scene geometry (SportsCar chassis OBJ/axlemesh, racing wheels, primitive shapes, and procedural terrain heightfield) into GPU-resident `RHIBuffer` vertex/index buffers via `RHIStreamer`.
     - [x] Comprehensive vertex layouts: Position (`vec3`), Normal (`vec3`), Tangent/Bitangent (`vec4`), UV Coordinates (`vec2`), Color (`vec4`), and Skeletal Joint Weights/IDs (`vec4`/`uvec4`).
     - [ ] High-performance transform streaming: Bind Camera View-Projection matrices, Camera World Position, and Per-Entity Model Transforms dynamically via Push Constants / Root Descriptors without CPU-GPU pipeline stalls.
+    - [ ] Multi-Backend ECS Mesh Registry & Adapter: Seamlessly map ECS entities (`MeshInstance3D`, `AssetPath`, primitive shapes) to GPU-resident `RHIMesh` buffers without breaking legacy OpenGL VAO compatibility.
+    - [ ] Viewport Scene Dispatch (`RHISceneRenderer`): Wire `RHISceneRenderer` into `EditorLayer::OnUpdate()`, recording graphics commands and rendering 3D scene geometry directly into `m_RHIViewport` with active camera controls.
   - [ ] **Step 2 - PBR Materials, Bindless Textures & Multi-Light Subsystem**:
+    - [ ] Unified HLSL Shader Pipeline: Standardized HLSL 2021 shader codebase (`ForwardPBR.hlsl`) compiled at runtime or offline via DXC (`RHIShader`) into DXIL for D3D12 and SPIR-V for Vulkan.
     - [ ] Industry-standard Metallic-Roughness PBR pipeline: Albedo/BaseColor, Normal (MikkTSpace tangent space), Roughness, Metallic, Ambient Occlusion (AO), and Emissive maps.
     - [ ] Bindless Texture Descriptors & Anisotropic Filtering: Tier 2 descriptor indexing (`nri::DescriptorPool`), Anisotropic 16x filtering, and trilinear mipmap sampling across all material slots.
     - [ ] Forward+ Multi-Light GPU Buffer: 1 Primary Directional Sun Light with physical illuminance (Lux), up to 16 Point Lights (vehicle brake/reverse lights, environment lamps) with inverse-square falloff, and up to 16 Spot Lights (vehicle dual headlights, high-beams) with inner/outer cone cutoff angles.
   - [ ] **Step 3 - Cascaded Shadow Mapping (CSM) & Atmospheric Skybox / IBL Passes**:
-    - [ ] Real-Time Directional Shadow Mapping (1024x1024 to 4096x4096) with Percentage-Closer Filtering (PCF 5x5) and slope-scaled depth bias to eliminate shadow acne and light bleeding.
+    - [ ] Real-Time Directional Shadow Mapping (1024x1024 to 4096x4096) with 4-cascade frustum splits, Percentage-Closer Filtering (PCF 5x5), and slope-scaled depth bias to eliminate shadow acne.
     - [ ] Image-Based Lighting (IBL) & Environment Maps: Pre-filtered environment radiance cubemap, diffuse irradiance cubemap, and split-sum BRDF LUT integration for realistic automotive metallic sheen.
     - [ ] Procedural Atmospheric Skybox Pass: Rayleigh & Mie atmospheric scattering simulation with dynamic sun elevation/azimuth synchronized with directional sun light vector.
   - [ ] **Step 4 - Post-Processing, HDR Tone Mapping & Anti-Aliasing (FXAA/MSAA)**:
-    - [ ] Floating-point offscreen HDR render target (`RGBA16_FLOAT` / `RGBA8_UNORM`) with depth-stencil (`D32_FLOAT`).
+    - [ ] Floating-point offscreen HDR render target (`RGBA16_FLOAT` / `RGBA8_UNORM`) with depth-stencil (`D32_FLOAT`) and seamless dynamic viewport resizing synchronization.
     - [ ] Exposure Control & Film-Grade Tone Mapping: ACES Filmic (Narkowicz fit), Reinhard, and Uncharted 2 curves with adjustable exposure compensation and gamma correction (sRGB EOTF).
     - [ ] Anti-Aliasing Integration: Fast Approximate Anti-Aliasing (FXAA) and hardware MSAA (2x/4x/8x) to eliminate jagged specular edges and aliased wireframes.
   - [ ] **Step 5 - Secondary Visual Passes (GPU Particle VFX, Physics Wireframes & GPU Object Picking)**:
@@ -349,7 +352,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [ ] Interactive Viewport GPU Object ID Picking: Secondary integer render target (`R32_UINT`) encoding Entity IDs per pixel, enabling instantaneous single-click entity selection in Viewport on DX12, Vulkan, and OpenGL without CPU raycast overhead.
   - [ ] **Step 6 - Triple-Backend Seamless Switching & Automated Verification (100% Visual Parity)**:
     - [ ] Seamless CLI switcher verification: `--rhi=dx12`, `--rhi=vulkan`, and `--rhi=opengl` producing pixel-accurate scene renders, lighting, shadows, and physics interactions.
-    - [ ] Automated test suites (Step 64) in `AxleTests.exe` validating mesh upload bandwidth, draw call dispatch rates, descriptor recycling, and zero memory leaks upon scene reload.
+    - [ ] Full Viewport Gizmo & Interaction Parity: ImGuizmo transformation (Translate/Rotate/Scale), Free-Fly/Orbit camera, and prefab drag-and-drop fully functional across all 3 backends.
+    - [ ] Automated test suites (Step 67+) in `AxleTests.exe` validating mesh upload bandwidth, draw call dispatch rates, descriptor recycling, and zero memory leaks upon scene reload.
 - [ ] **Phase 34: Dedicated 2D Canvas & In-Game UI Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
   - [ ] **Hardware-Accelerated 2D Batch Renderer (`Canvas2D`)**: High-performance sprite, quad, and line batch rendering with z-index sorting and clipping rectangles.
   - [ ] **Zero-ImGui Shipping Runtime**: Pure decoupled UI pipeline for commercial game releases without ImGui library linkage.

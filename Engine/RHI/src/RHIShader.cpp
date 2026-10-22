@@ -259,6 +259,12 @@ namespace Axle::RHI {
         wargs.push_back(L"-T");
         wargs.push_back(ToWide(profile));
 
+        // HLSL standard version: -HV <version> (e.g. 2021)
+        if (!desc.HLSLVersion.empty()) {
+            wargs.push_back(L"-HV");
+            wargs.push_back(ToWide(desc.HLSLVersion));
+        }
+
         // Optimization level
         if (desc.Optimization) {
             wargs.push_back(L"-O3");
@@ -468,6 +474,7 @@ namespace Axle::RHI {
         hash = FNV1aHash(desc.EntryPoint, hash);
         hash = FNV1aHash(GetProfileTarget(desc.Stage, desc.ShaderModel), hash);
         hash = FNV1aHash(desc.ShaderModel, hash);
+        hash = FNV1aHash(desc.HLSLVersion, hash);
         hash = FNV1aHash(desc.Optimization ? "O3" : "O0", hash);
         hash = FNV1aHash(desc.EnableVulkanDXLayout ? "dxlayout" : "stdlayout", hash);
         hash = FNV1aHash(desc.VulkanTargetEnv, hash);

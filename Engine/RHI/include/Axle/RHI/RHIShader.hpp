@@ -46,6 +46,7 @@ namespace Axle::RHI {
         RHIShaderStage Stage = RHIShaderStage::Vertex;
         RHIShaderFormat Format = RHIShaderFormat::DXIL;
         std::string ShaderModel = "6_0";             // "6_0", "6_2", "6_5", "6_6"
+        std::string HLSLVersion = "2021";            // "2016", "2017", "2018", "2021"
         std::vector<RHIShaderMacro> Macros;          // Preprocessor macro definitions
         std::vector<std::string> IncludeDirs;        // Additional include directories
         bool Optimization = true;                    // Enable -O3 optimization

@@ -156,7 +156,13 @@ namespace Axle {
         }
 
         std::string shaderSource;
-        auto shaderPath = FileSystem::ResolveAssetPath("shaders/ForwardScene.hlsl");
+        auto shaderPath = FileSystem::ResolveAssetPath("shaders/ForwardPBR.hlsl");
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "ForwardPBR.hlsl";
+        }
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = FileSystem::ResolveAssetPath("shaders/ForwardScene.hlsl");
+        }
         if (!std::filesystem::exists(shaderPath)) {
             shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "ForwardScene.hlsl";
         }
@@ -206,15 +212,45 @@ namespace Axle {
     }
 
     bool RHISceneRenderer::CreatePipelineLayout(RHIDevice& device) {
+        // Root Constant (b0, space 0): 128-byte per-entity push constants
         nri::RootConstantDesc rootConst = {};
         rootConst.registerIndex = 0;
         rootConst.size = sizeof(RHIObjectPushConstants); // 128 bytes
         rootConst.shaderStages = nri::StageBits::ALL;
 
+        // Root Descriptor (b1, space 0): 256-byte scene constants
+        nri::RootDescriptorDesc rootDesc = {};
+        rootDesc.registerIndex = 1;
+        rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDesc.shaderStages = nri::StageBits::ALL;
+
+        // Descriptor Set (space 1): 6 PBR textures (t0..t5) and 1 Sampler (s0)
+        nri::DescriptorRangeDesc ranges[2] = {};
+        ranges[0].baseRegisterIndex = 0;
+        ranges[0].descriptorNum = 6;
+        ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        ranges[1].baseRegisterIndex = 0;
+        ranges[1].descriptorNum = 1;
+        ranges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc descSet = {};
+        descSet.registerSpace = 1;
+        descSet.ranges = ranges;
+        descSet.rangeNum = 2;
+
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
         layoutDesc.rootConstants = &rootConst;
         layoutDesc.rootConstantNum = 1;
+        layoutDesc.rootDescriptors = &rootDesc;
+        layoutDesc.rootDescriptorNum = 1;
+        layoutDesc.descriptorSets = &descSet;
+        layoutDesc.descriptorSetNum = 1;
         layoutDesc.shaderStages = nri::StageBits::ALL;
 
         return m_PipelineLayout.Init(layoutDesc);

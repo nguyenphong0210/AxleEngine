@@ -97,11 +97,26 @@ namespace Axle::RHI {
         // Submission helper (submits this command buffer to the target queue)
         bool Submit(nri::Queue* queue = nullptr, nri::Fence* waitFence = nullptr, uint64_t waitValue = 0, nri::Fence* signalFence = nullptr, uint64_t signalValue = 0);
 
+        // Batch submission helper (submits an array of recorded command buffers in a single atomic queue submit)
+        static bool SubmitBatch(const std::vector<RHICommandBuffer*>& commandBuffers,
+                                nri::Queue* queue = nullptr,
+                                nri::Fence* waitFence = nullptr, uint64_t waitValue = 0,
+                                nri::Fence* signalFence = nullptr, uint64_t signalValue = 0);
+
+        static bool SubmitBatch(const nri::CommandBuffer* const* commandBuffers, uint32_t count,
+                                nri::Queue* queue = nullptr,
+                                nri::Fence* waitFence = nullptr, uint64_t waitValue = 0,
+                                nri::Fence* signalFence = nullptr, uint64_t signalValue = 0);
+
+        // Reset underlying command allocator for frame-to-frame recycling
+        bool Reset();
+
         bool IsValid() const { return m_CommandBuffer != nullptr; }
         bool IsRecording() const { return m_IsRecording; }
 
         nri::CommandBuffer* GetNative() const { return m_CommandBuffer; }
         operator nri::CommandBuffer*() const { return m_CommandBuffer; }
+        nri::CommandAllocator* GetCommandAllocator() const { return m_CommandAllocator; }
 
     private:
         nri::CommandBuffer* m_CommandBuffer = nullptr;

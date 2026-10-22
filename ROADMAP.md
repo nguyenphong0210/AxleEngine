@@ -324,7 +324,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Native D3D12 Swapchain Presentation: Direct backbuffer presentation (`IDXGISwapChain3`, 3 backbuffers flip-discard) resolving unpainted OS window canvas.
   - [ ] **Step 7 - Automated Headless Test Suite & Multi-Backend Validation**:
     - [x] Headless RHI test suite in `AxleTests.exe`: Device initialization (WARP for D3D12, SwiftShader/Mock ICD for Vulkan).
-    - [ ] Multithreaded command recording verification: worker threads via `enkiTS` recording into secondary command buffers concurrently.
+    - [x] Multithreaded command recording verification: worker threads via `enkiTS` recording into secondary command buffers concurrently.
     - [ ] Validation of pipeline barrier state machines, PSO cache hit rate, and swapchain recreation stability.
 - [ ] **Phase 33: Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline (`Engine/Renderer` & `Engine/RHI`)**
   - [ ] **Step 1 - Core Geometry, Mesh VRAM Sub-Allocation & Dynamic ECS Transforms**:

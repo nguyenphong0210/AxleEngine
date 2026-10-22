@@ -427,4 +427,79 @@ namespace Axle::RHI {
         return (res == nri::Result::SUCCESS);
     }
 
+    bool RHICommandBuffer::SubmitBatch(const std::vector<RHICommandBuffer*>& commandBuffers,
+                                       nri::Queue* queue,
+                                       nri::Fence* waitFence, uint64_t waitValue,
+                                       nri::Fence* signalFence, uint64_t signalValue) {
+        if (commandBuffers.empty()) return true;
+
+        std::vector<const nri::CommandBuffer*> nativeCmdBuffers;
+        nativeCmdBuffers.reserve(commandBuffers.size());
+        for (const auto* cb : commandBuffers) {
+            if (cb && cb->IsValid()) {
+                nativeCmdBuffers.push_back(cb->GetNative());
+            }
+        }
+        if (nativeCmdBuffers.empty()) return true;
+
+        return SubmitBatch(nativeCmdBuffers.data(), static_cast<uint32_t>(nativeCmdBuffers.size()),
+                           queue, waitFence, waitValue, signalFence, signalValue);
+    }
+
+    bool RHICommandBuffer::SubmitBatch(const nri::CommandBuffer* const* commandBuffers, uint32_t count,
+                                       nri::Queue* queue,
+                                       nri::Fence* waitFence, uint64_t waitValue,
+                                       nri::Fence* signalFence, uint64_t signalValue) {
+        if (!commandBuffers || count == 0) return true;
+
+        auto& rhiDevice = RHIDevice::Get();
+        const auto& core = rhiDevice.GetNRICore();
+        if (!queue) {
+            queue = rhiDevice.GetGraphicsQueue();
+        }
+        if (!queue || !core.QueueSubmit) return false;
+
+        nri::FenceSubmitDesc waitDesc = {};
+        if (waitFence) {
+            waitDesc.fence = waitFence;
+            waitDesc.value = waitValue;
+            waitDesc.stages = nri::StageBits::ALL;
+        }
+
+        nri::FenceSubmitDesc signalDesc = {};
+        if (signalFence) {
+            signalDesc.fence = signalFence;
+            signalDesc.value = signalValue;
+            signalDesc.stages = nri::StageBits::ALL;
+        }
+
+        nri::QueueSubmitDesc submitDesc = {};
+        submitDesc.commandBuffers = commandBuffers;
+        submitDesc.commandBufferNum = count;
+        if (waitFence) {
+            submitDesc.waitFences = &waitDesc;
+            submitDesc.waitFenceNum = 1;
+        }
+        if (signalFence) {
+            submitDesc.signalFences = &signalDesc;
+            submitDesc.signalFenceNum = 1;
+        }
+
+        nri::Result res = core.QueueSubmit(*queue, submitDesc);
+        return (res == nri::Result::SUCCESS);
+    }
+
+    bool RHICommandBuffer::Reset() {
+        if (!m_CommandAllocator) return false;
+        auto& rhiDevice = RHIDevice::Get();
+        if (!rhiDevice.IsInitialized()) return false;
+
+        const auto& core = rhiDevice.GetNRICore();
+        if (m_OwnsAllocator && core.ResetCommandAllocator) {
+            core.ResetCommandAllocator(*m_CommandAllocator);
+        }
+        m_IsRecording = false;
+        return true;
+    }
+
 }

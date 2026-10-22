@@ -12,6 +12,7 @@
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHISampler.hpp>
 #include <Axle/RHI/RHIDescriptorPool.hpp>
+#include <Axle/RHI/RHILight.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
 
 #include <memory>
@@ -66,6 +67,8 @@ namespace Axle {
         RHI::RHISampler& GetSampler() { return m_AnisoSampler; }
         RHI::RHIDescriptorPool& GetDescriptorPool() { return m_DescriptorPool; }
         nri::DescriptorSet* GetDefaultDescriptorSet() const { return m_DefaultDescriptorSet; }
+        RHI::RHIMultiLightBuffer& GetLightBuffer() { return m_LightBuffer; }
+        const RHI::RHIMultiLightBuffer& GetLightBuffer() const { return m_LightBuffer; }
 
     private:
         bool CompileShaders(RHI::RHIDevice& device);
@@ -80,6 +83,9 @@ namespace Axle {
         RHI::RHISampler m_AnisoSampler;
         RHI::RHIDescriptorPool m_DescriptorPool;
         nri::DescriptorSet* m_DefaultDescriptorSet = nullptr;
+
+        RHI::RHIBuffer m_SceneConstantBuffer;
+        RHI::RHIMultiLightBuffer m_LightBuffer;
 
         RHI::RHIShaderBytecode m_VertexShader;
         RHI::RHIShaderBytecode m_PixelShader;

@@ -264,6 +264,20 @@ namespace Axle::RHI {
         RHIDevice::Get().GetNRICore().CmdSetRootConstants(*m_CommandBuffer, desc);
     }
 
+    void RHICommandBuffer::SetRootDescriptor(uint32_t rootDescriptorIndex, nri::Descriptor* descriptor, uint32_t offset, nri::BindPoint bindPoint) {
+        if (!m_CommandBuffer || !m_IsRecording || !descriptor) return;
+        auto& rhiDevice = RHIDevice::Get();
+        const auto& core = rhiDevice.GetNRICore();
+        if (!core.CmdSetRootDescriptor) return;
+
+        nri::SetRootDescriptorDesc desc = {};
+        desc.rootDescriptorIndex = rootDescriptorIndex;
+        desc.descriptor = descriptor;
+        desc.offset = offset;
+        desc.bindPoint = bindPoint;
+        core.CmdSetRootDescriptor(*m_CommandBuffer, desc);
+    }
+
     void RHICommandBuffer::SetVertexBuffers(uint32_t baseSlot, const nri::VertexBufferDesc* vertexBufferDescs, uint32_t count) {
         if (!m_CommandBuffer || !m_IsRecording || !vertexBufferDescs || count == 0) return;
         RHIDevice::Get().GetNRICore().CmdSetVertexBuffers(*m_CommandBuffer, baseSlot, vertexBufferDescs, count);

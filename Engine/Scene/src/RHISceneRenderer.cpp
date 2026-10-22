@@ -163,8 +163,14 @@ namespace Axle {
             return false;
         }
 
+        // Initialize Scene Constants and Forward+ Multi-Light Constant Buffers
+        m_SceneConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISceneConstants), RHIMemoryLocation::HostUpload, "SceneConstantsBuffer"));
+        if (!m_LightBuffer.Init(device)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Forward+ Multi-Light GPU Buffer!");
+        }
+
         m_Initialized = true;
-        AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering & Descriptor Pools.");
+        AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering, Descriptor Pools & Forward+ Multi-Light Buffer.");
         return true;
     }
 
@@ -175,6 +181,9 @@ namespace Axle {
             m_Device->GetNRICore().DestroyPipeline(m_Pipeline);
             m_Pipeline = nullptr;
         }
+
+        m_LightBuffer.Shutdown();
+        m_SceneConstantBuffer.Shutdown();
 
         m_DefaultDescriptorSet = nullptr;
         m_DescriptorPool.Shutdown();
@@ -260,11 +269,17 @@ namespace Axle {
         rootConst.size = sizeof(RHIObjectPushConstants); // 128 bytes
         rootConst.shaderStages = nri::StageBits::ALL;
 
-        // Root Descriptor (b1, space 0): 256-byte scene constants
-        nri::RootDescriptorDesc rootDesc = {};
-        rootDesc.registerIndex = 1;
-        rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
-        rootDesc.shaderStages = nri::StageBits::ALL;
+        // Root Descriptors (space 0):
+        // [0] b1, space 0: 256-byte Scene Constants
+        // [1] b2, space 0: 2304-byte Forward+ Multi-Light Buffer
+        nri::RootDescriptorDesc rootDescs[2] = {};
+        rootDescs[0].registerIndex = 1;
+        rootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[0].shaderStages = nri::StageBits::ALL;
+
+        rootDescs[1].registerIndex = 2;
+        rootDescs[1].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[1].shaderStages = nri::StageBits::ALL;
 
         // Descriptor Set (space 1): 6 PBR textures (t0..t5) and 1 Sampler (s0)
         nri::DescriptorRangeDesc ranges[2] = {};
@@ -289,8 +304,8 @@ namespace Axle {
         layoutDesc.rootRegisterSpace = 0;
         layoutDesc.rootConstants = &rootConst;
         layoutDesc.rootConstantNum = 1;
-        layoutDesc.rootDescriptors = &rootDesc;
-        layoutDesc.rootDescriptorNum = 1;
+        layoutDesc.rootDescriptors = rootDescs;
+        layoutDesc.rootDescriptorNum = 2;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
         layoutDesc.shaderStages = nri::StageBits::ALL;
@@ -362,7 +377,7 @@ namespace Axle {
         m_LastRenderedEntityCount = 0;
         m_LastStreamedTransformBytes = 0;
 
-        // 1. Stream Global Scene Constants (View-Projection, Camera Pos, Sun Light)
+        // 1. Stream Global Scene Constants & Forward+ Multi-Light Buffer
         RHISceneConstants sceneConstants;
         sceneConstants.ViewProjection = camera.GetViewProjectionMatrix();
         sceneConstants.View = camera.GetViewMatrix();
@@ -373,13 +388,92 @@ namespace Axle {
         sceneConstants.SunColor = glm::vec4(1.0f, 0.98f, 0.92f, 1.0f);
 
         if (scene) {
-            auto dirLightView = scene->GetRegistry().view<DirectionalLightComponent, TransformComponent>();
+            RHIMultiLightBufferData lightData{};
+            lightData.CameraPosAndExposure = glm::vec4(camera.GetPosition(), 1.0f);
+
+            auto& registry = scene->GetRegistry();
+
+            // 1. Primary Directional Sun Light
+            auto dirLightView = registry.view<DirectionalLightComponent, TransformComponent>();
+            bool foundSun = false;
             for (auto entityID : dirLightView) {
+                const auto& dlc = dirLightView.get<DirectionalLightComponent>(entityID);
                 const auto& tc = dirLightView.get<TransformComponent>(entityID);
+
                 glm::vec3 fwd = tc.Rotation * glm::vec3(0.0f, 0.0f, -1.0f);
-                sceneConstants.SunDirection = glm::vec4(-glm::normalize(fwd), 1.2f);
+                glm::vec3 sunDir = -glm::normalize(fwd);
+                float lux = (dlc.Intensity > 100.0f) ? dlc.Intensity : (dlc.Intensity * PhysicalIlluminance::DirectSunlight);
+
+                lightData.SunLight.DirectionAndIlluminance = glm::vec4(sunDir, lux);
+                lightData.SunLight.ColorAndAmbient = glm::vec4(dlc.Color, dlc.AmbientIntensity);
+                lightData.SunLight.AmbientColor = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
+                lightData.SunLight.ShadowParams = glm::vec4(dlc.ShadowBias, dlc.ShadowFilterRadius, 0.0f, 0.0f);
+                lightData.LightCounts.z = 1;
+                foundSun = true;
                 break;
             }
+
+            if (!foundSun) {
+                lightData.SunLight.DirectionAndIlluminance = glm::vec4(glm::normalize(glm::vec3(0.45f, 0.85f, 0.25f)), PhysicalIlluminance::DirectSunlight);
+                lightData.SunLight.ColorAndAmbient = glm::vec4(1.0f, 0.98f, 0.92f, 0.25f);
+                lightData.SunLight.AmbientColor = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
+                lightData.SunLight.ShadowParams = glm::vec4(0.0012f, 2.0f, 0.0f, 0.0f);
+                lightData.LightCounts.z = 1;
+            }
+
+            // 2. Point Lights (up to 16)
+            auto pointLightView = registry.view<PointLightComponent, TransformComponent>();
+            uint32_t pointIndex = 0;
+            for (auto entityID : pointLightView) {
+                if (pointIndex >= MAX_POINT_LIGHTS) break;
+                const auto& plc = pointLightView.get<PointLightComponent>(entityID);
+                const auto& tc = pointLightView.get<TransformComponent>(entityID);
+
+                float intensity = (plc.Intensity > 10.0f) ? plc.Intensity : (plc.Intensity * 1000.0f);
+                lightData.PointLights[pointIndex].PositionAndRadius = glm::vec4(tc.Translation, plc.Radius);
+                lightData.PointLights[pointIndex].ColorAndIntensity = glm::vec4(plc.Color, intensity);
+                lightData.PointLights[pointIndex].Params = glm::vec4(plc.Falloff, 0.05f * 0.05f, 0.0f, 0.0f);
+                pointIndex++;
+            }
+            lightData.LightCounts.x = pointIndex;
+
+            // 3. Spot Lights (up to 16)
+            auto spotLightView = registry.view<SpotLightComponent, TransformComponent>();
+            uint32_t spotIndex = 0;
+            for (auto entityID : spotLightView) {
+                if (spotIndex >= MAX_SPOT_LIGHTS) break;
+                const auto& slc = spotLightView.get<SpotLightComponent>(entityID);
+                if (!slc.Enabled) continue;
+                const auto& tc = spotLightView.get<TransformComponent>(entityID);
+
+                glm::vec3 fwd = glm::normalize(tc.Rotation * glm::vec3(0.0f, 0.0f, -1.0f));
+                float intensity = (slc.Intensity > 10.0f) ? slc.Intensity : (slc.Intensity * 500.0f);
+                float cosInner = std::cos(glm::radians(slc.InnerConeAngle));
+                float cosOuter = std::cos(glm::radians(slc.OuterConeAngle));
+
+                lightData.SpotLights[spotIndex].PositionAndRange = glm::vec4(tc.Translation, slc.Range);
+                lightData.SpotLights[spotIndex].DirectionAndIntensity = glm::vec4(fwd, intensity);
+                lightData.SpotLights[spotIndex].ColorAndInnerAngle = glm::vec4(slc.Color, cosInner);
+                lightData.SpotLights[spotIndex].AngleParams = glm::vec4(cosOuter, 1.0f, 0.0f, 0.0f);
+                spotIndex++;
+            }
+            lightData.LightCounts.y = spotIndex;
+
+            m_LightBuffer.Update(lightData);
+
+            const auto& sun = lightData.SunLight;
+            sceneConstants.SunDirection = glm::vec4(sun.DirectionAndIlluminance.x,
+                                                    sun.DirectionAndIlluminance.y,
+                                                    sun.DirectionAndIlluminance.z,
+                                                    sun.DirectionAndIlluminance.w * 0.0005f);
+            sceneConstants.SunColor = sun.ColorAndAmbient;
+            sceneConstants.AmbientLight = glm::vec4(sun.AmbientColor.r, sun.AmbientColor.g, sun.AmbientColor.b, sun.ColorAndAmbient.w);
+        } else {
+            m_LightBuffer.ResetToDefaultSun();
+        }
+
+        if (m_SceneConstantBuffer.IsValid()) {
+            m_SceneConstantBuffer.UpdateData(&sceneConstants, sizeof(RHISceneConstants));
         }
 
         if (m_Streamer && m_Streamer->IsValid()) {
@@ -431,6 +525,14 @@ namespace Axle {
         // Bind Graphics Pipeline & Layout
         m_CommandBuffer.SetPipeline(m_Pipeline);
         m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+
+        // Bind Root Descriptors: [0] SceneConstants (b1), [1] MultiLightBuffer (b2)
+        if (m_SceneConstantBuffer.IsValid() && m_SceneConstantBuffer.GetCBV()) {
+            m_CommandBuffer.SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
+        }
+        if (m_LightBuffer.IsValid() && m_LightBuffer.GetCBV()) {
+            m_CommandBuffer.SetRootDescriptor(1, m_LightBuffer.GetCBV());
+        }
 
         // Bind Descriptor Pool & Material Descriptor Set (Space 1: 6 PBR textures + 16x Aniso Sampler)
         if (m_DescriptorPool.IsValid()) {

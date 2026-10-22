@@ -36,6 +36,44 @@ cbuffer SceneConstants : register(b1, space0) {
 };
 
 // -----------------------------------------------------------------------------
+// Forward+ Multi-Light GPU Buffer (Register b2, Space 0)
+// Size: 2304 bytes (256-byte aligned)
+// Supports: 1 Primary Directional Sun Light (Physical Lux illuminance),
+//           up to 16 Point Lights (Smooth windowed inverse-square falloff),
+//           up to 16 Spot Lights (Inner/outer cone cutoff angles).
+// -----------------------------------------------------------------------------
+struct DirectionalSunLight {
+    float4 DirectionAndIlluminance; // xyz: Normalized Sun Vector, w: Illuminance (Lux)
+    float4 ColorAndAmbient;        // xyz: Sun Warm Color, w: Ambient Intensity
+    float4 AmbientColor;           // xyz: Ambient Sky/Ground Tint, w: Ground bounce
+    float4 ShadowParams;           // x: Shadow Bias, y: Filter Radius, zw: Reserved
+};
+
+struct PointLightData {
+    float4 PositionAndRadius; // xyz: World Pos, w: Radius (m)
+    float4 ColorAndIntensity; // xyz: Linear RGB Color, w: Luminous Intensity (Lumens/Candela)
+    float4 Params;            // x: Falloff exponent (1.0 = inverse-square), y: MinRadius (0.05m), zw: Reserved
+    float4 Reserved;          // 64 bytes total
+};
+
+struct SpotLightData {
+    float4 PositionAndRange;      // xyz: World Pos, w: Range (m)
+    float4 DirectionAndIntensity; // xyz: Normalized Direction, w: Luminous Intensity
+    float4 ColorAndInnerAngle;    // xyz: Linear RGB Color, w: cos(InnerConeAngle)
+    float4 AngleParams;           // x: cos(OuterConeAngle), y: Falloff exponent, zw: Reserved
+};
+
+cbuffer MultiLightBuffer : register(b2, space0) {
+    DirectionalSunLight u_SunLight;
+    uint4               u_LightCounts;        // x: NumPointLights (0..16), y: NumSpotLights (0..16), z: HasSunLight, w: LightingMode
+    float4              u_CameraPosExposure;  // xyz: Camera Pos, w: Exposure
+    float4              u_LightReserved[2];   // 32 bytes header padding to 128 bytes
+    PointLightData      u_PointLights[16];    // 16 * 64 = 1024 bytes
+    SpotLightData       u_SpotLights[16];     // 16 * 64 = 1024 bytes
+    float4              u_LightTailReserved[8]; // 128 bytes tail padding to 2304 bytes
+};
+
+// -----------------------------------------------------------------------------
 // Texture & Sampler Bindings (Space 1)
 // -----------------------------------------------------------------------------
 Texture2D    u_AlbedoMap    : register(t0, space1);
@@ -182,54 +220,158 @@ float4 PSMain(PSInput input) : SV_Target0 {
         N = normalize(mul(normalSample, TBN));
     }
     
-    // 4. View & Directional Light Vectors
+    // 4. View Vector
     float3 camPos = (length(u_CameraPosition.xyz) > 0.001) ? u_CameraPosition.xyz : float3(0.0, 5.0, 10.0);
     float3 V = normalize(camPos - input.WorldPos);
-    
-    float3 L = normalize(u_SunDirAndIntensity.xyz);
-    if (length(L) < 0.1) L = normalize(float3(0.45, 0.85, 0.25));
-    float3 H = normalize(V + L);
+    float NdotV = max(dot(N, V), 0.001);
     
     // 5. Base Reflectivity F0 (Dielectric = 0.04, Metal = Albedo)
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, albedo.rgb, metallic);
     
-    // 6. Direct Directional Light Calculation (Cook-Torrance Specular + Lambert Diffuse)
-    float sunIntensity = max(0.2, u_SunDirAndIntensity.w);
-    float3 lightColor = (length(u_SunColor.rgb) > 0.01) ? u_SunColor.rgb : float3(1.0, 0.98, 0.92);
-    float3 radiance = lightColor * sunIntensity;
-    
-    float NdotL = max(dot(N, L), 0.0);
-    float NdotV = max(dot(N, V), 0.001);
-    
-    // Cook-Torrance Specular BRDF terms
-    float  NDF = DistributionGGX(N, H, roughness);
-    float  G   = GeometrySmith(N, V, L, roughness);
-    float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
-    
-    float3 numerator   = NDF * G * F;
-    float  denominator = 4.0 * NdotV * NdotL + 0.0001;
-    float3 specular    = numerator / denominator;
-    
-    // Energy conservation: diffuse vs specular
-    float3 kS = F;
-    float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
-    
-    float3 diffuse = kD * albedo.rgb / PI;
-    float3 Lo = (diffuse + specular) * radiance * NdotL;
-    
-    // 7. Ambient Lighting (Atmospheric Irradiance + Specular Reflection)
-    float3 ambientLightColor = (length(u_AmbientLight.rgb) > 0.01) ? u_AmbientLight.rgb : float3(0.22, 0.25, 0.32);
+    // Direct Radiance Accumulation
+    float3 Lo = float3(0.0, 0.0, 0.0);
+
+    // 6. Primary Directional Sun Light (Physical Illuminance in Lux)
+    bool hasMultiLightSun = (u_LightCounts.z > 0 && u_SunLight.DirectionAndIlluminance.w > 0.0);
+    float3 sunDir = hasMultiLightSun ? normalize(u_SunLight.DirectionAndIlluminance.xyz) : normalize(u_SunDirAndIntensity.xyz);
+    if (length(sunDir) < 0.1) sunDir = normalize(float3(0.45, 0.85, 0.25));
+
+    float sunIntensity = hasMultiLightSun ? (u_SunLight.DirectionAndIlluminance.w * 0.0005) : max(0.2, u_SunDirAndIntensity.w);
+    float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : ((length(u_SunColor.rgb) > 0.01) ? u_SunColor.rgb : float3(1.0, 0.98, 0.92));
+    float3 sunRadiance = sunColor * sunIntensity;
+
+    float NdotL_Sun = max(dot(N, sunDir), 0.0);
+    if (NdotL_Sun > 0.0) {
+        float3 H = normalize(V + sunDir);
+        float  NDF = DistributionGGX(N, H, roughness);
+        float  G   = GeometrySmith(N, V, sunDir, roughness);
+        float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
+
+        float3 numerator   = NDF * G * F;
+        float  denominator = 4.0 * NdotV * NdotL_Sun + 0.0001;
+        float3 specular    = numerator / denominator;
+
+        float3 kS = F;
+        float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
+        float3 diffuse = kD * albedo.rgb / PI;
+
+        Lo += (diffuse + specular) * sunRadiance * NdotL_Sun;
+    }
+
+    // 7. Point Lights (up to 16 with smooth windowed inverse-square falloff)
+    uint numPointLights = min(u_LightCounts.x, 16u);
+    for (uint p = 0; p < numPointLights; ++p) {
+        PointLightData pLight = u_PointLights[p];
+        float radius = pLight.PositionAndRadius.w;
+        if (radius <= 0.0) continue;
+
+        float3 lightVec = pLight.PositionAndRadius.xyz - input.WorldPos;
+        float dist = length(lightVec);
+        if (dist >= radius || dist <= 0.0001) continue;
+
+        float3 L = lightVec / dist;
+        float NdotL = max(dot(N, L), 0.0);
+        if (NdotL <= 0.0) continue;
+
+        // Smooth windowed inverse-square attenuation (Frostbite / UE standard)
+        float minRadius = max(0.0025, pLight.Params.y);
+        float distSq = max(dist * dist, minRadius);
+        float invDistSq = 1.0 / distSq;
+        float ratio = dist / radius;
+        float ratio4 = ratio * ratio * ratio * ratio;
+        float window = ClampZeroOne(1.0 - ratio4);
+        float attenuation = invDistSq * (window * window);
+
+        float falloffExp = pLight.Params.x;
+        if (falloffExp > 0.1 && abs(falloffExp - 1.0) > 0.01) {
+            attenuation = pow(max(attenuation, 0.0), falloffExp);
+        }
+
+        float3 radiance = pLight.ColorAndIntensity.rgb * (pLight.ColorAndIntensity.w * attenuation * 0.05);
+
+        float3 H = normalize(V + L);
+        float  NDF = DistributionGGX(N, H, roughness);
+        float  G   = GeometrySmith(N, V, L, roughness);
+        float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
+
+        float3 numerator   = NDF * G * F;
+        float  denominator = 4.0 * NdotV * NdotL + 0.0001;
+        float3 specular    = numerator / denominator;
+
+        float3 kS = F;
+        float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
+        float3 diffuse = kD * albedo.rgb / PI;
+
+        Lo += (diffuse + specular) * radiance * NdotL;
+    }
+
+    // 8. Spot Lights (up to 16 with inner/outer cone cutoff angles)
+    uint numSpotLights = min(u_LightCounts.y, 16u);
+    for (uint s = 0; s < numSpotLights; ++s) {
+        SpotLightData sLight = u_SpotLights[s];
+        float range = sLight.PositionAndRange.w;
+        if (range <= 0.0) continue;
+
+        float3 lightVec = sLight.PositionAndRange.xyz - input.WorldPos;
+        float dist = length(lightVec);
+        if (dist >= range || dist <= 0.0001) continue;
+
+        float3 L = lightVec / dist;
+        float NdotL = max(dot(N, L), 0.0);
+        if (NdotL <= 0.0) continue;
+
+        // Direction cone angle evaluation
+        float3 spotDir = normalize(sLight.DirectionAndIntensity.xyz);
+        float cosTheta = dot(-L, spotDir);
+        float cosInner = sLight.ColorAndInnerAngle.w;
+        float cosOuter = sLight.AngleParams.x;
+
+        if (cosTheta <= cosOuter) continue; // Outside outer cone cutoff
+
+        // Smooth quadratic cutoff between inner and outer angles
+        float spotAtten = ClampZeroOne((cosTheta - cosOuter) / max(0.0001, cosInner - cosOuter));
+        spotAtten = spotAtten * spotAtten;
+
+        // Smooth windowed distance attenuation
+        float distSq = max(dist * dist, 0.0025);
+        float ratio = dist / range;
+        float ratio4 = ratio * ratio * ratio * ratio;
+        float window = ClampZeroOne(1.0 - ratio4);
+        float distAtten = (1.0 / distSq) * (window * window);
+
+        float totalAtten = distAtten * spotAtten;
+        float3 radiance = sLight.ColorAndInnerAngle.rgb * (sLight.DirectionAndIntensity.w * totalAtten * 0.05);
+
+        float3 H = normalize(V + L);
+        float  NDF = DistributionGGX(N, H, roughness);
+        float  G   = GeometrySmith(N, V, L, roughness);
+        float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
+
+        float3 numerator   = NDF * G * F;
+        float  denominator = 4.0 * NdotV * NdotL + 0.0001;
+        float3 specular    = numerator / denominator;
+
+        float3 kS = F;
+        float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
+        float3 diffuse = kD * albedo.rgb / PI;
+
+        Lo += (diffuse + specular) * radiance * NdotL;
+    }
+
+    // 9. Ambient Lighting (Atmospheric Irradiance + Specular Reflection)
+    float3 ambientLightColor = hasMultiLightSun ? u_SunLight.AmbientColor.rgb : ((length(u_AmbientLight.rgb) > 0.01) ? u_AmbientLight.rgb : float3(0.22, 0.25, 0.32));
+    float ambientIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
     float3 ambientF = FresnelSchlickRoughness(NdotV, F0, roughness);
     float3 ambientKD = (float3(1.0, 1.0, 1.0) - ambientF) * (1.0 - metallic);
-    float3 ambientDiffuse = ambientKD * albedo.rgb * ambientLightColor;
-    float3 ambientSpecular = ambientF * ambientLightColor * (1.0 - roughness) * 0.45;
+    float3 ambientDiffuse = ambientKD * albedo.rgb * ambientLightColor * ambientIntensity;
+    float3 ambientSpecular = ambientF * ambientLightColor * ambientIntensity * (1.0 - roughness) * 0.45;
     float3 ambient = (ambientDiffuse + ambientSpecular) * ao;
     
-    // 8. Total Radiance Accumulation
+    // 10. Total Radiance Accumulation
     float3 color = ambient + Lo + emissive;
     
-    // 9. Tone Mapping & Color Polish (Reinhard Operator & Gamma Correction)
+    // 11. Tone Mapping & Color Polish (Reinhard Operator & Gamma Correction)
     color = color / (color + float3(1.0, 1.0, 1.0));
     color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
     

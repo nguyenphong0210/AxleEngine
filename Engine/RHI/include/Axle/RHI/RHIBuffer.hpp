@@ -156,12 +156,14 @@ namespace Axle::RHI {
 
         nri::Buffer* GetNative() const { return m_Buffer; }
         nri::Memory* GetNativeMemory() const { return m_Memory; }
+        nri::Descriptor* GetCBV() const { return m_CBV; }
         operator nri::Buffer*() const { return m_Buffer; }
 
     private:
         RHIBufferDesc m_Desc;
         nri::Buffer* m_Buffer = nullptr;
         nri::Memory* m_Memory = nullptr;
+        nri::Descriptor* m_CBV = nullptr;
         bool m_IsCommitted = false;
         void* m_MappedData = nullptr;
     };

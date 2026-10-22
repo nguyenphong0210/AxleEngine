@@ -16,6 +16,7 @@ add_library(AxleRHI STATIC
     src/RHISampler.cpp
     src/RHIDescriptorPool.cpp
     src/RHIBindless.cpp
+    src/RHILight.cpp
 )
 add_library(Axle::RHI ALIAS AxleRHI)
 

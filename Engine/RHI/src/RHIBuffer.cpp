@@ -53,11 +53,13 @@ namespace Axle::RHI {
         : m_Desc(std::move(other.m_Desc))
         , m_Buffer(other.m_Buffer)
         , m_Memory(other.m_Memory)
+        , m_CBV(other.m_CBV)
         , m_IsCommitted(other.m_IsCommitted)
         , m_MappedData(other.m_MappedData)
     {
         other.m_Buffer = nullptr;
         other.m_Memory = nullptr;
+        other.m_CBV = nullptr;
         other.m_IsCommitted = false;
         other.m_MappedData = nullptr;
     }
@@ -68,11 +70,13 @@ namespace Axle::RHI {
             m_Desc = std::move(other.m_Desc);
             m_Buffer = other.m_Buffer;
             m_Memory = other.m_Memory;
+            m_CBV = other.m_CBV;
             m_IsCommitted = other.m_IsCommitted;
             m_MappedData = other.m_MappedData;
 
             other.m_Buffer = nullptr;
             other.m_Memory = nullptr;
+            other.m_CBV = nullptr;
             other.m_IsCommitted = false;
             other.m_MappedData = nullptr;
         }
@@ -137,6 +141,16 @@ namespace Axle::RHI {
             }
         }
 
+        // Create Constant Buffer View descriptor if requested
+        if ((m_Desc.Usage & RHIBufferUsage::Constant) != RHIBufferUsage::None && core.CreateBufferView) {
+            nri::BufferViewDesc cbvDesc = {};
+            cbvDesc.buffer = m_Buffer;
+            cbvDesc.type = nri::BufferView::CONSTANT_BUFFER;
+            cbvDesc.offset = 0;
+            cbvDesc.size = m_Desc.Size;
+            core.CreateBufferView(cbvDesc, m_CBV);
+        }
+
         return true;
     }
 
@@ -174,6 +188,15 @@ namespace Axle::RHI {
             core.SetDebugName((nri::Object*)m_Buffer, m_Desc.DebugName.c_str());
         }
 
+        if ((m_Desc.Usage & RHIBufferUsage::Constant) != RHIBufferUsage::None && core.CreateBufferView) {
+            nri::BufferViewDesc cbvDesc = {};
+            cbvDesc.buffer = m_Buffer;
+            cbvDesc.type = nri::BufferView::CONSTANT_BUFFER;
+            cbvDesc.offset = 0;
+            cbvDesc.size = m_Desc.Size;
+            core.CreateBufferView(cbvDesc, m_CBV);
+        }
+
         return true;
     }
 
@@ -188,10 +211,18 @@ namespace Axle::RHI {
         m_IsCommitted = false;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (rhiDevice.IsInitialized() && !m_Desc.DebugName.empty()) {
+        if (rhiDevice.IsInitialized()) {
             const auto& core = rhiDevice.GetNRICore();
-            if (core.SetDebugName) {
+            if (!m_Desc.DebugName.empty() && core.SetDebugName) {
                 core.SetDebugName((nri::Object*)m_Buffer, m_Desc.DebugName.c_str());
+            }
+            if ((m_Desc.Usage & RHIBufferUsage::Constant) != RHIBufferUsage::None && core.CreateBufferView) {
+                nri::BufferViewDesc cbvDesc = {};
+                cbvDesc.buffer = m_Buffer;
+                cbvDesc.type = nri::BufferView::CONSTANT_BUFFER;
+                cbvDesc.offset = 0;
+                cbvDesc.size = m_Desc.Size;
+                core.CreateBufferView(cbvDesc, m_CBV);
             }
         }
 
@@ -206,6 +237,10 @@ namespace Axle::RHI {
         auto& rhiDevice = RHIDevice::Get();
         if (rhiDevice.IsInitialized()) {
             const auto& core = rhiDevice.GetNRICore();
+            if (m_CBV && core.DestroyDescriptor) {
+                core.DestroyDescriptor(m_CBV);
+                m_CBV = nullptr;
+            }
             if (m_Buffer && core.DestroyBuffer) {
                 core.DestroyBuffer(m_Buffer);
             }
@@ -214,6 +249,7 @@ namespace Axle::RHI {
             }
         }
 
+        m_CBV = nullptr;
         m_Buffer = nullptr;
         m_Memory = nullptr;
         m_IsCommitted = false;

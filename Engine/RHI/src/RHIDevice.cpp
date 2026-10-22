@@ -63,12 +63,56 @@ namespace Axle::RHI {
             info.VendorId = static_cast<uint32_t>(src.vendor);
             info.VendorName = GetVendorName(src.vendor);
             info.IsDiscreteGPU = (src.architecture == nri::Architecture::DISCRETE);
+            info.IsIntegrated = (src.architecture == nri::Architecture::INTEGRATED);
+            info.IsSoftware = (src.architecture == nri::Architecture::SOFTWARE);
             info.SupportsD3D12 = ((src.supportedGraphicsAPIs & nri::GraphicsAPI::D3D12) != 0);
             info.SupportsVulkan = ((src.supportedGraphicsAPIs & nri::GraphicsAPI::VK) != 0);
 
             result.push_back(info);
         }
         return result;
+    }
+
+    int32_t RHIDevice::FindSoftwareAdapterIndex(RHIType backend) {
+        uint32_t nriAdapterNum = 0;
+        nri::nriEnumerateAdapters(nullptr, nriAdapterNum);
+        if (nriAdapterNum == 0) return -1;
+        std::vector<nri::AdapterDesc> nriAdapters(nriAdapterNum);
+        nri::nriEnumerateAdapters(nriAdapters.data(), nriAdapterNum);
+
+        nri::GraphicsAPI targetApi = nri::GraphicsAPI::NONE;
+        if (backend == RHIType::Direct3D12) targetApi = nri::GraphicsAPI::D3D12;
+        else if (backend == RHIType::Vulkan) targetApi = nri::GraphicsAPI::VK;
+
+        for (uint32_t i = 0; i < nriAdapterNum; ++i) {
+            if (nriAdapters[i].architecture == nri::Architecture::SOFTWARE) {
+                if (targetApi == nri::GraphicsAPI::NONE || (nriAdapters[i].supportedGraphicsAPIs & targetApi) != 0) {
+                    return static_cast<int32_t>(i);
+                }
+            }
+        }
+        return -1;
+    }
+
+    int32_t RHIDevice::FindDiscreteAdapterIndex(RHIType backend) {
+        uint32_t nriAdapterNum = 0;
+        nri::nriEnumerateAdapters(nullptr, nriAdapterNum);
+        if (nriAdapterNum == 0) return -1;
+        std::vector<nri::AdapterDesc> nriAdapters(nriAdapterNum);
+        nri::nriEnumerateAdapters(nriAdapters.data(), nriAdapterNum);
+
+        nri::GraphicsAPI targetApi = nri::GraphicsAPI::NONE;
+        if (backend == RHIType::Direct3D12) targetApi = nri::GraphicsAPI::D3D12;
+        else if (backend == RHIType::Vulkan) targetApi = nri::GraphicsAPI::VK;
+
+        for (uint32_t i = 0; i < nriAdapterNum; ++i) {
+            if (nriAdapters[i].architecture == nri::Architecture::DISCRETE) {
+                if (targetApi == nri::GraphicsAPI::NONE || (nriAdapters[i].supportedGraphicsAPIs & targetApi) != 0) {
+                    return static_cast<int32_t>(i);
+                }
+            }
+        }
+        return -1;
     }
 
     bool RHIDevice::Init(const RHIDeviceDesc& desc) {
@@ -86,9 +130,10 @@ namespace Axle::RHI {
         AXLE_CORE_INFO("Enumerated {0} physical GPU adapter(s):", m_Adapters.size());
         for (size_t i = 0; i < m_Adapters.size(); ++i) {
             const auto& a = m_Adapters[i];
-            AXLE_CORE_INFO("  [{0}] {1} (VRAM: {2} MB, Discrete: {3}, D3D12: {4}, Vulkan: {5})",
+            AXLE_CORE_INFO("  [{0}] {1} (VRAM: {2} MB, Discrete: {3}, Software: {4}, D3D12: {5}, Vulkan: {6})",
                 i, a.Name, a.DedicatedVideoMemory / (1024 * 1024),
                 a.IsDiscreteGPU ? "Yes" : "No",
+                a.IsSoftware ? "Yes" : "No",
                 a.SupportsD3D12 ? "Yes" : "No",
                 a.SupportsVulkan ? "Yes" : "No");
         }
@@ -105,7 +150,32 @@ namespace Axle::RHI {
         if (!nriAdapters.empty()) {
             if (desc.AdapterIndex >= 0 && desc.AdapterIndex < static_cast<int32_t>(nriAdapters.size())) {
                 selectedAdapter = &nriAdapters[desc.AdapterIndex];
-            } else {
+            } else if (desc.PreferSoftware) {
+                nri::GraphicsAPI targetApi = (desc.PreferredBackend == RHIType::Vulkan) 
+                    ? nri::GraphicsAPI::VK 
+                    : nri::GraphicsAPI::D3D12;
+                for (size_t i = 0; i < nriAdapters.size(); ++i) {
+                    if (nriAdapters[i].architecture == nri::Architecture::SOFTWARE &&
+                        (nriAdapters[i].supportedGraphicsAPIs & targetApi) != 0) {
+                        selectedAdapter = &nriAdapters[i];
+                        break;
+                    }
+                }
+                if (!selectedAdapter) {
+                    for (size_t i = 0; i < nriAdapters.size(); ++i) {
+                        if (nriAdapters[i].architecture == nri::Architecture::SOFTWARE) {
+                            selectedAdapter = &nriAdapters[i];
+                            break;
+                        }
+                    }
+                }
+                if (selectedAdapter) {
+                    AXLE_CORE_INFO("PreferSoftware active: selected software adapter [{0}]", selectedAdapter->name);
+                } else {
+                    AXLE_CORE_WARN("PreferSoftware requested, but no software adapter available. Using default adapter.");
+                }
+            }
+            if (!selectedAdapter) {
                 selectedAdapter = &nriAdapters[0]; // Already sorted by NRI: discrete GPU with highest VRAM first
             }
         }
@@ -233,6 +303,8 @@ namespace Axle::RHI {
         m_Capabilities.DedicatedVideoMemory = !m_Adapters.empty() ? m_Adapters[0].DedicatedVideoMemory : (2ULL << 30);
 
         // Baseline OpenGL 4.5 capabilities
+        m_Capabilities.IsSoftwareAdapter = false;
+        m_Capabilities.IsHeadless = m_Desc.Headless;
         m_Capabilities.IsRayTracingSupported = false;
         m_Capabilities.RayTracingTier = 0;
         m_Capabilities.IsMeshShaderSupported = false;
@@ -260,6 +332,8 @@ namespace Axle::RHI {
 
         m_Capabilities.AdapterName = desc.adapterDesc.name;
         m_Capabilities.DedicatedVideoMemory = desc.adapterDesc.videoMemorySize;
+        m_Capabilities.IsSoftwareAdapter = (desc.adapterDesc.architecture == nri::Architecture::SOFTWARE);
+        m_Capabilities.IsHeadless = m_Desc.Headless;
 
         // Hardware feature query
         m_Capabilities.IsRayTracingSupported = (desc.tiers.rayTracing > 0);

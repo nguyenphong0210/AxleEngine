@@ -40,9 +40,13 @@ namespace Axle::RHI {
         RHIType GetBackend() const { return m_Capabilities.ActiveBackend; }
         const RHIDeviceCapabilities& GetCapabilities() const { return m_Capabilities; }
         const std::vector<RHIAdapterInfo>& GetAdapters() const { return m_Adapters; }
+        bool IsSoftwareAdapter() const { return m_Capabilities.IsSoftwareAdapter; }
+        bool IsHeadless() const { return m_Capabilities.IsHeadless; }
 
         // Query physical adapters on the machine
         static std::vector<RHIAdapterInfo> EnumerateAdapters();
+        static int32_t FindSoftwareAdapterIndex(RHIType backend = RHIType::None);
+        static int32_t FindDiscreteAdapterIndex(RHIType backend = RHIType::None);
 
         // Access underlying NRI device and interfaces
         nri::Device* GetNRIDevice() const { return m_Device; }

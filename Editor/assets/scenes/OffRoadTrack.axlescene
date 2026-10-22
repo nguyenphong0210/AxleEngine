@@ -1,7 +1,7 @@
 # Axle Scene Definition File
 Scene: Untitled
 Entities:
-  - Entity: 11361489209037752737
+  - Entity: 16911120043634136655
     TagComponent:
       Tag: RacingHUD
     TransformComponent:
@@ -14,7 +14,7 @@ Entities:
       InheritScale: true
     NativeScriptComponent:
       ScriptName: RacingHUD
-  - Entity: 7348581391689108329
+  - Entity: 4410247207252896170
     TagComponent:
       Tag: Main Camera
     TransformComponent:
@@ -32,7 +32,7 @@ Entities:
       FOV: 45.000000
       NearClip: 0.100000
       FarClip: 1000.000000
-  - Entity: 11497520995788260465
+  - Entity: 3212036372447557676
     TagComponent:
       Tag: BodyMesh
     TransformComponent:
@@ -46,10 +46,10 @@ Entities:
       Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
       Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
     HierarchyComponent:
-      Parent: 12169498403982624222
+      Parent: 4683912951407430428
       InheritTransform: true
       InheritScale: true
-  - Entity: 17688020873998690292
+  - Entity: 13023373180808188212
     TagComponent:
       Tag: Wheel_RR
     TransformComponent:
@@ -63,7 +63,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
       Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
     HierarchyComponent:
-      Parent: 12169498403982624222
+      Parent: 4683912951407430428
       InheritTransform: true
       InheritScale: true
     WheelComponent:
@@ -80,7 +80,7 @@ Entities:
       BrakeTorque: 3000.000000
       HandBrakeTorque: 0.000000
       AutoSyncMesh: true
-  - Entity: 4580364967919985136
+  - Entity: 10115984360735663771
     TagComponent:
       Tag: Wheel_RL
     TransformComponent:
@@ -94,7 +94,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
       Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
     HierarchyComponent:
-      Parent: 12169498403982624222
+      Parent: 4683912951407430428
       InheritTransform: true
       InheritScale: true
     WheelComponent:
@@ -111,7 +111,7 @@ Entities:
       BrakeTorque: 3000.000000
       HandBrakeTorque: 0.000000
       AutoSyncMesh: true
-  - Entity: 16208892300223418955
+  - Entity: 3225223148887777401
     TagComponent:
       Tag: Wheel_FR
     TransformComponent:
@@ -125,7 +125,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
       Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
     HierarchyComponent:
-      Parent: 12169498403982624222
+      Parent: 4683912951407430428
       InheritTransform: true
       InheritScale: true
     WheelComponent:
@@ -142,7 +142,7 @@ Entities:
       BrakeTorque: 3000.000000
       HandBrakeTorque: 0.000000
       AutoSyncMesh: true
-  - Entity: 4985916217141212644
+  - Entity: 7599059028391061793
     TagComponent:
       Tag: Wheel_FL
     TransformComponent:
@@ -156,7 +156,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
       Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
     HierarchyComponent:
-      Parent: 12169498403982624222
+      Parent: 4683912951407430428
       InheritTransform: true
       InheritScale: true
     WheelComponent:
@@ -173,7 +173,7 @@ Entities:
       BrakeTorque: 3000.000000
       HandBrakeTorque: 0.000000
       AutoSyncMesh: true
-  - Entity: 12169498403982624222
+  - Entity: 4683912951407430428
     TagComponent:
       Tag: Car
     TransformComponent:
@@ -235,7 +235,7 @@ Entities:
       Spatialized: true
       MinDistance: 2.000000
       MaxDistance: 80.000000
-  - Entity: 4583346391124008537
+  - Entity: 6485154261941321511
     TagComponent:
       Tag: SplineTrack
     TransformComponent:
@@ -303,7 +303,7 @@ Entities:
           HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
           Roll: 0.000000
           Scale: 1.000000
-  - Entity: 18349803100663609823
+  - Entity: 9325155351911971129
     TagComponent:
       Tag: OffRoadTerrain
     TransformComponent:
@@ -325,7 +325,7 @@ Entities:
       GeneratePhysics: true
       Friction: 0.850000
       Restitution: 0.050000
-  - Entity: 3880761844296601308
+  - Entity: 17363309466183890582
     TagComponent:
       Tag: Sun Light
     TransformComponent:

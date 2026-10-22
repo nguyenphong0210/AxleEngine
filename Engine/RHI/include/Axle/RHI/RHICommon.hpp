@@ -43,6 +43,8 @@ namespace Axle::RHI {
         uint32_t VendorId = 0;
         std::string VendorName;
         bool IsDiscreteGPU = false;
+        bool IsIntegrated = false;
+        bool IsSoftware = false; // WARP (D3D12), SwiftShader / CPU (Vulkan)
         bool SupportsD3D12 = false;
         bool SupportsVulkan = false;
     };
@@ -51,6 +53,8 @@ namespace Axle::RHI {
         std::string AdapterName;
         RHIType ActiveBackend = RHIType::None;
         uint64_t DedicatedVideoMemory = 0;
+        bool IsSoftwareAdapter = false;
+        bool IsHeadless = false;
 
         // Modern hardware features
         bool IsRayTracingSupported = false;
@@ -78,6 +82,8 @@ namespace Axle::RHI {
         bool EnableValidation = false;
         bool AllowFallback = true;
         int32_t AdapterIndex = -1; // -1 = automatically select best discrete GPU
+        bool PreferSoftware = false; // When true, selects WARP (D3D12) or SwiftShader/Mock ICD (Vulkan)
+        bool Headless = false;       // Headless mode (no swapchain, surface, or window needed)
     };
 
 }

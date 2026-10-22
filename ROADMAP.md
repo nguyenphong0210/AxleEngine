@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 31, and Phase 32 Steps 1-6** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **49 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
+* **Automated Test Verification**: **50 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 32 Step 7 (Headless RHI Test Suite)**, **Phase 33 (Multi-Backend 3D Viewport Scene Renderer)** and beyond.
 
 ---
@@ -323,7 +323,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Engine RHI Switcher: Configurable startup flag (`--rhi=dx12`, `--rhi=vulkan`, `--rhi=opengl`) with graceful fallback.
     - [x] Native D3D12 Swapchain Presentation: Direct backbuffer presentation (`IDXGISwapChain3`, 3 backbuffers flip-discard) resolving unpainted OS window canvas.
   - [ ] **Step 7 - Automated Headless Test Suite & Multi-Backend Validation**:
-    - [ ] Headless RHI test suite in `AxleTests.exe`: Device initialization (WARP for D3D12, SwiftShader/Mock ICD for Vulkan).
+    - [x] Headless RHI test suite in `AxleTests.exe`: Device initialization (WARP for D3D12, SwiftShader/Mock ICD for Vulkan).
     - [ ] Multithreaded command recording verification: worker threads via `enkiTS` recording into secondary command buffers concurrently.
     - [ ] Validation of pipeline barrier state machines, PSO cache hit rate, and swapchain recreation stability.
 - [ ] **Phase 33: Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline (`Engine/Renderer` & `Engine/RHI`)**

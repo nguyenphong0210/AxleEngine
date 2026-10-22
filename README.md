@@ -104,7 +104,7 @@ For in-depth guides, API references, and architectural walk-throughs, refer to t
 AxleEngine has undergone extensive architectural development and rigorous quality assurance:
 * **Completed Milestones**: **Phase 1 through Phase 31** are 100% complete, battle-tested, and fully verified.
 * **Automated Test Suite**: **47 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
-* **Upcoming Focus**: **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)** and **Phase 33: Dedicated 2D Canvas & In-Game UI Subsystem**.
+* **Upcoming Focus**: **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)** and **Phase 33: Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline**.
 
 👉 **For the complete phase-by-phase development history, detailed feature checklists, and upcoming roadmap, see [ROADMAP.md](ROADMAP.md).**
 

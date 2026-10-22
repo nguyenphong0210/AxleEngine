@@ -7,9 +7,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 31, and Phase 32 Steps 1-6** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **50 Comprehensive Headless Test Suites** (`AxleTests.exe`) passing with **100% pass rate**.
-* **Upcoming Focus**: **Phase 32 Step 7 (Headless RHI Test Suite)**, **Phase 33 (Multi-Backend 3D Viewport Scene Renderer)** and beyond.
+* **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized).
+* **Automated Test Verification**: **51 Comprehensive Headless Test Suites** (`AxleTests.exe`, 58 individual test steps) passing with **100% pass rate**.
+* **Upcoming Focus**: **Phase 33 (Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline)** and beyond.
 
 ---
 
@@ -296,7 +296,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 6 - Visual FX Editor Panel & Final VFX Integration**:
     - [x] Dedicated ImGui VFX Editor panel: live bezier curve tweaking (size, alpha, color gradient over time), texture slot assignment, burst controls, and instant viewport preview.
     - [x] Automated test suites (Steps 42-47) in `Editor/src/Test.cpp`: validating particle pool memory allocation, GPU instancing, curl noise determinism, physics collisions, emitter serialization fidelity, and gameplay slip event triggering.
-- [ ] **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)**
+- [x] **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)**
   - [x] **Step 1 - NRI Core Submodule & RHI Device Lifecycle (`Engine/RHI`)**:
     - [x] Integrate lightweight NVIDIA Rendering Interface (MIT) into `ThirdParty/NRI` (Core, Helper, and Streamer modules).
     - [x] Unified Device Abstraction: Physical GPU enumeration, hardware capability query (Ray Tracing, Mesh Shaders, Bindless Resources), and dynamic backend selection (Direct3D 12, Vulkan 1.3, with OpenGL 4.5 legacy fallback).
@@ -322,10 +322,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Viewport Descriptor Binding: Register offscreen scene render targets (`nri::Texture`) into ImGui GPU Descriptor Heap as valid `ImTextureID`.
     - [x] Engine RHI Switcher: Configurable startup flag (`--rhi=dx12`, `--rhi=vulkan`, `--rhi=opengl`) with graceful fallback.
     - [x] Native D3D12 Swapchain Presentation: Direct backbuffer presentation (`IDXGISwapChain3`, 3 backbuffers flip-discard) resolving unpainted OS window canvas.
-  - [ ] **Step 7 - Automated Headless Test Suite & Multi-Backend Validation**:
+  - [x] **Step 7 - Automated Headless Test Suite & Multi-Backend Validation**:
     - [x] Headless RHI test suite in `AxleTests.exe`: Device initialization (WARP for D3D12, SwiftShader/Mock ICD for Vulkan).
     - [x] Multithreaded command recording verification: worker threads via `enkiTS` recording into secondary command buffers concurrently.
-    - [ ] Validation of pipeline barrier state machines, PSO cache hit rate, and swapchain recreation stability.
+    - [x] Validation of pipeline barrier state machines, PSO cache hit rate, and swapchain recreation stability.
 - [ ] **Phase 33: Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline (`Engine/Renderer` & `Engine/RHI`)**
   - [ ] **Step 1 - Core Geometry, Mesh VRAM Sub-Allocation & Dynamic ECS Transforms**:
     - [ ] Stream 3D scene geometry (SportsCar chassis OBJ/axlemesh, racing wheels, primitive shapes, and procedural terrain heightfield) into GPU-resident `RHIBuffer` vertex/index buffers via `RHIStreamer`.

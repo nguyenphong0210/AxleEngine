@@ -201,8 +201,51 @@ namespace Axle::RHI {
         return true;
     }
 
+    void RHIResourceStateTracker::TrackBuffer(nri::Buffer* buffer, RHIAccess initialAccess, RHIPipelineStage initialStage) {
+        if (!buffer) return;
+        m_BufferStates[buffer] = { initialAccess, initialStage };
+    }
+
+    RHIAccess RHIResourceStateTracker::GetBufferAccess(nri::Buffer* buffer) const {
+        auto it = m_BufferStates.find(buffer);
+        if (it != m_BufferStates.end()) {
+            return it->second.Access;
+        }
+        return RHIAccess::None;
+    }
+
+    RHIPipelineStage RHIResourceStateTracker::GetBufferStage(nri::Buffer* buffer) const {
+        auto it = m_BufferStates.find(buffer);
+        if (it != m_BufferStates.end()) {
+            return it->second.Stage;
+        }
+        return RHIPipelineStage::None;
+    }
+
+    bool RHIResourceStateTracker::TransitionBuffer(nri::Buffer* buffer, RHIAccess targetAccess, RHIPipelineStage targetStage, RHIBarrierGroup& outBarriers) {
+        if (!buffer) return false;
+
+        RHIAccess currentAccess = RHIAccess::None;
+        RHIPipelineStage currentStage = RHIPipelineStage::None;
+        auto it = m_BufferStates.find(buffer);
+        if (it != m_BufferStates.end()) {
+            currentAccess = it->second.Access;
+            currentStage = it->second.Stage;
+        }
+
+        // Redundant transition elision: if already in target access and target stage, do nothing!
+        if (currentAccess == targetAccess && currentStage == targetStage && currentAccess != RHIAccess::None) {
+            return false;
+        }
+
+        outBarriers.AddBuffer(buffer, currentAccess, targetAccess, currentStage, targetStage);
+        m_BufferStates[buffer] = { targetAccess, targetStage };
+        return true;
+    }
+
     void RHIResourceStateTracker::Reset() {
         m_TextureStates.clear();
+        m_BufferStates.clear();
     }
 
 }

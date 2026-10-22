@@ -286,6 +286,11 @@ namespace Axle::RHI {
     // Explicit Resource State Machine & Redundant Barrier Elision Tracker
     // =========================================================================
 
+    struct RHIBufferState {
+        RHIAccess Access = RHIAccess::None;
+        RHIPipelineStage Stage = RHIPipelineStage::None;
+    };
+
     class RHIResourceStateTracker {
     public:
         RHIResourceStateTracker() = default;
@@ -301,11 +306,24 @@ namespace Axle::RHI {
         // Returns true if a barrier was generated and added to outBarriers, false if elided.
         bool TransitionTexture(nri::Texture* texture, RHIResourceLayout targetLayout, RHIBarrierGroup& outBarriers);
 
+        // Register initial known state of a buffer
+        void TrackBuffer(nri::Buffer* buffer, RHIAccess initialAccess = RHIAccess::None, RHIPipelineStage initialStage = RHIPipelineStage::None);
+
+        // Query current tracked access and stage of a buffer
+        RHIAccess GetBufferAccess(nri::Buffer* buffer) const;
+        RHIPipelineStage GetBufferStage(nri::Buffer* buffer) const;
+
+        // Transition a buffer to target access & stage:
+        // Automatically elides redundant transitions if the buffer is already in targetAccess & targetStage.
+        // Returns true if a barrier was generated and added to outBarriers, false if elided.
+        bool TransitionBuffer(nri::Buffer* buffer, RHIAccess targetAccess, RHIPipelineStage targetStage, RHIBarrierGroup& outBarriers);
+
         // Reset all tracked states
         void Reset();
 
     private:
         std::unordered_map<nri::Texture*, RHIResourceLayout> m_TextureStates;
+        std::unordered_map<nri::Buffer*, RHIBufferState> m_BufferStates;
     };
 
 }

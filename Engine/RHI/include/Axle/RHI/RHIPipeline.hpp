@@ -215,6 +215,10 @@ namespace Axle::RHI {
             uint64_t total = m_HitCount + m_MissCount;
             return total > 0 ? static_cast<float>(m_HitCount) / static_cast<float>(total) : 0.0f;
         }
+        void ResetStats() {
+            m_HitCount = 0;
+            m_MissCount = 0;
+        }
 
         // Release all cached pipelines from GPU
         void Clear();

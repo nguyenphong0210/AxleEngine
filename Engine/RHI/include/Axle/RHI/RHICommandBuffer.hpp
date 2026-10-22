@@ -51,6 +51,7 @@ namespace Axle::RHI {
         void TransitionBuffer(nri::Buffer* buffer, RHIAccess beforeAccess, RHIAccess afterAccess,
                               RHIPipelineStage beforeStage = RHIPipelineStage::AllCommands,
                               RHIPipelineStage afterStage = RHIPipelineStage::AllCommands);
+        bool TransitionBuffer(RHIResourceStateTracker& tracker, nri::Buffer* buffer, RHIAccess targetAccess, RHIPipelineStage targetStage);
 
         // Staging & Dynamic Streamer
         void CopyStreamedData(class RHIStreamer& streamer, uint64_t copyBatch);

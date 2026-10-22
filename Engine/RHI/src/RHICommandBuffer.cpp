@@ -210,6 +210,16 @@ namespace Axle::RHI {
         PipelineBarrier(group);
     }
 
+    bool RHICommandBuffer::TransitionBuffer(RHIResourceStateTracker& tracker, nri::Buffer* buffer, RHIAccess targetAccess, RHIPipelineStage targetStage) {
+        if (!buffer || !m_CommandBuffer || !m_IsRecording) return false;
+        RHIBarrierGroup group;
+        if (tracker.TransitionBuffer(buffer, targetAccess, targetStage, group)) {
+            PipelineBarrier(group);
+            return true;
+        }
+        return false;
+    }
+
     void RHICommandBuffer::CopyStreamedData(RHIStreamer& streamer, uint64_t copyBatch) {
         if (!m_CommandBuffer || !m_IsRecording || copyBatch == 0) return;
         streamer.CmdCopyStreamedData(*m_CommandBuffer, copyBatch);

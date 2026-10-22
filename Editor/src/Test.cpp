@@ -12548,6 +12548,415 @@ bool RunTest_Step65_Phase32_Step7_MultithreadedCommandRecording() {
 }
 
 // =============================================================================
+// TEST STEP 66: Phase 32 Step 7 - Validation of Pipeline Barrier State Machines,
+// PSO Cache Hit Rate, and Swapchain Recreation Stability
+// =============================================================================
+bool RunTest_Step66_Phase32_Step7_ValidationBarrierStateMachinePSOCacheSwapchain() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 66 TEST] BARRIER STATE MACHINE, PSO CACHE & SWAPCHAIN" << std::endl;
+    std::cout << "  (Barrier Elision, >99% PSO Hit Rate, 10x Resize Stability)" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    using namespace Axle::RHI;
+
+    // [66.1] Pipeline Barrier State Machine & Redundant Barrier Elision (Texture & Buffer)
+    std::cout << "\n[66.1] Testing Pipeline Barrier State Machine & Redundant Barrier Elision..." << std::endl;
+    {
+        auto& rhiDevice = RHIDevice::Get();
+        if (!rhiDevice.IsInitialized()) {
+            RHIDeviceDesc devDesc;
+            devDesc.PreferredBackend = RHIType::Direct3D12;
+            devDesc.Headless = true;
+            devDesc.AllowFallback = true;
+            bool devOk = rhiDevice.Init(devDesc);
+            assert(devOk);
+        }
+
+        // Create test texture and buffer
+        RHITexture testTex;
+        RHITextureDesc tDesc;
+        tDesc.Width = 256;
+        tDesc.Height = 256;
+        tDesc.Format = RHITextureFormat::RGBA8_UNORM;
+        tDesc.Usage = RHITextureUsage::ColorAttachment | RHITextureUsage::ShaderResource;
+        tDesc.DebugName = "StateMachine_TestTexture";
+        bool texOk = testTex.Init(tDesc);
+        assert(texOk);
+
+        RHIBuffer testBuf;
+        RHIBufferDesc bDesc = RHIBufferDesc::Structured(512, 16, true, RHIMemoryLocation::Device, "StateMachine_TestBuffer");
+        bool bufOk = testBuf.Init(bDesc);
+        assert(bufOk);
+
+        RHIResourceStateTracker tracker;
+
+        // Texture State Tracking
+        tracker.TrackTexture(testTex.GetNative(), RHIResourceLayout::Undefined);
+        assert(tracker.GetTextureState(testTex.GetNative()) == RHIResourceLayout::Undefined);
+
+        RHICommandBuffer cmd;
+        bool cmdInitOk = cmd.Init();
+        assert(cmdInitOk);
+        bool cmdBeginOk = cmd.Begin();
+        assert(cmdBeginOk);
+
+        // 1. Transition Undefined -> ColorAttachment
+        RHIBarrierGroup group1;
+        bool b1 = tracker.TransitionTexture(testTex.GetNative(), RHIResourceLayout::ColorAttachment, group1);
+        assert(b1 == true);
+        assert(tracker.GetTextureState(testTex.GetNative()) == RHIResourceLayout::ColorAttachment);
+        assert(group1.GetTextureCount() == 1);
+        cmd.PipelineBarrier(group1);
+
+        // 2. Redundant Transition Check (ColorAttachment -> ColorAttachment) -> Must be ELIDED!
+        RHIBarrierGroup groupRedundant;
+        bool bRedundant = tracker.TransitionTexture(testTex.GetNative(), RHIResourceLayout::ColorAttachment, groupRedundant);
+        assert(bRedundant == false); // Elided!
+        assert(groupRedundant.GetTextureCount() == 0); // Zero barriers emitted!
+        assert(tracker.GetTextureState(testTex.GetNative()) == RHIResourceLayout::ColorAttachment);
+
+        // 3. Transition ColorAttachment -> ShaderResource
+        RHIBarrierGroup group2;
+        bool b2 = tracker.TransitionTexture(testTex.GetNative(), RHIResourceLayout::ShaderResource, group2);
+        assert(b2 == true);
+        assert(tracker.GetTextureState(testTex.GetNative()) == RHIResourceLayout::ShaderResource);
+        assert(group2.GetTextureCount() == 1);
+        cmd.PipelineBarrier(group2);
+
+        // 4. Redundant Transition Check (ShaderResource -> ShaderResource) -> Must be ELIDED!
+        bool bRedundant2 = tracker.TransitionTexture(testTex.GetNative(), RHIResourceLayout::ShaderResource, groupRedundant);
+        assert(bRedundant2 == false);
+        assert(groupRedundant.GetTextureCount() == 0);
+
+        // 5. Transition ShaderResource -> CopySource
+        RHIBarrierGroup group3;
+        bool b3 = tracker.TransitionTexture(testTex.GetNative(), RHIResourceLayout::CopySource, group3);
+        assert(b3 == true);
+        assert(tracker.GetTextureState(testTex.GetNative()) == RHIResourceLayout::CopySource);
+        assert(group3.GetTextureCount() == 1);
+        cmd.PipelineBarrier(group3);
+
+        // Buffer State Tracking
+        tracker.TrackBuffer(testBuf.GetNative(), RHIAccess::None, RHIPipelineStage::None);
+        assert(tracker.GetBufferAccess(testBuf.GetNative()) == RHIAccess::None);
+
+        // 6. Transition Buffer None -> ShaderResourceRead (VertexShader)
+        RHIBarrierGroup groupBuf1;
+        bool bb1 = tracker.TransitionBuffer(testBuf.GetNative(), RHIAccess::ShaderResourceRead, RHIPipelineStage::VertexShader, groupBuf1);
+        assert(bb1 == true);
+        assert(tracker.GetBufferAccess(testBuf.GetNative()) == RHIAccess::ShaderResourceRead);
+        assert(tracker.GetBufferStage(testBuf.GetNative()) == RHIPipelineStage::VertexShader);
+        assert(groupBuf1.GetBufferCount() == 1);
+        cmd.PipelineBarrier(groupBuf1);
+
+        // 7. Redundant Buffer Transition Check -> Must be ELIDED!
+        RHIBarrierGroup groupBufRedundant;
+        bool bbRedundant = tracker.TransitionBuffer(testBuf.GetNative(), RHIAccess::ShaderResourceRead, RHIPipelineStage::VertexShader, groupBufRedundant);
+        assert(bbRedundant == false); // Elided!
+        assert(groupBufRedundant.GetBufferCount() == 0);
+
+        // 8. Transition Buffer ShaderResourceRead -> ShaderResourceStorage (ComputeShader)
+        RHIBarrierGroup groupBuf2;
+        bool bb2 = tracker.TransitionBuffer(testBuf.GetNative(), RHIAccess::ShaderResourceStorage, RHIPipelineStage::ComputeShader, groupBuf2);
+        assert(bb2 == true);
+        assert(tracker.GetBufferAccess(testBuf.GetNative()) == RHIAccess::ShaderResourceStorage);
+        assert(tracker.GetBufferStage(testBuf.GetNative()) == RHIPipelineStage::ComputeShader);
+        assert(groupBuf2.GetBufferCount() == 1);
+        cmd.PipelineBarrier(groupBuf2);
+
+        // 9. Batch barrier combining DISTINCT resources (1 texture + 1 buffer simultaneously)
+        RHIBarrierGroup groupBatch;
+        bool bBatchTex = tracker.TransitionTexture(testTex.GetNative(), RHIResourceLayout::ShaderResource, groupBatch);
+        assert(bBatchTex == true);
+        bool bBatchBuf = tracker.TransitionBuffer(testBuf.GetNative(), RHIAccess::ShaderResourceRead, RHIPipelineStage::VertexShader, groupBatch);
+        assert(bBatchBuf == true);
+        assert(groupBatch.GetTextureCount() == 1);
+        assert(groupBatch.GetBufferCount() == 1);
+        cmd.PipelineBarrier(groupBatch);
+
+        bool cmdEndOk = cmd.End();
+        assert(cmdEndOk);
+        bool cmdSubmitOk = cmd.Submit();
+        assert(cmdSubmitOk);
+        rhiDevice.GetNRICore().QueueWaitIdle(rhiDevice.GetGraphicsQueue());
+        cmd.Shutdown();
+
+        testTex.Shutdown();
+        testBuf.Shutdown();
+        tracker.Reset();
+
+        std::cout << "  -> PASS: Resource state machine tracking, redundant barrier elision (texture & buffer), and GPU barrier execution verified." << std::endl;
+    }
+
+    // [66.2] High-Frequency PSO Cache Hit Rate & Multi-Pass Profiling
+    std::cout << "\n[66.2] Testing High-Frequency PSO Cache Hit Rate (>99%) across 100 Frames..." << std::endl;
+    {
+        auto& rhiDevice = RHIDevice::Get();
+        auto& compiler = RHIShaderCompiler::Get();
+        if (!compiler.IsInitialized()) {
+            compiler.Init();
+        }
+
+        std::string testShader = R"(
+            struct VSOut {
+                float4 Pos : SV_Position;
+                float2 UV  : TEXCOORD0;
+            };
+            VSOut VSMain(uint vertexId : SV_VertexID) {
+                VSOut o;
+                o.UV = float2((vertexId << 1) & 2, vertexId & 2);
+                o.Pos = float4(o.UV * 2.0f - 1.0f, 0.0f, 1.0f);
+                return o;
+            }
+
+            cbuffer SceneConstants : register(b0, space0) {
+                float4 TintColor;
+            };
+
+            float4 PSMain(VSOut input) : SV_Target {
+                return TintColor * float4(input.UV, 0.5f, 1.0f);
+            }
+        )";
+
+        RHIShaderFormat shaderFormat = (rhiDevice.GetBackend() == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+
+        RHIShaderCompileDesc vsDesc;
+        vsDesc.Source = testShader;
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        vsDesc.Format = shaderFormat;
+        auto vsRes = compiler.Compile(vsDesc);
+        assert(vsRes.Success);
+
+        RHIShaderCompileDesc psDesc;
+        psDesc.Source = testShader;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = RHIShaderStage::Fragment;
+        psDesc.Format = shaderFormat;
+        auto psRes = compiler.Compile(psDesc);
+        assert(psRes.Success);
+
+        auto autoLayout = RHIShaderReflection::Merge({ vsRes.Reflection, psRes.Reflection }).BuildPipelineLayoutDesc();
+        RHIPipelineLayout pipelineLayout;
+        bool plOk = pipelineLayout.Init(autoLayout);
+        assert(plOk);
+
+        RHIGraphicsPipelineDesc baseDesc;
+        baseDesc.Layout = &pipelineLayout;
+        baseDesc.Shaders = { vsRes.Bytecode, psRes.Bytecode };
+        baseDesc.ColorAttachmentFormats = { nri::Format::RGBA8_UNORM };
+
+        // Define 5 distinct PSO permutations for different render passes
+        // Pass 1: Opaque Base Geometry
+        RHIGraphicsPipelineDesc psoOpaque = baseDesc;
+        psoOpaque.Rasterizer.FillMode = nri::FillMode::SOLID;
+        psoOpaque.Rasterizer.CullMode = nri::CullMode::BACK;
+        psoOpaque.DepthStencil.DepthTestEnable = true;
+        psoOpaque.DepthStencil.DepthWriteEnable = true;
+        psoOpaque.DepthStencil.DepthCompareOp = nri::CompareOp::LESS;
+        psoOpaque.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+
+        // Pass 2: Wireframe Debug Overlay
+        RHIGraphicsPipelineDesc psoWireframe = psoOpaque;
+        psoWireframe.Rasterizer.FillMode = nri::FillMode::WIREFRAME;
+        psoWireframe.Rasterizer.CullMode = nri::CullMode::NONE;
+
+        // Pass 3: Alpha Blended Decal
+        RHIGraphicsPipelineDesc psoAlpha = psoOpaque;
+        psoAlpha.DepthStencil.DepthWriteEnable = false;
+        psoAlpha.ColorAttachments = { RHIBlendAttachmentDesc::AlphaBlend() };
+
+        // Pass 4: Additive VFX Particle Pass
+        RHIGraphicsPipelineDesc psoAdditive = psoOpaque;
+        psoAdditive.DepthStencil.DepthWriteEnable = false;
+        psoAdditive.ColorAttachments = { RHIBlendAttachmentDesc::Additive() };
+
+        // Pass 5: Shadow / Depth-Only Pass
+        RHIGraphicsPipelineDesc psoShadow = psoOpaque;
+        psoShadow.DepthStencil.DepthCompareOp = nri::CompareOp::LESS_EQUAL;
+        RHIBlendAttachmentDesc depthOnlyAtt;
+        depthOnlyAtt.BlendEnabled = false;
+        depthOnlyAtt.ColorWriteMask = nri::ColorWriteBits::NONE;
+        psoShadow.ColorAttachments = { depthOnlyAtt };
+
+        auto& cache = RHIPipelineCache::Get();
+        cache.Clear();
+        cache.ResetStats();
+        assert(cache.GetCacheSize() == 0);
+        assert(cache.GetHitCount() == 0);
+        assert(cache.GetMissCount() == 0);
+
+        // Frame 0 (Cold Startup): Each distinct pipeline is compiled once (5 misses)
+        std::vector<RHIGraphicsPipelineDesc> psoDescs = { psoOpaque, psoWireframe, psoAlpha, psoAdditive, psoShadow };
+        std::vector<nri::Pipeline*> compiledPipelines(5, nullptr);
+
+        for (size_t i = 0; i < psoDescs.size(); ++i) {
+            compiledPipelines[i] = cache.GetOrCreateGraphicsPipeline(psoDescs[i]);
+            assert(compiledPipelines[i] != nullptr);
+        }
+
+        assert(cache.GetCacheSize() == 5);
+        assert(cache.GetMissCount() == 5);
+        assert(cache.GetHitCount() == 0);
+        std::cout << "  -> Cold Cache Startup: 5 initial compiles (Misses: " << cache.GetMissCount() << ", Hits: " << cache.GetHitCount() << ")" << std::endl;
+
+        // Simulate 100 Frames with 5 draw calls per frame (500 pipeline lookups total)
+        const uint32_t frameCount = 100;
+        auto startTime = std::chrono::high_resolution_clock::now();
+
+        for (uint32_t f = 0; f < frameCount; ++f) {
+            for (size_t i = 0; i < psoDescs.size(); ++i) {
+                nri::Pipeline* p = cache.GetOrCreateGraphicsPipeline(psoDescs[i]);
+                assert(p == compiledPipelines[i]); // Instant hit, exact same pipeline pointer
+            }
+        }
+
+        auto elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::high_resolution_clock::now() - startTime
+        ).count();
+
+        uint64_t totalQueries = cache.GetHitCount() + cache.GetMissCount();
+        assert(cache.GetMissCount() == 5);
+        assert(cache.GetHitCount() == (frameCount * psoDescs.size()));
+        assert(totalQueries == (5 + frameCount * psoDescs.size()));
+
+        float hitRate = cache.GetHitRate();
+        std::cout << "  -> Total Cache Queries: " << totalQueries << std::endl;
+        std::cout << "  -> Cache Hits: " << cache.GetHitCount() << " | Misses: " << cache.GetMissCount() << std::endl;
+        std::cout << "  -> Cache Hit Rate: " << (hitRate * 100.0f) << "% (Target: >= 99.0%)" << std::endl;
+        std::cout << "  -> 500 Lookups Completed in: " << elapsedUs << " us (Avg " << (static_cast<double>(elapsedUs) / totalQueries) << " us/query)" << std::endl;
+
+        assert(hitRate >= 0.99f);
+        std::cout << "  -> PASS: High-frequency PSO cache hit rate validated (>99.0% hit rate, zero re-compilation)." << std::endl;
+    }
+
+    // [66.3] Swapchain Recreation Stability Stress Test
+    std::cout << "\n[66.3] Testing Swapchain Recreation Stability (10x Rapid Resizing & Minimization Guard)..." << std::endl;
+    {
+        auto& rhiDevice = RHIDevice::Get();
+        rhiDevice.Shutdown();
+
+        // Initialize non-headless RHI Device for swapchain testing
+        RHIDeviceDesc devDesc;
+        devDesc.PreferredBackend = RHIType::Direct3D12;
+        devDesc.Headless = false;
+        devDesc.AllowFallback = true;
+        bool devOk = rhiDevice.Init(devDesc);
+        assert(devOk);
+
+        Axle::WindowProps props;
+        props.Title = "Axle RHI Swapchain Stability Validation";
+        props.Width = 1280;
+        props.Height = 720;
+        props.Maximized = false;
+
+        Axle::Window window(props);
+        Axle::RHI::RHISurface surface;
+        bool surfOk = surface.Init(window);
+        assert(surfOk);
+
+        Axle::RHI::RHISwapChain swapChain;
+        Axle::RHI::RHISwapChainDesc scDesc;
+        scDesc.Width = 1280;
+        scDesc.Height = 720;
+        scDesc.BufferCount = 3;
+        scDesc.FramesInFlight = 2;
+        scDesc.VSync = true;
+        bool scOk = swapChain.Init(surface, scDesc);
+        assert(scOk);
+
+        // Initial 2 frames
+        for (int f = 0; f < 2; ++f) {
+            bool bF = swapChain.BeginFrame();
+            assert(bF);
+            bool pF = swapChain.PresentFrame();
+            assert(pF);
+        }
+
+        // 10 Consecutive Resizes
+        std::vector<std::pair<uint32_t, uint32_t>> resolutions = {
+            { 1600, 900 },
+            { 1024, 768 },
+            { 800, 600 },
+            { 1920, 1080 },
+            { 960, 540 },
+            { 1366, 768 },
+            { 2560, 1440 },
+            { 1280, 720 },
+            { 1680, 1050 },
+            { 1920, 1080 }
+        };
+
+        for (size_t i = 0; i < resolutions.size(); ++i) {
+            uint32_t w = resolutions[i].first;
+            uint32_t h = resolutions[i].second;
+
+            glfwSetWindowSize(window.GetNativeWindow(), static_cast<int>(w), static_cast<int>(h));
+            glfwPollEvents();
+            surface.Resize(w, h);
+            bool resizeOk = swapChain.Resize(w, h);
+            assert(resizeOk);
+            assert(swapChain.GetWidth() == w);
+            assert(swapChain.GetHeight() == h);
+
+            for (int f = 0; f < 2; ++f) {
+                bool bF = swapChain.BeginFrame();
+                assert(bF);
+                assert(swapChain.GetCurrentTexture() != nullptr);
+                bool pF = swapChain.PresentFrame();
+                assert(pF);
+            }
+        }
+        std::cout << "  -> Completed 10 rapid resolution resizes and presentations without DXGI error or stall." << std::endl;
+
+        // Minimized Window Guard (0x0)
+        std::cout << "  -> Testing Minimized Window Guard (0x0 resolution)..." << std::endl;
+        surface.Resize(0, 0);
+        bool minResizeOk = swapChain.Resize(0, 0);
+        assert(minResizeOk);
+        assert(swapChain.IsMinimized() == true);
+        bool bFMin = swapChain.BeginFrame();
+        assert(bFMin == false); // Guard prevents GPU crash when minimized!
+
+        // Restore Normal Window Resolution
+        std::cout << "  -> Restoring window from minimized state to 1280x720..." << std::endl;
+        surface.Resize(1280, 720);
+        bool normResizeOk = swapChain.Resize(1280, 720);
+        assert(normResizeOk);
+        assert(swapChain.IsMinimized() == false);
+        bool bFRest = swapChain.BeginFrame();
+        assert(bFRest == true);
+        bool pFRest = swapChain.PresentFrame();
+        assert(pFRest == true);
+
+        // Dynamic VSync Toggle
+        std::cout << "  -> Testing Dynamic Presentation Mode (VSync) Toggle..." << std::endl;
+        swapChain.SetVSync(false);
+        assert(swapChain.IsVSync() == false);
+        bool bFv1 = swapChain.BeginFrame();
+        assert(bFv1 == true);
+        bool pFv1 = swapChain.PresentFrame();
+        assert(pFv1 == true);
+
+        swapChain.SetVSync(true);
+        assert(swapChain.IsVSync() == true);
+        bool bFv2 = swapChain.BeginFrame();
+        assert(bFv2 == true);
+        bool pFv2 = swapChain.PresentFrame();
+        assert(pFv2 == true);
+
+        swapChain.Shutdown();
+        assert(!swapChain.IsValid());
+        rhiDevice.Shutdown();
+
+        std::cout << "  -> PASS: Swapchain recreation stability, minimization guard, and VSync toggle verified." << std::endl;
+    }
+
+    std::cout << "\n>>> STEP 66 PASSED: Phase 32 Step 7 Barrier State Machines, PSO Cache (>99%) & Swapchain Stability 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -12620,6 +13029,7 @@ int main(int argc, char** argv) {
         else if (arg == "63" || arg == "step63" || arg == "--step63" || arg == "--rhi-switcher") targetStep = 63;
         else if (arg == "64" || arg == "step64" || arg == "--step64" || arg == "--headless" || arg == "--warp" || arg == "--rhi-headless") targetStep = 64;
         else if (arg == "65" || arg == "step65" || arg == "--step65" || arg == "--parallel-rhi" || arg == "--concurrent-rhi") targetStep = 65;
+        else if (arg == "66" || arg == "step66" || arg == "--step66" || arg == "--rhi-validation" || arg == "--pso-swapchain") targetStep = 66;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -12628,7 +13038,7 @@ int main(int argc, char** argv) {
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 57 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 58 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -12815,6 +13225,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 65) {
         if (!RunTest_Step65_Phase32_Step7_MultithreadedCommandRecording()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 66) {
+        if (!RunTest_Step66_Phase32_Step7_ValidationBarrierStateMachinePSOCacheSwapchain()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

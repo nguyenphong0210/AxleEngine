@@ -1,4 +1,5 @@
 #include <Axle/RHI/RHICommandBuffer.hpp>
+#include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHIStreamer.hpp>
 #include <Axle/Log.hpp>
 
@@ -261,6 +262,33 @@ namespace Axle::RHI {
         desc.offset = 0;
         desc.bindPoint = bindPoint;
         RHIDevice::Get().GetNRICore().CmdSetRootConstants(*m_CommandBuffer, desc);
+    }
+
+    void RHICommandBuffer::SetVertexBuffers(uint32_t baseSlot, const nri::VertexBufferDesc* vertexBufferDescs, uint32_t count) {
+        if (!m_CommandBuffer || !m_IsRecording || !vertexBufferDescs || count == 0) return;
+        RHIDevice::Get().GetNRICore().CmdSetVertexBuffers(*m_CommandBuffer, baseSlot, vertexBufferDescs, count);
+    }
+
+    void RHICommandBuffer::SetVertexBuffer(uint32_t slot, const nri::Buffer* buffer, uint64_t offset, uint32_t stride) {
+        if (!m_CommandBuffer || !m_IsRecording || !buffer) return;
+        nri::VertexBufferDesc desc = {};
+        desc.buffer = buffer;
+        desc.offset = offset;
+        desc.stride = stride;
+        RHIDevice::Get().GetNRICore().CmdSetVertexBuffers(*m_CommandBuffer, slot, &desc, 1);
+    }
+
+    void RHICommandBuffer::SetVertexBuffer(uint32_t slot, const RHIBuffer& buffer, uint64_t offset, uint32_t stride) {
+        SetVertexBuffer(slot, buffer.GetNative(), offset, stride);
+    }
+
+    void RHICommandBuffer::SetIndexBuffer(const nri::Buffer* buffer, uint64_t offset, nri::IndexType indexType) {
+        if (!m_CommandBuffer || !m_IsRecording || !buffer) return;
+        RHIDevice::Get().GetNRICore().CmdSetIndexBuffer(*m_CommandBuffer, *buffer, offset, indexType);
+    }
+
+    void RHICommandBuffer::SetIndexBuffer(const RHIBuffer& buffer, uint64_t offset, nri::IndexType indexType) {
+        SetIndexBuffer(buffer.GetNative(), offset, indexType);
     }
 
     void RHICommandBuffer::SetViewports(const nri::Viewport* viewports, uint32_t count) {

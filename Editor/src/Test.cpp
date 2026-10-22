@@ -83,6 +83,9 @@
 #include <Axle/RHI/RHIECSStreamer.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
+#include <Axle/RHI/RHIVertexLayout.hpp>
+#include <Axle/RHI/RHIMesh.hpp>
+#include <Axle/AssetSerializer.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/Application.hpp>
@@ -12957,6 +12960,187 @@ bool RunTest_Step66_Phase32_Step7_ValidationBarrierStateMachinePSOCacheSwapchain
 }
 
 // =============================================================================
+// TEST STEP 67: Phase 33 Step 1 - Core Geometry, Mesh VRAM Sub-Allocation
+// & 3D Scene Geometry Streaming via RHIStreamer
+// =============================================================================
+bool RunTest_Step67_Phase33_Step1_CoreGeometryAndStreamer() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 67 TEST] 3D SCENE GEOMETRY & RHI STREAMING       " << std::endl;
+    std::cout << " (SportsCar, Wheels, Primitives, Heightfield via Streamer)" << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle::RHI;
+
+    // [67.1] Comprehensive Vertex Layouts & Attribute Descriptors
+    std::cout << "[67.1] Testing Unified 64-Byte RHIVertex3D Layout & NRI Descriptors..." << std::endl;
+    assert(sizeof(RHIVertex3D) == 64);
+    assert(sizeof(RHISkinnedVertex3D) == 96);
+    assert(offsetof(RHIVertex3D, Position) == 0);
+    assert(offsetof(RHIVertex3D, Normal) == 12);
+    assert(offsetof(RHIVertex3D, Tangent) == 24);
+    assert(offsetof(RHIVertex3D, TexCoord) == 40);
+    assert(offsetof(RHIVertex3D, Color) == 48);
+
+    auto attribs = GetRHIVertex3DAttributes(0);
+    assert(attribs.size() == 5);
+    assert(attribs[0].format == nri::Format::RGB32_SFLOAT);
+    assert(attribs[1].format == nri::Format::RGB32_SFLOAT);
+    assert(attribs[2].format == nri::Format::RGBA32_SFLOAT);
+    assert(attribs[3].format == nri::Format::RG32_SFLOAT);
+    assert(attribs[4].format == nri::Format::RGBA32_SFLOAT);
+
+    auto streamDesc = GetRHIVertex3DStreamDesc(0);
+    assert(streamDesc.stride == 64);
+    assert(streamDesc.stepRate == nri::VertexStreamStepRate::PER_VERTEX);
+
+    auto skinnedAttribs = GetRHISkinnedVertex3DAttributes(0);
+    assert(skinnedAttribs.size() == 7);
+    assert(skinnedAttribs[5].format == nri::Format::RGBA32_UINT);
+    assert(skinnedAttribs[6].format == nri::Format::RGBA32_SFLOAT);
+    std::cout << "  -> PASS: 64-byte RHIVertex3D and 96-byte RHISkinnedVertex3D memory offsets and NRI stream descs verified." << std::endl;
+
+    // Initialize Headless RHI Device
+    auto& rhiDevice = RHIDevice::Get();
+    if (!rhiDevice.IsInitialized()) {
+        RHIDeviceDesc devDesc;
+        devDesc.PreferredBackend = RHIType::Direct3D12;
+        devDesc.Headless = true;
+        devDesc.AllowFallback = true;
+        bool devOk = rhiDevice.Init(devDesc);
+        assert(devOk);
+    }
+
+    RHIStreamer streamer;
+    RHIStreamerDesc strDesc;
+    bool strOk = streamer.Init(strDesc);
+    assert(strOk);
+
+    RHICommandBuffer cmd;
+    bool cmdInitOk = cmd.Init();
+    assert(cmdInitOk);
+    bool cmdBeginOk = cmd.Begin();
+    assert(cmdBeginOk);
+
+    // [67.2] Procedural 3D Primitive Shapes Geometry Streaming
+    std::cout << "\n[67.2] Testing Procedural Primitive Shapes Streaming via RHIStreamer..." << std::endl;
+    // Cube
+    auto cubeMesh = RHIMesh::StreamCube(streamer, cmd, 1.0f);
+    assert(cubeMesh != nullptr);
+    assert(cubeMesh->IsValid());
+    assert(cubeMesh->GetVertexCount() == 24);
+    assert(cubeMesh->GetIndexCount() == 36);
+    assert(cubeMesh->GetBoundingSize().x == 1.0f);
+
+    // Sphere
+    auto sphereMesh = RHIMesh::StreamSphere(streamer, cmd, 1.0f, 16, 24);
+    assert(sphereMesh != nullptr);
+    assert(sphereMesh->IsValid());
+    assert(sphereMesh->GetVertexCount() > 0);
+    assert(sphereMesh->GetIndexCount() > 0);
+
+    // Plane
+    auto planeMesh = RHIMesh::StreamPlane(streamer, cmd, 10.0f, 10.0f, 4, 4);
+    assert(planeMesh != nullptr);
+    assert(planeMesh->IsValid());
+    assert(planeMesh->GetVertexCount() == 25);
+    assert(planeMesh->GetIndexCount() == 96);
+    std::cout << "  -> Streamed Cube (24 verts, 36 idx), Sphere, and Plane into Device VRAM via RHIStreamer." << std::endl;
+    std::cout << "  -> PASS: Primitive geometry streaming into GPU-resident buffers verified." << std::endl;
+
+    // [67.3] SportsCar Chassis OBJ/axlemesh & Racing Wheel Streaming
+    std::cout << "\n[67.3] Testing SportsCar Chassis & Wheel Geometry Streaming into GPU VRAM..." << std::endl;
+    std::filesystem::path chassisPath = "Editor/assets/models/SportsCar_Chassis.axlemesh";
+    std::filesystem::path wheelPath = "Editor/assets/models/SportsCar_Wheel.axlemesh";
+    if (!std::filesystem::exists(chassisPath)) chassisPath = "assets/models/SportsCar_Chassis.axlemesh";
+    if (!std::filesystem::exists(wheelPath)) wheelPath = "assets/models/SportsCar_Wheel.axlemesh";
+
+    assert(std::filesystem::exists(chassisPath));
+    assert(std::filesystem::exists(wheelPath));
+
+    Axle::AxleMeshSource chassisSource;
+    bool loadChassisOk = Axle::AssetSerializer::LoadFromAxleText(chassisPath, chassisSource);
+    assert(loadChassisOk);
+    assert(!chassisSource.Vertices.empty());
+    assert(!chassisSource.Indices.empty());
+
+    auto chassisMesh = RHIMesh::StreamFromAxleMesh(streamer, cmd, chassisSource.Vertices, chassisSource.Indices,
+                                                  chassisSource.ColorPrimary, "SportsCar_Chassis");
+    assert(chassisMesh != nullptr);
+    assert(chassisMesh->IsValid());
+    assert(chassisMesh->GetVertexCount() == chassisSource.Vertices.size());
+    assert(chassisMesh->GetIndexCount() == chassisSource.Indices.size());
+
+    Axle::AxleMeshSource wheelSource;
+    bool loadWheelOk = Axle::AssetSerializer::LoadFromAxleText(wheelPath, wheelSource);
+    assert(loadWheelOk);
+    assert(!wheelSource.Vertices.empty());
+    assert(!wheelSource.Indices.empty());
+
+    auto wheelMesh = RHIMesh::StreamFromAxleMesh(streamer, cmd, wheelSource.Vertices, wheelSource.Indices,
+                                                wheelSource.ColorPrimary, "SportsCar_Wheel");
+    assert(wheelMesh != nullptr);
+    assert(wheelMesh->IsValid());
+    assert(wheelMesh->GetVertexCount() == wheelSource.Vertices.size());
+    assert(wheelMesh->GetIndexCount() == wheelSource.Indices.size());
+
+    std::cout << "  -> Streamed SportsCar_Chassis (" << chassisMesh->GetVertexCount() << " vertices, " << chassisMesh->GetIndexCount() << " indices) into VRAM." << std::endl;
+    std::cout << "  -> Streamed SportsCar_Wheel (" << wheelMesh->GetVertexCount() << " vertices, " << wheelMesh->GetIndexCount() << " indices) into VRAM." << std::endl;
+    std::cout << "  -> PASS: SportsCar chassis OBJ/axlemesh & wheel geometry streamed into GPU-resident VRAM." << std::endl;
+
+    // [67.4] Procedural Terrain Heightfield Streaming
+    std::cout << "\n[67.4] Testing Procedural Terrain Heightfield Streaming with Normals & Splat Weights..." << std::endl;
+    const uint32_t terrainResX = 32;
+    const uint32_t terrainResZ = 32;
+    std::vector<float> heights(terrainResX * terrainResZ);
+    std::vector<glm::vec4> splats(terrainResX * terrainResZ);
+
+    for (uint32_t z = 0; z < terrainResZ; ++z) {
+        for (uint32_t x = 0; x < terrainResX; ++x) {
+            float fx = static_cast<float>(x) / static_cast<float>(terrainResX);
+            float fz = static_cast<float>(z) / static_cast<float>(terrainResZ);
+            float h = std::sin(fx * 3.14159f * 2.0f) * std::cos(fz * 3.14159f * 2.0f) * 5.0f;
+            heights[z * terrainResX + x] = h;
+
+            // Multi-channel terrain splatmap (Grass, Rock, Mud, Sand)
+            float rockWeight = std::clamp((h - 2.0f) / 3.0f, 0.0f, 1.0f);
+            float grassWeight = 1.0f - rockWeight;
+            splats[z * terrainResX + x] = glm::vec4(grassWeight, rockWeight, 0.0f, 0.0f);
+        }
+    }
+
+    auto terrainMesh = RHIMesh::StreamTerrainHeightfield(streamer, cmd, terrainResX, terrainResZ, heights,
+                                                        glm::vec3(2.0f, 1.0f, 2.0f), glm::vec3(-32.0f, 0.0f, -32.0f), splats);
+    assert(terrainMesh != nullptr);
+    assert(terrainMesh->IsValid());
+    assert(terrainMesh->GetVertexCount() == terrainResX * terrainResZ);
+    assert(terrainMesh->GetIndexCount() == (terrainResX - 1) * (terrainResZ - 1) * 6);
+    std::cout << "  -> Streamed Terrain Heightfield (" << terrainMesh->GetVertexCount() << " vertices, " << terrainMesh->GetIndexCount() << " indices) with splat weights." << std::endl;
+    std::cout << "  -> PASS: Procedural terrain heightfield geometry successfully streamed." << std::endl;
+
+    // [67.5] Buffer Binding, Drawing and Queue Execution Verification
+    std::cout << "\n[67.5] Testing Command List Binding (SetVertexBuffer/SetIndexBuffer) & Submission..." << std::endl;
+    cubeMesh->Bind(cmd);
+    chassisMesh->Bind(cmd);
+    wheelMesh->Bind(cmd);
+    terrainMesh->Bind(cmd);
+
+    bool cmdEndOk = cmd.End();
+    assert(cmdEndOk);
+
+    bool submitOk = cmd.Submit();
+    assert(submitOk);
+
+    rhiDevice.GetNRICore().QueueWaitIdle(rhiDevice.GetGraphicsQueue());
+    std::cout << "  -> PASS: Successfully recorded and executed copy batches and buffer bindings on GPU queue." << std::endl;
+
+    streamer.Shutdown();
+    rhiDevice.Shutdown();
+
+    std::cout << "\n>>> STEP 67 PASSED: Phase 33 Step 1 3D Scene Geometry Streaming (SportsCar, Wheels, Primitives, Heightfield) 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -13030,6 +13214,7 @@ int main(int argc, char** argv) {
         else if (arg == "64" || arg == "step64" || arg == "--step64" || arg == "--headless" || arg == "--warp" || arg == "--rhi-headless") targetStep = 64;
         else if (arg == "65" || arg == "step65" || arg == "--step65" || arg == "--parallel-rhi" || arg == "--concurrent-rhi") targetStep = 65;
         else if (arg == "66" || arg == "step66" || arg == "--step66" || arg == "--rhi-validation" || arg == "--pso-swapchain") targetStep = 66;
+        else if (arg == "67" || arg == "step67" || arg == "--step67" || arg == "--geometry" || arg == "--mesh-streaming") targetStep = 67;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -13038,7 +13223,7 @@ int main(int argc, char** argv) {
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 58 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 59 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -13228,6 +13413,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 66) {
         if (!RunTest_Step66_Phase32_Step7_ValidationBarrierStateMachinePSOCacheSwapchain()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 67) {
+        if (!RunTest_Step67_Phase33_Step1_CoreGeometryAndStreamer()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

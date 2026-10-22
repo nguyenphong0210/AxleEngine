@@ -63,6 +63,13 @@ namespace Axle::RHI {
         void SetDescriptorSet(nri::BindPoint bindPoint, uint32_t setIndex, nri::DescriptorSet* descriptorSet);
         void SetRootConstants(uint32_t rootConstantIndex, const void* data, uint32_t size, nri::BindPoint bindPoint = nri::BindPoint::INHERIT);
 
+        // Vertex & Index Buffer Binding
+        void SetVertexBuffers(uint32_t baseSlot, const nri::VertexBufferDesc* vertexBufferDescs, uint32_t count);
+        void SetVertexBuffer(uint32_t slot, const nri::Buffer* buffer, uint64_t offset = 0, uint32_t stride = 0);
+        void SetVertexBuffer(uint32_t slot, const RHIBuffer& buffer, uint64_t offset = 0, uint32_t stride = 0);
+        void SetIndexBuffer(const nri::Buffer* buffer, uint64_t offset, nri::IndexType indexType);
+        void SetIndexBuffer(const RHIBuffer& buffer, uint64_t offset, nri::IndexType indexType);
+
         // Viewport & Scissor Setup
         void SetViewports(const nri::Viewport* viewports, uint32_t count);
         void SetViewport(const nri::Viewport& viewport);

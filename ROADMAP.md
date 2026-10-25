@@ -375,6 +375,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [ ] Interactive Viewport GPU Object ID Picking: Secondary integer render target (`R32_UINT`) encoding Entity IDs per pixel, enabling instantaneous single-click entity selection in Viewport on DX12, Vulkan, and OpenGL without CPU raycast overhead.
   - [ ] **Step 6 - Triple-Backend Seamless Switching & Automated Verification (100% Visual Parity)**:
     - [ ] Seamless CLI switcher verification: `--rhi=dx12`, `--rhi=vulkan`, and `--rhi=opengl` producing pixel-accurate scene renders, lighting, shadows, and physics interactions.
+    - [ ] In-Editor Project Settings RHI Selector & Restart Workflow: Dedicated `Project Settings -> Graphics RHI` dropdown (`Direct3D 12`, `Vulkan 1.3`, `OpenGL 4.5`), persistent serialization into `.axleproject` (`ProjectConfig`), and automated seamless Editor restart prompt ("Save & Restart Now") without manual command-line flags.
     - [ ] Full Viewport Gizmo & Interaction Parity: ImGuizmo transformation (Translate/Rotate/Scale), Free-Fly/Orbit camera, and prefab drag-and-drop fully functional across all 3 backends.
     - [ ] Automated test suites (Step 67+) in `AxleTests.exe` validating mesh upload bandwidth, draw call dispatch rates, descriptor recycling, and zero memory leaks upon scene reload.
 - [ ] **Phase 34: Declarative QML In-Game UI & Hardware-Accelerated `Canvas2D` Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**

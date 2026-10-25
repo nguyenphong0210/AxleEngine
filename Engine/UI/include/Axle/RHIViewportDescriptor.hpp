@@ -11,7 +11,7 @@ namespace Axle {
     struct RHIViewportDesc {
         uint32_t Width = 1280;
         uint32_t Height = 720;
-        RHI::RHITextureFormat ColorFormat = RHI::RHITextureFormat::RGBA8_UNORM;
+        RHI::RHITextureFormat ColorFormat = RHI::RHITextureFormat::RGBA16_FLOAT;
         bool EnableDepth = true;
         RHI::RHITextureFormat DepthFormat = RHI::RHITextureFormat::D32_FLOAT;
         std::string DebugName = "EditorViewport";
@@ -31,11 +31,22 @@ namespace Axle {
         // Initialize and allocate offscreen color (+ optional depth) textures and bind to ImGuiLayer
         bool Init(ImGuiLayer* imguiLayer, const RHIViewportDesc& desc);
         bool Init(ImGuiLayer* imguiLayer, uint32_t width, uint32_t height, 
-                  RHI::RHITextureFormat colorFormat = RHI::RHITextureFormat::RGBA8_UNORM, 
+                  RHI::RHITextureFormat colorFormat = RHI::RHITextureFormat::RGBA16_FLOAT, 
                   bool enableDepth = true);
 
         // Bind an externally-managed RHITexture to ImGuiLayer
         bool BindExternalTexture(ImGuiLayer* imguiLayer, RHI::RHITexture* texture);
+
+        // Dynamic format and HDR toggling
+        bool IsHDR() const { return m_Desc.ColorFormat == RHI::RHITextureFormat::RGBA16_FLOAT; }
+        bool SetHDR(bool enableHDR);
+        bool SetColorFormat(RHI::RHITextureFormat newFormat);
+        bool SetDepthFormat(RHI::RHITextureFormat depthFormat);
+
+        RHI::RHITextureFormat GetColorFormat() const { return m_Desc.ColorFormat; }
+        RHI::RHITextureFormat GetDepthFormat() const { return m_Desc.DepthFormat; }
+        nri::Format GetNRIColorFormat() const { return RHI::ToNRIFormat(m_Desc.ColorFormat); }
+        nri::Format GetNRIDepthFormat() const { return RHI::ToNRIFormat(m_Desc.DepthFormat); }
 
         // Resize the offscreen viewport render targets and refresh ImGui descriptor binding
         bool Resize(uint32_t newWidth, uint32_t newHeight);

@@ -191,12 +191,10 @@ namespace Axle {
     void RHISceneRenderer::Shutdown() {
         if (!m_Initialized) return;
 
-        if (m_Device && m_Pipeline) {
-            m_Device->GetNRICore().DestroyPipeline(m_Pipeline);
-            m_Pipeline = nullptr;
-        }
-
+        m_Pipeline = nullptr;
+        m_PipelineHDR = nullptr;
         m_SkyboxPipeline = nullptr;
+        m_SkyboxPipelineHDR = nullptr;
         m_SkyboxPipelineLayout.Shutdown();
         m_SkyboxConstantBuffer.Shutdown();
 
@@ -358,7 +356,7 @@ namespace Axle {
         }
     }
 
-    bool RHISceneRenderer::CreateGraphicsPipeline(RHIDevice& device) {
+    nri::Pipeline* RHISceneRenderer::GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_PipelineLayout;
         gfxDesc.Shaders = { m_VertexShader, m_PixelShader };
@@ -370,10 +368,10 @@ namespace Axle {
         gfxDesc.DepthStencil.DepthTestEnable = true;
         gfxDesc.DepthStencil.DepthWriteEnable = true;
         gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS;
-        gfxDesc.DepthStencil.DepthStencilFormat = nri::Format::D32_SFLOAT;
+        gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
 
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
-        gfxDesc.ColorAttachmentFormats = { nri::Format::RGBA8_UNORM };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
 
         // Configure 64-byte RHIVertex3D input layout
         RHIVertexInputDesc inputDesc;
@@ -386,8 +384,13 @@ namespace Axle {
         gfxDesc.VertexInput = inputDesc;
 
         auto& cache = RHIPipelineCache::Get();
-        m_Pipeline = cache.GetOrCreateGraphicsPipeline(gfxDesc);
-        return m_Pipeline != nullptr;
+        return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreateGraphicsPipeline(RHIDevice& device) {
+        m_Pipeline = GetOrCreatePipeline(nri::Format::RGBA8_UNORM, nri::Format::D32_SFLOAT);
+        m_PipelineHDR = GetOrCreatePipeline(nri::Format::RGBA16_SFLOAT, nri::Format::D32_SFLOAT);
+        return m_Pipeline != nullptr && m_PipelineHDR != nullptr;
     }
 
     bool RHISceneRenderer::CompileSkyboxShaders(RHIDevice& device) {
@@ -466,7 +469,7 @@ namespace Axle {
         return m_SkyboxPipelineLayout.Init(layoutDesc);
     }
 
-    bool RHISceneRenderer::CreateSkyboxPipeline(RHIDevice& device) {
+    nri::Pipeline* RHISceneRenderer::GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_SkyboxPipelineLayout;
         gfxDesc.Shaders = { m_SkyboxVertexShader, m_SkyboxPixelShader };
@@ -478,17 +481,42 @@ namespace Axle {
         gfxDesc.DepthStencil.DepthTestEnable = true;
         gfxDesc.DepthStencil.DepthWriteEnable = false;
         gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS_EQUAL;
-        gfxDesc.DepthStencil.DepthStencilFormat = nri::Format::D32_SFLOAT;
+        gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
 
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
-        gfxDesc.ColorAttachmentFormats = { nri::Format::RGBA8_UNORM };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
 
         // Empty vertex input layout (full-screen triangle generated via SV_VertexID)
         gfxDesc.VertexInput = RHIVertexInputDesc{};
 
         auto& cache = RHIPipelineCache::Get();
-        m_SkyboxPipeline = cache.GetOrCreateGraphicsPipeline(gfxDesc);
-        return m_SkyboxPipeline != nullptr;
+        return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreateSkyboxPipeline(RHIDevice& device) {
+        m_SkyboxPipeline = GetOrCreateSkyboxPipeline(nri::Format::RGBA8_UNORM, nri::Format::D32_SFLOAT);
+        m_SkyboxPipelineHDR = GetOrCreateSkyboxPipeline(nri::Format::RGBA16_SFLOAT, nri::Format::D32_SFLOAT);
+        return m_SkyboxPipeline != nullptr && m_SkyboxPipelineHDR != nullptr;
+    }
+
+    void RHISceneRenderer::SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat) {
+        m_CurrentColorFormat = RHI::ToNRIFormat(colorFormat);
+        m_CurrentDepthFormat = RHI::ToNRIFormat(depthFormat);
+    }
+
+    RHI::RHITextureFormat RHISceneRenderer::GetRenderTargetColorFormat() const {
+        switch (m_CurrentColorFormat) {
+            case nri::Format::RGBA16_SFLOAT: return RHI::RHITextureFormat::RGBA16_FLOAT;
+            case nri::Format::RGBA32_SFLOAT: return RHI::RHITextureFormat::RGBA32_FLOAT;
+            default:                         return RHI::RHITextureFormat::RGBA8_UNORM;
+        }
+    }
+
+    RHI::RHITextureFormat RHISceneRenderer::GetRenderTargetDepthFormat() const {
+        switch (m_CurrentDepthFormat) {
+            case nri::Format::D24_UNORM_S8_UINT: return RHI::RHITextureFormat::D24_UNORM_S8_UINT;
+            default:                             return RHI::RHITextureFormat::D32_FLOAT;
+        }
     }
 
     void RHISceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene,
@@ -498,6 +526,11 @@ namespace Axle {
                                        const SceneRenderSettings& settings)
     {
         if (!colorTarget || !colorTarget->IsValid()) return;
+
+        m_CurrentColorFormat = RHI::ToNRIFormat(colorTarget->GetFormat());
+        if (depthTarget && depthTarget->IsValid()) {
+            m_CurrentDepthFormat = RHI::ToNRIFormat(depthTarget->GetFormat());
+        }
 
         RenderScene(scene, camera,
                     colorTarget->GetNative(),
@@ -674,8 +707,13 @@ namespace Axle {
         nri::Rect scissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
         m_CommandBuffer.SetScissor(scissor);
 
-        // Bind Graphics Pipeline & Layout
-        m_CommandBuffer.SetPipeline(m_Pipeline);
+        // Bind Graphics Pipeline & Layout matching active color & depth formats
+        nri::Pipeline* activePipeline = (m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR)
+                                            ? m_PipelineHDR
+                                            : (m_CurrentColorFormat == nri::Format::RGBA8_UNORM && m_Pipeline)
+                                                  ? m_Pipeline
+                                                  : GetOrCreatePipeline(m_CurrentColorFormat, m_CurrentDepthFormat);
+        m_CommandBuffer.SetPipeline(activePipeline ? activePipeline : m_Pipeline);
         m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
 
         // Bind Root Descriptors: [0] SceneConstants (b1), [1] MultiLightBuffer (b2)
@@ -819,8 +857,13 @@ namespace Axle {
                     m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants));
                 }
 
-                // 4. Bind Skybox Graphics Pipeline & Root Constants
-                m_CommandBuffer.SetPipeline(m_SkyboxPipeline);
+                // 4. Bind Skybox Graphics Pipeline matching active color & depth formats
+                nri::Pipeline* activeSkyboxPipeline = (m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR)
+                                                          ? m_SkyboxPipelineHDR
+                                                          : (m_CurrentColorFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline)
+                                                                ? m_SkyboxPipeline
+                                                                : GetOrCreateSkyboxPipeline(m_CurrentColorFormat, m_CurrentDepthFormat);
+                m_CommandBuffer.SetPipeline(activeSkyboxPipeline ? activeSkyboxPipeline : m_SkyboxPipeline);
                 m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SkyboxPipelineLayout);
                 if (m_SkyboxConstantBuffer.IsValid() && m_SkyboxConstantBuffer.GetCBV()) {
                     m_CommandBuffer.SetRootDescriptor(0, m_SkyboxConstantBuffer.GetCBV());

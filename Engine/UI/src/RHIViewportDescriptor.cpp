@@ -105,6 +105,70 @@ namespace Axle {
         return RegisterWithImGui();
     }
 
+    bool RHIViewportDescriptor::SetHDR(bool enableHDR) {
+        RHI::RHITextureFormat targetFormat = enableHDR ? RHI::RHITextureFormat::RGBA16_FLOAT : RHI::RHITextureFormat::RGBA8_UNORM;
+        return SetColorFormat(targetFormat);
+    }
+
+    bool RHIViewportDescriptor::SetColorFormat(RHI::RHITextureFormat newFormat) {
+        if (m_Desc.ColorFormat == newFormat && IsValid()) {
+            return true;
+        }
+
+        if (!m_OwnsColorTexture) {
+            AXLE_CORE_WARN("RHIViewportDescriptor::SetColorFormat cannot modify externally-owned texture!");
+            return false;
+        }
+
+        m_Desc.ColorFormat = newFormat;
+        if (m_Desc.Width == 0 || m_Desc.Height == 0) {
+            return true;
+        }
+
+        UnregisterFromImGui();
+
+        auto colorDesc = RHI::RHITextureDesc::RenderTarget2D(m_Desc.Width, m_Desc.Height, m_Desc.ColorFormat, m_Desc.DebugName + "_Color");
+        if (!m_OwnedColorTexture) {
+            m_OwnedColorTexture = std::make_unique<RHI::RHITexture>();
+        }
+        if (!m_OwnedColorTexture->Init(colorDesc)) {
+            AXLE_CORE_ERROR("RHIViewportDescriptor::SetColorFormat: Failed to recreate color texture!");
+            Shutdown();
+            return false;
+        }
+        m_ColorTexture = m_OwnedColorTexture.get();
+
+        if (!RegisterWithImGui()) {
+            AXLE_CORE_ERROR("RHIViewportDescriptor::SetColorFormat: Failed to register texture with ImGui!");
+            Shutdown();
+            return false;
+        }
+
+        return true;
+    }
+
+    bool RHIViewportDescriptor::SetDepthFormat(RHI::RHITextureFormat depthFormat) {
+        if (m_Desc.DepthFormat == depthFormat && m_DepthTexture && m_DepthTexture->IsValid()) {
+            return true;
+        }
+
+        m_Desc.DepthFormat = depthFormat;
+        if (!m_Desc.EnableDepth || m_Desc.Width == 0 || m_Desc.Height == 0) {
+            return true;
+        }
+
+        if (!m_DepthTexture) {
+            m_DepthTexture = std::make_unique<RHI::RHITexture>();
+        }
+        auto depthDesc = RHI::RHITextureDesc::DepthStencil2D(m_Desc.Width, m_Desc.Height, m_Desc.DepthFormat, m_Desc.DebugName + "_Depth");
+        if (!m_DepthTexture->Init(depthDesc)) {
+            AXLE_CORE_ERROR("RHIViewportDescriptor::SetDepthFormat: Failed to recreate depth texture!");
+            return false;
+        }
+
+        return true;
+    }
+
     bool RHIViewportDescriptor::Resize(uint32_t newWidth, uint32_t newHeight) {
         if (newWidth == 0 || newHeight == 0) {
             return false;

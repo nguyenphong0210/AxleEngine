@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized), with **Phase 33 in active progress**.
-* **Automated Test Verification**: **60 Comprehensive Headless Test Suites** (`AxleTests.exe`, 67 individual test steps up through **Step 75**) passing with **100% pass rate**.
+* **Automated Test Verification**: **61 Comprehensive Headless Test Suites** (`AxleTests.exe`, 68 individual test steps up through **Step 76**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 33 (Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline)** and beyond.
 
 ---
@@ -361,7 +361,12 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
       - [x] **SceneRenderer Pass 5 Pipeline Integration**: Automated discovery of ECS `SkyboxComponent` (`SkyboxType::ProceduralAtmosphere`), dynamic sun direction synchronization with ECS `DirectionalLightComponent`, non-depth-writing early-Z test (`DepthCompareOp = LESS_EQUAL`, `DepthWriteEnable = false`, `CullMode = NONE`) rendering behind opaque scene geometry.
       - [x] **Automated Test Suite Step 75 (`AxleTests.exe 75`)**: Verified dual-stage bytecode compilation, 256-byte constant buffer reflection and alignment, solar elevation/azimuth vector trigonometry, live PSO creation, and viewport scene dispatch (4 draw calls) with zero unreleased D3D12/Vulkan allocations.
   - [ ] **Step 4 - Post-Processing, HDR Tone Mapping & Anti-Aliasing (FXAA/MSAA)**:
-    - [ ] Floating-point offscreen HDR render target (`RGBA16_FLOAT` / `RGBA8_UNORM`) with depth-stencil (`D32_FLOAT`) and seamless dynamic viewport resizing synchronization.
+    - [x] **Floating-Point Offscreen HDR Render Target (`RGBA16_FLOAT` / `RGBA8_UNORM`) & Dynamic Viewport Resizing Sync**:
+      - [x] **Floating-Point HDR & D32_FLOAT Infrastructure**: Offscreen floating-point HDR render target (`RHITextureFormat::RGBA16_FLOAT`) and 32-bit floating-point depth-stencil (`RHITextureFormat::D32_FLOAT`) allocated on GPU device-local VRAM via `RHIViewportDescriptor` and `RHITexture` with dedicated SRV, RTV, and DSV view generation.
+      - [x] **Dual-Format PSO Compilation & Format Independence in `RHISceneRenderer`**: Automatic dual-compilation and LRU caching of distinct Graphics Pipeline State Objects for SDR (`RGBA8_UNORM`) and HDR (`RGBA16_FLOAT`) across both PBR geometry passes (`m_Pipeline` vs `m_PipelineHDR`) and Atmospheric Skybox passes (`m_SkyboxPipeline` vs `m_SkyboxPipelineHDR`). Dynamic target RTV format detection prevents API format mismatch errors on Direct3D 12 and Vulkan.
+      - [x] **Seamless Dynamic Viewport Resizing Synchronization**: Optimized `RHIViewportDescriptor::Resize()` cycle with zero-leak VRAM reallocation, descriptor slot recycling into `ImGuiLayer` free list, aspect ratio preservation, and zero-dimension guards for minimized windows.
+      - [x] **Runtime Dynamic HDR / SDR Toggle**: `SetHDR(bool)` and `SetColorFormat()` APIs with live toggle support in Editor Viewport menu, allowing instantaneous switching between HDR (`RGBA16_FLOAT`) and SDR (`RGBA8_UNORM`).
+      - [x] **Automated Test Suite Step 76 (`AxleTests.exe 76`)**: 5-stage headless test suite validating HDR texture allocation, dual-format PSO compilation, 5-cycle dynamic resize stress testing, format reconfiguration, and live viewport scene dispatch (4 draw calls) with zero GPU memory leaks (100% PASS).
     - [ ] Exposure Control & Film-Grade Tone Mapping: ACES Filmic (Narkowicz fit), Reinhard, and Uncharted 2 curves with adjustable exposure compensation and gamma correction (sRGB EOTF).
     - [ ] Anti-Aliasing Integration: Fast Approximate Anti-Aliasing (FXAA) and hardware MSAA (2x/4x/8x) to eliminate jagged specular edges and aliased wireframes.
   - [ ] **Step 5 - Secondary Visual Passes (GPU Particle VFX, Physics Wireframes & GPU Object Picking)**:

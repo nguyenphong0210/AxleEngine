@@ -77,12 +77,22 @@ namespace Axle {
 
         RHI::RHIPipelineLayout& GetPipelineLayout() { return m_PipelineLayout; }
         nri::Pipeline* GetPipeline() const { return m_Pipeline; }
+        nri::Pipeline* GetHDRPipeline() const { return m_PipelineHDR; }
         RHI::RHIStreamer* GetStreamer() const { return m_Streamer.get(); }
         RHI::RHISampler& GetSampler() { return m_AnisoSampler; }
         RHI::RHIDescriptorPool& GetDescriptorPool() { return m_DescriptorPool; }
         nri::DescriptorSet* GetDefaultDescriptorSet() const { return m_DefaultDescriptorSet; }
         RHI::RHIMultiLightBuffer& GetLightBuffer() { return m_LightBuffer; }
         const RHI::RHIMultiLightBuffer& GetLightBuffer() const { return m_LightBuffer; }
+
+        // Render target format & HDR configuration
+        void SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat = RHI::RHITextureFormat::D32_FLOAT);
+        RHI::RHITextureFormat GetRenderTargetColorFormat() const;
+        RHI::RHITextureFormat GetRenderTargetDepthFormat() const;
+        bool IsHDR() const { return m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT; }
+
+        nri::Pipeline* GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT);
+        nri::Pipeline* GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT);
 
         // Image-Based Lighting (IBL) configuration
         void SetIBLMaps(const std::shared_ptr<RHI::RHITexture>& irradiance,
@@ -99,6 +109,7 @@ namespace Axle {
         const SkyboxComponent& GetSkyboxParameters() const { return m_SkyboxParams; }
         SkyboxComponent& GetSkyboxParameters() { return m_SkyboxParams; }
         nri::Pipeline* GetSkyboxPipeline() const { return m_SkyboxPipeline; }
+        nri::Pipeline* GetHDRSkyboxPipeline() const { return m_SkyboxPipelineHDR; }
         RHI::RHIPipelineLayout& GetSkyboxPipelineLayout() { return m_SkyboxPipelineLayout; }
         RHI::RHIBuffer& GetSkyboxConstantBuffer() { return m_SkyboxConstantBuffer; }
 
@@ -115,6 +126,10 @@ namespace Axle {
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
         nri::Pipeline* m_Pipeline = nullptr;
+        nri::Pipeline* m_PipelineHDR = nullptr;
+
+        nri::Format m_CurrentColorFormat = nri::Format::RGBA8_UNORM;
+        nri::Format m_CurrentDepthFormat = nri::Format::D32_SFLOAT;
 
         RHI::RHISampler m_AnisoSampler;
         RHI::RHIDescriptorPool m_DescriptorPool;
@@ -134,6 +149,7 @@ namespace Axle {
         // Atmospheric Skybox Resources
         RHI::RHIPipelineLayout m_SkyboxPipelineLayout;
         nri::Pipeline* m_SkyboxPipeline = nullptr;
+        nri::Pipeline* m_SkyboxPipelineHDR = nullptr;
         RHI::RHIBuffer m_SkyboxConstantBuffer;
         RHI::RHIShaderBytecode m_SkyboxVertexShader;
         RHI::RHIShaderBytecode m_SkyboxPixelShader;

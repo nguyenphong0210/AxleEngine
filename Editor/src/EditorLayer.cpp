@@ -144,7 +144,7 @@ void EditorLayer::OnAttach() {
             Axle::RHIViewportDesc vpDesc;
             vpDesc.Width = m_ViewportWidth;
             vpDesc.Height = m_ViewportHeight;
-            vpDesc.ColorFormat = Axle::RHI::RHITextureFormat::RGBA8_UNORM;
+            vpDesc.ColorFormat = Axle::RHI::RHITextureFormat::RGBA16_FLOAT;
             vpDesc.EnableDepth = true;
             vpDesc.DepthFormat = Axle::RHI::RHITextureFormat::D32_FLOAT;
             vpDesc.DebugName = "EditorMainViewport";
@@ -1847,6 +1847,13 @@ void EditorLayer::OnImGuiRender() {
             ImGui::MenuItem("Visual FX (VFX) Editor", nullptr, &m_ShowVFXEditor);
             ImGui::MenuItem("Performance & Debug", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
+            if (m_RHIViewport && m_RHIViewport->IsValid()) {
+                bool isHDR = m_RHIViewport->IsHDR();
+                if (ImGui::MenuItem("HDR Viewport (RGBA16_FLOAT)", nullptr, &isHDR)) {
+                    m_RHIViewport->SetHDR(isHDR);
+                    ClearRHIViewport();
+                }
+            }
             ImGui::Separator();
             bool isMaximized = Axle::Application::Get().GetWindow().IsMaximized();
             if (ImGui::MenuItem(isMaximized ? "Restore Window" : "Maximize Window", "F11")) {

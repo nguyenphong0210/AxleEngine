@@ -524,7 +524,9 @@ namespace Axle {
     }
 
     void Scene::RenderGeometryPass(const PerspectiveCamera& camera, Shader& shader,
-                                   const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, int shadowMapSlot) {
+                                   const glm::mat4& lightSpaceMatrix, const glm::vec3& lightDir, int shadowMapSlot,
+                                   const std::vector<glm::mat4>& cascadeMatrices,
+                                   const std::vector<float>& cascadeSplitDistances) {
         // 1. Query active directional sun light in scene
         DirectionalLightComponent sunLight;
         bool hasSunLight = GetPrimaryDirectionalLight(sunLight);
@@ -538,18 +540,29 @@ namespace Axle {
         int activeToneMapping = hasSunLight ? sunLight.ToneMappingMode : 0;
         float activeGamma = hasSunLight ? sunLight.Gamma : 2.2f;
 
-        // 2. Bind shader & setup camera and light uniforms
+        // 2. Bind shader & setup camera, CSM, and light uniforms
         shader.Bind();
         shader.SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix());
+        shader.SetMat4("u_View", camera.GetViewMatrix());
         shader.SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
+
+        if (!cascadeMatrices.empty()) {
+            shader.SetMat4Array("u_CascadeLightSpaceMatrices", cascadeMatrices.data(), static_cast<u32>(cascadeMatrices.size()));
+        }
+        if (!cascadeSplitDistances.empty()) {
+            shader.SetFloatArray("u_CascadeSplitDistances", cascadeSplitDistances.data(), static_cast<u32>(cascadeSplitDistances.size()));
+        }
+
         shader.SetFloat3("u_LightDir", activeLightDir);
         shader.SetFloat3("u_LightColor", activeLightColor);
         shader.SetFloat("u_LightIntensity", activeIntensity);
         shader.SetFloat("u_AmbientIntensity", activeAmbient);
         shader.SetInt("u_ShadowsEnabled", activeShadows);
         shader.SetInt("u_ShadowMap", shadowMapSlot);
-        shader.SetFloat("u_ShadowBias", (hasSunLight && sunLight.ShadowBias > 0.0f) ? sunLight.ShadowBias : 0.0012f);
-        shader.SetFloat("u_ShadowFilterRadius", (hasSunLight && sunLight.ShadowFilterRadius > 0.0f) ? sunLight.ShadowFilterRadius : 2.0f);
+        shader.SetFloat("u_ShadowBias", (hasSunLight && sunLight.ShadowBias > 0.0f) ? sunLight.ShadowBias : 0.0008f);
+        shader.SetFloat("u_ShadowSlopeBias", (hasSunLight && sunLight.ShadowSlopeBias > 0.0f) ? sunLight.ShadowSlopeBias : 0.0020f);
+        shader.SetFloat("u_ShadowNormalBias", (hasSunLight && sunLight.ShadowNormalBias > 0.0f) ? sunLight.ShadowNormalBias : 0.0150f);
+        shader.SetFloat("u_ShadowFilterRadius", (hasSunLight && sunLight.ShadowFilterRadius > 0.0f) ? sunLight.ShadowFilterRadius : 1.0f);
 
         // Tone Mapping & Photometric Controls (Phase 11: Sub-step 3.2)
         shader.SetFloat("u_Exposure", activeExposure);
@@ -694,6 +707,7 @@ namespace Axle {
             shader->SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
         } else {
             shader->SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix());
+            shader->SetMat4("u_View", camera.GetViewMatrix());
             shader->SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
             shader->SetFloat3("u_LightDir", lightDir);
             shader->SetFloat3("u_LightColor", glm::vec3(1.0f));

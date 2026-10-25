@@ -1,16 +1,23 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/PerspectiveCamera.hpp>
 #include <glm/glm.hpp>
+#include <vector>
 #include <memory>
 
 namespace Axle {
 
+    constexpr u32 CASCADE_COUNT = 4;
+
     struct ShadowMapSpecification {
         u32 Width = 2048;
         u32 Height = 2048;
-        float NearPlane = 1.0f;
-        float FarPlane = 160.0f;
-        float OrthoSize = 25.0f; // Half-size of orthographic frustum (default 50m x 50m coverage)
+        u32 CascadeCount = CASCADE_COUNT;
+        float NearPlane = 0.1f;
+        float FarPlane = 1000.0f;
+        float OrthoSize = 25.0f; // Half-size of orthographic frustum (legacy fallback)
+        float MaxDistance = 150.0f;
+        float SplitLambda = 0.85f;
     };
 
     class ShadowMap {
@@ -19,6 +26,7 @@ namespace Axle {
         ~ShadowMap();
 
         void Bind();
+        void BindCascade(u32 cascadeIndex);
         void Unbind();
         void Clear();
 
@@ -29,6 +37,7 @@ namespace Axle {
         u32 GetRendererID() const { return m_RendererID; }
         u32 GetWidth() const { return m_Specification.Width; }
         u32 GetHeight() const { return m_Specification.Height; }
+        u32 GetCascadeCount() const { return m_Specification.CascadeCount; }
         const ShadowMapSpecification& GetSpecification() const { return m_Specification; }
 
         void SetOrthoSize(float size) { m_Specification.OrthoSize = size; }
@@ -38,7 +47,17 @@ namespace Axle {
 
         void Resize(u32 width, u32 height);
 
-        // Calculate light-space view-projection matrix oriented towards focusCenter with optional orthoSize override
+        // 4-Cascade Frustum Split & Light-Space Matrix calculation with sub-texel stabilization
+        void CalculateCascades(const PerspectiveCamera& camera, const glm::vec3& lightDir, float maxDistance = 150.0f, float lambda = 0.85f);
+
+        const std::vector<glm::mat4>& GetCascadeMatrices() const { return m_CascadeMatrices; }
+        const std::vector<float>& GetCascadeSplitDistances() const { return m_CascadeSplitDistances; }
+        const glm::mat4& GetLightSpaceMatrix(u32 cascadeIndex = 0) const {
+            if (m_CascadeMatrices.empty()) return m_FallbackLightSpaceMatrix;
+            return m_CascadeMatrices[std::min<size_t>(cascadeIndex, m_CascadeMatrices.size() - 1)];
+        }
+
+        // Calculate legacy single light-space view-projection matrix oriented towards focusCenter
         glm::mat4 CalculateLightSpaceMatrix(const glm::vec3& lightDir, const glm::vec3& focusCenter = glm::vec3(0.0f), float orthoSizeOverride = 0.0f) const;
 
     private:
@@ -46,8 +65,12 @@ namespace Axle {
 
     private:
         u32 m_RendererID = 0;
-        u32 m_DepthTexture = 0;
+        u32 m_DepthTexture = 0; // GL_TEXTURE_2D_ARRAY (4 cascades)
         ShadowMapSpecification m_Specification;
+
+        std::vector<glm::mat4> m_CascadeMatrices;
+        std::vector<float> m_CascadeSplitDistances;
+        glm::mat4 m_FallbackLightSpaceMatrix{ 1.0f };
     };
 
 }

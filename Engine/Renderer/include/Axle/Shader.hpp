@@ -31,6 +31,7 @@ namespace Axle {
         void SetMat3(const std::string& name, const glm::mat3& matrix);
         void SetMat4(const std::string& name, const glm::mat4& matrix);
         void SetMat4Array(const std::string& name, const glm::mat4* values, u32 count);
+        void SetFloatArray(const std::string& name, const float* values, u32 count);
 
         u32 GetRendererID() const { return m_RendererID; }
 

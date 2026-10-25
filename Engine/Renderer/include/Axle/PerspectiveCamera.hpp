@@ -24,6 +24,8 @@ namespace Axle {
 
         float GetNearClip() const { return m_NearClip; }
         float GetFarClip() const { return m_FarClip; }
+        float GetFOV() const { return m_FOV; }
+        float GetAspectRatio() const { return m_AspectRatio; }
 
     private:
         void RecalculateViewMatrix();
@@ -36,6 +38,8 @@ namespace Axle {
         glm::vec3 m_Position{ 0.0f, 0.0f, 3.5f };
         glm::vec3 m_Rotation{ 0.0f, 0.0f, 0.0f }; // Degrees
 
+        float m_FOV = 45.0f;
+        float m_AspectRatio = 1.7777778f;
         float m_NearClip = 0.1f;
         float m_FarClip = 1000.0f;
     };

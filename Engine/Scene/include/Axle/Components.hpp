@@ -721,11 +721,15 @@ namespace Axle {
         float Elevation = 50.0f;  // Sun altitude angle (5..90 deg)
         bool CastShadows = true;
 
-        // Soft Shadows & Shadow Map Precision (Phase 25)
-        float ShadowOrthoSize = 25.0f;       // Half-extent of shadow coverage (5m..100m, default 25m = 50x50m)
-        float ShadowBias = 0.0012f;          // Depth bias against shadow acne
-        float ShadowFilterRadius = 2.0f;     // 16-Tap Vogel Spiral penumbra spread multiplier
+        // Cascaded Soft Shadows & Shadow Map Precision (4 Cascades, PCF 5x5, Slope Bias)
+        float ShadowOrthoSize = 25.0f;       // Half-extent of shadow coverage (legacy fallback)
+        float ShadowBias = 0.0012f;          // Base depth bias against shadow acne (default 0.0012)
+        float ShadowSlopeBias = 0.0020f;     // Slope-scaled depth bias multiplier
+        float ShadowNormalBias = 0.0150f;    // Normal offset bias factor against shadow acne
+        float ShadowFilterRadius = 2.0f;     // 5x5 PCF kernel penumbra spread multiplier (default 2.0)
         int ShadowQuality = 1;               // 0: 1024 Medium, 1: 2048 High (Default), 2: 4096 Ultra
+        float CascadeSplitLambda = 0.85f;    // PSSM logarithmic-linear split factor (0.0: linear, 1.0: logarithmic)
+        float MaxShadowDistance = 150.0f;    // Maximum shadow distance in meters
 
         // Post-Processing & Photometric Tone Mapping (Phase 11: Sub-step 3.2)
         float Exposure = 1.0f;

@@ -1049,7 +1049,7 @@ namespace Axle {
 
             if (dlc.CastShadows) {
                 ImGui::Indent(15.0f);
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Soft Shadow Settings:");
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Cascaded Shadow Settings (4 Splits):");
 
                 const char* shadowQualities[] = { "Low (1024x1024)", "High (2048x2048)", "Ultra (4096x4096)" };
                 int currentQuality = glm::clamp(dlc.ShadowQuality, 0, 2);
@@ -1057,19 +1057,36 @@ namespace Axle {
                     dlc.ShadowQuality = currentQuality;
                 }
 
-                ImGui::SliderFloat("Coverage (Ortho Size)", &dlc.ShadowOrthoSize, 5.0f, 100.0f, "%.1f m");
+                ImGui::SliderFloat("Max Shadow Distance", &dlc.MaxShadowDistance, 20.0f, 500.0f, "%.1f m");
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Orthographic projection extent. Smaller values yield denser texel resolution for close-ups.");
+                    ImGui::SetTooltip("Maximum view-space distance across all 4 cascades.");
                 }
 
-                ImGui::SliderFloat("Penumbra Softness", &dlc.ShadowFilterRadius, 0.5f, 6.0f, "%.1f");
+                ImGui::SliderFloat("Cascade Split Lambda", &dlc.CascadeSplitLambda, 0.50f, 0.95f, "%.2f");
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("16-tap Vogel spiral PCF filter spread. Higher values produce smoother, softer penumbra edges.");
+                    ImGui::SetTooltip("PSSM practical split weight (logarithmic vs linear distribution). Higher values give denser detail near the camera.");
                 }
 
-                ImGui::DragFloat("Depth Bias", &dlc.ShadowBias, 0.0001f, 0.0001f, 0.01f, "%.5f");
+                ImGui::SliderFloat("PCF 5x5 Softness", &dlc.ShadowFilterRadius, 0.5f, 3.0f, "%.2f");
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Adaptive depth bias to eliminate shadow acne and moiré artifacts.");
+                    ImGui::SetTooltip("5x5 Percentage-Closer Filtering (25 hardware bilinear taps) spread multiplier.");
+                }
+
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Anti-Acne Depth Biasing:");
+
+                ImGui::DragFloat("Base Depth Bias", &dlc.ShadowBias, 0.0001f, 0.0001f, 0.0100f, "%.5f");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Constant depth bias offset.");
+                }
+
+                ImGui::DragFloat("Slope-Scaled Bias", &dlc.ShadowSlopeBias, 0.0001f, 0.0001f, 0.0200f, "%.5f");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Slope-scaled depth bias proportional to tan(theta) to eliminate shadow acne on grazing angles.");
+                }
+
+                ImGui::DragFloat("Normal Offset Bias", &dlc.ShadowNormalBias, 0.001f, 0.001f, 0.050f, "%.4f");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("World-space normal offset bias to prevent self-shadow acne on curved surfaces without Peter Panning.");
                 }
 
                 ImGui::Unindent(15.0f);

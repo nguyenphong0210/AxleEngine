@@ -120,6 +120,12 @@ namespace Axle {
         if (loc != -1 && glad_glUniformMatrix4fv) glUniformMatrix4fv(loc, static_cast<GLsizei>(count), GL_FALSE, glm::value_ptr(values[0]));
     }
 
+    void Shader::SetFloatArray(const std::string& name, const float* values, u32 count) {
+        if (!values || count == 0) return;
+        i32 loc = GetUniformLocation(name);
+        if (loc != -1 && glad_glUniform1fv) glUniform1fv(loc, static_cast<GLsizei>(count), values);
+    }
+
     i32 Shader::GetUniformLocation(const std::string& name) {
         if (!glad_glGetUniformLocation || m_RendererID == 0) return -1;
 

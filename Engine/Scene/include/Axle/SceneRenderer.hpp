@@ -61,6 +61,14 @@ namespace Axle {
 
         const glm::mat4& GetLightSpaceMatrix() const { return m_LightSpaceMatrix; }
         const glm::vec3& GetLightDirection() const { return m_LightDir; }
+        const std::vector<glm::mat4>& GetCascadeMatrices() const {
+            static const std::vector<glm::mat4> s_Empty;
+            return m_ShadowMap ? m_ShadowMap->GetCascadeMatrices() : s_Empty;
+        }
+        const std::vector<float>& GetCascadeSplitDistances() const {
+            static const std::vector<float> s_Empty;
+            return m_ShadowMap ? m_ShadowMap->GetCascadeSplitDistances() : s_Empty;
+        }
 
     private:
         void InitShaders();

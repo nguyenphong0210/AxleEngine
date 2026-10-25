@@ -230,8 +230,12 @@ namespace Axle {
                 ss << "      CastShadows: " << (dlc.CastShadows ? "true" : "false") << "\n";
                 ss << "      ShadowOrthoSize: " << dlc.ShadowOrthoSize << "\n";
                 ss << "      ShadowBias: " << dlc.ShadowBias << "\n";
+                ss << "      ShadowSlopeBias: " << dlc.ShadowSlopeBias << "\n";
+                ss << "      ShadowNormalBias: " << dlc.ShadowNormalBias << "\n";
                 ss << "      ShadowFilterRadius: " << dlc.ShadowFilterRadius << "\n";
                 ss << "      ShadowQuality: " << dlc.ShadowQuality << "\n";
+                ss << "      CascadeSplitLambda: " << dlc.CascadeSplitLambda << "\n";
+                ss << "      MaxShadowDistance: " << dlc.MaxShadowDistance << "\n";
                 ss << "      Exposure: " << dlc.Exposure << "\n";
                 ss << "      ToneMappingMode: " << dlc.ToneMappingMode << "\n";
                 ss << "      Gamma: " << dlc.Gamma << "\n";
@@ -923,10 +927,18 @@ namespace Axle {
                             dlc.ShadowOrthoSize = std::stof(Trim(trimmed.substr(16)));
                         } else if (trimmed.rfind("ShadowBias:", 0) == 0) {
                             dlc.ShadowBias = std::stof(Trim(trimmed.substr(11)));
+                        } else if (trimmed.rfind("ShadowSlopeBias:", 0) == 0) {
+                            dlc.ShadowSlopeBias = std::stof(Trim(trimmed.substr(16)));
+                        } else if (trimmed.rfind("ShadowNormalBias:", 0) == 0) {
+                            dlc.ShadowNormalBias = std::stof(Trim(trimmed.substr(17)));
                         } else if (trimmed.rfind("ShadowFilterRadius:", 0) == 0) {
                             dlc.ShadowFilterRadius = std::stof(Trim(trimmed.substr(19)));
                         } else if (trimmed.rfind("ShadowQuality:", 0) == 0) {
                             dlc.ShadowQuality = std::stoi(Trim(trimmed.substr(14)));
+                        } else if (trimmed.rfind("CascadeSplitLambda:", 0) == 0) {
+                            dlc.CascadeSplitLambda = std::stof(Trim(trimmed.substr(19)));
+                        } else if (trimmed.rfind("MaxShadowDistance:", 0) == 0) {
+                            dlc.MaxShadowDistance = std::stof(Trim(trimmed.substr(18)));
                         } else if (trimmed.rfind("Exposure:", 0) == 0) {
                             dlc.Exposure = std::stof(Trim(trimmed.substr(9)));
                         } else if (trimmed.rfind("ToneMappingMode:", 0) == 0) {

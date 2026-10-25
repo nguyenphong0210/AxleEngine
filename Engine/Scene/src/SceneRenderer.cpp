@@ -81,9 +81,10 @@ namespace Axle {
                 uniform float u_AmbientIntensity;
                 uniform int u_ShadowsEnabled;
                 uniform mat4 u_Transform;
+                uniform mat4 u_View;
 
                 uniform sampler2D u_AlbedoMap;
-                uniform sampler2DShadow u_ShadowMap;
+                uniform sampler2DArrayShadow u_ShadowMap;
                 uniform sampler2D u_NormalMap;
                 uniform sampler2D u_RoughnessMap;
                 uniform sampler2D u_MetallicMap;
@@ -93,7 +94,11 @@ namespace Axle {
                 uniform int u_UseIBL;
                 uniform float u_EnvironmentIntensity;
 
+                uniform mat4 u_CascadeLightSpaceMatrices[4];
+                uniform float u_CascadeSplitDistances[4];
                 uniform float u_ShadowBias;
+                uniform float u_ShadowSlopeBias;
+                uniform float u_ShadowNormalBias;
                 uniform float u_ShadowFilterRadius;
 
                 // Point & Spot Lighting
@@ -138,60 +143,85 @@ namespace Axle {
                 uniform vec3 u_SkyHorizonColor;
                 uniform vec3 u_SkyGroundColor;
 
-                const vec2 POISSON_DISK[16] = vec2[](
-                    vec2(-0.94201624, -0.39906216),
-                    vec2( 0.94558609, -0.76890725),
-                    vec2(-0.09418410, -0.92938870),
-                    vec2( 0.34495938,  0.29387760),
-                    vec2(-0.91588581,  0.45771432),
-                    vec2(-0.81544232, -0.87912464),
-                    vec2(-0.38277543,  0.27676845),
-                    vec2( 0.97484398,  0.75648377),
-                    vec2( 0.44323325, -0.97511554),
-                    vec2( 0.53742981, -0.47373420),
-                    vec2(-0.26496911, -0.41893023),
-                    vec2( 0.79197514,  0.19090188),
-                    vec2(-0.24188840,  0.99706507),
-                    vec2(-0.81409955,  0.91437590),
-                    vec2( 0.19984126,  0.78641367),
-                    vec2( 0.14383161, -0.14100790)
-                );
-
-                float InterleavedGradientNoise(vec2 screenPos) {
-                    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
-                    return fract(magic.z * fract(dot(screenPos, magic.xy)));
-                }
-
-                vec2 Rotate2D(vec2 v, float angle) {
-                    float s = sin(angle);
-                    float c = cos(angle);
-                    return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
-                }
-
-                float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
-                    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+                float SampleCascadePCF5x5(int cascadeIdx, vec4 lightSpacePos, vec2 texelSize, float spreadMult, float bias) {
+                    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
                     projCoords = projCoords * 0.5 + 0.5;
+
                     if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) {
                         return 0.0;
                     }
-                    float baseBias = (u_ShadowBias > 0.0) ? u_ShadowBias : 0.0012;
-                    float filterSpread = (u_ShadowFilterRadius > 0.0) ? u_ShadowFilterRadius : 2.0;
+
+                    vec2 spread = texelSize * spreadMult;
+                    float shadowSum = 0.0;
+                    for (int x = -2; x <= 2; ++x) {
+                        for (int y = -2; y <= 2; ++y) {
+                            vec2 offset = vec2(float(x), float(y)) * spread;
+                            float lit = texture(u_ShadowMap, vec4(projCoords.xy + offset, float(cascadeIdx), projCoords.z - bias));
+                            shadowSum += (1.0 - lit);
+                        }
+                    }
+                    return shadowSum / 25.0;
+                }
+
+                float CalculateShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
+                    if (u_ShadowsEnabled == 0) return 0.0;
+
+                    vec4 viewPos = u_View * vec4(worldPos, 1.0);
+                    float depthValue = abs(viewPos.z);
+                    if (depthValue >= u_CascadeSplitDistances[3]) {
+                        return 0.0;
+                    }
+
+                    int cascadeIndex = 3;
+                    for (int i = 0; i < 4; ++i) {
+                        if (depthValue < u_CascadeSplitDistances[i]) {
+                            cascadeIndex = i;
+                            break;
+                        }
+                    }
 
                     float cosTheta = clamp(dot(normal, lightDir), 0.0, 1.0);
-                    float bias = max(baseBias * (1.0 - cosTheta), baseBias * 0.15);
+                    float slope = sqrt(clamp(1.0 - cosTheta * cosTheta, 0.0, 1.0)) / max(cosTheta, 0.001);
+                    float baseBias = (u_ShadowBias > 0.0) ? u_ShadowBias : 0.0008;
+                    float slopeScale = (u_ShadowSlopeBias > 0.0) ? u_ShadowSlopeBias : 0.0020;
+                    float normalBiasVal = (u_ShadowNormalBias > 0.0) ? u_ShadowNormalBias : 0.0150;
 
-                    vec2 texelSize = 1.0 / vec2(textureSize(u_ShadowMap, 0));
-                    vec2 filterRadius = texelSize * filterSpread;
+                    float cascadeScale = 1.0 + float(cascadeIndex) * 0.75;
+                    float bias = (baseBias + slopeScale * clamp(slope, 0.0, 4.0)) * cascadeScale;
+                    vec3 biasedPos = worldPos + normal * (normalBiasVal * cascadeScale);
+                    vec4 fragPosLightSpace = u_CascadeLightSpaceMatrices[cascadeIndex] * vec4(biasedPos, 1.0);
 
-                    float randomAngle = InterleavedGradientNoise(gl_FragCoord.xy) * 6.28318530718;
+                    vec2 texelSize = 1.0 / vec2(textureSize(u_ShadowMap, 0).xy);
+                    float filterSpread = (u_ShadowFilterRadius > 0.0) ? u_ShadowFilterRadius : 1.0;
 
-                    float shadowSum = 0.0;
-                    for (int i = 0; i < 16; ++i) {
-                        vec2 offset = Rotate2D(POISSON_DISK[i], randomAngle) * filterRadius;
-                        float lit = texture(u_ShadowMap, vec3(projCoords.xy + offset, projCoords.z - bias));
-                        shadowSum += (1.0 - lit);
+                    float shadow = SampleCascadePCF5x5(cascadeIndex, fragPosLightSpace, texelSize, filterSpread, bias);
+
+                    float currentSplit = u_CascadeSplitDistances[cascadeIndex];
+                    float prevSplit = (cascadeIndex > 0) ? u_CascadeSplitDistances[cascadeIndex - 1] : 0.0;
+                    float cascadeRange = currentSplit - prevSplit;
+                    float distFromSplit = currentSplit - depthValue;
+                    float blendBand = cascadeRange * 0.15;
+
+                    if (distFromSplit < blendBand && cascadeIndex < 3) {
+                        int nextCascade = cascadeIndex + 1;
+                        float nextScale = 1.0 + float(nextCascade) * 0.75;
+                        float nextBias = (baseBias + slopeScale * clamp(slope, 0.0, 4.0)) * nextScale;
+                        vec3 nextBiasedPos = worldPos + normal * (normalBiasVal * nextScale);
+                        vec4 nextLightPos = u_CascadeLightSpaceMatrices[nextCascade] * vec4(nextBiasedPos, 1.0);
+
+                        float nextShadow = SampleCascadePCF5x5(nextCascade, nextLightPos, texelSize, filterSpread, nextBias);
+                        float blendFactor = clamp(distFromSplit / blendBand, 0.0, 1.0);
+                        shadow = mix(nextShadow, shadow, blendFactor);
                     }
-                    return shadowSum / 16.0;
+
+                    float fadeStart = u_CascadeSplitDistances[3] * 0.85;
+                    float fadeEnd = u_CascadeSplitDistances[3];
+                    if (depthValue > fadeStart) {
+                        float fade = 1.0 - clamp((depthValue - fadeStart) / (fadeEnd - fadeStart), 0.0, 1.0);
+                        shadow *= fade;
+                    }
+
+                    return shadow;
                 }
 
                 vec3 PerturbNormal(vec3 N, vec3 V, vec2 texcoord, float strength) {
@@ -305,7 +335,7 @@ namespace Axle {
 
                     float shadow = 0.0;
                     if (u_ShadowsEnabled == 1) {
-                        shadow = CalculateShadow(v_FragPosLightSpace, N, L);
+                        shadow = CalculateShadow(v_WorldPos, N, L);
                     }
 
                     vec3 radiance = u_LightColor * u_LightIntensity;
@@ -534,21 +564,23 @@ namespace Axle {
                 m_ShadowMap->Resize(targetRes, targetRes);
             }
 
-            glm::vec3 focusCenter = glm::vec3(0.0f);
-            if (auto* pv = scene->GetPrimaryRuntimeVehicle()) {
-                focusCenter = pv->GetPosition();
-            } else {
-                focusCenter = camera.GetPosition();
-            }
-            float orthoSize = activeSunLight.ShadowOrthoSize > 0.0f ? activeSunLight.ShadowOrthoSize : 25.0f;
-            m_LightSpaceMatrix = m_ShadowMap->CalculateLightSpaceMatrix(m_LightDir, focusCenter, orthoSize);
+            float maxDist = activeSunLight.MaxShadowDistance > 0.0f ? activeSunLight.MaxShadowDistance : 150.0f;
+            float lambda = activeSunLight.CascadeSplitLambda > 0.0f ? activeSunLight.CascadeSplitLambda : 0.85f;
 
-            m_ShadowMap->Bind();
-            scene->RenderShadowPass(*m_ShadowShader, m_LightSpaceMatrix);
-            if (m_SkinningPipeline) {
-                scene->RenderSkeletalMeshes(*m_SkinningPipeline, camera, m_LightSpaceMatrix, m_LightDir, true);
+            m_ShadowMap->CalculateCascades(camera, m_LightDir, maxDist, lambda);
+            const auto& cascadeMatrices = m_ShadowMap->GetCascadeMatrices();
+
+            // Render all 4 cascade depth slices
+            for (uint32_t c = 0; c < cascadeMatrices.size(); ++c) {
+                m_ShadowMap->BindCascade(c);
+                scene->RenderShadowPass(*m_ShadowShader, cascadeMatrices[c]);
+                if (m_SkinningPipeline) {
+                    scene->RenderSkeletalMeshes(*m_SkinningPipeline, camera, cascadeMatrices[c], m_LightDir, true);
+                }
             }
             m_ShadowMap->Unbind();
+
+            m_LightSpaceMatrix = m_ShadowMap->GetLightSpaceMatrix(0);
         }
 
         // ==========================================
@@ -599,10 +631,28 @@ namespace Axle {
             m_Shader->SetInt("u_UseIBL", 0);
         }
 
+        const auto& cascadeMatrices = (castShadows && m_ShadowMap) ? m_ShadowMap->GetCascadeMatrices() : std::vector<glm::mat4>{};
+        const auto& splitDists = (castShadows && m_ShadowMap) ? m_ShadowMap->GetCascadeSplitDistances() : std::vector<float>{};
+
         // Render all active meshes with PBR lighting & hierarchy transforms
-        scene->RenderGeometryPass(camera, *m_Shader, m_LightSpaceMatrix, m_LightDir, 1);
+        scene->RenderGeometryPass(camera, *m_Shader, m_LightSpaceMatrix, m_LightDir, 1, cascadeMatrices, splitDists);
 
         if (m_SkinningPipeline) {
+            auto skelShader = m_SkinningPipeline->GetShader();
+            if (skelShader) {
+                skelShader->Bind();
+                skelShader->SetMat4("u_View", camera.GetViewMatrix());
+                if (!cascadeMatrices.empty()) {
+                    skelShader->SetMat4Array("u_CascadeLightSpaceMatrices", cascadeMatrices.data(), static_cast<u32>(cascadeMatrices.size()));
+                    skelShader->SetFloatArray("u_CascadeSplitDistances", splitDists.data(), static_cast<u32>(splitDists.size()));
+                }
+                skelShader->SetFloat("u_ShadowBias", activeSunLight.ShadowBias);
+                skelShader->SetFloat("u_ShadowSlopeBias", activeSunLight.ShadowSlopeBias);
+                skelShader->SetFloat("u_ShadowNormalBias", activeSunLight.ShadowNormalBias);
+                skelShader->SetFloat("u_ShadowFilterRadius", activeSunLight.ShadowFilterRadius);
+                skelShader->SetInt("u_ShadowsEnabled", castShadows ? 1 : 0);
+                skelShader->SetInt("u_ShadowMap", 1);
+            }
             scene->RenderSkeletalMeshes(*m_SkinningPipeline, camera, m_LightSpaceMatrix, m_LightDir, false);
         }
 

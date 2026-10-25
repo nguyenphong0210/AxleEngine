@@ -7,8 +7,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **57 Comprehensive Headless Test Suites** (`AxleTests.exe`, 64 individual test steps) passing with **100% pass rate**.
+* **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized), with **Phase 33 in active progress**.
+* **Automated Test Verification**: **58 Comprehensive Headless Test Suites** (`AxleTests.exe`, 65 individual test steps up through **Step 73**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 33 (Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline)** and beyond.
 
 ---
@@ -339,7 +339,13 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Bindless Texture Descriptors & Anisotropic Filtering: Tier 2 descriptor indexing (`nri::DescriptorPool`), Anisotropic 16x filtering, and trilinear mipmap sampling across all material slots.
     - [x] Forward+ Multi-Light GPU Buffer: 1 Primary Directional Sun Light with physical illuminance (Lux), up to 16 Point Lights (vehicle brake/reverse lights, environment lamps) with inverse-square falloff, and up to 16 Spot Lights (vehicle dual headlights, high-beams) with inner/outer cone cutoff angles.
   - [ ] **Step 3 - Cascaded Shadow Mapping (CSM) & Atmospheric Skybox / IBL Passes**:
-    - [ ] Real-Time Directional Shadow Mapping (1024x1024 to 4096x4096) with 4-cascade frustum splits, Percentage-Closer Filtering (PCF 5x5), and slope-scaled depth bias to eliminate shadow acne.
+    - [x] **Real-Time Directional Cascaded Shadow Mapping (CSM)**:
+      - [x] **Dynamic Resolution Tiers**: Configurable from 1024x1024 to 4096x4096 (`Low` 1024, `Medium` 2048, `High` 4096) via `DirectionalLightComponent::ShadowQuality` backed by `GL_TEXTURE_2D_ARRAY` with 4 depth layers (`GL_DEPTH_COMPONENT32F`).
+      - [x] **4-Cascade PSSM Frustum Splits**: Practical Split Scheme (logarithmic + linear mix with $\lambda = 0.85$, $z_{\text{max}} = 150\text{m}$) yielding monotonic split ranges ($6.17\text{m}$, $14.55\text{m}$, $37.37\text{m}$, $150.0\text{m}$).
+      - [x] **Bounding Sphere Stabilization & Sub-Texel Snapping**: Enclosing bounding sphere center/radius stabilization combined with texel-grid world snapping ($w_{\text{texel}} = \frac{2R}{\text{size}}$), completely eliminating shadow swimming and edge shimmer during camera rotation and translation.
+      - [x] **Percentage-Closer Filtering (PCF 5x5)**: 25 hardware bilinear samples using `sampler2DArrayShadow` (effective 6x6 filter footprint / 100 texel coverage) with smooth 15% cascade split boundary blending and distance fade-out.
+      - [x] **Slope-Scaled Depth Bias & Normal Offset Bias**: Hardware `glPolygonOffset(2.0, 4.0)` paired with dynamic GLSL slope calculation ($\tan\theta = \frac{\sqrt{1-\cos^2\theta}}{\cos\theta}$) and surface normal offset to eliminate 100% of shadow acne while preventing Peter Panning.
+      - [x] **Pipeline, UI & Serialization**: Integrated into `SceneRenderer` (Pass 1 depth render, Pass 2 shader uniforms), `EntityInspector` editor sliders, `SceneSerializer` roundtrip, and automated test suite Step 73 (`AxleTests.exe 73` passing 100%).
     - [ ] Image-Based Lighting (IBL) & Environment Maps: Pre-filtered environment radiance cubemap, diffuse irradiance cubemap, and split-sum BRDF LUT integration for realistic automotive metallic sheen.
     - [ ] Procedural Atmospheric Skybox Pass: Rayleigh & Mie atmospheric scattering simulation with dynamic sun elevation/azimuth synchronized with directional sun light vector.
   - [ ] **Step 4 - Post-Processing, HDR Tone Mapping & Anti-Aliasing (FXAA/MSAA)**:

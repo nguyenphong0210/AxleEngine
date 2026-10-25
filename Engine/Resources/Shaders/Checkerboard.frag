@@ -13,17 +13,18 @@ uniform float u_TileScale;        // Checkerboard tile frequency
 uniform vec4 u_Color1;            // Primary color or tint multiplier
 uniform vec4 u_Color2;            // Secondary pattern color
 
-// 2. Directional Sun Light & Real-Time Shadow Mapping
+// 2. Directional Sun Light & Real-Time Cascaded Shadow Mapping (4 Cascades, PCF 5x5)
 uniform vec3 u_LightDir;          // Directional sun light vector
 uniform vec3 u_LightColor;        // Sun light RGB color
 uniform float u_LightIntensity;   // Sun brightness multiplier
 uniform float u_AmbientIntensity; // Ambient fill lighting
 uniform int u_ShadowsEnabled;     // 1: Enable soft shadows, 0: Disable shadows
 uniform mat4 u_Transform;
+uniform mat4 u_View;              // Camera View Matrix for view-space depth
 
 // 3. Texture Sampler Slots
 uniform sampler2D u_AlbedoMap;     // Slot 0: Base Color / Diffuse Map
-uniform sampler2DShadow u_ShadowMap; // Slot 1: Directional Light Depth Texture (Hardware Bilinear PCF)
+uniform sampler2DArrayShadow u_ShadowMap; // Slot 1: 4-Cascade Depth Texture Array (Hardware Bilinear PCF)
 uniform sampler2D u_NormalMap;     // Slot 2: Tangent-space Normal Map
 uniform sampler2D u_RoughnessMap;  // Slot 3: Micro-surface Roughness Map
 uniform sampler2D u_MetallicMap;   // Slot 4: Metallic Mask Map
@@ -33,8 +34,13 @@ uniform sampler2D u_BRDFLUT;         // Slot 7: BRDF Integration 2D LUT
 uniform int u_UseIBL;                // 1: Enable HDR Image-Based Lighting, 0: Analytical
 uniform float u_EnvironmentIntensity;// Multiplier for IBL radiance
 
-uniform float u_ShadowBias;         // Dynamic light depth bias
-uniform float u_ShadowFilterRadius; // Dynamic penumbra spread radius
+// 4-Cascade CSM Uniforms & Anti-Acne Biasing
+uniform mat4 u_CascadeLightSpaceMatrices[4];
+uniform float u_CascadeSplitDistances[4];
+uniform float u_ShadowBias;         // Base depth bias
+uniform float u_ShadowSlopeBias;    // Slope-scaled depth bias multiplier
+uniform float u_ShadowNormalBias;   // Normal offset bias factor
+uniform float u_ShadowFilterRadius; // 5x5 PCF filter spread
 
 // 3.1 Point & Spot Lighting (Phase 28 Dynamic Vehicle Lighting)
 struct PointLight {
@@ -86,64 +92,101 @@ uniform vec3 u_SkyGroundColor;     // Terrain bounce radiance at ground (-Y)
 const float PI = 3.14159265358979323846;
 
 // ----------------------------------------------------------------------------
-// Shadow Calculation with 16-Tap Vogel Spiral / Poisson Disk PCF
+// Real-Time 4-Cascade Shadow Mapping with 5x5 PCF & Slope-Scaled Depth Bias
 // ----------------------------------------------------------------------------
-const vec2 POISSON_DISK[16] = vec2[](
-    vec2(-0.94201624, -0.39906216),
-    vec2( 0.94558609, -0.76890725),
-    vec2(-0.09418410, -0.92938870),
-    vec2( 0.34495938,  0.29387760),
-    vec2(-0.91588581,  0.45771432),
-    vec2(-0.81544232, -0.87912464),
-    vec2(-0.38277543,  0.27676845),
-    vec2( 0.97484398,  0.75648377),
-    vec2( 0.44323325, -0.97511554),
-    vec2( 0.53742981, -0.47373420),
-    vec2(-0.26496911, -0.41893023),
-    vec2( 0.79197514,  0.19090188),
-    vec2(-0.24188840,  0.99706507),
-    vec2(-0.81409955,  0.91437590),
-    vec2( 0.19984126,  0.78641367),
-    vec2( 0.14383161, -0.14100790)
-);
-
-float InterleavedGradientNoise(vec2 screenPos) {
-    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
-    return fract(magic.z * fract(dot(screenPos, magic.xy)));
-}
-
-vec2 Rotate2D(vec2 v, float angle) {
-    float s = sin(angle);
-    float c = cos(angle);
-    return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
-}
-
-float CalculateShadow(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
-    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+float SampleCascadePCF5x5(int cascadeIdx, vec4 lightSpacePos, vec2 texelSize, float spreadMult, float bias) {
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
     projCoords = projCoords * 0.5 + 0.5;
 
     if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) {
         return 0.0;
     }
 
-    float baseBias = (u_ShadowBias > 0.0) ? u_ShadowBias : 0.0012;
-    float filterSpread = (u_ShadowFilterRadius > 0.0) ? u_ShadowFilterRadius : 2.0;
-
-    float cosTheta = clamp(dot(normal, lightDir), 0.0, 1.0);
-    float bias = max(baseBias * (1.0 - cosTheta), baseBias * 0.15);
-
-    vec2 texelSize = 1.0 / vec2(textureSize(u_ShadowMap, 0));
-    vec2 filterRadius = texelSize * filterSpread;
-
-    float randomAngle = InterleavedGradientNoise(gl_FragCoord.xy) * 6.28318530718;
-
+    vec2 spread = texelSize * spreadMult;
     float shadowSum = 0.0;
-    for (int i = 0; i < 16; ++i) {
-        vec2 offset = Rotate2D(POISSON_DISK[i], randomAngle) * filterRadius;
-        float lit = texture(u_ShadowMap, vec3(projCoords.xy + offset, projCoords.z - bias));
-        shadowSum += (1.0 - lit);
+
+    // 5x5 PCF Kernel: 25 Hardware Bilinear PCF taps (effective 6x6 footprint)
+    for (int x = -2; x <= 2; ++x) {
+        for (int y = -2; y <= 2; ++y) {
+            vec2 offset = vec2(float(x), float(y)) * spread;
+            float lit = texture(u_ShadowMap, vec4(projCoords.xy + offset, float(cascadeIdx), projCoords.z - bias));
+            shadowSum += (1.0 - lit);
+        }
     }
-    return shadowSum / 16.0;
+    return shadowSum / 25.0;
+}
+
+float CalculateShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
+    if (u_ShadowsEnabled == 0) return 0.0;
+
+    // 1. Calculate view-space depth for cascade selection
+    vec4 viewPos = u_View * vec4(worldPos, 1.0);
+    float depthValue = abs(viewPos.z);
+
+    // If beyond max shadow distance, surface is fully lit
+    if (depthValue >= u_CascadeSplitDistances[3]) {
+        return 0.0;
+    }
+
+    // 2. Select cascade layer
+    int cascadeIndex = 3;
+    for (int i = 0; i < 4; ++i) {
+        if (depthValue < u_CascadeSplitDistances[i]) {
+            cascadeIndex = i;
+            break;
+        }
+    }
+
+    // 3. Slope-scaled depth bias calculation
+    // Slope = tan(theta) = sqrt(1 - cosTheta^2) / cosTheta
+    float cosTheta = clamp(dot(normal, lightDir), 0.0, 1.0);
+    float slope = sqrt(clamp(1.0 - cosTheta * cosTheta, 0.0, 1.0)) / max(cosTheta, 0.001);
+
+    float baseBias = (u_ShadowBias > 0.0) ? u_ShadowBias : 0.0008;
+    float slopeScale = (u_ShadowSlopeBias > 0.0) ? u_ShadowSlopeBias : 0.0020;
+    float normalBiasVal = (u_ShadowNormalBias > 0.0) ? u_ShadowNormalBias : 0.0150;
+
+    // Bias scaling across cascades (higher cascades have larger world texels)
+    float cascadeScale = 1.0 + float(cascadeIndex) * 0.75;
+    float bias = (baseBias + slopeScale * clamp(slope, 0.0, 4.0)) * cascadeScale;
+
+    // Normal offset bias to eliminate shadow acne on curved/sloped surfaces without Peter Panning
+    vec3 biasedPos = worldPos + normal * (normalBiasVal * cascadeScale);
+    vec4 fragPosLightSpace = u_CascadeLightSpaceMatrices[cascadeIndex] * vec4(biasedPos, 1.0);
+
+    vec2 texelSize = 1.0 / vec2(textureSize(u_ShadowMap, 0).xy);
+    float filterSpread = (u_ShadowFilterRadius > 0.0) ? u_ShadowFilterRadius : 1.0;
+
+    float shadow = SampleCascadePCF5x5(cascadeIndex, fragPosLightSpace, texelSize, filterSpread, bias);
+
+    // 4. Smooth blend between cascade split boundaries (15% blend band)
+    float currentSplit = u_CascadeSplitDistances[cascadeIndex];
+    float prevSplit = (cascadeIndex > 0) ? u_CascadeSplitDistances[cascadeIndex - 1] : 0.0;
+    float cascadeRange = currentSplit - prevSplit;
+    float distFromSplit = currentSplit - depthValue;
+    float blendBand = cascadeRange * 0.15;
+
+    if (distFromSplit < blendBand && cascadeIndex < 3) {
+        int nextCascade = cascadeIndex + 1;
+        float nextScale = 1.0 + float(nextCascade) * 0.75;
+        float nextBias = (baseBias + slopeScale * clamp(slope, 0.0, 4.0)) * nextScale;
+        vec3 nextBiasedPos = worldPos + normal * (normalBiasVal * nextScale);
+        vec4 nextLightPos = u_CascadeLightSpaceMatrices[nextCascade] * vec4(nextBiasedPos, 1.0);
+
+        float nextShadow = SampleCascadePCF5x5(nextCascade, nextLightPos, texelSize, filterSpread, nextBias);
+        float blendFactor = clamp(distFromSplit / blendBand, 0.0, 1.0);
+        shadow = mix(nextShadow, shadow, blendFactor);
+    }
+
+    // 5. Smooth fade out at maximum shadow distance
+    float fadeStart = u_CascadeSplitDistances[3] * 0.85;
+    float fadeEnd = u_CascadeSplitDistances[3];
+    if (depthValue > fadeStart) {
+        float fade = 1.0 - clamp((depthValue - fadeStart) / (fadeEnd - fadeStart), 0.0, 1.0);
+        shadow *= fade;
+    }
+
+    return shadow;
 }
 
 // ----------------------------------------------------------------------------
@@ -343,10 +386,10 @@ void main() {
     vec3 kD = vec3(1.0) - kS;
     kD *= 1.0 - metallic; // Pure metals absorb diffuse light
 
-    // Real-time PCF soft shadow
+    // Real-time PCF soft shadow (4-Cascade CSM, PCF 5x5, Slope Bias)
     float shadow = 0.0;
     if (u_ShadowsEnabled == 1) {
-        shadow = CalculateShadow(v_FragPosLightSpace, N, L);
+        shadow = CalculateShadow(v_WorldPos, N, L);
     }
 
     // Direct lighting radiance (Directional Sun)

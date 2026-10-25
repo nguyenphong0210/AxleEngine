@@ -74,7 +74,9 @@ namespace Axle {
         void RenderGeometryPass(const PerspectiveCamera& camera, Shader& shader,
                                 const glm::mat4& lightSpaceMatrix = glm::mat4(1.0f),
                                 const glm::vec3& lightDir = glm::vec3(0.45f, 1.0f, 0.65f),
-                                int shadowMapSlot = 1);
+                                int shadowMapSlot = 1,
+                                const std::vector<glm::mat4>& cascadeMatrices = {},
+                                const std::vector<float>& cascadeSplitDistances = {});
 
         // Update physics synchronization and render all mesh components (legacy/convenience wrapper)
         void OnUpdate(Timestep ts, PhysicsScene* physicsScene, const PerspectiveCamera& camera, Shader& shader,

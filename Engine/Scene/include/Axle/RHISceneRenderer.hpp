@@ -14,6 +14,7 @@
 #include <Axle/RHI/RHIDescriptorPool.hpp>
 #include <Axle/RHI/RHILight.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
+#include <Axle/Components.hpp>
 
 #include <memory>
 #include <string>
@@ -22,6 +23,19 @@
 namespace Axle {
 
     class Scene;
+
+    // 256-byte CBV aligned constants for Atmospheric Skybox pass
+    struct RHISkyboxConstants {
+        glm::mat4 InvViewProjection;   // 64 bytes
+        glm::vec4 CameraPosition;      // 16 bytes
+        glm::vec4 SunDirection;        // 16 bytes (xyz = normalized dir, w = solar elevation)
+        glm::vec4 SunColor;            // 16 bytes (rgb = sun color * intensity, w = day factor)
+        glm::vec4 ZenithColor;         // 16 bytes (rgb = zenith color, w = sunset factor)
+        glm::vec4 HorizonColor;        // 16 bytes (rgb = horizon color, w = turbidity)
+        glm::vec4 GroundColor;         // 16 bytes (rgb = ground color, w = exposure)
+        glm::vec4 Params;              // 16 bytes (x = SunSize, y = SunGlow, z = ToneMappingMode, w = Gamma)
+        glm::vec4 Reserved[5];         // 80 bytes padding -> Total: 256 bytes
+    };
 
     class RHISceneRenderer {
     public:
@@ -80,10 +94,22 @@ namespace Axle {
         std::shared_ptr<RHI::RHITexture> GetPrefilterMap() const { return m_PrefilterMap; }
         std::shared_ptr<RHI::RHITexture> GetBRDFLUT() const { return m_BRDFLUT; }
 
+        // Procedural Atmospheric Skybox pass configuration
+        void SetSkyboxParameters(const SkyboxComponent& skybox) { m_SkyboxParams = skybox; }
+        const SkyboxComponent& GetSkyboxParameters() const { return m_SkyboxParams; }
+        SkyboxComponent& GetSkyboxParameters() { return m_SkyboxParams; }
+        nri::Pipeline* GetSkyboxPipeline() const { return m_SkyboxPipeline; }
+        RHI::RHIPipelineLayout& GetSkyboxPipelineLayout() { return m_SkyboxPipelineLayout; }
+        RHI::RHIBuffer& GetSkyboxConstantBuffer() { return m_SkyboxConstantBuffer; }
+
     private:
         bool CompileShaders(RHI::RHIDevice& device);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
         bool CreateGraphicsPipeline(RHI::RHIDevice& device);
+
+        bool CompileSkyboxShaders(RHI::RHIDevice& device);
+        bool CreateSkyboxPipelineLayout(RHI::RHIDevice& device);
+        bool CreateSkyboxPipeline(RHI::RHIDevice& device);
 
     private:
         RHI::RHIDevice* m_Device = nullptr;
@@ -104,6 +130,14 @@ namespace Axle {
 
         RHI::RHIShaderBytecode m_VertexShader;
         RHI::RHIShaderBytecode m_PixelShader;
+
+        // Atmospheric Skybox Resources
+        RHI::RHIPipelineLayout m_SkyboxPipelineLayout;
+        nri::Pipeline* m_SkyboxPipeline = nullptr;
+        RHI::RHIBuffer m_SkyboxConstantBuffer;
+        RHI::RHIShaderBytecode m_SkyboxVertexShader;
+        RHI::RHIShaderBytecode m_SkyboxPixelShader;
+        SkyboxComponent m_SkyboxParams;
 
         RHI::RHICommandBuffer m_CommandBuffer;
         std::unique_ptr<RHI::RHIStreamer> m_Streamer;

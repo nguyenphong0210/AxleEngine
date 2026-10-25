@@ -175,6 +175,14 @@ namespace Axle {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Forward+ Multi-Light GPU Buffer!");
         }
 
+        // Initialize Atmospheric Skybox Pipeline & Constant Buffer
+        if (CompileSkyboxShaders(device) && CreateSkyboxPipelineLayout(device)) {
+            if (!CreateSkyboxPipeline(device)) {
+                AXLE_CORE_WARN("RHISceneRenderer: Failed to create Atmospheric Skybox graphics pipeline!");
+            }
+        }
+        m_SkyboxConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISkyboxConstants), RHIMemoryLocation::HostUpload, "SkyboxConstantsBuffer"));
+
         m_Initialized = true;
         AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering, Descriptor Pools & Forward+ Multi-Light Buffer.");
         return true;
@@ -187,6 +195,10 @@ namespace Axle {
             m_Device->GetNRICore().DestroyPipeline(m_Pipeline);
             m_Pipeline = nullptr;
         }
+
+        m_SkyboxPipeline = nullptr;
+        m_SkyboxPipelineLayout.Shutdown();
+        m_SkyboxConstantBuffer.Shutdown();
 
         m_LightBuffer.Shutdown();
         m_SceneConstantBuffer.Shutdown();
@@ -376,6 +388,107 @@ namespace Axle {
         auto& cache = RHIPipelineCache::Get();
         m_Pipeline = cache.GetOrCreateGraphicsPipeline(gfxDesc);
         return m_Pipeline != nullptr;
+    }
+
+    bool RHISceneRenderer::CompileSkyboxShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        if (!compiler.IsInitialized()) {
+            compiler.Init();
+        }
+
+        std::string shaderSource;
+        auto shaderPath = FileSystem::ResolveAssetPath("shaders/AtmosphericSkybox.hlsl");
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "AtmosphericSkybox.hlsl";
+        }
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "Engine/Resources/Shaders/AtmosphericSkybox.hlsl";
+        }
+
+        if (std::filesystem::exists(shaderPath)) {
+            std::ifstream file(shaderPath);
+            if (file.is_open()) {
+                std::stringstream ss;
+                ss << file.rdbuf();
+                shaderSource = ss.str();
+            }
+        }
+
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate AtmosphericSkybox.hlsl!");
+            return false;
+        }
+
+        RHIShaderCompileDesc vsDesc;
+        vsDesc.Source = shaderSource;
+        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        vsDesc.HLSLVersion = "2021";
+        vsDesc.ShaderModel = "6_0";
+        vsDesc.Format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        vsDesc.Optimization = true;
+
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile AtmosphericSkybox VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_SkyboxVertexShader = vsRes.Bytecode;
+
+        RHIShaderCompileDesc psDesc = vsDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = RHIShaderStage::Fragment;
+
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile AtmosphericSkybox PS: {0}", psRes.ErrorMessage);
+            return false;
+        }
+        m_SkyboxPixelShader = psRes.Bytecode;
+
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateSkyboxPipelineLayout(RHIDevice& device) {
+        // Root Descriptor [0] b0, space 0: 256-byte SkyboxConstants
+        nri::RootDescriptorDesc rootDesc = {};
+        rootDesc.registerIndex = 0;
+        rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDesc.shaderStages = nri::StageBits::ALL;
+
+        nri::PipelineLayoutDesc layoutDesc = {};
+        layoutDesc.rootRegisterSpace = 0;
+        layoutDesc.rootDescriptors = &rootDesc;
+        layoutDesc.rootDescriptorNum = 1;
+        layoutDesc.shaderStages = nri::StageBits::ALL;
+
+        return m_SkyboxPipelineLayout.Init(layoutDesc);
+    }
+
+    bool RHISceneRenderer::CreateSkyboxPipeline(RHIDevice& device) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_SkyboxPipelineLayout;
+        gfxDesc.Shaders = { m_SkyboxVertexShader, m_SkyboxPixelShader };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+
+        gfxDesc.DepthStencil.DepthTestEnable = true;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS_EQUAL;
+        gfxDesc.DepthStencil.DepthStencilFormat = nri::Format::D32_SFLOAT;
+
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { nri::Format::RGBA8_UNORM };
+
+        // Empty vertex input layout (full-screen triangle generated via SV_VertexID)
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+
+        auto& cache = RHIPipelineCache::Get();
+        m_SkyboxPipeline = cache.GetOrCreateGraphicsPipeline(gfxDesc);
+        return m_SkyboxPipeline != nullptr;
     }
 
     void RHISceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene,
@@ -656,7 +769,70 @@ namespace Axle {
             }
         }
 
-        // 5. End Rendering Pass
+        // 5. Procedural Atmospheric Skybox Pass (Rayleigh & Mie scattering at infinity)
+        if (settings.EnableSkybox && m_SkyboxPipeline) {
+            SkyboxComponent activeSkybox = m_SkyboxParams;
+            if (scene) {
+                SkyboxComponent sceneSkybox;
+                if (scene->GetPrimarySkybox(sceneSkybox)) {
+                    activeSkybox = sceneSkybox;
+                }
+            }
+
+            if (activeSkybox.Enabled && activeSkybox.Type == SkyboxType::ProceduralAtmospheric) {
+                // 1. Determine normalized Sun direction
+                glm::vec3 sunDir(0.45f, 0.85f, 0.25f);
+                if (activeSkybox.SyncWithSun) {
+                    sunDir = glm::vec3(sceneConstants.SunDirection);
+                } else {
+                    float radAz = glm::radians(activeSkybox.CustomAzimuth);
+                    float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
+                    sunDir = glm::vec3(
+                        std::cos(radEl) * std::sin(radAz),
+                        std::sin(radEl),
+                        std::cos(radEl) * std::cos(radAz)
+                    );
+                }
+                if (glm::length(sunDir) > 1e-4f) {
+                    sunDir = glm::normalize(sunDir);
+                } else {
+                    sunDir = glm::vec3(0.0f, 1.0f, 0.0f);
+                }
+
+                // 2. Solar elevation, day factor and sunset horizon warming factors
+                float sunElev = sunDir.y;
+                float dayFactor = std::clamp(sunElev * 3.0f + 0.5f, 0.0f, 1.0f);
+                float sunsetFactor = std::clamp(1.0f - std::abs(sunElev) * 2.5f, 0.0f, 1.0f);
+
+                // 3. Setup 256-byte CBV aligned constant buffer
+                RHISkyboxConstants skyboxConstants{};
+                skyboxConstants.InvViewProjection = glm::inverse(sceneConstants.ViewProjection);
+                skyboxConstants.CameraPosition = sceneConstants.CameraPosition;
+                skyboxConstants.SunDirection = glm::vec4(sunDir, sunElev);
+                skyboxConstants.SunColor = glm::vec4(glm::vec3(sceneConstants.SunColor) * activeSkybox.Intensity, dayFactor);
+                skyboxConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
+                skyboxConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
+                skyboxConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);
+                skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, 0.0f, 2.2f); // ACES filmic & 2.2 gamma
+
+                if (m_SkyboxConstantBuffer.IsValid()) {
+                    m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants));
+                }
+
+                // 4. Bind Skybox Graphics Pipeline & Root Constants
+                m_CommandBuffer.SetPipeline(m_SkyboxPipeline);
+                m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SkyboxPipelineLayout);
+                if (m_SkyboxConstantBuffer.IsValid() && m_SkyboxConstantBuffer.GetCBV()) {
+                    m_CommandBuffer.SetRootDescriptor(0, m_SkyboxConstantBuffer.GetCBV());
+                }
+
+                // 5. Draw full-screen triangle on far plane (SV_VertexID unproject)
+                m_CommandBuffer.Draw(3, 1, 0, 0);
+                m_LastDrawCallCount++;
+            }
+        }
+
+        // 6. End Rendering Pass
         m_CommandBuffer.EndRendering();
 
         // Transition back to ShaderResource for ImGui presentation

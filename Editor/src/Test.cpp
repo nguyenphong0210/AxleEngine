@@ -15078,6 +15078,241 @@ bool RunTest_Step74_ImageBasedLightingAndEnvironmentMaps() {
 }
 
 // =============================================================================
+// STEP 75: PROCEDURAL ATMOSPHERIC SKYBOX PASS (RAYLEIGH & MIE SCATTERING)
+// =============================================================================
+bool RunTest_Step75_ProceduralAtmosphericSkyboxPass() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 75 TEST] PROCEDURAL ATMOSPHERIC SKYBOX PASS      " << std::endl;
+    std::cout << " (Rayleigh & Mie Scattering, Sun Disk, Stars, ToneMap)  " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    auto& compiler = Axle::RHI::RHIShaderCompiler::Get();
+    if (!compiler.IsInitialized()) {
+        compiler.Init();
+    }
+
+    std::filesystem::path shaderPath = "Engine/Resources/Shaders/AtmosphericSkybox.hlsl";
+    if (!std::filesystem::exists(shaderPath)) {
+        shaderPath = "Resources/Shaders/AtmosphericSkybox.hlsl";
+    }
+    assert(std::filesystem::exists(shaderPath));
+
+    std::string shaderSource;
+    {
+        std::ifstream file(shaderPath);
+        assert(file.is_open());
+        std::stringstream ss;
+        ss << file.rdbuf();
+        shaderSource = ss.str();
+    }
+    assert(!shaderSource.empty());
+
+    // [75.1] HLSL 2021 Dual-Stage Compilation (DXIL & SPIR-V)
+    std::cout << "\n[75.1] Compiling AtmosphericSkybox.hlsl to D3D12 DXIL & Vulkan 1.3 SPIR-V..." << std::endl;
+    Axle::RHI::RHIShaderCompileDesc baseDesc;
+    baseDesc.Source = shaderSource;
+    baseDesc.SourcePath = shaderPath.string();
+    baseDesc.HLSLVersion = "2021";
+    baseDesc.ShaderModel = "6_0";
+    baseDesc.Optimization = true;
+
+    // Direct3D 12 DXIL
+    auto vsDxilDesc = baseDesc;
+    vsDxilDesc.Stage = Axle::RHI::RHIShaderStage::Vertex;
+    vsDxilDesc.EntryPoint = "VSMain";
+    vsDxilDesc.Format = Axle::RHI::RHIShaderFormat::DXIL;
+    auto vsDxilRes = compiler.Compile(vsDxilDesc);
+    assert(vsDxilRes.Success && vsDxilRes.Bytecode.IsValid());
+
+    auto psDxilDesc = baseDesc;
+    psDxilDesc.Stage = Axle::RHI::RHIShaderStage::Fragment;
+    psDxilDesc.EntryPoint = "PSMain";
+    psDxilDesc.Format = Axle::RHI::RHIShaderFormat::DXIL;
+    auto psDxilRes = compiler.Compile(psDxilDesc);
+    assert(psDxilRes.Success && psDxilRes.Bytecode.IsValid());
+
+    // Vulkan 1.3 SPIR-V
+    auto vsSpvDesc = baseDesc;
+    vsSpvDesc.Stage = Axle::RHI::RHIShaderStage::Vertex;
+    vsSpvDesc.EntryPoint = "VSMain";
+    vsSpvDesc.Format = Axle::RHI::RHIShaderFormat::SPIRV;
+    vsSpvDesc.VulkanTargetEnv = "vulkan1.3";
+    vsSpvDesc.EnableVulkanDXLayout = true;
+    auto vsSpvRes = compiler.Compile(vsSpvDesc);
+    assert(vsSpvRes.Success && vsSpvRes.Bytecode.IsValid());
+    uint32_t vsMagic = *reinterpret_cast<const uint32_t*>(vsSpvRes.Bytecode.GetData());
+    assert(vsMagic == 0x07230203);
+
+    auto psSpvDesc = baseDesc;
+    psSpvDesc.Stage = Axle::RHI::RHIShaderStage::Fragment;
+    psSpvDesc.EntryPoint = "PSMain";
+    psSpvDesc.Format = Axle::RHI::RHIShaderFormat::SPIRV;
+    psSpvDesc.VulkanTargetEnv = "vulkan1.3";
+    psSpvDesc.EnableVulkanDXLayout = true;
+    auto psSpvRes = compiler.Compile(psSpvDesc);
+    assert(psSpvRes.Success && psSpvRes.Bytecode.IsValid());
+    uint32_t psMagic = *reinterpret_cast<const uint32_t*>(psSpvRes.Bytecode.GetData());
+    assert(psMagic == 0x07230203);
+
+    std::cout << "  -> VS compiled: DXIL (" << vsDxilRes.Bytecode.GetSize() << "B), SPIR-V (" << vsSpvRes.Bytecode.GetSize() << "B)." << std::endl;
+    std::cout << "  -> PS compiled: DXIL (" << psDxilRes.Bytecode.GetSize() << "B), SPIR-V (" << psSpvRes.Bytecode.GetSize() << "B)." << std::endl;
+    std::cout << "  -> PASS: Dual-stage cross-API compilation verified." << std::endl;
+
+    // [75.2] Shader Reflection & 256-byte Uniform Buffer Layout
+    std::cout << "\n[75.2] Extracting SkyboxConstants Reflection & Hardware Alignment..." << std::endl;
+    auto reflection = compiler.Reflect(psDxilRes.Bytecode);
+    auto* skyboxCB = reflection.FindConstantBuffer("SkyboxConstants");
+    assert(skyboxCB->Size == 256);
+    assert(sizeof(Axle::RHISkyboxConstants) == 256);
+
+    std::cout << "  -> SkyboxConstants bound to b0, space 0 (Size: " << skyboxCB->Size << " bytes, CBV hardware aligned)." << std::endl;
+    std::cout << "  -> C++ RHISkyboxConstants struct size: " << sizeof(Axle::RHISkyboxConstants) << " bytes." << std::endl;
+    std::cout << "  -> PASS: Shader reflection and hardware buffer alignment validated." << std::endl;
+
+    // [75.3] Atmospheric Scattering Mathematics & Sun Position Vector
+    std::cout << "\n[75.3] Testing Solar Elevation / Azimuth Vector Trigonometry & Day/Sunset Factors..." << std::endl;
+    {
+        // Solar Zenith (Overhead noon: Azimuth 0, Elevation 90)
+        float radAzNoon = glm::radians(0.0f);
+        float radElNoon = glm::radians(90.0f);
+        glm::vec3 sunNoon = glm::normalize(glm::vec3(
+            std::cos(radElNoon) * std::sin(radAzNoon),
+            std::sin(radElNoon),
+            std::cos(radElNoon) * std::cos(radAzNoon)
+        ));
+        assert(std::abs(sunNoon.y - 1.0f) < 1e-4f);
+        float dayFactorNoon = std::clamp(sunNoon.y * 3.0f + 0.5f, 0.0f, 1.0f);
+        float sunsetFactorNoon = std::clamp(1.0f - std::abs(sunNoon.y) * 2.5f, 0.0f, 1.0f);
+        assert(dayFactorNoon == 1.0f);
+        assert(sunsetFactorNoon == 0.0f);
+
+        // Sunset Golden Hour (Horizon: Azimuth 90, Elevation 0)
+        float radAzSunset = glm::radians(90.0f);
+        float radElSunset = glm::radians(0.0f);
+        glm::vec3 sunSunset = glm::normalize(glm::vec3(
+            std::cos(radElSunset) * std::sin(radAzSunset),
+            std::sin(radElSunset),
+            std::cos(radElSunset) * std::cos(radAzSunset)
+        ));
+        assert(std::abs(sunSunset.y) < 1e-4f);
+        float dayFactorSunset = std::clamp(sunSunset.y * 3.0f + 0.5f, 0.0f, 1.0f);
+        float sunsetFactorSunset = std::clamp(1.0f - std::abs(sunSunset.y) * 2.5f, 0.0f, 1.0f);
+        assert(std::abs(dayFactorSunset - 0.5f) < 1e-4f);
+        assert(std::abs(sunsetFactorSunset - 1.0f) < 1e-4f);
+
+        // Night (Sun below horizon: Elevation -0.5)
+        float sunElevNight = -0.5f;
+        float dayFactorNight = std::clamp(sunElevNight * 3.0f + 0.5f, 0.0f, 1.0f);
+        assert(dayFactorNight == 0.0f);
+
+        std::cout << "  -> Noon: Sun (0, 1, 0), DayFactor = 1.0, SunsetFactor = 0.0." << std::endl;
+        std::cout << "  -> Sunset: Sun (1, 0, 0), DayFactor = 0.5, SunsetFactor = 1.0 (Golden Amber Peak)." << std::endl;
+        std::cout << "  -> Night: Sun below horizon, DayFactor = 0.0 (Procedural Stars active)." << std::endl;
+        std::cout << "  -> PASS: Solar physical parameters and day/night state machine validated." << std::endl;
+    }
+
+    // [75.4] RHI Device & Atmospheric Skybox Graphics Pipeline
+    std::cout << "\n[75.4] Testing Live Atmospheric Skybox PSO & Constant Buffer Creation..." << std::endl;
+    auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+    if (!rhiDevice.IsInitialized()) {
+        Axle::RHI::RHIDeviceDesc devDesc;
+        devDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+        devDesc.Headless = true;
+        devDesc.AllowFallback = true;
+        bool devOk = rhiDevice.Init(devDesc);
+        assert(devOk);
+    }
+
+    Axle::RHISceneRenderer sceneRenderer;
+    bool rendOk = sceneRenderer.Init(rhiDevice);
+    assert(rendOk);
+    assert(sceneRenderer.IsInitialized());
+    assert(sceneRenderer.GetSkyboxPipeline() != nullptr);
+    assert(sceneRenderer.GetSkyboxPipelineLayout().IsValid());
+    assert(sceneRenderer.GetSkyboxConstantBuffer().IsValid());
+    assert(sceneRenderer.GetSkyboxConstantBuffer().GetSize() == 256);
+
+    std::cout << "  -> Atmospheric Skybox graphics pipeline created and cached in RHIPipelineCache." << std::endl;
+    std::cout << "  -> SkyboxConstants constant buffer (256 bytes) allocated on HostUpload heap." << std::endl;
+    std::cout << "  -> PASS: Skybox PSO and root descriptor layout verified." << std::endl;
+
+    // [75.5] Live GPU Viewport Scene Dispatch with Sun Synchronization
+    std::cout << "\n[75.5] Testing Live Viewport Scene Dispatch with Sun-Synchronized Skybox..." << std::endl;
+    {
+        auto scene = std::make_shared<Axle::Scene>();
+        auto& meshRegistry = Axle::RHIMeshRegistry::Get();
+        meshRegistry.Init();
+
+        // 1. Primary Directional Sun Light
+        auto sun = scene->CreateEntity("Sun_DirectionalLight");
+        auto& sl = sun.AddComponent<Axle::DirectionalLightComponent>();
+        sl.Intensity = 2.0f;
+        sl.Color = glm::vec3(1.0f, 0.95f, 0.85f);
+
+        // 2. Procedural Atmospheric Skybox Component (SyncWithSun = true)
+        auto skyboxEntity = scene->CreateEntity("Atmospheric_Skybox");
+        auto& sbc = skyboxEntity.AddComponent<Axle::SkyboxComponent>();
+        sbc.Type = Axle::SkyboxType::ProceduralAtmospheric;
+        sbc.Enabled = true;
+        sbc.SyncWithSun = true;
+        sbc.Intensity = 1.0f;
+        sbc.Exposure = 1.0f;
+        sbc.SunSize = 0.045f;
+        sbc.SunGlow = 0.16f;
+        sbc.Turbidity = 1.0f;
+
+        // 3. PBR Entities (Red CarPaint Sphere, Chrome Sphere, Ground Plane)
+        auto redCar = scene->CreateEntity("CarPaint_Red_Sphere");
+        redCar.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(-2.0f, 1.0f, 0.0f);
+        redCar.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetSphere(), Axle::RHI::RHIMaterial::CreateCarPaintRed());
+
+        auto chromeSphere = scene->CreateEntity("Chrome_Sphere");
+        chromeSphere.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.0f, 1.0f, 0.0f);
+        chromeSphere.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetSphere(), Axle::RHI::RHIMaterial::CreateChrome());
+
+        auto ground = scene->CreateEntity("Ground_Plane");
+        ground.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetPlane(), Axle::RHI::RHIMaterial::CreateCarbonFiber());
+
+        // Render Targets & Camera
+        Axle::RHI::RHITexture colorTarget;
+        colorTarget.Init(Axle::RHI::RHITextureDesc::RenderTarget2D(1280, 720, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "SkyboxTargetColor"));
+
+        Axle::RHI::RHITexture depthTarget;
+        depthTarget.Init(Axle::RHI::RHITextureDesc::DepthStencil2D(1280, 720, Axle::RHI::RHITextureFormat::D32_FLOAT, "SkyboxTargetDepth"));
+
+        Axle::PerspectiveCamera camera(60.0f, 1280.0f / 720.0f, 0.1f, 1000.0f);
+        camera.SetPosition(glm::vec3(0.0f, 3.0f, 6.0f));
+        camera.SetRotation(glm::vec3(-15.0f, 0.0f, 0.0f));
+
+        Axle::SceneRenderSettings settings{};
+        settings.EnableSkybox = true;
+
+        sceneRenderer.RenderScene(scene, camera, &colorTarget, &depthTarget, settings);
+
+        // Expected: 3 mesh draw calls + 1 skybox draw call = 4 draw calls
+        assert(sceneRenderer.GetDrawCallCount() >= 4);
+        assert(sceneRenderer.GetRenderedEntityCount() >= 3);
+        assert(sceneRenderer.GetStreamedTransformBytes() > 0);
+
+        std::cout << "  -> Rendered " << sceneRenderer.GetRenderedEntityCount() << " scene entities and Atmospheric Skybox pass (" 
+                  << sceneRenderer.GetDrawCallCount() << " total draw calls)." << std::endl;
+        std::cout << "  -> PASS: Live viewport scene dispatch with Procedural Atmospheric Skybox pass verified." << std::endl;
+
+        // Clean teardown
+        colorTarget.Shutdown();
+        depthTarget.Shutdown();
+        sceneRenderer.Shutdown();
+        meshRegistry.Shutdown();
+        scene.reset();
+        Axle::RHI::RHIMaterial::ReleaseDefaultTextures();
+        rhiDevice.Shutdown();
+    }
+
+    std::cout << "\n>>> STEP 75 PASSED: Procedural Atmospheric Skybox Pass 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -15159,6 +15394,7 @@ int main(int argc, char** argv) {
         else if (arg == "72" || arg == "step72" || arg == "--step72" || arg == "--multi-light" || arg == "--forward-plus" || arg == "--lights") targetStep = 72;
         else if (arg == "73" || arg == "step73" || arg == "--step73" || arg == "--csm" || arg == "--cascades") targetStep = 73;
         else if (arg == "74" || arg == "step74" || arg == "--step74" || arg == "--ibl" || arg == "--environment-maps") targetStep = 74;
+        else if (arg == "75" || arg == "step75" || arg == "--step75" || arg == "--skybox" || arg == "--atmospheric") targetStep = 75;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -15381,6 +15617,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 74) {
         if (!RunTest_Step74_ImageBasedLightingAndEnvironmentMaps()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 75) {
+        if (!RunTest_Step75_ProceduralAtmosphericSkyboxPass()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

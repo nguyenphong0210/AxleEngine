@@ -13586,6 +13586,7 @@ bool RunTest_Step69_Phase33_Step2_UnifiedHLSLShaderPipelineAndForwardPBR() {
     depthTarget.Shutdown();
     sceneRenderer.Shutdown();
     meshRegistry.Shutdown();
+    Axle::RHI::RHIMaterial::ReleaseDefaultTextures();
     rhiDevice.Shutdown();
 
     std::cout << "\n>>> STEP 69 PASSED: Phase 33 Step 2 Unified HLSL 2021 Shader Pipeline & Forward PBR 100% verified! <<<\n" << std::endl;
@@ -14907,6 +14908,176 @@ bool RunTest_Step73_DirectionalCascadedShadowMapping() {
 }
 
 // =============================================================================
+// STEP 74: IMAGE-BASED LIGHTING (IBL) & ENVIRONMENT MAPS
+// (Pre-filtered Radiance Cubemap, Diffuse Irradiance Cubemap, Split-Sum BRDF LUT)
+// =============================================================================
+bool RunTest_Step74_ImageBasedLightingAndEnvironmentMaps() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 74 TEST] IMAGE-BASED LIGHTING (IBL) & ENV MAPS   " << std::endl;
+    std::cout << " (Irradiance Cubemap, Specular Prefilter, Split-Sum LUT)" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [74.1] Shader Reflection & Compilation of IBL Bindings in ForwardPBR.hlsl
+    std::cout << "\n[74.1] Compiling ForwardPBR.hlsl & Validating IBL Split-Sum Bindings..." << std::endl;
+    auto& compiler = Axle::RHI::RHIShaderCompiler::Get();
+    if (!compiler.IsInitialized()) {
+        compiler.Init();
+    }
+
+    std::filesystem::path shaderPath = "Engine/Resources/Shaders/ForwardPBR.hlsl";
+    if (!std::filesystem::exists(shaderPath)) {
+        shaderPath = "Resources/Shaders/ForwardPBR.hlsl";
+    }
+    assert(std::filesystem::exists(shaderPath));
+
+    std::string shaderSource;
+    {
+        std::ifstream file(shaderPath);
+        assert(file.is_open());
+        std::stringstream ss;
+        ss << file.rdbuf();
+        shaderSource = ss.str();
+    }
+
+    Axle::RHI::RHIShaderCompileDesc psDesc;
+    psDesc.Source = shaderSource;
+    psDesc.SourcePath = shaderPath.string();
+    psDesc.HLSLVersion = "2021";
+    psDesc.ShaderModel = "6_0";
+    psDesc.Stage = Axle::RHI::RHIShaderStage::Fragment;
+    psDesc.EntryPoint = "PSMain";
+    psDesc.Format = Axle::RHI::RHIShaderFormat::DXIL;
+    psDesc.Optimization = true;
+
+    auto psRes = compiler.Compile(psDesc);
+    assert(psRes.Success);
+    assert(psRes.Bytecode.IsValid());
+
+    auto reflection = compiler.Reflect(psRes.Bytecode);
+    bool hasIrradiance = (reflection.GetResource("u_IrradianceMap") != nullptr);
+    bool hasPrefilter = (reflection.GetResource("u_PrefilterMap") != nullptr);
+    bool hasBRDFLUT = (reflection.GetResource("u_BRDFLUT") != nullptr);
+
+    assert(hasIrradiance);
+    assert(hasPrefilter);
+    assert(hasBRDFLUT);
+    std::cout << "  -> Reflection verified: u_IrradianceMap (t6), u_PrefilterMap (t7), u_BRDFLUT (t8) present in space 1." << std::endl;
+    std::cout << "  -> PASS: Shader split-sum reflection verified." << std::endl;
+
+    // [74.2] Device Initialization & Default Fallback IBL Cubemaps / BRDF LUT
+    std::cout << "\n[74.2] Testing Default GPU IBL Cubemaps & Split-Sum BRDF LUT..." << std::endl;
+    auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+    if (!rhiDevice.IsInitialized()) {
+        Axle::RHI::RHIDeviceDesc devDesc;
+        devDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+        devDesc.Headless = true;
+        devDesc.AllowFallback = true;
+        bool devOk = rhiDevice.Init(devDesc);
+        assert(devOk);
+    }
+
+    auto defaultIrradiance = Axle::RHI::RHIMaterial::GetDefaultIrradianceCubemap();
+    assert(defaultIrradiance != nullptr && defaultIrradiance->IsValid());
+    assert(defaultIrradiance->GetDesc().IsCubeMap);
+    assert(defaultIrradiance->GetDesc().ArrayLayers == 6);
+    assert(defaultIrradiance->GetSRV() != nullptr);
+
+    auto defaultPrefilter = Axle::RHI::RHIMaterial::GetDefaultPrefilterCubemap();
+    assert(defaultPrefilter != nullptr && defaultPrefilter->IsValid());
+    assert(defaultPrefilter->GetDesc().IsCubeMap);
+    assert(defaultPrefilter->GetDesc().ArrayLayers == 6);
+    assert(defaultPrefilter->GetDesc().MipLevels == 5);
+    assert(defaultPrefilter->GetSRV() != nullptr);
+
+    auto defaultBRDF = Axle::RHI::RHIMaterial::GetDefaultBRDFLUT();
+    assert(defaultBRDF != nullptr && defaultBRDF->IsValid());
+    assert(!defaultBRDF->GetDesc().IsCubeMap);
+    assert(defaultBRDF->GetWidth() == 16 && defaultBRDF->GetHeight() == 16);
+    assert(defaultBRDF->GetSRV() != nullptr);
+
+    std::cout << "  -> Irradiance Cubemap (16x16x6, 1 mip), Prefilter Cubemap (16x16x6, 5 mips), BRDF LUT (16x16 2D) verified." << std::endl;
+    std::cout << "  -> PASS: Default GPU IBL cubemaps and 2D LUT validated." << std::endl;
+
+    // [74.3] RHISceneRenderer IBL Setters & Active Viewport Scene Dispatch
+    std::cout << "\n[74.3] Testing RHISceneRenderer IBL Integration & Scene Skybox Binding..." << std::endl;
+    {
+        Axle::RHISceneRenderer sceneRenderer;
+        bool rendOk = sceneRenderer.Init(rhiDevice);
+        assert(rendOk);
+        assert(sceneRenderer.IsInitialized());
+
+        sceneRenderer.SetIBLMaps(defaultIrradiance, defaultPrefilter, defaultBRDF);
+        assert(sceneRenderer.GetIrradianceMap() == defaultIrradiance);
+        assert(sceneRenderer.GetPrefilterMap() == defaultPrefilter);
+        assert(sceneRenderer.GetBRDFLUT() == defaultBRDF);
+
+        sceneRenderer.SetUseIBL(true);
+        assert(sceneRenderer.IsIBLEnabled());
+
+        auto scene = std::make_shared<Axle::Scene>();
+        auto& meshRegistry = Axle::RHIMeshRegistry::Get();
+        meshRegistry.Init();
+
+        // 1. Add Skybox with HDRCubemap type
+        auto skyboxEntity = scene->CreateEntity("Skybox_Studio");
+        auto& skyboxComp = skyboxEntity.AddComponent<Axle::SkyboxComponent>();
+        skyboxComp.Type = Axle::SkyboxType::HDRCubemap;
+        skyboxComp.Enabled = true;
+        skyboxComp.Intensity = 1.0f;
+
+        // 2. Add Sun Directional Light
+        auto sun = scene->CreateEntity("Sun_DirectionalLight");
+        auto& sl = sun.AddComponent<Axle::DirectionalLightComponent>();
+        sl.Intensity = 2.0f;
+
+        // 3. Add Metallic Car Paint Sphere & Chrome Sphere
+        auto redCar = scene->CreateEntity("CarPaint_Red_Sphere");
+        redCar.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(-2.0f, 1.0f, 0.0f);
+        redCar.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetSphere(), Axle::RHI::RHIMaterial::CreateCarPaintRed());
+
+        auto chromeSphere = scene->CreateEntity("Chrome_Sphere");
+        chromeSphere.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.0f, 1.0f, 0.0f);
+        chromeSphere.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetSphere(), Axle::RHI::RHIMaterial::CreateChrome());
+
+        auto goldCube = scene->CreateEntity("Gold_Cube");
+        goldCube.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(2.0f, 1.0f, 0.0f);
+        goldCube.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetCube(), Axle::RHI::RHIMaterial::CreateGold());
+
+        // Render Targets & Camera
+        Axle::RHI::RHITexture colorTarget;
+        colorTarget.Init(Axle::RHI::RHITextureDesc::RenderTarget2D(1280, 720, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "IBLTargetColor"));
+
+        Axle::RHI::RHITexture depthTarget;
+        depthTarget.Init(Axle::RHI::RHITextureDesc::DepthStencil2D(1280, 720, Axle::RHI::RHITextureFormat::D32_FLOAT, "IBLTargetDepth"));
+
+        Axle::PerspectiveCamera camera(60.0f, 1280.0f / 720.0f, 0.1f, 1000.0f);
+        camera.SetPosition(glm::vec3(0.0f, 3.0f, 6.0f));
+        camera.SetRotation(glm::vec3(-15.0f, 0.0f, 0.0f));
+
+        sceneRenderer.RenderScene(scene, camera, &colorTarget, &depthTarget);
+        assert(sceneRenderer.GetDrawCallCount() >= 3);
+        assert(sceneRenderer.GetRenderedEntityCount() >= 3);
+        assert(sceneRenderer.GetStreamedTransformBytes() > 0);
+
+        std::cout << "  -> Rendered " << sceneRenderer.GetRenderedEntityCount() << " entities (" 
+                  << sceneRenderer.GetDrawCallCount() << " draw calls) with Split-Sum IBL and HDR skybox ambient." << std::endl;
+        std::cout << "  -> PASS: Live viewport scene dispatch with Image-Based Lighting verified." << std::endl;
+
+        // Clean teardown
+        colorTarget.Shutdown();
+        depthTarget.Shutdown();
+        sceneRenderer.Shutdown();
+        meshRegistry.Shutdown();
+        scene.reset();
+        Axle::RHI::RHIMaterial::ReleaseDefaultTextures();
+        rhiDevice.Shutdown();
+    }
+
+    std::cout << "\n>>> STEP 74 PASSED: Image-Based Lighting (IBL) & Environment Maps 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -14987,6 +15158,7 @@ int main(int argc, char** argv) {
         else if (arg == "71" || arg == "step71" || arg == "--step71" || arg == "--bindless" || arg == "--anisotropic") targetStep = 71;
         else if (arg == "72" || arg == "step72" || arg == "--step72" || arg == "--multi-light" || arg == "--forward-plus" || arg == "--lights") targetStep = 72;
         else if (arg == "73" || arg == "step73" || arg == "--step73" || arg == "--csm" || arg == "--cascades") targetStep = 73;
+        else if (arg == "74" || arg == "step74" || arg == "--step74" || arg == "--ibl" || arg == "--environment-maps") targetStep = 74;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -15206,6 +15378,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 73) {
         if (!RunTest_Step73_DirectionalCascadedShadowMapping()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 74) {
+        if (!RunTest_Step74_ImageBasedLightingAndEnvironmentMaps()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

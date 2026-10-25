@@ -63,6 +63,7 @@ namespace Axle::RHI {
         uint32_t MipLevels = 1;
         uint32_t ArrayLayers = 1;
         uint32_t SampleCount = 1;
+        bool IsCubeMap = false;
         RHITextureFormat Format = RHITextureFormat::RGBA8_UNORM;
         RHITextureUsage Usage = RHITextureUsage::ShaderResource | RHITextureUsage::ColorAttachment;
         std::string DebugName = "RHITexture";
@@ -83,6 +84,19 @@ namespace Axle::RHI {
             desc.Height = height;
             desc.Format = format;
             desc.Usage = RHITextureUsage::DepthStencil | RHITextureUsage::ShaderResource;
+            desc.DebugName = name;
+            return desc;
+        }
+
+        static RHITextureDesc Cubemap(uint32_t size, uint32_t mipLevels = 1, RHITextureFormat format = RHITextureFormat::RGBA8_UNORM, const std::string& name = "RHICubemap") {
+            RHITextureDesc desc;
+            desc.Width = size;
+            desc.Height = size;
+            desc.ArrayLayers = 6;
+            desc.MipLevels = mipLevels;
+            desc.IsCubeMap = true;
+            desc.Format = format;
+            desc.Usage = RHITextureUsage::ShaderResource;
             desc.DebugName = name;
             return desc;
         }

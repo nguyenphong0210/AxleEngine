@@ -137,20 +137,26 @@ namespace Axle {
                     m_DescriptorPool.UpdateSampler(m_DefaultDescriptorSet, 1, 0, m_AnisoSampler.GetNative());
                 }
 
-                // Bind Fallback 1x1 GPU resident textures to Range 0 (t0..t5)
+                // Bind Fallback GPU resident textures to Range 0 (t0..t8: PBR material + IBL cubemaps + BRDF LUT)
                 auto whiteTex = RHIMaterial::GetDefaultWhiteTexture();
                 auto normalTex = RHIMaterial::GetDefaultFlatNormalTexture();
                 auto roughTex = RHIMaterial::GetDefaultRoughnessTexture();
                 auto blackTex = RHIMaterial::GetDefaultBlackTexture();
+                auto irradianceTex = m_IrradianceMap ? m_IrradianceMap : RHIMaterial::GetDefaultIrradianceCubemap();
+                auto prefilterTex = m_PrefilterMap ? m_PrefilterMap : RHIMaterial::GetDefaultPrefilterCubemap();
+                auto brdfLUTTex = m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT();
 
-                if (whiteTex && normalTex && roughTex && blackTex) {
+                if (whiteTex && normalTex && roughTex && blackTex && irradianceTex && prefilterTex && brdfLUTTex) {
                     std::vector<nri::Descriptor*> defaultSRVs = {
-                        whiteTex->GetSRV(),  // t0: Albedo (1x1 White)
-                        normalTex->GetSRV(), // t1: Normal (1x1 Flat Normal)
-                        roughTex->GetSRV(),  // t2: Roughness (1x1 0.5 Rough)
-                        blackTex->GetSRV(),  // t3: Metallic (1x1 Black)
-                        whiteTex->GetSRV(),  // t4: AO (1x1 White)
-                        blackTex->GetSRV()   // t5: Emissive (1x1 Black)
+                        whiteTex->GetSRV(),       // t0: Albedo (1x1 White)
+                        normalTex->GetSRV(),      // t1: Normal (1x1 Flat Normal)
+                        roughTex->GetSRV(),       // t2: Roughness (1x1 0.5 Rough)
+                        blackTex->GetSRV(),       // t3: Metallic (1x1 Black)
+                        whiteTex->GetSRV(),       // t4: AO (1x1 White)
+                        blackTex->GetSRV(),       // t5: Emissive (1x1 Black)
+                        irradianceTex->GetSRV(),  // t6: Irradiance Cubemap
+                        prefilterTex->GetSRV(),   // t7: Specular Prefilter Cubemap
+                        brdfLUTTex->GetSRV()      // t8: BRDF Integration 2D LUT
                     };
                     m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 0, defaultSRVs);
                 }
@@ -186,6 +192,9 @@ namespace Axle {
         m_SceneConstantBuffer.Shutdown();
 
         m_DefaultDescriptorSet = nullptr;
+        m_IrradianceMap = nullptr;
+        m_PrefilterMap = nullptr;
+        m_BRDFLUT = nullptr;
         m_DescriptorPool.Shutdown();
         m_AnisoSampler.Shutdown();
 
@@ -281,10 +290,10 @@ namespace Axle {
         rootDescs[1].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[1].shaderStages = nri::StageBits::ALL;
 
-        // Descriptor Set (space 1): 6 PBR textures (t0..t5) and 1 Sampler (s0)
+        // Descriptor Set (space 1): 6 PBR textures (t0..t5) + 3 IBL textures (t6..t8) and 1 Sampler (s0)
         nri::DescriptorRangeDesc ranges[2] = {};
         ranges[0].baseRegisterIndex = 0;
-        ranges[0].descriptorNum = 6;
+        ranges[0].descriptorNum = 9; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
@@ -311,6 +320,30 @@ namespace Axle {
         layoutDesc.shaderStages = nri::StageBits::ALL;
 
         return m_PipelineLayout.Init(layoutDesc);
+    }
+
+    void RHISceneRenderer::SetIBLMaps(const std::shared_ptr<RHI::RHITexture>& irradiance,
+                                      const std::shared_ptr<RHI::RHITexture>& prefilter,
+                                      const std::shared_ptr<RHI::RHITexture>& brdfLUT) {
+        m_IrradianceMap = irradiance;
+        m_PrefilterMap = prefilter;
+        m_BRDFLUT = brdfLUT;
+        m_UseIBL = (irradiance != nullptr || prefilter != nullptr || brdfLUT != nullptr);
+
+        if (m_DefaultDescriptorSet && m_DescriptorPool.IsValid()) {
+            auto irrTex = m_IrradianceMap ? m_IrradianceMap : RHIMaterial::GetDefaultIrradianceCubemap();
+            auto prefTex = m_PrefilterMap ? m_PrefilterMap : RHIMaterial::GetDefaultPrefilterCubemap();
+            auto lutTex = m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT();
+
+            if (irrTex && prefTex && lutTex) {
+                std::vector<nri::Descriptor*> iblSRVs = {
+                    irrTex->GetSRV(),
+                    prefTex->GetSRV(),
+                    lutTex->GetSRV()
+                };
+                m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 6, iblSRVs);
+            }
+        }
     }
 
     bool RHISceneRenderer::CreateGraphicsPipeline(RHIDevice& device) {
@@ -458,6 +491,12 @@ namespace Axle {
                 spotIndex++;
             }
             lightData.LightCounts.y = spotIndex;
+
+            // 4. Discover Skybox for IBL environment maps
+            SkyboxComponent skyboxComp;
+            bool hasSkybox = scene->GetPrimarySkybox(skyboxComp);
+            bool useIBL = m_UseIBL || (hasSkybox && skyboxComp.Enabled && skyboxComp.Type == SkyboxType::HDRCubemap);
+            lightData.LightCounts.w = useIBL ? 1u : 0u;
 
             m_LightBuffer.Update(lightData);
 

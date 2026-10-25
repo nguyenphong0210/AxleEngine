@@ -12,6 +12,9 @@ namespace Axle::RHI {
     static std::shared_ptr<RHITexture> s_DefaultFlatNormal;
     static std::shared_ptr<RHITexture> s_DefaultRoughness;
     static std::shared_ptr<RHITexture> s_DefaultBlack;
+    static std::shared_ptr<RHITexture> s_DefaultIrradianceCubemap;
+    static std::shared_ptr<RHITexture> s_DefaultPrefilterCubemap;
+    static std::shared_ptr<RHITexture> s_DefaultBRDFLUT;
 
     static std::string Trim(const std::string& str) {
         size_t first = str.find_first_not_of(" \t\r\n");
@@ -150,11 +153,44 @@ namespace Axle::RHI {
         return s_DefaultBlack;
     }
 
+    std::shared_ptr<RHITexture> RHIMaterial::GetDefaultIrradianceCubemap() {
+        if (!s_DefaultIrradianceCubemap && RHIDevice::Get().IsInitialized()) {
+            s_DefaultIrradianceCubemap = std::make_shared<RHITexture>();
+            s_DefaultIrradianceCubemap->Init(RHITextureDesc::Cubemap(16, 1, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Irradiance_Cubemap"));
+        }
+        return s_DefaultIrradianceCubemap;
+    }
+
+    std::shared_ptr<RHITexture> RHIMaterial::GetDefaultPrefilterCubemap() {
+        if (!s_DefaultPrefilterCubemap && RHIDevice::Get().IsInitialized()) {
+            s_DefaultPrefilterCubemap = std::make_shared<RHITexture>();
+            s_DefaultPrefilterCubemap->Init(RHITextureDesc::Cubemap(16, 5, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Prefilter_Cubemap"));
+        }
+        return s_DefaultPrefilterCubemap;
+    }
+
+    std::shared_ptr<RHITexture> RHIMaterial::GetDefaultBRDFLUT() {
+        if (!s_DefaultBRDFLUT && RHIDevice::Get().IsInitialized()) {
+            s_DefaultBRDFLUT = std::make_shared<RHITexture>();
+            RHITextureDesc desc;
+            desc.Width = 16;
+            desc.Height = 16;
+            desc.Format = RHITextureFormat::RGBA8_UNORM;
+            desc.Usage = RHITextureUsage::ShaderResource;
+            desc.DebugName = "RHIDefault_BRDFLUT_16x16";
+            s_DefaultBRDFLUT->Init(desc);
+        }
+        return s_DefaultBRDFLUT;
+    }
+
     void RHIMaterial::ReleaseDefaultTextures() {
         if (s_DefaultWhite) { s_DefaultWhite->Shutdown(); s_DefaultWhite = nullptr; }
         if (s_DefaultFlatNormal) { s_DefaultFlatNormal->Shutdown(); s_DefaultFlatNormal = nullptr; }
         if (s_DefaultRoughness) { s_DefaultRoughness->Shutdown(); s_DefaultRoughness = nullptr; }
         if (s_DefaultBlack) { s_DefaultBlack->Shutdown(); s_DefaultBlack = nullptr; }
+        if (s_DefaultIrradianceCubemap) { s_DefaultIrradianceCubemap->Shutdown(); s_DefaultIrradianceCubemap = nullptr; }
+        if (s_DefaultPrefilterCubemap) { s_DefaultPrefilterCubemap->Shutdown(); s_DefaultPrefilterCubemap = nullptr; }
+        if (s_DefaultBRDFLUT) { s_DefaultBRDFLUT->Shutdown(); s_DefaultBRDFLUT = nullptr; }
     }
 
     // Presets

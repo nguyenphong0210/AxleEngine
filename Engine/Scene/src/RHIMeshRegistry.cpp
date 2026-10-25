@@ -52,11 +52,11 @@ namespace Axle {
 
     void RHIMeshRegistry::Shutdown() {
         Clear();
-        m_Cube.reset();
-        m_Sphere.reset();
-        m_Cylinder.reset();
-        m_Cone.reset();
-        m_Plane.reset();
+        if (m_Cube) { m_Cube->Shutdown(); m_Cube.reset(); }
+        if (m_Sphere) { m_Sphere->Shutdown(); m_Sphere.reset(); }
+        if (m_Cylinder) { m_Cylinder->Shutdown(); m_Cylinder.reset(); }
+        if (m_Cone) { m_Cone->Shutdown(); m_Cone.reset(); }
+        if (m_Plane) { m_Plane->Shutdown(); m_Plane.reset(); }
         m_Initialized = false;
     }
 
@@ -174,6 +174,11 @@ namespace Axle {
     }
 
     void RHIMeshRegistry::Clear() {
+        for (auto& [key, mesh] : m_MeshCache) {
+            if (mesh) {
+                mesh->Shutdown();
+            }
+        }
         m_MeshCache.clear();
     }
 

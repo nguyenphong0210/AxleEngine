@@ -82,6 +82,9 @@ Texture2D    u_RoughnessMap : register(t2, space1);
 Texture2D    u_MetallicMap  : register(t3, space1);
 Texture2D    u_AOMap        : register(t4, space1);
 Texture2D    u_EmissiveMap  : register(t5, space1);
+TextureCube  u_IrradianceMap: register(t6, space1);
+TextureCube  u_PrefilterMap : register(t7, space1);
+Texture2D    u_BRDFLUT      : register(t8, space1);
 SamplerState u_Sampler      : register(s0, space1);
 
 // -----------------------------------------------------------------------------
@@ -359,14 +362,36 @@ float4 PSMain(PSInput input) : SV_Target0 {
         Lo += (diffuse + specular) * radiance * NdotL;
     }
 
-    // 9. Ambient Lighting (Atmospheric Irradiance + Specular Reflection)
-    float3 ambientLightColor = hasMultiLightSun ? u_SunLight.AmbientColor.rgb : ((length(u_AmbientLight.rgb) > 0.01) ? u_AmbientLight.rgb : float3(0.22, 0.25, 0.32));
-    float ambientIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
+    // 9. Ambient Lighting: Image-Based Lighting (IBL) or Analytical Approximation
     float3 ambientF = FresnelSchlickRoughness(NdotV, F0, roughness);
     float3 ambientKD = (float3(1.0, 1.0, 1.0) - ambientF) * (1.0 - metallic);
-    float3 ambientDiffuse = ambientKD * albedo.rgb * ambientLightColor * ambientIntensity;
-    float3 ambientSpecular = ambientF * ambientLightColor * ambientIntensity * (1.0 - roughness) * 0.45;
-    float3 ambient = (ambientDiffuse + ambientSpecular) * ao;
+    float3 ambient;
+
+    if (u_LightCounts.w == 1u) {
+        // Image-Based Lighting (IBL) via Split-Sum Approximation
+        // A. Diffuse Irradiance: Cosine-weighted hemispherical integration
+        float3 irradiance = u_IrradianceMap.Sample(u_Sampler, N).rgb;
+        float3 diffuseAmbient = irradiance * albedo.rgb * ambientKD;
+
+        // B. Specular Radiance: Pre-filtered environment radiance (roughness-dependent mip level)
+        float3 R = reflect(-V, N);
+        const float MAX_REFLECTION_LOD = 4.0;
+        float3 prefilteredColor = u_PrefilterMap.SampleLevel(u_Sampler, R, roughness * MAX_REFLECTION_LOD).rgb;
+
+        // C. Split-sum BRDF integration 2D LUT: scale (rg.x) and bias (rg.y) for Fresnel reflection
+        float2 envBRDF = u_BRDFLUT.Sample(u_Sampler, float2(max(NdotV, 0.0), roughness)).rg;
+        float3 specularAmbient = prefilteredColor * (ambientF * envBRDF.x + envBRDF.y);
+
+        float envIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
+        ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao;
+    } else {
+        // Analytical hemisphere ambient fallback
+        float3 ambientLightColor = hasMultiLightSun ? u_SunLight.AmbientColor.rgb : ((length(u_AmbientLight.rgb) > 0.01) ? u_AmbientLight.rgb : float3(0.22, 0.25, 0.32));
+        float ambientIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
+        float3 ambientDiffuse = ambientKD * albedo.rgb * ambientLightColor * ambientIntensity;
+        float3 ambientSpecular = ambientF * ambientLightColor * ambientIntensity * (1.0 - roughness) * 0.45;
+        ambient = (ambientDiffuse + ambientSpecular) * ao;
+    }
     
     // 10. Total Radiance Accumulation
     float3 color = ambient + Lo + emissive;

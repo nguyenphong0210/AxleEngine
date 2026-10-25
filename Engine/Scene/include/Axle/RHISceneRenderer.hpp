@@ -70,6 +70,16 @@ namespace Axle {
         RHI::RHIMultiLightBuffer& GetLightBuffer() { return m_LightBuffer; }
         const RHI::RHIMultiLightBuffer& GetLightBuffer() const { return m_LightBuffer; }
 
+        // Image-Based Lighting (IBL) configuration
+        void SetIBLMaps(const std::shared_ptr<RHI::RHITexture>& irradiance,
+                        const std::shared_ptr<RHI::RHITexture>& prefilter,
+                        const std::shared_ptr<RHI::RHITexture>& brdfLUT);
+        void SetUseIBL(bool useIBL) { m_UseIBL = useIBL; }
+        bool IsIBLEnabled() const { return m_UseIBL; }
+        std::shared_ptr<RHI::RHITexture> GetIrradianceMap() const { return m_IrradianceMap; }
+        std::shared_ptr<RHI::RHITexture> GetPrefilterMap() const { return m_PrefilterMap; }
+        std::shared_ptr<RHI::RHITexture> GetBRDFLUT() const { return m_BRDFLUT; }
+
     private:
         bool CompileShaders(RHI::RHIDevice& device);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
@@ -83,6 +93,11 @@ namespace Axle {
         RHI::RHISampler m_AnisoSampler;
         RHI::RHIDescriptorPool m_DescriptorPool;
         nri::DescriptorSet* m_DefaultDescriptorSet = nullptr;
+
+        std::shared_ptr<RHI::RHITexture> m_IrradianceMap;
+        std::shared_ptr<RHI::RHITexture> m_PrefilterMap;
+        std::shared_ptr<RHI::RHITexture> m_BRDFLUT;
+        bool m_UseIBL = false;
 
         RHI::RHIBuffer m_SceneConstantBuffer;
         RHI::RHIMultiLightBuffer m_LightBuffer;

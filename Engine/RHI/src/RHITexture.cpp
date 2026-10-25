@@ -49,6 +49,10 @@ namespace Axle::RHI {
         const auto& core = rhiDevice.GetNRICore();
         auto* dev = rhiDevice.GetNRIDevice();
 
+        uint32_t maxDim = std::max(desc.Width, desc.Height);
+        uint32_t maxMips = (maxDim > 0) ? (1 + static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(maxDim))))) : 1;
+        uint32_t actualMips = std::max(1u, std::min(desc.MipLevels, maxMips));
+
         nri::TextureDesc texDesc = {};
         texDesc.type = (desc.Depth > 1) ? nri::TextureType::TEXTURE_3D : nri::TextureType::TEXTURE_2D;
         texDesc.usage = ToNRITextureUsage(desc.Usage);
@@ -56,7 +60,7 @@ namespace Axle::RHI {
         texDesc.width = static_cast<nri::Dim_t>(desc.Width);
         texDesc.height = static_cast<nri::Dim_t>(desc.Height);
         texDesc.depth = static_cast<nri::Dim_t>(desc.Depth);
-        texDesc.mipNum = static_cast<nri::Dim_t>(desc.MipLevels);
+        texDesc.mipNum = static_cast<nri::Dim_t>(actualMips);
         texDesc.layerNum = static_cast<nri::Dim_t>(desc.ArrayLayers);
         texDesc.sampleNum = static_cast<nri::Sample_t>(desc.SampleCount);
 
@@ -66,6 +70,7 @@ namespace Axle::RHI {
             return false;
         }
 
+
         if (!desc.DebugName.empty()) {
             core.SetDebugName(m_Texture, desc.DebugName.c_str());
         }
@@ -74,10 +79,10 @@ namespace Axle::RHI {
         if (desc.Usage & RHITextureUsage::ShaderResource) {
             nri::TextureViewDesc srvView = {};
             srvView.texture = m_Texture;
-            srvView.type = nri::TextureView::TEXTURE;
+            srvView.type = desc.IsCubeMap ? nri::TextureView::TEXTURE_CUBE : ((desc.ArrayLayers > 1) ? nri::TextureView::TEXTURE_ARRAY : nri::TextureView::TEXTURE);
             srvView.format = ToNRIFormat(desc.Format);
             srvView.mipOffset = 0;
-            srvView.mipNum = static_cast<nri::Dim_t>(desc.MipLevels);
+            srvView.mipNum = static_cast<nri::Dim_t>(actualMips);
             srvView.layerOffset = 0;
             srvView.layerNum = static_cast<nri::Dim_t>(desc.ArrayLayers);
 

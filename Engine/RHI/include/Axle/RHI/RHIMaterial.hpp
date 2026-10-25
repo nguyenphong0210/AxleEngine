@@ -121,6 +121,9 @@ namespace Axle::RHI {
         static std::shared_ptr<RHITexture> GetDefaultFlatNormalTexture();   // 0xFFFF8080 (Flat MikkTSpace normal [0, 0, 1])
         static std::shared_ptr<RHITexture> GetDefaultRoughnessTexture();    // 0xFF808080 (0.5 Roughness)
         static std::shared_ptr<RHITexture> GetDefaultBlackTexture();        // 0xFF000000 (0.0 Metallic / Emissive)
+        static std::shared_ptr<RHITexture> GetDefaultIrradianceCubemap();   // 1x1x6 Neutral Ambient Irradiance Cubemap
+        static std::shared_ptr<RHITexture> GetDefaultPrefilterCubemap();    // 1x1x6 Specular Prefiltered Cubemap (5 mips)
+        static std::shared_ptr<RHITexture> GetDefaultBRDFLUT();             // 1x1 Neutral BRDF Integration 2D LUT
         static void ReleaseDefaultTextures();
 
         // Automotive & Industrial PBR Presets

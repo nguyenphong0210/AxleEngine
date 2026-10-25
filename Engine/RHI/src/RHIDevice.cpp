@@ -1,4 +1,5 @@
 #include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/Log.hpp>
 
 #include <cstring>
@@ -378,6 +379,8 @@ namespace Axle::RHI {
         if (!m_Initialized) return;
 
         AXLE_CORE_INFO("Shutting down RHI Device ({0})...", RHITypeToString(m_Capabilities.ActiveBackend));
+
+        RHIMaterial::ReleaseDefaultTextures();
 
         if (m_Device) {
             nri::nriDestroyDevice(m_Device);

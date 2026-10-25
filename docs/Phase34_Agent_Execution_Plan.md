@@ -2,23 +2,37 @@
 
 > **CRITICAL DIRECTIVES FOR AI AGENT (GOOGLE ANTIGRAVITY):**
 > 1. **Incremental Step-by-Step Execution:** Execute Phase 34 strictly one Step at a time (`Step 1` $\rightarrow$ `Step 2` $\rightarrow$ `Step 3` $\rightarrow$ `Step 4` $\rightarrow$ `Step 5` $\rightarrow$ `Step 6`). After completing each Step, compile `AxleEngine`, `AxleEditor`, `AxleRuntime`, and `AxleTests`, and run `AxleTests.exe` to verify 100% pass rate before starting the next Step.
-> 2. **Inspect Existing Interfaces First:** Before creating files in Step 1, inspect `CMakeLists.txt`, `Engine/RHI/`, `Engine/Renderer/`, `Engine/Scene/Components.hpp`, `Engine/Scene/Scene.hpp`, and `Editor/src/Test.cpp` to align with existing smart pointer aliases (`Ref<T>`, `Scope<T>`), logging macros, and RHI/OpenGL abstractions.
-> 3. **Zero ImGui Leakage in Core UI:** Do NOT `#include <imgui.h>` inside any file under `Engine/Renderer/Canvas2D.*`, `Engine/UI/Core/*`, `Engine/UI/Font/*`, `Engine/UI/Parser/*`, `Engine/UI/Binding/*`, or `Runtime/`.
-> 4. **Headless Test Safety:** All unit tests in `AxleTests.exe` must run deterministically even when no OS window or swapchain is active (CPU vertex batching, layout math, font measurement, and QML parsing must never crash when `RHIDevice` or OpenGL context is headless/null).
+> 2. **Library Decoupling (`AxleUI2D` vs `AxleUI`):** 
+>    - Create a clean static library **`AxleUI2D`** (alias **`Axle::UI2D`**) in `Engine/UI/CMakeLists.txt`. It contains all In-Game UI modules (`Canvas2D`, `UITypes`, `UIFont`, `UINode`, `UIDocument`, `QMLParser`, `UIDataContext`). It links ONLY to `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, and `Axle::RHI`.
+>    - `Axle::Scene` links to `Axle::UI2D` (for `UICanvasComponent` and `Canvas2D`). This eliminates CMake circular dependencies because `AxleUI2D` does not link to `Axle::Scene`.
+>    - `Axle::UI` retains Dear ImGui editor panels (`SceneHierarchyPanel`, `EntityInspector`, `ImGuiLayer`) and links to `Axle::Scene` and `Axle::UI2D`.
+>    - `AxleRuntime` links to `Axle::Scene` and `Axle::UI2D`, completely removing linkage to `Axle::UI` and Dear ImGui.
+> 3. **Canonical Include Paths & Standard Pointers:**
+>    - Always use canonical engine include paths: `#include <Axle/UI/UITypes.hpp>`, `#include <Axle/UI/Canvas2D.hpp>`, etc. Never use `#include "Engine/..."`.
+>    - AxleEngine uses standard C++20 pointers: `std::unique_ptr<T>` and `std::shared_ptr<T>` (not `Scope<T>` or `Ref<T>`).
+> 4. **Asset & Shader Locations:**
+>    - Built-in shaders belong in `Engine/Resources/Shaders/Canvas2D.hlsl`.
+>    - Game UI markup and fonts belong in `Editor/assets/ui/` and `Editor/assets/fonts/` (automatically copied to binary outputs by CMake).
+> 5. **Test Suite Numbering (Steps 76–81):**
+>    - Steps 1 through 75 are already occupied in `Editor/src/Test.cpp` (Phase 33 CSM, IBL, and Atmospheric Skybox are Steps 73, 74, 75).
+>    - Phase 34 automated unit test steps in `AxleTests.exe` are numbered **Step 76 through Step 81**.
+> 6. **Headless Test Safety & Fallback Shaders:**
+>    - All unit tests in `AxleTests.exe` must run deterministically on CPU even when no OS window or swapchain is active.
+>    - `Canvas2D.cpp` provides an embedded fallback GLSL shader and CPU batch inspection APIs (`GetStats()`, `GetVertexBuffer()`) so tests never crash when GPU context is null.
 
 ---
 
 ## 🛠️ STEP 1: RHI `Canvas2D` Batch Renderer & Procedural SDF Uber-Shader
 
 ### 1.1. Target Files
-- **Create:** `Engine/UI/Core/UITypes.hpp`
-- **Create:** `Engine/Renderer/Canvas2D.hpp`
-- **Create:** `Engine/Renderer/Canvas2D.cpp`
-- **Create:** `Sandbox/assets/shaders/Canvas2D.hlsl`
-- **Modify:** `CMakeLists.txt` (Register `Canvas2D.cpp` in the engine build target)
-- **Modify:** `Editor/src/Test.cpp` (Add `TestPhase34_Step1_Canvas2DBatching`)
+- **Create:** `Engine/UI/include/Axle/UI/UITypes.hpp`
+- **Create:** `Engine/UI/include/Axle/UI/Canvas2D.hpp`
+- **Create:** `Engine/UI/src/UI2D/Canvas2D.cpp`
+- **Create:** `Engine/Resources/Shaders/Canvas2D.hlsl`
+- **Modify:** `Engine/UI/CMakeLists.txt` (Configure `AxleUI2D` static library target)
+- **Modify:** `Editor/src/Test.cpp` (Add `RunTest_Step76_Phase34_Step1_Canvas2DBatching` as **Step 76**)
 
-### 1.2. Complete Header Specification: `Engine/UI/Core/UITypes.hpp`
+### 1.2. Complete Header Specification: `Engine/UI/include/Axle/UI/UITypes.hpp`
 ```cpp
 #pragma once
 #include <glm/glm.hpp>
@@ -71,26 +85,26 @@ namespace Axle {
     };
 
     struct alignas(16) UIVertex {
-        glm::vec2 ScreenPos{ 0.0f };      // [0..7]
-        glm::vec2 UV{ 0.0f };             // [8..15]
-        glm::vec4 Color{ 1.0f };          // [16..31]
-        glm::vec4 BorderColor{ 0.0f };    // [32..47]
-        glm::vec2 QuadSize{ 100.0f };     // [48..55]
-        float     CornerRadius = 0.0f;    // [56..59]
-        float     BorderWidth  = 0.0f;    // [60..63]
-        glm::vec2 AngleRange{ 0.0f };     // [64..71]
-        uint32_t  TextureIndex  = 0;      // [72..75]
-        uint32_t  PrimitiveType = 0;      // [76..79]
+        glm::vec2 ScreenPos{ 0.0f };      // [0..7]   Screen-space coords (pixels)
+        glm::vec2 UV{ 0.0f };             // [8..15]  Normalized quad UV [0..1] or atlas UV
+        glm::vec4 Color{ 1.0f };          // [16..31] Primary color (fill / text / arc)
+        glm::vec4 BorderColor{ 0.0f };    // [32..47] Border / track color
+        glm::vec2 QuadSize{ 100.0f };     // [48..55] Quad size in pixels
+        float     CornerRadius = 0.0f;    // [56..59] Corner radius (pixels) or arc thickness
+        float     BorderWidth  = 0.0f;    // [60..63] Border width (pixels) or active angle (rad)
+        glm::vec2 AngleRange{ 0.0f };     // [64..71] (StartAngleRad, EndAngleRad)
+        uint32_t  TextureIndex  = 0;      // [72..75] Bindless Texture Descriptor index
+        uint32_t  PrimitiveType = 0;      // [76..79] 0: SDF_Rect, 1: Sprite, 2: MSDF_Text, 3: SDF_RadialArc
     };
-    static_assert(sizeof(UIVertex) == 80, "UIVertex size must be 80 bytes");
+    static_assert(sizeof(UIVertex) == 80, "UIVertex size must be exactly 80 bytes");
 
 } // namespace Axle
 ```
 
-### 1.3. Complete Header Specification: `Engine/Renderer/Canvas2D.hpp`
+### 1.3. Complete Header Specification: `Engine/UI/include/Axle/UI/Canvas2D.hpp`
 ```cpp
 #pragma once
-#include "Engine/UI/Core/UITypes.hpp"
+#include <Axle/UI/UITypes.hpp>
 #include <vector>
 #include <memory>
 #include <string_view>
@@ -166,8 +180,8 @@ namespace Axle {
   - Append 4 `UIVertex` entries (Top-Left, Top-Right, Bottom-Right, Bottom-Left) and increment `m_Stats.QuadCount`, `VertexCount += 4`, `IndexCount += 6`.
 - In `EndCanvas()`:
   - If `m_Vertices.empty()`, set `m_Stats.DrawCalls = 0` and return.
-  - Upload `m_Vertices` to the active RHI / OpenGL dynamic vertex buffer if a GPU context is active, dispatch 1 indexed draw call, and set `m_Stats.DrawCalls = 1`.
-- **Unit Test (`TestPhase34_Step1_Canvas2DBatching`):**
+  - If a GPU context is active (RHI or OpenGL), upload `m_Vertices` to dynamic vertex buffer and dispatch indexed draw call. Set `m_Stats.DrawCalls = 1`. In headless testing mode, still set `m_Stats.DrawCalls = 1` based on pending vertex count.
+- **Unit Test (`RunTest_Step76_Phase34_Step1_Canvas2DBatching`):**
   - Instantiate `Canvas2D`, call `Init()`, `BeginCanvas({1920.0f, 1080.0f}, 1.0f)`.
   - Call `DrawRect({100, 100, 200, 80}, style)` and `DrawRadialArc({400, 400, 300, 300}, -225.0f, 45.0f, 0.75f, 16.0f, fill, track)`.
   - Call `EndCanvas()`. Assert `GetStats().QuadCount == 2`, `GetStats().VertexCount == 8`, `GetStats().DrawCalls == 1`.
@@ -178,16 +192,16 @@ namespace Axle {
 ## 🔤 STEP 2: MSDF Font Asset & Text Layout Pipeline
 
 ### 2.1. Target Files
-- **Create:** `Engine/UI/Font/UIFont.hpp`
-- **Create:** `Engine/UI/Font/UIFont.cpp`
-- **Modify:** `Engine/Renderer/Canvas2D.cpp` (Complete `DrawTextString` implementation)
-- **Modify:** `CMakeLists.txt` (Add `UIFont.cpp`)
-- **Modify:** `Editor/src/Test.cpp` (Add `TestPhase34_Step2_MSDFFontLayout`)
+- **Create:** `Engine/UI/include/Axle/UI/UIFont.hpp`
+- **Create:** `Engine/UI/src/UI2D/UIFont.cpp`
+- **Modify:** `Engine/UI/src/UI2D/Canvas2D.cpp` (Complete `DrawTextString` implementation)
+- **Modify:** `Engine/UI/CMakeLists.txt` (Add `src/UI2D/UIFont.cpp` to `AxleUI2D`)
+- **Modify:** `Editor/src/Test.cpp` (Add `RunTest_Step77_Phase34_Step2_MSDFFontLayout` as **Step 77**)
 
-### 2.2. Complete Header Specification: `Engine/UI/Font/UIFont.hpp`
+### 2.2. Complete Header Specification: `Engine/UI/include/Axle/UI/UIFont.hpp`
 ```cpp
 #pragma once
-#include "Engine/UI/Core/UITypes.hpp"
+#include <Axle/UI/UITypes.hpp>
 #include <unordered_map>
 #include <string>
 #include <string_view>
@@ -197,7 +211,7 @@ namespace Axle {
 
     struct GlyphMetrics {
         uint32_t  Codepoint = 0;
-        float     AdvanceX  = 0.6f;                  // Normalized to 1.0 em
+        float     AdvanceX  = 0.6f;                       // Normalized to 1.0 em
         glm::vec4 PlaneBounds{ 0.0f, 0.0f, 0.55f, 0.8f }; // Left, Bottom, Right, Top (em)
         glm::vec4 AtlasBounds{ 0.0f, 0.0f, 1.0f, 1.0f };  // u0, v0, u1, v1 (normalized UV)
     };
@@ -235,7 +249,7 @@ namespace Axle {
 - `UIFont()` constructor must call `InitDefaultEmbeddedFont()` automatically so every `UIFont` instance has valid metrics for ASCII characters `32..126` (plus newline `\n` handling) immediately upon construction.
 - In `Canvas2D::DrawTextString`:
   - Iterate through `text`. Skip emitting quads for whitespace `' '` or `'\n'` (only advance cursor `cursorX` or `cursorY`), and emit 1 quad per visible character with `UIPrimitiveType::MSDF_Text`.
-- **Unit Test (`TestPhase34_Step2_MSDFFontLayout`):**
+- **Unit Test (`RunTest_Step77_Phase34_Step2_MSDFFontLayout`):**
   - Verify `MeasureText("280 KM/H", 48.0f)` returns positive width and height.
   - Verify `DrawTextString("280 KM/H", font, rect, 48.0f, color)` emits exactly `7` quads (since the space `' '` is not emitted as a geometry quad).
 
@@ -244,19 +258,19 @@ namespace Axle {
 ## 🌳 STEP 3: Hybrid OOP UI DOM Tree (`UINode` & `UIDocument`) & 2-Pass Layout Engine
 
 ### 3.1. Target Files
-- **Create:** `Engine/UI/Core/UINode.hpp`
-- **Create:** `Engine/UI/Core/UINode.cpp`
-- **Create:** `Engine/UI/Core/UIDocument.hpp`
-- **Create:** `Engine/UI/Core/UIDocument.cpp`
-- **Modify:** `CMakeLists.txt` (Add `UINode.cpp`, `UIDocument.cpp`)
-- **Modify:** `Editor/src/Test.cpp` (Add `TestPhase34_Step3_LayoutEngine2Pass`)
+- **Create:** `Engine/UI/include/Axle/UI/UINode.hpp`
+- **Create:** `Engine/UI/src/UI2D/UINode.cpp`
+- **Create:** `Engine/UI/include/Axle/UI/UIDocument.hpp`
+- **Create:** `Engine/UI/src/UI2D/UIDocument.cpp`
+- **Modify:** `Engine/UI/CMakeLists.txt` (Add `UINode.cpp`, `UIDocument.cpp` to `AxleUI2D`)
+- **Modify:** `Editor/src/Test.cpp` (Add `RunTest_Step78_Phase34_Step3_LayoutEngine2Pass` as **Step 78**)
 
-### 3.2. Complete Header Specification: `Engine/UI/Core/UINode.hpp`
+### 3.2. Complete Header Specification: `Engine/UI/include/Axle/UI/UINode.hpp`
 ```cpp
 #pragma once
-#include "Engine/UI/Core/UITypes.hpp"
-#include "Engine/Renderer/Canvas2D.hpp"
-#include "Engine/UI/Font/UIFont.hpp"
+#include <Axle/UI/UITypes.hpp>
+#include <Axle/UI/Canvas2D.hpp>
+#include <Axle/UI/UIFont.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -405,10 +419,10 @@ namespace Axle {
 } // namespace Axle
 ```
 
-### 3.3. Complete Header Specification: `Engine/UI/Core/UIDocument.hpp`
+### 3.3. Complete Header Specification: `Engine/UI/include/Axle/UI/UIDocument.hpp`
 ```cpp
 #pragma once
-#include "Engine/UI/Core/UINode.hpp"
+#include <Axle/UI/UINode.hpp>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -416,7 +430,7 @@ namespace Axle {
 
 namespace Axle {
 
-    class UIDataContext; // Forward declaration for Step 5
+    class UIDataContext;
 
     enum class UIBindingType : uint8_t {
         Direct = 0,        // "{Vehicle.SpeedKmh}"
@@ -460,7 +474,7 @@ namespace Axle {
         void UpdateLayout(const glm::vec2& viewportSize);
         void Render(Canvas2D& canvas);
 
-        // Step 4 & 5 Hooks
+        // Binding & Interaction Hooks
         void AddBinding(const UIPropertyBinding& binding) { m_Bindings.push_back(binding); }
         const std::vector<UIPropertyBinding>& GetBindings() const { return m_Bindings; }
         void EvaluateBindings(const UIDataContext& context);
@@ -501,16 +515,16 @@ namespace Axle {
 ## 📜 STEP 4: Declarative QML-Style `.axleui` Parser & Live Hot-Reloading
 
 ### 4.1. Target Files
-- **Create:** `Engine/UI/Parser/QMLParser.hpp`
-- **Create:** `Engine/UI/Parser/QMLParser.cpp`
-- **Modify:** `Engine/UI/Core/UIDocument.cpp` (Wire `CheckAndHotReload()` to `QMLParser::ParseFile`)
-- **Modify:** `CMakeLists.txt` (Add `QMLParser.cpp`)
-- **Modify:** `Editor/src/Test.cpp` (Add `TestPhase34_Step4_QMLParserAndBindings`)
+- **Create:** `Engine/UI/include/Axle/UI/QMLParser.hpp`
+- **Create:** `Engine/UI/src/UI2D/QMLParser.cpp`
+- **Modify:** `Engine/UI/src/UI2D/UIDocument.cpp` (Wire `CheckAndHotReload()` to `QMLParser::ParseFile`)
+- **Modify:** `Engine/UI/CMakeLists.txt` (Add `src/UI2D/QMLParser.cpp` to `AxleUI2D`)
+- **Modify:** `Editor/src/Test.cpp` (Add `RunTest_Step79_Phase34_Step4_QMLParserAndBindings` as **Step 79**)
 
-### 4.2. Complete Header Specification: `Engine/UI/Parser/QMLParser.hpp`
+### 4.2. Complete Header Specification: `Engine/UI/include/Axle/UI/QMLParser.hpp`
 ```cpp
 #pragma once
-#include "Engine/UI/Core/UIDocument.hpp"
+#include <Axle/UI/UIDocument.hpp>
 #include <string>
 #include <string_view>
 
@@ -533,7 +547,7 @@ namespace Axle {
   - If the string contains `?` and `:` inside `{...}`, parse as `UIBindingType::Ternary` (`SourceKey`, `TrueValue`, `FalseValue`).
   - If the string starts with `{` and ends with `}` with no other text outside, parse as `UIBindingType::Direct`.
   - If the string has surrounding text like `"FPS: {Engine.FPS}"`, parse as `UIBindingType::Interpolated`.
-- **Unit Test (`TestPhase34_Step4_QMLParserAndBindings`):**
+- **Unit Test (`RunTest_Step79_Phase34_Step4_QMLParserAndBindings`):**
   - Parse the full `RacingHUD.axleui` string in memory.
   - Assert `FindNodeByID("tachometer_cluster") != nullptr`, `FindNodeByID("rpm_radial_gauge") != nullptr`, and `GetBindings().size() >= 8`.
 
@@ -542,52 +556,108 @@ namespace Axle {
 ## 🔗 STEP 5: Reactive Data Binding (`UIDataContext`), Input Events & ECS Integration
 
 ### 5.1. Target Files
-- **Create:** `Engine/UI/Binding/UIDataContext.hpp`
-- **Modify:** `Engine/UI/Core/UIDocument.cpp` (Implement `EvaluateBindings`, `ProcessInput`, `NavigateFocus`, `ActivateFocusedButton`)
-- **Modify:** `Engine/Scene/Components.hpp` (Add `UICanvasComponent`)
-- **Modify:** `Engine/Scene/Scene.hpp` & `Engine/Scene/Scene.cpp` (Add `UIDataContext m_UIDataContext` and `Canvas2D m_Canvas2D`, evaluate and render active `UICanvasComponent` entities)
-- **Modify:** `Engine/Scene/SceneSerializer.cpp` (Serialize/Deserialize `UICanvasComponent`)
-- **Modify:** `Editor/src/Test.cpp` (Add `TestPhase34_Step5_DataBindingAndHitTest`)
+- **Create:** `Engine/UI/include/Axle/UI/UIDataContext.hpp`
+- **Modify:** `Engine/UI/src/UI2D/UIDocument.cpp` (Implement `EvaluateBindings`, `ProcessInput`, `NavigateFocus`, `ActivateFocusedButton`)
+- **Modify:** `Engine/Scene/include/Axle/Components.hpp` (Add `UICanvasComponent` including `<Axle/UI/UIDocument.hpp>`)
+- **Modify:** `Engine/Scene/include/Axle/Scene.hpp` & `Engine/Scene/src/Scene.cpp` (Add `UIDataContext m_UIDataContext` and `Canvas2D m_Canvas2D`, evaluate and render active `UICanvasComponent` entities)
+- **Modify:** `Engine/Scene/src/SceneSerializer.cpp` (Serialize/Deserialize `UICanvasComponent`)
+- **Modify:** `Engine/Scene/CMakeLists.txt` (Add `Axle::UI2D` to `target_link_libraries(AxleScene PUBLIC ...)`)
+- **Modify:** `Editor/src/Test.cpp` (Add `RunTest_Step80_Phase34_Step5_DataBindingAndHitTest` as **Step 80**)
 
-### 5.2. `UICanvasComponent` Specification (`Engine/Scene/Components.hpp`)
+### 5.2. `UICanvasComponent` Specification (`Engine/Scene/include/Axle/Components.hpp`)
 ```cpp
-struct UICanvasComponent {
-    std::string AssetPath;
-    int32_t SortOrder = 0;
-    bool Visible = true;
-    std::shared_ptr<UIDocument> Document = nullptr;
+#include <Axle/UI/UIDocument.hpp>
 
-    UICanvasComponent() = default;
-    UICanvasComponent(const UICanvasComponent&) = default;
-    explicit UICanvasComponent(const std::string& path) : AssetPath(path) {}
-};
+namespace Axle {
+
+    struct UICanvasComponent {
+        std::string AssetPath;
+        int32_t SortOrder = 0;
+        bool Visible = true;
+        std::shared_ptr<UIDocument> Document = nullptr;
+
+        UICanvasComponent() = default;
+        UICanvasComponent(const UICanvasComponent&) = default;
+        explicit UICanvasComponent(const std::string& path) : AssetPath(path) {}
+    };
+
+} // namespace Axle
 ```
 
-### 5.3. Binding & Input Logic (`UIDocument.cpp`)
-- In `EvaluateBindings(const UIDataContext& context)`:
-  - For each `UIPropertyBinding`:
-    - Look up `context.Get(binding.SourceKey)`.
-    - For `UIBindingType::Direct`: dispatch to `TargetNode->SetPropertyFloat`, `SetPropertyBool`, `SetPropertyVec4`, or `SetProperty` (converting `int32_t`/`float` to formatted string if the target property is `"text"`).
-    - For `UIBindingType::Interpolated`: replace `{Key}` in `TemplateText` with the stringified value from `context` and call `TargetNode->SetProperty(binding.PropertyName, resultStr)`.
-    - For `UIBindingType::Ternary`: read boolean value from `context.Get(binding.SourceKey)`. Choose `TrueValue` if true, else `FalseValue`, and call `TargetNode->SetProperty(binding.PropertyName, chosenStr)`.
-- In `ProcessInput(const glm::vec2& mousePos, bool mouseDown, bool mouseClicked, const UIDataContext& context)`:
-  - Convert `mousePos` into Reference Resolution coordinates by dividing by `m_ComputedDPIScale`.
-  - Traverse visible `UIButtonNode` instances in reverse Z-order / reverse pre-order.
-  - Update `IsHovered` and `IsPressed`. If `mouseClicked` is true on a hovered button, call `context.TriggerAction(button->OnClickAction)` and return `true` (input consumed).
+### 5.3. Complete Header Specification: `Engine/UI/include/Axle/UI/UIDataContext.hpp`
+```cpp
+#pragma once
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <functional>
+#include <variant>
+#include <glm/glm.hpp>
+
+namespace Axle {
+
+    using UIDataValue = std::variant<int32_t, float, bool, std::string, glm::vec4>;
+
+    class UIDataContext {
+    public:
+        UIDataContext() = default;
+        ~UIDataContext() = default;
+
+        void SetInt(std::string_view key, int32_t value) { m_Values[std::string(key)] = value; }
+        void SetFloat(std::string_view key, float value) { m_Values[std::string(key)] = value; }
+        void SetBool(std::string_view key, bool value) { m_Values[std::string(key)] = value; }
+        void SetString(std::string_view key, std::string_view value) { m_Values[std::string(key)] = std::string(value); }
+        void SetColor(std::string_view key, const glm::vec4& value) { m_Values[std::string(key)] = value; }
+
+        bool Has(std::string_view key) const { return m_Values.contains(std::string(key)); }
+        const UIDataValue* Get(std::string_view key) const {
+            auto it = m_Values.find(std::string(key));
+            return (it != m_Values.end()) ? &it->second : nullptr;
+        }
+
+        void RegisterAction(std::string_view actionName, std::function<void()> callback) {
+            m_Actions[std::string(actionName)] = std::move(callback);
+        }
+
+        bool TriggerAction(std::string_view actionName) const {
+            auto it = m_Actions.find(std::string(actionName));
+            if (it != m_Actions.end() && it->second) {
+                it->second();
+                return true;
+            }
+            return false;
+        }
+
+        void Clear() {
+            m_Values.clear();
+            m_Actions.clear();
+        }
+
+    private:
+        std::unordered_map<std::string, UIDataValue> m_Values;
+        std::unordered_map<std::string, std::function<void()>> m_Actions;
+    };
+
+} // namespace Axle
+```
 
 ---
 
 ## 🏁 STEP 6: `RacingHUD.axleui` Migration, Zero-ImGui `AxleRuntime` & Final Verification
 
 ### 6.1. Target Files
-- **Create:** `Sandbox/assets/ui/RacingHUD.axleui` (Use template from Section 4.1 of `Phase34_QML_Canvas2D_Guide.md`)
-- **Create:** `Sandbox/assets/ui/PauseMenu.axleui` (Use template from Section 4.2 of `Phase34_QML_Canvas2D_Guide.md`)
-- **Modify:** `Runtime/src/RuntimeLayer.cpp` & `Runtime/CMakeLists.txt` (Bind vehicle telemetry to `Scene::GetUIDataContext()`, render `RacingHUD.axleui` and `PauseMenu.axleui` via `Canvas2D`, and remove `ImGuiLayer` from `AxleRuntime`)
-- **Modify:** `Editor/src/Test.cpp` (Add `TestPhase34_Step6_RacingHUDFullIntegration`)
-- **Modify:** `Roadmap.md` (Mark all Phase 34 checkboxes `[x]` and update completed phase count in Executive Summary)
+- **Create:** `Editor/assets/ui/RacingHUD.axleui` (Use template from Section 4.1 of `Phase34_QML_Canvas2D_Guide.md`)
+- **Create:** `Editor/assets/ui/PauseMenu.axleui` (Use template from Section 4.2 of `Phase34_QML_Canvas2D_Guide.md`)
+- **Modify:** `Runtime/src/RuntimeLayer.cpp` & `Runtime/CMakeLists.txt`:
+  - Link `Axle::UI2D` into `AxleRuntime`.
+  - Remove `Axle::UI` and `#include <imgui.h>` from `AxleRuntime`.
+  - Bind vehicle telemetry to `Scene::GetUIDataContext()`.
+  - Render `RacingHUD.axleui` and `PauseMenu.axleui` via `Canvas2D`.
+- **Modify:** `Editor/src/Test.cpp` (Add `RunTest_Step81_Phase34_Step6_RacingHUDFullIntegration` as **Step 81**)
+- **Modify:** `ROADMAP.md` (Mark all Phase 34 checkboxes `[x]` and update test counts)
 
-### 6.2. Final Acceptance Test (`TestPhase34_Step6_RacingHUDFullIntegration`)
-1. Load `Sandbox/assets/ui/RacingHUD.axleui` and `Sandbox/assets/ui/PauseMenu.axleui` via `QMLParser::ParseFile`.
+### 6.2. Final Acceptance Test (`RunTest_Step81_Phase34_Step6_RacingHUDFullIntegration`)
+1. Load `Editor/assets/ui/RacingHUD.axleui` and `Editor/assets/ui/PauseMenu.axleui` via `QMLParser::ParseFile`.
 2. Populate `UIDataContext` with realistic telemetry:
    - `Engine.FPS = 144`
    - `Vehicle.SpeedKmh = 215`

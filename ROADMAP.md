@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized), with **Phase 33 in active progress**.
-* **Automated Test Verification**: **58 Comprehensive Headless Test Suites** (`AxleTests.exe`, 65 individual test steps up through **Step 73**) passing with **100% pass rate**.
+* **Automated Test Verification**: **60 Comprehensive Headless Test Suites** (`AxleTests.exe`, 67 individual test steps up through **Step 75**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 33 (Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline)** and beyond.
 
 ---
@@ -373,30 +373,32 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [ ] Full Viewport Gizmo & Interaction Parity: ImGuizmo transformation (Translate/Rotate/Scale), Free-Fly/Orbit camera, and prefab drag-and-drop fully functional across all 3 backends.
     - [ ] Automated test suites (Step 67+) in `AxleTests.exe` validating mesh upload bandwidth, draw call dispatch rates, descriptor recycling, and zero memory leaks upon scene reload.
 - [ ] **Phase 34: Declarative QML In-Game UI & Hardware-Accelerated `Canvas2D` Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
-  - [ ] **Step 1 - RHI `Canvas2D` Batch Renderer & Procedural SDF Uber-Shader (`Engine/Renderer`)**:
-    - [ ] High-performance 2D batch renderer (`Canvas2D`) operating natively across Direct3D 12, Vulkan 1.3, and OpenGL 4.5 via per-frame dynamic host-visible ring buffers (`RHIBuffer`).
+  - [ ] **Step 1 - Decoupled `AxleUI2D` Library, `Canvas2D` Batch Renderer & Procedural SDF Uber-Shader (`Engine/UI`)**:
+    - [ ] Decouple In-Game UI from Editor ImGui by establishing the clean static library `AxleUI2D` (`Axle::UI2D`) linking only to `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, and `Axle::RHI`.
+    - [ ] High-performance 2D batch renderer (`Canvas2D`) operating natively across Direct3D 12, Vulkan 1.3, and OpenGL 4.5 via per-frame dynamic host-visible ring buffers (`RHIBuffer`) with embedded GLSL fallback for OpenGL.
     - [ ] Unified 80-byte aligned `UIVertex` format supporting Bindless Texture Descriptor indexing (`TextureIndex`) to eliminate texture-swap batch breaks and render complex HUDs in a single draw call.
-    - [ ] Procedural 2D Signed Distance Field (SDF) Uber-Shader (`Canvas2D.hlsl`): analytical anti-aliased rounded rectangles (`sdRoundedBox`), customizable border thickness, linear progress bars, and circular/arc gauges (`sdRadialArc` for automotive tachometers and speedometers) without CPU geometry tessellation.
+    - [ ] Procedural 2D Signed Distance Field (SDF) Uber-Shader (`Engine/Resources/Shaders/Canvas2D.hlsl`): analytical anti-aliased rounded rectangles (`sdRoundedBox`), customizable border thickness, linear progress bars, and circular/arc gauges (`sdRadialArc` for automotive tachometers and speedometers) without CPU geometry tessellation.
     - [ ] Hardware scissor clipping stack (`PushClipRect` / `PopClipRect`), Z-index painter's sorting, and headless vertex batch inspection APIs for automated testing.
-  - [ ] **Step 2 - Multi-Channel Signed Distance Field (MSDF) Font & Text Layout Pipeline (`Engine/UI/Font`)**:
+  - [ ] **Step 2 - Multi-Channel Signed Distance Field (MSDF) Font & Text Layout Pipeline (`Engine/UI`)**:
     - [ ] Native MSDF font asset pipeline (`UIFont` supporting `.axlefont` / `.axlebin` cache and a zero-dependency procedural embedded fallback font for headless CI testing).
     - [ ] Resolution-independent sharp text rendering (`PrimitiveType = MSDF_Text`) supporting arbitrary scaling (from 10pt telemetry labels to 120pt digital speedometers), kerning pairs, and pixel-shader screen-space distance anti-aliasing.
     - [ ] Text measurement calculator (`UIFont::MeasureText`) supporting multi-line word-wrapping, horizontal alignment (`Left`, `Center`, `Right`), and vertical alignment (`Top`, `Middle`, `Bottom`).
-  - [ ] **Step 3 - Hybrid OOP UI DOM Tree (`UIDocument` & `UINode`) & 2-Pass Layout Engine (`Engine/UI/Core`)**:
-    - [ ] Contiguous arena-allocated OOP widget hierarchy (`UIDocument` owning `std::vector<Scope<UINode>>`) keeping the 3D EnTT registry clean from micro-widget clutter.
+  - [ ] **Step 3 - Hybrid OOP UI DOM Tree (`UIDocument` & `UINode`) & 2-Pass Layout Engine (`Engine/UI`)**:
+    - [ ] Contiguous arena-allocated OOP widget hierarchy (`UIDocument` owning `std::vector<std::unique_ptr<UINode>>`) keeping the 3D EnTT registry clean from micro-widget clutter.
     - [ ] Core QML-style element primitives: `UICanvasNode`, `UIRectangleNode` (Panel), `UITextNode`, `UIImageNode`, `UIProgressBarNode`, `UIRadialGaugeNode` (Automotive Arc), `UIButtonNode`, and `UIBoxContainerNode` (`Row` / `Column`).
     - [ ] 2-Pass Responsive Layout Engine: Bottom-Up `MeasurePass` (desired content size) and Top-Down `ArrangePass` supporting 12-mode Anchors (`TopLeft`, `Center`, `BottomRight`, `StretchAll`, etc.), Margins, Padding, and automatic DPI scaling against a configurable `ReferenceResolution` (`1920x1080`).
-  - [ ] **Step 4 - Declarative QML-Style `.axleui` Parser & Live Hot-Reloading (`Engine/UI/Parser`)**:
+  - [ ] **Step 4 - Declarative QML-Style `.axleui` Parser & Live Hot-Reloading (`Engine/UI`)**:
     - [ ] Lightweight zero-dependency C++20 Lexer/Tokenizer and Recursive Descent Parser (`QMLParser`) reading human- and AI-friendly declarative `.axleui` markup files.
     - [ ] First-class property parsing: numeric scalars, strings, booleans, hex colors (`#RRGGBB` / `#RRGGBBAA`), vectors/margins (`[L, T, R, B]`), enums, string interpolation (`"FPS: {Engine.FPS}"`), and inline reactive ternary binding expressions (`"{Vehicle.IsRedline ? #FF1E42 : #00F5D4}"`).
     - [ ] Real-time `.axleui` file watcher (`std::filesystem::last_write_time`) enabling sub-millisecond in-game HUD and menu hot-reloading upon saving text edits without stopping simulation or recompiling C++.
   - [ ] **Step 5 - Reactive Data Binding (`UIDataContext`), Input Event Dispatch & ECS Integration (`Engine/Scene`)**:
     - [ ] Decoupled ViewModel data bridge (`UIDataContext`) mapping C++ gameplay variables (`int32_t`, `float`, `bool`, `std::string`, `glm::vec4`) and action callbacks (`std::function<void()>`) to `.axleui` binding tokens.
     - [ ] ECS Mount Point (`UICanvasComponent`): attach `.axleui` documents to scene entities with `SortOrder`, visibility toggles, full `.axlescene` serialization, and optional offscreen render-to-texture for 3D cockpit instrument clusters.
+    - [ ] Link `Axle::Scene` to `Axle::UI2D` to cleanly eliminate circular dependencies while keeping Dear ImGui isolated in `Axle::UI`.
     - [ ] Reverse Z-order hit-testing (`ProcessInput`) for mouse cursor interaction (`OnHover`, `OnPress`, `OnClick`) and directional D-Pad / Gamepad / Keyboard focus navigation (`NavUp`, `NavDown`, `NavLeft`, `NavRight`) across interactive `UIButtonNode` elements.
   - [ ] **Step 6 - `RacingHUD` QML Migration, Zero-ImGui Shipping Runtime & Automated Tests (`Runtime/` & `Editor/`)**:
-    - [ ] Port `RacingHUD` (analog/radial tachometer, digital speedometer, gear indicator, lateral/longitudinal G-force meter, and throttle/brake/clutch telemetry bars) and Pause Menu entirely to declarative `RacingHUD.axleui` and `PauseMenu.axleui`.
+    - [ ] Port `RacingHUD` (analog/radial tachometer, digital speedometer, gear indicator, lateral/longitudinal G-force meter, and throttle/brake/clutch telemetry bars) and Pause Menu entirely to declarative `Editor/assets/ui/RacingHUD.axleui` and `Editor/assets/ui/PauseMenu.axleui`.
     - [ ] Completely decouple `Axle::ImGuiLayer` and Dear ImGui linkage from `AxleRuntime.exe`, achieving a pure zero-ImGui standalone game executable while retaining full viewport preview inside `AxleEditor.exe`.
-    - [ ] Automated headless test suites (Steps 68–73) in `AxleTests.exe` validating `Canvas2D` vertex batching, MSDF font metrics, 2-pass anchor layout math across aspect ratios, QML parser AST & bindings, hit-testing, and end-to-end `RacingHUD` rendering.
+    - [ ] Automated headless test suites (Steps 76–81) in `AxleTests.exe` validating `Canvas2D` vertex batching, MSDF font metrics, 2-pass anchor layout math across aspect ratios, QML parser AST & bindings, hit-testing, and end-to-end `RacingHUD` rendering.
 
 ---

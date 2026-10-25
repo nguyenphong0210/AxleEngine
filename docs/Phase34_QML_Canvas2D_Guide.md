@@ -8,13 +8,14 @@
 Phase 34 transitions AxleEngine from the temporary Phase 28 Step 6 ImGui-based runtime overlay (**Direction A**) to a dedicated, shipping-grade, zero-ImGui In-Game UI & HUD subsystem (**Direction B**).
 
 ### 1.1. Core Design Pillars
-1. **Strict Separation of Tooling UI vs. In-Game UI:**
-   - **`AxleEditor.exe`** retains **Dear ImGui** for developer tooling (DockSpace, Scene Hierarchy, Inspector, Content Browser, VFX Curve Editor).
-   - **`AxleRuntime.exe`** strips all Dear ImGui dependencies, executing a pure, lightweight native 2D rendering and layout pipeline (`Axle::Canvas2D` + `Axle::UIDocument`).
+1. **Strict Separation of Tooling UI vs. In-Game UI (CMake Decoupling):**
+   - **`AxleEditor.exe`** retains **Dear ImGui** via the **`Axle::UI`** static library for developer tooling (DockSpace, Scene Hierarchy, Inspector, Content Browser, VFX Curve Editor).
+   - **`AxleRuntime.exe`** links to **`Axle::UI2D`** (pure, lightweight native 2D rendering and layout pipeline: `Axle::Canvas2D` + `Axle::UIDocument`) and completely strips all Dear ImGui linkage and headers.
+   - **Zero Circular Dependencies**: `Axle::UI2D` links only to `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, and `Axle::RHI`. `Axle::Scene` links to `Axle::UI2D` (for `UICanvasComponent` and `Canvas2D`), while `Axle::UI` (editor tools) links to both `Axle::Scene` and `Axle::UI2D`.
 2. **Hybrid Architecture (Macro-ECS + Micro-OOP + DOD Rendering):**
    - **Macro-Level ECS (`UICanvasComponent`):** In the EnTT `Scene` registry, an entire UI screen (e.g., `RacingHUD.axleui` or `PauseMenu.axleui`) is represented by **one single entity** carrying a `UICanvasComponent`. This prevents polluting the 3D spatial ECS registry with hundreds of micro-entities for individual labels, borders, and containers.
-   - **Micro-Level OOP (`UIDocument` & `UINode`):** Inside each `UIDocument`, UI elements are organized in a lightweight polymorphic node hierarchy (`UINode` subclasses) owned contiguously in a single vector arena (`std::vector<Scope<UINode>>`). This directly supports recursive two-pass layout algorithms (**Bottom-Up Measure** and **Top-Down Arrange**).
-   - **Data-Oriented Rendering (`Canvas2D`):** During rendering, the `UINode` tree does not issue individual GPU draw calls. Instead, nodes append flat `UIVertex` primitives into a contiguous pre-allocated buffer. `Canvas2D` leverages **Bindless Textures** and a **Procedural SDF Uber-Shader (`Canvas2D.hlsl`)** to draw rounded panels, borders, circular gauges, sprites, and MSDF text in **a single RHI draw call** across Direct3D 12, Vulkan 1.3, and OpenGL 4.5.
+   - **Micro-Level OOP (`UIDocument` & `UINode`):** Inside each `UIDocument`, UI elements are organized in a lightweight polymorphic node hierarchy (`UINode` subclasses) owned contiguously in a single vector arena (`std::vector<std::unique_ptr<UINode>>`). This directly supports recursive two-pass layout algorithms (**Bottom-Up Measure** and **Top-Down Arrange**).
+   - **Data-Oriented Rendering (`Canvas2D`):** During rendering, the `UINode` tree does not issue individual GPU draw calls. Instead, nodes append flat `UIVertex` primitives into a contiguous pre-allocated buffer. `Canvas2D` leverages **Bindless Textures** and a **Procedural SDF Uber-Shader (`Canvas2D.hlsl`)** to draw rounded panels, borders, circular gauges, sprites, and MSDF text in **a single draw call** across Direct3D 12, Vulkan 1.3, and OpenGL 4.5 Core Profile (with built-in fallback GLSL shaders for OpenGL and full CPU-side batch validation in headless CI tests).
 3. **AI-First Declarative QML Markup (`.axleui`):**
    - UI layouts, styling, and data bindings are authored in clean, declarative `.axleui` text files inspired by Qt QML.
    - Built-in file timestamp monitoring (`std::filesystem::last_write_time`) enables instant **Live Hot-Reloading** whenever a developer or AI agent edits and saves an `.axleui` file.
@@ -25,28 +26,26 @@ Phase 34 transitions AxleEngine from the temporary Phase 28 Step 6 ImGui-based r
 
 ```plaintext
 Engine/
-├── Renderer/
-│   ├── Canvas2D.hpp                 # Hardware-accelerated 2D batch renderer (RHI & GL)
-│   └── Canvas2D.cpp
 ├── UI/
-│   ├── Core/
+│   ├── include/Axle/UI/
 │   │   ├── UITypes.hpp              # UIRect, UIAnchor, UIStyle, UIVertex, UIPrimitiveType
-│   │   ├── UINode.hpp               # Base UINode and 8 concrete QML widget subclasses
-│   │   ├── UINode.cpp               # Measure, Arrange, Property reflection, and OnDraw logic
-│   │   ├── UIDocument.hpp           # Arena node owner, ID lookup table, bindings, hot-reload
-│   │   └── UIDocument.cpp
-│   ├── Font/
+│   │   ├── Canvas2D.hpp             # Hardware-accelerated 2D batch renderer (RHI & OpenGL fallback)
 │   │   ├── UIFont.hpp               # MSDF Font Atlas loader, embedded fallback font, text metrics
-│   │   └── UIFont.cpp
-│   ├── Binding/
+│   │   ├── UINode.hpp               # Base UINode and concrete QML widget subclasses
+│   │   ├── UIDocument.hpp           # Arena node owner, ID lookup table, bindings, hot-reload
+│   │   ├── QMLParser.hpp            # Zero-dependency C++20 Tokenizer & Recursive Descent Parser
 │   │   └── UIDataContext.hpp        # ViewModel bridge between C++ gameplay and .axleui bindings
-│   └── Parser/
-│       ├── QMLParser.hpp            # Zero-dependency C++20 Tokenizer & Recursive Descent Parser
-│       └── QMLParser.cpp
-Sandbox/
+│   └── src/UI2D/
+│       ├── Canvas2D.cpp             # 2D batching, scissor clipping, SDF geometry emission
+│       ├── UIFont.cpp               # Embedded ASCII font fallback, MSDF atlas parser
+│       ├── UINode.cpp               # 2-Pass layout (Measure/Arrange), property reflection, draw calls
+│       ├── UIDocument.cpp           # DOM arena, bindings evaluator, reverse Z-order input hit-testing
+│       └── QMLParser.cpp            # Tokenizer, recursive descent parser, binding AST extraction
+├── Resources/
+│   └── Shaders/
+│       └── Canvas2D.hlsl            # Cross-API SDF & MSDF Uber-Shader (DX12 / Vulkan, with GLSL fallback)
+Editor/
 └── assets/
-    ├── shaders/
-    │   └── Canvas2D.hlsl            # Cross-API SDF & MSDF Uber-Shader (DX12 / Vulkan / OpenGL)
     ├── fonts/
     │   └── Orbitron-Bold.axlefont   # Pre-baked MSDF font metric & atlas asset
     └── ui/
@@ -167,7 +166,7 @@ ArrayLiteral   ::= "[" Value ( "," Value )* "]"
 
 ## 4. Reference `.axleui` Production Templates
 
-### 4.1. `Sandbox/assets/ui/RacingHUD.axleui`
+### 4.1. `Editor/assets/ui/RacingHUD.axleui`
 ```qml
 Canvas {
     id: "racing_hud_root"
@@ -315,7 +314,7 @@ Canvas {
 }
 ```
 
-### 4.2. `Sandbox/assets/ui/PauseMenu.axleui`
+### 4.2. `Editor/assets/ui/PauseMenu.axleui`
 ```qml
 Canvas {
     id: "pause_menu_root"

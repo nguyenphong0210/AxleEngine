@@ -34,6 +34,7 @@ namespace Axle {
         fout << "  Name: " << config.Name << "\n";
         fout << "  StartScene: " << config.StartScene.string() << "\n";
         fout << "  AssetDirectory: " << config.AssetDirectory.string() << "\n";
+        fout << "  RHIBackend: " << config.RHIBackend << "\n";
 
         fout.close();
         AXLE_INFO("ProjectSerializer: Successfully saved project to '{0}'", filepath.string());
@@ -69,6 +70,8 @@ namespace Axle {
                     m_Project->GetConfig().StartScene = Trim(trimmed.substr(11));
                 } else if (trimmed.rfind("AssetDirectory:", 0) == 0) {
                     m_Project->GetConfig().AssetDirectory = Trim(trimmed.substr(15));
+                } else if (trimmed.rfind("RHIBackend:", 0) == 0) {
+                    m_Project->GetConfig().RHIBackend = Trim(trimmed.substr(11));
                 }
             }
         }

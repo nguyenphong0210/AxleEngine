@@ -2,6 +2,8 @@
 #include <Axle/Log.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/AssetCooker.hpp>
+#include <Axle/Project.hpp>
+#include <Axle/ProjectSerializer.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
 #include "EditorLayer.hpp"
 #include <exception>
@@ -125,6 +127,33 @@ int main(int argc, char** argv) {
     }
     // Parse RHI Switcher command line flags (--rhi=dx12, --rhi=vulkan, --rhi=opengl)
     Axle::RHI::RHIBackendConfig rhiConfig = Axle::RHI::RHISwitcher::ParseCommandLine(argc, argv);
+
+    // If no explicit CLI backend was provided, inspect Project configuration
+    if (rhiConfig.RawArgument.empty()) {
+        std::filesystem::path projPath = "Project.axleproj";
+        for (int i = 1; i < argc; ++i) {
+            std::filesystem::path p = argv[i];
+            if (p.extension() == ".axleproj" || p.extension() == ".axleproject") {
+                projPath = p;
+                break;
+            }
+        }
+        if (std::filesystem::exists(projPath)) {
+            auto tempProj = Axle::Project::New();
+            Axle::ProjectSerializer serializer(tempProj);
+            if (serializer.Deserialize(projPath)) {
+                const std::string& b = tempProj->GetConfig().RHIBackend;
+                if (b == "Direct3D12" || b == "dx12" || b == "d3d12") {
+                    rhiConfig.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+                } else if (b == "Vulkan" || b == "vulkan" || b == "vk") {
+                    rhiConfig.PreferredBackend = Axle::RHI::RHIType::Vulkan;
+                } else if (b == "OpenGL" || b == "opengl" || b == "gl") {
+                    rhiConfig.PreferredBackend = Axle::RHI::RHIType::OpenGL;
+                }
+            }
+        }
+    }
+
     Axle::GraphicsAPI activeAPI = Axle::GraphicsAPI::OpenGL;
 
     if (rhiConfig.PreferredBackend != Axle::RHI::RHIType::OpenGL) {

@@ -213,4 +213,12 @@ private:
     std::string m_ExportLastOutputDir;
 
     void RenderExportGameModal();
+
+    // Project Settings & Graphics RHI Switching (Phase 33 Step 6)
+    bool m_ShowProjectSettingsModal = false;
+    int m_SelectedRHIBackendIndex = 0; // 0 = Direct3D 12, 1 = Vulkan 1.3, 2 = OpenGL 4.5
+    bool m_RHIRequiresRestart = false;
+
+    void RenderProjectSettingsModal();
+    void RestartEditorWithBackend(const std::string& backendArg);
 };

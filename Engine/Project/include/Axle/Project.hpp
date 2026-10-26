@@ -10,6 +10,7 @@ namespace Axle {
         std::string Name = "Untitled";
         std::filesystem::path StartScene = "scenes/Playground.axlescene";
         std::filesystem::path AssetDirectory = "assets";
+        std::string RHIBackend = "Direct3D12"; // "Direct3D12", "Vulkan", "OpenGL"
     };
 
     class Project {

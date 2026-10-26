@@ -87,7 +87,7 @@ namespace Axle {
     void PerspectiveCameraController::OnResize(u32 width, u32 height) {
         if (width > 0 && height > 0) {
             m_AspectRatio = static_cast<f32>(width) / static_cast<f32>(height);
-            m_Camera.SetProjection(m_FOV, m_AspectRatio);
+            m_Camera.SetProjection(m_FOV, m_AspectRatio, m_Camera.GetNearClip(), m_Camera.GetFarClip());
         }
     }
 

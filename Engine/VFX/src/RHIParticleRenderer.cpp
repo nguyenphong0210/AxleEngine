@@ -286,9 +286,9 @@ namespace Axle {
         m_ActiveSampleCount = sampleCount;
 
         // 1. Populate Scene & Camera Matrices & Vectors
-        m_ActiveConstants.ViewProjection = camera.GetViewProjectionMatrix();
+        m_ActiveConstants.ViewProjection = camera.GetViewProjectionMatrixZO();
         m_ActiveConstants.View = camera.GetViewMatrix();
-        m_ActiveConstants.Projection = camera.GetProjectionMatrix();
+        m_ActiveConstants.Projection = camera.GetProjectionMatrixZO();
 
         glm::vec3 camPos = camera.GetPosition();
         glm::mat4 invView = glm::inverse(camera.GetViewMatrix());

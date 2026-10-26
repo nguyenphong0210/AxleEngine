@@ -2275,7 +2275,10 @@ void EditorLayer::OnImGuiRender() {
     ImGuizmo::SetRect(viewportMin.x, viewportMin.y, viewportBounds.x, viewportBounds.y);
 
     const glm::mat4& cameraView = m_CameraController->GetCamera().GetViewMatrix();
-    const glm::mat4& cameraProj = m_CameraController->GetCamera().GetProjectionMatrix();
+    bool isOpenGL = (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL);
+    const glm::mat4& cameraProj = isOpenGL
+                                ? m_CameraController->GetCamera().GetProjectionMatrix()
+                                : m_CameraController->GetCamera().GetProjectionMatrixZO();
 
     // 1. 3D Transform Gizmo Manipulation for Selected Entity (Active in Edit & Pause modes)
     if (m_SceneState != SceneState::Play) {

@@ -17,12 +17,15 @@ namespace Axle::RHI {
     class RHIDescriptorPool;
     class RHIPipelineLayout;
 
-    // Shading model selector matching ForwardPBR.hlsl
+    // Shading model selector matching ForwardPBR.hlsl & OpenGL PatternMode
     enum class RHIShadingModel : uint32_t {
-        MetallicRoughness = 0, // Solid / local Cook-Torrance GGX PBR
-        ProceduralCaro    = 1, // 3D Procedural Checkerboard Pattern
-        TerrainSplat      = 2, // Vertex Color Splatting (Heightfield)
-        TexturedPBR       = 3  // Full 6-slot textured PBR (Albedo, Normal, Rough, Metal, AO, Emissive)
+        WorldXZCaro       = 0, // Procedural World XZ Caro Pattern (Floor)
+        ProceduralCaro    = 1, // 3D Procedural Checkerboard Pattern (Mesh default)
+        SphericalCaro     = 2, // Spherical Caro Pattern (Spheres)
+        SolidColor        = 3, // Solid / local Cook-Torrance GGX PBR
+        MetallicRoughness = 3, // Alias for SolidColor PBR
+        TerrainSplat      = 4, // Vertex Color Splatting (Heightfield)
+        TexturedPBR       = 5  // Full 6-slot textured PBR (Albedo, Normal, Rough, Metal, AO, Emissive)
     };
 
     // Standard 6 PBR Texture Map Slots

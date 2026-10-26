@@ -64,6 +64,10 @@ namespace Axle {
             return output;
         }
 
+        float glsl_mod(float x, float y) {
+            return x - y * floor(x / y);
+        }
+
         float4 PSMain(PSInput input) : SV_Target0 {
             float3 N = normalize(input.NormalWS);
             float3 L = normalize(u_SunDirAndIntensity.xyz);
@@ -71,13 +75,24 @@ namespace Axle {
             float tileScale = max(0.01, u_Params.x);
             float4 baseColor = u_ColorPrimary;
             
-            if (patternMode == 0 || patternMode == 1) {
-                float2 checkCoords = (max(abs(input.WorldPos.x), abs(input.WorldPos.z)) > 5.0)
-                    ? floor(input.WorldPos.xz * (tileScale * 0.125))
-                    : floor((input.LocalPos.xz + float2(0.5, 0.5)) * tileScale);
-                float check = fmod(abs(checkCoords.x + checkCoords.y), 2.0);
-                baseColor = (check > 0.5) ? u_ColorPrimary : u_ColorSecondary;
+            if (patternMode == 0) {
+                float2 coord = floor(input.WorldPos.xz * tileScale);
+                float check = glsl_mod(coord.x + coord.y, 2.0);
+                baseColor = lerp(u_ColorPrimary, u_ColorSecondary, check);
+            } else if (patternMode == 1) {
+                float3 coord = floor((input.LocalPos + float3(0.5, 0.5, 0.5)) * tileScale + float3(0.0001, 0.0001, 0.0001));
+                float check = glsl_mod(coord.x + coord.y + coord.z, 2.0);
+                baseColor = lerp(u_ColorPrimary, u_ColorSecondary, check);
             } else if (patternMode == 2) {
+                float3 nLocal = normalize(input.LocalPos);
+                float uSph = atan2(nLocal.z, nLocal.x) / (2.0 * 3.14159265) + 0.5;
+                float vSph = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265 + 0.5;
+                float2 coord = floor(float2(uSph * tileScale, vSph * (tileScale * 0.5)));
+                float check = glsl_mod(coord.x + coord.y, 2.0);
+                baseColor = lerp(u_ColorPrimary, u_ColorSecondary, check);
+            } else if (patternMode == 3) {
+                baseColor = u_ColorPrimary;
+            } else if (patternMode == 4) {
                 baseColor = u_ColorPrimary * input.VertexColor;
             }
 
@@ -937,9 +952,9 @@ namespace Axle {
 
         // 1. Stream Global Scene Constants & Forward+ Multi-Light Buffer
         RHISceneConstants sceneConstants;
-        sceneConstants.ViewProjection = camera.GetViewProjectionMatrix();
+        sceneConstants.ViewProjection = camera.GetViewProjectionMatrixZO();
         sceneConstants.View = camera.GetViewMatrix();
-        sceneConstants.Projection = camera.GetProjectionMatrix();
+        sceneConstants.Projection = camera.GetProjectionMatrixZO();
         sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), settings.EnableToneMapping ? 1.0f : 0.0f);
         sceneConstants.AmbientLight = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
         sceneConstants.SunDirection = glm::vec4(0.45f, 0.85f, 0.25f, 1.2f);
@@ -1229,7 +1244,7 @@ namespace Axle {
                         } else {
                             pushConsts.ColorPrimary = mat.GetAlbedoColor();
                             pushConsts.ColorSecondary = glm::vec4(mat.GetEmissionColor(), mat.GetEmissionIntensity());
-                            pushConsts.Params = glm::vec4(mat.GetUVScale().x, 0.0f, mat.GetRoughness(), mat.GetMetallic());
+                            pushConsts.Params = glm::vec4(mat.GetUVScale().x, 3.0f, mat.GetRoughness(), mat.GetMetallic());
                         }
                     }
 
@@ -1331,7 +1346,7 @@ namespace Axle {
             PhysicsScene* activePhysics = physicsScene ? physicsScene : (scene ? scene->GetPhysicsScene() : nullptr);
             if (activePhysics) {
                 m_PhysicsDebugRenderer->Begin(camera.GetPosition(),
-                                             camera.GetViewProjectionMatrix(),
+                                             camera.GetViewProjectionMatrixZO(),
                                              sceneTargetFormat,
                                              m_CurrentDepthFormat,
                                              activeSampleCount,

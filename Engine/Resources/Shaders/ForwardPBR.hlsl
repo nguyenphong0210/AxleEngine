@@ -170,6 +170,12 @@ float3 FresnelSchlickRoughness(float cosTheta, float3 F0, float roughness) {
     return F0 + (maxRef - F0) * pow(ClampZeroOne(1.0 - cosTheta), 5.0);
 }
 
+// GLSL-compatible modulo utility: mod(x, y) = x - y * floor(x / y)
+// Ensures 100% exact parity with OpenGL across positive and negative coordinate axes.
+float glsl_mod(float x, float y) {
+    return x - y * floor(x / y);
+}
+
 // =============================================================================
 // PIXEL SHADER ENTRY POINT
 // =============================================================================
@@ -186,21 +192,31 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 emissive = float3(0.0, 0.0, 0.0);
     
     if (shadingMode == 0) {
-        // Solid PBR Material (Automotive paint, metal, plastic)
-        albedo = u_ColorPrimary;
+        // Mode 0: Procedural World XZ Caro / Checkerboard Pattern (Matches OpenGL Floor)
+        float2 coord = floor(input.WorldPos.xz * tileScale);
+        float pattern = glsl_mod(coord.x + coord.y, 2.0);
+        albedo = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
     } else if (shadingMode == 1) {
-        // Procedural 3D Caro / Checkerboard Pattern
-        // Ground plane / floor uses WorldPos.xz with clean 2m/1m tiles; smaller objects use local coordinates
-        float2 checkCoords = (max(abs(input.WorldPos.x), abs(input.WorldPos.z)) > 5.0)
-            ? floor(input.WorldPos.xz * (tileScale * 0.125))
-            : floor((input.LocalPos.xz + float2(0.5, 0.5)) * tileScale);
-        float check = fmod(abs(checkCoords.x + checkCoords.y), 2.0);
-        albedo = (check > 0.5) ? u_ColorPrimary : u_ColorSecondary;
+        // Mode 1: Local 3D Caro / Checkerboard Pattern (Matches OpenGL 3D Mesh default)
+        float3 coord = floor((input.LocalPos + float3(0.5, 0.5, 0.5)) * tileScale + float3(0.0001, 0.0001, 0.0001));
+        float pattern = glsl_mod(coord.x + coord.y + coord.z, 2.0);
+        albedo = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
     } else if (shadingMode == 2) {
-        // Splatmap Terrain Heightfield (Blended with Vertex Color)
-        albedo = u_ColorPrimary * input.VertexColor;
+        // Mode 2: Spherical Caro Pattern (Matches OpenGL Spheres)
+        float3 nLocal = normalize(input.LocalPos);
+        float uSph = atan2(nLocal.z, nLocal.x) / (2.0 * PI) + 0.5;
+        float vSph = asin(clamp(nLocal.y, -1.0, 1.0)) / PI + 0.5;
+        float2 coord = floor(float2(uSph * tileScale, vSph * (tileScale * 0.5)));
+        float pattern = glsl_mod(coord.x + coord.y, 2.0);
+        albedo = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
     } else if (shadingMode == 3) {
-        // Textured PBR Material (Sample Albedo, Roughness, Metallic, AO)
+        // Mode 3: Solid Color / Solid PBR Material (Matches OpenGL PatternMode 3)
+        albedo = u_ColorPrimary;
+    } else if (shadingMode == 4) {
+        // Mode 4: Splatmap Terrain Heightfield (Blended with Vertex Color)
+        albedo = u_ColorPrimary * input.VertexColor;
+    } else if (shadingMode == 5) {
+        // Mode 5: Textured PBR Material (Sample Albedo, Roughness, Metallic, AO)
         float2 uv = input.TexCoord * tileScale;
         float4 albedoSample = u_AlbedoMap.Sample(u_Sampler, uv);
         albedo = albedoSample * u_ColorPrimary;
@@ -217,7 +233,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
     
     // 3. Normal Vector & Tangent Space Perturbation
     float3 N = normalize(input.NormalWS);
-    if (shadingMode == 3 && abs(input.TangentWS.w) > 0.1) {
+    if (shadingMode == 5 && abs(input.TangentWS.w) > 0.1) {
         float3 T = normalize(input.TangentWS.xyz);
         float3 B = cross(N, T) * input.TangentWS.w;
         float3x3 TBN = float3x3(T, B, N);

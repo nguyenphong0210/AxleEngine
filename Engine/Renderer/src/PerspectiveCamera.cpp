@@ -16,7 +16,9 @@ namespace Axle {
         m_NearClip = nearClip;
         m_FarClip = farClip;
         m_ProjectionMatrix = glm::perspective(glm::radians(fovDegrees), aspectRatio, nearClip, farClip);
+        m_ProjectionMatrixZO = glm::perspectiveRH_ZO(glm::radians(fovDegrees), aspectRatio, nearClip, farClip);
         m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
+        m_ViewProjectionMatrixZO = m_ProjectionMatrixZO * m_ViewMatrix;
     }
 
     void PerspectiveCamera::SetPosition(const glm::vec3& position) {
@@ -33,6 +35,7 @@ namespace Axle {
         m_Position = glm::vec3(transform[3]);
         m_ViewMatrix = glm::inverse(transform);
         m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
+        m_ViewProjectionMatrixZO = m_ProjectionMatrixZO * m_ViewMatrix;
 
         // Cleanly extract pitch and yaw from camera forward vector (-Z in local camera space)
         glm::vec3 fwd = -glm::vec3(transform[2]);
@@ -49,6 +52,7 @@ namespace Axle {
         m_Position = position;
         m_ViewMatrix = viewMatrix;
         m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
+        m_ViewProjectionMatrixZO = m_ProjectionMatrixZO * m_ViewMatrix;
     }
 
     void PerspectiveCamera::RecalculateViewMatrix() {
@@ -61,6 +65,7 @@ namespace Axle {
         // View matrix is the inverse of camera's world transform
         m_ViewMatrix = glm::inverse(transform);
         m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
+        m_ViewProjectionMatrixZO = m_ProjectionMatrixZO * m_ViewMatrix;
     }
 
 }

@@ -49,6 +49,10 @@ PSInput VSMain(VSInput input) {
     return output;
 }
 
+float glsl_mod(float x, float y) {
+    return x - y * floor(x / y);
+}
+
 float4 PSMain(PSInput input) : SV_Target0 {
     float3 N = normalize(input.NormalWS);
     float3 L = normalize(u_SunDirAndIntensity.xyz);
@@ -58,18 +62,31 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float tileScale = max(0.01, u_Params.x);
     float4 baseColor = u_ColorPrimary;
     
-    if (patternMode == 0 || patternMode == 1) {
-        // Procedural 3D Caro / Checkerboard pattern
-        float2 checkCoords = (max(abs(input.WorldPos.x), abs(input.WorldPos.z)) > 5.0)
-            ? floor(input.WorldPos.xz * (tileScale * 0.125))
-            : floor((input.LocalPos.xz + float2(0.5, 0.5)) * tileScale);
-        float check = fmod(abs(checkCoords.x + checkCoords.y), 2.0);
-        baseColor = (check > 0.5) ? u_ColorPrimary : u_ColorSecondary;
+    if (patternMode == 0) {
+        // Mode 0: World XZ Caro (Floor)
+        float2 coord = floor(input.WorldPos.xz * tileScale);
+        float pattern = glsl_mod(coord.x + coord.y, 2.0);
+        baseColor = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
+    } else if (patternMode == 1) {
+        // Mode 1: Local 3D Caro (Box/Mesh)
+        float3 coord = floor((input.LocalPos + float3(0.5, 0.5, 0.5)) * tileScale + float3(0.0001, 0.0001, 0.0001));
+        float pattern = glsl_mod(coord.x + coord.y + coord.z, 2.0);
+        baseColor = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
     } else if (patternMode == 2) {
-        // Vertex Color splat weights (Terrain heightfield)
+        // Mode 2: Spherical Caro (Sphere)
+        float3 nLocal = normalize(input.LocalPos);
+        float uSph = atan2(nLocal.z, nLocal.x) / (2.0 * 3.14159265) + 0.5;
+        float vSph = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265 + 0.5;
+        float2 coord = floor(float2(uSph * tileScale, vSph * (tileScale * 0.5)));
+        float pattern = glsl_mod(coord.x + coord.y, 2.0);
+        baseColor = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
+    } else if (patternMode == 3) {
+        // Mode 3: Solid Color
+        baseColor = u_ColorPrimary;
+    } else if (patternMode == 4) {
+        // Mode 4: Splatmap Terrain Heightfield
         baseColor = u_ColorPrimary * input.VertexColor;
     } else {
-        // Solid color or custom tint
         baseColor = u_ColorPrimary;
     }
     

@@ -281,7 +281,7 @@ namespace Axle {
 
                 if (mesh && mesh->IsValid()) {
                     glm::mat4 worldMat = scene->GetWorldTransform(entityID);
-                    glm::mat4 mvp = camera.GetViewProjectionMatrix() * worldMat;
+                    glm::mat4 mvp = camera.GetViewProjectionMatrixZO() * worldMat;
 
                     RHIObjectIDPushConstants pushConsts;
                     pushConsts.ModelViewProjection = mvp;

@@ -96,6 +96,7 @@ int main(int argc, char** argv) {
         else if (arg == "86" || arg == "step86" || arg == "--step86" || arg == "--canvas2d" || arg == "--batch" || arg == "--sdf-shader") targetStep = 86;
         else if (arg == "87" || arg == "step87" || arg == "--step87" || arg == "--msdf" || arg == "--font" || arg == "--text-layout") targetStep = 87;
         else if (arg == "88" || arg == "step88" || arg == "--step88" || arg == "--dom-tree" || arg == "--layout-2pass" || arg == "--uinode") targetStep = 88;
+        else if (arg == "89" || arg == "step89" || arg == "--step89" || arg == "--parser" || arg == "--uiparser" || arg == "--hot-reload") targetStep = 89;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -360,6 +361,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 88) {
         if (!RunTest_Step88_Phase34_Step3_DOMTreeAnd2PassLayoutEngine()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 89) {
+        if (!RunTest_Step89_Phase34_Step4_DeclarativeUIParserAndHotReloading()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

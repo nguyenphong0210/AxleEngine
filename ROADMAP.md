@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 33** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **73 Comprehensive Headless Test Suites** (`AxleTests.exe`, 80 individual test steps up through **Step 88**) passing with **100% pass rate**.
+* **Automated Test Verification**: **74 Comprehensive Headless Test Suites** (`AxleTests.exe`, 81 individual test steps up through **Step 89**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 34 (Declarative QML In-Game UI & Hardware-Accelerated Canvas2D Subsystem)** and beyond.
 
 ---
@@ -435,10 +435,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Contiguous arena-allocated OOP widget hierarchy (`UIDocument` owning `std::vector<std::unique_ptr<UINode>>`) keeping the 3D EnTT registry clean from micro-widget clutter.
     - [x] Core QML-style element primitives: `UICanvasNode`, `UIRectangleNode` (Panel), `UITextNode`, `UIImageNode`, `UIProgressBarNode`, `UIRadialGaugeNode` (Automotive Arc), `UIButtonNode`, and `UIBoxContainerNode` (`Row` / `Column`).
     - [x] 2-Pass Responsive Layout Engine: Bottom-Up `MeasurePass` (desired content size) and Top-Down `ArrangePass` supporting 12-mode Anchors (`TopLeft`, `Center`, `BottomRight`, `StretchAll`, etc.), Margins, Padding, and automatic DPI scaling against a configurable `ReferenceResolution` (`1920x1080`).
-  - [ ] **Step 4 - Declarative QML-Style `.axleui` Parser & Live Hot-Reloading (`Engine/UI`)**:
-    - [ ] Lightweight zero-dependency C++20 Lexer/Tokenizer and Recursive Descent Parser (`QMLParser`) reading human- and AI-friendly declarative `.axleui` markup files.
-    - [ ] First-class property parsing: numeric scalars, strings, booleans, hex colors (`#RRGGBB` / `#RRGGBBAA`), vectors/margins (`[L, T, R, B]`), enums, string interpolation (`"FPS: {Engine.FPS}"`), and inline reactive ternary binding expressions (`"{Vehicle.IsRedline ? #FF1E42 : #00F5D4}"`).
-    - [ ] Real-time `.axleui` file watcher (`std::filesystem::last_write_time`) enabling sub-millisecond in-game HUD and menu hot-reloading upon saving text edits without stopping simulation or recompiling C++.
+  - [x] **Step 4 - Declarative `.axleui` UIParser & Live Hot-Reloading (`Engine/UI`)**:
+    - [x] Lightweight zero-dependency C++20 Lexer/Tokenizer and Recursive Descent Parser (`UIParser`) reading human- and AI-friendly declarative `.axleui` markup files.
+    - [x] First-class property parsing: numeric scalars, strings, booleans, hex colors (`#RRGGBB` / `#RRGGBBAA`), vectors/margins (`[L, T, R, B]`), enums, string interpolation (`"FPS: {Engine.FPS}"`), and inline reactive ternary binding expressions (`"{Vehicle.IsRedline ? #FF1E42 : #00F5D4}"`).
+    - [x] Real-time `.axleui` file watcher (`std::filesystem::last_write_time`) enabling sub-millisecond in-game HUD and menu hot-reloading upon saving text edits without stopping simulation or recompiling C++.
   - [ ] **Step 5 - Reactive Data Binding (`UIDataContext`), Input Event Dispatch & ECS Integration (`Engine/Scene`)**:
     - [ ] Decoupled ViewModel data bridge (`UIDataContext`) mapping C++ gameplay variables (`int32_t`, `float`, `bool`, `std::string`, `glm::vec4`) and action callbacks (`std::function<void()>`) to `.axleui` binding tokens.
     - [ ] ECS Mount Point (`UICanvasComponent`): attach `.axleui` documents to scene entities with `SortOrder`, visibility toggles, full `.axlescene` serialization, and optional offscreen render-to-texture for 3D cockpit instrument clusters.

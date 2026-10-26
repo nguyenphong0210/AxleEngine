@@ -762,4 +762,246 @@ bool RunTest_Step88_Phase34_Step3_DOMTreeAnd2PassLayoutEngine() {
     return true;
 }
 
+// =============================================================================
+// TEST STEP 89: Phase 34 Step 4 - Declarative .axleui UIParser & Hot-Reloading
+// (Lexer, AST Hierarchy, Properties, Reactive Bindings, Real-Time File Watcher)
+// =============================================================================
+bool RunTest_Step89_Phase34_Step4_DeclarativeUIParserAndHotReloading() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 89 TEST] DECLARATIVE .axleui UIPARSER & HOT-RELOAD" << std::endl;
+    std::cout << " (Lexer, Hierarchical AST, Bindings, Real-Time Watcher) " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    // [89.1] Comment Stripping & String Literal Preservation
+    std::cout << "[89.1] Testing Lexer Comment Stripping & String Quoting..." << std::endl;
+    std::string testSource = R"(
+        // Single-line comment at start
+        Canvas {
+            /* Multi-line block comment
+               spanning several lines */
+            id: "root_canvas"
+            referenceResolution: [1920, 1080] // resolution
+            Text {
+                text: "URL: //not_a_comment and /*still_text*/"
+            }
+        }
+    )";
+
+    UIDocument doc;
+    std::string parseErr;
+    bool parseOk = UIParser::ParseSource(testSource, doc, &parseErr);
+    if (!parseOk) {
+        std::cerr << "FAIL: ParseSource failed: " << parseErr << std::endl;
+    }
+    assert(parseOk);
+    assert(doc.GetRootNode() != nullptr);
+    assert(doc.GetRootNode()->GetTypeName() == "Canvas");
+    assert(doc.FindNodeByID("root_canvas") != nullptr);
+
+    auto* textChild = dynamic_cast<UITextNode*>(doc.GetRootNode()->Children[0]);
+    assert(textChild != nullptr);
+    assert(textChild->Text == "URL: //not_a_comment and /*still_text*/");
+    std::cout << "  -> Single-line // and block /* */ comments stripped cleanly: PASS" << std::endl;
+    std::cout << "  -> Comment characters inside string literals preserved: PASS" << std::endl;
+
+    // [89.2] Complete Declarative In-Memory Source Parsing
+    std::cout << "\n[89.2] Testing Hierarchical AST Construction across Primitives..." << std::endl;
+    std::string hudSource = R"(
+        Canvas {
+            id: "hud_root"
+            referenceResolution: [1920, 1080]
+
+            Rectangle {
+                id: "telemetry_box"
+                anchor: "TopLeft"
+                margin: [32, 32, 0, 0]
+                size: [280, 140]
+                color: "#0B0E14CC"
+                cornerRadius: 12
+                borderWidth: 2
+                borderColor: "#1E293B"
+
+                Column {
+                    anchor: "TopLeft"
+                    margin: [16, 14, 16, 14]
+                    spacing: 8
+
+                    Text {
+                        id: "fps_counter"
+                        text: "FPS: {Engine.FPS}"
+                        fontSize: 18
+                        color: "#38BDF8"
+                    }
+                    Text {
+                        id: "lat_g_text"
+                        text: "LATERAL G: {Vehicle.LateralG}"
+                        fontSize: 18
+                        color: "#E2E8F0"
+                    }
+                }
+            }
+
+            Rectangle {
+                id: "tachometer_cluster"
+                anchor: "BottomRight"
+                margin: [0, 0, 48, 48]
+                size: [340, 340]
+                color: "#0B0E14D9"
+                cornerRadius: 170
+
+                RadialGauge {
+                    id: "rpm_radial_gauge"
+                    anchor: "Center"
+                    size: [304, 304]
+                    startAngle: -225.0
+                    endAngle: 45.0
+                    thickness: 18.0
+                    value: "{Vehicle.RPMNormalized}"
+                    color: "{Vehicle.IsRedline ? #FF1E42FF : #00F5D4FF}"
+                    trackColor: "#1E293B99"
+                }
+
+                Button {
+                    id: "btn_pause"
+                    size: [120, 40]
+                    anchor: "Center"
+                    pos: [0, 60]
+                    onClick: "OnPauseGame"
+                    navDown: "btn_quit"
+                }
+            }
+        }
+    )";
+
+    UIDocument hudDoc;
+    assert(UIParser::ParseSource(hudSource, hudDoc, &parseErr));
+    assert(hudDoc.GetNodeCount() == 8);
+
+    auto* hudRoot = dynamic_cast<UICanvasNode*>(hudDoc.FindNodeByID("hud_root"));
+    assert(hudRoot != nullptr);
+    assert(hudRoot->ReferenceResolution == glm::vec2(1920.0f, 1080.0f));
+
+    auto* telemBox = dynamic_cast<UIRectangleNode*>(hudDoc.FindNodeByID("telemetry_box"));
+    assert(telemBox != nullptr);
+    assert(telemBox->Anchor == UIAnchor::TopLeft);
+    assert(telemBox->Margin == glm::vec4(32.0f, 32.0f, 0.0f, 0.0f));
+    assert(telemBox->Size == glm::vec2(280.0f, 140.0f));
+    assert(telemBox->Style.CornerRadius == 12.0f);
+    assert(telemBox->Style.BorderWidth == 2.0f);
+
+    auto* rpmGauge = dynamic_cast<UIRadialGaugeNode*>(hudDoc.FindNodeByID("rpm_radial_gauge"));
+    assert(rpmGauge != nullptr);
+    assert(rpmGauge->StartAngle == -225.0f);
+    assert(rpmGauge->EndAngle == 45.0f);
+    assert(rpmGauge->Thickness == 18.0f);
+
+    auto* pauseBtn = dynamic_cast<UIButtonNode*>(hudDoc.FindNodeByID("btn_pause"));
+    assert(pauseBtn != nullptr);
+    assert(pauseBtn->OnClickAction == "OnPauseGame");
+    assert(pauseBtn->NavDown == "btn_quit");
+
+    std::cout << "  -> Hierarchical AST parsed: 8 nodes instantiated: PASS" << std::endl;
+    std::cout << "  -> IDs, numeric scalars, anchors, and margins correctly assigned: PASS" << std::endl;
+
+    // [89.3] Reactive Binding AST Extraction
+    std::cout << "\n[89.3] Testing Reactive Binding AST Extraction..." << std::endl;
+    const auto& bindings = hudDoc.GetBindings();
+    assert(bindings.size() == 4);
+
+    // 1. Interpolated: "FPS: {Engine.FPS}"
+    assert(bindings[0].Type == UIBindingType::Interpolated);
+    assert(bindings[0].PropertyName == "text");
+    assert(bindings[0].SourceKey == "Engine.FPS");
+    assert(bindings[0].TemplateText == "FPS: {Engine.FPS}");
+
+    // 2. Interpolated: "LATERAL G: {Vehicle.LateralG}"
+    assert(bindings[1].Type == UIBindingType::Interpolated);
+    assert(bindings[1].PropertyName == "text");
+    assert(bindings[1].SourceKey == "Vehicle.LateralG");
+
+    // 3. Direct: "{Vehicle.RPMNormalized}"
+    assert(bindings[2].Type == UIBindingType::Direct);
+    assert(bindings[2].PropertyName == "value");
+    assert(bindings[2].SourceKey == "Vehicle.RPMNormalized");
+
+    // 4. Ternary: "{Vehicle.IsRedline ? #FF1E42FF : #00F5D4FF}"
+    assert(bindings[3].Type == UIBindingType::Ternary);
+    assert(bindings[3].PropertyName == "color");
+    assert(bindings[3].SourceKey == "Vehicle.IsRedline");
+    assert(bindings[3].TrueValue == "#FF1E42FF");
+    assert(bindings[3].FalseValue == "#00F5D4FF");
+
+    std::cout << "  -> Direct binding parsed: PASS" << std::endl;
+    std::cout << "  -> Interpolated binding with string template parsed: PASS" << std::endl;
+    std::cout << "  -> Conditional ternary binding with true/false branches parsed: PASS" << std::endl;
+
+    // [89.4] File Loading & Real-Time Hot-Reloading Watcher
+    std::cout << "\n[89.4] Testing File Loading & Real-Time Hot-Reloading..." << std::endl;
+    std::filesystem::create_directories("test_output");
+    std::string testFilePath = "test_output/HotReloadTest.axleui";
+
+    // Write Version 1
+    {
+        std::ofstream out(testFilePath);
+        out << R"(
+            Canvas {
+                id: "reload_root"
+                Text {
+                    id: "version_label"
+                    text: "VERSION 1.0"
+                    fontSize: 20
+                }
+            }
+        )";
+    }
+
+    UIDocument hotDoc;
+    assert(UIParser::ParseFile(testFilePath, hotDoc));
+    assert(hotDoc.GetFilePath() == testFilePath);
+
+    auto* verLabel = dynamic_cast<UITextNode*>(hotDoc.FindNodeByID("version_label"));
+    assert(verLabel != nullptr);
+    assert(verLabel->Text == "VERSION 1.0");
+
+    // Check hot-reload without file modification: must return false
+    assert(hotDoc.CheckAndHotReload() == false);
+    assert(verLabel->Text == "VERSION 1.0");
+
+    // Sleep briefly to ensure filesystem timestamp increments on write
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    // Overwrite with Version 2
+    {
+        std::ofstream out(testFilePath);
+        out << R"(
+            Canvas {
+                id: "reload_root"
+                Text {
+                    id: "version_label"
+                    text: "VERSION 2.0_HOT_RELOADED"
+                    fontSize: 32
+                }
+            }
+        )";
+    }
+
+    // Now CheckAndHotReload must detect the change and reload
+    bool reloaded = hotDoc.CheckAndHotReload();
+    assert(reloaded == true);
+
+    auto* reloadedLabel = dynamic_cast<UITextNode*>(hotDoc.FindNodeByID("version_label"));
+    assert(reloadedLabel != nullptr);
+    assert(reloadedLabel->Text == "VERSION 2.0_HOT_RELOADED");
+    assert(reloadedLabel->FontSize == 32.0f);
+
+    std::cout << "  -> Initial file parse successful: PASS" << std::endl;
+    std::cout << "  -> Unmodified file check returns false: PASS" << std::endl;
+    std::cout << "  -> Modified file timestamp change detected and hot-reloaded: PASS" << std::endl;
+
+    std::cout << "\n>>> STEP 89 PASSED: Declarative UIParser & Live Hot-Reloading 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
 

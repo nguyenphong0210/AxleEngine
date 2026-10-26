@@ -1,4 +1,5 @@
 #include <Axle/UI/UIDocument.hpp>
+#include <Axle/UI/UIParser.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -107,8 +108,7 @@ namespace Axle {
         auto currentWriteTime = std::filesystem::last_write_time(m_FilePath);
         if (currentWriteTime > m_LastWriteTime) {
             m_LastWriteTime = currentWriteTime;
-            // Hot reload parse is wired in Step 4
-            return true;
+            return UIParser::ParseFile(m_FilePath, *this);
         }
         return false;
     }

@@ -106,6 +106,7 @@ add_executable(AxleTests
     src/Tests/Test_Milestone8_Part1.cpp
     src/Tests/Test_Milestone8_Part2.cpp
     src/Tests/Test_Milestone8_Part3.cpp
+    src/Tests/Test_Milestone8_Part4.cpp
 )
 
 if (MSVC)
@@ -141,6 +142,7 @@ target_link_libraries(AxleTests PRIVATE
     Axle::Audio
     Axle::Asset
     Axle::UI
+    Axle::UI2D
     Axle::Physics
     Axle::Scene
     Axle::Vehicle

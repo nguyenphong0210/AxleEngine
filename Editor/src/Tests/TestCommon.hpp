@@ -103,6 +103,7 @@
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
 #include <Axle/ImGuiLayer.hpp>
+#include <Axle/UI/UITypes.hpp>
 #include <Axle/Application.hpp>
 #include <Axle/Window.hpp>
 #include <imgui.h>
@@ -309,3 +310,6 @@ bool RunTest_Step81_PhysicsDebugSceneRendererIntegration();
 bool RunTest_Step82_GPUObjectIDPicking();
 bool RunTest_Step83_ViewportClickPickingIntegration();
 bool RunTest_Step84_TripleBackendSwitchingAndVisualParity();
+
+// Milestone 8 - Part 4: Phase 34 Declarative QML In-Game UI & Hardware-Accelerated Canvas2D Subsystem (Steps 85+)
+bool RunTest_Step85_Phase34_Step1_Part1_DecoupledAxleUI2DLibraryAndUITypes();

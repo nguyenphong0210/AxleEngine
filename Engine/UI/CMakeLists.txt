@@ -1,3 +1,27 @@
+# ==============================================================================
+# AxleUI2D Static Library (Decoupled In-Game UI Subsystem)
+# ==============================================================================
+add_library(AxleUI2D STATIC
+    src/UI2D/UITypes.cpp
+)
+add_library(Axle::UI2D ALIAS AxleUI2D)
+
+target_include_directories(AxleUI2D PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/glm>
+)
+
+target_link_libraries(AxleUI2D
+    PUBLIC
+        Axle::Core
+        Axle::Platform
+        Axle::Renderer
+        Axle::RHI
+)
+
+# ==============================================================================
+# AxleUI Static Library (Editor Tooling UI via Dear ImGui)
+# ==============================================================================
 add_library(AxleUI STATIC
     src/ImGuiLayer.cpp
     src/DebugPanel.cpp
@@ -32,6 +56,7 @@ target_include_directories(AxleUI PUBLIC
 
 target_link_libraries(AxleUI
     PUBLIC
+        Axle::UI2D
         Axle::Core
         Axle::Platform
         Axle::Renderer
@@ -67,4 +92,3 @@ if (Vulkan_FOUND)
     target_link_libraries(AxleUI PRIVATE Vulkan::Vulkan)
     target_compile_definitions(AxleUI PUBLIC AXLE_HAS_VULKAN=1)
 endif()
-

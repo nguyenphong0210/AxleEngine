@@ -11,6 +11,7 @@
 #include <Axle/AnimationClip.hpp>
 #include <Axle/Animator.hpp>
 #include <Axle/AnimationStateMachine.hpp>
+#include <Axle/RHIMeshRegistry.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -769,6 +770,9 @@ namespace Axle {
                                         mc.VAO = loaded.VAO;
                                     }
                                 }
+                            }
+                            if (!mc.AssetPath.empty()) {
+                                mc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(mc.AssetPath);
                             }
                         } else if (trimmed.rfind("PatternMode:", 0) == 0) {
                             mc.PatternMode = std::stoi(Trim(trimmed.substr(12)));
@@ -1571,6 +1575,9 @@ namespace Axle {
                         mc.VAO = m_Context.CubeMesh;
                     }
                 }
+            }
+            if (!mc.RHIMeshAsset && !mc.AssetPath.empty()) {
+                mc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(mc.AssetPath);
             }
         }
 

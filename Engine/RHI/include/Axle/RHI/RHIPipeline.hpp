@@ -186,7 +186,7 @@ namespace Axle::RHI {
     public:
         static RHIPipelineCache& Get();
 
-        explicit RHIPipelineCache(size_t maxCapacity = 256);
+        explicit RHIPipelineCache(size_t maxCapacity = 2048);
         ~RHIPipelineCache();
 
         RHIPipelineCache(const RHIPipelineCache&) = delete;
@@ -230,7 +230,7 @@ namespace Axle::RHI {
             bool IsCompute = false;
         };
 
-        size_t m_MaxCapacity = 256;
+        size_t m_MaxCapacity = 2048;
         uint64_t m_HitCount = 0;
         uint64_t m_MissCount = 0;
 

@@ -96,6 +96,16 @@ add_dependencies(AxleEditor AxleScripts)
 # Dedicated Test Executable for Automated Verifications
 add_executable(AxleTests
     src/Test.cpp
+    src/Tests/Test_Milestone1.cpp
+    src/Tests/Test_Milestone2.cpp
+    src/Tests/Test_Milestone3.cpp
+    src/Tests/Test_Milestone4.cpp
+    src/Tests/Test_Milestone5.cpp
+    src/Tests/Test_Milestone6.cpp
+    src/Tests/Test_Milestone7.cpp
+    src/Tests/Test_Milestone8_Part1.cpp
+    src/Tests/Test_Milestone8_Part2.cpp
+    src/Tests/Test_Milestone8_Part3.cpp
 )
 
 if (MSVC)
@@ -119,6 +129,7 @@ add_custom_command(TARGET AxleTests POST_BUILD
 
 target_include_directories(AxleTests PRIVATE
     src
+    src/Tests
     assets/scripts
 )
 

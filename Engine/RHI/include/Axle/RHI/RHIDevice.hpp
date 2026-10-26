@@ -36,6 +36,9 @@ namespace Axle::RHI {
         // Graceful shutdown
         void Shutdown();
 
+        // Wait for all GPU queue operations to complete
+        void WaitIdle();
+
         bool IsInitialized() const { return m_Initialized; }
         RHIType GetBackend() const { return m_Capabilities.ActiveBackend; }
         const RHIDeviceCapabilities& GetCapabilities() const { return m_Capabilities; }

@@ -109,7 +109,7 @@ namespace Axle {
                                        float frequency,
                                        float strength,
                                        uint32_t octaves) {
-        const float eps = EPSILON;
+        const float eps = (frequency > 0.0f) ? (EPSILON / frequency) : EPSILON;
         const float inv2Eps = 1.0f / (2.0f * eps);
 
         glm::vec3 fxPlus  = Evaluate(position + glm::vec3(eps, 0.0f, 0.0f), frequency, strength, octaves);

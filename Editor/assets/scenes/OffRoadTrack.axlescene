@@ -1,7 +1,71 @@
 # Axle Scene Definition File
 Scene: Untitled
 Entities:
-  - Entity: 18115012520147694214
+  - Entity: 9777158124878081722
+    TagComponent:
+      Tag: TrackTorch_VFX
+    TransformComponent:
+      Translation: [ 3.500000 , 7.500000 , -76.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    ParticleEmitterComponent:
+      Name: TrackFire
+      Active: true
+      AutoPlay: true
+      Visible: true
+      SimulationSpace: World
+      EmissionRate: 80.000000
+      BurstCount: 0
+      BurstInterval: 0.000000
+      MaxParticles: 800
+      Lifetime: [ 0.800000 , 1.500000 ]
+      InitialSpeed: [ 1.500000 , 3.500000 ]
+      StartSize: [ 0.250000 , 0.450000 ]
+      EndSize: [ 0.050000 , 0.150000 ]
+      StartRotation: [ 0.000000 , 6.283185 ]
+      AngularVelocity: [ -1.500000 , 1.500000 ]
+      GravityModifier: -0.650000
+      Drag: 0.100000
+      StartColor: [ 1.000000 , 0.650000 , 0.150000 , 1.000000 ]
+      EndColor: [ 0.850000 , 0.120000 , 0.020000 , 0.000000 ]
+      BlendMode: 0
+      Orientation: 0
+      ShapeType: 0
+      ShapeRadius: 1.000000
+      ShapeConeAngle: 0.523599
+      ShapeBoxExtents: [ 1.000000 , 1.000000 , 1.000000 ]
+      ShapeLineLength: 1.000000
+      ShapeDirection: [ 0.000000 , 1.000000 , 0.000000 ]
+      ShapeSurfaceOnly: false
+      TexturePath: 
+      NormalMapPath: 
+      TextureRows: 1
+      TextureCols: 1
+      TotalFrames: 1
+      SubFrameBlending: false
+      LightingEnabled: false
+      WrapLighting: 0.400000
+      ScatteringFactor: 0.250000
+      NormalMapStrength: 1.000000
+      NearFadeEnabled: true
+      NearFadeStart: 0.200000
+      NearFadeEnd: 1.000000
+      FarFadeEnabled: false
+      FarFadeStart: 100.000000
+      FarFadeEnd: 200.000000
+      SoftnessDistance: 0.500000
+      CurlNoiseEnabled: false
+      CurlNoiseStrength: 1.000000
+      CurlNoiseFrequency: 0.500000
+      CollisionEnabled: false
+      CollisionRestitution: 0.500000
+      CollisionFriction: 0.200000
+      CollisionParticleRadius: 0.050000
+  - Entity: 10344097519636230422
     TagComponent:
       Tag: RacingHUD
     TransformComponent:
@@ -14,7 +78,7 @@ Entities:
       InheritScale: true
     NativeScriptComponent:
       ScriptName: RacingHUD
-  - Entity: 7375692058711100890
+  - Entity: 5669050512055767950
     TagComponent:
       Tag: Main Camera
     TransformComponent:
@@ -32,7 +96,7 @@ Entities:
       FOV: 45.000000
       NearClip: 0.100000
       FarClip: 1000.000000
-  - Entity: 8594132046733134158
+  - Entity: 4245905945142515872
     TagComponent:
       Tag: BodyMesh
     TransformComponent:
@@ -46,10 +110,10 @@ Entities:
       Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
       Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
     HierarchyComponent:
-      Parent: 2970178692739136401
+      Parent: 4699200439858065067
       InheritTransform: true
       InheritScale: true
-  - Entity: 10280977030768981528
+  - Entity: 5689527130553280706
     TagComponent:
       Tag: Wheel_RR
     TransformComponent:
@@ -63,7 +127,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
       Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
     HierarchyComponent:
-      Parent: 2970178692739136401
+      Parent: 4699200439858065067
       InheritTransform: true
       InheritScale: true
     WheelComponent:
@@ -80,7 +144,7 @@ Entities:
       BrakeTorque: 3000.000000
       HandBrakeTorque: 0.000000
       AutoSyncMesh: true
-  - Entity: 3924534279139734905
+  - Entity: 619749589725581525
     TagComponent:
       Tag: Wheel_RL
     TransformComponent:
@@ -94,7 +158,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
       Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
     HierarchyComponent:
-      Parent: 2970178692739136401
+      Parent: 4699200439858065067
       InheritTransform: true
       InheritScale: true
     WheelComponent:
@@ -111,7 +175,7 @@ Entities:
       BrakeTorque: 3000.000000
       HandBrakeTorque: 0.000000
       AutoSyncMesh: true
-  - Entity: 4390866207192904134
+  - Entity: 16808677203043777479
     TagComponent:
       Tag: Wheel_FR
     TransformComponent:
@@ -125,7 +189,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
       Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
     HierarchyComponent:
-      Parent: 2970178692739136401
+      Parent: 4699200439858065067
       InheritTransform: true
       InheritScale: true
     WheelComponent:
@@ -142,7 +206,7 @@ Entities:
       BrakeTorque: 3000.000000
       HandBrakeTorque: 0.000000
       AutoSyncMesh: true
-  - Entity: 15380064943139114639
+  - Entity: 9541231778497640064
     TagComponent:
       Tag: Wheel_FL
     TransformComponent:
@@ -156,7 +220,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
       Color2: [ 0.080000 , 0.080000 , 0.080000 , 0.080000 ]
     HierarchyComponent:
-      Parent: 2970178692739136401
+      Parent: 4699200439858065067
       InheritTransform: true
       InheritScale: true
     WheelComponent:
@@ -173,7 +237,7 @@ Entities:
       BrakeTorque: 3000.000000
       HandBrakeTorque: 0.000000
       AutoSyncMesh: true
-  - Entity: 2970178692739136401
+  - Entity: 4699200439858065067
     TagComponent:
       Tag: Car
     TransformComponent:
@@ -235,7 +299,19 @@ Entities:
       Spatialized: true
       MinDistance: 2.000000
       MaxDistance: 80.000000
-  - Entity: 9342371444331338709
+    VehicleVFXComponent:
+      Enabled: true
+      BurnoutSlipThreshold: 0.250000
+      SkidSlipThreshold: 0.250000
+      MinSpeedForRoosterTail: 4.000000
+      SurfaceType: 2
+      BackfireMinRPM: 5200.000000
+      BackfireThrottleLiftThreshold: 0.150000
+      BackfireHighThrottleMin: 0.600000
+      BackfireCooldown: 0.350000
+      BackfireFlameCount: 18
+      BackfireSparkCount: 28
+  - Entity: 13945555079336456670
     TagComponent:
       Tag: SplineTrack
     TransformComponent:
@@ -303,7 +379,7 @@ Entities:
           HandleOut: [ 2.000000 , 0.000000 , 0.000000 ]
           Roll: 0.000000
           Scale: 1.000000
-  - Entity: 4290867067489759793
+  - Entity: 9107538586307719878
     TagComponent:
       Tag: OffRoadTerrain
     TransformComponent:
@@ -325,7 +401,7 @@ Entities:
       GeneratePhysics: true
       Friction: 0.850000
       Restitution: 0.050000
-  - Entity: 1104267407827571849
+  - Entity: 4448760934290039279
     TagComponent:
       Tag: Sun Light
     TransformComponent:
@@ -345,8 +421,12 @@ Entities:
       CastShadows: true
       ShadowOrthoSize: 25.000000
       ShadowBias: 0.001200
+      ShadowSlopeBias: 0.002000
+      ShadowNormalBias: 0.015000
       ShadowFilterRadius: 2.000000
       ShadowQuality: 1
+      CascadeSplitLambda: 0.850000
+      MaxShadowDistance: 150.000000
       Exposure: 1.000000
       ToneMappingMode: 0
       Gamma: 2.200000

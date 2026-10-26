@@ -6,11 +6,16 @@
 // Root Constants / Push Constants (register b0, space0)
 // Size: EXACTLY 128 bytes (32 DWORDs)
 cbuffer ObjectConstants : register(b0, space0) {
-    float4x4 u_ModelViewProjection; // 64 bytes (Offset 0)
+    float4x4 u_Model;               // 64 bytes (Offset 0)
     float4   u_ColorPrimary;        // 16 bytes (Offset 64)
     float4   u_ColorSecondary;      // 16 bytes (Offset 80)
     float4   u_Params;              // 16 bytes (Offset 96) - x: TileScale, y: PatternMode, z: Roughness, w: Metallic
     float4   u_SunDirAndIntensity;  // 16 bytes (Offset 112) - xyz: Normalized sun direction, w: Sun intensity
+};
+
+// Scene Constants (register b1, space0)
+cbuffer SceneConstants : register(b1, space0) {
+    float4x4 u_ViewProjection;
 };
 
 // Vertex Input Layout (Matches 64-byte RHIVertex3D)
@@ -25,6 +30,7 @@ struct VSInput {
 // Vertex Output / Pixel Input
 struct PSInput {
     float4 PositionCS : SV_Position;
+    float3 WorldPos   : POSITION;
     float3 NormalWS   : NORMAL;
     float2 TexCoord   : TEXCOORD0;
     float4 VertexColor: COLOR0;
@@ -33,11 +39,13 @@ struct PSInput {
 
 PSInput VSMain(VSInput input) {
     PSInput output;
-    output.PositionCS = mul(u_ModelViewProjection, float4(input.Position, 1.0));
-    output.NormalWS   = input.Normal;
-    output.TexCoord   = input.TexCoord;
-    output.VertexColor= input.Color;
-    output.LocalPos   = input.Position;
+    float4 worldPos    = mul(u_Model, float4(input.Position, 1.0));
+    output.PositionCS  = mul(u_ViewProjection, worldPos);
+    output.WorldPos    = worldPos.xyz;
+    output.NormalWS    = normalize(mul((float3x3)u_Model, input.Normal));
+    output.TexCoord    = input.TexCoord;
+    output.VertexColor = input.Color;
+    output.LocalPos    = input.Position;
     return output;
 }
 
@@ -52,8 +60,10 @@ float4 PSMain(PSInput input) : SV_Target0 {
     
     if (patternMode == 0 || patternMode == 1) {
         // Procedural 3D Caro / Checkerboard pattern
-        float3 checkCoords = floor(input.LocalPos / tileScale);
-        float check = fmod(abs(checkCoords.x + checkCoords.y + checkCoords.z), 2.0);
+        float2 checkCoords = (max(abs(input.WorldPos.x), abs(input.WorldPos.z)) > 5.0)
+            ? floor(input.WorldPos.xz * (tileScale * 0.125))
+            : floor((input.LocalPos.xz + float2(0.5, 0.5)) * tileScale);
+        float check = fmod(abs(checkCoords.x + checkCoords.y), 2.0);
         baseColor = (check > 0.5) ? u_ColorPrimary : u_ColorSecondary;
     } else if (patternMode == 2) {
         // Vertex Color splat weights (Terrain heightfield)

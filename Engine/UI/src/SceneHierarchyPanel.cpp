@@ -27,6 +27,7 @@
 #include <filesystem>
 
 #include <Axle/VertexArray.hpp>
+#include <Axle/RHIMeshRegistry.hpp>
 #include <algorithm>
 #include <cctype>
 #include <fstream>
@@ -290,13 +291,13 @@ namespace Axle {
             case 4: { // 3D Plane
                 entity = m_Scene->CreateEntity("Plane");
                 entity.AddComponent<TransformComponent>(position, glm::vec3(20.0f, 1.0f, 20.0f));
-                if (m_PlaneMesh) {
-                    entity.AddComponent<MeshInstance3D>(
-                        m_PlaneMesh, 0, 1.0f,
-                        glm::vec4(0.35f, 0.38f, 0.42f, 1.0f),
-                        glm::vec4(0.20f, 0.22f, 0.25f, 1.0f)
-                    );
-                }
+                auto& mc = entity.AddComponent<MeshInstance3D>(
+                    m_PlaneMesh, 1, 8.0f,
+                    glm::vec4(0.35f, 0.38f, 0.42f, 1.0f),
+                    glm::vec4(0.20f, 0.22f, 0.25f, 1.0f)
+                );
+                mc.AssetPath = "builtin://plane";
+                mc.RHIMeshAsset = RHIMeshRegistry::Get().GetPlane();
                 break;
             }
             default:

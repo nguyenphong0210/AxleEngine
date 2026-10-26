@@ -190,8 +190,11 @@ float4 PSMain(PSInput input) : SV_Target0 {
         albedo = u_ColorPrimary;
     } else if (shadingMode == 1) {
         // Procedural 3D Caro / Checkerboard Pattern
-        float3 checkCoords = floor(input.LocalPos / tileScale);
-        float check = fmod(abs(checkCoords.x + checkCoords.y + checkCoords.z), 2.0);
+        // Ground plane / floor uses WorldPos.xz with clean 2m/1m tiles; smaller objects use local coordinates
+        float2 checkCoords = (max(abs(input.WorldPos.x), abs(input.WorldPos.z)) > 5.0)
+            ? floor(input.WorldPos.xz * (tileScale * 0.125))
+            : floor((input.LocalPos.xz + float2(0.5, 0.5)) * tileScale);
+        float check = fmod(abs(checkCoords.x + checkCoords.y), 2.0);
         albedo = (check > 0.5) ? u_ColorPrimary : u_ColorSecondary;
     } else if (shadingMode == 2) {
         // Splatmap Terrain Heightfield (Blended with Vertex Color)
@@ -241,7 +244,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 sunDir = hasMultiLightSun ? normalize(u_SunLight.DirectionAndIlluminance.xyz) : normalize(u_SunDirAndIntensity.xyz);
     if (length(sunDir) < 0.1) sunDir = normalize(float3(0.45, 0.85, 0.25));
 
-    float sunIntensity = hasMultiLightSun ? (u_SunLight.DirectionAndIlluminance.w * 0.0005) : max(0.2, u_SunDirAndIntensity.w);
+    float sunIntensity = hasMultiLightSun ? (u_SunLight.DirectionAndIlluminance.w * 0.000035 + u_SunLight.ColorAndAmbient.w * 0.5) : max(0.5, u_SunDirAndIntensity.w);
     float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : ((length(u_SunColor.rgb) > 0.01) ? u_SunColor.rgb : float3(1.0, 0.98, 0.92));
     float3 sunRadiance = sunColor * sunIntensity;
 

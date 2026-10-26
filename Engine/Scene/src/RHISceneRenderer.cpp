@@ -24,11 +24,15 @@ namespace Axle {
     // Embedded fallback HLSL shader in case shader file is not on disk
     static const char* s_FallbackForwardShader = R"(
         cbuffer ObjectConstants : register(b0, space0) {
-            float4x4 u_ModelViewProjection;
+            float4x4 u_Model;
             float4   u_ColorPrimary;
             float4   u_ColorSecondary;
             float4   u_Params;
             float4   u_SunDirAndIntensity;
+        };
+
+        cbuffer SceneConstants : register(b1, space0) {
+            float4x4 u_ViewProjection;
         };
 
         struct VSInput {
@@ -41,6 +45,7 @@ namespace Axle {
 
         struct PSInput {
             float4 PositionCS : SV_Position;
+            float3 WorldPos   : POSITION;
             float3 NormalWS   : NORMAL;
             float2 TexCoord   : TEXCOORD0;
             float4 VertexColor: COLOR0;
@@ -49,8 +54,10 @@ namespace Axle {
 
         PSInput VSMain(VSInput input) {
             PSInput output;
-            output.PositionCS  = mul(u_ModelViewProjection, float4(input.Position, 1.0));
-            output.NormalWS    = input.Normal;
+            float4 worldPos    = mul(u_Model, float4(input.Position, 1.0));
+            output.PositionCS  = mul(u_ViewProjection, worldPos);
+            output.WorldPos    = worldPos.xyz;
+            output.NormalWS    = normalize(mul((float3x3)u_Model, input.Normal));
             output.TexCoord    = input.TexCoord;
             output.VertexColor = input.Color;
             output.LocalPos    = input.Position;
@@ -65,8 +72,10 @@ namespace Axle {
             float4 baseColor = u_ColorPrimary;
             
             if (patternMode == 0 || patternMode == 1) {
-                float3 checkCoords = floor(input.LocalPos / tileScale);
-                float check = fmod(abs(checkCoords.x + checkCoords.y + checkCoords.z), 2.0);
+                float2 checkCoords = (max(abs(input.WorldPos.x), abs(input.WorldPos.z)) > 5.0)
+                    ? floor(input.WorldPos.xz * (tileScale * 0.125))
+                    : floor((input.LocalPos.xz + float2(0.5, 0.5)) * tileScale);
+                float check = fmod(abs(checkCoords.x + checkCoords.y), 2.0);
                 baseColor = (check > 0.5) ? u_ColorPrimary : u_ColorSecondary;
             } else if (patternMode == 2) {
                 baseColor = u_ColorPrimary * input.VertexColor;
@@ -471,8 +480,8 @@ namespace Axle {
         gfxDesc.Shaders = { m_VertexShader, m_PixelShader };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
-        gfxDesc.Rasterizer.CullMode = nri::CullMode::BACK;
-        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = true;
 
         gfxDesc.DepthStencil.DepthTestEnable = true;
         gfxDesc.DepthStencil.DepthWriteEnable = true;
@@ -1190,6 +1199,9 @@ namespace Axle {
                         } else {
                             mesh = RHIMeshRegistry::Get().GetCube();
                         }
+                    }
+                    if (mesh) {
+                        const_cast<MeshInstance3D&>(mc).RHIMeshAsset = mesh;
                     }
                 }
 

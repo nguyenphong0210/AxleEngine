@@ -29,7 +29,7 @@ namespace Axle {
         m_Sphere = RHIMesh::CreateSphere(0.5f, 24, 24);
         m_Cylinder = RHIMesh::CreateCylinder(0.5f, 1.0f, 24);
         m_Cone = RHIMesh::CreateCone(0.5f, 1.0f, 24);
-        m_Plane = RHIMesh::CreatePlane(10.0f, 10.0f, 10, 10);
+        m_Plane = RHIMesh::CreatePlane(1.0f, 1.0f, 10, 10);
 
         if (m_Cube) m_MeshCache["Cube"] = m_Cube;
         if (m_Sphere) m_MeshCache["Sphere"] = m_Sphere;

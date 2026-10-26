@@ -3,6 +3,7 @@
 
 #include <cstring>
 #include <algorithm>
+#include <iostream>
 
 namespace Axle::RHI {
 
@@ -225,6 +226,10 @@ namespace Axle::RHI {
         auto& rhiDevice = RHIDevice::Get();
         const auto& nriCore = rhiDevice.GetNRICore();
 
+        if (rhiDevice.IsInitialized() && m_LRUList.size() > m_MaxCapacity) {
+            rhiDevice.WaitIdle();
+        }
+
         while (m_LRUList.size() > m_MaxCapacity) {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
@@ -242,6 +247,10 @@ namespace Axle::RHI {
     void RHIPipelineCache::Clear() {
         auto& rhiDevice = RHIDevice::Get();
         const auto& nriCore = rhiDevice.GetNRICore();
+
+        if (rhiDevice.IsInitialized()) {
+            rhiDevice.WaitIdle();
+        }
 
         for (auto& entry : m_LRUList) {
             if (entry.Pipeline && rhiDevice.IsInitialized()) {
@@ -403,6 +412,9 @@ namespace Axle::RHI {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
             if (victim.Pipeline) {
+                if (rhiDevice.IsInitialized()) {
+                    rhiDevice.WaitIdle();
+                }
                 nriCore.DestroyPipeline(victim.Pipeline);
             }
             m_LRUList.pop_back();
@@ -461,6 +473,9 @@ namespace Axle::RHI {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
             if (victim.Pipeline) {
+                if (rhiDevice.IsInitialized()) {
+                    rhiDevice.WaitIdle();
+                }
                 nriCore.DestroyPipeline(victim.Pipeline);
             }
             m_LRUList.pop_back();

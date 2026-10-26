@@ -3,6 +3,7 @@
 # ==============================================================================
 add_library(AxleUI2D STATIC
     src/UI2D/UITypes.cpp
+    src/UI2D/Canvas2D.cpp
 )
 add_library(Axle::UI2D ALIAS AxleUI2D)
 

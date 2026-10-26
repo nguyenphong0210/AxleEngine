@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 33** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **70 Comprehensive Headless Test Suites** (`AxleTests.exe`, 77 individual test steps up through **Step 85**) passing with **100% pass rate**.
+* **Automated Test Verification**: **71 Comprehensive Headless Test Suites** (`AxleTests.exe`, 78 individual test steps up through **Step 86**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 34 (Declarative QML In-Game UI & Hardware-Accelerated Canvas2D Subsystem)** and beyond.
 
 ---
@@ -421,12 +421,12 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **Multi-Backend Mesh Upload Bandwidth & Scene Reload Stress Testing**: High-throughput mesh vertex/index buffer streaming via `RHIStreamer`, identical draw call dispatch rates across consecutive frames, dynamic descriptor recycling, and zero memory leaks across multi-cycle scene reload stress tests.
     - [x] **Automated Test Suite Step 84 (`AxleTests.exe 84`)**: 5-stage headless test suite validating CLI argument parser across all flags, `ProjectConfig` and `ProjectSerializer` roundtrip persistence across all backends, triple-backend RHI resolver and capability inspection, Viewport camera matrix orthogonality and ImGuizmo TRS decomposition, and multi-backend mesh upload / draw call dispatch with zero memory leaks (100% PASS).
 - [ ] **Phase 34: Declarative QML In-Game UI & Hardware-Accelerated `Canvas2D` Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
-  - [ ] **Step 1 - Decoupled `AxleUI2D` Library, `Canvas2D` Batch Renderer & Procedural SDF Uber-Shader (`Engine/UI`)**:
+  - [x] **Step 1 - Decoupled `AxleUI2D` Library, `Canvas2D` Batch Renderer & Procedural SDF Uber-Shader (`Engine/UI`)**:
     - [x] Decouple In-Game UI from Editor ImGui by establishing the clean static library `AxleUI2D` (`Axle::UI2D`) linking only to `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, and `Axle::RHI`.
-    - [ ] High-performance 2D batch renderer (`Canvas2D`) operating natively across Direct3D 12, Vulkan 1.3, and OpenGL 4.5 via per-frame dynamic host-visible ring buffers (`RHIBuffer`) with embedded GLSL fallback for OpenGL.
-    - [ ] Unified 80-byte aligned `UIVertex` format supporting Bindless Texture Descriptor indexing (`TextureIndex`) to eliminate texture-swap batch breaks and render complex HUDs in a single draw call.
-    - [ ] Procedural 2D Signed Distance Field (SDF) Uber-Shader (`Engine/Resources/Shaders/Canvas2D.hlsl`): analytical anti-aliased rounded rectangles (`sdRoundedBox`), customizable border thickness, linear progress bars, and circular/arc gauges (`sdRadialArc` for automotive tachometers and speedometers) without CPU geometry tessellation.
-    - [ ] Hardware scissor clipping stack (`PushClipRect` / `PopClipRect`), Z-index painter's sorting, and headless vertex batch inspection APIs for automated testing.
+    - [x] High-performance 2D batch renderer (`Canvas2D`) operating natively across Direct3D 12, Vulkan 1.3, and OpenGL 4.5 via per-frame dynamic host-visible ring buffers (`RHIBuffer`) with embedded GLSL fallback for OpenGL.
+    - [x] Unified 80-byte aligned `UIVertex` format supporting Bindless Texture Descriptor indexing (`TextureIndex`) to eliminate texture-swap batch breaks and render complex HUDs in a single draw call.
+    - [x] Procedural 2D Signed Distance Field (SDF) Uber-Shader (`Engine/Resources/Shaders/Canvas2D.hlsl`): analytical anti-aliased rounded rectangles (`sdRoundedBox`), customizable border thickness, linear progress bars, and circular/arc gauges (`sdRadialArc` for automotive tachometers and speedometers) without CPU geometry tessellation.
+    - [x] Hardware scissor clipping stack (`PushClipRect` / `PopClipRect`), Z-index painter's sorting, and headless vertex batch inspection APIs for automated testing.
   - [ ] **Step 2 - Multi-Channel Signed Distance Field (MSDF) Font & Text Layout Pipeline (`Engine/UI`)**:
     - [ ] Native MSDF font asset pipeline (`UIFont` supporting `.axlefont` / `.axlebin` cache and a zero-dependency procedural embedded fallback font for headless CI testing).
     - [ ] Resolution-independent sharp text rendering (`PrimitiveType = MSDF_Text`) supporting arbitrary scaling (from 10pt telemetry labels to 120pt digital speedometers), kerning pairs, and pixel-shader screen-space distance anti-aliasing.

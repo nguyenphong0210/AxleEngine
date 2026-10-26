@@ -93,6 +93,7 @@ int main(int argc, char** argv) {
         else if (arg == "83" || arg == "step83" || arg == "--step83" || arg == "--click-picking" || arg == "--viewport-picking") targetStep = 83;
         else if (arg == "84" || arg == "step84" || arg == "--step84" || arg == "--triple-backend" || arg == "--parity" || arg == "--rhi-parity") targetStep = 84;
         else if (arg == "85" || arg == "step85" || arg == "--step85" || arg == "--axleui2d" || arg == "--ui-types" || arg == "--decoupled-ui") targetStep = 85;
+        else if (arg == "86" || arg == "step86" || arg == "--step86" || arg == "--canvas2d" || arg == "--batch" || arg == "--sdf-shader") targetStep = 86;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -348,6 +349,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 85) {
         if (!RunTest_Step85_Phase34_Step1_Part1_DecoupledAxleUI2DLibraryAndUITypes()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 86) {
+        if (!RunTest_Step86_Phase34_Step1_Part2_Canvas2DBatchingAndSDFPipeline()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

@@ -116,6 +116,33 @@ namespace Axle {
             return it->second;
         }
 
+        // Built-in standard primitive aliases
+        if (assetPath == "builtin://plane" || assetPath == "Plane") {
+            auto plane = GetPlane();
+            if (plane) m_MeshCache[assetPath] = plane;
+            return plane;
+        }
+        if (assetPath == "builtin://cube" || assetPath == "Cube") {
+            auto cube = GetCube();
+            if (cube) m_MeshCache[assetPath] = cube;
+            return cube;
+        }
+        if (assetPath == "builtin://sphere" || assetPath == "Sphere") {
+            auto sphere = GetSphere();
+            if (sphere) m_MeshCache[assetPath] = sphere;
+            return sphere;
+        }
+        if (assetPath == "builtin://cylinder" || assetPath == "Cylinder") {
+            auto cyl = GetCylinder();
+            if (cyl) m_MeshCache[assetPath] = cyl;
+            return cyl;
+        }
+        if (assetPath == "builtin://cone" || assetPath == "Cone") {
+            auto cone = GetCone();
+            if (cone) m_MeshCache[assetPath] = cone;
+            return cone;
+        }
+
         // Try direct file path
         std::filesystem::path targetPath(assetPath);
         if (!std::filesystem::exists(targetPath)) {

@@ -931,7 +931,7 @@ namespace Axle {
         sceneConstants.ViewProjection = camera.GetViewProjectionMatrix();
         sceneConstants.View = camera.GetViewMatrix();
         sceneConstants.Projection = camera.GetProjectionMatrix();
-        sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), 1.0f);
+        sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), settings.EnableToneMapping ? 1.0f : 0.0f);
         sceneConstants.AmbientLight = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
         sceneConstants.SunDirection = glm::vec4(0.45f, 0.85f, 0.25f, 1.2f);
         sceneConstants.SunColor = glm::vec4(1.0f, 0.98f, 0.92f, 1.0f);
@@ -949,8 +949,7 @@ namespace Axle {
                 const auto& dlc = dirLightView.get<DirectionalLightComponent>(entityID);
                 const auto& tc = dirLightView.get<TransformComponent>(entityID);
 
-                glm::vec3 fwd = tc.Rotation * glm::vec3(0.0f, 0.0f, -1.0f);
-                glm::vec3 sunDir = -glm::normalize(fwd);
+                glm::vec3 sunDir = dlc.GetDirection();
                 float lux = (dlc.Intensity > 100.0f) ? dlc.Intensity : (dlc.Intensity * PhysicalIlluminance::DirectSunlight);
 
                 lightData.SunLight.DirectionAndIlluminance = glm::vec4(sunDir, lux);
@@ -1175,7 +1174,8 @@ namespace Axle {
                 if (!mesh) {
                     if (!mc.AssetPath.empty()) {
                         mesh = RHIMeshRegistry::Get().GetOrCreateMesh(mc.AssetPath);
-                    } else {
+                    }
+                    if (!mesh) {
                         // Check if entity has standard primitive name or fallback to Cube
                         Entity ent(entityID, scene.get());
                         std::string name = ent.GetName();
@@ -1195,10 +1195,9 @@ namespace Axle {
 
                 if (mesh && mesh->IsValid()) {
                     glm::mat4 worldMat = scene->GetWorldTransform(entityID);
-                    glm::mat4 mvp = sceneConstants.ViewProjection * worldMat;
 
                     RHIObjectPushConstants pushConsts;
-                    pushConsts.ModelViewProjection = mvp;
+                    pushConsts.Model = worldMat;
                     pushConsts.ColorPrimary = mc.Color1;
                     pushConsts.ColorSecondary = mc.Color2;
                     pushConsts.Params = glm::vec4(mc.TileScale, static_cast<float>(mc.PatternMode), 0.5f, 0.0f);
@@ -1207,13 +1206,13 @@ namespace Axle {
                     // Apply PBR Material parameters if present
                     if (mc.RHIMaterialAsset) {
                         mc.RHIMaterialAsset->ApplyToPushConstants(pushConsts);
-                        pushConsts.ModelViewProjection = mvp;
+                        pushConsts.Model = worldMat;
                         pushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
                     } else if (registry.all_of<MaterialComponent>(entityID)) {
                         const auto& mat = registry.get<MaterialComponent>(entityID);
                         if (mat.RHIMaterialAsset) {
                             mat.RHIMaterialAsset->ApplyToPushConstants(pushConsts);
-                            pushConsts.ModelViewProjection = mvp;
+                            pushConsts.Model = worldMat;
                             pushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
                         } else {
                             pushConsts.ColorPrimary = mat.GetAlbedoColor();

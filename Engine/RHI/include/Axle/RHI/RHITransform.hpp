@@ -16,7 +16,10 @@ namespace Axle::RHI {
     // Direct3D 12 and Vulkan 1.3 GPU architectures (NVIDIA, AMD, Intel, Apple).
     // Streamed dynamically with 0 CPU-GPU pipeline stalls and 0 descriptor overhead.
     struct alignas(16) RHIObjectPushConstants {
-        glm::mat4 ModelViewProjection{ 1.0f };       // 64 bytes (Offset 0)
+        union {
+            glm::mat4 ModelViewProjection{ 1.0f };       // 64 bytes (Offset 0)
+            glm::mat4 Model;
+        };
         glm::vec4 ColorPrimary{ 0.85f, 0.88f, 0.92f, 1.0f }; // 16 bytes (Offset 64)
         glm::vec4 ColorSecondary{ 0.45f, 0.48f, 0.52f, 1.0f }; // 16 bytes (Offset 80)
         glm::vec4 Params{ 4.0f, 1.0f, 0.5f, 0.0f };  // 16 bytes (Offset 96) - x: TileScale, y: PatternMode, z: Roughness, w: Metallic

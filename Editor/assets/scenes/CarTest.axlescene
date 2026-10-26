@@ -460,7 +460,7 @@ Entities:
     TagComponent:
       Tag: TrackTorch_VFX
     TransformComponent:
-      Translation: [ 0.000000 , 0.500000 , -5.000000 ]
+      Translation: [ 6.500000 , 0.500000 , -5.000000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     HierarchyComponent:
@@ -472,16 +472,16 @@ Entities:
       AutoPlay: true
       Name: TrackFire
       ShapeType: 0
-      MaxParticles: 800
-      EmissionRate: 80.000000
-      LifetimeMin: 0.800000
-      LifetimeMax: 1.500000
-      SpeedMin: 1.500000
-      SpeedMax: 3.500000
-      StartSizeMin: 0.250000
-      StartSizeMax: 0.450000
-      EndSizeMin: 0.050000
-      EndSizeMax: 0.150000
+      MaxParticles: 300
+      EmissionRate: 35.000000
+      LifetimeMin: 0.600000
+      LifetimeMax: 1.200000
+      SpeedMin: 1.000000
+      SpeedMax: 2.500000
+      StartSizeMin: 0.120000
+      StartSizeMax: 0.280000
+      EndSizeMin: 0.030000
+      EndSizeMax: 0.100000
       StartColor: [ 1.000000 , 0.650000 , 0.150000 , 1.000000 ]
       EndColor: [ 0.850000 , 0.120000 , 0.020000 , 0.000000 ]
       GravityModifier: -0.650000

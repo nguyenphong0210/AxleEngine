@@ -1398,6 +1398,8 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     Axle::SceneRenderSettings renderSettings;
     renderSettings.EnableShadows = true;
     renderSettings.EnableSkybox = true;
+    renderSettings.EnableToneMapping = true;
+    renderSettings.EnableFXAA = true;
     renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
     renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
 

@@ -14,7 +14,7 @@ T ClampZeroOne(T value) {
 // Size: EXACTLY 128 bytes (32 DWORDs) - Guaranteed hardware limit across Vulkan & D3D12
 // -----------------------------------------------------------------------------
 cbuffer ObjectConstants : register(b0, space0) {
-    float4x4 u_ModelViewProjection; // 64 bytes (Offset 0)
+    float4x4 u_Model;               // 64 bytes (Offset 0) - Model matrix
     float4   u_ColorPrimary;        // 16 bytes (Offset 64) - Albedo/BaseColor
     float4   u_ColorSecondary;      // 16 bytes (Offset 80) - Secondary/Pattern tint
     float4   u_Params;              // 16 bytes (Offset 96) - x: TileScale/UVScale, y: ShadingMode, z: Roughness, w: Metallic
@@ -116,10 +116,11 @@ struct PSInput {
 // =============================================================================
 PSInput VSMain(VSInput input) {
     PSInput output;
-    output.PositionCS  = mul(u_ModelViewProjection, float4(input.Position, 1.0));
-    output.WorldPos    = input.Position;
-    output.NormalWS    = input.Normal;
-    output.TangentWS   = input.Tangent;
+    float4 worldPos    = mul(u_Model, float4(input.Position, 1.0));
+    output.PositionCS  = mul(u_ViewProjection, worldPos);
+    output.WorldPos    = worldPos.xyz;
+    output.NormalWS    = normalize(mul((float3x3)u_Model, input.Normal));
+    output.TangentWS   = float4(normalize(mul((float3x3)u_Model, input.Tangent.xyz)), input.Tangent.w);
     output.TexCoord    = input.TexCoord;
     output.VertexColor = input.Color;
     output.LocalPos    = input.Position;
@@ -385,22 +386,47 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float envIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
         ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao;
     } else {
-        // Analytical hemisphere ambient fallback
-        float3 ambientLightColor = hasMultiLightSun ? u_SunLight.AmbientColor.rgb : ((length(u_AmbientLight.rgb) > 0.01) ? u_AmbientLight.rgb : float3(0.22, 0.25, 0.32));
-        float ambientIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
-        float3 ambientDiffuse = ambientKD * albedo.rgb * ambientLightColor * ambientIntensity;
-        float3 ambientSpecular = ambientF * ambientLightColor * ambientIntensity * (1.0 - roughness) * 0.45;
-        ambient = (ambientDiffuse + ambientSpecular) * ao;
+        // Analytical hemisphere ambient reflection (matches realistic automotive sheen)
+        float upWeight = saturate(N.y * 0.5 + 0.5);
+        float zenithWeight = saturate(N.y);
+        float3 skyZenith = float3(0.18, 0.42, 0.78);
+        float3 skyHorizon = float3(0.70, 0.82, 0.95);
+        float3 groundColor = float3(0.18, 0.16, 0.14);
+
+        float3 skyUpper = lerp(skyHorizon, skyZenith, zenithWeight);
+        float3 hemisphereLight = lerp(groundColor, skyUpper, upWeight);
+        float3 ambientDiffuse = hemisphereLight * albedo.rgb * ambientKD;
+
+        float3 R = reflect(-V, N);
+        float specZenith = saturate(R.y);
+        float3 specUpper = lerp(skyHorizon, skyZenith, specZenith);
+        float horizonFactor = smoothstep(-0.06, 0.06, R.y);
+        float3 specSky = lerp(groundColor, specUpper, horizonFactor);
+
+        // Specular sun reflection lobe for glossy metals & car clearcoat
+        float sunSpec = pow(max(dot(R, sunDir), 0.0), lerp(64.0, 8.0, roughness));
+        specSky += sunColor * sunSpec * (1.0 - roughness * 0.8) * 0.5;
+
+        float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.5);
+
+        float ambientIntensity = hasMultiLightSun ? max(0.28, u_SunLight.ColorAndAmbient.w) : 0.85;
+        ambient = (ambientDiffuse * ambientIntensity + specularAmbient) * ao;
     }
     
     // 10. Total Radiance Accumulation (Linear HDR Radiance)
     float3 color = ambient + Lo + emissive;
     
-    // 11. Tone Mapping & Color Polish (Reinhard Operator & Gamma Correction)
+    // 11. Tone Mapping & Color Polish (ACES Filmic Operator & Gamma Correction)
     // If u_CameraPosition.w > 0.0 (HDR Post-Processing Mode): Output pure linear HDR radiance
-    // If u_CameraPosition.w <= 0.0 (Legacy SDR Fallback): Apply baked-in Reinhard & 2.2 Gamma
+    // If u_CameraPosition.w <= 0.0 (Legacy SDR Fallback): Apply ACES Filmic & 2.2 Gamma
     if (u_CameraPosition.w <= 0.0) {
-        color = color / (color + float3(1.0, 1.0, 1.0));
+        // ACES Filmic (Narkowicz fit)
+        const float a = 2.51;
+        const float b = 0.03;
+        const float c = 2.43;
+        const float d = 0.59;
+        const float e = 0.14;
+        color = saturate((color * (a * color + b)) / (color * (c * color + d) + e));
         color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
     }
     

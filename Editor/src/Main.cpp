@@ -30,11 +30,24 @@ static void WriteCrashInfo(const char* title, DWORD code, void* addr, PEXCEPTION
                 (void*)targetAddr);
         }
 
+        HANDLE hProcess = GetCurrentProcess();
+        SymInitialize(hProcess, NULL, TRUE);
+
         void* stack[64];
         unsigned short frames = CaptureStackBackTrace(0, 64, stack, NULL);
         fprintf(f, "\nCallstack Backtrace (%u frames):\n", frames);
         for (unsigned short i = 0; i < frames; ++i) {
-            fprintf(f, "  [%02u] 0x%p\n", i, stack[i]);
+            DWORD64 displacement = 0;
+            char buffer[sizeof(SYMBOL_INFO) + 256 * sizeof(TCHAR)];
+            PSYMBOL_INFO pSymbol = (PSYMBOL_INFO)buffer;
+            pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+            pSymbol->MaxNameLen = 255;
+
+            if (SymFromAddr(hProcess, (DWORD64)stack[i], &displacement, pSymbol)) {
+                fprintf(f, "  [%02u] 0x%p %s + 0x%llX\n", i, stack[i], pSymbol->Name, displacement);
+            } else {
+                fprintf(f, "  [%02u] 0x%p\n", i, stack[i]);
+            }
         }
         fflush(f);
         fclose(f);
@@ -175,10 +188,16 @@ int main(int argc, char** argv) {
             .GraphicsBackend = activeAPI
         };
 
-        auto app = std::make_unique<Axle::Application>(spec);
-        app->SetUIContext(std::make_unique<Axle::ImGuiLayer>(Axle::ToImGuiBackend(activeAPI)));
-        app->PushLayer(std::make_shared<EditorLayer>());
-        app->Run();
+        {
+            auto app = std::make_unique<Axle::Application>(spec);
+            app->SetUIContext(std::make_unique<Axle::ImGuiLayer>(Axle::ToImGuiBackend(activeAPI)));
+            app->PushLayer(std::make_shared<EditorLayer>());
+            app->Run();
+        }
+
+        if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
+            Axle::RHI::RHIDevice::Get().Shutdown();
+        }
     } catch (const std::exception& e) {
         AXLE_CRITICAL("Unhandled C++ Exception: {0}", e.what());
         fprintf(stderr, "[FATAL] Unhandled C++ Exception: %s\n", e.what());

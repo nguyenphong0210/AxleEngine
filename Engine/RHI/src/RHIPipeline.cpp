@@ -248,10 +248,6 @@ namespace Axle::RHI {
         auto& rhiDevice = RHIDevice::Get();
         const auto& nriCore = rhiDevice.GetNRICore();
 
-        if (rhiDevice.IsInitialized()) {
-            rhiDevice.WaitIdle();
-        }
-
         for (auto& entry : m_LRUList) {
             if (entry.Pipeline && rhiDevice.IsInitialized()) {
                 nriCore.DestroyPipeline(entry.Pipeline);

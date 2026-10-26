@@ -377,7 +377,9 @@ namespace Axle::RHI {
     }
 
     void RHIDevice::WaitIdle() {
-        if (m_Initialized && m_GraphicsQueue && m_NRI.Core.QueueWaitIdle) {
+        if (m_Initialized && m_Device && m_NRI.Core.DeviceWaitIdle) {
+            m_NRI.Core.DeviceWaitIdle(m_Device);
+        } else if (m_Initialized && m_GraphicsQueue && m_NRI.Core.QueueWaitIdle) {
             m_NRI.Core.QueueWaitIdle(m_GraphicsQueue);
         }
     }
@@ -386,8 +388,6 @@ namespace Axle::RHI {
         if (!m_Initialized) return;
 
         AXLE_CORE_INFO("Shutting down RHI Device ({0})...", RHITypeToString(m_Capabilities.ActiveBackend));
-
-        WaitIdle();
 
         RHIPipelineCache::Get().Clear();
 

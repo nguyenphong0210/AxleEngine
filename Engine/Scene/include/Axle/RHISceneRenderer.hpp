@@ -45,6 +45,14 @@ namespace Axle {
     };
     static_assert(sizeof(RHIToneMappingConstants) == 256, "RHIToneMappingConstants must be 256 bytes aligned!");
 
+    // 256-byte CBV aligned constants for FXAA 3.11 post-processing pass
+    struct alignas(256) RHIFXAAConstants {
+        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // (width, height, 1/w, 1/h)
+        glm::vec4 FXAAParams{ 0.75f, 0.166f, 0.0833f, 0.0f };                     // (subpixQuality, edgeThreshold, edgeThresholdMin, reserved)
+        glm::vec4 Reserved[14]{};                                                 // 224 bytes padding -> Total: 256 bytes
+    };
+    static_assert(sizeof(RHIFXAAConstants) == 256, "RHIFXAAConstants must be 256 bytes aligned!");
+
     class RHISceneRenderer {
     public:
         RHISceneRenderer();
@@ -99,8 +107,8 @@ namespace Axle {
         RHI::RHITextureFormat GetRenderTargetDepthFormat() const;
         bool IsHDR() const { return m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT; }
 
-        nri::Pipeline* GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT);
-        nri::Pipeline* GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT);
+        nri::Pipeline* GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1);
+        nri::Pipeline* GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1);
 
         // Image-Based Lighting (IBL) configuration
         void SetIBLMaps(const std::shared_ptr<RHI::RHITexture>& irradiance,
@@ -147,6 +155,37 @@ namespace Axle {
         RHI::RHIBuffer& GetToneMappingConstantBuffer() { return m_ToneMappingConstantBuffer; }
         RHI::RHITexture* GetIntermediateHDRTarget() const { return m_IntermediateHDRTarget.get(); }
 
+        // Fast Approximate Anti-Aliasing (FXAA 3.11 Quality) Post-Processing Pass
+        void RenderFXAA(RHI::RHICommandBuffer& cmd,
+                        RHI::RHITexture* inputTexture,
+                        RHI::RHITexture* outputTarget,
+                        const RHIFXAAConstants& constants);
+
+        void RenderFXAA(RHI::RHICommandBuffer& cmd,
+                        RHI::RHITexture* inputTexture,
+                        RHI::RHITexture* outputTarget,
+                        const SceneRenderSettings& settings = SceneRenderSettings{});
+
+        void RenderFXAA(RHI::RHICommandBuffer& cmd,
+                        nri::Descriptor* inputSRV,
+                        nri::Texture* outputTarget,
+                        nri::Descriptor* outputRTV,
+                        uint32_t width, uint32_t height,
+                        nri::Format outFormat,
+                        const RHIFXAAConstants& constants);
+
+        nri::Pipeline* GetFXAAPipeline() const { return m_FXAAPipelineSDR; }
+        nri::Pipeline* GetHDRFXAAPipeline() const { return m_FXAAPipelineHDR; }
+        nri::Pipeline* GetOrCreateFXAAPipeline(nri::Format colorFormat);
+        RHI::RHIPipelineLayout& GetFXAAPipelineLayout() { return m_FXAAPipelineLayout; }
+        RHI::RHIBuffer& GetFXAAConstantBuffer() { return m_FXAAConstantBuffer; }
+
+        // Hardware MSAA & Intermediate AA targets
+        RHI::RHITexture* GetMSAAColorTarget() const { return m_MSAAColorTarget.get(); }
+        RHI::RHITexture* GetMSAADepthTarget() const { return m_MSAADepthTarget.get(); }
+        RHI::RHITexture* GetIntermediateFXAATarget() const { return m_IntermediateFXAATarget.get(); }
+        uint8_t GetCurrentMSAASamples() const { return m_CurrentMSAASamples; }
+
     private:
         bool CompileShaders(RHI::RHIDevice& device);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
@@ -159,6 +198,10 @@ namespace Axle {
         bool CompileToneMappingShaders(RHI::RHIDevice& device);
         bool CreateToneMappingPipelineLayout(RHI::RHIDevice& device);
         bool CreateToneMappingPipeline(RHI::RHIDevice& device);
+
+        bool CompileFXAAShaders(RHI::RHIDevice& device);
+        bool CreateFXAAPipelineLayout(RHI::RHIDevice& device);
+        bool CreateFXAAPipeline(RHI::RHIDevice& device);
 
     private:
         RHI::RHIDevice* m_Device = nullptr;
@@ -204,9 +247,26 @@ namespace Axle {
         RHI::RHIDescriptorPool m_ToneMappingDescriptorPool;
         nri::DescriptorSet* m_ToneMappingDescriptorSet = nullptr;
 
+        // Fast Approximate Anti-Aliasing (FXAA) Resources
+        RHI::RHIPipelineLayout m_FXAAPipelineLayout;
+        nri::Pipeline* m_FXAAPipelineSDR = nullptr;
+        nri::Pipeline* m_FXAAPipelineHDR = nullptr;
+        RHI::RHIBuffer m_FXAAConstantBuffer;
+        RHI::RHIShaderBytecode m_FXAAVertexShader;
+        RHI::RHIShaderBytecode m_FXAAPixelShader;
+        RHI::RHISampler m_FXAASampler;
+        RHI::RHIDescriptorPool m_FXAADescriptorPool;
+        nri::DescriptorSet* m_FXAADescriptorSet = nullptr;
+
         // Intermediate Floating-point HDR Target for 2-pass Scene -> ToneMap execution
         std::unique_ptr<RHI::RHITexture> m_IntermediateHDRTarget;
         std::unique_ptr<RHI::RHITexture> m_IntermediateHDRDepthTarget;
+
+        // Intermediate FXAA Target and Hardware MSAA Targets
+        std::unique_ptr<RHI::RHITexture> m_IntermediateFXAATarget;
+        std::unique_ptr<RHI::RHITexture> m_MSAAColorTarget;
+        std::unique_ptr<RHI::RHITexture> m_MSAADepthTarget;
+        uint8_t m_CurrentMSAASamples = 1;
 
         RHI::RHICommandBuffer m_CommandBuffer;
         std::unique_ptr<RHI::RHIStreamer> m_Streamer;

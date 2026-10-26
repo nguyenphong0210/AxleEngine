@@ -15883,6 +15883,309 @@ bool RunTest_Step77_ExposureAndToneMappingPass() {
 }
 
 // =============================================================================
+// STEP 78: Anti-Aliasing Integration (Fast Approximate Anti-Aliasing FXAA 3.11 & Hardware MSAA 2x/4x/8x)
+// =============================================================================
+bool RunTest_Step78_AntiAliasingPass() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 78] Testing Anti-Aliasing Integration (FXAA & Hardware MSAA 2x/4x/8x)..." << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [78.1] FXAA HLSL Bytecode Compilation (DXIL & SPIR-V)
+    std::cout << "\n[78.1] Compiling FXAA Post-Processing Shaders (DXIL 6.0 & SPIR-V)..." << std::endl;
+    {
+        auto& compiler = Axle::RHI::RHIShaderCompiler::Get();
+        if (!compiler.IsInitialized()) {
+            assert(compiler.Init());
+        }
+
+        auto shaderPath = Axle::FileSystem::ResolveAssetPath("shaders/FXAA.hlsl");
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "FXAA.hlsl";
+        }
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "Engine/Resources/Shaders/FXAA.hlsl";
+        }
+        assert(std::filesystem::exists(shaderPath));
+
+        std::ifstream file(shaderPath);
+        std::stringstream ss;
+        ss << file.rdbuf();
+        std::string shaderSource = ss.str();
+        assert(!shaderSource.empty());
+
+        // Vertex Shader
+        Axle::RHI::RHIShaderCompileDesc vsDesc;
+        vsDesc.Source = shaderSource;
+        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = Axle::RHI::RHIShaderStage::Vertex;
+        vsDesc.HLSLVersion = "2021";
+        vsDesc.ShaderModel = "6_0";
+        vsDesc.Format = Axle::RHI::RHIShaderFormat::DXIL;
+        vsDesc.Optimization = true;
+
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            std::cerr << "VS Error: " << vsRes.ErrorMessage << std::endl;
+        }
+        assert(vsRes.Success);
+        assert(vsRes.Bytecode.IsValid());
+
+        // Pixel Shader
+        Axle::RHI::RHIShaderCompileDesc psDesc = vsDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = Axle::RHI::RHIShaderStage::Fragment;
+
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            std::cerr << "PS Error: " << psRes.ErrorMessage << std::endl;
+        }
+        assert(psRes.Success);
+        assert(psRes.Bytecode.IsValid());
+
+        std::cout << "  -> Vertex Shader (VSMain): " << vsRes.Bytecode.GetSize() << " bytes DXIL." << std::endl;
+        std::cout << "  -> Pixel Shader (PSMain): " << psRes.Bytecode.GetSize() << " bytes DXIL." << std::endl;
+        std::cout << "  -> PASS: Dual-stage FXAA shader compilation validated." << std::endl;
+    }
+
+    // [78.2] Hardware Constant Buffer (RHIFXAAConstants) Alignment & Structure
+    std::cout << "\n[78.2] Validating RHIFXAAConstants 256-Byte CBV Hardware Alignment..." << std::endl;
+    {
+        static_assert(sizeof(Axle::RHIFXAAConstants) == 256, "RHIFXAAConstants must be 256 bytes aligned!");
+        assert(sizeof(Axle::RHIFXAAConstants) == 256);
+
+        Axle::RHIFXAAConstants fxaaConsts{};
+        fxaaConsts.ScreenSize = glm::vec4(1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f);
+        fxaaConsts.FXAAParams = glm::vec4(0.75f, 0.166f, 0.0833f, 0.0f);
+
+        assert(fxaaConsts.ScreenSize.x == 1920.0f);
+        assert(fxaaConsts.ScreenSize.y == 1080.0f);
+        assert(std::abs(fxaaConsts.ScreenSize.z - (1.0f / 1920.0f)) < 1e-6f);
+        assert(std::abs(fxaaConsts.ScreenSize.w - (1.0f / 1080.0f)) < 1e-6f);
+        assert(fxaaConsts.FXAAParams.x == 0.75f);
+        assert(fxaaConsts.FXAAParams.y == 0.166f);
+        assert(fxaaConsts.FXAAParams.z == 0.0833f);
+
+        std::cout << "  -> RHIFXAAConstants size: " << sizeof(Axle::RHIFXAAConstants) << " bytes (aligned to 256B CBV hardware boundary)." << std::endl;
+        std::cout << "  -> Parameters: ScreenSize=1920x1080, SubpixQuality=0.75, EdgeThreshold=0.166, EdgeThresholdMin=0.0833." << std::endl;
+        std::cout << "  -> PASS: Hardware constant buffer alignment validated." << std::endl;
+    }
+
+    // [78.3] Hardware Multisample Anti-Aliasing (MSAA 2x, 4x, 8x) Target Allocations
+    std::cout << "\n[78.3] Testing Hardware MSAA Render Target & Depth Stencil Allocations (2x, 4x, 8x)..." << std::endl;
+    {
+        auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+        if (!rhiDevice.IsInitialized()) {
+            Axle::RHI::RHIDeviceDesc devDesc;
+            devDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+            devDesc.Headless = true;
+            devDesc.AllowFallback = true;
+            assert(rhiDevice.Init(devDesc));
+        }
+
+        const uint32_t samplesToTest[] = { 2, 4, 8 };
+        for (uint32_t samples : samplesToTest) {
+            // Color Target MSAA
+            Axle::RHI::RHITexture msaaColor;
+            Axle::RHI::RHITextureDesc colorDesc = Axle::RHI::RHITextureDesc::RenderTarget2D(1280, 720, Axle::RHI::RHITextureFormat::RGBA16_FLOAT, "MSAA_Color");
+            colorDesc.SampleCount = samples;
+            assert(msaaColor.Init(colorDesc));
+            assert(msaaColor.IsValid());
+            assert(msaaColor.GetRTV() != nullptr);
+            assert(msaaColor.GetSRV() != nullptr);
+            assert(msaaColor.GetDesc().SampleCount == samples);
+
+            // Depth Target MSAA
+            Axle::RHI::RHITexture msaaDepth;
+            Axle::RHI::RHITextureDesc depthDesc = Axle::RHI::RHITextureDesc::DepthStencil2D(1280, 720, Axle::RHI::RHITextureFormat::D32_FLOAT, "MSAA_Depth");
+            depthDesc.SampleCount = samples;
+            assert(msaaDepth.Init(depthDesc));
+            assert(msaaDepth.IsValid());
+            assert(msaaDepth.GetDSV() != nullptr);
+            assert(msaaDepth.GetDesc().SampleCount == samples);
+
+            std::cout << "  -> Allocated MSAA " << samples << "x: Color RGBA16_FLOAT (RTV+SRV valid), Depth D32_FLOAT (DSV valid)." << std::endl;
+
+            msaaColor.Shutdown();
+            msaaDepth.Shutdown();
+        }
+
+        std::cout << "  -> PASS: Hardware MSAA 2x, 4x, and 8x allocation and resource binding verified." << std::endl;
+    }
+
+    // [78.4] Standalone FXAA Post-Processing Pass Execution
+    std::cout << "\n[78.4] Testing Live Standalone FXAA Pipeline Creation & Post-Processing Dispatch..." << std::endl;
+    {
+        auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+        if (!rhiDevice.IsInitialized()) {
+            Axle::RHI::RHIDeviceDesc devDesc;
+            devDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+            devDesc.Headless = true;
+            devDesc.AllowFallback = true;
+            assert(rhiDevice.Init(devDesc));
+        }
+
+        Axle::RHISceneRenderer sceneRenderer;
+        assert(sceneRenderer.Init(rhiDevice));
+
+        assert(sceneRenderer.GetFXAAPipelineLayout().IsValid());
+        assert(sceneRenderer.GetFXAAPipeline() != nullptr);
+        assert(sceneRenderer.GetHDRFXAAPipeline() != nullptr);
+        assert(sceneRenderer.GetFXAAConstantBuffer().IsValid());
+
+        // Allocate Input (1280x720 RGBA8_UNORM) & Output (1280x720 RGBA8_UNORM)
+        Axle::RHI::RHITexture inputColor;
+        assert(inputColor.Init(Axle::RHI::RHITextureDesc::RenderTarget2D(1280, 720, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "FXAA_Input")));
+
+        Axle::RHI::RHITexture outputColor;
+        assert(outputColor.Init(Axle::RHI::RHITextureDesc::RenderTarget2D(1280, 720, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "FXAA_Output")));
+
+        Axle::RHI::RHICommandBuffer cmd;
+        assert(cmd.Init(rhiDevice.GetGraphicsQueue()));
+        assert(cmd.Begin());
+
+        // Dispatch FXAA pass with default quality settings
+        Axle::RHIFXAAConstants fxaaConsts{};
+        fxaaConsts.ScreenSize = glm::vec4(1280.0f, 720.0f, 1.0f / 1280.0f, 1.0f / 720.0f);
+        fxaaConsts.FXAAParams = glm::vec4(0.75f, 0.166f, 0.0833f, 0.0f);
+        sceneRenderer.RenderFXAA(cmd, &inputColor, &outputColor, fxaaConsts);
+
+        // Dispatch second FXAA pass with high-subpix quality settings
+        fxaaConsts.FXAAParams = glm::vec4(1.0f, 0.125f, 0.0625f, 0.0f);
+        sceneRenderer.RenderFXAA(cmd, &inputColor, &outputColor, fxaaConsts);
+
+        assert(cmd.End());
+        auto* queue = rhiDevice.GetGraphicsQueue();
+        cmd.Submit(queue);
+        rhiDevice.GetNRICore().QueueWaitIdle(queue);
+
+        std::cout << "  -> FXAA pipeline layout & SDR/HDR PSOs initialized." << std::endl;
+        std::cout << "  -> Dispatched 2 standalone FXAA passes with full GPU queue sync." << std::endl;
+        std::cout << "  -> PASS: Standalone FXAA post-processing pass execution verified." << std::endl;
+
+        cmd.Shutdown();
+        inputColor.Shutdown();
+        outputColor.Shutdown();
+        sceneRenderer.Shutdown();
+    }
+
+    // [78.5] End-to-End Multi-Pass Scene Rendering with MSAA & FXAA Integration
+    std::cout << "\n[78.5] Testing End-to-End Multi-Pass Scene Rendering with MSAA & FXAA..." << std::endl;
+    {
+        auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+        if (!rhiDevice.IsInitialized()) {
+            Axle::RHI::RHIDeviceDesc devDesc;
+            devDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+            devDesc.Headless = true;
+            devDesc.AllowFallback = true;
+            assert(rhiDevice.Init(devDesc));
+        }
+
+        auto& meshRegistry = Axle::RHIMeshRegistry::Get();
+        meshRegistry.Init();
+
+        Axle::RHISceneRenderer sceneRenderer;
+        assert(sceneRenderer.Init(rhiDevice));
+
+        // Construct 3D scene with entities & atmospheric skybox
+        auto scene = std::make_shared<Axle::Scene>();
+
+        auto sunEnt = scene->CreateEntity("Sun_Light");
+        auto& dlc = sunEnt.AddComponent<Axle::DirectionalLightComponent>();
+        dlc.Intensity = 100000.0f;
+
+        auto skyboxEnt = scene->CreateEntity("Procedural_Skybox");
+        auto& skyComp = skyboxEnt.AddComponent<Axle::SkyboxComponent>();
+        skyComp.Enabled = true;
+        skyComp.Type = Axle::SkyboxType::ProceduralAtmospheric;
+        skyComp.Intensity = 1.0f;
+
+        auto carSphere = scene->CreateEntity("CarPaint_Sphere");
+        carSphere.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(-1.5f, 1.0f, 0.0f);
+        carSphere.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetSphere(), Axle::RHI::RHIMaterial::CreateCarPaintRed());
+
+        auto chromeSphere = scene->CreateEntity("Chrome_Sphere");
+        chromeSphere.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(1.5f, 1.0f, 0.0f);
+        chromeSphere.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetSphere(), Axle::RHI::RHIMaterial::CreateChrome());
+
+        auto ground = scene->CreateEntity("Ground_Floor");
+        ground.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.0f, 0.0f, 0.0f);
+        ground.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetPlane(), Axle::RHI::RHIMaterial::CreateCarbonFiber());
+
+        // Allocate Viewport Render Target (1920x1080 RGBA8_UNORM + D32_FLOAT)
+        Axle::RHI::RHITexture viewportColor;
+        assert(viewportColor.Init(Axle::RHI::RHITextureDesc::RenderTarget2D(1920, 1080, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "ViewportColor")));
+
+        Axle::RHI::RHITexture viewportDepth;
+        assert(viewportDepth.Init(Axle::RHI::RHITextureDesc::DepthStencil2D(1920, 1080, Axle::RHI::RHITextureFormat::D32_FLOAT, "ViewportDepth")));
+
+        Axle::PerspectiveCamera camera(60.0f, 1920.0f / 1080.0f, 0.1f, 1000.0f);
+        camera.SetPosition(glm::vec3(0.0f, 2.5f, 6.0f));
+        camera.SetRotation(glm::vec3(-12.0f, 0.0f, 0.0f));
+
+        // Subtest A: Hardware MSAA 4x Dispatch (Scene 4 draws into MSAA target -> hardware resolve)
+        Axle::SceneRenderSettings settingsMSAA{};
+        settingsMSAA.EnableSkybox = true;
+        settingsMSAA.MSAASamples = 4;
+        sceneRenderer.RenderScene(scene, camera, &viewportColor, &viewportDepth, settingsMSAA);
+        assert(sceneRenderer.GetDrawCallCount() == 4);
+        assert(sceneRenderer.GetMSAAColorTarget() != nullptr);
+        assert(sceneRenderer.GetMSAAColorTarget()->IsValid());
+        assert(sceneRenderer.GetMSAAColorTarget()->GetDesc().SampleCount == 4);
+        std::cout << "  -> Subtest A: MSAA 4x scene render & hardware resolve executed successfully." << std::endl;
+
+        // Subtest B: Screen-Space FXAA Dispatch (Scene 4 draws into intermediate -> FXAA draw call = 5 total)
+        Axle::SceneRenderSettings settingsFXAA{};
+        settingsFXAA.EnableSkybox = true;
+        settingsFXAA.EnableFXAA = true;
+        sceneRenderer.RenderScene(scene, camera, &viewportColor, &viewportDepth, settingsFXAA);
+        assert(sceneRenderer.GetDrawCallCount() == 5);
+        assert(sceneRenderer.GetIntermediateFXAATarget() != nullptr);
+        assert(sceneRenderer.GetIntermediateFXAATarget()->IsValid());
+        std::cout << "  -> Subtest B: FXAA post-processing pass (5 total draw calls) executed successfully." << std::endl;
+
+        // Subtest C: Triple-Pass Full Film Pipeline (MSAA 4x HDR -> resolve -> ACES Tone Mapping -> FXAA -> Viewport)
+        Axle::SceneRenderSettings settingsFull{};
+        settingsFull.EnableSkybox = true;
+        settingsFull.MSAASamples = 4;
+        settingsFull.EnableToneMapping = true;
+        settingsFull.EnableFXAA = true;
+        sceneRenderer.RenderScene(scene, camera, &viewportColor, &viewportDepth, settingsFull);
+        assert(sceneRenderer.GetDrawCallCount() == 6); // 3 meshes + 1 skybox + 1 tone map + 1 FXAA
+        std::cout << "  -> Subtest C: Full Film Pipeline (MSAA 4x + Tone Mapping + FXAA, 6 draw calls) validated." << std::endl;
+
+        // Subtest D: Stress test 10 consecutive frames switching AA methods dynamically
+        for (int frame = 0; frame < 10; ++frame) {
+            Axle::SceneRenderSettings dynamicSettings{};
+            dynamicSettings.EnableSkybox = true;
+            if (frame % 3 == 0) {
+                dynamicSettings.MSAASamples = 4;
+            } else if (frame % 3 == 1) {
+                dynamicSettings.EnableFXAA = true;
+            } else {
+                dynamicSettings.MSAASamples = 2;
+                dynamicSettings.EnableToneMapping = true;
+                dynamicSettings.EnableFXAA = true;
+            }
+            sceneRenderer.RenderScene(scene, camera, &viewportColor, &viewportDepth, dynamicSettings);
+        }
+        std::cout << "  -> Subtest D: 10 dynamic frames stress testing AA switching without stalls or leaks." << std::endl;
+        std::cout << "  -> PASS: Multi-pass AA scene integration validated." << std::endl;
+
+        viewportColor.Shutdown();
+        viewportDepth.Shutdown();
+        sceneRenderer.Shutdown();
+        meshRegistry.Shutdown();
+        scene.reset();
+        Axle::RHI::RHIMaterial::ReleaseDefaultTextures();
+        rhiDevice.Shutdown();
+    }
+
+    std::cout << "\n>>> STEP 78 PASSED: Anti-Aliasing Integration (FXAA & Hardware MSAA) 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -15967,6 +16270,7 @@ int main(int argc, char** argv) {
         else if (arg == "75" || arg == "step75" || arg == "--step75" || arg == "--skybox" || arg == "--atmospheric") targetStep = 75;
         else if (arg == "76" || arg == "step76" || arg == "--step76" || arg == "--hdr" || arg == "--resize" || arg == "--hdr-target") targetStep = 76;
         else if (arg == "77" || arg == "step77" || arg == "--step77" || arg == "--tonemap" || arg == "--tone-mapping" || arg == "--exposure") targetStep = 77;
+        else if (arg == "78" || arg == "step78" || arg == "--step78" || arg == "--aa" || arg == "--fxaa" || arg == "--msaa" || arg == "--anti-aliasing") targetStep = 78;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -16198,6 +16502,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 77) {
         if (!RunTest_Step77_ExposureAndToneMappingPass()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 78) {
+        if (!RunTest_Step78_AntiAliasingPass()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

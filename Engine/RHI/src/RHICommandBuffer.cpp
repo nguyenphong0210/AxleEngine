@@ -338,6 +338,11 @@ namespace Axle::RHI {
         RHIDevice::Get().GetNRICore().CmdClearAttachments(*m_CommandBuffer, clearDescs, clearDescNum, rects, rectNum);
     }
 
+    void RHICommandBuffer::ResolveTexture(nri::Texture* dstTexture, const nri::Texture* srcTexture, nri::ResolveOp resolveOp) {
+        if (!m_CommandBuffer || !m_IsRecording || !dstTexture || !srcTexture) return;
+        RHIDevice::Get().GetNRICore().CmdResolveTexture(*m_CommandBuffer, *dstTexture, nullptr, *srcTexture, nullptr, resolveOp);
+    }
+
     void RHICommandBuffer::Draw(const nri::DrawDesc& drawDesc) {
         if (!m_CommandBuffer || !m_IsRecording) return;
         RHIDevice::Get().GetNRICore().CmdDraw(*m_CommandBuffer, drawDesc);

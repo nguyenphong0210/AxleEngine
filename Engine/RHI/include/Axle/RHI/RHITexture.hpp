@@ -30,6 +30,20 @@ namespace Axle::RHI {
         }
     }
 
+    inline RHITextureFormat FromNRIFormat(nri::Format format) {
+        switch (format) {
+            case nri::Format::RGBA8_UNORM:       return RHITextureFormat::RGBA8_UNORM;
+            case nri::Format::RGBA8_SRGB:        return RHITextureFormat::RGBA8_SRGB;
+            case nri::Format::BGRA8_UNORM:       return RHITextureFormat::BGRA8_UNORM;
+            case nri::Format::RGBA16_SFLOAT:     return RHITextureFormat::RGBA16_FLOAT;
+            case nri::Format::RGBA32_SFLOAT:     return RHITextureFormat::RGBA32_FLOAT;
+            case nri::Format::R32_SFLOAT:        return RHITextureFormat::R32_FLOAT;
+            case nri::Format::D32_SFLOAT:        return RHITextureFormat::D32_FLOAT;
+            case nri::Format::D24_UNORM_S8_UINT: return RHITextureFormat::D24_UNORM_S8_UINT;
+            default:                             return RHITextureFormat::RGBA8_UNORM;
+        }
+    }
+
     enum class RHITextureUsage : uint32_t {
         None            = 0,
         ShaderResource  = 1 << 0,

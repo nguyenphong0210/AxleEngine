@@ -205,13 +205,47 @@ namespace Axle {
 
         m_ToneMappingConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIToneMappingConstants), RHIMemoryLocation::HostUpload, "ToneMappingConstantsBuffer"));
 
+        // Initialize Fast Approximate Anti-Aliasing (FXAA 3.11 Quality) Pipeline & Resources
+        if (CompileFXAAShaders(device) && CreateFXAAPipelineLayout(device)) {
+            if (!CreateFXAAPipeline(device)) {
+                AXLE_CORE_WARN("RHISceneRenderer: Failed to create FXAA graphics pipeline!");
+            }
+        }
+
+        if (!m_FXAASampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Bilinear Clamp Sampler for FXAA.");
+        }
+
+        if (!m_FXAADescriptorPool.Init(RHIDescriptorPoolDesc::Tier2Bindless(64, 16))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize FXAA Descriptor Pool!");
+        } else if (m_FXAAPipelineLayout.IsValid()) {
+            m_FXAADescriptorSet = m_FXAADescriptorPool.AllocateDescriptorSet(m_FXAAPipelineLayout, 0);
+            if (m_FXAADescriptorSet && m_FXAASampler.IsValid()) {
+                m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 1, 0, m_FXAASampler.GetNative());
+            }
+        }
+
+        m_FXAAConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIFXAAConstants), RHIMemoryLocation::HostUpload, "FXAAConstantsBuffer"));
+
         m_Initialized = true;
-        AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering, Descriptor Pools, Forward+ Multi-Light Buffer & Film-Grade Tone Mapping.");
+        AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering, Descriptor Pools, Forward+ Multi-Light Buffer, Film-Grade Tone Mapping & Anti-Aliasing (FXAA/MSAA).");
         return true;
     }
 
     void RHISceneRenderer::Shutdown() {
         if (!m_Initialized) return;
+
+        m_FXAAPipelineSDR = nullptr;
+        m_FXAAPipelineHDR = nullptr;
+        m_FXAAPipelineLayout.Shutdown();
+        m_FXAAConstantBuffer.Shutdown();
+        m_FXAADescriptorSet = nullptr;
+        m_FXAADescriptorPool.Shutdown();
+        m_FXAASampler.Shutdown();
+        m_IntermediateFXAATarget.reset();
+        m_MSAAColorTarget.reset();
+        m_MSAADepthTarget.reset();
+        m_CurrentMSAASamples = 1;
 
         m_ToneMappingPipelineSDR = nullptr;
         m_ToneMappingPipelineHDR = nullptr;
@@ -388,7 +422,7 @@ namespace Axle {
         }
     }
 
-    nri::Pipeline* RHISceneRenderer::GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat) {
+    nri::Pipeline* RHISceneRenderer::GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_PipelineLayout;
         gfxDesc.Shaders = { m_VertexShader, m_PixelShader };
@@ -404,6 +438,7 @@ namespace Axle {
 
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.SampleCount = sampleCount;
 
         // Configure 64-byte RHIVertex3D input layout
         RHIVertexInputDesc inputDesc;
@@ -501,7 +536,7 @@ namespace Axle {
         return m_SkyboxPipelineLayout.Init(layoutDesc);
     }
 
-    nri::Pipeline* RHISceneRenderer::GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat) {
+    nri::Pipeline* RHISceneRenderer::GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_SkyboxPipelineLayout;
         gfxDesc.Shaders = { m_SkyboxVertexShader, m_SkyboxPixelShader };
@@ -517,6 +552,7 @@ namespace Axle {
 
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.SampleCount = sampleCount;
 
         // Empty vertex input layout (full-screen triangle generated via SV_VertexID)
         gfxDesc.VertexInput = RHIVertexInputDesc{};
@@ -657,6 +693,134 @@ namespace Axle {
         m_ToneMappingPipelineSDR = GetOrCreateToneMappingPipeline(nri::Format::RGBA8_UNORM);
         m_ToneMappingPipelineHDR = GetOrCreateToneMappingPipeline(nri::Format::RGBA16_SFLOAT);
         return m_ToneMappingPipelineSDR != nullptr && m_ToneMappingPipelineHDR != nullptr;
+    }
+
+    bool RHISceneRenderer::CompileFXAAShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        if (!compiler.IsInitialized()) {
+            compiler.Init();
+        }
+
+        std::string shaderSource;
+        auto shaderPath = FileSystem::ResolveAssetPath("shaders/FXAA.hlsl");
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "FXAA.hlsl";
+        }
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "Engine/Resources/Shaders/FXAA.hlsl";
+        }
+
+        if (std::filesystem::exists(shaderPath)) {
+            std::ifstream file(shaderPath);
+            if (file.is_open()) {
+                std::stringstream ss;
+                ss << file.rdbuf();
+                shaderSource = ss.str();
+            }
+        }
+
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate FXAA.hlsl!");
+            return false;
+        }
+
+        RHIShaderCompileDesc vsDesc;
+        vsDesc.Source = shaderSource;
+        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        vsDesc.HLSLVersion = "2021";
+        vsDesc.ShaderModel = "6_0";
+        vsDesc.Format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        vsDesc.Optimization = true;
+
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile FXAA VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_FXAAVertexShader = vsRes.Bytecode;
+
+        RHIShaderCompileDesc psDesc = vsDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = RHIShaderStage::Fragment;
+
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile FXAA PS: {0}", psRes.ErrorMessage);
+            return false;
+        }
+        m_FXAAPixelShader = psRes.Bytecode;
+
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateFXAAPipelineLayout(RHIDevice& device) {
+        // Root Descriptor [0] b0, space 0: 256-byte RHIFXAAConstants
+        nri::RootDescriptorDesc rootDesc = {};
+        rootDesc.registerIndex = 0;
+        rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDesc.shaderStages = nri::StageBits::ALL;
+
+        // Descriptor Set (space 1):
+        // Range 0: t0 (Input Texture)
+        // Range 1: s0 (Linear Sampler)
+        nri::DescriptorRangeDesc ranges[2] = {};
+        ranges[0].baseRegisterIndex = 0;
+        ranges[0].descriptorNum = 1;
+        ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        ranges[1].baseRegisterIndex = 0;
+        ranges[1].descriptorNum = 1;
+        ranges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc descSet = {};
+        descSet.registerSpace = 1;
+        descSet.ranges = ranges;
+        descSet.rangeNum = 2;
+
+        nri::PipelineLayoutDesc layoutDesc = {};
+        layoutDesc.rootRegisterSpace = 0;
+        layoutDesc.rootDescriptors = &rootDesc;
+        layoutDesc.rootDescriptorNum = 1;
+        layoutDesc.descriptorSets = &descSet;
+        layoutDesc.descriptorSetNum = 1;
+        layoutDesc.shaderStages = nri::StageBits::ALL;
+
+        return m_FXAAPipelineLayout.Init(layoutDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateFXAAPipeline(nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_FXAAPipelineLayout;
+        gfxDesc.Shaders = { m_FXAAVertexShader, m_FXAAPixelShader };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+
+        // Empty vertex input layout (full-screen triangle generated via SV_VertexID)
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+
+        auto& cache = RHIPipelineCache::Get();
+        return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreateFXAAPipeline(RHIDevice& device) {
+        m_FXAAPipelineSDR = GetOrCreateFXAAPipeline(nri::Format::RGBA8_UNORM);
+        m_FXAAPipelineHDR = GetOrCreateFXAAPipeline(nri::Format::RGBA16_SFLOAT);
+        return m_FXAAPipelineSDR != nullptr && m_FXAAPipelineHDR != nullptr;
     }
 
     void RHISceneRenderer::SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat) {
@@ -826,12 +990,44 @@ namespace Axle {
             m_LastStreamedTransformBytes += sizeof(RHISceneConstants);
         }
 
-        // Determine whether intermediate HDR target is used for 2-pass tone mapping
+        // Determine whether intermediate targets are used for MSAA, Tone Mapping & FXAA
+        bool useMSAA = (settings.MSAASamples > 1);
+        uint8_t activeSampleCount = useMSAA ? settings.MSAASamples : 1;
+        bool useToneMap = settings.EnableToneMapping;
+        bool useFXAA = settings.EnableFXAA;
+
         nri::Texture* sceneTargetTexture = colorTarget;
         nri::Descriptor* sceneTargetRTV = colorRTV;
+        nri::Texture* sceneDepthTexture = depthTarget;
+        nri::Descriptor* sceneDepthDSV = depthDSV;
         nri::Format sceneTargetFormat = m_CurrentColorFormat;
 
-        if (settings.EnableToneMapping) {
+        if (useMSAA) {
+            sceneTargetFormat = useToneMap ? nri::Format::RGBA16_SFLOAT : m_CurrentColorFormat;
+            if (!m_MSAAColorTarget || m_MSAAColorTarget->GetWidth() != width || m_MSAAColorTarget->GetHeight() != height ||
+                m_CurrentMSAASamples != activeSampleCount || m_MSAAColorTarget->GetFormat() != RHI::FromNRIFormat(sceneTargetFormat) ||
+                !m_MSAADepthTarget || m_MSAADepthTarget->GetFormat() != RHI::FromNRIFormat(m_CurrentDepthFormat)) {
+                m_MSAAColorTarget = std::make_unique<RHITexture>();
+                RHITextureDesc colorDesc = RHITextureDesc::RenderTarget2D(width, height, RHI::FromNRIFormat(sceneTargetFormat), "SceneRenderer_MSAAColor");
+                colorDesc.SampleCount = activeSampleCount;
+                m_MSAAColorTarget->Init(colorDesc);
+
+                m_MSAADepthTarget = std::make_unique<RHITexture>();
+                RHITextureDesc depthDesc = RHITextureDesc::DepthStencil2D(width, height, RHI::FromNRIFormat(m_CurrentDepthFormat), "SceneRenderer_MSAADepth");
+                depthDesc.SampleCount = activeSampleCount;
+                m_MSAADepthTarget->Init(depthDesc);
+
+                m_CurrentMSAASamples = activeSampleCount;
+            }
+            if (m_MSAAColorTarget && m_MSAAColorTarget->IsValid()) {
+                sceneTargetTexture = m_MSAAColorTarget->GetNative();
+                sceneTargetRTV = m_MSAAColorTarget->GetRTV();
+            }
+            if (m_MSAADepthTarget && m_MSAADepthTarget->IsValid()) {
+                sceneDepthTexture = m_MSAADepthTarget->GetNative();
+                sceneDepthDSV = m_MSAADepthTarget->GetDSV();
+            }
+        } else if (useToneMap) {
             if (!m_IntermediateHDRTarget || m_IntermediateHDRTarget->GetWidth() != width || m_IntermediateHDRTarget->GetHeight() != height) {
                 m_IntermediateHDRTarget = std::make_unique<RHITexture>();
                 m_IntermediateHDRTarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHITextureFormat::RGBA16_FLOAT, "SceneRenderer_IntermediateHDR"));
@@ -841,6 +1037,16 @@ namespace Axle {
                 sceneTargetRTV = m_IntermediateHDRTarget->GetRTV();
                 sceneTargetFormat = nri::Format::RGBA16_SFLOAT;
             }
+        } else if (useFXAA) {
+            if (!m_IntermediateFXAATarget || m_IntermediateFXAATarget->GetWidth() != width || m_IntermediateFXAATarget->GetHeight() != height) {
+                m_IntermediateFXAATarget = std::make_unique<RHITexture>();
+                m_IntermediateFXAATarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHI::FromNRIFormat(m_CurrentColorFormat), "SceneRenderer_IntermediateFXAA"));
+            }
+            if (m_IntermediateFXAATarget && m_IntermediateFXAATarget->IsValid()) {
+                sceneTargetTexture = m_IntermediateFXAATarget->GetNative();
+                sceneTargetRTV = m_IntermediateFXAATarget->GetRTV();
+                sceneTargetFormat = m_CurrentColorFormat;
+            }
         }
 
         // 2. Begin Command Recording
@@ -848,8 +1054,8 @@ namespace Axle {
 
         // Transition Color & Depth Attachments for rendering
         m_CommandBuffer.TransitionTexture(sceneTargetTexture, RHIResourceLayout::ShaderResource, RHIResourceLayout::ColorAttachment);
-        if (depthTarget) {
-            m_CommandBuffer.TransitionTexture(depthTarget, RHIResourceLayout::DepthStencilRead, RHIResourceLayout::DepthStencilWrite);
+        if (sceneDepthTexture) {
+            m_CommandBuffer.TransitionTexture(sceneDepthTexture, RHIResourceLayout::DepthStencilRead, RHIResourceLayout::DepthStencilWrite);
         }
 
         // 3. Begin Rendering Pass
@@ -860,8 +1066,8 @@ namespace Axle {
         colorAttachment.clearValue.color.f = { 0.12f, 0.14f, 0.18f, 1.0f };
 
         nri::AttachmentDesc depthAttachment = {};
-        if (depthDSV) {
-            depthAttachment.descriptor = depthDSV;
+        if (sceneDepthDSV) {
+            depthAttachment.descriptor = sceneDepthDSV;
             depthAttachment.loadOp = nri::LoadOp::CLEAR;
             depthAttachment.storeOp = nri::StoreOp::STORE;
             depthAttachment.clearValue.depthStencil.depth = 1.0f;
@@ -871,7 +1077,7 @@ namespace Axle {
         nri::RenderingDesc renderingDesc = {};
         renderingDesc.colors = &colorAttachment;
         renderingDesc.colorNum = 1;
-        if (depthDSV) {
+        if (sceneDepthDSV) {
             renderingDesc.depth = depthAttachment;
         }
 
@@ -884,12 +1090,12 @@ namespace Axle {
         nri::Rect scissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
         m_CommandBuffer.SetScissor(scissor);
 
-        // Bind Graphics Pipeline & Layout matching active color & depth formats
-        nri::Pipeline* activePipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR)
+        // Bind Graphics Pipeline & Layout matching active color & depth formats and sample count
+        nri::Pipeline* activePipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR && activeSampleCount == 1)
                                             ? m_PipelineHDR
-                                            : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_Pipeline)
+                                            : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_Pipeline && activeSampleCount == 1)
                                                   ? m_Pipeline
-                                                  : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat);
+                                                  : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
         m_CommandBuffer.SetPipeline(activePipeline ? activePipeline : m_Pipeline);
         m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
 
@@ -1037,11 +1243,11 @@ namespace Axle {
                 }
 
                 // 4. Bind Skybox Graphics Pipeline matching active color & depth formats
-                nri::Pipeline* activeSkyboxPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR)
+                nri::Pipeline* activeSkyboxPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
                                                           ? m_SkyboxPipelineHDR
-                                                          : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline)
+                                                          : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline && activeSampleCount == 1)
                                                                 ? m_SkyboxPipeline
-                                                                : GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat);
+                                                                : GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
                 m_CommandBuffer.SetPipeline(activeSkyboxPipeline ? activeSkyboxPipeline : m_SkyboxPipeline);
                 m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SkyboxPipelineLayout);
                 if (m_SkyboxConstantBuffer.IsValid() && m_SkyboxConstantBuffer.GetCBV()) {
@@ -1059,23 +1265,78 @@ namespace Axle {
 
         // Transition scene color target back to ShaderResource
         m_CommandBuffer.TransitionTexture(sceneTargetTexture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
-        if (depthTarget) {
-            m_CommandBuffer.TransitionTexture(depthTarget, RHIResourceLayout::DepthStencilWrite, RHIResourceLayout::DepthStencilRead);
+        if (sceneDepthTexture) {
+            m_CommandBuffer.TransitionTexture(sceneDepthTexture, RHIResourceLayout::DepthStencilWrite, RHIResourceLayout::DepthStencilRead);
         }
 
-        // 7. Post-Processing Tone Mapping Pass
-        if (settings.EnableToneMapping && m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid()) {
+        // 7. Resolve Hardware MSAA if enabled
+        if (useMSAA && m_MSAAColorTarget && m_MSAAColorTarget->IsValid()) {
+            nri::Texture* resolveDstTexture = colorTarget;
+            if (useToneMap) {
+                if (!m_IntermediateHDRTarget || m_IntermediateHDRTarget->GetWidth() != width || m_IntermediateHDRTarget->GetHeight() != height) {
+                    m_IntermediateHDRTarget = std::make_unique<RHITexture>();
+                    m_IntermediateHDRTarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHITextureFormat::RGBA16_FLOAT, "SceneRenderer_IntermediateHDR"));
+                }
+                resolveDstTexture = m_IntermediateHDRTarget->GetNative();
+            } else if (useFXAA) {
+                if (!m_IntermediateFXAATarget || m_IntermediateFXAATarget->GetWidth() != width || m_IntermediateFXAATarget->GetHeight() != height) {
+                    m_IntermediateFXAATarget = std::make_unique<RHITexture>();
+                    m_IntermediateFXAATarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHI::FromNRIFormat(m_CurrentColorFormat), "SceneRenderer_IntermediateFXAA"));
+                }
+                resolveDstTexture = m_IntermediateFXAATarget->GetNative();
+            }
+
+            m_CommandBuffer.TransitionTexture(m_MSAAColorTarget->GetNative(), RHIResourceLayout::ShaderResource, RHIResourceLayout::ResolveSource);
+            m_CommandBuffer.TransitionTexture(resolveDstTexture, RHIResourceLayout::ShaderResource, RHIResourceLayout::ResolveDest);
+            m_CommandBuffer.ResolveTexture(resolveDstTexture, m_MSAAColorTarget->GetNative(), nri::ResolveOp::AVERAGE);
+            m_CommandBuffer.TransitionTexture(resolveDstTexture, RHIResourceLayout::ResolveDest, RHIResourceLayout::ShaderResource);
+            m_CommandBuffer.TransitionTexture(m_MSAAColorTarget->GetNative(), RHIResourceLayout::ResolveSource, RHIResourceLayout::ShaderResource);
+        }
+
+        // 8. Post-Processing Tone Mapping Pass
+        if (useToneMap && m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid()) {
             RHIToneMappingConstants toneConstants{};
             toneConstants.Params = glm::vec4(settings.Exposure, settings.Gamma, static_cast<float>(settings.ToneMappingMode), settings.WhitePoint);
             toneConstants.ColorGrading = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
 
+            nri::Texture* toneOutTexture = colorTarget;
+            nri::Descriptor* toneOutRTV = colorRTV;
+            if (useFXAA) {
+                if (!m_IntermediateFXAATarget || m_IntermediateFXAATarget->GetWidth() != width || m_IntermediateFXAATarget->GetHeight() != height) {
+                    m_IntermediateFXAATarget = std::make_unique<RHITexture>();
+                    m_IntermediateFXAATarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHI::FromNRIFormat(m_CurrentColorFormat), "SceneRenderer_IntermediateFXAA"));
+                }
+                toneOutTexture = m_IntermediateFXAATarget->GetNative();
+                toneOutRTV = m_IntermediateFXAATarget->GetRTV();
+            }
+
             RenderToneMapping(m_CommandBuffer,
                               m_IntermediateHDRTarget->GetSRV(),
-                              colorTarget,
-                              colorRTV,
+                              toneOutTexture,
+                              toneOutRTV,
                               width, height,
                               m_CurrentColorFormat,
                               toneConstants);
+        }
+
+        // 9. Post-Processing FXAA Pass
+        if (useFXAA && m_IntermediateFXAATarget && m_IntermediateFXAATarget->IsValid()) {
+            RHIFXAAConstants fxaaConstants{};
+            fxaaConstants.ScreenSize = glm::vec4(
+                static_cast<float>(width),
+                static_cast<float>(height),
+                1.0f / static_cast<float>(width),
+                1.0f / static_cast<float>(height)
+            );
+            fxaaConstants.FXAAParams = glm::vec4(settings.FXAASubpixQuality, settings.FXAAEdgeThreshold, settings.FXAAEdgeThresholdMin, 0.0f);
+
+            RenderFXAA(m_CommandBuffer,
+                       m_IntermediateFXAATarget->GetSRV(),
+                       colorTarget,
+                       colorRTV,
+                       width, height,
+                       m_CurrentColorFormat,
+                       fxaaConstants);
         }
 
         // 8. End and Submit to Queue
@@ -1176,6 +1437,112 @@ namespace Axle {
         if (m_ToneMappingDescriptorPool.IsValid() && m_ToneMappingDescriptorSet) {
             m_ToneMappingDescriptorPool.Bind(cmd.GetNative());
             RHIDescriptorPool::BindDescriptorSet(cmd.GetNative(), 0, m_ToneMappingDescriptorSet);
+        }
+
+        // Draw full-screen triangle via SV_VertexID
+        cmd.Draw(3, 1, 0, 0);
+
+        cmd.EndRendering();
+
+        // Transition back to ShaderResource for presentation
+        cmd.TransitionTexture(outputTarget, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
+
+        m_LastDrawCallCount++;
+    }
+
+    void RHISceneRenderer::RenderFXAA(RHI::RHICommandBuffer& cmd,
+                                      RHI::RHITexture* inputTexture,
+                                      RHI::RHITexture* outputTarget,
+                                      const RHIFXAAConstants& constants)
+    {
+        if (!inputTexture || !inputTexture->IsValid() || !outputTarget || !outputTarget->IsValid()) return;
+
+        RenderFXAA(cmd,
+                   inputTexture->GetSRV(),
+                   outputTarget->GetNative(),
+                   outputTarget->GetRTV(),
+                   outputTarget->GetWidth(),
+                   outputTarget->GetHeight(),
+                   RHI::ToNRIFormat(outputTarget->GetFormat()),
+                   constants);
+    }
+
+    void RHISceneRenderer::RenderFXAA(RHI::RHICommandBuffer& cmd,
+                                      RHI::RHITexture* inputTexture,
+                                      RHI::RHITexture* outputTarget,
+                                      const SceneRenderSettings& settings)
+    {
+        if (!outputTarget || !outputTarget->IsValid()) return;
+        RHIFXAAConstants constants{};
+        constants.ScreenSize = glm::vec4(
+            static_cast<float>(outputTarget->GetWidth()),
+            static_cast<float>(outputTarget->GetHeight()),
+            1.0f / static_cast<float>(outputTarget->GetWidth()),
+            1.0f / static_cast<float>(outputTarget->GetHeight())
+        );
+        constants.FXAAParams = glm::vec4(settings.FXAASubpixQuality, settings.FXAAEdgeThreshold, settings.FXAAEdgeThresholdMin, 0.0f);
+        RenderFXAA(cmd, inputTexture, outputTarget, constants);
+    }
+
+    void RHISceneRenderer::RenderFXAA(RHI::RHICommandBuffer& cmd,
+                                      nri::Descriptor* inputSRV,
+                                      nri::Texture* outputTarget,
+                                      nri::Descriptor* outputRTV,
+                                      uint32_t width, uint32_t height,
+                                      nri::Format outFormat,
+                                      const RHIFXAAConstants& constants)
+    {
+        if (!m_Initialized || !inputSRV || !outputTarget || !outputRTV || width == 0 || height == 0) return;
+
+        // 1. Update 256-byte FXAA Constants
+        if (m_FXAAConstantBuffer.IsValid()) {
+            m_FXAAConstantBuffer.UpdateData(&constants, sizeof(RHIFXAAConstants));
+        }
+
+        // 2. Bind Texture SRV & Sampler in Space 1
+        if (m_FXAADescriptorPool.IsValid() && m_FXAADescriptorSet) {
+            m_FXAADescriptorPool.UpdateTexture(m_FXAADescriptorSet, 0, 0, inputSRV);
+            if (m_FXAASampler.IsValid()) {
+                m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 1, 0, m_FXAASampler.GetNative());
+            }
+        }
+
+        // 3. Transition Output Texture for Color Rendering
+        cmd.TransitionTexture(outputTarget, RHIResourceLayout::ShaderResource, RHIResourceLayout::ColorAttachment);
+
+        // 4. Begin Rendering Pass
+        nri::AttachmentDesc colorAttachment = {};
+        colorAttachment.descriptor = outputRTV;
+        colorAttachment.loadOp = nri::LoadOp::CLEAR;
+        colorAttachment.storeOp = nri::StoreOp::STORE;
+
+        nri::RenderingDesc renderingDesc = {};
+        renderingDesc.colors = &colorAttachment;
+        renderingDesc.colorNum = 1;
+
+        cmd.BeginRendering(renderingDesc);
+
+        nri::Viewport vp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+        cmd.SetViewport(vp);
+
+        nri::Rect scissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+        cmd.SetScissor(scissor);
+
+        nri::Pipeline* activePipeline = (outFormat == nri::Format::RGBA16_SFLOAT && m_FXAAPipelineHDR)
+                                            ? m_FXAAPipelineHDR
+                                            : (outFormat == nri::Format::RGBA8_UNORM && m_FXAAPipelineSDR)
+                                                  ? m_FXAAPipelineSDR
+                                                  : GetOrCreateFXAAPipeline(outFormat);
+        cmd.SetPipeline(activePipeline ? activePipeline : m_FXAAPipelineSDR);
+        cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_FXAAPipelineLayout);
+
+        if (m_FXAAConstantBuffer.IsValid() && m_FXAAConstantBuffer.GetCBV()) {
+            cmd.SetRootDescriptor(0, m_FXAAConstantBuffer.GetCBV());
+        }
+
+        if (m_FXAADescriptorPool.IsValid() && m_FXAADescriptorSet) {
+            m_FXAADescriptorPool.Bind(cmd.GetNative());
+            RHIDescriptorPool::BindDescriptorSet(cmd.GetNative(), 0, m_FXAADescriptorSet);
         }
 
         // Draw full-screen triangle via SV_VertexID

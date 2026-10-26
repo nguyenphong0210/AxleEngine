@@ -21,12 +21,17 @@ namespace Axle {
         bool EnableShadows = true;
         bool EnableSkybox = true;
         bool EnableToneMapping = false;
+        bool EnableFXAA = false;
+        uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8
         bool ShowPhysicsDebug = false;
         PhysicsDrawSettings PhysicsDrawSettings;
         float Exposure = 1.0f;
         int ToneMappingMode = 0; // 0: ACES Filmic, 1: Reinhard, 2: Uncharted 2, 3: Linear Bypass
         float Gamma = 2.2f;
         float WhitePoint = 4.0f; // Configurable white point for Extended Reinhard & Uncharted 2
+        float FXAASubpixQuality = 0.75f;
+        float FXAAEdgeThreshold = 0.166f;
+        float FXAAEdgeThresholdMin = 0.0833f;
     };
 
     class SceneRenderer {

@@ -81,6 +81,7 @@ namespace Axle::RHI {
         void BeginRendering(const nri::RenderingDesc& renderingDesc);
         void EndRendering();
         void ClearAttachments(const nri::ClearAttachmentDesc* clearDescs, uint32_t clearDescNum, const nri::Rect* rects = nullptr, uint32_t rectNum = 0);
+        void ResolveTexture(nri::Texture* dstTexture, const nri::Texture* srcTexture, nri::ResolveOp resolveOp = nri::ResolveOp::AVERAGE);
 
         // Draw & Dispatch
         void Draw(const nri::DrawDesc& drawDesc);

@@ -18,6 +18,8 @@ namespace Axle {
     class Vehicle;
     class SkinningPipeline;
     class ParticleRenderer;
+    class RHIParticleRenderer;
+    namespace RHI { class RHICommandBuffer; }
     struct DirectionalLightComponent;
     struct SkyboxComponent;
 
@@ -96,6 +98,8 @@ namespace Axle {
         // Render particle emitters (GPU-instanced billboarding)
         void RenderParticles(ParticleRenderer& particleRenderer, const PerspectiveCamera& camera,
                              const std::shared_ptr<class Framebuffer>& targetFBO = nullptr);
+        void RenderParticles(RHIParticleRenderer& particleRenderer, const PerspectiveCamera& camera,
+                             RHI::RHICommandBuffer& cmd);
 
         // Simulation runtime lifecycle & dynamic vehicle assembly (Phase 20.3 Stage 2)
         void OnRuntimeStart(PhysicsScene* physicsScene = nullptr);

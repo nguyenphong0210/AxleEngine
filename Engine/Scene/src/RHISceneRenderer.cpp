@@ -1,4 +1,5 @@
 #include <Axle/RHISceneRenderer.hpp>
+#include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
@@ -227,6 +228,12 @@ namespace Axle {
 
         m_FXAAConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIFXAAConstants), RHIMemoryLocation::HostUpload, "FXAAConstantsBuffer"));
 
+        // Initialize GPU Instanced Particle VFX Renderer
+        m_ParticleRenderer = std::make_unique<RHIParticleRenderer>();
+        if (!m_ParticleRenderer->Init(device)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize GPU Instanced Particle VFX Renderer!");
+        }
+
         m_Initialized = true;
         AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering, Descriptor Pools, Forward+ Multi-Light Buffer, Film-Grade Tone Mapping & Anti-Aliasing (FXAA/MSAA).");
         return true;
@@ -234,6 +241,11 @@ namespace Axle {
 
     void RHISceneRenderer::Shutdown() {
         if (!m_Initialized) return;
+
+        if (m_ParticleRenderer) {
+            m_ParticleRenderer->Shutdown();
+            m_ParticleRenderer.reset();
+        }
 
         m_FXAAPipelineSDR = nullptr;
         m_FXAAPipelineHDR = nullptr;
@@ -1260,7 +1272,16 @@ namespace Axle {
             }
         }
 
-        // 6. End Scene Rendering Pass
+        // 6. GPU Instanced Particle VFX Pass (Tire smoke, drift dust, exhaust backfire flames, impacts)
+        if (settings.EnableParticles && m_ParticleRenderer && scene) {
+            m_ParticleRenderer->ResetMetrics();
+            m_ParticleRenderer->Begin(m_CommandBuffer, camera, sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
+            scene->RenderParticles(*m_ParticleRenderer, camera, m_CommandBuffer);
+            m_ParticleRenderer->End();
+            m_LastDrawCallCount += m_ParticleRenderer->GetDrawCallCount();
+        }
+
+        // 7. End Scene Rendering Pass
         m_CommandBuffer.EndRendering();
 
         // Transition scene color target back to ShaderResource

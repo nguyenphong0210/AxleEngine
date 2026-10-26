@@ -9,6 +9,7 @@
 #include <Axle/Vehicle.hpp>
 #include <Axle/SkinningPipeline.hpp>
 #include <Axle/ParticleRenderer.hpp>
+#include <Axle/RHIParticleRenderer.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -1653,6 +1654,92 @@ namespace Axle {
         }
 
         particleRenderer.End();
+    }
+
+    void Scene::RenderParticles(RHIParticleRenderer& particleRenderer, const PerspectiveCamera& camera,
+                                RHI::RHICommandBuffer& cmd) {
+        auto view = m_Registry.view<ParticleEmitterComponent, TransformComponent>();
+
+        bool hasParticles = false;
+        for (auto entityID : view) {
+            auto& pec = view.get<ParticleEmitterComponent>(entityID);
+            if (pec.Visible && pec.System && pec.System->GetActiveParticleCount() > 0) {
+                hasParticles = true;
+                break;
+            }
+        }
+        if (!hasParticles) {
+            auto vvfxView = m_Registry.view<VehicleVFXComponent>();
+            for (auto entityID : vvfxView) {
+                auto& vvfx = vvfxView.get<VehicleVFXComponent>(entityID);
+                if (vvfx.Enabled && vvfx.RuntimeVFX && vvfx.RuntimeVFX->GetTotalActiveParticles() > 0) {
+                    hasParticles = true;
+                    break;
+                }
+            }
+        }
+        if (!hasParticles) {
+            auto cvfxView = m_Registry.view<CharacterVFXComponent>();
+            for (auto entityID : cvfxView) {
+                auto& cvfx = cvfxView.get<CharacterVFXComponent>(entityID);
+                if (cvfx.Enabled && cvfx.RuntimeVFX && cvfx.RuntimeVFX->GetTotalActiveParticles() > 0) {
+                    hasParticles = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasParticles) return;
+
+        // 1. Render standalone ParticleEmitterComponents
+        for (auto entityID : view) {
+            auto& pec = view.get<ParticleEmitterComponent>(entityID);
+            if (!pec.Visible || !pec.System || pec.System->GetActiveParticleCount() == 0) continue;
+
+            particleRenderer.Render(cmd, *pec.System, nullptr, nullptr, pec.Config.SoftnessDistance);
+        }
+
+        // 2. Render Vehicle VFX particle systems (Wheel smoke, drift dust, exhaust flames & sparks)
+        auto vvfxView = m_Registry.view<VehicleVFXComponent>();
+        for (auto entityID : vvfxView) {
+            auto& vvfx = vvfxView.get<VehicleVFXComponent>(entityID);
+            if (!vvfx.Enabled || !vvfx.RuntimeVFX) continue;
+
+            for (uint32_t i = 0; i < 4; ++i) {
+                auto smoke = vvfx.RuntimeVFX->GetWheelSmokeSystem(i);
+                if (smoke && smoke->GetActiveParticleCount() > 0) {
+                    particleRenderer.Render(cmd, *smoke, nullptr, nullptr, 0.5f);
+                }
+                auto rooster = vvfx.RuntimeVFX->GetWheelRoosterSystem(i);
+                if (rooster && rooster->GetActiveParticleCount() > 0) {
+                    particleRenderer.Render(cmd, *rooster, nullptr, nullptr, 0.5f);
+                }
+            }
+            auto flame = vvfx.RuntimeVFX->GetExhaustFlameSystem();
+            if (flame && flame->GetActiveParticleCount() > 0) {
+                particleRenderer.Render(cmd, *flame, nullptr, nullptr, 0.5f);
+            }
+            auto sparks = vvfx.RuntimeVFX->GetExhaustSparkSystem();
+            if (sparks && sparks->GetActiveParticleCount() > 0) {
+                particleRenderer.Render(cmd, *sparks, nullptr, nullptr, 0.5f);
+            }
+        }
+
+        // 3. Render Character VFX particle systems (Footstep dust, landing shockwaves)
+        auto cvfxView = m_Registry.view<CharacterVFXComponent>();
+        for (auto entityID : cvfxView) {
+            auto& cvfx = cvfxView.get<CharacterVFXComponent>(entityID);
+            if (!cvfx.Enabled || !cvfx.RuntimeVFX) continue;
+
+            auto footstep = cvfx.RuntimeVFX->GetFootstepSystem();
+            if (footstep && footstep->GetActiveParticleCount() > 0) {
+                particleRenderer.Render(cmd, *footstep, nullptr, nullptr, 0.5f);
+            }
+            auto shockwave = cvfx.RuntimeVFX->GetLandingShockwaveSystem();
+            if (shockwave && shockwave->GetActiveParticleCount() > 0) {
+                particleRenderer.Render(cmd, *shockwave, nullptr, nullptr, 0.5f);
+            }
+        }
     }
 
 }

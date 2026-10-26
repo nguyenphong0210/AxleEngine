@@ -23,6 +23,7 @@
 namespace Axle {
 
     class Scene;
+    class RHIParticleRenderer;
 
     // 256-byte CBV aligned constants for Atmospheric Skybox pass
     struct RHISkyboxConstants {
@@ -186,6 +187,9 @@ namespace Axle {
         RHI::RHITexture* GetIntermediateFXAATarget() const { return m_IntermediateFXAATarget.get(); }
         uint8_t GetCurrentMSAASamples() const { return m_CurrentMSAASamples; }
 
+        // GPU Instanced Particle VFX Renderer
+        RHIParticleRenderer* GetParticleRenderer() const { return m_ParticleRenderer.get(); }
+
     private:
         bool CompileShaders(RHI::RHIDevice& device);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
@@ -267,6 +271,8 @@ namespace Axle {
         std::unique_ptr<RHI::RHITexture> m_MSAAColorTarget;
         std::unique_ptr<RHI::RHITexture> m_MSAADepthTarget;
         uint8_t m_CurrentMSAASamples = 1;
+
+        std::unique_ptr<RHIParticleRenderer> m_ParticleRenderer;
 
         RHI::RHICommandBuffer m_CommandBuffer;
         std::unique_ptr<RHI::RHIStreamer> m_Streamer;

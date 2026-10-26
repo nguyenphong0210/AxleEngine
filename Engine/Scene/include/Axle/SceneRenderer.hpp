@@ -20,6 +20,7 @@ namespace Axle {
     struct SceneRenderSettings {
         bool EnableShadows = true;
         bool EnableSkybox = true;
+        bool EnableParticles = true;
         bool EnableToneMapping = false;
         bool EnableFXAA = false;
         uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8

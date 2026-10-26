@@ -3,6 +3,7 @@ add_library(AxleVFX STATIC
     src/ParticleEmitter.cpp
     src/ParticleSystem.cpp
     src/ParticleRenderer.cpp
+    src/RHIParticleRenderer.cpp
     src/CurlNoise.cpp
     src/ParticleCollision.cpp
     src/ParticleForceField.cpp
@@ -18,6 +19,7 @@ target_link_libraries(AxleVFX
     PUBLIC
         Axle::Core
         Axle::Renderer
+        Axle::RHI
     PRIVATE
         glad
 )

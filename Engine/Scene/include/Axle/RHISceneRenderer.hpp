@@ -26,6 +26,7 @@ namespace Axle {
     class PhysicsScene;
     class RHIParticleRenderer;
     class RHIPhysicsDebugRenderer;
+    class RHIObjectPicker;
 
     // 256-byte CBV aligned constants for Atmospheric Skybox pass
     struct RHISkyboxConstants {
@@ -197,6 +198,11 @@ namespace Axle {
         // RHI Physics Debug Wireframe Renderer
         RHIPhysicsDebugRenderer* GetPhysicsDebugRenderer() const { return m_PhysicsDebugRenderer.get(); }
 
+        // GPU Integer Object ID Picker
+        RHIObjectPicker* GetObjectPicker() const { return m_ObjectPicker.get(); }
+        uint32_t PickEntity(const std::shared_ptr<Scene>& scene, const PerspectiveCamera& camera,
+                            uint32_t width, uint32_t height, uint32_t x, uint32_t y);
+
     private:
         bool CompileShaders(RHI::RHIDevice& device);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
@@ -281,6 +287,7 @@ namespace Axle {
 
         std::unique_ptr<RHIParticleRenderer> m_ParticleRenderer;
         std::unique_ptr<RHIPhysicsDebugRenderer> m_PhysicsDebugRenderer;
+        std::unique_ptr<RHIObjectPicker> m_ObjectPicker;
 
         RHI::RHICommandBuffer m_CommandBuffer;
         std::unique_ptr<RHI::RHIStreamer> m_Streamer;

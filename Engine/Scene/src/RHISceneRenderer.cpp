@@ -1,6 +1,8 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/RHIPhysicsDebugRenderer.hpp>
+#include <Axle/RHIObjectPicker.hpp>
+#include <Axle/PhysicsEngine.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/Vehicle.hpp>
 #include <Axle/Scene.hpp>
@@ -11,6 +13,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 
+#include <iostream>
 #include <fstream>
 #include <sstream>
 
@@ -238,9 +241,18 @@ namespace Axle {
         }
 
         // Initialize RHI Physics Debug Wireframe Line Renderer
+        if (!PhysicsEngine::IsInitialized()) {
+            PhysicsEngine::Init();
+        }
         m_PhysicsDebugRenderer = std::make_unique<RHIPhysicsDebugRenderer>();
         if (!m_PhysicsDebugRenderer->Init(device)) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize RHI Physics Debug Wireframe Line Renderer!");
+        }
+
+        // Initialize GPU Integer Object ID Picker
+        m_ObjectPicker = std::make_unique<RHIObjectPicker>();
+        if (!m_ObjectPicker->Init(device)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize GPU Integer Object ID Picker!");
         }
 
         m_Initialized = true;
@@ -250,6 +262,11 @@ namespace Axle {
 
     void RHISceneRenderer::Shutdown() {
         if (!m_Initialized) return;
+
+        if (m_ObjectPicker) {
+            m_ObjectPicker->Shutdown();
+            m_ObjectPicker.reset();
+        }
 
         if (m_PhysicsDebugRenderer) {
             m_PhysicsDebugRenderer->Shutdown();
@@ -1624,6 +1641,14 @@ namespace Axle {
         cmd.TransitionTexture(outputTarget, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
 
         m_LastDrawCallCount++;
+    }
+
+    uint32_t RHISceneRenderer::PickEntity(const std::shared_ptr<Scene>& scene, const PerspectiveCamera& camera,
+                                          uint32_t width, uint32_t height, uint32_t x, uint32_t y) {
+        if (!m_ObjectPicker || !m_ObjectPicker->IsInitialized()) {
+            return RHIObjectPicker::InvalidEntityID;
+        }
+        return m_ObjectPicker->Pick(scene, camera, width, height, x, y);
     }
 
 }

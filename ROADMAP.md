@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized), with **Phase 33 in active progress**.
-* **Automated Test Verification**: **67 Comprehensive Headless Test Suites** (`AxleTests.exe`, 74 individual test steps up through **Step 82**) passing with **100% pass rate**.
+* **Automated Test Verification**: **68 Comprehensive Headless Test Suites** (`AxleTests.exe`, 75 individual test steps up through **Step 83**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 33 (Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline)** and beyond.
 
 ---
@@ -380,7 +380,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
       - [x] **Hardware Texture Resolve (`CmdResolveTexture`)**: Added native `ResolveTexture` to `RHICommandBuffer` leveraging Direct3D 12 `ResolveSubresource` and Vulkan `vkCmdResolveImage` with explicit `ResolveSource` / `ResolveDest` barrier state transitions.
       - [x] **Multi-Pass Post-Processing Pipeline in `RHISceneRenderer`**: Seamless multi-pass rendering orchestrating any combination of hardware MSAA (2x/4x/8x), film-grade Tone Mapping (ACES/Reinhard/Uncharted 2), and FXAA. Pass 1 renders multi-sampled scene geometry and skybox; Pass 2 resolves MSAA to intermediate HDR or viewport target; Pass 3 applies film-grade tone mapping; Pass 4 dispatches FXAA post-processing directly into the final viewport render target.
       - [x] **Automated Test Suite Step 78 (`AxleTests.exe 78`)**: 5-stage headless test suite validating dual-stage FXAA shader compilation (VS 3044B, PS 8060B), 256-byte CBV alignment, MSAA 2x/4x/8x target allocations, standalone dual-quality FXAA dispatch, and end-to-end multi-pass scene rendering across MSAA, FXAA, and full triple-pass film pipeline (6 draw calls) with dynamic AA switching stress testing and zero GPU memory leaks (100% PASS).
-  - [ ] **Step 5 - Secondary Visual Passes (GPU Particle VFX, Physics Wireframes & GPU Object Picking)**:
+  - [x] **Step 5 - Secondary Visual Passes (GPU Particle VFX, Physics Wireframes & GPU Object Picking)**:
     - [x] **GPU Instanced Particle VFX Pass**:
       - [x] **Procedural Quad Dual-Stage HLSL Shader (`Particle.hlsl`)**: High-performance HLSL 2021 vertex and fragment shader with dual-target compilation to Direct3D 12 DXIL and Vulkan 1.3 SPIR-V. Zero quad vertex/index buffer allocation via `SV_VertexID % 6` unprojection generating unit quad $[-0.5, 0.5]$.
       - [x] **Flexible Billboard Orientations**: Camera-Facing ($XY$ plane oriented to camera right/up vectors), Axial-Y (cylindrical rotation locked around world up $Y$ axis), and Velocity-Aligned (stretched ribbon oriented along particle trajectory).
@@ -401,17 +401,19 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
         - [x] **`PhysicsScene::DrawDebug` & Vehicle Raycast Integration**: Overloaded `PhysicsScene::DrawDebug(JPH::DebugRenderer&)` forward bridge, automatic extraction of Jolt collision shapes (boxes, spheres, capsules, convex hulls, triangle meshes, terrain heightfields), constraints, contact points, and vehicle multi-wheel suspension raycasts into `RHIPhysicsDebugRenderer`.
         - [x] **Zero-Overhead Dynamic Rendering**: Zero physics draw call overhead and line allocations when `ShowPhysicsDebug = false`.
         - [x] **Multi-Pass Pipeline Integration**: Seamless physics wireframe overlay dispatched directly within the active scene render pass before MSAA resolving, HDR Tone Mapping (ACES/Reinhard/Uncharted 2), and FXAA anti-aliasing.
-    - [ ] **Interactive Viewport GPU Object ID Picking**:
+    - [x] **Interactive Viewport GPU Object ID Picking**:
       - [x] **Step 5.3.1 - GPU Integer Render Target (`R32_UINT`), `ObjectID.hlsl` Pipeline & `RHIObjectPicker` Readback**:
         - [x] **Single-Source HLSL 2021 Shader (`ObjectID.hlsl`)**: Dual-stage compilation to Direct3D 12 DXIL (`VSMain` 4360B, `PSMain` 3320B) and Vulkan 1.3 SPIR-V (`VSMain` 1032B, `PSMain` 840B). Outputs raw integer entity IDs directly to `SV_Target0` using an exact 128-byte hardware root constant buffer (`RHIObjectIDPushConstants`).
         - [x] **Discrete GPU Integer Render Target (`R32_UINT`) & Depth Buffer**: Discrete 2D offscreen integer target with `RHITextureUsage::ColorAttachment | RHITextureUsage::HostTransfer`, paired with dedicated `D32_FLOAT` depth buffer, guaranteeing 100% pixel-perfect occlusion across multi-entity 3D scenes.
         - [x] **`RHIObjectPicker` Subsystem**: Autonomous picking pass pipeline (`RenderPickingPass`) with automatic mesh retrieval (`RHIMeshRegistry`), 1-based entity encoding (`u_EntityID + 1`) to preserve 0-clear background (`InvalidEntityID = 0xFFFFFFFF`), and barrier layout transitions (`ShaderResource`/`CopySource` <-> `ColorAttachment`).
         - [x] **Direct Host Memory Readback (`ReadPixel`)**: Zero-CPU-raycast sub-millisecond single-pixel queries via `nri::ReadbackTextureToHostMemory` reading directly from GPU VRAM.
         - [x] **Automated Test Suite Step 82 (`AxleTests.exe 82`)**: 6-stage headless test suite validating 128-byte push constants layout, dual-backend shader compilation, pipeline & PSO lifecycle, multi-entity 3D scene construction, pixel-perfect readback queries (Box_Left = 0, Sphere_Right = 1, Empty Space = 0xFFFFFFFF, occlusion front-to-back), and dynamic resize stress tests (100% PASS).
-      - [ ] **Step 5.3.2 - Viewport Click Picking Integration in `EditorLayer` & `RHISceneRenderer`**:
-        - [ ] Mouse click coordinate translation from ImGui Viewport panel into offscreen render target space.
-        - [ ] Single-click and hover entity selection wired into `SceneHierarchyPanel` and `EditorLayer` active selection.
-        - [ ] Automated Test Suite Step 83 (`AxleTests.exe 83`).
+      - [x] **Step 5.3.2 - Viewport Click Picking Integration in `EditorLayer` & `RHISceneRenderer`**:
+        - [x] **ImGui Viewport Coordinate Translation**: Sub-pixel mouse translation from ImGui viewport window coordinates `(mousePos.x - viewportMin.x, mousePos.y - viewportMin.y)` into GPU integer render target space with automatic boundary clamping and out-of-bounds guards.
+        - [x] **RHISceneRenderer Embedded Picking Bridge**: Embedded `RHIObjectPicker` instance inside `RHISceneRenderer`, exposed via `RHISceneRenderer::PickEntity(scene, camera, width, height, x, y)` and `GetObjectPicker()`.
+        - [x] **Single-Click & Hierarchy Panel Selection Synchronization**: Seamless single-click viewport picking wired directly into `EditorLayer::OnImGuiRender()` when `m_ViewportHovered && ImGui::IsMouseClicked(0)`, synchronizing with `SceneHierarchyPanel::SetSelectedEntity()` and clearing selection on empty sky clicks.
+        - [x] **CullMode Independence & Multi-Pass Coexistence**: Zero backface culling (`CullMode::NONE`) ensuring single-sided and two-sided meshes (planes, ground, leaves, decals) are 100% pickable from any camera angle, coexisting cleanly with active multi-pass scene rendering and zero resource leaks across dynamic resizes.
+        - [x] **Automated Test Suite Step 83 (`AxleTests.exe 83`)**: 6-stage headless test suite validating `RHISceneRenderer` picker lifecycle, 4-entity scene construction (Cube, Sphere, Occluded Cone, Ground Plane), viewport boundary clamping, ray-accurate entity queries, selection bridge synchronization, and multi-pass coexistence (100% PASS).
   - [ ] **Step 6 - Triple-Backend Seamless Switching & Automated Verification (100% Visual Parity)**:
     - [ ] Seamless CLI switcher verification: `--rhi=dx12`, `--rhi=vulkan`, and `--rhi=opengl` producing pixel-accurate scene renders, lighting, shadows, and physics interactions.
     - [ ] In-Editor Project Settings RHI Selector & Restart Workflow: Dedicated `Project Settings -> Graphics RHI` dropdown (`Direct3D 12`, `Vulkan 1.3`, `OpenGL 4.5`), persistent serialization into `.axleproject` (`ProjectConfig`), and automated seamless Editor restart prompt ("Save & Restart Now") without manual command-line flags.

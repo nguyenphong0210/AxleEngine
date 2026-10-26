@@ -154,7 +154,7 @@ namespace Axle {
         gfxDesc.Shaders = { m_VertexShader, m_PixelShader };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
-        gfxDesc.Rasterizer.CullMode = nri::CullMode::BACK;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
         gfxDesc.Rasterizer.FrontCounterClockwise = false;
 
         gfxDesc.DepthStencil.DepthTestEnable = true;

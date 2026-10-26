@@ -28,6 +28,7 @@
 #include <AxleTerrain/TerrainSerializer.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
+#include <Axle/RHIObjectPicker.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -2493,7 +2494,32 @@ void EditorLayer::OnImGuiRender() {
             float mouseY = mousePos.y - viewportMin.y;
 
             if (mouseX >= 0.0f && mouseX < viewportBounds.x && mouseY >= 0.0f && mouseY < viewportBounds.y) {
-                float ndcX = (2.0f * (mouseX / viewportBounds.x)) - 1.0f;
+                bool handledByGPU = false;
+                if (m_RHISceneRenderer && m_RHISceneRenderer->GetObjectPicker() && m_RHISceneRenderer->GetObjectPicker()->IsInitialized()) {
+                    uint32_t px = static_cast<uint32_t>(glm::clamp(mouseX, 0.0f, viewportBounds.x - 1.0f));
+                    uint32_t py = static_cast<uint32_t>(glm::clamp(mouseY, 0.0f, viewportBounds.y - 1.0f));
+                    uint32_t pickedID = m_RHISceneRenderer->PickEntity(
+                        m_Scene,
+                        m_CameraController->GetCamera(),
+                        static_cast<uint32_t>(viewportBounds.x),
+                        static_cast<uint32_t>(viewportBounds.y),
+                        px, py
+                    );
+
+                    if (pickedID != RHIObjectPicker::InvalidEntityID && m_Scene && m_Scene->GetRegistry().valid(static_cast<entt::entity>(pickedID))) {
+                        Axle::Entity pickedEntity(static_cast<entt::entity>(pickedID), m_Scene.get());
+                        std::string tag = pickedEntity.HasComponent<Axle::TagComponent>() ? pickedEntity.GetComponent<Axle::TagComponent>().Tag : "Unnamed";
+                        AXLE_INFO("[GPU PICK] Selected Entity ID: {}, Tag: '{}' at pixel ({}, {})", pickedID, tag, px, py);
+                        m_SceneHierarchyPanel.SetSelectedEntity(pickedEntity);
+                    } else {
+                        AXLE_INFO("[GPU PICK] Clicked empty space at pixel ({}, {}), clearing selection", px, py);
+                        m_SceneHierarchyPanel.SetSelectedEntity({});
+                    }
+                    handledByGPU = true;
+                }
+
+                if (!handledByGPU) {
+                    float ndcX = (2.0f * (mouseX / viewportBounds.x)) - 1.0f;
                 float ndcY = 1.0f - (2.0f * (mouseY / viewportBounds.y));
 
                 glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
@@ -2587,6 +2613,7 @@ void EditorLayer::OnImGuiRender() {
                     } else {
                         AXLE_WARN("[PICK] Non-finite ray origin/dir calculated, skipping CastRay");
                     }
+                }
                 }
             }
         }

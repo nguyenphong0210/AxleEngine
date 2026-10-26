@@ -4,6 +4,7 @@
 #include <Axle/RHI/RHIShader.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
 
+#include <iostream>
 #include <filesystem>
 #include <fstream>
 #include <sstream>

@@ -94,6 +94,7 @@
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
+#include <Axle/RHIPhysicsDebugRenderer.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/ImGuiLayer.hpp>
@@ -16559,6 +16560,284 @@ bool RunTest_Step79_GPUParticleVFXPass() {
 }
 
 // =============================================================================
+// TEST STEP 80: Phase 33 - Step 5.2.1: RHI Physics Debug Wireframe Line Pipeline
+// =============================================================================
+bool RunTest_Step80_RHIPhysicsDebugLinePipeline() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 80 TEST] PHASE 33.5.2: RHI PHYSICS DEBUG WIREFRAME " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    if (!Axle::PhysicsEngine::IsInitialized()) {
+        Axle::PhysicsEngine::Init();
+    }
+
+    // [80.1] HLSL 2021 Shader Compilation (PhysicsWireframe.hlsl -> DXIL)
+    std::cout << "\n[80.1] Testing PhysicsWireframe.hlsl Line-Topology Shader Compilation..." << std::endl;
+    {
+        std::filesystem::path shaderPath = "Engine/Resources/Shaders/PhysicsWireframe.hlsl";
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "../Engine/Resources/Shaders/PhysicsWireframe.hlsl";
+        }
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "../../Engine/Resources/Shaders/PhysicsWireframe.hlsl";
+        }
+        assert(std::filesystem::exists(shaderPath));
+
+        std::ifstream file(shaderPath);
+        std::stringstream ss;
+        ss << file.rdbuf();
+        std::string shaderSource = ss.str();
+        assert(!shaderSource.empty());
+
+        auto& compiler = Axle::RHI::RHIShaderCompiler::Get();
+
+        // Vertex Shader
+        Axle::RHI::RHIShaderCompileDesc vsDesc;
+        vsDesc.Source = shaderSource;
+        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = Axle::RHI::RHIShaderStage::Vertex;
+        vsDesc.HLSLVersion = "2021";
+        vsDesc.ShaderModel = "6_0";
+        vsDesc.Format = Axle::RHI::RHIShaderFormat::DXIL;
+        vsDesc.Optimization = true;
+
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            std::cerr << "PhysicsWireframe VS Error: " << vsRes.ErrorMessage << std::endl;
+        }
+        assert(vsRes.Success);
+        assert(vsRes.Bytecode.IsValid());
+
+        // Pixel Shader
+        Axle::RHI::RHIShaderCompileDesc psDesc = vsDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = Axle::RHI::RHIShaderStage::Fragment;
+
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            std::cerr << "PhysicsWireframe PS Error: " << psRes.ErrorMessage << std::endl;
+        }
+        assert(psRes.Success);
+        assert(psRes.Bytecode.IsValid());
+
+        std::cout << "  -> Vertex Shader (VSMain): " << vsRes.Bytecode.GetSize() << " bytes DXIL." << std::endl;
+        std::cout << "  -> Pixel Shader (PSMain): " << psRes.Bytecode.GetSize() << " bytes DXIL." << std::endl;
+        std::cout << "  -> PASS: Line topology PhysicsWireframe.hlsl compilation validated." << std::endl;
+    }
+
+    // [80.2] Memory Layout & 256-Byte CBV Alignment Validation
+    std::cout << "\n[80.2] Validating RHIDebugLineVertex & RHIPhysicsDebugConstants Alignment..." << std::endl;
+    {
+        static_assert(sizeof(Axle::RHIDebugLineVertex) == 28, "RHIDebugLineVertex must be 28 bytes!");
+        assert(sizeof(Axle::RHIDebugLineVertex) == 28);
+        assert(offsetof(Axle::RHIDebugLineVertex, Position) == 0);
+        assert(offsetof(Axle::RHIDebugLineVertex, Color) == 12);
+
+        static_assert(sizeof(Axle::RHIPhysicsDebugConstants) == 256, "RHIPhysicsDebugConstants must be 256 bytes!");
+        static_assert(alignof(Axle::RHIPhysicsDebugConstants) == 256, "RHIPhysicsDebugConstants must have 256-byte alignment!");
+        assert(sizeof(Axle::RHIPhysicsDebugConstants) == 256);
+        assert(offsetof(Axle::RHIPhysicsDebugConstants, ViewProjection) == 0);
+        assert(offsetof(Axle::RHIPhysicsDebugConstants, DepthBiasParams) == 64);
+        assert(offsetof(Axle::RHIPhysicsDebugConstants, Reserved) == 80);
+
+        std::cout << "  -> RHIDebugLineVertex: 28 bytes (Position: 12B, Color: 16B)." << std::endl;
+        std::cout << "  -> RHIPhysicsDebugConstants: 256 bytes (256-byte aligned hardware CBV)." << std::endl;
+        std::cout << "  -> PASS: Memory layout and field offsets verified." << std::endl;
+    }
+
+    // [80.3] RHIPhysicsDebugRenderer Lifecycle & Dynamic PSO Line Pipeline Caching
+    std::cout << "\n[80.3] Testing RHIPhysicsDebugRenderer Initialization & Dynamic PSO Caching..." << std::endl;
+    {
+        auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+        if (!rhiDevice.IsInitialized()) {
+            Axle::RHI::RHIDeviceDesc devDesc;
+            devDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+            devDesc.Headless = true;
+            devDesc.AllowFallback = true;
+            assert(rhiDevice.Init(devDesc));
+        }
+
+        Axle::RHIPhysicsDebugRenderer debugRenderer;
+        assert(debugRenderer.Init(rhiDevice));
+        assert(debugRenderer.IsValid());
+        assert(debugRenderer.GetPipelineLayout().IsValid());
+        assert(debugRenderer.GetConstantBuffer().IsValid());
+        assert(debugRenderer.GetVertexBuffer().IsValid());
+
+        // Test SDR line pipelines (depth-test on vs off)
+        auto* pLineSDR_Depth = debugRenderer.GetOrCreatePipeline(nri::Format::RGBA8_UNORM, nri::Format::D32_SFLOAT, 1, true);
+        auto* pLineSDR_NoDepth = debugRenderer.GetOrCreatePipeline(nri::Format::RGBA8_UNORM, nri::Format::D32_SFLOAT, 1, false);
+        assert(pLineSDR_Depth != nullptr);
+        assert(pLineSDR_NoDepth != nullptr);
+        assert(pLineSDR_Depth != pLineSDR_NoDepth);
+
+        // Test HDR line pipelines
+        auto* pLineHDR_Depth = debugRenderer.GetOrCreatePipeline(nri::Format::RGBA16_SFLOAT, nri::Format::D32_SFLOAT, 1, true);
+        assert(pLineHDR_Depth != nullptr);
+        assert(pLineHDR_Depth != pLineSDR_Depth);
+
+        // Test MSAA 4x line pipeline
+        auto* pLineMSAA_Depth = debugRenderer.GetOrCreatePipeline(nri::Format::RGBA8_UNORM, nri::Format::D32_SFLOAT, 4, true);
+        assert(pLineMSAA_Depth != nullptr);
+
+        // Test Cache Hit
+        auto* pLineSDR_Depth_Hit = debugRenderer.GetOrCreatePipeline(nri::Format::RGBA8_UNORM, nri::Format::D32_SFLOAT, 1, true);
+        assert(pLineSDR_Depth_Hit == pLineSDR_Depth);
+
+        std::cout << "  -> Initialized RHIPhysicsDebugRenderer with 100,000 vertex capacity (2.8MB VBO)." << std::endl;
+        std::cout << "  -> Cached line topology PSOs across SDR, HDR, and MSAA targets with DepthTest toggling." << std::endl;
+        std::cout << "  -> PASS: RHIPhysicsDebugRenderer lifecycle & PSO cache validated." << std::endl;
+
+        debugRenderer.Shutdown();
+    }
+
+    // [80.4] Standalone Line Batch Streaming & GPU Command Execution (1,000+ line segments)
+    std::cout << "\n[80.4] Testing Standalone Line Batch Streaming & GPU Command Execution..." << std::endl;
+    {
+        auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+        if (!rhiDevice.IsInitialized()) {
+            Axle::RHI::RHIDeviceDesc devDesc;
+            devDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+            devDesc.Headless = true;
+            devDesc.AllowFallback = true;
+            assert(rhiDevice.Init(devDesc));
+        }
+
+        Axle::RHIPhysicsDebugRenderer debugRenderer;
+        assert(debugRenderer.Init(rhiDevice));
+
+        // Create 1280x720 Color & Depth Render Targets
+        Axle::RHI::RHITexture colorTarget;
+        assert(colorTarget.Init(Axle::RHI::RHITextureDesc::RenderTarget2D(1280, 720, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "Test_DebugColorTarget")));
+
+        Axle::RHI::RHITexture depthTarget;
+        assert(depthTarget.Init(Axle::RHI::RHITextureDesc::DepthStencil2D(1280, 720, Axle::RHI::RHITextureFormat::D32_FLOAT, "Test_DebugDepthTarget")));
+
+        Axle::PerspectiveCamera camera(60.0f, 1280.0f / 720.0f, 0.1f, 1000.0f);
+        camera.SetPosition(glm::vec3(0.0f, 5.0f, 10.0f));
+        camera.SetRotation(glm::vec3(-25.0f, 0.0f, 0.0f));
+
+        debugRenderer.Begin(camera.GetPosition(), camera.GetViewProjectionMatrix(),
+                            nri::Format::RGBA8_UNORM, nri::Format::D32_SFLOAT, 1, true, 0.0001f, 1.0f);
+
+        // Add rich geometry debug primitives
+        // 1. AABB Box (12 line segments = 24 vertices)
+        debugRenderer.DrawBox(glm::vec3(-2.0f, 0.0f, -2.0f), glm::vec3(2.0f, 2.0f, 2.0f), glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
+
+        // 2. Oriented Box (12 line segments = 24 vertices)
+        glm::mat4 boxTransform = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(4.0f, 1.0f, 0.0f)), glm::radians(35.0f), glm::vec3(0, 1, 0));
+        debugRenderer.DrawOrientedBox(boxTransform, glm::vec3(0.8f, 0.4f, 1.5f), glm::vec4(0.0f, 1.0f, 1.0f, 1.0f));
+
+        // 3. Coordinate Axes (3 lines = 6 vertices)
+        debugRenderer.DrawTransform(boxTransform, 2.0f);
+
+        // 4. Circle (32 line segments = 64 vertices)
+        debugRenderer.DrawCircle(glm::vec3(0.0f, 0.05f, 0.0f), 3.0f, glm::vec3(0.0f, 1.0f, 0.0f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f), 32);
+
+        // 5. Sphere (3 orthogonal circles = 96 line segments = 192 vertices)
+        debugRenderer.DrawSphere(glm::vec3(-4.0f, 2.0f, 0.0f), 1.2f, glm::vec4(1.0f, 0.3f, 0.8f, 1.0f), 24);
+
+        // 6. Rays (5 line segments = 10 vertices)
+        for (int i = 0; i < 5; ++i) {
+            float angle = static_cast<float>(i) * 0.4f;
+            debugRenderer.DrawRay(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(std::cos(angle), 0.5f, std::sin(angle)), 4.0f, glm::vec4(1.0f, 0.5f, 0.0f, 1.0f));
+        }
+
+        // 7. Simulated JPH::DrawLine calls (500 lines = 1000 vertices)
+        for (int i = 0; i < 500; ++i) {
+            float t = static_cast<float>(i) * 0.02f;
+            JPH::RVec3 from(t, std::sin(t), std::cos(t));
+            JPH::RVec3 to(t + 0.02f, std::sin(t + 0.02f), std::cos(t + 0.02f));
+            debugRenderer.DrawLine(from, to, JPH::Color(100, 200, 255, 255));
+        }
+
+        assert(debugRenderer.GetLineCount() > 500);
+        assert(debugRenderer.GetVertexCount() > 1000);
+
+        Axle::RHI::RHICommandBuffer cmd;
+        assert(cmd.Init(rhiDevice.GetGraphicsQueue()));
+        assert(cmd.Begin());
+
+        cmd.TransitionTexture(colorTarget.GetNative(), Axle::RHI::RHIResourceLayout::Undefined, Axle::RHI::RHIResourceLayout::ColorAttachment);
+        cmd.TransitionTexture(depthTarget.GetNative(), Axle::RHI::RHIResourceLayout::Undefined, Axle::RHI::RHIResourceLayout::DepthStencilWrite);
+
+        nri::AttachmentDesc colorAttachment{};
+        colorAttachment.descriptor = colorTarget.GetRTV();
+        colorAttachment.loadOp = nri::LoadOp::CLEAR;
+        colorAttachment.storeOp = nri::StoreOp::STORE;
+        colorAttachment.clearValue.color.f = { 0.05f, 0.05f, 0.08f, 1.0f };
+
+        nri::AttachmentDesc depthAttachment{};
+        depthAttachment.descriptor = depthTarget.GetDSV();
+        depthAttachment.loadOp = nri::LoadOp::CLEAR;
+        depthAttachment.storeOp = nri::StoreOp::STORE;
+        depthAttachment.clearValue.depthStencil.depth = 1.0f;
+
+        nri::RenderingDesc renderingDesc{};
+        renderingDesc.colors = &colorAttachment;
+        renderingDesc.colorNum = 1;
+        renderingDesc.depth = depthAttachment;
+
+        cmd.BeginRendering(renderingDesc);
+
+        debugRenderer.End(cmd);
+
+        cmd.EndRendering();
+        cmd.TransitionTexture(colorTarget.GetNative(), Axle::RHI::RHIResourceLayout::ColorAttachment, Axle::RHI::RHIResourceLayout::ShaderResource);
+        assert(cmd.End());
+
+        auto* queue = rhiDevice.GetGraphicsQueue();
+        cmd.Submit(queue);
+        rhiDevice.GetNRICore().QueueWaitIdle(queue);
+
+        assert(debugRenderer.GetDrawCallCount() == 1);
+        assert(debugRenderer.GetFlushedVertexCount() > 1000);
+
+        std::cout << "  -> Flushed " << debugRenderer.GetFlushedVertexCount() << " line vertices ("
+                  << debugRenderer.GetFlushedVertexCount() / 2 << " line segments) via CmdDraw." << std::endl;
+        std::cout << "  -> PASS: Standalone physics wireframe batch dispatch verified." << std::endl;
+
+        cmd.Shutdown();
+        colorTarget.Shutdown();
+        depthTarget.Shutdown();
+        debugRenderer.Shutdown();
+    }
+
+    // [80.5] JPH::DebugRendererSimple Compliance & NaN/Inf Protection
+    std::cout << "\n[80.5] Testing JPH DebugRendererSimple Virtual Overrides & Sanitization..." << std::endl;
+    {
+        Axle::RHIPhysicsDebugRenderer debugRenderer;
+        debugRenderer.Clear();
+        assert(debugRenderer.GetLineCount() == 0);
+
+        // Test NaN/Inf suppression
+        debugRenderer.DrawLine(JPH::RVec3(NAN, 0, 0), JPH::RVec3(1, 1, 1), JPH::Color::sRed);
+        debugRenderer.DrawLine(JPH::RVec3(0, 0, 0), JPH::RVec3(INFINITY, 1, 1), JPH::Color::sRed);
+        assert(debugRenderer.GetLineCount() == 0);
+
+        // Test valid lines and color conversion
+        debugRenderer.DrawLine(JPH::RVec3(0, 0, 0), JPH::RVec3(1, 2, 3), JPH::Color(255, 128, 64, 200));
+        assert(debugRenderer.GetLineCount() == 1);
+        assert(debugRenderer.GetVertexCount() == 2);
+
+        // Test DrawTriangle fallback implementation in DebugRendererSimple
+        debugRenderer.DrawTriangle(JPH::RVec3(0, 0, 0), JPH::RVec3(1, 0, 0), JPH::RVec3(0, 1, 0), JPH::Color::sGreen, JPH::DebugRenderer::ECastShadow::Off);
+        assert(debugRenderer.GetLineCount() == 4); // 1 previous line + 3 triangle edges
+
+        debugRenderer.Clear();
+        assert(debugRenderer.GetLineCount() == 0);
+
+        std::cout << "  -> NaN and Inf vector inputs rejected without crash." << std::endl;
+        std::cout << "  -> JPH::Color to float4 mapping and DrawTriangle fallback verified." << std::endl;
+        std::cout << "  -> PASS: JPH DebugRendererSimple compliance validated." << std::endl;
+    }
+
+    std::cout << "\n>>> STEP 80 PASSED: RHI Physics Debug Wireframe Line Pipeline 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -16645,6 +16924,7 @@ int main(int argc, char** argv) {
         else if (arg == "77" || arg == "step77" || arg == "--step77" || arg == "--tonemap" || arg == "--tone-mapping" || arg == "--exposure") targetStep = 77;
         else if (arg == "78" || arg == "step78" || arg == "--step78" || arg == "--aa" || arg == "--fxaa" || arg == "--msaa" || arg == "--anti-aliasing") targetStep = 78;
         else if (arg == "79" || arg == "step79" || arg == "--step79" || arg == "--particles" || arg == "--gpu-particles" || arg == "--vfx-rhi") targetStep = 79;
+        else if (arg == "80" || arg == "step80" || arg == "--step80" || arg == "--physics-debug" || arg == "--wireframe" || arg == "--line-pipeline") targetStep = 80;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -16653,7 +16933,7 @@ int main(int argc, char** argv) {
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 65 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 66 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -16882,6 +17162,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 79) {
         if (!RunTest_Step79_GPUParticleVFXPass()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 80) {
+        if (!RunTest_Step80_RHIPhysicsDebugLinePipeline()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

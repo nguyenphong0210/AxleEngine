@@ -158,6 +158,11 @@ float4 PSMain(VSOutput input) : SV_Target {
     float3 exposed = skyColor * expVal;
 
     int toneMapMode = (int)u_Params.z;
+    if (toneMapMode < 0) {
+        // Linear HDR Radiance Output for subsequent Tone Mapping Post-Processing Pass
+        return float4(skyColor, 1.0);
+    }
+
     float3 mappedColor;
     if (toneMapMode == 0) {
         mappedColor = ToneMapACES(exposed);

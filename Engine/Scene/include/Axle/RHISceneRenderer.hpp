@@ -37,6 +37,14 @@ namespace Axle {
         glm::vec4 Reserved[5];         // 80 bytes padding -> Total: 256 bytes
     };
 
+    // 256-byte CBV aligned constants for Tone Mapping post-processing pass
+    struct alignas(256) RHIToneMappingConstants {
+        glm::vec4 Params{ 1.0f, 2.2f, 0.0f, 4.0f };       // x: Exposure, y: Gamma, z: ToneMappingMode, w: WhitePoint
+        glm::vec4 ColorGrading{ 1.0f, 1.0f, 0.0f, 0.0f }; // x: Contrast, y: Saturation, z: VignetteIntensity, w: Reserved
+        glm::vec4 Reserved[14]{};                         // 224 bytes padding -> Total: 256 bytes
+    };
+    static_assert(sizeof(RHIToneMappingConstants) == 256, "RHIToneMappingConstants must be 256 bytes aligned!");
+
     class RHISceneRenderer {
     public:
         RHISceneRenderer();
@@ -113,6 +121,32 @@ namespace Axle {
         RHI::RHIPipelineLayout& GetSkyboxPipelineLayout() { return m_SkyboxPipelineLayout; }
         RHI::RHIBuffer& GetSkyboxConstantBuffer() { return m_SkyboxConstantBuffer; }
 
+        // Film-Grade Tone Mapping & Post-Processing Pass
+        void RenderToneMapping(RHI::RHICommandBuffer& cmd,
+                               RHI::RHITexture* inputHDR,
+                               RHI::RHITexture* outputTarget,
+                               const RHIToneMappingConstants& constants);
+
+        void RenderToneMapping(RHI::RHICommandBuffer& cmd,
+                               RHI::RHITexture* inputHDR,
+                               RHI::RHITexture* outputTarget,
+                               const SceneRenderSettings& settings = SceneRenderSettings{});
+
+        void RenderToneMapping(RHI::RHICommandBuffer& cmd,
+                               nri::Descriptor* inputHDR_SRV,
+                               nri::Texture* outputTarget,
+                               nri::Descriptor* outputRTV,
+                               uint32_t width, uint32_t height,
+                               nri::Format outFormat,
+                               const RHIToneMappingConstants& constants);
+
+        nri::Pipeline* GetToneMappingPipeline() const { return m_ToneMappingPipelineSDR; }
+        nri::Pipeline* GetHDRToneMappingPipeline() const { return m_ToneMappingPipelineHDR; }
+        nri::Pipeline* GetOrCreateToneMappingPipeline(nri::Format colorFormat);
+        RHI::RHIPipelineLayout& GetToneMappingPipelineLayout() { return m_ToneMappingPipelineLayout; }
+        RHI::RHIBuffer& GetToneMappingConstantBuffer() { return m_ToneMappingConstantBuffer; }
+        RHI::RHITexture* GetIntermediateHDRTarget() const { return m_IntermediateHDRTarget.get(); }
+
     private:
         bool CompileShaders(RHI::RHIDevice& device);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
@@ -121,6 +155,10 @@ namespace Axle {
         bool CompileSkyboxShaders(RHI::RHIDevice& device);
         bool CreateSkyboxPipelineLayout(RHI::RHIDevice& device);
         bool CreateSkyboxPipeline(RHI::RHIDevice& device);
+
+        bool CompileToneMappingShaders(RHI::RHIDevice& device);
+        bool CreateToneMappingPipelineLayout(RHI::RHIDevice& device);
+        bool CreateToneMappingPipeline(RHI::RHIDevice& device);
 
     private:
         RHI::RHIDevice* m_Device = nullptr;
@@ -154,6 +192,21 @@ namespace Axle {
         RHI::RHIShaderBytecode m_SkyboxVertexShader;
         RHI::RHIShaderBytecode m_SkyboxPixelShader;
         SkyboxComponent m_SkyboxParams;
+
+        // Tone Mapping Post-Processing Resources
+        RHI::RHIPipelineLayout m_ToneMappingPipelineLayout;
+        nri::Pipeline* m_ToneMappingPipelineSDR = nullptr;
+        nri::Pipeline* m_ToneMappingPipelineHDR = nullptr;
+        RHI::RHIBuffer m_ToneMappingConstantBuffer;
+        RHI::RHIShaderBytecode m_ToneMappingVertexShader;
+        RHI::RHIShaderBytecode m_ToneMappingPixelShader;
+        RHI::RHISampler m_ToneMappingSampler;
+        RHI::RHIDescriptorPool m_ToneMappingDescriptorPool;
+        nri::DescriptorSet* m_ToneMappingDescriptorSet = nullptr;
+
+        // Intermediate Floating-point HDR Target for 2-pass Scene -> ToneMap execution
+        std::unique_ptr<RHI::RHITexture> m_IntermediateHDRTarget;
+        std::unique_ptr<RHI::RHITexture> m_IntermediateHDRDepthTarget;
 
         RHI::RHICommandBuffer m_CommandBuffer;
         std::unique_ptr<RHI::RHIStreamer> m_Streamer;

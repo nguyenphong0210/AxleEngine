@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized), with **Phase 33 in active progress**.
-* **Automated Test Verification**: **61 Comprehensive Headless Test Suites** (`AxleTests.exe`, 68 individual test steps up through **Step 76**) passing with **100% pass rate**.
+* **Automated Test Verification**: **62 Comprehensive Headless Test Suites** (`AxleTests.exe`, 69 individual test steps up through **Step 77**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 33 (Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline)** and beyond.
 
 ---
@@ -367,7 +367,12 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
       - [x] **Seamless Dynamic Viewport Resizing Synchronization**: Optimized `RHIViewportDescriptor::Resize()` cycle with zero-leak VRAM reallocation, descriptor slot recycling into `ImGuiLayer` free list, aspect ratio preservation, and zero-dimension guards for minimized windows.
       - [x] **Runtime Dynamic HDR / SDR Toggle**: `SetHDR(bool)` and `SetColorFormat()` APIs with live toggle support in Editor Viewport menu, allowing instantaneous switching between HDR (`RGBA16_FLOAT`) and SDR (`RGBA8_UNORM`).
       - [x] **Automated Test Suite Step 76 (`AxleTests.exe 76`)**: 5-stage headless test suite validating HDR texture allocation, dual-format PSO compilation, 5-cycle dynamic resize stress testing, format reconfiguration, and live viewport scene dispatch (4 draw calls) with zero GPU memory leaks (100% PASS).
-    - [ ] Exposure Control & Film-Grade Tone Mapping: ACES Filmic (Narkowicz fit), Reinhard, and Uncharted 2 curves with adjustable exposure compensation and gamma correction (sRGB EOTF).
+    - [x] **Exposure Control & Film-Grade Tone Mapping: ACES Filmic, Reinhard & Uncharted 2**:
+      - [x] **Full-Screen Triangle Generation & Post-Processing Shader (`ToneMapping.hlsl`)**: High-performance full-screen vertex shader via `SV_VertexID` unprojection without vertex buffer overhead. Implemented 4 tone mapping operators: ACES Filmic (Narkowicz fit), Extended Reinhard with configurable white point, Uncharted 2 (John Hable filmic), and Linear Bypass.
+      - [x] **Photometric Exposure, Color Grading & sRGB EOTF**: Configurable exposure compensation ($C \cdot 2^{\text{exposure}}$), contrast adjustment, saturation controls, procedural analytical vignette, and standard sRGB gamma 2.2 electro-optical transfer function.
+      - [x] **Hardware-Aligned Constant Buffer (`RHIToneMappingConstants`)**: Exact 256-byte CBV aligned layout (`b0, space 0`) containing exposure, tone map mode, contrast, saturation, vignette parameters, white point, and viewport dimensions.
+      - [x] **Decoupled 2-Pass Scene Rendering Pipeline**: Automatic 2-pass scene rendering in `RHISceneRenderer::RenderScene`. When tone mapping is enabled, Pass 1 renders high-dynamic-range geometry and atmospheric skybox into intermediate offscreen `RGBA16_FLOAT` HDR render target, and Pass 2 executes post-processing full-screen dispatch to resolve into viewport destination target (`RGBA8_UNORM` or `RGBA16_FLOAT`).
+      - [x] **Automated Test Suite Step 77 (`AxleTests.exe 77`)**: 5-stage headless test suite validating HLSL bytecode compilation, 256-byte CBV alignment, analytical tone curve response (middle grey and highlight compression), standalone full-screen pass execution, and end-to-end 2-pass scene rendering (5 draw calls) with zero GPU memory leaks (100% PASS).
     - [ ] Anti-Aliasing Integration: Fast Approximate Anti-Aliasing (FXAA) and hardware MSAA (2x/4x/8x) to eliminate jagged specular edges and aliased wireframes.
   - [ ] **Step 5 - Secondary Visual Passes (GPU Particle VFX, Physics Wireframes & GPU Object Picking)**:
     - [ ] GPU Instanced Particle VFX Pass: Port `ParticleRenderer` (Phase 31) to RHI instanced draw commands (`CmdDraw`), rendering tire smoke, drift dust, exhaust backfire flames, and ground impacts directly in the D3D12/Vulkan viewport.

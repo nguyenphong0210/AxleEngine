@@ -393,12 +393,16 @@ float4 PSMain(PSInput input) : SV_Target0 {
         ambient = (ambientDiffuse + ambientSpecular) * ao;
     }
     
-    // 10. Total Radiance Accumulation
+    // 10. Total Radiance Accumulation (Linear HDR Radiance)
     float3 color = ambient + Lo + emissive;
     
     // 11. Tone Mapping & Color Polish (Reinhard Operator & Gamma Correction)
-    color = color / (color + float3(1.0, 1.0, 1.0));
-    color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+    // If u_CameraPosition.w > 0.0 (HDR Post-Processing Mode): Output pure linear HDR radiance
+    // If u_CameraPosition.w <= 0.0 (Legacy SDR Fallback): Apply baked-in Reinhard & 2.2 Gamma
+    if (u_CameraPosition.w <= 0.0) {
+        color = color / (color + float3(1.0, 1.0, 1.0));
+        color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+    }
     
     return float4(color, albedo.a);
 }

@@ -183,13 +183,45 @@ namespace Axle {
         }
         m_SkyboxConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISkyboxConstants), RHIMemoryLocation::HostUpload, "SkyboxConstantsBuffer"));
 
+        // Initialize Film-Grade Tone Mapping Post-Processing Pipeline & Resources
+        if (CompileToneMappingShaders(device) && CreateToneMappingPipelineLayout(device)) {
+            if (!CreateToneMappingPipeline(device)) {
+                AXLE_CORE_WARN("RHISceneRenderer: Failed to create Tone Mapping graphics pipeline!");
+            }
+        }
+
+        if (!m_ToneMappingSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Bilinear Clamp Sampler for Tone Mapping.");
+        }
+
+        if (!m_ToneMappingDescriptorPool.Init(RHIDescriptorPoolDesc::Tier2Bindless(64, 16))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Tone Mapping Descriptor Pool!");
+        } else if (m_ToneMappingPipelineLayout.IsValid()) {
+            m_ToneMappingDescriptorSet = m_ToneMappingDescriptorPool.AllocateDescriptorSet(m_ToneMappingPipelineLayout, 0);
+            if (m_ToneMappingDescriptorSet && m_ToneMappingSampler.IsValid()) {
+                m_ToneMappingDescriptorPool.UpdateSampler(m_ToneMappingDescriptorSet, 1, 0, m_ToneMappingSampler.GetNative());
+            }
+        }
+
+        m_ToneMappingConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIToneMappingConstants), RHIMemoryLocation::HostUpload, "ToneMappingConstantsBuffer"));
+
         m_Initialized = true;
-        AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering, Descriptor Pools & Forward+ Multi-Light Buffer.");
+        AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering, Descriptor Pools, Forward+ Multi-Light Buffer & Film-Grade Tone Mapping.");
         return true;
     }
 
     void RHISceneRenderer::Shutdown() {
         if (!m_Initialized) return;
+
+        m_ToneMappingPipelineSDR = nullptr;
+        m_ToneMappingPipelineHDR = nullptr;
+        m_ToneMappingPipelineLayout.Shutdown();
+        m_ToneMappingConstantBuffer.Shutdown();
+        m_ToneMappingDescriptorSet = nullptr;
+        m_ToneMappingDescriptorPool.Shutdown();
+        m_ToneMappingSampler.Shutdown();
+        m_IntermediateHDRTarget.reset();
+        m_IntermediateHDRDepthTarget.reset();
 
         m_Pipeline = nullptr;
         m_PipelineHDR = nullptr;
@@ -499,6 +531,134 @@ namespace Axle {
         return m_SkyboxPipeline != nullptr && m_SkyboxPipelineHDR != nullptr;
     }
 
+    bool RHISceneRenderer::CompileToneMappingShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        if (!compiler.IsInitialized()) {
+            compiler.Init();
+        }
+
+        std::string shaderSource;
+        auto shaderPath = FileSystem::ResolveAssetPath("shaders/ToneMapping.hlsl");
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "ToneMapping.hlsl";
+        }
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "Engine/Resources/Shaders/ToneMapping.hlsl";
+        }
+
+        if (std::filesystem::exists(shaderPath)) {
+            std::ifstream file(shaderPath);
+            if (file.is_open()) {
+                std::stringstream ss;
+                ss << file.rdbuf();
+                shaderSource = ss.str();
+            }
+        }
+
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate ToneMapping.hlsl!");
+            return false;
+        }
+
+        RHIShaderCompileDesc vsDesc;
+        vsDesc.Source = shaderSource;
+        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        vsDesc.HLSLVersion = "2021";
+        vsDesc.ShaderModel = "6_0";
+        vsDesc.Format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        vsDesc.Optimization = true;
+
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile ToneMapping VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_ToneMappingVertexShader = vsRes.Bytecode;
+
+        RHIShaderCompileDesc psDesc = vsDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = RHIShaderStage::Fragment;
+
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile ToneMapping PS: {0}", psRes.ErrorMessage);
+            return false;
+        }
+        m_ToneMappingPixelShader = psRes.Bytecode;
+
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateToneMappingPipelineLayout(RHIDevice& device) {
+        // Root Descriptor [0] b0, space 0: 256-byte ToneMappingConstants
+        nri::RootDescriptorDesc rootDesc = {};
+        rootDesc.registerIndex = 0;
+        rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDesc.shaderStages = nri::StageBits::ALL;
+
+        // Descriptor Set (space 1):
+        // Range 0: t0 (HDR Texture)
+        // Range 1: s0 (Linear/Bilinear Sampler)
+        nri::DescriptorRangeDesc ranges[2] = {};
+        ranges[0].baseRegisterIndex = 0;
+        ranges[0].descriptorNum = 1;
+        ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        ranges[1].baseRegisterIndex = 0;
+        ranges[1].descriptorNum = 1;
+        ranges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc descSet = {};
+        descSet.registerSpace = 1;
+        descSet.ranges = ranges;
+        descSet.rangeNum = 2;
+
+        nri::PipelineLayoutDesc layoutDesc = {};
+        layoutDesc.rootRegisterSpace = 0;
+        layoutDesc.rootDescriptors = &rootDesc;
+        layoutDesc.rootDescriptorNum = 1;
+        layoutDesc.descriptorSets = &descSet;
+        layoutDesc.descriptorSetNum = 1;
+        layoutDesc.shaderStages = nri::StageBits::ALL;
+
+        return m_ToneMappingPipelineLayout.Init(layoutDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateToneMappingPipeline(nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_ToneMappingPipelineLayout;
+        gfxDesc.Shaders = { m_ToneMappingVertexShader, m_ToneMappingPixelShader };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+
+        // Empty vertex input layout (full-screen triangle generated via SV_VertexID)
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+
+        auto& cache = RHIPipelineCache::Get();
+        return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreateToneMappingPipeline(RHIDevice& device) {
+        m_ToneMappingPipelineSDR = GetOrCreateToneMappingPipeline(nri::Format::RGBA8_UNORM);
+        m_ToneMappingPipelineHDR = GetOrCreateToneMappingPipeline(nri::Format::RGBA16_SFLOAT);
+        return m_ToneMappingPipelineSDR != nullptr && m_ToneMappingPipelineHDR != nullptr;
+    }
+
     void RHISceneRenderer::SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat) {
         m_CurrentColorFormat = RHI::ToNRIFormat(colorFormat);
         m_CurrentDepthFormat = RHI::ToNRIFormat(depthFormat);
@@ -666,18 +826,35 @@ namespace Axle {
             m_LastStreamedTransformBytes += sizeof(RHISceneConstants);
         }
 
+        // Determine whether intermediate HDR target is used for 2-pass tone mapping
+        nri::Texture* sceneTargetTexture = colorTarget;
+        nri::Descriptor* sceneTargetRTV = colorRTV;
+        nri::Format sceneTargetFormat = m_CurrentColorFormat;
+
+        if (settings.EnableToneMapping) {
+            if (!m_IntermediateHDRTarget || m_IntermediateHDRTarget->GetWidth() != width || m_IntermediateHDRTarget->GetHeight() != height) {
+                m_IntermediateHDRTarget = std::make_unique<RHITexture>();
+                m_IntermediateHDRTarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHITextureFormat::RGBA16_FLOAT, "SceneRenderer_IntermediateHDR"));
+            }
+            if (m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid()) {
+                sceneTargetTexture = m_IntermediateHDRTarget->GetNative();
+                sceneTargetRTV = m_IntermediateHDRTarget->GetRTV();
+                sceneTargetFormat = nri::Format::RGBA16_SFLOAT;
+            }
+        }
+
         // 2. Begin Command Recording
         if (!m_CommandBuffer.Begin()) return;
 
         // Transition Color & Depth Attachments for rendering
-        m_CommandBuffer.TransitionTexture(colorTarget, RHIResourceLayout::ShaderResource, RHIResourceLayout::ColorAttachment);
+        m_CommandBuffer.TransitionTexture(sceneTargetTexture, RHIResourceLayout::ShaderResource, RHIResourceLayout::ColorAttachment);
         if (depthTarget) {
             m_CommandBuffer.TransitionTexture(depthTarget, RHIResourceLayout::DepthStencilRead, RHIResourceLayout::DepthStencilWrite);
         }
 
         // 3. Begin Rendering Pass
         nri::AttachmentDesc colorAttachment = {};
-        colorAttachment.descriptor = colorRTV;
+        colorAttachment.descriptor = sceneTargetRTV;
         colorAttachment.loadOp = nri::LoadOp::CLEAR;
         colorAttachment.storeOp = nri::StoreOp::STORE;
         colorAttachment.clearValue.color.f = { 0.12f, 0.14f, 0.18f, 1.0f };
@@ -708,11 +885,11 @@ namespace Axle {
         m_CommandBuffer.SetScissor(scissor);
 
         // Bind Graphics Pipeline & Layout matching active color & depth formats
-        nri::Pipeline* activePipeline = (m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR)
+        nri::Pipeline* activePipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR)
                                             ? m_PipelineHDR
-                                            : (m_CurrentColorFormat == nri::Format::RGBA8_UNORM && m_Pipeline)
+                                            : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_Pipeline)
                                                   ? m_Pipeline
-                                                  : GetOrCreatePipeline(m_CurrentColorFormat, m_CurrentDepthFormat);
+                                                  : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat);
         m_CommandBuffer.SetPipeline(activePipeline ? activePipeline : m_Pipeline);
         m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
 
@@ -851,18 +1028,20 @@ namespace Axle {
                 skyboxConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
                 skyboxConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
                 skyboxConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);
-                skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, 0.0f, 2.2f); // ACES filmic & 2.2 gamma
+                // If Tone Mapping is enabled, output linear HDR sky radiance (-1.0f mode)
+                float skyboxToneMode = settings.EnableToneMapping ? -1.0f : static_cast<float>(settings.ToneMappingMode);
+                skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, settings.EnableToneMapping ? 1.0f : settings.Gamma);
 
                 if (m_SkyboxConstantBuffer.IsValid()) {
                     m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants));
                 }
 
                 // 4. Bind Skybox Graphics Pipeline matching active color & depth formats
-                nri::Pipeline* activeSkyboxPipeline = (m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR)
+                nri::Pipeline* activeSkyboxPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR)
                                                           ? m_SkyboxPipelineHDR
-                                                          : (m_CurrentColorFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline)
+                                                          : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline)
                                                                 ? m_SkyboxPipeline
-                                                                : GetOrCreateSkyboxPipeline(m_CurrentColorFormat, m_CurrentDepthFormat);
+                                                                : GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat);
                 m_CommandBuffer.SetPipeline(activeSkyboxPipeline ? activeSkyboxPipeline : m_SkyboxPipeline);
                 m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SkyboxPipelineLayout);
                 if (m_SkyboxConstantBuffer.IsValid() && m_SkyboxConstantBuffer.GetCBV()) {
@@ -875,16 +1054,31 @@ namespace Axle {
             }
         }
 
-        // 6. End Rendering Pass
+        // 6. End Scene Rendering Pass
         m_CommandBuffer.EndRendering();
 
-        // Transition back to ShaderResource for ImGui presentation
-        m_CommandBuffer.TransitionTexture(colorTarget, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
+        // Transition scene color target back to ShaderResource
+        m_CommandBuffer.TransitionTexture(sceneTargetTexture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
         if (depthTarget) {
             m_CommandBuffer.TransitionTexture(depthTarget, RHIResourceLayout::DepthStencilWrite, RHIResourceLayout::DepthStencilRead);
         }
 
-        // 6. End and Submit to Queue
+        // 7. Post-Processing Tone Mapping Pass
+        if (settings.EnableToneMapping && m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid()) {
+            RHIToneMappingConstants toneConstants{};
+            toneConstants.Params = glm::vec4(settings.Exposure, settings.Gamma, static_cast<float>(settings.ToneMappingMode), settings.WhitePoint);
+            toneConstants.ColorGrading = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+
+            RenderToneMapping(m_CommandBuffer,
+                              m_IntermediateHDRTarget->GetSRV(),
+                              colorTarget,
+                              colorRTV,
+                              width, height,
+                              m_CurrentColorFormat,
+                              toneConstants);
+        }
+
+        // 8. End and Submit to Queue
         m_CommandBuffer.End();
         auto* queue = m_Device->GetGraphicsQueue();
         m_CommandBuffer.Submit(queue);
@@ -893,6 +1087,106 @@ namespace Axle {
         if (m_Streamer) {
             m_Streamer->EndFrame();
         }
+    }
+
+    void RHISceneRenderer::RenderToneMapping(RHI::RHICommandBuffer& cmd,
+                                            RHI::RHITexture* inputHDR,
+                                            RHI::RHITexture* outputTarget,
+                                            const RHIToneMappingConstants& constants)
+    {
+        if (!inputHDR || !inputHDR->IsValid() || !outputTarget || !outputTarget->IsValid()) return;
+
+        RenderToneMapping(cmd,
+                          inputHDR->GetSRV(),
+                          outputTarget->GetNative(),
+                          outputTarget->GetRTV(),
+                          outputTarget->GetWidth(),
+                          outputTarget->GetHeight(),
+                          RHI::ToNRIFormat(outputTarget->GetFormat()),
+                          constants);
+    }
+
+    void RHISceneRenderer::RenderToneMapping(RHI::RHICommandBuffer& cmd,
+                                            RHI::RHITexture* inputHDR,
+                                            RHI::RHITexture* outputTarget,
+                                            const SceneRenderSettings& settings)
+    {
+        RHIToneMappingConstants constants{};
+        constants.Params = glm::vec4(settings.Exposure, settings.Gamma, static_cast<float>(settings.ToneMappingMode), settings.WhitePoint);
+        constants.ColorGrading = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+        RenderToneMapping(cmd, inputHDR, outputTarget, constants);
+    }
+
+    void RHISceneRenderer::RenderToneMapping(RHI::RHICommandBuffer& cmd,
+                                            nri::Descriptor* inputHDR_SRV,
+                                            nri::Texture* outputTarget,
+                                            nri::Descriptor* outputRTV,
+                                            uint32_t width, uint32_t height,
+                                            nri::Format outFormat,
+                                            const RHIToneMappingConstants& constants)
+    {
+        if (!m_Initialized || !inputHDR_SRV || !outputTarget || !outputRTV || width == 0 || height == 0) return;
+
+        // 1. Update 256-byte Tone Mapping Constants
+        if (m_ToneMappingConstantBuffer.IsValid()) {
+            m_ToneMappingConstantBuffer.UpdateData(&constants, sizeof(RHIToneMappingConstants));
+        }
+
+        // 2. Bind HDR Texture SRV & Sampler in Space 1
+        if (m_ToneMappingDescriptorPool.IsValid() && m_ToneMappingDescriptorSet) {
+            m_ToneMappingDescriptorPool.UpdateTexture(m_ToneMappingDescriptorSet, 0, 0, inputHDR_SRV);
+            if (m_ToneMappingSampler.IsValid()) {
+                m_ToneMappingDescriptorPool.UpdateSampler(m_ToneMappingDescriptorSet, 1, 0, m_ToneMappingSampler.GetNative());
+            }
+        }
+
+        // 3. Transition Output Texture for Color Rendering
+        cmd.TransitionTexture(outputTarget, RHIResourceLayout::ShaderResource, RHIResourceLayout::ColorAttachment);
+
+        // 4. Begin Rendering Pass
+        nri::AttachmentDesc colorAttachment = {};
+        colorAttachment.descriptor = outputRTV;
+        colorAttachment.loadOp = nri::LoadOp::CLEAR;
+        colorAttachment.storeOp = nri::StoreOp::STORE;
+
+        nri::RenderingDesc renderingDesc = {};
+        renderingDesc.colors = &colorAttachment;
+        renderingDesc.colorNum = 1;
+
+        cmd.BeginRendering(renderingDesc);
+
+        nri::Viewport vp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+        cmd.SetViewport(vp);
+
+        nri::Rect scissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+        cmd.SetScissor(scissor);
+
+        nri::Pipeline* activePipeline = (outFormat == nri::Format::RGBA16_SFLOAT && m_ToneMappingPipelineHDR)
+                                            ? m_ToneMappingPipelineHDR
+                                            : (outFormat == nri::Format::RGBA8_UNORM && m_ToneMappingPipelineSDR)
+                                                  ? m_ToneMappingPipelineSDR
+                                                  : GetOrCreateToneMappingPipeline(outFormat);
+        cmd.SetPipeline(activePipeline ? activePipeline : m_ToneMappingPipelineSDR);
+        cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_ToneMappingPipelineLayout);
+
+        if (m_ToneMappingConstantBuffer.IsValid() && m_ToneMappingConstantBuffer.GetCBV()) {
+            cmd.SetRootDescriptor(0, m_ToneMappingConstantBuffer.GetCBV());
+        }
+
+        if (m_ToneMappingDescriptorPool.IsValid() && m_ToneMappingDescriptorSet) {
+            m_ToneMappingDescriptorPool.Bind(cmd.GetNative());
+            RHIDescriptorPool::BindDescriptorSet(cmd.GetNative(), 0, m_ToneMappingDescriptorSet);
+        }
+
+        // Draw full-screen triangle via SV_VertexID
+        cmd.Draw(3, 1, 0, 0);
+
+        cmd.EndRendering();
+
+        // Transition back to ShaderResource for presentation
+        cmd.TransitionTexture(outputTarget, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
+
+        m_LastDrawCallCount++;
     }
 
 }

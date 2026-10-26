@@ -1,4 +1,5 @@
 #include <Axle/UI/Canvas2D.hpp>
+#include <Axle/UI/UIFont.hpp>
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
@@ -106,12 +107,49 @@ namespace Axle {
 
     void Canvas2D::DrawTextString(std::string_view text, const std::shared_ptr<UIFont>& font,
                                   const UIRect& rect, float fontSize, const glm::vec4& color) {
-        // Will be expanded in Step 2 with full MSDF font metrics
-        if (text.empty()) return;
-        (void)font;
-        (void)rect;
-        (void)fontSize;
-        (void)color;
+        if (text.empty() || !font || fontSize <= 0.0f) return;
+
+        float cursorX = rect.X;
+        float cursorY = rect.Y;
+        uint32_t prevCodepoint = 0;
+
+        for (char c : text) {
+            if (c == '\r') continue;
+            if (c == '\n') {
+                cursorX = rect.X;
+                cursorY += fontSize * font->GetLineHeight();
+                prevCodepoint = 0;
+                continue;
+            }
+
+            uint32_t cp = static_cast<uint8_t>(c);
+            const GlyphMetrics* glyph = font->GetGlyph(cp);
+            if (!glyph) {
+                glyph = font->GetGlyph('?');
+                if (!glyph) continue;
+            }
+
+            float kerning = prevCodepoint ? font->GetKerning(prevCodepoint, cp) : 0.0f;
+            cursorX += kerning * fontSize;
+
+            // Emit quad only for visible glyphs (space ' ' is non-rendering)
+            if (c != ' ') {
+                float gx = cursorX + glyph->PlaneBounds.x * fontSize;
+                float gy = cursorY + (font->GetLineHeight() - glyph->PlaneBounds.w) * fontSize;
+                float gw = (glyph->PlaneBounds.z - glyph->PlaneBounds.x) * fontSize;
+                float gh = (glyph->PlaneBounds.w - glyph->PlaneBounds.y) * fontSize;
+
+                if (gw > 0.0f && gh > 0.0f) {
+                    EmitQuad(UIRect{ gx, gy, gw, gh }, glyph->AtlasBounds,
+                             color, glm::vec4(0.0f),
+                             0.0f, 0.0f, glm::vec2(0.0f),
+                             font->GetBindlessTextureIndex(), UIPrimitiveType::MSDF_Text);
+                }
+            }
+
+            cursorX += glyph->AdvanceX * fontSize;
+            prevCodepoint = cp;
+        }
     }
 
     void Canvas2D::EmitQuad(const UIRect& unscaledRect, const glm::vec4& uvBounds,

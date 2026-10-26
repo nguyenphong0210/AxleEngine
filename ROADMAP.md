@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 33** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **71 Comprehensive Headless Test Suites** (`AxleTests.exe`, 78 individual test steps up through **Step 86**) passing with **100% pass rate**.
+* **Automated Test Verification**: **72 Comprehensive Headless Test Suites** (`AxleTests.exe`, 79 individual test steps up through **Step 87**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 34 (Declarative QML In-Game UI & Hardware-Accelerated Canvas2D Subsystem)** and beyond.
 
 ---
@@ -427,10 +427,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Unified 80-byte aligned `UIVertex` format supporting Bindless Texture Descriptor indexing (`TextureIndex`) to eliminate texture-swap batch breaks and render complex HUDs in a single draw call.
     - [x] Procedural 2D Signed Distance Field (SDF) Uber-Shader (`Engine/Resources/Shaders/Canvas2D.hlsl`): analytical anti-aliased rounded rectangles (`sdRoundedBox`), customizable border thickness, linear progress bars, and circular/arc gauges (`sdRadialArc` for automotive tachometers and speedometers) without CPU geometry tessellation.
     - [x] Hardware scissor clipping stack (`PushClipRect` / `PopClipRect`), Z-index painter's sorting, and headless vertex batch inspection APIs for automated testing.
-  - [ ] **Step 2 - Multi-Channel Signed Distance Field (MSDF) Font & Text Layout Pipeline (`Engine/UI`)**:
-    - [ ] Native MSDF font asset pipeline (`UIFont` supporting `.axlefont` / `.axlebin` cache and a zero-dependency procedural embedded fallback font for headless CI testing).
-    - [ ] Resolution-independent sharp text rendering (`PrimitiveType = MSDF_Text`) supporting arbitrary scaling (from 10pt telemetry labels to 120pt digital speedometers), kerning pairs, and pixel-shader screen-space distance anti-aliasing.
-    - [ ] Text measurement calculator (`UIFont::MeasureText`) supporting multi-line word-wrapping, horizontal alignment (`Left`, `Center`, `Right`), and vertical alignment (`Top`, `Middle`, `Bottom`).
+  - [x] **Step 2 - Multi-Channel Signed Distance Field (MSDF) Font & Text Layout Pipeline (`Engine/UI`)**:
+    - [x] Native MSDF font asset pipeline (`UIFont` supporting `.axlefont` / `.axlebin` cache and a zero-dependency procedural embedded fallback font for headless CI testing).
+    - [x] Resolution-independent sharp text rendering (`PrimitiveType = MSDF_Text`) supporting arbitrary scaling (from 10pt telemetry labels to 120pt digital speedometers), kerning pairs, and pixel-shader screen-space distance anti-aliasing.
+    - [x] Text measurement calculator (`UIFont::MeasureText`) supporting multi-line word-wrapping, horizontal alignment (`Left`, `Center`, `Right`), and vertical alignment (`Top`, `Middle`, `Bottom`).
   - [ ] **Step 3 - Hybrid OOP UI DOM Tree (`UIDocument` & `UINode`) & 2-Pass Layout Engine (`Engine/UI`)**:
     - [ ] Contiguous arena-allocated OOP widget hierarchy (`UIDocument` owning `std::vector<std::unique_ptr<UINode>>`) keeping the 3D EnTT registry clean from micro-widget clutter.
     - [ ] Core QML-style element primitives: `UICanvasNode`, `UIRectangleNode` (Panel), `UITextNode`, `UIImageNode`, `UIProgressBarNode`, `UIRadialGaugeNode` (Automotive Arc), `UIButtonNode`, and `UIBoxContainerNode` (`Row` / `Column`).

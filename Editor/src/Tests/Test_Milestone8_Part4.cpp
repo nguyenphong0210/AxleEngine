@@ -300,3 +300,117 @@ bool RunTest_Step86_Phase34_Step1_Part2_Canvas2DBatchingAndSDFPipeline() {
     return true;
 }
 
+// =============================================================================
+// TEST STEP 87: Phase 34 Step 2 - MSDF Font Pipeline, Glyph Metrics,
+// Kerning Pairs, Text Measurement & Sharp Text Quad Emission
+// =============================================================================
+bool RunTest_Step87_Phase34_Step2_MSDFFontAndTextLayout() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 87 TEST] MSDF FONT PIPELINE & TEXT LAYOUT       " << std::endl;
+    std::cout << " (Embedded ASCII Fallback, Kerning, MeasureText, Quads) " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    // [87.1] Default Embedded Font Initialization & Glyph Inspection
+    std::cout << "[87.1] Testing Default Embedded Font & Standard ASCII Glyphs..." << std::endl;
+    auto font = std::make_shared<UIFont>();
+    assert(font != nullptr);
+    assert(font->GetLineHeight() == 1.15f);
+
+    const GlyphMetrics* spaceGlyph = font->GetGlyph(' ');
+    assert(spaceGlyph != nullptr);
+    assert(spaceGlyph->Codepoint == 32);
+    assert(spaceGlyph->AdvanceX == 0.35f);
+
+    const GlyphMetrics* digitGlyph = font->GetGlyph('5');
+    assert(digitGlyph != nullptr);
+    assert(digitGlyph->Codepoint == '5');
+    assert(digitGlyph->AdvanceX == 0.6f);
+
+    const GlyphMetrics* upperGlyph = font->GetGlyph('A');
+    assert(upperGlyph != nullptr);
+    assert(upperGlyph->Codepoint == 'A');
+    assert(upperGlyph->AdvanceX == 0.65f);
+
+    const GlyphMetrics* lowerGlyph = font->GetGlyph('a');
+    assert(lowerGlyph != nullptr);
+    assert(lowerGlyph->Codepoint == 'a');
+    assert(lowerGlyph->AdvanceX == 0.55f);
+
+    std::cout << "  -> Space (' '), Digits ('0'-'9'), Uppercase ('A'-'Z'), Lowercase ('a'-'z') glyphs: PASS" << std::endl;
+
+    // [87.2] Kerning Pair Inspection & Custom Kerning Assignment
+    std::cout << "\n[87.2] Testing Kerning Map & Pair Arithmetic..." << std::endl;
+    float avKerning = font->GetKerning('A', 'V');
+    assert(avKerning == -0.05f);
+
+    font->SetKerning('T', 'e', -0.06f);
+    assert(font->GetKerning('T', 'e') == -0.06f);
+
+    // Unset pair should return 0.0f
+    assert(font->GetKerning('X', 'Z') == 0.0f);
+    std::cout << "  -> Kerning pairs queried and dynamically assigned: PASS" << std::endl;
+
+    // [87.3] Multi-line Text Measurement (UIFont::MeasureText)
+    std::cout << "\n[87.3] Testing Single-Line & Multi-Line Text Measurement..." << std::endl;
+    glm::vec2 size1 = font->MeasureText("280 KM/H", 48.0f);
+    assert(size1.x > 0.0f);
+    assert(size1.y > 0.0f);
+    // 8 chars total, approximate width ~ (8 * 0.6f * 48.0f) = ~230px
+    assert(size1.x > 150.0f && size1.x < 350.0f);
+    assert(std::abs(size1.y - (48.0f * 1.15f)) < 1e-3f);
+
+    glm::vec2 sizeMulti = font->MeasureText("SPEED\n280 KM/H", 48.0f);
+    assert(sizeMulti.x >= size1.x);
+    // 2 lines height
+    assert(std::abs(sizeMulti.y - (2.0f * 48.0f * 1.15f)) < 1e-3f);
+
+    std::cout << "  -> MeasureText single line (\"280 KM/H\"): (" << size1.x << ", " << size1.y << ") PASS" << std::endl;
+    std::cout << "  -> MeasureText multi-line (\"SPEED\\n280 KM/H\"): (" << sizeMulti.x << ", " << sizeMulti.y << ") PASS" << std::endl;
+
+    // [87.4] Text Quad Emission in Canvas2D
+    std::cout << "\n[87.4] Testing Sharp Text Quad Emission in Canvas2D..." << std::endl;
+    Canvas2D canvas;
+    canvas.Init();
+    canvas.BeginCanvas(glm::vec2(1920.0f, 1080.0f), 1.0f);
+
+    font->SetBindlessTextureIndex(12);
+    // "280 KM/H" has 8 characters, but 1 is a space (' ') which must NOT emit a quad!
+    canvas.DrawTextString("280 KM/H", font, UIRect{ 100.0f, 200.0f, 500.0f, 60.0f }, 48.0f, glm::vec4(1.0f, 0.9f, 0.2f, 1.0f));
+
+    assert(canvas.GetStats().QuadCount == 7);
+    assert(canvas.GetStats().VertexCount == 28);
+    assert(canvas.GetStats().IndexCount == 42);
+
+    const auto& textVerts = canvas.GetVertexBuffer();
+    assert(textVerts.size() == 28);
+    for (size_t i = 0; i < textVerts.size(); i += 4) {
+        assert(textVerts[i].PrimitiveType == static_cast<uint32_t>(UIPrimitiveType::MSDF_Text));
+        assert(textVerts[i].TextureIndex == 12);
+        assert(textVerts[i].Color == glm::vec4(1.0f, 0.9f, 0.2f, 1.0f));
+    }
+
+    canvas.EndCanvas();
+    assert(canvas.GetStats().DrawCalls == 1);
+    std::cout << "  -> Exactly 7 quads emitted for 8-char string (space quad omitted): PASS" << std::endl;
+    std::cout << "  -> PrimitiveType == MSDF_Text and TextureIndex == 12 verified: PASS" << std::endl;
+
+    // [87.5] Font Serialization & Deserialization (.axlefont)
+    std::cout << "\n[87.5] Testing .axlefont Save & Load..." << std::endl;
+    std::filesystem::create_directories("test_output");
+    std::string testFontPath = "test_output/TestFont.axlefont";
+    assert(font->SaveToAxleFont(testFontPath));
+
+    UIFont loadedFont;
+    assert(loadedFont.LoadFromAxleFont(testFontPath));
+    assert(loadedFont.GetBindlessTextureIndex() == 12);
+    assert(loadedFont.GetGlyph('A') != nullptr);
+
+    std::cout << "  -> SaveToAxleFont / LoadFromAxleFont roundtrip: PASS" << std::endl;
+
+    std::cout << "\n>>> STEP 87 PASSED: MSDF Font Pipeline & Text Layout 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+

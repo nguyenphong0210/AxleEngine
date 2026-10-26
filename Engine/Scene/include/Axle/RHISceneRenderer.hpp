@@ -23,7 +23,9 @@
 namespace Axle {
 
     class Scene;
+    class PhysicsScene;
     class RHIParticleRenderer;
+    class RHIPhysicsDebugRenderer;
 
     // 256-byte CBV aligned constants for Atmospheric Skybox pass
     struct RHISkyboxConstants {
@@ -75,7 +77,8 @@ namespace Axle {
                          const PerspectiveCamera& camera,
                          RHI::RHITexture* colorTarget,
                          RHI::RHITexture* depthTarget = nullptr,
-                         const SceneRenderSettings& settings = SceneRenderSettings{});
+                         const SceneRenderSettings& settings = SceneRenderSettings{},
+                         PhysicsScene* physicsScene = nullptr);
 
         // Render entire 3D scene into specific render targets (Headless tests / custom FBO)
         void RenderScene(const std::shared_ptr<Scene>& scene,
@@ -85,7 +88,8 @@ namespace Axle {
                          nri::Texture* depthTarget,
                          nri::Descriptor* depthDSV,
                          uint32_t width, uint32_t height,
-                         const SceneRenderSettings& settings = SceneRenderSettings{});
+                         const SceneRenderSettings& settings = SceneRenderSettings{},
+                         PhysicsScene* physicsScene = nullptr);
 
         // Performance & Telemetry metrics
         uint32_t GetDrawCallCount() const { return m_LastDrawCallCount; }
@@ -190,6 +194,9 @@ namespace Axle {
         // GPU Instanced Particle VFX Renderer
         RHIParticleRenderer* GetParticleRenderer() const { return m_ParticleRenderer.get(); }
 
+        // RHI Physics Debug Wireframe Renderer
+        RHIPhysicsDebugRenderer* GetPhysicsDebugRenderer() const { return m_PhysicsDebugRenderer.get(); }
+
     private:
         bool CompileShaders(RHI::RHIDevice& device);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
@@ -273,6 +280,7 @@ namespace Axle {
         uint8_t m_CurrentMSAASamples = 1;
 
         std::unique_ptr<RHIParticleRenderer> m_ParticleRenderer;
+        std::unique_ptr<RHIPhysicsDebugRenderer> m_PhysicsDebugRenderer;
 
         RHI::RHICommandBuffer m_CommandBuffer;
         std::unique_ptr<RHI::RHIStreamer> m_Streamer;

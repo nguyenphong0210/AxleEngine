@@ -1,5 +1,8 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
+#include <Axle/RHIPhysicsDebugRenderer.hpp>
+#include <Axle/PhysicsScene.hpp>
+#include <Axle/Vehicle.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
@@ -234,6 +237,12 @@ namespace Axle {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize GPU Instanced Particle VFX Renderer!");
         }
 
+        // Initialize RHI Physics Debug Wireframe Line Renderer
+        m_PhysicsDebugRenderer = std::make_unique<RHIPhysicsDebugRenderer>();
+        if (!m_PhysicsDebugRenderer->Init(device)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize RHI Physics Debug Wireframe Line Renderer!");
+        }
+
         m_Initialized = true;
         AXLE_CORE_INFO("RHISceneRenderer: Successfully initialized with PushConstant transform streaming, 16x Anisotropic Filtering, Descriptor Pools, Forward+ Multi-Light Buffer, Film-Grade Tone Mapping & Anti-Aliasing (FXAA/MSAA).");
         return true;
@@ -241,6 +250,11 @@ namespace Axle {
 
     void RHISceneRenderer::Shutdown() {
         if (!m_Initialized) return;
+
+        if (m_PhysicsDebugRenderer) {
+            m_PhysicsDebugRenderer->Shutdown();
+            m_PhysicsDebugRenderer.reset();
+        }
 
         if (m_ParticleRenderer) {
             m_ParticleRenderer->Shutdown();
@@ -859,7 +873,8 @@ namespace Axle {
                                        const PerspectiveCamera& camera,
                                        RHITexture* colorTarget,
                                        RHITexture* depthTarget,
-                                       const SceneRenderSettings& settings)
+                                       const SceneRenderSettings& settings,
+                                       PhysicsScene* physicsScene)
     {
         if (!colorTarget || !colorTarget->IsValid()) return;
 
@@ -874,7 +889,8 @@ namespace Axle {
                     depthTarget ? depthTarget->GetNative() : nullptr,
                     depthTarget ? depthTarget->GetDSV() : nullptr,
                     colorTarget->GetWidth(), colorTarget->GetHeight(),
-                    settings);
+                    settings,
+                    physicsScene);
     }
 
     void RHISceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene,
@@ -884,7 +900,8 @@ namespace Axle {
                                        nri::Texture* depthTarget,
                                        nri::Descriptor* depthDSV,
                                        uint32_t width, uint32_t height,
-                                       const SceneRenderSettings& settings)
+                                       const SceneRenderSettings& settings,
+                                       PhysicsScene* physicsScene)
     {
         if (!m_Initialized || !colorTarget || !colorRTV || width == 0 || height == 0) return;
 
@@ -1279,6 +1296,38 @@ namespace Axle {
             scene->RenderParticles(*m_ParticleRenderer, camera, m_CommandBuffer);
             m_ParticleRenderer->End();
             m_LastDrawCallCount += m_ParticleRenderer->GetDrawCallCount();
+        }
+
+        // 6.5. Jolt Physics Debug Wireframe Pass (Colliders, wheel suspension raycasts, bounds)
+        if (settings.ShowPhysicsDebug && m_PhysicsDebugRenderer) {
+            PhysicsScene* activePhysics = physicsScene ? physicsScene : (scene ? scene->GetPhysicsScene() : nullptr);
+            if (activePhysics) {
+                m_PhysicsDebugRenderer->Begin(camera.GetPosition(),
+                                             camera.GetViewProjectionMatrix(),
+                                             sceneTargetFormat,
+                                             m_CurrentDepthFormat,
+                                             activeSampleCount,
+                                             true,
+                                             settings.PhysicsDepthBias,
+                                             settings.PhysicsAlphaMultiplier);
+
+                activePhysics->DrawDebug(*m_PhysicsDebugRenderer, settings.PhysicsDrawSettings);
+
+                // Render active vehicle suspension raycasts and chassis orientation if requested
+                if (scene) {
+                    for (const auto& rvd : scene->GetRuntimeVehicles()) {
+                        if (rvd.VehicleInstance && rvd.VehicleInstance->GetConstraint()) {
+                            if (settings.PhysicsDrawSettings.DrawBoundingBoxes) {
+                                glm::mat4 chassisXform = rvd.VehicleInstance->GetChassisTransform();
+                                m_PhysicsDebugRenderer->DrawTransform(chassisXform, 1.5f);
+                            }
+                        }
+                    }
+                }
+
+                m_PhysicsDebugRenderer->End(m_CommandBuffer);
+                m_LastDrawCallCount += m_PhysicsDebugRenderer->GetDrawCallCount();
+            }
         }
 
         // 7. End Scene Rendering Pass

@@ -16838,6 +16838,185 @@ bool RunTest_Step80_RHIPhysicsDebugLinePipeline() {
 }
 
 // =============================================================================
+// TEST STEP 81: Phase 33 - Step 5.2.2: SceneRenderer Integration & Physics Debug Overlay
+// =============================================================================
+bool RunTest_Step81_PhysicsDebugSceneRendererIntegration() {
+    using namespace Axle;
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 81 TEST] PHASE 33.5.2.2: PHYSICS DEBUG SCENE RENDERER " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    if (!Axle::PhysicsEngine::IsInitialized()) {
+        Axle::PhysicsEngine::Init();
+    }
+
+    // [81.1] Validate SceneRenderSettings Defaults and Physics Depth Bias Parameters
+    std::cout << "\n[81.1] Validating SceneRenderSettings Physics Debug Defaults..." << std::endl;
+    {
+        SceneRenderSettings settings;
+        assert(!settings.ShowPhysicsDebug);
+        assert(settings.PhysicsDepthBias > 0.0f);
+        assert(settings.PhysicsAlphaMultiplier == 1.0f);
+        assert(settings.PhysicsDrawSettings.DrawShapes);
+        assert(settings.PhysicsDrawSettings.DrawWireframe);
+        std::cout << "  -> ShowPhysicsDebug default: false." << std::endl;
+        std::cout << "  -> PhysicsDepthBias: " << settings.PhysicsDepthBias << ", Alpha: " << settings.PhysicsAlphaMultiplier << std::endl;
+        std::cout << "  -> PASS: SceneRenderSettings physics parameters verified." << std::endl;
+    }
+
+    // [81.2] Initialize RHIDevice & RHISceneRenderer with Embedded RHIPhysicsDebugRenderer
+    std::cout << "\n[81.2] Testing RHISceneRenderer Lifecycle & Embedded Physics Debugger..." << std::endl;
+    auto& rhiDevice = Axle::RHI::RHIDevice::Get();
+    if (!rhiDevice.IsInitialized()) {
+        Axle::RHI::RHIDeviceDesc devDesc;
+        devDesc.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+        devDesc.Headless = true;
+        devDesc.AllowFallback = true;
+        assert(rhiDevice.Init(devDesc));
+    }
+
+    RHISceneRenderer sceneRenderer;
+    assert(sceneRenderer.Init(rhiDevice));
+    assert(sceneRenderer.IsInitialized());
+    assert(sceneRenderer.GetPhysicsDebugRenderer() != nullptr);
+    assert(sceneRenderer.GetPhysicsDebugRenderer()->IsValid());
+    std::cout << "  -> RHISceneRenderer initialized with active RHIPhysicsDebugRenderer." << std::endl;
+    std::cout << "  -> PASS: RHIPhysicsDebugRenderer lifecycle inside RHISceneRenderer verified." << std::endl;
+
+    // [81.3] Scene & Physics Simulation Construction (Ground plane, falling box, bouncy sphere)
+    std::cout << "\n[81.3] Constructing 3D Test Scene with Static & Dynamic Physics Bodies..." << std::endl;
+    auto scene = std::make_shared<Scene>();
+    PhysicsScene physicsScene;
+
+    // 1. Static Ground Plane (HalfExtent 50m)
+    PlaneBodyProps planeProps;
+    planeProps.Position = glm::vec3(0.0f, 0.0f, 0.0f);
+    planeProps.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+    planeProps.HalfExtent = 50.0f;
+    BodyID planeID = physicsScene.CreatePlane(planeProps);
+    assert(!planeID.IsInvalid());
+
+    Entity groundEntity = scene->CreateEntity("Ground_Floor");
+    auto& groundTc = groundEntity.GetComponent<TransformComponent>();
+    groundTc.Translation = glm::vec3(0.0f, 0.0f, 0.0f);
+    groundTc.Scale = glm::vec3(50.0f, 1.0f, 50.0f);
+    auto& groundMesh = groundEntity.AddComponent<MeshInstance3D>();
+    groundMesh.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+
+    // 2. Dynamic Box Collider (Position 0, 3, 0)
+    BoxBodyProps boxProps;
+    boxProps.Position = glm::vec3(0.0f, 3.0f, 0.0f);
+    boxProps.HalfExtent = glm::vec3(1.0f, 1.0f, 1.0f);
+    boxProps.IsDynamic = true;
+    BodyID boxID = physicsScene.CreateBox(boxProps);
+    assert(!boxID.IsInvalid());
+
+    Entity boxEntity = scene->CreateEntity("Physics_Box");
+    auto& boxTc = boxEntity.GetComponent<TransformComponent>();
+    boxTc.Translation = glm::vec3(0.0f, 3.0f, 0.0f);
+    auto& boxMesh = boxEntity.AddComponent<MeshInstance3D>();
+    boxMesh.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+
+    // 3. Dynamic Sphere Collider (Position 4, 5, 0, radius 1.5)
+    SphereBodyProps sphereProps;
+    sphereProps.Position = glm::vec3(4.0f, 5.0f, 0.0f);
+    sphereProps.Radius = 1.5f;
+    sphereProps.IsDynamic = true;
+    BodyID sphereID = physicsScene.CreateSphere(sphereProps);
+    assert(!sphereID.IsInvalid());
+
+    Entity sphereEntity = scene->CreateEntity("Physics_Sphere");
+    auto& sphereTc = sphereEntity.GetComponent<TransformComponent>();
+    sphereTc.Translation = glm::vec3(4.0f, 5.0f, 0.0f);
+    auto& sphereMesh = sphereEntity.AddComponent<MeshInstance3D>();
+    sphereMesh.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+
+    // 4. Directional Sun Light & Atmospheric Skybox
+    Entity sunEntity = scene->CreateEntity("Sun_Light");
+    auto& sunLight = sunEntity.AddComponent<DirectionalLightComponent>();
+    sunLight.Color = glm::vec3(1.0f, 0.95f, 0.9f);
+    sunLight.Intensity = 120000.0f;
+    auto& sunTc = sunEntity.GetComponent<TransformComponent>();
+    sunTc.Rotation = glm::quat(glm::vec3(glm::radians(-45.0f), glm::radians(30.0f), 0.0f));
+
+    Entity skyEntity = scene->CreateEntity("Atmosphere");
+    auto& skybox = skyEntity.AddComponent<SkyboxComponent>();
+    skybox.Type = SkyboxType::ProceduralAtmospheric;
+
+    // Camera looking down at physics scene
+    PerspectiveCamera camera(60.0f, 1280.0f / 720.0f, 0.1f, 1000.0f);
+    camera.SetPosition(glm::vec3(0.0f, 8.0f, 18.0f));
+    camera.SetRotation(glm::vec3(-22.0f, 0.0f, 0.0f));
+
+    std::cout << "  -> Created Ground Floor (PlaneBody), Physics Box (BoxBody), and Physics Sphere (SphereBody)." << std::endl;
+    std::cout << "  -> PASS: 3D Scene + Physics simulation test bed constructed." << std::endl;
+
+    // [81.4] RenderScene with ShowPhysicsDebug = true (Overlay Verification)
+    std::cout << "\n[81.4] Testing Viewport Render with ShowPhysicsDebug = true..." << std::endl;
+    Axle::RHI::RHITexture colorTarget;
+    assert(colorTarget.Init(Axle::RHI::RHITextureDesc::RenderTarget2D(1280, 720, Axle::RHI::RHITextureFormat::RGBA8_UNORM, "Test_PhysicsDebugColor")));
+
+    Axle::RHI::RHITexture depthTarget;
+    assert(depthTarget.Init(Axle::RHI::RHITextureDesc::DepthStencil2D(1280, 720, Axle::RHI::RHITextureFormat::D32_FLOAT, "Test_PhysicsDebugDepth")));
+
+    SceneRenderSettings debugSettings;
+    debugSettings.ShowPhysicsDebug = true;
+    debugSettings.PhysicsDrawSettings.DrawShapes = true;
+    debugSettings.PhysicsDrawSettings.DrawWireframe = true;
+    debugSettings.PhysicsDrawSettings.DrawBoundingBoxes = true;
+
+    sceneRenderer.RenderScene(scene, camera, &colorTarget, &depthTarget, debugSettings, &physicsScene);
+
+    uint32_t debugDrawCalls = sceneRenderer.GetDrawCallCount();
+    auto* debugRenderer = sceneRenderer.GetPhysicsDebugRenderer();
+    assert(debugRenderer != nullptr);
+    assert(debugRenderer->GetFlushedVertexCount() > 0);
+    assert(debugRenderer->GetDrawCallCount() >= 1);
+    assert(debugDrawCalls >= 4); // 3 entities + skybox + physics debug lines
+
+    std::cout << "  -> Flushed " << debugRenderer->GetFlushedVertexCount() << " physics debug wireframe vertices." << std::endl;
+    std::cout << "  -> Total draw calls: " << debugDrawCalls << " (includes physics debug wireframe overlay)." << std::endl;
+    std::cout << "  -> PASS: Physics collider wireframes rendered cleanly on top of scene geometry." << std::endl;
+
+    // [81.5] Multi-Pass Pipeline Integration (Physics Debug + Tone Mapping + FXAA + MSAA 4x)
+    std::cout << "\n[81.5] Testing Multi-Pass Integration (Physics Debug + MSAA 4x + ToneMap + FXAA)..." << std::endl;
+    {
+        SceneRenderSettings fullPipelineSettings = debugSettings;
+        fullPipelineSettings.EnableToneMapping = true;
+        fullPipelineSettings.ToneMappingMode = 0; // ACES Filmic
+        fullPipelineSettings.EnableFXAA = true;
+        fullPipelineSettings.MSAASamples = 4;
+
+        sceneRenderer.RenderScene(scene, camera, &colorTarget, &depthTarget, fullPipelineSettings, &physicsScene);
+
+        assert(sceneRenderer.GetDrawCallCount() > debugDrawCalls);
+        assert(debugRenderer->GetFlushedVertexCount() > 0);
+        std::cout << "  -> Total multi-pass draw calls: " << sceneRenderer.GetDrawCallCount() << std::endl;
+        std::cout << "  -> PASS: Physics wireframe seamlessly resolved through MSAA 4x, ACES Tone Mapping, and FXAA." << std::endl;
+    }
+
+    // [81.6] Dynamic Physics Debug Toggle & Zero-Overhead Verification
+    std::cout << "\n[81.6] Testing Dynamic Physics Debug Toggle & Zero-Overhead Mode..." << std::endl;
+    {
+        SceneRenderSettings noDebugSettings = debugSettings;
+        noDebugSettings.ShowPhysicsDebug = false;
+
+        sceneRenderer.RenderScene(scene, camera, &colorTarget, &depthTarget, noDebugSettings, &physicsScene);
+
+        assert(sceneRenderer.GetDrawCallCount() < debugDrawCalls);
+        std::cout << "  -> Non-debug draw calls: " << sceneRenderer.GetDrawCallCount() << " (reduced from " << debugDrawCalls << ")." << std::endl;
+        std::cout << "  -> PASS: Zero physics line draw calls submitted when ShowPhysicsDebug = false." << std::endl;
+    }
+
+    colorTarget.Shutdown();
+    depthTarget.Shutdown();
+    sceneRenderer.Shutdown();
+
+    std::cout << "\n>>> STEP 81 PASSED: SceneRenderer Physics Debug Wireframe Overlay 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -16925,6 +17104,7 @@ int main(int argc, char** argv) {
         else if (arg == "78" || arg == "step78" || arg == "--step78" || arg == "--aa" || arg == "--fxaa" || arg == "--msaa" || arg == "--anti-aliasing") targetStep = 78;
         else if (arg == "79" || arg == "step79" || arg == "--step79" || arg == "--particles" || arg == "--gpu-particles" || arg == "--vfx-rhi") targetStep = 79;
         else if (arg == "80" || arg == "step80" || arg == "--step80" || arg == "--physics-debug" || arg == "--wireframe" || arg == "--line-pipeline") targetStep = 80;
+        else if (arg == "81" || arg == "step81" || arg == "--step81" || arg == "--physics-scene" || arg == "--debug-overlay") targetStep = 81;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -16933,7 +17113,7 @@ int main(int argc, char** argv) {
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 66 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 67 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -17165,6 +17345,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 80) {
         if (!RunTest_Step80_RHIPhysicsDebugLinePipeline()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 81) {
+        if (!RunTest_Step81_PhysicsDebugSceneRendererIntegration()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

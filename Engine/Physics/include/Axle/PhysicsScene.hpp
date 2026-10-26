@@ -14,6 +14,10 @@
 #include <glm/gtc/quaternion.hpp>
 #include <memory>
 
+namespace JPH {
+    class DebugRenderer;
+}
+
 namespace Axle {
 
     using BodyID = JPH::BodyID;
@@ -106,8 +110,9 @@ namespace Axle {
         // Step simulation by delta time
         void Step(Timestep ts, i32 collisionSteps = 1);
 
-        // Debug visualization using PhysicsDebugRenderer
+        // Debug visualization using PhysicsDebugRenderer (OpenGL) or RHIPhysicsDebugRenderer / JPH::DebugRenderer
         void DrawDebug(PhysicsDebugRenderer& renderer, const PhysicsDrawSettings& settings = PhysicsDrawSettings());
+        void DrawDebug(JPH::DebugRenderer& renderer, const PhysicsDrawSettings& settings = PhysicsDrawSettings());
 
         // Body creation and management
         BodyID CreateBox(const BoxBodyProps& props);

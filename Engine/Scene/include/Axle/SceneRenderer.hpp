@@ -26,6 +26,8 @@ namespace Axle {
         uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8
         bool ShowPhysicsDebug = false;
         PhysicsDrawSettings PhysicsDrawSettings;
+        float PhysicsDepthBias = 0.0001f;
+        float PhysicsAlphaMultiplier = 1.0f;
         float Exposure = 1.0f;
         int ToneMappingMode = 0; // 0: ACES Filmic, 1: Reinhard, 2: Uncharted 2, 3: Linear Bypass
         float Gamma = 2.2f;

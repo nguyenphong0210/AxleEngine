@@ -70,7 +70,7 @@ namespace Axle {
         m_PhysicsSystem.Update(dt, collisionSteps, m_TempAllocator.get(), m_JobSystem.get());
     }
 
-    void PhysicsScene::DrawDebug(PhysicsDebugRenderer& renderer, const PhysicsDrawSettings& settings) {
+    void PhysicsScene::DrawDebug(JPH::DebugRenderer& renderer, const PhysicsDrawSettings& settings) {
         JPH::DebugRenderer::sInstance = &renderer;
 
         JPH::BodyManager::DrawSettings joltSettings;
@@ -86,6 +86,10 @@ namespace Axle {
 
         m_PhysicsSystem.DrawConstraints(&renderer);
         m_PhysicsSystem.DrawConstraintLimits(&renderer);
+    }
+
+    void PhysicsScene::DrawDebug(PhysicsDebugRenderer& renderer, const PhysicsDrawSettings& settings) {
+        DrawDebug(static_cast<JPH::DebugRenderer&>(renderer), settings);
     }
 
     BodyID PhysicsScene::CreateBox(const BoxBodyProps& props) {

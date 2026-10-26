@@ -106,6 +106,8 @@
 #include <Axle/UI/UITypes.hpp>
 #include <Axle/UI/Canvas2D.hpp>
 #include <Axle/UI/UIFont.hpp>
+#include <Axle/UI/UINode.hpp>
+#include <Axle/UI/UIDocument.hpp>
 #include <Axle/Application.hpp>
 #include <Axle/Window.hpp>
 #include <imgui.h>
@@ -317,3 +319,4 @@ bool RunTest_Step84_TripleBackendSwitchingAndVisualParity();
 bool RunTest_Step85_Phase34_Step1_Part1_DecoupledAxleUI2DLibraryAndUITypes();
 bool RunTest_Step86_Phase34_Step1_Part2_Canvas2DBatchingAndSDFPipeline();
 bool RunTest_Step87_Phase34_Step2_MSDFFontAndTextLayout();
+bool RunTest_Step88_Phase34_Step3_DOMTreeAnd2PassLayoutEngine();

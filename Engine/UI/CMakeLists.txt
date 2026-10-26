@@ -5,6 +5,8 @@ add_library(AxleUI2D STATIC
     src/UI2D/UITypes.cpp
     src/UI2D/Canvas2D.cpp
     src/UI2D/UIFont.cpp
+    src/UI2D/UINode.cpp
+    src/UI2D/UIDocument.cpp
 )
 add_library(Axle::UI2D ALIAS AxleUI2D)
 

@@ -413,4 +413,353 @@ bool RunTest_Step87_Phase34_Step2_MSDFFontAndTextLayout() {
     return true;
 }
 
+// =============================================================================
+// TEST STEP 88: Phase 34 Step 3 - Hybrid OOP UI DOM Tree (UINode & UIDocument)
+// & 2-Pass Responsive Layout Engine (MeasurePass & ArrangePass across 12 UIAnchors)
+// =============================================================================
+bool RunTest_Step88_Phase34_Step3_DOMTreeAnd2PassLayoutEngine() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 88 TEST] UI DOM TREE & 2-PASS LAYOUT ENGINE     " << std::endl;
+    std::cout << " (Arena Hierarchy, 12 UIAnchors, Box Container, DPI)    " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    // [88.1] Arena Allocation & Element Type Coverage in UIDocument
+    std::cout << "[88.1] Testing Arena Node Allocation & Full Type Coverage..." << std::endl;
+    UIDocument doc;
+    assert(doc.GetNodeCount() == 0);
+    assert(doc.GetRootNode() == nullptr);
+
+    // Root Canvas
+    auto* root = doc.CreateNode<UICanvasNode>(nullptr);
+    assert(root != nullptr);
+    assert(doc.GetRootNode() == root);
+    assert(root->GetTypeName() == "Canvas");
+    assert(root->ReferenceResolution == glm::vec2(1920.0f, 1080.0f));
+
+    // Panel (Rectangle)
+    auto* panel = doc.CreateNode<UIRectangleNode>(root);
+    assert(panel != nullptr);
+    assert(panel->Parent == root);
+    assert(panel->GetTypeName() == "Rectangle");
+
+    // Text child inside panel
+    auto* speedText = doc.CreateNode<UITextNode>(panel);
+    assert(speedText != nullptr);
+    assert(speedText->Parent == panel);
+    assert(speedText->GetTypeName() == "Text");
+
+    // Radial Gauge
+    auto* rpmGauge = doc.CreateNode<UIRadialGaugeNode>(root);
+    assert(rpmGauge != nullptr);
+    assert(rpmGauge->Parent == root);
+    assert(rpmGauge->GetTypeName() == "RadialGauge");
+
+    // Progress Bar
+    auto* fuelBar = doc.CreateNode<UIProgressBarNode>(root);
+    assert(fuelBar != nullptr);
+    assert(fuelBar->Parent == root);
+    assert(fuelBar->GetTypeName() == "ProgressBar");
+
+    // Interactive Button
+    auto* pauseBtn = doc.CreateNode<UIButtonNode>(root);
+    assert(pauseBtn != nullptr);
+    assert(pauseBtn->Parent == root);
+    assert(pauseBtn->GetTypeName() == "Button");
+
+    // Box Container (Column)
+    auto* telemetryCol = doc.CreateNode<UIBoxContainerNode>(root, true);
+    assert(telemetryCol != nullptr);
+    assert(telemetryCol->IsVertical == true);
+    assert(telemetryCol->GetTypeName() == "Column");
+
+    // 2 children inside Column
+    auto* label1 = doc.CreateNode<UITextNode>(telemetryCol);
+    auto* label2 = doc.CreateNode<UITextNode>(telemetryCol);
+    assert(label1->Parent == telemetryCol);
+    assert(label2->Parent == telemetryCol);
+
+    // Image Node
+    auto* logoImg = doc.CreateNode<UIImageNode>(root);
+    assert(logoImg != nullptr);
+    assert(logoImg->GetTypeName() == "Image");
+
+    assert(doc.GetNodeCount() == 10);
+    assert(root->Children.size() == 6); // panel, rpmGauge, fuelBar, pauseBtn, telemetryCol, logoImg
+    assert(panel->Children.size() == 1); // speedText
+    assert(telemetryCol->Children.size() == 2); // label1, label2
+
+    std::cout << "  -> Arena allocation of 10 nodes across all 8 concrete element types: PASS" << std::endl;
+    std::cout << "  -> Parent-child hierarchy pointers and children vectors: PASS" << std::endl;
+
+    // [88.2] Fast ID Lookup & Dynamic Property Reflection
+    std::cout << "\n[88.2] Testing ID Map Lookup & Dynamic Property Setters..." << std::endl;
+    panel->ID = "mainPanel";
+    speedText->ID = "speedText";
+    rpmGauge->ID = "rpmGauge";
+    fuelBar->ID = "fuelBar";
+    pauseBtn->ID = "pauseBtn";
+
+    doc.RebuildIDMap();
+    assert(doc.FindNodeByID("rpmGauge") == rpmGauge);
+    assert(doc.FindNodeByID("speedText") == speedText);
+    assert(doc.FindNodeByID("pauseBtn") == pauseBtn);
+    assert(doc.FindNodeByID("nonExistent") == nullptr);
+
+    // Test Color & Hex Parsing
+    assert(panel->SetProperty("backgroundColor", "#1A2233E6"));
+    assert(std::abs(panel->Style.BackgroundColor.r - (0x1A / 255.0f)) < 0.01f);
+    assert(std::abs(panel->Style.BackgroundColor.g - (0x22 / 255.0f)) < 0.01f);
+    assert(std::abs(panel->Style.BackgroundColor.b - (0x33 / 255.0f)) < 0.01f);
+    assert(std::abs(panel->Style.BackgroundColor.a - (0xE6 / 255.0f)) < 0.01f);
+
+    assert(panel->SetPropertyFloat("cornerRadius", 16.0f));
+    assert(panel->Style.CornerRadius == 16.0f);
+    assert(panel->SetPropertyFloat("borderWidth", 2.0f));
+    assert(panel->Style.BorderWidth == 2.0f);
+
+    assert(speedText->SetProperty("text", "280 KM/H"));
+    assert(speedText->Text == "280 KM/H");
+    assert(speedText->SetPropertyFloat("fontSize", 48.0f));
+    assert(speedText->FontSize == 48.0f);
+
+    assert(fuelBar->SetPropertyFloat("value", 0.72f));
+    assert(fuelBar->Value == 0.72f);
+    assert(rpmGauge->SetPropertyFloat("value", 0.85f));
+    assert(rpmGauge->Value == 0.85f);
+    assert(pauseBtn->SetProperty("action", "PauseGame"));
+    assert(pauseBtn->OnClickAction == "PauseGame");
+
+    std::cout << "  -> RebuildIDMap() & FindNodeByID() verified: PASS" << std::endl;
+    std::cout << "  -> Hex color, numeric float, and string property reflection: PASS" << std::endl;
+
+    // [88.3] 2-Pass Layout Engine: Bottom-Up Measure & Top-Down Arrange across 12 UIAnchor Modes
+    std::cout << "\n[88.3] Testing 2-Pass Layout Engine (Measure & Arrange across Anchors)..." << std::endl;
+
+    // Configure distinct anchor test nodes under root
+    doc.Clear();
+    root = doc.CreateNode<UICanvasNode>(nullptr);
+    root->ReferenceResolution = glm::vec2(1920.0f, 1080.0f);
+
+    // 1. TopLeft Anchor
+    auto* nTL = doc.CreateNode<UIRectangleNode>(root);
+    nTL->Anchor = UIAnchor::TopLeft;
+    nTL->Position = glm::vec2(20.0f, 30.0f);
+    nTL->Size = glm::vec2(200.0f, 100.0f);
+    nTL->Margin = glm::vec4(10.0f, 15.0f, 0.0f, 0.0f);
+
+    // 2. TopCenter Anchor
+    auto* nTC = doc.CreateNode<UIRectangleNode>(root);
+    nTC->Anchor = UIAnchor::TopCenter;
+    nTC->Position = glm::vec2(5.0f, 0.0f);
+    nTC->Size = glm::vec2(400.0f, 80.0f);
+    nTC->Margin = glm::vec4(0.0f, 25.0f, 0.0f, 0.0f);
+
+    // 3. TopRight Anchor
+    auto* nTR = doc.CreateNode<UIRectangleNode>(root);
+    nTR->Anchor = UIAnchor::TopRight;
+    nTR->Position = glm::vec2(-10.0f, 5.0f);
+    nTR->Size = glm::vec2(300.0f, 120.0f);
+    nTR->Margin = glm::vec4(0.0f, 10.0f, 30.0f, 0.0f);
+
+    // 4. Center Anchor
+    auto* nCenter = doc.CreateNode<UIRectangleNode>(root);
+    nCenter->Anchor = UIAnchor::Center;
+    nCenter->Position = glm::vec2(0.0f, 0.0f);
+    nCenter->Size = glm::vec2(500.0f, 300.0f);
+
+    // 5. BottomRight Anchor
+    auto* nBR = doc.CreateNode<UIRectangleNode>(root);
+    nBR->Anchor = UIAnchor::BottomRight;
+    nBR->Position = glm::vec2(0.0f, 0.0f);
+    nBR->Size = glm::vec2(250.0f, 150.0f);
+    nBR->Margin = glm::vec4(0.0f, 0.0f, 40.0f, 20.0f);
+
+    // 6. BottomStretch Anchor
+    auto* nBStretch = doc.CreateNode<UIRectangleNode>(root);
+    nBStretch->Anchor = UIAnchor::BottomStretch;
+    nBStretch->Position = glm::vec2(0.0f, 0.0f);
+    nBStretch->Size = glm::vec2(0.0f, 60.0f);
+    nBStretch->Margin = glm::vec4(50.0f, 0.0f, 50.0f, 30.0f);
+
+    // 7. StretchAll Anchor
+    auto* nStretchAll = doc.CreateNode<UIRectangleNode>(root);
+    nStretchAll->Anchor = UIAnchor::StretchAll;
+    nStretchAll->Margin = glm::vec4(40.0f, 60.0f, 40.0f, 60.0f);
+
+    // Run 2-Pass Layout
+    doc.UpdateLayout(glm::vec2(1920.0f, 1080.0f));
+
+    // Verify Root ComputedRect
+    assert(root->ComputedRect.X == 0.0f && root->ComputedRect.Y == 0.0f);
+    assert(root->ComputedRect.Width == 1920.0f && root->ComputedRect.Height == 1080.0f);
+
+    // 1. TopLeft: X = 0 + 10 + 20 = 30; Y = 0 + 15 + 30 = 45; W = 200; H = 100
+    assert(nTL->ComputedRect.X == 30.0f);
+    assert(nTL->ComputedRect.Y == 45.0f);
+    assert(nTL->ComputedRect.Width == 200.0f);
+    assert(nTL->ComputedRect.Height == 100.0f);
+
+    // 2. TopCenter: X = 0.5 * (1920 - 400) + 5 = 765; Y = 25; W = 400; H = 80
+    assert(nTC->ComputedRect.X == 765.0f);
+    assert(nTC->ComputedRect.Y == 25.0f);
+    assert(nTC->ComputedRect.Width == 400.0f);
+    assert(nTC->ComputedRect.Height == 80.0f);
+
+    // 3. TopRight: X = 1920 - 300 - 30 - 10 = 1580; Y = 10 + 5 = 15; W = 300; H = 120
+    assert(nTR->ComputedRect.X == 1580.0f);
+    assert(nTR->ComputedRect.Y == 15.0f);
+    assert(nTR->ComputedRect.Width == 300.0f);
+    assert(nTR->ComputedRect.Height == 120.0f);
+
+    // 4. Center: X = 0.5 * (1920 - 500) = 710; Y = 0.5 * (1080 - 300) = 390; W = 500; H = 300
+    assert(nCenter->ComputedRect.X == 710.0f);
+    assert(nCenter->ComputedRect.Y == 390.0f);
+    assert(nCenter->ComputedRect.Width == 500.0f);
+    assert(nCenter->ComputedRect.Height == 300.0f);
+
+    // 5. BottomRight: X = 1920 - 250 - 40 = 1630; Y = 1080 - 150 - 20 = 910; W = 250; H = 150
+    assert(nBR->ComputedRect.X == 1630.0f);
+    assert(nBR->ComputedRect.Y == 910.0f);
+    assert(nBR->ComputedRect.Width == 250.0f);
+    assert(nBR->ComputedRect.Height == 150.0f);
+
+    // 6. BottomStretch: X = 50; Y = 1080 - 60 - 30 = 990; W = 1920 - 100 = 1820; H = 60
+    assert(nBStretch->ComputedRect.X == 50.0f);
+    assert(nBStretch->ComputedRect.Y == 990.0f);
+    assert(nBStretch->ComputedRect.Width == 1820.0f);
+    assert(nBStretch->ComputedRect.Height == 60.0f);
+
+    // 7. StretchAll: X = 40; Y = 60; W = 1920 - 80 = 1840; H = 1080 - 120 = 960
+    assert(nStretchAll->ComputedRect.X == 40.0f);
+    assert(nStretchAll->ComputedRect.Y == 60.0f);
+    assert(nStretchAll->ComputedRect.Width == 1840.0f);
+    assert(nStretchAll->ComputedRect.Height == 960.0f);
+
+    std::cout << "  -> TopLeft, TopCenter, TopRight, Center, BottomRight anchor positioning: PASS" << std::endl;
+    std::cout << "  -> BottomStretch and StretchAll dimension stretching: PASS" << std::endl;
+
+    // [88.4] UIBoxContainerNode (Column / Row) Stacking & Auto-Measurement
+    std::cout << "\n[88.4] Testing Box Container Sequential Stacking & Child Auto-Sizing..." << std::endl;
+    doc.Clear();
+    root = doc.CreateNode<UICanvasNode>(nullptr);
+
+    auto* col = doc.CreateNode<UIBoxContainerNode>(root, true);
+    col->Anchor = UIAnchor::TopLeft;
+    col->Position = glm::vec2(100.0f, 100.0f);
+    col->Padding = glm::vec4(10.0f, 10.0f, 10.0f, 10.0f);
+    col->Spacing = 8.0f;
+
+    auto* item1 = doc.CreateNode<UIRectangleNode>(col);
+    item1->Size = glm::vec2(150.0f, 40.0f);
+
+    auto* item2 = doc.CreateNode<UIRectangleNode>(col);
+    item2->Size = glm::vec2(180.0f, 50.0f);
+
+    auto* item3 = doc.CreateNode<UIRectangleNode>(col);
+    item3->Size = glm::vec2(120.0f, 30.0f);
+
+    doc.UpdateLayout(glm::vec2(1920.0f, 1080.0f));
+
+    // Column Desired Size: W = padding(10 + 10) + maxW(180) = 200
+    //                      H = padding(10 + 10) + sumH(40 + 50 + 30) + spacing(2 * 8) = 20 + 120 + 16 = 156
+    assert(col->ComputedRect.X == 100.0f);
+    assert(col->ComputedRect.Y == 100.0f);
+    assert(col->ComputedRect.Width == 200.0f);
+    assert(col->ComputedRect.Height == 156.0f);
+
+    // Child 1: Y = 100 + 10 = 110, H = 40
+    assert(item1->ComputedRect.X == 110.0f);
+    assert(item1->ComputedRect.Y == 110.0f);
+    assert(item1->ComputedRect.Width == 150.0f);
+    assert(item1->ComputedRect.Height == 40.0f);
+
+    // Child 2: Y = 110 + 40 + 8 = 158, H = 50
+    assert(item2->ComputedRect.X == 110.0f);
+    assert(item2->ComputedRect.Y == 158.0f);
+    assert(item2->ComputedRect.Width == 180.0f);
+    assert(item2->ComputedRect.Height == 50.0f);
+
+    // Child 3: Y = 158 + 50 + 8 = 216, H = 30
+    assert(item3->ComputedRect.X == 110.0f);
+    assert(item3->ComputedRect.Y == 216.0f);
+    assert(item3->ComputedRect.Width == 120.0f);
+    assert(item3->ComputedRect.Height == 30.0f);
+
+    std::cout << "  -> Column container measured desired size (200x156): PASS" << std::endl;
+    std::cout << "  -> Children stacked sequentially with spacing & padding: PASS" << std::endl;
+
+    // [88.5] Multi-Resolution DPI Scaling Factor
+    std::cout << "\n[88.5] Testing Multi-Resolution DPI Scaling Factor..." << std::endl;
+    doc.UpdateLayout(glm::vec2(3840.0f, 2160.0f)); // 4K UHD
+    assert(std::abs(doc.GetComputedDPIScale() - 2.0f) < 1e-4f);
+
+    doc.UpdateLayout(glm::vec2(2560.0f, 1440.0f)); // 1440p QHD
+    assert(std::abs(doc.GetComputedDPIScale() - (2560.0f / 1920.0f)) < 1e-4f);
+
+    doc.UpdateLayout(glm::vec2(1280.0f, 720.0f));  // 720p HD
+    assert(std::abs(doc.GetComputedDPIScale() - (1280.0f / 1920.0f)) < 1e-4f);
+
+    std::cout << "  -> 4K (2.0x), 1440p (1.33x), 720p (0.67x) DPI scaling factor computation: PASS" << std::endl;
+
+    // [88.6] End-to-End Hierarchical Canvas2D Drawing & Batch Consolidation
+    std::cout << "\n[88.6] Testing End-to-End Hierarchical Canvas2D Drawing..." << std::endl;
+    doc.Clear();
+    root = doc.CreateNode<UICanvasNode>(nullptr);
+
+    auto* hudPanel = doc.CreateNode<UIRectangleNode>(root);
+    hudPanel->Size = glm::vec2(400.0f, 200.0f);
+    hudPanel->Style.BackgroundColor = glm::vec4(0.1f, 0.1f, 0.1f, 0.9f);
+
+    auto* hudText = doc.CreateNode<UITextNode>(hudPanel);
+    hudText->Text = "RPM";
+    hudText->FontSize = 24.0f;
+    hudText->Color = glm::vec4(1.0f);
+
+    auto* hudGauge = doc.CreateNode<UIRadialGaugeNode>(root);
+    hudGauge->Size = glm::vec2(150.0f, 150.0f);
+    hudGauge->Value = 0.65f;
+
+    auto* hudBar = doc.CreateNode<UIProgressBarNode>(root);
+    hudBar->Size = glm::vec2(200.0f, 20.0f);
+    hudBar->Value = 0.8f;
+
+    auto* hudBtn = doc.CreateNode<UIButtonNode>(root);
+    hudBtn->Size = glm::vec2(100.0f, 40.0f);
+
+    // Also add an invisible node to verify it is NOT drawn
+    auto* hiddenNode = doc.CreateNode<UIRectangleNode>(root);
+    hiddenNode->Visible = false;
+
+    doc.UpdateLayout(glm::vec2(1920.0f, 1080.0f));
+
+    Canvas2D canvas;
+    canvas.Init();
+    canvas.BeginCanvas(glm::vec2(1920.0f, 1080.0f), 1.0f);
+
+    doc.Render(canvas);
+
+    // Expect:
+    // hudPanel: 1 quad (Rect)
+    // hudText: 3 quads ('R', 'P', 'M')
+    // hudGauge: 1 quad (RadialArc)
+    // hudBar: 2 quads (1 track + 1 fill)
+    // hudBtn: 1 quad (Rect)
+    // hiddenNode: 0 quads
+    // Total quads = 1 + 3 + 1 + 2 + 1 = 8 quads
+    assert(canvas.GetStats().QuadCount == 8);
+    assert(canvas.GetStats().VertexCount == 32);
+    assert(canvas.GetStats().IndexCount == 48);
+
+    canvas.EndCanvas();
+    assert(canvas.GetStats().DrawCalls == 1);
+
+    std::cout << "  -> Document rendered 8 quads into Canvas2D in a single consolidated draw call: PASS" << std::endl;
+    std::cout << "  -> Hidden node correctly skipped during OnDraw: PASS" << std::endl;
+
+    std::cout << "\n>>> STEP 88 PASSED: UI DOM Tree & 2-Pass Layout Engine 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
 

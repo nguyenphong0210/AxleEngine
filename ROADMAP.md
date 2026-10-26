@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 33** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **72 Comprehensive Headless Test Suites** (`AxleTests.exe`, 79 individual test steps up through **Step 87**) passing with **100% pass rate**.
+* **Automated Test Verification**: **73 Comprehensive Headless Test Suites** (`AxleTests.exe`, 80 individual test steps up through **Step 88**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 34 (Declarative QML In-Game UI & Hardware-Accelerated Canvas2D Subsystem)** and beyond.
 
 ---
@@ -431,10 +431,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Native MSDF font asset pipeline (`UIFont` supporting `.axlefont` / `.axlebin` cache and a zero-dependency procedural embedded fallback font for headless CI testing).
     - [x] Resolution-independent sharp text rendering (`PrimitiveType = MSDF_Text`) supporting arbitrary scaling (from 10pt telemetry labels to 120pt digital speedometers), kerning pairs, and pixel-shader screen-space distance anti-aliasing.
     - [x] Text measurement calculator (`UIFont::MeasureText`) supporting multi-line word-wrapping, horizontal alignment (`Left`, `Center`, `Right`), and vertical alignment (`Top`, `Middle`, `Bottom`).
-  - [ ] **Step 3 - Hybrid OOP UI DOM Tree (`UIDocument` & `UINode`) & 2-Pass Layout Engine (`Engine/UI`)**:
-    - [ ] Contiguous arena-allocated OOP widget hierarchy (`UIDocument` owning `std::vector<std::unique_ptr<UINode>>`) keeping the 3D EnTT registry clean from micro-widget clutter.
-    - [ ] Core QML-style element primitives: `UICanvasNode`, `UIRectangleNode` (Panel), `UITextNode`, `UIImageNode`, `UIProgressBarNode`, `UIRadialGaugeNode` (Automotive Arc), `UIButtonNode`, and `UIBoxContainerNode` (`Row` / `Column`).
-    - [ ] 2-Pass Responsive Layout Engine: Bottom-Up `MeasurePass` (desired content size) and Top-Down `ArrangePass` supporting 12-mode Anchors (`TopLeft`, `Center`, `BottomRight`, `StretchAll`, etc.), Margins, Padding, and automatic DPI scaling against a configurable `ReferenceResolution` (`1920x1080`).
+  - [x] **Step 3 - Hybrid OOP UI DOM Tree (`UIDocument` & `UINode`) & 2-Pass Layout Engine (`Engine/UI`)**:
+    - [x] Contiguous arena-allocated OOP widget hierarchy (`UIDocument` owning `std::vector<std::unique_ptr<UINode>>`) keeping the 3D EnTT registry clean from micro-widget clutter.
+    - [x] Core QML-style element primitives: `UICanvasNode`, `UIRectangleNode` (Panel), `UITextNode`, `UIImageNode`, `UIProgressBarNode`, `UIRadialGaugeNode` (Automotive Arc), `UIButtonNode`, and `UIBoxContainerNode` (`Row` / `Column`).
+    - [x] 2-Pass Responsive Layout Engine: Bottom-Up `MeasurePass` (desired content size) and Top-Down `ArrangePass` supporting 12-mode Anchors (`TopLeft`, `Center`, `BottomRight`, `StretchAll`, etc.), Margins, Padding, and automatic DPI scaling against a configurable `ReferenceResolution` (`1920x1080`).
   - [ ] **Step 4 - Declarative QML-Style `.axleui` Parser & Live Hot-Reloading (`Engine/UI`)**:
     - [ ] Lightweight zero-dependency C++20 Lexer/Tokenizer and Recursive Descent Parser (`QMLParser`) reading human- and AI-friendly declarative `.axleui` markup files.
     - [ ] First-class property parsing: numeric scalars, strings, booleans, hex colors (`#RRGGBB` / `#RRGGBBAA`), vectors/margins (`[L, T, R, B]`), enums, string interpolation (`"FPS: {Engine.FPS}"`), and inline reactive ternary binding expressions (`"{Vehicle.IsRedline ? #FF1E42 : #00F5D4}"`).

@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <filesystem>
+#include <Axle/UI/UIDataContext.hpp>
 
 namespace Axle {
 
@@ -121,12 +122,16 @@ namespace Axle {
         entt::registry& GetRegistry() { return m_Registry; }
         const entt::registry& GetRegistry() const { return m_Registry; }
 
+        UIDataContext& GetUIDataContext() { return m_UIDataContext; }
+        const UIDataContext& GetUIDataContext() const { return m_UIDataContext; }
+
     private:
         void UpdateEntityTransformRecursive(entt::entity entity, const glm::mat4& parentWorld);
 
         entt::registry m_Registry;
         std::vector<RuntimeVehicleData> m_RuntimeVehicles;
         PhysicsScene* m_RuntimePhysicsScene = nullptr;
+        UIDataContext m_UIDataContext;
 
         friend class Entity;
     };

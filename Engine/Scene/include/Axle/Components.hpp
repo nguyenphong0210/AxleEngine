@@ -16,6 +16,7 @@
 #include <Axle/ParticleEmitter.hpp>
 #include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
+#include <Axle/UI/UIDocument.hpp>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -1320,6 +1321,17 @@ namespace Axle {
                 RuntimeVFX->Update(ts, characterPos, characterRot, linearVelocity, isGrounded, currentSpeed, groundNormal);
             }
         }
+    };
+
+    struct UICanvasComponent {
+        std::string AssetPath;
+        int32_t SortOrder = 0;
+        bool Visible = true;
+        std::shared_ptr<UIDocument> Document = nullptr;
+
+        UICanvasComponent() = default;
+        UICanvasComponent(const UICanvasComponent&) = default;
+        explicit UICanvasComponent(const std::string& path) : AssetPath(path) {}
     };
 
 }

@@ -506,6 +506,15 @@ namespace Axle {
                 ss << "      HeavyLandingCount: " << cvfx.Config.HeavyLandingCount << "\n";
             }
 
+            // UICanvasComponent
+            if (entity.HasComponent<UICanvasComponent>()) {
+                auto& uic = entity.GetComponent<UICanvasComponent>();
+                ss << "    UICanvasComponent:\n";
+                ss << "      AssetPath: " << uic.AssetPath << "\n";
+                ss << "      SortOrder: " << uic.SortOrder << "\n";
+                ss << "      Visible: " << (uic.Visible ? "true" : "false") << "\n";
+            }
+
             // Custom Entity Serializer Hook (for plugins e.g. SplineComponent, TerrainComponent)
             if (m_Context.CustomEntitySerializer) {
                 m_Context.CustomEntitySerializer(entity, ss);
@@ -572,6 +581,7 @@ namespace Axle {
             ParticleEmitter,
             VehicleVFX,
             CharacterVFX,
+            UICanvas,
             Custom
         };
         ComponentSection currentSection = ComponentSection::None;
@@ -717,6 +727,12 @@ namespace Axle {
                 currentSection = ComponentSection::CharacterVFX;
                 if (!currentEntity.HasComponent<CharacterVFXComponent>()) {
                     currentEntity.AddComponent<CharacterVFXComponent>();
+                }
+            } else if (trimmed == "UICanvasComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::UICanvas;
+                if (!currentEntity.HasComponent<UICanvasComponent>()) {
+                    currentEntity.AddComponent<UICanvasComponent>();
                 }
             } else if (trimmed.back() == ':' && ((trimmed.length() >= 10 && trimmed.substr(trimmed.length() - 10) == "Component:") || (line.find_first_not_of(" \t") == 4 && trimmed.find(' ') == std::string::npos))) {
                 flushCustomSection();
@@ -1532,6 +1548,20 @@ namespace Axle {
                             try { cvfx.Config.NormalLandingCount = std::stoul(Trim(trimmed.substr(19))); } catch (...) {}
                         } else if (trimmed.rfind("HeavyLandingCount:", 0) == 0) {
                             try { cvfx.Config.HeavyLandingCount = std::stoul(Trim(trimmed.substr(18))); } catch (...) {}
+                        }
+                        break;
+                    }
+                    case ComponentSection::UICanvas: {
+                        if (!currentEntity.HasComponent<UICanvasComponent>()) {
+                            currentEntity.AddComponent<UICanvasComponent>();
+                        }
+                        auto& uic = currentEntity.GetComponent<UICanvasComponent>();
+                        if (trimmed.rfind("AssetPath:", 0) == 0) {
+                            uic.AssetPath = Trim(trimmed.substr(10));
+                        } else if (trimmed.rfind("SortOrder:", 0) == 0) {
+                            try { uic.SortOrder = std::stoi(Trim(trimmed.substr(10))); } catch (...) {}
+                        } else if (trimmed.rfind("Visible:", 0) == 0) {
+                            uic.Visible = (Trim(trimmed.substr(8)) == "true");
                         }
                         break;
                     }

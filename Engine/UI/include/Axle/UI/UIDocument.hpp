@@ -1,13 +1,12 @@
 #pragma once
 #include <Axle/UI/UINode.hpp>
+#include <Axle/UI/UIDataContext.hpp>
 #include <memory>
 #include <vector>
 #include <unordered_map>
 #include <filesystem>
 
 namespace Axle {
-
-    class UIDataContext;
 
     enum class UIBindingType : uint8_t {
         Direct = 0,        // "{Vehicle.SpeedKmh}"

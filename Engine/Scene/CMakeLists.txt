@@ -30,5 +30,6 @@ target_link_libraries(AxleScene
         Axle::Asset
         Axle::Audio
         Axle::VFX
+        Axle::UI2D
 )
 

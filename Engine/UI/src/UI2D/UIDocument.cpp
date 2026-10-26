@@ -73,26 +73,152 @@ namespace Axle {
     }
 
     void UIDocument::EvaluateBindings(const UIDataContext& context) {
-        (void)context;
-        // Detailed binding evaluation is fully implemented in Step 5
+        for (const auto& binding : m_Bindings) {
+            if (!binding.TargetNode) continue;
+
+            if (binding.Type == UIBindingType::Direct) {
+                const UIDataValue* val = context.Get(binding.SourceKey);
+                if (!val) continue;
+
+                std::visit([&](auto&& arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, float>) {
+                        binding.TargetNode->SetPropertyFloat(binding.PropertyName, arg);
+                    } else if constexpr (std::is_same_v<T, int32_t>) {
+                        binding.TargetNode->SetPropertyFloat(binding.PropertyName, static_cast<float>(arg));
+                        binding.TargetNode->SetProperty(binding.PropertyName, std::to_string(arg));
+                    } else if constexpr (std::is_same_v<T, bool>) {
+                        binding.TargetNode->SetPropertyBool(binding.PropertyName, arg);
+                    } else if constexpr (std::is_same_v<T, std::string>) {
+                        binding.TargetNode->SetProperty(binding.PropertyName, arg);
+                    } else if constexpr (std::is_same_v<T, glm::vec4>) {
+                        binding.TargetNode->SetPropertyVec4(binding.PropertyName, arg);
+                    }
+                }, *val);
+            } else if (binding.Type == UIBindingType::Interpolated) {
+                std::string result = binding.TemplateText;
+                std::string placeholder = "{" + binding.SourceKey + "}";
+                size_t pos = result.find(placeholder);
+                if (pos != std::string::npos) {
+                    const UIDataValue* val = context.Get(binding.SourceKey);
+                    std::string rep = "";
+                    if (val) {
+                        std::visit([&](auto&& arg) {
+                            using T = std::decay_t<decltype(arg)>;
+                            if constexpr (std::is_same_v<T, float>) {
+                                char buf[32];
+                                snprintf(buf, sizeof(buf), "%.1f", arg);
+                                rep = buf;
+                            } else if constexpr (std::is_same_v<T, int32_t>) {
+                                rep = std::to_string(arg);
+                            } else if constexpr (std::is_same_v<T, bool>) {
+                                rep = arg ? "true" : "false";
+                            } else if constexpr (std::is_same_v<T, std::string>) {
+                                rep = arg;
+                            }
+                        }, *val);
+                    }
+                    result.replace(pos, placeholder.length(), rep);
+                    binding.TargetNode->SetProperty(binding.PropertyName, result);
+                }
+            } else if (binding.Type == UIBindingType::Ternary) {
+                const UIDataValue* val = context.Get(binding.SourceKey);
+                bool cond = false;
+                if (val) {
+                    std::visit([&](auto&& arg) {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, bool>) {
+                            cond = arg;
+                        } else if constexpr (std::is_same_v<T, int32_t>) {
+                            cond = (arg != 0);
+                        } else if constexpr (std::is_same_v<T, float>) {
+                            cond = (arg > 0.0f);
+                        } else if constexpr (std::is_same_v<T, std::string>) {
+                            cond = (arg == "true" || arg == "1");
+                        }
+                    }, *val);
+                }
+                binding.TargetNode->SetProperty(binding.PropertyName, cond ? binding.TrueValue : binding.FalseValue);
+            }
+        }
     }
 
     bool UIDocument::ProcessInput(const glm::vec2& mousePos, bool mouseDown, bool mouseClicked, const UIDataContext& context) {
-        (void)mousePos;
-        (void)mouseDown;
-        (void)mouseClicked;
-        (void)context;
-        // Input hit-testing is fully implemented in Step 5
-        return false;
+        bool handled = false;
+
+        // Traverse in reverse order for topmost hit-testing
+        for (auto it = m_NodeArena.rbegin(); it != m_NodeArena.rend(); ++it) {
+            auto* btn = dynamic_cast<UIButtonNode*>(it->get());
+            if (!btn || !btn->Visible) continue;
+
+            if (!handled && btn->ComputedRect.Contains(mousePos)) {
+                btn->IsHovered = true;
+                btn->IsPressed = mouseDown;
+
+                if (mouseClicked && !btn->OnClickAction.empty()) {
+                    context.TriggerAction(btn->OnClickAction);
+                }
+                handled = true;
+            } else {
+                btn->IsHovered = false;
+                btn->IsPressed = false;
+            }
+        }
+
+        return handled;
     }
 
     bool UIDocument::NavigateFocus(std::string_view direction) {
-        (void)direction;
+        UIButtonNode* currentFocus = nullptr;
+        UIButtonNode* firstButton = nullptr;
+
+        for (const auto& node : m_NodeArena) {
+            auto* btn = dynamic_cast<UIButtonNode*>(node.get());
+            if (!btn || !btn->Visible) continue;
+            if (!firstButton) firstButton = btn;
+            if (btn->IsFocused) {
+                currentFocus = btn;
+                break;
+            }
+        }
+
+        if (!currentFocus) {
+            if (firstButton) {
+                firstButton->IsFocused = true;
+                return true;
+            }
+            return false;
+        }
+
+        std::string targetID;
+        if (direction == "Up") targetID = currentFocus->NavUp;
+        else if (direction == "Down") targetID = currentFocus->NavDown;
+        else if (direction == "Left") targetID = currentFocus->NavLeft;
+        else if (direction == "Right") targetID = currentFocus->NavRight;
+
+        if (targetID.empty()) return false;
+
+        UINode* targetNode = FindNodeByID(targetID);
+        auto* targetBtn = dynamic_cast<UIButtonNode*>(targetNode);
+        if (targetBtn && targetBtn->Visible) {
+            currentFocus->IsFocused = false;
+            targetBtn->IsFocused = true;
+            return true;
+        }
+
         return false;
     }
 
     bool UIDocument::ActivateFocusedButton(const UIDataContext& context) {
-        (void)context;
+        for (const auto& node : m_NodeArena) {
+            auto* btn = dynamic_cast<UIButtonNode*>(node.get());
+            if (btn && btn->Visible && btn->IsFocused) {
+                if (!btn->OnClickAction.empty()) {
+                    return context.TriggerAction(btn->OnClickAction);
+                }
+                return true;
+            }
+        }
         return false;
     }
 

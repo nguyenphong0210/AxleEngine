@@ -8,8 +8,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 33** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **74 Comprehensive Headless Test Suites** (`AxleTests.exe`, 81 individual test steps up through **Step 89**) passing with **100% pass rate**.
-* **Upcoming Focus**: **Phase 34 (Declarative QML In-Game UI & Hardware-Accelerated Canvas2D Subsystem)** and beyond.
+* **Automated Test Verification**: **75 Comprehensive Headless Test Suites** (`AxleTests.exe`, 82 individual test steps up through **Step 90**) passing with **100% pass rate**.
+* **Upcoming Focus**: **Phase 34 (Declarative AxleUI In-Game UI & Hardware-Accelerated Canvas2D Subsystem)** and beyond.
 
 ---
 
@@ -420,7 +420,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **Full Viewport Gizmo & Interaction Parity**: ImGuizmo transformation matrix decomposition and reconstruction (Translate, Rotate, Scale) verified to $<0.001$ floating-point delta, camera unprojection ray direction parity, and mouse raycasting equivalence across coordinate systems.
     - [x] **Multi-Backend Mesh Upload Bandwidth & Scene Reload Stress Testing**: High-throughput mesh vertex/index buffer streaming via `RHIStreamer`, identical draw call dispatch rates across consecutive frames, dynamic descriptor recycling, and zero memory leaks across multi-cycle scene reload stress tests.
     - [x] **Automated Test Suite Step 84 (`AxleTests.exe 84`)**: 5-stage headless test suite validating CLI argument parser across all flags, `ProjectConfig` and `ProjectSerializer` roundtrip persistence across all backends, triple-backend RHI resolver and capability inspection, Viewport camera matrix orthogonality and ImGuizmo TRS decomposition, and multi-backend mesh upload / draw call dispatch with zero memory leaks (100% PASS).
-- [ ] **Phase 34: Declarative QML In-Game UI & Hardware-Accelerated `Canvas2D` Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
+- [ ] **Phase 34: Declarative AxleUI In-Game UI & Hardware-Accelerated `Canvas2D` Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
   - [x] **Step 1 - Decoupled `AxleUI2D` Library, `Canvas2D` Batch Renderer & Procedural SDF Uber-Shader (`Engine/UI`)**:
     - [x] Decouple In-Game UI from Editor ImGui by establishing the clean static library `AxleUI2D` (`Axle::UI2D`) linking only to `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, and `Axle::RHI`.
     - [x] High-performance 2D batch renderer (`Canvas2D`) operating natively across Direct3D 12, Vulkan 1.3, and OpenGL 4.5 via per-frame dynamic host-visible ring buffers (`RHIBuffer`) with embedded GLSL fallback for OpenGL.
@@ -433,21 +433,21 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Text measurement calculator (`UIFont::MeasureText`) supporting multi-line word-wrapping, horizontal alignment (`Left`, `Center`, `Right`), and vertical alignment (`Top`, `Middle`, `Bottom`).
   - [x] **Step 3 - Hybrid OOP UI DOM Tree (`UIDocument` & `UINode`) & 2-Pass Layout Engine (`Engine/UI`)**:
     - [x] Contiguous arena-allocated OOP widget hierarchy (`UIDocument` owning `std::vector<std::unique_ptr<UINode>>`) keeping the 3D EnTT registry clean from micro-widget clutter.
-    - [x] Core QML-style element primitives: `UICanvasNode`, `UIRectangleNode` (Panel), `UITextNode`, `UIImageNode`, `UIProgressBarNode`, `UIRadialGaugeNode` (Automotive Arc), `UIButtonNode`, and `UIBoxContainerNode` (`Row` / `Column`).
+    - [x] Core declarative element primitives: `UICanvasNode`, `UIRectangleNode` (Panel), `UITextNode`, `UIImageNode`, `UIProgressBarNode`, `UIRadialGaugeNode` (Automotive Arc), `UIButtonNode`, and `UIBoxContainerNode` (`Row` / `Column`).
     - [x] 2-Pass Responsive Layout Engine: Bottom-Up `MeasurePass` (desired content size) and Top-Down `ArrangePass` supporting 12-mode Anchors (`TopLeft`, `Center`, `BottomRight`, `StretchAll`, etc.), Margins, Padding, and automatic DPI scaling against a configurable `ReferenceResolution` (`1920x1080`).
   - [x] **Step 4 - Declarative `.axleui` UIParser & Live Hot-Reloading (`Engine/UI`)**:
     - [x] Lightweight zero-dependency C++20 Lexer/Tokenizer and Recursive Descent Parser (`UIParser`) reading human- and AI-friendly declarative `.axleui` markup files.
     - [x] First-class property parsing: numeric scalars, strings, booleans, hex colors (`#RRGGBB` / `#RRGGBBAA`), vectors/margins (`[L, T, R, B]`), enums, string interpolation (`"FPS: {Engine.FPS}"`), and inline reactive ternary binding expressions (`"{Vehicle.IsRedline ? #FF1E42 : #00F5D4}"`).
     - [x] Real-time `.axleui` file watcher (`std::filesystem::last_write_time`) enabling sub-millisecond in-game HUD and menu hot-reloading upon saving text edits without stopping simulation or recompiling C++.
-  - [ ] **Step 5 - Reactive Data Binding (`UIDataContext`), Input Event Dispatch & ECS Integration (`Engine/Scene`)**:
-    - [ ] Decoupled ViewModel data bridge (`UIDataContext`) mapping C++ gameplay variables (`int32_t`, `float`, `bool`, `std::string`, `glm::vec4`) and action callbacks (`std::function<void()>`) to `.axleui` binding tokens.
-    - [ ] ECS Mount Point (`UICanvasComponent`): attach `.axleui` documents to scene entities with `SortOrder`, visibility toggles, full `.axlescene` serialization, and optional offscreen render-to-texture for 3D cockpit instrument clusters.
-    - [ ] Link `Axle::Scene` to `Axle::UI2D` to cleanly eliminate circular dependencies while keeping Dear ImGui isolated in `Axle::UI`.
-    - [ ] Reverse Z-order hit-testing (`ProcessInput`) for mouse cursor interaction (`OnHover`, `OnPress`, `OnClick`) and directional D-Pad / Gamepad / Keyboard focus navigation (`NavUp`, `NavDown`, `NavLeft`, `NavRight`) across interactive `UIButtonNode` elements.
-  - [ ] **Step 6 - `RacingHUD` QML Migration, Zero-ImGui Shipping Runtime & Automated Tests (`Runtime/` & `Editor/`)**:
+  - [x] **Step 5 - Reactive Data Binding (`UIDataContext`), Input Event Dispatch & ECS Integration (`Engine/Scene`)**:
+    - [x] Decoupled ViewModel data bridge (`UIDataContext`) mapping C++ gameplay variables (`int32_t`, `float`, `bool`, `std::string`, `glm::vec4`) and action callbacks (`std::function<void()>`) to `.axleui` binding tokens.
+    - [x] ECS Mount Point (`UICanvasComponent`): attach `.axleui` documents to scene entities with `SortOrder`, visibility toggles, full `.axlescene` serialization, and optional offscreen render-to-texture for 3D cockpit instrument clusters.
+    - [x] Link `Axle::Scene` to `Axle::UI2D` to cleanly eliminate circular dependencies while keeping Dear ImGui isolated in `Axle::UI`.
+    - [x] Reverse Z-order hit-testing (`ProcessInput`) for mouse cursor interaction (`OnHover`, `OnPress`, `OnClick`) and directional D-Pad / Gamepad / Keyboard focus navigation (`NavUp`, `NavDown`, `NavLeft`, `NavRight`) across interactive `UIButtonNode` elements.
+  - [ ] **Step 6 - `RacingHUD` AxleUI Migration, Zero-ImGui Shipping Runtime & Automated Tests (`Runtime/` & `Editor/`)**:
     - [ ] Port `RacingHUD` (analog/radial tachometer, digital speedometer, gear indicator, lateral/longitudinal G-force meter, and throttle/brake/clutch telemetry bars) and Pause Menu entirely to declarative `Editor/assets/ui/RacingHUD.axleui` and `Editor/assets/ui/PauseMenu.axleui`.
     - [ ] Completely decouple `Axle::ImGuiLayer` and Dear ImGui linkage from `AxleRuntime.exe`, achieving a pure zero-ImGui standalone game executable while retaining full viewport preview inside `AxleEditor.exe`.
-    - [ ] Automated headless test suites (Steps 76–81) in `AxleTests.exe` validating `Canvas2D` vertex batching, MSDF font metrics, 2-pass anchor layout math across aspect ratios, QML parser AST & bindings, hit-testing, and end-to-end `RacingHUD` rendering.
+    - [ ] Automated headless test suites (Steps 76–81) in `AxleTests.exe` validating `Canvas2D` vertex batching, MSDF font metrics, 2-pass anchor layout math across aspect ratios, UIParser AST & bindings, hit-testing, and end-to-end `RacingHUD` rendering.
   - [ ] **Step 7 - In-Editor Visual Canvas Drag-and-Drop Tooling & Unity-Style `RectTransform` Gizmo (`Editor/`)**:
     - [ ] **Unity-Style `RectTransform` Abstraction (`Engine/UI`)**: Geometric layout model with `AnchorMin`, `AnchorMax` (normalized [0..1] range), `Pivot` (rotational & scaling origin [0..1]), `AnchoredPosition`, and `SizeDelta` for responsive UI scaling across arbitrary viewport resolutions.
     - [ ] **Interactive 2D Canvas Gizmo Handles (`Editor/`)**: Viewport canvas overlay via `ImDrawList` featuring bounding rectangle, 8 peripheral resize handles (corners and midpoints), pivot crosshair, and 4 anchor petal handles with interactive mouse dragging for position translation, dimension resizing, and anchor boundary splitting.

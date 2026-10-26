@@ -316,9 +316,10 @@ bool RunTest_Step82_GPUObjectIDPicking();
 bool RunTest_Step83_ViewportClickPickingIntegration();
 bool RunTest_Step84_TripleBackendSwitchingAndVisualParity();
 
-// Milestone 8 - Part 4: Phase 34 Declarative QML In-Game UI & Hardware-Accelerated Canvas2D Subsystem (Steps 85+)
+// Milestone 8 - Part 4: Phase 34 Declarative AxleUI In-Game UI & Hardware-Accelerated Canvas2D Subsystem (Steps 85+)
 bool RunTest_Step85_Phase34_Step1_Part1_DecoupledAxleUI2DLibraryAndUITypes();
 bool RunTest_Step86_Phase34_Step1_Part2_Canvas2DBatchingAndSDFPipeline();
 bool RunTest_Step87_Phase34_Step2_MSDFFontAndTextLayout();
 bool RunTest_Step88_Phase34_Step3_DOMTreeAnd2PassLayoutEngine();
 bool RunTest_Step89_Phase34_Step4_DeclarativeUIParserAndHotReloading();
+bool RunTest_Step90_Phase34_Step5_DataBindingAndHitTest();

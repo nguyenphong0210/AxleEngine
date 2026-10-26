@@ -1004,4 +1004,246 @@ bool RunTest_Step89_Phase34_Step4_DeclarativeUIParserAndHotReloading() {
     return true;
 }
 
+// =============================================================================
+// TEST STEP 90: Phase 34 Step 5 - Reactive Data Binding (UIDataContext),
+// Reverse Z-Order Hit-Testing, D-Pad Focus Navigation & ECS UICanvasComponent
+// =============================================================================
+bool RunTest_Step90_Phase34_Step5_DataBindingAndHitTest() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 90 TEST] REACTIVE BINDINGS, HIT-TEST & ECS CANVAS" << std::endl;
+    std::cout << " (UIDataContext, Topmost Hit-Test, Focus Nav, ECS)      " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    // [90.1] UIDataContext Data Registry & Action Callbacks
+    std::cout << "[90.1] Testing UIDataContext Value Registry & Actions..." << std::endl;
+    UIDataContext ctx;
+    ctx.SetInt("Engine.FPS", 144);
+    ctx.SetFloat("Vehicle.SpeedKmh", 245.5f);
+    ctx.SetFloat("Vehicle.RPMNormalized", 0.88f);
+    ctx.SetBool("Vehicle.IsRedline", false);
+    ctx.SetString("Vehicle.GearString", "4");
+    ctx.SetColor("Vehicle.GaugeColor", glm::vec4(0.0f, 0.96f, 0.83f, 1.0f));
+
+    assert(ctx.Has("Engine.FPS"));
+    assert(ctx.Has("Vehicle.SpeedKmh"));
+    assert(!ctx.Has("NonExistent.Key"));
+
+    bool actionFired = false;
+    ctx.RegisterAction("StartSimulation", [&]() { actionFired = true; });
+    assert(ctx.TriggerAction("StartSimulation") == true);
+    assert(actionFired == true);
+    assert(ctx.TriggerAction("UnknownAction") == false);
+
+    std::cout << "  -> Int, Float, Bool, String, and Vec4 properties stored: PASS" << std::endl;
+    std::cout << "  -> Action callback registration and dispatch verified: PASS" << std::endl;
+
+    // [90.2] Multi-Mode Binding Evaluation (Direct, Interpolated, Ternary)
+    std::cout << "\n[90.2] Testing Direct, Interpolated, and Ternary Binding Evaluation..." << std::endl;
+    std::string testUi = R"(
+        Canvas {
+            id: "hud"
+            referenceResolution: [1920, 1080]
+
+            Text {
+                id: "speed_text"
+                text: "{Vehicle.SpeedKmh}"
+            }
+            Text {
+                id: "fps_text"
+                text: "FPS: {Engine.FPS}"
+            }
+            ProgressBar {
+                id: "rpm_bar"
+                value: "{Vehicle.RPMNormalized}"
+            }
+            RadialGauge {
+                id: "gauge"
+                color: "{Vehicle.IsRedline ? #FF1E42FF : #00F5D4FF}"
+            }
+        }
+    )";
+
+    UIDocument doc;
+    assert(UIParser::ParseSource(testUi, doc));
+
+    auto* speedText = dynamic_cast<UITextNode*>(doc.FindNodeByID("speed_text"));
+    auto* fpsText = dynamic_cast<UITextNode*>(doc.FindNodeByID("fps_text"));
+    auto* rpmBar = dynamic_cast<UIProgressBarNode*>(doc.FindNodeByID("rpm_bar"));
+    auto* gauge = dynamic_cast<UIRadialGaugeNode*>(doc.FindNodeByID("gauge"));
+
+    assert(speedText && fpsText && rpmBar && gauge);
+
+    // Initial evaluation with IsRedline = false
+    doc.EvaluateBindings(ctx);
+    assert(fpsText->Text == "FPS: 144");
+    assert(std::abs(rpmBar->Value - 0.88f) < 1e-4f);
+    assert(gauge->Color == UINode::ParseHexColor("#00F5D4FF"));
+
+    // Update context: Redline active, speed up to 320
+    ctx.SetBool("Vehicle.IsRedline", true);
+    ctx.SetInt("Vehicle.SpeedKmh", 320);
+    ctx.SetFloat("Vehicle.RPMNormalized", 0.98f);
+    ctx.SetInt("Engine.FPS", 165);
+
+    doc.EvaluateBindings(ctx);
+    assert(fpsText->Text == "FPS: 165");
+    assert(std::abs(rpmBar->Value - 0.98f) < 1e-4f);
+    assert(gauge->Color == UINode::ParseHexColor("#FF1E42FF"));
+
+    std::cout << "  -> Direct binding evaluated: PASS" << std::endl;
+    std::cout << "  -> String interpolation evaluated: PASS" << std::endl;
+    std::cout << "  -> Conditional ternary binding evaluated across state changes: PASS" << std::endl;
+
+    // [90.3] Topmost Reverse Z-Order Mouse Hit-Testing
+    std::cout << "\n[90.3] Testing Topmost Mouse Hit-Testing (Hover, Press, Click)..." << std::endl;
+    std::string buttonUi = R"(
+        Canvas {
+            id: "button_canvas"
+            referenceResolution: [1920, 1080]
+
+            Button {
+                id: "btn_resume"
+                anchor: "TopLeft"
+                pos: [100, 100]
+                size: [200, 50]
+                onClick: "OnResume"
+                navDown: "btn_quit"
+            }
+            Button {
+                id: "btn_quit"
+                anchor: "TopLeft"
+                pos: [100, 200]
+                size: [200, 50]
+                onClick: "OnQuit"
+                navUp: "btn_resume"
+            }
+        }
+    )";
+
+    UIDocument btnDoc;
+    assert(UIParser::ParseSource(buttonUi, btnDoc));
+    btnDoc.UpdateLayout(glm::vec2(1920.0f, 1080.0f));
+
+    auto* btnResume = dynamic_cast<UIButtonNode*>(btnDoc.FindNodeByID("btn_resume"));
+    auto* btnQuit = dynamic_cast<UIButtonNode*>(btnDoc.FindNodeByID("btn_quit"));
+    assert(btnResume && btnQuit);
+
+    bool resumeClicked = false;
+    bool quitClicked = false;
+    ctx.RegisterAction("OnResume", [&]() { resumeClicked = true; });
+    ctx.RegisterAction("OnQuit", [&]() { quitClicked = true; });
+
+    // 1. Mouse hover inside btn_resume (pos: [150, 125])
+    bool handled = btnDoc.ProcessInput(glm::vec2(150.0f, 125.0f), false, false, ctx);
+    assert(handled == true);
+    assert(btnResume->IsHovered == true);
+    assert(btnResume->IsPressed == false);
+    assert(btnQuit->IsHovered == false);
+
+    // 2. Mouse press inside btn_resume
+    handled = btnDoc.ProcessInput(glm::vec2(150.0f, 125.0f), true, false, ctx);
+    assert(handled == true);
+    assert(btnResume->IsPressed == true);
+
+    // 3. Mouse click inside btn_resume
+    handled = btnDoc.ProcessInput(glm::vec2(150.0f, 125.0f), false, true, ctx);
+    assert(handled == true);
+    assert(resumeClicked == true);
+
+    // 4. Mouse click inside btn_quit (pos: [150, 225])
+    handled = btnDoc.ProcessInput(glm::vec2(150.0f, 225.0f), false, true, ctx);
+    assert(handled == true);
+    assert(quitClicked == true);
+    assert(btnQuit->IsHovered == true);
+    assert(btnResume->IsHovered == false);
+
+    // 5. Mouse outside all buttons (pos: [600, 600])
+    handled = btnDoc.ProcessInput(glm::vec2(600.0f, 600.0f), false, false, ctx);
+    assert(handled == false);
+    assert(btnResume->IsHovered == false);
+    assert(btnQuit->IsHovered == false);
+
+    std::cout << "  -> Hover, press, and click input events dispatched: PASS" << std::endl;
+    std::cout << "  -> Outside coordinates ignored and unhandled: PASS" << std::endl;
+
+    // [90.4] Directional D-Pad / Gamepad Focus Navigation
+    std::cout << "\n[90.4] Testing Directional Focus Navigation & Focused Activation..." << std::endl;
+    quitClicked = false;
+    resumeClicked = false;
+
+    // Initial navigation: should focus first button (btn_resume)
+    assert(btnDoc.NavigateFocus("Down") == true);
+    assert(btnResume->IsFocused == true);
+    assert(btnQuit->IsFocused == false);
+
+    // Navigate Down: should move focus to btn_quit
+    assert(btnDoc.NavigateFocus("Down") == true);
+    assert(btnResume->IsFocused == false);
+    assert(btnQuit->IsFocused == true);
+
+    // Activate focused button (btn_quit)
+    assert(btnDoc.ActivateFocusedButton(ctx) == true);
+    assert(quitClicked == true);
+    assert(resumeClicked == false);
+
+    // Navigate Up: should move focus back to btn_resume
+    assert(btnDoc.NavigateFocus("Up") == true);
+    assert(btnResume->IsFocused == true);
+    assert(btnQuit->IsFocused == false);
+
+    // Activate focused button (btn_resume)
+    assert(btnDoc.ActivateFocusedButton(ctx) == true);
+    assert(resumeClicked == true);
+
+    std::cout << "  -> D-Pad / Gamepad directional focus transitions: PASS" << std::endl;
+    std::cout << "  -> ActivateFocusedButton invoked targeted callback: PASS" << std::endl;
+
+    // [90.5] ECS UICanvasComponent Attachment & SceneSerializer Roundtrip
+    std::cout << "\n[90.5] Testing ECS UICanvasComponent & Serialization Roundtrip..." << std::endl;
+    auto scene = std::make_shared<Scene>();
+    auto entity = scene->CreateEntity("VehicleHUD_Entity");
+
+    auto& uic = entity.AddComponent<UICanvasComponent>("Editor/assets/ui/RacingHUD.axleui");
+    uic.SortOrder = 7;
+    uic.Visible = true;
+
+    assert(entity.HasComponent<UICanvasComponent>());
+    assert(scene->GetUIDataContext().Has("NonExistent") == false);
+
+    // Serialize scene to string
+    SceneSerializer serializer(scene.get());
+    std::string yamlData = serializer.SerializeToString();
+    assert(yamlData.find("UICanvasComponent:") != std::string::npos);
+    assert(yamlData.find("AssetPath: Editor/assets/ui/RacingHUD.axleui") != std::string::npos);
+    assert(yamlData.find("SortOrder: 7") != std::string::npos);
+
+    // Deserialize into fresh scene
+    auto loadedScene = std::make_shared<Scene>();
+    SceneSerializer deserializer(loadedScene.get());
+    assert(deserializer.DeserializeFromString(yamlData) == true);
+
+    bool foundLoadedCanvas = false;
+    auto canvasView = loadedScene->GetRegistry().view<UICanvasComponent, TagComponent>();
+    for (auto ent : canvasView) {
+        const auto& tag = canvasView.get<TagComponent>(ent);
+        if (tag.Tag == "VehicleHUD_Entity") {
+            const auto& comp = canvasView.get<UICanvasComponent>(ent);
+            assert(comp.AssetPath == "Editor/assets/ui/RacingHUD.axleui");
+            assert(comp.SortOrder == 7);
+            assert(comp.Visible == true);
+            foundLoadedCanvas = true;
+            break;
+        }
+    }
+    assert(foundLoadedCanvas == true);
+
+    std::cout << "  -> UICanvasComponent attached to ECS entity: PASS" << std::endl;
+    std::cout << "  -> SceneSerializer YAML serialization / deserialization roundtrip: PASS" << std::endl;
+
+    std::cout << "\n>>> STEP 90 PASSED: Data Binding, Hit-Test & ECS Integration 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
 

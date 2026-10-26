@@ -671,3 +671,23 @@ namespace Axle {
    - `FindNodeByID("rpm_radial_gauge")` has redline color `#FF1E42FF`.
    - `canvas.GetStats().DrawCalls == 1` and `canvas.GetStats().QuadCount > 20`.
    - Simulating a click on `btn_resume` inside `PauseMenu.axleui` invokes the bound `OnResumeGame` C++ callback.
+
+---
+
+## 🎨 STEP 7: Unity-Style In-Editor Drag-and-Drop UI Canvas Tooling (`Editor/` & `Engine/UI`)
+
+### 7.1. File Creation & Modification Targets
+- **Create:** `Engine/UI/include/Axle/UI/UIRectTransform.hpp` & `Engine/UI/src/UI2D/UIRectTransform.cpp`
+  - Encapsulate `AnchorMin`, `AnchorMax`, `Pivot`, `AnchoredPosition`, and `SizeDelta`.
+- **Create:** `Editor/src/UIGizmo2D.hpp` & `Editor/src/UIGizmo2D.cpp`
+  - Bounding rectangle overlay, 8 resize handles, center pivot crosshair, and 4 anchor handles drawn via `ImDrawList`.
+  - Mouse drag logic for translating, edge/corner resizing, and splitting anchor pins.
+- **Create:** `Editor/src/UIPalettePanel.hpp` & `Editor/src/UIPalettePanel.cpp`
+  - Stock widget palette (`Canvas`, `Panel`, `Text`, `Image`, `Button`, `ProgressBar`, `RadialGauge`).
+  - Native ImGui Drag-and-Drop payload source (`"AXLE_UI_WIDGET"`).
+- **Modify:** `Editor/src/EditorLayer.cpp`
+  - Add 2D / 3D viewport camera mode toggle.
+  - Wire drag-and-drop target in Viewport and `SceneHierarchyPanel`.
+  - Synchronize visual edits back to active `UIDocument` and `.axleui` file serialization.
+- **Modify:** `Editor/CMakeLists.txt`
+  - Register `UIGizmo2D.cpp` and `UIPalettePanel.cpp`.

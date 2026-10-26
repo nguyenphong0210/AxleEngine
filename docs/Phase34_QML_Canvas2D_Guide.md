@@ -406,3 +406,41 @@ Canvas {
     }
 }
 ```
+
+---
+
+## 5. In-Editor Visual Canvas Drag-and-Drop Tooling (Unity-Style Workflow)
+
+To provide an intuitive, visual editing experience identical to Unity's UGUI Canvas & RectTransform system, Phase 34 includes interactive in-editor tooling in `AxleEditor`:
+
+### 5.1. `UIRectTransform` Abstraction & Layout Model
+Every UI element inherits a responsive layout bounding box defined by:
+- **`AnchorMin` & `AnchorMax` (`glm::vec2` in [0..1] range)**: Relative anchor points inside the parent container:
+  - `(0, 0)`: Top-Left in screen coordinates.
+  - `(0.5, 0.5)`: Center.
+  - `(1, 1)`: Bottom-Right.
+  - When `AnchorMin != AnchorMax`, the widget stretches responsively with the container.
+- **`Pivot` (`glm::vec2` in [0..1] range)**: Rotation, scaling, and positioning origin (default `(0.5, 0.5)`).
+- **`AnchoredPosition` (`glm::vec2`)**: Pixel offset from the resolved anchor point to the pivot.
+- **`SizeDelta` (`glm::vec2`)**: Pixel width and height (or margin offsets when stretching).
+
+### 5.2. Viewport 2D Edit Mode & Interactive `UIGizmo2D`
+- **2D / 3D Mode Toggle**: Viewport toolbar button that locks the scene camera to an orthographic view perpendicular to the active `UICanvasComponent`.
+- **Bounding Box & 8-Point Resize Handles**:
+  - Rendered via ImGui's `ImDrawList` over the viewport.
+  - **Interior drag**: Translates `AnchoredPosition`.
+  - **4 Corner handles & 4 Edge handles**: Interactively adjusts `SizeDelta` with optional aspect ratio locking (`Shift`).
+  - **Center Pivot crosshair**: Draggable to shift the transformation pivot point.
+- **4 Anchor Petals (Anchor Gizmo)**:
+  - Interactive handles representing `AnchorMin` and `AnchorMax`.
+  - Splitting the handles allows designers to visually configure edge stretching (e.g. stretch horizontally across bottom screen).
+
+### 5.3. UI Component Palette & Drag-and-Drop Spawner
+- **UI Palette Panel (`Editor/UI`)**:
+  - Displays ready-to-use widgets: `Canvas`, `Panel (Rounded Rect)`, `Text (MSDF)`, `Image (Sprite)`, `Button`, `ProgressBar`, `RadialGauge` (Speedometer/Tachometer).
+- **ImGui Drag-and-Drop Payloads**:
+  - Uses `ImGui::BeginDragDropSource()` with payload type `"AXLE_UI_WIDGET"`.
+  - Dragging onto the **Scene Viewport Canvas** or **`SceneHierarchyPanel`** tree triggers `ImGui::AcceptDragDropPayload()`, creating the child node at mouse release position.
+
+### 5.4. Two-Way Document Synchronization (`.axleui`)
+- Interactive manipulation immediately updates the live `UIDocument` DOM tree and serializes back into the source `.axleui` file or `.axlescene`, maintaining full harmony between text-based QML markup and visual editor drag-and-drop.

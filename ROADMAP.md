@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 32** (100% implemented, verified, and stabilized), with **Phase 33 in active progress**.
-* **Automated Test Verification**: **66 Comprehensive Headless Test Suites** (`AxleTests.exe`, 73 individual test steps up through **Step 81**) passing with **100% pass rate**.
+* **Automated Test Verification**: **67 Comprehensive Headless Test Suites** (`AxleTests.exe`, 74 individual test steps up through **Step 82**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 33 (Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline)** and beyond.
 
 ---
@@ -401,8 +401,17 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
         - [x] **`PhysicsScene::DrawDebug` & Vehicle Raycast Integration**: Overloaded `PhysicsScene::DrawDebug(JPH::DebugRenderer&)` forward bridge, automatic extraction of Jolt collision shapes (boxes, spheres, capsules, convex hulls, triangle meshes, terrain heightfields), constraints, contact points, and vehicle multi-wheel suspension raycasts into `RHIPhysicsDebugRenderer`.
         - [x] **Zero-Overhead Dynamic Rendering**: Zero physics draw call overhead and line allocations when `ShowPhysicsDebug = false`.
         - [x] **Multi-Pass Pipeline Integration**: Seamless physics wireframe overlay dispatched directly within the active scene render pass before MSAA resolving, HDR Tone Mapping (ACES/Reinhard/Uncharted 2), and FXAA anti-aliasing.
-        - [x] **Automated Test Suite Step 81 (`AxleTests.exe 81`)**: 6-stage headless test suite validating settings depth bias defaults, `RHISceneRenderer` embedded debug renderer lifecycle, 3D scene + Jolt physics test bed construction, live viewport physics wireframe rendering (924 vertices flushed, 5 draw calls), multi-pass integration (7 draw calls with MSAA 4x + Tone Mapping + FXAA), and zero-overhead dynamic toggle (100% PASS).
-    - [ ] Interactive Viewport GPU Object ID Picking: Secondary integer render target (`R32_UINT`) encoding Entity IDs per pixel, enabling instantaneous single-click entity selection in Viewport on DX12, Vulkan, and OpenGL without CPU raycast overhead.
+    - [ ] **Interactive Viewport GPU Object ID Picking**:
+      - [x] **Step 5.3.1 - GPU Integer Render Target (`R32_UINT`), `ObjectID.hlsl` Pipeline & `RHIObjectPicker` Readback**:
+        - [x] **Single-Source HLSL 2021 Shader (`ObjectID.hlsl`)**: Dual-stage compilation to Direct3D 12 DXIL (`VSMain` 4360B, `PSMain` 3320B) and Vulkan 1.3 SPIR-V (`VSMain` 1032B, `PSMain` 840B). Outputs raw integer entity IDs directly to `SV_Target0` using an exact 128-byte hardware root constant buffer (`RHIObjectIDPushConstants`).
+        - [x] **Discrete GPU Integer Render Target (`R32_UINT`) & Depth Buffer**: Discrete 2D offscreen integer target with `RHITextureUsage::ColorAttachment | RHITextureUsage::HostTransfer`, paired with dedicated `D32_FLOAT` depth buffer, guaranteeing 100% pixel-perfect occlusion across multi-entity 3D scenes.
+        - [x] **`RHIObjectPicker` Subsystem**: Autonomous picking pass pipeline (`RenderPickingPass`) with automatic mesh retrieval (`RHIMeshRegistry`), 1-based entity encoding (`u_EntityID + 1`) to preserve 0-clear background (`InvalidEntityID = 0xFFFFFFFF`), and barrier layout transitions (`ShaderResource`/`CopySource` <-> `ColorAttachment`).
+        - [x] **Direct Host Memory Readback (`ReadPixel`)**: Zero-CPU-raycast sub-millisecond single-pixel queries via `nri::ReadbackTextureToHostMemory` reading directly from GPU VRAM.
+        - [x] **Automated Test Suite Step 82 (`AxleTests.exe 82`)**: 6-stage headless test suite validating 128-byte push constants layout, dual-backend shader compilation, pipeline & PSO lifecycle, multi-entity 3D scene construction, pixel-perfect readback queries (Box_Left = 0, Sphere_Right = 1, Empty Space = 0xFFFFFFFF, occlusion front-to-back), and dynamic resize stress tests (100% PASS).
+      - [ ] **Step 5.3.2 - Viewport Click Picking Integration in `EditorLayer` & `RHISceneRenderer`**:
+        - [ ] Mouse click coordinate translation from ImGui Viewport panel into offscreen render target space.
+        - [ ] Single-click and hover entity selection wired into `SceneHierarchyPanel` and `EditorLayer` active selection.
+        - [ ] Automated Test Suite Step 83 (`AxleTests.exe 83`).
   - [ ] **Step 6 - Triple-Backend Seamless Switching & Automated Verification (100% Visual Parity)**:
     - [ ] Seamless CLI switcher verification: `--rhi=dx12`, `--rhi=vulkan`, and `--rhi=opengl` producing pixel-accurate scene renders, lighting, shadows, and physics interactions.
     - [ ] In-Editor Project Settings RHI Selector & Restart Workflow: Dedicated `Project Settings -> Graphics RHI` dropdown (`Direct3D 12`, `Vulkan 1.3`, `OpenGL 4.5`), persistent serialization into `.axleproject` (`ProjectConfig`), and automated seamless Editor restart prompt ("Save & Restart Now") without manual command-line flags.

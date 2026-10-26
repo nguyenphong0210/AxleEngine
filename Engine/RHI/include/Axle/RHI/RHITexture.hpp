@@ -12,6 +12,7 @@ namespace Axle::RHI {
         RGBA16_FLOAT,
         RGBA32_FLOAT,
         R32_FLOAT,
+        R32_UINT,
         D32_FLOAT,
         D24_UNORM_S8_UINT
     };
@@ -24,6 +25,7 @@ namespace Axle::RHI {
             case RHITextureFormat::RGBA16_FLOAT:      return nri::Format::RGBA16_SFLOAT;
             case RHITextureFormat::RGBA32_FLOAT:      return nri::Format::RGBA32_SFLOAT;
             case RHITextureFormat::R32_FLOAT:         return nri::Format::R32_SFLOAT;
+            case RHITextureFormat::R32_UINT:          return nri::Format::R32_UINT;
             case RHITextureFormat::D32_FLOAT:         return nri::Format::D32_SFLOAT;
             case RHITextureFormat::D24_UNORM_S8_UINT: return nri::Format::D24_UNORM_S8_UINT;
             default:                                  return nri::Format::RGBA8_UNORM;
@@ -38,6 +40,7 @@ namespace Axle::RHI {
             case nri::Format::RGBA16_SFLOAT:     return RHITextureFormat::RGBA16_FLOAT;
             case nri::Format::RGBA32_SFLOAT:     return RHITextureFormat::RGBA32_FLOAT;
             case nri::Format::R32_SFLOAT:        return RHITextureFormat::R32_FLOAT;
+            case nri::Format::R32_UINT:          return RHITextureFormat::R32_UINT;
             case nri::Format::D32_SFLOAT:        return RHITextureFormat::D32_FLOAT;
             case nri::Format::D24_UNORM_S8_UINT: return RHITextureFormat::D24_UNORM_S8_UINT;
             default:                             return RHITextureFormat::RGBA8_UNORM;
@@ -51,7 +54,8 @@ namespace Axle::RHI {
         DepthStencil    = 1 << 2,
         Storage         = 1 << 3,
         CopySource      = 1 << 4,
-        CopyDest        = 1 << 5
+        CopyDest        = 1 << 5,
+        HostTransfer    = 1 << 6
     };
 
     inline RHITextureUsage operator|(RHITextureUsage a, RHITextureUsage b) {
@@ -67,6 +71,7 @@ namespace Axle::RHI {
         if (usage & RHITextureUsage::ColorAttachment) bits |= nri::TextureUsageBits::COLOR_ATTACHMENT;
         if (usage & RHITextureUsage::DepthStencil)    bits |= nri::TextureUsageBits::DEPTH_STENCIL_ATTACHMENT;
         if (usage & RHITextureUsage::Storage)         bits |= nri::TextureUsageBits::SHADER_RESOURCE_STORAGE;
+        if (usage & RHITextureUsage::HostTransfer)    bits |= nri::TextureUsageBits::HOST_TRANSFER;
         return bits;
     }
 
@@ -88,6 +93,16 @@ namespace Axle::RHI {
             desc.Height = height;
             desc.Format = format;
             desc.Usage = RHITextureUsage::ShaderResource | RHITextureUsage::ColorAttachment;
+            desc.DebugName = name;
+            return desc;
+        }
+
+        static RHITextureDesc IntegerTarget2D(uint32_t width, uint32_t height, const std::string& name = "IntegerTarget2D") {
+            RHITextureDesc desc;
+            desc.Width = width;
+            desc.Height = height;
+            desc.Format = RHITextureFormat::R32_UINT;
+            desc.Usage = RHITextureUsage::ShaderResource | RHITextureUsage::ColorAttachment | RHITextureUsage::HostTransfer;
             desc.DebugName = name;
             return desc;
         }

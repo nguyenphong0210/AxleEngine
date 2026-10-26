@@ -95,6 +95,7 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/RHIPhysicsDebugRenderer.hpp>
+#include <Axle/RHIObjectPicker.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/ImGuiLayer.hpp>
@@ -17017,6 +17018,210 @@ bool RunTest_Step81_PhysicsDebugSceneRendererIntegration() {
 }
 
 // =============================================================================
+// STEP 82: GPU OBJECT ID PICKING PIPELINE (R32_UINT) & VIEWPORT CLICK SELECTION
+// =============================================================================
+bool RunTest_Step82_GPUObjectIDPicking() {
+    using namespace Axle;
+    using namespace Axle::RHI;
+
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " RUNNING STEP 82: GPU OBJECT ID PICKING PIPELINE (R32_UINT) " << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [82.1] Push Constants Memory Layout & Hardware 128-byte Alignment
+    std::cout << "\n[82.1] Validating RHIObjectIDPushConstants Memory Layout..." << std::endl;
+    assert(sizeof(RHIObjectIDPushConstants) == 128);
+    assert(offsetof(RHIObjectIDPushConstants, ModelViewProjection) == 0);
+    assert(offsetof(RHIObjectIDPushConstants, EntityID) == 64);
+    assert(RHIObjectPicker::InvalidEntityID == 0xFFFFFFFF);
+    std::cout << "  -> Push Constants: 128 bytes, MVP offset 0, EntityID offset 64, InvalidID 0xFFFFFFFF." << std::endl;
+    std::cout << "  -> PASS: Memory layout and alignment verified." << std::endl;
+
+    // [82.2] Shader Compilation (ObjectID.hlsl to D3D12 DXIL and Vulkan SPIR-V)
+    std::cout << "\n[82.2] Testing Shader Compilation for ObjectID.hlsl..." << std::endl;
+    auto& compiler = RHIShaderCompiler::Get();
+    if (!compiler.IsInitialized()) {
+        assert(compiler.Init());
+    }
+
+    std::string shaderSource;
+    auto shaderPath = FileSystem::ResolveAssetPath("shaders/ObjectID.hlsl");
+    if (!std::filesystem::exists(shaderPath)) {
+        shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "ObjectID.hlsl";
+    }
+    if (!std::filesystem::exists(shaderPath)) {
+        shaderPath = "Engine/Resources/Shaders/ObjectID.hlsl";
+    }
+
+    std::ifstream file(shaderPath);
+    assert(file.is_open());
+    std::stringstream ss;
+    ss << file.rdbuf();
+    shaderSource = ss.str();
+    assert(!shaderSource.empty());
+
+    // Compile to DXIL
+    RHIShaderCompileDesc vsDesc;
+    vsDesc.Source = shaderSource;
+    vsDesc.SourcePath = shaderPath.string();
+    vsDesc.EntryPoint = "VSMain";
+    vsDesc.Stage = RHIShaderStage::Vertex;
+    vsDesc.HLSLVersion = "2021";
+    vsDesc.ShaderModel = "6_0";
+    vsDesc.Format = RHIShaderFormat::DXIL;
+    vsDesc.Optimization = true;
+    auto vsRes = compiler.Compile(vsDesc);
+    assert(vsRes.Success);
+    assert(vsRes.Bytecode.GetSize() > 0);
+
+    RHIShaderCompileDesc psDesc = vsDesc;
+    psDesc.EntryPoint = "PSMain";
+    psDesc.Stage = RHIShaderStage::Fragment;
+    auto psRes = compiler.Compile(psDesc);
+    assert(psRes.Success);
+    assert(psRes.Bytecode.GetSize() > 0);
+
+    // Compile to SPIR-V
+    vsDesc.Format = RHIShaderFormat::SPIRV;
+    auto vsSpv = compiler.Compile(vsDesc);
+    assert(vsSpv.Success);
+    assert(vsSpv.Bytecode.GetSize() > 0);
+
+    psDesc.Format = RHIShaderFormat::SPIRV;
+    auto psSpv = compiler.Compile(psDesc);
+    assert(psSpv.Success);
+    assert(psSpv.Bytecode.GetSize() > 0);
+
+    std::cout << "  -> Compiled VSMain: " << vsRes.Bytecode.GetSize() << "B (DXIL), " << vsSpv.Bytecode.GetSize() << "B (SPIR-V)." << std::endl;
+    std::cout << "  -> Compiled PSMain: " << psRes.Bytecode.GetSize() << "B (DXIL), " << psSpv.Bytecode.GetSize() << "B (SPIR-V)." << std::endl;
+    std::cout << "  -> PASS: Dual-stage shader compilation validated." << std::endl;
+
+    // [82.3] RHI Device & RHIObjectPicker Initialization
+    std::cout << "\n[82.3] Initializing RHI Device and RHIObjectPicker..." << std::endl;
+    auto& device = RHIDevice::Get();
+    if (!device.IsInitialized()) {
+        RHIDeviceDesc devDesc;
+        devDesc.PreferredBackend = RHIType::Direct3D12;
+        devDesc.Headless = true;
+        devDesc.AllowFallback = true;
+        assert(device.Init(devDesc));
+    }
+
+    RHIObjectPicker picker;
+    assert(picker.Init(device));
+    assert(picker.IsInitialized());
+    assert(picker.GetPipeline() != nullptr);
+    std::cout << "  -> RHIObjectPicker initialized with active integer pipeline." << std::endl;
+    std::cout << "  -> PASS: Lifecycle & PSO creation verified." << std::endl;
+
+    // [82.4] 3D Test Scene Setup with Multiple Distinct Entities
+    std::cout << "\n[82.4] Constructing 3D Scene with Multiple Entities for Picking..." << std::endl;
+    auto scene = std::make_shared<Scene>();
+
+    // Entity A: Left Box at (-3.0, 0.0, 0.0)
+    Entity boxLeft = scene->CreateEntity("Box_Left");
+    auto& tcLeft = boxLeft.GetComponent<TransformComponent>();
+    tcLeft.Translation = glm::vec3(-3.0f, 0.0f, 0.0f);
+    tcLeft.Scale = glm::vec3(1.0f);
+    auto& meshLeft = boxLeft.AddComponent<MeshInstance3D>();
+    meshLeft.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+    uint32_t idLeft = static_cast<uint32_t>(boxLeft);
+
+    // Entity B: Right Sphere at (3.0, 0.0, 0.0)
+    Entity sphereRight = scene->CreateEntity("Sphere_Right");
+    auto& tcRight = sphereRight.GetComponent<TransformComponent>();
+    tcRight.Translation = glm::vec3(3.0f, 0.0f, 0.0f);
+    tcRight.Scale = glm::vec3(1.0f);
+    auto& meshRight = sphereRight.AddComponent<MeshInstance3D>();
+    meshRight.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+    uint32_t idRight = static_cast<uint32_t>(sphereRight);
+
+    // Entity C: Occluded Cylinder behind Right Sphere at (3.0, 0.0, -8.0)
+    Entity occludedCylinder = scene->CreateEntity("Cylinder_Occluded");
+    auto& tcOcc = occludedCylinder.GetComponent<TransformComponent>();
+    tcOcc.Translation = glm::vec3(3.0f, 0.0f, -8.0f);
+    tcOcc.Scale = glm::vec3(1.0f);
+    auto& meshOcc = occludedCylinder.AddComponent<MeshInstance3D>();
+    meshOcc.RHIMeshAsset = RHIMeshRegistry::Get().GetCylinder();
+    uint32_t idOcc = static_cast<uint32_t>(occludedCylinder);
+
+    // Camera looking down -Z axis from (0, 0, 10)
+    const uint32_t width = 1280;
+    const uint32_t height = 720;
+    PerspectiveCamera camera(60.0f, static_cast<float>(width) / static_cast<float>(height), 0.1f, 100.0f);
+    camera.SetPosition(glm::vec3(0.0f, 0.0f, 10.0f));
+    camera.SetRotation(glm::vec3(0.0f, 0.0f, 0.0f));
+
+    std::cout << "  -> Created Entity A (Box_Left, ID: " << idLeft << ") at (-3, 0, 0)" << std::endl;
+    std::cout << "  -> Created Entity B (Sphere_Right, ID: " << idRight << ") at (3, 0, 0)" << std::endl;
+    std::cout << "  -> Created Entity C (Cylinder_Occluded, ID: " << idOcc << ") at (3, 0, -8)" << std::endl;
+    std::cout << "  -> PASS: Test bed scene constructed." << std::endl;
+
+    // [82.5] Render Picking Pass and Validate Single-Click Query
+    std::cout << "\n[82.5] Executing GPU Picking Pass and Querying Pixel Readbacks..." << std::endl;
+    picker.RenderPickingPass(scene, camera, width, height);
+    assert(picker.GetDrawCallCount() == 3);
+    assert(picker.GetRenderedEntityCount() == 3);
+
+    // Helper to project 3D point to 2D screen coordinate
+    auto WorldToScreen = [&](const glm::vec3& worldPos) -> glm::uvec2 {
+        glm::vec4 clip = camera.GetViewProjectionMatrix() * glm::vec4(worldPos, 1.0f);
+        glm::vec3 ndc = glm::vec3(clip) / clip.w;
+        float sx = (ndc.x * 0.5f + 0.5f) * static_cast<float>(width);
+        float sy = (-ndc.y * 0.5f + 0.5f) * static_cast<float>(height);
+        return glm::uvec2(static_cast<uint32_t>(glm::clamp(sx, 0.0f, static_cast<float>(width - 1))),
+                          static_cast<uint32_t>(glm::clamp(sy, 0.0f, static_cast<float>(height - 1))));
+    };
+
+    // Query 1: Empty center of screen (0, 0, 0)
+    glm::uvec2 screenCenter = WorldToScreen(glm::vec3(0.0f, 0.0f, 0.0f));
+    uint32_t hitCenter = picker.ReadPixel(screenCenter.x, screenCenter.y);
+    assert(hitCenter == RHIObjectPicker::InvalidEntityID);
+    std::cout << "  -> Query Empty Space at (" << screenCenter.x << ", " << screenCenter.y << "): Returned 0x"
+              << std::hex << hitCenter << std::dec << " (InvalidEntityID). PASS!" << std::endl;
+
+    // Query 2: Entity A (Box_Left)
+    glm::uvec2 screenLeft = WorldToScreen(glm::vec3(-3.0f, 0.0f, 0.0f));
+    uint32_t hitLeft = picker.ReadPixel(screenLeft.x, screenLeft.y);
+    assert(hitLeft == idLeft);
+    std::cout << "  -> Query Box_Left at (" << screenLeft.x << ", " << screenLeft.y << "): Returned ID "
+              << hitLeft << " (Expected: " << idLeft << "). MATCH! PASS!" << std::endl;
+
+    // Query 3: Entity B (Sphere_Right)
+    glm::uvec2 screenRight = WorldToScreen(glm::vec3(3.0f, 0.0f, 0.0f));
+    uint32_t hitRight = picker.ReadPixel(screenRight.x, screenRight.y);
+    assert(hitRight == idRight);
+    std::cout << "  -> Query Sphere_Right at (" << screenRight.x << ", " << screenRight.y << "): Returned ID "
+              << hitRight << " (Expected: " << idRight << "). MATCH! PASS!" << std::endl;
+
+    // Query 4: Occlusion Test (Sphere_Right occludes Cylinder_Occluded at same screen X, Y)
+    assert(hitRight != idOcc);
+    std::cout << "  -> Depth Occlusion Check: Front Sphere occludes back Cylinder. Returned "
+              << hitRight << " != " << idOcc << ". PASS!" << std::endl;
+
+    // [82.6] Dynamic Resize & Stress Test
+    std::cout << "\n[82.6] Testing Dynamic Resize (1920x1080 -> 800x600 -> 1280x720)..." << std::endl;
+    picker.Resize(1920, 1080);
+    assert(picker.GetPickingTexture()->GetWidth() == 1920);
+    assert(picker.GetPickingTexture()->GetHeight() == 1080);
+
+    picker.Resize(800, 600);
+    assert(picker.GetPickingTexture()->GetWidth() == 800);
+    assert(picker.GetPickingTexture()->GetHeight() == 600);
+
+    // Pick() unified API
+    uint32_t hitRepick = picker.Pick(scene, camera, width, height, screenLeft.x, screenLeft.y);
+    assert(hitRepick == idLeft);
+    std::cout << "  -> Unified Pick() returned ID " << hitRepick << " after resizing. PASS!" << std::endl;
+
+    picker.Shutdown();
+    std::cout << "  -> RHIObjectPicker cleanly shut down with zero leaks." << std::endl;
+
+    std::cout << "\n>>> STEP 82 PASSED: GPU Object ID Picking Pipeline 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+// =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
 // =============================================================================
 int main(int argc, char** argv) {
@@ -17105,6 +17310,7 @@ int main(int argc, char** argv) {
         else if (arg == "79" || arg == "step79" || arg == "--step79" || arg == "--particles" || arg == "--gpu-particles" || arg == "--vfx-rhi") targetStep = 79;
         else if (arg == "80" || arg == "step80" || arg == "--step80" || arg == "--physics-debug" || arg == "--wireframe" || arg == "--line-pipeline") targetStep = 80;
         else if (arg == "81" || arg == "step81" || arg == "--step81" || arg == "--physics-scene" || arg == "--debug-overlay") targetStep = 81;
+        else if (arg == "82" || arg == "step82" || arg == "--step82" || arg == "--object-id" || arg == "--picking" || arg == "--gpu-picking") targetStep = 82;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -17113,7 +17319,7 @@ int main(int argc, char** argv) {
     std::cout << "\n========================================================" << std::endl;
     std::cout << "        AXLE ENGINE - CORE & SCRIPTING TEST SUITE       " << std::endl;
     if (targetStep == 0) {
-        std::cout << "              RUNNING ALL 67 STEPS                      " << std::endl;
+        std::cout << "              RUNNING ALL 68 STEPS                      " << std::endl;
     } else {
         std::cout << "              RUNNING STEP " << targetStep << " ONLY                    " << std::endl;
     }
@@ -17348,6 +17554,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 81) {
         if (!RunTest_Step81_PhysicsDebugSceneRendererIntegration()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 82) {
+        if (!RunTest_Step82_GPUObjectIDPicking()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

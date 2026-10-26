@@ -8,6 +8,7 @@ add_library(AxleScene STATIC
     src/ScriptCompiler.cpp
     src/SceneRenderer.cpp
     src/RHISceneRenderer.cpp
+    src/RHIObjectPicker.cpp
     src/RHIMeshRegistry.cpp
     src/CharacterVFX.cpp
 )

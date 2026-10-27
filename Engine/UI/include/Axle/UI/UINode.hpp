@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/UI/UITypes.hpp>
+#include <Axle/UI/RectTransform.hpp>
 #include <Axle/UI/Canvas2D.hpp>
 #include <Axle/UI/UIFont.hpp>
 #include <string>
@@ -25,6 +26,14 @@ namespace Axle {
         glm::vec4 Padding{ 0.0f }; // x: Left, y: Top, z: Right, w: Bottom
         int32_t   ZIndex   = 0;
         bool      Visible  = true;
+
+        // Geometric RectTransform (Unity-style layout model)
+        bool          UseRectTransform = false;
+        RectTransform Transform{};
+
+        void SetUseRectTransform(bool enable);
+        void SyncTransformFromLegacy();
+        void SyncLegacyFromTransform();
 
         glm::vec2 DesiredSize{ 0.0f };
         UIRect    ComputedRect{};

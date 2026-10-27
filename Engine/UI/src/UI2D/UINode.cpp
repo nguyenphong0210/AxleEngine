@@ -49,6 +49,16 @@ namespace Axle {
     }
 
     void UINode::OnArrange(const UIRect& parentRect) {
+        if (UseRectTransform) {
+            ComputedRect = Transform.ComputeRect(parentRect);
+            for (UINode* child : Children) {
+                if (child && child->Visible) {
+                    child->OnArrange(ComputedRect);
+                }
+            }
+            return;
+        }
+
         float Px = parentRect.X;
         float Py = parentRect.Y;
         float Pw = parentRect.Width;
@@ -129,6 +139,45 @@ namespace Axle {
         }
     }
 
+    void UINode::SyncTransformFromLegacy() {
+        Transform.SetAnchorPreset(Anchor);
+        if (Anchor == UIAnchor::StretchAll) {
+            Transform.AnchorMin = { 0.0f, 0.0f };
+            Transform.AnchorMax = { 1.0f, 1.0f };
+            Transform.Pivot = { 0.5f, 0.5f };
+            Transform.SetOffsets({ Margin.x, Margin.y }, { -Margin.z, -Margin.w }, { 0.0f, 0.0f, 100.0f, 100.0f });
+        } else if (Anchor == UIAnchor::TopStretch) {
+            Transform.AnchorMin = { 0.0f, 0.0f };
+            Transform.AnchorMax = { 1.0f, 0.0f };
+            Transform.Pivot = { 0.5f, 0.0f };
+            Transform.SizeDelta = { -(Margin.x + Margin.z), Size.y };
+            Transform.AnchoredPosition = { (Margin.x - Margin.z) * 0.5f, Margin.y + Position.y };
+        } else if (Anchor == UIAnchor::BottomStretch) {
+            Transform.AnchorMin = { 0.0f, 1.0f };
+            Transform.AnchorMax = { 1.0f, 1.0f };
+            Transform.Pivot = { 0.5f, 1.0f };
+            Transform.SizeDelta = { -(Margin.x + Margin.z), Size.y };
+            Transform.AnchoredPosition = { (Margin.x - Margin.z) * 0.5f, -(Margin.w - Position.y) };
+        } else {
+            Transform.SizeDelta = (DesiredSize.x > 0.0f || DesiredSize.y > 0.0f) ? DesiredSize : Size;
+            Transform.AnchoredPosition = Position;
+        }
+    }
+
+    void UINode::SyncLegacyFromTransform() {
+        Size = Transform.SizeDelta;
+        Position = Transform.AnchoredPosition;
+    }
+
+    void UINode::SetUseRectTransform(bool enable) {
+        if (enable && !UseRectTransform) {
+            SyncTransformFromLegacy();
+        } else if (!enable && UseRectTransform) {
+            SyncLegacyFromTransform();
+        }
+        UseRectTransform = enable;
+    }
+
     bool UINode::SetProperty(std::string_view propName, std::string_view strVal) {
         if (propName == "id") {
             ID = std::string(strVal);
@@ -136,16 +185,18 @@ namespace Axle {
         }
         if (propName == "anchor" || propName == "anchors.fill" || propName == "anchors.center") {
             Anchor = ParseAnchor(strVal);
+            Transform.SetAnchorPreset(Anchor);
             return true;
         }
         return false;
     }
 
     bool UINode::SetPropertyFloat(std::string_view propName, float val) {
-        if (propName == "x") { Position.x = val; return true; }
-        if (propName == "y") { Position.y = val; return true; }
-        if (propName == "width") { Size.x = val; return true; }
-        if (propName == "height") { Size.y = val; return true; }
+        if (propName == "x") { Position.x = val; Transform.AnchoredPosition.x = val; return true; }
+        if (propName == "y") { Position.y = val; Transform.AnchoredPosition.y = val; return true; }
+        if (propName == "width") { Size.x = val; Transform.SizeDelta.x = val; return true; }
+        if (propName == "height") { Size.y = val; Transform.SizeDelta.y = val; return true; }
+        if (propName == "rotation") { Transform.Rotation = val; return true; }
         if (propName == "zIndex") { ZIndex = static_cast<int32_t>(val); return true; }
         if (propName == "margin") { Margin = glm::vec4(val); return true; }
         if (propName == "padding") { Padding = glm::vec4(val); return true; }
@@ -154,12 +205,19 @@ namespace Axle {
 
     bool UINode::SetPropertyBool(std::string_view propName, bool val) {
         if (propName == "visible") { Visible = val; return true; }
+        if (propName == "useRectTransform") { SetUseRectTransform(val); return true; }
         return false;
     }
 
     bool UINode::SetPropertyVec2(std::string_view propName, const glm::vec2& val) {
-        if (propName == "position") { Position = val; return true; }
-        if (propName == "size") { Size = val; return true; }
+        if (propName == "position") { Position = val; Transform.AnchoredPosition = val; return true; }
+        if (propName == "size") { Size = val; Transform.SizeDelta = val; return true; }
+        if (propName == "anchorMin") { Transform.AnchorMin = val; UseRectTransform = true; return true; }
+        if (propName == "anchorMax") { Transform.AnchorMax = val; UseRectTransform = true; return true; }
+        if (propName == "pivot") { Transform.Pivot = val; UseRectTransform = true; return true; }
+        if (propName == "anchoredPosition" || propName == "anchoredPos") { Transform.AnchoredPosition = val; UseRectTransform = true; return true; }
+        if (propName == "sizeDelta") { Transform.SizeDelta = val; UseRectTransform = true; return true; }
+        if (propName == "scale") { Transform.Scale = val; return true; }
         return false;
     }
 

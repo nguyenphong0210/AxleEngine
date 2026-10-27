@@ -3,6 +3,7 @@
 # ==============================================================================
 add_library(AxleUI2D STATIC
     src/UI2D/UITypes.cpp
+    src/UI2D/RectTransform.cpp
     src/UI2D/Canvas2D.cpp
     src/UI2D/UIFont.cpp
     src/UI2D/UINode.cpp

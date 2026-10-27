@@ -1,5 +1,6 @@
 #include "TestCommon.hpp"
 #include <Axle/UI/UITypes.hpp>
+#include <Axle/UI/RectTransform.hpp>
 #include <iostream>
 #include <cstddef>
 
@@ -1453,6 +1454,310 @@ bool RunTest_Step91_Phase34_Step6_RacingHUDFullIntegration() {
     std::cout << "  -> Visibility toggle synced with UICanvasComponent: PASS" << std::endl;
 
     std::cout << "\n>>> STEP 91 PASSED: RacingHUD AxleUI Migration & Zero-ImGui Runtime 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+bool RunTest_Step92_Phase34_Step7_RectTransform() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 92 TEST] UNITY-STYLE RECTTRANSFORM ABSTRACTION   " << std::endl;
+    std::cout << " (Anchors, Pivots, Insets, SetRect, Multi-Res, Corners) " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    UIRect parent1080p{ 0.0f, 0.0f, 1920.0f, 1080.0f };
+
+    // [92.1] Point Anchors & Normalized Pivots
+    std::cout << "[92.1] Testing Unity-Style Point Anchors & Normalized Pivots..." << std::endl;
+    {
+        // Top-Left (Pivot: 0, 0)
+        RectTransform rtTL;
+        rtTL.AnchorMin = { 0.0f, 0.0f };
+        rtTL.AnchorMax = { 0.0f, 0.0f };
+        rtTL.Pivot = { 0.0f, 0.0f };
+        rtTL.SizeDelta = { 200.0f, 100.0f };
+        rtTL.AnchoredPosition = { 50.0f, 30.0f };
+
+        UIRect rTL = rtTL.ComputeRect(parent1080p);
+        assert(std::abs(rTL.X - 50.0f) < 1e-4f);
+        assert(std::abs(rTL.Y - 30.0f) < 1e-4f);
+        assert(std::abs(rTL.Width - 200.0f) < 1e-4f);
+        assert(std::abs(rTL.Height - 100.0f) < 1e-4f);
+
+        // Center (Pivot: 0.5, 0.5)
+        RectTransform rtCenter;
+        rtCenter.AnchorMin = { 0.5f, 0.5f };
+        rtCenter.AnchorMax = { 0.5f, 0.5f };
+        rtCenter.Pivot = { 0.5f, 0.5f };
+        rtCenter.SizeDelta = { 400.0f, 200.0f };
+        rtCenter.AnchoredPosition = { 0.0f, 0.0f };
+
+        UIRect rCenter = rtCenter.ComputeRect(parent1080p);
+        assert(std::abs(rCenter.X - (1920.0f - 400.0f) * 0.5f) < 1e-4f); // 760
+        assert(std::abs(rCenter.Y - (1080.0f - 200.0f) * 0.5f) < 1e-4f); // 440
+        assert(std::abs(rCenter.Width - 400.0f) < 1e-4f);
+        assert(std::abs(rCenter.Height - 200.0f) < 1e-4f);
+
+        // Bottom-Right (Pivot: 1, 1)
+        RectTransform rtBR;
+        rtBR.AnchorMin = { 1.0f, 1.0f };
+        rtBR.AnchorMax = { 1.0f, 1.0f };
+        rtBR.Pivot = { 1.0f, 1.0f };
+        rtBR.SizeDelta = { 300.0f, 300.0f };
+        rtBR.AnchoredPosition = { -40.0f, -40.0f };
+
+        UIRect rBR = rtBR.ComputeRect(parent1080p);
+        assert(std::abs(rBR.X - (1920.0f - 300.0f - 40.0f)) < 1e-4f); // 1580
+        assert(std::abs(rBR.Y - (1080.0f - 300.0f - 40.0f)) < 1e-4f); // 740
+        assert(std::abs(rBR.Width - 300.0f) < 1e-4f);
+        assert(std::abs(rBR.Height - 300.0f) < 1e-4f);
+
+        // Arbitrary Non-Centered Pivot (0.25, 0.75)
+        RectTransform rtCustom;
+        rtCustom.AnchorMin = { 0.5f, 0.5f };
+        rtCustom.AnchorMax = { 0.5f, 0.5f };
+        rtCustom.Pivot = { 0.25f, 0.75f };
+        rtCustom.SizeDelta = { 200.0f, 100.0f };
+        rtCustom.AnchoredPosition = { 0.0f, 0.0f };
+
+        glm::vec2 pivotScreen = rtCustom.GetPivotScreenPos(parent1080p);
+        assert(std::abs(pivotScreen.x - 960.0f) < 1e-4f);
+        assert(std::abs(pivotScreen.y - 540.0f) < 1e-4f);
+
+        UIRect rCustom = rtCustom.ComputeRect(parent1080p);
+        assert(std::abs(rCustom.X - (960.0f - 0.25f * 200.0f)) < 1e-4f); // 910
+        assert(std::abs(rCustom.Y - (540.0f - 0.75f * 100.0f)) < 1e-4f); // 465
+        assert(std::abs(rCustom.Width - 200.0f) < 1e-4f);
+        assert(std::abs(rCustom.Height - 100.0f) < 1e-4f);
+
+        std::cout << "  -> Top-Left, Center, Bottom-Right, and custom non-centered pivots: PASS" << std::endl;
+    }
+
+    // [92.2] Stretch Anchors & Margin Insets (Offsets)
+    std::cout << "\n[92.2] Testing Stretch Anchors & Margin Insets (Offsets)..." << std::endl;
+    {
+        // Horizontal Stretch (TopStretch: Left = 20, Right = 20, Top = 20, Height = 60)
+        RectTransform rtHStretch;
+        rtHStretch.AnchorMin = { 0.0f, 0.0f };
+        rtHStretch.AnchorMax = { 1.0f, 0.0f };
+        rtHStretch.Pivot = { 0.5f, 0.0f };
+        rtHStretch.SizeDelta = { -40.0f, 60.0f };
+        rtHStretch.AnchoredPosition = { 0.0f, 20.0f };
+
+        UIRect rH = rtHStretch.ComputeRect(parent1080p);
+        assert(std::abs(rH.X - 20.0f) < 1e-4f);
+        assert(std::abs(rH.Y - 20.0f) < 1e-4f);
+        assert(std::abs(rH.Width - (1920.0f - 40.0f)) < 1e-4f); // 1880
+        assert(std::abs(rH.Height - 60.0f) < 1e-4f);
+
+        // Full 2D Stretch (StretchAll) via SetOffsets
+        RectTransform rtFullStretch;
+        rtFullStretch.AnchorMin = { 0.0f, 0.0f };
+        rtFullStretch.AnchorMax = { 1.0f, 1.0f };
+        rtFullStretch.Pivot = { 0.5f, 0.5f };
+        rtFullStretch.SetOffsets(glm::vec2(30.0f, 20.0f), glm::vec2(-50.0f, -40.0f), parent1080p);
+
+        UIRect rFull = rtFullStretch.ComputeRect(parent1080p);
+        assert(std::abs(rFull.X - 30.0f) < 1e-4f);
+        assert(std::abs(rFull.Y - 20.0f) < 1e-4f);
+        assert(std::abs(rFull.Width - (1920.0f - 30.0f - 50.0f)) < 1e-4f); // 1840
+        assert(std::abs(rFull.Height - (1080.0f - 20.0f - 40.0f)) < 1e-4f); // 1020
+
+        glm::vec2 offsetMin = rtFullStretch.GetOffsetMin(parent1080p);
+        glm::vec2 offsetMax = rtFullStretch.GetOffsetMax(parent1080p);
+        assert(std::abs(offsetMin.x - 30.0f) < 1e-4f && std::abs(offsetMin.y - 20.0f) < 1e-4f);
+        assert(std::abs(offsetMax.x - -50.0f) < 1e-4f && std::abs(offsetMax.y - -40.0f) < 1e-4f);
+
+        std::cout << "  -> Horizontal stretch and full 2D stretch with insets: PASS" << std::endl;
+        std::cout << "  -> GetOffsetMin / GetOffsetMax roundtrip precision: PASS" << std::endl;
+    }
+
+    // [92.3] SetRect & KeepScreenRect Preset Switching
+    std::cout << "\n[92.3] Testing SetRect & KeepScreenRect Preset Switching..." << std::endl;
+    {
+        UIRect targetRect{ 480.0f, 270.0f, 320.0f, 180.0f };
+        RectTransform rt;
+        rt.AnchorMin = { 0.0f, 0.0f };
+        rt.AnchorMax = { 0.0f, 0.0f };
+        rt.Pivot = { 0.5f, 0.5f };
+
+        rt.SetRect(targetRect, parent1080p);
+        UIRect r1 = rt.ComputeRect(parent1080p);
+        assert(std::abs(r1.X - targetRect.X) < 1e-4f);
+        assert(std::abs(r1.Y - targetRect.Y) < 1e-4f);
+        assert(std::abs(r1.Width - targetRect.Width) < 1e-4f);
+        assert(std::abs(r1.Height - targetRect.Height) < 1e-4f);
+
+        // Switch to Center preset with keepScreenRect = true
+        rt.SetAnchorPreset(UIAnchor::Center, true, parent1080p);
+        UIRect rCenter = rt.ComputeRect(parent1080p);
+        assert(std::abs(rCenter.X - targetRect.X) < 1e-4f);
+        assert(std::abs(rCenter.Y - targetRect.Y) < 1e-4f);
+        assert(std::abs(rCenter.Width - targetRect.Width) < 1e-4f);
+        assert(std::abs(rCenter.Height - targetRect.Height) < 1e-4f);
+
+        // Switch to BottomRight preset with keepScreenRect = true
+        rt.SetAnchorPreset(UIAnchor::BottomRight, true, parent1080p);
+        UIRect rBR = rt.ComputeRect(parent1080p);
+        assert(std::abs(rBR.X - targetRect.X) < 1e-4f);
+        assert(std::abs(rBR.Y - targetRect.Y) < 1e-4f);
+        assert(std::abs(rBR.Width - targetRect.Width) < 1e-4f);
+        assert(std::abs(rBR.Height - targetRect.Height) < 1e-4f);
+
+        // Switch to StretchAll preset with keepScreenRect = true
+        rt.SetAnchorPreset(UIAnchor::StretchAll, true, parent1080p);
+        UIRect rStretch = rt.ComputeRect(parent1080p);
+        assert(std::abs(rStretch.X - targetRect.X) < 1e-4f);
+        assert(std::abs(rStretch.Y - targetRect.Y) < 1e-4f);
+        assert(std::abs(rStretch.Width - targetRect.Width) < 1e-4f);
+        assert(std::abs(rStretch.Height - targetRect.Height) < 1e-4f);
+
+        std::cout << "  -> Preserved exact screen bounds across TopLeft, Center, BottomRight, StretchAll: PASS" << std::endl;
+    }
+
+    // [92.4] Multi-Resolution Responsive Layout Scaling
+    std::cout << "\n[92.4] Testing Multi-Resolution Responsive Layout Scaling..." << std::endl;
+    {
+        // 1. Header: TopStretch, height = 60, margins = 20
+        RectTransform header;
+        header.AnchorMin = { 0.0f, 0.0f };
+        header.AnchorMax = { 1.0f, 0.0f };
+        header.Pivot = { 0.5f, 0.0f };
+        header.SizeDelta = { -40.0f, 60.0f };
+        header.AnchoredPosition = { 0.0f, 20.0f };
+
+        // 2. Minimap: BottomRight, 200x200, margin 30
+        RectTransform minimap;
+        minimap.AnchorMin = { 1.0f, 1.0f };
+        minimap.AnchorMax = { 1.0f, 1.0f };
+        minimap.Pivot = { 1.0f, 1.0f };
+        minimap.SizeDelta = { 200.0f, 200.0f };
+        minimap.AnchoredPosition = { -30.0f, -30.0f };
+
+        // 3. Center Crosshair: Center, 32x32
+        RectTransform crosshair;
+        crosshair.AnchorMin = { 0.5f, 0.5f };
+        crosshair.AnchorMax = { 0.5f, 0.5f };
+        crosshair.Pivot = { 0.5f, 0.5f };
+        crosshair.SizeDelta = { 32.0f, 32.0f };
+        crosshair.AnchoredPosition = { 0.0f, 0.0f };
+
+        // Test on 1080p (1920x1080)
+        UIRect h1080 = header.ComputeRect(parent1080p);
+        UIRect m1080 = minimap.ComputeRect(parent1080p);
+        UIRect c1080 = crosshair.ComputeRect(parent1080p);
+        assert(h1080.Width == 1880.0f);
+        assert(m1080.X == 1920.0f - 230.0f);
+        assert(c1080.X == (1920.0f - 32.0f) * 0.5f);
+
+        // Test on 4K UHD (3840x2160)
+        UIRect parent4K{ 0.0f, 0.0f, 3840.0f, 2160.0f };
+        UIRect h4K = header.ComputeRect(parent4K);
+        UIRect m4K = minimap.ComputeRect(parent4K);
+        UIRect c4K = crosshair.ComputeRect(parent4K);
+        assert(h4K.Width == 3840.0f - 40.0f); // Stretched dynamically
+        assert(m4K.X == 3840.0f - 230.0f);    // Anchored to bottom right
+        assert(m4K.Y == 2160.0f - 230.0f);
+        assert(c4K.X == (3840.0f - 32.0f) * 0.5f); // Stayed dead center
+
+        // Test on Ultrawide 21:9 (2560x1080)
+        UIRect parentUW{ 0.0f, 0.0f, 2560.0f, 1080.0f };
+        UIRect hUW = header.ComputeRect(parentUW);
+        UIRect mUW = minimap.ComputeRect(parentUW);
+        UIRect cUW = crosshair.ComputeRect(parentUW);
+        assert(hUW.Width == 2560.0f - 40.0f);
+        assert(mUW.X == 2560.0f - 230.0f);
+        assert(cUW.X == (2560.0f - 32.0f) * 0.5f);
+
+        std::cout << "  -> 1080p, 4K UHD (3840x2160), and 21:9 Ultrawide (2560x1080) scaling: PASS" << std::endl;
+    }
+
+    // [92.5] Corners, Rotation & Scaling around Pivot
+    std::cout << "\n[92.5] Testing Corners, Rotation & Scaling around Pivot..." << std::endl;
+    {
+        RectTransform rt;
+        rt.AnchorMin = { 0.0f, 0.0f };
+        rt.AnchorMax = { 0.0f, 0.0f };
+        rt.Pivot = { 0.5f, 0.5f };
+        rt.SizeDelta = { 200.0f, 100.0f };
+        rt.AnchoredPosition = { 200.0f, 150.0f }; // Center is at (200, 150), corners: (100, 100) to (300, 200)
+
+        glm::vec2 corners[4];
+        rt.GetWorldCorners(parent1080p, corners);
+        assert(std::abs(corners[0].x - 100.0f) < 1e-4f && std::abs(corners[0].y - 100.0f) < 1e-4f); // TL
+        assert(std::abs(corners[1].x - 300.0f) < 1e-4f && std::abs(corners[1].y - 100.0f) < 1e-4f); // TR
+        assert(std::abs(corners[2].x - 300.0f) < 1e-4f && std::abs(corners[2].y - 200.0f) < 1e-4f); // BR
+        assert(std::abs(corners[3].x - 100.0f) < 1e-4f && std::abs(corners[3].y - 200.0f) < 1e-4f); // BL
+
+        // Scale by 2.0x around Pivot (200, 150)
+        rt.Scale = { 2.0f, 2.0f };
+        rt.GetWorldCorners(parent1080p, corners);
+        assert(std::abs(corners[0].x - 0.0f) < 1e-4f && std::abs(corners[0].y - 50.0f) < 1e-4f);   // TL
+        assert(std::abs(corners[2].x - 400.0f) < 1e-4f && std::abs(corners[2].y - 250.0f) < 1e-4f); // BR
+
+        // 90-degree Rotation around Pivot
+        rt.Scale = { 1.0f, 1.0f };
+        rt.Rotation = 90.0f;
+        rt.GetWorldCorners(parent1080p, corners);
+        // Pivot is (200, 150). Original TL was (100, 100) -> d = (-100, -50).
+        // Rotated 90 deg: (d.x*0 - d.y*1, d.x*1 + d.y*0) = (50, -100) -> Pivot + (50, -100) = (250, 50)
+        assert(std::abs(corners[0].x - 250.0f) < 1e-3f && std::abs(corners[0].y - 50.0f) < 1e-3f);
+
+        std::cout << "  -> Local scale and rotation around pivot corner transformations: PASS" << std::endl;
+    }
+
+    // [92.6] Declarative .axleui Parsing with RectTransform & Canvas2D Draw
+    std::cout << "\n[92.6] Testing Declarative .axleui Parsing with RectTransform..." << std::endl;
+    {
+        const char* axleuiSource = R"(
+            Canvas {
+                id: "rect_canvas"
+                referenceResolution: [1920, 1080]
+
+                Rectangle {
+                    id: "center_panel"
+                    anchorMin: [0.5, 0.5]
+                    anchorMax: [0.5, 0.5]
+                    pivot: [0.5, 0.5]
+                    sizeDelta: [500, 300]
+                    anchoredPosition: [0, 0]
+                    color: "#0F172ACC"
+                    cornerRadius: 12
+                }
+            }
+        )";
+
+        UIDocument doc;
+        bool parseOk = UIParser::ParseSource(axleuiSource, doc);
+        assert(parseOk == true);
+
+        auto* panel = doc.FindNodeByID("center_panel");
+        assert(panel != nullptr);
+        assert(panel->UseRectTransform == true);
+        assert(panel->Transform.AnchorMin.x == 0.5f && panel->Transform.AnchorMin.y == 0.5f);
+        assert(panel->Transform.SizeDelta.x == 500.0f && panel->Transform.SizeDelta.y == 300.0f);
+
+        doc.UpdateLayout(glm::vec2(1920.0f, 1080.0f));
+        assert(std::abs(panel->ComputedRect.X - (1920.0f - 500.0f) * 0.5f) < 1e-4f);
+        assert(std::abs(panel->ComputedRect.Y - (1080.0f - 300.0f) * 0.5f) < 1e-4f);
+        assert(std::abs(panel->ComputedRect.Width - 500.0f) < 1e-4f);
+        assert(std::abs(panel->ComputedRect.Height - 300.0f) < 1e-4f);
+
+        // Hardware Canvas2D Render
+        Canvas2D canvas;
+        canvas.BeginCanvas(glm::vec2(1920.0f, 1080.0f));
+        doc.Render(canvas);
+        canvas.EndCanvas();
+
+        const auto& stats = canvas.GetStats();
+        assert(stats.DrawCalls == 1);
+        assert(stats.QuadCount == 1);
+
+        std::cout << "  -> Declarative .axleui parsed RectTransform properties into AST: PASS" << std::endl;
+        std::cout << "  -> UpdateLayout evaluated exact center geometry and Canvas2D batch: PASS" << std::endl;
+    }
+
+    std::cout << "\n>>> STEP 92 PASSED: Unity-Style RectTransform Geometric Abstraction 100% verified! <<<\n" << std::endl;
     return true;
 }
 

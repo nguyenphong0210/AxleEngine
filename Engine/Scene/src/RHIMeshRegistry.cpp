@@ -110,6 +110,7 @@ namespace Axle {
 
     std::shared_ptr<RHIMesh> RHIMeshRegistry::GetOrCreateMesh(const std::string& assetPath) {
         if (assetPath.empty()) return nullptr;
+        if (!RHIDevice::Get().IsInitialized()) return nullptr;
 
         auto it = m_MeshCache.find(assetPath);
         if (it != m_MeshCache.end() && it->second && it->second->IsValid()) {

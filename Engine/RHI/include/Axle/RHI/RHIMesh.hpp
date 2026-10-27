@@ -91,7 +91,8 @@ namespace Axle::RHI {
                                                       const std::vector<glm::vec3>& normals = {}, const std::vector<glm::vec2>& uvs = {},
                                                       const glm::vec4& color = glm::vec4(1.0f), const std::string& name = "");
         static std::shared_ptr<RHIMesh> CreateFromAxleMesh(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices,
-                                                           const glm::vec4& color = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f), const std::string& name = "");
+                                                           const glm::vec4& color = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f), const std::string& name = "",
+                                                           float creaseAngleDegrees = 45.0f);
         static std::shared_ptr<RHIMesh> CreateTerrainHeightfield(uint32_t resX, uint32_t resZ, const std::vector<float>& heights,
                                                                  const glm::vec3& scale = glm::vec3(1.0f), const glm::vec3& origin = glm::vec3(0.0f),
                                                                  const std::vector<glm::vec4>& splatWeights = {});
@@ -102,7 +103,8 @@ namespace Axle::RHI {
         static std::shared_ptr<RHIMesh> StreamPlane(RHIStreamer& streamer, RHICommandBuffer& cmd, float sizeX = 1.0f, float sizeZ = 1.0f, uint32_t resX = 1, uint32_t resZ = 1);
         static std::shared_ptr<RHIMesh> StreamFromAxleMesh(RHIStreamer& streamer, RHICommandBuffer& cmd,
                                                            const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices,
-                                                           const glm::vec4& color = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f), const std::string& name = "AxleMesh");
+                                                           const glm::vec4& color = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f), const std::string& name = "AxleMesh",
+                                                           float creaseAngleDegrees = 0.0f);
         static std::shared_ptr<RHIMesh> StreamTerrainHeightfield(RHIStreamer& streamer, RHICommandBuffer& cmd,
                                                                  uint32_t resX, uint32_t resZ, const std::vector<float>& heights,
                                                                  const glm::vec3& scale = glm::vec3(1.0f), const glm::vec3& origin = glm::vec3(0.0f),

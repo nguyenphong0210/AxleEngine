@@ -600,9 +600,15 @@ namespace Axle::RHI {
         return mesh;
     }
 
-    std::shared_ptr<RHIMesh> RHIMesh::CreateFromAxleMesh(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices,
-                                                         const glm::vec4& color, const std::string& name) {
-        if (positions.empty() || indices.empty()) return nullptr;
+    static void GenerateAxleMeshGeometry(const std::vector<glm::vec3>& positions,
+                                         const std::vector<uint32_t>& indices,
+                                         const glm::vec4& color,
+                                         float creaseAngleDegrees,
+                                         std::vector<RHIVertex3D>& outVertices,
+                                         std::vector<uint32_t>& outIndices) {
+        outVertices.clear();
+        outIndices.clear();
+        if (positions.empty() || indices.empty()) return;
 
         glm::vec3 minB(1e9f);
         glm::vec3 maxB(-1e9f);
@@ -612,40 +618,145 @@ namespace Axle::RHI {
         }
         glm::vec3 size = glm::max(maxB - minB, glm::vec3(0.01f));
 
-        std::vector<RHIVertex3D> vertices(positions.size());
-        for (size_t i = 0; i < positions.size(); ++i) {
-            vertices[i].Position = positions[i];
-            vertices[i].Normal = glm::vec3(0.0f, 1.0f, 0.0f); // Default normal; will be accumulated per triangle below
-            vertices[i].TexCoord = glm::vec2((positions[i].x - minB.x) / size.x, (positions[i].z - minB.z) / size.z);
-            vertices[i].Color = color;
-            vertices[i].Tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+        // If creaseAngleDegrees <= 0.0f, perform standard smooth normal accumulation without splitting vertices
+        if (creaseAngleDegrees <= 0.0f) {
+            outVertices.resize(positions.size());
+            outIndices = indices;
+
+            for (size_t i = 0; i < positions.size(); ++i) {
+                outVertices[i].Position = positions[i];
+                outVertices[i].Normal = glm::vec3(0.0f);
+                outVertices[i].TexCoord = glm::vec2((positions[i].x - minB.x) / size.x, (positions[i].z - minB.z) / size.z);
+                outVertices[i].Color = color;
+                outVertices[i].Tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+            }
+
+            for (size_t i = 0; i < indices.size(); i += 3) {
+                uint32_t i0 = indices[i];
+                uint32_t i1 = indices[i + 1];
+                uint32_t i2 = indices[i + 2];
+                if (i0 < positions.size() && i1 < positions.size() && i2 < positions.size()) {
+                    glm::vec3 e1 = positions[i1] - positions[i0];
+                    glm::vec3 e2 = positions[i2] - positions[i0];
+                    glm::vec3 fn = glm::cross(e1, e2);
+                    outVertices[i0].Normal += fn;
+                    outVertices[i1].Normal += fn;
+                    outVertices[i2].Normal += fn;
+                }
+            }
+
+            for (auto& v : outVertices) {
+                float len = glm::length(v.Normal);
+                v.Normal = (len > 1e-6f) ? (v.Normal / len) : glm::vec3(0.0f, 1.0f, 0.0f);
+            }
+
+            ComputeMeshTangents(outVertices, outIndices);
+            return;
         }
 
-        // Accumulate triangle face normals
-        std::vector<glm::vec3> faceNormals(positions.size(), glm::vec3(0.0f));
-        for (size_t i = 0; i + 2 < indices.size(); i += 3) {
-            uint32_t i0 = indices[i];
-            uint32_t i1 = indices[i + 1];
-            uint32_t i2 = indices[i + 2];
+        const size_t numTriangles = indices.size() / 3;
+        std::vector<glm::vec3> faceNormals(numTriangles);
+        for (size_t t = 0; t < numTriangles; ++t) {
+            uint32_t i0 = indices[t * 3];
+            uint32_t i1 = indices[t * 3 + 1];
+            uint32_t i2 = indices[t * 3 + 2];
             if (i0 < positions.size() && i1 < positions.size() && i2 < positions.size()) {
                 glm::vec3 e1 = positions[i1] - positions[i0];
                 glm::vec3 e2 = positions[i2] - positions[i0];
-                glm::vec3 fn = glm::cross(e1, e2);
-                faceNormals[i0] += fn;
-                faceNormals[i1] += fn;
-                faceNormals[i2] += fn;
-            }
-        }
-        for (size_t i = 0; i < positions.size(); ++i) {
-            if (glm::dot(faceNormals[i], faceNormals[i]) > 1e-6f) {
-                vertices[i].Normal = glm::normalize(faceNormals[i]);
+                glm::vec3 cr = glm::cross(e1, e2);
+                float len = glm::length(cr);
+                faceNormals[t] = (len > 1e-6f) ? (cr / len) : glm::vec3(0.0f, 1.0f, 0.0f);
+            } else {
+                faceNormals[t] = glm::vec3(0.0f, 1.0f, 0.0f);
             }
         }
 
-        ComputeMeshTangents(vertices, indices);
+        // Map each position index to its incident triangle corners: (triangleIndex, cornerIndex)
+        std::vector<std::vector<std::pair<uint32_t, uint32_t>>> vertexIncidentCorners(positions.size());
+        for (uint32_t t = 0; t < static_cast<uint32_t>(numTriangles); ++t) {
+            for (uint32_t c = 0; c < 3; ++c) {
+                uint32_t vi = indices[t * 3 + c];
+                if (vi < positions.size()) {
+                    vertexIncidentCorners[vi].push_back({ t, c });
+                }
+            }
+        }
+
+        outIndices.resize(indices.size());
+        const float cosCrease = std::cos(glm::radians(creaseAngleDegrees));
+
+        // For each original position, group incident corners by crease angle
+        for (size_t vi = 0; vi < positions.size(); ++vi) {
+            const auto& corners = vertexIncidentCorners[vi];
+            if (corners.empty()) continue;
+
+            struct SmoothingGroup {
+                glm::vec3 AccumulatedNormal{ 0.0f };
+                glm::vec3 RepNormal{ 0.0f };
+                std::vector<std::pair<uint32_t, uint32_t>> GroupCorners;
+            };
+
+            std::vector<SmoothingGroup> groups;
+
+            for (const auto& corner : corners) {
+                uint32_t t = corner.first;
+                const glm::vec3& fn = faceNormals[t];
+
+                bool matched = false;
+                for (auto& g : groups) {
+                    if (glm::dot(fn, g.RepNormal) >= cosCrease) {
+                        g.AccumulatedNormal += fn;
+                        g.GroupCorners.push_back(corner);
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if (!matched) {
+                    SmoothingGroup newG;
+                    newG.AccumulatedNormal = fn;
+                    newG.RepNormal = fn;
+                    newG.GroupCorners.push_back(corner);
+                    groups.push_back(newG);
+                }
+            }
+
+            // Create an output vertex for each smoothing group
+            for (auto& g : groups) {
+                glm::vec3 norm = (glm::dot(g.AccumulatedNormal, g.AccumulatedNormal) > 1e-6f)
+                    ? glm::normalize(g.AccumulatedNormal)
+                    : g.RepNormal;
+
+                RHIVertex3D vert;
+                vert.Position = positions[vi];
+                vert.Normal = norm;
+                vert.TexCoord = glm::vec2((positions[vi].x - minB.x) / size.x, (positions[vi].z - minB.z) / size.z);
+                vert.Color = color;
+                vert.Tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+
+                uint32_t newVertexIndex = static_cast<uint32_t>(outVertices.size());
+                outVertices.push_back(vert);
+
+                for (const auto& corner : g.GroupCorners) {
+                    outIndices[corner.first * 3 + corner.second] = newVertexIndex;
+                }
+            }
+        }
+
+        ComputeMeshTangents(outVertices, outIndices);
+    }
+
+    std::shared_ptr<RHIMesh> RHIMesh::CreateFromAxleMesh(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices,
+                                                         const glm::vec4& color, const std::string& name,
+                                                         float creaseAngleDegrees) {
+        if (positions.empty() || indices.empty()) return nullptr;
+
+        std::vector<RHIVertex3D> vertices;
+        std::vector<uint32_t> outIndices;
+        GenerateAxleMeshGeometry(positions, indices, color, creaseAngleDegrees, vertices, outIndices);
 
         auto mesh = std::make_shared<RHIMesh>();
-        mesh->Init(vertices, indices, name.empty() ? "AxleMesh" : name);
+        mesh->Init(vertices, outIndices, name.empty() ? "AxleMesh" : name);
         return mesh;
     }
 
@@ -695,51 +806,16 @@ namespace Axle::RHI {
 
     std::shared_ptr<RHIMesh> RHIMesh::StreamFromAxleMesh(RHIStreamer& streamer, RHICommandBuffer& cmd,
                                                          const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices,
-                                                         const glm::vec4& color, const std::string& name) {
+                                                         const glm::vec4& color, const std::string& name,
+                                                         float creaseAngleDegrees) {
         if (positions.empty() || indices.empty()) return nullptr;
 
-        glm::vec3 minB(1e9f);
-        glm::vec3 maxB(-1e9f);
-        for (const auto& p : positions) {
-            minB = glm::min(minB, p);
-            maxB = glm::max(maxB, p);
-        }
-        glm::vec3 size = glm::max(maxB - minB, glm::vec3(0.01f));
-
-        std::vector<RHIVertex3D> vertices(positions.size());
-        for (size_t i = 0; i < positions.size(); ++i) {
-            vertices[i].Position = positions[i];
-            vertices[i].Normal = glm::vec3(0.0f, 1.0f, 0.0f);
-            vertices[i].TexCoord = glm::vec2((positions[i].x - minB.x) / size.x, (positions[i].z - minB.z) / size.z);
-            vertices[i].Color = color;
-            vertices[i].Tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-        }
-
-        // Accumulate face normals
-        std::vector<glm::vec3> faceNormals(positions.size(), glm::vec3(0.0f));
-        for (size_t i = 0; i + 2 < indices.size(); i += 3) {
-            uint32_t i0 = indices[i];
-            uint32_t i1 = indices[i + 1];
-            uint32_t i2 = indices[i + 2];
-            if (i0 < positions.size() && i1 < positions.size() && i2 < positions.size()) {
-                glm::vec3 e1 = positions[i1] - positions[i0];
-                glm::vec3 e2 = positions[i2] - positions[i0];
-                glm::vec3 fn = glm::cross(e1, e2);
-                faceNormals[i0] += fn;
-                faceNormals[i1] += fn;
-                faceNormals[i2] += fn;
-            }
-        }
-        for (size_t i = 0; i < positions.size(); ++i) {
-            if (glm::dot(faceNormals[i], faceNormals[i]) > 1e-6f) {
-                vertices[i].Normal = glm::normalize(faceNormals[i]);
-            }
-        }
-
-        ComputeMeshTangents(vertices, indices);
+        std::vector<RHIVertex3D> vertices;
+        std::vector<uint32_t> outIndices;
+        GenerateAxleMeshGeometry(positions, indices, color, creaseAngleDegrees, vertices, outIndices);
 
         auto mesh = std::make_shared<RHIMesh>();
-        if (!mesh->StreamUpload(streamer, cmd, vertices, indices, name)) return nullptr;
+        if (!mesh->StreamUpload(streamer, cmd, vertices, outIndices, name)) return nullptr;
         return mesh;
     }
 

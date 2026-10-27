@@ -233,7 +233,15 @@ float4 PSMain(PSInput input) : SV_Target0 {
     
     // 3. Normal Vector & Tangent Space Perturbation
     float3 N = normalize(input.NormalWS);
-    if (shadingMode == 5 && abs(input.TangentWS.w) > 0.1) {
+    if (shadingMode == 0 || shadingMode == 1) {
+        // Geometric screen derivative flat normal for procedural caro & low-poly meshes (Exact OpenGL Parity)
+        float3 dX = ddx(input.WorldPos);
+        float3 dY = ddy(input.WorldPos);
+        float3 crossN = cross(dX, dY);
+        if (length(crossN) > 1e-6) {
+            N = normalize(crossN);
+        }
+    } else if (shadingMode == 5 && abs(input.TangentWS.w) > 0.1) {
         float3 T = normalize(input.TangentWS.xyz);
         float3 B = cross(N, T) * input.TangentWS.w;
         float3x3 TBN = float3x3(T, B, N);
@@ -246,6 +254,9 @@ float4 PSMain(PSInput input) : SV_Target0 {
     // 4. View Vector
     float3 camPos = (length(u_CameraPosition.xyz) > 0.001) ? u_CameraPosition.xyz : float3(0.0, 5.0, 10.0);
     float3 V = normalize(camPos - input.WorldPos);
+    if (dot(N, V) < 0.0) {
+        N = -N;
+    }
     float NdotV = max(dot(N, V), 0.001);
     
     // 5. Base Reflectivity F0 (Dielectric = 0.04, Metal = Albedo)

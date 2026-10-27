@@ -33,6 +33,12 @@ namespace Axle {
 
         cbuffer SceneConstants : register(b1, space0) {
             float4x4 u_ViewProjection;
+            float4x4 u_View;
+            float4x4 u_Projection;
+            float4   u_CameraPosition;
+            float4   u_AmbientLight;
+            float4   u_SunDirection;
+            float4   u_SunColor;
         };
 
         struct VSInput {
@@ -69,8 +75,6 @@ namespace Axle {
         }
 
         float4 PSMain(PSInput input) : SV_Target0 {
-            float3 N = normalize(input.NormalWS);
-            float3 L = normalize(u_SunDirAndIntensity.xyz);
             int patternMode = (int)u_Params.y;
             float tileScale = max(0.01, u_Params.x);
             float4 baseColor = u_ColorPrimary;
@@ -96,11 +100,27 @@ namespace Axle {
                 baseColor = u_ColorPrimary * input.VertexColor;
             }
 
+            float3 camPos = (length(u_CameraPosition.xyz) > 0.001) ? u_CameraPosition.xyz : float3(0.0, 5.0, 10.0);
+            float3 V = normalize(camPos - input.WorldPos);
+
+            float3 N = normalize(input.NormalWS);
+            if (patternMode == 0 || patternMode == 1) {
+                float3 dX = ddx(input.WorldPos);
+                float3 dY = ddy(input.WorldPos);
+                float3 crossN = cross(dX, dY);
+                if (length(crossN) > 1e-6) {
+                    N = normalize(crossN);
+                }
+            }
+            if (dot(N, V) < 0.0) {
+                N = -N;
+            }
+
+            float3 L = normalize(u_SunDirAndIntensity.xyz);
             float NdotL = max(0.0, dot(N, L));
             float sunIntensity = max(0.2, u_SunDirAndIntensity.w);
             float3 diffuse = baseColor.rgb * (NdotL * sunIntensity);
             float3 ambient = baseColor.rgb * float3(0.22, 0.25, 0.32);
-            float3 V = float3(0.0, 0.707, 0.707);
             float3 H = normalize(L + V);
             float NdotH = max(0.0, dot(N, H));
             float3 specular = float3(0.9, 0.9, 0.9) * pow(NdotH, 32.0) * (1.0 - u_Params.z) * 0.35;
@@ -108,6 +128,49 @@ namespace Axle {
             return float4(ambient + diffuse + specular, baseColor.a);
         }
     )";
+
+    static std::filesystem::path FindShaderPath(const std::string& shaderFileName) {
+        // 1. Try Asset Path resolution
+        auto path = FileSystem::ResolveAssetPath("shaders/" + shaderFileName);
+        if (std::filesystem::exists(path)) return path;
+
+        path = FileSystem::ResolveAssetPath(shaderFileName);
+        if (std::filesystem::exists(path)) return path;
+
+        // 2. Try candidate root directories
+        std::vector<std::filesystem::path> roots = {
+            std::filesystem::current_path(),
+            std::filesystem::current_path().parent_path(),
+            std::filesystem::current_path().parent_path().parent_path(),
+            std::filesystem::current_path().parent_path().parent_path().parent_path(),
+            std::filesystem::path(".."),
+            std::filesystem::path("../.."),
+            std::filesystem::path("../../.."),
+            FileSystem::GetAssetDirectory(),
+            FileSystem::GetAssetDirectory().parent_path()
+        };
+
+        std::vector<std::string> subdirs = {
+            "Engine/Resources/Shaders",
+            "Resources/Shaders",
+            "shaders",
+            "Editor/assets/shaders",
+            "assets/shaders"
+        };
+
+        for (const auto& root : roots) {
+            if (root.empty()) continue;
+            for (const auto& sub : subdirs) {
+                std::error_code ec;
+                auto testPath = root / sub / shaderFileName;
+                if (std::filesystem::exists(testPath, ec) && !std::filesystem::is_directory(testPath, ec)) {
+                    return testPath;
+                }
+            }
+        }
+
+        return {};
+    }
 
     RHISceneRenderer::RHISceneRenderer() = default;
 
@@ -359,27 +422,23 @@ namespace Axle {
         }
 
         std::string shaderSource;
-        auto shaderPath = FileSystem::ResolveAssetPath("shaders/ForwardPBR.hlsl");
-        if (!std::filesystem::exists(shaderPath)) {
-            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "ForwardPBR.hlsl";
-        }
-        if (!std::filesystem::exists(shaderPath)) {
-            shaderPath = FileSystem::ResolveAssetPath("shaders/ForwardScene.hlsl");
-        }
-        if (!std::filesystem::exists(shaderPath)) {
-            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "ForwardScene.hlsl";
+        auto shaderPath = FindShaderPath("ForwardPBR.hlsl");
+        if (shaderPath.empty()) {
+            shaderPath = FindShaderPath("ForwardScene.hlsl");
         }
 
-        if (std::filesystem::exists(shaderPath)) {
+        if (!shaderPath.empty() && std::filesystem::exists(shaderPath)) {
             std::ifstream file(shaderPath);
             if (file.is_open()) {
                 std::stringstream ss;
                 ss << file.rdbuf();
                 shaderSource = ss.str();
+                AXLE_CORE_INFO("RHISceneRenderer: Loaded ForwardPBR shader from {0}", shaderPath.string());
             }
         }
 
         if (shaderSource.empty()) {
+            AXLE_CORE_WARN("RHISceneRenderer: Using fallback forward shader!");
             shaderSource = s_FallbackForwardShader;
         }
 
@@ -388,9 +447,13 @@ namespace Axle {
         // Compile Vertex Shader
         RHIShaderCompileDesc vsDesc;
         vsDesc.Source = shaderSource;
+        vsDesc.SourcePath = shaderPath.empty() ? "ForwardPBR.hlsl" : shaderPath.string();
         vsDesc.EntryPoint = "VSMain";
         vsDesc.Stage = RHIShaderStage::Vertex;
+        vsDesc.HLSLVersion = "2021";
+        vsDesc.ShaderModel = "6_0";
         vsDesc.Format = format;
+        vsDesc.Optimization = true;
         auto vsRes = compiler.Compile(vsDesc);
         if (!vsRes.Success) {
             AXLE_CORE_ERROR("RHISceneRenderer: VS compile failed: {0}", vsRes.ErrorMessage);
@@ -399,11 +462,9 @@ namespace Axle {
         m_VertexShader = vsRes.Bytecode;
 
         // Compile Pixel Shader
-        RHIShaderCompileDesc psDesc;
-        psDesc.Source = shaderSource;
+        RHIShaderCompileDesc psDesc = vsDesc;
         psDesc.EntryPoint = "PSMain";
         psDesc.Stage = RHIShaderStage::Fragment;
-        psDesc.Format = format;
         auto psRes = compiler.Compile(psDesc);
         if (!psRes.Success) {
             AXLE_CORE_ERROR("RHISceneRenderer: PS compile failed: {0}", psRes.ErrorMessage);
@@ -534,15 +595,9 @@ namespace Axle {
         }
 
         std::string shaderSource;
-        auto shaderPath = FileSystem::ResolveAssetPath("shaders/AtmosphericSkybox.hlsl");
-        if (!std::filesystem::exists(shaderPath)) {
-            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "AtmosphericSkybox.hlsl";
-        }
-        if (!std::filesystem::exists(shaderPath)) {
-            shaderPath = "Engine/Resources/Shaders/AtmosphericSkybox.hlsl";
-        }
+        auto shaderPath = FindShaderPath("AtmosphericSkybox.hlsl");
 
-        if (std::filesystem::exists(shaderPath)) {
+        if (!shaderPath.empty() && std::filesystem::exists(shaderPath)) {
             std::ifstream file(shaderPath);
             if (file.is_open()) {
                 std::stringstream ss;
@@ -641,15 +696,9 @@ namespace Axle {
         }
 
         std::string shaderSource;
-        auto shaderPath = FileSystem::ResolveAssetPath("shaders/ToneMapping.hlsl");
-        if (!std::filesystem::exists(shaderPath)) {
-            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "ToneMapping.hlsl";
-        }
-        if (!std::filesystem::exists(shaderPath)) {
-            shaderPath = "Engine/Resources/Shaders/ToneMapping.hlsl";
-        }
+        auto shaderPath = FindShaderPath("ToneMapping.hlsl");
 
-        if (std::filesystem::exists(shaderPath)) {
+        if (!shaderPath.empty() && std::filesystem::exists(shaderPath)) {
             std::ifstream file(shaderPath);
             if (file.is_open()) {
                 std::stringstream ss;
@@ -769,15 +818,9 @@ namespace Axle {
         }
 
         std::string shaderSource;
-        auto shaderPath = FileSystem::ResolveAssetPath("shaders/FXAA.hlsl");
-        if (!std::filesystem::exists(shaderPath)) {
-            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "FXAA.hlsl";
-        }
-        if (!std::filesystem::exists(shaderPath)) {
-            shaderPath = "Engine/Resources/Shaders/FXAA.hlsl";
-        }
+        auto shaderPath = FindShaderPath("FXAA.hlsl");
 
-        if (std::filesystem::exists(shaderPath)) {
+        if (!shaderPath.empty() && std::filesystem::exists(shaderPath)) {
             std::ifstream file(shaderPath);
             if (file.is_open()) {
                 std::stringstream ss;

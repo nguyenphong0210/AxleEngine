@@ -30,6 +30,7 @@
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHIObjectPicker.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
+#include <Axle/RHI/RHIMesh.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -340,10 +341,35 @@ void EditorLayer::OnAttach() {
                 sc.TrackVAO = Axle::Spline::TrackGenerator::BuildVAO(mesh);
                 sc.VertexCount = static_cast<Axle::u32>(mesh.GetVertexCount());
                 sc.TriangleCount = static_cast<Axle::u32>(mesh.GetTriangleCount());
+                std::shared_ptr<Axle::RHI::RHIMesh> trackRHIMesh = nullptr;
+                if (Axle::RHI::RHIDevice::Get().IsInitialized() && !mesh.IsEmpty()) {
+                    std::vector<glm::vec3> trackNormals(mesh.Positions.size(), glm::vec3(0.0f));
+                    for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
+                        uint32_t i0 = mesh.Indices[i], i1 = mesh.Indices[i + 1], i2 = mesh.Indices[i + 2];
+                        if (i0 < mesh.Positions.size() && i1 < mesh.Positions.size() && i2 < mesh.Positions.size()) {
+                            glm::vec3 fn = glm::cross(mesh.Positions[i1] - mesh.Positions[i0], mesh.Positions[i2] - mesh.Positions[i0]);
+                            trackNormals[i0] += fn;
+                            trackNormals[i1] += fn;
+                            trackNormals[i2] += fn;
+                        }
+                    }
+                    for (auto& n : trackNormals) {
+                        if (glm::dot(n, n) > 1e-6f) n = glm::normalize(n);
+                        else n = glm::vec3(0.0f, 1.0f, 0.0f);
+                    }
+                    trackRHIMesh = Axle::RHI::RHIMesh::CreateFromRaw(
+                        mesh.Positions, mesh.Indices, trackNormals, mesh.UVs,
+                        glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), "SplineTrack_RHI"
+                    );
+                }
+
                 if (!entity.HasComponent<Axle::MeshInstance3D>()) {
-                    entity.AddComponent<Axle::MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+                    auto& mi = entity.AddComponent<Axle::MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+                    mi.RHIMeshAsset = trackRHIMesh;
                 } else {
-                    entity.GetComponent<Axle::MeshInstance3D>().VAO = sc.TrackVAO;
+                    auto& mi = entity.GetComponent<Axle::MeshInstance3D>();
+                    mi.VAO = sc.TrackVAO;
+                    mi.RHIMeshAsset = trackRHIMesh;
                 }
                 ImGui::CloseCurrentPopup();
             }
@@ -356,10 +382,29 @@ void EditorLayer::OnAttach() {
                 tc.Data.GenerateHills(0.025f, 8.0f, 3);
                 tc.Data.AutoGenerateSplatmap(32.0f, 18.0f);
                 tc.CombinedVAO = Axle::Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
+
+                std::shared_ptr<Axle::RHI::RHIMesh> terrainRHIMesh = nullptr;
+                if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
+                    uint32_t resX = tc.Data.GetResolutionX();
+                    uint32_t resZ = tc.Data.GetResolutionZ();
+                    glm::vec3 scale(tc.Data.GetSpacingX(), 1.0f, tc.Data.GetSpacingZ());
+                    glm::vec3 origin = tc.Data.GetOrigin();
+                    const auto& heights = tc.Data.GetHeights();
+                    const auto& splats = tc.Data.GetSplatmap();
+                    terrainRHIMesh = Axle::RHI::RHIMesh::CreateTerrainHeightfield(resX, resZ, heights, scale, origin, splats);
+                }
+
                 if (!entity.HasComponent<Axle::MeshInstance3D>()) {
-                    entity.AddComponent<Axle::MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
+                    auto& mi = entity.AddComponent<Axle::MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
+                    mi.RHIMeshAsset = terrainRHIMesh;
                 } else {
-                    entity.GetComponent<Axle::MeshInstance3D>().VAO = tc.CombinedVAO;
+                    auto& mi = entity.GetComponent<Axle::MeshInstance3D>();
+                    mi.VAO = tc.CombinedVAO;
+                    mi.RHIMeshAsset = terrainRHIMesh;
+                    mi.PatternMode = 0;
+                    mi.TileScale = 8.0f;
+                    mi.Color1 = glm::vec4(0.35f, 0.55f, 0.25f, 1.0f);
+                    mi.Color2 = glm::vec4(0.45f, 0.35f, 0.2f, 1.0f);
                 }
                 if (m_PhysicsScene && tc.GeneratePhysics) {
                     tc.PhysicsBodyID = Axle::Terrain::TerrainCollider::CreateTerrainCollider(tc.Data, *m_PhysicsScene, tc.Friction, tc.Restitution);
@@ -845,11 +890,37 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
             sc.VertexCount = static_cast<Axle::u32>(mesh.GetVertexCount());
             sc.TriangleCount = static_cast<Axle::u32>(mesh.GetTriangleCount());
             sc.Dirty = false;
+
+            std::shared_ptr<Axle::RHI::RHIMesh> trackRHIMesh = nullptr;
+            if (Axle::RHI::RHIDevice::Get().IsInitialized() && !mesh.IsEmpty()) {
+                std::vector<glm::vec3> trackNormals(mesh.Positions.size(), glm::vec3(0.0f));
+                for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
+                    uint32_t i0 = mesh.Indices[i], i1 = mesh.Indices[i + 1], i2 = mesh.Indices[i + 2];
+                    if (i0 < mesh.Positions.size() && i1 < mesh.Positions.size() && i2 < mesh.Positions.size()) {
+                        glm::vec3 fn = glm::cross(mesh.Positions[i1] - mesh.Positions[i0], mesh.Positions[i2] - mesh.Positions[i0]);
+                        trackNormals[i0] += fn;
+                        trackNormals[i1] += fn;
+                        trackNormals[i2] += fn;
+                    }
+                }
+                for (auto& n : trackNormals) {
+                    if (glm::dot(n, n) > 1e-6f) n = glm::normalize(n);
+                    else n = glm::vec3(0.0f, 1.0f, 0.0f);
+                }
+                trackRHIMesh = Axle::RHI::RHIMesh::CreateFromRaw(
+                    mesh.Positions, mesh.Indices, trackNormals, mesh.UVs,
+                    glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), "SplineTrack_RHI"
+                );
+            }
+
             Axle::Entity ent{ e, m_Scene.get() };
             if (!ent.HasComponent<Axle::MeshInstance3D>()) {
-                ent.AddComponent<Axle::MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+                auto& mi = ent.AddComponent<Axle::MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+                mi.RHIMeshAsset = trackRHIMesh;
             } else {
-                ent.GetComponent<Axle::MeshInstance3D>().VAO = sc.TrackVAO;
+                auto& mi = ent.GetComponent<Axle::MeshInstance3D>();
+                mi.VAO = sc.TrackVAO;
+                mi.RHIMeshAsset = trackRHIMesh;
             }
             if (m_PhysicsScene && sc.GeneratePhysics) {
                 sc.RuntimeBodyID = Axle::Spline::TrackGenerator::CreatePhysicsCollider(mesh, sc, *m_PhysicsScene);
@@ -860,11 +931,30 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
         for (auto e : terrainView) {
             auto& tc = terrainView.get<Axle::Terrain::TerrainComponent>(e);
             tc.CombinedVAO = Axle::Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
+
+            std::shared_ptr<Axle::RHI::RHIMesh> terrainRHIMesh = nullptr;
+            if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
+                uint32_t resX = tc.Data.GetResolutionX();
+                uint32_t resZ = tc.Data.GetResolutionZ();
+                glm::vec3 scale(tc.Data.GetSpacingX(), 1.0f, tc.Data.GetSpacingZ());
+                glm::vec3 origin = tc.Data.GetOrigin();
+                const auto& heights = tc.Data.GetHeights();
+                const auto& splats = tc.Data.GetSplatmap();
+                terrainRHIMesh = Axle::RHI::RHIMesh::CreateTerrainHeightfield(resX, resZ, heights, scale, origin, splats);
+            }
+
             Axle::Entity ent{ e, m_Scene.get() };
             if (!ent.HasComponent<Axle::MeshInstance3D>()) {
-                ent.AddComponent<Axle::MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
+                auto& mi = ent.AddComponent<Axle::MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
+                mi.RHIMeshAsset = terrainRHIMesh;
             } else {
-                ent.GetComponent<Axle::MeshInstance3D>().VAO = tc.CombinedVAO;
+                auto& mi = ent.GetComponent<Axle::MeshInstance3D>();
+                mi.VAO = tc.CombinedVAO;
+                mi.RHIMeshAsset = terrainRHIMesh;
+                mi.PatternMode = 0;
+                mi.TileScale = 8.0f;
+                mi.Color1 = glm::vec4(0.35f, 0.55f, 0.25f, 1.0f);
+                mi.Color2 = glm::vec4(0.45f, 0.35f, 0.2f, 1.0f);
             }
             if (m_PhysicsScene && tc.GeneratePhysics) {
                 tc.PhysicsBodyID = Axle::Terrain::TerrainCollider::CreateTerrainCollider(tc.Data, *m_PhysicsScene, tc.Friction, tc.Restitution);

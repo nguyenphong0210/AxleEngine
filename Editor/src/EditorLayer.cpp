@@ -31,6 +31,8 @@
 #include <Axle/RHIObjectPicker.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
+#include <Axle/UI/RectTransformGizmo.hpp>
+#include <Axle/UI/UIDocument.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -2580,14 +2582,54 @@ void EditorLayer::OnImGuiRender() {
                     m_PhysicsScene.get()
                 );
             }
+
+            // 4. Interactive 2D Canvas Gizmo Handles (Phase 34 Step 7 - RectTransformGizmo)
+            if (selectedEntity.HasComponent<Axle::UICanvasComponent>()) {
+                auto& uic = selectedEntity.GetComponent<Axle::UICanvasComponent>();
+                if (uic.Document && uic.Document->GetRootNode()) {
+                    auto* rootCanvas = dynamic_cast<Axle::UICanvasNode*>(uic.Document->GetRootNode());
+                    Axle::UIRect parentRect{
+                        0.0f, 0.0f,
+                        rootCanvas ? rootCanvas->ReferenceResolution.x : 1920.0f,
+                        rootCanvas ? rootCanvas->ReferenceResolution.y : 1080.0f
+                    };
+
+                    Axle::RectTransform* targetTransform = nullptr;
+                    for (auto* child : uic.Document->GetRootNode()->Children) {
+                        if (child && child->Visible) {
+                            targetTransform = &child->Transform;
+                            break;
+                        }
+                    }
+                    if (!targetTransform) {
+                        targetTransform = &uic.Document->GetRootNode()->Transform;
+                    }
+
+                    if (targetTransform) {
+                        bool uiModified = false;
+                        Axle::RectTransformGizmo::Get().DrawGizmo(
+                            parentRect,
+                            *targetTransform,
+                            glm::vec2(viewportMin.x, viewportMin.y),
+                            glm::vec2(viewportBounds.x, viewportBounds.y),
+                            m_ViewportHovered,
+                            &uiModified
+                        );
+                        if (uiModified) {
+                            uic.Document->UpdateLayout(glm::vec2(parentRect.Width, parentRect.Height));
+                        }
+                    }
+                }
+            }
         }
     }
 
-    // 3. Viewport Mouse Picking (Click on 3D meshes to select entity)
+    // 5. Viewport Mouse Picking (Click on 3D meshes to select entity)
     if (m_ViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        AXLE_INFO("[PICK] Left click detected in Viewport. Hovered=true, IsOverGizmo={}, IsUsingGizmo={}, RMBPressed={}",
-            ImGuizmo::IsOver(), ImGuizmo::IsUsing(), Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight));
-        if (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() && !Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)) {
+        bool over2DGizmo = Axle::RectTransformGizmo::Get().IsOver() || Axle::RectTransformGizmo::Get().IsUsing();
+        AXLE_INFO("[PICK] Left click detected in Viewport. Hovered=true, IsOverGizmo={}, IsUsingGizmo={}, Over2DGizmo={}, RMBPressed={}",
+            ImGuizmo::IsOver(), ImGuizmo::IsUsing(), over2DGizmo, Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight));
+        if (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() && !over2DGizmo && !Axle::Input::IsMouseButtonPressed(Axle::MouseCode::ButtonRight)) {
             ImVec2 mousePos = ImGui::GetMousePos();
             float mouseX = mousePos.x - viewportMin.x;
             float mouseY = mousePos.y - viewportMin.y;

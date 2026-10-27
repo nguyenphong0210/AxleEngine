@@ -100,6 +100,7 @@ int main(int argc, char** argv) {
         else if (arg == "90" || arg == "step90" || arg == "--step90" || arg == "--databinding" || arg == "--hit-test" || arg == "--uicontext") targetStep = 90;
         else if (arg == "91" || arg == "step91" || arg == "--step91" || arg == "--racinghud" || arg == "--pausemenu" || arg == "--hud-integration") targetStep = 91;
         else if (arg == "92" || arg == "step92" || arg == "--step92" || arg == "--recttransform" || arg == "--rect-transform") targetStep = 92;
+        else if (arg == "93" || arg == "step93" || arg == "--step93" || arg == "--gizmo2d" || arg == "--canvasgizmo") targetStep = 93;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -376,6 +377,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 92) {
         if (!RunTest_Step92_Phase34_Step7_RectTransform()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 93) {
+        if (!RunTest_Step93_Phase34_Step7_RectTransformGizmo()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

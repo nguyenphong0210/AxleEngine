@@ -325,3 +325,4 @@ bool RunTest_Step89_Phase34_Step4_DeclarativeUIParserAndHotReloading();
 bool RunTest_Step90_Phase34_Step5_DataBindingAndHitTest();
 bool RunTest_Step91_Phase34_Step6_RacingHUDFullIntegration();
 bool RunTest_Step92_Phase34_Step7_RectTransform();
+bool RunTest_Step93_Phase34_Step7_RectTransformGizmo();

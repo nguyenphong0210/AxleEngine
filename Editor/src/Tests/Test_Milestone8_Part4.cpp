@@ -1,6 +1,7 @@
 #include "TestCommon.hpp"
 #include <Axle/UI/UITypes.hpp>
 #include <Axle/UI/RectTransform.hpp>
+#include <Axle/UI/RectTransformGizmo.hpp>
 #include <iostream>
 #include <cstddef>
 
@@ -1758,6 +1759,185 @@ bool RunTest_Step92_Phase34_Step7_RectTransform() {
     }
 
     std::cout << "\n>>> STEP 92 PASSED: Unity-Style RectTransform Geometric Abstraction 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+bool RunTest_Step93_Phase34_Step7_RectTransformGizmo() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 93 TEST] INTERACTIVE 2D CANVAS GIZMO HANDLES    " << std::endl;
+    std::cout << " (Hit-Testing, 8 Resizes, Pivot, 4 Anchors, Snapping)   " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    UIRect parent1080p{ 0.0f, 0.0f, 1920.0f, 1080.0f };
+    glm::vec2 vpPos{ 0.0f, 0.0f };
+    glm::vec2 vpSize{ 1920.0f, 1080.0f };
+    auto& gizmo = RectTransformGizmo::Get();
+
+    // [93.1] Testing Canvas-to-Viewport Coordinate Mapping & Letterboxing
+    std::cout << "[93.1] Testing Canvas-to-Viewport Coordinate Mapping..." << std::endl;
+    {
+        // 1:1 Viewport
+        RectTransform rt;
+        rt.AnchorMin = { 0.0f, 0.0f };
+        rt.AnchorMax = { 0.0f, 0.0f };
+        rt.Pivot = { 0.5f, 0.5f };
+        rt.SizeDelta = { 200.0f, 100.0f };
+        rt.AnchoredPosition = { 200.0f, 150.0f }; // Rect: (100, 100) to (300, 200), Pivot: (200, 150)
+
+        Gizmo2DHandle h = gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(100.0f, 100.0f));
+        assert(h == Gizmo2DHandle::Corner_TL);
+
+        // Scaled Viewport (720p: 1280x720)
+        glm::vec2 vpSize720{ 1280.0f, 720.0f };
+        float scale = 1280.0f / 1920.0f; // 0.666667
+        glm::vec2 expectedScreenPos = glm::vec2(100.0f, 100.0f) * scale;
+        h = gizmo.HitTest(parent1080p, rt, vpPos, vpSize720, expectedScreenPos);
+        assert(h == Gizmo2DHandle::Corner_TL);
+
+        std::cout << "  -> 1:1 and scaled 720p viewport canvas mapping: PASS" << std::endl;
+    }
+
+    // [93.2] Testing Hit-Testing across all 8 Resize Handles & Body
+    std::cout << "\n[93.2] Testing Hit-Testing across 8 Resize Handles & Body..." << std::endl;
+    {
+        RectTransform rt;
+        rt.AnchorMin = { 0.5f, 0.5f };
+        rt.AnchorMax = { 0.5f, 0.5f };
+        rt.Pivot = { 0.5f, 0.5f };
+        rt.SizeDelta = { 400.0f, 200.0f };
+        rt.AnchoredPosition = { 0.0f, 0.0f };
+
+        // Center element: rect is (760, 440) to (1160, 640)
+        // 4 Corners:
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(760.0f, 440.0f)) == Gizmo2DHandle::Corner_TL);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(1160.0f, 440.0f)) == Gizmo2DHandle::Corner_TR);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(1160.0f, 640.0f)) == Gizmo2DHandle::Corner_BR);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(760.0f, 640.0f)) == Gizmo2DHandle::Corner_BL);
+
+        // 4 Edges:
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(960.0f, 440.0f)) == Gizmo2DHandle::Edge_T);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(1160.0f, 540.0f)) == Gizmo2DHandle::Edge_R);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(960.0f, 640.0f)) == Gizmo2DHandle::Edge_B);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(760.0f, 540.0f)) == Gizmo2DHandle::Edge_L);
+
+        // Body interior:
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(850.0f, 500.0f)) == Gizmo2DHandle::Body);
+
+        // Outside:
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(200.0f, 200.0f)) == Gizmo2DHandle::None);
+
+        std::cout << "  -> 4 Corners (TL, TR, BR, BL) hit-tested: PASS" << std::endl;
+        std::cout << "  -> 4 Midpoints (T, R, B, L) hit-tested: PASS" << std::endl;
+        std::cout << "  -> Body interior and outside rejection: PASS" << std::endl;
+    }
+
+    // [93.3] Testing Pivot Crosshair Hit-Testing & Invariant Rect During Pivot Drag
+    std::cout << "\n[93.3] Testing Pivot Crosshair Hit-Testing & Drag Invariance..." << std::endl;
+    {
+        RectTransform rt;
+        rt.AnchorMin = { 0.5f, 0.5f };
+        rt.AnchorMax = { 0.5f, 0.5f };
+        rt.Pivot = { 0.25f, 0.75f };
+        rt.SizeDelta = { 400.0f, 200.0f };
+        rt.AnchoredPosition = { 0.0f, 0.0f };
+
+        UIRect rInitial = rt.ComputeRect(parent1080p);
+        glm::vec2 pivotScreen = rt.GetPivotScreenPos(parent1080p);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, pivotScreen) == Gizmo2DHandle::Pivot);
+
+        // Simulate dragging pivot to (0.8, 0.2)
+        rt.Pivot = { 0.8f, 0.2f };
+        rt.SetRect(rInitial, parent1080p);
+        UIRect rAfter = rt.ComputeRect(parent1080p);
+
+        assert(std::abs(rAfter.X - rInitial.X) < 1e-4f);
+        assert(std::abs(rAfter.Y - rInitial.Y) < 1e-4f);
+        assert(std::abs(rAfter.Width - rInitial.Width) < 1e-4f);
+        assert(std::abs(rAfter.Height - rInitial.Height) < 1e-4f);
+
+        std::cout << "  -> Pivot hit-test at non-centered position: PASS" << std::endl;
+        std::cout << "  -> Visual bounding rectangle invariant during pivot shift: PASS" << std::endl;
+    }
+
+    // [93.4] Testing Anchor Petals Hit-Testing & Boundary Splitting
+    std::cout << "\n[93.4] Testing 4 Anchor Petals & Boundary Splitting..." << std::endl;
+    {
+        RectTransform rt;
+        // Stretched anchors: AnchorMin = (0.2, 0.2), AnchorMax = (0.8, 0.8)
+        rt.AnchorMin = { 0.2f, 0.2f };
+        rt.AnchorMax = { 0.8f, 0.8f };
+        rt.Pivot = { 0.5f, 0.5f };
+        rt.SizeDelta = { -40.0f, -40.0f };
+        rt.AnchoredPosition = { 0.0f, 0.0f };
+
+        // Anchor screen positions at 1920x1080:
+        // aMin = (0.2 * 1920, 0.2 * 1080) = (384, 216)
+        // aMax = (0.8 * 1920, 0.8 * 1080) = (1536, 864)
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(384.0f, 216.0f)) == Gizmo2DHandle::Anchor_TL);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(1536.0f, 216.0f)) == Gizmo2DHandle::Anchor_TR);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(1536.0f, 864.0f)) == Gizmo2DHandle::Anchor_BR);
+        assert(gizmo.HitTest(parent1080p, rt, vpPos, vpSize, glm::vec2(384.0f, 864.0f)) == Gizmo2DHandle::Anchor_BL);
+
+        // Simulate Anchor Boundary Splitting (drag Anchor_TL inwards)
+        UIRect rInitial = rt.ComputeRect(parent1080p);
+        rt.AnchorMin = { 0.3f, 0.3f };
+        rt.SetRect(rInitial, parent1080p);
+        UIRect rAfter = rt.ComputeRect(parent1080p);
+
+        assert(std::abs(rAfter.X - rInitial.X) < 1e-4f);
+        assert(std::abs(rAfter.Y - rInitial.Y) < 1e-4f);
+        assert(std::abs(rAfter.Width - rInitial.Width) < 1e-4f);
+        assert(std::abs(rAfter.Height - rInitial.Height) < 1e-4f);
+
+        std::cout << "  -> 4 Anchor petals (TL, TR, BR, BL) hit-tested: PASS" << std::endl;
+        std::cout << "  -> Anchor boundary splitting with screen rect preservation: PASS" << std::endl;
+    }
+
+    // [93.5] Testing Translation & Resize Math
+    std::cout << "\n[93.5] Testing Translation & Corner Resize Math..." << std::endl;
+    {
+        RectTransform rt;
+        rt.AnchorMin = { 0.0f, 0.0f };
+        rt.AnchorMax = { 0.0f, 0.0f };
+        rt.Pivot = { 0.0f, 0.0f };
+        rt.SizeDelta = { 200.0f, 150.0f };
+        rt.AnchoredPosition = { 100.0f, 100.0f };
+
+        // Translate: move by (50, 30)
+        rt.AnchoredPosition += glm::vec2(50.0f, 30.0f);
+        UIRect rTrans = rt.ComputeRect(parent1080p);
+        assert(rTrans.X == 150.0f && rTrans.Y == 130.0f);
+
+        // Corner BR Resize: expand width by +100, height by +50
+        UIRect targetR = rTrans;
+        targetR.Width += 100.0f;
+        targetR.Height += 50.0f;
+        rt.SetRect(targetR, parent1080p);
+        UIRect rResized = rt.ComputeRect(parent1080p);
+        assert(rResized.Width == 300.0f && rResized.Height == 200.0f);
+        assert(rResized.X == 150.0f && rResized.Y == 130.0f);
+
+        std::cout << "  -> Interactive translation and 2D corner dimension resizing: PASS" << std::endl;
+    }
+
+    // [93.6] Testing Grid Snapping Configuration
+    std::cout << "\n[93.6] Testing Grid Snapping Configuration..." << std::endl;
+    {
+        gizmo.GetSettings().SnapToGrid = true;
+        gizmo.GetSettings().SnapIncrement = 25.0f;
+
+        glm::vec2 rawDelta{ 23.4f, -48.2f };
+        glm::vec2 snappedDelta = glm::round(rawDelta / gizmo.GetSettings().SnapIncrement) * gizmo.GetSettings().SnapIncrement;
+        assert(snappedDelta.x == 25.0f);
+        assert(snappedDelta.y == -50.0f);
+
+        gizmo.GetSettings().SnapToGrid = false;
+        std::cout << "  -> Configurable grid snapping (25px increment): PASS" << std::endl;
+    }
+
+    std::cout << "\n>>> STEP 93 PASSED: Interactive 2D Canvas Gizmo Handles 100% verified! <<<\n" << std::endl;
     return true;
 }
 

@@ -6,11 +6,16 @@
 namespace Axle {
 
     PerspectiveCamera::PerspectiveCamera(f32 fovDegrees, f32 aspectRatio, f32 nearClip, f32 farClip) {
-        SetProjection(fovDegrees, aspectRatio, nearClip, farClip);
+        SetPerspective(fovDegrees, aspectRatio, nearClip, farClip);
         RecalculateViewMatrix();
     }
 
     void PerspectiveCamera::SetProjection(f32 fovDegrees, f32 aspectRatio, f32 nearClip, f32 farClip) {
+        SetPerspective(fovDegrees, aspectRatio, nearClip, farClip);
+    }
+
+    void PerspectiveCamera::SetPerspective(f32 fovDegrees, f32 aspectRatio, f32 nearClip, f32 farClip) {
+        m_ProjectionType = CameraProjectionType::Perspective;
         m_FOV = fovDegrees;
         m_AspectRatio = aspectRatio;
         m_NearClip = nearClip;
@@ -19,6 +24,31 @@ namespace Axle {
         m_ProjectionMatrixZO = glm::perspectiveRH_ZO(glm::radians(fovDegrees), aspectRatio, nearClip, farClip);
         m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
         m_ViewProjectionMatrixZO = m_ProjectionMatrixZO * m_ViewMatrix;
+    }
+
+    void PerspectiveCamera::SetOrthographic(f32 size, f32 aspectRatio, f32 nearClip, f32 farClip) {
+        m_ProjectionType = CameraProjectionType::Orthographic;
+        m_OrthographicSize = size;
+        m_AspectRatio = aspectRatio;
+        m_NearClip = nearClip;
+        m_FarClip = farClip;
+
+        const float orthoLeft = -size * aspectRatio * 0.5f;
+        const float orthoRight = size * aspectRatio * 0.5f;
+        const float orthoBottom = -size * 0.5f;
+        const float orthoTop = size * 0.5f;
+
+        m_ProjectionMatrix = glm::ortho(orthoLeft, orthoRight, orthoBottom, orthoTop, nearClip, farClip);
+        m_ProjectionMatrixZO = glm::orthoRH_ZO(orthoLeft, orthoRight, orthoBottom, orthoTop, nearClip, farClip);
+        m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
+        m_ViewProjectionMatrixZO = m_ProjectionMatrixZO * m_ViewMatrix;
+    }
+
+    void PerspectiveCamera::SetOrthographicSize(float size) {
+        m_OrthographicSize = size;
+        if (m_ProjectionType == CameraProjectionType::Orthographic) {
+            SetOrthographic(m_OrthographicSize, m_AspectRatio, m_NearClip, m_FarClip);
+        }
     }
 
     void PerspectiveCamera::SetPosition(const glm::vec3& position) {

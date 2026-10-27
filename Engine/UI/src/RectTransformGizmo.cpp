@@ -202,8 +202,14 @@ namespace Axle {
                 glm::vec2 mouseDeltaScreen = mousePosGlm - m_DragStartMousePos;
                 glm::vec2 mouseDeltaCanvas = mouseDeltaScreen / mapping.Scale;
 
-                if (m_Settings.SnapToGrid && m_Settings.SnapIncrement > 0.0f) {
-                    mouseDeltaCanvas = glm::round(mouseDeltaCanvas / m_Settings.SnapIncrement) * m_Settings.SnapIncrement;
+                glm::vec2 snapStep = ComputeSnapIncrement(parentRect);
+                if (m_Settings.SnapToGrid) {
+                    if (snapStep.x > 0.0f) {
+                        mouseDeltaCanvas.x = glm::round(mouseDeltaCanvas.x / snapStep.x) * snapStep.x;
+                    }
+                    if (snapStep.y > 0.0f) {
+                        mouseDeltaCanvas.y = glm::round(mouseDeltaCanvas.y / snapStep.y) * snapStep.y;
+                    }
                 }
 
                 switch (m_ActiveHandle) {
@@ -440,6 +446,20 @@ namespace Axle {
 
         if (outModified) *outModified = modified;
         return (m_ActiveHandle != Gizmo2DHandle::None || m_HoveredHandle != Gizmo2DHandle::None);
+    }
+
+    glm::vec2 RectTransformGizmo::ComputeSnapIncrement(const UIRect& parentRect) const {
+        if (!m_Settings.SnapToGrid) {
+            return glm::vec2(0.0f);
+        }
+        if (m_Settings.SnapIsPercentage && m_Settings.SnapPercent > 0.0f) {
+            return glm::vec2(
+                parentRect.Width * (m_Settings.SnapPercent / 100.0f),
+                parentRect.Height * (m_Settings.SnapPercent / 100.0f)
+            );
+        }
+        float inc = (m_Settings.SnapIncrement > 0.0f) ? m_Settings.SnapIncrement : 1.0f;
+        return glm::vec2(inc, inc);
     }
 
 } // namespace Axle

@@ -1164,6 +1164,28 @@ void EditorLayer::OnSceneStop() {
     AXLE_INFO("Simulation stopped (Edit Mode). Restored pristine Editor Scene with zero physics drift.");
 }
 
+void EditorLayer::Set2DViewMode(bool enabled) {
+    if (!m_CameraController) return;
+    m_CameraController->Set2DMode(enabled);
+
+    // Synchronize 2D UI grid snapping settings
+    auto& gizmoSettings = Axle::RectTransformGizmo::Get().GetSettings();
+    gizmoSettings.SnapToGrid = m_UI2DSnapEnabled;
+    gizmoSettings.SnapIsPercentage = m_UI2DSnapIsPercentage;
+    gizmoSettings.SnapIncrement = m_UI2DSnapPixel;
+    gizmoSettings.SnapPercent = m_UI2DSnapPercent;
+
+    if (enabled) {
+        AXLE_INFO("[Editor] Viewport 2D UI Edit Mode enabled (orthogonal projection locked facing canvas plane)");
+    } else {
+        AXLE_INFO("[Editor] Viewport 3D Edit Mode restored");
+    }
+}
+
+bool EditorLayer::Is2DViewMode() const {
+    return m_CameraController ? m_CameraController->Is2DMode() : false;
+}
+
 void EditorLayer::ResetSimulation() {
     AXLE_INFO("Resetting physics simulation state");
 
@@ -1614,6 +1636,19 @@ void EditorLayer::RenderToolbar() {
         ImGui::TextColored(ImVec4(0.35f, 0.38f, 0.44f, 1.0f), "|");
         ImGui::SameLine();
 
+        // --- 2.5. VIEWPORT 2D / 3D CAMERA TOGGLE (Phase 34 Step 7.3) ---
+        bool is2DMode = m_CameraController ? m_CameraController->Is2DMode() : false;
+        if (DrawToolButton(is2DMode ? "2D" : "2D", is2DMode, ImVec2(38.0f, 26.0f))) {
+            Set2DViewMode(!is2DMode);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Toggle Viewport 2D UI Edit Mode\nLocks camera orientation to orthogonal projection facing the active canvas plane");
+        }
+
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.35f, 0.38f, 0.44f, 1.0f), "|");
+        ImGui::SameLine();
+
         // --- 3. GIZMO TRANSFORMATION TOOLS ---
         if (DrawToolButton("Select (Q)", m_GizmoType == -1, ImVec2(76.0f, 26.0f))) {
             m_GizmoType = -1;
@@ -1646,6 +1681,37 @@ void EditorLayer::RenderToolbar() {
                 ImGui::DragFloat("##SnapScale", &m_SnapScale, 0.05f, 0.05f, 5.0f, "%.2f");
             } else {
                 ImGui::DragFloat("##SnapTrans", &m_SnapTranslation, 0.05f, 0.05f, 5.0f, "%.2f m");
+            }
+        }
+
+        // 2D UI Grid Snapping controls (Pixel and Percentage increments)
+        if (is2DMode) {
+            ImGui::SameLine();
+            if (ImGui::Checkbox("UI Snap", &m_UI2DSnapEnabled)) {
+                Axle::RectTransformGizmo::Get().GetSettings().SnapToGrid = m_UI2DSnapEnabled;
+            }
+            if (m_UI2DSnapEnabled) {
+                ImGui::SameLine();
+                const char* snapModeStr = m_UI2DSnapIsPercentage ? "%" : "px";
+                if (ImGui::Button(snapModeStr, ImVec2(30.0f, 26.0f))) {
+                    m_UI2DSnapIsPercentage = !m_UI2DSnapIsPercentage;
+                    Axle::RectTransformGizmo::Get().GetSettings().SnapIsPercentage = m_UI2DSnapIsPercentage;
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Toggle between Pixel (px) and Percentage (%%) grid increments");
+                }
+
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(70.0f);
+                if (m_UI2DSnapIsPercentage) {
+                    if (ImGui::DragFloat("##UISnapPct", &m_UI2DSnapPercent, 1.0f, 1.0f, 50.0f, "%.0f %%")) {
+                        Axle::RectTransformGizmo::Get().GetSettings().SnapPercent = m_UI2DSnapPercent;
+                    }
+                } else {
+                    if (ImGui::DragFloat("##UISnapPix", &m_UI2DSnapPixel, 1.0f, 1.0f, 100.0f, "%.0f px")) {
+                        Axle::RectTransformGizmo::Get().GetSettings().SnapIncrement = m_UI2DSnapPixel;
+                    }
+                }
             }
         }
 
@@ -1770,6 +1836,8 @@ void EditorLayer::RenderToolbar() {
         ImGui::SameLine();
         if (m_CompileNotificationTimer > 0.0f) {
             ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.55f, 1.0f), "[OK] %s", m_CompileNotificationMessage.c_str());
+        } else if (is2DMode) {
+            ImGui::TextColored(ImVec4(0.20f, 0.85f, 0.95f, 1.0f), "2D UI EDIT MODE: Orthogonal View Lock | RMB/MMB: Pan | Scroll: Zoom | RectTransform Gizmo");
         } else if (m_SceneState == SceneState::Edit) {
             ImGui::TextColored(ImVec4(0.35f, 0.70f, 1.0f, 1.0f), "EDIT MODE: Q:Select W:Move E:Rotate R:Scale | Click to select | RMB+WASD Fly");
         } else if (m_SceneState == SceneState::Play) {
@@ -2052,6 +2120,15 @@ void EditorLayer::OnImGuiRender() {
     m_ViewportFocused = ImGui::IsWindowFocused();
     m_ViewportHovered = ImGui::IsWindowHovered();
     Axle::Input::SetViewportHovered(m_ViewportHovered);
+
+    // 2D Viewport scroll zoom
+    if (m_ViewportHovered && m_CameraController && m_CameraController->Is2DMode()) {
+        float wheel = ImGui::GetIO().MouseWheel;
+        if (wheel != 0.0f) {
+            float zoomFactor = (wheel > 0.0f) ? 0.88f : 1.14f;
+            m_CameraController->SetOrthographicSize(std::clamp(m_CameraController->GetOrthographicSize() * zoomFactor, 1.0f, 2000.0f));
+        }
+    }
 
     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
     if (viewportSize.x > 0.0f && viewportSize.y > 0.0f &&
@@ -2372,8 +2449,8 @@ void EditorLayer::OnImGuiRender() {
                                 ? m_CameraController->GetCamera().GetProjectionMatrix()
                                 : m_CameraController->GetCamera().GetProjectionMatrixZO();
 
-    // 1. 3D Transform Gizmo Manipulation for Selected Entity (Active in Edit & Pause modes)
-    if (m_SceneState != SceneState::Play) {
+    // 1. 3D Transform Gizmo Manipulation for Selected Entity (Active in Edit & Pause modes, suppressed in 2D mode)
+    if (m_SceneState != SceneState::Play && !Is2DViewMode()) {
         auto selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
         if (selectedEntity && selectedEntity.HasComponent<Axle::TransformComponent>() && m_GizmoType != -1) {
             auto& tc = selectedEntity.GetComponent<Axle::TransformComponent>();

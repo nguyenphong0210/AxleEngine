@@ -22,6 +22,16 @@ namespace Axle {
         void SetPosition(const glm::vec3& position) { m_CameraPosition = position; m_Camera.SetPosition(position); }
         void SetRotation(const glm::vec3& rotation) { m_CameraRotation = rotation; m_Camera.SetRotation(rotation); }
 
+        // Viewport 2D UI Edit Mode (Phase 34 Step 7.3)
+        void Set2DMode(bool enabled);
+        bool Is2DMode() const { return m_Is2DMode; }
+
+        void SetOrthographicSize(f32 size);
+        f32 GetOrthographicSize() const { return m_OrthographicSize; }
+
+        const glm::vec3& GetSaved3DPosition() const { return m_Saved3DPosition; }
+        const glm::vec3& GetSaved3DRotation() const { return m_Saved3DRotation; }
+
     private:
         f32 m_AspectRatio;
         f32 m_FOV;
@@ -36,6 +46,12 @@ namespace Axle {
         glm::vec2 m_LastMousePosition{ 0.0f, 0.0f };
         bool m_FirstMouseUpdate = true;
         bool m_WasInteracting = false;
+
+        // 2D View Mode state
+        bool m_Is2DMode = false;
+        f32 m_OrthographicSize = 10.0f;
+        glm::vec3 m_Saved3DPosition{ 0.0f, 6.0f, 18.0f };
+        glm::vec3 m_Saved3DRotation{ -12.0f, 0.0f, 0.0f };
     };
 
 }

@@ -2,6 +2,8 @@
 #include <Axle/UI/UITypes.hpp>
 #include <Axle/UI/RectTransform.hpp>
 #include <Axle/UI/RectTransformGizmo.hpp>
+#include <Axle/PerspectiveCamera.hpp>
+#include <Axle/PerspectiveCameraController.hpp>
 #include <iostream>
 #include <cstddef>
 
@@ -1940,5 +1942,188 @@ bool RunTest_Step93_Phase34_Step7_RectTransformGizmo() {
     std::cout << "\n>>> STEP 93 PASSED: Interactive 2D Canvas Gizmo Handles 100% verified! <<<\n" << std::endl;
     return true;
 }
+
+// =============================================================================
+// TEST STEP 94: Phase 34 Step 7 (Part 3) - Viewport 2D UI Edit Mode Toggle,
+// Orthogonal Projection Lock, Camera Pose Cache & Customizable Grid Snapping
+// =============================================================================
+bool RunTest_Step94_Phase34_Step7_Viewport2DModeAndGridSnapping() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 94 TEST] VIEWPORT 2D UI EDIT MODE & GRID SNAPPING" << std::endl;
+    std::cout << " (Orthogonal View Lock, 2D/3D Pose Cache, Px/% Snapping) " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    // [94.1] Testing PerspectiveCamera Orthographic Projection Mode
+    std::cout << "[94.1] Testing PerspectiveCamera Orthographic Projection Configuration..." << std::endl;
+    {
+        PerspectiveCamera cam(45.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+        assert(!cam.IsOrthographic());
+        assert(cam.GetProjectionType() == CameraProjectionType::Perspective);
+
+        // In a perspective projection, proj[3][3] == 0.0f and proj[2][3] == -1.0f
+        const glm::mat4& persProj = cam.GetProjectionMatrix();
+        assert(std::abs(persProj[3][3]) < 1e-5f);
+        assert(std::abs(persProj[2][3] - (-1.0f)) < 1e-5f);
+
+        // Switch to Orthographic
+        cam.SetOrthographic(10.0f, 16.0f / 9.0f, -100.0f, 1000.0f);
+        assert(cam.IsOrthographic());
+        assert(cam.GetProjectionType() == CameraProjectionType::Orthographic);
+        assert(cam.GetOrthographicSize() == 10.0f);
+
+        // In an affine orthographic projection, proj[3][3] == 1.0f and proj[2][3] == 0.0f
+        const glm::mat4& orthoProj = cam.GetProjectionMatrix();
+        assert(std::abs(orthoProj[3][3] - 1.0f) < 1e-5f);
+        assert(std::abs(orthoProj[2][3]) < 1e-5f);
+
+        // Check ZO (Direct3D 12 / Vulkan) projection matrix
+        const glm::mat4& orthoProjZO = cam.GetProjectionMatrixZO();
+        assert(std::abs(orthoProjZO[3][3] - 1.0f) < 1e-5f);
+        assert(std::abs(orthoProjZO[2][3]) < 1e-5f);
+
+        // Dynamic orthographic size change
+        cam.SetOrthographicSize(25.0f);
+        assert(cam.GetOrthographicSize() == 25.0f);
+        float expectedM00 = 1.0f / (25.0f * (16.0f / 9.0f) * 0.5f);
+        assert(std::abs(cam.GetProjectionMatrix()[0][0] - expectedM00) < 1e-4f);
+
+        // Switch back to perspective
+        cam.SetPerspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+        assert(!cam.IsOrthographic());
+        assert(std::abs(cam.GetProjectionMatrix()[3][3]) < 1e-5f);
+        assert(cam.GetFOV() == 60.0f);
+
+        std::cout << "  -> Perspective to Orthographic switch (OpenGL [-1,1] and D3D12/Vulkan [0,1]): PASS" << std::endl;
+        std::cout << "  -> Dynamic Orthographic Size adjustment: PASS" << std::endl;
+        std::cout << "  -> Reversible Perspective restoration: PASS" << std::endl;
+    }
+
+    // [94.2] Testing PerspectiveCameraController 2D Mode & 3D Pose Caching
+    std::cout << "\n[94.2] Testing PerspectiveCameraController 2D Mode & Pose Caching..." << std::endl;
+    {
+        PerspectiveCameraController controller(45.0f, 16.0f / 9.0f);
+        glm::vec3 customPos{ 14.5f, 7.2f, 22.0f };
+        glm::vec3 customRot{ 25.0f, -60.0f, 0.0f }; // Pitch 25, Yaw -60
+        controller.SetPosition(customPos);
+        controller.SetRotation(customRot);
+
+        assert(!controller.Is2DMode());
+
+        // Enable 2D View Mode
+        controller.Set2DMode(true);
+        assert(controller.Is2DMode());
+        assert(controller.GetCamera().IsOrthographic());
+
+        // Saved 3D pose must match pristine custom values
+        assert(controller.GetSaved3DPosition() == customPos);
+        assert(controller.GetSaved3DRotation() == customRot);
+
+        // View orientation in 2D mode MUST be locked facing the canvas plane:
+        // Euler angles (Pitch = 0, Yaw = 0, Roll = 0)
+        assert(controller.GetCamera().GetRotation() == glm::vec3(0.0f, 0.0f, 0.0f));
+
+        // Disable 2D View Mode -> restore 3D
+        controller.Set2DMode(false);
+        assert(!controller.Is2DMode());
+        assert(!controller.GetCamera().IsOrthographic());
+
+        // Camera pose must be seamlessly restored to the saved 3D position & rotation
+        assert(controller.GetCamera().GetPosition() == customPos);
+        assert(controller.GetCamera().GetRotation() == customRot);
+
+        std::cout << "  -> 2D view toggle and orthographic camera switch: PASS" << std::endl;
+        std::cout << "  -> Exact canvas plane orientation lock (Pitch=0, Yaw=0, Roll=0): PASS" << std::endl;
+        std::cout << "  -> Seamless 3D camera pose cache & restoration: PASS" << std::endl;
+    }
+
+    // [94.3] Testing Customizable 2D UI Grid Snapping (Pixel Increments)
+    std::cout << "\n[94.3] Testing Customizable 2D UI Grid Snapping (Pixel Increments)..." << std::endl;
+    {
+        auto& gizmo = RectTransformGizmo::Get();
+        auto& settings = gizmo.GetSettings();
+        settings.SnapToGrid = true;
+        settings.SnapIsPercentage = false;
+
+        UIRect parent1080p{ 0.0f, 0.0f, 1920.0f, 1080.0f };
+
+        // Test pixel increments: 1px, 5px, 10px, 25px, 50px
+        const float pixelIncrements[] = { 1.0f, 5.0f, 10.0f, 25.0f, 50.0f };
+        for (float inc : pixelIncrements) {
+            settings.SnapIncrement = inc;
+            glm::vec2 snap = gizmo.ComputeSnapIncrement(parent1080p);
+            assert(snap.x == inc && snap.y == inc);
+        }
+
+        // Test rounding calculation with 10px increment
+        settings.SnapIncrement = 10.0f;
+        glm::vec2 delta1{ 14.3f, 26.8f };
+        glm::vec2 snapStep = gizmo.ComputeSnapIncrement(parent1080p);
+        glm::vec2 snapped1 = glm::round(delta1 / snapStep) * snapStep;
+        assert(snapped1.x == 10.0f);
+        assert(snapped1.y == 30.0f);
+
+        // Test rounding with 25px increment
+        settings.SnapIncrement = 25.0f;
+        glm::vec2 delta2{ 36.5f, 63.0f };
+        snapStep = gizmo.ComputeSnapIncrement(parent1080p);
+        glm::vec2 snapped2 = glm::round(delta2 / snapStep) * snapStep;
+        assert(snapped2.x == 25.0f);
+        assert(snapped2.y == 75.0f);
+
+        std::cout << "  -> Pixel increments (1px, 5px, 10px, 25px, 50px) verified: PASS" << std::endl;
+        std::cout << "  -> Delta rounding to pixel grid: PASS" << std::endl;
+    }
+
+    // [94.4] Testing Customizable 2D UI Grid Snapping (Percentage Increments)
+    std::cout << "\n[94.4] Testing Customizable 2D UI Grid Snapping (Percentage Increments)..." << std::endl;
+    {
+        auto& gizmo = RectTransformGizmo::Get();
+        auto& settings = gizmo.GetSettings();
+        settings.SnapToGrid = true;
+        settings.SnapIsPercentage = true;
+
+        UIRect parent1080p{ 0.0f, 0.0f, 1920.0f, 1080.0f };
+
+        // Test 5% increment: 5% of 1920 = 96px, 5% of 1080 = 54px
+        settings.SnapPercent = 5.0f;
+        glm::vec2 snap5 = gizmo.ComputeSnapIncrement(parent1080p);
+        assert(std::abs(snap5.x - 96.0f) < 1e-4f);
+        assert(std::abs(snap5.y - 54.0f) < 1e-4f);
+
+        // Test 10% increment: 10% of 1920 = 192px, 10% of 1080 = 108px
+        settings.SnapPercent = 10.0f;
+        glm::vec2 snap10 = gizmo.ComputeSnapIncrement(parent1080p);
+        assert(std::abs(snap10.x - 192.0f) < 1e-4f);
+        assert(std::abs(snap10.y - 108.0f) < 1e-4f);
+
+        // Test 25% increment: 25% of 1920 = 480px, 25% of 1080 = 270px
+        settings.SnapPercent = 25.0f;
+        glm::vec2 snap25 = gizmo.ComputeSnapIncrement(parent1080p);
+        assert(std::abs(snap25.x - 480.0f) < 1e-4f);
+        assert(std::abs(snap25.y - 270.0f) < 1e-4f);
+
+        // Test anchor percentage snapping
+        float stepNorm = settings.SnapPercent / 100.0f; // 0.25
+        glm::vec2 rawAnchorDelta{ 0.23f, 0.52f };
+        glm::vec2 snappedAnchor = glm::round(rawAnchorDelta / stepNorm) * stepNorm;
+        assert(std::abs(snappedAnchor.x - 0.25f) < 1e-4f);
+        assert(std::abs(snappedAnchor.y - 0.50f) < 1e-4f);
+
+        // Reset settings
+        settings.SnapToGrid = false;
+        settings.SnapIsPercentage = false;
+        settings.SnapIncrement = 10.0f;
+        settings.SnapPercent = 5.0f;
+
+        std::cout << "  -> Percentage increments (5%, 10%, 25%) scaling with canvas resolution: PASS" << std::endl;
+        std::cout << "  -> Anchor petal percentage boundary snapping: PASS" << std::endl;
+    }
+
+    std::cout << "\n>>> STEP 94 PASSED: Viewport 2D UI Edit Mode & Grid Snapping 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
 
 

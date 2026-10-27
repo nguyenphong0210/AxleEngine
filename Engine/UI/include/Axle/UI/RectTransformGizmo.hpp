@@ -30,7 +30,9 @@ namespace Axle {
         bool  ShowPivotCrosshair = true;
         bool  ShowResizeHandles  = true;
         bool  SnapToGrid         = false;
-        float SnapIncrement      = 10.0f;     // Grid increment in canvas pixels
+        bool  SnapIsPercentage   = false;     // false = Pixel increment, true = Percentage increment
+        float SnapIncrement      = 10.0f;     // Grid increment in canvas pixels (e.g. 1px, 5px, 10px, 25px)
+        float SnapPercent        = 5.0f;      // Grid increment in percentage (e.g. 1%, 5%, 10%, 25%)
         ImU32 CanvasColor        = IM_COL32(100, 116, 139, 140);   // Slate outline
         ImU32 BoundsColor        = IM_COL32(56, 189, 248, 255);    // Sky cyan
         ImU32 BoundsFillColor    = IM_COL32(56, 189, 248, 25);     // Sky cyan fill
@@ -77,6 +79,9 @@ namespace Axle {
 
         RectTransformGizmoSettings& GetSettings() { return m_Settings; }
         const RectTransformGizmoSettings& GetSettings() const { return m_Settings; }
+
+        /// @brief Calculate effective canvas snap step based on pixel or percentage settings
+        glm::vec2 ComputeSnapIncrement(const UIRect& parentRect) const;
 
     private:
         RectTransformGizmoSettings m_Settings{};

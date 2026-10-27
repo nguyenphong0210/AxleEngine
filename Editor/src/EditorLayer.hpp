@@ -76,6 +76,10 @@ public:
     Axle::RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
     Axle::RHISceneRenderer* GetRHISceneRenderer() const { return m_RHISceneRenderer.get(); }
 
+    // Viewport 2D UI Edit Mode & Grid Snapping (Phase 34 Step 7.3)
+    void Set2DViewMode(bool enabled);
+    bool Is2DViewMode() const;
+
 private:
     void ResetSimulation();
     void RenderToolbar();
@@ -137,6 +141,12 @@ private:
     bool m_UseEditorCameraInPlay = false;
     bool m_ActiveCameraIsSceneCamera = false;
     bool m_F2KeyWasPressed = false;
+
+    // Viewport 2D UI Edit Mode & Grid Snapping (Phase 34 Step 7.3)
+    bool m_UI2DSnapEnabled = false;
+    bool m_UI2DSnapIsPercentage = false;
+    float m_UI2DSnapPixel = 10.0f;
+    float m_UI2DSnapPercent = 5.0f;
 
     // Scene & Entities (Phase 18.2: Safe Scene State Simulation)
     std::shared_ptr<Axle::Scene> m_Scene;        // Active Scene pointer

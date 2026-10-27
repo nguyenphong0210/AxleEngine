@@ -49,6 +49,7 @@ namespace Axle {
         virtual bool SetPropertyVec4(std::string_view propName, const glm::vec4& val);
 
         static glm::vec4 ParseHexColor(std::string_view hexStr);
+        static std::string ToHexColor(const glm::vec4& color);
         static UIAnchor ParseAnchor(std::string_view anchorStr);
     };
 

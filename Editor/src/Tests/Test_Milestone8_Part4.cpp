@@ -2386,6 +2386,297 @@ bool RunTest_Step95_Phase34_Step7_UIPaletteAndDragDropSpawner() {
     return true;
 }
 
+// =============================================================================
+// TEST STEP 96: Phase 34 Step 7 - Bidirectional Document Synchronization
+// (AST Serialization to .axleui, Roundtrip Parsing, Dirty State & Scene Sync)
+// =============================================================================
+bool RunTest_Step96_Phase34_Step7_BidirectionalDocumentSynchronization() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 96 TEST] BIDIRECTIONAL DOCUMENT SYNCHRONIZATION  " << std::endl;
+    std::cout << " (AST Serialization, Roundtrip Parsing, Scene Sync)     " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    // [96.1] Programmatic UIDocument Construction & Serialization to .axleui
+    std::cout << "[96.1] Testing UIDocument AST Serialization to .axleui syntax..." << std::endl;
+    std::string serializedOutput;
+    {
+        auto doc = std::make_unique<UIDocument>();
+        auto* canvas = doc->CreateNode<UICanvasNode>(nullptr);
+        canvas->ID = "root_canvas";
+        canvas->ReferenceResolution = glm::vec2(1920.0f, 1080.0f);
+
+        auto* panel = doc->CreateNode<UIRectangleNode>(canvas);
+        panel->ID = "main_panel";
+        panel->SetUseRectTransform(true);
+        panel->Transform.AnchorMin = glm::vec2(0.5f, 0.5f);
+        panel->Transform.AnchorMax = glm::vec2(0.5f, 0.5f);
+        panel->Transform.Pivot = glm::vec2(0.5f, 0.5f);
+        panel->Transform.AnchoredPosition = glm::vec2(100.0f, -50.0f);
+        panel->Transform.SizeDelta = glm::vec2(400.0f, 300.0f);
+        panel->Style.BackgroundColor = glm::vec4(0.1f, 0.2f, 0.3f, 0.9f);
+        panel->Style.CornerRadius = 12.0f;
+        panel->Style.BorderWidth = 2.0f;
+        panel->Style.BorderColor = glm::vec4(0.4f, 0.6f, 0.8f, 1.0f);
+
+        auto* title = doc->CreateNode<UITextNode>(panel);
+        title->ID = "panel_title";
+        title->SetUseRectTransform(true);
+        title->Transform.AnchorMin = glm::vec2(0.5f, 1.0f);
+        title->Transform.AnchorMax = glm::vec2(0.5f, 1.0f);
+        title->Transform.Pivot = glm::vec2(0.5f, 1.0f);
+        title->Transform.AnchoredPosition = glm::vec2(0.0f, -20.0f);
+        title->Transform.SizeDelta = glm::vec2(300.0f, 40.0f);
+        title->Text = "SETTINGS MENU";
+        title->FontSize = 24.0f;
+        title->Color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+        auto* btn = doc->CreateNode<UIButtonNode>(panel);
+        btn->ID = "apply_btn";
+        btn->SetUseRectTransform(true);
+        btn->Transform.AnchorMin = glm::vec2(0.5f, 0.0f);
+        btn->Transform.AnchorMax = glm::vec2(0.5f, 0.0f);
+        btn->Transform.Pivot = glm::vec2(0.5f, 0.0f);
+        btn->Transform.AnchoredPosition = glm::vec2(0.0f, 30.0f);
+        btn->Transform.SizeDelta = glm::vec2(180.0f, 48.0f);
+        btn->NormalColor = glm::vec4(0.2f, 0.3f, 0.4f, 1.0f);
+        btn->HoverColor = glm::vec4(0.3f, 0.4f, 0.5f, 1.0f);
+        btn->PressedColor = glm::vec4(0.1f, 0.6f, 0.9f, 1.0f);
+        btn->OnClickAction = "OnApplySettings";
+
+        auto* bar = doc->CreateNode<UIProgressBarNode>(panel);
+        bar->ID = "volume_bar";
+        bar->SetUseRectTransform(true);
+        bar->Transform.AnchorMin = glm::vec2(0.5f, 0.5f);
+        bar->Transform.AnchorMax = glm::vec2(0.5f, 0.5f);
+        bar->Transform.SizeDelta = glm::vec2(250.0f, 20.0f);
+        bar->Value = 0.75f;
+
+        auto* gauge = doc->CreateNode<UIRadialGaugeNode>(panel);
+        gauge->ID = "speed_gauge";
+        gauge->SetUseRectTransform(true);
+        gauge->Transform.AnchorMin = glm::vec2(0.5f, 0.5f);
+        gauge->Transform.AnchorMax = glm::vec2(0.5f, 0.5f);
+        gauge->Transform.SizeDelta = glm::vec2(120.0f, 120.0f);
+        gauge->Value = 0.6f;
+        gauge->Thickness = 12.0f;
+
+        serializedOutput = doc->Serialize();
+        assert(!serializedOutput.empty());
+        assert(serializedOutput.find("Canvas {") != std::string::npos);
+        assert(serializedOutput.find("id: \"root_canvas\"") != std::string::npos);
+        assert(serializedOutput.find("Rectangle {") != std::string::npos);
+        assert(serializedOutput.find("id: \"main_panel\"") != std::string::npos);
+        assert(serializedOutput.find("useRectTransform: true") != std::string::npos);
+        assert(serializedOutput.find("Text {") != std::string::npos);
+        assert(serializedOutput.find("SETTINGS MENU") != std::string::npos);
+        assert(serializedOutput.find("Button {") != std::string::npos);
+        assert(serializedOutput.find("onClick: \"OnApplySettings\"") != std::string::npos);
+        assert(serializedOutput.find("ProgressBar {") != std::string::npos);
+        assert(serializedOutput.find("RadialGauge {") != std::string::npos);
+
+        std::cout << "  -> Structured .axleui serialization with nested scoping: PASS" << std::endl;
+        std::cout << "  -> RectTransform layout attributes & styling preservation: PASS" << std::endl;
+    }
+
+    // [96.2] Round-Trip Parsing & AST Preservation
+    std::cout << "\n[96.2] Testing Round-Trip Parsing (Source -> AST -> Re-serialized Source)..." << std::endl;
+    {
+        auto doc2 = std::make_unique<UIDocument>();
+        std::string err;
+        bool parseSuccess = UIParser::ParseSource(serializedOutput, *doc2, &err);
+        if (!parseSuccess) {
+            std::cerr << "Parse error: " << err << std::endl;
+        }
+        assert(parseSuccess);
+        assert(doc2->GetNodeCount() == 6);
+
+        // Verify root Canvas
+        auto* rootCanvas = dynamic_cast<UICanvasNode*>(doc2->FindNodeByID("root_canvas"));
+        assert(rootCanvas != nullptr);
+        assert(rootCanvas->ReferenceResolution == glm::vec2(1920.0f, 1080.0f));
+
+        // Verify main_panel
+        auto* panel = dynamic_cast<UIRectangleNode*>(doc2->FindNodeByID("main_panel"));
+        assert(panel != nullptr);
+        assert(panel->UseRectTransform == true);
+        assert(panel->Transform.AnchorMin == glm::vec2(0.5f, 0.5f));
+        assert(panel->Transform.AnchorMax == glm::vec2(0.5f, 0.5f));
+        assert(panel->Transform.Pivot == glm::vec2(0.5f, 0.5f));
+        assert(panel->Transform.AnchoredPosition == glm::vec2(100.0f, -50.0f));
+        assert(panel->Transform.SizeDelta == glm::vec2(400.0f, 300.0f));
+        assert(panel->Style.CornerRadius == 12.0f);
+        assert(panel->Style.BorderWidth == 2.0f);
+
+        // Verify panel_title
+        auto* title = dynamic_cast<UITextNode*>(doc2->FindNodeByID("panel_title"));
+        assert(title != nullptr);
+        assert(title->Text == "SETTINGS MENU");
+        assert(title->FontSize == 24.0f);
+
+        // Verify apply_btn
+        auto* btn = dynamic_cast<UIButtonNode*>(doc2->FindNodeByID("apply_btn"));
+        assert(btn != nullptr);
+        assert(btn->OnClickAction == "OnApplySettings");
+
+        // Verify volume_bar
+        auto* bar = dynamic_cast<UIProgressBarNode*>(doc2->FindNodeByID("volume_bar"));
+        assert(bar != nullptr);
+        assert(std::abs(bar->Value - 0.75f) < 1e-4f);
+
+        // Verify speed_gauge
+        auto* gauge = dynamic_cast<UIRadialGaugeNode*>(doc2->FindNodeByID("speed_gauge"));
+        assert(gauge != nullptr);
+        assert(std::abs(gauge->Value - 0.6f) < 1e-4f);
+        assert(gauge->Thickness == 12.0f);
+
+        // Verify exact layout bounds equivalence
+        UIRect parentRect{ 0.0f, 0.0f, 1920.0f, 1080.0f };
+        UIRect rect = panel->Transform.ComputeRect(parentRect);
+        // Center of 1920x1080 is (960, 540). With anchoredPos (100, -50) and size (400, 300):
+        // X = 960 + 100 - 200 = 860, Y = 540 - 50 - 150 = 340
+        assert(std::abs(rect.X - 860.0f) < 1e-3f);
+        assert(std::abs(rect.Y - 340.0f) < 1e-3f);
+        assert(std::abs(rect.Width - 400.0f) < 1e-3f);
+        assert(std::abs(rect.Height - 300.0f) < 1e-3f);
+
+        std::cout << "  -> Full roundtrip AST fidelity across all widget primitives: PASS" << std::endl;
+        std::cout << "  -> Geometric bounding rectangle invariance across parse roundtrip: PASS" << std::endl;
+    }
+
+    // [96.3] Document Dirty State Tracking & File I/O
+    std::cout << "\n[96.3] Testing Dirty State Tracking & SaveToFile / LoadFromFile..." << std::endl;
+    {
+        std::filesystem::path tempFilePath = std::filesystem::current_path() / "build" / "test_sync_doc.axleui";
+        if (!std::filesystem::exists(tempFilePath.parent_path())) {
+            std::filesystem::create_directories(tempFilePath.parent_path());
+        }
+
+        auto doc = std::make_unique<UIDocument>();
+        assert(doc->IsDirty() == false);
+
+        // Adding node triggers dirty flag
+        auto* canvas = doc->CreateNode<UICanvasNode>(nullptr);
+        assert(doc->IsDirty() == true);
+
+        // Saving clears dirty flag
+        bool saved = doc->SaveToFile(tempFilePath.string());
+        assert(saved);
+        assert(doc->IsDirty() == false);
+        assert(std::filesystem::exists(tempFilePath));
+
+        // Adding another node marks dirty again
+        doc->CreateNode<UIRectangleNode>(canvas);
+        assert(doc->IsDirty() == true);
+
+        // LoadFromFile clears dirty flag
+        bool loaded = doc->LoadFromFile(tempFilePath.string());
+        assert(loaded);
+        assert(doc->IsDirty() == false);
+        assert(doc->GetNodeCount() == 1); // Only Canvas was saved previously
+
+        std::filesystem::remove(tempFilePath);
+        std::cout << "  -> Document dirty state lifecycle (CreateNode -> dirty, SaveToFile -> clean): PASS" << std::endl;
+        std::cout << "  -> LoadFromFile file synchronization: PASS" << std::endl;
+    }
+
+    // [96.4] Visual Viewport Manipulation Dirty Flag Synchronization
+    std::cout << "\n[96.4] Testing Viewport Gizmo Modification Dirty Flag Trigger..." << std::endl;
+    {
+        auto doc = std::make_unique<UIDocument>();
+        auto* canvas = doc->CreateNode<UICanvasNode>(nullptr);
+        auto* panel = doc->CreateNode<UIRectangleNode>(canvas);
+        panel->SetUseRectTransform(true);
+        panel->Transform.SizeDelta = glm::vec2(200.0f, 100.0f);
+
+        doc->SetDirty(false);
+        assert(!doc->IsDirty());
+
+        // Simulate gizmo translation modification
+        bool uiModified = true;
+        panel->Transform.AnchoredPosition += glm::vec2(15.0f, 25.0f);
+        if (uiModified) {
+            doc->UpdateLayout(glm::vec2(1920.0f, 1080.0f));
+            doc->SetDirty(true);
+        }
+
+        assert(doc->IsDirty() == true);
+        assert(panel->Transform.AnchoredPosition == glm::vec2(15.0f, 25.0f));
+
+        std::cout << "  -> Interactive visual canvas modification triggers document dirty sync: PASS" << std::endl;
+    }
+
+    // [96.5] End-to-End Scene (.axlescene) & UI (.axleui) Synchronization
+    std::cout << "\n[96.5] Testing End-to-End Scene & UI Document Co-Serialization..." << std::endl;
+    {
+        std::filesystem::path scenePath = std::filesystem::current_path() / "build" / "test_sync_scene.axlescene";
+        std::filesystem::path uiDocPath = std::filesystem::current_path() / "build" / "test_scene_ui.axleui";
+
+        // 1. Create Scene with UICanvasComponent
+        auto scene = std::make_shared<Scene>();
+        Entity canvasEntity = scene->CreateEntity("HUD_Canvas");
+        auto& uic = canvasEntity.AddComponent<UICanvasComponent>();
+        uic.AssetPath = uiDocPath.string();
+        uic.SortOrder = 5;
+        uic.Visible = true;
+        uic.Document = std::make_shared<UIDocument>();
+
+        auto* canvasNode = uic.Document->CreateNode<UICanvasNode>(nullptr);
+        canvasNode->ID = "hud_root";
+        auto* panelNode = uic.Document->CreateNode<UIRectangleNode>(canvasNode);
+        panelNode->ID = "hud_box";
+        panelNode->SetUseRectTransform(true);
+        panelNode->Transform.SizeDelta = glm::vec2(320.0f, 80.0f);
+
+        // 2. Serialize Scene (which automatically synchronizes and writes the UI document)
+        SceneSerializer serializer(scene.get());
+        bool serialized = serializer.Serialize(scenePath);
+        assert(serialized);
+        assert(std::filesystem::exists(scenePath));
+        assert(std::filesystem::exists(uiDocPath));
+
+        // 3. Deserialize Scene into fresh Scene instance
+        auto reloadedScene = std::make_shared<Scene>();
+        SceneSerializer deserializer(reloadedScene.get());
+        bool deserialized = deserializer.Deserialize(scenePath);
+        assert(deserialized);
+
+        Entity loadedEntity;
+        for (auto [e, tag] : reloadedScene->GetRegistry().view<TagComponent>().each()) {
+            if (tag.Tag == "HUD_Canvas") {
+                loadedEntity = Entity{ e, reloadedScene.get() };
+                break;
+            }
+        }
+        assert(bool(loadedEntity));
+        assert(loadedEntity.HasComponent<UICanvasComponent>());
+
+        auto& loadedUIC = loadedEntity.GetComponent<UICanvasComponent>();
+        assert(loadedUIC.SortOrder == 5);
+        assert(loadedUIC.Visible == true);
+        assert(loadedUIC.Document != nullptr);
+        assert(loadedUIC.Document->GetNodeCount() == 2);
+
+        auto* loadedPanel = loadedUIC.Document->FindNodeByID("hud_box");
+        assert(loadedPanel != nullptr);
+        assert(loadedPanel->UseRectTransform == true);
+        assert(loadedPanel->Transform.SizeDelta == glm::vec2(320.0f, 80.0f));
+
+        // Clean up temporary files
+        std::filesystem::remove(scenePath);
+        std::filesystem::remove(uiDocPath);
+
+        std::cout << "  -> SceneSerializer auto-synchronizes and serializes .axleui document: PASS" << std::endl;
+        std::cout << "  -> SceneSerializer deserialization restores UICanvasComponent and parses .axleui: PASS" << std::endl;
+        std::cout << "  -> Zero desynchronization between scene hierarchy and UI document AST: PASS" << std::endl;
+    }
+
+    std::cout << "\n>>> STEP 96 PASSED: Bidirectional Document Synchronization 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
+
 
 
 

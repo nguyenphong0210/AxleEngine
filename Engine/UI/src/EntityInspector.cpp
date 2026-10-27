@@ -22,6 +22,7 @@
 #include <Axle/ParticleSystem.hpp>
 #include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
+#include <Axle/UI/UIParser.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -1998,6 +1999,88 @@ namespace Axle {
             }
         }, /*canRemove=*/ true);
 
+        // UICanvasComponent (Phase 34 Step 7 - UI Canvas & Document Synchronization)
+        DrawComponent<UICanvasComponent>("UI Canvas Component", entity, [&](UICanvasComponent& uic) {
+            char pathBuf[256];
+            std::strncpy(pathBuf, uic.AssetPath.c_str(), sizeof(pathBuf) - 1);
+            pathBuf[sizeof(pathBuf) - 1] = '\0';
+            if (ImGui::InputText("Asset Path", pathBuf, sizeof(pathBuf))) {
+                uic.AssetPath = pathBuf;
+            }
+
+            // Drag-drop .axleui item into AssetPath
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    const char* pathStr = static_cast<const char*>(payload->Data);
+                    std::filesystem::path p(pathStr);
+                    if (p.extension() == ".axleui") {
+                        uic.AssetPath = p.string();
+                        if (uic.Document) {
+                            uic.Document->LoadFromFile(p.string());
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            ImGui::DragInt("Sort Order", &uic.SortOrder, 1, -100, 100);
+            ImGui::Checkbox("Visible", &uic.Visible);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+
+            if (uic.Document) {
+                bool isDirty = uic.Document->IsDirty();
+                if (isDirty) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "[*] Document has unsaved visual modifications");
+                } else {
+                    ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.45f, 1.0f), "[OK] Document is clean & synchronized");
+                }
+
+                ImGui::Text("Nodes in DOM: %zu", uic.Document->GetNodeCount());
+                if (auto* rootCanvas = dynamic_cast<UICanvasNode*>(uic.Document->GetRootNode())) {
+                    ImGui::Text("Reference Resolution: %.0f x %.0f",
+                        rootCanvas->ReferenceResolution.x, rootCanvas->ReferenceResolution.y);
+                }
+
+                ImGui::Spacing();
+                if (ImGui::Button("Save .axleui Document")) {
+                    std::string savePath = uic.AssetPath;
+                    if (savePath.empty()) {
+                        savePath = "assets/ui/" + entity.GetName() + ".axleui";
+                        uic.AssetPath = savePath;
+                    }
+                    std::filesystem::path fullPath = savePath;
+                    if (!std::filesystem::exists(fullPath)) {
+                        fullPath = FileSystem::GetAssetDirectory() / savePath;
+                    }
+                    if (fullPath.has_parent_path() && !std::filesystem::exists(fullPath.parent_path())) {
+                        std::filesystem::create_directories(fullPath.parent_path());
+                    }
+                    uic.Document->SaveToFile(fullPath.string());
+                    AXLE_INFO("Saved UI Document '{0}'", fullPath.string());
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button("Reload from Disk")) {
+                    std::filesystem::path fullPath = uic.AssetPath;
+                    if (!std::filesystem::exists(fullPath)) {
+                        fullPath = FileSystem::GetAssetDirectory() / uic.AssetPath;
+                    }
+                    if (std::filesystem::exists(fullPath)) {
+                        uic.Document->LoadFromFile(fullPath.string());
+                        AXLE_INFO("Reloaded UI Document '{0}'", fullPath.string());
+                    }
+                }
+            } else {
+                ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "No UIDocument attached.");
+                if (ImGui::Button("Initialize Empty Canvas Document")) {
+                    uic.Document = std::make_shared<UIDocument>();
+                    uic.Document->CreateNode<UICanvasNode>(nullptr);
+                }
+            }
+        }, /*canRemove=*/ true);
+
         // Custom Plugin Components
         if (m_CustomComponentDrawer) {
             m_CustomComponentDrawer(entity);
@@ -2245,6 +2328,17 @@ namespace Axle {
             "Audio/VFX", "CharacterVFXComponent", "Gameplay VFX: Ground footstep dust puffs & landing shockwave ripples",
             entity.HasComponent<CharacterVFXComponent>(), true,
             [&]() { entity.AddComponent<CharacterVFXComponent>(); }
+        });
+
+        // --- USER INTERFACE CATEGORY ---
+        items.push_back({
+            "User Interface", "UICanvasComponent", "Hardware-accelerated 2D UI canvas with responsive layout & .axleui bindings",
+            entity.HasComponent<UICanvasComponent>(), true,
+            [&]() {
+                auto& uic = entity.AddComponent<UICanvasComponent>();
+                uic.Document = std::make_shared<UIDocument>();
+                uic.Document->CreateNode<UICanvasNode>(nullptr);
+            }
         });
 
         // Rendering logic:

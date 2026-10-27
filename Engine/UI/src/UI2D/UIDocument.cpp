@@ -239,4 +239,36 @@ namespace Axle {
         return false;
     }
 
+    std::string UIDocument::Serialize() const {
+        return UIParser::SerializeDocument(*this);
+    }
+
+    bool UIDocument::SaveToFile(const std::string& path) {
+        std::string targetPath = path.empty() ? m_FilePath : path;
+        if (targetPath.empty()) return false;
+
+        std::string err;
+        bool ok = UIParser::SaveFile(targetPath, *this, &err);
+        if (ok) {
+            m_FilePath = targetPath;
+            if (std::filesystem::exists(m_FilePath)) {
+                m_LastWriteTime = std::filesystem::last_write_time(m_FilePath);
+            }
+            m_IsDirty = false;
+        }
+        return ok;
+    }
+
+    bool UIDocument::LoadFromFile(const std::string& path) {
+        if (path.empty()) return false;
+        std::string err;
+        bool ok = UIParser::ParseFile(path, *this, &err);
+        if (ok) {
+            SetFilePath(path);
+            m_IsDirty = false;
+        }
+        return ok;
+    }
+
 } // namespace Axle
+

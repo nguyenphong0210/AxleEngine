@@ -10,6 +10,9 @@ namespace Axle {
         static bool ParseSource(std::string_view source, UIDocument& outDocument, std::string* outError = nullptr);
         static bool ParseFile(const std::string& filepath, UIDocument& outDocument, std::string* outError = nullptr);
 
+        static std::string SerializeDocument(const UIDocument& document);
+        static bool SaveFile(const std::string& filepath, const UIDocument& document, std::string* outError = nullptr);
+
     private:
         static std::string StripComments(std::string_view source);
         static bool ParseNode(std::string_view& src, UINode* parent, UIDocument& doc, std::string* outError);

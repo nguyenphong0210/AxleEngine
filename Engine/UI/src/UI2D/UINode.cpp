@@ -34,6 +34,20 @@ namespace Axle {
         return glm::vec4(1.0f);
     }
 
+    std::string UINode::ToHexColor(const glm::vec4& color) {
+        uint8_t r = static_cast<uint8_t>(std::clamp(color.r, 0.0f, 1.0f) * 255.0f + 0.5f);
+        uint8_t g = static_cast<uint8_t>(std::clamp(color.g, 0.0f, 1.0f) * 255.0f + 0.5f);
+        uint8_t b = static_cast<uint8_t>(std::clamp(color.b, 0.0f, 1.0f) * 255.0f + 0.5f);
+        uint8_t a = static_cast<uint8_t>(std::clamp(color.a, 0.0f, 1.0f) * 255.0f + 0.5f);
+        char buf[12];
+        if (a == 255) {
+            snprintf(buf, sizeof(buf), "#%02X%02X%02X", r, g, b);
+        } else {
+            snprintf(buf, sizeof(buf), "#%02X%02X%02X%02X", r, g, b, a);
+        }
+        return std::string(buf);
+    }
+
     UIAnchor UINode::ParseAnchor(std::string_view anchorStr) {
         return StringToUIAnchor(anchorStr);
     }

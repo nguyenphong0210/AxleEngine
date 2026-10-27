@@ -103,6 +103,7 @@ int main(int argc, char** argv) {
         else if (arg == "93" || arg == "step93" || arg == "--step93" || arg == "--gizmo2d" || arg == "--canvasgizmo") targetStep = 93;
         else if (arg == "94" || arg == "step94" || arg == "--step94" || arg == "--2dmode" || arg == "--gridsnap") targetStep = 94;
         else if (arg == "95" || arg == "step95" || arg == "--step95" || arg == "--uipalette" || arg == "--palette") targetStep = 95;
+        else if (arg == "96" || arg == "step96" || arg == "--step96" || arg == "--uisync" || arg == "--doc-sync") targetStep = 96;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -388,6 +389,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 95) {
         if (!RunTest_Step95_Phase34_Step7_UIPaletteAndDragDropSpawner()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 96) {
+        if (!RunTest_Step96_Phase34_Step7_BidirectionalDocumentSynchronization()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

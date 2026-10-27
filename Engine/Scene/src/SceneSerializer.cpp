@@ -12,6 +12,7 @@
 #include <Axle/Animator.hpp>
 #include <Axle/AnimationStateMachine.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
+#include <Axle/UI/UIParser.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -509,6 +510,21 @@ namespace Axle {
             // UICanvasComponent
             if (entity.HasComponent<UICanvasComponent>()) {
                 auto& uic = entity.GetComponent<UICanvasComponent>();
+                if (uic.Document && uic.AssetPath.empty()) {
+                    uic.AssetPath = "assets/ui/" + entity.GetName() + ".axleui";
+                }
+                if (uic.Document && !uic.AssetPath.empty()) {
+                    std::filesystem::path fullDocPath = uic.AssetPath;
+                    if (!std::filesystem::exists(fullDocPath)) {
+                        fullDocPath = FileSystem::GetAssetDirectory() / uic.AssetPath;
+                    }
+                    if (uic.Document->IsDirty() || !std::filesystem::exists(fullDocPath)) {
+                        if (fullDocPath.has_parent_path() && !std::filesystem::exists(fullDocPath.parent_path())) {
+                            std::filesystem::create_directories(fullDocPath.parent_path());
+                        }
+                        uic.Document->SaveToFile(fullDocPath.string());
+                    }
+                }
                 ss << "    UICanvasComponent:\n";
                 ss << "      AssetPath: " << uic.AssetPath << "\n";
                 ss << "      SortOrder: " << uic.SortOrder << "\n";
@@ -1558,6 +1574,16 @@ namespace Axle {
                         auto& uic = currentEntity.GetComponent<UICanvasComponent>();
                         if (trimmed.rfind("AssetPath:", 0) == 0) {
                             uic.AssetPath = Trim(trimmed.substr(10));
+                            if (!uic.AssetPath.empty()) {
+                                std::filesystem::path fullPath = uic.AssetPath;
+                                if (!std::filesystem::exists(fullPath)) {
+                                    fullPath = FileSystem::GetAssetDirectory() / uic.AssetPath;
+                                }
+                                if (std::filesystem::exists(fullPath)) {
+                                    uic.Document = std::make_shared<UIDocument>();
+                                    UIParser::ParseFile(fullPath.string(), *uic.Document);
+                                }
+                            }
                         } else if (trimmed.rfind("SortOrder:", 0) == 0) {
                             try { uic.SortOrder = std::stoi(Trim(trimmed.substr(10))); } catch (...) {}
                         } else if (trimmed.rfind("Visible:", 0) == 0) {

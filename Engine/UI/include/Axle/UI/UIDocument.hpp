@@ -40,6 +40,7 @@ namespace Axle {
                 m_RootNode = rawPtr;
             }
             m_NodeArena.push_back(std::move(node));
+            m_IsDirty = true;
             return rawPtr;
         }
 
@@ -58,10 +59,17 @@ namespace Axle {
         bool NavigateFocus(std::string_view direction); // "Up", "Down", "Left", "Right"
         bool ActivateFocusedButton(const UIDataContext& context);
 
-        // File Management & Hot-Reloading
+        // File Management, Dirty State & Serialization
         void SetFilePath(const std::string& path);
         const std::string& GetFilePath() const { return m_FilePath; }
         bool CheckAndHotReload();
+
+        bool IsDirty() const { return m_IsDirty; }
+        void SetDirty(bool dirty = true) { m_IsDirty = dirty; }
+
+        std::string Serialize() const;
+        bool SaveToFile(const std::string& path = "");
+        bool LoadFromFile(const std::string& path);
 
         UINode* GetRootNode() const { return m_RootNode; }
         void SetRootNode(UINode* root) { m_RootNode = root; }
@@ -86,6 +94,7 @@ namespace Axle {
         std::string m_FilePath;
         std::filesystem::file_time_type m_LastWriteTime{};
         float m_ComputedDPIScale = 1.0f;
+        bool m_IsDirty = false;
     };
 
 } // namespace Axle

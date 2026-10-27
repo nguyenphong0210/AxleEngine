@@ -340,4 +340,215 @@ namespace Axle {
         return success;
     }
 
+    static std::string FormatFloat(float val) {
+        if (std::abs(val - std::round(val)) < 1e-4f) {
+            return std::to_string(static_cast<long long>(std::round(val)));
+        }
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.3f", val);
+        std::string s(buf);
+        while (s.find('.') != std::string::npos && (s.back() == '0' || s.back() == '.')) {
+            bool wasDot = (s.back() == '.');
+            s.pop_back();
+            if (wasDot) break;
+        }
+        return s;
+    }
+
+    static void SerializeNode(const UINode* node, const UIDocument& doc, int level, std::stringstream& ss) {
+        if (!node) return;
+
+        std::string ind(level * 4, ' ');
+
+        // 1. Determine Type Name
+        std::string typeName = "Rectangle";
+        if (dynamic_cast<const UICanvasNode*>(node)) {
+            typeName = "Canvas";
+        } else if (dynamic_cast<const UIButtonNode*>(node)) {
+            typeName = "Button";
+        } else if (dynamic_cast<const UITextNode*>(node)) {
+            typeName = "Text";
+        } else if (dynamic_cast<const UIImageNode*>(node)) {
+            typeName = "Image";
+        } else if (dynamic_cast<const UIProgressBarNode*>(node)) {
+            typeName = "ProgressBar";
+        } else if (dynamic_cast<const UIRadialGaugeNode*>(node)) {
+            typeName = "RadialGauge";
+        } else if (auto* box = dynamic_cast<const UIBoxContainerNode*>(node)) {
+            typeName = box->IsVertical ? "Column" : "Row";
+        } else if (dynamic_cast<const UIRectangleNode*>(node)) {
+            typeName = "Rectangle";
+        }
+
+        ss << ind << typeName << " {\n";
+        std::string propInd = ind + "    ";
+
+        // 2. ID
+        if (!node->ID.empty()) {
+            ss << propInd << "id: \"" << node->ID << "\"\n";
+        }
+
+        // Helper to check for property bindings
+        auto getBindingExpr = [&](const std::string& propName) -> std::string {
+            for (const auto& b : doc.GetBindings()) {
+                if (b.TargetNode == node && b.PropertyName == propName) {
+                    if (b.Type == UIBindingType::Direct) {
+                        return "{" + b.SourceKey + "}";
+                    } else if (b.Type == UIBindingType::Interpolated) {
+                        return b.TemplateText;
+                    } else if (b.Type == UIBindingType::Ternary) {
+                        return "{" + b.SourceKey + " ? " + b.TrueValue + " : " + b.FalseValue + "}";
+                    }
+                }
+            }
+            return "";
+        };
+
+        // 3. Visibility
+        std::string visBinding = getBindingExpr("visible");
+        if (!visBinding.empty()) {
+            ss << propInd << "visible: \"" << visBinding << "\"\n";
+        } else if (!node->Visible) {
+            ss << propInd << "visible: false\n";
+        }
+
+        // 4. Layout & RectTransform
+        if (node->UseRectTransform) {
+            ss << propInd << "useRectTransform: true\n";
+            ss << propInd << "anchorMin: [" << FormatFloat(node->Transform.AnchorMin.x) << ", " << FormatFloat(node->Transform.AnchorMin.y) << "]\n";
+            ss << propInd << "anchorMax: [" << FormatFloat(node->Transform.AnchorMax.x) << ", " << FormatFloat(node->Transform.AnchorMax.y) << "]\n";
+            ss << propInd << "pivot: [" << FormatFloat(node->Transform.Pivot.x) << ", " << FormatFloat(node->Transform.Pivot.y) << "]\n";
+            ss << propInd << "anchoredPosition: [" << FormatFloat(node->Transform.AnchoredPosition.x) << ", " << FormatFloat(node->Transform.AnchoredPosition.y) << "]\n";
+            ss << propInd << "sizeDelta: [" << FormatFloat(node->Transform.SizeDelta.x) << ", " << FormatFloat(node->Transform.SizeDelta.y) << "]\n";
+            if (std::abs(node->Transform.Rotation) > 1e-4f) {
+                ss << propInd << "rotation: " << FormatFloat(node->Transform.Rotation) << "\n";
+            }
+            if (std::abs(node->Transform.Scale.x - 1.0f) > 1e-4f || std::abs(node->Transform.Scale.y - 1.0f) > 1e-4f) {
+                ss << propInd << "scale: [" << FormatFloat(node->Transform.Scale.x) << ", " << FormatFloat(node->Transform.Scale.y) << "]\n";
+            }
+        } else {
+            ss << propInd << "position: [" << FormatFloat(node->Position.x) << ", " << FormatFloat(node->Position.y) << "]\n";
+            ss << propInd << "size: [" << FormatFloat(node->Size.x) << ", " << FormatFloat(node->Size.y) << "]\n";
+            if (node->Anchor != UIAnchor::TopLeft) {
+                ss << propInd << "anchor: \"" << UIAnchorToString(node->Anchor) << "\"\n";
+            }
+        }
+
+        // 5. Node Specific Properties
+        if (auto* canvas = dynamic_cast<const UICanvasNode*>(node)) {
+            ss << propInd << "referenceResolution: [" << FormatFloat(canvas->ReferenceResolution.x) << ", " << FormatFloat(canvas->ReferenceResolution.y) << "]\n";
+        } else if (auto* btn = dynamic_cast<const UIButtonNode*>(node)) {
+            ss << propInd << "normalColor: \"" << UINode::ToHexColor(btn->NormalColor) << "\"\n";
+            ss << propInd << "hoverColor: \"" << UINode::ToHexColor(btn->HoverColor) << "\"\n";
+            ss << propInd << "pressedColor: \"" << UINode::ToHexColor(btn->PressedColor) << "\"\n";
+            if (btn->Style.CornerRadius > 0.0f) {
+                ss << propInd << "cornerRadius: " << FormatFloat(btn->Style.CornerRadius) << "\n";
+            }
+            if (btn->Style.BorderWidth > 0.0f) {
+                ss << propInd << "borderWidth: " << FormatFloat(btn->Style.BorderWidth) << "\n";
+                ss << propInd << "borderColor: \"" << UINode::ToHexColor(btn->Style.BorderColor) << "\"\n";
+            }
+            if (!btn->OnClickAction.empty()) {
+                ss << propInd << "onClick: \"" << btn->OnClickAction << "\"\n";
+            }
+            if (!btn->NavUp.empty())    ss << propInd << "navUp: \"" << btn->NavUp << "\"\n";
+            if (!btn->NavDown.empty())  ss << propInd << "navDown: \"" << btn->NavDown << "\"\n";
+            if (!btn->NavLeft.empty())  ss << propInd << "navLeft: \"" << btn->NavLeft << "\"\n";
+            if (!btn->NavRight.empty()) ss << propInd << "navRight: \"" << btn->NavRight << "\"\n";
+        } else if (auto* rect = dynamic_cast<const UIRectangleNode*>(node)) {
+            std::string colBinding = getBindingExpr("color");
+            if (!colBinding.empty()) {
+                ss << propInd << "color: \"" << colBinding << "\"\n";
+            } else {
+                ss << propInd << "color: \"" << UINode::ToHexColor(rect->Style.BackgroundColor) << "\"\n";
+            }
+            if (rect->Style.CornerRadius > 0.0f) {
+                ss << propInd << "cornerRadius: " << FormatFloat(rect->Style.CornerRadius) << "\n";
+            }
+            if (rect->Style.BorderWidth > 0.0f) {
+                ss << propInd << "borderWidth: " << FormatFloat(rect->Style.BorderWidth) << "\n";
+                ss << propInd << "borderColor: \"" << UINode::ToHexColor(rect->Style.BorderColor) << "\"\n";
+            }
+        } else if (auto* text = dynamic_cast<const UITextNode*>(node)) {
+            std::string textBinding = getBindingExpr("text");
+            if (!textBinding.empty()) {
+                ss << propInd << "text: \"" << textBinding << "\"\n";
+            } else {
+                ss << propInd << "text: \"" << text->Text << "\"\n";
+            }
+            ss << propInd << "fontSize: " << FormatFloat(text->FontSize) << "\n";
+            std::string colBinding = getBindingExpr("color");
+            if (!colBinding.empty()) {
+                ss << propInd << "color: \"" << colBinding << "\"\n";
+            } else {
+                ss << propInd << "color: \"" << UINode::ToHexColor(text->Color) << "\"\n";
+            }
+            if (text->AutoSize) {
+                ss << propInd << "autoSize: true\n";
+            }
+        } else if (auto* img = dynamic_cast<const UIImageNode*>(node)) {
+            if (!img->TexturePath.empty()) {
+                ss << propInd << "texture: \"" << img->TexturePath << "\"\n";
+            }
+            ss << propInd << "tintColor: \"" << UINode::ToHexColor(img->TintColor) << "\"\n";
+        } else if (auto* bar = dynamic_cast<const UIProgressBarNode*>(node)) {
+            std::string valBinding = getBindingExpr("value");
+            if (!valBinding.empty()) {
+                ss << propInd << "value: \"" << valBinding << "\"\n";
+            } else {
+                ss << propInd << "value: " << FormatFloat(bar->Value) << "\n";
+            }
+            ss << propInd << "fillColor: \"" << UINode::ToHexColor(bar->FillColor) << "\"\n";
+            ss << propInd << "backgroundColor: \"" << UINode::ToHexColor(bar->BackgroundColor) << "\"\n";
+            if (bar->CornerRadius > 0.0f) {
+                ss << propInd << "cornerRadius: " << FormatFloat(bar->CornerRadius) << "\n";
+            }
+        } else if (auto* gauge = dynamic_cast<const UIRadialGaugeNode*>(node)) {
+            std::string valBinding = getBindingExpr("value");
+            if (!valBinding.empty()) {
+                ss << propInd << "value: \"" << valBinding << "\"\n";
+            } else {
+                ss << propInd << "value: " << FormatFloat(gauge->Value) << "\n";
+            }
+            ss << propInd << "startAngle: " << FormatFloat(gauge->StartAngle) << "\n";
+            ss << propInd << "endAngle: " << FormatFloat(gauge->EndAngle) << "\n";
+            ss << propInd << "thickness: " << FormatFloat(gauge->Thickness) << "\n";
+            ss << propInd << "color: \"" << UINode::ToHexColor(gauge->Color) << "\"\n";
+            ss << propInd << "trackColor: \"" << UINode::ToHexColor(gauge->TrackColor) << "\"\n";
+        } else if (auto* box = dynamic_cast<const UIBoxContainerNode*>(node)) {
+            if (box->Spacing > 0.0f) {
+                ss << propInd << "spacing: " << FormatFloat(box->Spacing) << "\n";
+            }
+        }
+
+        // 6. Child Elements
+        for (const UINode* child : node->Children) {
+            ss << "\n";
+            SerializeNode(child, doc, level + 1, ss);
+        }
+
+        ss << ind << "}\n";
+    }
+
+    std::string UIParser::SerializeDocument(const UIDocument& document) {
+        std::stringstream ss;
+        if (const UINode* root = document.GetRootNode()) {
+            SerializeNode(root, document, 0, ss);
+        }
+        return ss.str();
+    }
+
+    bool UIParser::SaveFile(const std::string& filepath, const UIDocument& document, std::string* outError) {
+        std::ofstream file(filepath);
+        if (!file.is_open()) {
+            if (outError) *outError = "Failed to open file for writing: " + filepath;
+            return false;
+        }
+
+        std::string serialized = SerializeDocument(document);
+        file << serialized;
+        return true;
+    }
+
 } // namespace Axle
+

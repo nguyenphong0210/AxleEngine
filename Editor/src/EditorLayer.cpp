@@ -986,6 +986,32 @@ void EditorLayer::SaveScene(const std::filesystem::path& filepath) {
 
     auto targetPath = filepath.empty() ? m_CurrentScenePath : filepath;
 
+    // Synchronize UI documents associated with UICanvasComponent
+    Axle::Scene* activeScene = m_EditorScene ? m_EditorScene.get() : m_Scene.get();
+    if (activeScene) {
+        auto view = activeScene->GetRegistry().view<Axle::UICanvasComponent>();
+        for (auto entityID : view) {
+            Axle::Entity ent{ entityID, activeScene };
+            auto& uic = ent.GetComponent<Axle::UICanvasComponent>();
+            if (uic.Document) {
+                if (uic.AssetPath.empty()) {
+                    uic.AssetPath = "assets/ui/" + ent.GetName() + ".axleui";
+                }
+                std::filesystem::path fullPath = uic.AssetPath;
+                if (!std::filesystem::exists(fullPath)) {
+                    fullPath = Axle::FileSystem::GetAssetDirectory() / uic.AssetPath;
+                }
+                if (uic.Document->IsDirty() || !std::filesystem::exists(fullPath)) {
+                    if (fullPath.has_parent_path() && !std::filesystem::exists(fullPath.parent_path())) {
+                        std::filesystem::create_directories(fullPath.parent_path());
+                    }
+                    uic.Document->SaveToFile(fullPath.string());
+                    AXLE_INFO("Synchronized UI Document for Entity '{0}' to '{1}'", ent.GetName(), fullPath.string());
+                }
+            }
+        }
+    }
+
     // Always serialize pristine EditorScene even if simulation is active (Phase 18.2)
     Axle::SceneSerializer serializer(m_EditorScene ? m_EditorScene.get() : m_Scene.get(), m_PhysicsScene.get());
     serializer.SetContext(m_SerializerContext);
@@ -2738,6 +2764,7 @@ void EditorLayer::OnImGuiRender() {
                         );
                         if (uiModified) {
                             uic.Document->UpdateLayout(glm::vec2(parentRect.Width, parentRect.Height));
+                            uic.Document->SetDirty(true);
                         }
                     }
                 }

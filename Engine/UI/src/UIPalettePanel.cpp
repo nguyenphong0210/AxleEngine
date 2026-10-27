@@ -276,6 +276,7 @@ namespace Axle {
         }
 
         doc->RebuildIDMap();
+        doc->SetDirty(true);
         AXLE_INFO("[UI Palette] Spawned stock widget '{0}' (ID: '{1}')", node ? node->GetTypeName() : "None", node ? node->ID : "");
         return node;
     }

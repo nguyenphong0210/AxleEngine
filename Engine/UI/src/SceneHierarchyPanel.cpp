@@ -1,4 +1,5 @@
 #include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/UIPalettePanel.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
@@ -467,6 +468,21 @@ namespace Axle {
                         }
                     }
 
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(UIPalettePanel::DRAG_DROP_PAYLOAD_ID)) {
+                        const char* widgetTypeName = static_cast<const char*>(payload->Data);
+                        auto canvasEntity = UIPalettePanel::GetOrCreateCanvasEntity(m_Scene);
+                        if (canvasEntity && canvasEntity.HasComponent<UICanvasComponent>()) {
+                            auto& uic = canvasEntity.GetComponent<UICanvasComponent>();
+                            if (!uic.Document) {
+                                uic.Document = std::make_shared<UIDocument>();
+                                uic.Document->CreateNode<UICanvasNode>(nullptr);
+                            }
+                            UIPalettePanel::SpawnWidgetByName(uic.Document.get(), widgetTypeName);
+                            m_SelectedEntity = canvasEntity;
+                            AXLE_INFO("Spawned UI Widget '{0}' under Root Canvas via Hierarchy Drag & Drop", widgetTypeName);
+                        }
+                    }
+
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         const char* pathStr = static_cast<const char*>(payload->Data);
                         std::filesystem::path p(pathStr);
@@ -825,6 +841,24 @@ namespace Axle {
                         AXLE_INFO("Applied Material '{0}' to Entity '{1}' via Tree Drag & Drop", p.stem().string(), tag);
                     }
                 }
+            }
+
+            // 3. Drop Stock UI Widget onto Entity (Phase 34 Step 7.4)
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(UIPalettePanel::DRAG_DROP_PAYLOAD_ID)) {
+                const char* widgetTypeName = static_cast<const char*>(payload->Data);
+                if (!entity.HasComponent<UICanvasComponent>()) {
+                    auto& uic = entity.AddComponent<UICanvasComponent>();
+                    uic.Document = std::make_shared<UIDocument>();
+                    uic.Document->CreateNode<UICanvasNode>(nullptr);
+                }
+                auto& uic = entity.GetComponent<UICanvasComponent>();
+                if (!uic.Document) {
+                    uic.Document = std::make_shared<UIDocument>();
+                    uic.Document->CreateNode<UICanvasNode>(nullptr);
+                }
+                UIPalettePanel::SpawnWidgetByName(uic.Document.get(), widgetTypeName);
+                m_SelectedEntity = entity;
+                AXLE_INFO("Spawned UI Widget '{0}' under Entity '{1}' via Tree Drag & Drop", widgetTypeName, tag);
             }
             ImGui::EndDragDropTarget();
         }

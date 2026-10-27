@@ -327,3 +327,4 @@ bool RunTest_Step91_Phase34_Step6_RacingHUDFullIntegration();
 bool RunTest_Step92_Phase34_Step7_RectTransform();
 bool RunTest_Step93_Phase34_Step7_RectTransformGizmo();
 bool RunTest_Step94_Phase34_Step7_Viewport2DModeAndGridSnapping();
+bool RunTest_Step95_Phase34_Step7_UIPaletteAndDragDropSpawner();

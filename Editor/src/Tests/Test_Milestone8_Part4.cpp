@@ -4,6 +4,7 @@
 #include <Axle/UI/RectTransformGizmo.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/PerspectiveCameraController.hpp>
+#include <Axle/UIPalettePanel.hpp>
 #include <iostream>
 #include <cstddef>
 
@@ -2124,6 +2125,267 @@ bool RunTest_Step94_Phase34_Step7_Viewport2DModeAndGridSnapping() {
     std::cout << "\n>>> STEP 94 PASSED: Viewport 2D UI Edit Mode & Grid Snapping 100% verified! <<<\n" << std::endl;
     return true;
 }
+
+// =============================================================================
+// TEST STEP 95: Phase 34 Step 7 - UI Component Palette & Drag-and-Drop Spawner
+// (Stock Primitives, Factory Spawning, Viewport Projection & Hierarchy Drop)
+// =============================================================================
+bool RunTest_Step95_Phase34_Step7_UIPaletteAndDragDropSpawner() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 95 TEST] UI COMPONENT PALETTE & DRAG-DROP SPAWNER" << std::endl;
+    std::cout << " (Stock Primitives, Factory Spawning, ScreenToCanvas)   " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    // [95.1] Stock Widget Descriptors
+    std::cout << "[95.1] Verifying Stock UI Widget Descriptors..." << std::endl;
+    {
+        const auto& widgets = UIPalettePanel::GetStockWidgets();
+        assert(widgets.size() == 7);
+
+        // Verify all 7 primitives exist with non-empty descriptors
+        bool hasCanvas = false, hasPanel = false, hasText = false;
+        bool hasImage = false, hasButton = false, hasProgressBar = false, hasRadialGauge = false;
+
+        for (const auto& w : widgets) {
+            assert(!w.Name.empty());
+            assert(!w.Category.empty());
+            assert(!w.Description.empty());
+            assert(w.DefaultSize.x > 0.0f && w.DefaultSize.y > 0.0f);
+
+            if (w.Type == UIWidgetType::Canvas) {
+                hasCanvas = true;
+                assert(w.Name == "Canvas");
+                assert(w.Category == "Containers");
+                assert(w.DefaultSize == glm::vec2(1920.0f, 1080.0f));
+            } else if (w.Type == UIWidgetType::Panel) {
+                hasPanel = true;
+                assert(w.Name == "Panel");
+                assert(w.Category == "Containers");
+                assert(w.DefaultSize == glm::vec2(300.0f, 200.0f));
+            } else if (w.Type == UIWidgetType::Text) {
+                hasText = true;
+                assert(w.Name == "Text");
+                assert(w.Category == "Basic");
+                assert(w.DefaultSize == glm::vec2(200.0f, 40.0f));
+            } else if (w.Type == UIWidgetType::Image) {
+                hasImage = true;
+                assert(w.Name == "Image");
+                assert(w.Category == "Basic");
+                assert(w.DefaultSize == glm::vec2(128.0f, 128.0f));
+            } else if (w.Type == UIWidgetType::Button) {
+                hasButton = true;
+                assert(w.Name == "Button");
+                assert(w.Category == "Controls");
+                assert(w.DefaultSize == glm::vec2(180.0f, 48.0f));
+            } else if (w.Type == UIWidgetType::ProgressBar) {
+                hasProgressBar = true;
+                assert(w.Name == "ProgressBar");
+                assert(w.Category == "Gauges");
+                assert(w.DefaultSize == glm::vec2(260.0f, 26.0f));
+            } else if (w.Type == UIWidgetType::RadialGauge) {
+                hasRadialGauge = true;
+                assert(w.Name == "RadialGauge");
+                assert(w.Category == "Gauges");
+                assert(w.DefaultSize == glm::vec2(180.0f, 180.0f));
+            }
+        }
+
+        assert(hasCanvas && hasPanel && hasText && hasImage && hasButton && hasProgressBar && hasRadialGauge);
+        assert(std::string_view(UIPalettePanel::DRAG_DROP_PAYLOAD_ID) == "AXLE_UI_WIDGET_TYPE");
+        std::cout << "  -> Stock UI widget catalog validation (7 primitives, categories, default sizes): PASS" << std::endl;
+    }
+
+    // [95.2] Factory Spawning by UIWidgetType into UIDocument
+    std::cout << "\n[95.2] Testing Factory Spawning by UIWidgetType..." << std::endl;
+    {
+        auto doc = std::make_unique<UIDocument>();
+        assert(doc->GetNodeCount() == 0);
+
+        // Spawn Canvas (becomes root)
+        UINode* canvasNode = UIPalettePanel::SpawnWidget(doc.get(), UIWidgetType::Canvas);
+        assert(canvasNode != nullptr);
+        assert(doc->GetRootNode() == canvasNode);
+        assert(canvasNode->GetTypeName() == "UICanvasNode" || dynamic_cast<UICanvasNode*>(canvasNode) != nullptr);
+
+        // Spawn Panel
+        UINode* panelNode = UIPalettePanel::SpawnWidget(doc.get(), UIWidgetType::Panel, canvasNode);
+        assert(panelNode != nullptr);
+        assert(panelNode->UseRectTransform == true);
+        assert(panelNode->Transform.SizeDelta == glm::vec2(300.0f, 200.0f));
+        assert(panelNode->Transform.Pivot == glm::vec2(0.5f, 0.5f));
+        assert(panelNode->Transform.AnchorMin == glm::vec2(0.5f, 0.5f));
+        assert(panelNode->Transform.AnchorMax == glm::vec2(0.5f, 0.5f));
+
+        // Spawn Text
+        UINode* textNode = UIPalettePanel::SpawnWidget(doc.get(), UIWidgetType::Text, canvasNode);
+        assert(textNode != nullptr);
+        assert(textNode->UseRectTransform == true);
+        assert(textNode->Transform.SizeDelta == glm::vec2(200.0f, 40.0f));
+        auto* text = dynamic_cast<UITextNode*>(textNode);
+        assert(text != nullptr);
+        assert(text->Text == "Label");
+
+        // Spawn Image
+        UINode* imgNode = UIPalettePanel::SpawnWidget(doc.get(), UIWidgetType::Image, canvasNode);
+        assert(imgNode != nullptr);
+        assert(imgNode->UseRectTransform == true);
+        assert(imgNode->Transform.SizeDelta == glm::vec2(128.0f, 128.0f));
+
+        // Spawn Button (verifying it auto-creates a child text node)
+        size_t nodeCountBeforeBtn = doc->GetNodeCount();
+        UINode* btnNode = UIPalettePanel::SpawnWidget(doc.get(), UIWidgetType::Button, canvasNode);
+        assert(btnNode != nullptr);
+        assert(btnNode->UseRectTransform == true);
+        assert(btnNode->Transform.SizeDelta == glm::vec2(180.0f, 48.0f));
+        assert(doc->GetNodeCount() == nodeCountBeforeBtn + 2); // Button + Child Label
+        assert(btnNode->Children.size() == 1);
+        auto* btnLabel = dynamic_cast<UITextNode*>(btnNode->Children[0]);
+        assert(btnLabel != nullptr);
+        assert(btnLabel->Text == "Button");
+
+        // Spawn ProgressBar
+        UINode* barNode = UIPalettePanel::SpawnWidget(doc.get(), UIWidgetType::ProgressBar, canvasNode);
+        assert(barNode != nullptr);
+        assert(barNode->UseRectTransform == true);
+        assert(barNode->Transform.SizeDelta == glm::vec2(260.0f, 26.0f));
+        auto* bar = dynamic_cast<UIProgressBarNode*>(barNode);
+        assert(bar != nullptr);
+        assert(bar->Value == 0.5f);
+
+        // Spawn RadialGauge
+        UINode* gaugeNode = UIPalettePanel::SpawnWidget(doc.get(), UIWidgetType::RadialGauge, canvasNode);
+        assert(gaugeNode != nullptr);
+        assert(gaugeNode->UseRectTransform == true);
+        assert(gaugeNode->Transform.SizeDelta == glm::vec2(180.0f, 180.0f));
+        auto* gauge = dynamic_cast<UIRadialGaugeNode*>(gaugeNode);
+        assert(gauge != nullptr);
+        assert(gauge->Thickness == 16.0f);
+
+        // Verify ID Map integrity
+        assert(doc->FindNodeByID(panelNode->ID) == panelNode);
+        assert(doc->FindNodeByID(textNode->ID) == textNode);
+        assert(doc->FindNodeByID(btnNode->ID) == btnNode);
+
+        std::cout << "  -> Factory spawning across all 7 primitives with RectTransform setup: PASS" << std::endl;
+        std::cout << "  -> Compound widget (Button + Text child node) composition: PASS" << std::endl;
+        std::cout << "  -> UIDocument ID map synchronization: PASS" << std::endl;
+    }
+
+    // [95.3] String-Based Widget Spawning & Name Aliasing
+    std::cout << "\n[95.3] Testing String-Based Widget Spawning..." << std::endl;
+    {
+        auto doc = std::make_unique<UIDocument>();
+        UINode* c = UIPalettePanel::SpawnWidgetByName(doc.get(), "Canvas");
+        assert(c != nullptr);
+
+        UINode* p1 = UIPalettePanel::SpawnWidgetByName(doc.get(), "Panel", c);
+        assert(p1 != nullptr);
+        UINode* p2 = UIPalettePanel::SpawnWidgetByName(doc.get(), "Rectangle", c); // Alias
+        assert(p2 != nullptr);
+        UINode* t = UIPalettePanel::SpawnWidgetByName(doc.get(), "Text", c);
+        assert(t != nullptr);
+        UINode* b = UIPalettePanel::SpawnWidgetByName(doc.get(), "Button", c);
+        assert(b != nullptr);
+        UINode* invalid = UIPalettePanel::SpawnWidgetByName(doc.get(), "NonExistentWidget", c);
+        assert(invalid == nullptr);
+
+        std::cout << "  -> Name resolution and alias ('Panel' / 'Rectangle') dispatch: PASS" << std::endl;
+        std::cout << "  -> Graceful null handling for unknown widget types: PASS" << std::endl;
+    }
+
+    // [95.4] Viewport ScreenToCanvas Coordinate Mapping
+    std::cout << "\n[95.4] Testing ScreenToCanvas Coordinate Transformation..." << std::endl;
+    {
+        glm::vec2 canvasRes{ 1920.0f, 1080.0f };
+
+        // Test 1: 1:1 Viewport match (1920x1080 viewport at (0, 0))
+        glm::vec2 vpMin1{ 0.0f, 0.0f };
+        glm::vec2 vpSize1{ 1920.0f, 1080.0f };
+        glm::vec2 canvasCenter1 = UIPalettePanel::ScreenToCanvas({ 960.0f, 540.0f }, vpMin1, vpSize1, canvasRes);
+        assert(std::abs(canvasCenter1.x - 960.0f) < 1e-3f);
+        assert(std::abs(canvasCenter1.y - 540.0f) < 1e-3f);
+
+        // Test 2: Uniformly scaled viewport (960x540 at offset (100, 50))
+        glm::vec2 vpMin2{ 100.0f, 50.0f };
+        glm::vec2 vpSize2{ 960.0f, 540.0f };
+        glm::vec2 canvasCenter2 = UIPalettePanel::ScreenToCanvas({ 100.0f + 480.0f, 50.0f + 270.0f }, vpMin2, vpSize2, canvasRes);
+        assert(std::abs(canvasCenter2.x - 960.0f) < 1e-3f);
+        assert(std::abs(canvasCenter2.y - 540.0f) < 1e-3f);
+
+        // Test 3: Letterboxed viewport (Pillarboxed 2560x1080 viewport with 16:9 canvas centered)
+        glm::vec2 vpMin3{ 0.0f, 0.0f };
+        glm::vec2 vpSize3{ 2560.0f, 1080.0f }; // Width excess: (2560 - 1920) / 2 = 320px black bars on left/right
+        // Center of viewport (1280, 540) should map to canvas center (960, 540)
+        glm::vec2 canvasCenter3 = UIPalettePanel::ScreenToCanvas({ 1280.0f, 540.0f }, vpMin3, vpSize3, canvasRes);
+        assert(std::abs(canvasCenter3.x - 960.0f) < 1e-3f);
+        assert(std::abs(canvasCenter3.y - 540.0f) < 1e-3f);
+
+        // Pillarbox left border at screen x = 320 should map to canvas x = 0
+        glm::vec2 canvasLeft3 = UIPalettePanel::ScreenToCanvas({ 320.0f, 540.0f }, vpMin3, vpSize3, canvasRes);
+        assert(std::abs(canvasLeft3.x - 0.0f) < 1e-3f);
+
+        // Pillarbox right border at screen x = 320 + 1920 = 2240 should map to canvas x = 1920
+        glm::vec2 canvasRight3 = UIPalettePanel::ScreenToCanvas({ 2240.0f, 540.0f }, vpMin3, vpSize3, canvasRes);
+        assert(std::abs(canvasRight3.x - 1920.0f) < 1e-3f);
+
+        std::cout << "  -> 1:1 Viewport to Canvas mapping: PASS" << std::endl;
+        std::cout << "  -> Uniformly scaled Viewport coordinate mapping: PASS" << std::endl;
+        std::cout << "  -> Pillarboxed / Letterboxed aspect-ratio fitted coordinate mapping: PASS" << std::endl;
+    }
+
+    // [95.5] Spawning Widget at Explicit Canvas Coordinates
+    std::cout << "\n[95.5] Testing Dropped Widget Canvas Positioning..." << std::endl;
+    {
+        auto doc = std::make_unique<UIDocument>();
+        auto* canvas = doc->CreateNode<UICanvasNode>(nullptr);
+        canvas->ReferenceResolution = { 1920.0f, 1080.0f };
+
+        // Drop a Panel (300x200) at Canvas coordinates (400, 300)
+        glm::vec2 dropPos{ 400.0f, 300.0f };
+        UINode* panelNode = UIPalettePanel::SpawnWidget(doc.get(), UIWidgetType::Panel, canvas, dropPos);
+        assert(panelNode != nullptr);
+
+        UIRect parentRect{ 0.0f, 0.0f, 1920.0f, 1080.0f };
+        UIRect computedRect = panelNode->Transform.ComputeRect(parentRect);
+
+        // Panel center should be at (400, 300)
+        glm::vec2 computedCenter{ computedRect.X + computedRect.Width * 0.5f, computedRect.Y + computedRect.Height * 0.5f };
+        assert(std::abs(computedCenter.x - dropPos.x) < 1e-3f);
+        assert(std::abs(computedCenter.y - dropPos.y) < 1e-3f);
+        assert(std::abs(computedRect.Width - 300.0f) < 1e-3f);
+        assert(std::abs(computedRect.Height - 200.0f) < 1e-3f);
+
+        std::cout << "  -> RectTransform SetRect alignment to dropped canvas coordinate: PASS" << std::endl;
+        std::cout << "  -> Computed bounding rectangle matches widget size delta and drop center: PASS" << std::endl;
+    }
+
+    // [95.6] GetOrCreateCanvasEntity Scene Integration
+    std::cout << "\n[95.6] Testing GetOrCreateCanvasEntity Scene Integration..." << std::endl;
+    {
+        auto scene = std::make_shared<Scene>();
+
+        // Scene initially has 0 entities with UICanvasComponent
+        Entity e1 = UIPalettePanel::GetOrCreateCanvasEntity(scene.get());
+        assert(bool(e1));
+        assert(e1.HasComponent<UICanvasComponent>());
+        assert(e1.GetComponent<UICanvasComponent>().Document != nullptr);
+        assert(e1.GetComponent<UICanvasComponent>().Document->GetRootNode() != nullptr);
+
+        // Calling again should resolve the existing entity rather than creating a duplicate
+        Entity e2 = UIPalettePanel::GetOrCreateCanvasEntity(scene.get());
+        assert(bool(e2));
+        assert(e1 == e2);
+
+        std::cout << "  -> Auto-creation of UICanvas entity with root Canvas node: PASS" << std::endl;
+        std::cout << "  -> Idempotent resolution of existing UICanvas entity: PASS" << std::endl;
+    }
+
+    std::cout << "\n>>> STEP 95 PASSED: UI Component Palette & Drag-and-Drop Spawner 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
 
 
 

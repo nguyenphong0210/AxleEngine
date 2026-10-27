@@ -14,6 +14,7 @@
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/AssemblyEditorPanel.hpp>
 #include <Axle/VFXEditorPanel.hpp>
+#include <Axle/UIPalettePanel.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
@@ -171,6 +172,7 @@ private:
     Axle::AssemblyEditorPanel m_AssemblyEditorPanel;
     Axle::VFXEditorPanel m_VFXEditorPanel;
     Axle::DebugPanel m_DebugPanel;
+    Axle::UIPalettePanel m_UIPalettePanel;
 
     // Panel Visibility Flags
     bool m_ShowSceneHierarchy = true;
@@ -179,6 +181,7 @@ private:
     bool m_ShowContentBrowser = true;
     bool m_ShowAssemblyEditor = false;
     bool m_ShowVFXEditor = false;
+    bool m_ShowUIPalette = true;
     bool m_ShowTelemetry = false;
     bool m_ResetLayout = true;
 

@@ -176,6 +176,7 @@ void EditorLayer::OnAttach() {
 
     // Connect Editor Panels
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_UIPalettePanel.SetContext(m_Scene.get());
     m_SceneHierarchyPanel.SetMeshes(m_CubeMesh, m_SphereMesh, m_CylinderMesh, m_ConeMesh, m_PlaneMesh);
     m_SceneHierarchyPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
     Axle::AssetManager::Init(Axle::FileSystem::GetAssetDirectory());
@@ -637,6 +638,7 @@ void EditorLayer::OnScenePlay() {
 
     // Update panel contexts to point to the active runtime scene
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_UIPalettePanel.SetContext(m_Scene.get());
     m_SceneHierarchyPanel.SetSelectedEntity({});
 
     m_SceneState = SceneState::Play;
@@ -790,6 +792,7 @@ void EditorLayer::NewScene() {
     cameraEntity.AddComponent<Axle::NativeScriptComponent>("VehicleChaseCamera");
 
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_UIPalettePanel.SetContext(m_Scene.get());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
     m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
     m_CompileNotificationMessage = "Created new empty scene";
@@ -964,6 +967,7 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
         }
 
         m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+        m_UIPalettePanel.SetContext(m_Scene.get());
         m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
         m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
 
@@ -1158,6 +1162,7 @@ void EditorLayer::OnSceneStop() {
 
     // Restore panel contexts to pristine EditorScene
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
+    m_UIPalettePanel.SetContext(m_Scene.get());
     m_SceneHierarchyPanel.SetSelectedEntity({});
 
     m_UseEditorCameraInPlay = false;
@@ -2012,6 +2017,7 @@ void EditorLayer::OnImGuiRender() {
             ImGui::MenuItem("Content Browser", nullptr, &m_ShowContentBrowser);
             ImGui::MenuItem("Assembly Editor", nullptr, &m_ShowAssemblyEditor);
             ImGui::MenuItem("Visual FX (VFX) Editor", nullptr, &m_ShowVFXEditor);
+            ImGui::MenuItem("UI Widget Palette", nullptr, &m_ShowUIPalette);
             ImGui::MenuItem("Performance & Debug", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             if (m_RHIViewport && m_RHIViewport->IsValid()) {
@@ -2105,6 +2111,7 @@ void EditorLayer::OnImGuiRender() {
         ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_left);
         ImGui::DockBuilderDockWindow("Viewport", dock_main);
         ImGui::DockBuilderDockWindow("Content Browser", dock_bottom);
+        ImGui::DockBuilderDockWindow("UI Widget Palette", dock_bottom);
         ImGui::DockBuilderDockWindow("Console", dock_bottom);
         ImGui::DockBuilderDockWindow("Properties", dock_right);
         ImGui::DockBuilderDockWindow("Performance & Debug", dock_right);
@@ -2431,6 +2438,43 @@ void EditorLayer::OnImGuiRender() {
                         if (Axle::ScriptRegistry::BindByName(hitEntity, scriptName)) {
                             m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
                             AXLE_INFO("Attached NativeScript '{0}' onto Entity '{1}'", scriptName, hitEntity.GetName());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Drop Stock UI Widget into Viewport Canvas (Phase 34 Step 7.4)
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(Axle::UIPalettePanel::DRAG_DROP_PAYLOAD_ID)) {
+            const char* widgetTypeName = static_cast<const char*>(payload->Data);
+            if (widgetTypeName && m_Scene) {
+                Axle::Entity canvasEntity = Axle::UIPalettePanel::GetOrCreateCanvasEntity(m_Scene.get());
+                if (canvasEntity && canvasEntity.HasComponent<Axle::UICanvasComponent>()) {
+                    auto& canvasComp = canvasEntity.GetComponent<Axle::UICanvasComponent>();
+                    if (canvasComp.Document) {
+                        glm::vec2 canvasRes(1920.0f, 1080.0f);
+                        if (auto* rootCanvas = dynamic_cast<Axle::UICanvasNode*>(canvasComp.Document->GetRootNode())) {
+                            canvasRes = rootCanvas->ReferenceResolution;
+                        }
+
+                        ImVec2 mousePos = ImGui::GetMousePos();
+                        glm::vec2 canvasPos = Axle::UIPalettePanel::ScreenToCanvas(
+                            glm::vec2(mousePos.x, mousePos.y),
+                            glm::vec2(viewportMin.x, viewportMin.y),
+                            glm::vec2(viewportBounds.x, viewportBounds.y),
+                            canvasRes
+                        );
+
+                        Axle::UINode* spawnedNode = Axle::UIPalettePanel::SpawnWidgetByName(
+                            canvasComp.Document.get(),
+                            widgetTypeName,
+                            canvasComp.Document->GetRootNode(),
+                            canvasPos
+                        );
+                        if (spawnedNode) {
+                            m_SceneHierarchyPanel.SetSelectedEntity(canvasEntity);
+                            AXLE_INFO("Dropped UI Widget '{0}' into Viewport Canvas at ({1:.1f}, {2:.1f})",
+                                widgetTypeName, canvasPos.x, canvasPos.y);
                         }
                     }
                 }
@@ -2889,7 +2933,11 @@ void EditorLayer::OnImGuiRender() {
     // 8. Content Browser Panel
     m_ContentBrowserPanel.OnImGuiRender(&m_ShowContentBrowser);
 
-
+    // 9. UI Widget Palette Panel (Phase 34 Step 7.4)
+    if (m_ShowUIPalette) {
+        m_UIPalettePanel.SetContext(m_Scene.get());
+        m_UIPalettePanel.OnImGuiRender(&m_ShowUIPalette);
+    }
 
     // 10. Assembly Editor Panel (Phase 12)
     m_AssemblyEditorPanel.OnImGuiRender(&m_ShowAssemblyEditor);

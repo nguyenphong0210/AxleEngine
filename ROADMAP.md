@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 33** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **79 Comprehensive Headless Test Suites** (`AxleTests.exe`, 86 individual test steps up through **Step 94**) passing with **100% pass rate**.
+* **Automated Test Verification**: **80 Comprehensive Headless Test Suites** (`AxleTests.exe`, 87 individual test steps up through **Step 95**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 34 (Declarative AxleUI In-Game UI & Hardware-Accelerated Canvas2D Subsystem)** and beyond.
 
 ---
@@ -452,7 +452,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **Unity-Style `RectTransform` Abstraction (`Engine/UI`)**: Geometric layout model with `AnchorMin`, `AnchorMax` (normalized [0..1] range), `Pivot` (rotational & scaling origin [0..1]), `AnchoredPosition`, and `SizeDelta` for responsive UI scaling across arbitrary viewport resolutions.
     - [x] **Interactive 2D Canvas Gizmo Handles (`Editor/`)**: Viewport canvas overlay via `ImDrawList` featuring bounding rectangle, 8 peripheral resize handles (corners and midpoints), pivot crosshair, and 4 anchor petal handles with interactive mouse dragging for position translation, dimension resizing, and anchor boundary splitting.
     - [x] **Viewport 2D UI Edit Mode Toggle**: One-click "2D / 3D" camera toggle in the Viewport toolbar, locking view orientation to an orthogonal projection facing the active canvas plane with customizable grid snapping (pixel and percentage increments).
-    - [ ] **UI Component Palette & Drag-and-Drop Spawner (`Editor/`)**: Dedicated UI Widget Palette panel containing stock primitives (`Canvas`, `Panel`, `Text`, `Image`, `Button`, `ProgressBar`, `RadialGauge`); supports native ImGui Drag-and-Drop payloads (`ImGui::BeginDragDropSource` / `ImGui::AcceptDragDropPayload`) dropped directly onto the Viewport canvas or the `SceneHierarchyPanel` tree.
+    - [x] **UI Component Palette & Drag-and-Drop Spawner (`Editor/`)**: Dedicated UI Widget Palette panel containing stock primitives (`Canvas`, `Panel`, `Text`, `Image`, `Button`, `ProgressBar`, `RadialGauge`); supports native ImGui Drag-and-Drop payloads (`ImGui::BeginDragDropSource` / `ImGui::AcceptDragDropPayload`) dropped directly onto the Viewport canvas or the `SceneHierarchyPanel` tree.
     - [ ] **Bidirectional Document Synchronization**: Visual manipulation in Viewport directly updates the active `UIDocument` DOM tree and serializes back to `.axleui` declarative documents and `.axlescene` scene files without desynchronization.
 
 ---

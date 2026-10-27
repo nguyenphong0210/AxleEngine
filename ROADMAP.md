@@ -7,9 +7,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 33** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **81 Comprehensive Headless Test Suites** (`AxleTests.exe`, 88 individual test steps up through **Step 96**) passing with **100% pass rate**.
-* **Upcoming Focus**: **Phase 34 (Declarative AxleUI In-Game UI & Hardware-Accelerated Canvas2D Subsystem)** and beyond.
+* **Completed Phases**: **Phase 1 through Phase 34** (100% implemented, verified, and stabilized).
+* **Automated Test Verification**: **81 Comprehensive Headless Test Suites** (`AxleTests.exe`, 96 individual test steps up through **Step 96**) passing with **100% pass rate**.
+* **Upcoming Focus**: **Milestone 9 (Production Hardening, Vulkan Parity & Advanced Graphics)** and beyond.
 
 ---
 
@@ -26,7 +26,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 │ [x] MILESTONE 5: Component-Driven Architecture & Standalone Runtime (Phases 20 - 23)   │
 │ [x] MILESTONE 6: AAA PBR Lighting, Soft Shadows, IBL & Audio (Phases 24 - 28)          │
 │ [x] MILESTONE 7: Large-Scale Terrain, Splines & Character Systems (Phases 29 - 30)     │
-│ [x] MILESTONE 8: Visual Effects, Modern RHI & Cross-Platform Engine (Phases 31 - 33)   │
+│ [x] MILESTONE 8: Visual Effects, Modern RHI & In-Game UI Subsystem (Phases 31 - 34)   │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -420,7 +420,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **Full Viewport Gizmo & Interaction Parity**: ImGuizmo transformation matrix decomposition and reconstruction (Translate, Rotate, Scale) verified to $<0.001$ floating-point delta, camera unprojection ray direction parity, and mouse raycasting equivalence across coordinate systems.
     - [x] **Multi-Backend Mesh Upload Bandwidth & Scene Reload Stress Testing**: High-throughput mesh vertex/index buffer streaming via `RHIStreamer`, identical draw call dispatch rates across consecutive frames, dynamic descriptor recycling, and zero memory leaks across multi-cycle scene reload stress tests.
     - [x] **Automated Test Suite Step 84 (`AxleTests.exe 84`)**: 5-stage headless test suite validating CLI argument parser across all flags, `ProjectConfig` and `ProjectSerializer` roundtrip persistence across all backends, triple-backend RHI resolver and capability inspection, Viewport camera matrix orthogonality and ImGuizmo TRS decomposition, and multi-backend mesh upload / draw call dispatch with zero memory leaks (100% PASS).
-- [ ] **Phase 34: Declarative AxleUI In-Game UI & Hardware-Accelerated `Canvas2D` Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
+- [x] **Phase 34: Declarative AxleUI In-Game UI & Hardware-Accelerated `Canvas2D` Subsystem (`Engine/UI` & `Engine/Renderer`) [Direction B]**
   - [x] **Step 1 - Decoupled `AxleUI2D` Library, `Canvas2D` Batch Renderer & Procedural SDF Uber-Shader (`Engine/UI`)**:
     - [x] Decouple In-Game UI from Editor ImGui by establishing the clean static library `AxleUI2D` (`Axle::UI2D`) linking only to `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, and `Axle::RHI`.
     - [x] High-performance 2D batch renderer (`Canvas2D`) operating natively across Direct3D 12, Vulkan 1.3, and OpenGL 4.5 via per-frame dynamic host-visible ring buffers (`RHIBuffer`) with embedded GLSL fallback for OpenGL.

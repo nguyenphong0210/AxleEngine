@@ -22,8 +22,14 @@
 #if defined(AXLE_HAS_VULKAN)
 #include <imgui_impl_vulkan.h>
 #endif
+#include <filesystem>
 
 namespace Axle {
+
+    ::ImFont* ImGuiLayer::s_RegularFont = nullptr;
+    ::ImFont* ImGuiLayer::s_BoldFont    = nullptr;
+    ::ImFont* ImGuiLayer::s_HeaderFont  = nullptr;
+    ::ImFont* ImGuiLayer::s_CodeFont    = nullptr;
 
     static void UpdateWindowSnapping() {
         ImGuiContext* g = ImGui::GetCurrentContext();
@@ -161,15 +167,64 @@ namespace Axle {
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
+        // --- Crisp Typography: High-DPI Vector Fonts (Unity Style Segoe UI) ---
+        ImFontConfig fontConfig;
+        fontConfig.OversampleH = 3;
+        fontConfig.OversampleV = 2;
+        fontConfig.PixelSnapH = false;
+
+        const char* regularFontPath = "C:/Windows/Fonts/segoeui.ttf";
+        const char* boldFontPath    = "C:/Windows/Fonts/segoeuib.ttf";
+        const char* codeFontPath    = "C:/Windows/Fonts/consola.ttf";
+
+        if (std::filesystem::exists(regularFontPath)) {
+            s_RegularFont = io.Fonts->AddFontFromFileTTF(regularFontPath, 15.5f, &fontConfig);
+            io.FontDefault = s_RegularFont;
+        } else {
+            s_RegularFont = io.Fonts->AddFontDefault();
+        }
+
+        if (std::filesystem::exists(boldFontPath)) {
+            s_BoldFont = io.Fonts->AddFontFromFileTTF(boldFontPath, 15.5f, &fontConfig);
+            s_HeaderFont = io.Fonts->AddFontFromFileTTF(boldFontPath, 17.5f, &fontConfig);
+        } else {
+            s_BoldFont = s_RegularFont;
+            s_HeaderFont = s_RegularFont;
+        }
+
+        if (std::filesystem::exists(codeFontPath)) {
+            s_CodeFont = io.Fonts->AddFontFromFileTTF(codeFontPath, 13.5f, &fontConfig);
+        } else {
+            s_CodeFont = s_RegularFont;
+        }
+
         SetDarkThemeColors();
 
+        // --- Unity Editor Ergonomic Metrics ---
         ImGuiStyle& style = ImGui::GetStyle();
-        style.WindowRounding = 6.0f;
-        style.FrameRounding = 4.0f;
-        style.PopupRounding = 4.0f;
-        style.ScrollbarRounding = 4.0f;
-        style.GrabRounding = 4.0f;
-        style.TabRounding = 4.0f;
+        style.WindowRounding    = 0.0f; // Flat docked panels like Unity
+        style.ChildRounding     = 3.0f;
+        style.FrameRounding     = 3.5f; // Unity input/button rounded edges
+        style.PopupRounding     = 4.0f;
+        style.ScrollbarRounding = 6.0f;
+        style.GrabRounding      = 3.0f;
+        style.TabRounding       = 3.0f;
+
+        style.WindowPadding     = ImVec2(8.0f, 8.0f);
+        style.FramePadding      = ImVec2(7.0f, 4.0f);
+        style.CellPadding       = ImVec2(4.0f, 3.0f);
+        style.ItemSpacing       = ImVec2(6.0f, 4.0f);
+        style.ItemInnerSpacing  = ImVec2(4.0f, 4.0f);
+        style.TouchExtraPadding = ImVec2(0.0f, 0.0f);
+        style.IndentSpacing     = 14.0f;
+        style.ScrollbarSize     = 13.0f;
+        style.GrabMinSize       = 10.0f;
+
+        style.WindowBorderSize  = 1.0f;
+        style.ChildBorderSize   = 1.0f;
+        style.PopupBorderSize   = 1.0f;
+        style.FrameBorderSize   = 1.0f;
+        style.TabBorderSize     = 1.0f;
 
         switch (m_BackendType) {
             case ImGuiBackendType::OpenGL:
@@ -691,34 +746,80 @@ namespace Axle {
         ImGui::StyleColorsDark();
 
         auto& colors = ImGui::GetStyle().Colors;
-        colors[ImGuiCol_WindowBg] = ImVec4{ 0.1f, 0.105f, 0.11f, 1.0f };
 
-        // Headers
-        colors[ImGuiCol_Header] = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
-        colors[ImGuiCol_HeaderHovered] = ImVec4{ 0.3f, 0.305f, 0.31f, 1.0f };
-        colors[ImGuiCol_HeaderActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        // Base text & background (Unity Charcoal Dark)
+        colors[ImGuiCol_Text]                  = ImVec4(0.85f, 0.85f, 0.85f, 1.0f); // #D9D9D9
+        colors[ImGuiCol_TextDisabled]          = ImVec4(0.50f, 0.50f, 0.50f, 1.0f); // #808080
+        colors[ImGuiCol_WindowBg]              = ImVec4(0.155f, 0.155f, 0.155f, 1.0f); // #282828 (Unity Signature Slate)
+        colors[ImGuiCol_ChildBg]               = ImVec4(0.133f, 0.133f, 0.133f, 1.0f); // #222222
+        colors[ImGuiCol_PopupBg]               = ImVec4(0.165f, 0.165f, 0.165f, 0.98f); // #2A2A2A
+        colors[ImGuiCol_Border]                = ImVec4(0.10f, 0.10f, 0.10f, 1.0f); // #1A1A1A (Subtle 1px border)
+        colors[ImGuiCol_BorderShadow]          = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+
+        // Frame background (Inputs, check boxes, combo boxes)
+        colors[ImGuiCol_FrameBg]               = ImVec4(0.165f, 0.165f, 0.165f, 1.0f); // #2A2A2A
+        colors[ImGuiCol_FrameBgHovered]        = ImVec4(0.22f, 0.22f, 0.22f, 1.0f); // #383838
+        colors[ImGuiCol_FrameBgActive]         = ImVec4(0.26f, 0.26f, 0.26f, 1.0f); // #424242
+
+        // Title and Menu Bars
+        colors[ImGuiCol_TitleBg]               = ImVec4(0.12f, 0.12f, 0.12f, 1.0f); // #1F1F1F
+        colors[ImGuiCol_TitleBgActive]         = ImVec4(0.155f, 0.155f, 0.155f, 1.0f); // #282828
+        colors[ImGuiCol_TitleBgCollapsed]      = ImVec4(0.12f, 0.12f, 0.12f, 0.75f);
+        colors[ImGuiCol_MenuBarBg]             = ImVec4(0.12f, 0.12f, 0.12f, 1.0f); // #1F1F1F
+
+        // Scrollbars
+        colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.13f, 0.13f, 0.13f, 0.60f);
+        colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.28f, 0.28f, 0.28f, 1.0f); // #474747
+        colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.36f, 0.36f, 0.36f, 1.0f); // #5C5C5C
+        colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.44f, 0.44f, 0.44f, 1.0f); // #707070
+
+        // Sliders & Checkmarks (Unity Selection Blue #3A79B8)
+        colors[ImGuiCol_CheckMark]             = ImVec4(0.23f, 0.47f, 0.72f, 1.0f); // #3A79B8
+        colors[ImGuiCol_SliderGrab]            = ImVec4(0.38f, 0.38f, 0.38f, 1.0f); // #606060
+        colors[ImGuiCol_SliderGrabActive]      = ImVec4(0.23f, 0.47f, 0.72f, 1.0f); // #3A79B8
 
         // Buttons
-        colors[ImGuiCol_Button] = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
-        colors[ImGuiCol_ButtonHovered] = ImVec4{ 0.3f, 0.305f, 0.31f, 1.0f };
-        colors[ImGuiCol_ButtonActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        colors[ImGuiCol_Button]                = ImVec4(0.22f, 0.22f, 0.22f, 1.0f); // #383838
+        colors[ImGuiCol_ButtonHovered]         = ImVec4(0.28f, 0.28f, 0.28f, 1.0f); // #484848
+        colors[ImGuiCol_ButtonActive]          = ImVec4(0.18f, 0.18f, 0.18f, 1.0f); // #2E2E2E
 
-        // Frame BG
-        colors[ImGuiCol_FrameBg] = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
-        colors[ImGuiCol_FrameBgHovered] = ImVec4{ 0.3f, 0.305f, 0.31f, 1.0f };
-        colors[ImGuiCol_FrameBgActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        // Headers (CollapsingHeader, TreeNodes)
+        colors[ImGuiCol_Header]                = ImVec4(0.20f, 0.20f, 0.20f, 1.0f); // #333333
+        colors[ImGuiCol_HeaderHovered]         = ImVec4(0.26f, 0.26f, 0.26f, 1.0f); // #424242
+        colors[ImGuiCol_HeaderActive]          = ImVec4(0.23f, 0.47f, 0.72f, 0.85f); // #3A79B8
 
-        // Tabs
-        colors[ImGuiCol_Tab] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
-        colors[ImGuiCol_TabHovered] = ImVec4{ 0.38f, 0.3805f, 0.381f, 1.0f };
-        colors[ImGuiCol_TabActive] = ImVec4{ 0.28f, 0.2805f, 0.281f, 1.0f };
-        colors[ImGuiCol_TabUnfocused] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
-        colors[ImGuiCol_TabUnfocusedActive] = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
+        // Separators
+        colors[ImGuiCol_Separator]             = ImVec4(0.12f, 0.12f, 0.12f, 1.0f); // #1F1F1F
+        colors[ImGuiCol_SeparatorHovered]      = ImVec4(0.23f, 0.47f, 0.72f, 0.78f);
+        colors[ImGuiCol_SeparatorActive]       = ImVec4(0.23f, 0.47f, 0.72f, 1.0f);
 
-        // Title
-        colors[ImGuiCol_TitleBg] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
-        colors[ImGuiCol_TitleBgActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
-        colors[ImGuiCol_TitleBgCollapsed] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        // Resize Grips
+        colors[ImGuiCol_ResizeGrip]            = ImVec4(0.20f, 0.20f, 0.20f, 0.50f);
+        colors[ImGuiCol_ResizeGripHovered]     = ImVec4(0.23f, 0.47f, 0.72f, 0.75f);
+        colors[ImGuiCol_ResizeGripActive]      = ImVec4(0.23f, 0.47f, 0.72f, 0.90f);
+
+        // Tabs (Unity Tab bar styling)
+        colors[ImGuiCol_Tab]                   = ImVec4(0.14f, 0.14f, 0.14f, 1.0f); // #242424
+        colors[ImGuiCol_TabHovered]            = ImVec4(0.24f, 0.24f, 0.24f, 1.0f); // #3D3D3D
+        colors[ImGuiCol_TabActive]             = ImVec4(0.19f, 0.19f, 0.19f, 1.0f); // #303030
+        colors[ImGuiCol_TabUnfocused]          = ImVec4(0.12f, 0.12f, 0.12f, 1.0f); // #1F1F1F
+        colors[ImGuiCol_TabUnfocusedActive]   = ImVec4(0.16f, 0.16f, 0.16f, 1.0f); // #292929
+
+        // Docking Preview & Empty space
+        colors[ImGuiCol_DockingPreview]        = ImVec4(0.23f, 0.47f, 0.72f, 0.45f);
+        colors[ImGuiCol_DockingEmptyBg]        = ImVec4(0.10f, 0.10f, 0.10f, 1.0f);
+
+        // Tables & Lists
+        colors[ImGuiCol_TableHeaderBg]         = ImVec4(0.16f, 0.16f, 0.16f, 1.0f);
+        colors[ImGuiCol_TableBorderStrong]     = ImVec4(0.12f, 0.12f, 0.12f, 1.0f);
+        colors[ImGuiCol_TableBorderLight]      = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
+        colors[ImGuiCol_TableRowBg]            = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+        colors[ImGuiCol_TableRowBgAlt]         = ImVec4(1.0f, 1.0f, 1.0f, 0.02f);
+
+        // Highlight, Drag Drop and Selection
+        colors[ImGuiCol_TextSelectedBg]        = ImVec4(0.23f, 0.47f, 0.72f, 0.40f);
+        colors[ImGuiCol_DragDropTarget]        = ImVec4(0.23f, 0.47f, 0.72f, 0.95f);
+        colors[ImGuiCol_NavHighlight]          = ImVec4(0.23f, 0.47f, 0.72f, 0.80f);
     }
 
 }

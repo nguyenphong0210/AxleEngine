@@ -64,11 +64,24 @@ namespace Axle {
 
         auto& component = entity.GetComponent<T>();
         ImVec2 contentRegionAvailable = ImGui::GetContentRegionAvail();
+        float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{ 4.0f, 4.0f });
-        float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
         ImGui::Separator();
-        bool open = ImGui::TreeNodeEx((void*)typeid(T).hash_code(), treeNodeFlags, "%s", name.c_str());
+
+        std::string icon = "• ";
+        if (name == "Transform") icon = "📐 ";
+        else if (name.find("Mesh") != std::string::npos) icon = "🧊 ";
+        else if (name.find("Camera") != std::string::npos) icon = "📷 ";
+        else if (name.find("Light") != std::string::npos) icon = "💡 ";
+        else if (name.find("UI") != std::string::npos || name.find("Canvas") != std::string::npos) icon = "🖼️ ";
+        else if (name.find("Audio") != std::string::npos) icon = "🔊 ";
+        else if (name.find("VFX") != std::string::npos || name.find("Particle") != std::string::npos) icon = "🎆 ";
+        else if (name.find("Physics") != std::string::npos || name.find("Body") != std::string::npos || name.find("Collision") != std::string::npos) icon = "⚡ ";
+        else if (name.find("Script") != std::string::npos) icon = "📜 ";
+
+        std::string componentTitle = icon + name;
+        bool open = ImGui::TreeNodeEx((void*)typeid(T).hash_code(), treeNodeFlags, "%s", componentTitle.c_str());
         ImGui::PopStyleVar();
 
         bool removeComponent = false;
@@ -85,14 +98,18 @@ namespace Axle {
             ImGui::EndPopup();
         }
 
-        // Right-aligned settings button on header
-        ImGui::SameLine(contentRegionAvailable.x - lineHeight * 0.5f);
-        std::string btnId = "+##" + name;
-        if (ImGui::Button(btnId.c_str(), ImVec2{ lineHeight, lineHeight })) {
+        // Right-aligned settings button on header (Unity vertical ellipsis ⋮)
+        ImGui::SameLine(contentRegionAvailable.x - lineHeight * 0.7f);
+        std::string btnId = "...##" + name;
+        if (ImGui::Button(btnId.c_str(), ImVec2{ lineHeight * 0.9f, lineHeight })) {
             ImGui::OpenPopup("ComponentSettings");
         }
 
         if (ImGui::BeginPopup("ComponentSettings")) {
+            if (ImGui::MenuItem("Reset")) {
+                // Reset component parameters to defaults
+            }
+            ImGui::Separator();
             if (canRemove) {
                 if (ImGui::MenuItem("Remove Component")) {
                     removeComponent = true;
@@ -123,18 +140,56 @@ namespace Axle {
             return;
         }
 
-        // Tag Component
+        // Tag Component (Unity Signature Entity Inspector Header)
         if (entity.HasComponent<TagComponent>()) {
             auto& tag = entity.GetComponent<TagComponent>().Tag;
             char buffer[256];
             std::memset(buffer, 0, sizeof(buffer));
             std::strncpy(buffer, tag.c_str(), sizeof(buffer) - 1);
 
+            // Active Checkbox + Large Entity Name
+            static bool s_EntityActive = true;
+            ImGui::Checkbox("##Active", &s_EntityActive);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enable / Disable Entity");
+            ImGui::SameLine();
+
             ImGui::PushItemWidth(-1);
             if (ImGui::InputText("##Tag", buffer, sizeof(buffer))) {
                 tag = std::string(buffer);
             }
             ImGui::PopItemWidth();
+
+            // Unity Subheader: Tag | Layer | Static
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
+            ImGui::TextDisabled("Tag:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(90.0f);
+            if (ImGui::BeginCombo("##EntityTagCombo", "Untagged")) {
+                if (ImGui::Selectable("Untagged")) {}
+                if (ImGui::Selectable("MainCamera")) {}
+                if (ImGui::Selectable("Player")) {}
+                if (ImGui::Selectable("Vehicle")) {}
+                if (ImGui::Selectable("FinishLine")) {}
+                ImGui::EndCombo();
+            }
+
+            ImGui::SameLine();
+            ImGui::TextDisabled("Layer:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(85.0f);
+            if (ImGui::BeginCombo("##EntityLayerCombo", "Default")) {
+                if (ImGui::Selectable("Default")) {}
+                if (ImGui::Selectable("TransparentFX")) {}
+                if (ImGui::Selectable("Ignore Raycast")) {}
+                if (ImGui::Selectable("Water")) {}
+                if (ImGui::Selectable("UI")) {}
+                ImGui::EndCombo();
+            }
+
+            ImGui::SameLine();
+            static bool s_Static = false;
+            ImGui::Checkbox("Static", &s_Static);
+            ImGui::PopStyleVar();
 
             if (entity.HasComponent<IDComponent>()) {
                 uint64_t uuid = (uint64_t)entity.GetComponent<IDComponent>().ID;
@@ -2086,20 +2141,28 @@ namespace Axle {
             m_CustomComponentDrawer(entity);
         }
 
-        // --- ADD COMPONENT BUTTON ---
+        // --- UNITY STYLE ADD COMPONENT BUTTON ---
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
         float availWidth = ImGui::GetContentRegionAvail().x;
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.85f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.55f, 0.95f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.35f, 0.75f, 1.0f));
-        if (ImGui::Button("+ Add Component", ImVec2(availWidth, 30.0f))) {
+        float btnWidth = std::min(230.0f, availWidth * 0.85f);
+        float offsetX = (availWidth - btnWidth) * 0.5f;
+        if (offsetX > 0.0f) {
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.24f, 0.24f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.32f, 0.32f, 0.32f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.20f, 0.20f, 1.0f));
+        if (ImGui::Button("Add Component", ImVec2(btnWidth, 28.0f))) {
             ImGui::OpenPopup("AddComponentPopup");
             m_ComponentSearchFilter[0] = '\0';
         }
         ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar();
 
         DrawAddComponentPopup(entity);
     }

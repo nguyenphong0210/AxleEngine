@@ -628,6 +628,10 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
 void EditorLayer::OnScenePlay() {
     if (m_SceneState == SceneState::Play) return;
 
+    if (m_ConsolePanel.GetClearOnPlay()) {
+        m_ConsolePanel.Clear();
+    }
+
     m_SceneHierarchyPanel.StopAudioPreview();
 
     CompileAndHotReloadAssets(false);
@@ -1566,7 +1570,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
 
 void EditorLayer::RenderToolbar() {
     const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
-    const float toolbarHeight = 36.0f;
+    const float toolbarHeight = 38.0f;
 
     ImGui::SetNextWindowPos(mainViewport->WorkPos);
     ImGui::SetNextWindowSize(ImVec2(mainViewport->WorkSize.x, toolbarHeight));
@@ -1580,132 +1584,81 @@ void EditorLayer::RenderToolbar() {
                                   | ImGuiWindowFlags_NoSavedSettings;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 5.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
 
     if (ImGui::Begin("##FixedTopToolbar", nullptr, toolbarFlags)) {
-        auto DrawToolButton = [](const char* label, bool active, ImVec2 size) -> bool {
+        // Draw subtle bottom border line for Unity Main Toolbar
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 winMin = ImGui::GetWindowPos();
+        ImVec2 winMax = ImVec2(winMin.x + ImGui::GetWindowWidth(), winMin.y + toolbarHeight);
+        dl->AddLine(ImVec2(winMin.x, winMax.y - 1.0f), ImVec2(winMax.x, winMax.y - 1.0f), IM_COL32(24, 24, 24, 255));
+
+        auto DrawSegmentedToolButton = [](const char* label, const char* tooltip, bool active, ImVec2 size) -> bool {
             if (active) {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.85f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.55f, 0.95f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.35f, 0.75f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.30f, 0.30f, 0.30f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.35f, 0.35f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.23f, 0.47f, 0.72f, 1.0f)); // Unity selection outline
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
             }
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
             bool clicked = ImGui::Button(label, size);
-            if (active) {
-                ImGui::PopStyleColor(3);
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(4);
+            if (ImGui::IsItemHovered() && tooltip) {
+                ImGui::SetTooltip("%s", tooltip);
             }
             return clicked;
         };
 
-        // --- 1. QUICK SCENE SAVE (Unreal Engine Style) ---
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.44f, 0.74f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.54f, 0.88f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.36f, 0.62f, 1.0f));
-        if (ImGui::Button("Save", ImVec2(56.0f, 26.0f))) {
-            SaveScene();
-        }
-        ImGui::PopStyleColor(3);
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Save active scene to file (Ctrl+S)");
-        }
-
-        ImGui::SameLine();
-
-        // --- 2. UNREAL-STYLE SCRIPT COMPILE & HOT-RELOAD BUTTON ---
-        auto& scriptCompiler = Axle::ScriptCompiler::Get();
-        const bool isCompilingScripts = scriptCompiler.IsCompiling();
-
-        if (isCompilingScripts) {
-            float time = (float)ImGui::GetTime();
-            float pulse = 0.70f + 0.30f * sinf(time * 6.0f);
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f * pulse, 0.60f * pulse, 0.10f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.70f, 0.20f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.75f, 0.50f, 0.05f, 1.0f));
-
-            int dotCount = ((int)(time * 3.0f)) % 4;
-            std::string dots(dotCount, '.');
-            std::string compText = "Compiling" + dots;
-            ImGui::Button(compText.c_str(), ImVec2(105.0f, 26.0f));
-            ImGui::PopStyleColor(3);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Building AxleScripts.dll asynchronously in background...");
-            }
-        } else if (m_ScriptCompileStatusTimer > 0.0f) {
-            ImGui::PushStyleColor(ImGuiCol_Button, m_ScriptCompileStatusColor);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, m_ScriptCompileStatusColor);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, m_ScriptCompileStatusColor);
-            if (ImGui::Button(m_ScriptCompileStatusText.c_str(), ImVec2(125.0f, 26.0f))) {
-                TriggerScriptCompilationAndReload();
-            }
-            ImGui::PopStyleColor(3);
-            if (ImGui::IsItemHovered()) {
-                auto lastRes = scriptCompiler.GetLastResult();
-                if (!lastRes.Success && !lastRes.Diagnostics.empty()) {
-                    std::string errSummary = "Compilation Diagnostics:\n";
-                    for (const auto& diag : lastRes.Diagnostics) {
-                        errSummary += " - " + diag.File + "(" + std::to_string(diag.Line) + "): " + diag.Message + "\n";
-                    }
-                    ImGui::SetTooltip("%s", errSummary.c_str());
-                } else {
-                    ImGui::SetTooltip("Click to Recompile C++ Scripts (F9 / Ctrl+B)");
-                }
-            }
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.23f, 0.28f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.33f, 0.40f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.19f, 0.23f, 1.0f));
-            if (ImGui::Button("Compile (F9)", ImVec2(105.0f, 26.0f))) {
-                TriggerScriptCompilationAndReload();
-            }
-            ImGui::PopStyleColor(3);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Compile C++ Scripts & Hot-Reload DLL (F9 / Ctrl+B)");
-            }
-        }
-
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.35f, 0.38f, 0.44f, 1.0f), "|");
-        ImGui::SameLine();
-
-        // --- 2.5. VIEWPORT 2D / 3D CAMERA TOGGLE (Phase 34 Step 7.3) ---
+        // --- 1. LEFT CLUSTER: Unity Transform Tools (Hand/Move/Rotate/Scale/Rect) ---
         bool is2DMode = m_CameraController ? m_CameraController->Is2DMode() : false;
-        if (DrawToolButton(is2DMode ? "2D" : "2D", is2DMode, ImVec2(38.0f, 26.0f))) {
-            Set2DViewMode(!is2DMode);
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Toggle Viewport 2D UI Edit Mode\nLocks camera orientation to orthogonal projection facing the active canvas plane");
-        }
+        const ImVec2 toolBtnSize(32.0f, 26.0f);
 
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.35f, 0.38f, 0.44f, 1.0f), "|");
-        ImGui::SameLine();
-
-        // --- 3. GIZMO TRANSFORMATION TOOLS ---
-        if (DrawToolButton("Select (Q)", m_GizmoType == -1, ImVec2(76.0f, 26.0f))) {
+        if (DrawSegmentedToolButton("Select", "Select Tool (Q)", m_GizmoType == -1 && !is2DMode, ImVec2(52.0f, 26.0f))) {
             m_GizmoType = -1;
         }
         ImGui::SameLine();
-        if (DrawToolButton("Move (W)", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE, ImVec2(70.0f, 26.0f))) {
+        if (DrawSegmentedToolButton("Move", "Move Tool (W)", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE, ImVec2(48.0f, 26.0f))) {
             m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
         }
         ImGui::SameLine();
-        if (DrawToolButton("Rotate (E)", m_GizmoType == ImGuizmo::OPERATION::ROTATE, ImVec2(76.0f, 26.0f))) {
+        if (DrawSegmentedToolButton("Rotate", "Rotate Tool (E)", m_GizmoType == ImGuizmo::OPERATION::ROTATE, ImVec2(54.0f, 26.0f))) {
             m_GizmoType = ImGuizmo::OPERATION::ROTATE;
         }
         ImGui::SameLine();
-        if (DrawToolButton("Scale (R)", m_GizmoType == ImGuizmo::OPERATION::SCALE, ImVec2(70.0f, 26.0f))) {
+        if (DrawSegmentedToolButton("Scale", "Scale Tool (R)", m_GizmoType == ImGuizmo::OPERATION::SCALE, ImVec2(48.0f, 26.0f))) {
             m_GizmoType = ImGuizmo::OPERATION::SCALE;
         }
         ImGui::SameLine();
-        const char* modeLabel = m_GizmoModeLocal ? "Coord: Local" : "Coord: World";
-        if (ImGui::Button(modeLabel, ImVec2(96.0f, 26.0f))) {
+        if (DrawSegmentedToolButton("Rect", "Rect Tool / 2D UI Edit Mode (T)", is2DMode, ImVec2(44.0f, 26.0f))) {
+            Set2DViewMode(!is2DMode);
+        }
+
+        ImGui::SameLine();
+        ImGui::Spacing();
+        ImGui::SameLine();
+
+        // Pivot / Center and Local / Global Toggles (Unity Standard)
+        const char* coordLabel = m_GizmoModeLocal ? "Local" : "Global";
+        if (ImGui::Button(coordLabel, ImVec2(56.0f, 26.0f))) {
             m_GizmoModeLocal = !m_GizmoModeLocal;
         }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Toggle Gizmo Orientation: Local vs Global coordinates");
+        }
+
         ImGui::SameLine();
         ImGui::Checkbox("Snap", &m_SnapEnabled);
         if (m_SnapEnabled) {
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(65.0f);
+            ImGui::SetNextItemWidth(60.0f);
             if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) {
                 ImGui::DragFloat("##SnapRot", &m_SnapRotation, 1.0f, 1.0f, 90.0f, "%.0f deg");
             } else if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
@@ -1715,132 +1668,133 @@ void EditorLayer::RenderToolbar() {
             }
         }
 
-        // 2D UI Grid Snapping controls (Pixel and Percentage increments)
-        if (is2DMode) {
-            ImGui::SameLine();
-            if (ImGui::Checkbox("UI Snap", &m_UI2DSnapEnabled)) {
-                Axle::RectTransformGizmo::Get().GetSettings().SnapToGrid = m_UI2DSnapEnabled;
-            }
-            if (m_UI2DSnapEnabled) {
-                ImGui::SameLine();
-                const char* snapModeStr = m_UI2DSnapIsPercentage ? "%" : "px";
-                if (ImGui::Button(snapModeStr, ImVec2(30.0f, 26.0f))) {
-                    m_UI2DSnapIsPercentage = !m_UI2DSnapIsPercentage;
-                    Axle::RectTransformGizmo::Get().GetSettings().SnapIsPercentage = m_UI2DSnapIsPercentage;
-                }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Toggle between Pixel (px) and Percentage (%%) grid increments");
-                }
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.30f, 0.30f, 0.30f, 1.0f), "|");
+        ImGui::SameLine();
 
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(70.0f);
-                if (m_UI2DSnapIsPercentage) {
-                    if (ImGui::DragFloat("##UISnapPct", &m_UI2DSnapPercent, 1.0f, 1.0f, 50.0f, "%.0f %%")) {
-                        Axle::RectTransformGizmo::Get().GetSettings().SnapPercent = m_UI2DSnapPercent;
-                    }
-                } else {
-                    if (ImGui::DragFloat("##UISnapPix", &m_UI2DSnapPixel, 1.0f, 1.0f, 100.0f, "%.0f px")) {
-                        Axle::RectTransformGizmo::Get().GetSettings().SnapIncrement = m_UI2DSnapPixel;
-                    }
-                }
-            }
+        // Save & Compile buttons
+        if (ImGui::Button("Save", ImVec2(52.0f, 26.0f))) {
+            SaveScene();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Save active scene (Ctrl+S)");
         }
 
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
-        ImGui::SameLine();
-
-        // --- 1. PLAY BUTTON ---
-        if (m_SceneState == SceneState::Play) {
-            ImGui::BeginDisabled(true);
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.50f, 0.25f, 0.5f));
-            ImGui::Button("Playing (F5)", ImVec2(100.0f, 26.0f));
+        auto& scriptCompiler = Axle::ScriptCompiler::Get();
+        const bool isCompilingScripts = scriptCompiler.IsCompiling();
+        if (isCompilingScripts) {
+            float time = (float)ImGui::GetTime();
+            float pulse = 0.70f + 0.30f * sinf(time * 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f * pulse, 0.60f * pulse, 0.10f, 1.0f));
+            int dotCount = ((int)(time * 3.0f)) % 4;
+            std::string compText = "Compiling" + std::string(dotCount, '.');
+            ImGui::Button(compText.c_str(), ImVec2(92.0f, 26.0f));
             ImGui::PopStyleColor();
-            ImGui::EndDisabled();
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.72f, 0.28f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.85f, 0.35f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.60f, 0.22f, 1.0f));
-            if (ImGui::Button("Play (F5)", ImVec2(100.0f, 26.0f))) {
-                OnScenePlay();
+        } else if (m_ScriptCompileStatusTimer > 0.0f) {
+            ImGui::PushStyleColor(ImGuiCol_Button, m_ScriptCompileStatusColor);
+            if (ImGui::Button(m_ScriptCompileStatusText.c_str(), ImVec2(100.0f, 26.0f))) {
+                TriggerScriptCompilationAndReload();
             }
-            ImGui::PopStyleColor(3);
+            ImGui::PopStyleColor();
+        } else {
+            if (ImGui::Button("Compile (F9)", ImVec2(92.0f, 26.0f))) {
+                TriggerScriptCompilationAndReload();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Compile C++ Scripts & Hot-Reload DLL (F9 / Ctrl+B)");
+            }
         }
 
-        // --- 2. PAUSE BUTTON ---
-        ImGui::SameLine();
+        // --- 2. CENTER CLUSTER: Unity Signature Transport Pill (Play / Pause / Step / Reset) ---
+        const float centerClusterWidth = 240.0f;
+        const float centerTargetX = (mainViewport->WorkSize.x - centerClusterWidth) * 0.5f;
+        if (ImGui::GetCursorPosX() < centerTargetX) {
+            ImGui::SameLine(centerTargetX);
+        }
+
+        // Play Button (Unity iconic Play button)
+        const ImVec2 transportBtnSize(54.0f, 26.0f);
         if (m_SceneState == SceneState::Play) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.88f, 0.48f, 0.12f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.98f, 0.58f, 0.18f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.75f, 0.40f, 0.10f, 1.0f));
-            if (ImGui::Button("Pause (F6)", ImVec2(100.0f, 26.0f))) {
-                OnScenePause();
-            }
-            ImGui::PopStyleColor(3);
-        } else if (m_SceneState == SceneState::Pause) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.72f, 0.28f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.85f, 0.35f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.60f, 0.22f, 1.0f));
-            if (ImGui::Button("Resume (F6)", ImVec2(100.0f, 26.0f))) {
-                OnScenePlay();
-            }
-            ImGui::PopStyleColor(3);
-        } else {
-            ImGui::BeginDisabled(true);
-            ImGui::Button("Pause", ImVec2(100.0f, 26.0f));
-            ImGui::EndDisabled();
-        }
-
-        // --- 3. STOP BUTTON ---
-        ImGui::SameLine();
-        if (m_SceneState != SceneState::Edit) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.18f, 0.20f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.25f, 0.28f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.14f, 0.16f, 1.0f));
-            if (ImGui::Button("Stop (F7)", ImVec2(90.0f, 26.0f))) {
+            // Active Play state in Unity: blue/cyan highlight
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.45f, 0.72f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.55f, 0.82f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.38f, 0.62f, 1.0f));
+            if (ImGui::Button("Stop", transportBtnSize)) {
                 OnSceneStop();
             }
             ImGui::PopStyleColor(3);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop Simulation (F5 / F7)");
         } else {
-            ImGui::BeginDisabled(true);
-            ImGui::Button("Stop", ImVec2(90.0f, 26.0f));
-            ImGui::EndDisabled();
-        }
-
-        // --- 4. STEP 1 FRAME BUTTON ---
-        ImGui::SameLine();
-        if (m_SceneState == SceneState::Pause) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.52f, 0.88f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.62f, 0.98f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.42f, 0.75f, 1.0f));
-            if (ImGui::Button("Step (O)", ImVec2(80.0f, 26.0f))) {
-                m_StepSingleFrame = true;
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.28f, 0.28f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.45f, 0.72f, 1.0f));
+            if (ImGui::Button("Play", transportBtnSize)) {
+                OnScenePlay();
             }
             ImGui::PopStyleColor(3);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play Simulation (F5)");
+        }
+
+        // Pause Button
+        ImGui::SameLine();
+        if (m_SceneState == SceneState::Play) {
+            if (ImGui::Button("Pause", ImVec2(50.0f, 26.0f))) {
+                OnScenePause();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pause Simulation (F6)");
+        } else if (m_SceneState == SceneState::Pause) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.55f, 0.15f, 1.0f));
+            if (ImGui::Button("Resume", ImVec2(60.0f, 26.0f))) {
+                OnScenePlay();
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Resume Simulation (F6)");
         } else {
             ImGui::BeginDisabled(true);
-            ImGui::Button("Step", ImVec2(80.0f, 26.0f));
+            ImGui::Button("Pause", ImVec2(50.0f, 26.0f));
             ImGui::EndDisabled();
         }
 
-        // --- 5. RESET SCENE BUTTON ---
+        // Step 1 Frame Button
         ImGui::SameLine();
-        if (ImGui::Button("Reset (Ctrl+R)", ImVec2(98.0f, 26.0f))) {
-            ResetSimulation();
+        if (m_SceneState == SceneState::Pause) {
+            if (ImGui::Button("Step", ImVec2(44.0f, 26.0f))) {
+                m_StepSingleFrame = true;
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Step 1 Frame (O)");
+        } else {
+            ImGui::BeginDisabled(true);
+            ImGui::Button("Step", ImVec2(44.0f, 26.0f));
+            ImGui::EndDisabled();
         }
 
-        // --- 6. SIMULATION SPEED SLIDER ---
+        // Reset Button
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(100.0f);
-        ImGui::SliderFloat("Speed", &m_SimulationSpeed, 0.1f, 2.0f, "%.1fx");
+        if (ImGui::Button("Reset", ImVec2(48.0f, 26.0f))) {
+            ResetSimulation();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset Scene Simulation (Ctrl+R)");
+
+        // --- 3. RIGHT CLUSTER: Viewport Display & Camera Settings ---
+        const float rightClusterWidth = 330.0f;
+        const float rightTargetX = mainViewport->WorkSize.x - rightClusterWidth;
+        if (ImGui::GetCursorPosX() < rightTargetX) {
+            ImGui::SameLine(rightTargetX);
+        }
+
+        // 2D Button
+        if (DrawSegmentedToolButton("2D", "Toggle Viewport 2D UI Edit Mode", is2DMode, ImVec2(34.0f, 26.0f))) {
+            Set2DViewMode(!is2DMode);
+        }
 
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
+        ImGui::Checkbox("Wire", &m_ShowPhysicsDebug);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Wireframe Physics Debug [F1]");
 
-        // --- 7. CAMERA MODE TOGGLE ---
         ImGui::SameLine();
-        const char* camBtnText = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay) ? "Cam: Game [C]" : "Cam: Free-Fly [C]";
-        if (ImGui::Button(camBtnText, ImVec2(125.0f, 26.0f))) {
+        const char* camBtnText = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay) ? "GameCam" : "FlyCam";
+        if (ImGui::Button(camBtnText, ImVec2(68.0f, 26.0f))) {
             m_UseEditorCameraInPlay = !m_UseEditorCameraInPlay;
             if (m_SceneState == SceneState::Play && m_UseEditorCameraInPlay && m_Scene) {
                 auto camEntity = m_Scene->GetPrimaryCameraEntity();
@@ -1855,27 +1809,12 @@ void EditorLayer::RenderToolbar() {
                 }
             }
         }
-
-        // --- 8. WIREFRAME TOGGLE ---
-        ImGui::SameLine();
-        ImGui::Checkbox("Wireframe [F1]", &m_ShowPhysicsDebug);
-
-        // --- 9. STATUS / NAVIGATION HINT ---
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "|");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Switch between Free-Fly and Gameplay Camera [C / F2]");
 
         ImGui::SameLine();
-        if (m_CompileNotificationTimer > 0.0f) {
-            ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.55f, 1.0f), "[OK] %s", m_CompileNotificationMessage.c_str());
-        } else if (is2DMode) {
-            ImGui::TextColored(ImVec4(0.20f, 0.85f, 0.95f, 1.0f), "2D UI EDIT MODE: Orthogonal View Lock | RMB/MMB: Pan | Scroll: Zoom | RectTransform Gizmo");
-        } else if (m_SceneState == SceneState::Edit) {
-            ImGui::TextColored(ImVec4(0.35f, 0.70f, 1.0f, 1.0f), "EDIT MODE: Q:Select W:Move E:Rotate R:Scale | Click to select | RMB+WASD Fly");
-        } else if (m_SceneState == SceneState::Play) {
-            ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.45f, 1.0f), "PLAYING: Drive with WASD/Arrows (Space: Handbrake)");
-        } else {
-            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "PAUSED: Physics frozen. Hold RMB+WASD or manipulate entities");
-        }
+        ImGui::SetNextItemWidth(70.0f);
+        ImGui::SliderFloat("##SimSpeed", &m_SimulationSpeed, 0.1f, 2.0f, "%.1fx");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Simulation Speed Multiplier");
     }
     ImGui::End();
     ImGui::PopStyleVar(3);
@@ -2035,15 +1974,14 @@ void EditorLayer::OnImGuiRender() {
                 m_SnapEnabled = !m_SnapEnabled;
             }
             ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("View")) {
-            ImGui::MenuItem("Scene Hierarchy", nullptr, &m_ShowSceneHierarchy);
-            ImGui::MenuItem("Properties / Inspector", nullptr, &m_ShowProperties);
-            ImGui::MenuItem("Console Log", nullptr, &m_ShowConsole);
-            ImGui::MenuItem("Content Browser", nullptr, &m_ShowContentBrowser);
+         if (ImGui::BeginMenu("View")) {
+            ImGui::MenuItem("Hierarchy", nullptr, &m_ShowSceneHierarchy);
+            ImGui::MenuItem("Inspector", nullptr, &m_ShowProperties);
+            ImGui::MenuItem("Console", nullptr, &m_ShowConsole);
+            ImGui::MenuItem("Project", nullptr, &m_ShowContentBrowser);
             ImGui::MenuItem("Assembly Editor", nullptr, &m_ShowAssemblyEditor);
             ImGui::MenuItem("Visual FX (VFX) Editor", nullptr, &m_ShowVFXEditor);
-            ImGui::MenuItem("UI Widget Palette", nullptr, &m_ShowUIPalette);
+            ImGui::MenuItem("UI Library", nullptr, &m_ShowUIPalette);
             ImGui::MenuItem("Performance & Debug", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             if (m_RHIViewport && m_RHIViewport->IsValid()) {
@@ -2095,19 +2033,20 @@ void EditorLayer::OnImGuiRender() {
     // 2. Render Fixed Toolbar directly beneath Main Menu Bar
     RenderToolbar();
 
-    // 3. Fullscreen DockSpace Container (Below Toolbar)
+    // 3. Fullscreen DockSpace Container (Between Toolbar and Status Bar)
     const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
-    const float toolbarHeight = 36.0f;
+    const float toolbarHeight = 38.0f;
+    const float statusBarHeight = 24.0f;
     const ImVec2 dockspacePos = ImVec2(mainViewport->WorkPos.x, mainViewport->WorkPos.y + toolbarHeight);
-    const ImVec2 dockspaceSize = ImVec2(mainViewport->WorkSize.x, mainViewport->WorkSize.y - toolbarHeight);
+    const ImVec2 dockspaceSize = ImVec2(mainViewport->WorkSize.x, mainViewport->WorkSize.y - toolbarHeight - statusBarHeight);
 
     ImGui::SetNextWindowPos(dockspacePos);
     ImGui::SetNextWindowSize(dockspaceSize);
     ImGui::SetNextWindowViewport(mainViewport->ID);
 
-    ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_NoDocking
-                                         | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse
-                                         | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+    ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_NoDocking 
+                                         | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse 
+                                         | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove 
                                          | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -2132,23 +2071,24 @@ void EditorLayer::OnImGuiRender() {
         ImGuiID dock_main = dockspaceID;
         ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.20f, nullptr, &dock_main);
         ImGuiID dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.28f, nullptr, &dock_main);
-        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, nullptr, &dock_main);
+        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.28f, nullptr, &dock_main);
 
-        ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_left);
-        ImGui::DockBuilderDockWindow("Viewport", dock_main);
-        ImGui::DockBuilderDockWindow("Content Browser", dock_bottom);
-        ImGui::DockBuilderDockWindow("UI Widget Palette", dock_bottom);
+        // Unity Standard Layout: Hierarchy & UI Library on Left, Project & Console on Bottom, Inspector on Right
+        ImGui::DockBuilderDockWindow("Hierarchy", dock_left);
+        ImGui::DockBuilderDockWindow("UI Library", dock_left);
+        ImGui::DockBuilderDockWindow("Scene", dock_main);
+        ImGui::DockBuilderDockWindow("Project", dock_bottom);
         ImGui::DockBuilderDockWindow("Console", dock_bottom);
-        ImGui::DockBuilderDockWindow("Properties", dock_right);
+        ImGui::DockBuilderDockWindow("Inspector", dock_right);
         ImGui::DockBuilderDockWindow("Performance & Debug", dock_right);
 
         ImGui::DockBuilderFinish(dockspaceID);
     }
     ImGui::End(); // End AxleEngineDockSpace
 
-    // 3. Render 3D Viewport Window
+    // 3. Render 3D Viewport Window (Unity Scene View)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("Viewport");
+    ImGui::Begin("Scene");
 
     m_ViewportFocused = ImGui::IsWindowFocused();
     m_ViewportHovered = ImGui::IsWindowHovered();
@@ -3032,6 +2972,70 @@ void EditorLayer::OnImGuiRender() {
 
     // 12. Project Configuration & Hardware Graphics RHI Settings Modal (Phase 33 Step 6)
     RenderProjectSettingsModal();
+
+    // 13. Unity Style Persistent Status Bar (Bottom edge)
+    RenderStatusBar();
+}
+
+void EditorLayer::RenderStatusBar() {
+    const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+    const float statusBarHeight = 24.0f;
+    const ImVec2 statusBarPos = ImVec2(mainViewport->WorkPos.x, mainViewport->WorkPos.y + mainViewport->WorkSize.y - statusBarHeight);
+    const ImVec2 statusBarSize = ImVec2(mainViewport->WorkSize.x, statusBarHeight);
+
+    ImGui::SetNextWindowPos(statusBarPos);
+    ImGui::SetNextWindowSize(statusBarSize);
+    ImGui::SetNextWindowViewport(mainViewport->ID);
+
+    ImGuiWindowFlags statusFlags = ImGuiWindowFlags_NoDocking 
+                                 | ImGuiWindowFlags_NoTitleBar 
+                                 | ImGuiWindowFlags_NoResize 
+                                 | ImGuiWindowFlags_NoMove 
+                                 | ImGuiWindowFlags_NoScrollbar 
+                                 | ImGuiWindowFlags_NoSavedSettings;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 3.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f)); // #1F1F1F
+
+    if (ImGui::Begin("##UnityStatusBar", nullptr, statusFlags)) {
+        // Top border line
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddLine(statusBarPos, ImVec2(statusBarPos.x + statusBarSize.x, statusBarPos.y), IM_COL32(28, 28, 28, 255));
+
+        // Left: Notification / Engine Status
+        if (m_CompileNotificationTimer > 0.0f) {
+            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.45f, 1.0f), "[OK] %s", m_CompileNotificationMessage.c_str());
+        } else if (m_SceneState == SceneState::Play) {
+            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.45f, 1.0f), "[Play Mode Active] Drive with WASD/Arrows (Space: Handbrake, C: Toggle Camera)");
+        } else if (m_SceneState == SceneState::Pause) {
+            ImGui::TextColored(ImVec4(0.95f, 0.65f, 0.15f, 1.0f), "[Paused] Physics simulation frozen. Hold RMB+WASD or drag transform gizmos");
+        } else {
+            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.60f, 1.0f), "Ready");
+        }
+
+        // Right side info: FPS, RHI Backend, Scene Path
+        float fps = m_LastDeltaTime > 0.0f ? 1.0f / m_LastDeltaTime : 0.0f;
+        float ms = m_LastDeltaTime * 1000.0f;
+        const char* rhiName = "OpenGL 4.5";
+        if (m_RHIViewport && m_RHIViewport->IsValid()) {
+            rhiName = "Direct3D 12";
+        }
+
+        std::string sceneName = m_CurrentScenePath.empty() ? "Untitled Scene" : m_CurrentScenePath.filename().string();
+        std::string rightText = std::string(rhiName) + " | " + std::to_string(static_cast<int>(fps)) + " FPS (" + 
+                                std::to_string(static_cast<int>(ms)) + " ms) | " + sceneName;
+
+        float textWidth = ImGui::CalcTextSize(rightText.c_str()).x;
+        float rightX = statusBarSize.x - textWidth - 14.0f;
+        if (rightX > ImGui::GetCursorPosX()) {
+            ImGui::SameLine(rightX);
+            ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.50f, 1.0f), "%s", rightText.c_str());
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
 }
 
 void EditorLayer::SetupNextImportModal() {

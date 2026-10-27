@@ -11,6 +11,7 @@ struct ID3D12CommandAllocator;
 struct ID3D12DescriptorHeap;
 struct ID3D12GraphicsCommandList;
 struct ID3D12Fence;
+struct ImFont;
 
 namespace Axle {
 
@@ -50,6 +51,12 @@ namespace Axle {
 
         void SetDarkThemeColors();
 
+        // Modern typography font accessors (Unity Style)
+        static ::ImFont* GetRegularFont() { return s_RegularFont; }
+        static ::ImFont* GetBoldFont()    { return s_BoldFont; }
+        static ::ImFont* GetHeaderFont()  { return s_HeaderFont; }
+        static ::ImFont* GetCodeFont()    { return s_CodeFont; }
+
         ImGuiBackendType GetBackendType() const { return m_BackendType; }
         bool IsInitialized() const { return m_Initialized; }
 
@@ -62,6 +69,10 @@ namespace Axle {
         void UnregisterTextureDescriptor(uint64_t gpuHandlePtr);
 
     private:
+        static ::ImFont* s_RegularFont;
+        static ::ImFont* s_BoldFont;
+        static ::ImFont* s_HeaderFont;
+        static ::ImFont* s_CodeFont;
         void InitOpenGL();
         void InitD3D12();
         void InitVulkan();

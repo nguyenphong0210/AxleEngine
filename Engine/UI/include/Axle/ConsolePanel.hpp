@@ -38,6 +38,8 @@ namespace Axle {
         ~ConsolePanel() = default;
 
         void OnImGuiRender(bool* p_open = nullptr);
+        void Clear() { if (m_Sink) m_Sink->Clear(); m_SelectedMessageIndex = -1; }
+        bool GetClearOnPlay() const { return m_ClearOnPlay; }
 
     private:
         std::shared_ptr<EditorConsoleSink> m_Sink;
@@ -46,6 +48,10 @@ namespace Axle {
         bool m_ShowInfo = true;
         bool m_ShowWarn = true;
         bool m_ShowError = true;
+        bool m_Collapse = false;
+        bool m_ClearOnPlay = false;
+        int m_SelectedMessageIndex = -1;
+        char m_SearchFilter[128] = "";
     };
 
 }

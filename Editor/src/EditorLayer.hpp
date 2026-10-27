@@ -84,6 +84,7 @@ public:
 private:
     void ResetSimulation();
     void RenderToolbar();
+    void RenderStatusBar();
     void UnlockCursor();
     void ClearRHIViewport();
     bool IsCursorLocked() const;

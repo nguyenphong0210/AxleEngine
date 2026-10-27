@@ -625,7 +625,7 @@ namespace Axle {
         if (p_open && !*p_open) return;
 
         ImGui::SetNextWindowSize(ImVec2(650.0f, 320.0f), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("Content Browser", p_open)) {
+        if (!ImGui::Begin("Project", p_open)) {
             m_IsHovered = false;
             ImGui::End();
             return;
@@ -654,12 +654,48 @@ namespace Axle {
     }
 
     void ContentBrowserPanel::RenderTopBar() {
+        // [+ ▾] Unity Create Button
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+        if (ImGui::Button("+ ▾", ImVec2(36.0f, 24.0f))) {
+            ImGui::OpenPopup("ProjectCreatePopup");
+        }
+        ImGui::PopStyleVar();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Create New Asset in Current Directory");
+        }
+
+        if (ImGui::BeginPopup("ProjectCreatePopup")) {
+            if (ImGui::MenuItem("Folder")) {
+                CreateNewFolder(m_CurrentDirectory);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("C++ Script (ScriptableEntity)")) {
+                CreateNewScript(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("C++ Class (.h & .cpp)")) {
+                CreateNewClass(m_CurrentDirectory);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Scene")) {
+                CreateNewScene(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("Material")) {
+                CreateNewMaterial(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("Physics Material")) {
+                CreateNewPhysicsMaterial(m_CurrentDirectory);
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::SameLine();
+
         // Back Button
         bool canGoBack = (m_CurrentDirectory != m_RootDirectory) && std::filesystem::exists(m_CurrentDirectory.parent_path());
         if (!canGoBack) {
             ImGui::BeginDisabled(true);
         }
-        if (ImGui::Button("< Back", ImVec2(65.0f, 24.0f))) {
+        if (ImGui::Button("< Back", ImVec2(60.0f, 24.0f))) {
             m_CurrentDirectory = m_CurrentDirectory.parent_path();
             m_SelectedEntry.clear();
         }
@@ -668,7 +704,7 @@ namespace Axle {
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Refresh", ImVec2(65.0f, 24.0f))) {
+        if (ImGui::Button("Refresh", ImVec2(62.0f, 24.0f))) {
             // View refreshes automatically next frame
         }
 
@@ -770,6 +806,18 @@ namespace Axle {
             ImGui::TextColored(ImVec4(0.35f, 0.40f, 0.48f, 1.0f), "|");
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.25f, 0.90f, 0.55f, 1.0f), "[OK] %s", m_StatusNotificationMessage.c_str());
+        }
+
+        // Right side: Unity Project Thumbnail Zoom Slider
+        const float sliderWidth = 110.0f;
+        float rightX = ImGui::GetWindowWidth() - sliderWidth - 20.0f;
+        if (rightX > ImGui::GetCursorPosX()) {
+            ImGui::SameLine(rightX);
+            ImGui::SetNextItemWidth(sliderWidth);
+            ImGui::SliderFloat("##ThumbnailSize", &m_ThumbnailSize, 48.0f, 140.0f, "");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Adjust Thumbnail Size (Unity Project Slider)");
+            }
         }
     }
 

@@ -302,19 +302,19 @@ namespace Axle {
     void UIPalettePanel::OnImGuiRender(bool* pOpen) {
         if (pOpen && !*pOpen) return;
 
-        ImGui::SetNextWindowSize(ImVec2(320.0f, 480.0f), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("UI Widget Palette", pOpen)) {
+        ImGui::SetNextWindowSize(ImVec2(280.0f, 480.0f), ImGuiCond_FirstUseEver);
+        if (!ImGui::Begin("UI Library", pOpen)) {
             ImGui::End();
             return;
         }
 
-        // Search Bar
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+        // Unity UI Library Search Bar
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
         m_Filter.Draw("##WidgetFilter", ImGui::GetContentRegionAvail().x);
         if (!m_Filter.IsActive()) {
             ImVec2 minPos = ImGui::GetItemRectMin();
             ImDrawList* dl = ImGui::GetWindowDrawList();
-            dl->AddText(ImVec2(minPos.x + 8.0f, minPos.y + 4.0f), IM_COL32(140, 150, 165, 180), "Search widgets...");
+            dl->AddText(ImVec2(minPos.x + 8.0f, minPos.y + 4.0f), IM_COL32(130, 130, 130, 200), "Search elements...");
         }
         ImGui::PopStyleVar();
 
@@ -324,6 +324,7 @@ namespace Axle {
 
         const auto& widgets = GetStockWidgets();
         std::string lastCategory = "";
+        bool categoryOpen = true;
 
         // Resolve active target canvas entity
         Entity activeCanvasEntity = GetOrCreateCanvasEntity(m_Scene);
@@ -337,25 +338,61 @@ namespace Axle {
                 continue;
             }
 
-            // Category Header
+            // Unity Foldout Category Header
             if (widget.Category != lastCategory) {
                 lastCategory = widget.Category;
-                ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.45f, 0.70f, 0.95f, 1.0f), "--- %s ---", widget.Category.c_str());
-                ImGui::Spacing();
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+                categoryOpen = ImGui::CollapsingHeader(widget.Category.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+                ImGui::PopStyleColor(2);
+            }
+
+            if (!categoryOpen) {
+                continue;
             }
 
             ImGui::PushID(widget.Name.c_str());
 
-            // Card item container
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.17f, 0.22f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.26f, 0.35f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.40f, 0.75f, 1.0f));
+            // Unity UI Library Compact Element Card
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.19f, 0.19f, 0.19f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.27f, 0.27f, 0.27f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.23f, 0.47f, 0.72f, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.13f, 0.13f, 0.13f, 1.0f));
 
-            std::string btnLabel = widget.Icon + "  " + widget.Name;
-            bool clicked = ImGui::Button(btnLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 32.0f));
+            float cardWidth = ImGui::GetContentRegionAvail().x;
+            float cardHeight = 30.0f;
+            ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+            bool clicked = ImGui::Button("##WidgetCardBtn", ImVec2(cardWidth, cardHeight));
 
-            ImGui::PopStyleColor(3);
+            ImGui::PopStyleColor(4);
+            ImGui::PopStyleVar(2);
+
+            // Draw custom Unity-style contents on top of button
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            
+            // Icon Badge with translucent accent tint
+            ImVec2 badgeMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + 4.0f);
+            ImVec2 badgeMax = ImVec2(cursorPos.x + 26.0f, cursorPos.y + 26.0f);
+            ImU32 badgeBgColor = ImColor(widget.AccentColor.x, widget.AccentColor.y, widget.AccentColor.z, 0.20f);
+            ImU32 badgeTextColor = ImColor(widget.AccentColor.x, widget.AccentColor.y, widget.AccentColor.z, 1.0f);
+            dl->AddRectFilled(badgeMin, badgeMax, badgeBgColor, 3.0f);
+
+            // Centered icon text inside badge
+            ImVec2 iconSize = ImGui::CalcTextSize(widget.Icon.c_str());
+            ImVec2 iconPos = ImVec2(badgeMin.x + (22.0f - iconSize.x) * 0.5f, badgeMin.y + (22.0f - iconSize.y) * 0.5f);
+            dl->AddText(iconPos, badgeTextColor, widget.Icon.c_str());
+
+            // Widget Name
+            dl->AddText(ImVec2(cursorPos.x + 34.0f, cursorPos.y + 6.0f), IM_COL32(220, 220, 220, 255), widget.Name.c_str());
+
+            // Right hint text (type tag)
+            ImVec2 hintSize = ImGui::CalcTextSize(widget.Category.c_str());
+            float hintX = cursorPos.x + cardWidth - hintSize.x - 8.0f;
+            if (hintX > cursorPos.x + 34.0f + 70.0f) {
+                dl->AddText(ImVec2(hintX, cursorPos.y + 7.0f), IM_COL32(110, 110, 110, 255), widget.Category.c_str());
+            }
 
             // Drag and Drop Source
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
@@ -363,7 +400,7 @@ namespace Axle {
                 ImGui::PushStyleColor(ImGuiCol_Text, widget.AccentColor);
                 ImGui::Text("%s %s", widget.Icon.c_str(), widget.Name.c_str());
                 ImGui::PopStyleColor();
-                ImGui::TextDisabled("Drop onto Viewport or Hierarchy");
+                ImGui::TextDisabled("Drop onto Viewport Canvas or Scene Hierarchy");
                 ImGui::EndDragDropSource();
             }
 
@@ -378,7 +415,7 @@ namespace Axle {
                 ImGui::Separator();
                 ImGui::TextUnformatted(widget.Description.c_str());
                 ImGui::TextDisabled("Default Size: %.0f x %.0f px", widget.DefaultSize.x, widget.DefaultSize.y);
-                ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.55f, 1.0f), "Tip: Drag onto Viewport canvas or click to add");
+                ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.55f, 1.0f), "Drag onto Viewport canvas or click to add");
                 ImGui::EndTooltip();
             }
 

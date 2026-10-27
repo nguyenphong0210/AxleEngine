@@ -49,8 +49,12 @@ namespace Axle {
     void SceneHierarchyPanel::DrawVec3Control(const std::string& label, glm::vec3& values, float resetValue, float columnWidth, float speed) {
         ImGui::PushID(label.c_str());
 
-        ImGui::Columns(2);
-        ImGui::SetColumnWidth(0, columnWidth);
+        // Unity Inspector Row Layout with clean horizontal alignment
+        float totalWidth = ImGui::GetContentRegionAvail().x;
+        float labelWidth = std::min(columnWidth, totalWidth * 0.32f);
+        float controlsWidth = totalWidth - labelWidth;
+
+        ImGui::AlignTextToFramePadding();
         ImGui::Text("%s", label.c_str());
         if (ImGui::BeginPopupContextItem()) {
             if (ImGui::MenuItem("Reset All Axes")) {
@@ -58,66 +62,53 @@ namespace Axle {
             }
             ImGui::EndPopup();
         }
-        ImGui::NextColumn();
 
-        ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0, 0 });
+        ImGui::SameLine(labelWidth);
 
-        float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
-        ImVec2 buttonSize = { lineHeight + 3.0f, lineHeight };
+        // 3 Axes: X, Y, Z with subtle spacing and Unity pastel badges
+        float spacing = 4.0f;
+        float itemWidth = (controlsWidth - spacing * 2.0f) / 3.0f;
+        float badgeWidth = 16.0f;
+        float dragWidth = std::max(20.0f, itemWidth - badgeWidth);
+        float lineHeight = ImGui::GetFrameHeight();
 
-        // X Control - Red
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.80f, 0.15f, 0.15f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.95f, 0.25f, 0.25f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.70f, 0.10f, 0.10f, 1.0f });
-        if (ImGui::Button("X", buttonSize)) {
-            values.x = resetValue;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Click to reset X to %.2f", resetValue);
-        }
-        ImGui::PopStyleColor(3);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0.0f, 0.0f });
 
-        ImGui::SameLine();
-        ImGui::DragFloat("##X", &values.x, speed, 0.0f, 0.0f, "%.2f");
-        ImGui::PopItemWidth();
-        ImGui::SameLine();
+        auto DrawAxis = [&](const char* axisLabel, float& val, const ImVec4& color, const ImVec4& hoverColor, const char* id) {
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, color);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, color);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 
-        // Y Control - Green
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.15f, 0.70f, 0.20f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.25f, 0.85f, 0.30f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.10f, 0.60f, 0.15f, 1.0f });
-        if (ImGui::Button("Y", buttonSize)) {
-            values.y = resetValue;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Click to reset Y to %.2f", resetValue);
-        }
-        ImGui::PopStyleColor(3);
+            if (ImGui::Button(axisLabel, ImVec2(badgeWidth, lineHeight))) {
+                val = resetValue;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Click to reset %s to %.2f (or drag to scrub)", axisLabel, resetValue);
+            }
+            ImGui::PopStyleColor(4);
 
-        ImGui::SameLine();
-        ImGui::DragFloat("##Y", &values.y, speed, 0.0f, 0.0f, "%.2f");
-        ImGui::PopItemWidth();
-        ImGui::SameLine();
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(dragWidth);
+            ImGui::DragFloat(id, &val, speed, 0.0f, 0.0f, "%.2f");
+            ImGui::PopStyleVar();
+        };
 
-        // Z Control - Blue
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.15f, 0.35f, 0.85f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.25f, 0.45f, 0.95f, 1.0f });
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.10f, 0.25f, 0.75f, 1.0f });
-        if (ImGui::Button("Z", buttonSize)) {
-            values.z = resetValue;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Click to reset Z to %.2f", resetValue);
-        }
-        ImGui::PopStyleColor(3);
+        // Axis X - Unity Coral Red
+        DrawAxis("X", values.x, ImVec4(0.85f, 0.26f, 0.26f, 1.0f), ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "##X");
 
-        ImGui::SameLine();
-        ImGui::DragFloat("##Z", &values.z, speed, 0.0f, 0.0f, "%.2f");
-        ImGui::PopItemWidth();
+        ImGui::SameLine(0.0f, spacing);
+
+        // Axis Y - Unity Emerald Green
+        DrawAxis("Y", values.y, ImVec4(0.30f, 0.68f, 0.31f, 1.0f), ImVec4(0.38f, 0.78f, 0.40f, 1.0f), "##Y");
+
+        ImGui::SameLine(0.0f, spacing);
+
+        // Axis Z - Unity Royal Blue
+        DrawAxis("Z", values.z, ImVec4(0.20f, 0.52f, 0.88f, 1.0f), ImVec4(0.28f, 0.62f, 0.98f, 1.0f), "##Z");
 
         ImGui::PopStyleVar();
-        ImGui::Columns(1);
         ImGui::PopID();
     }
 
@@ -375,11 +366,72 @@ namespace Axle {
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("UI")) {
+            if (ImGui::MenuItem("Canvas")) {
+                Entity canvasEntity = UIPalettePanel::GetOrCreateCanvasEntity(m_Scene);
+                m_SelectedEntity = canvasEntity;
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Panel")) {
+                Entity canvas = UIPalettePanel::GetOrCreateCanvasEntity(m_Scene);
+                if (canvas && canvas.HasComponent<UICanvasComponent>()) {
+                    UIPalettePanel::SpawnWidget(canvas.GetComponent<UICanvasComponent>().Document.get(), UIWidgetType::Panel);
+                    m_SelectedEntity = canvas;
+                }
+            }
+            if (ImGui::MenuItem("Text")) {
+                Entity canvas = UIPalettePanel::GetOrCreateCanvasEntity(m_Scene);
+                if (canvas && canvas.HasComponent<UICanvasComponent>()) {
+                    UIPalettePanel::SpawnWidget(canvas.GetComponent<UICanvasComponent>().Document.get(), UIWidgetType::Text);
+                    m_SelectedEntity = canvas;
+                }
+            }
+            if (ImGui::MenuItem("Image")) {
+                Entity canvas = UIPalettePanel::GetOrCreateCanvasEntity(m_Scene);
+                if (canvas && canvas.HasComponent<UICanvasComponent>()) {
+                    UIPalettePanel::SpawnWidget(canvas.GetComponent<UICanvasComponent>().Document.get(), UIWidgetType::Image);
+                    m_SelectedEntity = canvas;
+                }
+            }
+            if (ImGui::MenuItem("Button")) {
+                Entity canvas = UIPalettePanel::GetOrCreateCanvasEntity(m_Scene);
+                if (canvas && canvas.HasComponent<UICanvasComponent>()) {
+                    UIPalettePanel::SpawnWidget(canvas.GetComponent<UICanvasComponent>().Document.get(), UIWidgetType::Button);
+                    m_SelectedEntity = canvas;
+                }
+            }
+            if (ImGui::MenuItem("ProgressBar")) {
+                Entity canvas = UIPalettePanel::GetOrCreateCanvasEntity(m_Scene);
+                if (canvas && canvas.HasComponent<UICanvasComponent>()) {
+                    UIPalettePanel::SpawnWidget(canvas.GetComponent<UICanvasComponent>().Document.get(), UIWidgetType::ProgressBar);
+                    m_SelectedEntity = canvas;
+                }
+            }
+            if (ImGui::MenuItem("RadialGauge")) {
+                Entity canvas = UIPalettePanel::GetOrCreateCanvasEntity(m_Scene);
+                if (canvas && canvas.HasComponent<UICanvasComponent>()) {
+                    UIPalettePanel::SpawnWidget(canvas.GetComponent<UICanvasComponent>().Document.get(), UIWidgetType::RadialGauge);
+                    m_SelectedEntity = canvas;
+                }
+            }
+            ImGui::EndMenu();
+        }
+
         if (ImGui::MenuItem("Camera")) {
             auto camEntity = m_Scene->CreateEntity("Camera");
             camEntity.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 2.0f, 5.0f);
             camEntity.AddComponent<CameraComponent>(45.0f, 0.1f, 1000.0f, false);
             m_SelectedEntity = camEntity;
+        }
+
+        if (ImGui::BeginMenu("Effects")) {
+            if (ImGui::MenuItem("Particle Emitter")) {
+                auto vfxEntity = m_Scene->CreateEntity("Particle Emitter");
+                vfxEntity.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 1.0f, 0.0f);
+                vfxEntity.AddComponent<ParticleEmitterComponent>();
+                m_SelectedEntity = vfxEntity;
+            }
+            ImGui::EndMenu();
         }
 
         if (ImGui::BeginMenu("Environment")) {
@@ -403,15 +455,16 @@ namespace Axle {
         // 1. Scene Hierarchy Window
         if (!p_hierarchyOpen || *p_hierarchyOpen) {
             ImGui::SetNextWindowSize(ImVec2(280.0f, 400.0f), ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Scene Hierarchy", p_hierarchyOpen)) {
-                // Header Bar: [+ Create] Button & Search Filter
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.30f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.68f, 0.38f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.45f, 0.22f, 1.0f));
-                if (ImGui::Button("+ Create", ImVec2(75.0f, 24.0f))) {
+            if (ImGui::Begin("Hierarchy", p_hierarchyOpen)) {
+                // Header Bar: [+ ▾] Unity Style Create Button & Search Filter
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+                if (ImGui::Button("+ ▾", ImVec2(38.0f, 24.0f))) {
                     ImGui::OpenPopup("CreateEntityPopup");
                 }
-                ImGui::PopStyleColor(3);
+                ImGui::PopStyleVar();
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Create New GameObject / Primitive / Light / UI Component");
+                }
 
                 if (ImGui::BeginPopup("CreateEntityPopup")) {
                     DrawCreateMenu();
@@ -592,7 +645,7 @@ namespace Axle {
         // 2. Properties / Inspector Window
         if (!p_propertiesOpen || *p_propertiesOpen) {
             ImGui::SetNextWindowSize(ImVec2(340.0f, 500.0f), ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Properties", p_propertiesOpen)) {
+            if (ImGui::Begin("Inspector", p_propertiesOpen)) {
                 bool hasEntity = (m_SelectedEntity && m_Scene && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity));
                 bool hasAsset = (!m_SelectedAsset.empty() && std::filesystem::exists(m_SelectedAsset));
 
@@ -631,7 +684,7 @@ namespace Axle {
                 } else {
                     ImGui::Spacing();
                     ImGui::TextDisabled("No entity selected.");
-                    ImGui::TextWrapped("Click any entity in Scene Hierarchy to inspect its components, or drag a 3D model (.obj) from Content Browser here to instantiate:");
+                    ImGui::TextWrapped("Click any entity in Hierarchy to inspect its components, or drag a 3D model (.obj) from Project here to instantiate:");
                     ImGui::Spacing();
                     ImGui::Separator();
                     ImGui::Spacing();
@@ -786,7 +839,24 @@ namespace Axle {
             flags |= ImGuiTreeNodeFlags_DefaultOpen;
         }
 
-        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", tag.c_str());
+        // Select appropriate Unity style icon for visual hierarchy recognition
+        const char* icon = "• ";
+        if (entity.HasComponent<VehicleComponent>()) {
+            icon = "🚗 ";
+        } else if (entity.HasComponent<CameraComponent>()) {
+            icon = "📷 ";
+        } else if (entity.HasComponent<DirectionalLightComponent>() || entity.HasComponent<PointLightComponent>() || entity.HasComponent<SpotLightComponent>()) {
+            icon = "💡 ";
+        } else if (entity.HasComponent<UICanvasComponent>()) {
+            icon = "🖼️ ";
+        } else if (entity.HasComponent<AudioSourceComponent>()) {
+            icon = "🔊 ";
+        } else if (entity.HasComponent<MeshInstance3D>()) {
+            icon = "🧊 ";
+        }
+
+        std::string displayLabel = std::string(icon) + tag;
+        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", displayLabel.c_str());
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
             m_SelectedEntity = entity;

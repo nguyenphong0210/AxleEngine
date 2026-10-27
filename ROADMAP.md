@@ -27,6 +27,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 │ [x] MILESTONE 6: AAA PBR Lighting, Soft Shadows, IBL & Audio (Phases 24 - 28)          │
 │ [x] MILESTONE 7: Large-Scale Terrain, Splines & Character Systems (Phases 29 - 30)     │
 │ [x] MILESTONE 8: Visual Effects, Modern RHI & In-Game UI Subsystem (Phases 31 - 34)   │
+│ [ ] MILESTONE 9: Vulkan 1.3 Backend Parity & Advanced Graphics (Phases 35+)            │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -454,5 +455,25 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **Viewport 2D UI Edit Mode Toggle**: One-click "2D / 3D" camera toggle in the Viewport toolbar, locking view orientation to an orthogonal projection facing the active canvas plane with customizable grid snapping (pixel and percentage increments).
     - [x] **UI Component Palette & Drag-and-Drop Spawner (`Editor/`)**: Dedicated UI Widget Palette panel containing stock primitives (`Canvas`, `Panel`, `Text`, `Image`, `Button`, `ProgressBar`, `RadialGauge`); supports native ImGui Drag-and-Drop payloads (`ImGui::BeginDragDropSource` / `ImGui::AcceptDragDropPayload`) dropped directly onto the Viewport canvas or the `SceneHierarchyPanel` tree.
     - [x] **Bidirectional Document Synchronization**: Visual manipulation in Viewport directly updates the active `UIDocument` DOM tree and serializes back to `.axleui` declarative documents and `.axlescene` scene files without desynchronization.
+
+---
+
+### Milestone 9: Production Hardening, Vulkan 1.3 Backend Parity & Next-Gen Architecture (Phases 35+)
+- [ ] **Phase 35: High-Performance Vulkan 1.3 Graphics Backend & Editor Parity (`Engine/RHI` & `Engine/UI`)**
+  - [ ] **Step 1 - Vulkan Swapchain Presentation Engine & ImGuiLayer Backend Integration (`Engine/UI`)**:
+    - [ ] Create native `VkSurfaceKHR` from GLFW window (`glfwCreateWindowSurface`) and query surface capabilities, color formats (`VK_FORMAT_B8G8R8A8_UNORM`), and presentation modes (`VK_PRESENT_MODE_FIFO_KHR` / `VK_PRESENT_MODE_MAILBOX_KHR`).
+    - [ ] Construct Vulkan swapchain (`VkSwapchainKHR`, 3 backbuffers), render pass (`VkRenderPass`), image views, and framebuffers.
+    - [ ] Initialize `ImGui_ImplVulkan_InitInfo` with persistent `VkDescriptorPool`, graphics queue, and dynamic loader.
+    - [ ] Implement `ImGuiLayer::End()` Vulkan dispatch: Record `ImGui_ImplVulkan_RenderDrawData` into a command buffer, submit to graphics queue, and present via `vkQueuePresentKHR`.
+    - [ ] Completely resolve crash when launching or switching to `--rhi=vulkan` in `AxleEditor`.
+  - [ ] **Step 2 - Offscreen Viewport Vulkan Descriptor Bridge (`Engine/UI` & `Engine/Renderer`)**:
+    - [ ] Register offscreen HDR/SDR render target (`RHITexture`) to Dear ImGui via `ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)`.
+    - [ ] Synchronize layout transitions in `RHISceneRenderer` (`ColorAttachment` -> `ShaderReadOnly`) to eliminate validation layer hazards.
+    - [ ] Implement descriptor set recycling in `RHIViewportDescriptor` on viewport resize without leaking descriptor pool slots.
+  - [ ] **Step 3 - Dynamic Window Resize, Swapchain Recreation & Zero-Leak Recovery (`Engine/UI`)**:
+    - [ ] Gracefully handle `VK_SUBOPTIMAL_KHR` and `VK_ERROR_OUT_OF_DATE_KHR` during window drag resize, minimize, and restore.
+    - [ ] Synchronize device queues via `vkQueueWaitIdle` / `vkDeviceWaitIdle` during recreation.
+  - [ ] **Step 4 - Triple-Backend Parity & Automated Verification Suite (`AxleTests.exe --step97`)**:
+    - [ ] Headless unit test Step 97 verifying Vulkan physical device query, swapchain lifecycle, descriptor set binding, offscreen texture bridge, and headless render parity.
 
 ---

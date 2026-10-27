@@ -60,6 +60,9 @@ private:
 public:
     void OnCreate() override {
         AXLE_INFO("RacingHUD: Attached to entity '{0}' (Status: Active)", GetEntityName());
+        if (!HasComponent<Axle::UICanvasComponent>()) {
+            GetEntity().AddComponent<Axle::UICanvasComponent>("Editor/assets/ui/RacingHUD.axleui");
+        }
     }
 
     void OnUpdate(Axle::Timestep ts) override {
@@ -68,6 +71,9 @@ public:
             if (!m_HKeyWasPressed) {
                 Visible = !Visible;
                 AXLE_INFO("RacingHUD: Visibility toggled {0}", Visible ? "ON" : "OFF");
+                if (HasComponent<Axle::UICanvasComponent>()) {
+                    GetComponent<Axle::UICanvasComponent>().Visible = Visible;
+                }
                 m_HKeyWasPressed = true;
             }
         } else {
@@ -82,6 +88,10 @@ public:
             }
         } else {
             m_UKeyWasPressed = false;
+        }
+
+        if (HasComponent<Axle::UICanvasComponent>()) {
+            GetComponent<Axle::UICanvasComponent>().Visible = Visible;
         }
 
         if (!Visible) return;
@@ -174,6 +184,37 @@ public:
             m_ShiftFlashState = false;
             m_ShiftFlashTimer = 0.0f;
         }
+
+        // Publish to scene UIDataContext for declarative AxleUI (RacingHUD.axleui)
+        auto& uiCtx = scene->GetUIDataContext();
+        uiCtx.Set("Engine.FPS", dt > 1e-4f ? static_cast<int32_t>(std::round(1.0f / dt)) : 60);
+
+        const float displaySpeed = UseMph ? (m_SmoothedSpeed * 0.621371f) : m_SmoothedSpeed;
+        uiCtx.Set("Vehicle.SpeedKmh", static_cast<int32_t>(std::round(displaySpeed)));
+        uiCtx.Set("Vehicle.SpeedUnit", std::string(UseMph ? "MPH" : "KM/H"));
+
+        const float rpmNorm = (MaxRPM > 0.0f) ? std::clamp(m_SmoothedRPM / MaxRPM, 0.0f, 1.0f) : 0.0f;
+        uiCtx.Set("Vehicle.RPMNormalized", rpmNorm);
+
+        const bool isRedline = (m_SmoothedRPM >= RedlineRPM);
+        uiCtx.Set("Vehicle.IsRedline", isRedline);
+
+        std::string gearStr = "N";
+        if (m_CurrentGear < 0) gearStr = "R";
+        else if (m_CurrentGear > 0) gearStr = std::to_string(m_CurrentGear);
+        uiCtx.Set("Vehicle.GearString", gearStr);
+
+        uiCtx.Set("Vehicle.Throttle", m_Throttle);
+        uiCtx.Set("Vehicle.Brake", m_Brake);
+        uiCtx.Set("Vehicle.Handbrake", m_Handbrake);
+        uiCtx.Set("Vehicle.Steering", m_Steering);
+
+        char latBuf[32], longBuf[32];
+        std::snprintf(latBuf, sizeof(latBuf), "%+.2f", m_SmoothedGForce.x);
+        std::snprintf(longBuf, sizeof(longBuf), "%+.2f", m_SmoothedGForce.y);
+        uiCtx.Set("Vehicle.LateralG", std::string(latBuf));
+        uiCtx.Set("Vehicle.LongitudinalG", std::string(longBuf));
+        uiCtx.Set("Vehicle.CameraMode", std::string("CHASE"));
     }
 
     void OnImGuiRender() override {

@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <functional>
 #include <variant>
+#include <type_traits>
 #include <glm/glm.hpp>
 
 namespace Axle {
@@ -20,6 +21,24 @@ namespace Axle {
         void SetBool(std::string_view key, bool value) { m_Values[std::string(key)] = value; }
         void SetString(std::string_view key, std::string_view value) { m_Values[std::string(key)] = std::string(value); }
         void SetColor(std::string_view key, const glm::vec4& value) { m_Values[std::string(key)] = value; }
+
+        template<typename T>
+        void Set(std::string_view key, T&& value) {
+            using Decayed = std::decay_t<T>;
+            if constexpr (std::is_same_v<Decayed, int32_t> || std::is_same_v<Decayed, int>) {
+                SetInt(key, static_cast<int32_t>(value));
+            } else if constexpr (std::is_same_v<Decayed, float> || std::is_same_v<Decayed, double>) {
+                SetFloat(key, static_cast<float>(value));
+            } else if constexpr (std::is_same_v<Decayed, bool>) {
+                SetBool(key, static_cast<bool>(value));
+            } else if constexpr (std::is_convertible_v<T, std::string_view>) {
+                SetString(key, std::string_view(value));
+            } else if constexpr (std::is_same_v<Decayed, glm::vec4>) {
+                SetColor(key, value);
+            } else {
+                m_Values[std::string(key)] = std::forward<T>(value);
+            }
+        }
 
         bool Has(std::string_view key) const { return m_Values.contains(std::string(key)); }
         const UIDataValue* Get(std::string_view key) const {

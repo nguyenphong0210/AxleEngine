@@ -1,0 +1,144 @@
+Canvas {
+    id: "racing_hud_root"
+    referenceResolution: [1920, 1080]
+
+    // Top-Left Telemetry & G-Force Panel
+    Rectangle {
+        id: "telemetry_panel"
+        anchor: "TopLeft"
+        margin: [32, 32, 0, 0]
+        size: [280, 140]
+        color: "#0B0E14CC"
+        cornerRadius: 12
+        borderWidth: 2
+        borderColor: "#1E293B"
+
+        Column {
+            anchor: "TopLeft"
+            margin: [16, 14, 16, 14]
+            spacing: 8
+
+            Text {
+                id: "fps_counter"
+                text: "FPS: {Engine.FPS}"
+                fontSize: 18
+                color: "#38BDF8"
+            }
+            Text {
+                id: "lat_g_text"
+                text: "LATERAL G: {Vehicle.LateralG}"
+                fontSize: 18
+                color: "#E2E8F0"
+            }
+            Text {
+                id: "long_g_text"
+                text: "LONGITUDINAL G: {Vehicle.LongitudinalG}"
+                fontSize: 18
+                color: "#E2E8F0"
+            }
+            Text {
+                id: "camera_mode_text"
+                text: "CAM: {Vehicle.CameraMode}"
+                fontSize: 16
+                color: "#94A3B8"
+            }
+        }
+    }
+
+    // Bottom-Right Tachometer, Gear & Speedometer Cluster
+    Rectangle {
+        id: "tachometer_cluster"
+        anchor: "BottomRight"
+        margin: [0, 0, 48, 48]
+        size: [340, 340]
+        color: "#0B0E14D9"
+        cornerRadius: 170
+        borderWidth: 3
+        borderColor: "#334155"
+
+        RadialGauge {
+            id: "rpm_radial_gauge"
+            anchor: "Center"
+            size: [304, 304]
+            startAngle: -225.0
+            endAngle: 45.0
+            thickness: 18.0
+            value: "{Vehicle.RPMNormalized}"
+            color: "{Vehicle.IsRedline ? #FF1E42FF : #00F5D4FF}"
+            trackColor: "#1E293B99"
+        }
+
+        Text {
+            id: "gear_indicator"
+            anchor: "Center"
+            pos: [0, -24]
+            text: "{Vehicle.GearString}"
+            fontSize: 88
+            color: "{Vehicle.IsRedline ? #FF1E42FF : #FFFFFFFF}"
+        }
+
+        Column {
+            anchor: "BottomCenter"
+            margin: [0, 0, 0, 52]
+            spacing: 2
+
+            Text {
+                id: "speed_value"
+                text: "{Vehicle.SpeedKmh}"
+                fontSize: 52
+                color: "#38BDF8"
+            }
+            Text {
+                id: "speed_unit"
+                text: "KM/H"
+                fontSize: 16
+                color: "#94A3B8"
+            }
+        }
+    }
+
+    // Bottom-Right Pedal Input Bars (Throttle & Brake)
+    Rectangle {
+        id: "pedal_inputs_panel"
+        anchor: "BottomRight"
+        margin: [0, 0, 408, 48]
+        size: [180, 96]
+        color: "#0B0E14CC"
+        cornerRadius: 10
+        borderWidth: 2
+        borderColor: "#1E293B"
+
+        Column {
+            anchor: "Center"
+            size: [152, 68]
+            spacing: 10
+
+            Text {
+                text: "THROTTLE"
+                fontSize: 12
+                color: "#94A3B8"
+            }
+            ProgressBar {
+                id: "throttle_bar"
+                size: [152, 12]
+                value: "{Vehicle.Throttle}"
+                fillColor: "#10B981"
+                backgroundColor: "#1E293B"
+                cornerRadius: 6
+            }
+            Text {
+                text: "BRAKE"
+                fontSize: 12
+                color: "#94A3B8"
+            }
+            ProgressBar {
+                id: "brake_bar"
+                size: [152, 12]
+                value: "{Vehicle.Brake}"
+                fillColor: "#EF4444"
+                backgroundColor: "#1E293B"
+                cornerRadius: 6
+            }
+        }
+    }
+}

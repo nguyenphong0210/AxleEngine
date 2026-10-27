@@ -12,6 +12,8 @@
 #include <Axle/Log.hpp>
 #include <Axle/Input.hpp>
 #include <Axle/KeyCodes.hpp>
+#include <Axle/UI/Canvas2D.hpp>
+#include <Axle/UI/UIDocument.hpp>
 
 #include <memory>
 #include <filesystem>
@@ -26,11 +28,13 @@ namespace Axle {
         void OnAttach() override;
         void OnDetach() override;
         void OnUpdate(Timestep ts) override;
-        void OnImGuiRender() override;
+        void OnImGuiRender() override {}
         void OnWindowResize(u32 width, u32 height) override;
 
     private:
         void LoadProjectAndStartScene();
+        void SetupPauseMenu();
+        void RenderUI();
 
     private:
         std::filesystem::path m_ProjectPath;
@@ -39,7 +43,9 @@ namespace Axle {
         std::unique_ptr<SceneRenderer> m_SceneRenderer;
 
         PerspectiveCamera m_Camera;
+        Canvas2D m_Canvas;
         bool m_IsPaused = false;
+        bool m_PrevMouseDown = false;
         bool m_EscapeKeyWasPressed = false;
         bool m_F11KeyWasPressed = false;
         u32 m_WindowWidth = 1280;

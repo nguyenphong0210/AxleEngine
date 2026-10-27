@@ -8,7 +8,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 33** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **75 Comprehensive Headless Test Suites** (`AxleTests.exe`, 82 individual test steps up through **Step 90**) passing with **100% pass rate**.
+* **Automated Test Verification**: **76 Comprehensive Headless Test Suites** (`AxleTests.exe`, 83 individual test steps up through **Step 91**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Phase 34 (Declarative AxleUI In-Game UI & Hardware-Accelerated Canvas2D Subsystem)** and beyond.
 
 ---
@@ -444,10 +444,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] ECS Mount Point (`UICanvasComponent`): attach `.axleui` documents to scene entities with `SortOrder`, visibility toggles, full `.axlescene` serialization, and optional offscreen render-to-texture for 3D cockpit instrument clusters.
     - [x] Link `Axle::Scene` to `Axle::UI2D` to cleanly eliminate circular dependencies while keeping Dear ImGui isolated in `Axle::UI`.
     - [x] Reverse Z-order hit-testing (`ProcessInput`) for mouse cursor interaction (`OnHover`, `OnPress`, `OnClick`) and directional D-Pad / Gamepad / Keyboard focus navigation (`NavUp`, `NavDown`, `NavLeft`, `NavRight`) across interactive `UIButtonNode` elements.
-  - [ ] **Step 6 - `RacingHUD` AxleUI Migration, Zero-ImGui Shipping Runtime & Automated Tests (`Runtime/` & `Editor/`)**:
-    - [ ] Port `RacingHUD` (analog/radial tachometer, digital speedometer, gear indicator, lateral/longitudinal G-force meter, and throttle/brake/clutch telemetry bars) and Pause Menu entirely to declarative `Editor/assets/ui/RacingHUD.axleui` and `Editor/assets/ui/PauseMenu.axleui`.
-    - [ ] Completely decouple `Axle::ImGuiLayer` and Dear ImGui linkage from `AxleRuntime.exe`, achieving a pure zero-ImGui standalone game executable while retaining full viewport preview inside `AxleEditor.exe`.
-    - [ ] Automated headless test suites (Steps 76–81) in `AxleTests.exe` validating `Canvas2D` vertex batching, MSDF font metrics, 2-pass anchor layout math across aspect ratios, UIParser AST & bindings, hit-testing, and end-to-end `RacingHUD` rendering.
+  - [x] **Step 6 - `RacingHUD` AxleUI Migration, Zero-ImGui Shipping Runtime & Automated Tests (`Runtime/` & `Editor/`)**:
+    - [x] Port `RacingHUD` (analog/radial tachometer, digital speedometer, gear indicator, lateral/longitudinal G-force meter, and throttle/brake/clutch telemetry bars) and Pause Menu entirely to declarative `Editor/assets/ui/RacingHUD.axleui` and `Editor/assets/ui/PauseMenu.axleui`.
+    - [x] Completely decouple `Axle::ImGuiLayer` and Dear ImGui linkage from `AxleRuntime.exe`, achieving a pure zero-ImGui standalone game executable while retaining full viewport preview inside `AxleEditor.exe`.
+    - [x] Automated headless test suites (Step 91 / Steps 76–81) in `AxleTests.exe` validating `Canvas2D` vertex batching, MSDF font metrics, 2-pass anchor layout math across aspect ratios, UIParser AST & bindings, hit-testing, and end-to-end `RacingHUD` rendering.
   - [ ] **Step 7 - In-Editor Visual Canvas Drag-and-Drop Tooling & Unity-Style `RectTransform` Gizmo (`Editor/`)**:
     - [ ] **Unity-Style `RectTransform` Abstraction (`Engine/UI`)**: Geometric layout model with `AnchorMin`, `AnchorMax` (normalized [0..1] range), `Pivot` (rotational & scaling origin [0..1]), `AnchoredPosition`, and `SizeDelta` for responsive UI scaling across arbitrary viewport resolutions.
     - [ ] **Interactive 2D Canvas Gizmo Handles (`Editor/`)**: Viewport canvas overlay via `ImDrawList` featuring bounding rectangle, 8 peripheral resize handles (corners and midpoints), pivot crosshair, and 4 anchor petal handles with interactive mouse dragging for position translation, dimension resizing, and anchor boundary splitting.

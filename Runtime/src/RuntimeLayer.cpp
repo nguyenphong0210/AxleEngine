@@ -15,7 +15,7 @@
 #include <AxleTerrain/TerrainCollider.hpp>
 #include <AxleTerrain/TerrainSerializer.hpp>
 #include <GLFW/glfw3.h>
-#include <imgui.h>
+#include <algorithm>
 
 namespace Axle {
 
@@ -24,7 +24,7 @@ namespace Axle {
     }
 
     void RuntimeLayer::OnAttach() {
-        AXLE_INFO("RuntimeLayer attached - Initializing Axle Standalone Game Player");
+        AXLE_INFO("RuntimeLayer attached - Initializing Axle Standalone Game Player (Zero-ImGui Shipping Runtime)");
 
         // Initialize Audio Subsystem
         AudioEngine::Init();
@@ -33,15 +33,18 @@ namespace Axle {
         m_WindowWidth = window.GetWidth();
         m_WindowHeight = window.GetHeight();
 
-        // 1. Sync GLFW input context, initialize gameplay scripts module, and sync ImGui context
+        // 1. Sync GLFW input context and initialize gameplay scripts module
         ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(window.GetNativeWindow()));
         ScriptHotReloadManager::Get().Initialize("AxleScripts.dll");
-        ScriptHotReloadManager::Get().SyncImGuiContext(ImGui::GetCurrentContext());
+        ScriptHotReloadManager::Get().SyncImGuiContext(nullptr);
 
-        // 2. Initialize Physics Scene
+        // 2. Initialize Hardware 2D Canvas for In-Game UI & HUD
+        m_Canvas.Init();
+
+        // 3. Initialize Physics Scene
         m_PhysicsScene = std::make_unique<PhysicsScene>();
 
-        // 3. Initialize Decoupled Scene Renderer (Direct Screen Backbuffer)
+        // 4. Initialize Decoupled Scene Renderer (Direct Screen Backbuffer)
         m_SceneRenderer = std::make_unique<SceneRenderer>();
         m_SceneRenderer->SetViewportSize(m_WindowWidth, m_WindowHeight);
 
@@ -305,28 +308,120 @@ namespace Axle {
 
             m_SceneRenderer->RenderScene(m_Scene, activeCamera, nullptr, m_PhysicsScene.get(), nullptr, settings);
         }
+
+        // 5. Render In-Game UI & HUD via Hardware Canvas2D (Zero-ImGui Shipping Runtime)
+        RenderUI();
     }
 
-    void RuntimeLayer::OnImGuiRender() {
+    void RuntimeLayer::SetupPauseMenu() {
         if (!m_Scene) return;
 
-        const ImGuiViewport* vp = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(vp->WorkPos);
-        ImGui::SetNextWindowSize(vp->WorkSize);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
-                                 ImGuiWindowFlags_NoMove |
-                                 ImGuiWindowFlags_NoSavedSettings |
-                                 ImGuiWindowFlags_NoBackground |
-                                 ImGuiWindowFlags_NoFocusOnAppearing |
-                                 ImGuiWindowFlags_NoBringToFrontOnFocus |
-                                 ImGuiWindowFlags_NoInputs;
-        if (ImGui::Begin("##GameHUDCanvas", nullptr, flags)) {
-            m_Scene->OnImGuiRender();
+        auto& uiCtx = m_Scene->GetUIDataContext();
+        uiCtx.Set("Game.IsPaused", m_IsPaused);
+
+        uiCtx.RegisterAction("OnResumeGame", [this]() {
+            m_IsPaused = false;
+            Input::SetCursorMode(CursorMode::Normal);
+            AXLE_INFO("Runtime: Game resumed via UI button");
+        });
+
+        uiCtx.RegisterAction("OnResetVehicle", [this]() {
+            if (m_Scene) {
+                auto vehicle = m_Scene->GetPrimaryRuntimeVehicle();
+                if (vehicle) {
+                    vehicle->Reset(glm::vec3(0.0f, 1.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+                }
+            }
+            m_IsPaused = false;
+            AXLE_INFO("Runtime: Vehicle reset via UI button");
+        });
+
+        uiCtx.RegisterAction("OnQuitGame", []() {
+            AXLE_INFO("Runtime: Quit requested via UI button");
+            Application::Get().Close();
+        });
+
+        // Ensure PauseMenu entity exists
+        bool hasPauseEntity = false;
+        auto view = m_Scene->GetRegistry().view<TagComponent, UICanvasComponent>();
+        for (auto e : view) {
+            const auto& tag = view.get<TagComponent>(e);
+            if (tag.Tag == "PauseMenu_UI") {
+                hasPauseEntity = true;
+                break;
+            }
         }
-        ImGui::End();
-        ImGui::PopStyleVar(2);
+
+        if (!hasPauseEntity) {
+            auto pauseEntity = m_Scene->CreateEntity("PauseMenu_UI");
+            auto& uic = pauseEntity.AddComponent<UICanvasComponent>("Editor/assets/ui/PauseMenu.axleui");
+            uic.SortOrder = 100;
+            uic.Visible = true;
+        }
+    }
+
+    void RuntimeLayer::RenderUI() {
+        if (!m_Scene) return;
+
+        auto& uiCtx = m_Scene->GetUIDataContext();
+        uiCtx.Set("Game.IsPaused", m_IsPaused);
+
+        const glm::vec2 viewportSize(static_cast<float>(m_WindowWidth), static_cast<float>(m_WindowHeight));
+        if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f) return;
+
+        // Process mouse input for interactive UI (e.g. Pause Menu)
+        auto [mx, my] = Input::GetMousePosition();
+        bool isDown = Input::IsMouseButtonPressed(MouseCode::Button0);
+        bool isClicked = isDown && !m_PrevMouseDown;
+        m_PrevMouseDown = isDown;
+
+        // Collect and sort canvas components
+        auto canvasView = m_Scene->GetRegistry().view<UICanvasComponent>();
+        struct CanvasItem {
+            int32_t SortOrder;
+            UICanvasComponent* Comp;
+        };
+        std::vector<CanvasItem> sortedCanvases;
+        for (auto ent : canvasView) {
+            auto& comp = canvasView.get<UICanvasComponent>(ent);
+            if (comp.Visible && !comp.AssetPath.empty()) {
+                sortedCanvases.push_back({ comp.SortOrder, &comp });
+            }
+        }
+        std::sort(sortedCanvases.begin(), sortedCanvases.end(), [](const CanvasItem& a, const CanvasItem& b) {
+            return a.SortOrder < b.SortOrder;
+        });
+
+        // Reverse iterate for hit testing (topmost first)
+        if (m_IsPaused) {
+            for (auto it = sortedCanvases.rbegin(); it != sortedCanvases.rend(); ++it) {
+                auto* comp = it->Comp;
+                if (comp->Document) {
+                    if (comp->Document->ProcessInput(glm::vec2(mx, my), isDown, isClicked, uiCtx)) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        m_Canvas.BeginCanvas(viewportSize);
+
+        for (auto& item : sortedCanvases) {
+            auto* comp = item.Comp;
+            if (!comp->Document) {
+                comp->Document = std::make_shared<UIDocument>();
+                comp->Document->SetFilePath(comp->AssetPath);
+                comp->Document->CheckAndHotReload();
+            } else {
+                comp->Document->CheckAndHotReload();
+            }
+
+            comp->Document->EvaluateBindings(uiCtx);
+            comp->Document->UpdateLayout(viewportSize);
+            comp->Document->Render(m_Canvas);
+        }
+
+        m_Canvas.EndCanvas();
     }
 
     void RuntimeLayer::OnWindowResize(u32 width, u32 height) {
@@ -345,6 +440,7 @@ namespace Axle {
     void RuntimeLayer::OnDetach() {
         AXLE_INFO("RuntimeLayer detached - Shutting down Game Player");
         Input::SetCursorMode(CursorMode::Normal);
+        m_Canvas.Shutdown();
         if (m_Scene) {
             m_Scene->OnRuntimeStop(m_PhysicsScene.get());
         }

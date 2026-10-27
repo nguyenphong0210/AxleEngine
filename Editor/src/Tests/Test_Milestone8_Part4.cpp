@@ -1246,4 +1246,214 @@ bool RunTest_Step90_Phase34_Step5_DataBindingAndHitTest() {
     return true;
 }
 
+// =============================================================================
+// TEST STEP 91: Phase 34 Step 6 - RacingHUD & PauseMenu AxleUI Migration,
+// Zero-ImGui Shipping Runtime Telemetry Bridge & Full In-Game UI Integration
+// =============================================================================
+bool RunTest_Step91_Phase34_Step6_RacingHUDFullIntegration() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 91 TEST] RACING HUD & PAUSE MENU AXLEUI PIPELINE " << std::endl;
+    std::cout << " (Declarative Templates, Bindings, Canvas2D, Hit-Test)  " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    // [91.1] Loading & Parsing Declarative RacingHUD.axleui and PauseMenu.axleui
+    std::cout << "[91.1] Loading and Parsing Declarative .axleui Documents..." << std::endl;
+    std::string hudPath = "Editor/assets/ui/RacingHUD.axleui";
+    if (!std::filesystem::exists(hudPath)) hudPath = "assets/ui/RacingHUD.axleui";
+
+    std::string pausePath = "Editor/assets/ui/PauseMenu.axleui";
+    if (!std::filesystem::exists(pausePath)) pausePath = "assets/ui/PauseMenu.axleui";
+
+    UIDocument hudDoc;
+    std::string hudErr;
+    bool hudParsed = UIParser::ParseFile(hudPath, hudDoc, &hudErr);
+    if (!hudParsed) {
+        std::cerr << "FAIL: Failed to parse RacingHUD.axleui! Error: " << hudErr << std::endl;
+        return false;
+    }
+
+    UIDocument pauseDoc;
+    std::string pauseErr;
+    bool pauseParsed = UIParser::ParseFile(pausePath, pauseDoc, &pauseErr);
+    if (!pauseParsed) {
+        std::cerr << "FAIL: Failed to parse PauseMenu.axleui! Error: " << pauseErr << std::endl;
+        return false;
+    }
+
+    assert(hudDoc.GetNodeCount() >= 10);
+    assert(pauseDoc.GetNodeCount() >= 5);
+    std::cout << "  -> RacingHUD.axleui parsed successfully (" << hudDoc.GetNodeCount() << " nodes instantiated): PASS" << std::endl;
+    std::cout << "  -> PauseMenu.axleui parsed successfully (" << pauseDoc.GetNodeCount() << " nodes instantiated): PASS" << std::endl;
+
+    // [91.2] Live Vehicle Telemetry & Binding Evaluation
+    std::cout << "\n[91.2] Testing Live Vehicle Telemetry & Binding Evaluation..." << std::endl;
+    UIDataContext ctx;
+    ctx.Set("Engine.FPS", 144);
+    ctx.Set("Vehicle.SpeedKmh", 215);
+    ctx.Set("Vehicle.SpeedUnit", std::string("KM/H"));
+    ctx.Set("Vehicle.RPMNormalized", 0.92f);
+    ctx.Set("Vehicle.IsRedline", true);
+    ctx.Set("Vehicle.GearString", std::string("5"));
+    ctx.Set("Vehicle.Throttle", 1.0f);
+    ctx.Set("Vehicle.Brake", 0.0f);
+    ctx.Set("Vehicle.LateralG", std::string("+0.85"));
+    ctx.Set("Vehicle.LongitudinalG", std::string("-0.32"));
+    ctx.Set("Vehicle.CameraMode", std::string("CHASE"));
+    ctx.Set("Game.IsPaused", false);
+
+    bool resumedGame = false;
+    bool resetVehicle = false;
+    bool quitGame = false;
+    ctx.RegisterAction("OnResumeGame", [&]() { resumedGame = true; });
+    ctx.RegisterAction("OnResetVehicle", [&]() { resetVehicle = true; });
+    ctx.RegisterAction("OnQuitGame", [&]() { quitGame = true; });
+
+    hudDoc.EvaluateBindings(ctx);
+
+    auto* speedNode = dynamic_cast<UITextNode*>(hudDoc.FindNodeByID("speed_value"));
+    assert(speedNode != nullptr);
+    assert(speedNode->Text == "215");
+
+    auto* gearNode = dynamic_cast<UITextNode*>(hudDoc.FindNodeByID("gear_indicator"));
+    assert(gearNode != nullptr);
+    assert(gearNode->Text == "5");
+
+    auto* rpmGauge = dynamic_cast<UIRadialGaugeNode*>(hudDoc.FindNodeByID("rpm_radial_gauge"));
+    assert(rpmGauge != nullptr);
+    assert(std::abs(rpmGauge->Value - 0.92f) < 1e-4f);
+
+    auto* throttleBar = dynamic_cast<UIProgressBarNode*>(hudDoc.FindNodeByID("throttle_bar"));
+    assert(throttleBar != nullptr);
+    assert(std::abs(throttleBar->Value - 1.0f) < 1e-4f);
+
+    auto* brakeBar = dynamic_cast<UIProgressBarNode*>(hudDoc.FindNodeByID("brake_bar"));
+    assert(brakeBar != nullptr);
+    assert(std::abs(brakeBar->Value - 0.0f) < 1e-4f);
+
+    std::cout << "  -> Speed string ('215') evaluated: PASS" << std::endl;
+    std::cout << "  -> Gear indicator ('5') and RPM Gauge (0.92, Redline) evaluated: PASS" << std::endl;
+    std::cout << "  -> Throttle (1.0) and Brake (0.0) pedal bars evaluated: PASS" << std::endl;
+
+    // [91.3] 2-Pass Responsive Layout across Resolutions (1080p, 4K, 720p)
+    std::cout << "\n[91.3] Testing 2-Pass Responsive Layout Engine across Resolutions..." << std::endl;
+    hudDoc.UpdateLayout(glm::vec2(1920.0f, 1080.0f));
+    assert(std::abs(hudDoc.GetComputedDPIScale() - 1.0f) < 1e-4f);
+
+    auto* cluster = hudDoc.FindNodeByID("tachometer_cluster");
+    assert(cluster != nullptr);
+    assert(cluster->ComputedRect.X + cluster->ComputedRect.Width <= 1920.0f);
+    assert(cluster->ComputedRect.Y + cluster->ComputedRect.Height <= 1080.0f);
+
+    auto* telemPanel = hudDoc.FindNodeByID("telemetry_panel");
+    assert(telemPanel != nullptr);
+    assert(telemPanel->ComputedRect.X >= 0.0f);
+    assert(telemPanel->ComputedRect.Y >= 0.0f);
+
+    // 4K Layout
+    hudDoc.UpdateLayout(glm::vec2(3840.0f, 2160.0f));
+    assert(std::abs(hudDoc.GetComputedDPIScale() - 2.0f) < 1e-4f);
+    assert((cluster->ComputedRect.X + cluster->ComputedRect.Width) * hudDoc.GetComputedDPIScale() <= 3840.0f + 0.1f);
+
+    // 720p Layout
+    hudDoc.UpdateLayout(glm::vec2(1280.0f, 720.0f));
+    assert(std::abs(hudDoc.GetComputedDPIScale() - (1280.0f / 1920.0f)) < 1e-4f);
+    assert((cluster->ComputedRect.X + cluster->ComputedRect.Width) * hudDoc.GetComputedDPIScale() <= 1280.0f + 0.1f);
+
+    std::cout << "  -> 1080p, 4K (2.0x DPI), and 720p (0.667x DPI) responsive layouts verified: PASS" << std::endl;
+
+    // [91.4] Hardware Canvas2D Batch Rendering (1 Draw Call, Multi-Quad)
+    std::cout << "\n[91.4] Testing Hardware Canvas2D Batch Rendering..." << std::endl;
+    hudDoc.UpdateLayout(glm::vec2(1920.0f, 1080.0f));
+    Canvas2D canvas;
+    canvas.BeginCanvas(glm::vec2(1920.0f, 1080.0f));
+    hudDoc.Render(canvas);
+    canvas.EndCanvas();
+
+    const auto& stats = canvas.GetStats();
+    assert(stats.DrawCalls == 1);
+    assert(stats.QuadCount >= 15);
+    assert(stats.VertexCount == stats.QuadCount * 4);
+    assert(stats.IndexCount == stats.QuadCount * 6);
+    std::cout << "  -> Canvas2D consolidated " << stats.QuadCount << " quads (" 
+              << stats.VertexCount << " verts, " << stats.IndexCount << " idx) in " 
+              << stats.DrawCalls << " draw call: PASS" << std::endl;
+
+    // [91.5] Interactive Pause Menu & Action Callback Triggers
+    std::cout << "\n[91.5] Testing Interactive Pause Menu & Action Callback Triggers..." << std::endl;
+    pauseDoc.EvaluateBindings(ctx);
+    assert(pauseDoc.GetRootNode()->Visible == false); // Game.IsPaused is false
+
+    ctx.Set("Game.IsPaused", true);
+    pauseDoc.EvaluateBindings(ctx);
+    assert(pauseDoc.GetRootNode()->Visible == true); // Game.IsPaused is true
+
+    pauseDoc.UpdateLayout(glm::vec2(1920.0f, 1080.0f));
+    auto* btnResume = dynamic_cast<UIButtonNode*>(pauseDoc.FindNodeByID("btn_resume"));
+    assert(btnResume != nullptr);
+    glm::vec2 clickPos(btnResume->ComputedRect.X + btnResume->ComputedRect.Width * 0.5f,
+                       btnResume->ComputedRect.Y + btnResume->ComputedRect.Height * 0.5f);
+
+    bool clickHandled = pauseDoc.ProcessInput(clickPos, true, true, ctx);
+    assert(clickHandled == true);
+    assert(resumedGame == true);
+
+    // Focus Navigation on Pause Menu
+    bool navHandled = pauseDoc.NavigateFocus("Down"); // Initial focus lands on first button (btn_resume)
+    assert(navHandled == true);
+    assert(btnResume->IsFocused == true);
+
+    navHandled = pauseDoc.NavigateFocus("Down"); // Move to btn_reset_vehicle
+    assert(navHandled == true);
+    pauseDoc.ActivateFocusedButton(ctx);
+    assert(resetVehicle == true);
+
+    navHandled = pauseDoc.NavigateFocus("Down"); // Move to btn_quit
+    assert(navHandled == true);
+    pauseDoc.ActivateFocusedButton(ctx);
+    assert(quitGame == true);
+
+    std::cout << "  -> Visibility binding '{Game.IsPaused}' verified: PASS" << std::endl;
+    std::cout << "  -> Mouse hit-test and 'OnResumeGame' trigger: PASS" << std::endl;
+    std::cout << "  -> Directional focus navigation and 'OnResetVehicle' / 'OnQuitGame' triggers: PASS" << std::endl;
+
+    // [91.6] Standalone Zero-ImGui Shipping Runtime & ECS Lifecycle Integration
+    std::cout << "\n[91.6] Testing ECS RacingHUD Script Lifecycle & UIDataContext Bridge..." << std::endl;
+    auto scene = std::make_shared<Scene>();
+    auto hudEntity = scene->CreateEntity("RacingHUD_Entity");
+    auto& nsc = hudEntity.AddComponent<NativeScriptComponent>("RacingHUD");
+    nsc.Bind<RacingHUD>();
+    nsc.Instance = nsc.InstantiateScript();
+    nsc.Instance->SetEntity(hudEntity);
+    nsc.Instance->OnCreate();
+
+    assert(hudEntity.HasComponent<UICanvasComponent>() == true);
+    auto& uic = hudEntity.GetComponent<UICanvasComponent>();
+    assert(uic.Visible == true);
+
+    // Tick update
+    auto* hudInstance = static_cast<RacingHUD*>(nsc.Instance);
+    hudInstance->OnUpdate(0.016f);
+
+    assert(scene->GetUIDataContext().Has("Vehicle.SpeedKmh") == true);
+    assert(scene->GetUIDataContext().Has("Engine.FPS") == true);
+
+    // Visibility toggle
+    hudInstance->Visible = false;
+    hudInstance->OnUpdate(0.016f);
+    assert(uic.Visible == false);
+
+    nsc.Instance->OnDestroy();
+    delete nsc.Instance;
+    nsc.Instance = nullptr;
+
+    std::cout << "  -> NativeScriptComponent attached UICanvasComponent to entity: PASS" << std::endl;
+    std::cout << "  -> OnUpdate published telemetry to Scene UIDataContext: PASS" << std::endl;
+    std::cout << "  -> Visibility toggle synced with UICanvasComponent: PASS" << std::endl;
+
+    std::cout << "\n>>> STEP 91 PASSED: RacingHUD AxleUI Migration & Zero-ImGui Runtime 100% verified! <<<\n" << std::endl;
+    return true;
+}
+
 

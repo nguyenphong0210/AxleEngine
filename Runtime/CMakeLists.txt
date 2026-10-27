@@ -17,7 +17,7 @@ target_link_libraries(AxleRuntime PRIVATE
     Axle::Vehicle
     Axle::Scene
     Axle::Project
-    Axle::UI
+    Axle::UI2D
     Axle::Spline
     Axle::Terrain
     Axle::Animation

@@ -31,7 +31,8 @@ static void WriteCrashInfo(const char* title, DWORD code, void* addr, PEXCEPTION
         }
 
         HANDLE hProcess = GetCurrentProcess();
-        SymInitialize(hProcess, NULL, TRUE);
+        SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+        SymInitialize(hProcess, "D:\\WorkSpace\\AxleEngine\\build\\Editor\\Release;.;", TRUE);
 
         void* stack[64];
         unsigned short frames = CaptureStackBackTrace(0, 64, stack, NULL);
@@ -43,8 +44,16 @@ static void WriteCrashInfo(const char* title, DWORD code, void* addr, PEXCEPTION
             pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
             pSymbol->MaxNameLen = 255;
 
+            IMAGEHLP_LINE64 lineInfo = {};
+            lineInfo.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+            DWORD displacementLine = 0;
+
             if (SymFromAddr(hProcess, (DWORD64)stack[i], &displacement, pSymbol)) {
-                fprintf(f, "  [%02u] 0x%p %s + 0x%llX\n", i, stack[i], pSymbol->Name, displacement);
+                fprintf(f, "  [%02u] 0x%p %s + 0x%llX", i, stack[i], pSymbol->Name, displacement);
+                if (SymGetLineFromAddr64(hProcess, (DWORD64)stack[i], &displacementLine, &lineInfo)) {
+                    fprintf(f, " (%s:%lu)", lineInfo.FileName, lineInfo.LineNumber);
+                }
+                fprintf(f, "\n");
             } else {
                 fprintf(f, "  [%02u] 0x%p\n", i, stack[i]);
             }
@@ -166,6 +175,15 @@ int main(int argc, char** argv) {
             }
         }
     }
+
+#if defined(_WIN32)
+#if !defined(AXLE_HAS_VULKAN)
+    if (rhiConfig.PreferredBackend == Axle::RHI::RHIType::Vulkan) {
+        AXLE_WARN("Vulkan 1.3 is supported for headless RHI compute/tests, but Editor UI requires the Vulkan SDK (not installed). Defaulting to Direct3D 12.");
+        rhiConfig.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+    }
+#endif
+#endif
 
     Axle::GraphicsAPI activeAPI = Axle::GraphicsAPI::OpenGL;
 

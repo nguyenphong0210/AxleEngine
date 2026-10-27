@@ -188,6 +188,11 @@ namespace Axle {
 
     void ImGuiLayer::InitOpenGL() {
         if (m_Window) {
+            int clientApi = glfwGetWindowAttrib(m_Window, GLFW_CLIENT_API);
+            if (clientApi != GLFW_OPENGL_API) {
+                AXLE_CORE_ERROR("ImGuiLayer::InitOpenGL: Cannot initialize OpenGL backend because window has no OpenGL context (GLFW_CLIENT_API is {0})!", clientApi);
+                return;
+            }
             ImGui_ImplGlfw_InitForOpenGL(m_Window, true);
         }
         ImGui_ImplOpenGL3_Init("#version 450");
@@ -342,9 +347,7 @@ namespace Axle {
         }
         AXLE_CORE_INFO("ImGui Layer initialized successfully for Vulkan");
 #else
-        AXLE_CORE_WARN("Vulkan ImGui backend requested but not available; falling back to OpenGL!");
-        InitOpenGL();
-        m_BackendType = ImGuiBackendType::OpenGL;
+        AXLE_CORE_WARN("Vulkan ImGui backend requested but not available without Vulkan SDK!");
 #endif
     }
 
@@ -445,30 +448,40 @@ namespace Axle {
     }
 
     void ImGuiLayer::Begin() {
+        if (!m_Initialized) return;
+
         switch (m_BackendType) {
             case ImGuiBackendType::OpenGL:
-                ImGui_ImplOpenGL3_NewFrame();
-                if (m_Window) ImGui_ImplGlfw_NewFrame();
-                ImGui::NewFrame();
+                if (ImGui::GetIO().BackendRendererUserData != nullptr) {
+                    ImGui_ImplOpenGL3_NewFrame();
+                    if (m_Window) ImGui_ImplGlfw_NewFrame();
+                    ImGui::NewFrame();
+                }
                 break;
             case ImGuiBackendType::Direct3D12:
 #if defined(AXLE_HAS_D3D12)
-                ImGui_ImplDX12_NewFrame();
-                if (m_Window) ImGui_ImplGlfw_NewFrame();
-                ImGui::NewFrame();
+                if (ImGui::GetIO().BackendRendererUserData != nullptr) {
+                    ImGui_ImplDX12_NewFrame();
+                    if (m_Window) ImGui_ImplGlfw_NewFrame();
+                    ImGui::NewFrame();
+                }
 #endif
                 break;
             case ImGuiBackendType::Vulkan:
 #if defined(AXLE_HAS_VULKAN)
-                ImGui_ImplVulkan_NewFrame();
-                if (m_Window) ImGui_ImplGlfw_NewFrame();
-                ImGui::NewFrame();
+                if (ImGui::GetIO().BackendRendererUserData != nullptr) {
+                    ImGui_ImplVulkan_NewFrame();
+                    if (m_Window) ImGui_ImplGlfw_NewFrame();
+                    ImGui::NewFrame();
+                }
 #endif
                 break;
         }
     }
 
     void ImGuiLayer::End() {
+        if (!m_Initialized || ImGui::GetIO().BackendRendererUserData == nullptr) return;
+
         UpdateWindowSnapping();
         ImGui::Render();
 

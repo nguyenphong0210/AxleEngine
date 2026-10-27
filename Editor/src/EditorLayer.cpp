@@ -3315,7 +3315,11 @@ void EditorLayer::RenderProjectSettingsModal() {
             ImGui::Spacing();
             const char* backendItems[] = {
                 "Direct3D 12 (D3D12) [Native Windows / Ray Tracing / Mesh Shaders]",
+#if defined(AXLE_HAS_VULKAN)
                 "Vulkan 1.3 (VK) [Modern Cross-Platform / High Efficiency]",
+#else
+                "Vulkan 1.3 (VK) [Headless RHI / Editor UI requires Vulkan SDK]",
+#endif
                 "OpenGL 4.5 (Core) [Universal Compatibility / Legacy Pipeline]"
             };
 
@@ -3329,6 +3333,15 @@ void EditorLayer::RenderProjectSettingsModal() {
             const char* backendKeys[] = { "Direct3D12", "Vulkan", "OpenGL" };
             const char* backendFlags[] = { "dx12", "vulkan", "opengl" };
             config.RHIBackend = backendKeys[m_SelectedRHIBackendIndex];
+
+#if !defined(AXLE_HAS_VULKAN)
+            if (m_SelectedRHIBackendIndex == 1) {
+                ImGui::Spacing();
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.4f, 1.0f));
+                ImGui::TextWrapped("WARNING: The standalone Vulkan SDK is not installed on this system. While headless RHI compute/tests run via the driver's Vulkan library, the Editor UI requires the Vulkan SDK. Launching with Vulkan will safely fallback to Direct3D 12.");
+                ImGui::PopStyleColor();
+            }
+#endif
 
             if (m_RHIRequiresRestart) {
                 ImGui::Spacing();

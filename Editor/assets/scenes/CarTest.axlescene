@@ -1,392 +1,192 @@
 # Axle Scene Definition File
-Scene: CarTest
+Scene: Untitled
 Entities:
-  - Entity: 15027978107127069824
+  - Entity: 13370000112233445566
     TagComponent:
-      Tag: Wheel_RR
-    TransformComponent:
-      Translation: [ -0.950000 , -0.100000 , -1.400000 ]
-      Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
-    MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
-      PatternMode: 3
-      TileScale: 4.000000
-      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
-      AlbedoPath: 
-      UseAlbedoMap: false
-      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-      NormalPath: 
-      UseNormalMap: false
-      NormalStrength: 1.000000
-      RoughnessPath: 
-      UseRoughnessMap: false
-      Roughness: 0.750000
-      MetallicPath: 
-      UseMetallicMap: false
-      Metallic: 0.050000
-      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
-      EmissionIntensity: 0.000000
-      UVScale: [ 1.000000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 8959925798803133502
-      InheritTransform: true
-      InheritScale: true
-    WheelComponent:
-      Radius: 0.350000
-      Width: 0.250000
-      SuspensionMinLength: 0.050000
-      SuspensionMaxLength: 0.250000
-      SpringFrequency: 2.200000
-      SpringDamping: 0.700000
-      CanSteer: false
-      MaxSteerAngle: 32.000000
-      IsDriven: true
-      HasHandbrake: true
-      BrakeTorque: 3000.000000
-      HandBrakeTorque: 6000.000000
-      AutoSyncMesh: true
-  - Entity: 6128542852897491018
-    TagComponent:
-      Tag: Wheel_RL
-    TransformComponent:
-      Translation: [ 0.950000 , -0.100000 , -1.400000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
-    MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
-      PatternMode: 3
-      TileScale: 4.000000
-      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
-      AlbedoPath: 
-      UseAlbedoMap: false
-      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-      NormalPath: 
-      UseNormalMap: false
-      NormalStrength: 1.000000
-      RoughnessPath: 
-      UseRoughnessMap: false
-      Roughness: 0.750000
-      MetallicPath: 
-      UseMetallicMap: false
-      Metallic: 0.050000
-      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
-      EmissionIntensity: 0.000000
-      UVScale: [ 1.000000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 8959925798803133502
-      InheritTransform: true
-      InheritScale: true
-    WheelComponent:
-      Radius: 0.350000
-      Width: 0.250000
-      SuspensionMinLength: 0.050000
-      SuspensionMaxLength: 0.250000
-      SpringFrequency: 2.200000
-      SpringDamping: 0.700000
-      CanSteer: false
-      MaxSteerAngle: 32.000000
-      IsDriven: true
-      HasHandbrake: true
-      BrakeTorque: 3000.000000
-      HandBrakeTorque: 6000.000000
-      AutoSyncMesh: true
-  - Entity: 4716918885181481269
-    TagComponent:
-      Tag: Wheel_FR
-    TransformComponent:
-      Translation: [ -0.950000 , -0.100000 , 1.400000 ]
-      Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
-    MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
-      PatternMode: 3
-      TileScale: 4.000000
-      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
-      AlbedoPath: 
-      UseAlbedoMap: false
-      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-      NormalPath: 
-      UseNormalMap: false
-      NormalStrength: 1.000000
-      RoughnessPath: 
-      UseRoughnessMap: false
-      Roughness: 0.750000
-      MetallicPath: 
-      UseMetallicMap: false
-      Metallic: 0.050000
-      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
-      EmissionIntensity: 0.000000
-      UVScale: [ 1.000000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 8959925798803133502
-      InheritTransform: true
-      InheritScale: true
-    WheelComponent:
-      Radius: 0.350000
-      Width: 0.250000
-      SuspensionMinLength: 0.050000
-      SuspensionMaxLength: 0.250000
-      SpringFrequency: 2.200000
-      SpringDamping: 0.700000
-      CanSteer: true
-      MaxSteerAngle: 32.000000
-      IsDriven: true
-      HasHandbrake: false
-      BrakeTorque: 3000.000000
-      HandBrakeTorque: 0.000000
-      AutoSyncMesh: true
-  - Entity: 7782791376365683938
-    TagComponent:
-      Tag: Wheel_FL
-    TransformComponent:
-      Translation: [ 0.950000 , -0.100000 , 1.400000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
-    MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
-      PatternMode: 3
-      TileScale: 4.000000
-      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
-      AlbedoPath: 
-      UseAlbedoMap: false
-      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
-      NormalPath: 
-      UseNormalMap: false
-      NormalStrength: 1.000000
-      RoughnessPath: 
-      UseRoughnessMap: false
-      Roughness: 0.750000
-      MetallicPath: 
-      UseMetallicMap: false
-      Metallic: 0.050000
-      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
-      EmissionIntensity: 0.000000
-      UVScale: [ 1.000000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 8959925798803133502
-      InheritTransform: true
-      InheritScale: true
-    WheelComponent:
-      Radius: 0.350000
-      Width: 0.250000
-      SuspensionMinLength: 0.050000
-      SuspensionMaxLength: 0.250000
-      SpringFrequency: 2.200000
-      SpringDamping: 0.700000
-      CanSteer: true
-      MaxSteerAngle: 32.000000
-      IsDriven: true
-      HasHandbrake: false
-      BrakeTorque: 3000.000000
-      HandBrakeTorque: 0.000000
-      AutoSyncMesh: true
-  - Entity: 2479544764548422800
-    TagComponent:
-      Tag: BodyMesh
+      Tag: Racing HUD
     TransformComponent:
       Translation: [ 0.000000 , 0.000000 , 0.000000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    NativeScriptComponent:
+      ScriptName: RacingHUD
+  - Entity: 12485920194857201942
+    TagComponent:
+      Tag: Main Camera
+    TransformComponent:
+      Translation: [ 0.000000 , 6.000000 , 18.000000 ]
+      Rotation: [ 0.994522 , -0.104528 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    NativeScriptComponent:
+      ScriptName: VehicleChaseCamera
+    CameraComponent:
+      Primary: true
+      FOV: 45.000000
+      NearClip: 0.100000
+      FarClip: 1000.000000
+    AudioListenerComponent:
+      Active: true
+  - Entity: 17853323863493946772
+    TagComponent:
+      Tag: Directional Light
+    TransformComponent:
+      Translation: [ 0.000000 , 10.000000 , 0.000000 ]
+      Rotation: [ 0.875426 , 0.408218 , -0.234570 , 0.109382 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    DirectionalLightComponent:
+      Color: [ 1.000000 , 0.980000 , 0.920000 ]
+      Intensity: 1.000000
+      AmbientIntensity: 0.280000
+      Azimuth: 45.000000
+      Elevation: 50.000000
+      CastShadows: true
+      ShadowOrthoSize: 25.000000
+      ShadowBias: 0.001200
+      ShadowSlopeBias: 0.002000
+      ShadowNormalBias: 0.015000
+      ShadowFilterRadius: 2.000000
+      ShadowQuality: 1
+      CascadeSplitLambda: 0.850000
+      MaxShadowDistance: 150.000000
+      Exposure: 1.000000
+      ToneMappingMode: 0
+      Gamma: 2.200000
+  - Entity: 14539758737335856244
+    TagComponent:
+      Tag: Skybox Environment
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    SkyboxComponent:
+      Enabled: true
+      SkyboxType: 0
+      HDRPath: 
+      Intensity: 1.000000
+      Exposure: 1.000000
+      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
+      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
+      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
+      SunSize: 0.045000
+      SunGlow: 0.160000
+      Turbidity: 1.000000
+      SyncWithSun: true
+      CustomAzimuth: 45.000000
+      CustomElevation: 50.000000
+      HemisphereAmbient: true
+  - Entity: 14508017990534648314
+    TagComponent:
+      Tag: Ground
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 100.000000 , 1.000000 , 100.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Chassis.axlemesh
+      AssetPath: builtin://plane
       PatternMode: 1
-      TileScale: 6.000000
-      Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
-      Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: assets/materials/GoldMetallic.axlemat
-      AlbedoPath: 
-      UseAlbedoMap: false
-      AlbedoColor: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
-      NormalPath: 
-      UseNormalMap: false
-      NormalStrength: 1.000000
-      RoughnessPath: 
-      UseRoughnessMap: false
-      Roughness: 0.180000
-      MetallicPath: 
-      UseMetallicMap: false
-      Metallic: 1.000000
-      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
-      EmissionIntensity: 0.000000
-      UVScale: [ 1.000000 , 1.000000 ]
+      TileScale: 8.000000
+      Color1: [ 0.350000 , 0.380000 , 0.420000 , 1.000000 ]
+      Color2: [ 0.200000 , 0.220000 , 0.250000 , 1.000000 ]
+    RigidBody3D:
+      MotionType: Static
+      IsDynamic: false
+      Mass: 1.000000
+      LinearDamping: 0.050000
+      AngularDamping: 0.050000
+      GravityFactor: 1.000000
+    CollisionShape3D:
+      ShapeType: Plane
+      HalfExtent: [ 50.000000 , 0.500000 , 50.000000 ]
+      Radius: 50.000000
+      HalfHeight: 0.500000
+      Offset: [ 0.000000 , 0.000000 , 0.000000 ]
+      Friction: 0.800000
+      Restitution: 0.000000
+      IsTrigger: false
     HierarchyComponent:
-      Parent: 8959925798803133502
+      Parent: 0
       InheritTransform: true
       InheritScale: true
-  - Entity: 1100220033004400101
+  - Entity: 1234567890123456789
     TagComponent:
-      Tag: Headlight_L
+      Tag: TrackTorch_VFX
     TransformComponent:
-      Translation: [ 0.650000 , 0.250000 , 2.180000 ]
+      Translation: [ 6.500000 , 0.500000 , -5.000000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 0.220000 , 0.090000 , 0.040000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     HierarchyComponent:
-      Parent: 8959925798803133502
+      Parent: 0
       InheritTransform: true
       InheritScale: true
-    MeshInstance3D:
-      AssetPath: builtin://cube
-      PatternMode: 3
-      TileScale: 1.000000
-      Color1: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
-      Color2: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: 
-      AlbedoPath: 
-      UseAlbedoMap: false
-      AlbedoColor: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
-      NormalPath: 
-      UseNormalMap: false
-      NormalStrength: 1.000000
-      RoughnessPath: 
-      UseRoughnessMap: false
-      Roughness: 0.100000
-      MetallicPath: 
-      UseMetallicMap: false
-      Metallic: 0.000000
-      EmissionColor: [ 0.950000 , 0.980000 , 1.000000 ]
-      EmissionIntensity: 5.000000
-      UVScale: [ 1.000000 , 1.000000 ]
-    SpotLightComponent:
-      Enabled: true
-      Color: [ 1.000000 , 0.980000 , 0.900000 ]
-      Intensity: 15.000000
-      Range: 45.000000
-      InnerConeAngle: 18.000000
-      OuterConeAngle: 32.000000
-  - Entity: 1100220033004400102
-    TagComponent:
-      Tag: Headlight_R
-    TransformComponent:
-      Translation: [ -0.650000 , 0.250000 , 2.180000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 0.220000 , 0.090000 , 0.040000 ]
-    HierarchyComponent:
-      Parent: 8959925798803133502
-      InheritTransform: true
-      InheritScale: true
-    MeshInstance3D:
-      AssetPath: builtin://cube
-      PatternMode: 3
-      TileScale: 1.000000
-      Color1: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
-      Color2: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: 
-      AlbedoPath: 
-      UseAlbedoMap: false
-      AlbedoColor: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
-      NormalPath: 
-      UseNormalMap: false
-      NormalStrength: 1.000000
-      RoughnessPath: 
-      UseRoughnessMap: false
-      Roughness: 0.100000
-      MetallicPath: 
-      UseMetallicMap: false
-      Metallic: 0.000000
-      EmissionColor: [ 0.950000 , 0.980000 , 1.000000 ]
-      EmissionIntensity: 5.000000
-      UVScale: [ 1.000000 , 1.000000 ]
-    SpotLightComponent:
-      Enabled: true
-      Color: [ 1.000000 , 0.980000 , 0.900000 ]
-      Intensity: 15.000000
-      Range: 45.000000
-      InnerConeAngle: 18.000000
-      OuterConeAngle: 32.000000
-  - Entity: 1100220033004400103
-    TagComponent:
-      Tag: Taillight_L
-    TransformComponent:
-      Translation: [ 0.650000 , 0.350000 , -2.180000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 0.240000 , 0.080000 , 0.040000 ]
-    HierarchyComponent:
-      Parent: 8959925798803133502
-      InheritTransform: true
-      InheritScale: true
-    MeshInstance3D:
-      AssetPath: builtin://cube
-      PatternMode: 3
-      TileScale: 1.000000
-      Color1: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
-      Color2: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: 
-      AlbedoPath: 
-      UseAlbedoMap: false
-      AlbedoColor: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
-      NormalPath: 
-      UseNormalMap: false
-      NormalStrength: 1.000000
-      RoughnessPath: 
-      UseRoughnessMap: false
-      Roughness: 0.200000
-      MetallicPath: 
-      UseMetallicMap: false
-      Metallic: 0.000000
-      EmissionColor: [ 1.000000 , 0.050000 , 0.050000 ]
-      EmissionIntensity: 1.500000
-      UVScale: [ 1.000000 , 1.000000 ]
-    PointLightComponent:
-      Color: [ 1.000000 , 0.050000 , 0.020000 ]
-      Intensity: 1.000000
-      Radius: 8.000000
-      Falloff: 1.500000
-  - Entity: 1100220033004400104
-    TagComponent:
-      Tag: Taillight_R
-    TransformComponent:
-      Translation: [ -0.650000 , 0.350000 , -2.180000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 0.240000 , 0.080000 , 0.040000 ]
-    HierarchyComponent:
-      Parent: 8959925798803133502
-      InheritTransform: true
-      InheritScale: true
-    MeshInstance3D:
-      AssetPath: builtin://cube
-      PatternMode: 3
-      TileScale: 1.000000
-      Color1: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
-      Color2: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: 
-      AlbedoPath: 
-      UseAlbedoMap: false
-      AlbedoColor: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
-      NormalPath: 
-      UseNormalMap: false
-      NormalStrength: 1.000000
-      RoughnessPath: 
-      UseRoughnessMap: false
-      Roughness: 0.200000
-      MetallicPath: 
-      UseMetallicMap: false
-      Metallic: 0.000000
-      EmissionColor: [ 1.000000 , 0.050000 , 0.050000 ]
-      EmissionIntensity: 1.500000
-      UVScale: [ 1.000000 , 1.000000 ]
-    PointLightComponent:
-      Color: [ 1.000000 , 0.050000 , 0.020000 ]
-      Intensity: 1.000000
-      Radius: 8.000000
-      Falloff: 1.500000
+    ParticleEmitterComponent:
+      Name: TrackFire
+      Active: true
+      AutoPlay: true
+      Visible: true
+      SimulationSpace: World
+      EmissionRate: 35.000000
+      BurstCount: 0
+      BurstInterval: 0.000000
+      MaxParticles: 300
+      Lifetime: [ 1.000000 , 2.000000 ]
+      InitialSpeed: [ 2.000000 , 5.000000 ]
+      StartSize: [ 0.200000 , 0.400000 ]
+      EndSize: [ 0.800000 , 1.200000 ]
+      StartRotation: [ 0.000000 , 6.283185 ]
+      AngularVelocity: [ -1.500000 , 1.500000 ]
+      GravityModifier: -0.650000
+      Drag: 0.100000
+      StartColor: [ 1.000000 , 0.650000 , 0.150000 , 1.000000 ]
+      EndColor: [ 0.850000 , 0.120000 , 0.020000 , 0.000000 ]
+      BlendMode: 1
+      Orientation: 0
+      ShapeType: 0
+      ShapeRadius: 1.000000
+      ShapeConeAngle: 0.523599
+      ShapeBoxExtents: [ 1.000000 , 1.000000 , 1.000000 ]
+      ShapeLineLength: 1.000000
+      ShapeDirection: [ 0.000000 , 1.000000 , 0.000000 ]
+      ShapeSurfaceOnly: false
+      TexturePath: 
+      NormalMapPath: 
+      TextureRows: 1
+      TextureCols: 1
+      TotalFrames: 1
+      SubFrameBlending: false
+      LightingEnabled: false
+      WrapLighting: 0.400000
+      ScatteringFactor: 0.250000
+      NormalMapStrength: 1.000000
+      NearFadeEnabled: true
+      NearFadeStart: 0.200000
+      NearFadeEnd: 1.000000
+      FarFadeEnabled: false
+      FarFadeStart: 100.000000
+      FarFadeEnd: 200.000000
+      SoftnessDistance: 0.500000
+      CurlNoiseEnabled: false
+      CurlNoiseStrength: 1.000000
+      CurlNoiseFrequency: 0.500000
+      CollisionEnabled: false
+      CollisionRestitution: 0.500000
+      CollisionFriction: 0.200000
+      CollisionParticleRadius: 0.050000
   - Entity: 8959925798803133502
     TagComponent:
       Tag: Car
@@ -423,7 +223,7 @@ Entities:
       MinRPM: 1000.000000
       MaxBrakeTorque: 3000.000000
       MaxHandBrakeTorque: 6000.000000
-      AutoSyncMesh: true
+      AntiRollBarStiffness: 1000.000000
       DefaultSuspensionFrequency: 2.000000
       DefaultSuspensionDamping: 0.500000
       FourWheelDrive: true
@@ -456,146 +256,395 @@ Entities:
       MinSpeedForRoosterTail: 5.000000
       SurfaceType: 0
       BackfireMinRPM: 5200.000000
-  - Entity: 1234567890123456789
+      BackfireThrottleLiftThreshold: 0.150000
+      BackfireHighThrottleMin: 0.600000
+      BackfireCooldown: 0.350000
+      BackfireFlameCount: 18
+      BackfireSparkCount: 28
+  - Entity: 1100220033004400104
     TagComponent:
-      Tag: TrackTorch_VFX
+      Tag: Taillight_R
     TransformComponent:
-      Translation: [ 6.500000 , 0.500000 , -5.000000 ]
+      Translation: [ -0.650000 , 0.350000 , -2.180000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 0
-      InheritTransform: true
-      InheritScale: true
-    ParticleEmitterComponent:
-      Active: true
-      AutoPlay: true
-      Name: TrackFire
-      ShapeType: 0
-      MaxParticles: 300
-      EmissionRate: 35.000000
-      LifetimeMin: 0.600000
-      LifetimeMax: 1.200000
-      SpeedMin: 1.000000
-      SpeedMax: 2.500000
-      StartSizeMin: 0.120000
-      StartSizeMax: 0.280000
-      EndSizeMin: 0.030000
-      EndSizeMax: 0.100000
-      StartColor: [ 1.000000 , 0.650000 , 0.150000 , 1.000000 ]
-      EndColor: [ 0.850000 , 0.120000 , 0.020000 , 0.000000 ]
-      GravityModifier: -0.650000
-      BlendMode: 1
-      Orientation: 0
-      SimulationSpace: 0
-  - Entity: 14508017990534648314
-    TagComponent:
-      Tag: Ground
-    TransformComponent:
-      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 100.000000 , 1.000000 , 100.000000 ]
+      Scale: [ 0.240000 , 0.080000 , 0.040000 ]
     MeshInstance3D:
-      AssetPath: builtin://plane
-      PatternMode: 1
-      TileScale: 8.000000
-      Color1: [ 0.350000 , 0.380000 , 0.420000 , 1.000000 ]
-      Color2: [ 0.200000 , 0.220000 , 0.250000 , 1.000000 ]
-    RigidBody3D:
-      MotionType: Static
-      IsDynamic: false
-      Mass: 1.000000
-      LinearDamping: 0.050000
-      AngularDamping: 0.050000
-      GravityFactor: 1.000000
-    CollisionShape3D:
-      ShapeType: Plane
-      HalfExtent: [ 50.000000 , 0.500000 , 50.000000 ]
-      Radius: 50.000000
-      HalfHeight: 0.500000
-      Offset: [ 0.000000 , 0.000000 , 0.000000 ]
-      Friction: 0.800000
-      Restitution: 0.000000
-      IsTrigger: false
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      Color2: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
     HierarchyComponent:
-      Parent: 0
+      Parent: 8959925798803133502
       InheritTransform: true
       InheritScale: true
-  - Entity: 14539758737335856244
-    TagComponent:
-      Tag: Skybox Environment
-    TransformComponent:
-      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 0
-      InheritTransform: true
-      InheritScale: true
-    SkyboxComponent:
-      Enabled: true
-      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
-      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
-      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
-      SunSize: 0.045000
-      SunGlow: 0.160000
-      Turbidity: 1.000000
-      SyncWithSun: true
-      CustomAzimuth: 45.000000
-      CustomElevation: 50.000000
-      HemisphereAmbient: true
-  - Entity: 17853323863493946772
-    TagComponent:
-      Tag: Directional Light
-    TransformComponent:
-      Translation: [ 0.000000 , 10.000000 , 0.000000 ]
-      Rotation: [ 0.875426 , 0.408218 , -0.234570 , 0.109382 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 0
-      InheritTransform: true
-      InheritScale: true
-    DirectionalLightComponent:
-      Color: [ 1.000000 , 0.980000 , 0.920000 ]
+    MaterialComponent:
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.200000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.000000
+      EmissionColor: [ 1.000000 , 0.050000 , 0.050000 ]
+      EmissionIntensity: 1.500000
+      UVScale: [ 1.000000 , 1.000000 ]
+    PointLightComponent:
+      Color: [ 1.000000 , 0.050000 , 0.020000 ]
       Intensity: 1.000000
-      AmbientIntensity: 0.280000
-      Azimuth: 45.000000
-      Elevation: 50.000000
-      CastShadows: true
-      Exposure: 1.000000
-      ToneMappingMode: 0
-      Gamma: 2.200000
-  - Entity: 12485920194857201942
+      Radius: 8.000000
+      Falloff: 1.500000
+  - Entity: 1100220033004400103
     TagComponent:
-      Tag: Main Camera
+      Tag: Taillight_L
     TransformComponent:
-      Translation: [ 0.000000 , 6.000000 , 18.000000 ]
-      Rotation: [ 0.994522 , -0.104528 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+      Translation: [ 0.650000 , 0.350000 , -2.180000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 0.240000 , 0.080000 , 0.040000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      Color2: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
     HierarchyComponent:
-      Parent: 0
+      Parent: 8959925798803133502
       InheritTransform: true
       InheritScale: true
-    CameraComponent:
-      Primary: true
-      FOV: 45.000000
-      NearClip: 0.100000
-      FarClip: 1000.000000
-    AudioListenerComponent:
-      Active: true
-    NativeScriptComponent:
-      ScriptName: VehicleChaseCamera
-  - Entity: 13370000112233445566
+    MaterialComponent:
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.900000 , 0.050000 , 0.050000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.200000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.000000
+      EmissionColor: [ 1.000000 , 0.050000 , 0.050000 ]
+      EmissionIntensity: 1.500000
+      UVScale: [ 1.000000 , 1.000000 ]
+    PointLightComponent:
+      Color: [ 1.000000 , 0.050000 , 0.020000 ]
+      Intensity: 1.000000
+      Radius: 8.000000
+      Falloff: 1.500000
+  - Entity: 1100220033004400102
     TagComponent:
-      Tag: Racing HUD
+      Tag: Headlight_R
+    TransformComponent:
+      Translation: [ -0.650000 , 0.250000 , 2.180000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 0.220000 , 0.090000 , 0.040000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      Color2: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    MaterialComponent:
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.100000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.000000
+      EmissionColor: [ 0.950000 , 0.980000 , 1.000000 ]
+      EmissionIntensity: 5.000000
+      UVScale: [ 1.000000 , 1.000000 ]
+    SpotLightComponent:
+      Enabled: true
+      Color: [ 1.000000 , 0.980000 , 0.900000 ]
+      Intensity: 15.000000
+      Range: 45.000000
+      InnerConeAngle: 18.000000
+      OuterConeAngle: 32.000000
+  - Entity: 1100220033004400101
+    TagComponent:
+      Tag: Headlight_L
+    TransformComponent:
+      Translation: [ 0.650000 , 0.250000 , 2.180000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 0.220000 , 0.090000 , 0.040000 ]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      TileScale: 1.000000
+      Color1: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      Color2: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    MaterialComponent:
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 1.000000 , 1.000000 , 1.000000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.100000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.000000
+      EmissionColor: [ 0.950000 , 0.980000 , 1.000000 ]
+      EmissionIntensity: 5.000000
+      UVScale: [ 1.000000 , 1.000000 ]
+    SpotLightComponent:
+      Enabled: true
+      Color: [ 1.000000 , 0.980000 , 0.900000 ]
+      Intensity: 15.000000
+      Range: 45.000000
+      InnerConeAngle: 18.000000
+      OuterConeAngle: 32.000000
+  - Entity: 2479544764548422800
+    TagComponent:
+      Tag: BodyMesh
     TransformComponent:
       Translation: [ 0.000000 , 0.000000 , 0.000000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Chassis.axlemesh
+      PatternMode: 1
+      TileScale: 6.000000
+      Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+      Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
     HierarchyComponent:
-      Parent: 0
+      Parent: 8959925798803133502
       InheritTransform: true
       InheritScale: true
-    NativeScriptComponent:
-      ScriptName: RacingHUD
-
+    MaterialComponent:
+      MaterialHandle: 4412493906563465094
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/GoldMetallic.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.180000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 1.000000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
+  - Entity: 7782791376365683938
+    TagComponent:
+      Tag: Wheel_FL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.100000 , 1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+    MaterialComponent:
+      MaterialHandle: 756105786948966310
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.750000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.050000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
+  - Entity: 4716918885181481269
+    TagComponent:
+      Tag: Wheel_FR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.100000 , 1.400000 ]
+      Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: true
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: false
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 0.000000
+      AutoSyncMesh: true
+    MaterialComponent:
+      MaterialHandle: 756105786948966310
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.750000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.050000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
+  - Entity: 6128542852897491018
+    TagComponent:
+      Tag: Wheel_RL
+    TransformComponent:
+      Translation: [ 0.950000 , -0.100000 , -1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: true
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 6000.000000
+      AutoSyncMesh: true
+    MaterialComponent:
+      MaterialHandle: 756105786948966310
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.750000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.050000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]
+  - Entity: 15027978107127069824
+    TagComponent:
+      Tag: Wheel_RR
+    TransformComponent:
+      Translation: [ -0.950000 , -0.100000 , -1.400000 ]
+      Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    MeshInstance3D:
+      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      PatternMode: 3
+      TileScale: 4.000000
+      Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 8959925798803133502
+      InheritTransform: true
+      InheritScale: true
+    WheelComponent:
+      Radius: 0.350000
+      Width: 0.250000
+      SuspensionMinLength: 0.050000
+      SuspensionMaxLength: 0.250000
+      SpringFrequency: 2.200000
+      SpringDamping: 0.700000
+      CanSteer: false
+      MaxSteerAngle: 32.000000
+      IsDriven: true
+      HasHandbrake: true
+      BrakeTorque: 3000.000000
+      HandBrakeTorque: 6000.000000
+      AutoSyncMesh: true
+    MaterialComponent:
+      MaterialHandle: 756105786948966310
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axlemat
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1.000000
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.750000
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.050000
+      EmissionColor: [ 0.000000 , 0.000000 , 0.000000 ]
+      EmissionIntensity: 0.000000
+      UVScale: [ 1.000000 , 1.000000 ]

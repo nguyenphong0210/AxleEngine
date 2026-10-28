@@ -300,9 +300,14 @@ namespace Axle {
     glm::vec2 UITextNode::OnMeasure(const std::shared_ptr<UIFont>& defaultFont) {
         if (AutoSize && defaultFont) {
             DesiredSize = defaultFont->MeasureText(Text, FontSize);
+        } else if (AutoSize && !Text.empty()) {
+            // Responsive measurement heuristic for layout passes without loaded TTF atlas (e.g. ImGui viewport bridge)
+            DesiredSize = glm::vec2(static_cast<float>(Text.length()) * FontSize * 0.58f, FontSize * 1.25f);
         } else {
             DesiredSize = Size;
         }
+        if (Size.x > 0.0f) DesiredSize.x = Size.x;
+        if (Size.y > 0.0f) DesiredSize.y = Size.y;
         return DesiredSize;
     }
 

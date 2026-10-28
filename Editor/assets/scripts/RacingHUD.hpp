@@ -61,7 +61,11 @@ public:
     void OnCreate() override {
         AXLE_INFO("RacingHUD: Attached to entity '{0}' (Status: Active)", GetEntityName());
         if (!HasComponent<Axle::UICanvasComponent>()) {
-            GetEntity().AddComponent<Axle::UICanvasComponent>("Editor/assets/ui/RacingHUD.axleui");
+            std::string uiPath = "assets/ui/RacingHUD.axleui";
+            if (!std::filesystem::exists(uiPath) && std::filesystem::exists("Editor/assets/ui/RacingHUD.axleui")) {
+                uiPath = "Editor/assets/ui/RacingHUD.axleui";
+            }
+            GetEntity().AddComponent<Axle::UICanvasComponent>(uiPath);
         }
     }
 
@@ -219,6 +223,9 @@ public:
 
     void OnImGuiRender() override {
         if (!Visible) return;
+
+        // When UICanvasComponent is attached, the HUD is rendered declaratively by the Canvas UI system!
+        if (HasComponent<Axle::UICanvasComponent>()) return;
 
         if (!ImGui::GetCurrentContext()) return;
 

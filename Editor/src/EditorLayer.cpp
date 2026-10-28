@@ -2988,18 +2988,33 @@ void EditorLayer::OnImGuiRender() {
         for (auto ent : canvasView) {
             auto& comp = canvasView.get<Axle::UICanvasComponent>(ent);
             if (comp.Visible && !comp.AssetPath.empty()) {
-                if (!comp.Document) {
-                    comp.Document = std::make_shared<Axle::UIDocument>();
-                    comp.Document->SetFilePath(comp.AssetPath);
-                    comp.Document->CheckAndHotReload();
+                if (!comp.Document || !comp.Document->GetRootNode()) {
+                    if (!comp.Document) comp.Document = std::make_shared<Axle::UIDocument>();
+
+                    std::filesystem::path targetPath = comp.AssetPath;
+                    if (!std::filesystem::exists(targetPath)) {
+                        std::string s = targetPath.generic_string();
+                        if (s.rfind("Editor/", 0) == 0 && std::filesystem::exists(s.substr(7))) {
+                            targetPath = s.substr(7);
+                        } else if (std::filesystem::exists(Axle::FileSystem::ResolveAssetPath(comp.AssetPath))) {
+                            targetPath = Axle::FileSystem::ResolveAssetPath(comp.AssetPath);
+                        } else if (std::filesystem::exists(std::filesystem::path("../../../") / comp.AssetPath)) {
+                            targetPath = std::filesystem::path("../../../") / comp.AssetPath;
+                        }
+                    }
+
+                    comp.Document->SetFilePath(targetPath.string());
+                    comp.Document->LoadFromFile(targetPath.string());
                 } else {
                     comp.Document->CheckAndHotReload();
                 }
 
-                comp.Document->EvaluateBindings(uiCtx);
-                comp.Document->UpdateLayout(vSize);
-                Axle::UICanvasImGuiRenderer::Render(comp.Document.get(), drawList, vMin, vSize);
-                renderedCanvasUI = true;
+                if (comp.Document && comp.Document->GetRootNode()) {
+                    comp.Document->EvaluateBindings(uiCtx);
+                    comp.Document->UpdateLayout(vSize);
+                    Axle::UICanvasImGuiRenderer::Render(comp.Document.get(), drawList, vMin, vSize);
+                    renderedCanvasUI = true;
+                }
             }
         }
 

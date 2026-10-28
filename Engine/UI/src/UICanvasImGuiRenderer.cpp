@@ -112,6 +112,35 @@ namespace Axle {
             float totalSpan = std::fmod(endRad - startRad + TWO_PI * 2.0f, TWO_PI);
             if (totalSpan <= 0.0001f) totalSpan = TWO_PI;
 
+            // Concentric outer and inner hairlines for luxury virtual cockpit look
+            float outerR = radius + thickness * 0.5f + 3.0f * mapping.Scale;
+            float innerR = std::max(2.0f, radius - thickness * 0.5f - 3.0f * mapping.Scale);
+
+            drawList->PathClear();
+            drawList->PathArcTo(center, outerR, startRad, endRad, 48);
+            drawList->PathStroke(IM_COL32(148, 163, 184, 45), 0, 1.0f);
+
+            drawList->PathClear();
+            drawList->PathArcTo(center, innerR, startRad, endRad, 48);
+            drawList->PathStroke(IM_COL32(148, 163, 184, 30), 0, 1.0f);
+
+            // Precision RPM tachometer tick marks (16 divisions)
+            const int numTicks = 16;
+            for (int i = 0; i <= numTicks; ++i) {
+                float frac = static_cast<float>(i) / static_cast<float>(numTicks);
+                float angle = startRad + totalSpan * frac;
+                float cosA = std::cos(angle);
+                float sinA = std::sin(angle);
+                bool isMajor = (i % 2 == 0);
+                float tLen = (isMajor ? 4.5f : 2.5f) * mapping.Scale;
+                float rInner = outerR + 2.0f * mapping.Scale;
+                float rOuter = rInner + tLen;
+                ImVec2 p1(center.x + cosA * rInner, center.y + sinA * rInner);
+                ImVec2 p2(center.x + cosA * rOuter, center.y + sinA * rOuter);
+                ImU32 tickCol = (frac >= 0.75f) ? IM_COL32(239, 68, 68, 190) : (isMajor ? IM_COL32(226, 232, 240, 160) : IM_COL32(148, 163, 184, 90));
+                drawList->AddLine(p1, p2, tickCol, isMajor ? 1.5f : 1.0f);
+            }
+
             // Background track arc
             ImU32 trackCol = ToImU32(rg->TrackColor);
             if ((trackCol >> 24) > 0) {
@@ -138,7 +167,33 @@ namespace Axle {
                 ImU32 textCol = ToImU32(tn->Color);
                 float scaledFontSize = tn->FontSize * mapping.Scale;
                 if (scaledFontSize >= 6.0f) {
-                    drawList->AddText(ImGui::GetFont(), scaledFontSize, sMin, textCol, tn->Text.c_str());
+                    ImFont* font = ImGui::GetFont();
+                    ImVec2 textSize = font->CalcTextSizeA(scaledFontSize, FLT_MAX, 0.0f, tn->Text.c_str());
+
+                    ImVec2 drawPos = sMin;
+                    if (cr.Width > 0.0f) {
+                        if (tn->Anchor == UIAnchor::Center || tn->Anchor == UIAnchor::TopCenter || tn->Anchor == UIAnchor::BottomCenter) {
+                            drawPos.x = sMin.x + (cr.Width * mapping.Scale - textSize.x) * 0.5f;
+                        } else if (tn->Anchor == UIAnchor::TopRight || tn->Anchor == UIAnchor::BottomRight || tn->Anchor == UIAnchor::CenterRight) {
+                            drawPos.x = sMin.x + (cr.Width * mapping.Scale - textSize.x);
+                        }
+                    }
+                    if (cr.Height > 0.0f) {
+                        if (tn->Anchor == UIAnchor::Center || tn->Anchor == UIAnchor::CenterLeft || tn->Anchor == UIAnchor::CenterRight) {
+                            drawPos.y = sMin.y + (cr.Height * mapping.Scale - textSize.y) * 0.5f;
+                        } else if (tn->Anchor == UIAnchor::BottomLeft || tn->Anchor == UIAnchor::BottomCenter || tn->Anchor == UIAnchor::BottomRight) {
+                            drawPos.y = sMin.y + (cr.Height * mapping.Scale - textSize.y);
+                        }
+                    }
+
+                    // Subtle drop shadow for crisp 3D contrast over sky/track
+                    ImU32 alpha = (textCol >> 24);
+                    if (alpha > 40) {
+                        ImU32 shadowCol = IM_COL32(0, 0, 0, static_cast<int>(alpha * 0.65f));
+                        drawList->AddText(font, scaledFontSize, ImVec2(drawPos.x + 1.0f, drawPos.y + 1.2f), shadowCol, tn->Text.c_str());
+                    }
+
+                    drawList->AddText(font, scaledFontSize, drawPos, textCol, tn->Text.c_str());
                 }
             }
         }

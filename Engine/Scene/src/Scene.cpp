@@ -17,6 +17,10 @@ namespace Axle {
     Scene::Scene() {
     }
 
+    Scene::~Scene() {
+        Clear();
+    }
+
     Entity Scene::CreateEntity(const std::string& name) {
         return CreateEntityWithUUID(UUID(), name);
     }
@@ -44,8 +48,11 @@ namespace Axle {
             if (nsc.Instance && nsc.DestroyScript) {
                 nsc.Instance->OnDestroy();
                 nsc.DestroyScript(&nsc);
+                nsc.Instance = nullptr;
             }
         }
+        m_RuntimeVehicles.clear();
+        m_RuntimePhysicsScene = nullptr;
         m_Registry.clear();
     }
 

@@ -491,22 +491,57 @@ void EditorLayer::UnlockCursor() {
 }
 
 void EditorLayer::OnDetach() {
-    AXLE_INFO("EditorLayer detached");
+    AXLE_INFO("EditorLayer::OnDetach -> [1/14] UnlockCursor");
     UnlockCursor();
-    if (m_SceneState == SceneState::Play) {
+
+    AXLE_INFO("EditorLayer::OnDetach -> [2/14] Stop Simulation if active");
+    if (m_SceneState != SceneState::Edit) {
         OnSceneStop();
     }
-    m_Scene.reset();
-    m_EditorScene.reset();
+    if (m_RuntimeScene) {
+        m_RuntimeScene->Clear();
+        m_RuntimeScene.reset();
+    }
+
+    AXLE_INFO("EditorLayer::OnDetach -> [3/14] Detach and clear panel contexts");
+    m_SceneHierarchyPanel.SetSelectedEntity({});
+    m_SceneHierarchyPanel.ClearSelectedAsset();
+    m_SceneHierarchyPanel.StopAudioPreview();
+    m_SceneHierarchyPanel.SetContext(nullptr, nullptr);
+    m_UIPalettePanel.SetContext(nullptr);
+    m_AssetPreviewPanel.SetSceneContext(nullptr, nullptr, nullptr, nullptr);
+    m_AssemblyEditorPanel.SetSceneContext(nullptr, nullptr, nullptr);
+    m_VFXEditorPanel.SetSceneContext(nullptr);
+
+    AXLE_INFO("EditorLayer::OnDetach -> [4/14] Clear and reset scenes");
+    if (m_Scene) {
+        m_Scene->Clear();
+        m_Scene.reset();
+    }
+    if (m_EditorScene) {
+        m_EditorScene->Clear();
+        m_EditorScene.reset();
+    }
+
+    AXLE_INFO("EditorLayer::OnDetach -> [5/14] ScriptHotReloadManager::Shutdown");
     Axle::ScriptHotReloadManager::Get().Shutdown();
+
+    AXLE_INFO("EditorLayer::OnDetach -> [6/14] AssetManager::Shutdown");
     Axle::AssetManager::Shutdown();
+
+    AXLE_INFO("EditorLayer::OnDetach -> [7/14] AudioEngine::Shutdown");
     Axle::AudioEngine::Shutdown();
+
+    AXLE_INFO("EditorLayer::OnDetach -> [8/14] TerrainPlugin & SplinePlugin Shutdown");
     Axle::Terrain::TerrainPlugin::Shutdown();
     Axle::Spline::SplinePlugin::Shutdown();
-    m_SceneRenderer.reset();
-    m_PhysicsDebugRenderer.reset();
-    m_PhysicsScene.reset();
-    m_Framebuffer.reset();
+
+    AXLE_INFO("EditorLayer::OnDetach -> [9/14] Wait GPU idle");
+    if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
+        Axle::RHI::RHIDevice::Get().WaitIdle();
+    }
+
+    AXLE_INFO("EditorLayer::OnDetach -> [10/14] Shutdown Renderers & Viewport");
     if (m_RHIViewport) {
         m_RHIViewport->Shutdown();
         m_RHIViewport.reset();
@@ -515,11 +550,22 @@ void EditorLayer::OnDetach() {
         m_RHISceneRenderer->Shutdown();
         m_RHISceneRenderer.reset();
     }
+    m_SceneRenderer.reset();
+    m_PhysicsDebugRenderer.reset();
+    m_Framebuffer.reset();
+
+    AXLE_INFO("EditorLayer::OnDetach -> [11/14] Shutdown PhysicsScene");
+    m_PhysicsScene.reset();
+
+    AXLE_INFO("EditorLayer::OnDetach -> [12/14] Reset camera and primitive meshes");
+    m_CameraController.reset();
     m_CubeMesh.reset();
     m_SphereMesh.reset();
     m_CylinderMesh.reset();
     m_ConeMesh.reset();
     m_PlaneMesh.reset();
+
+    AXLE_INFO("EditorLayer::OnDetach -> [13/14] Complete!");
 }
 
 void EditorLayer::OnWindowResize(Axle::u32 width, Axle::u32 height) {

@@ -25,6 +25,11 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::VFX
 )
 
+if(MSVC)
+    target_compile_options(AxleEditor PRIVATE "$<$<CONFIG:Release>:/Zi>")
+    target_link_options(AxleEditor PRIVATE "$<$<CONFIG:Release>:/DEBUG>" "$<$<CONFIG:Release>:/MAP:AxleEditor.map>")
+endif()
+
 # ==============================================================================
 # User Gameplay Scripts Module (Hot-Reloadable Shared Library)
 # ==============================================================================

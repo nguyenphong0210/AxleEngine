@@ -5,6 +5,7 @@
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
+#include <Axle/RHIMeshRegistry.hpp>
 #include "EditorLayer.hpp"
 #include <exception>
 #include <csignal>
@@ -211,11 +212,15 @@ int main(int argc, char** argv) {
             app->SetUIContext(std::make_unique<Axle::ImGuiLayer>(Axle::ToImGuiBackend(activeAPI)));
             app->PushLayer(std::make_shared<EditorLayer>());
             app->Run();
+            AXLE_INFO("Main: Application run loop completed, now destroying app object...");
         }
 
+        AXLE_INFO("Main: Application destroyed, now checking RHIDevice::Shutdown...");
         if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
+            Axle::RHIMeshRegistry::Get().Shutdown();
             Axle::RHI::RHIDevice::Get().Shutdown();
         }
+        AXLE_INFO("Main: Axle Editor exited cleanly!");
     } catch (const std::exception& e) {
         AXLE_CRITICAL("Unhandled C++ Exception: {0}", e.what());
         fprintf(stderr, "[FATAL] Unhandled C++ Exception: %s\n", e.what());

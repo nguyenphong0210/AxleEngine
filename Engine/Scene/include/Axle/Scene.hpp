@@ -33,7 +33,7 @@ namespace Axle {
     class Scene {
     public:
         Scene();
-        ~Scene() = default;
+        ~Scene();
 
         Entity CreateEntity(const std::string& name = "Entity");
         Entity CreateEntityWithUUID(UUID uuid, const std::string& name = "Entity");

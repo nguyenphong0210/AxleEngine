@@ -67,20 +67,24 @@ namespace Axle {
     }
 
     Application::~Application() {
+        AXLE_CORE_INFO("Application::~Application -> [1/5] Clear LayerStack");
         m_LayerStack.Clear();
 
+        AXLE_CORE_INFO("Application::~Application -> [2/5] Shutdown UIContext");
         if (m_UIContext) {
             m_UIContext->Shutdown();
             m_UIContext.reset();
         }
 
+        AXLE_CORE_INFO("Application::~Application -> [3/5] Shutdown PhysicsEngine");
         if (PhysicsEngine::IsInitialized()) {
             PhysicsEngine::Shutdown();
         }
 
+        AXLE_CORE_INFO("Application::~Application -> [4/5] Shutdown JobSystem");
         JobSystem::Shutdown();
 
-        AXLE_CORE_INFO("Application '{0}' shut down", m_Specification.Name);
+        AXLE_CORE_INFO("Application::~Application -> [5/5] Complete ('{0}' shut down)", m_Specification.Name);
         s_Instance = nullptr;
     }
 

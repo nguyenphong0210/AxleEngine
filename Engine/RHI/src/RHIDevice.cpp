@@ -389,9 +389,13 @@ namespace Axle::RHI {
 
         AXLE_CORE_INFO("Shutting down RHI Device ({0})...", RHITypeToString(m_Capabilities.ActiveBackend));
 
+        WaitIdle();
+
         RHIPipelineCache::Get().Clear();
 
         RHIMaterial::ReleaseDefaultTextures();
+
+        WaitIdle();
 
         if (m_Device) {
             nri::nriDestroyDevice(m_Device);

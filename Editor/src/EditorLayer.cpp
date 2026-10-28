@@ -1974,7 +1974,8 @@ void EditorLayer::OnImGuiRender() {
                 m_SnapEnabled = !m_SnapEnabled;
             }
             ImGui::EndMenu();
-         if (ImGui::BeginMenu("View")) {
+        }
+        if (ImGui::BeginMenu("View")) {
             ImGui::MenuItem("Hierarchy", nullptr, &m_ShowSceneHierarchy);
             ImGui::MenuItem("Inspector", nullptr, &m_ShowProperties);
             ImGui::MenuItem("Console", nullptr, &m_ShowConsole);

@@ -455,7 +455,7 @@ namespace Axle {
         // 1. Scene Hierarchy Window
         if (!p_hierarchyOpen || *p_hierarchyOpen) {
             ImGui::SetNextWindowSize(ImVec2(280.0f, 400.0f), ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Hierarchy", p_hierarchyOpen)) {
+            if (ImGui::Begin("Hierarchy", nullptr)) {
                 // Header Bar: [+ ▾] Unity Style Create Button & Search Filter
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
                 if (ImGui::Button("+ ▾", ImVec2(38.0f, 24.0f))) {
@@ -645,7 +645,7 @@ namespace Axle {
         // 2. Properties / Inspector Window
         if (!p_propertiesOpen || *p_propertiesOpen) {
             ImGui::SetNextWindowSize(ImVec2(340.0f, 500.0f), ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Inspector", p_propertiesOpen)) {
+            if (ImGui::Begin("Inspector", nullptr)) {
                 bool hasEntity = (m_SelectedEntity && m_Scene && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity));
                 bool hasAsset = (!m_SelectedAsset.empty() && std::filesystem::exists(m_SelectedAsset));
 
@@ -684,19 +684,17 @@ namespace Axle {
                 } else {
                     ImGui::Spacing();
                     ImGui::TextDisabled("No entity selected.");
-                    ImGui::TextWrapped("Click any entity in Hierarchy to inspect its components, or drag a 3D model (.obj) from Project here to instantiate:");
+                    ImGui::TextWrapped("Select an entity in Hierarchy to inspect its components, or drag a 3D model (.obj) from Project to instantiate.");
                     ImGui::Spacing();
                     ImGui::Separator();
                     ImGui::Spacing();
 
                     float availW = ImGui::GetContentRegionAvail().x;
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.30f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.68f, 0.38f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.45f, 0.22f, 1.0f));
-                    if (ImGui::Button("+ Create Entity", ImVec2(availW, 28.0f))) {
+                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
+                    if (ImGui::Button("+ Create Entity", ImVec2(availW, 26.0f))) {
                         ImGui::OpenPopup("PropsCreateEntityPopup");
                     }
-                    ImGui::PopStyleColor(3);
+                    ImGui::PopStyleVar();
 
                     if (ImGui::BeginPopup("PropsCreateEntityPopup")) {
                         DrawCreateMenu();
@@ -839,24 +837,8 @@ namespace Axle {
             flags |= ImGuiTreeNodeFlags_DefaultOpen;
         }
 
-        // Select appropriate Unity style icon for visual hierarchy recognition
-        const char* icon = "• ";
-        if (entity.HasComponent<VehicleComponent>()) {
-            icon = "🚗 ";
-        } else if (entity.HasComponent<CameraComponent>()) {
-            icon = "📷 ";
-        } else if (entity.HasComponent<DirectionalLightComponent>() || entity.HasComponent<PointLightComponent>() || entity.HasComponent<SpotLightComponent>()) {
-            icon = "💡 ";
-        } else if (entity.HasComponent<UICanvasComponent>()) {
-            icon = "🖼️ ";
-        } else if (entity.HasComponent<AudioSourceComponent>()) {
-            icon = "🔊 ";
-        } else if (entity.HasComponent<MeshInstance3D>()) {
-            icon = "🧊 ";
-        }
-
-        std::string displayLabel = std::string(icon) + tag;
-        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", displayLabel.c_str());
+        // Unity GameObject Tree Node: clean label with native foldout arrow
+        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", tag.c_str());
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
             m_SelectedEntity = entity;

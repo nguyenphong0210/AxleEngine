@@ -303,7 +303,7 @@ namespace Axle {
         if (pOpen && !*pOpen) return;
 
         ImGui::SetNextWindowSize(ImVec2(280.0f, 480.0f), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("UI Library", pOpen)) {
+        if (!ImGui::Begin("UI Library", nullptr)) {
             ImGui::End();
             return;
         }

@@ -72,7 +72,7 @@ namespace Axle {
         if (p_open && !*p_open) return;
 
         ImGui::SetNextWindowSize(ImVec2(680.0f, 280.0f), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("Console", p_open)) {
+        if (!ImGui::Begin("Console", nullptr)) {
             ImGui::End();
             return;
         }
@@ -97,13 +97,13 @@ namespace Axle {
         auto DrawToggleButton = [](const char* label, bool* state, ImVec2 size = ImVec2(0.0f, 24.0f)) -> bool {
             bool active = *state;
             if (active) {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.44f, 0.68f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.50f, 0.76f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.38f, 0.60f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.35f, 0.55f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.42f, 0.65f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.28f, 0.45f, 1.0f));
             } else {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.19f, 0.19f, 0.19f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.26f, 0.26f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.21f, 0.21f, 0.21f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.27f, 0.27f, 0.27f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
             }
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
             bool clicked = ImGui::Button(label, size);
@@ -235,25 +235,30 @@ namespace Axle {
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.24f, 0.24f, 0.24f, 0.85f));
             ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.20f, 0.40f, 0.65f, 1.0f));
 
-            ImVec4 levelCol = ImVec4(0.85f, 0.85f, 0.85f, 1.0f);
-            const char* levelIcon = "[i]";
+            ImVec4 levelCol = ImVec4(0.83f, 0.83f, 0.83f, 1.0f);
+            ImVec4 iconCol = ImVec4(0.35f, 0.70f, 0.95f, 1.0f);
+            const char* levelIcon = "(i)";
             switch (entry.Level) {
                 case spdlog::level::trace:
-                    levelCol = ImVec4(0.55f, 0.55f, 0.55f, 1.0f);
-                    levelIcon = "[.]";
+                    levelCol = ImVec4(0.58f, 0.58f, 0.58f, 1.0f);
+                    iconCol = ImVec4(0.55f, 0.55f, 0.55f, 1.0f);
+                    levelIcon = "(.)";
                     break;
                 case spdlog::level::info:
-                    levelCol = ImVec4(0.35f, 0.82f, 0.95f, 1.0f);
-                    levelIcon = "[i]";
+                    levelCol = ImVec4(0.83f, 0.83f, 0.83f, 1.0f); // Neutral light grey (Unity style)
+                    iconCol = ImVec4(0.35f, 0.70f, 0.95f, 1.0f);  // Subtle cyan icon badge
+                    levelIcon = "(i)";
                     break;
                 case spdlog::level::warn:
-                    levelCol = ImVec4(0.98f, 0.78f, 0.15f, 1.0f);
-                    levelIcon = "[!]";
+                    levelCol = ImVec4(0.92f, 0.74f, 0.25f, 1.0f); // Warm gold
+                    iconCol = ImVec4(0.95f, 0.75f, 0.20f, 1.0f);
+                    levelIcon = "(!)";
                     break;
                 case spdlog::level::err:
                 case spdlog::level::critical:
-                    levelCol = ImVec4(0.95f, 0.30f, 0.30f, 1.0f);
-                    levelIcon = "[X]";
+                    levelCol = ImVec4(0.90f, 0.38f, 0.36f, 1.0f); // Soft coral red
+                    iconCol = ImVec4(0.95f, 0.35f, 0.35f, 1.0f);
+                    levelIcon = "[x]";
                     break;
                 default:
                     break;
@@ -267,7 +272,7 @@ namespace Axle {
             }
 
             ImGui::SameLine(6.0f);
-            ImGui::TextColored(levelCol, "%s", levelIcon);
+            ImGui::TextColored(iconCol, "%s", levelIcon);
             ImGui::SameLine();
             ImGui::TextDisabled("[%s]", entry.Timestamp.c_str());
             ImGui::SameLine();

@@ -69,19 +69,7 @@ namespace Axle {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{ 4.0f, 4.0f });
         ImGui::Separator();
 
-        std::string icon = "• ";
-        if (name == "Transform") icon = "📐 ";
-        else if (name.find("Mesh") != std::string::npos) icon = "🧊 ";
-        else if (name.find("Camera") != std::string::npos) icon = "📷 ";
-        else if (name.find("Light") != std::string::npos) icon = "💡 ";
-        else if (name.find("UI") != std::string::npos || name.find("Canvas") != std::string::npos) icon = "🖼️ ";
-        else if (name.find("Audio") != std::string::npos) icon = "🔊 ";
-        else if (name.find("VFX") != std::string::npos || name.find("Particle") != std::string::npos) icon = "🎆 ";
-        else if (name.find("Physics") != std::string::npos || name.find("Body") != std::string::npos || name.find("Collision") != std::string::npos) icon = "⚡ ";
-        else if (name.find("Script") != std::string::npos) icon = "📜 ";
-
-        std::string componentTitle = icon + name;
-        bool open = ImGui::TreeNodeEx((void*)typeid(T).hash_code(), treeNodeFlags, "%s", componentTitle.c_str());
+        bool open = ImGui::TreeNodeEx((void*)typeid(T).hash_code(), treeNodeFlags, "%s", name.c_str());
         ImGui::PopStyleVar();
 
         bool removeComponent = false;

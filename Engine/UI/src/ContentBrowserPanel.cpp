@@ -625,7 +625,7 @@ namespace Axle {
         if (p_open && !*p_open) return;
 
         ImGui::SetNextWindowSize(ImVec2(650.0f, 320.0f), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("Project", p_open)) {
+        if (!ImGui::Begin("Project", nullptr)) {
             m_IsHovered = false;
             ImGui::End();
             return;

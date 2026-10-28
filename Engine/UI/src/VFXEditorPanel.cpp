@@ -398,7 +398,7 @@ namespace Axle {
         ImGui::Spacing();
 
         if (m_SelectedEntity && m_SelectedEntity.HasComponent<ParticleEmitterComponent>()) {
-            if (ImGui::Button("💾 Apply to Selected Entity", ImVec2(-1.0f, 30.0f))) {
+            if (ImGui::Button("Apply to Selected Entity", ImVec2(-1.0f, 30.0f))) {
                 auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
                 pec.Config = m_Config;
                 pec.Initialize();
@@ -407,7 +407,7 @@ namespace Axle {
         }
 
         if (m_Scene) {
-            if (ImGui::Button("➕ Create New VFX Entity in Scene", ImVec2(-1.0f, 28.0f))) {
+            if (ImGui::Button("Create New VFX Entity in Scene", ImVec2(-1.0f, 28.0f))) {
                 std::string entName = m_Config.Name.empty() ? "VFX_Emitter" : m_Config.Name;
                 Entity newEnt = m_Scene->CreateEntity(entName);
                 newEnt.AddComponent<TransformComponent>(glm::vec3(0.0f, 1.0f, 0.0f));
@@ -427,30 +427,30 @@ namespace Axle {
         if (ImGui::Begin("Visual FX (VFX) Editor", &m_IsOpen, ImGuiWindowFlags_NoScrollbar)) {
             // Top Toolbar
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 4));
-            if (ImGui::Button(m_IsPlaying ? "⏸ Pause" : "▶ Play", ImVec2(75, 26))) {
+            if (ImGui::Button(m_IsPlaying ? "Pause" : "Play", ImVec2(65, 26))) {
                 if (m_IsPlaying) PausePreview(); else PlayPreview();
             }
             ImGui::SameLine();
-            if (ImGui::Button("⏹ Stop", ImVec2(65, 26))) {
+            if (ImGui::Button("Stop", ImVec2(55, 26))) {
                 StopPreview();
             }
             ImGui::SameLine();
-            if (ImGui::Button("🔄 Reset", ImVec2(65, 26))) {
+            if (ImGui::Button("Reset", ImVec2(55, 26))) {
                 ResetPreview();
             }
             ImGui::SameLine();
             ImGui::TextDisabled("|");
             ImGui::SameLine();
 
-            if (ImGui::Button("💥 Burst 20", ImVec2(85, 26))) {
+            if (ImGui::Button("Burst 20", ImVec2(75, 26))) {
                 TriggerBurst(20);
             }
             ImGui::SameLine();
-            if (ImGui::Button("💥 Burst 100", ImVec2(90, 26))) {
+            if (ImGui::Button("Burst 100", ImVec2(80, 26))) {
                 TriggerBurst(100);
             }
             ImGui::SameLine();
-            if (ImGui::Button("💥 Burst 500", ImVec2(90, 26))) {
+            if (ImGui::Button("Burst 500", ImVec2(80, 26))) {
                 TriggerBurst(500);
             }
             ImGui::SameLine();

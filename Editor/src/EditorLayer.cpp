@@ -1584,96 +1584,103 @@ void EditorLayer::RenderToolbar() {
                                   | ImGuiWindowFlags_NoSavedSettings;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 5.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 5.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.165f, 0.165f, 0.165f, 1.0f)); // #2A2A2A Unity Toolbar Bg
 
     if (ImGui::Begin("##FixedTopToolbar", nullptr, toolbarFlags)) {
-        // Draw subtle bottom border line for Unity Main Toolbar
+        // Draw subtle 1px bottom border line for Unity Main Toolbar
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 winMin = ImGui::GetWindowPos();
         ImVec2 winMax = ImVec2(winMin.x + ImGui::GetWindowWidth(), winMin.y + toolbarHeight);
-        dl->AddLine(ImVec2(winMin.x, winMax.y - 1.0f), ImVec2(winMax.x, winMax.y - 1.0f), IM_COL32(24, 24, 24, 255));
+        dl->AddLine(ImVec2(winMin.x, winMax.y - 1.0f), ImVec2(winMax.x, winMax.y - 1.0f), IM_COL32(30, 30, 30, 255));
 
-        auto DrawSegmentedToolButton = [](const char* label, const char* tooltip, bool active, ImVec2 size) -> bool {
+        // Helper lambda for segmented tool buttons (no gap between buttons)
+        auto DrawSegmentButton = [](const char* label, const char* tooltip, bool active, ImVec2 size, int cornerFlags) -> bool {
             if (active) {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.30f, 0.30f, 0.30f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.35f, 0.35f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.23f, 0.47f, 0.72f, 1.0f)); // Unity selection outline
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.38f, 0.62f, 1.0f)); // Unity active blue #2E619E
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.44f, 0.70f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.32f, 0.54f, 1.0f));
             } else {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.22f, 0.22f, 1.0f)); // #383838
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.27f, 0.27f, 0.27f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.17f, 0.17f, 0.17f, 1.0f));
             }
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.14f, 0.14f, 0.14f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, (cornerFlags != 0) ? 3.5f : 0.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+
             bool clicked = ImGui::Button(label, size);
+
             ImGui::PopStyleVar(2);
             ImGui::PopStyleColor(4);
+
             if (ImGui::IsItemHovered() && tooltip) {
                 ImGui::SetTooltip("%s", tooltip);
             }
             return clicked;
         };
 
-        // --- 1. LEFT CLUSTER: Unity Transform Tools (Hand/Move/Rotate/Scale/Rect) ---
+        // --- 1. LEFT CLUSTER: Unity Transform Tools (Contiguous Segmented Capsule) ---
         bool is2DMode = m_CameraController ? m_CameraController->Is2DMode() : false;
-        const ImVec2 toolBtnSize(32.0f, 26.0f);
 
-        if (DrawSegmentedToolButton("Select", "Select Tool (Q)", m_GizmoType == -1 && !is2DMode, ImVec2(52.0f, 26.0f))) {
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f)); // Zero gap between tools!
+        if (DrawSegmentButton("Select", "Select Tool (Q)", m_GizmoType == -1 && !is2DMode, ImVec2(50.0f, 26.0f), 1)) {
             m_GizmoType = -1;
         }
         ImGui::SameLine();
-        if (DrawSegmentedToolButton("Move", "Move Tool (W)", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE, ImVec2(48.0f, 26.0f))) {
+        if (DrawSegmentButton("Move", "Move Tool (W)", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE, ImVec2(46.0f, 26.0f), 0)) {
             m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
         }
         ImGui::SameLine();
-        if (DrawSegmentedToolButton("Rotate", "Rotate Tool (E)", m_GizmoType == ImGuizmo::OPERATION::ROTATE, ImVec2(54.0f, 26.0f))) {
+        if (DrawSegmentButton("Rotate", "Rotate Tool (E)", m_GizmoType == ImGuizmo::OPERATION::ROTATE, ImVec2(50.0f, 26.0f), 0)) {
             m_GizmoType = ImGuizmo::OPERATION::ROTATE;
         }
         ImGui::SameLine();
-        if (DrawSegmentedToolButton("Scale", "Scale Tool (R)", m_GizmoType == ImGuizmo::OPERATION::SCALE, ImVec2(48.0f, 26.0f))) {
+        if (DrawSegmentButton("Scale", "Scale Tool (R)", m_GizmoType == ImGuizmo::OPERATION::SCALE, ImVec2(46.0f, 26.0f), 0)) {
             m_GizmoType = ImGuizmo::OPERATION::SCALE;
         }
         ImGui::SameLine();
-        if (DrawSegmentedToolButton("Rect", "Rect Tool / 2D UI Edit Mode (T)", is2DMode, ImVec2(44.0f, 26.0f))) {
+        if (DrawSegmentButton("Rect", "Rect Tool / 2D UI Edit Mode (T)", is2DMode, ImVec2(44.0f, 26.0f), 2)) {
             Set2DViewMode(!is2DMode);
         }
+        ImGui::PopStyleVar(); // Restore ItemSpacing
 
         ImGui::SameLine();
-        ImGui::Spacing();
-        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
 
-        // Pivot / Center and Local / Global Toggles (Unity Standard)
+        // Pivot / Center and Local / Global Toggle Button
         const char* coordLabel = m_GizmoModeLocal ? "Local" : "Global";
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
         if (ImGui::Button(coordLabel, ImVec2(56.0f, 26.0f))) {
             m_GizmoModeLocal = !m_GizmoModeLocal;
         }
+        ImGui::PopStyleVar();
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Toggle Gizmo Orientation: Local vs Global coordinates");
         }
 
         ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 4.0f);
         ImGui::Checkbox("Snap", &m_SnapEnabled);
         if (m_SnapEnabled) {
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(60.0f);
+            ImGui::SetNextItemWidth(55.0f);
             if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) {
-                ImGui::DragFloat("##SnapRot", &m_SnapRotation, 1.0f, 1.0f, 90.0f, "%.0f deg");
+                ImGui::DragFloat("##SnapRot", &m_SnapRotation, 1.0f, 1.0f, 90.0f, "%.0f°");
             } else if (m_GizmoType == ImGuizmo::OPERATION::SCALE) {
                 ImGui::DragFloat("##SnapScale", &m_SnapScale, 0.05f, 0.05f, 5.0f, "%.2f");
             } else {
-                ImGui::DragFloat("##SnapTrans", &m_SnapTranslation, 0.05f, 0.05f, 5.0f, "%.2f m");
+                ImGui::DragFloat("##SnapTrans", &m_SnapTranslation, 0.05f, 0.05f, 5.0f, "%.2fm");
             }
         }
 
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.30f, 0.30f, 0.30f, 1.0f), "|");
+        ImGui::TextColored(ImVec4(0.28f, 0.28f, 0.28f, 1.0f), "|");
         ImGui::SameLine();
 
         // Save & Compile buttons
-        if (ImGui::Button("Save", ImVec2(52.0f, 26.0f))) {
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+        if (ImGui::Button("Save", ImVec2(46.0f, 26.0f))) {
             SaveScene();
         }
         if (ImGui::IsItemHovered()) {
@@ -1689,112 +1696,125 @@ void EditorLayer::RenderToolbar() {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f * pulse, 0.60f * pulse, 0.10f, 1.0f));
             int dotCount = ((int)(time * 3.0f)) % 4;
             std::string compText = "Compiling" + std::string(dotCount, '.');
-            ImGui::Button(compText.c_str(), ImVec2(92.0f, 26.0f));
+            ImGui::Button(compText.c_str(), ImVec2(90.0f, 26.0f));
             ImGui::PopStyleColor();
         } else if (m_ScriptCompileStatusTimer > 0.0f) {
             ImGui::PushStyleColor(ImGuiCol_Button, m_ScriptCompileStatusColor);
-            if (ImGui::Button(m_ScriptCompileStatusText.c_str(), ImVec2(100.0f, 26.0f))) {
+            if (ImGui::Button(m_ScriptCompileStatusText.c_str(), ImVec2(96.0f, 26.0f))) {
                 TriggerScriptCompilationAndReload();
             }
             ImGui::PopStyleColor();
         } else {
-            if (ImGui::Button("Compile (F9)", ImVec2(92.0f, 26.0f))) {
+            if (ImGui::Button("Compile", ImVec2(62.0f, 26.0f))) {
                 TriggerScriptCompilationAndReload();
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Compile C++ Scripts & Hot-Reload DLL (F9 / Ctrl+B)");
             }
         }
+        ImGui::PopStyleVar();
 
-        // --- 2. CENTER CLUSTER: Unity Signature Transport Pill (Play / Pause / Step / Reset) ---
-        const float centerClusterWidth = 240.0f;
-        const float centerTargetX = (mainViewport->WorkSize.x - centerClusterWidth) * 0.5f;
+        // --- 2. CENTER CLUSTER: Unity Signature Contiguous Transport Pill [ ▶ | ⏸ | ⏭ ] ---
+        const float transportPillWidth = 144.0f;
+        const float centerTargetX = (mainViewport->WorkSize.x - transportPillWidth) * 0.5f;
         if (ImGui::GetCursorPosX() < centerTargetX) {
             ImGui::SameLine(centerTargetX);
+        } else {
+            ImGui::SameLine();
         }
 
-        // Play Button (Unity iconic Play button)
-        const ImVec2 transportBtnSize(54.0f, 26.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f)); // Contiguous pill!
+
+        // Play Button (Left part of pill)
+        const ImVec2 playBtnSize(52.0f, 26.0f);
         if (m_SceneState == SceneState::Play) {
-            // Active Play state in Unity: blue/cyan highlight
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.45f, 0.72f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.55f, 0.82f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.38f, 0.62f, 1.0f));
-            if (ImGui::Button("Stop", transportBtnSize)) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.38f, 0.62f, 1.0f)); // Active Unity Blue #2E619E
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.44f, 0.70f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.32f, 0.54f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
+            if (ImGui::Button("Stop", playBtnSize)) {
                 OnSceneStop();
             }
+            ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop Simulation (F5 / F7)");
         } else {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.28f, 0.28f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.45f, 0.72f, 1.0f));
-            if (ImGui::Button("Play", transportBtnSize)) {
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.27f, 0.27f, 0.27f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.38f, 0.62f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
+            if (ImGui::Button("Play", playBtnSize)) {
                 OnScenePlay();
             }
+            ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play Simulation (F5)");
         }
 
-        // Pause Button
+        // Pause Button (Middle part of pill)
         ImGui::SameLine();
+        const ImVec2 pauseBtnSize(48.0f, 26.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
         if (m_SceneState == SceneState::Play) {
-            if (ImGui::Button("Pause", ImVec2(50.0f, 26.0f))) {
+            if (ImGui::Button("Pause", pauseBtnSize)) {
                 OnScenePause();
             }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pause Simulation (F6)");
         } else if (m_SceneState == SceneState::Pause) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.55f, 0.15f, 1.0f));
-            if (ImGui::Button("Resume", ImVec2(60.0f, 26.0f))) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.70f, 0.45f, 0.12f, 1.0f)); // Warm Amber
+            if (ImGui::Button("Resume", pauseBtnSize)) {
                 OnScenePlay();
             }
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Resume Simulation (F6)");
         } else {
             ImGui::BeginDisabled(true);
-            ImGui::Button("Pause", ImVec2(50.0f, 26.0f));
+            ImGui::Button("Pause", pauseBtnSize);
             ImGui::EndDisabled();
         }
+        ImGui::PopStyleVar();
 
-        // Step 1 Frame Button
+        // Step Button (Right part of pill)
         ImGui::SameLine();
+        const ImVec2 stepBtnSize(44.0f, 26.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
         if (m_SceneState == SceneState::Pause) {
-            if (ImGui::Button("Step", ImVec2(44.0f, 26.0f))) {
+            if (ImGui::Button("Step", stepBtnSize)) {
                 m_StepSingleFrame = true;
             }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Step 1 Frame (O)");
         } else {
             ImGui::BeginDisabled(true);
-            ImGui::Button("Step", ImVec2(44.0f, 26.0f));
+            ImGui::Button("Step", stepBtnSize);
             ImGui::EndDisabled();
         }
+        ImGui::PopStyleVar();
 
-        // Reset Button
-        ImGui::SameLine();
-        if (ImGui::Button("Reset", ImVec2(48.0f, 26.0f))) {
-            ResetSimulation();
-        }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset Scene Simulation (Ctrl+R)");
+        ImGui::PopStyleVar(); // Restore ItemSpacing
 
         // --- 3. RIGHT CLUSTER: Viewport Display & Camera Settings ---
-        const float rightClusterWidth = 330.0f;
+        const float rightClusterWidth = 280.0f;
         const float rightTargetX = mainViewport->WorkSize.x - rightClusterWidth;
         if (ImGui::GetCursorPosX() < rightTargetX) {
             ImGui::SameLine(rightTargetX);
+        } else {
+            ImGui::SameLine();
         }
 
         // 2D Button
-        if (DrawSegmentedToolButton("2D", "Toggle Viewport 2D UI Edit Mode", is2DMode, ImVec2(34.0f, 26.0f))) {
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+        if (DrawSegmentButton("2D", "Toggle Viewport 2D UI Edit Mode", is2DMode, ImVec2(32.0f, 26.0f), 3)) {
             Set2DViewMode(!is2DMode);
         }
 
         ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 6.0f);
         ImGui::Checkbox("Wire", &m_ShowPhysicsDebug);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Wireframe Physics Debug [F1]");
 
         ImGui::SameLine();
         const char* camBtnText = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay) ? "GameCam" : "FlyCam";
-        if (ImGui::Button(camBtnText, ImVec2(68.0f, 26.0f))) {
+        if (ImGui::Button(camBtnText, ImVec2(66.0f, 26.0f))) {
             m_UseEditorCameraInPlay = !m_UseEditorCameraInPlay;
             if (m_SceneState == SceneState::Play && m_UseEditorCameraInPlay && m_Scene) {
                 auto camEntity = m_Scene->GetPrimaryCameraEntity();
@@ -1812,12 +1832,15 @@ void EditorLayer::RenderToolbar() {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Switch between Free-Fly and Gameplay Camera [C / F2]");
 
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(70.0f);
+        ImGui::SetNextItemWidth(65.0f);
         ImGui::SliderFloat("##SimSpeed", &m_SimulationSpeed, 0.1f, 2.0f, "%.1fx");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Simulation Speed Multiplier");
+
+        ImGui::PopStyleVar();
     }
     ImGui::End();
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(); // Pop WindowBg
+    ImGui::PopStyleVar(2);
 }
 
 void EditorLayer::OnImGuiRender() {
@@ -2058,7 +2081,7 @@ void EditorLayer::OnImGuiRender() {
     ImGui::PopStyleVar(3);
 
     ImGuiID dockspaceID = ImGui::GetID("AxleMainDockspace");
-    ImGui::DockSpace(dockspaceID, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+    ImGui::DockSpace(dockspaceID, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_NoWindowMenuButton);
 
     // Build default docked layout if not yet configured or if reset requested
     ImGuiDockNode* node = ImGui::DockBuilderGetNode(dockspaceID);
@@ -2066,7 +2089,7 @@ void EditorLayer::OnImGuiRender() {
         m_ResetLayout = false;
 
         ImGui::DockBuilderRemoveNode(dockspaceID);
-        ImGui::DockBuilderAddNode(dockspaceID, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderAddNode(dockspaceID, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_NoWindowMenuButton);
         ImGui::DockBuilderSetNodeSize(dockspaceID, dockspaceSize);
 
         ImGuiID dock_main = dockspaceID;
@@ -2139,36 +2162,7 @@ void EditorLayer::OnImGuiRender() {
     ImVec2 viewportMax = ImGui::GetItemRectMax();
     ImVec2 viewportBounds = ImGui::GetItemRectSize();
 
-    // Viewport Camera Mode Overlay Badge (Phase 20.4)
-    if (m_SceneState == SceneState::Play) {
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        ImVec2 badgePos = ImVec2(viewportMin.x + 14.0f, viewportMin.y + 14.0f);
 
-        const char* badgeText = nullptr;
-        ImU32 badgeBorder = IM_COL32(46, 204, 113, 255);
-
-        if (!m_UseEditorCameraInPlay && m_ActiveCameraIsSceneCamera) {
-            badgeText = "[ GAME VIEW: PRIMARY CAMERA ] - Press 'F2' to Eject Free-Fly";
-            badgeBorder = IM_COL32(46, 204, 113, 255); // Green
-        } else if (m_UseEditorCameraInPlay) {
-            badgeText = "[ EJECT FREE-FLY CAMERA ] - Press 'F2' to Return to Game View";
-            badgeBorder = IM_COL32(241, 196, 15, 255); // Yellow
-        } else {
-            badgeText = "[ NO PRIMARY CAMERA IN SCENE ] - Using Editor Camera (Press 'F2')";
-            badgeBorder = IM_COL32(231, 76, 60, 255);  // Red
-        }
-
-        if (badgeText) {
-            ImVec2 textSize = ImGui::CalcTextSize(badgeText);
-            ImVec2 padding(10.0f, 6.0f);
-            ImVec2 boxMin = badgePos;
-            ImVec2 boxMax = ImVec2(badgePos.x + textSize.x + padding.x * 2.0f, badgePos.y + textSize.y + padding.y * 2.0f);
-
-            drawList->AddRectFilled(boxMin, boxMax, IM_COL32(15, 18, 24, 210), 4.0f);
-            drawList->AddRect(boxMin, boxMax, badgeBorder, 4.0f, 0, 1.5f);
-            drawList->AddText(ImVec2(boxMin.x + padding.x, boxMin.y + padding.y), IM_COL32(240, 240, 240, 255), badgeText);
-        }
-    }
 
     // Drag & Drop Target: Drag 3D models (.obj) from Content Browser into Viewport to instantiate
     if (ImGui::BeginDragDropTarget()) {
@@ -2849,39 +2843,22 @@ void EditorLayer::OnImGuiRender() {
         }
     }
 
-    // Viewport Overlay Badges
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    ImVec2 winPos = ImGui::GetWindowPos();
-    ImVec2 badgePos = ImVec2(winPos.x + 12.0f, winPos.y + 12.0f);
-
-    const char* statusText = (m_SceneState == SceneState::Edit) ? "EDIT MODE (STOPPED)"
-                           : (m_SceneState == SceneState::Play) ? "SIMULATION ACTIVE"
-                           : "SIMULATION PAUSED";
-    ImU32 statusBg = (m_SceneState == SceneState::Edit) ? IM_COL32(35, 75, 150, 220)
-                   : (m_SceneState == SceneState::Play) ? IM_COL32(25, 140, 55, 220)
-                   : IM_COL32(190, 95, 15, 220);
-
-    drawList->AddRectFilled(badgePos, ImVec2(badgePos.x + 175.0f, badgePos.y + 24.0f), statusBg, 4.0f);
-    drawList->AddText(ImVec2(badgePos.x + 8.0f, badgePos.y + 4.0f), IM_COL32(255, 255, 255, 255), statusText);
-
+    // In Simulation Play mode, display sleek runtime vehicle HUD in upper-right corner if applicable
     if (m_SceneState == SceneState::Play && m_Scene) {
-        float offsetX = 185.0f;
         if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
             const auto vTele = pv->GetTelemetry();
-            char speedStr[48];
+            char speedStr[64];
             snprintf(speedStr, sizeof(speedStr), "%.1f KM/H | GEAR %d", vTele.SpeedKmh, vTele.CurrentGear);
-            ImVec2 speedPos = ImVec2(badgePos.x + offsetX, badgePos.y);
-            drawList->AddRectFilled(speedPos, ImVec2(speedPos.x + 155.0f, speedPos.y + 24.0f), IM_COL32(20, 30, 45, 220), 4.0f);
-            drawList->AddText(ImVec2(speedPos.x + 8.0f, speedPos.y + 4.0f), IM_COL32(0, 230, 180, 255), speedStr);
-            offsetX += 165.0f;
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImVec2 winPos = ImGui::GetWindowPos();
+            ImVec2 winSize = ImGui::GetWindowSize();
+            float hudW = 160.0f;
+            ImVec2 hudPos = ImVec2(winPos.x + winSize.x - hudW - 16.0f, winPos.y + 14.0f);
+            drawList->AddRectFilled(hudPos, ImVec2(hudPos.x + hudW, hudPos.y + 26.0f), IM_COL32(20, 20, 20, 190), 4.0f);
+            drawList->AddRect(hudPos, ImVec2(hudPos.x + hudW, hudPos.y + 26.0f), IM_COL32(60, 60, 60, 220), 4.0f);
+            ImVec2 textSize = ImGui::CalcTextSize(speedStr);
+            drawList->AddText(ImVec2(hudPos.x + (hudW - textSize.x) * 0.5f, hudPos.y + 5.0f), IM_COL32(0, 225, 175, 255), speedStr);
         }
-        ImVec2 playHintPos = ImVec2(badgePos.x + offsetX, badgePos.y);
-        drawList->AddRectFilled(playHintPos, ImVec2(playHintPos.x + 620.0f, playHintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
-        drawList->AddText(ImVec2(playHintPos.x + 8.0f, playHintPos.y + 4.0f), IM_COL32(200, 210, 225, 255), "Drive: WASD / Space | Click LMB: Lock/Look | Esc / Shift+F1: Unlock | C: Dist | F2: Free-Fly | V: Cam");
-    } else if (m_SceneState == SceneState::Edit) {
-        ImVec2 hintPos = ImVec2(badgePos.x + 185.0f, badgePos.y);
-        drawList->AddRectFilled(hintPos, ImVec2(hintPos.x + 440.0f, hintPos.y + 24.0f), IM_COL32(20, 25, 35, 200), 4.0f);
-        drawList->AddText(ImVec2(hintPos.x + 8.0f, hintPos.y + 4.0f), IM_COL32(200, 210, 225, 255), "Gizmo: W/E/R | Q: Select | Click Mesh | RMB+WASD Fly");
     }
 
     // Dispatch General-Purpose ScriptableEntity::OnImGuiRender() for Active Simulation Scripts (Unity OnGUI / UE HUD style)
@@ -2892,19 +2869,26 @@ void EditorLayer::OnImGuiRender() {
     ImGui::End();
     ImGui::PopStyleVar();
 
-    // 5. Scene Hierarchy & Inspector Panels
-    m_SceneHierarchyPanel.OnImGuiRender(&m_ShowSceneHierarchy, &m_ShowProperties);
+    // 5. Scene Hierarchy & Inspector Panels (Unity dock tabs without X close button)
+    if (m_ShowSceneHierarchy || m_ShowProperties) {
+        m_SceneHierarchyPanel.OnImGuiRender(m_ShowSceneHierarchy ? &m_ShowSceneHierarchy : nullptr,
+                                            m_ShowProperties ? &m_ShowProperties : nullptr);
+    }
 
     // 6. Console Log Panel
-    m_ConsolePanel.OnImGuiRender(&m_ShowConsole);
+    if (m_ShowConsole) {
+        m_ConsolePanel.OnImGuiRender(nullptr);
+    }
 
     // 8. Content Browser Panel
-    m_ContentBrowserPanel.OnImGuiRender(&m_ShowContentBrowser);
+    if (m_ShowContentBrowser) {
+        m_ContentBrowserPanel.OnImGuiRender(nullptr);
+    }
 
     // 9. UI Widget Palette Panel (Phase 34 Step 7.4)
     if (m_ShowUIPalette) {
         m_UIPalettePanel.SetContext(m_Scene.get());
-        m_UIPalettePanel.OnImGuiRender(&m_ShowUIPalette);
+        m_UIPalettePanel.OnImGuiRender(nullptr);
     }
 
     // 10. Assembly Editor Panel (Phase 12)

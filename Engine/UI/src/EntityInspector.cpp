@@ -23,6 +23,7 @@
 #include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
 #include <Axle/UI/UIParser.hpp>
+#include <Axle/UIVectorIcons.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -69,7 +70,15 @@ namespace Axle {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{ 4.0f, 4.0f });
         ImGui::Separator();
 
-        bool open = ImGui::TreeNodeEx((void*)typeid(T).hash_code(), treeNodeFlags, "%s", name.c_str());
+        ImVec2 rowStart = ImGui::GetCursorScreenPos();
+        bool open = ImGui::TreeNodeEx((void*)typeid(T).hash_code(), treeNodeFlags, "    %s", name.c_str());
+
+        // Draw component vector icon
+        float iconSize = 13.0f;
+        float textOffsetX = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 3.0f;
+        ImVec2 iconPos(rowStart.x + textOffsetX, rowStart.y + (lineHeight - iconSize) * 0.5f);
+        UIIcons::DrawComponentVectorIcon(ImGui::GetWindowDrawList(), iconPos, iconSize, name);
+
         ImGui::PopStyleVar();
 
         bool removeComponent = false;

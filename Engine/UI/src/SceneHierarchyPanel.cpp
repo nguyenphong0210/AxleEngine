@@ -20,6 +20,7 @@
 #include <Axle/AudioSource.hpp>
 #include <Axle/AudioClip.hpp>
 #include <Axle/VehicleAudio.hpp>
+#include <Axle/UIVectorIcons.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -837,8 +838,15 @@ namespace Axle {
             flags |= ImGuiTreeNodeFlags_DefaultOpen;
         }
 
-        // Unity GameObject Tree Node: clean label with native foldout arrow
-        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", tag.c_str());
+        // Unity GameObject Tree Node: leave space for crisp vector icon
+        ImVec2 rowStart = ImGui::GetCursorScreenPos();
+        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "    %s", tag.c_str());
+
+        // Draw crisp vector icon in the reserved pocket
+        float iconSize = 13.0f;
+        float textOffsetX = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImVec2 iconPos(rowStart.x + textOffsetX, rowStart.y + (ImGui::GetTextLineHeight() - iconSize) * 0.5f);
+        UIIcons::DrawEntityVectorIcon(ImGui::GetWindowDrawList(), iconPos, iconSize, entity);
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
             m_SelectedEntity = entity;

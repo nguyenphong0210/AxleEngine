@@ -33,6 +33,7 @@
 #include <Axle/RHI/RHIMesh.hpp>
 #include <Axle/UI/RectTransformGizmo.hpp>
 #include <Axle/UI/UIDocument.hpp>
+#include <Axle/UIVectorIcons.hpp>
 #include <filesystem>
 
 #ifdef _WIN32
@@ -48,6 +49,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
+#include <functional>
 
 EditorLayer::EditorLayer()
     : Layer("EditorLayer") {
@@ -1594,27 +1596,74 @@ void EditorLayer::RenderToolbar() {
         ImVec2 winMax = ImVec2(winMin.x + ImGui::GetWindowWidth(), winMin.y + toolbarHeight);
         dl->AddLine(ImVec2(winMin.x, winMax.y - 1.0f), ImVec2(winMax.x, winMax.y - 1.0f), IM_COL32(30, 30, 30, 255));
 
-        // Helper lambda for segmented tool buttons (no gap between buttons)
-        auto DrawSegmentButton = [](const char* label, const char* tooltip, bool active, ImVec2 size, int cornerFlags) -> bool {
+        // Helper lambda for segmented tool icon buttons (no gap between buttons)
+        auto DrawSegmentIconButton = [](const char* id, const char* tooltip, bool active, ImVec2 size, int cornerFlags,
+                                        void(*drawIcon)(ImDrawList*, ImVec2, float, ImU32)) -> bool {
+            ImDrawFlags roundFlags = ImDrawFlags_RoundNone;
+            if (cornerFlags == 1) roundFlags = ImDrawFlags_RoundLeft;
+            else if (cornerFlags == 2) roundFlags = ImDrawFlags_RoundRight;
+            else if (cornerFlags == 3) roundFlags = ImDrawFlags_RoundAll;
+
+            ImVec2 pMin = ImGui::GetCursorScreenPos();
+            ImVec2 pMax = ImVec2(pMin.x + size.x, pMin.y + size.y);
+            bool clicked = ImGui::InvisibleButton(id, size);
+            bool hovered = ImGui::IsItemHovered();
+            bool held = ImGui::IsItemActive();
+
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImU32 bgCol;
             if (active) {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.38f, 0.62f, 1.0f)); // Unity active blue #2E619E
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.44f, 0.70f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.32f, 0.54f, 1.0f));
+                bgCol = held ? IM_COL32(36, 82, 138, 255) : (hovered ? IM_COL32(56, 112, 178, 255) : IM_COL32(46, 97, 158, 255));
             } else {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.22f, 0.22f, 1.0f)); // #383838
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.27f, 0.27f, 0.27f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.17f, 0.17f, 0.17f, 1.0f));
+                bgCol = held ? IM_COL32(42, 42, 42, 255) : (hovered ? IM_COL32(68, 68, 68, 255) : IM_COL32(54, 54, 54, 255));
             }
-            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.14f, 0.14f, 0.14f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, (cornerFlags != 0) ? 3.5f : 0.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+            float rounding = (cornerFlags != 0) ? 4.0f : 0.0f;
+            dl->AddRectFilled(pMin, pMax, bgCol, rounding, roundFlags);
+            dl->AddRect(pMin, pMax, IM_COL32(36, 36, 36, 255), rounding, roundFlags, 1.0f);
 
-            bool clicked = ImGui::Button(label, size);
+            // Vector icon
+            ImVec2 center((pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f);
+            ImU32 iconCol = active ? IM_COL32(255, 255, 255, 255) : (hovered ? IM_COL32(245, 248, 255, 255) : IM_COL32(205, 210, 220, 240));
+            if (drawIcon) {
+                drawIcon(dl, center, 14.0f, iconCol);
+            }
 
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(4);
+            if (hovered && tooltip) {
+                ImGui::SetTooltip("%s", tooltip);
+            }
+            return clicked;
+        };
 
-            if (ImGui::IsItemHovered() && tooltip) {
+        auto DrawSegmentButton = [](const char* label, const char* tooltip, bool active, ImVec2 size, int cornerFlags) -> bool {
+            ImDrawFlags roundFlags = ImDrawFlags_RoundNone;
+            if (cornerFlags == 1) roundFlags = ImDrawFlags_RoundLeft;
+            else if (cornerFlags == 2) roundFlags = ImDrawFlags_RoundRight;
+            else if (cornerFlags == 3) roundFlags = ImDrawFlags_RoundAll;
+
+            ImVec2 pMin = ImGui::GetCursorScreenPos();
+            ImVec2 pMax = ImVec2(pMin.x + size.x, pMin.y + size.y);
+            bool clicked = ImGui::InvisibleButton(label, size);
+            bool hovered = ImGui::IsItemHovered();
+            bool held = ImGui::IsItemActive();
+
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImU32 bgCol;
+            if (active) {
+                bgCol = held ? IM_COL32(36, 82, 138, 255) : (hovered ? IM_COL32(56, 112, 178, 255) : IM_COL32(46, 97, 158, 255));
+            } else {
+                bgCol = held ? IM_COL32(42, 42, 42, 255) : (hovered ? IM_COL32(68, 68, 68, 255) : IM_COL32(54, 54, 54, 255));
+            }
+            float rounding = (cornerFlags != 0) ? 4.0f : 0.0f;
+            dl->AddRectFilled(pMin, pMax, bgCol, rounding, roundFlags);
+            dl->AddRect(pMin, pMax, IM_COL32(36, 36, 36, 255), rounding, roundFlags, 1.0f);
+
+            // Centered text
+            ImVec2 textSize = ImGui::CalcTextSize(label);
+            ImVec2 textPos((pMin.x + pMax.x - textSize.x) * 0.5f, (pMin.y + pMax.y - textSize.y) * 0.5f);
+            ImU32 textCol = active ? IM_COL32(255, 255, 255, 255) : (hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(210, 215, 225, 240));
+            dl->AddText(textPos, textCol, label);
+
+            if (hovered && tooltip) {
                 ImGui::SetTooltip("%s", tooltip);
             }
             return clicked;
@@ -1622,25 +1671,41 @@ void EditorLayer::RenderToolbar() {
 
         // --- 1. LEFT CLUSTER: Unity Transform Tools (Contiguous Segmented Capsule) ---
         bool is2DMode = m_CameraController ? m_CameraController->Is2DMode() : false;
+        const ImVec2 toolBtnSize(34.0f, 26.0f);
 
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f)); // Zero gap between tools!
-        if (DrawSegmentButton("Select", "Select Tool (Q)", m_GizmoType == -1 && !is2DMode, ImVec2(50.0f, 26.0f), 1)) {
+
+        // Tool 1: Select (Q)
+        if (DrawSegmentIconButton("##ToolSelect", "Select Tool (Q)", m_GizmoType == -1 && !is2DMode, toolBtnSize, 1,
+            Axle::UIIcons::DrawToolSelectIcon)) {
             m_GizmoType = -1;
         }
         ImGui::SameLine();
-        if (DrawSegmentButton("Move", "Move Tool (W)", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE, ImVec2(46.0f, 26.0f), 0)) {
+
+        // Tool 2: Move (W)
+        if (DrawSegmentIconButton("##ToolMove", "Move Tool (W)", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE, toolBtnSize, 0,
+            Axle::UIIcons::DrawToolMoveIcon)) {
             m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
         }
         ImGui::SameLine();
-        if (DrawSegmentButton("Rotate", "Rotate Tool (E)", m_GizmoType == ImGuizmo::OPERATION::ROTATE, ImVec2(50.0f, 26.0f), 0)) {
+
+        // Tool 3: Rotate (E)
+        if (DrawSegmentIconButton("##ToolRotate", "Rotate Tool (E)", m_GizmoType == ImGuizmo::OPERATION::ROTATE, toolBtnSize, 0,
+            Axle::UIIcons::DrawToolRotateIcon)) {
             m_GizmoType = ImGuizmo::OPERATION::ROTATE;
         }
         ImGui::SameLine();
-        if (DrawSegmentButton("Scale", "Scale Tool (R)", m_GizmoType == ImGuizmo::OPERATION::SCALE, ImVec2(46.0f, 26.0f), 0)) {
+
+        // Tool 4: Scale (R)
+        if (DrawSegmentIconButton("##ToolScale", "Scale Tool (R)", m_GizmoType == ImGuizmo::OPERATION::SCALE, toolBtnSize, 0,
+            Axle::UIIcons::DrawToolScaleIcon)) {
             m_GizmoType = ImGuizmo::OPERATION::SCALE;
         }
         ImGui::SameLine();
-        if (DrawSegmentButton("Rect", "Rect Tool / 2D UI Edit Mode (T)", is2DMode, ImVec2(44.0f, 26.0f), 2)) {
+
+        // Tool 5: Rect (T)
+        if (DrawSegmentIconButton("##ToolRect", "Rect Tool / 2D UI Edit Mode (T)", is2DMode, toolBtnSize, 2,
+            Axle::UIIcons::DrawToolRectIcon)) {
             Set2DViewMode(!is2DMode);
         }
         ImGui::PopStyleVar(); // Restore ItemSpacing
@@ -1715,7 +1780,7 @@ void EditorLayer::RenderToolbar() {
         ImGui::PopStyleVar();
 
         // --- 2. CENTER CLUSTER: Unity Signature Contiguous Transport Pill [ ▶ | ⏸ | ⏭ ] ---
-        const float transportPillWidth = 144.0f;
+        const float transportPillWidth = 136.0f;
         const float centerTargetX = (mainViewport->WorkSize.x - transportPillWidth) * 0.5f;
         if (ImGui::GetCursorPosX() < centerTargetX) {
             ImGui::SameLine(centerTargetX);
@@ -1725,16 +1790,19 @@ void EditorLayer::RenderToolbar() {
 
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f)); // Contiguous pill!
 
-        // Play Button (Left part of pill)
-        const ImVec2 playBtnSize(52.0f, 26.0f);
+        // Play / Stop Button (Left part of pill)
+        const ImVec2 playBtnSize(48.0f, 26.0f);
         if (m_SceneState == SceneState::Play) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.38f, 0.62f, 1.0f)); // Active Unity Blue #2E619E
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.44f, 0.70f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.32f, 0.54f, 1.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
-            if (ImGui::Button("Stop", playBtnSize)) {
+            if (ImGui::Button("##StopBtn", playBtnSize)) {
                 OnSceneStop();
             }
+            ImVec2 bMin = ImGui::GetItemRectMin();
+            ImVec2 bMax = ImGui::GetItemRectMax();
+            Axle::UIIcons::DrawStopIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f);
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop Simulation (F5 / F7)");
@@ -1743,9 +1811,12 @@ void EditorLayer::RenderToolbar() {
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.27f, 0.27f, 0.27f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.38f, 0.62f, 1.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
-            if (ImGui::Button("Play", playBtnSize)) {
+            if (ImGui::Button("##PlayBtn", playBtnSize)) {
                 OnScenePlay();
             }
+            ImVec2 bMin = ImGui::GetItemRectMin();
+            ImVec2 bMax = ImGui::GetItemRectMax();
+            Axle::UIIcons::DrawPlayIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f);
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play Simulation (F5)");
@@ -1753,23 +1824,32 @@ void EditorLayer::RenderToolbar() {
 
         // Pause Button (Middle part of pill)
         ImGui::SameLine();
-        const ImVec2 pauseBtnSize(48.0f, 26.0f);
+        const ImVec2 pauseBtnSize(44.0f, 26.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
         if (m_SceneState == SceneState::Play) {
-            if (ImGui::Button("Pause", pauseBtnSize)) {
+            if (ImGui::Button("##PauseBtn", pauseBtnSize)) {
                 OnScenePause();
             }
+            ImVec2 bMin = ImGui::GetItemRectMin();
+            ImVec2 bMax = ImGui::GetItemRectMax();
+            Axle::UIIcons::DrawPauseIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pause Simulation (F6)");
         } else if (m_SceneState == SceneState::Pause) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.70f, 0.45f, 0.12f, 1.0f)); // Warm Amber
-            if (ImGui::Button("Resume", pauseBtnSize)) {
+            if (ImGui::Button("##ResumeBtn", pauseBtnSize)) {
                 OnScenePlay();
             }
+            ImVec2 bMin = ImGui::GetItemRectMin();
+            ImVec2 bMax = ImGui::GetItemRectMax();
+            Axle::UIIcons::DrawPauseIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f, IM_COL32(255, 235, 140, 255));
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Resume Simulation (F6)");
         } else {
             ImGui::BeginDisabled(true);
-            ImGui::Button("Pause", pauseBtnSize);
+            ImGui::Button("##DisabledPauseBtn", pauseBtnSize);
+            ImVec2 bMin = ImGui::GetItemRectMin();
+            ImVec2 bMax = ImGui::GetItemRectMax();
+            Axle::UIIcons::DrawPauseIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f, IM_COL32(110, 110, 110, 255));
             ImGui::EndDisabled();
         }
         ImGui::PopStyleVar();
@@ -1779,13 +1859,19 @@ void EditorLayer::RenderToolbar() {
         const ImVec2 stepBtnSize(44.0f, 26.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
         if (m_SceneState == SceneState::Pause) {
-            if (ImGui::Button("Step", stepBtnSize)) {
+            if (ImGui::Button("##StepBtn", stepBtnSize)) {
                 m_StepSingleFrame = true;
             }
+            ImVec2 bMin = ImGui::GetItemRectMin();
+            ImVec2 bMax = ImGui::GetItemRectMax();
+            Axle::UIIcons::DrawStepIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Step 1 Frame (O)");
         } else {
             ImGui::BeginDisabled(true);
-            ImGui::Button("Step", stepBtnSize);
+            ImGui::Button("##DisabledStepBtn", stepBtnSize);
+            ImVec2 bMin = ImGui::GetItemRectMin();
+            ImVec2 bMax = ImGui::GetItemRectMax();
+            Axle::UIIcons::DrawStepIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f, IM_COL32(110, 110, 110, 255));
             ImGui::EndDisabled();
         }
         ImGui::PopStyleVar();

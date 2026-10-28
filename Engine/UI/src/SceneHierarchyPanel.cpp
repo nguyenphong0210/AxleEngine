@@ -21,6 +21,8 @@
 #include <Axle/AudioClip.hpp>
 #include <Axle/VehicleAudio.hpp>
 #include <Axle/UIVectorIcons.hpp>
+#include <Axle/UI/UINode.hpp>
+#include <Axle/UI/UIDocument.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -675,11 +677,19 @@ namespace Axle {
                 }
 
                 if (m_InspectorMode == InspectorMode::Entity && hasEntity) {
-                    DrawComponents(m_SelectedEntity);
+                    if (m_SelectedUINode && m_SelectedEntity.HasComponent<UICanvasComponent>()) {
+                        DrawUINodeProperties(m_SelectedUINode, m_SelectedEntity.GetComponent<UICanvasComponent>());
+                    } else {
+                        DrawComponents(m_SelectedEntity);
+                    }
                 } else if (m_InspectorMode == InspectorMode::Asset && hasAsset) {
                     DrawAssetProperties(m_SelectedAsset);
                 } else if (hasEntity) {
-                    DrawComponents(m_SelectedEntity);
+                    if (m_SelectedUINode && m_SelectedEntity.HasComponent<UICanvasComponent>()) {
+                        DrawUINodeProperties(m_SelectedUINode, m_SelectedEntity.GetComponent<UICanvasComponent>());
+                    } else {
+                        DrawComponents(m_SelectedEntity);
+                    }
                 } else if (hasAsset) {
                     DrawAssetProperties(m_SelectedAsset);
                 } else {
@@ -827,6 +837,12 @@ namespace Axle {
         if (entity.HasComponent<HierarchyComponent>()) {
             hasChildren = !entity.GetComponent<HierarchyComponent>().Children.empty();
         }
+        if (entity.HasComponent<UICanvasComponent>()) {
+            auto& uic = entity.GetComponent<UICanvasComponent>();
+            if (uic.Document && uic.Document->GetRootNode() && !uic.Document->GetRootNode()->Children.empty()) {
+                hasChildren = true;
+            }
+        }
 
         ImGuiTreeNodeFlags flags = ((m_SelectedEntity == entity) ? ImGuiTreeNodeFlags_Selected : 0) 
                                  | ImGuiTreeNodeFlags_OpenOnArrow 
@@ -850,6 +866,7 @@ namespace Axle {
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
             m_SelectedEntity = entity;
+            m_SelectedUINode = nullptr;
             m_SelectedAsset.clear();
         }
 
@@ -1036,11 +1053,23 @@ namespace Axle {
         if (opened) {
             if (hasChildren) {
                 // Copy children list to avoid iterator invalidation upon modification
-                auto children = entity.GetComponent<HierarchyComponent>().Children;
-                for (auto childID : children) {
-                    if (m_Scene->GetRegistry().valid(childID)) {
-                        Entity childEntity{ childID, m_Scene };
-                        DrawEntityNode(childEntity);
+                if (entity.HasComponent<HierarchyComponent>()) {
+                    auto children = entity.GetComponent<HierarchyComponent>().Children;
+                    for (auto childID : children) {
+                        if (m_Scene->GetRegistry().valid(childID)) {
+                            Entity childEntity{ childID, m_Scene };
+                            DrawEntityNode(childEntity);
+                        }
+                    }
+                }
+
+                // Expand UI Node sub-tree if entity carries UICanvasComponent
+                if (entity.HasComponent<UICanvasComponent>()) {
+                    auto& uic = entity.GetComponent<UICanvasComponent>();
+                    if (uic.Document && uic.Document->GetRootNode()) {
+                        for (UINode* uiChild : uic.Document->GetRootNode()->Children) {
+                            DrawUINodeTree(uiChild, uic);
+                        }
                     }
                 }
             }
@@ -1052,5 +1081,146 @@ namespace Axle {
         }
     }
 
+    void SceneHierarchyPanel::DrawUINodeTree(UINode* uiNode, UICanvasComponent& uic) {
+        if (!uiNode) return;
+
+        bool isSelected = (m_SelectedUINode == uiNode);
+        bool hasChildren = !uiNode->Children.empty();
+
+        ImGuiTreeNodeFlags flags = (isSelected ? ImGuiTreeNodeFlags_Selected : 0)
+                                 | ImGuiTreeNodeFlags_OpenOnArrow
+                                 | ImGuiTreeNodeFlags_SpanAvailWidth;
+
+        if (!hasChildren) {
+            flags |= ImGuiTreeNodeFlags_Leaf;
+        } else {
+            flags |= ImGuiTreeNodeFlags_DefaultOpen;
+        }
+
+        std::string nodeLabel = uiNode->ID.empty() ? std::string(uiNode->GetTypeName()) : uiNode->ID;
+        ImGui::PushStyleColor(ImGuiCol_Text, isSelected ? ImVec4(0.35f, 0.85f, 1.0f, 1.0f) : ImVec4(0.85f, 0.90f, 0.95f, 1.0f));
+        bool opened = ImGui::TreeNodeEx((void*)uiNode, flags, "  %s [%s]", nodeLabel.c_str(), uiNode->GetTypeName().data());
+        ImGui::PopStyleColor();
+
+        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+            m_SelectedUINode = uiNode;
+            m_SelectedAsset.clear();
+        }
+
+        if (opened) {
+            for (UINode* child : uiNode->Children) {
+                DrawUINodeTree(child, uic);
+            }
+            ImGui::TreePop();
+        }
+    }
+
+    void SceneHierarchyPanel::DrawUINodeProperties(UINode* node, UICanvasComponent& uic) {
+        if (!node) return;
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.35f, 0.5f, 1.0f));
+        if (ImGui::Button("<- Back to Canvas Entity", ImVec2(ImGui::GetContentRegionAvail().x, 24.0f))) {
+            m_SelectedUINode = nullptr;
+            ImGui::PopStyleColor();
+            return;
+        }
+        ImGui::PopStyleColor();
+
+        if (m_OnOpenUICanvasDesignerCallback && !uic.AssetPath.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.35f, 1.0f));
+            if (ImGui::Button("🎨 Open in UI Canvas Designer", ImVec2(ImGui::GetContentRegionAvail().x, 24.0f))) {
+                m_OnOpenUICanvasDesignerCallback(uic.AssetPath);
+            }
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.0f, 1.0f), "UI Node: %s [%s]", node->ID.c_str(), node->GetTypeName().data());
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        bool dirty = false;
+
+        char idBuf[128];
+        std::strncpy(idBuf, node->ID.c_str(), sizeof(idBuf) - 1);
+        idBuf[sizeof(idBuf) - 1] = '\0';
+        if (ImGui::InputText("ID", idBuf, sizeof(idBuf))) {
+            node->ID = idBuf;
+            dirty = true;
+        }
+
+        if (ImGui::Checkbox("Visible", &node->Visible)) {
+            dirty = true;
+        }
+
+        const char* anchorNames[] = {
+            "TopLeft", "TopCenter", "TopRight",
+            "CenterLeft", "Center", "CenterRight",
+            "BottomLeft", "BottomCenter", "BottomRight",
+            "TopStretch", "BottomStretch", "StretchAll"
+        };
+        int currentAnchor = static_cast<int>(node->Anchor);
+        if (ImGui::Combo("Anchor", &currentAnchor, anchorNames, IM_ARRAYSIZE(anchorNames))) {
+            node->Anchor = static_cast<UIAnchor>(currentAnchor);
+            node->SyncTransformFromLegacy();
+            dirty = true;
+        }
+
+        if (ImGui::DragFloat2("Position", glm::value_ptr(node->Position), 1.0f)) {
+            node->Transform.AnchoredPosition = node->Position;
+            dirty = true;
+        }
+
+        if (ImGui::DragFloat2("Size", glm::value_ptr(node->Size), 1.0f, 0.0f, 3840.0f)) {
+            node->Transform.SizeDelta = node->Size;
+            dirty = true;
+        }
+
+        // Widget-specific properties
+        if (auto* rn = dynamic_cast<UIRectangleNode*>(node)) {
+            ImGui::Separator();
+            ImGui::TextDisabled("Rectangle Styling:");
+            if (ImGui::ColorEdit4("Background Color", glm::value_ptr(rn->Style.BackgroundColor))) dirty = true;
+            if (ImGui::DragFloat("Corner Radius", &rn->Style.CornerRadius, 0.5f, 0.0f, 100.0f)) dirty = true;
+            if (ImGui::DragFloat("Border Width", &rn->Style.BorderWidth, 0.2f, 0.0f, 20.0f)) dirty = true;
+            if (ImGui::ColorEdit4("Border Color", glm::value_ptr(rn->Style.BorderColor))) dirty = true;
+        }
+        else if (auto* tn = dynamic_cast<UITextNode*>(node)) {
+            ImGui::Separator();
+            ImGui::TextDisabled("Text Properties:");
+            char textBuf[256];
+            std::strncpy(textBuf, tn->Text.c_str(), sizeof(textBuf) - 1);
+            textBuf[sizeof(textBuf) - 1] = '\0';
+            if (ImGui::InputText("Text Content", textBuf, sizeof(textBuf))) {
+                tn->Text = textBuf;
+                dirty = true;
+            }
+            if (ImGui::DragFloat("Font Size", &tn->FontSize, 1.0f, 8.0f, 120.0f)) dirty = true;
+            if (ImGui::ColorEdit4("Text Color", glm::value_ptr(tn->Color))) dirty = true;
+        }
+        else if (auto* rg = dynamic_cast<UIRadialGaugeNode*>(node)) {
+            ImGui::Separator();
+            ImGui::TextDisabled("Radial Gauge Properties:");
+            if (ImGui::SliderFloat("Gauge Value", &rg->Value, 0.0f, 1.0f)) dirty = true;
+            if (ImGui::DragFloat("Start Angle", &rg->StartAngle, 1.0f, -360.0f, 360.0f)) dirty = true;
+            if (ImGui::DragFloat("End Angle", &rg->EndAngle, 1.0f, -360.0f, 360.0f)) dirty = true;
+            if (ImGui::DragFloat("Thickness", &rg->Thickness, 0.5f, 1.0f, 40.0f)) dirty = true;
+            if (ImGui::ColorEdit4("Active Color", glm::value_ptr(rg->Color))) dirty = true;
+            if (ImGui::ColorEdit4("Track Color", glm::value_ptr(rg->TrackColor))) dirty = true;
+        }
+        else if (auto* pb = dynamic_cast<UIProgressBarNode*>(node)) {
+            ImGui::Separator();
+            ImGui::TextDisabled("Progress Bar Properties:");
+            if (ImGui::SliderFloat("Progress Value", &pb->Value, 0.0f, 1.0f)) dirty = true;
+            if (ImGui::ColorEdit4("Fill Color", glm::value_ptr(pb->FillColor))) dirty = true;
+            if (ImGui::ColorEdit4("Background Color", glm::value_ptr(pb->BackgroundColor))) dirty = true;
+            if (ImGui::DragFloat("Corner Radius", &pb->CornerRadius, 0.5f, 0.0f, 50.0f)) dirty = true;
+        }
+
+        if (dirty && uic.Document) {
+            uic.Document->MarkLayoutDirty();
+            uic.Document->SetDirty(true);
+        }
+    }
 
 }

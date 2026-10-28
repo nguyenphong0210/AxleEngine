@@ -14,6 +14,8 @@ namespace Axle {
     class VertexArray;
     class AssetPreviewPanel;
     class AudioSource;
+    class UINode;
+    struct UICanvasComponent;
 
     enum class InspectorMode {
         Entity = 0,
@@ -42,6 +44,9 @@ namespace Axle {
         Entity GetSelectedEntity() const { return m_SelectedEntity; }
         void SetSelectedEntity(Entity entity);
 
+        UINode* GetSelectedUINode() const { return m_SelectedUINode; }
+        void SetSelectedUINode(UINode* node) { m_SelectedUINode = node; }
+
         void SetSelectedAsset(const std::filesystem::path& assetPath);
         const std::filesystem::path& GetSelectedAsset() const { return m_SelectedAsset; }
         void ClearSelectedAsset();
@@ -51,6 +56,7 @@ namespace Axle {
 
         void SetSpawnAssetCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnSpawnAssetCallback = callback; }
         void SetOpenAssemblyEditorCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenAssemblyEditorCallback = callback; }
+        void SetOpenUICanvasDesignerCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenUICanvasDesignerCallback = callback; }
         void SetCustomComponentDrawer(std::function<void(Entity)> callback) { m_CustomComponentDrawer = callback; }
         void SetCustomAddComponentDrawer(std::function<void(Entity)> callback) { m_CustomAddComponentDrawer = callback; }
 
@@ -69,11 +75,14 @@ namespace Axle {
         void DrawAssetProperties(const std::filesystem::path& path);
         void DrawMaterialAssetProperties(const std::filesystem::path& path);
         void DrawCreateMenu();
+        void DrawUINodeTree(UINode* node, UICanvasComponent& uic);
+        void DrawUINodeProperties(UINode* node, UICanvasComponent& uic);
 
     private:
         Scene* m_Scene = nullptr;
         PhysicsScene* m_PhysicsScene = nullptr;
         Entity m_SelectedEntity{};
+        UINode* m_SelectedUINode = nullptr;
         std::filesystem::path m_SelectedAsset;
         InspectorMode m_InspectorMode = InspectorMode::Entity;
         AssetPreviewPanel* m_AssetPreviewPanel = nullptr;
@@ -91,6 +100,7 @@ namespace Axle {
 
         std::function<void(const std::filesystem::path&)> m_OnSpawnAssetCallback;
         std::function<void(const std::filesystem::path&)> m_OnOpenAssemblyEditorCallback;
+        std::function<void(const std::filesystem::path&)> m_OnOpenUICanvasDesignerCallback;
         std::function<void(Entity)> m_CustomComponentDrawer;
         std::function<void(Entity)> m_CustomAddComponentDrawer;
 

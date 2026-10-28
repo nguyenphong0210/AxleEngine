@@ -187,6 +187,13 @@ void EditorLayer::OnAttach() {
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
 
+    m_ContentBrowserPanel.SetOpenUICanvasCallback([this](const std::filesystem::path& path) {
+        OpenUICanvasDesigner(path);
+    });
+    m_SceneHierarchyPanel.SetOpenUICanvasDesignerCallback([this](const std::filesystem::path& path) {
+        OpenUICanvasDesigner(path);
+    });
+
     // Setup Serializer Context for meshes & scripts
     m_SerializerContext.CubeMesh = m_CubeMesh;
     m_SerializerContext.SphereMesh = m_SphereMesh;
@@ -1926,7 +1933,7 @@ void EditorLayer::RenderToolbar() {
         ImGui::PopStyleVar(); // Restore ItemSpacing
 
         // --- 3. RIGHT CLUSTER: Viewport Display & Camera Settings ---
-        const float rightClusterWidth = 280.0f;
+        const float rightClusterWidth = 320.0f;
         const float rightTargetX = mainViewport->WorkSize.x - rightClusterWidth;
         if (ImGui::GetCursorPosX() < rightTargetX) {
             ImGui::SameLine(rightTargetX);
@@ -1938,6 +1945,11 @@ void EditorLayer::RenderToolbar() {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
         if (DrawSegmentButton("2D", "Toggle Viewport 2D UI Edit Mode", is2DMode, ImVec2(32.0f, 26.0f), 3)) {
             Set2DViewMode(!is2DMode);
+        }
+
+        ImGui::SameLine();
+        if (DrawSegmentButton("UI", "Toggle UI Canvas Live Overlay Preview", m_ShowUIOverlay, ImVec2(32.0f, 26.0f), 3)) {
+            m_ShowUIOverlay = !m_ShowUIOverlay;
         }
 
         ImGui::SameLine();
@@ -2139,6 +2151,7 @@ void EditorLayer::OnImGuiRender() {
             ImGui::MenuItem("Assembly Editor", nullptr, &m_ShowAssemblyEditor);
             ImGui::MenuItem("Visual FX (VFX) Editor", nullptr, &m_ShowVFXEditor);
             ImGui::MenuItem("UI Library", nullptr, &m_ShowUIPalette);
+            ImGui::MenuItem("UI Canvas Designer", nullptr, &m_ShowUICanvasDesigner);
             ImGui::MenuItem("Performance & Debug", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             if (m_RHIViewport && m_RHIViewport->IsValid()) {
@@ -2976,11 +2989,40 @@ void EditorLayer::OnImGuiRender() {
         }
     }
 
-    // In Simulation Play mode, render Declarative Canvas UI (e.g. RacingHUD.axleui)
-    if (m_SceneState == SceneState::Play && m_Scene) {
+    // Render Declarative Canvas UI (in Play mode OR in Edit mode when UI Preview is enabled)
+    bool isCanvasEntitySelected = false;
+    if (m_Scene) {
+        auto selEnt = m_SceneHierarchyPanel.GetSelectedEntity();
+        if (selEnt && selEnt.HasComponent<Axle::UICanvasComponent>()) {
+            isCanvasEntitySelected = true;
+        }
+    }
+
+    bool shouldRenderCanvasUI = m_Scene && (
+        (m_SceneState == SceneState::Play) ||
+        (m_SceneState == SceneState::Edit && (m_ShowUIOverlay || isCanvasEntitySelected || is2DMode))
+    );
+
+    if (shouldRenderCanvasUI) {
         auto canvasView = m_Scene->GetRegistry().view<Axle::UICanvasComponent>();
         bool renderedCanvasUI = false;
         auto& uiCtx = m_Scene->GetUIDataContext();
+
+        // In Edit Mode, inject live mock vehicle telemetry so gauges & readouts are active and visible
+        if (m_SceneState == SceneState::Edit) {
+            uiCtx.Set("Engine.FPS", 60);
+            uiCtx.Set("Vehicle.SpeedKmh", 145);
+            uiCtx.Set("Vehicle.SpeedUnit", std::string("KM/H"));
+            uiCtx.Set("Vehicle.RPMNormalized", 0.68f);
+            uiCtx.Set("Vehicle.IsRedline", false);
+            uiCtx.Set("Vehicle.GearString", std::string("4"));
+            uiCtx.Set("Vehicle.Throttle", 0.85f);
+            uiCtx.Set("Vehicle.Brake", 0.0f);
+            uiCtx.Set("Vehicle.LateralG", std::string("+0.42"));
+            uiCtx.Set("Vehicle.LongitudinalG", std::string("+0.15"));
+            uiCtx.Set("Vehicle.CameraMode", std::string("CHASE"));
+        }
+
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         const glm::vec2 vMin(viewportMin.x, viewportMin.y);
         const glm::vec2 vSize(viewportBounds.x, viewportBounds.y);
@@ -3072,6 +3114,11 @@ void EditorLayer::OnImGuiRender() {
         m_VFXEditorPanel.SetSceneContext(m_Scene.get());
         m_VFXEditorPanel.SetSelectedEntity(m_SceneHierarchyPanel.GetSelectedEntity());
         m_VFXEditorPanel.OnImGuiRender(&m_ShowVFXEditor);
+    }
+
+    // 10c. UI Canvas Designer Panel (Phase 34 Step 7.5 - Dedicated Visual .axleui Designer)
+    if (m_ShowUICanvasDesigner) {
+        m_UICanvasDesignerPanel.OnImGuiRender(&m_ShowUICanvasDesigner);
     }
 
     // 11. Performance & Telemetry Panel
@@ -3764,6 +3811,11 @@ void EditorLayer::RestartEditorWithBackend(const std::string& backendArg) {
 #else
     Axle::Application::Get().Close();
 #endif
+}
+
+void EditorLayer::OpenUICanvasDesigner(const std::filesystem::path& path) {
+    m_UICanvasDesignerPanel.OpenDocument(path);
+    m_ShowUICanvasDesigner = true;
 }
 
 

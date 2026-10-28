@@ -15,6 +15,7 @@
 #include <Axle/AssemblyEditorPanel.hpp>
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/UIPalettePanel.hpp>
+#include <Axle/UICanvasDesignerPanel.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
@@ -149,6 +150,7 @@ private:
     bool m_UI2DSnapIsPercentage = false;
     float m_UI2DSnapPixel = 10.0f;
     float m_UI2DSnapPercent = 5.0f;
+    bool m_ShowUIOverlay = true; // Live Canvas UI overlay preview in Viewport (Edit & Play modes)
 
     // Scene & Entities (Phase 18.2: Safe Scene State Simulation)
     std::shared_ptr<Axle::Scene> m_Scene;        // Active Scene pointer
@@ -174,6 +176,7 @@ private:
     Axle::VFXEditorPanel m_VFXEditorPanel;
     Axle::DebugPanel m_DebugPanel;
     Axle::UIPalettePanel m_UIPalettePanel;
+    Axle::UICanvasDesignerPanel m_UICanvasDesignerPanel;
 
     // Panel Visibility Flags
     bool m_ShowSceneHierarchy = true;
@@ -183,8 +186,13 @@ private:
     bool m_ShowAssemblyEditor = false;
     bool m_ShowVFXEditor = false;
     bool m_ShowUIPalette = true;
+    bool m_ShowUICanvasDesigner = false;
     bool m_ShowTelemetry = false;
     bool m_ResetLayout = true;
+
+public:
+    void OpenUICanvasDesigner(const std::filesystem::path& path);
+private:
 
     Axle::f32 m_LastDeltaTime = 0.0f;
 

@@ -96,6 +96,9 @@ namespace Axle {
         if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") {
             return { AssetKind::Audio, "Audio Clip", "AUD", IM_COL32(255, 95, 160, 255) };
         }
+        if (ext == ".axleui") {
+            return { AssetKind::Document, "UI Canvas", "UI", IM_COL32(56, 189, 248, 255) };
+        }
         if (ext == ".md" || ext == ".txt" || ext == ".json" || ext == ".yaml") {
             return { AssetKind::Document, "Document", "DOC", IM_COL32(165, 180, 200, 255) };
         }
@@ -938,6 +941,9 @@ namespace Axle {
                             } else if (ext == ".axleproj" && m_OnOpenProjectCallback) {
                                 m_OnOpenProjectCallback(path);
                                 SetStatusNotification("Loaded project: " + path.filename().string());
+                            } else if (ext == ".axleui" && m_OnOpenUICanvasCallback) {
+                                m_OnOpenUICanvasCallback(path);
+                                SetStatusNotification("Opened UI Designer: " + path.filename().string());
                             }
                             // Note: .axle files are inspected via single-click into Properties + Asset Preview tabs
                         }
@@ -995,6 +1001,13 @@ namespace Axle {
                                 if (m_OnOpenProjectCallback) {
                                     m_OnOpenProjectCallback(path);
                                     SetStatusNotification("Loaded project: " + path.filename().string());
+                                }
+                            }
+                            ImGui::Separator();
+                        } else if (ext == ".axleui") {
+                            if (ImGui::MenuItem("Open in UI Canvas Designer")) {
+                                if (m_OnOpenUICanvasCallback) {
+                                    m_OnOpenUICanvasCallback(path);
                                 }
                             }
                             ImGui::Separator();

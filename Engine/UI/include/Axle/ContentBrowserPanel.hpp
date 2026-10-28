@@ -69,6 +69,9 @@ namespace Axle {
         std::function<void(const std::filesystem::path&)> m_OnInstantiateAssemblyCallback;
         std::function<void(const std::filesystem::path&)> m_OnSelectAssetCallback;
         std::function<void(uint32_t, const std::filesystem::path&)> m_OnPackageEntityCallback;
+        std::function<void(const std::filesystem::path&)> m_OnOpenUICanvasCallback;
+    public:
+        void SetOpenUICanvasCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenUICanvasCallback = callback; }
     };
 
 }

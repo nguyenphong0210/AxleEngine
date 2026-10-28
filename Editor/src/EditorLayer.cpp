@@ -2998,9 +2998,10 @@ void EditorLayer::OnImGuiRender() {
         }
     }
 
+    bool is2D = m_CameraController ? m_CameraController->Is2DMode() : false;
     bool shouldRenderCanvasUI = m_Scene && (
         (m_SceneState == SceneState::Play) ||
-        (m_SceneState == SceneState::Edit && (m_ShowUIOverlay || isCanvasEntitySelected || is2DMode))
+        (m_SceneState == SceneState::Edit && (m_ShowUIOverlay || isCanvasEntitySelected || is2D))
     );
 
     if (shouldRenderCanvasUI) {

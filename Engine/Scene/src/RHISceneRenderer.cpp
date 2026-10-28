@@ -1501,6 +1501,9 @@ namespace Axle {
         m_CommandBuffer.Submit(queue);
         m_Device->GetNRICore().QueueWaitIdle(queue);
 
+        // Reset command allocator to recycle its memory pages for next frame
+        m_CommandBuffer.Reset();
+
         if (m_Streamer) {
             m_Streamer->EndFrame();
         }

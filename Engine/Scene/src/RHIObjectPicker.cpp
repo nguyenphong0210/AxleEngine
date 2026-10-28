@@ -313,6 +313,9 @@ namespace Axle {
             m_Device->GetNRICore().QueueWaitIdle(queue);
         }
 
+        // Reset command allocator to recycle memory
+        m_CommandBuffer.Reset();
+
         m_HasRendered = true;
     }
 

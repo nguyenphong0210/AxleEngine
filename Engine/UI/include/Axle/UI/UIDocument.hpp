@@ -22,6 +22,10 @@ namespace Axle {
         std::string   TemplateText; // Used for Interpolated strings
         std::string   TrueValue;    // Used for Ternary
         std::string   FalseValue;   // Used for Ternary
+
+        // Cache for smart dirty-checking & delta evaluation
+        UIDataValue   LastValue{};
+        bool          HasEvaluated = false;
     };
 
     class UIDocument {
@@ -41,6 +45,7 @@ namespace Axle {
             }
             m_NodeArena.push_back(std::move(node));
             m_IsDirty = true;
+            m_LayoutDirty = true;
             return rawPtr;
         }
 
@@ -48,7 +53,9 @@ namespace Axle {
         void RebuildIDMap();
         UINode* FindNodeByID(const std::string& id) const;
 
-        void UpdateLayout(const glm::vec2& viewportSize);
+        void UpdateLayout(const glm::vec2& viewportSize, bool force = false);
+        void MarkLayoutDirty() { m_LayoutDirty = true; }
+        bool IsLayoutDirty() const { return m_LayoutDirty; }
         void Render(Canvas2D& canvas);
 
         // Binding & Interaction Hooks
@@ -95,6 +102,9 @@ namespace Axle {
         std::filesystem::file_time_type m_LastWriteTime{};
         float m_ComputedDPIScale = 1.0f;
         bool m_IsDirty = false;
+
+        glm::vec2 m_LastLayoutViewportSize{ 0.0f, 0.0f };
+        bool m_LayoutDirty = true;
     };
 
 } // namespace Axle

@@ -13,6 +13,8 @@ namespace Axle {
         m_NodeArena.clear();
         m_IDMap.clear();
         m_Bindings.clear();
+        m_LayoutDirty = true;
+        m_LastLayoutViewportSize = { 0.0f, 0.0f };
     }
 
     void UIDocument::RebuildIDMap() {
@@ -32,8 +34,13 @@ namespace Axle {
         return nullptr;
     }
 
-    void UIDocument::UpdateLayout(const glm::vec2& viewportSize) {
+    void UIDocument::UpdateLayout(const glm::vec2& viewportSize, bool force) {
         if (!m_RootNode) return;
+
+        // Skip redundant layout reflow if viewport size is identical and layout is clean
+        if (!m_LayoutDirty && !force && viewportSize == m_LastLayoutViewportSize) {
+            return;
+        }
 
         float refW = 1920.0f;
         float refH = 1080.0f;
@@ -53,6 +60,9 @@ namespace Axle {
         // Pass 2: Top-Down Arrange
         UIRect rootRect{ 0.0f, 0.0f, refW, refH };
         m_RootNode->OnArrange(rootRect);
+
+        m_LayoutDirty = false;
+        m_LastLayoutViewportSize = viewportSize;
     }
 
     void UIDocument::Render(Canvas2D& canvas) {
@@ -73,13 +83,21 @@ namespace Axle {
     }
 
     void UIDocument::EvaluateBindings(const UIDataContext& context) {
-        for (const auto& binding : m_Bindings) {
+        for (auto& binding : m_Bindings) {
             if (!binding.TargetNode) continue;
 
-            if (binding.Type == UIBindingType::Direct) {
-                const UIDataValue* val = context.Get(binding.SourceKey);
-                if (!val) continue;
+            const UIDataValue* val = context.Get(binding.SourceKey);
+            if (!val) continue;
 
+            // Delta check: skip evaluation if value has not changed since last evaluation
+            if (binding.HasEvaluated && (*val == binding.LastValue)) {
+                continue;
+            }
+
+            binding.LastValue = *val;
+            binding.HasEvaluated = true;
+
+            if (binding.Type == UIBindingType::Direct) {
                 std::visit([&](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, float>) {
@@ -100,45 +118,44 @@ namespace Axle {
                 std::string placeholder = "{" + binding.SourceKey + "}";
                 size_t pos = result.find(placeholder);
                 if (pos != std::string::npos) {
-                    const UIDataValue* val = context.Get(binding.SourceKey);
                     std::string rep = "";
-                    if (val) {
-                        std::visit([&](auto&& arg) {
-                            using T = std::decay_t<decltype(arg)>;
-                            if constexpr (std::is_same_v<T, float>) {
-                                char buf[32];
-                                snprintf(buf, sizeof(buf), "%.1f", arg);
-                                rep = buf;
-                            } else if constexpr (std::is_same_v<T, int32_t>) {
-                                rep = std::to_string(arg);
-                            } else if constexpr (std::is_same_v<T, bool>) {
-                                rep = arg ? "true" : "false";
-                            } else if constexpr (std::is_same_v<T, std::string>) {
-                                rep = arg;
-                            }
-                        }, *val);
-                    }
+                    std::visit([&](auto&& arg) {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, float>) {
+                            char buf[32];
+                            snprintf(buf, sizeof(buf), "%.1f", arg);
+                            rep = buf;
+                        } else if constexpr (std::is_same_v<T, int32_t>) {
+                            rep = std::to_string(arg);
+                        } else if constexpr (std::is_same_v<T, bool>) {
+                            rep = arg ? "true" : "false";
+                        } else if constexpr (std::is_same_v<T, std::string>) {
+                            rep = arg;
+                        }
+                    }, *val);
                     result.replace(pos, placeholder.length(), rep);
                     binding.TargetNode->SetProperty(binding.PropertyName, result);
                 }
             } else if (binding.Type == UIBindingType::Ternary) {
-                const UIDataValue* val = context.Get(binding.SourceKey);
                 bool cond = false;
-                if (val) {
-                    std::visit([&](auto&& arg) {
-                        using T = std::decay_t<decltype(arg)>;
-                        if constexpr (std::is_same_v<T, bool>) {
-                            cond = arg;
-                        } else if constexpr (std::is_same_v<T, int32_t>) {
-                            cond = (arg != 0);
-                        } else if constexpr (std::is_same_v<T, float>) {
-                            cond = (arg > 0.0f);
-                        } else if constexpr (std::is_same_v<T, std::string>) {
-                            cond = (arg == "true" || arg == "1");
-                        }
-                    }, *val);
-                }
+                std::visit([&](auto&& arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, bool>) {
+                        cond = arg;
+                    } else if constexpr (std::is_same_v<T, int32_t>) {
+                        cond = (arg != 0);
+                    } else if constexpr (std::is_same_v<T, float>) {
+                        cond = (arg > 0.0f);
+                    } else if constexpr (std::is_same_v<T, std::string>) {
+                        cond = (arg == "true" || arg == "1");
+                    }
+                }, *val);
                 binding.TargetNode->SetProperty(binding.PropertyName, cond ? binding.TrueValue : binding.FalseValue);
+            }
+
+            // Auto-sized text changes might affect layout
+            if (binding.PropertyName == "text") {
+                MarkLayoutDirty();
             }
         }
     }
@@ -234,7 +251,11 @@ namespace Axle {
         auto currentWriteTime = std::filesystem::last_write_time(m_FilePath);
         if (currentWriteTime > m_LastWriteTime) {
             m_LastWriteTime = currentWriteTime;
-            return UIParser::ParseFile(m_FilePath, *this);
+            bool ok = UIParser::ParseFile(m_FilePath, *this);
+            if (ok) {
+                m_LayoutDirty = true;
+            }
+            return ok;
         }
         return false;
     }
@@ -266,6 +287,7 @@ namespace Axle {
         if (ok) {
             SetFilePath(path);
             m_IsDirty = false;
+            m_LayoutDirty = true;
         }
         return ok;
     }

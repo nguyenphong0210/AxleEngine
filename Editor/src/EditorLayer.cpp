@@ -33,6 +33,7 @@
 #include <Axle/RHI/RHIMesh.hpp>
 #include <Axle/UI/RectTransformGizmo.hpp>
 #include <Axle/UI/UIDocument.hpp>
+#include <Axle/UICanvasImGuiRenderer.hpp>
 #include <Axle/UIVectorIcons.hpp>
 #include <filesystem>
 
@@ -2975,21 +2976,46 @@ void EditorLayer::OnImGuiRender() {
         }
     }
 
-    // In Simulation Play mode, display sleek runtime vehicle HUD in upper-right corner if applicable
+    // In Simulation Play mode, render Declarative Canvas UI (e.g. RacingHUD.axleui)
     if (m_SceneState == SceneState::Play && m_Scene) {
-        if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
-            const auto vTele = pv->GetTelemetry();
-            char speedStr[64];
-            snprintf(speedStr, sizeof(speedStr), "%.1f KM/H | GEAR %d", vTele.SpeedKmh, vTele.CurrentGear);
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            ImVec2 winPos = ImGui::GetWindowPos();
-            ImVec2 winSize = ImGui::GetWindowSize();
-            float hudW = 160.0f;
-            ImVec2 hudPos = ImVec2(winPos.x + winSize.x - hudW - 16.0f, winPos.y + 14.0f);
-            drawList->AddRectFilled(hudPos, ImVec2(hudPos.x + hudW, hudPos.y + 26.0f), IM_COL32(20, 20, 20, 190), 4.0f);
-            drawList->AddRect(hudPos, ImVec2(hudPos.x + hudW, hudPos.y + 26.0f), IM_COL32(60, 60, 60, 220), 4.0f);
-            ImVec2 textSize = ImGui::CalcTextSize(speedStr);
-            drawList->AddText(ImVec2(hudPos.x + (hudW - textSize.x) * 0.5f, hudPos.y + 5.0f), IM_COL32(0, 225, 175, 255), speedStr);
+        auto canvasView = m_Scene->GetRegistry().view<Axle::UICanvasComponent>();
+        bool renderedCanvasUI = false;
+        auto& uiCtx = m_Scene->GetUIDataContext();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const glm::vec2 vMin(viewportMin.x, viewportMin.y);
+        const glm::vec2 vSize(viewportBounds.x, viewportBounds.y);
+
+        for (auto ent : canvasView) {
+            auto& comp = canvasView.get<Axle::UICanvasComponent>(ent);
+            if (comp.Visible && !comp.AssetPath.empty()) {
+                if (!comp.Document) {
+                    comp.Document = std::make_shared<Axle::UIDocument>();
+                    comp.Document->SetFilePath(comp.AssetPath);
+                    comp.Document->CheckAndHotReload();
+                } else {
+                    comp.Document->CheckAndHotReload();
+                }
+
+                comp.Document->EvaluateBindings(uiCtx);
+                comp.Document->UpdateLayout(vSize);
+                Axle::UICanvasImGuiRenderer::Render(comp.Document.get(), drawList, vMin, vSize);
+                renderedCanvasUI = true;
+            }
+        }
+
+        // Fallback minimal telemetry badge only if no declarative UICanvasComponent is active
+        if (!renderedCanvasUI) {
+            if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
+                const auto vTele = pv->GetTelemetry();
+                char speedStr[64];
+                snprintf(speedStr, sizeof(speedStr), "%.1f KM/H | GEAR %d", vTele.SpeedKmh, vTele.CurrentGear);
+                float hudW = 160.0f;
+                ImVec2 hudPos = ImVec2(viewportMin.x + viewportBounds.x - hudW - 16.0f, viewportMin.y + 14.0f);
+                drawList->AddRectFilled(hudPos, ImVec2(hudPos.x + hudW, hudPos.y + 26.0f), IM_COL32(20, 20, 20, 190), 4.0f);
+                drawList->AddRect(hudPos, ImVec2(hudPos.x + hudW, hudPos.y + 26.0f), IM_COL32(60, 60, 60, 220), 4.0f);
+                ImVec2 textSize = ImGui::CalcTextSize(speedStr);
+                drawList->AddText(ImVec2(hudPos.x + (hudW - textSize.x) * 0.5f, hudPos.y + 5.0f), IM_COL32(0, 225, 175, 255), speedStr);
+            }
         }
     }
 

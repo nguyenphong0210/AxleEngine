@@ -220,6 +220,9 @@ public:
     void OnImGuiRender() override {
         if (!Visible) return;
 
+        // When UICanvasComponent is attached, the HUD is rendered declaratively by the Canvas UI system!
+        if (HasComponent<Axle::UICanvasComponent>()) return;
+
         if (!ImGui::GetCurrentContext()) return;
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();

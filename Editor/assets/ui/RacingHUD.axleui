@@ -30,7 +30,7 @@ Canvas {
             }
             Text {
                 id: "camera_mode_text"
-                text: "CAM: {Vehicle.CameraMode}"
+                text: "CAM: {CameraMode}"
                 fontSize: 12
                 color: "#94A3B8"
             }
@@ -41,13 +41,13 @@ Canvas {
             }
             Text {
                 id: "lat_g_text"
-                text: "LAT: {Vehicle.LateralG}"
+                text: "LAT: {LateralG}"
                 fontSize: 12
                 color: "#CBD5E1"
             }
             Text {
                 id: "long_g_text"
-                text: "{Vehicle.LongitudinalG}"
+                text: "{LongitudinalG}"
                 fontSize: 0
                 color: "#00000000"
             }
@@ -63,7 +63,7 @@ Canvas {
         color: "#080C16B3"
         cornerRadius: 18
         borderWidth: 1.2
-        borderColor: "{Vehicle.IsRedline ? #FF1E42CC : #33415555}"
+        borderColor: "{IsRedline ? #FF1E42CC : #33415555}"
 
         // Left Module: F1-Style Precision Pedal Telemetry & Drive Mode
         Rectangle {
@@ -78,7 +78,7 @@ Canvas {
                 spacing: 7
 
                 Text {
-                    text: "AXLE PERFORMANCE"
+                    text: "{Horsepower} HP • AXLE"
                     fontSize: 10
                     color: "#64748B"
                 }
@@ -94,7 +94,7 @@ Canvas {
                     ProgressBar {
                         id: "throttle_bar"
                         size: [136, 7]
-                        value: "{Vehicle.Throttle}"
+                        value: "{Throttle}"
                         fillColor: "#10B981"
                         backgroundColor: "#1E293B88"
                         cornerRadius: 3.5
@@ -112,7 +112,7 @@ Canvas {
                     ProgressBar {
                         id: "brake_bar"
                         size: [136, 7]
-                        value: "{Vehicle.Brake}"
+                        value: "{Brake}"
                         fillColor: "#EF4444"
                         backgroundColor: "#1E293B88"
                         cornerRadius: 3.5
@@ -169,8 +169,8 @@ Canvas {
                 startAngle: -220.0
                 endAngle: 40.0
                 thickness: 6.5
-                value: "{Vehicle.RPMNormalized}"
-                color: "{Vehicle.IsRedline ? #FF1E42FF : #00F5D4FF}"
+                value: "{RPMNormalized}"
+                color: "{IsRedline ? #FF1E42FF : #00F5D4FF}"
                 trackColor: "#1E293B66"
             }
 
@@ -181,15 +181,15 @@ Canvas {
                 cornerRadius: 22
                 color: "#0F172A88"
                 borderWidth: 1.0
-                borderColor: "{Vehicle.IsRedline ? #FF1E4288 : #33415566}"
+                borderColor: "{IsRedline ? #FF1E4288 : #33415566}"
 
                 Text {
                     id: "gear_indicator"
                     anchor: "Center"
                     pos: [0, -1]
-                    text: "{Vehicle.GearString}"
+                    text: "{GearString}"
                     fontSize: 28
-                    color: "{Vehicle.IsRedline ? #FF1E42FF : #FFFFFFFF}"
+                    color: "{IsRedline ? #FF1E42FF : #FFFFFFFF}"
                 }
             }
 
@@ -197,7 +197,7 @@ Canvas {
                 id: "speed_value"
                 anchor: "Center"
                 pos: [0, 22]
-                text: "{Vehicle.SpeedKmh}"
+                text: "{SpeedKmh}"
                 fontSize: 24
                 color: "#F8FAFC"
             }
@@ -206,7 +206,7 @@ Canvas {
                 id: "speed_unit"
                 anchor: "Center"
                 pos: [0, 39]
-                text: "{Vehicle.SpeedUnit}"
+                text: "{SpeedUnit}"
                 fontSize: 10
                 color: "#64748B"
             }

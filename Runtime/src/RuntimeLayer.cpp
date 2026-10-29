@@ -424,6 +424,9 @@ namespace Axle {
             if (targetEntity) {
                 if (targetEntity.HasComponent<Axle::NativeScriptComponent>()) {
                     auto& nsc = targetEntity.GetComponent<Axle::NativeScriptComponent>();
+                    if (nsc.FloatFields.empty() && nsc.IntFields.empty() && !nsc.ScriptName.empty()) {
+                        nsc.Bind(nsc.ScriptName);
+                    }
                     nsc.SyncFieldsFromInstance();
                     for (const auto& [name, val] : nsc.FloatFields) scopedCtx.SetFloat(name, val);
                     for (const auto& [name, val] : nsc.IntFields) scopedCtx.SetInt(name, val);

@@ -45,13 +45,24 @@ namespace Axle {
         }
 
         bool Has(std::string_view key) const {
-            if (m_Values.contains(std::string(key))) return true;
+            std::string k(key);
+            if (m_Values.contains(k)) return true;
+            if (k.rfind("Vehicle.", 0) == 0 && m_Values.contains(k.substr(8))) return true;
+            if (k.find('.') == std::string::npos && m_Values.contains("Vehicle." + k)) return true;
             return m_ParentContext ? m_ParentContext->Has(key) : false;
         }
 
         const UIDataValue* Get(std::string_view key) const {
-            auto it = m_Values.find(std::string(key));
+            std::string k(key);
+            auto it = m_Values.find(k);
             if (it != m_Values.end()) return &it->second;
+            if (k.rfind("Vehicle.", 0) == 0) {
+                auto itAlias = m_Values.find(k.substr(8));
+                if (itAlias != m_Values.end()) return &itAlias->second;
+            } else if (k.find('.') == std::string::npos) {
+                auto itAlias = m_Values.find("Vehicle." + k);
+                if (itAlias != m_Values.end()) return &itAlias->second;
+            }
             return m_ParentContext ? m_ParentContext->Get(key) : nullptr;
         }
 

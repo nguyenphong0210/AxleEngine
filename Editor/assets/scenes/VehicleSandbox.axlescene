@@ -435,6 +435,11 @@ Entities:
       Parent: 0
     NativeScriptComponent:
       ScriptName: RacingHUD
+    UICanvasComponent:
+      AssetPath: assets/ui/RacingHUD.axleui
+      DataSourceEntityID: 8959925798803133502
+      SortOrder: 0
+      Visible: true
 
   # ============================================================================
   # AUTOMOTIVE PLAYGROUND & OBSTACLE COURSE (Phase 7 & Phase 28 Step 4)

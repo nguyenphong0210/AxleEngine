@@ -3012,6 +3012,20 @@ void EditorLayer::OnImGuiRender() {
         // In Edit Mode, inject live mock vehicle telemetry so gauges & readouts are active and visible
         if (m_SceneState == SceneState::Edit) {
             uiCtx.Set("Engine.FPS", 60);
+
+            // Relative / scoped keys
+            uiCtx.Set("SpeedKmh", 145);
+            uiCtx.Set("SpeedUnit", std::string("KM/H"));
+            uiCtx.Set("RPMNormalized", 0.68f);
+            uiCtx.Set("IsRedline", false);
+            uiCtx.Set("GearString", std::string("4"));
+            uiCtx.Set("Throttle", 0.85f);
+            uiCtx.Set("Brake", 0.0f);
+            uiCtx.Set("LateralG", std::string("+0.42"));
+            uiCtx.Set("LongitudinalG", std::string("+0.15"));
+            uiCtx.Set("CameraMode", std::string("CHASE"));
+
+            // Legacy prefixed keys
             uiCtx.Set("Vehicle.SpeedKmh", 145);
             uiCtx.Set("Vehicle.SpeedUnit", std::string("KM/H"));
             uiCtx.Set("Vehicle.RPMNormalized", 0.68f);
@@ -3060,6 +3074,9 @@ void EditorLayer::OnImGuiRender() {
                     if (targetEntity) {
                         if (targetEntity.HasComponent<Axle::NativeScriptComponent>()) {
                             auto& nsc = targetEntity.GetComponent<Axle::NativeScriptComponent>();
+                            if (nsc.FloatFields.empty() && nsc.IntFields.empty() && !nsc.ScriptName.empty()) {
+                                nsc.Bind(nsc.ScriptName);
+                            }
                             nsc.SyncFieldsFromInstance();
                             for (const auto& [name, val] : nsc.FloatFields) scopedCtx.SetFloat(name, val);
                             for (const auto& [name, val] : nsc.IntFields) scopedCtx.SetInt(name, val);

@@ -14,6 +14,11 @@ Entities:
       InheritScale: true
     NativeScriptComponent:
       ScriptName: RacingHUD
+    UICanvasComponent:
+      AssetPath: assets/ui/RacingHUD.axleui
+      DataSourceEntityID: 8959925798803133502
+      SortOrder: 0
+      Visible: true
   - Entity: 12485920194857201942
     TagComponent:
       Tag: Main Camera

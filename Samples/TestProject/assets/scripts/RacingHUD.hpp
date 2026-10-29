@@ -103,11 +103,22 @@ public:
         Axle::Scene* scene = GetEntity().GetScene();
         if (!scene) return;
 
-        // Resolve Target Vehicle: Entity itself or primary scene vehicle
+        // Resolve Target Vehicle: UICanvasComponent's DataSourceEntity, Entity itself, or primary scene vehicle
         Axle::Vehicle* vehicle = nullptr;
         Axle::VehicleComponent* vc = nullptr;
 
-        if (HasComponent<Axle::VehicleComponent>()) {
+        Axle::Entity targetEntity = GetEntity();
+        if (HasComponent<Axle::UICanvasComponent>()) {
+            auto& uic = GetComponent<Axle::UICanvasComponent>();
+            targetEntity = uic.GetDataSourceEntity(scene, GetEntity());
+        }
+
+        if (targetEntity && targetEntity.HasComponent<Axle::VehicleComponent>()) {
+            vc = &targetEntity.GetComponent<Axle::VehicleComponent>();
+            vehicle = scene->GetRuntimeVehicle(targetEntity);
+        }
+
+        if (!vehicle && HasComponent<Axle::VehicleComponent>()) {
             vc = &GetComponent<Axle::VehicleComponent>();
             vehicle = scene->GetRuntimeVehicle(GetEntity());
         }
@@ -194,28 +205,43 @@ public:
         uiCtx.Set("Engine.FPS", dt > 1e-4f ? static_cast<int32_t>(std::round(1.0f / dt)) : 60);
 
         const float displaySpeed = UseMph ? (m_SmoothedSpeed * 0.621371f) : m_SmoothedSpeed;
-        uiCtx.Set("Vehicle.SpeedKmh", static_cast<int32_t>(std::round(displaySpeed)));
-        uiCtx.Set("Vehicle.SpeedUnit", std::string(UseMph ? "MPH" : "KM/H"));
-
+        const int32_t speedInt = static_cast<int32_t>(std::round(displaySpeed));
+        const std::string unitStr = UseMph ? "MPH" : "KM/H";
         const float rpmNorm = (MaxRPM > 0.0f) ? std::clamp(m_SmoothedRPM / MaxRPM, 0.0f, 1.0f) : 0.0f;
-        uiCtx.Set("Vehicle.RPMNormalized", rpmNorm);
-
         const bool isRedline = (m_SmoothedRPM >= RedlineRPM);
-        uiCtx.Set("Vehicle.IsRedline", isRedline);
 
         std::string gearStr = "N";
         if (m_CurrentGear < 0) gearStr = "R";
         else if (m_CurrentGear > 0) gearStr = std::to_string(m_CurrentGear);
-        uiCtx.Set("Vehicle.GearString", gearStr);
-
-        uiCtx.Set("Vehicle.Throttle", m_Throttle);
-        uiCtx.Set("Vehicle.Brake", m_Brake);
-        uiCtx.Set("Vehicle.Handbrake", m_Handbrake);
-        uiCtx.Set("Vehicle.Steering", m_Steering);
 
         char latBuf[32], longBuf[32];
         std::snprintf(latBuf, sizeof(latBuf), "%+.2f", m_SmoothedGForce.x);
         std::snprintf(longBuf, sizeof(longBuf), "%+.2f", m_SmoothedGForce.y);
+
+        // Relative / Scoped Telemetry (Clean MVVM Convention)
+        uiCtx.Set("SpeedKmh", speedInt);
+        uiCtx.Set("SpeedUnit", unitStr);
+        uiCtx.Set("RPMNormalized", rpmNorm);
+        uiCtx.Set("IsRedline", isRedline);
+        uiCtx.Set("GearString", gearStr);
+        uiCtx.Set("Throttle", m_Throttle);
+        uiCtx.Set("Brake", m_Brake);
+        uiCtx.Set("Handbrake", m_Handbrake);
+        uiCtx.Set("Steering", m_Steering);
+        uiCtx.Set("LateralG", std::string(latBuf));
+        uiCtx.Set("LongitudinalG", std::string(longBuf));
+        uiCtx.Set("CameraMode", std::string("CHASE"));
+
+        // Legacy Prefixed Telemetry (Full Backward Compatibility)
+        uiCtx.Set("Vehicle.SpeedKmh", speedInt);
+        uiCtx.Set("Vehicle.SpeedUnit", unitStr);
+        uiCtx.Set("Vehicle.RPMNormalized", rpmNorm);
+        uiCtx.Set("Vehicle.IsRedline", isRedline);
+        uiCtx.Set("Vehicle.GearString", gearStr);
+        uiCtx.Set("Vehicle.Throttle", m_Throttle);
+        uiCtx.Set("Vehicle.Brake", m_Brake);
+        uiCtx.Set("Vehicle.Handbrake", m_Handbrake);
+        uiCtx.Set("Vehicle.Steering", m_Steering);
         uiCtx.Set("Vehicle.LateralG", std::string(latBuf));
         uiCtx.Set("Vehicle.LongitudinalG", std::string(longBuf));
         uiCtx.Set("Vehicle.CameraMode", std::string("CHASE"));

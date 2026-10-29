@@ -3053,7 +3053,22 @@ void EditorLayer::OnImGuiRender() {
                 }
 
                 if (comp.Document && comp.Document->GetRootNode()) {
-                    comp.Document->EvaluateBindings(uiCtx);
+                    Axle::Entity canvasEntity{ ent, m_Scene.get() };
+                    Axle::Entity targetEntity = comp.GetDataSourceEntity(m_Scene.get(), canvasEntity);
+
+                    Axle::UIDataContext scopedCtx(&uiCtx);
+                    if (targetEntity) {
+                        if (targetEntity.HasComponent<Axle::NativeScriptComponent>()) {
+                            auto& nsc = targetEntity.GetComponent<Axle::NativeScriptComponent>();
+                            nsc.SyncFieldsFromInstance();
+                            for (const auto& [name, val] : nsc.FloatFields) scopedCtx.SetFloat(name, val);
+                            for (const auto& [name, val] : nsc.IntFields) scopedCtx.SetInt(name, val);
+                            for (const auto& [name, val] : nsc.BoolFields) scopedCtx.SetBool(name, val);
+                            for (const auto& [name, val] : nsc.StringFields) scopedCtx.SetString(name, val);
+                        }
+                    }
+
+                    comp.Document->EvaluateBindings(scopedCtx);
                     comp.Document->UpdateLayout(vSize);
                     Axle::UICanvasImGuiRenderer::Render(comp.Document.get(), drawList, vMin, vSize);
                     renderedCanvasUI = true;

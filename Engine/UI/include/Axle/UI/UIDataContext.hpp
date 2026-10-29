@@ -14,7 +14,11 @@ namespace Axle {
     class UIDataContext {
     public:
         UIDataContext() = default;
+        explicit UIDataContext(const UIDataContext* parent) : m_ParentContext(parent) {}
         ~UIDataContext() = default;
+
+        void SetParentContext(const UIDataContext* parent) { m_ParentContext = parent; }
+        const UIDataContext* GetParentContext() const { return m_ParentContext; }
 
         void SetInt(std::string_view key, int32_t value) { m_Values[std::string(key)] = value; }
         void SetFloat(std::string_view key, float value) { m_Values[std::string(key)] = value; }
@@ -40,10 +44,15 @@ namespace Axle {
             }
         }
 
-        bool Has(std::string_view key) const { return m_Values.contains(std::string(key)); }
+        bool Has(std::string_view key) const {
+            if (m_Values.contains(std::string(key))) return true;
+            return m_ParentContext ? m_ParentContext->Has(key) : false;
+        }
+
         const UIDataValue* Get(std::string_view key) const {
             auto it = m_Values.find(std::string(key));
-            return (it != m_Values.end()) ? &it->second : nullptr;
+            if (it != m_Values.end()) return &it->second;
+            return m_ParentContext ? m_ParentContext->Get(key) : nullptr;
         }
 
         void RegisterAction(std::string_view actionName, std::function<void()> callback) {
@@ -56,7 +65,7 @@ namespace Axle {
                 it->second();
                 return true;
             }
-            return false;
+            return m_ParentContext ? m_ParentContext->TriggerAction(actionName) : false;
         }
 
         void Clear() {
@@ -65,6 +74,7 @@ namespace Axle {
         }
 
     private:
+        const UIDataContext* m_ParentContext = nullptr;
         std::unordered_map<std::string, UIDataValue> m_Values;
         std::unordered_map<std::string, std::function<void()>> m_Actions;
     };

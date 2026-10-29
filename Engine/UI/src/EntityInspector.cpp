@@ -45,6 +45,33 @@ namespace Axle {
         return it != str.end();
     }
 
+    static std::vector<std::string> DiscoverAxleUIAssets() {
+        std::vector<std::string> result;
+        const std::vector<std::filesystem::path> searchDirs = {
+            FileSystem::GetAssetDirectory(),
+            std::filesystem::path("assets"),
+            std::filesystem::path("Editor/assets"),
+            std::filesystem::path("assets/ui"),
+            std::filesystem::path("Editor/assets/ui")
+        };
+        std::unordered_set<std::string> seen;
+        for (const auto& dir : searchDirs) {
+            if (!std::filesystem::exists(dir)) continue;
+            try {
+                for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".axleui") {
+                        std::string rel = entry.path().lexically_normal().generic_string();
+                        if (seen.insert(rel).second) {
+                            result.push_back(rel);
+                        }
+                    }
+                }
+            } catch (...) {}
+        }
+        std::sort(result.begin(), result.end());
+        return result;
+    }
+
     template<typename T, typename UIFunction>
     static void DrawComponent(
         const std::string& name,
@@ -2051,13 +2078,46 @@ namespace Axle {
             }
         }, /*canRemove=*/ true);
 
-        // UICanvasComponent (Phase 34 Step 7 - UI Canvas & Document Synchronization)
+        // UICanvasComponent (Phase 34 Step 7 & 8 - UI Canvas, Searchable Picker & Scoped MVVM Binding)
         DrawComponent<UICanvasComponent>("UI Canvas Component", entity, [&](UICanvasComponent& uic) {
-            char pathBuf[256];
-            std::strncpy(pathBuf, uic.AssetPath.c_str(), sizeof(pathBuf) - 1);
-            pathBuf[sizeof(pathBuf) - 1] = '\0';
-            if (ImGui::InputText("Asset Path", pathBuf, sizeof(pathBuf))) {
-                uic.AssetPath = pathBuf;
+            // 1. Searchable Asset Path Picker
+            std::string previewText = uic.AssetPath.empty() ? "[ None (Select .axleui) ]" : uic.AssetPath;
+            if (ImGui::BeginCombo("Asset Path", previewText.c_str())) {
+                static char filterBuf[64] = "";
+                ImGui::SetNextItemWidth(-1.0f);
+                ImGui::InputTextWithHint("##FilterAxleUI", "Search .axleui...", filterBuf, sizeof(filterBuf));
+                ImGui::Separator();
+
+                if (ImGui::Selectable("[ None / Clear ]", uic.AssetPath.empty())) {
+                    uic.AssetPath = "";
+                    filterBuf[0] = '\0';
+                }
+
+                auto availableAssets = DiscoverAxleUIAssets();
+                for (const auto& assetPath : availableAssets) {
+                    if (filterBuf[0] != '\0' && !ContainsIgnoreCase(assetPath, filterBuf)) {
+                        continue;
+                    }
+                    bool isSelected = (uic.AssetPath == assetPath);
+                    if (ImGui::Selectable(assetPath.c_str(), isSelected)) {
+                        uic.AssetPath = assetPath;
+                        filterBuf[0] = '\0';
+                        if (!uic.Document) {
+                            uic.Document = std::make_shared<UIDocument>();
+                        }
+                        std::filesystem::path fullPath = assetPath;
+                        if (!std::filesystem::exists(fullPath)) {
+                            fullPath = FileSystem::GetAssetDirectory() / assetPath;
+                        }
+                        if (std::filesystem::exists(fullPath)) {
+                            uic.Document->LoadFromFile(fullPath.string());
+                        }
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
             }
 
             // Drag-drop .axleui item into AssetPath
@@ -2066,13 +2126,78 @@ namespace Axle {
                     const char* pathStr = static_cast<const char*>(payload->Data);
                     std::filesystem::path p(pathStr);
                     if (p.extension() == ".axleui") {
-                        uic.AssetPath = p.string();
-                        if (uic.Document) {
-                            uic.Document->LoadFromFile(p.string());
+                        uic.AssetPath = p.generic_string();
+                        if (!uic.Document) {
+                            uic.Document = std::make_shared<UIDocument>();
+                        }
+                        uic.Document->LoadFromFile(p.string());
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            // 2. Scoped MVVM Data Source (Convention over Configuration + Retargeting)
+            std::string dsLabel = "[ Self (This Entity) ]";
+            Entity currentTarget = uic.GetDataSourceEntity(entity.GetScene(), entity);
+
+            if (uic.DataSourceEntityID == 0) {
+                if (entity.HasComponent<NativeScriptComponent>()) {
+                    dsLabel = "[ Self (NativeScript: " + entity.GetComponent<NativeScriptComponent>().ScriptName + ") ]";
+                } else {
+                    dsLabel = "[ Self (This Entity) ]";
+                }
+            } else {
+                if (currentTarget && currentTarget != entity) {
+                    std::string targetTag = currentTarget.GetName();
+                    if (currentTarget.HasComponent<NativeScriptComponent>()) {
+                        dsLabel = "[ " + targetTag + " (" + currentTarget.GetComponent<NativeScriptComponent>().ScriptName + ") ]";
+                    } else {
+                        dsLabel = "[ " + targetTag + " ]";
+                    }
+                } else {
+                    dsLabel = "[ Entity: " + std::to_string(static_cast<uint64_t>(uic.DataSourceEntityID)) + " ]";
+                }
+            }
+
+            float availX = ImGui::GetContentRegionAvail().x;
+            float btnW = 28.0f;
+            float inputW = (uic.DataSourceEntityID != 0) ? (availX - btnW - 6.0f) : availX;
+
+            ImGui::SetNextItemWidth(inputW);
+            ImGui::PushStyleColor(ImGuiCol_Text, (uic.DataSourceEntityID == 0) ? ImVec4(0.4f, 0.85f, 1.0f, 1.0f) : ImVec4(0.95f, 0.75f, 0.35f, 1.0f));
+            ImGui::InputText("Data Source", const_cast<char*>(dsLabel.c_str()), dsLabel.length(), ImGuiInputTextFlags_ReadOnly);
+            ImGui::PopStyleColor();
+
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Drag & Drop an Entity from Scene Hierarchy to retarget the UI Data Source.\nDefault is 'Self' (auto-binds to script co-located on this Entity).");
+            }
+
+            // Accept Drag & Drop of Entity from Scene Hierarchy
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_HIERARCHY_ENTITY")) {
+                    uint32_t draggedID = *(const uint32_t*)payload->Data;
+                    if (entity.GetScene()) {
+                        Entity draggedEntity{ (entt::entity)draggedID, entity.GetScene() };
+                        if (draggedEntity) {
+                            if (draggedEntity == entity) {
+                                uic.DataSourceEntityID = 0;
+                            } else {
+                                uic.DataSourceEntityID = draggedEntity.GetUUID();
+                            }
                         }
                     }
                 }
                 ImGui::EndDragDropTarget();
+            }
+
+            if (uic.DataSourceEntityID != 0) {
+                ImGui::SameLine();
+                if (ImGui::Button("x##ClearDS", ImVec2(btnW, 0))) {
+                    uic.DataSourceEntityID = 0; // Reset to Self (Auto)
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Reset Data Source back to Self (Auto)");
+                }
             }
 
             ImGui::DragInt("Sort Order", &uic.SortOrder, 1, -100, 100);

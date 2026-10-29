@@ -104,6 +104,7 @@ int main(int argc, char** argv) {
         else if (arg == "94" || arg == "step94" || arg == "--step94" || arg == "--2dmode" || arg == "--gridsnap") targetStep = 94;
         else if (arg == "95" || arg == "step95" || arg == "--step95" || arg == "--uipalette" || arg == "--palette") targetStep = 95;
         else if (arg == "96" || arg == "step96" || arg == "--step96" || arg == "--uisync" || arg == "--doc-sync") targetStep = 96;
+        else if (arg == "97" || arg == "step97" || arg == "--step97" || arg == "--mvvm" || arg == "--datasource") targetStep = 97;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -392,6 +393,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 96) {
         if (!RunTest_Step96_Phase34_Step7_BidirectionalDocumentSynchronization()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 97) {
+        if (!RunTest_Step97_Phase34_Step8_ScopedMVVMDataSourceAndInspectorUX()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

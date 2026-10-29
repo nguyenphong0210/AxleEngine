@@ -329,3 +329,4 @@ bool RunTest_Step93_Phase34_Step7_RectTransformGizmo();
 bool RunTest_Step94_Phase34_Step7_Viewport2DModeAndGridSnapping();
 bool RunTest_Step95_Phase34_Step7_UIPaletteAndDragDropSpawner();
 bool RunTest_Step96_Phase34_Step7_BidirectionalDocumentSynchronization();
+bool RunTest_Step97_Phase34_Step8_ScopedMVVMDataSourceAndInspectorUX();

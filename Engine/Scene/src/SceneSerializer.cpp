@@ -527,6 +527,9 @@ namespace Axle {
                 }
                 ss << "    UICanvasComponent:\n";
                 ss << "      AssetPath: " << uic.AssetPath << "\n";
+                if (uic.DataSourceEntityID != 0) {
+                    ss << "      DataSourceEntityID: " << static_cast<uint64_t>(uic.DataSourceEntityID) << "\n";
+                }
                 ss << "      SortOrder: " << uic.SortOrder << "\n";
                 ss << "      Visible: " << (uic.Visible ? "true" : "false") << "\n";
             }
@@ -1584,6 +1587,8 @@ namespace Axle {
                                     UIParser::ParseFile(fullPath.string(), *uic.Document);
                                 }
                             }
+                        } else if (trimmed.rfind("DataSourceEntityID:", 0) == 0) {
+                            try { uic.DataSourceEntityID = std::stoull(Trim(trimmed.substr(19))); } catch (...) {}
                         } else if (trimmed.rfind("SortOrder:", 0) == 0) {
                             try { uic.SortOrder = std::stoi(Trim(trimmed.substr(10))); } catch (...) {}
                         } else if (trimmed.rfind("Visible:", 0) == 0) {

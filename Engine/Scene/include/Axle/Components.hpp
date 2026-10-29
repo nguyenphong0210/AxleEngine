@@ -1323,8 +1323,12 @@ namespace Axle {
         }
     };
 
+    class Scene;
+    class Entity;
+
     struct UICanvasComponent {
         std::string AssetPath;
+        UUID DataSourceEntityID = 0; // 0 = Self (This Entity / Auto-detect), or explicit UUID of target entity
         int32_t SortOrder = 0;
         bool Visible = true;
         std::shared_ptr<UIDocument> Document = nullptr;
@@ -1332,6 +1336,8 @@ namespace Axle {
         UICanvasComponent() = default;
         UICanvasComponent(const UICanvasComponent&) = default;
         explicit UICanvasComponent(const std::string& path) : AssetPath(path) {}
+
+        Entity GetDataSourceEntity(Scene* scene, Entity currentEntity) const;
     };
 
 }

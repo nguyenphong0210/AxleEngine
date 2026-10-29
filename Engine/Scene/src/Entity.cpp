@@ -1,5 +1,6 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/Scene.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -201,6 +202,19 @@ namespace Axle {
     glm::mat4 Entity::GetWorldTransform() const {
         if (!*this) return glm::mat4(1.0f);
         return m_Scene->GetWorldTransform(m_EntityHandle);
+    }
+
+    Entity UICanvasComponent::GetDataSourceEntity(Scene* scene, Entity currentEntity) const {
+        if (DataSourceEntityID == 0) {
+            return currentEntity;
+        }
+        if (scene) {
+            Entity target = scene->GetEntityByUUID(DataSourceEntityID);
+            if (target) {
+                return target;
+            }
+        }
+        return currentEntity;
     }
 
 }

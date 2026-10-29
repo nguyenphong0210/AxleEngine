@@ -456,8 +456,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **UI Component Palette & Drag-and-Drop Spawner (`Editor/`)**: Dedicated UI Widget Palette panel containing stock primitives (`Canvas`, `Panel`, `Text`, `Image`, `Button`, `ProgressBar`, `RadialGauge`); supports native ImGui Drag-and-Drop payloads (`ImGui::BeginDragDropSource` / `ImGui::AcceptDragDropPayload`) dropped directly onto the Viewport canvas or the `SceneHierarchyPanel` tree.
     - [x] **Bidirectional Document Synchronization**: Visual manipulation in Viewport directly updates the active `UIDocument` DOM tree and serializes back to `.axleui` declarative documents and `.axlescene` scene files without desynchronization.
   - [ ] **Step 8 - Scoped MVVM Data Source Binding, Inspector UX & Clean Hierarchy Architecture (`Engine/UI` & `Engine/Scene`)**:
-    - [ ] **Scene Hierarchy DOM Decoupling**: Hide internal UI DOM micro-nodes (Row, Column, Text, Rectangles) from Scene Hierarchy tree view; render `UICanvas` as a single atomic scene entity.
-    - [ ] **Component Registry Discovery**: Add `"User Interface"` category to `EntityInspector` component creation menu.
+    - [x] **Scene Hierarchy DOM Decoupling**: Hide internal UI DOM micro-nodes (Row, Column, Text, Rectangles) from Scene Hierarchy tree view; render `UICanvas` as a single atomic scene entity.
+    - [x] **Component Registry Discovery**: Add `"User Interface"` category to `EntityInspector` component creation menu.
     - [ ] **Searchable `.axleui` Asset Picker**: Replace raw text input with a searchable modal/combo asset picker scanning project directories, maintaining drag-and-drop payload support.
     - [ ] **Hybrid MVVM "Convention over Configuration" Data Source**:
       - Auto-detection: When `UICanvasComponent` and `NativeScriptComponent` coexist on the same entity, automatically bind and display `[ Self (NativeScript: ClassName) ]`.

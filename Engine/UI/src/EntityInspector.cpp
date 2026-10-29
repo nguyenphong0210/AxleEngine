@@ -2439,7 +2439,7 @@ namespace Axle {
                 ImGui::TextDisabled("No components match '%s'", searchQuery.c_str());
             }
         } else {
-            const std::vector<std::string> categories = { "Rendering", "Physics", "Scripts", "Audio/VFX" };
+            const std::vector<std::string> categories = { "Rendering", "Physics", "Scripts", "Audio/VFX", "User Interface" };
             for (const auto& cat : categories) {
                 if (ImGui::BeginMenu(cat.c_str())) {
                     for (const auto& item : items) {

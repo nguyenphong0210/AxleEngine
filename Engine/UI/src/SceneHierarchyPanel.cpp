@@ -837,12 +837,6 @@ namespace Axle {
         if (entity.HasComponent<HierarchyComponent>()) {
             hasChildren = !entity.GetComponent<HierarchyComponent>().Children.empty();
         }
-        if (entity.HasComponent<UICanvasComponent>()) {
-            auto& uic = entity.GetComponent<UICanvasComponent>();
-            if (uic.Document && uic.Document->GetRootNode() && !uic.Document->GetRootNode()->Children.empty()) {
-                hasChildren = true;
-            }
-        }
 
         ImGuiTreeNodeFlags flags = ((m_SelectedEntity == entity) ? ImGuiTreeNodeFlags_Selected : 0) 
                                  | ImGuiTreeNodeFlags_OpenOnArrow 
@@ -1063,15 +1057,7 @@ namespace Axle {
                     }
                 }
 
-                // Expand UI Node sub-tree if entity carries UICanvasComponent
-                if (entity.HasComponent<UICanvasComponent>()) {
-                    auto& uic = entity.GetComponent<UICanvasComponent>();
-                    if (uic.Document && uic.Document->GetRootNode()) {
-                        for (UINode* uiChild : uic.Document->GetRootNode()->Children) {
-                            DrawUINodeTree(uiChild, uic);
-                        }
-                    }
-                }
+                // UI DOM micro-nodes are decoupled from 3D Scene Hierarchy (edited via UI Canvas Designer)
             }
             ImGui::TreePop();
         }

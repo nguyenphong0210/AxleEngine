@@ -1,125 +1,130 @@
-# UI Canvas Architecture & Scoped Data Binding Specification
+# UI Canvas Architecture & Scoped MVVM Data Binding Specification
 
-**Document Version:** 1.0.0  
+**Document Version:** 1.1.0  
 **Target Subsystem:** `Engine/UI`, `Engine/Scene`, `Editor`  
-**Related Documents:** `Phase34_QML_Canvas2D_Guide.md`, `ARCHITECTURE.md`, `ECS_AND_SCENE_GRAPH.md`
+**Pattern:** Hybrid MVVM (Model-View-ViewModel) with "Convention over Configuration"  
+**Related Documents:** `Phase34_QML_Canvas2D_Guide.md`, `ARCHITECTURE.md`, `ECS_AND_SCENE_GRAPH.md`, `ROADMAP.md`
 
 ---
 
 ## 1. Executive Summary & Problem Analysis
 
-AxleEngine's 2D Canvas UI subsystem provides hardware-accelerated declarative interface rendering via `.axleui` markup and `UICanvasComponent`. While the rendering pipeline operates with high visual fidelity and 180+ FPS throughput, user testing and architectural analysis have revealed four key areas requiring enhancement:
+AxleEngine's 2D Canvas UI subsystem provides hardware-accelerated declarative interface rendering via `.axleui` markup and `UICanvasComponent`. While the rendering pipeline operates with high visual fidelity and 180+ FPS throughput, user testing and architectural analysis have revealed key ergonomic and data-flow requirements:
 
 1. **Global Data Collision (The Multi-Instance Problem):**
-   - `UIDataContext` is currently scoped at the global `Scene` level.
-   - Gameplay scripts publish metrics using fixed global keys (e.g., `"Vehicle.SpeedKmh"`).
-   - If multiple vehicles or entities exist in a scene (e.g., Player vs. AI racers, Split-Screen, or Multiplayer), scripts overwrite each other's telemetry, causing UI flicker and state corruption.
-   - Hardcoding entity IDs into `.axleui` files destroys UI reusability across instances.
+   - `UIDataContext` was originally scoped only at the global `Scene` level.
+   - Scripts published metrics using fixed global keys (e.g. `"Vehicle.SpeedKmh"`).
+   - When multiple vehicle instances exist in a scene (e.g. Player vs. AI racers, Split-Screen, or Multiplayer), scripts overwrite each other's telemetry, causing UI flicker.
+   - Hardcoding entity IDs into `.axleui` markup destroys template reusability across instances.
 
-2. **Scene Hierarchy Visual Pollution:**
-   - Expanding `UICanvas` on the Scene Hierarchy expands the internal DOM tree (30+ micro-nodes: `Row`, `Column`, `Rectangle`, `Text`, etc.).
-   - This clutters the 3D spatial hierarchy and buries world objects (`Car`, `Track`, `Lights`, `Camera`).
+2. **Inspector UX & Data Source Binding Gap:**
+   - On the Inspector panel, `UICanvasComponent` lacked an intuitive link to scripts (`NativeScriptComponent`).
+   - Users needed a standard mechanism to connect declarative `.axleui` Views with C++ ViewModels/Scripts.
+   - The UX should adopt the industry-standard **"Convention over Configuration"** pattern (as seen in Unity UI Toolkit, Unreal Engine UMG MVVM, and Godot).
 
-3. **Manual Asset Path Input:**
-   - In the Inspector, `Asset Path` is currently a raw `ImGui::InputText`. Users must memorize or manually type file paths rather than selecting from project assets.
+3. **Scene Hierarchy Visual Pollution:**
+   - Expanding `UICanvas` on the Scene Hierarchy auto-expanded the internal DOM tree (30+ micro-nodes: `Row`, `Column`, `Rectangle`, `Text`, etc.).
+   - This cluttered the 3D spatial hierarchy and buried world objects (`Car`, `Track`, `Lights`, `Camera`).
 
-4. **Component Registry Discovery:**
-   - In `EntityInspector.cpp`, the category list omits `"User Interface"`. As a result, users cannot discover `UICanvasComponent` in the Add Component menu unless they manually type in the search bar.
+4. **Manual Asset Path Input & Component Discovery:**
+   - `Asset Path` was a raw text input field rather than a searchable project asset picker.
+   - `UICanvasComponent` was missing from the categorized "Add Component" menu due to the absence of a `"User Interface"` category.
 
 ---
 
-## 2. Core Architectural Design
+## 2. Core Architectural Design: Scoped MVVM with "Convention over Configuration"
 
 ```mermaid
 flowchart TD
-    subgraph Data Sources [Data Sources / Models]
-        Car1["Car 1 (Player 1)"]
-        Car2["Car 2 (Player 2 / AI)"]
+    subgraph View [View Layer (.axleui)]
+        Markup["RacingHUD.axleui<br/>text: '{SpeedKmh}'<br/>value: '{RPMNormalized}'<br/>color: '{IsRedline ? #FF1E42 : #00F5D4}'"]
     end
 
-    subgraph Canvases [UICanvasComponent]
-        Canvas1["HUD Canvas 1<br/>Target: Car 1"]
-        Canvas2["HUD Canvas 2<br/>Target: Car 2"]
+    subgraph Bridge [Bridge Layer (UICanvasComponent)]
+        CanvasComp["UICanvasComponent<br/>Asset Path: 'RacingHUD.axleui'<br/>Data Source: [ Self | EntityRef | None ]"]
     end
 
-    subgraph Template [Declarative View Template]
-        UIFile["RacingHUD.axleui<br/>(100% Shared Across Instances)"]
+    subgraph ViewModel [ViewModel / Data Layer]
+        direction TB
+        Script1["CarController.hpp (NativeScriptComponent)<br/>• Reflected Fields: Horsepower, SteerSpeed...<br/>• Scoped UIDataContext: SpeedKmh, RPMNormalized..."]
+        Phys1["VehiclePhysicsComponent / TransformComponent"]
     end
 
-    Car1 --> Canvas1
-    Car2 --> Canvas2
-    UIFile -.->|Binds to Relative Properties| Canvas1
-    UIFile -.->|Binds to Relative Properties| Canvas2
+    Markup -.->|Evaluates Bindings| CanvasComp
+    CanvasComp ==>|Auto-Detected (Same Entity)| Script1
+    CanvasComp -.->|Fallback or Drag-and-Drop Override| Phys1
 ```
 
 ---
 
-### 2.1. Scoped Data Context & Target Entity (MVVM Pattern)
+### 2.1. Two-Tier Inspector UX: The "Data Source" Mechanism
 
-To allow unlimited entity instances without data collisions while reusing the exact same `.axleui` markup, AxleEngine adopts a **Two-Tier Scoped Binding Architecture**:
+On the Inspector panel of `UICanvasComponent`, the UI exposes an interactive `Data Source` field:
 
-1. **Relative Property Paths in `.axleui`:**
-   Template files omit global namespace prefixes (`Vehicle.*`) and bind directly to relative properties of the target model:
-   ```qml
-   Text {
-       id: "speed_readout"
-       text: "{SpeedKmh}"
-       fontSize: 36
-   }
-   RadialGauge {
-       id: "tachometer"
-       value: "{RPMNormalized}"
-       color: "{IsRedline ? #FF1E42FF : #00F5D4FF}"
-   }
-   ```
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ ▼ 🖼️ UI Canvas Component                                            [...]
+├────────────────────────────────────────────────────────────────────────┤
+│ Asset Path:   [ 📄 assets/ui/RacingHUD.axleui                  ▼ ] [ 🔍 ]│
+│                                                                        │
+│ Data Source:  [ ⚙️ Self (NativeScript: CarController)          ▼ ] [ 🎯 ]│
+│               *(Auto-detects NativeScript residing on the same Entity)*│
+│                                                                        │
+│ Sort Order:   [ 0 ]                                                    │
+│ [x] Visible                                                            │
+│                                                                        │
+│ Nodes in DOM: 18 | Reference Resolution: 1920 x 1080                   │
+│ [ Save .axleui Document ] [ Reload from Disk ]                         │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
-2. **`TargetEntity` Specification on `UICanvasComponent`:**
-   `UICanvasComponent` gains explicit target binding:
-   ```cpp
-   struct UICanvasComponent {
-       std::string AssetPath;
-       UUID TargetEntityID = 0; // 0 = Auto / Primary Player Vehicle
-       int32_t SortOrder = 0;
-       bool Visible = true;
-       std::shared_ptr<UIDocument> Document = nullptr;
+#### Mode A: Convention over Configuration (Auto-Detection / Zero Setup)
+- **Same Entity:** When `UICanvasComponent` and `NativeScriptComponent` (e.g. `CarController` or `RacingHUD`) coexist on the same Entity:
+  - The `Data Source` property automatically detects the script and displays: `[ ⚙️ Self (NativeScript: <ClassName>) ]`.
+  - Both components establish a bidirectional link automatically without requiring the user to perform any drag-and-drop or manual configuration.
+  - Eliminates unlinked references, null-pointer errors, and configuration fatigue.
 
-       void SetTargetEntity(Entity entity);
-       Entity GetTargetEntity(Scene* scene) const;
-   };
-   ```
-
-3. **Hierarchical Binding Resolution (`UIDocument::EvaluateBindings`):**
-   When resolving a property `{SpeedKmh}`:
-   - **Tier 1 (Local Scoped Context):** The engine resolves the target entity's components (e.g., `VehiclePhysicsComponent` or associated `NativeScriptComponent`). If found, it reads the local value.
-   - **Tier 2 (Global Scene Context Fallback):** If not found in the target entity, it falls back to the Scene's global `UIDataContext` for truly global metrics (`Engine.FPS`, `MatchTime`, `ServerPing`).
-
-4. **Zero-Overhead Runtime Vehicle Switching:**
-   When a player enters a different vehicle during gameplay:
-   ```cpp
-   // Immediate single-pointer redirect (sub-microsecond execution, zero allocation)
-   hudCanvas.SetTargetEntity(newVehicleEntity);
-   ```
-   No file re-parsing, texture reallocation, or UI recreation occurs. All gauges, needles, and readouts seamlessly bind to the new vehicle on the subsequent frame.
-
-5. **Inspector Binding Modes:**
-   - **`Auto Primary Vehicle` (Default):** Dynamically tracks `scene->GetPrimaryRuntimeVehicle()`.
-   - **`Explicit Entity`:** Points to a specific UUID (ideal for Split-Screen Player 2 or Spectator Cameras).
+#### Mode B: Drag-and-Drop Retargeting (External Entity Target)
+- **Different Entity:** When the UI Canvas is an independent 2D Screen-space overlay decoupled from the 3D vehicle in the world:
+  - The user simply drags the target Entity (e.g. `Car`) from the **Scene Hierarchy** and drops it onto the `Data Source` field.
+  - The display updates to: `[ 🚗 Car (NativeScript: CarController) ]`.
+  - An adjacent `[ 🎯 ]` / `[ x ]` button provides rapid entity selection via popup and quick reset to default `[ Self (Auto) ]`.
 
 ---
 
-### 2.2. Scene Hierarchy UX & DOM Decoupling
+### 2.2. Dual-Channel Data Exposure: Reflected Fields + Scoped UIDataContext
 
-Following the architectural standards of Unreal Engine (Widget Blueprints) and Unity (UI Toolkit Canvas):
+When `UICanvasComponent` binds to a `NativeScriptComponent`, the binding engine (`UIDocument::EvaluateBindings`) has access to two distinct data streams:
 
-- **Single-Row Representation:** The Scene Hierarchy treats `UICanvas` as an atomic scene entity, identical to `Directional Light` or `Main Camera`.
-- **DOM Suppression:** Internal layout micro-nodes (`Row`, `Column`, `Rectangle`, `Text`) are no longer expanded inside the 3D spatial hierarchy.
-- **Dedicated Editing Surfaces:** Fine-grained widget inspection, layout tweaking, and QML editing are routed to:
-  1. The **UI Canvas Designer** panel (`.axleui` visual workspace with live mock telemetry).
-  2. The **Inspector Panel**, which displays the canvas document summary, reference resolution, and document dirty status.
+1. **Reflected Script Fields (`AXLE_SCRIPT_FIELDS`):**
+   - Any public script variables exposed via the reflection macro (e.g., `Horsepower`, `MaxSteerAngle`, `BrakePower`, `SteerSpeed`, `BoostMultiplier`) are automatically exposed to `.axleui` templates.
+   - Declarative markup can directly bind to reflected field identifiers:
+     ```qml
+     Text { text: "Power: {Horsepower} HP" }
+     ```
+
+2. **Scoped `UIDataContext` Telemetry:**
+   - Scripts update local metrics using `GetEntity().GetLocalUIDataContext().Set("SpeedKmh", ...)` for high-frequency runtime telemetry.
+   - This telemetry is strictly encapsulated within the target Entity instance, avoiding collisions in multi-car simulations.
+
+3. **Fallback to Scene Globals:**
+   - If an evaluated `{...}` token is not found in the local Data Source, the engine falls back to `Scene::GetUIDataContext()` for global engine metrics (`{Engine.FPS}`, `{MatchTime}`, `{NetworkPing}`).
 
 ---
 
-### 2.3. Searchable Asset Picker for `AssetPath`
+### 2.3. Scene Hierarchy Cleanliness: DOM Decoupling
+
+Following the architectural standards of Unreal Engine (Widget Blueprints) and Unity (UI Toolkit `UIDocument`):
+
+- **Single-Row Representation:** The Scene Hierarchy renders `UICanvas` as an atomic scene entity, identical to `Directional Light`, `Camera`, or `Car`.
+- **DOM Tree Suppression:** Internal layout micro-nodes (`Row`, `Column`, `Rectangle`, `Text`, `RadialGauge`) are **NOT** auto-expanded inside the 3D scene tree.
+- **Dedicated Editing Surfaces:** Fine-grained widget inspection, visual layout tweaking, and QML editing are routed to:
+  1. The **UI Canvas Designer** panel (`.axleui` visual workspace with live interactive gizmos).
+  2. The **Entity Inspector**, which displays high-level canvas status and properties.
+
+---
+
+### 2.4. Searchable Asset Picker for `AssetPath`
 
 The raw string input field in `EntityInspector.cpp` is replaced by an interactive **Searchable Asset Picker**:
 
@@ -136,21 +141,17 @@ The raw string input field in `EntityInspector.cpp` is replaced by an interactiv
 │   │  📄 RacingHUD.axleui      (assets/ui/RacingHUD.axleui) │  │
 │   │  📄 PauseMenu.axleui      (assets/ui/PauseMenu.axleui) │  │
 │   └────────────────────────────────────────────────────────┘  │
-│                                                               │
-│ Target Entity: [ 🎯 Primary Vehicle (Auto)         ▼ ]        │
-│ Sort Order:    [ 0 ]                                          │
-│ [X] Visible                                                   │
 └───────────────────────────────────────────────────────────────┘
 ```
 
-- **Project Scanning:** Discovers all `.axleui` files across `assets/` and `Editor/assets/`.
+- **Project Scanning:** Automatically discovers all `.axleui` files across `assets/` and `Editor/assets/`.
 - **Interactive Search:** Real-time character filtering.
 - **Automatic Loading:** Selecting an item immediately updates `AssetPath` and invokes `uic.Document->LoadFromFile()`.
 - **Drag & Drop Retained:** Dragging an `.axleui` item from the Content Browser into the field remains fully functional.
 
 ---
 
-### 2.4. Component Registry Category Exposure
+### 2.5. Component Registry: "User Interface" Category
 
 In [`Engine/UI/src/EntityInspector.cpp`](file:///d:/WorkSpace/AxleEngine/Engine/UI/src/EntityInspector.cpp#L2442), the hardcoded list of root categories is updated:
 
@@ -167,57 +168,43 @@ This immediately surfaces:
 
 ---
 
-## 3. Technical Implementation Roadmap
+## 3. Comparison with Commercial Game Engines
 
-### Phase 1: Hierarchy Cleanliness & Add Component Registration
-1. Add `"User Interface"` to category vector in `EntityInspector.cpp`.
-2. Remove auto-expansion of internal UI DOM nodes in `SceneHierarchyPanel.cpp`.
-3. Verify clean, single-row display of `UICanvas` in the Scene Hierarchy.
-
-### Phase 2: Searchable Asset Picker for `AssetPath`
-1. Implement directory scanning utility for `.axleui` files.
-2. Build an `ImGui::BeginCombo` / popup search filter inside `EntityInspector.cpp`.
-3. Connect selection callback to `uic.Document->LoadFromFile()`.
-
-### Phase 3: Scoped Data Target & Runtime Switch Engine API
-1. Add `UUID TargetEntityID = 0;` and helper methods to `UICanvasComponent` in `Components.hpp`.
-2. Enhance `UIDocument::EvaluateBindings` in `UIDocument.cpp` to resolve target entity properties before scene globals.
-3. Expose `Target Entity` dropdown selector in `EntityInspector.cpp` (Auto Primary vs. Explicit Entity).
-4. Update `EditorLayer.cpp` Edit-Mode mock telemetry injection to support scoped targets.
-
-### Phase 4: Automated Verification & Unit Test Suite
-1. Run automated build with `cmake --build build --config Release`.
-2. Execute full regression test suite: `AxleTests.exe --summary`.
-3. Verify zero memory leaks, zero command allocator degradation, and 100% test pass rate.
+| Feature / UX | **AxleEngine** (Current Design) | **Unity** (UI Toolkit 2023/6) | **Unreal Engine 5** (UMG MVVM) | **Godot 4** |
+| :--- | :--- | :--- | :--- | :--- |
+| **Default Binding** | `Self` (Auto-detects `NativeScript` on same Entity) | Contextual Fallback to `GetComponent<T>()` on same GameObject | `Owner Actor` (Actor owning `UWidgetComponent`) | Node's attached script or `owner` |
+| **Retargeting UX** | Drag-and-drop Entity from Hierarchy into `Data Source` | Drag GameObject / Component / ScriptableObject into `dataSource` | Select `Source Type: Object Reference` & drag Actor / ViewModel | Drag Node into `@export var target` field |
+| **Reflection Fields** | Exposes `AXLE_SCRIPT_FIELDS` automatically | Exposes `[CreateProperty]` / serialized C# properties | Exposes `UPROPERTY(FieldNotify)` | Exposes `@export` script variables |
+| **Hierarchy Representation** | Single atomic Entity row (DOM hidden from 3D tree) | Single `UIDocument` GameObject (UXML DOM hidden) | Single `UWidgetComponent` (Widget tree in UMG editor) | Separate Control tree or SubViewport |
+| **Asset Selection** | Searchable popup picker (`.axleui`) + Drag & Drop | Asset field with circle picker (`.uxml`) + Drag & Drop | Asset drop-down with thumbnail picker (`WBP_`) | QuickOpen resource dropdown (`.tscn`) |
 
 ---
 
-## 4. API Reference & Code Examples
+## 4. Technical Implementation Roadmap
 
-### 4.1. Updating Scoped Telemetry from Gameplay C++
-```cpp
-// In RacingHUD.hpp (attached to Car or Canvas):
-void RacingHUD::OnUpdate(Axle::Timestep ts) {
-    auto targetEntity = GetEntity(); // or resolve from UICanvasComponent::GetTargetEntity()
+### Phase 1: Hierarchy Cleanliness & Add Component Registration
+1. In `Engine/UI/src/EntityInspector.cpp`, add `"User Interface"` to `categories` vector so `UICanvasComponent` appears in the menu.
+2. In `Engine/UI/src/SceneHierarchyPanel.cpp` (lines 1066-1075 & 1097), remove `ImGuiTreeNodeFlags_DefaultOpen` or suppress DOM tree auto-expansion so `UICanvas` remains a single clean row.
+3. Verify clean display in Scene Hierarchy.
 
-    if (auto* pv = GetVehiclePhysics()) {
-        auto& localCtx = targetEntity.GetLocalUIDataContext();
-        localCtx.Set("SpeedKmh", static_cast<int32_t>(std::round(pv->GetSpeedKmh())));
-        localCtx.Set("RPMNormalized", pv->GetRPMNormalized());
-        localCtx.Set("GearString", pv->GetGearString());
-        localCtx.Set("IsRedline", pv->GetRPM() >= pv->GetRedlineRPM());
-    }
-}
-```
+### Phase 2: Searchable Asset Picker for `AssetPath`
+1. Implement a helper scanning `.axleui` files across `assets/` and `Editor/assets/`.
+2. Replace raw `ImGui::InputText` in `EntityInspector.cpp` with a combo/popup search picker with live filter.
+3. Retain drag-and-drop support from Content Browser.
 
-### 4.2. Runtime Vehicle Switch in Gameplay
-```cpp
-void PlayerController::OnEnterVehicle(Axle::Entity enteredVehicle) {
-    if (auto hud = m_Scene->FindEntityByName("UICanvas")) {
-        auto& uic = hud.GetComponent<Axle::UICanvasComponent>();
-        uic.SetTargetEntity(enteredVehicle);
-        uic.Visible = true;
-    }
-}
-```
+### Phase 3: Scoped Data Source Mechanism on `UICanvasComponent`
+1. In `Engine/Scene/include/Axle/Components.hpp`:
+   - Add `UUID DataSourceEntityID = 0;` (0 = Self / Auto-detect).
+   - Add helper methods `Entity GetDataSourceEntity(Scene* scene, Entity currentEntity) const;`.
+2. In `Engine/UI/src/EntityInspector.cpp`:
+   - Render `Data Source: [ Self (NativeScript: ClassName) ]` if `DataSourceEntityID == 0` and current entity has script.
+   - Accept drag-and-drop payload `AXLE_DND_ENTITY` from Scene Hierarchy into `Data Source`.
+   - Provide a reset/clear button to restore `Self (Auto)`.
+3. In `Engine/UI/src/UI2D/UIDocument.cpp` (`UIDocument::EvaluateBindings`):
+   - Query the target entity's `NativeScriptComponent` reflected fields and local `UIDataContext`.
+   - If token is found, return the local value; otherwise, fallback to global `Scene::GetUIDataContext()`.
 
+### Phase 4: Automated Verification & Unit Test Suite
+1. Run `cmake --build build --config Release --target AxleEditor AxleTests`.
+2. Execute `AxleTests.exe --summary` to verify that all 96 unit test suites pass with 0 failures.
+3. Validate runtime HUD telemetry binding with `RacingHUD.axleui`.

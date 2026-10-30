@@ -5,6 +5,22 @@
 
 // Root Constants / Push Constants (register b0, space0)
 // Size: EXACTLY 128 bytes (32 DWORDs)
+// In Vulkan (SPIR-V), DXC compiles [[vk::push_constant]] to physical push constant range
+#if defined(__spirv__)
+struct ObjectConstants_t {
+    float4x4 u_Model;               // 64 bytes (Offset 0)
+    float4   u_ColorPrimary;        // 16 bytes (Offset 64)
+    float4   u_ColorSecondary;      // 16 bytes (Offset 80)
+    float4   u_Params;              // 16 bytes (Offset 96) - x: TileScale, y: PatternMode, z: Roughness, w: Metallic
+    float4   u_SunDirAndIntensity;  // 16 bytes (Offset 112) - xyz: Normalized sun direction, w: Sun intensity
+};
+[[vk::push_constant]] ObjectConstants_t ObjectConstants;
+#define u_Model (ObjectConstants.u_Model)
+#define u_ColorPrimary (ObjectConstants.u_ColorPrimary)
+#define u_ColorSecondary (ObjectConstants.u_ColorSecondary)
+#define u_Params (ObjectConstants.u_Params)
+#define u_SunDirAndIntensity (ObjectConstants.u_SunDirAndIntensity)
+#else
 cbuffer ObjectConstants : register(b0, space0) {
     float4x4 u_Model;               // 64 bytes (Offset 0)
     float4   u_ColorPrimary;        // 16 bytes (Offset 64)
@@ -12,6 +28,7 @@ cbuffer ObjectConstants : register(b0, space0) {
     float4   u_Params;              // 16 bytes (Offset 96) - x: TileScale, y: PatternMode, z: Roughness, w: Metallic
     float4   u_SunDirAndIntensity;  // 16 bytes (Offset 112) - xyz: Normalized sun direction, w: Sun intensity
 };
+#endif
 
 // Scene Constants (register b1, space0)
 cbuffer SceneConstants : register(b1, space0) {

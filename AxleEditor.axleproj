@@ -3,3 +3,4 @@ Project:
   Name: Axle Project
   StartScene: scenes/CarTest.axlescene
   AssetDirectory: Editor/assets
+  RHIBackend: Vulkan

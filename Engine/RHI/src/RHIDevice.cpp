@@ -249,8 +249,9 @@ namespace Axle::RHI {
         creationDesc.callbackInterface = callbackInterface;
 
         // Standard Vulkan binding register offsets for HLSL SPIR-V compatibility
+        // Shift samplers (sRegister = 128) to prevent binding index collisions with textures (t0..t127) in shared spaces
         if (backend == RHIType::Vulkan) {
-            creationDesc.vkBindingOffsets.sRegister = 0;
+            creationDesc.vkBindingOffsets.sRegister = 128;
             creationDesc.vkBindingOffsets.tRegister = 0;
             creationDesc.vkBindingOffsets.bRegister = 0;
             creationDesc.vkBindingOffsets.uRegister = 0;

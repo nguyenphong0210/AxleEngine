@@ -8,13 +8,26 @@
 // -----------------------------------------------------------------------------
 // Root Constants (Register b0, Space 0)
 // Size: EXACTLY 128 bytes (32 DWORDs)
+// In Vulkan (SPIR-V), DXC compiles [[vk::push_constant]] to physical push constant range
 // -----------------------------------------------------------------------------
+#if defined(__spirv__)
+struct ObjectConstants_t {
+    float4x4 u_ModelViewProjection; // 64 bytes (Offset 0)
+    uint     u_EntityID;            // 4 bytes  (Offset 64)
+    uint3    u_Padding;             // 12 bytes (Offset 68)
+    float4   u_Reserved[3];         // 48 bytes (Offset 80..128)
+};
+[[vk::push_constant]] ObjectConstants_t ObjectConstants;
+#define u_ModelViewProjection (ObjectConstants.u_ModelViewProjection)
+#define u_EntityID (ObjectConstants.u_EntityID)
+#else
 cbuffer ObjectConstants : register(b0, space0) {
     float4x4 u_ModelViewProjection; // 64 bytes (Offset 0)
     uint     u_EntityID;            // 4 bytes  (Offset 64)
     uint3    u_Padding;             // 12 bytes (Offset 68)
     float4   u_Reserved[3];         // 48 bytes (Offset 80..128)
 };
+#endif
 
 // -----------------------------------------------------------------------------
 // Vertex Input: Standard 64-byte RHIVertex3D compatible layout

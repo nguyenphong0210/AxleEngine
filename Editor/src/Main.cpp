@@ -153,7 +153,10 @@ int main(int argc, char** argv) {
 
     // If no explicit CLI backend was provided, inspect Project configuration
     if (rhiConfig.RawArgument.empty()) {
-        std::filesystem::path projPath = "Project.axleproj";
+        std::filesystem::path projPath = "AxleEditor.axleproj";
+        if (!std::filesystem::exists(projPath)) {
+            projPath = "Project.axleproj";
+        }
         for (int i = 1; i < argc; ++i) {
             std::filesystem::path p = argv[i];
             if (p.extension() == ".axleproj" || p.extension() == ".axleproject") {

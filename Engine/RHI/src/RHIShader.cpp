@@ -290,6 +290,11 @@ namespace Axle::RHI {
             std::wstring vkEnv = L"-fspv-target-env=" + ToWide(desc.VulkanTargetEnv);
             wargs.push_back(vkEnv);
 
+            // Shift sampler bindings to 128 to match NRI vkBindingOffsets.sRegister = 128
+            wargs.push_back(L"-fvk-s-shift");
+            wargs.push_back(L"128");
+            wargs.push_back(L"all");
+
             // Preprocessor defines for Vulkan/SPIR-V
             wargs.push_back(L"-D");
             wargs.push_back(L"__spirv__=1");

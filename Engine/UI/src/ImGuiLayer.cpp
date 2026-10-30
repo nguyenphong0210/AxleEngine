@@ -711,9 +711,41 @@ namespace Axle {
 
     void ImGuiLayer::ShutdownVulkan() {
 #if defined(AXLE_HAS_VULKAN)
-        ImGui_ImplVulkan_Shutdown();
-        if (m_Window) {
-            ImGui_ImplGlfw_Shutdown();
+        auto& rhiDevice = RHI::RHIDevice::Get();
+        if (rhiDevice.IsInitialized() && rhiDevice.GetBackend() == RHI::RHIType::Vulkan) {
+            auto* nriDev = rhiDevice.GetNRIDevice();
+            const auto& core = rhiDevice.GetNRICore();
+            const auto& wrapperVK = rhiDevice.GetNRIWrapperVK();
+            auto vkDevice = static_cast<VkDevice>(core.GetDeviceNativeObject(nriDev));
+            auto vkInstance = static_cast<VkInstance>(wrapperVK.GetInstanceVK(*nriDev));
+
+            if (vkDevice && s_VkFuncs.vkDeviceWaitIdle) {
+                s_VkFuncs.vkDeviceWaitIdle(vkDevice);
+            }
+
+            ImGui_ImplVulkan_Shutdown();
+            if (m_Window) {
+                ImGui_ImplGlfw_Shutdown();
+            }
+
+            if (m_VulkanWindowData) {
+                ImGui_ImplVulkanH_DestroyWindow(vkInstance, vkDevice, m_VulkanWindowData, nullptr);
+                if (m_VulkanWindowData->Surface != VK_NULL_HANDLE && s_VkFuncs.vkDestroySurfaceKHR) {
+                    s_VkFuncs.vkDestroySurfaceKHR(vkInstance, m_VulkanWindowData->Surface, nullptr);
+                    m_VulkanWindowData->Surface = VK_NULL_HANDLE;
+                }
+                delete m_VulkanWindowData;
+                m_VulkanWindowData = nullptr;
+            }
+        } else {
+            ImGui_ImplVulkan_Shutdown();
+            if (m_Window) {
+                ImGui_ImplGlfw_Shutdown();
+            }
+            if (m_VulkanWindowData) {
+                delete m_VulkanWindowData;
+                m_VulkanWindowData = nullptr;
+            }
         }
 #endif
     }
@@ -849,6 +881,113 @@ namespace Axle {
             d3d12Queue->Signal(m_D3D12Fence, m_D3D12FenceValueCounter);
         }
 #endif
+#if defined(AXLE_HAS_VULKAN)
+        else if (m_BackendType == ImGuiBackendType::Vulkan && m_VulkanWindowData) {
+            auto& rhiDevice = RHI::RHIDevice::Get();
+            if (!rhiDevice.IsInitialized() || rhiDevice.GetBackend() != RHI::RHIType::Vulkan) return;
+
+            auto* nriDev = rhiDevice.GetNRIDevice();
+            auto* nriQueue = rhiDevice.GetGraphicsQueue();
+            if (!nriDev || !nriQueue) return;
+
+            const auto& core = rhiDevice.GetNRICore();
+            const auto& wrapperVK = rhiDevice.GetNRIWrapperVK();
+
+            VkInstance vkInstance = static_cast<VkInstance>(wrapperVK.GetInstanceVK(*nriDev));
+            VkPhysicalDevice vkPhysDevice = static_cast<VkPhysicalDevice>(wrapperVK.GetPhysicalDeviceVK(*nriDev));
+            VkDevice vkDevice = static_cast<VkDevice>(core.GetDeviceNativeObject(nriDev));
+            VkQueue vkQueue = static_cast<VkQueue>(core.GetQueueNativeObject(nriQueue));
+            uint32_t queueFamily = wrapperVK.GetQueueFamilyIndexVK(*nriQueue);
+
+            ImGui_ImplVulkanH_Window* wd = m_VulkanWindowData;
+            ImDrawData* draw_data = ImGui::GetDrawData();
+            const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
+
+            // Handle window resize for Vulkan swapchain
+            if (m_Window) {
+                int fbW = 0, fbH = 0;
+                glfwGetFramebufferSize(m_Window, &fbW, &fbH);
+                if (fbW > 0 && fbH > 0 && (m_VulkanSwapChainRebuild || m_VulkanWidth != static_cast<uint32_t>(fbW) || m_VulkanHeight != static_cast<uint32_t>(fbH))) {
+                    m_VulkanWidth = static_cast<uint32_t>(fbW);
+                    m_VulkanHeight = static_cast<uint32_t>(fbH);
+                    ImGui_ImplVulkan_SetMinImageCount(m_VulkanMinImageCount);
+                    ImGui_ImplVulkanH_CreateOrResizeWindow(
+                        vkInstance, vkPhysDevice, vkDevice, wd, queueFamily, nullptr,
+                        static_cast<int>(m_VulkanWidth), static_cast<int>(m_VulkanHeight),
+                        m_VulkanMinImageCount, 0
+                    );
+                    wd->FrameIndex = 0;
+                    m_VulkanSwapChainRebuild = false;
+                }
+            }
+
+            if (!is_minimized && wd->Swapchain != VK_NULL_HANDLE && s_VkFuncs.vkAcquireNextImageKHR && s_VkFuncs.vkQueueSubmit && s_VkFuncs.vkQueuePresentKHR) {
+                VkSemaphore image_acquired_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].ImageAcquiredSemaphore;
+                VkSemaphore render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
+
+                VkResult err = s_VkFuncs.vkAcquireNextImageKHR(vkDevice, wd->Swapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE, &wd->FrameIndex);
+                if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR) {
+                    m_VulkanSwapChainRebuild = true;
+                    if (err == VK_ERROR_OUT_OF_DATE_KHR) return;
+                }
+
+                ImGui_ImplVulkanH_Frame* fd = &wd->Frames[wd->FrameIndex];
+                s_VkFuncs.vkWaitForFences(vkDevice, 1, &fd->Fence, VK_TRUE, UINT64_MAX);
+                s_VkFuncs.vkResetFences(vkDevice, 1, &fd->Fence);
+
+                s_VkFuncs.vkResetCommandPool(vkDevice, fd->CommandPool, 0);
+                VkCommandBufferBeginInfo beginInfo = {};
+                beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                beginInfo.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+                s_VkFuncs.vkBeginCommandBuffer(fd->CommandBuffer, &beginInfo);
+
+                VkRenderPassBeginInfo rpInfo = {};
+                rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                rpInfo.renderPass = wd->RenderPass;
+                rpInfo.framebuffer = fd->Framebuffer;
+                rpInfo.renderArea.extent.width = wd->Width;
+                rpInfo.renderArea.extent.height = wd->Height;
+                rpInfo.clearValueCount = 1;
+                rpInfo.pClearValues = &wd->ClearValue;
+                s_VkFuncs.vkCmdBeginRenderPass(fd->CommandBuffer, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+                // Record Dear ImGui primitives into Vulkan command buffer
+                ImGui_ImplVulkan_RenderDrawData(draw_data, fd->CommandBuffer);
+
+                s_VkFuncs.vkCmdEndRenderPass(fd->CommandBuffer);
+                s_VkFuncs.vkEndCommandBuffer(fd->CommandBuffer);
+
+                VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                VkSubmitInfo submitInfo = {};
+                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                submitInfo.waitSemaphoreCount = 1;
+                submitInfo.pWaitSemaphores = &image_acquired_semaphore;
+                submitInfo.pWaitDstStageMask = &wait_stage;
+                submitInfo.commandBufferCount = 1;
+                submitInfo.pCommandBuffers = &fd->CommandBuffer;
+                submitInfo.signalSemaphoreCount = 1;
+                submitInfo.pSignalSemaphores = &render_complete_semaphore;
+
+                s_VkFuncs.vkQueueSubmit(vkQueue, 1, &submitInfo, fd->Fence);
+
+                if (!m_VulkanSwapChainRebuild) {
+                    VkPresentInfoKHR presentInfo = {};
+                    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+                    presentInfo.waitSemaphoreCount = 1;
+                    presentInfo.pWaitSemaphores = &render_complete_semaphore;
+                    presentInfo.swapchainCount = 1;
+                    presentInfo.pSwapchains = &wd->Swapchain;
+                    presentInfo.pImageIndices = &wd->FrameIndex;
+
+                    err = s_VkFuncs.vkQueuePresentKHR(vkQueue, &presentInfo);
+                    if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR) {
+                        m_VulkanSwapChainRebuild = true;
+                    }
+                    wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->SemaphoreCount;
+                }
+            }
+        }
+#endif
     }
 
     void ImGuiLayer::Render(RHI::RHICommandBuffer* cmdBuffer) {
@@ -858,6 +997,15 @@ namespace Axle {
             const auto& core = RHI::RHIDevice::Get().GetNRICore();
             auto* nativeCmd = static_cast<ID3D12GraphicsCommandList*>(core.GetCommandBufferNativeObject(cmdBuffer->GetNative()));
             Render(nativeCmd);
+        }
+#endif
+#if defined(AXLE_HAS_VULKAN)
+        if (m_BackendType == ImGuiBackendType::Vulkan) {
+            const auto& core = RHI::RHIDevice::Get().GetNRICore();
+            auto vkCmd = static_cast<VkCommandBuffer>(core.GetCommandBufferNativeObject(cmdBuffer->GetNative()));
+            if (vkCmd) {
+                ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), vkCmd);
+            }
         }
 #endif
     }

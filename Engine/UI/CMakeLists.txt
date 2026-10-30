@@ -116,4 +116,7 @@ elseif (vulkan_headers_SOURCE_DIR OR EXISTS "${CMAKE_BINARY_DIR}/_deps/vulkan_he
         IMGUI_IMPL_VULKAN_NO_PROTOTYPES=1
         VK_NO_PROTOTYPES=1
     )
+    if (WIN32)
+        target_compile_definitions(AxleUI PUBLIC VK_USE_PLATFORM_WIN32_KHR=1)
+    endif()
 endif()

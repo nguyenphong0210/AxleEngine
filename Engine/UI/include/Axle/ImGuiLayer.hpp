@@ -12,6 +12,7 @@ struct ID3D12DescriptorHeap;
 struct ID3D12GraphicsCommandList;
 struct ID3D12Fence;
 struct ImFont;
+struct ImGui_ImplVulkanH_Window;
 
 namespace Axle {
 
@@ -108,6 +109,14 @@ namespace Axle {
         uint64_t m_D3D12FenceValueCounter = 0;
         uint32_t m_D3D12Width = 0;
         uint32_t m_D3D12Height = 0;
+
+        // Vulkan Window Swapchain & Presentation
+        ImGui_ImplVulkanH_Window* m_VulkanWindowData = nullptr;
+        void* m_VulkanDescriptorPool = nullptr; // VkDescriptorPool
+        bool m_VulkanSwapChainRebuild = false;
+        uint32_t m_VulkanMinImageCount = 2;
+        uint32_t m_VulkanWidth = 0;
+        uint32_t m_VulkanHeight = 0;
     };
 
 }

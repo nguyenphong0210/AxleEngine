@@ -4,27 +4,62 @@
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-#include <GLFW/glfw3.h>
+#if defined(AXLE_HAS_VULKAN)
+#if !defined(VK_NO_PROTOTYPES)
+#define VK_NO_PROTOTYPES 1
+#endif
+#if defined(_WIN32) && !defined(VK_USE_PLATFORM_WIN32_KHR)
+#define VK_USE_PLATFORM_WIN32_KHR 1
+#endif
+#include <vulkan/vulkan.h>
+#include <imgui_impl_vulkan.h>
+#endif
 
-#if defined(AXLE_HAS_D3D12)
+#if defined(_WIN32)
 #if defined(APIENTRY)
 #undef APIENTRY
 #endif
+#if !defined(GLFW_EXPOSE_NATIVE_WIN32)
 #define GLFW_EXPOSE_NATIVE_WIN32
+#endif
+#endif
+
+#include <GLFW/glfw3.h>
+#if defined(_WIN32)
 #include <GLFW/glfw3native.h>
+#endif
+
+#if defined(AXLE_HAS_D3D12)
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <imgui_impl_dx12.h>
-#include <Axle/RHI/RHIDevice.hpp>
-#include <Axle/RHI/RHICommandBuffer.hpp>
 #endif
 
-#if defined(AXLE_HAS_VULKAN)
-#include <imgui_impl_vulkan.h>
+#if defined(AXLE_HAS_D3D12) || defined(AXLE_HAS_VULKAN)
+#include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHICommandBuffer.hpp>
 #endif
 #include <filesystem>
 
 namespace Axle {
+
+#if defined(AXLE_HAS_VULKAN)
+    struct VulkanDispatchTable {
+        PFN_vkDeviceWaitIdle vkDeviceWaitIdle = nullptr;
+        PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR = nullptr;
+        PFN_vkQueueSubmit vkQueueSubmit = nullptr;
+        PFN_vkQueuePresentKHR vkQueuePresentKHR = nullptr;
+        PFN_vkWaitForFences vkWaitForFences = nullptr;
+        PFN_vkResetFences vkResetFences = nullptr;
+        PFN_vkResetCommandPool vkResetCommandPool = nullptr;
+        PFN_vkBeginCommandBuffer vkBeginCommandBuffer = nullptr;
+        PFN_vkEndCommandBuffer vkEndCommandBuffer = nullptr;
+        PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass = nullptr;
+        PFN_vkCmdEndRenderPass vkCmdEndRenderPass = nullptr;
+        PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = nullptr;
+    };
+    static VulkanDispatchTable s_VkFuncs;
+#endif
 
     ::ImFont* ImGuiLayer::s_RegularFont = nullptr;
     ::ImFont* ImGuiLayer::s_BoldFont    = nullptr;
@@ -397,10 +432,191 @@ namespace Axle {
 
     void ImGuiLayer::InitVulkan() {
 #if defined(AXLE_HAS_VULKAN)
-        if (m_Window) {
-            ImGui_ImplGlfw_InitForVulkan(m_Window, true);
+        if (!m_Window) {
+            AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: GLFW window is null!");
+            return;
         }
-        AXLE_CORE_INFO("ImGui Layer initialized successfully for Vulkan");
+
+        auto& rhiDevice = RHI::RHIDevice::Get();
+        if (!rhiDevice.IsInitialized() || rhiDevice.GetBackend() != RHI::RHIType::Vulkan) {
+            AXLE_CORE_WARN("ImGuiLayer::InitVulkan: RHI Device is not initialized or not Vulkan; falling back to OpenGL!");
+            InitOpenGL();
+            m_BackendType = ImGuiBackendType::OpenGL;
+            return;
+        }
+
+        auto* nriDev = rhiDevice.GetNRIDevice();
+        auto* nriQueue = rhiDevice.GetGraphicsQueue();
+        if (!nriDev || !nriQueue) {
+            AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: NRI device or graphics queue is null!");
+            return;
+        }
+
+        const auto& core = rhiDevice.GetNRICore();
+        const auto& wrapperVK = rhiDevice.GetNRIWrapperVK();
+
+        VkInstance vkInstance = static_cast<VkInstance>(wrapperVK.GetInstanceVK(*nriDev));
+        VkPhysicalDevice vkPhysDevice = static_cast<VkPhysicalDevice>(wrapperVK.GetPhysicalDeviceVK(*nriDev));
+        VkDevice vkDevice = static_cast<VkDevice>(core.GetDeviceNativeObject(nriDev));
+        VkQueue vkQueue = static_cast<VkQueue>(core.GetQueueNativeObject(nriQueue));
+        uint32_t queueFamily = wrapperVK.GetQueueFamilyIndexVK(*nriQueue);
+
+        if (!vkInstance || !vkPhysDevice || !vkDevice || !vkQueue) {
+            AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: Failed to query native Vulkan handles from NRI!");
+            return;
+        }
+
+        // Dynamic Vulkan loader for ImGui
+        auto pfnGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(wrapperVK.GetInstanceProcAddrVK(*nriDev));
+        if (!pfnGetInstanceProcAddr) {
+#if defined(_WIN32)
+            HMODULE hVK = GetModuleHandleA("vulkan-1.dll");
+            if (!hVK) hVK = LoadLibraryA("vulkan-1.dll");
+            if (hVK) {
+                pfnGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(GetProcAddress(hVK, "vkGetInstanceProcAddr"));
+            }
+#endif
+        }
+
+        if (!pfnGetInstanceProcAddr) {
+            AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: Failed to locate vkGetInstanceProcAddr!");
+            return;
+        }
+
+        struct ImGuiLoaderContext {
+            PFN_vkGetInstanceProcAddr getProcAddr;
+            VkInstance instance;
+        } loaderCtx{ pfnGetInstanceProcAddr, vkInstance };
+
+        auto loaderFunc = [](const char* function_name, void* user_data) -> PFN_vkVoidFunction {
+            auto* ctx = static_cast<ImGuiLoaderContext*>(user_data);
+            if (!ctx || !ctx->getProcAddr) return nullptr;
+            PFN_vkVoidFunction ptr = ctx->getProcAddr(ctx->instance, function_name);
+            if (!ptr) {
+                ptr = ctx->getProcAddr(VK_NULL_HANDLE, function_name);
+            }
+            return ptr;
+        };
+
+        if (!ImGui_ImplVulkan_LoadFunctions(VK_API_VERSION_1_3, loaderFunc, &loaderCtx)) {
+            AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: Failed to load Vulkan functions for Dear ImGui!");
+            return;
+        }
+
+        // Populate our local dispatch table for presentation & synchronization
+        #define AXLE_LOAD_VK_FUNC(fn) s_VkFuncs.fn = reinterpret_cast<PFN_##fn>(pfnGetInstanceProcAddr(vkInstance, #fn))
+        AXLE_LOAD_VK_FUNC(vkDeviceWaitIdle);
+        AXLE_LOAD_VK_FUNC(vkAcquireNextImageKHR);
+        AXLE_LOAD_VK_FUNC(vkQueueSubmit);
+        AXLE_LOAD_VK_FUNC(vkQueuePresentKHR);
+        AXLE_LOAD_VK_FUNC(vkWaitForFences);
+        AXLE_LOAD_VK_FUNC(vkResetFences);
+        AXLE_LOAD_VK_FUNC(vkResetCommandPool);
+        AXLE_LOAD_VK_FUNC(vkBeginCommandBuffer);
+        AXLE_LOAD_VK_FUNC(vkEndCommandBuffer);
+        AXLE_LOAD_VK_FUNC(vkCmdBeginRenderPass);
+        AXLE_LOAD_VK_FUNC(vkCmdEndRenderPass);
+        AXLE_LOAD_VK_FUNC(vkDestroySurfaceKHR);
+        #undef AXLE_LOAD_VK_FUNC
+
+        // Allocate Vulkan Window Data
+        m_VulkanWindowData = new ImGui_ImplVulkanH_Window();
+        ImGui_ImplVulkanH_Window* wd = m_VulkanWindowData;
+
+        // Create Surface via GLFW with Win32 fallback
+        VkResult err = glfwCreateWindowSurface(vkInstance, m_Window, nullptr, &wd->Surface);
+        if (err != VK_SUCCESS || wd->Surface == VK_NULL_HANDLE) {
+#if defined(_WIN32)
+            auto pfnCreateWin32Surface = reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(pfnGetInstanceProcAddr(vkInstance, "vkCreateWin32SurfaceKHR"));
+            if (pfnCreateWin32Surface) {
+                VkWin32SurfaceCreateInfoKHR sci = {};
+                sci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+                sci.hinstance = GetModuleHandle(nullptr);
+                sci.hwnd = glfwGetWin32Window(m_Window);
+                err = pfnCreateWin32Surface(vkInstance, &sci, nullptr, &wd->Surface);
+            }
+#endif
+            if (err != VK_SUCCESS || wd->Surface == VK_NULL_HANDLE) {
+                AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: Failed to create Vulkan surface! (VkResult: {0})", static_cast<int>(err));
+                delete m_VulkanWindowData;
+                m_VulkanWindowData = nullptr;
+                return;
+            }
+        }
+
+        int fbW = 0, fbH = 0;
+        glfwGetFramebufferSize(m_Window, &fbW, &fbH);
+        m_VulkanWidth = static_cast<uint32_t>(fbW > 0 ? fbW : 1280);
+        m_VulkanHeight = static_cast<uint32_t>(fbH > 0 ? fbH : 720);
+
+        // Select Surface Format
+        const VkFormat requestSurfaceImageFormats[] = {
+            VK_FORMAT_B8G8R8A8_UNORM,
+            VK_FORMAT_R8G8B8A8_UNORM,
+            VK_FORMAT_B8G8R8A8_SRGB,
+            VK_FORMAT_R8G8B8A8_SRGB
+        };
+        const VkColorSpaceKHR requestSurfaceColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+        wd->SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(
+            vkPhysDevice,
+            wd->Surface,
+            requestSurfaceImageFormats,
+            static_cast<int>(sizeof(requestSurfaceImageFormats) / sizeof(requestSurfaceImageFormats[0])),
+            requestSurfaceColorSpace
+        );
+
+        // Select Present Mode (Mailbox > Immediate > FIFO)
+        VkPresentModeKHR present_modes[] = {
+            VK_PRESENT_MODE_MAILBOX_KHR,
+            VK_PRESENT_MODE_IMMEDIATE_KHR,
+            VK_PRESENT_MODE_FIFO_KHR
+        };
+        wd->PresentMode = ImGui_ImplVulkanH_SelectPresentMode(
+            vkPhysDevice,
+            wd->Surface,
+            present_modes,
+            static_cast<int>(sizeof(present_modes) / sizeof(present_modes[0]))
+        );
+
+        // Create Swapchain, RenderPass, and Command Buffers for Window
+        ImGui_ImplVulkanH_CreateOrResizeWindow(
+            vkInstance,
+            vkPhysDevice,
+            vkDevice,
+            wd,
+            queueFamily,
+            nullptr,
+            static_cast<int>(m_VulkanWidth),
+            static_cast<int>(m_VulkanHeight),
+            m_VulkanMinImageCount,
+            0
+        );
+
+        // Initialize ImGui GLFW implementation
+        ImGui_ImplGlfw_InitForVulkan(m_Window, true);
+
+        // Initialize ImGui Vulkan implementation with automatic descriptor pool management
+        ImGui_ImplVulkan_InitInfo initInfo = {};
+        initInfo.ApiVersion = VK_API_VERSION_1_3;
+        initInfo.Instance = vkInstance;
+        initInfo.PhysicalDevice = vkPhysDevice;
+        initInfo.Device = vkDevice;
+        initInfo.QueueFamily = queueFamily;
+        initInfo.Queue = vkQueue;
+        initInfo.DescriptorPoolSize = 1024;
+        initInfo.MinImageCount = m_VulkanMinImageCount;
+        initInfo.ImageCount = wd->ImageCount;
+        initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        initInfo.PipelineInfoMain.RenderPass = wd->RenderPass;
+        initInfo.PipelineInfoMain.Subpass = 0;
+
+        if (!ImGui_ImplVulkan_Init(&initInfo)) {
+            AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: ImGui_ImplVulkan_Init failed!");
+            return;
+        }
+
+        AXLE_CORE_INFO("ImGui Layer initialized successfully for Vulkan 1.3 (Surface SwapChain: {0}x{1}, Images: {2}, PresentMode: {3})",
+                       m_VulkanWidth, m_VulkanHeight, wd->ImageCount, static_cast<int>(wd->PresentMode));
 #else
         AXLE_CORE_WARN("Vulkan ImGui backend requested but not available without Vulkan SDK!");
 #endif

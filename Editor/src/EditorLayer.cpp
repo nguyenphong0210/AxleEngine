@@ -2822,14 +2822,14 @@ void EditorLayer::OnImGuiRender() {
                         rootCanvas ? rootCanvas->ReferenceResolution.y : 1080.0f
                     };
 
+                    Axle::UINode* selectedUINode = m_SceneHierarchyPanel.GetSelectedUINode();
                     Axle::RectTransform* targetTransform = nullptr;
-                    for (auto* child : uic.Document->GetRootNode()->Children) {
-                        if (child && child->Visible) {
-                            targetTransform = &child->Transform;
-                            break;
+                    if (selectedUINode) {
+                        targetTransform = &selectedUINode->Transform;
+                        if (selectedUINode->Parent) {
+                            parentRect = selectedUINode->Parent->ComputedRect;
                         }
-                    }
-                    if (!targetTransform) {
+                    } else {
                         targetTransform = &uic.Document->GetRootNode()->Transform;
                     }
 

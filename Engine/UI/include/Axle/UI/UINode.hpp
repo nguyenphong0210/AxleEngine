@@ -58,6 +58,11 @@ namespace Axle {
         UICanvasNode() {
             Size = ReferenceResolution;
             Anchor = UIAnchor::StretchAll;
+            Transform.AnchorMin = { 0.0f, 0.0f };
+            Transform.AnchorMax = { 1.0f, 1.0f };
+            Transform.Pivot = { 0.5f, 0.5f };
+            Transform.SizeDelta = { 0.0f, 0.0f };
+            Transform.AnchoredPosition = { 0.0f, 0.0f };
         }
         std::string_view GetTypeName() const override { return "Canvas"; }
         glm::vec2 ReferenceResolution{ 1920.0f, 1080.0f };

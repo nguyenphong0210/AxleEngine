@@ -479,9 +479,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Register offscreen HDR/SDR render target (`RHITexture`) to Dear ImGui via `ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)`.
     - [x] Synchronize layout transitions in `RHISceneRenderer` (`ColorAttachment` -> `ShaderReadOnly`) to eliminate validation layer hazards.
     - [x] Implement descriptor set recycling in `RHIViewportDescriptor` on viewport resize without leaking descriptor pool slots.
-  - [ ] **Step 3 - Dynamic Window Resize, Swapchain Recreation & Zero-Leak Recovery (`Engine/UI`)**:
-    - [ ] Gracefully handle `VK_SUBOPTIMAL_KHR` and `VK_ERROR_OUT_OF_DATE_KHR` during window drag resize, minimize, and restore.
-    - [ ] Synchronize device queues via `vkQueueWaitIdle` / `vkDeviceWaitIdle` during recreation.
+  - [x] **Step 3 - Dynamic Window Resize, Swapchain Recreation & Zero-Leak Recovery (`Engine/UI`)**:
+    - [x] Gracefully handle `VK_SUBOPTIMAL_KHR` and `VK_ERROR_OUT_OF_DATE_KHR` during window drag resize, minimize, and restore.
+    - [x] Synchronize device queues via `vkQueueWaitIdle` / `vkDeviceWaitIdle` during recreation.
   - [ ] **Step 4 - Triple-Backend Parity & Automated Verification Suite (`AxleTests.exe --step97`)**:
     - [ ] Headless unit test Step 97 verifying Vulkan physical device query, swapchain lifecycle, descriptor set binding, offscreen texture bridge, and headless render parity.
 

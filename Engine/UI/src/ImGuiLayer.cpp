@@ -908,6 +908,9 @@ namespace Axle {
                 int fbW = 0, fbH = 0;
                 glfwGetFramebufferSize(m_Window, &fbW, &fbH);
                 if (fbW > 0 && fbH > 0 && (m_VulkanSwapChainRebuild || m_VulkanWidth != static_cast<uint32_t>(fbW) || m_VulkanHeight != static_cast<uint32_t>(fbH))) {
+                    if (s_VkFuncs.vkDeviceWaitIdle) {
+                        s_VkFuncs.vkDeviceWaitIdle(vkDevice);
+                    }
                     m_VulkanWidth = static_cast<uint32_t>(fbW);
                     m_VulkanHeight = static_cast<uint32_t>(fbH);
                     ImGui_ImplVulkan_SetMinImageCount(m_VulkanMinImageCount);

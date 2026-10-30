@@ -65,9 +65,12 @@ namespace Axle {
         ID3D12DescriptorHeap* GetD3D12DescriptorHeap() const { return m_D3D12SrvHeap; }
         uint32_t GetAllocatedDescriptorCount() const { return m_AllocatedDescriptorCount; }
 
-        // Register / copy an external D3D12 SRV CPU descriptor into the ImGui heap, returning a GPU handle (ImTextureID)
+        // Register / copy an external D3D12 SRV CPU descriptor or Vulkan ImageView into the ImGui heap/pool, returning a GPU handle (ImTextureID)
         uint64_t RegisterTextureDescriptor(uint64_t cpuHandlePtr);
         void UnregisterTextureDescriptor(uint64_t gpuHandlePtr);
+
+        // Force Vulkan SwapChain rebuild on next frame (e.g. on window resize / restoration)
+        void RebuildVulkanSwapChain() { m_VulkanSwapChainRebuild = true; }
 
     private:
         static ::ImFont* s_RegularFont;

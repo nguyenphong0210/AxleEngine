@@ -475,10 +475,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Initialize `ImGui_ImplVulkan_InitInfo` with persistent `VkDescriptorPool`, graphics queue, and dynamic loader.
     - [x] Implement `ImGuiLayer::End()` Vulkan dispatch: Record `ImGui_ImplVulkan_RenderDrawData` into a command buffer, submit to graphics queue, and present via `vkQueuePresentKHR`.
     - [x] Completely resolve crash when launching or switching to `--rhi=vulkan` in `AxleEditor`.
-  - [ ] **Step 2 - Offscreen Viewport Vulkan Descriptor Bridge (`Engine/UI` & `Engine/Renderer`)**:
-    - [ ] Register offscreen HDR/SDR render target (`RHITexture`) to Dear ImGui via `ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)`.
-    - [ ] Synchronize layout transitions in `RHISceneRenderer` (`ColorAttachment` -> `ShaderReadOnly`) to eliminate validation layer hazards.
-    - [ ] Implement descriptor set recycling in `RHIViewportDescriptor` on viewport resize without leaking descriptor pool slots.
+  - [x] **Step 2 - Offscreen Viewport Vulkan Descriptor Bridge (`Engine/UI` & `Engine/Renderer`)**:
+    - [x] Register offscreen HDR/SDR render target (`RHITexture`) to Dear ImGui via `ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)`.
+    - [x] Synchronize layout transitions in `RHISceneRenderer` (`ColorAttachment` -> `ShaderReadOnly`) to eliminate validation layer hazards.
+    - [x] Implement descriptor set recycling in `RHIViewportDescriptor` on viewport resize without leaking descriptor pool slots.
   - [ ] **Step 3 - Dynamic Window Resize, Swapchain Recreation & Zero-Leak Recovery (`Engine/UI`)**:
     - [ ] Gracefully handle `VK_SUBOPTIMAL_KHR` and `VK_ERROR_OUT_OF_DATE_KHR` during window drag resize, minimize, and restore.
     - [ ] Synchronize device queues via `vkQueueWaitIdle` / `vkDeviceWaitIdle` during recreation.

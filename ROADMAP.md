@@ -469,12 +469,12 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 ### Milestone 9: Production Hardening, Vulkan 1.3 Backend Parity & Next-Gen Architecture (Phases 35+)
 - [ ] **Phase 35: High-Performance Vulkan 1.3 Graphics Backend & Editor Parity (`Engine/RHI` & `Engine/UI`)**
-  - [ ] **Step 1 - Vulkan Swapchain Presentation Engine & ImGuiLayer Backend Integration (`Engine/UI`)**:
-    - [ ] Create native `VkSurfaceKHR` from GLFW window (`glfwCreateWindowSurface`) and query surface capabilities, color formats (`VK_FORMAT_B8G8R8A8_UNORM`), and presentation modes (`VK_PRESENT_MODE_FIFO_KHR` / `VK_PRESENT_MODE_MAILBOX_KHR`).
-    - [ ] Construct Vulkan swapchain (`VkSwapchainKHR`, 3 backbuffers), render pass (`VkRenderPass`), image views, and framebuffers.
-    - [ ] Initialize `ImGui_ImplVulkan_InitInfo` with persistent `VkDescriptorPool`, graphics queue, and dynamic loader.
-    - [ ] Implement `ImGuiLayer::End()` Vulkan dispatch: Record `ImGui_ImplVulkan_RenderDrawData` into a command buffer, submit to graphics queue, and present via `vkQueuePresentKHR`.
-    - [ ] Completely resolve crash when launching or switching to `--rhi=vulkan` in `AxleEditor`.
+  - [x] **Step 1 - Vulkan Swapchain Presentation Engine & ImGuiLayer Backend Integration (`Engine/UI`)**:
+    - [x] Create native `VkSurfaceKHR` from GLFW window (`glfwCreateWindowSurface`) and query surface capabilities, color formats (`VK_FORMAT_B8G8R8A8_UNORM`), and presentation modes (`VK_PRESENT_MODE_FIFO_KHR` / `VK_PRESENT_MODE_MAILBOX_KHR`).
+    - [x] Construct Vulkan swapchain (`VkSwapchainKHR`, 3 backbuffers), render pass (`VkRenderPass`), image views, and framebuffers.
+    - [x] Initialize `ImGui_ImplVulkan_InitInfo` with persistent `VkDescriptorPool`, graphics queue, and dynamic loader.
+    - [x] Implement `ImGuiLayer::End()` Vulkan dispatch: Record `ImGui_ImplVulkan_RenderDrawData` into a command buffer, submit to graphics queue, and present via `vkQueuePresentKHR`.
+    - [x] Completely resolve crash when launching or switching to `--rhi=vulkan` in `AxleEditor`.
   - [ ] **Step 2 - Offscreen Viewport Vulkan Descriptor Bridge (`Engine/UI` & `Engine/Renderer`)**:
     - [ ] Register offscreen HDR/SDR render target (`RHITexture`) to Dear ImGui via `ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)`.
     - [ ] Synchronize layout transitions in `RHISceneRenderer` (`ColorAttachment` -> `ShaderReadOnly`) to eliminate validation layer hazards.

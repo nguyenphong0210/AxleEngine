@@ -7,8 +7,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 34** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **81 Comprehensive Headless Test Suites** (`AxleTests.exe`, 96 individual test steps up through **Step 96**) passing with **100% pass rate**.
+* **Completed Phases**: **Phase 1 through Phase 35** (100% implemented, verified, and stabilized).
+* **Automated Test Verification**: **81 Comprehensive Headless Test Suites** (`AxleTests.exe`, 96 individual test steps up through **Step 98**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Milestone 9 (Production Hardening, Vulkan Parity & Advanced Graphics)** and beyond.
 
 ---
@@ -468,7 +468,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ---
 
 ### Milestone 9: Production Hardening, Vulkan 1.3 Backend Parity & Next-Gen Architecture (Phases 35+)
-- [ ] **Phase 35: High-Performance Vulkan 1.3 Graphics Backend & Editor Parity (`Engine/RHI` & `Engine/UI`)**
+- [x] **Phase 35: High-Performance Vulkan 1.3 Graphics Backend & Editor Parity (`Engine/RHI` & `Engine/UI`)**
   - [x] **Step 1 - Vulkan Swapchain Presentation Engine & ImGuiLayer Backend Integration (`Engine/UI`)**:
     - [x] Create native `VkSurfaceKHR` from GLFW window (`glfwCreateWindowSurface`) and query surface capabilities, color formats (`VK_FORMAT_B8G8R8A8_UNORM`), and presentation modes (`VK_PRESENT_MODE_FIFO_KHR` / `VK_PRESENT_MODE_MAILBOX_KHR`).
     - [x] Construct Vulkan swapchain (`VkSwapchainKHR`, 3 backbuffers), render pass (`VkRenderPass`), image views, and framebuffers.
@@ -482,7 +482,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 3 - Dynamic Window Resize, Swapchain Recreation & Zero-Leak Recovery (`Engine/UI`)**:
     - [x] Gracefully handle `VK_SUBOPTIMAL_KHR` and `VK_ERROR_OUT_OF_DATE_KHR` during window drag resize, minimize, and restore.
     - [x] Synchronize device queues via `vkQueueWaitIdle` / `vkDeviceWaitIdle` during recreation.
-  - [ ] **Step 4 - Triple-Backend Parity & Automated Verification Suite (`AxleTests.exe --step97`)**:
-    - [ ] Headless unit test Step 97 verifying Vulkan physical device query, swapchain lifecycle, descriptor set binding, offscreen texture bridge, and headless render parity.
+  - [x] **Step 4 - Triple-Backend Parity & Automated Verification Suite (`AxleTests.exe --step98`)**:
+    - [x] Headless unit test Step 98 verifying Vulkan physical device query, swapchain lifecycle, descriptor set binding, offscreen texture bridge, and headless render parity.
 
 ---

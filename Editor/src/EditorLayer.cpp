@@ -3257,7 +3257,11 @@ void EditorLayer::RenderStatusBar() {
         float ms = m_LastDeltaTime * 1000.0f;
         const char* rhiName = "OpenGL 4.5";
         if (m_RHIViewport && m_RHIViewport->IsValid()) {
-            rhiName = "Direct3D 12";
+            if (Axle::RHI::RHIDevice::Get().IsInitialized() && Axle::RHI::RHIDevice::Get().GetBackend() == Axle::RHI::RHIType::Vulkan) {
+                rhiName = "Vulkan 1.3";
+            } else {
+                rhiName = "Direct3D 12";
+            }
         }
 
         std::string sceneName = m_CurrentScenePath.empty() ? "Untitled Scene" : m_CurrentScenePath.filename().string();

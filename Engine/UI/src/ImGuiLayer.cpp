@@ -1023,44 +1023,55 @@ namespace Axle {
 
     uint64_t ImGuiLayer::RegisterTextureDescriptor(uint64_t cpuHandlePtr) {
 #if defined(AXLE_HAS_D3D12)
-        if (m_BackendType != ImGuiBackendType::Direct3D12 || !m_D3D12SrvHeap || cpuHandlePtr == 0) {
-            return 0;
+        if (m_BackendType == ImGuiBackendType::Direct3D12 && m_D3D12SrvHeap && cpuHandlePtr != 0) {
+            auto& rhiDevice = RHI::RHIDevice::Get();
+            if (!rhiDevice.IsInitialized()) return 0;
+
+            const auto& core = rhiDevice.GetNRICore();
+            auto* d3d12Device = static_cast<ID3D12Device*>(core.GetDeviceNativeObject(rhiDevice.GetNRIDevice()));
+            if (!d3d12Device) return 0;
+
+            D3D12_CPU_DESCRIPTOR_HANDLE outCpu = {};
+            D3D12_GPU_DESCRIPTOR_HANDLE outGpu = {};
+            AllocateD3D12Descriptor(&outCpu, &outGpu);
+
+            D3D12_CPU_DESCRIPTOR_HANDLE srcCpu = {};
+            srcCpu.ptr = cpuHandlePtr;
+
+            d3d12Device->CopyDescriptorsSimple(1, outCpu, srcCpu, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            return outGpu.ptr;
         }
-        auto& rhiDevice = RHI::RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) return 0;
-
-        const auto& core = rhiDevice.GetNRICore();
-        auto* d3d12Device = static_cast<ID3D12Device*>(core.GetDeviceNativeObject(rhiDevice.GetNRIDevice()));
-        if (!d3d12Device) return 0;
-
-        D3D12_CPU_DESCRIPTOR_HANDLE outCpu = {};
-        D3D12_GPU_DESCRIPTOR_HANDLE outGpu = {};
-        AllocateD3D12Descriptor(&outCpu, &outGpu);
-
-        D3D12_CPU_DESCRIPTOR_HANDLE srcCpu = {};
-        srcCpu.ptr = cpuHandlePtr;
-
-        d3d12Device->CopyDescriptorsSimple(1, outCpu, srcCpu, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-        return outGpu.ptr;
-#else
+#endif
+#if defined(AXLE_HAS_VULKAN)
+        if (m_BackendType == ImGuiBackendType::Vulkan && cpuHandlePtr != 0) {
+            auto imageView = reinterpret_cast<VkImageView>(cpuHandlePtr);
+            VkDescriptorSet descSet = ImGui_ImplVulkan_AddTexture(imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            return reinterpret_cast<uint64_t>(descSet);
+        }
+#endif
         (void)cpuHandlePtr;
         return 0;
-#endif
     }
 
     void ImGuiLayer::UnregisterTextureDescriptor(uint64_t gpuHandlePtr) {
 #if defined(AXLE_HAS_D3D12)
-        if (m_BackendType != ImGuiBackendType::Direct3D12 || !m_D3D12SrvHeap || gpuHandlePtr == 0) {
+        if (m_BackendType == ImGuiBackendType::Direct3D12 && m_D3D12SrvHeap && gpuHandlePtr != 0) {
+            D3D12_GPU_DESCRIPTOR_HANDLE gpuStart = m_D3D12SrvHeap->GetGPUDescriptorHandleForHeapStart();
+            if (gpuHandlePtr >= gpuStart.ptr) {
+                uint32_t index = static_cast<uint32_t>((gpuHandlePtr - gpuStart.ptr) / m_D3D12DescriptorSize);
+                m_FreeDescriptorIndices.push_back(index);
+                return;
+            }
+        }
+#endif
+#if defined(AXLE_HAS_VULKAN)
+        if (m_BackendType == ImGuiBackendType::Vulkan && gpuHandlePtr != 0) {
+            auto descSet = reinterpret_cast<VkDescriptorSet>(gpuHandlePtr);
+            ImGui_ImplVulkan_RemoveTexture(descSet);
             return;
         }
-        D3D12_GPU_DESCRIPTOR_HANDLE gpuStart = m_D3D12SrvHeap->GetGPUDescriptorHandleForHeapStart();
-        if (gpuHandlePtr < gpuStart.ptr) return;
-
-        uint32_t index = static_cast<uint32_t>((gpuHandlePtr - gpuStart.ptr) / m_D3D12DescriptorSize);
-        m_FreeDescriptorIndices.push_back(index);
-#else
-        (void)gpuHandlePtr;
 #endif
+        (void)gpuHandlePtr;
     }
 
     void ImGuiLayer::AllocateD3D12Descriptor(void* outCpuHandle, void* outGpuHandle) {

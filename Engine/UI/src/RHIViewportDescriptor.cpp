@@ -252,8 +252,13 @@ namespace Axle {
             m_ImTextureID = 1;
             return true;
         } else if (m_ImGuiLayer->GetBackendType() == ImGuiBackendType::Vulkan) {
-            m_ImTextureID = 1;
-            return true;
+            uint64_t vkImageView = m_ColorTexture->GetNativeSRVHandle();
+            if (vkImageView == 0) {
+                AXLE_CORE_ERROR("RHIViewportDescriptor::RegisterWithImGui: Native Vulkan ImageView handle is null!");
+                return false;
+            }
+            m_ImTextureID = m_ImGuiLayer->RegisterTextureDescriptor(vkImageView);
+            return m_ImTextureID != 0;
         }
         return false;
     }

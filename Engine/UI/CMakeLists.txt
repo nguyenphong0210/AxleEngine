@@ -101,4 +101,19 @@ if (Vulkan_FOUND)
     )
     target_link_libraries(AxleUI PRIVATE Vulkan::Vulkan)
     target_compile_definitions(AxleUI PUBLIC AXLE_HAS_VULKAN=1)
+elseif (vulkan_headers_SOURCE_DIR OR EXISTS "${CMAKE_BINARY_DIR}/_deps/vulkan_headers-src/include")
+    if (vulkan_headers_SOURCE_DIR)
+        set(VK_HEADERS_DIR "${vulkan_headers_SOURCE_DIR}/include")
+    else()
+        set(VK_HEADERS_DIR "${CMAKE_BINARY_DIR}/_deps/vulkan_headers-src/include")
+    endif()
+    target_include_directories(AxleUI PUBLIC ${VK_HEADERS_DIR})
+    target_sources(AxleUI PRIVATE
+        ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/backends/imgui_impl_vulkan.cpp
+    )
+    target_compile_definitions(AxleUI PUBLIC 
+        AXLE_HAS_VULKAN=1 
+        IMGUI_IMPL_VULKAN_NO_PROTOTYPES=1
+        VK_NO_PROTOTYPES=1
+    )
 endif()

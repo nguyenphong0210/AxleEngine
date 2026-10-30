@@ -288,6 +288,13 @@ namespace Axle::RHI {
             AXLE_CORE_WARN("Failed to query nri::SwapChainInterface (presentation may be unavailable).");
         }
 
+        if (backend == RHIType::Vulkan) {
+            res = nri::nriGetInterface(*m_Device, NRI_INTERFACE(nri::WrapperVKInterface), (void*)&m_NRI.WrapperVK);
+            if (res != nri::Result::SUCCESS) {
+                AXLE_CORE_WARN("Failed to query nri::WrapperVKInterface for Vulkan device!");
+            }
+        }
+
         res = m_NRI.Core.GetQueue(*m_Device, nri::QueueType::GRAPHICS, 0, m_GraphicsQueue);
         if (res != nri::Result::SUCCESS || !m_GraphicsQueue) {
             AXLE_CORE_ERROR("Failed to obtain primary Graphics Queue!");

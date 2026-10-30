@@ -6,6 +6,7 @@
 #include <Extensions/NRIHelper.h>
 #include <Extensions/NRIStreamer.h>
 #include <Extensions/NRISwapChain.h>
+#include <Extensions/NRIWrapperVK.h>
 
 #include <memory>
 #include <vector>
@@ -17,6 +18,7 @@ namespace Axle::RHI {
         nri::HelperInterface Helper = {};
         nri::StreamerInterface Streamer = {};
         nri::SwapChainInterface SwapChain = {};
+        nri::WrapperVKInterface WrapperVK = {};
     };
 
     class RHIDevice {
@@ -58,6 +60,7 @@ namespace Axle::RHI {
         const nri::HelperInterface& GetNRIHelper() const { return m_NRI.Helper; }
         const nri::StreamerInterface& GetNRIStreamer() const { return m_NRI.Streamer; }
         const nri::SwapChainInterface& GetNRISwapChain() const { return m_NRI.SwapChain; }
+        const nri::WrapperVKInterface& GetNRIWrapperVK() const { return m_NRI.WrapperVK; }
 
     private:
         bool TryInitNRI(RHIType backend, const RHIDeviceDesc& desc, const nri::AdapterDesc* adapterDesc);

@@ -231,5 +231,5 @@ flowchart LR
 3. **Hybrid Texture Loading:**
    - **Direct File Mode:** Simple UI icons and test textures can directly reference `.png` / `.jpg` strings without creating a separate wrapper file.
    - **Descriptor Mode:** High-fidelity PBR textures reference a `Texture { ... }` `.axleasset` for explicit color-space (sRGB vs Linear), Anisotropic 16x filtering, BC7 compression, and HDR Skybox IBL generation.
-4. **Backward Compatibility:** All existing `.axlemat`, `.axleui`, `.axlemesh`, `.amat` files continue to load transparently through legacy fallback paths.
+4. **Single Clean Standard:** Pure `.axleasset` format for all component resources. Zero legacy technical debt, no dual-extension clutter; all existing assets are migrated cleanly to `.axleasset`.
 

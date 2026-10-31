@@ -489,7 +489,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [ ] Implement centralized `AssetDSL` tokenizer supporting C/QML-style declarative blocks (`Material`, `Canvas`, `ParticleEmitter`, `Mesh`, `Texture`, `Terrain`, `PhysicsMaterial`).
     - [ ] Support native Hex color `#RRGGBB` / `#RRGGBBAA`, vectors `[x, y]`, floats, strings, single-line `//` and multi-line `/* */` comments.
     - [ ] Built-in lightweight peek utility `AssetDSL::PeekAssetKind()` to identify asset type for Content Browser icons with zero full-parse cost.
-    - [ ] 100% backward compatibility loader for legacy `.axlemat`, `.axleui`, `.axlemesh`, `.amat` files.
+    - [ ] 100% Single Pure Standard: Zero legacy parser debt; directly migrate existing `.axlemat` and `.axleui` files to `.axleasset`.
   - [ ] **Step 2 - Material & Texture Standardization, Drag-and-Drop Image Ingest & RHI Preview Parity (`Engine/Asset`, `Engine/UI`, `Engine/Scene`)**:
     - [ ] Standardize `Material { ... }` and `Texture { ... }` in `.axleasset` with bidirectional load/save in `MaterialComponent` and `AssetManager`.
     - [ ] **External Drag-and-Drop Image Ingest Pipeline**: Dragging external `.png`, `.jpg`, `.tga`, `.hdr` files from Windows Explorer into Content Browser or Viewport automatically ingests them, intelligently detects texture type from filename suffixes (`_diffuse`/`_albedo`/`_d` -> sRGB Color, `_normal`/`_norm`/`_n` -> Linear Normal, `_roughness`/`_orm` -> Linear Data, `.hdr` -> CubemapHDR), and auto-generates companion `.axleasset` descriptors.
@@ -504,7 +504,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [ ] Add `[Open in VFX Editor]` shortcut button directly on `ParticleEmitterComponent` in Inspector to dock and link the editor.
     - [ ] Upgrade `VFXEditorPanel` 3D preview viewport to multi-backend RHI (Vulkan / D3D12).
   - [ ] **Step 4 - UI Canvas & 3D Geometry Integration (`Engine/UI`, `Engine/Asset`)**:
-    - [ ] Migrate `.axleui` to `.axleasset` under `Canvas { ... }` root block with dual-extension loading.
+    - [ ] Migrate `.axleui` to `.axleasset` under `Canvas { ... }` root block cleanly replacing `.axleui`.
     - [ ] Unify `.axlemesh` into `Mesh { ... }` in `.axleasset` with automatic `.axlebin` baking and zero-overhead GPU loading.
     - [ ] Standardize `Terrain { ... }` and `PhysicsMaterial { ... }` into `.axleasset`.
     - [ ] Automated test suite Step 99 (`AxleTests.exe --step99`) validating AST parsing, round-trip serialization, backward compatibility, and Vulkan RHI preview rendering.

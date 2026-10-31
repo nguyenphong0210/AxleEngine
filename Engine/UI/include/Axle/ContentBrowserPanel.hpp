@@ -34,6 +34,7 @@ namespace Axle {
         static std::filesystem::path CreateNewFolder(const std::filesystem::path& parentDir, const std::string& baseName = "New_Folder");
         static std::filesystem::path CreateNewScene(const std::filesystem::path& parentDir, const std::string& baseName = "New_Scene");
         static std::filesystem::path CreateNewMaterial(const std::filesystem::path& parentDir, const std::string& baseName = "New_Material");
+        static std::filesystem::path CreateNewTexture(const std::filesystem::path& parentDir, const std::string& baseName = "New_Texture");
         static std::filesystem::path CreateNewScript(const std::filesystem::path& parentDir, const std::string& baseName = "NewScript");
         static std::pair<std::filesystem::path, std::filesystem::path> CreateNewClass(const std::filesystem::path& parentDir, const std::string& baseName = "NewClass");
         static std::filesystem::path CreateNewPhysicsMaterial(const std::filesystem::path& parentDir, const std::string& baseName = "New_PhysicsMaterial");

@@ -691,6 +691,31 @@ Mesh {
     }
     std::cout << "  -> PASS: 3D preview mesh selector and 1-click PBR material presets verified." << std::endl;
 
+    // [99.15] Content Browser Pure .axleasset Material and Texture Creation
+    std::cout << "\n[99.15] Testing Content Browser Material & Texture Creation..." << std::endl;
+    {
+        std::filesystem::path tempDir = "temp_cb_test";
+        std::filesystem::create_directories(tempDir);
+
+        auto matPath = ContentBrowserPanel::CreateNewMaterial(tempDir, "TestPBRMat");
+        assert(std::filesystem::exists(matPath));
+        assert(matPath.extension() == ".axleasset");
+        assert(AssetDSL::PeekAssetKindFromFile(matPath.string()) == AssetKind::Material);
+
+        auto texPath = ContentBrowserPanel::CreateNewTexture(tempDir, "TestPBRTex");
+        assert(std::filesystem::exists(texPath));
+        assert(texPath.extension() == ".axleasset");
+        assert(AssetDSL::PeekAssetKindFromFile(texPath.string()) == AssetKind::Texture);
+
+        TextureDescriptor reloadedTex;
+        assert(TextureDescriptor::Load(texPath.string(), reloadedTex));
+        assert(reloadedTex.Type == "Color");
+        assert(reloadedTex.Filter == "Anisotropic16x");
+
+        std::filesystem::remove_all(tempDir);
+    }
+    std::cout << "  -> PASS: Content Browser Material and Texture .axleasset creation actions verified." << std::endl;
+
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;
 }

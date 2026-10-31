@@ -1,3 +1,4 @@
+#include <Axle/TextureDescriptor.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
@@ -518,13 +519,32 @@ namespace Axle {
     }
 
     std::filesystem::path ContentBrowserPanel::CreateNewMaterial(const std::filesystem::path& parentDir, const std::string& baseName) {
-        std::filesystem::path newPath = parentDir / (baseName + ".axlemat");
+        std::filesystem::path newPath = parentDir / (baseName + ".axleasset");
         int counter = 1;
         while (std::filesystem::exists(newPath)) {
-            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axlemat");
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
-        MaterialComponent defaultMat;
-        if (SceneHierarchyPanel::SaveMaterialAsset(newPath, defaultMat)) {
+        Material mat(newPath.stem().string());
+        if (mat.Save(newPath)) {
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
+    }
+
+    std::filesystem::path ContentBrowserPanel::CreateNewTexture(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / (baseName + ".axleasset");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
+        }
+        TextureDescriptor desc;
+        desc.Name = newPath.stem().string();
+        desc.Type = "Color";
+        desc.Filter = "Anisotropic16x";
+        desc.WrapU = "Repeat";
+        desc.WrapV = "Repeat";
+        desc.GenerateMips = true;
+        if (TextureDescriptor::Save(newPath.string(), desc)) {
             AssetManager::GetOrCreateMetadata(newPath);
         }
         return newPath;
@@ -704,8 +724,11 @@ namespace Axle {
             if (ImGui::MenuItem("Scene")) {
                 CreateNewScene(m_CurrentDirectory);
             }
-            if (ImGui::MenuItem("Material")) {
+            if (ImGui::MenuItem("Material Asset (.axleasset)")) {
                 CreateNewMaterial(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("Texture Asset (.axleasset)")) {
+                CreateNewTexture(m_CurrentDirectory);
             }
             if (ImGui::MenuItem("Physics Material")) {
                 CreateNewPhysicsMaterial(m_CurrentDirectory);
@@ -1300,9 +1323,17 @@ namespace Axle {
                         SetStatusNotification("Created Scene: " + p.filename().string());
                         RefreshThumbnails();
                     }
-                    if (ImGui::MenuItem("Material Asset (.axlemat)")) {
+                    if (ImGui::MenuItem("Material Asset (.axleasset)")) {
                         auto p = CreateNewMaterial(m_CurrentDirectory);
                         SetStatusNotification("Created Material Asset: " + p.filename().string());
+                        if (m_OnSelectAssetCallback) {
+                            m_OnSelectAssetCallback(p);
+                        }
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("Texture Asset (.axleasset)")) {
+                        auto p = CreateNewTexture(m_CurrentDirectory);
+                        SetStatusNotification("Created Texture Asset: " + p.filename().string());
                         if (m_OnSelectAssetCallback) {
                             m_OnSelectAssetCallback(p);
                         }

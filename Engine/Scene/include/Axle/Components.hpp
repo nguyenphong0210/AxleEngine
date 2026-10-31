@@ -14,6 +14,7 @@
 #include <Axle/CharacterController.hpp>
 #include <Axle/ParticleSystem.hpp>
 #include <Axle/ParticleEmitter.hpp>
+#include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
 #include <Axle/UI/UIDocument.hpp>
@@ -1216,6 +1217,7 @@ namespace Axle {
     struct ParticleEmitterComponent {
         ParticleEmitterConfig Config;
         std::shared_ptr<ParticleSystem> System = nullptr;
+        std::string AssetPath;
 
         UUID TextureAsset = 0;
         std::string TexturePath;
@@ -1264,6 +1266,23 @@ namespace Axle {
         void Stop() {
             Active = false;
             if (System) System->SetEmitting(false);
+        }
+
+        bool LoadFromAsset(const std::string& path) {
+            AssetPath = path;
+            std::string texPath;
+            if (ParticleEmitterSerializer::DeserializeFromFile(path, Config, texPath)) {
+                if (!texPath.empty()) {
+                    TexturePath = texPath;
+                }
+                Initialize();
+                return true;
+            }
+            return false;
+        }
+
+        bool SaveToAsset(const std::string& path) const {
+            return ParticleEmitterSerializer::SerializeToFile(path, Config, TexturePath);
         }
 
         void Reset() {

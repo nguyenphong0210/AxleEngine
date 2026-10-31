@@ -16,6 +16,7 @@
 #include <Axle/AssetDSL.hpp>
 #include <Axle/TextureDescriptor.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
+#include <Axle/ParticleEmitterSerializer.hpp>
 
 // =============================================================================
 // STEP 98: PHASE 35 STEP 4 - TRIPLE-BACKEND PARITY & AUTOMATED VULKAN 1.3 VERIFICATION
@@ -715,6 +716,64 @@ Mesh {
         std::filesystem::remove_all(tempDir);
     }
     std::cout << "  -> PASS: Content Browser Material and Texture .axleasset creation actions verified." << std::endl;
+
+    // [99.16] Particle Emitter .axleasset Schema and Serialization
+    std::cout << "\n[99.16] Testing ParticleEmitter .axleasset Schema and Serialization..." << std::endl;
+    {
+        ParticleEmitterConfig emitterCfg;
+        emitterCfg.Name = "ExhaustFlame";
+        emitterCfg.MaxParticles = 500;
+        emitterCfg.EmissionRate = 80.0f;
+        emitterCfg.Lifetime = FloatRange(0.15f, 0.40f);
+        emitterCfg.InitialSpeed = FloatRange(4.0f, 10.0f);
+        emitterCfg.Shape.Type = ParticleEmitterShapeType::Cone;
+        emitterCfg.Shape.ConeAngle = 0.35f;
+        emitterCfg.Shape.Radius = 0.05f;
+        emitterCfg.ColorOverLifetime.StartColor = glm::vec4(1.0f, 0.27f, 0.0f, 1.0f);
+        emitterCfg.ColorOverLifetime.EndColor = glm::vec4(0.2f, 0.0f, 0.0f, 0.0f);
+        emitterCfg.BlendMode = ParticleBlendMode::Additive;
+        emitterCfg.CurlNoise.Enabled = true;
+        emitterCfg.CurlNoise.Strength = 2.5f;
+
+        std::string serialized = ParticleEmitterSerializer::Serialize(emitterCfg, "textures/particles/flame.png");
+        assert(!serialized.empty());
+        assert(serialized.find("ParticleEmitter {") != std::string::npos);
+        assert(serialized.find("ExhaustFlame") != std::string::npos);
+        assert(serialized.find("Additive") != std::string::npos);
+        assert(serialized.find("Cone") != std::string::npos);
+
+        // Fast peek validation
+        assert(AssetDSL::PeekAssetKind(serialized) == AssetKind::ParticleEmitter);
+
+        // Deserialization round-trip
+        ParticleEmitterConfig loadedCfg;
+        std::string loadedTex;
+        bool desOk = ParticleEmitterSerializer::Deserialize(serialized, loadedCfg, loadedTex);
+        assert(desOk);
+        assert(loadedCfg.Name == "ExhaustFlame");
+        assert(loadedCfg.MaxParticles == 500);
+        assert(std::abs(loadedCfg.EmissionRate - 80.0f) < 0.01f);
+        assert(std::abs(loadedCfg.Lifetime.Min - 0.15f) < 0.01f);
+        assert(std::abs(loadedCfg.Lifetime.Max - 0.40f) < 0.01f);
+        assert(loadedCfg.Shape.Type == ParticleEmitterShapeType::Cone);
+        assert(std::abs(loadedCfg.Shape.ConeAngle - 0.35f) < 0.01f);
+        assert(loadedCfg.BlendMode == ParticleBlendMode::Additive);
+        assert(loadedCfg.CurlNoise.Enabled == true);
+        assert(std::abs(loadedCfg.CurlNoise.Strength - 2.5f) < 0.01f);
+        assert(loadedTex == "textures/particles/flame.png");
+
+        // Component load & save test
+        std::filesystem::path tempFile = "temp_exhaust.axleasset";
+        assert(ParticleEmitterSerializer::SerializeToFile(tempFile.string(), emitterCfg, "textures/flame.png"));
+
+        ParticleEmitterComponent comp;
+        assert(comp.LoadFromAsset(tempFile.string()));
+        assert(comp.Config.MaxParticles == 500);
+        assert(comp.TexturePath == "textures/flame.png");
+
+        std::filesystem::remove(tempFile);
+    }
+    std::cout << "  -> PASS: ParticleEmitter .axleasset schema and serialization verified." << std::endl;
 
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;

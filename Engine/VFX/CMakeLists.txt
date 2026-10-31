@@ -7,6 +7,7 @@ add_library(AxleVFX STATIC
     src/CurlNoise.cpp
     src/ParticleCollision.cpp
     src/ParticleForceField.cpp
+    src/ParticleEmitterSerializer.cpp
 )
 add_library(Axle::VFX ALIAS AxleVFX)
 
@@ -20,6 +21,7 @@ target_link_libraries(AxleVFX
         Axle::Core
         Axle::Renderer
         Axle::RHI
+        Axle::Asset
     PRIVATE
         glad
 )

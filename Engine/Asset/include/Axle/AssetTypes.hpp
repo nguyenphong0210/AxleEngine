@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/AssetDSL.hpp>
 #include <string>
 #include <string_view>
 #include <filesystem>
@@ -17,7 +18,10 @@ namespace Axle {
         Script,
         Texture,
         Audio,
-        Font
+        Font,
+        ParticleEmitter,
+        Canvas,
+        Terrain
     };
 
     inline const char* AssetTypeToString(AssetType type) {
@@ -31,21 +35,27 @@ namespace Axle {
             case AssetType::Texture:         return "Texture";
             case AssetType::Audio:           return "Audio";
             case AssetType::Font:            return "Font";
+            case AssetType::ParticleEmitter: return "ParticleEmitter";
+            case AssetType::Canvas:          return "Canvas";
+            case AssetType::Terrain:         return "Terrain";
             case AssetType::None:
             default:                         return "None";
         }
     }
 
     inline AssetType AssetTypeFromString(std::string_view typeStr) {
-        if (typeStr == "Scene")           return AssetType::Scene;
-        if (typeStr == "Mesh")            return AssetType::Mesh;
-        if (typeStr == "Assembly")        return AssetType::Assembly;
-        if (typeStr == "Material")        return AssetType::Material;
-        if (typeStr == "PhysicsMaterial") return AssetType::PhysicsMaterial;
-        if (typeStr == "Script")          return AssetType::Script;
-        if (typeStr == "Texture")         return AssetType::Texture;
-        if (typeStr == "Audio")           return AssetType::Audio;
-        if (typeStr == "Font")            return AssetType::Font;
+        if (typeStr == "Scene")                                  return AssetType::Scene;
+        if (typeStr == "Mesh")                                   return AssetType::Mesh;
+        if (typeStr == "Assembly")                               return AssetType::Assembly;
+        if (typeStr == "Material")                               return AssetType::Material;
+        if (typeStr == "PhysicsMaterial")                        return AssetType::PhysicsMaterial;
+        if (typeStr == "Script")                                 return AssetType::Script;
+        if (typeStr == "Texture")                                return AssetType::Texture;
+        if (typeStr == "Audio")                                  return AssetType::Audio;
+        if (typeStr == "Font")                                   return AssetType::Font;
+        if (typeStr == "ParticleEmitter" || typeStr == "VFX")    return AssetType::ParticleEmitter;
+        if (typeStr == "Canvas" || typeStr == "UI")              return AssetType::Canvas;
+        if (typeStr == "Terrain")                                return AssetType::Terrain;
         return AssetType::None;
     }
 
@@ -54,7 +64,20 @@ namespace Axle {
         std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
 
         if (ext == ".axlescene" || ext == ".scene") return AssetType::Scene;
-        if (ext == ".axlemat" || ext == ".amat" || ext == ".mat" || ext == ".axleasset") return AssetType::Material;
+        if (ext == ".axleasset") {
+            AssetKind kind = AssetDSL::PeekAssetKindFromFile(path.string());
+            switch (kind) {
+                case AssetKind::Material:        return AssetType::Material;
+                case AssetKind::ParticleEmitter: return AssetType::ParticleEmitter;
+                case AssetKind::Texture:         return AssetType::Texture;
+                case AssetKind::Canvas:          return AssetType::Canvas;
+                case AssetKind::Mesh:            return AssetType::Mesh;
+                case AssetKind::Terrain:         return AssetType::Terrain;
+                case AssetKind::PhysicsMaterial: return AssetType::PhysicsMaterial;
+                default:                         return AssetType::Material;
+            }
+        }
+        if (ext == ".axlemat" || ext == ".amat" || ext == ".mat") return AssetType::Material;
         if (ext == ".physmat") return AssetType::PhysicsMaterial;
         if (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") return AssetType::Mesh;
         if (ext == ".axle") return AssetType::Assembly;

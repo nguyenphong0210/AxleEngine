@@ -484,5 +484,27 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Synchronize device queues via `vkQueueWaitIdle` / `vkDeviceWaitIdle` during recreation.
   - [x] **Step 4 - Triple-Backend Parity & Automated Verification Suite (`AxleTests.exe --step98`)**:
     - [x] Headless unit test Step 98 verifying Vulkan physical device query, swapchain lifecycle, descriptor set binding, offscreen texture bridge, and headless render parity.
+- [ ] **Phase 36: Unified `.axleasset` Architecture & Multi-Backend Component Resource Standardization (`Engine/Asset`, `Engine/Scene`, `Engine/UI`)**
+  - [ ] **Step 1 - Core `AssetDSL` Lexer/Parser & Shared Resource Pipeline (`Engine/Asset`)**:
+    - [ ] Implement centralized `AssetDSL` tokenizer supporting C/QML-style declarative blocks (`Material`, `Canvas`, `ParticleEmitter`, `Mesh`, `Terrain`, `PhysicsMaterial`).
+    - [ ] Support native Hex color `#RRGGBB` / `#RRGGBBAA`, vectors `[x, y]`, floats, strings, single-line `//` and multi-line `/* */` comments.
+    - [ ] Built-in lightweight peek utility `AssetDSL::PeekAssetKind()` to identify asset type for Content Browser icons with zero full-parse cost.
+    - [ ] 100% backward compatibility loader for legacy `.axlemat`, `.axleui`, `.axlemesh`, `.amat` files.
+  - [ ] **Step 2 - Material Standardization & RHI Vulkan/D3D12 Preview Parity (`Engine/Asset`, `Engine/UI`, `Engine/Scene`)**:
+    - [ ] Standardize `Material { ... }` in `.axleasset` with bidirectional load/save in `MaterialComponent` and `AssetManager`.
+    - [ ] Eliminate legacy OpenGL dependencies in material pipeline (`Window::HasActiveContext()`, `Texture2D::Create`), wiring directly to `RHI::RHIMaterial` and Tier-2 Bindless descriptors.
+    - [ ] Upgrade `AssetPreviewPanel` from legacy OpenGL FBO to multi-backend RHI descriptor bridge (`ImGui_ImplVulkan_AddTexture` / `ImGui_ImplDX12_AddTexture`), restoring live 3D PBR turntable preview on Vulkan 1.3 & D3D12.
+    - [ ] Add 3D preview mesh selector (Sphere, Cube, Cylinder, Plane) & 1-click PBR material presets bar in Material Inspector.
+    - [ ] Content Browser `Create -> Material Asset (.axleasset)` integration with PBR Sphere icon and smart drag & drop to Entity.
+  - [ ] **Step 3 - VFX Particle System Asset & Dedicated Inspector Docking (`Engine/VFX`, `Engine/UI`)**:
+    - [ ] Standardize `ParticleEmitter { ... }` in `.axleasset` (kinematics, shapes, curves, flipbook, force fields).
+    - [ ] Add `Create -> VFX Asset (.axleasset)` in Content Browser.
+    - [ ] Add `[Open in VFX Editor]` shortcut button directly on `ParticleEmitterComponent` in Inspector to dock and link the editor.
+    - [ ] Upgrade `VFXEditorPanel` 3D preview viewport to multi-backend RHI (Vulkan / D3D12).
+  - [ ] **Step 4 - UI Canvas & 3D Geometry Integration (`Engine/UI`, `Engine/Asset`)**:
+    - [ ] Migrate `.axleui` to `.axleasset` under `Canvas { ... }` root block with dual-extension loading.
+    - [ ] Unify `.axlemesh` into `Mesh { ... }` in `.axleasset` with automatic `.axlebin` baking and zero-overhead GPU loading.
+    - [ ] Standardize `Terrain { ... }` and `PhysicsMaterial { ... }` into `.axleasset`.
+    - [ ] Automated test suite Step 99 (`AxleTests.exe --step99`) validating AST parsing, round-trip serialization, backward compatibility, and Vulkan RHI preview rendering.
 
 ---

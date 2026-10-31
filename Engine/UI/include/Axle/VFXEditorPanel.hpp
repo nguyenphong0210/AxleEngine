@@ -4,6 +4,7 @@
 #include <Axle/ParticleSystem.hpp>
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/Framebuffer.hpp>
+#include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <glm/glm.hpp>
@@ -27,6 +28,10 @@ namespace Axle {
         void SetSceneContext(Scene* scene) { m_Scene = scene; }
         void SetSelectedEntity(Entity entity);
         void SetEmitterConfig(const ParticleEmitterConfig& config);
+
+                void InitRHI(class ImGuiLayer* imguiLayer);
+        RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
+        bool HasRHIViewport() const { return m_RHIViewport != nullptr && m_RHIViewport->IsValid(); }
 
         bool IsOpen() const { return m_IsOpen; }
         void SetOpen(bool open) { m_IsOpen = open; }
@@ -58,7 +63,9 @@ namespace Axle {
         std::unique_ptr<ParticleSystem> m_PreviewSystem;
         std::unique_ptr<ParticleRenderer> m_ParticleRenderer;
         std::shared_ptr<Framebuffer> m_Framebuffer;
-
+        std::unique_ptr<RHIViewportDescriptor> m_RHIViewport;
+        class ImGuiLayer* m_ImGuiLayer = nullptr;
+        
         bool m_IsOpen = false;
         bool m_IsPlaying = true;
         bool m_IsLooping = true;

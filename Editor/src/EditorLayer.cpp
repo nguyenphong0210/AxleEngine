@@ -187,6 +187,7 @@ void EditorLayer::OnAttach() {
     m_ContentBrowserPanel.SetRootPath(Axle::FileSystem::GetAssetDirectory());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
     m_AssetPreviewPanel.InitRHI(m_ImGuiLayer);
+    m_VFXEditorPanel.InitRHI(m_ImGuiLayer);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
 
     m_ContentBrowserPanel.SetOpenUICanvasCallback([this](const std::filesystem::path& path) {

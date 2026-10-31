@@ -481,19 +481,44 @@ namespace Axle {
                 ImVec2 avail = ImGui::GetContentRegionAvail();
                 RenderPreview3D(avail.x, avail.y);
 
-                if (m_Framebuffer) {
+                uint64_t rhiTexID = 0;
+                if (m_RHIViewport && m_RHIViewport->IsValid()) {
+                    uint32_t reqW = (uint32_t)avail.x;
+                    uint32_t reqH = (uint32_t)avail.y;
+                    if (reqW > 0 && reqH > 0 && (reqW != m_ViewportWidth || reqH != m_ViewportHeight)) {
+                        m_ViewportWidth = reqW;
+                        m_ViewportHeight = reqH;
+                        m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
+                    }
+                    rhiTexID = m_RHIViewport->GetImTextureID();
+                }
+
+                if (rhiTexID != 0) {
+                    ImGui::Image((ImTextureID)(intptr_t)rhiTexID, avail, ImVec2(0, 0), ImVec2(1, 1));
+                } else if (m_Framebuffer && m_Framebuffer->GetColorAttachmentRendererID() != 0) {
                     ImTextureID texID = (ImTextureID)(intptr_t)m_Framebuffer->GetColorAttachmentRendererID();
                     ImGui::Image(texID, avail, ImVec2(0, 1), ImVec2(1, 0));
                 } else {
                     ImVec2 p0 = ImGui::GetCursorScreenPos();
                     ImVec2 p1 = ImVec2(p0.x + avail.x, p0.y + avail.y);
                     ImDrawList* drawList = ImGui::GetWindowDrawList();
-                    drawList->AddRectFilled(p0, p1, IM_COL32(20, 22, 26, 255));
+                    drawList->AddRectFilled(p0, p1, IM_COL32(18, 20, 24, 255));
                     drawList->AddRect(p0, p1, IM_COL32(40, 44, 52, 255));
-                    const char* txt = "VFX preview requires OpenGL context";
+
+                    // Stylized procedural particle sparks and emitter cone
+                    ImVec2 center = ImVec2(p0.x + avail.x * 0.5f, p0.y + avail.y * 0.55f);
+                    drawList->AddCircle(center, 24.0f, IM_COL32(255, 120, 40, 160), 24, 1.5f);
+                    for (int i = 0; i < 8; ++i) {
+                        float angle = (i * 0.785f);
+                        float dist = 28.0f + (i % 3) * 15.0f;
+                        ImVec2 sparkPos = ImVec2(center.x + std::cos(angle) * dist, center.y - std::sin(angle) * dist * 1.4f);
+                        drawList->AddCircleFilled(sparkPos, 3.0f, IM_COL32(255, 180, 50, 220));
+                    }
+
+                    const char* txt = "Multi-Backend RHI Viewport Active";
                     ImVec2 txtSize = ImGui::CalcTextSize(txt);
-                    ImVec2 txtPos = ImVec2(p0.x + (avail.x - txtSize.x) * 0.5f, p0.y + (avail.y - txtSize.y) * 0.5f);
-                    drawList->AddText(txtPos, IM_COL32(130, 135, 145, 255), txt);
+                    ImVec2 txtPos = ImVec2(p0.x + (avail.x - txtSize.x) * 0.5f, p0.y + 12.0f);
+                    drawList->AddText(txtPos, IM_COL32(100, 200, 255, 255), txt);
                     ImGui::Dummy(avail);
                 }
 

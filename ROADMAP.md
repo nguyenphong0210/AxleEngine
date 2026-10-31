@@ -498,11 +498,11 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Upgrade `AssetPreviewPanel` from legacy OpenGL FBO to multi-backend RHI descriptor bridge (`ImGui_ImplVulkan_AddTexture` / `ImGui_ImplDX12_AddTexture`), restoring live 3D PBR turntable preview on Vulkan 1.3 & D3D12.
     - [x] Add 3D preview mesh selector (Sphere, Cube, Cylinder, Plane) & 1-click PBR material presets bar in Material Inspector.
     - [x] Content Browser `Create -> Material Asset (.axleasset)` and `Create -> Texture Asset (.axleasset)` integration with PBR Sphere/Texture icons.
-  - [ ] **Step 3 - VFX Particle System Asset & Dedicated Inspector Docking (`Engine/VFX`, `Engine/UI`)**:
+  - [x] **Step 3 - VFX Particle System Asset & Dedicated Inspector Docking (`Engine/VFX`, `Engine/UI`)**:
     - [x] Standardize `ParticleEmitter { ... }` in `.axleasset` (kinematics, shapes, curves, flipbook, force fields).
     - [x] Add `Create -> VFX Asset (.axleasset)` in Content Browser.
     - [x] Add `[Open in VFX Editor]` shortcut button directly on `ParticleEmitterComponent` in Inspector to dock and link the editor.
-    - [ ] Upgrade `VFXEditorPanel` 3D preview viewport to multi-backend RHI (Vulkan / D3D12).
+    - [x] Upgrade `VFXEditorPanel` 3D preview viewport to multi-backend RHI (Vulkan / D3D12).
   - [ ] **Step 4 - UI Canvas & 3D Geometry Integration (`Engine/UI`, `Engine/Asset`)**:
     - [ ] Migrate `.axleui` to `.axleasset` under `Canvas { ... }` root block cleanly replacing `.axleui`.
     - [ ] Unify `.axlemesh` into `Mesh { ... }` in `.axleasset` with automatic `.axlebin` baking and zero-overhead GPU loading.

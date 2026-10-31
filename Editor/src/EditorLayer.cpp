@@ -195,6 +195,11 @@ void EditorLayer::OnAttach() {
     m_SceneHierarchyPanel.SetOpenUICanvasDesignerCallback([this](const std::filesystem::path& path) {
         OpenUICanvasDesigner(path);
     });
+    m_SceneHierarchyPanel.SetOpenVFXEditorCallback([this](Entity entity) {
+        m_ShowVFXEditor = true;
+        m_VFXEditorPanel.SetOpen(true);
+        m_VFXEditorPanel.SetSelectedEntity(entity);
+    });
 
     // Setup Serializer Context for meshes & scripts
     m_SerializerContext.CubeMesh = m_CubeMesh;

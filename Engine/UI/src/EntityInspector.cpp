@@ -1831,6 +1831,16 @@ namespace Axle {
 
         // Particle Emitter Component (VFX)
         DrawComponent<ParticleEmitterComponent>("Particle Emitter (VFX)", entity, [&](ParticleEmitterComponent& pec) {
+            // Open in VFX Editor Button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.35f, 0.15f, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.45f, 0.25f, 1.0f));
+            if (ImGui::Button("Open in VFX Editor", ImVec2(ImGui::GetContentRegionAvail().x, 26.0f))) {
+                if (m_OnOpenVFXEditorCallback) {
+                    m_OnOpenVFXEditorCallback(entity);
+                }
+            }
+            ImGui::PopStyleColor(2);
+            ImGui::Spacing();
             // Live Playback & Testing Bar
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
             if (ImGui::Button(pec.Active ? "Pause Emitter" : "Play Emitter", ImVec2(100.0f, 24.0f))) {

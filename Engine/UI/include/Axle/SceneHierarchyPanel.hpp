@@ -57,6 +57,7 @@ namespace Axle {
         void SetSpawnAssetCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnSpawnAssetCallback = callback; }
         void SetOpenAssemblyEditorCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenAssemblyEditorCallback = callback; }
         void SetOpenUICanvasDesignerCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenUICanvasDesignerCallback = callback; }
+        void SetOpenVFXEditorCallback(std::function<void(Entity)> callback) { m_OnOpenVFXEditorCallback = callback; }
         void SetCustomComponentDrawer(std::function<void(Entity)> callback) { m_CustomComponentDrawer = callback; }
         void SetCustomAddComponentDrawer(std::function<void(Entity)> callback) { m_CustomAddComponentDrawer = callback; }
 
@@ -101,6 +102,7 @@ namespace Axle {
         std::function<void(const std::filesystem::path&)> m_OnSpawnAssetCallback;
         std::function<void(const std::filesystem::path&)> m_OnOpenAssemblyEditorCallback;
         std::function<void(const std::filesystem::path&)> m_OnOpenUICanvasDesignerCallback;
+        std::function<void(Entity)> m_OnOpenVFXEditorCallback;
         std::function<void(Entity)> m_CustomComponentDrawer;
         std::function<void(Entity)> m_CustomAddComponentDrawer;
 

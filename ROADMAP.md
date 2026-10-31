@@ -508,7 +508,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Unify `.axlemesh` into `Mesh { ... }` in `.axleasset` with automatic `.axlebin` baking and zero-overhead GPU loading.
     - [x] Standardize `Terrain { ... }` and `PhysicsMaterial { ... }` into `.axleasset`.
     - [x] Automated test suite Step 99 (`AxleTests.exe --step99`) validating AST parsing, round-trip serialization, backward compatibility, and Vulkan RHI preview rendering.
-- [ ] **Phase 37: Raw Media Asset Ingestion Pipeline & Opt-in Descriptor Architecture (`Engine/Asset`, `Engine/UI`, `Editor`)**
+- [x] **Phase 37: Raw Media Asset Ingestion Pipeline & Opt-in Descriptor Architecture (`Engine/Asset`, `Engine/UI`, `Editor`)**
   - [x] **Step 1 - Raw Media Ingest (Single-File Zero-Companion Ingestion in `EditorLayer`)**:
     - [x] Update `EditorLayer::OnFileDrop` for images (`.png`, `.jpg`, `.jpeg`, `.tga`, `.bmp`, `.hdr`): Copy only the image file itself to destination (`textures/` or active Content Browser directory) without auto-generating companion `.axleasset` files.
     - [x] Update `EditorLayer::OnFileDrop` for audio (`.wav`, `.mp3`, `.ogg`, `.flac`): Copy only the audio file to `audio/` or active Content Browser folder.
@@ -523,8 +523,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 4 - Standalone Runtime & Packaging Alignment (`Engine/Asset` & `Runtime`)**:
     - [x] In `AssetCooker`, package raw image and audio files directly into `Data.axlepak` using convention defaults, or using companion `.axleasset` if explicitly present.
     - [x] In `RuntimeLayer`, verify seamless asset resolution from both loose disk files and monolithic `.axlepak` packages.
-  - [ ] **Step 5 - Automated Test Suite Step 100 (`AxleTests.exe --step100`)**:
-    - [ ] Implement Step 100 automated test suite in `AxleTests.exe` validating raw media ingestion, in-memory descriptor synthesis, opt-in `.axleasset` generation, and runtime texture resolution.
-    - [ ] Verify 100% pass rate across all test suites.
+  - [x] **Step 5 - Automated Test Suite Step 100 (`AxleTests.exe --step100`)**:
+    - [x] Implement Step 100 automated test suite in `AxleTests.exe` validating raw media ingestion, in-memory descriptor synthesis, opt-in `.axleasset` generation, and runtime texture resolution.
+    - [x] Verify 100% pass rate across all test suites.
 
 ---

@@ -336,3 +336,5 @@ bool RunTest_Step98_Phase35_Step4_VulkanGraphicsBackendAndParity();
 
 // Milestone 9 - Part 2: Phase 36 Unified .axleasset Architecture & Multi-Backend Component Resource Standardization (Steps 99+)
 bool RunTest_Step99_Phase36_Step1_AssetDSLLexerAndParser();
+bool RunTest_Step100_Phase37_RawMediaIngestionAndOptInDescriptors();
+

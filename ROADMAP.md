@@ -7,9 +7,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 35** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **81 Comprehensive Headless Test Suites** (`AxleTests.exe`, 96 individual test steps up through **Step 98**) passing with **100% pass rate**.
-* **Upcoming Focus**: **Milestone 9 (Production Hardening, Vulkan Parity & Advanced Graphics)** and beyond.
+* **Completed Phases**: **Phase 1 through Phase 37** (100% implemented, verified, and stabilized).
+* **Automated Test Verification**: **83 Comprehensive Headless Test Suites** (`AxleTests.exe`, 100 individual test steps up through **Step 100**) passing with **100% pass rate**.
+* **Upcoming Focus**: **Milestone 10: Complete Visual Tooling Ecosystem (Material ➔ VFX ➔ Animation)** and beyond.
 
 ---
 
@@ -27,7 +27,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 │ [x] MILESTONE 6: AAA PBR Lighting, Soft Shadows, IBL & Audio (Phases 24 - 28)          │
 │ [x] MILESTONE 7: Large-Scale Terrain, Splines & Character Systems (Phases 29 - 30)     │
 │ [x] MILESTONE 8: Visual Effects, Modern RHI & In-Game UI Subsystem (Phases 31 - 34)   │
-│ [ ] MILESTONE 9: Vulkan 1.3 Backend Parity & Advanced Graphics (Phases 35+)            │
+│ [x] MILESTONE 9: Vulkan 1.3 Backend, Unified .axleasset & Raw Media (Phases 35 - 37)  │
+│ [ ] MILESTONE 10: Visual Tooling Ecosystem: Material, VFX & Animation (Phases 38 - 40)│
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -467,7 +468,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 ---
 
-### Milestone 9: Production Hardening, Vulkan 1.3 Backend Parity & Next-Gen Architecture (Phases 35+)
+### Milestone 9: Production Hardening, Vulkan 1.3 Backend Parity & Next-Gen Architecture (Phases 35 - 37)
 - [x] **Phase 35: High-Performance Vulkan 1.3 Graphics Backend & Editor Parity (`Engine/RHI` & `Engine/UI`)**
   - [x] **Step 1 - Vulkan Swapchain Presentation Engine & ImGuiLayer Backend Integration (`Engine/UI`)**:
     - [x] Create native `VkSurfaceKHR` from GLFW window (`glfwCreateWindowSurface`) and query surface capabilities, color formats (`VK_FORMAT_B8G8R8A8_UNORM`), and presentation modes (`VK_PRESENT_MODE_FIFO_KHR` / `VK_PRESENT_MODE_MAILBOX_KHR`).
@@ -526,5 +527,76 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 5 - Automated Test Suite Step 100 (`AxleTests.exe --step100`)**:
     - [x] Implement Step 100 automated test suite in `AxleTests.exe` validating raw media ingestion, in-memory descriptor synthesis, opt-in `.axleasset` generation, and runtime texture resolution.
     - [x] Verify 100% pass rate across all test suites.
+
+---
+
+
+### Milestone 10: Complete Visual Tooling Ecosystem (Phases 38 - 40)
+*Design Philosophy: Unity-style Authoring Workflows (PBR Inspector, Shuriken Modules, Animator State Machine) + Godot-style Compact Bottom Docking.*
+
+- [ ] **Phase 38: Visual Material Studio & Multi-Pass Surface Pipeline (`Engine/Asset`, `Engine/Renderer`, `Engine/UI`, `Editor`)**
+  - [ ] **Step 1 - Core Material Schema & DSL Upgrade (`Engine/Asset`, `Engine/Scene`)**:
+    - [ ] Add `SurfaceType` enum: `Opaque`, `Cutout`, `Transparent`, `Additive` in `MaterialComponent` and `AssetDSL`.
+    - [ ] Add `CullMode` enum: `Back`, `Front`, `None` (Two-Sided) for foliage, flags, and glass.
+    - [ ] Add `AlphaCutoff` slider (0.0 -> 1.0, default 0.5) for cutout alpha testing.
+    - [ ] Add `DepthWrite` toggle (true for Opaque, false for Transparent/Additive).
+    - [ ] Add UV controls: `UVTiling` (`glm::vec2`), `UVOffset` (`glm::vec2`).
+    - [ ] Add `EmissionHDR` (RGB Color + `EmissionIntensity` multiplier 0.0 -> 20.0+) and `OcclusionMap` (Ambient Occlusion texture slot + strength).
+    - [ ] Round-trip AST serialization in `.axleasset` format with 100% backward compatibility.
+  - [ ] **Step 2 - HLSL Shader & Multi-Pass RHI Forward Pipeline (`Engine/Renderer`, `Engine/RHI`)**:
+    - [ ] In `ForwardPBR.hlsl`, apply UV transformations: `uv = inUV * u_UVTiling + u_UVOffset`.
+    - [ ] Cutout support: discard fragments below alpha cutoff in pixel shader.
+    - [ ] Translucency & Blending: configure RHI pipeline blend states for Alpha Blend and Additive.
+    - [ ] Two-Sided rasterizer culling: support `RHICullMode::None` in rasterizer state.
+    - [ ] Sorter in `SceneRenderer`: separate opaque queue from back-to-front sorted translucent queue.
+  - [ ] **Step 3 - Dedicated Material Studio Panel & Content Browser Integration (`Engine/UI`, `Editor`)**:
+    - [ ] Create `MaterialEditorPanel` (dockable or standalone tab).
+    - [ ] Double-clicking any `.axleasset` (Material) or `.axlemat` in Content Browser opens `MaterialEditorPanel`.
+    - [ ] 3D Preview Turntable with sample mesh switcher: Sphere, Cube, Cylinder, Plane, Teapot.
+    - [ ] HDRI Environment lighting selector: *Studio Neutral*, *Sunny Sky*, *Sunset Glow*, *Night Sky*.
+    - [ ] Inspector group accordions (*Surface Options*, *Surface Inputs*, *Advanced Options*).
+    - [ ] Toolbar with `Save (.axleasset)`, `Revert`, and Quick Presets (Gold, Car Paint, Rubber, Glass, Chrome, LED Taillight, Foliage Two-Sided).
+  - [ ] **Step 4 - Automated Verification Suite Step 101 (`AxleTests.exe --step101`)**:
+    - [ ] Step 101 tests verifying: DSL round-trip serialization of new surface properties, Cutout alpha clipping math, Two-sided culling flags, RHI pipeline blend mode configs, and headless Material Studio operations.
+
+- [ ] **Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (`Engine/VFX`, `Engine/UI`, `Editor`)**
+  - [ ] **Step 1 - Multi-Emitter Architecture & Bursts (`Engine/VFX`, `Engine/Asset`)**:
+    - [ ] Upgrade `ParticleEmitterComponent` to multi-emitter `ParticleSystem` containing multiple Emitter stacks.
+    - [ ] Support burst emissions: list of `{ Time, MinCount, MaxCount, Cycles, Interval }`.
+    - [ ] Per-emitter Material binding: support Additive, Cutout, and Alpha Blended materials.
+  - [ ] **Step 2 - ImGui Custom Curve & Gradient Editors (`Engine/UI`)**:
+    - [ ] Interactive 4-point cubic Bezier curve editor widget in ImGui for *Size over Lifetime*, *Speed over Lifetime*, *Alpha over Lifetime*.
+    - [ ] Interactive multi-key Gradient Bar widget with color and alpha keyframes.
+  - [ ] **Step 3 - Kinematics, Collision & Sub-Emitters (`Engine/VFX`)**:
+    - [ ] Emission shapes: Point, Sphere, Hemisphere, Cone, Box, Circle, Mesh Surface.
+    - [ ] Particle collision: raycasting / floor plane tests with `Bounce` elasticity and `Kill` on contact.
+    - [ ] Sub-emitters: trigger child particle systems on `Birth`, `Collision`, or `Death`.
+    - [ ] Sprite sheet / Flipbook NxM grid animation playback.
+  - [ ] **Step 4 - VFX Studio Panel Modernization (`Engine/UI`, `Editor`)**:
+    - [ ] Left column: Emitter stack manager (Add, Delete, Duplicate, Visibility toggle).
+    - [ ] Middle: 3D RHI Viewport with Play, Pause, Restart, Scrubber, and live particle count.
+    - [ ] Right column: Shuriken-style collapsible module list with curves and gradient ramps.
+  - [ ] **Step 5 - Automated Verification Suite Step 102 (`AxleTests.exe --step102`)**:
+    - [ ] Step 102 tests verifying: Curve evaluation math, gradient evaluation, burst generation, sub-emitter triggering, and `.axleasset` serialization.
+
+- [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Renderer`, `Engine/UI`, `Editor`)**
+  - [ ] **Step 1 - Bottom Dock Dopesheet & Timeline Panel (`Engine/UI`, `Engine/Animation`)**:
+    - [ ] Dedicated Animation Timeline panel docked at the bottom sharing space with Console and Content Browser.
+    - [ ] Playback controls: Play, Pause, Step, Loop, FPS selector (24, 30, 60), speed scaling (0.1x - 2.0x).
+    - [ ] Expandable bone tracks for Translation (X,Y,Z), Rotation (Quaternion), Scale (X,Y,Z).
+    - [ ] Keyframe diamonds on timeline with box selection, drag, copy, paste, delete.
+  - [ ] **Step 2 - 3D Skeleton Wireframe Visualizer (`Engine/Renderer`, `Editor`)**:
+    - [ ] Render 3D wireframe octahedron bones and joint spheres in Viewport when rigged entity is selected.
+    - [ ] Bidirectional selection: clicking a bone in Viewport highlights its track in the Dopesheet.
+  - [ ] **Step 3 - Visual Animator State Machine Graph (`Engine/Animation`, `Engine/UI`)**:
+    - [ ] Visual node graph editor with State Cards (`Idle`, `Walk`, `Run`, `Jump`).
+    - [ ] Directed transition arrows with configurable cross-fade duration and `Has Exit Time`.
+    - [ ] Parameters panel: Float (`Speed`), Int (`Weapon`), Bool (`IsGrounded`), Trigger (`Jump`).
+    - [ ] Condition rules: e.g. `Speed Greater 0.1` -> transition from `Idle` to `Walk`.
+  - [ ] **Step 4 - Locomotion Blend Trees & Animation Event Triggers (`Engine/Animation`)**:
+    - [ ] 1D and 2D Blend Trees: smooth velocity blending without foot sliding.
+    - [ ] Keyframe event markers triggering C++ script callbacks (`PlayFootstep`, `SpawnSlashVFX`, `EnableHitbox`).
+  - [ ] **Step 5 - Automated Verification Suite Step 103 (`AxleTests.exe --step103`)**:
+    - [ ] Step 103 tests verifying: State Machine transitions, cross-fade weight blending, 1D/2D blend trees, and animation events.
 
 ---

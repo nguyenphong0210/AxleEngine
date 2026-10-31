@@ -197,3 +197,4 @@ flowchart LR
 1. **Lightweight Assets (Material, UI, VFX, Physics):** Parsed directly into C++ structs in sub-millisecond time.
 2. **Heavy Geometry (Mesh):** Automatically compiled into `.axlebin` binary cache upon save. Runtime loads directly from `.axlebin` with zero text-parsing overhead.
 3. **Backward Compatibility:** All existing `.axlemat`, `.axleui`, `.axlemesh`, `.amat` files continue to load transparently through legacy fallback paths.
+

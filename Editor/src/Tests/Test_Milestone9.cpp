@@ -440,6 +440,51 @@ Canvas {
     assert(std::abs(reloadedMatDoc.Root->GetFloat("roughness") - 0.14f) < 1e-4f);
     std::cout << "  -> PASS: AST round-trip serialization perfectly preserves all properties." << std::endl;
 
+    // [99.8] Advanced Vector, Color & Array Parsing (FloatArray, StringArray, Vec3Array, IVec3Array)
+    std::cout << "\n[99.8] Testing Advanced Vector & Array Parsing..." << std::endl;
+    std::string arraySource = R"(
+Mesh {
+    name: "TriangleMesh"
+    bounds: [2.0, 1.0, 3.0]
+    floatList: [1.5, 2.5, 3.5, 4.5]
+    layers: ["assets/materials/m1.axleasset", "assets/materials/m2.axleasset"]
+    vertices: [
+        [-1.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0]
+    ]
+    indices: [
+        [0, 1, 2]
+    ]
+}
+)";
+    AssetDocument meshDoc;
+    assert(AssetDSL::ParseSource(arraySource, meshDoc, &parseErr));
+    assert(meshDoc.IsValid() && meshDoc.Kind == AssetKind::Mesh);
+    glm::vec3 bounds = meshDoc.Root->GetVec3("bounds");
+    assert(bounds.x == 2.0f && bounds.y == 1.0f && bounds.z == 3.0f);
+
+    const auto* floatListProp = meshDoc.Root->GetProperty("floatList");
+    assert(floatListProp != nullptr);
+    auto floats = floatListProp->AsFloatArray();
+    assert(floats.size() == 4 && floats[1] == 2.5f);
+
+    const auto* layersProp = meshDoc.Root->GetProperty("layers");
+    assert(layersProp != nullptr);
+    auto layers = layersProp->AsStringArray();
+    assert(layers.size() == 2 && layers[0] == "assets/materials/m1.axleasset");
+
+    const auto* vertsProp = meshDoc.Root->GetProperty("vertices");
+    assert(vertsProp != nullptr);
+    auto verts = vertsProp->AsVec3Array();
+    assert(verts.size() == 3 && verts[2].y == 1.0f);
+
+    const auto* idxProp = meshDoc.Root->GetProperty("indices");
+    assert(idxProp != nullptr);
+    auto indices = idxProp->AsIVec3Array();
+    assert(indices.size() == 1 && indices[0].z == 2);
+    std::cout << "  -> PASS: Advanced vector arrays and string arrays correctly parsed." << std::endl;
+
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;
 }

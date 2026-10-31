@@ -174,6 +174,13 @@ bool RunTest_Step67_Phase33_Step1_CoreGeometryAndStreamer() {
     rhiDevice.GetNRICore().QueueWaitIdle(rhiDevice.GetGraphicsQueue());
     std::cout << "  -> PASS: Successfully recorded and executed copy batches and buffer bindings on GPU queue." << std::endl;
 
+    cubeMesh.reset();
+    sphereMesh.reset();
+    planeMesh.reset();
+    chassisMesh.reset();
+    wheelMesh.reset();
+    terrainMesh.reset();
+
     streamer.Shutdown();
     rhiDevice.Shutdown();
 

@@ -1226,6 +1226,31 @@ namespace Axle {
                             ImGui::Separator();
                         }
 
+                        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
+                            std::filesystem::path descPath = path.parent_path() / (path.stem().string() + ".axleasset");
+                            std::error_code ec;
+                            bool hasDesc = std::filesystem::exists(descPath, ec);
+                            if (!hasDesc) {
+                                if (ImGui::MenuItem("Create Texture Descriptor (.axleasset)")) {
+                                    auto desc = TextureDescriptor::CreateFromImageFile(path, FileSystem::GetAssetDirectory());
+                                    if (TextureDescriptor::Save(descPath.string(), desc)) {
+                                        AssetManager::GetOrCreateMetadata(descPath);
+                                        if (m_OnSelectAssetCallback) {
+                                            m_OnSelectAssetCallback(descPath);
+                                        }
+                                        SetStatusNotification("Created Texture Descriptor: " + descPath.filename().string());
+                                    }
+                                }
+                            } else {
+                                if (ImGui::MenuItem("Edit Texture Descriptor (.axleasset)")) {
+                                    if (m_OnSelectAssetCallback) {
+                                        m_OnSelectAssetCallback(descPath);
+                                    }
+                                }
+                            }
+                            ImGui::Separator();
+                        }
+
                         if (!isDir && m_AssetPreviewPanel) {
                             if (ImGui::MenuItem("Inspect in 3D Asset Preview")) {
                                 m_AssetPreviewPanel->SetAsset(path);

@@ -517,9 +517,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 2 - In-Memory Texture Descriptor Synthesis & Direct Image Loading (`Engine/Asset`)**:
     - [x] Enhance `TextureDescriptor::Load(filepath, outDesc)` to detect raw image formats (`.png`, `.jpg`, `.hdr`...) and synthesize in-memory descriptors on the fly via `CreateFromImageFile` with convention heuristics (`_normal` -> NormalMap Linear BC5, `.hdr` -> CubemapHDR, default -> Color sRGB Anisotropic16x) with zero disk footprint.
     - [x] Ensure `AssetManager::GetTexture(path)` and `MaterialComponent` load raw image files directly without requiring `.axleasset`.
-  - [ ] **Step 3 - Opt-in Texture Descriptor Generation in Content Browser (`Engine/UI`)**:
-    - [ ] In `ContentBrowserPanel`, add `"Create Texture Descriptor (.axleasset)"` to the right-click context menu of image items.
-    - [ ] Allow users to explicitly generate `<stem>.axleasset` only when deep customization is needed (Point filter for Pixel Art, BC7 compression, Clamp wrapping, custom max resolution).
+  - [x] **Step 3 - Opt-in Texture Descriptor Generation in Content Browser (`Engine/UI`)**:
+    - [x] In `ContentBrowserPanel`, add `"Create Texture Descriptor (.axleasset)"` to the right-click context menu of image items.
+    - [x] Allow users to explicitly generate `<stem>.axleasset` only when deep customization is needed (Point filter for Pixel Art, BC7 compression, Clamp wrapping, custom max resolution).
   - [ ] **Step 4 - Standalone Runtime & Packaging Alignment (`Engine/Asset` & `Runtime`)**:
     - [ ] In `AssetCooker`, package raw image and audio files directly into `Data.axlepak` using convention defaults, or using companion `.axleasset` if explicitly present.
     - [ ] In `RuntimeLayer`, verify seamless asset resolution from both loose disk files and monolithic `.axlepak` packages.

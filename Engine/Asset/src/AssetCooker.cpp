@@ -20,12 +20,17 @@ namespace Axle {
     static std::filesystem::path FindExecutable(const std::string& name) {
         static const std::vector<std::filesystem::path> searchPaths = {
             "build/Runtime/Release",
+            "build/Runtime/Debug",
             "build/Runtime",
             "build/Editor/Release",
+            "build/Editor/Debug",
             "build/Editor",
             "Runtime/Release",
+            "Runtime/Debug",
             "Editor/Release",
+            "Editor/Debug",
             "bin/Release",
+            "bin/Debug",
             "bin",
             "."
         };
@@ -48,12 +53,16 @@ namespace Axle {
                 exeDir / name,
                 exeDir / ".." / name,
                 exeDir / ".." / "Runtime" / "Release" / name,
+                exeDir / ".." / "Runtime" / "Debug" / name,
                 exeDir / ".." / "Runtime" / name,
                 exeDir / ".." / ".." / "Runtime" / "Release" / name,
+                exeDir / ".." / ".." / "Runtime" / "Debug" / name,
                 exeDir / ".." / ".." / "Runtime" / name,
                 exeDir / ".." / ".." / "build" / "Runtime" / "Release" / name,
+                exeDir / ".." / ".." / "build" / "Runtime" / "Debug" / name,
                 exeDir / ".." / ".." / "build" / "Runtime" / name,
                 exeDir / ".." / ".." / "bin" / "Release" / name,
+                exeDir / ".." / ".." / "bin" / "Debug" / name,
                 exeDir / ".." / ".." / "bin" / name
             };
             for (const auto& p : relToExe) {
@@ -163,10 +172,9 @@ namespace Axle {
             assetDir = FileSystem::GetAssetDirectory();
         }
 
+        std::vector<std::filesystem::path> assetFiles;
         if (std::filesystem::exists(assetDir)) {
             AXLE_INFO("AssetCooker: Scanning asset directory '{0}'", assetDir.string());
-
-            std::vector<std::filesystem::path> assetFiles;
             for (const auto& entry : std::filesystem::recursive_directory_iterator(assetDir)) {
                 if (entry.is_regular_file()) {
                     assetFiles.push_back(entry.path());
@@ -295,6 +303,18 @@ namespace Axle {
                 std::filesystem::copy(audioSrcDir, audioDstDir, std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
                 if (!ec) {
                     AXLE_INFO("AssetCooker: Bundled companion audio assets to '{0}'", audioDstDir.string());
+                }
+            }
+
+            // Also mirror any loose audio files from other subfolders
+            for (const auto& path : assetFiles) {
+                std::string ext = path.extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+                if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") {
+                    auto rel = std::filesystem::relative(path, assetDir);
+                    auto targetAudioPath = outputDir / "assets" / rel;
+                    std::filesystem::create_directories(targetAudioPath.parent_path(), ec);
+                    std::filesystem::copy_file(path, targetAudioPath, std::filesystem::copy_options::overwrite_existing, ec);
                 }
             }
         }

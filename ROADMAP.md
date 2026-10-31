@@ -520,9 +520,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 3 - Opt-in Texture Descriptor Generation in Content Browser (`Engine/UI`)**:
     - [x] In `ContentBrowserPanel`, add `"Create Texture Descriptor (.axleasset)"` to the right-click context menu of image items.
     - [x] Allow users to explicitly generate `<stem>.axleasset` only when deep customization is needed (Point filter for Pixel Art, BC7 compression, Clamp wrapping, custom max resolution).
-  - [ ] **Step 4 - Standalone Runtime & Packaging Alignment (`Engine/Asset` & `Runtime`)**:
-    - [ ] In `AssetCooker`, package raw image and audio files directly into `Data.axlepak` using convention defaults, or using companion `.axleasset` if explicitly present.
-    - [ ] In `RuntimeLayer`, verify seamless asset resolution from both loose disk files and monolithic `.axlepak` packages.
+  - [x] **Step 4 - Standalone Runtime & Packaging Alignment (`Engine/Asset` & `Runtime`)**:
+    - [x] In `AssetCooker`, package raw image and audio files directly into `Data.axlepak` using convention defaults, or using companion `.axleasset` if explicitly present.
+    - [x] In `RuntimeLayer`, verify seamless asset resolution from both loose disk files and monolithic `.axlepak` packages.
   - [ ] **Step 5 - Automated Test Suite Step 100 (`AxleTests.exe --step100`)**:
     - [ ] Implement Step 100 automated test suite in `AxleTests.exe` validating raw media ingestion, in-memory descriptor synthesis, opt-in `.axleasset` generation, and runtime texture resolution.
     - [ ] Verify 100% pass rate across all test suites.

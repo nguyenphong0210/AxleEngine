@@ -41,6 +41,10 @@ namespace Axle::RHI {
 
     struct RHIMaterialDesc {
         std::string Name = "PBR_Material";
+        Axle::SurfaceType SurfaceType = Axle::SurfaceType::Opaque;
+        Axle::CullMode CullMode = Axle::CullMode::Back;
+        float AlphaCutoff = 0.5f;
+        bool DepthWrite = true;
         glm::vec4 BaseColor{ 1.0f, 1.0f, 1.0f, 1.0f };
         float Roughness = 0.5f;       // Clamped to [0.04, 1.0]
         float Metallic = 0.0f;        // Clamped to [0.0, 1.0]
@@ -70,6 +74,25 @@ namespace Axle::RHI {
         // Identification & Properties
         const std::string& GetName() const { return m_Desc.Name; }
         void SetName(const std::string& name) { m_Desc.Name = name; }
+
+        Axle::SurfaceType GetSurfaceType() const { return m_Desc.SurfaceType; }
+        void SetSurfaceType(Axle::SurfaceType type) {
+            m_Desc.SurfaceType = type;
+            if (type == Axle::SurfaceType::Transparent || type == Axle::SurfaceType::Additive) m_Desc.DepthWrite = false;
+            else m_Desc.DepthWrite = true;
+        }
+
+        Axle::CullMode GetCullMode() const { return m_Desc.CullMode; }
+        void SetCullMode(Axle::CullMode mode) { m_Desc.CullMode = mode; }
+
+        float GetAlphaCutoff() const { return m_Desc.AlphaCutoff; }
+        void SetAlphaCutoff(float cutoff) { m_Desc.AlphaCutoff = std::clamp(cutoff, 0.0f, 1.0f); }
+
+        bool GetDepthWrite() const { return m_Desc.DepthWrite; }
+        void SetDepthWrite(bool depthWrite) { m_Desc.DepthWrite = depthWrite; }
+
+        const glm::vec2& GetUVTiling() const { return m_Desc.UVScale; }
+        void SetUVTiling(const glm::vec2& tiling) { m_Desc.UVScale = tiling; }
 
         const glm::vec4& GetBaseColor() const { return m_Desc.BaseColor; }
         void SetBaseColor(const glm::vec4& color) { m_Desc.BaseColor = color; }
@@ -141,6 +164,8 @@ namespace Axle::RHI {
         static std::shared_ptr<RHIMaterial> CreateTireRubber();
         static std::shared_ptr<RHIMaterial> CreateCastIron();
         static std::shared_ptr<RHIMaterial> CreateHeadlightLED();
+        static std::shared_ptr<RHIMaterial> CreateGlass();
+        static std::shared_ptr<RHIMaterial> CreateFoliage();
 
         // Bindless Tier 2 indexing slot indices
         uint32_t GetBindlessIndex(RHITextureSlot slot) const {

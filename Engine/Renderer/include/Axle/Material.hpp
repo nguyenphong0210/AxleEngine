@@ -26,6 +26,25 @@ namespace Axle {
         const std::filesystem::path& GetFilePath() const { return m_FilePath; }
         void SetFilePath(const std::filesystem::path& path) { m_FilePath = path; }
 
+        // Surface Options (Unity / Unreal Standard)
+        SurfaceType GetSurfaceType() const { return m_SurfaceType; }
+        void SetSurfaceType(SurfaceType type) {
+            m_SurfaceType = type;
+            if (type == SurfaceType::Transparent || type == SurfaceType::Additive) m_DepthWrite = false;
+            else m_DepthWrite = true;
+        }
+
+        CullMode GetCullMode() const { return m_CullMode; }
+        void SetCullMode(CullMode mode) { m_CullMode = mode; }
+
+        float GetAlphaCutoff() const { return m_AlphaCutoff; }
+        float& GetAlphaCutoffRef() { return m_AlphaCutoff; }
+        void SetAlphaCutoff(float cutoff) { m_AlphaCutoff = std::clamp(cutoff, 0.0f, 1.0f); }
+
+        bool GetDepthWrite() const { return m_DepthWrite; }
+        bool& GetDepthWriteRef() { return m_DepthWrite; }
+        void SetDepthWrite(bool depthWrite) { m_DepthWrite = depthWrite; }
+
         // PBR Core Properties
         const glm::vec4& GetAlbedoColor() const { return m_AlbedoColor; }
         glm::vec4& GetAlbedoColorRef() { return m_AlbedoColor; }
@@ -55,10 +74,19 @@ namespace Axle {
         glm::vec2& GetUVScaleRef() { return m_UVScale; }
         void SetUVScale(const glm::vec2& uvScale) { m_UVScale = uvScale; }
 
+        const glm::vec2& GetUVTiling() const { return m_UVScale; }
+        glm::vec2& GetUVTilingRef() { return m_UVScale; }
+        void SetUVTiling(const glm::vec2& uvTiling) { m_UVScale = uvTiling; }
+
+        const glm::vec2& GetUVOffset() const { return m_UVOffset; }
+        glm::vec2& GetUVOffsetRef() { return m_UVOffset; }
+        void SetUVOffset(const glm::vec2& uvOffset) { m_UVOffset = uvOffset; }
+
         // Texture Slots
         const std::string& GetAlbedoPath() const { return m_AlbedoPath; }
         const std::shared_ptr<Texture2D>& GetAlbedoMap() const { return m_AlbedoMap; }
         bool UseAlbedoMap() const { return m_UseAlbedoMap && (m_AlbedoMap != nullptr); }
+        bool IsAlbedoMapEnabled() const { return m_UseAlbedoMap; }
         void SetUseAlbedoMap(bool use) { m_UseAlbedoMap = use; }
         void SetAlbedoTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path = "");
         void SetAlbedoPath(const std::string& path);
@@ -67,6 +95,7 @@ namespace Axle {
         const std::string& GetNormalPath() const { return m_NormalPath; }
         const std::shared_ptr<Texture2D>& GetNormalMap() const { return m_NormalMap; }
         bool UseNormalMap() const { return m_UseNormalMap && (m_NormalMap != nullptr); }
+        bool IsNormalMapEnabled() const { return m_UseNormalMap; }
         void SetUseNormalMap(bool use) { m_UseNormalMap = use; }
         void SetNormalTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path = "");
         void SetNormalPath(const std::string& path);
@@ -75,6 +104,7 @@ namespace Axle {
         const std::string& GetRoughnessPath() const { return m_RoughnessPath; }
         const std::shared_ptr<Texture2D>& GetRoughnessMap() const { return m_RoughnessMap; }
         bool UseRoughnessMap() const { return m_UseRoughnessMap && (m_RoughnessMap != nullptr); }
+        bool IsRoughnessMapEnabled() const { return m_UseRoughnessMap; }
         void SetUseRoughnessMap(bool use) { m_UseRoughnessMap = use; }
         void SetRoughnessTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path = "");
         void SetRoughnessPath(const std::string& path);
@@ -83,6 +113,7 @@ namespace Axle {
         const std::string& GetMetallicPath() const { return m_MetallicPath; }
         const std::shared_ptr<Texture2D>& GetMetallicMap() const { return m_MetallicMap; }
         bool UseMetallicMap() const { return m_UseMetallicMap && (m_MetallicMap != nullptr); }
+        bool IsMetallicMapEnabled() const { return m_UseMetallicMap; }
         void SetUseMetallicMap(bool use) { m_UseMetallicMap = use; }
         void SetMetallicTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path = "");
         void SetMetallicPath(const std::string& path);
@@ -94,6 +125,7 @@ namespace Axle {
         const std::string& GetAOPath() const { return m_AOPath; }
         const std::shared_ptr<Texture2D>& GetAOMap() const { return m_AOMap; }
         bool UseAOMap() const { return m_UseAOMap && (m_AOMap != nullptr); }
+        bool IsAOMapEnabled() const { return m_UseAOMap; }
         void SetUseAOMap(bool use) { m_UseAOMap = use; }
         void SetAOTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path = "");
         void SetAOPath(const std::string& path);
@@ -102,6 +134,7 @@ namespace Axle {
         const std::string& GetEmissivePath() const { return m_EmissivePath; }
         const std::shared_ptr<Texture2D>& GetEmissiveMap() const { return m_EmissiveMap; }
         bool UseEmissiveMap() const { return m_UseEmissiveMap && (m_EmissiveMap != nullptr); }
+        bool IsEmissiveMapEnabled() const { return m_UseEmissiveMap; }
         void SetUseEmissiveMap(bool use) { m_UseEmissiveMap = use; }
         void SetEmissiveTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path = "");
         void SetEmissivePath(const std::string& path);
@@ -123,6 +156,8 @@ namespace Axle {
         void SetPresetCastIron();
         void SetPresetHeadlightLED();
         void SetPresetTaillightLED();
+        void SetPresetGlass();
+        void SetPresetFoliage();
 
         // GPU Shader Binding
         void Bind(Shader& shader, uint32_t slotAlbedo = 0, uint32_t slotNormal = 2, uint32_t slotRoughness = 3, uint32_t slotMetallic = 4) const;
@@ -142,6 +177,11 @@ namespace Axle {
         std::string m_Name;
         std::filesystem::path m_FilePath;
 
+        SurfaceType m_SurfaceType = SurfaceType::Opaque;
+        CullMode m_CullMode = CullMode::Back;
+        float m_AlphaCutoff = 0.5f;
+        bool m_DepthWrite = true;
+
         glm::vec4 m_AlbedoColor{ 1.0f, 1.0f, 1.0f, 1.0f };
         float m_Roughness = 0.5f;
         float m_Metallic = 0.0f;
@@ -149,6 +189,7 @@ namespace Axle {
         glm::vec3 m_EmissionColor{ 0.0f, 0.0f, 0.0f };
         float m_EmissionIntensity = 0.0f;
         glm::vec2 m_UVScale{ 1.0f, 1.0f };
+        glm::vec2 m_UVOffset{ 0.0f, 0.0f };
 
         std::string m_AlbedoPath;
         std::shared_ptr<Texture2D> m_AlbedoMap;

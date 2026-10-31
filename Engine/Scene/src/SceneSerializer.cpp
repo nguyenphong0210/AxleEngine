@@ -268,6 +268,11 @@ namespace Axle {
                 ss << "      EmissionColor: [ " << mat.EmissionColor.r << " , " << mat.EmissionColor.g << " , " << mat.EmissionColor.b << " ]\n";
                 ss << "      EmissionIntensity: " << mat.EmissionIntensity << "\n";
                 ss << "      UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
+                ss << "      UVOffset: [ " << mat.UVOffset.x << " , " << mat.UVOffset.y << " ]\n";
+                ss << "      SurfaceType: " << SurfaceTypeToString(mat.SurfaceType) << "\n";
+                ss << "      CullMode: " << CullModeToString(mat.CullMode) << "\n";
+                ss << "      AlphaCutoff: " << mat.AlphaCutoff << "\n";
+                ss << "      DepthWrite: " << (mat.DepthWrite ? "true" : "false") << "\n";
             }
 
             // SkyboxComponent
@@ -1139,10 +1144,24 @@ namespace Axle {
                             mat.EmissionColor = glm::vec3(r, g, b);
                         } else if (trimmed.rfind("EmissionIntensity:", 0) == 0) {
                             mat.EmissionIntensity = std::stof(Trim(trimmed.substr(18)));
-                        } else if (trimmed.rfind("UVScale:", 0) == 0) {
+                        } else if (trimmed.rfind("UVScale:", 0) == 0 || trimmed.rfind("UVTiling:", 0) == 0) {
                             float u = 1, v = 1;
-                            sscanf(trimmed.c_str(), "UVScale: [ %f , %f ]", &u, &v);
+                            const char* fmt = (trimmed.rfind("UVTiling:", 0) == 0) ? "UVTiling: [ %f , %f ]" : "UVScale: [ %f , %f ]";
+                            sscanf(trimmed.c_str(), fmt, &u, &v);
                             mat.UVScale = glm::vec2(u, v);
+                        } else if (trimmed.rfind("UVOffset:", 0) == 0) {
+                            float u = 0, v = 0;
+                            sscanf(trimmed.c_str(), "UVOffset: [ %f , %f ]", &u, &v);
+                            mat.UVOffset = glm::vec2(u, v);
+                        } else if (trimmed.rfind("SurfaceType:", 0) == 0) {
+                            mat.SurfaceType = StringToSurfaceType(Trim(trimmed.substr(12)));
+                        } else if (trimmed.rfind("CullMode:", 0) == 0) {
+                            mat.CullMode = StringToCullMode(Trim(trimmed.substr(9)));
+                        } else if (trimmed.rfind("AlphaCutoff:", 0) == 0) {
+                            try { mat.AlphaCutoff = std::clamp(std::stof(Trim(trimmed.substr(12))), 0.0f, 1.0f); } catch (...) {}
+                        } else if (trimmed.rfind("DepthWrite:", 0) == 0) {
+                            std::string val = Trim(trimmed.substr(11));
+                            mat.DepthWrite = (val == "true" || val == "1");
                         }
                         break;
                     }

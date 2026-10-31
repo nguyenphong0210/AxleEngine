@@ -550,21 +550,36 @@ namespace Axle {
         }
     }
 
-    nri::Pipeline* RHISceneRenderer::GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount) {
+    nri::Pipeline* RHISceneRenderer::GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount,
+                                                         Axle::SurfaceType surfaceType,
+                                                         Axle::CullMode cullMode,
+                                                         bool depthWrite) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_PipelineLayout;
         gfxDesc.Shaders = { m_VertexShader, m_PixelShader };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
-        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        if (cullMode == Axle::CullMode::Back) {
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::BACK;
+        } else if (cullMode == Axle::CullMode::Front) {
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::FRONT;
+        } else {
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        }
         gfxDesc.Rasterizer.FrontCounterClockwise = true;
 
         gfxDesc.DepthStencil.DepthTestEnable = true;
-        gfxDesc.DepthStencil.DepthWriteEnable = true;
+        gfxDesc.DepthStencil.DepthWriteEnable = depthWrite;
         gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS;
         gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
 
-        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        if (surfaceType == Axle::SurfaceType::Transparent) {
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::AlphaBlend() };
+        } else if (surfaceType == Axle::SurfaceType::Additive) {
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Additive() };
+        } else {
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        }
         gfxDesc.ColorAttachmentFormats = { colorFormat };
         gfxDesc.SampleCount = sampleCount;
 
@@ -1227,10 +1242,24 @@ namespace Axle {
             }
         }
 
-        // 4. Iterate Scene Entities & Stream Transforms via Root Constants
+        // 4. Iterate Scene Entities & Stream Transforms via Root Constants (Multi-Pass Forward Pipeline)
         if (scene) {
             auto& registry = scene->GetRegistry();
             auto meshView = registry.view<TransformComponent, MeshInstance3D>();
+
+            struct DrawItem {
+                std::shared_ptr<RHIMesh> Mesh;
+                RHIObjectPushConstants PushConsts;
+                Axle::SurfaceType SurfaceType = Axle::SurfaceType::Opaque;
+                Axle::CullMode CullMode = Axle::CullMode::None;
+                bool DepthWrite = true;
+                float DistanceSq = 0.0f;
+            };
+
+            std::vector<DrawItem> opaqueQueue;
+            std::vector<DrawItem> transparentQueue;
+
+            glm::vec3 camPos = camera.GetPosition();
 
             for (auto entityID : meshView) {
                 const auto& tc = meshView.get<TransformComponent>(entityID);
@@ -1266,41 +1295,80 @@ namespace Axle {
                 if (mesh && mesh->IsValid()) {
                     glm::mat4 worldMat = scene->GetWorldTransform(entityID);
 
-                    RHIObjectPushConstants pushConsts;
-                    pushConsts.Model = worldMat;
-                    pushConsts.ColorPrimary = mc.Color1;
-                    pushConsts.ColorSecondary = mc.Color2;
-                    pushConsts.Params = glm::vec4(mc.TileScale, static_cast<float>(mc.PatternMode), 0.5f, 0.0f);
-                    pushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
+                    DrawItem item;
+                    item.Mesh = mesh;
+                    item.PushConsts.Model = worldMat;
+                    item.PushConsts.ColorPrimary = mc.Color1;
+                    item.PushConsts.ColorSecondary = mc.Color2;
+                    item.PushConsts.Params = glm::vec4(mc.TileScale, static_cast<float>(mc.PatternMode), 0.5f, 0.0f);
+                    item.PushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
+                    glm::vec3 diff = glm::vec3(worldMat[3]) - camPos;
+                    item.DistanceSq = glm::dot(diff, diff);
 
                     // Apply PBR Material parameters if present
                     if (mc.RHIMaterialAsset) {
-                        mc.RHIMaterialAsset->ApplyToPushConstants(pushConsts);
-                        pushConsts.Model = worldMat;
-                        pushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
+                        mc.RHIMaterialAsset->ApplyToPushConstants(item.PushConsts);
+                        item.PushConsts.Model = worldMat;
+                        item.SurfaceType = mc.RHIMaterialAsset->GetSurfaceType();
+                        item.CullMode = mc.RHIMaterialAsset->GetCullMode();
+                        item.DepthWrite = mc.RHIMaterialAsset->GetDepthWrite();
                     } else if (registry.all_of<MaterialComponent>(entityID)) {
-                        const auto& mat = registry.get<MaterialComponent>(entityID);
-                        if (mat.RHIMaterialAsset) {
-                            mat.RHIMaterialAsset->ApplyToPushConstants(pushConsts);
-                            pushConsts.Model = worldMat;
-                            pushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
-                        } else {
-                            pushConsts.ColorPrimary = mat.GetAlbedoColor();
-                            pushConsts.ColorSecondary = glm::vec4(mat.GetEmissionColor(), mat.GetEmissionIntensity());
-                            pushConsts.Params = glm::vec4(mat.GetUVScale().x, 3.0f, mat.GetRoughness(), mat.GetMetallic());
+                        auto& mat = registry.get<MaterialComponent>(entityID);
+                        if (!mat.RHIMaterialAsset) {
+                            mat.RHIMaterialAsset = std::make_shared<RHI::RHIMaterial>(mat.MaterialAsset ? mat.MaterialAsset->GetName() : "Material");
                         }
+                        mat.SyncToRHI();
+                        mat.RHIMaterialAsset->ApplyToPushConstants(item.PushConsts);
+                        item.PushConsts.Model = worldMat;
+                        item.SurfaceType = mat.SurfaceType;
+                        item.CullMode = mat.CullMode;
+                        item.DepthWrite = mat.DepthWrite;
                     }
 
-                    // Bind per-entity transform directly to Root Constants (Zero CPU-GPU stalls!)
-                    m_CommandBuffer.SetRootConstants(0, &pushConsts, sizeof(pushConsts));
-                    m_LastStreamedTransformBytes += sizeof(pushConsts);
+                    if (item.SurfaceType == Axle::SurfaceType::Transparent || item.SurfaceType == Axle::SurfaceType::Additive) {
+                        transparentQueue.push_back(std::move(item));
+                    } else {
+                        opaqueQueue.push_back(std::move(item));
+                    }
+                }
+            }
 
-                    // Bind vertex/index buffers and dispatch draw
-                    mesh->Bind(m_CommandBuffer);
-                    mesh->Draw(m_CommandBuffer);
+            nri::Pipeline* currentPipeline = activePipeline;
 
-                    m_LastDrawCallCount += static_cast<uint32_t>(mesh->GetSubmeshCount());
-                    m_LastRenderedEntityCount++;
+            auto RenderDrawItem = [&](const DrawItem& item) {
+                nri::Pipeline* needed = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
+                    ? m_PipelineHDR
+                    : (sceneTargetFormat == nri::Format::RGBA8_UNORM && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_Pipeline)
+                        ? m_Pipeline
+                        : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode, item.DepthWrite);
+
+                if (needed && needed != currentPipeline) {
+                    m_CommandBuffer.SetPipeline(needed);
+                    currentPipeline = needed;
+                }
+
+                m_CommandBuffer.SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
+                m_LastStreamedTransformBytes += sizeof(item.PushConsts);
+
+                item.Mesh->Bind(m_CommandBuffer);
+                item.Mesh->Draw(m_CommandBuffer);
+
+                m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+                m_LastRenderedEntityCount++;
+            };
+
+            // 4a. Render Opaque & Cutout Queue
+            for (const auto& item : opaqueQueue) {
+                RenderDrawItem(item);
+            }
+
+            // 4b. Render Transparent & Additive Queue (Sorted Back-to-Front)
+            if (!transparentQueue.empty()) {
+                std::sort(transparentQueue.begin(), transparentQueue.end(), [](const DrawItem& a, const DrawItem& b) {
+                    return a.DistanceSq > b.DistanceSq;
+                });
+                for (const auto& item : transparentQueue) {
+                    RenderDrawItem(item);
                 }
             }
         }

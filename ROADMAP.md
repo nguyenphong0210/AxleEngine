@@ -534,30 +534,30 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ### Milestone 10: Complete Visual Tooling Ecosystem (Phases 38 - 40)
 *Design Philosophy: Unity-style Authoring Workflows (PBR Inspector, Shuriken Modules, Animator State Machine) + Godot-style Compact Bottom Docking.*
 
-- [ ] **Phase 38: Visual Material Studio & Multi-Pass Surface Pipeline (`Engine/Asset`, `Engine/Renderer`, `Engine/UI`, `Editor`)**
-  - [ ] **Step 1 - Core Material Schema & DSL Upgrade (`Engine/Asset`, `Engine/Scene`)**:
-    - [ ] Add `SurfaceType` enum: `Opaque`, `Cutout`, `Transparent`, `Additive` in `MaterialComponent` and `AssetDSL`.
-    - [ ] Add `CullMode` enum: `Back`, `Front`, `None` (Two-Sided) for foliage, flags, and glass.
-    - [ ] Add `AlphaCutoff` slider (0.0 -> 1.0, default 0.5) for cutout alpha testing.
-    - [ ] Add `DepthWrite` toggle (true for Opaque, false for Transparent/Additive).
-    - [ ] Add UV controls: `UVTiling` (`glm::vec2`), `UVOffset` (`glm::vec2`).
-    - [ ] Add `EmissionHDR` (RGB Color + `EmissionIntensity` multiplier 0.0 -> 20.0+) and `OcclusionMap` (Ambient Occlusion texture slot + strength).
-    - [ ] Round-trip AST serialization in `.axleasset` format with 100% backward compatibility.
-  - [ ] **Step 2 - HLSL Shader & Multi-Pass RHI Forward Pipeline (`Engine/Renderer`, `Engine/RHI`)**:
-    - [ ] In `ForwardPBR.hlsl`, apply UV transformations: `uv = inUV * u_UVTiling + u_UVOffset`.
-    - [ ] Cutout support: discard fragments below alpha cutoff in pixel shader.
-    - [ ] Translucency & Blending: configure RHI pipeline blend states for Alpha Blend and Additive.
-    - [ ] Two-Sided rasterizer culling: support `RHICullMode::None` in rasterizer state.
-    - [ ] Sorter in `SceneRenderer`: separate opaque queue from back-to-front sorted translucent queue.
-  - [ ] **Step 3 - Dedicated Material Studio Panel & Content Browser Integration (`Engine/UI`, `Editor`)**:
-    - [ ] Create `MaterialEditorPanel` (dockable or standalone tab).
-    - [ ] Double-clicking any `.axleasset` (Material) or `.axlemat` in Content Browser opens `MaterialEditorPanel`.
-    - [ ] 3D Preview Turntable with sample mesh switcher: Sphere, Cube, Cylinder, Plane, Teapot.
-    - [ ] HDRI Environment lighting selector: *Studio Neutral*, *Sunny Sky*, *Sunset Glow*, *Night Sky*.
-    - [ ] Inspector group accordions (*Surface Options*, *Surface Inputs*, *Advanced Options*).
-    - [ ] Toolbar with `Save (.axleasset)`, `Revert`, and Quick Presets (Gold, Car Paint, Rubber, Glass, Chrome, LED Taillight, Foliage Two-Sided).
-  - [ ] **Step 4 - Automated Verification Suite Step 101 (`AxleTests.exe --step101`)**:
-    - [ ] Step 101 tests verifying: DSL round-trip serialization of new surface properties, Cutout alpha clipping math, Two-sided culling flags, RHI pipeline blend mode configs, and headless Material Studio operations.
+- [x] **Phase 38: Visual Material Studio & Multi-Pass Surface Pipeline (`Engine/Asset`, `Engine/Renderer`, `Engine/UI`, `Editor`)**
+  - [x] **Step 1 - Core Material Schema & DSL Upgrade (`Engine/Asset`, `Engine/Scene`)**:
+    - [x] Add `SurfaceType` enum: `Opaque`, `Cutout`, `Transparent`, `Additive` in `MaterialComponent` and `AssetDSL`.
+    - [x] Add `CullMode` enum: `Back`, `Front`, `None` (Two-Sided) for foliage, flags, and glass.
+    - [x] Add `AlphaCutoff` slider (0.0 -> 1.0, default 0.5) for cutout alpha testing.
+    - [x] Add `DepthWrite` toggle (true for Opaque, false for Transparent/Additive).
+    - [x] Add UV controls: `UVTiling` (`glm::vec2`), `UVOffset` (`glm::vec2`).
+    - [x] Add `EmissionHDR` (RGB Color + `EmissionIntensity` multiplier 0.0 -> 20.0+) and `OcclusionMap` (Ambient Occlusion texture slot + strength).
+    - [x] Round-trip AST serialization in `.axleasset` format with 100% backward compatibility.
+  - [x] **Step 2 - HLSL Shader & Multi-Pass RHI Forward Pipeline (`Engine/Renderer`, `Engine/RHI`)**:
+    - [x] In `ForwardPBR.hlsl`, apply UV transformations: `uv = inUV * u_UVTiling + u_UVOffset`.
+    - [x] Cutout support: discard fragments below alpha cutoff in pixel shader.
+    - [x] Translucency & Blending: configure RHI pipeline blend states for Alpha Blend and Additive.
+    - [x] Two-Sided rasterizer culling: support `RHICullMode::None` in rasterizer state.
+    - [x] Sorter in `SceneRenderer`: separate opaque queue from back-to-front sorted translucent queue.
+  - [x] **Step 3 - Dedicated Material Studio Panel & Content Browser Integration (`Engine/UI`, `Editor`)**:
+    - [x] Create `MaterialEditorPanel` (dockable or standalone tab).
+    - [x] Double-clicking any `.axleasset` (Material) or `.axlemat` in Content Browser opens `MaterialEditorPanel`.
+    - [x] 3D Preview Turntable with sample mesh switcher: Sphere, Cube, Cylinder, Plane, Teapot.
+    - [x] HDRI Environment lighting selector: *Studio Neutral*, *Sunny Sky*, *Sunset Glow*, *Night Sky*.
+    - [x] Inspector group accordions (*Surface Options*, *Surface Inputs*, *Advanced Options*).
+    - [x] Toolbar with `Save (.axleasset)`, `Revert`, and Quick Presets (Gold, Car Paint, Rubber, Glass, Chrome, LED Taillight, Foliage Two-Sided).
+  - [x] **Step 4 - Automated Verification Suite Step 101 (`AxleTests.exe --step101`)**:
+    - [x] Step 101 tests verifying: DSL round-trip serialization of new surface properties, Cutout alpha clipping math, Two-sided culling flags, RHI pipeline blend mode configs, and headless Material Studio operations.
 
 - [ ] **Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (`Engine/VFX`, `Engine/UI`, `Editor`)**
   - [ ] **Step 1 - Multi-Emitter Architecture & Bursts (`Engine/VFX`, `Engine/Asset`)**:

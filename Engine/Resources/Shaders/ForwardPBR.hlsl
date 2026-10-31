@@ -18,24 +18,32 @@ T ClampZeroOne(T value) {
 struct ObjectConstants_t {
     float4x4 u_Model;               // 64 bytes (Offset 0) - Model matrix
     float4   u_ColorPrimary;        // 16 bytes (Offset 64) - Albedo/BaseColor
-    float4   u_ColorSecondary;      // 16 bytes (Offset 80) - Secondary/Pattern tint
+    float4   u_ColorSecondary;      // 16 bytes (Offset 80) - Secondary/Pattern tint & Emissive (rgb: tint, w: emission intensity)
     float4   u_Params;              // 16 bytes (Offset 96) - x: TileScale/UVScale, y: ShadingMode, z: Roughness, w: Metallic
-    float4   u_SunDirAndIntensity;  // 16 bytes (Offset 112) - xyz: Normalized Sun Direction, w: Sun Intensity
+    float4   u_MaterialExtra;       // 16 bytes (Offset 112) - xy: UVOffset, z: AlphaCutoff, w: SurfaceType (0: Opaque, 1: Cutout, 2: Transparent, 3: Additive)
 };
 [[vk::push_constant]] ObjectConstants_t ObjectConstants;
 #define u_Model (ObjectConstants.u_Model)
 #define u_ColorPrimary (ObjectConstants.u_ColorPrimary)
 #define u_ColorSecondary (ObjectConstants.u_ColorSecondary)
 #define u_Params (ObjectConstants.u_Params)
-#define u_SunDirAndIntensity (ObjectConstants.u_SunDirAndIntensity)
+#define u_MaterialExtra (ObjectConstants.u_MaterialExtra)
+#define u_SunDirAndIntensity (ObjectConstants.u_MaterialExtra)
+#define u_UVOffset (ObjectConstants.u_MaterialExtra.xy)
+#define u_AlphaCutoff (ObjectConstants.u_MaterialExtra.z)
+#define u_SurfaceType (ObjectConstants.u_MaterialExtra.w)
 #else
 cbuffer ObjectConstants : register(b0, space0) {
     float4x4 u_Model;               // 64 bytes (Offset 0) - Model matrix
     float4   u_ColorPrimary;        // 16 bytes (Offset 64) - Albedo/BaseColor
-    float4   u_ColorSecondary;      // 16 bytes (Offset 80) - Secondary/Pattern tint
+    float4   u_ColorSecondary;      // 16 bytes (Offset 80) - Secondary/Pattern tint & Emissive
     float4   u_Params;              // 16 bytes (Offset 96) - x: TileScale/UVScale, y: ShadingMode, z: Roughness, w: Metallic
-    float4   u_SunDirAndIntensity;  // 16 bytes (Offset 112) - xyz: Normalized Sun Direction, w: Sun Intensity
+    float4   u_MaterialExtra;       // 16 bytes (Offset 112) - xy: UVOffset, z: AlphaCutoff, w: SurfaceType
 };
+#define u_SunDirAndIntensity (u_MaterialExtra)
+#define u_UVOffset (u_MaterialExtra.xy)
+#define u_AlphaCutoff (u_MaterialExtra.z)
+#define u_SurfaceType (u_MaterialExtra.w)
 #endif
 
 // -----------------------------------------------------------------------------
@@ -229,12 +237,15 @@ float4 PSMain(PSInput input) : SV_Target0 {
     } else if (shadingMode == 3) {
         // Mode 3: Solid Color / Solid PBR Material (Matches OpenGL PatternMode 3)
         albedo = u_ColorPrimary;
+        if (u_ColorSecondary.w > 0.01) {
+            emissive = u_ColorSecondary.rgb * u_ColorSecondary.w;
+        }
     } else if (shadingMode == 4) {
         // Mode 4: Splatmap Terrain Heightfield (Blended with Vertex Color)
         albedo = u_ColorPrimary * input.VertexColor;
     } else if (shadingMode == 5) {
         // Mode 5: Textured PBR Material (Sample Albedo, Roughness, Metallic, AO)
-        float2 uv = input.TexCoord * tileScale;
+        float2 uv = input.TexCoord * tileScale + u_UVOffset;
         float4 albedoSample = u_AlbedoMap.Sample(u_Sampler, uv);
         albedo = albedoSample * u_ColorPrimary;
         
@@ -245,7 +256,19 @@ float4 PSMain(PSInput input) : SV_Target0 {
         metallic = clamp(metallic, 0.0, 1.0);
         
         ao = u_AOMap.Sample(u_Sampler, uv).r;
-        emissive = u_EmissiveMap.Sample(u_Sampler, uv).rgb;
+        float3 emissiveSample = u_EmissiveMap.Sample(u_Sampler, uv).rgb;
+        if (length(emissiveSample) > 0.001) {
+            emissive = emissiveSample * u_ColorSecondary.rgb * max(1.0, u_ColorSecondary.w);
+        } else if (u_ColorSecondary.w > 0.01) {
+            emissive = u_ColorSecondary.rgb * u_ColorSecondary.w;
+        }
+    }
+    
+    // Cutout alpha test (SurfaceType == 1): discard fragment if alpha < cutoff
+    int surfaceType = (int)(u_SurfaceType + 0.5);
+    float alphaCutoff = (u_AlphaCutoff > 0.001) ? u_AlphaCutoff : 0.5;
+    if (surfaceType == 1 && albedo.a < alphaCutoff) {
+        discard;
     }
     
     // 3. Normal Vector & Tangent Space Perturbation
@@ -263,7 +286,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 B = cross(N, T) * input.TangentWS.w;
         float3x3 TBN = float3x3(T, B, N);
         
-        float2 uv = input.TexCoord * tileScale;
+        float2 uv = input.TexCoord * tileScale + u_UVOffset;
         float3 normalSample = u_NormalMap.Sample(u_Sampler, uv).xyz * 2.0 - 1.0;
         N = normalize(mul(normalSample, TBN));
     }
@@ -285,10 +308,11 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     // 6. Primary Directional Sun Light (Physical Illuminance in Lux)
     bool hasMultiLightSun = (u_LightCounts.z > 0 && u_SunLight.DirectionAndIlluminance.w > 0.0);
-    float3 sunDir = hasMultiLightSun ? normalize(u_SunLight.DirectionAndIlluminance.xyz) : normalize(u_SunDirAndIntensity.xyz);
-    if (length(sunDir) < 0.1) sunDir = normalize(float3(0.45, 0.85, 0.25));
+    float3 sunDir = hasMultiLightSun ? normalize(u_SunLight.DirectionAndIlluminance.xyz) 
+                                     : (length(u_SunDirection.xyz) > 0.01 ? normalize(u_SunDirection.xyz) : normalize(float3(0.45, 0.85, 0.25)));
 
-    float sunIntensity = hasMultiLightSun ? (u_SunLight.DirectionAndIlluminance.w * 0.000035 + u_SunLight.ColorAndAmbient.w * 0.5) : max(0.5, u_SunDirAndIntensity.w);
+    float sunIntensity = hasMultiLightSun ? (u_SunLight.DirectionAndIlluminance.w * 0.000035 + u_SunLight.ColorAndAmbient.w * 0.5) 
+                                          : (u_SunDirection.w > 0.01 ? u_SunDirection.w : max(0.5, u_SunColor.w));
     float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : ((length(u_SunColor.rgb) > 0.01) ? u_SunColor.rgb : float3(1.0, 0.98, 0.92));
     float3 sunRadiance = sunColor * sunIntensity;
 

@@ -146,7 +146,8 @@ namespace Axle {
         }
 
         bool isAssembly = (ext == ".axle");
-        bool isMaterial = (ext == ".axlemat" || ext == ".amat" || ext == ".mat");
+        bool isMaterial = (ext == ".axlemat" || ext == ".amat" || ext == ".mat" ||
+                           (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material));
         bool isMesh = (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
         bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr");
 
@@ -481,99 +482,39 @@ namespace Axle {
     }
 
     bool SceneHierarchyPanel::SaveMaterialAsset(const std::filesystem::path& path, const MaterialComponent& mat) {
-        std::ofstream fout(path);
-        if (!fout.is_open()) return false;
-        fout << "MaterialAsset:\n";
-        fout << "  AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
-        fout << "  AlbedoPath: " << mat.AlbedoPath << "\n";
-        fout << "  UseAlbedoMap: " << (mat.UseAlbedoMap ? "true" : "false") << "\n";
-        fout << "  NormalPath: " << mat.NormalPath << "\n";
-        fout << "  UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
-        fout << "  NormalStrength: " << mat.NormalStrength << "\n";
-        fout << "  Roughness: " << mat.Roughness << "\n";
-        fout << "  RoughnessPath: " << mat.RoughnessPath << "\n";
-        fout << "  UseRoughnessMap: " << (mat.UseRoughnessMap ? "true" : "false") << "\n";
-        fout << "  Metallic: " << mat.Metallic << "\n";
-        fout << "  MetallicPath: " << mat.MetallicPath << "\n";
-        fout << "  UseMetallicMap: " << (mat.UseMetallicMap ? "true" : "false") << "\n";
-        fout << "  EmissionColor: [ " << mat.EmissionColor.r << " , " << mat.EmissionColor.g << " , " << mat.EmissionColor.b << " ]\n";
-        fout << "  EmissionIntensity: " << mat.EmissionIntensity << "\n";
-        fout << "  UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
-        fout.close();
-        return true;
+        auto m = std::make_shared<Material>(path.stem().string());
+        m->SetAlbedoColor(mat.AlbedoColor);
+        m->SetAlbedoTexture(mat.AlbedoMap, mat.AlbedoPath);
+        m->SetUseAlbedoMap(mat.UseAlbedoMap);
+        m->SetNormalTexture(mat.NormalMap, mat.NormalPath);
+        m->SetUseNormalMap(mat.UseNormalMap);
+        m->SetNormalStrength(mat.NormalStrength);
+        m->SetRoughness(mat.Roughness);
+        m->SetRoughnessTexture(mat.RoughnessMap, mat.RoughnessPath);
+        m->SetUseRoughnessMap(mat.UseRoughnessMap);
+        m->SetMetallic(mat.Metallic);
+        m->SetMetallicTexture(mat.MetallicMap, mat.MetallicPath);
+        m->SetUseMetallicMap(mat.UseMetallicMap);
+        m->SetAO(mat.AOStrength);
+        m->SetAOTexture(mat.AOMap, mat.AOPath);
+        m->SetUseAOMap(mat.UseAOMap);
+        m->SetEmissionColor(mat.EmissionColor);
+        m->SetEmissionIntensity(mat.EmissionIntensity);
+        m->SetEmissiveTexture(mat.EmissiveMap, mat.EmissivePath);
+        m->SetUseEmissiveMap(mat.UseEmissiveMap);
+        m->SetUVScale(mat.UVScale);
+        m->SetUVOffset(mat.UVOffset);
+        m->SetSurfaceType(mat.SurfaceType);
+        m->SetCullMode(mat.CullMode);
+        m->SetAlphaCutoff(mat.AlphaCutoff);
+        m->SetDepthWrite(mat.DepthWrite);
+        return m->Save(path);
     }
 
     bool SceneHierarchyPanel::LoadMaterialAsset(const std::filesystem::path& path, MaterialComponent& mat) {
-        std::ifstream fin(path);
-        if (!fin.is_open()) return false;
-        std::string line;
-        while (std::getline(fin, line)) {
-            size_t start = line.find_first_not_of(" \t\r\n");
-            if (start == std::string::npos) continue;
-            std::string trimmed = line.substr(start);
-
-            if (trimmed.rfind("AlbedoColor:", 0) == 0) {
-                float r = 1, g = 1, b = 1, a = 1;
-                sscanf(trimmed.c_str(), "AlbedoColor: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
-                mat.AlbedoColor = glm::vec4(r, g, b, a);
-            } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
-                std::string p = trimmed.substr(11);
-                size_t pStart = p.find_first_not_of(" \t");
-                std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
-                mat.AlbedoPath = pathStr;
-                if (!pathStr.empty() && Window::HasActiveContext()) {
-                    mat.SetAlbedo(pathStr);
-                }
-            } else if (trimmed.rfind("UseAlbedoMap:", 0) == 0) {
-                mat.UseAlbedoMap = (trimmed.find("true") != std::string::npos);
-            } else if (trimmed.rfind("NormalPath:", 0) == 0) {
-                std::string p = trimmed.substr(11);
-                size_t pStart = p.find_first_not_of(" \t");
-                std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
-                mat.NormalPath = pathStr;
-                if (!pathStr.empty() && Window::HasActiveContext()) {
-                    mat.SetNormal(pathStr);
-                }
-            } else if (trimmed.rfind("UseNormalMap:", 0) == 0) {
-                mat.UseNormalMap = (trimmed.find("true") != std::string::npos);
-            } else if (trimmed.rfind("NormalStrength:", 0) == 0) {
-                mat.NormalStrength = std::stof(trimmed.substr(15));
-            } else if (trimmed.rfind("Roughness:", 0) == 0) {
-                mat.Roughness = std::stof(trimmed.substr(10));
-            } else if (trimmed.rfind("RoughnessPath:", 0) == 0) {
-                std::string p = trimmed.substr(14);
-                size_t pStart = p.find_first_not_of(" \t");
-                std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
-                mat.RoughnessPath = pathStr;
-                if (!pathStr.empty() && Window::HasActiveContext()) {
-                    mat.SetRoughnessMap(pathStr);
-                }
-            } else if (trimmed.rfind("UseRoughnessMap:", 0) == 0) {
-                mat.UseRoughnessMap = (trimmed.find("true") != std::string::npos);
-            } else if (trimmed.rfind("Metallic:", 0) == 0) {
-                mat.Metallic = std::stof(trimmed.substr(9));
-            } else if (trimmed.rfind("MetallicPath:", 0) == 0) {
-                std::string p = trimmed.substr(13);
-                size_t pStart = p.find_first_not_of(" \t");
-                std::string pathStr = (pStart != std::string::npos ? p.substr(pStart) : "");
-                mat.MetallicPath = pathStr;
-                if (!pathStr.empty() && Window::HasActiveContext()) {
-                    mat.SetMetallicMap(pathStr);
-                }
-            } else if (trimmed.rfind("UseMetallicMap:", 0) == 0) {
-                mat.UseMetallicMap = (trimmed.find("true") != std::string::npos);
-            } else if (trimmed.rfind("EmissionColor:", 0) == 0) {
-                float r = 0, g = 0, b = 0;
-                sscanf(trimmed.c_str(), "EmissionColor: [ %f , %f , %f ]", &r, &g, &b);
-                mat.EmissionColor = glm::vec3(r, g, b);
-            } else if (trimmed.rfind("EmissionIntensity:", 0) == 0) {
-                mat.EmissionIntensity = std::stof(trimmed.substr(18));
-            } else if (trimmed.rfind("UVScale:", 0) == 0) {
-                float x = 1, y = 1;
-                sscanf(trimmed.c_str(), "UVScale: [ %f , %f ]", &x, &y);
-                mat.UVScale = glm::vec2(x, y);
-            }
-        }
+        auto m = std::make_shared<Material>(path.stem().string());
+        if (!m->Load(path)) return false;
+        mat.SetAsset(0, m);
         return true;
     }
 
@@ -610,7 +551,44 @@ namespace Axle {
             ImGui::Spacing();
         }
 
-        // 1. Material Presets Card (12 Professional Presets)
+        // 1. Surface Options (Unity Standard / URP Header)
+        if (ImGui::CollapsingHeader("Surface Options", ImGuiTreeNodeFlags_DefaultOpen)) {
+            // Surface Type Combo
+            const char* surfaceTypes[] = { "Opaque", "Cutout", "Transparent", "Additive" };
+            int currentSurfaceType = static_cast<int>(m_ActiveMaterialAsset.SurfaceType);
+            if (ImGui::Combo("Surface Type", &currentSurfaceType, surfaceTypes, IM_ARRAYSIZE(surfaceTypes))) {
+                m_ActiveMaterialAsset.SurfaceType = static_cast<Axle::SurfaceType>(currentSurfaceType);
+                if (m_ActiveMaterialAsset.SurfaceType == Axle::SurfaceType::Transparent || m_ActiveMaterialAsset.SurfaceType == Axle::SurfaceType::Additive) {
+                    m_ActiveMaterialAsset.DepthWrite = false;
+                } else {
+                    m_ActiveMaterialAsset.DepthWrite = true;
+                }
+                changed = true;
+            }
+
+            // Render Face (Cull Mode) Combo
+            const char* cullModes[] = { "Back", "Front", "Both / None (Two-Sided)" };
+            int currentCull = (m_ActiveMaterialAsset.CullMode == Axle::CullMode::Back) ? 0 : (m_ActiveMaterialAsset.CullMode == Axle::CullMode::Front ? 1 : 2);
+            if (ImGui::Combo("Render Face", &currentCull, cullModes, IM_ARRAYSIZE(cullModes))) {
+                m_ActiveMaterialAsset.CullMode = (currentCull == 0) ? Axle::CullMode::Back : (currentCull == 1 ? Axle::CullMode::Front : Axle::CullMode::None);
+                changed = true;
+            }
+
+            // Alpha Cutoff (if Cutout)
+            if (m_ActiveMaterialAsset.SurfaceType == Axle::SurfaceType::Cutout) {
+                if (ImGui::SliderFloat("Alpha Cutoff", &m_ActiveMaterialAsset.AlphaCutoff, 0.0f, 1.0f, "%.2f")) {
+                    changed = true;
+                }
+            }
+
+            // Depth Write
+            if (ImGui::Checkbox("Depth Write", &m_ActiveMaterialAsset.DepthWrite)) {
+                changed = true;
+            }
+            ImGui::Spacing();
+        }
+
+        // 2. Material Presets Card (16 Professional Presets)
         if (ImGui::CollapsingHeader("Material Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
             float btnW = (ImGui::GetContentRegionAvail().x - 12.0f) / 4.0f;
             
@@ -640,21 +618,31 @@ namespace Axle {
             if (ImGui::Button("Paint Silver", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCarPaintSilver(); changed = true; }
             ImGui::SameLine();
             if (ImGui::Button("Headlight", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetHeadlightLED(); changed = true; }
+
+            // Row 4: Advanced Shaders & Transparency
+            if (ImGui::Button("Glass", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetGlass(); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Foliage", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetFoliage(); changed = true; }
             ImGui::SameLine();
             if (ImGui::Button("Taillight", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetTaillightLED(); changed = true; }
+            ImGui::SameLine();
+            if (ImGui::Button("Reset Textures", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.ResetTextures(); changed = true; }
         }
 
         ImGui::Spacing();
 
-        // 2. Interactive PBR Surface Properties
-        if (ImGui::CollapsingHeader("PBR Surface Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // 3. Interactive PBR Surface Inputs (Unity-Style Layout)
+        if (ImGui::CollapsingHeader("PBR Surface Inputs", ImGuiTreeNodeFlags_DefaultOpen)) {
+            float clearBtnW = 24.0f;
+            float inputW = ImGui::GetContentRegionAvail().x - clearBtnW - 6.0f;
+
             // Albedo Color
-            if (ImGui::ColorEdit4("Albedo Color", glm::value_ptr(m_ActiveMaterialAsset.AlbedoColor))) {
+            if (ImGui::ColorEdit4("Base Color", glm::value_ptr(m_ActiveMaterialAsset.AlbedoColor))) {
                 changed = true;
             }
 
             // Albedo Texture Slot
-            ImGui::TextDisabled("Albedo Map");
+            ImGui::TextDisabled("Base Map");
             if (m_ActiveMaterialAsset.UseAlbedoMap && m_ActiveMaterialAsset.AlbedoMap && m_ActiveMaterialAsset.AlbedoMap->IsLoaded() && m_ActiveMaterialAsset.AlbedoMap->GetRendererID() != 0) {
                 ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.AlbedoMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
                 ImGui::SameLine();
@@ -662,8 +650,6 @@ namespace Axle {
             char albedoBuf[256];
             std::memset(albedoBuf, 0, sizeof(albedoBuf));
             std::strncpy(albedoBuf, m_ActiveMaterialAsset.AlbedoPath.c_str(), sizeof(albedoBuf) - 1);
-            float clearBtnW = 24.0f;
-            float inputW = ImGui::GetContentRegionAvail().x - clearBtnW - 6.0f;
             ImGui::SetNextItemWidth(inputW);
             if (ImGui::InputText("##AlbedoTexture", albedoBuf, sizeof(albedoBuf))) {
                 m_ActiveMaterialAsset.SetAlbedo(albedoBuf);
@@ -784,6 +770,39 @@ namespace Axle {
 
             ImGui::Separator();
 
+            // Occlusion Map
+            if (ImGui::SliderFloat("Occlusion", &m_ActiveMaterialAsset.AOStrength, 0.0f, 1.0f, "%.2f")) {
+                changed = true;
+            }
+            ImGui::TextDisabled("Occlusion Map");
+            if (m_ActiveMaterialAsset.UseAOMap && m_ActiveMaterialAsset.AOMap && m_ActiveMaterialAsset.AOMap->IsLoaded() && m_ActiveMaterialAsset.AOMap->GetRendererID() != 0) {
+                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.AOMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
+                ImGui::SameLine();
+            }
+            char aoBuf[256];
+            std::memset(aoBuf, 0, sizeof(aoBuf));
+            std::strncpy(aoBuf, m_ActiveMaterialAsset.AOPath.c_str(), sizeof(aoBuf) - 1);
+            ImGui::SetNextItemWidth(inputW);
+            if (ImGui::InputText("##AOMap", aoBuf, sizeof(aoBuf))) {
+                m_ActiveMaterialAsset.SetAOMap(aoBuf);
+                changed = true;
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    std::string droppedPath = static_cast<const char*>(payload->Data);
+                    m_ActiveMaterialAsset.SetAOMap(droppedPath);
+                    changed = true;
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("X##ClearAO", ImVec2(clearBtnW, 0.0f))) {
+                m_ActiveMaterialAsset.SetAOMap("");
+                changed = true;
+            }
+
+            ImGui::Separator();
+
             // Emission
             if (ImGui::ColorEdit3("Emission Color", glm::value_ptr(m_ActiveMaterialAsset.EmissionColor))) {
                 changed = true;
@@ -791,14 +810,43 @@ namespace Axle {
             if (ImGui::DragFloat("Emission Intensity", &m_ActiveMaterialAsset.EmissionIntensity, 0.1f, 0.0f, 50.0f, "%.1f")) {
                 changed = true;
             }
+            ImGui::TextDisabled("Emissive Map");
+            if (m_ActiveMaterialAsset.UseEmissiveMap && m_ActiveMaterialAsset.EmissiveMap && m_ActiveMaterialAsset.EmissiveMap->IsLoaded() && m_ActiveMaterialAsset.EmissiveMap->GetRendererID() != 0) {
+                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.EmissiveMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
+                ImGui::SameLine();
+            }
+            char emissiveBuf[256];
+            std::memset(emissiveBuf, 0, sizeof(emissiveBuf));
+            std::strncpy(emissiveBuf, m_ActiveMaterialAsset.EmissivePath.c_str(), sizeof(emissiveBuf) - 1);
+            ImGui::SetNextItemWidth(inputW);
+            if (ImGui::InputText("##EmissiveMap", emissiveBuf, sizeof(emissiveBuf))) {
+                m_ActiveMaterialAsset.SetEmissiveMap(emissiveBuf);
+                changed = true;
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    std::string droppedPath = static_cast<const char*>(payload->Data);
+                    m_ActiveMaterialAsset.SetEmissiveMap(droppedPath);
+                    changed = true;
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("X##ClearEmissive", ImVec2(clearBtnW, 0.0f))) {
+                m_ActiveMaterialAsset.SetEmissiveMap("");
+                changed = true;
+            }
 
             ImGui::Separator();
 
-            // UV Tiling
-            if (ImGui::DragFloat2("UV Scale", glm::value_ptr(m_ActiveMaterialAsset.UVScale), 0.1f, 0.01f, 100.0f, "%.2f")) {
+            // UV Tiling & Offset
+            if (ImGui::DragFloat2("Tiling", glm::value_ptr(m_ActiveMaterialAsset.UVScale), 0.1f, 0.01f, 100.0f, "%.2f")) {
                 changed = true;
             }
-            if (ImGui::SmallButton("1x1")) { m_ActiveMaterialAsset.UVScale = glm::vec2(1.0f); changed = true; }
+            if (ImGui::DragFloat2("Offset", glm::value_ptr(m_ActiveMaterialAsset.UVOffset), 0.05f, -10.0f, 10.0f, "%.2f")) {
+                changed = true;
+            }
+            if (ImGui::SmallButton("1x1")) { m_ActiveMaterialAsset.UVScale = glm::vec2(1.0f); m_ActiveMaterialAsset.UVOffset = glm::vec2(0.0f); changed = true; }
             ImGui::SameLine();
             if (ImGui::SmallButton("2x2")) { m_ActiveMaterialAsset.UVScale = glm::vec2(2.0f); changed = true; }
             ImGui::SameLine();

@@ -95,6 +95,10 @@ namespace Axle::RHI {
                                       static_cast<float>(m_Desc.ShadingModel),
                                       m_Desc.Roughness,
                                       m_Desc.Metallic);
+        pushConsts.MaterialExtra = glm::vec4(m_Desc.UVOffset.x,
+                                             m_Desc.UVOffset.y,
+                                             m_Desc.AlphaCutoff,
+                                             static_cast<float>(m_Desc.SurfaceType));
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultWhiteTexture() {
@@ -292,6 +296,29 @@ namespace Axle::RHI {
         return mat;
     }
 
+    std::shared_ptr<RHIMaterial> RHIMaterial::CreateGlass() {
+        auto mat = std::make_shared<RHIMaterial>("Glass");
+        mat->SetBaseColor(glm::vec4(0.92f, 0.96f, 1.0f, 0.35f));
+        mat->SetRoughness(0.04f);
+        mat->SetMetallic(0.0f);
+        mat->SetSurfaceType(SurfaceType::Transparent);
+        mat->SetCullMode(CullMode::None);
+        mat->SetDepthWrite(false);
+        return mat;
+    }
+
+    std::shared_ptr<RHIMaterial> RHIMaterial::CreateFoliage() {
+        auto mat = std::make_shared<RHIMaterial>("Foliage");
+        mat->SetBaseColor(glm::vec4(0.20f, 0.65f, 0.15f, 1.0f));
+        mat->SetRoughness(0.60f);
+        mat->SetMetallic(0.0f);
+        mat->SetSurfaceType(SurfaceType::Cutout);
+        mat->SetCullMode(CullMode::None);
+        mat->SetAlphaCutoff(0.5f);
+        mat->SetDepthWrite(true);
+        return mat;
+    }
+
     bool RHIMaterial::Save(const std::filesystem::path& filepath) const {
         std::ofstream fout(filepath);
         if (!fout.is_open()) {
@@ -314,6 +341,11 @@ namespace Axle::RHI {
             fout << "Material {\n";
             fout << "    name: \"" << m_Desc.Name << "\"\n";
             fout << "    shader: \"ForwardPBR\"\n\n";
+            fout << "    // Surface Options\n";
+            fout << "    surfaceType: \"" << SurfaceTypeToString(m_Desc.SurfaceType) << "\"\n";
+            fout << "    cullMode: \"" << CullModeToString(m_Desc.CullMode) << "\"\n";
+            fout << "    alphaCutoff: " << m_Desc.AlphaCutoff << "\n";
+            fout << "    depthWrite: " << (m_Desc.DepthWrite ? "true" : "false") << "\n\n";
             fout << "    // Base Color & Texture\n";
             fout << "    albedoColor: \"" << formatHex(m_Desc.BaseColor) << "\"\n";
             fout << "    albedoMap: \"" << m_Desc.AlbedoPath << "\"\n\n";
@@ -321,17 +353,24 @@ namespace Axle::RHI {
             fout << "    metallic: " << m_Desc.Metallic << "\n";
             fout << "    roughness: " << m_Desc.Roughness << "\n";
             fout << "    normalMap: \"" << m_Desc.NormalPath << "\"\n";
-            fout << "    normalStrength: " << m_Desc.NormalStrength << "\n\n";
+            fout << "    normalStrength: " << m_Desc.NormalStrength << "\n";
+            fout << "    occlusionMap: \"" << m_Desc.AOPath << "\"\n";
+            fout << "    occlusionStrength: " << m_Desc.AO << "\n\n";
             fout << "    // Emission & UV Scaling\n";
             fout << "    emissionColor: \"" << formatHex(glm::vec4(m_Desc.EmissiveColor, 1.0f)) << "\"\n";
             fout << "    emissionIntensity: " << m_Desc.EmissiveIntensity << "\n";
-            fout << "    uvScale: [ " << m_Desc.UVScale.x << " , " << m_Desc.UVScale.y << " ]\n";
+            fout << "    uvTiling: [ " << m_Desc.UVScale.x << " , " << m_Desc.UVScale.y << " ]\n";
+            fout << "    uvOffset: [ " << m_Desc.UVOffset.x << " , " << m_Desc.UVOffset.y << " ]\n";
             fout << "}\n";
             return true;
         }
 
         fout << "RHIMaterial:\n";
         fout << "  Name: " << m_Desc.Name << "\n";
+        fout << "  SurfaceType: " << SurfaceTypeToString(m_Desc.SurfaceType) << "\n";
+        fout << "  CullMode: " << CullModeToString(m_Desc.CullMode) << "\n";
+        fout << "  AlphaCutoff: " << m_Desc.AlphaCutoff << "\n";
+        fout << "  DepthWrite: " << (m_Desc.DepthWrite ? "true" : "false") << "\n";
         fout << "  BaseColor: [ " << m_Desc.BaseColor.r << " , " << m_Desc.BaseColor.g << " , " << m_Desc.BaseColor.b << " , " << m_Desc.BaseColor.a << " ]\n";
         fout << "  Roughness: " << m_Desc.Roughness << "\n";
         fout << "  Metallic: " << m_Desc.Metallic << "\n";
@@ -375,6 +414,19 @@ namespace Axle::RHI {
                     std::string val = Trim(trimmed.substr(5));
                     if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
                     m_Desc.Name = val;
+                } else if (trimmed.rfind("surfaceType:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(12));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    m_Desc.SurfaceType = StringToSurfaceType(val);
+                } else if (trimmed.rfind("cullMode:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(9));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    m_Desc.CullMode = StringToCullMode(val);
+                } else if (trimmed.rfind("alphaCutoff:", 0) == 0) {
+                    try { m_Desc.AlphaCutoff = std::clamp(std::stof(Trim(trimmed.substr(12))), 0.0f, 1.0f); } catch (...) {}
+                } else if (trimmed.rfind("depthWrite:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(11));
+                    m_Desc.DepthWrite = (val == "true" || val == "1");
                 } else if (trimmed.rfind("albedoColor:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(12));
                     if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
@@ -417,10 +469,45 @@ namespace Axle::RHI {
                     m_Desc.NormalPath = p;
                 } else if (trimmed.rfind("normalStrength:", 0) == 0) {
                     try { m_Desc.NormalStrength = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
-                } else if (trimmed.rfind("uvScale:", 0) == 0) {
+                } else if (trimmed.rfind("uvScale:", 0) == 0 || trimmed.rfind("uvTiling:", 0) == 0) {
                     float x = 1, y = 1;
-                    std::sscanf(trimmed.c_str(), "uvScale: [ %f , %f ]", &x, &y);
+                    const char* fmt = (trimmed.rfind("uvTiling:", 0) == 0) ? "uvTiling: [ %f , %f ]" : "uvScale: [ %f , %f ]";
+                    std::sscanf(trimmed.c_str(), fmt, &x, &y);
                     m_Desc.UVScale = glm::vec2(x, y);
+                } else if (trimmed.rfind("uvOffset:", 0) == 0) {
+                    float x = 0, y = 0;
+                    std::sscanf(trimmed.c_str(), "uvOffset: [ %f , %f ]", &x, &y);
+                    m_Desc.UVOffset = glm::vec2(x, y);
+                } else if (trimmed.rfind("occlusionMap:", 0) == 0 || trimmed.rfind("aoMap:", 0) == 0) {
+                    size_t colon = trimmed.find(':');
+                    std::string p = Trim(trimmed.substr(colon + 1));
+                    if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
+                    m_Desc.AOPath = p;
+                } else if (trimmed.rfind("occlusionStrength:", 0) == 0 || trimmed.rfind("ao:", 0) == 0) {
+                    size_t colon = trimmed.find(':');
+                    try { SetAO(std::stof(Trim(trimmed.substr(colon + 1)))); } catch (...) {}
+                } else if (trimmed.rfind("emissionColor:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(14));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    if (!val.empty() && val[0] == '#') {
+                        auto hexCharToInt = [](char c) -> uint32_t {
+                            if (c >= '0' && c <= '9') return c - '0';
+                            if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+                            if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+                            return 0;
+                        };
+                        std::string h = val.substr(1);
+                        if (h.size() >= 6) {
+                            uint32_t r = (hexCharToInt(h[0]) << 4) | hexCharToInt(h[1]);
+                            uint32_t g = (hexCharToInt(h[2]) << 4) | hexCharToInt(h[3]);
+                            uint32_t b = (hexCharToInt(h[4]) << 4) | hexCharToInt(h[5]);
+                            m_Desc.EmissiveColor = glm::vec3(r / 255.0f, g / 255.0f, b / 255.0f);
+                        }
+                    } else {
+                        float r = 0, g = 0, b = 0;
+                        std::sscanf(val.c_str(), "[ %f , %f , %f ]", &r, &g, &b);
+                        m_Desc.EmissiveColor = glm::vec3(r, g, b);
+                    }
                 } else if (trimmed.rfind("emissionIntensity:", 0) == 0) {
                     try { m_Desc.EmissiveIntensity = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
                 }
@@ -445,6 +532,15 @@ namespace Axle::RHI {
             if (inSection) {
                 if (trimmed.rfind("Name:", 0) == 0) {
                     m_Desc.Name = Trim(trimmed.substr(5));
+                } else if (trimmed.rfind("SurfaceType:", 0) == 0) {
+                    m_Desc.SurfaceType = StringToSurfaceType(Trim(trimmed.substr(12)));
+                } else if (trimmed.rfind("CullMode:", 0) == 0) {
+                    m_Desc.CullMode = StringToCullMode(Trim(trimmed.substr(9)));
+                } else if (trimmed.rfind("AlphaCutoff:", 0) == 0) {
+                    try { m_Desc.AlphaCutoff = std::clamp(std::stof(Trim(trimmed.substr(12))), 0.0f, 1.0f); } catch (...) {}
+                } else if (trimmed.rfind("DepthWrite:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(11));
+                    m_Desc.DepthWrite = (val == "true" || val == "1");
                 } else if (trimmed.rfind("BaseColor:", 0) == 0 || trimmed.rfind("AlbedoColor:", 0) == 0) {
                     float r = 1, g = 1, b = 1, a = 1;
                     const char* fmt = (trimmed.rfind("BaseColor:", 0) == 0) ? "BaseColor: [ %f , %f , %f , %f ]" : "AlbedoColor: [ %f , %f , %f , %f ]";

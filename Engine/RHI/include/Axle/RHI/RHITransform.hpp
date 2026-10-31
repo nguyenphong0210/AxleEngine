@@ -23,7 +23,10 @@ namespace Axle::RHI {
         glm::vec4 ColorPrimary{ 0.85f, 0.88f, 0.92f, 1.0f }; // 16 bytes (Offset 64)
         glm::vec4 ColorSecondary{ 0.45f, 0.48f, 0.52f, 1.0f }; // 16 bytes (Offset 80)
         glm::vec4 Params{ 4.0f, 1.0f, 0.5f, 0.0f };  // 16 bytes (Offset 96) - x: TileScale, y: PatternMode, z: Roughness, w: Metallic
-        glm::vec4 SunDirAndIntensity{ 0.45f, 0.85f, 0.25f, 1.2f }; // 16 bytes (Offset 112) - xyz: Light dir, w: Sun intensity
+        union {
+            glm::vec4 SunDirAndIntensity{ 0.45f, 0.85f, 0.25f, 1.2f }; // 16 bytes (Offset 112) - xyz: Light dir, w: Sun intensity
+            glm::vec4 MaterialExtra; // 16 bytes (Offset 112) - x: UVOffset.x, y: UVOffset.y, z: AlphaCutoff, w: SurfaceType
+        };
 
         static constexpr uint32_t GetByteSize() { return sizeof(RHIObjectPushConstants); }
     };

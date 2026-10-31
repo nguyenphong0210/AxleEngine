@@ -338,3 +338,6 @@ bool RunTest_Step98_Phase35_Step4_VulkanGraphicsBackendAndParity();
 bool RunTest_Step99_Phase36_Step1_AssetDSLLexerAndParser();
 bool RunTest_Step100_Phase37_RawMediaIngestionAndOptInDescriptors();
 
+
+// Milestone 10 - Phase 38: Unity-Style Material Studio & RHI Forward Pipeline (Step 101)
+bool RunTest_Step101_Phase38_MaterialSchemaInspectorAndHLSLStudio();

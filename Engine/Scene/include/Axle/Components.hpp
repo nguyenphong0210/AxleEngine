@@ -111,6 +111,13 @@ namespace Axle {
         std::shared_ptr<RHI::RHIMaterial> RHIMaterialAsset = nullptr; // Multi-backend RHI PBR Material
         std::string AssetPath; // Unified .axleasset file path
 
+        // Surface Options (Unity / Unreal Standard)
+        Axle::SurfaceType SurfaceType = Axle::SurfaceType::Opaque;
+        Axle::CullMode CullMode = Axle::CullMode::Back;
+        float AlphaCutoff = 0.5f;
+        bool DepthWrite = true;
+        glm::vec2 UVOffset{ 0.0f, 0.0f };
+
         // Local instance properties (active when MaterialHandle == 0 or when editing local values)
         std::string AlbedoPath;
         std::shared_ptr<Texture2D> AlbedoMap;
@@ -166,39 +173,53 @@ namespace Axle {
             AlbedoColor = MaterialAsset->GetAlbedoColor();
             AlbedoPath = MaterialAsset->GetAlbedoPath();
             AlbedoMap = MaterialAsset->GetAlbedoMap();
-            UseAlbedoMap = MaterialAsset->UseAlbedoMap();
+            UseAlbedoMap = MaterialAsset->IsAlbedoMapEnabled();
 
             NormalPath = MaterialAsset->GetNormalPath();
             NormalMap = MaterialAsset->GetNormalMap();
-            UseNormalMap = MaterialAsset->UseNormalMap();
+            UseNormalMap = MaterialAsset->IsNormalMapEnabled();
             NormalStrength = MaterialAsset->GetNormalStrength();
 
             Roughness = MaterialAsset->GetRoughness();
             RoughnessPath = MaterialAsset->GetRoughnessPath();
             RoughnessMap = MaterialAsset->GetRoughnessMap();
-            UseRoughnessMap = MaterialAsset->UseRoughnessMap();
+            UseRoughnessMap = MaterialAsset->IsRoughnessMapEnabled();
 
             Metallic = MaterialAsset->GetMetallic();
             MetallicPath = MaterialAsset->GetMetallicPath();
             MetallicMap = MaterialAsset->GetMetallicMap();
-            UseMetallicMap = MaterialAsset->UseMetallicMap();
+            UseMetallicMap = MaterialAsset->IsMetallicMapEnabled();
 
             AOStrength = MaterialAsset->GetAO();
             AOPath = MaterialAsset->GetAOPath();
             AOMap = MaterialAsset->GetAOMap();
-            UseAOMap = MaterialAsset->UseAOMap();
+            UseAOMap = MaterialAsset->IsAOMapEnabled();
 
             EmissivePath = MaterialAsset->GetEmissivePath();
             EmissiveMap = MaterialAsset->GetEmissiveMap();
-            UseEmissiveMap = MaterialAsset->UseEmissiveMap();
+            UseEmissiveMap = MaterialAsset->IsEmissiveMapEnabled();
 
             EmissionColor = MaterialAsset->GetEmissionColor();
             EmissionIntensity = MaterialAsset->GetEmissionIntensity();
             UVScale = MaterialAsset->GetUVScale();
+            UVOffset = MaterialAsset->GetUVOffset();
+            SurfaceType = MaterialAsset->GetSurfaceType();
+            CullMode = MaterialAsset->GetCullMode();
+            AlphaCutoff = MaterialAsset->GetAlphaCutoff();
+            DepthWrite = MaterialAsset->GetDepthWrite();
 
+            SyncToRHI();
+        }
+
+        void SyncToRHI() {
             if (!RHIMaterialAsset) {
-                RHIMaterialAsset = std::make_shared<RHI::RHIMaterial>(MaterialAsset->GetName());
+                std::string name = MaterialAsset ? MaterialAsset->GetName() : "Material";
+                RHIMaterialAsset = std::make_shared<RHI::RHIMaterial>(name);
             }
+            RHIMaterialAsset->SetSurfaceType(SurfaceType);
+            RHIMaterialAsset->SetCullMode(CullMode);
+            RHIMaterialAsset->SetAlphaCutoff(AlphaCutoff);
+            RHIMaterialAsset->SetDepthWrite(DepthWrite);
             RHIMaterialAsset->SetBaseColor(AlbedoColor);
             RHIMaterialAsset->SetRoughness(Roughness);
             RHIMaterialAsset->SetMetallic(Metallic);
@@ -206,6 +227,7 @@ namespace Axle {
             RHIMaterialAsset->SetEmissiveColor(EmissionColor);
             RHIMaterialAsset->SetEmissiveIntensity(EmissionIntensity);
             RHIMaterialAsset->SetUVScale(UVScale);
+            RHIMaterialAsset->SetUVOffset(UVOffset);
             if (UseNormalMap) {
                 RHIMaterialAsset->GetDesc().NormalPath = NormalPath;
             }
@@ -216,6 +238,12 @@ namespace Axle {
 
         void SyncToAsset() {
             if (!MaterialAsset) return;
+            MaterialAsset->SetSurfaceType(SurfaceType);
+            MaterialAsset->SetCullMode(CullMode);
+            MaterialAsset->SetAlphaCutoff(AlphaCutoff);
+            MaterialAsset->SetDepthWrite(DepthWrite);
+            MaterialAsset->SetUVOffset(UVOffset);
+
             MaterialAsset->SetAlbedoColor(AlbedoColor);
             MaterialAsset->SetAlbedoTexture(AlbedoMap, AlbedoPath);
             MaterialAsset->SetUseAlbedoMap(UseAlbedoMap);
@@ -249,6 +277,10 @@ namespace Axle {
             MaterialAsset = nullptr;
         }
 
+        Axle::SurfaceType GetSurfaceType() const { return MaterialAsset ? MaterialAsset->GetSurfaceType() : SurfaceType; }
+        Axle::CullMode GetCullMode() const { return MaterialAsset ? MaterialAsset->GetCullMode() : CullMode; }
+        float GetAlphaCutoff() const { return MaterialAsset ? MaterialAsset->GetAlphaCutoff() : AlphaCutoff; }
+        bool GetDepthWrite() const { return MaterialAsset ? MaterialAsset->GetDepthWrite() : DepthWrite; }
         float GetRoughness() const { return MaterialAsset ? MaterialAsset->GetRoughness() : Roughness; }
         float GetMetallic() const { return MaterialAsset ? MaterialAsset->GetMetallic() : Metallic; }
         float GetAO() const { return MaterialAsset ? MaterialAsset->GetAO() : AOStrength; }
@@ -257,6 +289,8 @@ namespace Axle {
         const glm::vec3& GetEmissionColor() const { return MaterialAsset ? MaterialAsset->GetEmissionColor() : EmissionColor; }
         float GetEmissionIntensity() const { return MaterialAsset ? MaterialAsset->GetEmissionIntensity() : EmissionIntensity; }
         const glm::vec2& GetUVScale() const { return MaterialAsset ? MaterialAsset->GetUVScale() : UVScale; }
+        const glm::vec2& GetUVTiling() const { return MaterialAsset ? MaterialAsset->GetUVTiling() : UVScale; }
+        const glm::vec2& GetUVOffset() const { return MaterialAsset ? MaterialAsset->GetUVOffset() : UVOffset; }
 
         void Bind(Shader& shader, uint32_t slotAlbedo = 0, uint32_t slotNormal = 2, uint32_t slotRoughness = 3, uint32_t slotMetallic = 4) const {
             if (HasAsset()) {
@@ -297,12 +331,15 @@ namespace Axle {
             }
 
             shader.SetFloat2("u_UVScale", UVScale);
+            shader.SetFloat2("u_UVOffset", UVOffset);
             shader.SetFloat("u_Roughness", Roughness);
             shader.SetFloat("u_Metallic", Metallic);
             shader.SetFloat("u_NormalStrength", NormalStrength);
             shader.SetFloat3("u_EmissionColor", EmissionColor);
             shader.SetFloat("u_EmissionIntensity", EmissionIntensity);
             shader.SetFloat4("u_Color1", AlbedoColor);
+            shader.SetInt("u_SurfaceType", static_cast<int>(SurfaceType));
+            shader.SetFloat("u_AlphaCutoff", AlphaCutoff);
         }
 
         void ResetTextures() {
@@ -330,6 +367,12 @@ namespace Axle {
             EmissivePath.clear();
             EmissiveMap = nullptr;
             UseEmissiveMap = false;
+
+            SurfaceType = SurfaceType::Opaque;
+            CullMode = CullMode::Back;
+            AlphaCutoff = 0.5f;
+            DepthWrite = true;
+            UVOffset = glm::vec2(0.0f);
 
             if (HasAsset()) SyncToAsset();
         }
@@ -461,6 +504,35 @@ namespace Axle {
             Metallic = 0.0f;
             EmissionColor = glm::vec3(1.0f, 0.05f, 0.05f);
             EmissionIntensity = 4.0f;
+            SurfaceType = SurfaceType::Additive;
+            DepthWrite = false;
+            if (HasAsset()) SyncToAsset();
+        }
+
+        void SetPresetGlass() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.92f, 0.96f, 1.0f, 0.35f);
+            Roughness = 0.04f;
+            Metallic = 0.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+            SurfaceType = SurfaceType::Transparent;
+            CullMode = CullMode::None;
+            DepthWrite = false;
+            if (HasAsset()) SyncToAsset();
+        }
+
+        void SetPresetFoliage() {
+            ResetTextures();
+            AlbedoColor = glm::vec4(0.20f, 0.65f, 0.15f, 1.0f);
+            Roughness = 0.60f;
+            Metallic = 0.0f;
+            EmissionColor = glm::vec3(0.0f);
+            EmissionIntensity = 0.0f;
+            SurfaceType = SurfaceType::Cutout;
+            CullMode = CullMode::None;
+            AlphaCutoff = 0.5f;
+            DepthWrite = true;
             if (HasAsset()) SyncToAsset();
         }
 
@@ -512,6 +584,32 @@ namespace Axle {
             } else {
                 MetallicMap = nullptr;
                 UseMetallicMap = false;
+            }
+            if (HasAsset()) SyncToAsset();
+        }
+
+        void SetAOMap(const std::string& path) {
+            AOPath = path;
+            if (!path.empty()) {
+                auto resolved = FileSystem::ResolveAssetPath(path);
+                AOMap = Texture2D::Create(resolved.string());
+                UseAOMap = (AOMap && AOMap->IsLoaded());
+            } else {
+                AOMap = nullptr;
+                UseAOMap = false;
+            }
+            if (HasAsset()) SyncToAsset();
+        }
+
+        void SetEmissiveMap(const std::string& path) {
+            EmissivePath = path;
+            if (!path.empty()) {
+                auto resolved = FileSystem::ResolveAssetPath(path);
+                EmissiveMap = Texture2D::Create(resolved.string());
+                UseEmissiveMap = (EmissiveMap && EmissiveMap->IsLoaded());
+            } else {
+                EmissiveMap = nullptr;
+                UseEmissiveMap = false;
             }
             if (HasAsset()) SyncToAsset();
         }

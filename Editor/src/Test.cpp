@@ -1,4 +1,5 @@
 #include "Tests/TestCommon.hpp"
+#include <Axle/RHIMeshRegistry.hpp>
 
 // =============================================================================
 // MAIN ENTRY POINT FOR TEST SUITE
@@ -108,6 +109,7 @@ int main(int argc, char** argv) {
         else if (arg == "98" || arg == "step98" || arg == "--step98" || arg == "--vulkan-parity" || arg == "--vulkan") targetStep = 98;
         else if (arg == "99" || arg == "step99" || arg == "--step99" || arg == "--assetdsl" || arg == "--axleasset") targetStep = 99;
         else if (arg == "100" || arg == "step100" || arg == "--step100" || arg == "--rawmedia" || arg == "--optin-desc") targetStep = 100;
+        else if (arg == "101" || arg == "step101" || arg == "--step101" || arg == "--material-studio" || arg == "--phase38") targetStep = 101;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -409,11 +411,16 @@ int main(int argc, char** argv) {
     if (targetStep == 0 || targetStep == 100) {
         if (!RunTest_Step100_Phase37_RawMediaIngestionAndOptInDescriptors()) allPassed = false;
     }
+    if (targetStep == 0 || targetStep == 101) {
+        if (!RunTest_Step101_Phase38_MaterialSchemaInspectorAndHLSLStudio()) allPassed = false;
+    }
 
     if (Axle::JobSystem::IsInitialized()) {
         Axle::JobSystem::Shutdown();
     }
     Axle::ScriptHotReloadManager::Get().Shutdown();
+    Axle::RHIMeshRegistry::Get().Shutdown();
+    Axle::RHI::RHIMaterial::ReleaseDefaultTextures();
     if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
         Axle::RHI::RHIDevice::Get().Shutdown();
     }

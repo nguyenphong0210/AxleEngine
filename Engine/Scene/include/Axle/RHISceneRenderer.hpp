@@ -113,7 +113,10 @@ namespace Axle {
         RHI::RHITextureFormat GetRenderTargetDepthFormat() const;
         bool IsHDR() const { return m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT; }
 
-        nri::Pipeline* GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1);
+        nri::Pipeline* GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1,
+                                           Axle::SurfaceType surfaceType = Axle::SurfaceType::Opaque,
+                                           Axle::CullMode cullMode = Axle::CullMode::None,
+                                           bool depthWrite = true);
         nri::Pipeline* GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1);
 
         // Image-Based Lighting (IBL) configuration

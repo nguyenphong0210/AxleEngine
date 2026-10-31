@@ -23,6 +23,7 @@
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/PhysicsMaterial.hpp>
 #include <Axle/TerrainAsset.hpp>
+#include <Axle/RHIMeshRegistry.hpp>
 
 // =============================================================================
 // STEP 98: PHASE 35 STEP 4 - TRIPLE-BACKEND PARITY & AUTOMATED VULKAN 1.3 VERIFICATION
@@ -57,6 +58,7 @@ bool RunTest_Step98_Phase35_Step4_VulkanGraphicsBackendAndParity() {
     assert(foundVulkanAdapter && "Expected at least one Vulkan-capable adapter on host system!");
 
     // Shutdown existing device if active
+    RHIMeshRegistry::Get().Shutdown();
     auto& rhiDevice = RHIDevice::Get();
     if (rhiDevice.IsInitialized()) {
         rhiDevice.Shutdown();

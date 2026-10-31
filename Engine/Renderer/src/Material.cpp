@@ -189,6 +189,11 @@ namespace Axle {
         ClearMetallicTexture();
         ClearAOTexture();
         ClearEmissiveTexture();
+        m_SurfaceType = SurfaceType::Opaque;
+        m_CullMode = CullMode::Back;
+        m_AlphaCutoff = 0.5f;
+        m_DepthWrite = true;
+        m_UVOffset = glm::vec2(0.0f);
     }
 
     void Material::SetPresetCarPaintRed() {
@@ -306,6 +311,33 @@ namespace Axle {
         m_Metallic = 0.0f;
         m_EmissionColor = glm::vec3(1.0f, 0.05f, 0.05f);
         m_EmissionIntensity = 12.0f;
+        m_SurfaceType = SurfaceType::Additive;
+        m_DepthWrite = false;
+    }
+
+    void Material::SetPresetGlass() {
+        ResetTextures();
+        m_AlbedoColor = glm::vec4(0.92f, 0.96f, 1.0f, 0.35f);
+        m_Roughness = 0.04f;
+        m_Metallic = 0.0f;
+        m_EmissionColor = glm::vec3(0.0f);
+        m_EmissionIntensity = 0.0f;
+        m_SurfaceType = SurfaceType::Transparent;
+        m_CullMode = CullMode::None;
+        m_DepthWrite = false;
+    }
+
+    void Material::SetPresetFoliage() {
+        ResetTextures();
+        m_AlbedoColor = glm::vec4(0.20f, 0.65f, 0.15f, 1.0f);
+        m_Roughness = 0.60f;
+        m_Metallic = 0.0f;
+        m_EmissionColor = glm::vec3(0.0f);
+        m_EmissionIntensity = 0.0f;
+        m_SurfaceType = SurfaceType::Cutout;
+        m_CullMode = CullMode::None;
+        m_AlphaCutoff = 0.5f;
+        m_DepthWrite = true;
     }
 
     void Material::Bind(Shader& shader, uint32_t slotAlbedo, uint32_t slotNormal, uint32_t slotRoughness, uint32_t slotMetallic) const {
@@ -342,12 +374,15 @@ namespace Axle {
         }
 
         shader.SetFloat2("u_UVScale", m_UVScale);
+        shader.SetFloat2("u_UVOffset", m_UVOffset);
         shader.SetFloat("u_Roughness", m_Roughness);
         shader.SetFloat("u_Metallic", m_Metallic);
         shader.SetFloat("u_NormalStrength", m_NormalStrength);
         shader.SetFloat3("u_EmissionColor", m_EmissionColor);
         shader.SetFloat("u_EmissionIntensity", m_EmissionIntensity);
         shader.SetFloat4("u_Color1", m_AlbedoColor);
+        shader.SetInt("u_SurfaceType", static_cast<int>(m_SurfaceType));
+        shader.SetFloat("u_AlphaCutoff", m_AlphaCutoff);
     }
 
     void Material::BindDefault(Shader& shader, const glm::vec4& color1, const glm::vec4& color2,
@@ -393,6 +428,11 @@ namespace Axle {
             fout << "Material {\n";
             fout << "    name: \"" << m_Name << "\"\n";
             fout << "    shader: \"ForwardPBR\"\n\n";
+            fout << "    // Surface Options\n";
+            fout << "    surfaceType: \"" << SurfaceTypeToString(m_SurfaceType) << "\"\n";
+            fout << "    cullMode: \"" << CullModeToString(m_CullMode) << "\"\n";
+            fout << "    alphaCutoff: " << m_AlphaCutoff << "\n";
+            fout << "    depthWrite: " << (m_DepthWrite ? "true" : "false") << "\n\n";
             fout << "    // Base Color & Texture\n";
             fout << "    albedoColor: \"" << formatHex(m_AlbedoColor) << "\"\n";
             fout << "    albedoMap: \"" << m_AlbedoPath << "\"\n\n";
@@ -400,11 +440,14 @@ namespace Axle {
             fout << "    metallic: " << m_Metallic << "\n";
             fout << "    roughness: " << m_Roughness << "\n";
             fout << "    normalMap: \"" << m_NormalPath << "\"\n";
-            fout << "    normalStrength: " << m_NormalStrength << "\n\n";
+            fout << "    normalStrength: " << m_NormalStrength << "\n";
+            fout << "    occlusionMap: \"" << m_AOPath << "\"\n";
+            fout << "    occlusionStrength: " << m_AOStrength << "\n\n";
             fout << "    // Emission & UV Scaling\n";
             fout << "    emissionColor: \"" << formatHex(glm::vec4(m_EmissionColor, 1.0f)) << "\"\n";
             fout << "    emissionIntensity: " << m_EmissionIntensity << "\n";
-            fout << "    uvScale: [ " << m_UVScale.x << " , " << m_UVScale.y << " ]\n";
+            fout << "    uvTiling: [ " << m_UVScale.x << " , " << m_UVScale.y << " ]\n";
+            fout << "    uvOffset: [ " << m_UVOffset.x << " , " << m_UVOffset.y << " ]\n";
             fout << "}\n";
             return true;
         }
@@ -413,6 +456,10 @@ namespace Axle {
         if (!m_Name.empty()) {
             fout << "  Name: " << m_Name << "\n";
         }
+        fout << "  SurfaceType: " << SurfaceTypeToString(m_SurfaceType) << "\n";
+        fout << "  CullMode: " << CullModeToString(m_CullMode) << "\n";
+        fout << "  AlphaCutoff: " << m_AlphaCutoff << "\n";
+        fout << "  DepthWrite: " << (m_DepthWrite ? "true" : "false") << "\n";
         fout << "  AlbedoColor: [ " << m_AlbedoColor.r << " , " << m_AlbedoColor.g << " , " << m_AlbedoColor.b << " , " << m_AlbedoColor.a << " ]\n";
         fout << "  AlbedoPath: " << m_AlbedoPath << "\n";
         fout << "  UseAlbedoMap: " << (m_UseAlbedoMap ? "true" : "false") << "\n";
@@ -433,6 +480,7 @@ namespace Axle {
         fout << "  EmissionColor: [ " << m_EmissionColor.r << " , " << m_EmissionColor.g << " , " << m_EmissionColor.b << " ]\n";
         fout << "  EmissionIntensity: " << m_EmissionIntensity << "\n";
         fout << "  UVScale: [ " << m_UVScale.x << " , " << m_UVScale.y << " ]\n";
+        fout << "  UVOffset: [ " << m_UVOffset.x << " , " << m_UVOffset.y << " ]\n";
 
         fout.close();
         return true;
@@ -461,6 +509,19 @@ namespace Axle {
                     std::string val = Trim(trimmed.substr(5));
                     if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
                     m_Name = val;
+                } else if (trimmed.rfind("surfaceType:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(12));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    m_SurfaceType = StringToSurfaceType(val);
+                } else if (trimmed.rfind("cullMode:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(9));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    m_CullMode = StringToCullMode(val);
+                } else if (trimmed.rfind("alphaCutoff:", 0) == 0) {
+                    try { m_AlphaCutoff = std::clamp(std::stof(Trim(trimmed.substr(12))), 0.0f, 1.0f); } catch (...) {}
+                } else if (trimmed.rfind("depthWrite:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(11));
+                    m_DepthWrite = (val == "true" || val == "1");
                 } else if (trimmed.rfind("albedoColor:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(12));
                     if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
@@ -505,10 +566,46 @@ namespace Axle {
                     else ClearNormalTexture();
                 } else if (trimmed.rfind("normalStrength:", 0) == 0) {
                     try { m_NormalStrength = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
-                } else if (trimmed.rfind("uvScale:", 0) == 0) {
+                } else if (trimmed.rfind("uvScale:", 0) == 0 || trimmed.rfind("uvTiling:", 0) == 0) {
                     float x = 1, y = 1;
-                    std::sscanf(trimmed.c_str(), "uvScale: [ %f , %f ]", &x, &y);
+                    const char* fmt = (trimmed.rfind("uvTiling:", 0) == 0) ? "uvTiling: [ %f , %f ]" : "uvScale: [ %f , %f ]";
+                    std::sscanf(trimmed.c_str(), fmt, &x, &y);
                     m_UVScale = glm::vec2(x, y);
+                } else if (trimmed.rfind("uvOffset:", 0) == 0) {
+                    float x = 0, y = 0;
+                    std::sscanf(trimmed.c_str(), "uvOffset: [ %f , %f ]", &x, &y);
+                    m_UVOffset = glm::vec2(x, y);
+                } else if (trimmed.rfind("occlusionMap:", 0) == 0 || trimmed.rfind("aoMap:", 0) == 0) {
+                    size_t colon = trimmed.find(':');
+                    std::string p = Trim(trimmed.substr(colon + 1));
+                    if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
+                    if (!p.empty()) { SetAOPath(p); m_UseAOMap = true; }
+                    else ClearAOTexture();
+                } else if (trimmed.rfind("occlusionStrength:", 0) == 0 || trimmed.rfind("ao:", 0) == 0) {
+                    size_t colon = trimmed.find(':');
+                    try { SetAO(std::stof(Trim(trimmed.substr(colon + 1)))); } catch (...) {}
+                } else if (trimmed.rfind("emissionColor:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(14));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    if (!val.empty() && val[0] == '#') {
+                        auto hexCharToInt = [](char c) -> uint32_t {
+                            if (c >= '0' && c <= '9') return c - '0';
+                            if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+                            if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+                            return 0;
+                        };
+                        std::string h = val.substr(1);
+                        if (h.size() >= 6) {
+                            uint32_t r = (hexCharToInt(h[0]) << 4) | hexCharToInt(h[1]);
+                            uint32_t g = (hexCharToInt(h[2]) << 4) | hexCharToInt(h[3]);
+                            uint32_t b = (hexCharToInt(h[4]) << 4) | hexCharToInt(h[5]);
+                            m_EmissionColor = glm::vec3(r / 255.0f, g / 255.0f, b / 255.0f);
+                        }
+                    } else {
+                        float r = 0, g = 0, b = 0;
+                        std::sscanf(val.c_str(), "[ %f , %f , %f ]", &r, &g, &b);
+                        m_EmissionColor = glm::vec3(r, g, b);
+                    }
                 } else if (trimmed.rfind("emissionIntensity:", 0) == 0) {
                     try { m_EmissionIntensity = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
                 }
@@ -532,6 +629,15 @@ namespace Axle {
             if (inSection) {
                 if (trimmed.rfind("Name:", 0) == 0) {
                     m_Name = Trim(trimmed.substr(5));
+                } else if (trimmed.rfind("SurfaceType:", 0) == 0) {
+                    m_SurfaceType = StringToSurfaceType(Trim(trimmed.substr(12)));
+                } else if (trimmed.rfind("CullMode:", 0) == 0) {
+                    m_CullMode = StringToCullMode(Trim(trimmed.substr(9)));
+                } else if (trimmed.rfind("AlphaCutoff:", 0) == 0) {
+                    try { m_AlphaCutoff = std::clamp(std::stof(Trim(trimmed.substr(12))), 0.0f, 1.0f); } catch (...) {}
+                } else if (trimmed.rfind("DepthWrite:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(11));
+                    m_DepthWrite = (val == "true" || val == "1");
                 } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(11));
                     if (!p.empty()) SetAlbedoPath(p);
@@ -586,10 +692,15 @@ namespace Axle {
                     m_EmissionColor = glm::vec3(r, g, b);
                 } else if (trimmed.rfind("EmissionIntensity:", 0) == 0) {
                     m_EmissionIntensity = std::stof(Trim(trimmed.substr(18)));
-                } else if (trimmed.rfind("UVScale:", 0) == 0) {
+                } else if (trimmed.rfind("UVScale:", 0) == 0 || trimmed.rfind("UVTiling:", 0) == 0) {
                     float x = 1, y = 1;
-                    std::sscanf(trimmed.c_str(), "UVScale: [ %f , %f ]", &x, &y);
+                    const char* fmt = (trimmed.rfind("UVTiling:", 0) == 0) ? "UVTiling: [ %f , %f ]" : "UVScale: [ %f , %f ]";
+                    std::sscanf(trimmed.c_str(), fmt, &x, &y);
                     m_UVScale = glm::vec2(x, y);
+                } else if (trimmed.rfind("UVOffset:", 0) == 0) {
+                    float x = 0, y = 0;
+                    std::sscanf(trimmed.c_str(), "UVOffset: [ %f , %f ]", &x, &y);
+                    m_UVOffset = glm::vec2(x, y);
                 }
             }
         }

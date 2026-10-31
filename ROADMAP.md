@@ -508,5 +508,23 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Unify `.axlemesh` into `Mesh { ... }` in `.axleasset` with automatic `.axlebin` baking and zero-overhead GPU loading.
     - [x] Standardize `Terrain { ... }` and `PhysicsMaterial { ... }` into `.axleasset`.
     - [x] Automated test suite Step 99 (`AxleTests.exe --step99`) validating AST parsing, round-trip serialization, backward compatibility, and Vulkan RHI preview rendering.
+- [ ] **Phase 37: Raw Media Asset Ingestion Pipeline & Opt-in Descriptor Architecture (`Engine/Asset`, `Engine/UI`, `Editor`)**
+  - [ ] **Step 1 - Raw Media Ingest (Single-File Zero-Companion Ingestion in `EditorLayer`)**:
+    - [ ] Update `EditorLayer::OnFileDrop` for images (`.png`, `.jpg`, `.jpeg`, `.tga`, `.bmp`, `.hdr`): Copy only the image file itself to destination (`textures/` or active Content Browser directory) without auto-generating companion `.axleasset` files.
+    - [ ] Update `EditorLayer::OnFileDrop` for audio (`.wav`, `.mp3`, `.ogg`, `.flac`): Copy only the audio file to `audio/` or active Content Browser folder.
+    - [ ] Update `EditorLayer::OnFileDrop` for video (`.mp4`, `.mkv`, `.avi`, `.webm`): Copy only the video file to `video/` or active Content Browser folder.
+    - [ ] Keep assets directory 100% clean, avoiding file duplication and orphaned descriptors.
+  - [ ] **Step 2 - In-Memory Texture Descriptor Synthesis & Direct Image Loading (`Engine/Asset`)**:
+    - [ ] Enhance `TextureDescriptor::Load(filepath, outDesc)` to detect raw image formats (`.png`, `.jpg`, `.hdr`...) and synthesize in-memory descriptors on the fly via `CreateFromImageFile` with convention heuristics (`_normal` -> NormalMap Linear BC5, `.hdr` -> CubemapHDR, default -> Color sRGB Anisotropic16x) with zero disk footprint.
+    - [ ] Ensure `AssetManager::GetTexture(path)` and `MaterialComponent` load raw image files directly without requiring `.axleasset`.
+  - [ ] **Step 3 - Opt-in Texture Descriptor Generation in Content Browser (`Engine/UI`)**:
+    - [ ] In `ContentBrowserPanel`, add `"Create Texture Descriptor (.axleasset)"` to the right-click context menu of image items.
+    - [ ] Allow users to explicitly generate `<stem>.axleasset` only when deep customization is needed (Point filter for Pixel Art, BC7 compression, Clamp wrapping, custom max resolution).
+  - [ ] **Step 4 - Standalone Runtime & Packaging Alignment (`Engine/Asset` & `Runtime`)**:
+    - [ ] In `AssetCooker`, package raw image and audio files directly into `Data.axlepak` using convention defaults, or using companion `.axleasset` if explicitly present.
+    - [ ] In `RuntimeLayer`, verify seamless asset resolution from both loose disk files and monolithic `.axlepak` packages.
+  - [ ] **Step 5 - Automated Test Suite Step 100 (`AxleTests.exe --step100`)**:
+    - [ ] Implement Step 100 automated test suite in `AxleTests.exe` validating raw media ingestion, in-memory descriptor synthesis, opt-in `.axleasset` generation, and runtime texture resolution.
+    - [ ] Verify 100% pass rate across all test suites.
 
 ---

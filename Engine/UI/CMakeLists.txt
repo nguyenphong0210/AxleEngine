@@ -40,6 +40,7 @@ add_library(AxleUI STATIC
     src/AssetPreviewPanel.cpp
     src/AssemblyEditorPanel.cpp
     src/VFXEditorPanel.cpp
+    src/CurveEditorWidget.cpp
     src/RHIViewportDescriptor.cpp
     src/RectTransformGizmo.cpp
     src/UIPalettePanel.cpp

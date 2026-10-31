@@ -411,8 +411,7 @@ namespace Axle {
             auto* comp = item.Comp;
             if (!comp->Document) {
                 comp->Document = std::make_shared<UIDocument>();
-                comp->Document->SetFilePath(comp->AssetPath);
-                comp->Document->CheckAndHotReload();
+                comp->Document->LoadFromFile(comp->AssetPath);
             } else {
                 comp->Document->CheckAndHotReload();
             }

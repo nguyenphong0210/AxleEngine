@@ -538,7 +538,7 @@ namespace Axle {
                                    PhysicsScene* physicsScene,
                                    PhysicsDebugRenderer* physicsDebugRenderer,
                                    const SceneRenderSettings& settings) {
-        if (!scene || !Window::HasActiveContext() || !targetFBO || !m_Shader) return;
+        if (!scene || !Window::HasActiveContext() || !m_Shader) return;
 
         // Query active Directional Sun Light if present in scene
         DirectionalLightComponent activeSunLight;

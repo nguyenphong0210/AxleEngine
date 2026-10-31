@@ -1,4 +1,5 @@
 #include <Axle/UI/UIParser.hpp>
+#include <Axle/FileSystem.hpp>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -323,30 +324,32 @@ namespace Axle {
     }
 
     bool UIParser::ParseFile(const std::string& filepath, UIDocument& outDocument, std::string* outError) {
-        std::string actualPath = filepath;
-        if (!std::filesystem::exists(actualPath)) {
-            std::filesystem::path p(filepath);
-            if (p.extension() == ".axleui") {
-                p.replace_extension(".axleasset");
-                if (std::filesystem::exists(p)) {
-                    actualPath = p.string();
-                }
+        std::filesystem::path p(filepath);
+        std::string source = FileSystem::ReadTextFile(p);
+        if (source.empty() && p.extension() == ".axleui") {
+            p.replace_extension(".axleasset");
+            source = FileSystem::ReadTextFile(p);
+        }
+        if (source.empty()) {
+            auto resolved = FileSystem::ResolveAssetPath(filepath);
+            source = FileSystem::ReadTextFile(resolved);
+            if (source.empty() && resolved.extension() == ".axleui") {
+                resolved.replace_extension(".axleasset");
+                source = FileSystem::ReadTextFile(resolved);
+            }
+            if (!source.empty()) {
+                p = resolved;
             }
         }
 
-        std::ifstream file(actualPath);
-        if (!file.is_open()) {
+        if (source.empty()) {
             if (outError) *outError = "Failed to open UI asset file: " + filepath;
             return false;
         }
 
-        std::stringstream ss;
-        ss << file.rdbuf();
-        std::string source = ss.str();
-
         bool success = ParseSource(source, outDocument, outError);
         if (success) {
-            outDocument.SetFilePath(actualPath);
+            outDocument.SetFilePath(p.string());
         }
         return success;
     }

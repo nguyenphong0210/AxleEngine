@@ -96,7 +96,7 @@ add_custom_command(TARGET AxleEditor POST_BUILD
     $<TARGET_FILE_DIR:AxleEditor>/dxil.dll
 )
 
-add_dependencies(AxleEditor AxleScripts)
+add_dependencies(AxleEditor AxleScripts AxleRuntime)
 
 # Dedicated Test Executable for Automated Verifications
 add_executable(AxleTests
@@ -119,20 +119,10 @@ if (MSVC)
     target_compile_options(AxleTests PRIVATE /bigobj)
 endif()
 
-add_custom_command(TARGET AxleTests POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets
-    $<TARGET_FILE_DIR:AxleTests>/assets
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/Engine/Resources
-    $<TARGET_FILE_DIR:AxleTests>/Resources
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll
-    $<TARGET_FILE_DIR:AxleTests>/dxcompiler.dll
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll
-    $<TARGET_FILE_DIR:AxleTests>/dxil.dll
-)
+# AxleTests outputs into the same directory as AxleEditor ($<TARGET_FILE_DIR:AxleEditor>).
+# Dependency on AxleEditor ensures AxleEditor builds and synchronizes all assets, resources,
+# and DXC DLLs first, preventing parallel post-build file locking race conditions (-j 16).
+add_dependencies(AxleTests AxleEditor)
 
 target_include_directories(AxleTests PRIVATE
     src

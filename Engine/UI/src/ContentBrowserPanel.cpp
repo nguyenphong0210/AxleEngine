@@ -1,5 +1,6 @@
 #include <Axle/TextureDescriptor.hpp>
 #include <Axle/ParticleEmitterSerializer.hpp>
+#include <Axle/UI/UIParser.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
@@ -576,6 +577,23 @@ namespace Axle {
         return newPath;
     }
 
+    std::filesystem::path ContentBrowserPanel::CreateNewCanvas(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / (baseName + ".axleasset");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
+        }
+        UIDocument doc;
+        auto* root = doc.CreateNode<UICanvasNode>(nullptr);
+        root->ID = newPath.stem().string();
+        root->ReferenceResolution = glm::vec2(1920.0f, 1080.0f);
+
+        if (UIParser::SaveFile(newPath.string(), doc)) {
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
+    }
+
     std::filesystem::path ContentBrowserPanel::CreateNewScript(const std::filesystem::path& parentDir, const std::string& baseName) {
         std::string className = baseName;
         std::filesystem::path newPath = parentDir / (className + ".hpp");
@@ -758,6 +776,9 @@ namespace Axle {
             }
             if (ImGui::MenuItem("VFX Asset (.axleasset)")) {
                 CreateNewVFXAsset(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("UI Canvas Asset (.axleasset)")) {
+                CreateNewCanvas(m_CurrentDirectory);
             }
             if (ImGui::MenuItem("Physics Material")) {
                 CreateNewPhysicsMaterial(m_CurrentDirectory);
@@ -1371,6 +1392,14 @@ namespace Axle {
                     if (ImGui::MenuItem("VFX Asset (.axleasset)")) {
                         auto p = CreateNewVFXAsset(m_CurrentDirectory);
                         SetStatusNotification("Created VFX Asset: " + p.filename().string());
+                        if (m_OnSelectAssetCallback) {
+                            m_OnSelectAssetCallback(p);
+                        }
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("UI Canvas Asset (.axleasset)")) {
+                        auto p = CreateNewCanvas(m_CurrentDirectory);
+                        SetStatusNotification("Created UI Canvas Asset: " + p.filename().string());
                         if (m_OnSelectAssetCallback) {
                             m_OnSelectAssetCallback(p);
                         }

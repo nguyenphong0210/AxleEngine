@@ -323,9 +323,20 @@ namespace Axle {
     }
 
     bool UIParser::ParseFile(const std::string& filepath, UIDocument& outDocument, std::string* outError) {
-        std::ifstream file(filepath);
+        std::string actualPath = filepath;
+        if (!std::filesystem::exists(actualPath)) {
+            std::filesystem::path p(filepath);
+            if (p.extension() == ".axleui") {
+                p.replace_extension(".axleasset");
+                if (std::filesystem::exists(p)) {
+                    actualPath = p.string();
+                }
+            }
+        }
+
+        std::ifstream file(actualPath);
         if (!file.is_open()) {
-            if (outError) *outError = "Failed to open .axleui file: " + filepath;
+            if (outError) *outError = "Failed to open UI asset file: " + filepath;
             return false;
         }
 
@@ -335,7 +346,7 @@ namespace Axle {
 
         bool success = ParseSource(source, outDocument, outError);
         if (success) {
-            outDocument.SetFilePath(filepath);
+            outDocument.SetFilePath(actualPath);
         }
         return success;
     }

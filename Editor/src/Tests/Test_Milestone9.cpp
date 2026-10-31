@@ -18,6 +18,7 @@
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/VFXEditorPanel.hpp>
+#include <Axle/UI/UIParser.hpp>
 
 // =============================================================================
 // STEP 98: PHASE 35 STEP 4 - TRIPLE-BACKEND PARITY & AUTOMATED VULKAN 1.3 VERIFICATION
@@ -862,6 +863,56 @@ Mesh {
         assert(!desc.DebugName.empty());
     }
     std::cout << "  -> PASS: VFXEditorPanel multi-backend RHI viewport bridge verified." << std::endl;
+
+    // [99.20] UI Canvas Declarative DOM Integration in Pure .axleasset Standard
+    std::cout << "\n[99.20] Testing UI Canvas Integration in Pure .axleasset Standard..." << std::endl;
+    {
+        std::filesystem::path tempDir = "temp_cb_canvas_test";
+        std::filesystem::create_directories(tempDir);
+
+        // 1. Create Canvas via Content Browser Action
+        auto canvasPath = ContentBrowserPanel::CreateNewCanvas(tempDir, "TestMainMenuHUD");
+        assert(std::filesystem::exists(canvasPath));
+        assert(canvasPath.extension() == ".axleasset");
+
+        // 2. Fast peek validation & AssetManager Type detection
+        assert(AssetDSL::PeekAssetKindFromFile(canvasPath.string()) == AssetKind::Canvas);
+        assert(AssetManager::GetAssetType(canvasPath) == AssetType::Canvas);
+
+        // 3. Parse declarative Canvas DOM via UIParser
+        UIDocument doc;
+        std::string err;
+        assert(UIParser::ParseFile(canvasPath.string(), doc, &err));
+        assert(doc.GetRootNode() != nullptr);
+        assert(doc.GetRootNode()->ID == "TestMainMenuHUD");
+        auto* canvasNode = dynamic_cast<UICanvasNode*>(doc.GetRootNode());
+        assert(canvasNode != nullptr);
+        assert(canvasNode->ReferenceResolution.x == 1920.0f);
+        assert(canvasNode->ReferenceResolution.y == 1080.0f);
+
+        // 4. Test programmatic element addition & pure .axleasset serialization
+        auto* panel = doc.CreateNode<UIRectangleNode>(doc.GetRootNode());
+        panel->ID = "background_rect";
+        panel->Style.BackgroundColor = glm::vec4(0.1f, 0.12f, 0.16f, 0.95f);
+        panel->Size = glm::vec2(800.0f, 600.0f);
+
+        assert(UIParser::SaveFile(canvasPath.string(), doc, &err));
+
+        // 5. Reload and verify round-trip
+        UIDocument reloadedDoc;
+        assert(UIParser::ParseFile(canvasPath.string(), reloadedDoc, &err));
+        assert(reloadedDoc.GetNodeCount() == 2);
+        assert(reloadedDoc.FindNodeByID("background_rect") != nullptr);
+
+        // 6. Test transparent legacy .axleui redirection
+        std::filesystem::path legacyPath = tempDir / "TestMainMenuHUD.axleui";
+        UIDocument legacyDoc;
+        assert(UIParser::ParseFile(legacyPath.string(), legacyDoc, &err));
+        assert(legacyDoc.GetNodeCount() == 2);
+
+        std::filesystem::remove_all(tempDir);
+    }
+    std::cout << "  -> PASS: Canvas declarative UI cleanly integrated into unified .axleasset format." << std::endl;
 
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;

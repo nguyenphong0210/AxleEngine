@@ -474,6 +474,29 @@ namespace Axle {
 
         bool changed = false;
 
+        // 0. 3D Preview Mesh Selector (Sphere, Cube, Cylinder, Plane)
+        if (ImGui::CollapsingHeader("Preview Mesh Selector", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::TextDisabled("Preview Model:");
+            PreviewMeshType activeType = m_AssetPreviewPanel ? m_AssetPreviewPanel->GetPreviewMeshType() : PreviewMeshType::Sphere;
+            float btnW = (ImGui::GetContentRegionAvail().x - 18.0f) / 4.0f;
+            auto DrawMeshBtn = [&](const char* label, PreviewMeshType type) {
+                bool isSel = (activeType == type);
+                if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.50f, 0.85f, 0.90f));
+                if (ImGui::Button(label, ImVec2(btnW, 26.0f))) {
+                    if (m_AssetPreviewPanel) m_AssetPreviewPanel->SetPreviewMeshType(type);
+                }
+                if (isSel) ImGui::PopStyleColor();
+            };
+            DrawMeshBtn("Sphere", PreviewMeshType::Sphere);
+            ImGui::SameLine();
+            DrawMeshBtn("Cube", PreviewMeshType::Cube);
+            ImGui::SameLine();
+            DrawMeshBtn("Cylinder", PreviewMeshType::Cylinder);
+            ImGui::SameLine();
+            DrawMeshBtn("Plane", PreviewMeshType::Plane);
+            ImGui::Spacing();
+        }
+
         // 1. Material Presets Card (12 Professional Presets)
         if (ImGui::CollapsingHeader("Material Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
             float btnW = (ImGui::GetContentRegionAvail().x - 12.0f) / 4.0f;

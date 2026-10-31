@@ -552,6 +552,19 @@ namespace Axle {
         }
     }
 
+    void AssetPreviewPanel::SetPreviewMeshType(PreviewMeshType type) {
+        m_PreviewMeshType = type;
+        if (!m_SerializerContext) return;
+        std::shared_ptr<VertexArray> vao = m_SerializerContext->SphereMesh;
+        if (type == PreviewMeshType::Cube) vao = m_FallbackMesh;
+        else if (type == PreviewMeshType::Cylinder) vao = m_SerializerContext->CylinderMesh;
+        else if (type == PreviewMeshType::Plane) vao = m_SerializerContext->PlaneMesh;
+
+        if (!m_CurrentPackage.Parts.empty()) {
+            m_CurrentPackage.Parts[0].LoadedMesh.VAO = vao;
+        }
+    }
+
     void AssetPreviewPanel::UpdateMaterialPreview(const MaterialComponent& mat) {
         if (!m_CurrentPackage.Parts.empty()) {
             m_CurrentPackage.Parts[0].LoadedMesh.SourceData.ColorPrimary = mat.AlbedoColor;

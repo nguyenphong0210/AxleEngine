@@ -14,6 +14,13 @@
 
 namespace Axle {
 
+    enum class PreviewMeshType {
+        Sphere = 0,
+        Cube = 1,
+        Cylinder = 2,
+        Plane = 3
+    };
+
     class AssetPreviewPanel {
     public:
         AssetPreviewPanel();
@@ -31,6 +38,8 @@ namespace Axle {
 
         void SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh, const SceneSerializerContext* serializerContext = nullptr);
         void InitRHI(ImGuiLayer* imguiLayer);
+        PreviewMeshType GetPreviewMeshType() const { return m_PreviewMeshType; }
+        void SetPreviewMeshType(PreviewMeshType type);
         RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
         void UpdateMaterialPreview(const MaterialComponent& mat);
 
@@ -68,6 +77,7 @@ namespace Axle {
         float m_TurntableSpeed = 1.0f;
         bool m_WireframeMode = false;
         bool m_ShowPedestal = true;
+        PreviewMeshType m_PreviewMeshType = PreviewMeshType::Sphere;
         bool m_IsViewportHovered = false;
 
         // Cached Bounds

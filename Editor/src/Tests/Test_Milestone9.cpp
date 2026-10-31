@@ -663,6 +663,34 @@ Mesh {
     }
     std::cout << "  -> PASS: AssetPreviewPanel multi-backend RHI viewport bridge verified." << std::endl;
 
+    // [99.14] 3D Preview Mesh Selector & 1-Click PBR Material Presets
+    std::cout << "\n[99.14] Testing 3D Preview Mesh Selector & PBR Presets..." << std::endl;
+    {
+        AssetPreviewPanel panel;
+        assert(panel.GetPreviewMeshType() == PreviewMeshType::Sphere);
+        panel.SetPreviewMeshType(PreviewMeshType::Cube);
+        assert(panel.GetPreviewMeshType() == PreviewMeshType::Cube);
+        panel.SetPreviewMeshType(PreviewMeshType::Cylinder);
+        assert(panel.GetPreviewMeshType() == PreviewMeshType::Cylinder);
+        panel.SetPreviewMeshType(PreviewMeshType::Plane);
+        assert(panel.GetPreviewMeshType() == PreviewMeshType::Plane);
+
+        // Verify 1-click PBR Presets on MaterialComponent
+        MaterialComponent mc;
+        mc.SetPresetGold();
+        assert(mc.Metallic == 1.0f);
+        assert(mc.Roughness <= 0.25f);
+
+        mc.SetPresetRubber();
+        assert(mc.Metallic == 0.0f);
+        assert(mc.Roughness >= 0.8f);
+
+        mc.SetPresetChrome();
+        assert(mc.Metallic == 1.0f);
+        assert(mc.Roughness < 0.1f);
+    }
+    std::cout << "  -> PASS: 3D preview mesh selector and 1-click PBR material presets verified." << std::endl;
+
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;
 }

@@ -59,7 +59,7 @@ namespace Axle {
             if (!std::filesystem::exists(dir)) continue;
             try {
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
-                    if (entry.is_regular_file() && entry.path().extension() == ".axleui") {
+                    if (entry.is_regular_file() && (entry.path().extension() == ".axleui" || entry.path().extension() == ".axleasset")) {
                         std::string rel = entry.path().lexically_normal().generic_string();
                         if (seen.insert(rel).second) {
                             result.push_back(rel);
@@ -2135,7 +2135,7 @@ namespace Axle {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                     const char* pathStr = static_cast<const char*>(payload->Data);
                     std::filesystem::path p(pathStr);
-                    if (p.extension() == ".axleui") {
+                    if (p.extension() == ".axleui" || p.extension() == ".axleasset") {
                         uic.AssetPath = p.generic_string();
                         if (!uic.Document) {
                             uic.Document = std::make_shared<UIDocument>();

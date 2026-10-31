@@ -59,7 +59,7 @@ namespace Axle {
 
         ImGui::AlignTextToFramePadding();
         ImGui::Text("%s", label.c_str());
-        if (ImGui::BeginPopupContextItem()) {
+        if (ImGui::BeginPopupContextItem("##ResetContext")) {
             if (ImGui::MenuItem("Reset All Axes")) {
                 values = glm::vec3(resetValue);
             }

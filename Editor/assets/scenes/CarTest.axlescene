@@ -15,7 +15,7 @@ Entities:
     NativeScriptComponent:
       ScriptName: RacingHUD
     UICanvasComponent:
-      AssetPath: assets/ui/RacingHUD.axleui
+      AssetPath: assets/ui/RacingHUD.axleasset
       DataSourceEntityID: 8959925798803133502
       SortOrder: 0
       Visible: true
@@ -441,7 +441,7 @@ Entities:
       InheritScale: true
     MaterialComponent:
       MaterialHandle: 4412493906563465094
-      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/GoldMetallic.axlemat
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/GoldMetallic.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
@@ -490,7 +490,7 @@ Entities:
       AutoSyncMesh: true
     MaterialComponent:
       MaterialHandle: 756105786948966310
-      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axlemat
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -539,7 +539,7 @@ Entities:
       AutoSyncMesh: true
     MaterialComponent:
       MaterialHandle: 756105786948966310
-      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axlemat
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -588,7 +588,7 @@ Entities:
       AutoSyncMesh: true
     MaterialComponent:
       MaterialHandle: 756105786948966310
-      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axlemat
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -637,7 +637,7 @@ Entities:
       AutoSyncMesh: true
     MaterialComponent:
       MaterialHandle: 756105786948966310
-      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axlemat
+      AssetPath: D:\WorkSpace\AxleEngine\Editor/assets\materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]

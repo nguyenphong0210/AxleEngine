@@ -2464,7 +2464,7 @@ void EditorLayer::OnImGuiRender() {
                             entityTag, spawnPos.x, spawnPos.y, spawnPos.z);
                     }
                 }
-            } else if (ext == ".amat" || ext == ".axlemat" || ext == ".mat") {
+            } else if (ext == ".amat" || ext == ".axlemat" || ext == ".mat" || ext == ".axleasset") {
                 // Drop Material into Viewport onto an Entity under the cursor
                 ImVec2 mousePos = ImGui::GetMousePos();
                 float mouseX = mousePos.x - viewportMin.x;

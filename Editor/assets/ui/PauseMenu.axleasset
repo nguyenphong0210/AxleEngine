@@ -1,0 +1,89 @@
+Canvas {
+    id: "pause_menu_root"
+    referenceResolution: [1920, 1080]
+    visible: "{Game.IsPaused}"
+
+    Rectangle {
+        id: "dim_backdrop"
+        anchor: "StretchAll"
+        color: "#000000AA"
+
+        Rectangle {
+            id: "pause_dialog"
+            anchor: "Center"
+            size: [460, 380]
+            color: "#0F172AF2"
+            cornerRadius: 16
+            borderWidth: 2
+            borderColor: "#38BDF8"
+
+            Column {
+                anchor: "Center"
+                size: [360, 280]
+                spacing: 20
+
+                Text {
+                    id: "pause_title"
+                    text: "SIMULATION PAUSED"
+                    fontSize: 32
+                    color: "#F8FAFC"
+                }
+
+                Button {
+                    id: "btn_resume"
+                    size: [360, 56]
+                    cornerRadius: 8
+                    normalColor: "#1E293B"
+                    hoverColor: "#334155"
+                    pressedColor: "#0284C7"
+                    onClick: "OnResumeGame"
+                    navDown: "btn_reset_vehicle"
+
+                    Text {
+                        anchor: "Center"
+                        text: "RESUME DRIVING"
+                        fontSize: 20
+                        color: "#FFFFFF"
+                    }
+                }
+
+                Button {
+                    id: "btn_reset_vehicle"
+                    size: [360, 56]
+                    cornerRadius: 8
+                    normalColor: "#1E293B"
+                    hoverColor: "#334155"
+                    pressedColor: "#0284C7"
+                    onClick: "OnResetVehicle"
+                    navUp: "btn_resume"
+                    navDown: "btn_quit"
+
+                    Text {
+                        anchor: "Center"
+                        text: "RESET VEHICLE (R)"
+                        fontSize: 20
+                        color: "#FFFFFF"
+                    }
+                }
+
+                Button {
+                    id: "btn_quit"
+                    size: [360, 56]
+                    cornerRadius: 8
+                    normalColor: "#7F1D1D"
+                    hoverColor: "#991B1B"
+                    pressedColor: "#DC2626"
+                    onClick: "OnQuitGame"
+                    navUp: "btn_reset_vehicle"
+
+                    Text {
+                        anchor: "Center"
+                        text: "EXIT TO DESKTOP"
+                        fontSize: 20
+                        color: "#FFFFFF"
+                    }
+                }
+            }
+        }
+    }
+}

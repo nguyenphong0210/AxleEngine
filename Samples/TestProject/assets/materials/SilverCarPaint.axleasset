@@ -1,0 +1,19 @@
+Material {
+    name: "SilverCarPaint"
+    shader: "ForwardPBR"
+
+    // Base Color & Texture
+    albedoColor: "#EBEFF5"
+    albedoMap: ""
+
+    // Surface Microfacet
+    metallic: 0.92
+    roughness: 0.14
+    normalMap: ""
+    normalStrength: 1.0
+
+    // Emission & UV Scaling
+    emissionColor: "#000000"
+    emissionIntensity: 0.0
+    uvScale: [1.0, 1.0]
+}

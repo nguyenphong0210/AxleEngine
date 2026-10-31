@@ -1,0 +1,19 @@
+Material {
+    name: "BlackRubber"
+    shader: "ForwardPBR"
+
+    // Base Color & Texture
+    albedoColor: "#0D0D0D"
+    albedoMap: ""
+
+    // Surface Microfacet
+    metallic: 0.0
+    roughness: 0.85
+    normalMap: ""
+    normalStrength: 1.0
+
+    // Emission & UV Scaling
+    emissionColor: "#000000"
+    emissionIntensity: 0.0
+    uvScale: [1.0, 1.0]
+}

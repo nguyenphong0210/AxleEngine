@@ -15,7 +15,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Roughness: 0.750000
       Metallic: 0.050000
@@ -51,7 +51,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Roughness: 0.750000
       Metallic: 0.050000
@@ -87,7 +87,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Roughness: 0.750000
       Metallic: 0.050000
@@ -123,7 +123,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Roughness: 0.750000
       Metallic: 0.050000
@@ -159,7 +159,7 @@ Entities:
       Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
       Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/GoldMetallic.axlemat
+      AssetPath: assets/materials/GoldMetallic.axleasset
       AlbedoColor: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
       Roughness: 0.180000
       Metallic: 1.000000
@@ -436,7 +436,7 @@ Entities:
     NativeScriptComponent:
       ScriptName: RacingHUD
     UICanvasComponent:
-      AssetPath: assets/ui/RacingHUD.axleui
+      AssetPath: assets/ui/RacingHUD.axleasset
       DataSourceEntityID: 8959925798803133502
       SortOrder: 0
       Visible: true

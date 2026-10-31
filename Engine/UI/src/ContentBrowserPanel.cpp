@@ -594,6 +594,35 @@ namespace Axle {
         return newPath;
     }
 
+    std::filesystem::path ContentBrowserPanel::CreateNewMesh(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / (baseName + ".axleasset");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
+        }
+        AxleMeshSource mesh;
+        mesh.Name = newPath.stem().string();
+        mesh.BoundingSize = glm::vec3(1.0f);
+        mesh.HalfExtent = glm::vec3(0.5f);
+        mesh.Vertices = {
+            { -0.5f, -0.5f,  0.5f }, {  0.5f, -0.5f,  0.5f }, {  0.5f,  0.5f,  0.5f }, { -0.5f,  0.5f,  0.5f },
+            { -0.5f, -0.5f, -0.5f }, {  0.5f, -0.5f, -0.5f }, {  0.5f,  0.5f, -0.5f }, { -0.5f,  0.5f, -0.5f }
+        };
+        mesh.Indices = {
+            0, 1, 2, 2, 3, 0,
+            1, 5, 6, 6, 2, 1,
+            5, 4, 7, 7, 6, 5,
+            4, 0, 3, 3, 7, 4,
+            3, 2, 6, 6, 7, 3,
+            4, 5, 1, 1, 0, 4
+        };
+
+        if (AssetSerializer::SaveToAxleText(newPath, mesh)) {
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
+    }
+
     std::filesystem::path ContentBrowserPanel::CreateNewScript(const std::filesystem::path& parentDir, const std::string& baseName) {
         std::string className = baseName;
         std::filesystem::path newPath = parentDir / (className + ".hpp");
@@ -779,6 +808,9 @@ namespace Axle {
             }
             if (ImGui::MenuItem("UI Canvas Asset (.axleasset)")) {
                 CreateNewCanvas(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("3D Mesh Asset (.axleasset)")) {
+                CreateNewMesh(m_CurrentDirectory);
             }
             if (ImGui::MenuItem("Physics Material")) {
                 CreateNewPhysicsMaterial(m_CurrentDirectory);
@@ -1400,6 +1432,14 @@ namespace Axle {
                     if (ImGui::MenuItem("UI Canvas Asset (.axleasset)")) {
                         auto p = CreateNewCanvas(m_CurrentDirectory);
                         SetStatusNotification("Created UI Canvas Asset: " + p.filename().string());
+                        if (m_OnSelectAssetCallback) {
+                            m_OnSelectAssetCallback(p);
+                        }
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("3D Mesh Asset (.axleasset)")) {
+                        auto p = CreateNewMesh(m_CurrentDirectory);
+                        SetStatusNotification("Created 3D Mesh Asset: " + p.filename().string());
                         if (m_OnSelectAssetCallback) {
                             m_OnSelectAssetCallback(p);
                         }

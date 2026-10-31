@@ -1,4 +1,5 @@
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/AssetDSL.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Buffer.hpp>
 #include <Axle/Log.hpp>
@@ -47,6 +48,42 @@ namespace Axle {
     }
 
     bool AssetSerializer::SaveToAxleText(const std::filesystem::path& path, const AxleMeshSource& mesh) {
+        if (path.extension() == ".axleasset") {
+            std::ofstream file(path);
+            if (!file.is_open()) {
+                AXLE_ERROR("AssetSerializer: Failed to open file for writing: '{0}'", path.string());
+                return false;
+            }
+            file << "Mesh {\n";
+            file << "    name: \"" << (mesh.Name.empty() ? path.stem().string() : mesh.Name) << "\"\n";
+            file << "    bounds: [" << std::fixed << std::setprecision(3) << mesh.BoundingSize.x << ", " << mesh.BoundingSize.y << ", " << mesh.BoundingSize.z << "]\n";
+            file << "    patternMode: " << mesh.PatternMode << "\n";
+            file << "    tileScale: " << std::fixed << std::setprecision(2) << mesh.TileScale << "\n";
+            file << "    colorPrimary: \"" << AssetDSL::FormatHexColor(mesh.ColorPrimary) << "\"\n";
+            file << "    colorSecondary: \"" << AssetDSL::FormatHexColor(mesh.ColorSecondary) << "\"\n\n";
+
+            file << "    vertices: [\n";
+            for (size_t i = 0; i < mesh.Vertices.size(); ++i) {
+                const auto& v = mesh.Vertices[i];
+                file << "        [" << std::setprecision(4) << v.x << ", " << v.y << ", " << v.z << "]"
+                     << (i + 1 < mesh.Vertices.size() ? "," : "") << "\n";
+            }
+            file << "    ]\n\n";
+
+            file << "    indices: [\n";
+            for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
+                file << "        [" << mesh.Indices[i] << ", " << mesh.Indices[i+1] << ", " << mesh.Indices[i+2] << "]"
+                     << (i + 3 < mesh.Indices.size() ? "," : "") << "\n";
+            }
+            file << "    ]\n";
+            file << "}\n";
+
+            // Automatically bake to binary cache
+            std::filesystem::path cachePath = GetCachePathFor(path);
+            SaveToAxleBinary(cachePath, mesh);
+            return true;
+        }
+
         std::ofstream file(path);
         if (!file.is_open()) {
             AXLE_ERROR("AssetSerializer: Failed to open file for writing: '{0}'", path.string());
@@ -102,11 +139,70 @@ namespace Axle {
     }
 
     bool AssetSerializer::LoadFromAxleText(const std::filesystem::path& path, AxleMeshSource& outMesh) {
-        std::string content = FileSystem::ReadTextFile(path);
+        std::filesystem::path actualPath = path;
+        if (!FileSystem::Exists(actualPath)) {
+            if (actualPath.extension() == ".axlemesh" || actualPath.extension() == ".axle") {
+                actualPath.replace_extension(".axleasset");
+            }
+        }
+
+        std::string content = FileSystem::ReadTextFile(actualPath);
         if (content.empty()) {
-            AXLE_ERROR("AssetSerializer: Failed to read .axle text file: '{0}'", path.string());
+            AXLE_ERROR("AssetSerializer: Failed to read mesh text file: '{0}'", path.string());
             return false;
         }
+
+        // Check for pure unified .axleasset Mesh block
+        if (content.find("Mesh {") != std::string::npos || AssetDSL::PeekAssetKind(content) == AssetKind::Mesh) {
+            AssetDocument doc;
+            std::string err;
+            if (AssetDSL::ParseSource(content, doc, &err) && doc.IsValid() && doc.Root) {
+                outMesh = AxleMeshSource{};
+                outMesh.Name = doc.Root->GetString("name", actualPath.stem().string());
+                if (doc.Root->HasProperty("bounds")) {
+                    outMesh.BoundingSize = doc.Root->GetVec3("bounds");
+                    outMesh.HalfExtent = outMesh.BoundingSize * 0.5f;
+                }
+                if (doc.Root->HasProperty("patternMode")) {
+                    outMesh.PatternMode = doc.Root->GetInt("patternMode", 1);
+                }
+                if (doc.Root->HasProperty("tileScale")) {
+                    outMesh.TileScale = doc.Root->GetFloat("tileScale", 8.0f);
+                }
+                if (doc.Root->HasProperty("colorPrimary")) {
+                    outMesh.ColorPrimary = doc.Root->GetVec4("colorPrimary", glm::vec4(0.85f, 0.88f, 0.92f, 1.0f));
+                }
+                if (doc.Root->HasProperty("colorSecondary")) {
+                    outMesh.ColorSecondary = doc.Root->GetVec4("colorSecondary", glm::vec4(0.65f, 0.70f, 0.76f, 1.0f));
+                }
+                if (doc.Root->HasProperty("vertices")) {
+                    outMesh.Vertices = doc.Root->GetProperty("vertices")->AsVec3Array();
+                }
+                if (doc.Root->HasProperty("indices")) {
+                    auto tris = doc.Root->GetProperty("indices")->AsIVec3Array();
+                    outMesh.Indices.reserve(tris.size() * 3);
+                    for (const auto& tri : tris) {
+                        outMesh.Indices.push_back(static_cast<u32>(tri.x));
+                        outMesh.Indices.push_back(static_cast<u32>(tri.y));
+                        outMesh.Indices.push_back(static_cast<u32>(tri.z));
+                    }
+                }
+
+                if (outMesh.BoundingSize == glm::vec3(1.0f) && !outMesh.Vertices.empty()) {
+                    glm::vec3 minV(1e9f), maxV(-1e9f);
+                    for (const auto& v : outMesh.Vertices) {
+                        minV = glm::min(minV, v);
+                        maxV = glm::max(maxV, v);
+                    }
+                    outMesh.BoundingSize = glm::max(maxV - minV, glm::vec3(0.01f));
+                    outMesh.HalfExtent = outMesh.BoundingSize * 0.5f;
+                }
+
+                return true;
+            }
+        }
+
+
 
         std::istringstream file(content);
         outMesh = AxleMeshSource{};

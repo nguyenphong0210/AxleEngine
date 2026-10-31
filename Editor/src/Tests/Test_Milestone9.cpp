@@ -19,6 +19,7 @@
 #include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/UI/UIParser.hpp>
+#include <Axle/AssetSerializer.hpp>
 
 // =============================================================================
 // STEP 98: PHASE 35 STEP 4 - TRIPLE-BACKEND PARITY & AUTOMATED VULKAN 1.3 VERIFICATION
@@ -913,6 +914,55 @@ Mesh {
         std::filesystem::remove_all(tempDir);
     }
     std::cout << "  -> PASS: Canvas declarative UI cleanly integrated into unified .axleasset format." << std::endl;
+
+    // [99.21] Unified 3D Mesh Geometry (.axleasset) with Auto-Baking to .axlebin
+    std::cout << "\n[99.21] Testing Unified 3D Mesh Geometry (.axleasset) & Auto-Baking..." << std::endl;
+    {
+        std::filesystem::path tempDir = std::filesystem::temp_directory_path() / "AxleTest_Step99_Mesh";
+        std::filesystem::remove_all(tempDir);
+        std::filesystem::create_directories(tempDir);
+
+        // 1. Create mesh via ContentBrowserPanel::CreateNewMesh
+        auto meshPath = ContentBrowserPanel::CreateNewMesh(tempDir, "TestCubeMesh");
+        assert(std::filesystem::exists(meshPath));
+        assert(meshPath.extension() == ".axleasset");
+
+        // 2. Verify PeekAssetKindFromFile and AssetType
+        assert(AssetDSL::PeekAssetKindFromFile(meshPath) == AssetKind::Mesh);
+        assert(AssetManager::GetAssetType(meshPath) == AssetType::Mesh);
+
+        // 3. Load mesh from .axleasset text via AssetSerializer
+        AxleMeshSource loadedMesh;
+        assert(AssetSerializer::LoadFromAxleText(meshPath, loadedMesh));
+        assert(loadedMesh.Name == "TestCubeMesh");
+        assert(loadedMesh.Vertices.size() == 8);
+        assert(loadedMesh.Indices.size() == 36);
+        assert(loadedMesh.BoundingSize == glm::vec3(1.0f));
+
+        // 4. Verify auto-baked .cache/TestCubeMesh.axlebin binary cache
+        auto cachePath = AssetSerializer::GetCachePathFor(meshPath);
+        assert(std::filesystem::exists(cachePath));
+        assert(cachePath.extension() == ".axlebin");
+
+        AxleMeshSource binaryMesh;
+        assert(AssetSerializer::LoadFromAxleBinary(cachePath, binaryMesh));
+        assert(binaryMesh.Vertices.size() == 8);
+        assert(binaryMesh.Indices.size() == 36);
+        assert(binaryMesh.BoundingSize == glm::vec3(1.0f));
+
+        // 5. Test round-trip modification
+        loadedMesh.TileScale = 16.0f;
+        loadedMesh.ColorPrimary = glm::vec4(1.0f, 0.0f, 0.5f, 1.0f);
+        assert(AssetSerializer::SaveToAxleText(meshPath, loadedMesh));
+
+        AxleMeshSource reloadedMesh;
+        assert(AssetSerializer::LoadFromAxleText(meshPath, reloadedMesh));
+        assert(reloadedMesh.TileScale == 16.0f);
+        assert(glm::distance(reloadedMesh.ColorPrimary, glm::vec4(1.0f, 0.0f, 0.5f, 1.0f)) < 0.01f);
+
+        std::filesystem::remove_all(tempDir);
+    }
+    std::cout << "  -> PASS: 3D Mesh unified into .axleasset with automatic .axlebin cache baking." << std::endl;
 
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;

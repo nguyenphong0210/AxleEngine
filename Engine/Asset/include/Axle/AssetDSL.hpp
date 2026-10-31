@@ -84,15 +84,18 @@ namespace Axle {
         // Fast peek utility to identify asset type for Content Browser icons with zero full-parse cost
         static AssetKind PeekAssetKind(std::string_view source);
         static AssetKind PeekAssetKindFromFile(const std::string& filepath);
+        static AssetKind PeekAssetKindFromFile(const std::filesystem::path& filepath) { return PeekAssetKindFromFile(filepath.string()); }
 
         // Parsing
         static bool ParseSource(std::string_view source, AssetDocument& outDoc, std::string* outError = nullptr);
         static bool ParseFile(const std::string& filepath, AssetDocument& outDoc, std::string* outError = nullptr);
+        static bool ParseFile(const std::filesystem::path& filepath, AssetDocument& outDoc, std::string* outError = nullptr) { return ParseFile(filepath.string(), outDoc, outError); }
 
         // Serializing
         static std::string SerializeDocument(const AssetDocument& doc);
         static std::string SerializeBlock(const AssetBlock& block, int indentLevel = 0);
         static bool SaveFile(const std::string& filepath, const AssetDocument& doc, std::string* outError = nullptr);
+        static bool SaveFile(const std::filesystem::path& filepath, const AssetDocument& doc, std::string* outError = nullptr) { return SaveFile(filepath.string(), doc, outError); }
 
         // Utilities
         static std::string StripComments(std::string_view source);

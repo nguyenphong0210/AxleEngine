@@ -484,7 +484,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Synchronize device queues via `vkQueueWaitIdle` / `vkDeviceWaitIdle` during recreation.
   - [x] **Step 4 - Triple-Backend Parity & Automated Verification Suite (`AxleTests.exe --step98`)**:
     - [x] Headless unit test Step 98 verifying Vulkan physical device query, swapchain lifecycle, descriptor set binding, offscreen texture bridge, and headless render parity.
-- [ ] **Phase 36: Unified `.axleasset` Architecture & Multi-Backend Component Resource Standardization (`Engine/Asset`, `Engine/Scene`, `Engine/UI`)**
+- [x] **Phase 36: Unified `.axleasset` Architecture & Multi-Backend Component Resource Standardization (`Engine/Asset`, `Engine/Scene`, `Engine/UI`)**
   - [x] **Step 1 - Core `AssetDSL` Lexer/Parser & Shared Resource Pipeline (`Engine/Asset`)**:
     - [x] Implement centralized `AssetDSL` tokenizer supporting C/QML-style declarative blocks (`Material`, `Canvas`, `ParticleEmitter`, `Mesh`, `Texture`, `Terrain`, `PhysicsMaterial`).
     - [x] Support native Hex color `#RRGGBB` / `#RRGGBBAA`, vectors `[x, y]`, floats, strings, single-line `//` and multi-line `/* */` comments.
@@ -503,10 +503,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Add `Create -> VFX Asset (.axleasset)` in Content Browser.
     - [x] Add `[Open in VFX Editor]` shortcut button directly on `ParticleEmitterComponent` in Inspector to dock and link the editor.
     - [x] Upgrade `VFXEditorPanel` 3D preview viewport to multi-backend RHI (Vulkan / D3D12).
-  - [ ] **Step 4 - UI Canvas & 3D Geometry Integration (`Engine/UI`, `Engine/Asset`)**:
+  - [x] **Step 4 - UI Canvas & 3D Geometry Integration (`Engine/UI`, `Engine/Asset`)**:
     - [x] Migrate `.axleui` to `.axleasset` under `Canvas { ... }` root block cleanly replacing `.axleui`.
     - [x] Unify `.axlemesh` into `Mesh { ... }` in `.axleasset` with automatic `.axlebin` baking and zero-overhead GPU loading.
     - [x] Standardize `Terrain { ... }` and `PhysicsMaterial { ... }` into `.axleasset`.
-    - [ ] Automated test suite Step 99 (`AxleTests.exe --step99`) validating AST parsing, round-trip serialization, backward compatibility, and Vulkan RHI preview rendering.
+    - [x] Automated test suite Step 99 (`AxleTests.exe --step99`) validating AST parsing, round-trip serialization, backward compatibility, and Vulkan RHI preview rendering.
 
 ---

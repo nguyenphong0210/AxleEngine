@@ -495,7 +495,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **External Drag-and-Drop Image Ingest Pipeline**: Dragging external `.png`, `.jpg`, `.tga`, `.hdr` files from Windows Explorer into Content Browser or Viewport automatically ingests them, intelligently detects texture type from filename suffixes (`_diffuse`/`_albedo`/`_d` -> sRGB Color, `_normal`/`_norm`/`_n` -> Linear Normal, `_roughness`/`_orm` -> Linear Data, `.hdr` -> CubemapHDR), and auto-generates companion `.axleasset` descriptors.
     - [x] **Viewport Entity Drag & Drop**: Dropping an image texture or material `.axleasset` directly onto an Entity in the 3D Viewport auto-assigns it to the corresponding PBR slot under the cursor.
     - [x] Eliminate legacy OpenGL dependencies in material pipeline (`Window::HasActiveContext()`, `Texture2D::Create`), wiring directly to `RHI::RHIMaterial` and Tier-2 Bindless descriptors.
-    - [ ] Upgrade `AssetPreviewPanel` from legacy OpenGL FBO to multi-backend RHI descriptor bridge (`ImGui_ImplVulkan_AddTexture` / `ImGui_ImplDX12_AddTexture`), restoring live 3D PBR turntable preview on Vulkan 1.3 & D3D12.
+    - [x] Upgrade `AssetPreviewPanel` from legacy OpenGL FBO to multi-backend RHI descriptor bridge (`ImGui_ImplVulkan_AddTexture` / `ImGui_ImplDX12_AddTexture`), restoring live 3D PBR turntable preview on Vulkan 1.3 & D3D12.
     - [ ] Add 3D preview mesh selector (Sphere, Cube, Cylinder, Plane) & 1-click PBR material presets bar in Material Inspector.
     - [ ] Content Browser `Create -> Material Asset (.axleasset)` and `Create -> Texture Asset (.axleasset)` integration with PBR Sphere/Texture icons.
   - [ ] **Step 3 - VFX Particle System Asset & Dedicated Inspector Docking (`Engine/VFX`, `Engine/UI`)**:

@@ -118,6 +118,18 @@ namespace Axle {
         }
     }
 
+    void AssetPreviewPanel::InitRHI(ImGuiLayer* imguiLayer) {
+        m_ImGuiLayer = imguiLayer;
+        if (!m_ImGuiLayer) return;
+
+        if (RHI::RHIDevice::Get().IsInitialized()) {
+            if (!m_RHIViewport) {
+                m_RHIViewport = std::make_unique<RHIViewportDescriptor>();
+            }
+            m_RHIViewport->Init(m_ImGuiLayer, m_ViewportWidth, m_ViewportHeight, RHI::RHITextureFormat::RGBA8_UNORM, true);
+        }
+    }
+
     void AssetPreviewPanel::SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh, const SceneSerializerContext* serializerContext) {
         m_Scene = scene;
         m_PhysicsScene = physicsScene;
@@ -579,7 +591,19 @@ namespace Axle {
 
         RenderPreview3D(availW, viewportH);
 
-        if (m_Framebuffer) {
+        uint64_t rhiTexID = 0;
+        if (m_RHIViewport && m_RHIViewport->IsValid()) {
+            if ((uint32_t)availW != m_ViewportWidth || (uint32_t)viewportH != m_ViewportHeight) {
+                m_ViewportWidth = (uint32_t)availW;
+                m_ViewportHeight = (uint32_t)viewportH;
+                m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
+            }
+            rhiTexID = m_RHIViewport->GetImTextureID();
+        }
+
+        if (rhiTexID != 0) {
+            ImGui::Image((ImTextureID)(intptr_t)rhiTexID, ImVec2(availW, viewportH), ImVec2(0, 0), ImVec2(1, 1));
+        } else if (m_Framebuffer) {
             u32 texID = m_Framebuffer->GetColorAttachmentRendererID();
             ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(availW, viewportH), ImVec2(0, 1), ImVec2(1, 0));
         } else {
@@ -589,7 +613,7 @@ namespace Axle {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             drawList->AddRectFilled(p0, p1, IM_COL32(22, 24, 28, 255));
             drawList->AddRect(p0, p1, IM_COL32(45, 49, 58, 255));
-            const char* txt = "Preview available under OpenGL backend";
+            const char* txt = "Preview available under Multi-Backend RHI / OpenGL";
             ImVec2 txtSize = ImGui::CalcTextSize(txt);
             ImVec2 txtPos = ImVec2(p0.x + (dummySize.x - txtSize.x) * 0.5f, p0.y + (dummySize.y - txtSize.y) * 0.5f);
             drawList->AddText(txtPos, IM_COL32(140, 145, 155, 255), txt);

@@ -7,6 +7,7 @@
 #include <Axle/Shader.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/PhysicsScene.hpp>
+#include <Axle/RHIViewportDescriptor.hpp>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -29,6 +30,8 @@ namespace Axle {
         size_t GetTotalTriangles() const { return m_TotalTriangles; }
 
         void SetSceneContext(Scene* scene, PhysicsScene* physicsScene, std::shared_ptr<VertexArray> fallbackMesh, const SceneSerializerContext* serializerContext = nullptr);
+        void InitRHI(ImGuiLayer* imguiLayer);
+        RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
         void UpdateMaterialPreview(const MaterialComponent& mat);
 
         void RenderPreviewViewport();
@@ -49,6 +52,8 @@ namespace Axle {
         // Viewport & Rendering
         std::shared_ptr<Framebuffer> m_Framebuffer;
         std::unique_ptr<Shader> m_Shader;
+        std::unique_ptr<RHIViewportDescriptor> m_RHIViewport;
+        ImGuiLayer* m_ImGuiLayer = nullptr;
         u32 m_ViewportWidth = 380;
         u32 m_ViewportHeight = 320;
 

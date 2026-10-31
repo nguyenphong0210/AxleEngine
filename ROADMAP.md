@@ -509,11 +509,11 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Standardize `Terrain { ... }` and `PhysicsMaterial { ... }` into `.axleasset`.
     - [x] Automated test suite Step 99 (`AxleTests.exe --step99`) validating AST parsing, round-trip serialization, backward compatibility, and Vulkan RHI preview rendering.
 - [ ] **Phase 37: Raw Media Asset Ingestion Pipeline & Opt-in Descriptor Architecture (`Engine/Asset`, `Engine/UI`, `Editor`)**
-  - [ ] **Step 1 - Raw Media Ingest (Single-File Zero-Companion Ingestion in `EditorLayer`)**:
-    - [ ] Update `EditorLayer::OnFileDrop` for images (`.png`, `.jpg`, `.jpeg`, `.tga`, `.bmp`, `.hdr`): Copy only the image file itself to destination (`textures/` or active Content Browser directory) without auto-generating companion `.axleasset` files.
-    - [ ] Update `EditorLayer::OnFileDrop` for audio (`.wav`, `.mp3`, `.ogg`, `.flac`): Copy only the audio file to `audio/` or active Content Browser folder.
-    - [ ] Update `EditorLayer::OnFileDrop` for video (`.mp4`, `.mkv`, `.avi`, `.webm`): Copy only the video file to `video/` or active Content Browser folder.
-    - [ ] Keep assets directory 100% clean, avoiding file duplication and orphaned descriptors.
+  - [x] **Step 1 - Raw Media Ingest (Single-File Zero-Companion Ingestion in `EditorLayer`)**:
+    - [x] Update `EditorLayer::OnFileDrop` for images (`.png`, `.jpg`, `.jpeg`, `.tga`, `.bmp`, `.hdr`): Copy only the image file itself to destination (`textures/` or active Content Browser directory) without auto-generating companion `.axleasset` files.
+    - [x] Update `EditorLayer::OnFileDrop` for audio (`.wav`, `.mp3`, `.ogg`, `.flac`): Copy only the audio file to `audio/` or active Content Browser folder.
+    - [x] Update `EditorLayer::OnFileDrop` for video (`.mp4`, `.mkv`, `.avi`, `.webm`): Copy only the video file to `video/` or active Content Browser folder.
+    - [x] Keep assets directory 100% clean, avoiding file duplication and orphaned descriptors.
   - [ ] **Step 2 - In-Memory Texture Descriptor Synthesis & Direct Image Loading (`Engine/Asset`)**:
     - [ ] Enhance `TextureDescriptor::Load(filepath, outDesc)` to detect raw image formats (`.png`, `.jpg`, `.hdr`...) and synthesize in-memory descriptors on the fly via `CreateFromImageFile` with convention heuristics (`_normal` -> NormalMap Linear BC5, `.hdr` -> CubemapHDR, default -> Color sRGB Anisotropic16x) with zero disk footprint.
     - [ ] Ensure `AssetManager::GetTexture(path)` and `MaterialComponent` load raw image files directly without requiring `.axleasset`.

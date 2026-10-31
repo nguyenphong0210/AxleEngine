@@ -687,12 +687,40 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
             if (srcPath != destImgPath) {
                 std::filesystem::copy_file(srcPath, destImgPath, std::filesystem::copy_options::overwrite_existing, ec);
             }
-
-            auto desc = Axle::TextureDescriptor::CreateFromImageFile(destImgPath, Axle::FileSystem::GetAssetDirectory());
-            std::filesystem::path companionPath = texDestFolder / (stem + ".axleasset");
-            Axle::TextureDescriptor::Save(companionPath.string(), desc);
-            AXLE_INFO("Asset Pipeline: Ingested texture '{0}' and auto-generated companion descriptor '{1}' (Type: {2})",
-                destImgPath.filename().string(), companionPath.filename().string(), desc.Type);
+            AXLE_INFO("Asset Pipeline: Ingested texture '{0}' into '{1}' (Zero-companion raw media)",
+                destImgPath.filename().string(), texDestFolder.string());
+        } else if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") {
+            std::filesystem::path audioDestFolder;
+            if (m_ContentBrowserPanel.IsWindowHovered()) {
+                audioDestFolder = m_ContentBrowserPanel.GetCurrentPath();
+            } else {
+                audioDestFolder = Axle::FileSystem::ResolveAssetPath("audio");
+            }
+            if (!std::filesystem::exists(audioDestFolder, ec)) {
+                std::filesystem::create_directories(audioDestFolder, ec);
+            }
+            std::filesystem::path destAudioPath = audioDestFolder / srcPath.filename();
+            if (srcPath != destAudioPath) {
+                std::filesystem::copy_file(srcPath, destAudioPath, std::filesystem::copy_options::overwrite_existing, ec);
+            }
+            AXLE_INFO("Asset Pipeline: Ingested audio '{0}' into '{1}' (Zero-companion raw media)",
+                destAudioPath.filename().string(), audioDestFolder.string());
+        } else if (ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".webm") {
+            std::filesystem::path videoDestFolder;
+            if (m_ContentBrowserPanel.IsWindowHovered()) {
+                videoDestFolder = m_ContentBrowserPanel.GetCurrentPath();
+            } else {
+                videoDestFolder = Axle::FileSystem::ResolveAssetPath("video");
+            }
+            if (!std::filesystem::exists(videoDestFolder, ec)) {
+                std::filesystem::create_directories(videoDestFolder, ec);
+            }
+            std::filesystem::path destVideoPath = videoDestFolder / srcPath.filename();
+            if (srcPath != destVideoPath) {
+                std::filesystem::copy_file(srcPath, destVideoPath, std::filesystem::copy_options::overwrite_existing, ec);
+            }
+            AXLE_INFO("Asset Pipeline: Ingested video '{0}' into '{1}' (Zero-companion raw media)",
+                destVideoPath.filename().string(), videoDestFolder.string());
         } else {
             // General asset file copy (textures, shaders, scenes, documents)
             std::filesystem::path destPath = destFolder / srcPath.filename();

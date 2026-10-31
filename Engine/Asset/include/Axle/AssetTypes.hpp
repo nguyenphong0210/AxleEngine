@@ -54,7 +54,7 @@ namespace Axle {
         std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
 
         if (ext == ".axlescene" || ext == ".scene") return AssetType::Scene;
-        if (ext == ".axlemat" || ext == ".amat" || ext == ".mat") return AssetType::Material;
+        if (ext == ".axlemat" || ext == ".amat" || ext == ".mat" || ext == ".axleasset") return AssetType::Material;
         if (ext == ".physmat") return AssetType::PhysicsMaterial;
         if (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") return AssetType::Mesh;
         if (ext == ".axle") return AssetType::Assembly;

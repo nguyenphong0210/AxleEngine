@@ -488,7 +488,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **Step 1 - Core `AssetDSL` Lexer/Parser & Shared Resource Pipeline (`Engine/Asset`)**:
     - [x] Implement centralized `AssetDSL` tokenizer supporting C/QML-style declarative blocks (`Material`, `Canvas`, `ParticleEmitter`, `Mesh`, `Texture`, `Terrain`, `PhysicsMaterial`).
     - [x] Support native Hex color `#RRGGBB` / `#RRGGBBAA`, vectors `[x, y]`, floats, strings, single-line `//` and multi-line `/* */` comments.
-    - [ ] Built-in lightweight peek utility `AssetDSL::PeekAssetKind()` to identify asset type for Content Browser icons with zero full-parse cost.
+    - [x] Built-in lightweight peek utility `AssetDSL::PeekAssetKind()` to identify asset type for Content Browser icons with zero full-parse cost.
     - [ ] 100% Single Pure Standard: Zero legacy parser debt; directly migrate existing `.axlemat` and `.axleui` files to `.axleasset`.
   - [ ] **Step 2 - Material & Texture Standardization, Drag-and-Drop Image Ingest & RHI Preview Parity (`Engine/Asset`, `Engine/UI`, `Engine/Scene`)**:
     - [ ] Standardize `Material { ... }` and `Texture { ... }` in `.axleasset` with bidirectional load/save in `MaterialComponent` and `AssetManager`.

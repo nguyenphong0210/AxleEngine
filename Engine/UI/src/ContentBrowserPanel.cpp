@@ -8,6 +8,7 @@
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/PhysicsMaterial.hpp>
+#include <Axle/AssetDSL.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
 #include <algorithm>
@@ -32,7 +33,7 @@ namespace Axle {
         return it != str.end();
     }
 
-    enum class AssetKind {
+    enum class CBAssetKind {
         Folder,
         Assembly,
         Model3D,
@@ -49,7 +50,7 @@ namespace Axle {
     };
 
     struct AssetVisualMeta {
-        AssetKind Kind;
+        CBAssetKind Kind;
         const char* TypeLabel;
         const char* Tag;
         ImU32 AccentColor;
@@ -57,53 +58,74 @@ namespace Axle {
 
     static AssetVisualMeta GetAssetVisualMeta(const std::filesystem::directory_entry& entry) {
         if (entry.is_directory()) {
-            return { AssetKind::Folder, "Folder", "DIR", IM_COL32(245, 185, 45, 255) };
+            return { CBAssetKind::Folder, "Folder", "DIR", IM_COL32(245, 185, 45, 255) };
         }
 
         auto ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
         if (ext == ".axlemesh") {
-            return { AssetKind::Model3D, "3D Mesh", "MSH", IM_COL32(65, 195, 255, 255) };
+            return { CBAssetKind::Model3D, "3D Mesh", "MSH", IM_COL32(65, 195, 255, 255) };
         }
         if (ext == ".axle") {
-            return { AssetKind::Assembly, "Assembly Prefab", "ASY", IM_COL32(255, 175, 45, 255) };
+            return { CBAssetKind::Assembly, "Assembly Prefab", "ASY", IM_COL32(255, 175, 45, 255) };
         }
         if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
-            return { AssetKind::Model3D, "3D Mesh", "3D", IM_COL32(65, 195, 255, 255) };
+            return { CBAssetKind::Model3D, "3D Mesh", "3D", IM_COL32(65, 195, 255, 255) };
         }
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") {
-            return { AssetKind::Texture, "Texture", "IMG", IM_COL32(46, 204, 113, 255) };
+            return { CBAssetKind::Texture, "Texture", "IMG", IM_COL32(46, 204, 113, 255) };
         }
         if (ext == ".vert" || ext == ".frag" || ext == ".glsl" || ext == ".comp") {
-            return { AssetKind::Shader, "Shader", "SHD", IM_COL32(205, 105, 255, 255) };
+            return { CBAssetKind::Shader, "Shader", "SHD", IM_COL32(205, 105, 255, 255) };
         }
         if (ext == ".axlescene" || ext == ".scene") {
-            return { AssetKind::Scene, "Axle Scene", "SCN", IM_COL32(255, 85, 95, 255) };
+            return { CBAssetKind::Scene, "Axle Scene", "SCN", IM_COL32(255, 85, 95, 255) };
         }
         if (ext == ".axleproj") {
-            return { AssetKind::Project, "Axle Project", "PRJ", IM_COL32(0, 210, 180, 255) };
+            return { CBAssetKind::Project, "Axle Project", "PRJ", IM_COL32(0, 210, 180, 255) };
         }
         if (ext == ".axlemat" || ext == ".amat" || ext == ".mat") {
-            return { AssetKind::Material, "Material", "MAT", IM_COL32(255, 135, 45, 255) };
+            return { CBAssetKind::Material, "Material", "MAT", IM_COL32(255, 135, 45, 255) };
         }
         if (ext == ".physmat") {
-            return { AssetKind::PhysicsMaterial, "Physics Material", "PHY", IM_COL32(255, 165, 50, 255) };
+            return { CBAssetKind::PhysicsMaterial, "Physics Material", "PHY", IM_COL32(255, 165, 50, 255) };
         }
         if (ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".lua" || ext == ".py") {
-            return { AssetKind::Script, "Source Code", "CODE", IM_COL32(75, 160, 245, 255) };
+            return { CBAssetKind::Script, "Source Code", "CODE", IM_COL32(75, 160, 245, 255) };
         }
         if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") {
-            return { AssetKind::Audio, "Audio Clip", "AUD", IM_COL32(255, 95, 160, 255) };
+            return { CBAssetKind::Audio, "Audio Clip", "AUD", IM_COL32(255, 95, 160, 255) };
         }
         if (ext == ".axleui") {
-            return { AssetKind::Document, "UI Canvas", "UI", IM_COL32(56, 189, 248, 255) };
+            return { CBAssetKind::Document, "UI Canvas", "UI", IM_COL32(56, 189, 248, 255) };
+        }
+        if (ext == ".axleasset") {
+            auto dslKind = AssetDSL::PeekAssetKindFromFile(entry.path().string());
+            switch (dslKind) {
+                case Axle::AssetKind::Material:
+                    return { CBAssetKind::Material, "Material Asset", "MAT", IM_COL32(255, 135, 45, 255) };
+                case Axle::AssetKind::Texture:
+                    return { CBAssetKind::Texture, "Texture Asset", "TEX", IM_COL32(46, 204, 113, 255) };
+                case Axle::AssetKind::Canvas:
+                    return { CBAssetKind::Document, "UI Canvas", "UI", IM_COL32(56, 189, 248, 255) };
+                case Axle::AssetKind::ParticleEmitter:
+                    return { CBAssetKind::Other, "Particle VFX", "VFX", IM_COL32(255, 75, 75, 255) };
+                case Axle::AssetKind::Mesh:
+                    return { CBAssetKind::Model3D, "3D Mesh", "MSH", IM_COL32(65, 195, 255, 255) };
+                case Axle::AssetKind::Terrain:
+                    return { CBAssetKind::Other, "Terrain", "TRN", IM_COL32(34, 197, 94, 255) };
+                case Axle::AssetKind::PhysicsMaterial:
+                    return { CBAssetKind::PhysicsMaterial, "Physics Material", "PHY", IM_COL32(255, 165, 50, 255) };
+                default:
+                    return { CBAssetKind::Other, "Axle Asset", "AST", IM_COL32(180, 180, 180, 255) };
+            }
         }
         if (ext == ".md" || ext == ".txt" || ext == ".json" || ext == ".yaml") {
-            return { AssetKind::Document, "Document", "DOC", IM_COL32(165, 180, 200, 255) };
+            return { CBAssetKind::Document, "Document", "DOC", IM_COL32(165, 180, 200, 255) };
         }
 
-        return { AssetKind::Other, "File", "FILE", IM_COL32(140, 150, 165, 255) };
+        return { CBAssetKind::Other, "File", "FILE", IM_COL32(140, 150, 165, 255) };
     }
 
     // -----------------------------------------------------------------------------
@@ -941,9 +963,11 @@ namespace Axle {
                             } else if (ext == ".axleproj" && m_OnOpenProjectCallback) {
                                 m_OnOpenProjectCallback(path);
                                 SetStatusNotification("Loaded project: " + path.filename().string());
-                            } else if (ext == ".axleui" && m_OnOpenUICanvasCallback) {
-                                m_OnOpenUICanvasCallback(path);
-                                SetStatusNotification("Opened UI Designer: " + path.filename().string());
+                            } else if ((ext == ".axleui" || ext == ".axleasset") && m_OnOpenUICanvasCallback) {
+                                if (ext == ".axleui" || AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::Canvas) {
+                                    m_OnOpenUICanvasCallback(path);
+                                    SetStatusNotification("Opened UI Designer: " + path.filename().string());
+                                }
                             }
                             // Note: .axle files are inspected via single-click into Properties + Asset Preview tabs
                         }
@@ -1004,13 +1028,19 @@ namespace Axle {
                                 }
                             }
                             ImGui::Separator();
-                        } else if (ext == ".axleui") {
-                            if (ImGui::MenuItem("Open in UI Canvas Designer")) {
-                                if (m_OnOpenUICanvasCallback) {
-                                    m_OnOpenUICanvasCallback(path);
-                                }
+                        } else if (ext == ".axleui" || ext == ".axleasset") {
+                            bool isCanvas = (ext == ".axleui");
+                            if (ext == ".axleasset") {
+                                isCanvas = (AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::Canvas);
                             }
-                            ImGui::Separator();
+                            if (isCanvas) {
+                                if (ImGui::MenuItem("Open in UI Canvas Designer")) {
+                                    if (m_OnOpenUICanvasCallback) {
+                                        m_OnOpenUICanvasCallback(path);
+                                    }
+                                }
+                                ImGui::Separator();
+                            }
                         }
 
                         if (ext == ".axlemesh" || ext == ".axlebin") {
@@ -1108,8 +1138,8 @@ namespace Axle {
                     float iconScale = iconAreaH * 0.36f;
 
                     u32 thumbTex = 0;
-                    if ((meta.Kind == AssetKind::Model3D || meta.Kind == AssetKind::Assembly || 
-                         meta.Kind == AssetKind::Material || meta.Kind == AssetKind::Texture) && m_ThumbnailManager) {
+                    if ((meta.Kind == CBAssetKind::Model3D || meta.Kind == CBAssetKind::Assembly || 
+                         meta.Kind == CBAssetKind::Material || meta.Kind == CBAssetKind::Texture) && m_ThumbnailManager) {
                         thumbTex = m_ThumbnailManager->GetOrCreateThumbnail(path);
                     }
 
@@ -1128,18 +1158,18 @@ namespace Axle {
                         drawList->AddText(ImVec2(badgeMin.x + 3.0f, badgeMin.y + 1.0f), meta.AccentColor, meta.Tag);
                     } else {
                         switch (meta.Kind) {
-                            case AssetKind::Folder:   DrawFolderIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Assembly: DrawAssemblyIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Model3D:  DrawModel3DIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Texture:  DrawTexturePictureIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Shader:   DrawShaderIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Scene:    DrawSceneIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Project:         DrawProjectIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Material:        
-                            case AssetKind::PhysicsMaterial: DrawMaterialIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Script:          DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(75, 160, 245, 230)); break;
-                            case AssetKind::Audio:           DrawAudioIcon(drawList, iconCenter, iconScale); break;
-                            case AssetKind::Document: DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(150, 165, 185, 230)); break;
+                            case CBAssetKind::Folder:   DrawFolderIcon(drawList, iconCenter, iconScale); break;
+                            case CBAssetKind::Assembly: DrawAssemblyIcon(drawList, iconCenter, iconScale); break;
+                            case CBAssetKind::Model3D:  DrawModel3DIcon(drawList, iconCenter, iconScale); break;
+                            case CBAssetKind::Texture:  DrawTexturePictureIcon(drawList, iconCenter, iconScale); break;
+                            case CBAssetKind::Shader:   DrawShaderIcon(drawList, iconCenter, iconScale); break;
+                            case CBAssetKind::Scene:    DrawSceneIcon(drawList, iconCenter, iconScale); break;
+                            case CBAssetKind::Project:         DrawProjectIcon(drawList, iconCenter, iconScale); break;
+                            case CBAssetKind::Material:        
+                            case CBAssetKind::PhysicsMaterial: DrawMaterialIcon(drawList, iconCenter, iconScale); break;
+                            case CBAssetKind::Script:          DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(75, 160, 245, 230)); break;
+                            case CBAssetKind::Audio:           DrawAudioIcon(drawList, iconCenter, iconScale); break;
+                            case CBAssetKind::Document: DrawDocumentIcon(drawList, iconCenter, iconScale, IM_COL32(150, 165, 185, 230)); break;
                             default:                  DrawGenericFileIcon(drawList, iconCenter, iconScale); break;
                         }
                     }

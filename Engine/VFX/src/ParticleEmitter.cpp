@@ -111,6 +111,21 @@ namespace Axle {
                 outDir = normDir;
                 break;
             }
+            case ParticleEmitterShapeType::Circle: {
+                glm::vec3 up = (std::abs(normDir.y) < 0.999f) ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+                glm::vec3 right = glm::normalize(glm::cross(normDir, up));
+                up = glm::cross(right, normDir);
+                float r = SurfaceOnly ? Radius : (Radius * std::sqrt(VFXRandom::Float(0.0f, 1.0f)));
+                float phi = VFXRandom::Float(0.0f, 6.2831853f);
+                outOffset = (right * std::cos(phi) + up * std::sin(phi)) * r;
+                outDir = normDir;
+                break;
+            }
+            case ParticleEmitterShapeType::MeshSurface: {
+                outOffset = VFXRandom::UnitVector() * Radius;
+                outDir = glm::normalize(outOffset);
+                break;
+            }
         }
     }
 

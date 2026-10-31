@@ -14,6 +14,8 @@ namespace Axle {
             case ParticleEmitterShapeType::Box: return "Box";
             case ParticleEmitterShapeType::Cone: return "Cone";
             case ParticleEmitterShapeType::Line: return "Line";
+            case ParticleEmitterShapeType::Circle: return "Circle";
+            case ParticleEmitterShapeType::MeshSurface: return "MeshSurface";
             default: return "Point";
         }
     }
@@ -25,6 +27,8 @@ namespace Axle {
         if (str == "Box") return ParticleEmitterShapeType::Box;
         if (str == "Cone") return ParticleEmitterShapeType::Cone;
         if (str == "Line") return ParticleEmitterShapeType::Line;
+        if (str == "Circle") return ParticleEmitterShapeType::Circle;
+        if (str == "MeshSurface") return ParticleEmitterShapeType::MeshSurface;
         return ParticleEmitterShapeType::Point;
     }
 
@@ -97,6 +101,14 @@ namespace Axle {
         root.SetString("name", config.Name.empty() ? "DefaultEmitter" : config.Name);
         root.SetUInt("maxParticles", config.MaxParticles);
         root.SetFloat("emissionRate", config.EmissionRate);
+        root.SetFloat("duration", config.Duration);
+        root.SetBool("looping", config.Looping);
+        root.SetBool("playOnAwake", config.PlayOnAwake);
+
+        if (!config.MaterialPath.empty()) {
+            root.SetString("material", config.MaterialPath);
+        }
+
         if (config.BurstCount > 0) {
             root.SetUInt("burstCount", config.BurstCount);
             root.SetFloat("burstInterval", config.BurstInterval);
@@ -116,7 +128,7 @@ namespace Axle {
         if (config.Shape.Type == ParticleEmitterShapeType::Cone) {
             root.SetFloat("coneAngle", config.Shape.ConeAngle);
             root.SetFloat("radius", config.Shape.Radius);
-        } else if (config.Shape.Type == ParticleEmitterShapeType::Sphere || config.Shape.Type == ParticleEmitterShapeType::Hemisphere) {
+        } else if (config.Shape.Type == ParticleEmitterShapeType::Sphere || config.Shape.Type == ParticleEmitterShapeType::Hemisphere || config.Shape.Type == ParticleEmitterShapeType::Circle) {
             root.SetFloat("radius", config.Shape.Radius);
             root.SetBool("surfaceOnly", config.Shape.SurfaceOnly);
         } else if (config.Shape.Type == ParticleEmitterShapeType::Box) {
@@ -133,6 +145,16 @@ namespace Axle {
         SerializeFloatRange(root, "endSize", config.EndSize);
         SerializeFloatRange(root, "startRotation", config.StartRotation);
         SerializeFloatRange(root, "angularVelocity", config.AngularVelocity);
+
+        // Curves (Size, Speed, Alpha over Lifetime)
+        root.SetVec4("sizeCurveBezier", glm::vec4(config.SizeOverLifetime.P0.y, config.SizeOverLifetime.P1.y, config.SizeOverLifetime.P2.y, config.SizeOverLifetime.P3.y));
+        root.SetInt("sizeCurveType", static_cast<int32_t>(config.SizeOverLifetime.Type));
+
+        root.SetVec4("speedCurveBezier", glm::vec4(config.SpeedOverLifetime.P0.y, config.SpeedOverLifetime.P1.y, config.SpeedOverLifetime.P2.y, config.SpeedOverLifetime.P3.y));
+        root.SetInt("speedCurveType", static_cast<int32_t>(config.SpeedOverLifetime.Type));
+
+        root.SetVec4("alphaCurveBezier", glm::vec4(config.AlphaOverLifetime.P0.y, config.AlphaOverLifetime.P1.y, config.AlphaOverLifetime.P2.y, config.AlphaOverLifetime.P3.y));
+        root.SetInt("alphaCurveType", static_cast<int32_t>(config.AlphaOverLifetime.Type));
 
         root.SetHexColor("startColor", config.ColorOverLifetime.StartColor);
         root.SetHexColor("endColor", config.ColorOverLifetime.EndColor);
@@ -193,6 +215,49 @@ namespace Axle {
             root.SetBool("collisionEnabled", true);
             root.SetFloat("collisionRestitution", config.Collision.Restitution);
             root.SetFloat("collisionFriction", config.Collision.Friction);
+            root.SetBool("killOnCollision", config.Collision.KillOnCollision);
+        }
+
+        // Bursts child blocks
+        for (const auto& burst : config.Bursts) {
+            auto bBlock = std::make_shared<AssetBlock>();
+            bBlock->Type = "Burst";
+            bBlock->SetFloat("time", burst.Time);
+            bBlock->SetUInt("minCount", burst.MinCount);
+            bBlock->SetUInt("maxCount", burst.MaxCount);
+            bBlock->SetUInt("cycles", burst.Cycles);
+            bBlock->SetFloat("interval", burst.Interval);
+            bBlock->SetFloat("probability", burst.Probability);
+            root.Children.push_back(bBlock);
+        }
+
+        // Sub-Emitters child blocks
+        for (const auto& sub : config.SubEmitters) {
+            auto sBlock = std::make_shared<AssetBlock>();
+            sBlock->Type = "SubEmitter";
+            sBlock->SetString("trigger", sub.Trigger == SubEmitterTrigger::Birth ? "Birth" : (sub.Trigger == SubEmitterTrigger::Death ? "Death" : "Collision"));
+            sBlock->SetString("target", sub.TargetEmitterName);
+            sBlock->SetUInt("emitCount", sub.EmitCount);
+            sBlock->SetFloat("probability", sub.Probability);
+            sBlock->SetBool("inheritColor", sub.InheritColor);
+            sBlock->SetBool("inheritVelocity", sub.InheritVelocity);
+            root.Children.push_back(sBlock);
+        }
+
+        // Color & Alpha gradient multi-keys
+        for (const auto& ck : config.ColorOverLifetime.ColorKeys) {
+            auto ckBlock = std::make_shared<AssetBlock>();
+            ckBlock->Type = "ColorKey";
+            ckBlock->SetFloat("time", ck.Time);
+            ckBlock->SetVec3("color", ck.Color);
+            root.Children.push_back(ckBlock);
+        }
+        for (const auto& ak : config.ColorOverLifetime.AlphaKeys) {
+            auto akBlock = std::make_shared<AssetBlock>();
+            akBlock->Type = "AlphaKey";
+            akBlock->SetFloat("time", ak.Time);
+            akBlock->SetFloat("alpha", ak.Alpha);
+            root.Children.push_back(akBlock);
         }
 
         return AssetDSL::SerializeDocument(doc);
@@ -213,6 +278,11 @@ namespace Axle {
         outConfig.Name = root.GetString("name", outConfig.Name);
         outConfig.MaxParticles = root.GetUInt("maxParticles", outConfig.MaxParticles);
         outConfig.EmissionRate = root.GetFloat("emissionRate", outConfig.EmissionRate);
+        outConfig.Duration = root.GetFloat("duration", outConfig.Duration);
+        outConfig.Looping = root.GetBool("looping", outConfig.Looping);
+        outConfig.PlayOnAwake = root.GetBool("playOnAwake", outConfig.PlayOnAwake);
+        outConfig.MaterialPath = root.GetString("material", outConfig.MaterialPath);
+
         outConfig.BurstCount = root.GetUInt("burstCount", outConfig.BurstCount);
         outConfig.BurstInterval = root.GetFloat("burstInterval", outConfig.BurstInterval);
 
@@ -253,6 +323,29 @@ namespace Axle {
         }
         if (root.HasProperty("angularVelocity")) {
             outConfig.AngularVelocity = ParseFloatRange(root, "angularVelocity", outConfig.AngularVelocity);
+        }
+
+        // Cubic Bezier Curves
+        if (root.HasProperty("sizeCurveBezier")) {
+            glm::vec4 b = root.GetVec4("sizeCurveBezier", glm::vec4(1.0f, 1.0f, 0.5f, 0.0f));
+            outConfig.SizeOverLifetime.SetCubicBezier(b.x, b.y, b.z, b.w);
+            if (root.HasProperty("sizeCurveType")) {
+                outConfig.SizeOverLifetime.Type = static_cast<CurveType>(root.GetInt("sizeCurveType", 0));
+            }
+        }
+        if (root.HasProperty("speedCurveBezier")) {
+            glm::vec4 b = root.GetVec4("speedCurveBezier", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+            outConfig.SpeedOverLifetime.SetCubicBezier(b.x, b.y, b.z, b.w);
+            if (root.HasProperty("speedCurveType")) {
+                outConfig.SpeedOverLifetime.Type = static_cast<CurveType>(root.GetInt("speedCurveType", 0));
+            }
+        }
+        if (root.HasProperty("alphaCurveBezier")) {
+            glm::vec4 b = root.GetVec4("alphaCurveBezier", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+            outConfig.AlphaOverLifetime.SetCubicBezier(b.x, b.y, b.z, b.w);
+            if (root.HasProperty("alphaCurveType")) {
+                outConfig.AlphaOverLifetime.Type = static_cast<CurveType>(root.GetInt("alphaCurveType", 0));
+            }
         }
 
         // Color & Alpha
@@ -314,6 +407,44 @@ namespace Axle {
         outConfig.Collision.Enabled = root.GetBool("collisionEnabled", outConfig.Collision.Enabled);
         outConfig.Collision.Restitution = root.GetFloat("collisionRestitution", outConfig.Collision.Restitution);
         outConfig.Collision.Friction = root.GetFloat("collisionFriction", outConfig.Collision.Friction);
+        outConfig.Collision.KillOnCollision = root.GetBool("killOnCollision", outConfig.Collision.KillOnCollision);
+
+        // Child blocks parsing
+        for (const auto& child : root.Children) {
+            if (child->Type == "Burst") {
+                ParticleBurst b;
+                b.Time = child->GetFloat("time", 0.0f);
+                b.MinCount = child->GetUInt("minCount", 30);
+                b.MaxCount = child->GetUInt("maxCount", 30);
+                b.Cycles = child->GetUInt("cycles", 1);
+                b.Interval = child->GetFloat("interval", 0.0f);
+                b.Probability = child->GetFloat("probability", 1.0f);
+                b.Reset();
+                outConfig.Bursts.push_back(b);
+            } else if (child->Type == "SubEmitter") {
+                SubEmitterConfig sub;
+                std::string trigStr = child->GetString("trigger", "Collision");
+                if (trigStr == "Birth") sub.Trigger = SubEmitterTrigger::Birth;
+                else if (trigStr == "Death") sub.Trigger = SubEmitterTrigger::Death;
+                else sub.Trigger = SubEmitterTrigger::Collision;
+                sub.TargetEmitterName = child->GetString("target", "");
+                sub.EmitCount = child->GetUInt("emitCount", 10);
+                sub.Probability = child->GetFloat("probability", 1.0f);
+                sub.InheritColor = child->GetBool("inheritColor", true);
+                sub.InheritVelocity = child->GetBool("inheritVelocity", false);
+                outConfig.SubEmitters.push_back(sub);
+            } else if (child->Type == "ColorKey") {
+                GradientColorKey ck;
+                ck.Time = child->GetFloat("time", 0.0f);
+                ck.Color = child->GetVec3("color", glm::vec3(1.0f));
+                outConfig.ColorOverLifetime.ColorKeys.push_back(ck);
+            } else if (child->Type == "AlphaKey") {
+                GradientAlphaKey ak;
+                ak.Time = child->GetFloat("time", 0.0f);
+                ak.Alpha = child->GetFloat("alpha", 1.0f);
+                outConfig.ColorOverLifetime.AlphaKeys.push_back(ak);
+            }
+        }
 
         return true;
     }

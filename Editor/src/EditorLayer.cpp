@@ -189,6 +189,7 @@ void EditorLayer::OnAttach() {
     auto* imguiLayer = dynamic_cast<Axle::ImGuiLayer*>(Axle::Application::Get().GetUIContext());
     m_AssetPreviewPanel.InitRHI(imguiLayer);
     m_VFXEditorPanel.InitRHI(imguiLayer);
+    m_SceneHierarchyPanel.SetImGuiLayer(imguiLayer);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
 
     m_ContentBrowserPanel.SetOpenUICanvasCallback([this](const std::filesystem::path& path) {

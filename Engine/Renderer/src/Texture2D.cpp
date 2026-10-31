@@ -97,7 +97,7 @@ namespace Axle {
         stbi_image_free(data);
         m_IsLoaded = true;
 
-        AXLE_CORE_INFO("Texture2D: Successfully loaded '{0}' ({1}x{2}, {3} channels, ID: {4})",
+        AXLE_CORE_TRACE("Texture2D: Successfully loaded '{0}' ({1}x{2}, {3} channels, ID: {4})",
             std::filesystem::path(filepath).filename().string(), m_Width, m_Height, channels, m_RendererID);
     }
 

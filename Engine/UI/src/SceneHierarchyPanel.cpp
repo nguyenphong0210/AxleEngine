@@ -120,7 +120,12 @@ namespace Axle {
         SetContext(scene, physicsScene);
     }
 
+    SceneHierarchyPanel::~SceneHierarchyPanel() {
+        ClearTexturePreview();
+    }
+
     void SceneHierarchyPanel::SetContext(Scene* scene, PhysicsScene* physicsScene) {
+        ClearTexturePreview();
         m_Scene = scene;
         m_PhysicsScene = physicsScene;
         m_SelectedEntity = {};
@@ -148,6 +153,9 @@ namespace Axle {
             ClearSelectedAsset();
             return;
         }
+        if (m_SelectedAsset != assetPath) {
+            ClearTexturePreview();
+        }
         m_SelectedAsset = assetPath;
         m_InspectorMode = InspectorMode::Asset;
         if (m_AssetPreviewPanel) {
@@ -156,6 +164,7 @@ namespace Axle {
     }
 
     void SceneHierarchyPanel::ClearSelectedAsset() {
+        ClearTexturePreview();
         m_SelectedAsset.clear();
         m_InspectorMode = InspectorMode::Entity;
         if (m_AssetPreviewPanel) {

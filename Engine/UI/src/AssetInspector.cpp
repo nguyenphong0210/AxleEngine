@@ -11,6 +11,12 @@
 #include <Axle/AudioEngine.hpp>
 #include <Axle/AudioSource.hpp>
 #include <Axle/AudioClip.hpp>
+#include <Axle/RHI/RHITexture.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/Application.hpp>
+#include <Axle/ImGuiLayer.hpp>
+#include <stb_image.h>
+#include <Extensions/NRIHelper.h>
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <filesystem>
@@ -18,6 +24,96 @@
 #include <string>
 
 namespace Axle {
+
+    void SceneHierarchyPanel::ClearTexturePreview() {
+        if (m_TexturePreviewImGuiID != 0) {
+            if (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) {
+                m_ImGuiLayer->UnregisterTextureDescriptor(m_TexturePreviewImGuiID);
+            }
+            m_TexturePreviewImGuiID = 0;
+        }
+        m_RHITexturePreview.reset();
+        m_GLTexturePreview.reset();
+        m_LoadedTexturePath.clear();
+        m_LoadedTextureWidth = 0;
+        m_LoadedTextureHeight = 0;
+        m_LoadedTextureChannels = 0;
+    }
+
+    void SceneHierarchyPanel::LoadTexturePreview(const std::filesystem::path& path) {
+        if (m_LoadedTexturePath == path && (m_TexturePreviewImGuiID != 0 || m_LoadedTextureWidth > 0)) {
+            return;
+        }
+
+        ClearTexturePreview();
+        m_LoadedTexturePath = path;
+
+        if (!m_ImGuiLayer) {
+            m_ImGuiLayer = dynamic_cast<ImGuiLayer*>(Application::Get().GetUIContext());
+        }
+
+        std::filesystem::path absPath = FileSystem::ResolveAssetPath(path);
+        auto buffer = FileSystem::ReadBinaryFile(absPath);
+        if (buffer.empty()) {
+            AXLE_CORE_WARN("SceneHierarchyPanel: Failed to read texture file for preview '{0}'", absPath.string());
+            return;
+        }
+
+        int width = 0, height = 0, channels = 0;
+        stbi_set_flip_vertically_on_load(false);
+        stbi_uc* pixels = stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 4);
+        if (!pixels) {
+            AXLE_CORE_WARN("SceneHierarchyPanel: Failed to decode texture '{0}': {1}", absPath.string(), stbi_failure_reason());
+            return;
+        }
+
+        m_LoadedTextureWidth = static_cast<uint32_t>(width);
+        m_LoadedTextureHeight = static_cast<uint32_t>(height);
+        m_LoadedTextureChannels = static_cast<uint32_t>(channels);
+
+        bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
+        if (isRHI) {
+            auto& rhiDevice = RHI::RHIDevice::Get();
+            if (rhiDevice.IsInitialized()) {
+                m_RHITexturePreview = std::make_shared<RHI::RHITexture>();
+                auto desc = RHI::RHITextureDesc::RenderTarget2D(m_LoadedTextureWidth, m_LoadedTextureHeight, RHI::RHITextureFormat::RGBA8_UNORM, "TexturePreview_" + path.filename().string());
+                desc.Usage = RHI::RHITextureUsage::ShaderResource;
+                if (m_RHITexturePreview->Init(desc)) {
+                    const auto& helper = rhiDevice.GetNRIHelper();
+                    nri::Queue* queue = rhiDevice.GetGraphicsQueue();
+                    if (queue && helper.UploadData) {
+                        nri::TextureSubresourceUploadDesc subres = {};
+                        subres.slices = pixels;
+                        subres.sliceNum = 1;
+                        subres.rowPitch = m_LoadedTextureWidth * 4;
+                        subres.slicePitch = m_LoadedTextureWidth * m_LoadedTextureHeight * 4;
+
+                        nri::TextureUploadDesc upDesc = {};
+                        upDesc.subresources = &subres;
+                        upDesc.texture = m_RHITexturePreview->GetNative();
+                        upDesc.after.access = nri::AccessBits::SHADER_RESOURCE;
+                        upDesc.after.layout = nri::Layout::SHADER_RESOURCE;
+                        upDesc.after.stages = nri::StageBits::ALL;
+                        upDesc.planes = nri::PlaneBits::ALL;
+
+                        helper.UploadData(*queue, &upDesc, 1, nullptr, 0);
+                    }
+
+                    uint64_t nativeHandle = m_RHITexturePreview->GetNativeSRVHandle();
+                    if (nativeHandle != 0 && m_ImGuiLayer) {
+                        m_TexturePreviewImGuiID = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                    }
+                }
+            }
+        } else {
+            m_GLTexturePreview = Texture2D::Create(absPath.string());
+            if (m_GLTexturePreview && m_GLTexturePreview->IsLoaded()) {
+                m_TexturePreviewImGuiID = m_GLTexturePreview->GetRendererID();
+            }
+        }
+
+        stbi_image_free(pixels);
+    }
 
     void SceneHierarchyPanel::DrawAssetProperties(const std::filesystem::path& path) {
         if (!std::filesystem::exists(path)) {
@@ -101,15 +197,15 @@ namespace Axle {
 
         // 2. 2D Texture Asset: Render image preview with resolution metadata
         if (isTexture) {
-            auto tex = Texture2D::Create(path.string());
-            if (tex && tex->IsLoaded()) {
+            LoadTexturePreview(path);
+            if (m_LoadedTextureWidth > 0 && m_LoadedTextureHeight > 0) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.09f, 0.11f, 0.14f, 1.0f));
                 ImGui::BeginChild("TexturePreviewViewport", ImVec2(0.0f, 220.0f), true);
                 {
                     float availW = ImGui::GetContentRegionAvail().x;
                     float availH = 200.0f;
-                    float texW = (float)tex->GetWidth();
-                    float texH = (float)tex->GetHeight();
+                    float texW = (float)m_LoadedTextureWidth;
+                    float texH = (float)m_LoadedTextureHeight;
                     float scale = std::min(availW / texW, availH / texH);
                     float dispW = texW * scale;
                     float dispH = texH * scale;
@@ -119,7 +215,14 @@ namespace Axle {
                     if (padX > 0) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + padX);
                     if (padY > 0) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + padY);
 
-                    ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), ImVec2(dispW, dispH), ImVec2(0, 1), ImVec2(1, 0));
+                    ImVec2 uv0 = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) ? ImVec2(0.0f, 0.0f) : ImVec2(0.0f, 1.0f);
+                    ImVec2 uv1 = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) ? ImVec2(1.0f, 1.0f) : ImVec2(1.0f, 0.0f);
+
+                    if (m_TexturePreviewImGuiID != 0) {
+                        ImGui::Image((ImTextureID)(intptr_t)m_TexturePreviewImGuiID, ImVec2(dispW, dispH), uv0, uv1);
+                    } else {
+                        ImGui::TextDisabled("Preview unavailable");
+                    }
                 }
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
@@ -134,17 +237,27 @@ namespace Axle {
 
                     ImGui::TextDisabled("Dimensions:");
                     ImGui::NextColumn();
-                    ImGui::Text("%u x %u px", tex->GetWidth(), tex->GetHeight());
+                    ImGui::Text("%u x %u px", m_LoadedTextureWidth, m_LoadedTextureHeight);
                     ImGui::NextColumn();
 
                     ImGui::TextDisabled("Aspect Ratio:");
                     ImGui::NextColumn();
-                    ImGui::Text("%.2f:1", (float)tex->GetWidth() / (float)std::max(1u, tex->GetHeight()));
+                    ImGui::Text("%.2f:1", (float)m_LoadedTextureWidth / (float)std::max(1u, m_LoadedTextureHeight));
+                    ImGui::NextColumn();
+
+                    ImGui::TextDisabled("Channels:");
+                    ImGui::NextColumn();
+                    std::string chanStr = (m_LoadedTextureChannels == 4) ? "RGBA (4)" : ((m_LoadedTextureChannels == 3) ? "RGB (3)" : std::to_string(m_LoadedTextureChannels));
+                    ImGui::Text("%s", chanStr.c_str());
                     ImGui::NextColumn();
 
                     ImGui::TextDisabled("Renderer ID:");
                     ImGui::NextColumn();
-                    ImGui::Text("%u", tex->GetRendererID());
+                    if (m_TexturePreviewImGuiID != 0) {
+                        ImGui::Text("0x%llX", (unsigned long long)m_TexturePreviewImGuiID);
+                    } else {
+                        ImGui::TextDisabled("0");
+                    }
                     ImGui::NextColumn();
 
                     ImGui::Columns(1);
@@ -542,7 +655,7 @@ namespace Axle {
 
             // Albedo Texture Slot
             ImGui::TextDisabled("Albedo Map");
-            if (m_ActiveMaterialAsset.UseAlbedoMap && m_ActiveMaterialAsset.AlbedoMap && m_ActiveMaterialAsset.AlbedoMap->IsLoaded()) {
+            if (m_ActiveMaterialAsset.UseAlbedoMap && m_ActiveMaterialAsset.AlbedoMap && m_ActiveMaterialAsset.AlbedoMap->IsLoaded() && m_ActiveMaterialAsset.AlbedoMap->GetRendererID() != 0) {
                 ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.AlbedoMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
                 ImGui::SameLine();
             }
@@ -577,7 +690,7 @@ namespace Axle {
                 changed = true;
             }
             ImGui::TextDisabled("Roughness Map");
-            if (m_ActiveMaterialAsset.UseRoughnessMap && m_ActiveMaterialAsset.RoughnessMap && m_ActiveMaterialAsset.RoughnessMap->IsLoaded()) {
+            if (m_ActiveMaterialAsset.UseRoughnessMap && m_ActiveMaterialAsset.RoughnessMap && m_ActiveMaterialAsset.RoughnessMap->IsLoaded() && m_ActiveMaterialAsset.RoughnessMap->GetRendererID() != 0) {
                 ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.RoughnessMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
                 ImGui::SameLine();
             }
@@ -610,7 +723,7 @@ namespace Axle {
                 changed = true;
             }
             ImGui::TextDisabled("Metallic Map");
-            if (m_ActiveMaterialAsset.UseMetallicMap && m_ActiveMaterialAsset.MetallicMap && m_ActiveMaterialAsset.MetallicMap->IsLoaded()) {
+            if (m_ActiveMaterialAsset.UseMetallicMap && m_ActiveMaterialAsset.MetallicMap && m_ActiveMaterialAsset.MetallicMap->IsLoaded() && m_ActiveMaterialAsset.MetallicMap->GetRendererID() != 0) {
                 ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.MetallicMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
                 ImGui::SameLine();
             }
@@ -643,7 +756,7 @@ namespace Axle {
                 changed = true;
             }
             ImGui::TextDisabled("Normal Map");
-            if (m_ActiveMaterialAsset.UseNormalMap && m_ActiveMaterialAsset.NormalMap && m_ActiveMaterialAsset.NormalMap->IsLoaded()) {
+            if (m_ActiveMaterialAsset.UseNormalMap && m_ActiveMaterialAsset.NormalMap && m_ActiveMaterialAsset.NormalMap->IsLoaded() && m_ActiveMaterialAsset.NormalMap->GetRendererID() != 0) {
                 ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.NormalMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
                 ImGui::SameLine();
             }

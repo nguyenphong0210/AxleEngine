@@ -15,7 +15,10 @@ namespace Axle {
     class AssetPreviewPanel;
     class AudioSource;
     class UINode;
+    class ImGuiLayer;
+    class Texture2D;
     struct UICanvasComponent;
+    namespace RHI { class RHITexture; }
 
     enum class InspectorMode {
         Entity = 0,
@@ -26,7 +29,8 @@ namespace Axle {
     public:
         SceneHierarchyPanel() = default;
         SceneHierarchyPanel(Scene* scene, PhysicsScene* physicsScene = nullptr);
-        ~SceneHierarchyPanel() = default;
+        ~SceneHierarchyPanel();
+        void SetImGuiLayer(ImGuiLayer* layer) { m_ImGuiLayer = layer; }
 
         void SetContext(Scene* scene, PhysicsScene* physicsScene = nullptr);
         void SetMeshes(
@@ -95,6 +99,18 @@ namespace Axle {
 
         std::shared_ptr<AudioSource> m_EditorPreviewAudioSource;
         std::string m_EditorPreviewPath;
+
+        void LoadTexturePreview(const std::filesystem::path& path);
+        void ClearTexturePreview();
+
+        ImGuiLayer* m_ImGuiLayer = nullptr;
+        std::filesystem::path m_LoadedTexturePath;
+        uint32_t m_LoadedTextureWidth = 0;
+        uint32_t m_LoadedTextureHeight = 0;
+        uint32_t m_LoadedTextureChannels = 0;
+        uint64_t m_TexturePreviewImGuiID = 0;
+        std::shared_ptr<Texture2D> m_GLTexturePreview;
+        std::shared_ptr<RHI::RHITexture> m_RHITexturePreview;
 
         char m_SearchFilter[64] = "";
         char m_ComponentSearchFilter[64] = "";

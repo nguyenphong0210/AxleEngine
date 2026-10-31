@@ -17,6 +17,7 @@ AxleEngine Project
     ├── Canvas { ... }              // 2D Declarative UI (HUD, Pause Menu, Dialogs)
     ├── ParticleEmitter { ... }     // Visual Effects (VFX: Smoke, Flame, Sparks, Dust)
     ├── Mesh { ... }                // 3D Geometry (Auto-baked to .axlebin cache for GPU)
+    ├── Texture { ... }             // GPU Texture Descriptor (sRGB/Linear, Anisotropic 16x, BC7, Skybox HDR)
     ├── Terrain { ... }             // Ground & Track Maps (Heightmap, Splatmap, Layers)
     └── PhysicsMaterial { ... }     // Surface Friction & Restitution
 ```
@@ -62,7 +63,7 @@ This guarantees:
 ## 3. Unified DSL Grammar (`AssetDSL`)
 
 All `.axleasset` files share 100% identical syntax:
-- **Root Block:** Declares asset type (`Material`, `Canvas`, `ParticleEmitter`, `Mesh`, `Terrain`, `PhysicsMaterial`).
+- **Root Block:** Declares asset type (`Material`, `Canvas`, `ParticleEmitter`, `Mesh`, `Texture`, `Terrain`, `PhysicsMaterial`).
 - **Properties:** `property: value`
 - **Colors:** Hex string (`"#RRGGBB"` / `"#RRGGBBAA"`) or float array (`[r, g, b, a]`).
 - **Vectors / Ranges:** `[x, y]` or `[min, max]`.
@@ -181,6 +182,35 @@ PhysicsMaterial {
 }
 ```
 
+#### G. GPU Texture & Skybox HDR (`Car_Albedo.axleasset` / `SunsetSkybox.axleasset`)
+```c
+// 1. Surface PBR Texture Descriptor
+Texture {
+    name: "Car_Albedo"
+    source: "textures/car_body_diffuse.png"
+
+    // GPU Loading & Color Space
+    type: "Color"              // "Color" (sRGB), "NormalMap" (Linear), "Data" (ORM / Roughness)
+    filter: "Anisotropic16x"   // "Point", "Linear", "Anisotropic16x"
+    wrapU: "Repeat"            // "Repeat", "Clamp", "Mirror"
+    wrapV: "Repeat"
+
+    // GPU Optimization
+    generateMips: true
+    maxResolution: 2048        // Automatic downscale clamp on lower-tier hardware
+    compression: "BC7"         // Automatic bake to GPU compressed binary cache
+}
+
+// 2. High Dynamic Range (HDR) Environment Skybox & IBL
+Texture {
+    name: "SunsetSkybox"
+    source: "textures/skybox/industrial_sunset.hdr"
+    type: "CubemapHDR"
+    exposure: 1.2
+    generatePrefilter: true    // Auto-compute specular IBL cubemap mips
+}
+```
+
 ---
 
 ## 4. Pipeline & Caching Strategy
@@ -191,10 +221,15 @@ flowchart LR
     Parser --> AssetManager["AssetManager"]
     AssetManager -->|Mesh Geometry| Compiler["AssetSerializer (Compile to .axlebin)"]
     Compiler --> GPU["GPU Memory (VBO/IBO)"]
-    AssetManager -->|Material/Texture| RHI["RHI Resource Creation (Direct3D 12 / Vulkan 1.3)"]
+    AssetManager -->|Texture Baking| TexBake["GPU Texture Compressor (BC7/BC5)"]
+    TexBake --> GPU
+    AssetManager -->|Material/UI/VFX| RHI["RHI Resource Creation (Direct3D 12 / Vulkan 1.3)"]
 ```
 
 1. **Lightweight Assets (Material, UI, VFX, Physics):** Parsed directly into C++ structs in sub-millisecond time.
 2. **Heavy Geometry (Mesh):** Automatically compiled into `.axlebin` binary cache upon save. Runtime loads directly from `.axlebin` with zero text-parsing overhead.
-3. **Backward Compatibility:** All existing `.axlemat`, `.axleui`, `.axlemesh`, `.amat` files continue to load transparently through legacy fallback paths.
+3. **Hybrid Texture Loading:**
+   - **Direct File Mode:** Simple UI icons and test textures can directly reference `.png` / `.jpg` strings without creating a separate wrapper file.
+   - **Descriptor Mode:** High-fidelity PBR textures reference a `Texture { ... }` `.axleasset` for explicit color-space (sRGB vs Linear), Anisotropic 16x filtering, BC7 compression, and HDR Skybox IBL generation.
+4. **Backward Compatibility:** All existing `.axlemat`, `.axleui`, `.axlemesh`, `.amat` files continue to load transparently through legacy fallback paths.
 

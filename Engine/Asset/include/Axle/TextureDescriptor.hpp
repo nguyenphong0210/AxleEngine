@@ -35,6 +35,7 @@ namespace Axle {
         static bool Save(const std::string& filepath, const TextureDescriptor& desc);
         static std::string Serialize(const TextureDescriptor& desc);
         static bool Deserialize(std::string_view source, TextureDescriptor& outDesc);
+        static TextureDescriptor CreateFromImageFile(const std::filesystem::path& imagePath, const std::filesystem::path& assetDirectory = "");
     };
 
 } // namespace Axle

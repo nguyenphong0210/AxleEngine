@@ -1,3 +1,4 @@
+#include <Axle/TextureDescriptor.hpp>
 #include "EditorLayer.hpp"
 #include <Axle/Application.hpp>
 #include <Axle/Input.hpp>
@@ -664,6 +665,26 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
 
                 m_SceneHierarchyPanel.SetSelectedEntity(entity);
             }
+        } else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
+            std::filesystem::path texDestFolder;
+            if (m_ContentBrowserPanel.IsWindowHovered()) {
+                texDestFolder = m_ContentBrowserPanel.GetCurrentPath();
+            } else {
+                texDestFolder = Axle::FileSystem::ResolveAssetPath("textures");
+            }
+            if (!std::filesystem::exists(texDestFolder, ec)) {
+                std::filesystem::create_directories(texDestFolder, ec);
+            }
+            std::filesystem::path destImgPath = texDestFolder / srcPath.filename();
+            if (srcPath != destImgPath) {
+                std::filesystem::copy_file(srcPath, destImgPath, std::filesystem::copy_options::overwrite_existing, ec);
+            }
+
+            auto desc = Axle::TextureDescriptor::CreateFromImageFile(destImgPath, Axle::FileSystem::GetAssetDirectory());
+            std::filesystem::path companionPath = texDestFolder / (stem + ".axleasset");
+            Axle::TextureDescriptor::Save(companionPath.string(), desc);
+            AXLE_INFO("Asset Pipeline: Ingested texture '{0}' and auto-generated companion descriptor '{1}' (Type: {2})",
+                destImgPath.filename().string(), companionPath.filename().string(), desc.Type);
         } else {
             // General asset file copy (textures, shaders, scenes, documents)
             std::filesystem::path destPath = destFolder / srcPath.filename();

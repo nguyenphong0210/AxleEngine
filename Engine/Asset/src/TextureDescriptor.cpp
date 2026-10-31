@@ -69,4 +69,46 @@ namespace Axle {
         return true;
     }
 
+    TextureDescriptor TextureDescriptor::CreateFromImageFile(const std::filesystem::path& imagePath, const std::filesystem::path& assetDirectory) {
+        TextureDescriptor desc;
+        desc.Name = imagePath.stem().string();
+
+        std::error_code ec;
+        if (!assetDirectory.empty()) {
+            std::filesystem::path rel = std::filesystem::relative(imagePath, assetDirectory, ec);
+            desc.Source = ec ? imagePath.generic_string() : rel.generic_string();
+        } else {
+            desc.Source = imagePath.generic_string();
+        }
+
+        std::string ext = imagePath.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+
+        std::string stemLower = desc.Name;
+        std::transform(stemLower.begin(), stemLower.end(), stemLower.begin(), [](unsigned char c) { return std::tolower(c); });
+
+        if (ext == ".hdr") {
+            desc.Type = "CubemapHDR";
+            desc.Filter = "Linear";
+            desc.WrapU = "Clamp";
+            desc.WrapV = "Clamp";
+            desc.GenerateMips = true;
+            desc.GeneratePrefilter = true;
+        } else if (stemLower.ends_with("_normal") || stemLower.ends_with("_norm") || stemLower.ends_with("_n")) {
+            desc.Type = "NormalMap";
+            desc.Filter = "Linear";
+            desc.Compression = "BC5";
+        } else if (stemLower.ends_with("_roughness") || stemLower.ends_with("_rough") || stemLower.ends_with("_r") ||
+                   stemLower.ends_with("_orm") || stemLower.ends_with("_metallic") || stemLower.ends_with("_metal") ||
+                   stemLower.ends_with("_m") || stemLower.ends_with("_ao")) {
+            desc.Type = "Data";
+            desc.Filter = "Linear";
+        } else {
+            desc.Type = "Color";
+            desc.Filter = "Anisotropic16x";
+        }
+
+        return desc;
+    }
+
 } // namespace Axle

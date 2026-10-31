@@ -529,6 +529,47 @@ Mesh {
     }
     std::cout << "  -> PASS: Material & TextureDescriptor declarative serialization verified." << std::endl;
 
+    // [99.10] Drag-and-Drop Image Ingest & Companion Descriptor Generation
+    std::cout << "\n[99.10] Testing Image Ingest & Companion Descriptor Heuristic..." << std::endl;
+    {
+        // 1. Albedo / Diffuse
+        auto d1 = TextureDescriptor::CreateFromImageFile("assets/textures/car_body_diffuse.png");
+        assert(d1.Name == "car_body_diffuse");
+        assert(d1.Type == "Color");
+        assert(d1.GetColorSpace() == TextureColorSpace::sRGB);
+        assert(d1.Filter == "Anisotropic16x");
+
+        // 2. Normal Map
+        auto d2 = TextureDescriptor::CreateFromImageFile("assets/textures/car_body_normal.png");
+        assert(d2.Name == "car_body_normal");
+        assert(d2.Type == "NormalMap");
+        assert(d2.GetColorSpace() == TextureColorSpace::Linear);
+        assert(d2.Compression == "BC5");
+
+        // 3. Roughness / ORM Data
+        auto d3 = TextureDescriptor::CreateFromImageFile("assets/textures/engine_orm.png");
+        assert(d3.Name == "engine_orm");
+        assert(d3.Type == "Data");
+        assert(d3.GetColorSpace() == TextureColorSpace::Linear);
+
+        // 4. HDR Cubemap
+        auto d4 = TextureDescriptor::CreateFromImageFile("assets/textures/sky_panorama.hdr");
+        assert(d4.Name == "sky_panorama");
+        assert(d4.Type == "CubemapHDR");
+        assert(d4.WrapU == "Clamp" && d4.WrapV == "Clamp");
+        assert(d4.GeneratePrefilter == true);
+
+        // Verify companion file saving
+        std::filesystem::path compPath = "test_companion_temp.axleasset";
+        assert(TextureDescriptor::Save(compPath.string(), d2));
+        TextureDescriptor reloadedD2;
+        assert(TextureDescriptor::Load(compPath.string(), reloadedD2));
+        assert(reloadedD2.Type == "NormalMap");
+        assert(reloadedD2.Compression == "BC5");
+        std::filesystem::remove(compPath);
+    }
+    std::cout << "  -> PASS: Filename suffix detection and companion descriptor generation verified." << std::endl;
+
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;
 }

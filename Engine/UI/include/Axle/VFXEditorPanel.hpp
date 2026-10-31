@@ -7,6 +7,7 @@
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/PerspectiveCamera.hpp>
+#include <Axle/Components.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -29,7 +30,7 @@ namespace Axle {
         void SetSelectedEntity(Entity entity);
         void SetEmitterConfig(const ParticleEmitterConfig& config);
 
-                void InitRHI(class ImGuiLayer* imguiLayer);
+        void InitRHI(class ImGuiLayer* imguiLayer);
         RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
         bool HasRHIViewport() const { return m_RHIViewport != nullptr && m_RHIViewport->IsValid(); }
 
@@ -46,20 +47,41 @@ namespace Axle {
         const ParticleEmitterConfig& GetConfig() const { return m_Config; }
         ParticleSystem* GetPreviewSystem() const { return m_PreviewSystem.get(); }
 
+        // Emitter Stack API
+        size_t GetEmitterStackCount() const { return m_EmitterStacks.size(); }
+        ParticleEmitterStack* GetCurrentEmitterStack();
+        void AddEmitterStack(const std::string& name, const ParticleEmitterConfig& config = {});
+        void RemoveEmitterStack(size_t index);
+        void SelectEmitterStack(size_t index);
+
     private:
         void RenderPreview3D(float width, float height);
         void DrawGrid(const glm::mat4& viewProj, float radius = 5.0f);
+        
+        // 3-Column Unity Shuriken Layout
+        void DrawEmitterStackColumn(float width, float height);
+        void DrawTransportBar();
+        void DrawShurikenInspector(float width, float height);
+
+        // Modular Shuriken Group Accordions
         void DrawPresetSelector();
-        void DrawLifecycleAndSpawnControls();
+        void DrawMainModule();
+        void DrawEmissionAndBurstsModule();
         void DrawShapeControls();
         void DrawCurvesControls();
         void DrawTextureFlipbookControls();
         void DrawDynamicsAndForceFields();
+        void DrawSubEmittersModule();
         void DrawShadingAndBillboarding();
         void DrawSceneActions();
 
+        void SyncCurrentStackConfig();
+
     private:
         ParticleEmitterConfig m_Config;
+        std::vector<ParticleEmitterStack> m_EmitterStacks;
+        size_t m_SelectedStackIndex = 0;
+
         std::unique_ptr<ParticleSystem> m_PreviewSystem;
         std::unique_ptr<ParticleRenderer> m_ParticleRenderer;
         std::shared_ptr<Framebuffer> m_Framebuffer;
@@ -71,6 +93,7 @@ namespace Axle {
         bool m_IsLooping = true;
         bool m_ShowGroundGrid = true;
         bool m_ShowBounds = false;
+        float m_PlaybackScrubberTime = 0.0f;
 
         // Viewport resolution & Orbit Camera
         u32 m_ViewportWidth = 640;

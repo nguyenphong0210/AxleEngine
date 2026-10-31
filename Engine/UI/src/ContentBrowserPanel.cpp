@@ -1,4 +1,5 @@
 #include <Axle/TextureDescriptor.hpp>
+#include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
@@ -550,6 +551,31 @@ namespace Axle {
         return newPath;
     }
 
+    std::filesystem::path ContentBrowserPanel::CreateNewVFXAsset(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / (baseName + ".axleasset");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
+        }
+        ParticleEmitterConfig config;
+        config.Name = newPath.stem().string();
+        config.MaxParticles = 1000;
+        config.EmissionRate = 50.0f;
+        config.Lifetime = FloatRange(1.0f, 2.0f);
+        config.InitialSpeed = FloatRange(2.0f, 5.0f);
+        config.Shape.Type = ParticleEmitterShapeType::Cone;
+        config.Shape.ConeAngle = 0.52359877f;
+        config.Shape.Radius = 0.5f;
+        config.ColorOverLifetime.StartColor = glm::vec4(1.0f, 0.6f, 0.2f, 1.0f);
+        config.ColorOverLifetime.EndColor = glm::vec4(0.2f, 0.05f, 0.0f, 0.0f);
+        config.BlendMode = ParticleBlendMode::Additive;
+
+        if (ParticleEmitterSerializer::SerializeToFile(newPath.string(), config)) {
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
+    }
+
     std::filesystem::path ContentBrowserPanel::CreateNewScript(const std::filesystem::path& parentDir, const std::string& baseName) {
         std::string className = baseName;
         std::filesystem::path newPath = parentDir / (className + ".hpp");
@@ -729,6 +755,9 @@ namespace Axle {
             }
             if (ImGui::MenuItem("Texture Asset (.axleasset)")) {
                 CreateNewTexture(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("VFX Asset (.axleasset)")) {
+                CreateNewVFXAsset(m_CurrentDirectory);
             }
             if (ImGui::MenuItem("Physics Material")) {
                 CreateNewPhysicsMaterial(m_CurrentDirectory);
@@ -1334,6 +1363,14 @@ namespace Axle {
                     if (ImGui::MenuItem("Texture Asset (.axleasset)")) {
                         auto p = CreateNewTexture(m_CurrentDirectory);
                         SetStatusNotification("Created Texture Asset: " + p.filename().string());
+                        if (m_OnSelectAssetCallback) {
+                            m_OnSelectAssetCallback(p);
+                        }
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("VFX Asset (.axleasset)")) {
+                        auto p = CreateNewVFXAsset(m_CurrentDirectory);
+                        SetStatusNotification("Created VFX Asset: " + p.filename().string());
                         if (m_OnSelectAssetCallback) {
                             m_OnSelectAssetCallback(p);
                         }

@@ -775,6 +775,30 @@ Mesh {
     }
     std::cout << "  -> PASS: ParticleEmitter .axleasset schema and serialization verified." << std::endl;
 
+    // [99.17] Content Browser Create VFX Asset (.axleasset) Action
+    std::cout << "\n[99.17] Testing Content Browser VFX Asset Creation..." << std::endl;
+    {
+        std::filesystem::path tempDir = "temp_cb_vfx_test";
+        std::filesystem::create_directories(tempDir);
+
+        auto vfxPath = ContentBrowserPanel::CreateNewVFXAsset(tempDir, "TestFlameEmitter");
+        assert(std::filesystem::exists(vfxPath));
+        assert(vfxPath.extension() == ".axleasset");
+        assert(AssetDSL::PeekAssetKindFromFile(vfxPath.string()) == AssetKind::ParticleEmitter);
+        assert(AssetManager::GetAssetType(vfxPath) == AssetType::ParticleEmitter);
+
+        ParticleEmitterConfig loadedCfg;
+        std::string texPath;
+        assert(ParticleEmitterSerializer::DeserializeFromFile(vfxPath.string(), loadedCfg, texPath));
+        assert(loadedCfg.Name == "TestFlameEmitter");
+        assert(loadedCfg.MaxParticles == 1000);
+        assert(loadedCfg.Shape.Type == ParticleEmitterShapeType::Cone);
+        assert(loadedCfg.BlendMode == ParticleBlendMode::Additive);
+
+        std::filesystem::remove_all(tempDir);
+    }
+    std::cout << "  -> PASS: Content Browser VFX Asset (.axleasset) creation verified." << std::endl;
+
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;
 }

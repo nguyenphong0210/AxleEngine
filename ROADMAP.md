@@ -500,7 +500,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Content Browser `Create -> Material Asset (.axleasset)` and `Create -> Texture Asset (.axleasset)` integration with PBR Sphere/Texture icons.
   - [ ] **Step 3 - VFX Particle System Asset & Dedicated Inspector Docking (`Engine/VFX`, `Engine/UI`)**:
     - [x] Standardize `ParticleEmitter { ... }` in `.axleasset` (kinematics, shapes, curves, flipbook, force fields).
-    - [ ] Add `Create -> VFX Asset (.axleasset)` in Content Browser.
+    - [x] Add `Create -> VFX Asset (.axleasset)` in Content Browser.
     - [ ] Add `[Open in VFX Editor]` shortcut button directly on `ParticleEmitterComponent` in Inspector to dock and link the editor.
     - [ ] Upgrade `VFXEditorPanel` 3D preview viewport to multi-backend RHI (Vulkan / D3D12).
   - [ ] **Step 4 - UI Canvas & 3D Geometry Integration (`Engine/UI`, `Engine/Asset`)**:

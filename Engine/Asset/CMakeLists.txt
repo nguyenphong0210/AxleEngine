@@ -3,6 +3,7 @@ add_library(AxleAsset STATIC
     src/AssetMetadataSerializer.cpp
     src/AssetManager.cpp
     src/AssetCooker.cpp
+    src/AssetDSL.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/ufbx/ufbx.c
 )
 add_library(Axle::Asset ALIAS AxleAsset)

@@ -333,3 +333,6 @@ bool RunTest_Step97_Phase34_Step8_ScopedMVVMDataSourceAndInspectorUX();
 
 // Milestone 9 - Part 1: Phase 35 High-Performance Vulkan 1.3 Graphics Backend & Editor Parity (Steps 98+)
 bool RunTest_Step98_Phase35_Step4_VulkanGraphicsBackendAndParity();
+
+// Milestone 9 - Part 2: Phase 36 Unified .axleasset Architecture & Multi-Backend Component Resource Standardization (Steps 99+)
+bool RunTest_Step99_Phase36_Step1_AssetDSLLexerAndParser();

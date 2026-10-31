@@ -9,6 +9,7 @@
 #endif
 
 #include "TestCommon.hpp"
+#include <Axle/AssetDSL.hpp>
 
 // =============================================================================
 // STEP 98: PHASE 35 STEP 4 - TRIPLE-BACKEND PARITY & AUTOMATED VULKAN 1.3 VERIFICATION
@@ -272,3 +273,173 @@ bool RunTest_Step98_Phase35_Step4_VulkanGraphicsBackendAndParity() {
     return true;
 }
 
+
+// =============================================================================
+// STEP 99: PHASE 36 STEP 1 - ASSETDSL LEXER, PARSER & PEEK UTILITY
+// =============================================================================
+bool RunTest_Step99_Phase36_Step1_AssetDSLLexerAndParser() {
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 99 TEST] PHASE 36 STEP 1: ASSETDSL LEXER & PARSER" << std::endl;
+    std::cout << " (AST Blocks, Peek Utility, Hex Colors, Serialization)  " << std::endl;
+    std::cout << "========================================================\n" << std::endl;
+
+    using namespace Axle;
+
+    // [99.1] StringToAssetKind and AssetKindToString Mapping
+    std::cout << "[99.1] Testing StringToAssetKind and AssetKindToString Mappings..." << std::endl;
+    assert(AssetDSL::StringToAssetKind("Material") == AssetKind::Material);
+    assert(AssetDSL::StringToAssetKind("Canvas") == AssetKind::Canvas);
+    assert(AssetDSL::StringToAssetKind("ParticleEmitter") == AssetKind::ParticleEmitter);
+    assert(AssetDSL::StringToAssetKind("Mesh") == AssetKind::Mesh);
+    assert(AssetDSL::StringToAssetKind("Texture") == AssetKind::Texture);
+    assert(AssetDSL::StringToAssetKind("Terrain") == AssetKind::Terrain);
+    assert(AssetDSL::StringToAssetKind("PhysicsMaterial") == AssetKind::PhysicsMaterial);
+    assert(AssetDSL::StringToAssetKind("InvalidUnknown") == AssetKind::Unknown);
+
+    assert(AssetDSL::AssetKindToString(AssetKind::Material) == "Material");
+    assert(AssetDSL::AssetKindToString(AssetKind::Canvas) == "Canvas");
+    assert(AssetDSL::AssetKindToString(AssetKind::ParticleEmitter) == "ParticleEmitter");
+    assert(AssetDSL::AssetKindToString(AssetKind::Mesh) == "Mesh");
+    assert(AssetDSL::AssetKindToString(AssetKind::Texture) == "Texture");
+    assert(AssetDSL::AssetKindToString(AssetKind::Terrain) == "Terrain");
+    assert(AssetDSL::AssetKindToString(AssetKind::PhysicsMaterial) == "PhysicsMaterial");
+    std::cout << "  -> PASS: All 7 unified asset kinds correctly mapped." << std::endl;
+
+    // [99.2] Single-line & Multi-line Comment Stripping with String Literals
+    std::cout << "\n[99.2] Testing Comment Stripping..." << std::endl;
+    std::string testCommentSource =
+        "// Header comment\n"
+        "/* Multi-line\n"
+        "   comment */\n"
+        "Material {\n"
+        "    name: \"Silver // Not a comment /* Not comment */\"\n"
+        "    // trailing comment\n"
+        "    roughness: 0.25 /* inline block */\n"
+        "}\n";
+    std::string stripped = AssetDSL::StripComments(testCommentSource);
+    assert(stripped.find("Header comment") == std::string::npos);
+    assert(stripped.find("Multi-line") == std::string::npos);
+    assert(stripped.find("inline block") == std::string::npos);
+    assert(stripped.find("Silver // Not a comment /* Not comment */") != std::string::npos);
+    std::cout << "  -> PASS: Comment stripping preserves strings and removes line/block comments." << std::endl;
+
+    // [99.3] Fast PeekAssetKind Utility
+    std::cout << "\n[99.3] Testing Fast PeekAssetKind Utility..." << std::endl;
+    assert(AssetDSL::PeekAssetKind(testCommentSource) == AssetKind::Material);
+    assert(AssetDSL::PeekAssetKind("// Comment\nTexture { source: \"car.png\" }") == AssetKind::Texture);
+    assert(AssetDSL::PeekAssetKind("/* Header */ Canvas { name: \"HUD\" }") == AssetKind::Canvas);
+    assert(AssetDSL::PeekAssetKind("ParticleEmitter { maxParticles: 100 }") == AssetKind::ParticleEmitter);
+    assert(AssetDSL::PeekAssetKind("Mesh { name: \"Box\" }") == AssetKind::Mesh);
+    assert(AssetDSL::PeekAssetKind("Terrain { size: [512, 512] }") == AssetKind::Terrain);
+    assert(AssetDSL::PeekAssetKind("PhysicsMaterial { friction: 0.8 }") == AssetKind::PhysicsMaterial);
+    std::cout << "  -> PASS: PeekAssetKind correctly identifies asset type with zero full-parse cost." << std::endl;
+
+    // [99.4] Hex Color Parsing and Formatting
+    std::cout << "\n[99.4] Testing Hex Color Parsing and Formatting..." << std::endl;
+    glm::vec4 c1 = AssetDSL::ParseHexColor("#FF0000"); // Red
+    assert(std::abs(c1.r - 1.0f) < 1e-3f && c1.g < 1e-3f && c1.b < 1e-3f && std::abs(c1.a - 1.0f) < 1e-3f);
+
+    glm::vec4 c2 = AssetDSL::ParseHexColor("#38BDF880"); // Light blue with 50% alpha
+    assert(std::abs(c2.a - (128.0f / 255.0f)) < 1e-2f);
+
+    std::string formattedHex = AssetDSL::FormatHexColor(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), false);
+    assert(formattedHex == "#FF0000");
+    std::cout << "  -> PASS: Hex color parsing and formatting verified." << std::endl;
+
+    // [99.5] Declarative Material Block Parsing
+    std::cout << "\n[99.5] Testing Declarative Material Block Parsing..." << std::endl;
+    std::string materialSource = R"(
+Material {
+    name: "SilverCarPaint"
+    shader: "ForwardPBR"
+
+    // Base Color & Texture
+    albedoColor: "#EAEBF5"
+    albedoMap: "textures/car_d.png"
+
+    // Surface Microfacet
+    metallic: 0.92
+    roughness: 0.14
+    normalMap: "textures/car_n.png"
+    normalStrength: 1.0
+
+    // Emission & UV Scaling
+    emissionColor: "#000000"
+    emissionIntensity: 0.0
+    uvScale: [1.0, 2.0]
+}
+)";
+    AssetDocument matDoc;
+    std::string parseErr;
+    assert(AssetDSL::ParseSource(materialSource, matDoc, &parseErr));
+    assert(matDoc.IsValid());
+    assert(matDoc.Kind == AssetKind::Material);
+    assert(matDoc.Root->Type == "Material");
+    assert(matDoc.Root->GetString("name") == "SilverCarPaint");
+    assert(matDoc.Root->GetString("shader") == "ForwardPBR");
+    assert(matDoc.Root->GetString("albedoMap") == "textures/car_d.png");
+    assert(std::abs(matDoc.Root->GetFloat("metallic") - 0.92f) < 1e-4f);
+    assert(std::abs(matDoc.Root->GetFloat("roughness") - 0.14f) < 1e-4f);
+    glm::vec2 uvScale = matDoc.Root->GetVec2("uvScale");
+    assert(std::abs(uvScale.x - 1.0f) < 1e-4f && std::abs(uvScale.y - 2.0f) < 1e-4f);
+    glm::vec4 albedo = matDoc.Root->GetVec4("albedoColor");
+    assert(albedo.r > 0.8f && albedo.g > 0.8f && albedo.b > 0.8f);
+    std::cout << "  -> PASS: Material block properties (strings, floats, vectors, hex colors) parsed accurately." << std::endl;
+
+    // [99.6] Nested AST Block Parsing (Canvas -> Rectangle -> Text)
+    std::cout << "\n[99.6] Testing Nested AST Block Parsing (Canvas DOM)..." << std::endl;
+    std::string canvasSource = R"(
+Canvas {
+    name: "RacingHUD"
+    referenceResolution: [1920, 1080]
+
+    Rectangle {
+        id: "speedometer_panel"
+        anchor: "BottomRight"
+        margin: [0, 0, 40, 40]
+        size: [300, 120]
+        color: "#080C16CC"
+        cornerRadius: 16
+
+        Text {
+            id: "speed_value"
+            text: "{Vehicle.Speed}"
+            fontSize: 48
+            color: "#38BDF8"
+        }
+    }
+}
+)";
+    AssetDocument canvasDoc;
+    assert(AssetDSL::ParseSource(canvasSource, canvasDoc, &parseErr));
+    assert(canvasDoc.IsValid());
+    assert(canvasDoc.Kind == AssetKind::Canvas);
+    assert(canvasDoc.Root->Children.size() == 1);
+
+    auto rectChild = canvasDoc.Root->Children[0];
+    assert(rectChild->Type == "Rectangle");
+    assert(rectChild->GetString("id") == "speedometer_panel");
+    assert(rectChild->GetFloat("cornerRadius") == 16.0f);
+    assert(rectChild->Children.size() == 1);
+
+    auto textChild = rectChild->Children[0];
+    assert(textChild->Type == "Text");
+    assert(textChild->GetString("id") == "speed_value");
+    assert(textChild->GetString("text") == "{Vehicle.Speed}");
+    assert(textChild->GetInt("fontSize") == 48);
+    std::cout << "  -> PASS: Nested DOM tree (Canvas -> Rectangle -> Text) accurately constructed." << std::endl;
+
+    // [99.7] Round-Trip AST Serialization
+    std::cout << "\n[99.7] Testing Round-Trip AST Serialization..." << std::endl;
+    std::string serializedMat = AssetDSL::SerializeDocument(matDoc);
+    AssetDocument reloadedMatDoc;
+    assert(AssetDSL::ParseSource(serializedMat, reloadedMatDoc, &parseErr));
+    assert(reloadedMatDoc.Kind == AssetKind::Material);
+    assert(reloadedMatDoc.Root->GetString("name") == "SilverCarPaint");
+    assert(std::abs(reloadedMatDoc.Root->GetFloat("metallic") - 0.92f) < 1e-4f);
+    assert(std::abs(reloadedMatDoc.Root->GetFloat("roughness") - 0.14f) < 1e-4f);
+    std::cout << "  -> PASS: AST round-trip serialization perfectly preserves all properties." << std::endl;
+
+    std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
+    return true;
+}

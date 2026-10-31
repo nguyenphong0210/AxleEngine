@@ -117,7 +117,7 @@ add_executable(AxleTests
 )
 
 if (MSVC)
-    target_compile_options(AxleTests PRIVATE /bigobj)
+    target_compile_options(AxleTests PRIVATE /bigobj /FS)
 endif()
 
 # AxleTests outputs into the same directory as AxleEditor ($<TARGET_FILE_DIR:AxleEditor>).

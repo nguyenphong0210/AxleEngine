@@ -7,8 +7,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 37** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **83 Comprehensive Headless Test Suites** (`AxleTests.exe`, 100 individual test steps up through **Step 100**) passing with **100% pass rate**.
+* **Completed Phases**: **Phase 1 through Phase 39** (100% implemented, verified, and stabilized).
+* **Automated Test Verification**: **85 Comprehensive Headless Test Suites** (`AxleTests.exe`, 102 individual test steps up through **Step 102**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Milestone 10: Complete Visual Tooling Ecosystem (Material ➔ VFX ➔ Animation)** and beyond.
 
 ---
@@ -559,25 +559,25 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 4 - Automated Verification Suite Step 101 (`AxleTests.exe --step101`)**:
     - [x] Step 101 tests verifying: DSL round-trip serialization of new surface properties, Cutout alpha clipping math, Two-sided culling flags, RHI pipeline blend mode configs, and headless Material Studio operations.
 
-- [ ] **Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (`Engine/VFX`, `Engine/UI`, `Editor`)**
-  - [ ] **Step 1 - Multi-Emitter Architecture & Bursts (`Engine/VFX`, `Engine/Asset`)**:
-    - [ ] Upgrade `ParticleEmitterComponent` to multi-emitter `ParticleSystem` containing multiple Emitter stacks.
-    - [ ] Support burst emissions: list of `{ Time, MinCount, MaxCount, Cycles, Interval }`.
-    - [ ] Per-emitter Material binding: support Additive, Cutout, and Alpha Blended materials.
-  - [ ] **Step 2 - ImGui Custom Curve & Gradient Editors (`Engine/UI`)**:
-    - [ ] Interactive 4-point cubic Bezier curve editor widget in ImGui for *Size over Lifetime*, *Speed over Lifetime*, *Alpha over Lifetime*.
-    - [ ] Interactive multi-key Gradient Bar widget with color and alpha keyframes.
-  - [ ] **Step 3 - Kinematics, Collision & Sub-Emitters (`Engine/VFX`)**:
-    - [ ] Emission shapes: Point, Sphere, Hemisphere, Cone, Box, Circle, Mesh Surface.
-    - [ ] Particle collision: raycasting / floor plane tests with `Bounce` elasticity and `Kill` on contact.
-    - [ ] Sub-emitters: trigger child particle systems on `Birth`, `Collision`, or `Death`.
-    - [ ] Sprite sheet / Flipbook NxM grid animation playback.
-  - [ ] **Step 4 - VFX Studio Panel Modernization (`Engine/UI`, `Editor`)**:
-    - [ ] Left column: Emitter stack manager (Add, Delete, Duplicate, Visibility toggle).
-    - [ ] Middle: 3D RHI Viewport with Play, Pause, Restart, Scrubber, and live particle count.
-    - [ ] Right column: Shuriken-style collapsible module list with curves and gradient ramps.
-  - [ ] **Step 5 - Automated Verification Suite Step 102 (`AxleTests.exe --step102`)**:
-    - [ ] Step 102 tests verifying: Curve evaluation math, gradient evaluation, burst generation, sub-emitter triggering, and `.axleasset` serialization.
+- [x] **Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (`Engine/VFX`, `Engine/UI`, `Editor`)**
+  - [x] **Step 1 - Multi-Emitter Architecture & Bursts (`Engine/VFX`, `Engine/Asset`)**:
+    - [x] Upgrade `ParticleEmitterComponent` to multi-emitter `ParticleSystem` containing multiple Emitter stacks.
+    - [x] Support burst emissions: list of `{ Time, MinCount, MaxCount, Cycles, Interval }`.
+    - [x] Per-emitter Material binding: support Additive, Cutout, and Alpha Blended materials.
+  - [x] **Step 2 - ImGui Custom Curve & Gradient Editors (`Engine/UI`)**:
+    - [x] Interactive 4-point cubic Bezier curve editor widget in ImGui for *Size over Lifetime*, *Speed over Lifetime*, *Alpha over Lifetime*.
+    - [x] Interactive multi-key Gradient Bar widget with color and alpha keyframes.
+  - [x] **Step 3 - Kinematics, Collision & Sub-Emitters (`Engine/VFX`)**:
+    - [x] Emission shapes: Point, Sphere, Hemisphere, Cone, Box, Circle, Mesh Surface.
+    - [x] Particle collision: raycasting / floor plane tests with `Bounce` elasticity and `Kill` on contact.
+    - [x] Sub-emitters: trigger child particle systems on `Birth`, `Collision`, or `Death`.
+    - [x] Sprite sheet / Flipbook NxM grid animation playback.
+  - [x] **Step 4 - VFX Studio Panel Modernization (`Engine/UI`, `Editor`)**:
+    - [x] Left column: Emitter stack manager (Add, Delete, Duplicate, Visibility toggle).
+    - [x] Middle: 3D RHI Viewport with Play, Pause, Restart, Scrubber, and live particle count.
+    - [x] Right column: Shuriken-style collapsible module list with curves and gradient ramps.
+  - [x] **Step 5 - Automated Verification Suite Step 102 (`AxleTests.exe --step102`)**:
+    - [x] Step 102 tests verifying: Curve evaluation math, gradient evaluation, burst generation, sub-emitter triggering, and `.axleasset` serialization.
 
 - [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Renderer`, `Engine/UI`, `Editor`)**
   - [ ] **Step 1 - Bottom Dock Dopesheet & Timeline Panel (`Engine/UI`, `Engine/Animation`)**:

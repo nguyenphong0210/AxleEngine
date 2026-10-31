@@ -341,3 +341,6 @@ bool RunTest_Step100_Phase37_RawMediaIngestionAndOptInDescriptors();
 
 // Milestone 10 - Phase 38: Unity-Style Material Studio & RHI Forward Pipeline (Step 101)
 bool RunTest_Step101_Phase38_MaterialSchemaInspectorAndHLSLStudio();
+
+// Milestone 10 - Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (Step 102)
+bool RunTest_Step102_Phase39_VisualParticleAndVFXStudio();

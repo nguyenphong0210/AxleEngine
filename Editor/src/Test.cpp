@@ -110,6 +110,7 @@ int main(int argc, char** argv) {
         else if (arg == "99" || arg == "step99" || arg == "--step99" || arg == "--assetdsl" || arg == "--axleasset") targetStep = 99;
         else if (arg == "100" || arg == "step100" || arg == "--step100" || arg == "--rawmedia" || arg == "--optin-desc") targetStep = 100;
         else if (arg == "101" || arg == "step101" || arg == "--step101" || arg == "--material-studio" || arg == "--phase38") targetStep = 101;
+        else if (arg == "102" || arg == "step102" || arg == "--step102" || arg == "--vfx-studio" || arg == "--shuriken" || arg == "--phase39") targetStep = 102;
         else if (arg.rfind("--step=", 0) == 0) {
             try { targetStep = std::stoi(arg.substr(7)); } catch (...) {}
         }
@@ -413,6 +414,9 @@ int main(int argc, char** argv) {
     }
     if (targetStep == 0 || targetStep == 101) {
         if (!RunTest_Step101_Phase38_MaterialSchemaInspectorAndHLSLStudio()) allPassed = false;
+    }
+    if (targetStep == 0 || targetStep == 102) {
+        if (!RunTest_Step102_Phase39_VisualParticleAndVFXStudio()) allPassed = false;
     }
 
     if (Axle::JobSystem::IsInitialized()) {

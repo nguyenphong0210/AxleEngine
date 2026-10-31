@@ -107,6 +107,7 @@ namespace Axle {
         UUID MaterialHandle = 0; // AssetHandle (0 = inline / custom / unlinked)
         std::shared_ptr<Material> MaterialAsset = nullptr; // Cached pointer for zero runtime lookup cost
         std::shared_ptr<RHI::RHIMaterial> RHIMaterialAsset = nullptr; // Multi-backend RHI PBR Material
+        std::string AssetPath; // Unified .axleasset file path
 
         // Local instance properties (active when MaterialHandle == 0 or when editing local values)
         std::string AlbedoPath;
@@ -150,7 +151,7 @@ namespace Axle {
             SyncFromAsset();
         }
 
-        bool HasAsset() const { return MaterialHandle != 0 && MaterialAsset != nullptr; }
+        bool HasAsset() const { return (MaterialHandle != 0 && MaterialAsset != nullptr) || !AssetPath.empty(); }
 
         void SetAsset(UUID handle, const std::shared_ptr<Material>& asset) {
             MaterialHandle = handle;

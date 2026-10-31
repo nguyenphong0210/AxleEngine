@@ -4,6 +4,7 @@ add_library(AxleAsset STATIC
     src/AssetManager.cpp
     src/AssetCooker.cpp
     src/AssetDSL.cpp
+    src/TextureDescriptor.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/ufbx/ufbx.c
 )
 add_library(Axle::Asset ALIAS AxleAsset)

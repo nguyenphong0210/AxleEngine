@@ -299,6 +299,37 @@ namespace Axle::RHI {
             return false;
         }
 
+        std::string ext = filepath.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+        if (ext == ".axleasset" || ext.empty()) {
+            auto formatHex = [](const glm::vec4& c) {
+                uint32_t r = (uint32_t)std::clamp(c.r * 255.0f + 0.5f, 0.0f, 255.0f);
+                uint32_t g = (uint32_t)std::clamp(c.g * 255.0f + 0.5f, 0.0f, 255.0f);
+                uint32_t b = (uint32_t)std::clamp(c.b * 255.0f + 0.5f, 0.0f, 255.0f);
+                std::ostringstream ss;
+                ss << "#" << std::uppercase << std::hex << std::setfill('0')
+                   << std::setw(2) << r << std::setw(2) << g << std::setw(2) << b;
+                return ss.str();
+            };
+            fout << "Material {\n";
+            fout << "    name: \"" << m_Desc.Name << "\"\n";
+            fout << "    shader: \"ForwardPBR\"\n\n";
+            fout << "    // Base Color & Texture\n";
+            fout << "    albedoColor: \"" << formatHex(m_Desc.BaseColor) << "\"\n";
+            fout << "    albedoMap: \"" << m_Desc.AlbedoPath << "\"\n\n";
+            fout << "    // Surface Microfacet\n";
+            fout << "    metallic: " << m_Desc.Metallic << "\n";
+            fout << "    roughness: " << m_Desc.Roughness << "\n";
+            fout << "    normalMap: \"" << m_Desc.NormalPath << "\"\n";
+            fout << "    normalStrength: " << m_Desc.NormalStrength << "\n\n";
+            fout << "    // Emission & UV Scaling\n";
+            fout << "    emissionColor: \"" << formatHex(glm::vec4(m_Desc.EmissiveColor, 1.0f)) << "\"\n";
+            fout << "    emissionIntensity: " << m_Desc.EmissiveIntensity << "\n";
+            fout << "    uvScale: [ " << m_Desc.UVScale.x << " , " << m_Desc.UVScale.y << " ]\n";
+            fout << "}\n";
+            return true;
+        }
+
         fout << "RHIMaterial:\n";
         fout << "  Name: " << m_Desc.Name << "\n";
         fout << "  BaseColor: [ " << m_Desc.BaseColor.r << " , " << m_Desc.BaseColor.g << " , " << m_Desc.BaseColor.b << " , " << m_Desc.BaseColor.a << " ]\n";
@@ -330,8 +361,77 @@ namespace Axle::RHI {
             return false;
         }
 
+        std::stringstream ss;
+        ss << fin.rdbuf();
+        std::string content = ss.str();
+
+        if (content.find("Material {") != std::string::npos || content.find("Material{") != std::string::npos) {
+            std::istringstream stream(content);
+            std::string line;
+            while (std::getline(stream, line)) {
+                std::string trimmed = Trim(line);
+                if (trimmed.empty() || trimmed[0] == '/' || trimmed[0] == '#') continue;
+                if (trimmed.rfind("name:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(5));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    m_Desc.Name = val;
+                } else if (trimmed.rfind("albedoColor:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(12));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    if (!val.empty() && val[0] == '#') {
+                        auto hexCharToInt = [](char c) -> uint32_t {
+                            if (c >= '0' && c <= '9') return c - '0';
+                            if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+                            if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+                            return 0;
+                        };
+                        std::string h = val.substr(1);
+                        if (h.size() == 6) {
+                            uint32_t r = (hexCharToInt(h[0]) << 4) | hexCharToInt(h[1]);
+                            uint32_t g = (hexCharToInt(h[2]) << 4) | hexCharToInt(h[3]);
+                            uint32_t b = (hexCharToInt(h[4]) << 4) | hexCharToInt(h[5]);
+                            m_Desc.BaseColor = glm::vec4(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+                        } else if (h.size() == 8) {
+                            uint32_t r = (hexCharToInt(h[0]) << 4) | hexCharToInt(h[1]);
+                            uint32_t g = (hexCharToInt(h[2]) << 4) | hexCharToInt(h[3]);
+                            uint32_t b = (hexCharToInt(h[4]) << 4) | hexCharToInt(h[5]);
+                            uint32_t a = (hexCharToInt(h[6]) << 4) | hexCharToInt(h[7]);
+                            m_Desc.BaseColor = glm::vec4(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
+                        }
+                    } else {
+                        float r = 1, g = 1, b = 1, a = 1;
+                        std::sscanf(val.c_str(), "[ %f , %f , %f , %f ]", &r, &g, &b, &a);
+                        m_Desc.BaseColor = glm::vec4(r, g, b, a);
+                    }
+                } else if (trimmed.rfind("albedoMap:", 0) == 0) {
+                    std::string p = Trim(trimmed.substr(10));
+                    if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
+                    m_Desc.AlbedoPath = p;
+                } else if (trimmed.rfind("metallic:", 0) == 0) {
+                    try { SetMetallic(std::stof(Trim(trimmed.substr(9)))); } catch (...) {}
+                } else if (trimmed.rfind("roughness:", 0) == 0) {
+                    try { SetRoughness(std::stof(Trim(trimmed.substr(10)))); } catch (...) {}
+                } else if (trimmed.rfind("normalMap:", 0) == 0) {
+                    std::string p = Trim(trimmed.substr(10));
+                    if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
+                    m_Desc.NormalPath = p;
+                } else if (trimmed.rfind("normalStrength:", 0) == 0) {
+                    try { m_Desc.NormalStrength = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
+                } else if (trimmed.rfind("uvScale:", 0) == 0) {
+                    float x = 1, y = 1;
+                    std::sscanf(trimmed.c_str(), "uvScale: [ %f , %f ]", &x, &y);
+                    m_Desc.UVScale = glm::vec2(x, y);
+                } else if (trimmed.rfind("emissionIntensity:", 0) == 0) {
+                    try { m_Desc.EmissiveIntensity = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
+                }
+            }
+            return true;
+        }
+
         std::string line;
         bool inSection = false;
+        fin.clear();
+        fin.seekg(0);
 
         while (std::getline(fin, line)) {
             std::string trimmed = Trim(line);

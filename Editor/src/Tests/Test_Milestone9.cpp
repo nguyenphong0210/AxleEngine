@@ -10,6 +10,8 @@
 
 #include "TestCommon.hpp"
 #include <Axle/AssetDSL.hpp>
+#include <Axle/TextureDescriptor.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
 
 // =============================================================================
 // STEP 98: PHASE 35 STEP 4 - TRIPLE-BACKEND PARITY & AUTOMATED VULKAN 1.3 VERIFICATION
@@ -484,6 +486,48 @@ Mesh {
     auto indices = idxProp->AsIVec3Array();
     assert(indices.size() == 1 && indices[0].z == 2);
     std::cout << "  -> PASS: Advanced vector arrays and string arrays correctly parsed." << std::endl;
+
+    // [99.9] Standardized Material & TextureDescriptor Declarative Serialization
+    std::cout << "\n[99.9] Testing Standardized Material & TextureDescriptor Serialization..." << std::endl;
+    TextureDescriptor texDesc;
+    texDesc.Name = "TestAlbedo";
+    texDesc.Source = "textures/test_diffuse.png";
+    texDesc.Type = "Color";
+    texDesc.Filter = "Anisotropic16x";
+    texDesc.WrapU = "Repeat";
+    texDesc.WrapV = "Repeat";
+    texDesc.GenerateMips = true;
+    texDesc.MaxResolution = 2048;
+
+    std::string serializedTex = TextureDescriptor::Serialize(texDesc);
+    TextureDescriptor parsedTex;
+    assert(TextureDescriptor::Deserialize(serializedTex, parsedTex));
+    assert(parsedTex.Name == "TestAlbedo");
+    assert(parsedTex.Source == "textures/test_diffuse.png");
+    assert(parsedTex.Type == "Color");
+    assert(parsedTex.Filter == "Anisotropic16x");
+    assert(parsedTex.GetColorSpace() == TextureColorSpace::sRGB);
+
+    // Test Material .axleasset roundtrip
+    std::filesystem::path tempMatPath = "test_material_temp.axleasset";
+    {
+        Material mat("TestDeclarativeMat");
+        mat.SetAlbedoColor(glm::vec4(0.2f, 0.4f, 0.8f, 1.0f));
+        mat.SetMetallic(0.75f);
+        mat.SetRoughness(0.25f);
+        mat.SetAlbedoPath("textures/car_d.png");
+        assert(mat.Save(tempMatPath));
+    }
+    {
+        Material loadedMat;
+        assert(loadedMat.Load(tempMatPath));
+        assert(loadedMat.GetName() == "TestDeclarativeMat");
+        assert(std::abs(loadedMat.GetMetallic() - 0.75f) < 1e-4f);
+        assert(std::abs(loadedMat.GetRoughness() - 0.25f) < 1e-4f);
+        assert(loadedMat.GetAlbedoPath() == "textures/car_d.png");
+        std::filesystem::remove(tempMatPath);
+    }
+    std::cout << "  -> PASS: Material & TextureDescriptor declarative serialization verified." << std::endl;
 
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;

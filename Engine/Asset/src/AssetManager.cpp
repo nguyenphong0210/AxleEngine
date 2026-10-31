@@ -1,3 +1,4 @@
+#include <Axle/TextureDescriptor.hpp>
 #include <Axle/AssetManager.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
@@ -275,7 +276,17 @@ namespace Axle {
         }
 
         // Resolve path through FileSystem (supporting VFS & disk)
-        std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
+        std::filesystem::path targetImagePath = path;
+        std::string ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+        if (ext == ".axleasset") {
+            TextureDescriptor desc;
+            std::filesystem::path resolvedDesc = FileSystem::ResolveAssetPath(path);
+            if (TextureDescriptor::Load(resolvedDesc.string(), desc) && !desc.Source.empty()) {
+                targetImagePath = desc.Source;
+            }
+        }
+        std::filesystem::path resolved = FileSystem::ResolveAssetPath(targetImagePath);
         auto texture = Texture2D::Create(resolved.string());
         if (texture && texture->IsLoaded()) {
             s_TextureCacheByPath[key] = texture;

@@ -85,13 +85,13 @@ Entities:
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Chassis.axlemesh
+      AssetPath: assets/models/SportsCar_Chassis.axleasset
       PatternMode: 1
       TileScale: 6.000000
       Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
       Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/GoldMetallic.axlemat
+      AssetPath: assets/materials/GoldMetallic.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
@@ -118,13 +118,13 @@ Entities:
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      AssetPath: assets/models/SportsCar_Wheel.axleasset
       PatternMode: 1
       TileScale: 4.000000
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -155,13 +155,13 @@ Entities:
       Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      AssetPath: assets/models/SportsCar_Wheel.axleasset
       PatternMode: 1
       TileScale: 4.000000
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -192,13 +192,13 @@ Entities:
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      AssetPath: assets/models/SportsCar_Wheel.axleasset
       PatternMode: 1
       TileScale: 4.000000
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -229,13 +229,13 @@ Entities:
       Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      AssetPath: assets/models/SportsCar_Wheel.axleasset
       PatternMode: 1
       TileScale: 4.000000
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]

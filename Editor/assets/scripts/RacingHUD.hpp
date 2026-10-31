@@ -61,9 +61,9 @@ public:
     void OnCreate() override {
         AXLE_INFO("RacingHUD: Attached to entity '{0}' (Status: Active)", GetEntityName());
         if (!HasComponent<Axle::UICanvasComponent>()) {
-            std::string uiPath = "assets/ui/RacingHUD.axleui";
-            if (!std::filesystem::exists(uiPath) && std::filesystem::exists("Editor/assets/ui/RacingHUD.axleui")) {
-                uiPath = "Editor/assets/ui/RacingHUD.axleui";
+            std::string uiPath = "assets/ui/RacingHUD.axleasset";
+            if (!std::filesystem::exists(uiPath) && std::filesystem::exists("Editor/assets/ui/RacingHUD.axleasset")) {
+                uiPath = "Editor/assets/ui/RacingHUD.axleasset";
             }
             GetEntity().AddComponent<Axle::UICanvasComponent>(uiPath);
         }
@@ -200,7 +200,7 @@ public:
             m_ShiftFlashTimer = 0.0f;
         }
 
-        // Publish to scene UIDataContext for declarative AxleUI (RacingHUD.axleui)
+        // Publish to scene UIDataContext for declarative AxleUI (RacingHUD.axleasset)
         auto& uiCtx = scene->GetUIDataContext();
         uiCtx.Set("Engine.FPS", dt > 1e-4f ? static_cast<int32_t>(std::round(1.0f / dt)) : 60);
 

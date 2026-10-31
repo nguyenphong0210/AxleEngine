@@ -122,6 +122,9 @@ namespace Axle {
                 case Axle::AssetKind::PhysicsMaterial:
                     return { CBAssetKind::PhysicsMaterial, "Physics Material", "PHY", IM_COL32(255, 165, 50, 255) };
                 default:
+                    if (AssemblySerializer::IsAssemblyFile(entry.path())) {
+                        return { CBAssetKind::Assembly, "Assembly Prefab", "ASY", IM_COL32(255, 175, 45, 255) };
+                    }
                     return { CBAssetKind::Other, "Axle Asset", "AST", IM_COL32(180, 180, 180, 255) };
             }
         }
@@ -838,6 +841,20 @@ namespace Axle {
             }
             if (ImGui::MenuItem("Terrain Asset (.axleasset)")) {
                 CreateNewTerrain(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("Assembly Prefab (.axleasset)")) {
+                std::filesystem::path newAsmPath = m_CurrentDirectory / "New_Assembly.axleasset";
+                int counter = 1;
+                while (std::filesystem::exists(newAsmPath)) {
+                    newAsmPath = m_CurrentDirectory / ("New_Assembly_" + std::to_string(counter++) + ".axleasset");
+                }
+                if (AssemblySerializer::CreateEmptyAssembly(newAsmPath, newAsmPath.stem().string())) {
+                    AssetManager::GetOrCreateMetadata(newAsmPath);
+                    SetStatusNotification("Created Assembly: " + newAsmPath.filename().string());
+                    if (m_OnOpenAssemblyCallback) {
+                        m_OnOpenAssemblyCallback(newAsmPath);
+                    }
+                }
             }
             ImGui::EndPopup();
         }

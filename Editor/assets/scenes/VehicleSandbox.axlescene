@@ -9,7 +9,7 @@ Entities:
       Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      AssetPath: assets/models/SportsCar_Wheel.axleasset
       PatternMode: 3
       TileScale: 4.000000
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -45,7 +45,7 @@ Entities:
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      AssetPath: assets/models/SportsCar_Wheel.axleasset
       PatternMode: 3
       TileScale: 4.000000
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -81,7 +81,7 @@ Entities:
       Rotation: [ 0.000000 , 0.000000 , 1.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      AssetPath: assets/models/SportsCar_Wheel.axleasset
       PatternMode: 3
       TileScale: 4.000000
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -117,7 +117,7 @@ Entities:
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Wheel.axlemesh
+      AssetPath: assets/models/SportsCar_Wheel.axleasset
       PatternMode: 3
       TileScale: 4.000000
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -153,7 +153,7 @@ Entities:
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: assets/models/SportsCar_Chassis.axlemesh
+      AssetPath: assets/models/SportsCar_Chassis.axleasset
       PatternMode: 1
       TileScale: 6.000000
       Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]

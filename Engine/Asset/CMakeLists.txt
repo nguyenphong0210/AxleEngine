@@ -19,4 +19,5 @@ target_link_libraries(AxleAsset
     PUBLIC
         Axle::Core
         Axle::Renderer
+        Axle::RHI
 )

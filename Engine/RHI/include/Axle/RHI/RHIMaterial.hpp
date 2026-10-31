@@ -101,6 +101,7 @@ namespace Axle::RHI {
         RHIShadingModel GetShadingModel() const { return m_Desc.ShadingModel; }
         void SetShadingModel(RHIShadingModel model) { m_Desc.ShadingModel = model; }
 
+        RHIMaterialDesc& GetDesc() { return m_Desc; }
         const RHIMaterialDesc& GetDesc() const { return m_Desc; }
 
         // Texture Slots

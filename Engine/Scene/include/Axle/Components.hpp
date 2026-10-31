@@ -26,6 +26,7 @@
 #include <vector>
 #include <memory>
 #include <algorithm>
+#include <Axle/RHI/RHIMaterial.hpp>
 
 namespace Axle {
 
@@ -193,6 +194,23 @@ namespace Axle {
             EmissionColor = MaterialAsset->GetEmissionColor();
             EmissionIntensity = MaterialAsset->GetEmissionIntensity();
             UVScale = MaterialAsset->GetUVScale();
+
+            if (!RHIMaterialAsset) {
+                RHIMaterialAsset = std::make_shared<RHI::RHIMaterial>(MaterialAsset->GetName());
+            }
+            RHIMaterialAsset->SetBaseColor(AlbedoColor);
+            RHIMaterialAsset->SetRoughness(Roughness);
+            RHIMaterialAsset->SetMetallic(Metallic);
+            RHIMaterialAsset->SetNormalStrength(NormalStrength);
+            RHIMaterialAsset->SetEmissiveColor(EmissionColor);
+            RHIMaterialAsset->SetEmissiveIntensity(EmissionIntensity);
+            RHIMaterialAsset->SetUVScale(UVScale);
+            if (UseNormalMap) {
+                RHIMaterialAsset->GetDesc().NormalPath = NormalPath;
+            }
+            if (UseAlbedoMap) {
+                RHIMaterialAsset->GetDesc().AlbedoPath = AlbedoPath;
+            }
         }
 
         void SyncToAsset() {

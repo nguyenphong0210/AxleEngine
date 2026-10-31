@@ -5,6 +5,7 @@
 #include <Axle/AssetMetadataSerializer.hpp>
 #include <Axle/Texture2D.hpp>
 #include <Axle/Material.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
 #include <filesystem>
 #include <unordered_map>
 #include <mutex>
@@ -60,6 +61,11 @@ namespace Axle {
         static void ReloadMaterial(const std::filesystem::path& path);
         static void ClearMaterialCache();
 
+        // Multi-Backend RHI Material Cache
+        static std::shared_ptr<RHI::RHIMaterial> GetRHIMaterial(const std::filesystem::path& path);
+        static std::shared_ptr<RHI::RHIMaterial> GetRHIMaterial(UUID uuid);
+        static void ClearRHIMaterialCache();
+
     private:
         static std::string NormalizePathKey(const std::filesystem::path& path);
 
@@ -72,6 +78,8 @@ namespace Axle {
         static std::unordered_map<UUID, std::shared_ptr<Texture2D>> s_TextureCacheByUUID;
         static std::unordered_map<UUID, std::shared_ptr<Material>> s_MaterialCacheByUUID;
         static std::unordered_map<std::string, std::shared_ptr<Material>> s_MaterialCacheByPath;
+        static std::unordered_map<UUID, std::shared_ptr<RHI::RHIMaterial>> s_RHIMaterialCacheByUUID;
+        static std::unordered_map<std::string, std::shared_ptr<RHI::RHIMaterial>> s_RHIMaterialCacheByPath;
 
         static std::recursive_mutex s_AssetMutex;
         static bool s_Initialized;

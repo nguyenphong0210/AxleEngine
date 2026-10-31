@@ -16,6 +16,8 @@ namespace Axle {
     std::unordered_map<UUID, std::shared_ptr<Texture2D>> AssetManager::s_TextureCacheByUUID;
     std::unordered_map<UUID, std::shared_ptr<Material>> AssetManager::s_MaterialCacheByUUID;
     std::unordered_map<std::string, std::shared_ptr<Material>> AssetManager::s_MaterialCacheByPath;
+    std::unordered_map<UUID, std::shared_ptr<RHI::RHIMaterial>> AssetManager::s_RHIMaterialCacheByUUID;
+    std::unordered_map<std::string, std::shared_ptr<RHI::RHIMaterial>> AssetManager::s_RHIMaterialCacheByPath;
     std::recursive_mutex AssetManager::s_AssetMutex;
     bool AssetManager::s_Initialized = false;
 
@@ -450,6 +452,46 @@ namespace Axle {
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
         s_MaterialCacheByPath.clear();
         s_MaterialCacheByUUID.clear();
+    }
+
+    std::shared_ptr<RHI::RHIMaterial> AssetManager::GetRHIMaterial(const std::filesystem::path& path) {
+        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        std::string key = NormalizePathKey(path);
+        auto it = s_RHIMaterialCacheByPath.find(key);
+        if (it != s_RHIMaterialCacheByPath.end() && it->second) {
+            return it->second;
+        }
+
+        std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
+        auto mat = std::make_shared<RHI::RHIMaterial>();
+        if (!mat->Load(resolved)) {
+            return nullptr;
+        }
+
+        s_RHIMaterialCacheByPath[key] = mat;
+        UUID uuid = GetAssetUUID(path);
+        if (uuid != 0) {
+            s_RHIMaterialCacheByUUID[uuid] = mat;
+        }
+        return mat;
+    }
+
+    std::shared_ptr<RHI::RHIMaterial> AssetManager::GetRHIMaterial(UUID uuid) {
+        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        if (uuid == 0) return nullptr;
+        auto it = s_RHIMaterialCacheByUUID.find(uuid);
+        if (it != s_RHIMaterialCacheByUUID.end() && it->second) {
+            return it->second;
+        }
+        std::filesystem::path p = GetAssetPath(uuid);
+        if (p.empty()) return nullptr;
+        return GetRHIMaterial(p);
+    }
+
+    void AssetManager::ClearRHIMaterialCache() {
+        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        s_RHIMaterialCacheByUUID.clear();
+        s_RHIMaterialCacheByPath.clear();
     }
 
 }

@@ -612,6 +612,30 @@ Mesh {
     }
     std::cout << "  -> PASS: Viewport entity material & texture auto-assignment logic verified." << std::endl;
 
+    // [99.12] Multi-Backend RHIMaterial Decoupling & Tier-2 Bindless Indices
+    std::cout << "\n[99.12] Testing Multi-Backend RHIMaterial & Bindless Descriptors..." << std::endl;
+    {
+        // Verify AssetManager::GetRHIMaterial
+        auto rhiMat = AssetManager::GetRHIMaterial("assets/materials/SilverCarPaint.axleasset");
+        assert(rhiMat != nullptr);
+        assert(rhiMat->GetName() == "SilverCarPaint");
+        assert(std::abs(rhiMat->GetMetallic() - 0.92f) < 1e-4f);
+        assert(std::abs(rhiMat->GetRoughness() - 0.14f) < 1e-4f);
+
+        // Verify Tier-2 Bindless descriptor slot indices
+        rhiMat->SetBindlessIndex(RHI::RHITextureSlot::Albedo, 42);
+        rhiMat->SetBindlessIndex(RHI::RHITextureSlot::Normal, 43);
+        assert(rhiMat->GetBindlessIndex(RHI::RHITextureSlot::Albedo) == 42);
+        assert(rhiMat->GetBindlessIndex(RHI::RHITextureSlot::Normal) == 43);
+
+        // Verify PushConstants streaming
+        RHI::RHIObjectPushConstants pushConsts;
+        rhiMat->ApplyToPushConstants(pushConsts);
+        assert(std::abs(pushConsts.Params.z - 0.14f) < 1e-4f); // roughness
+        assert(std::abs(pushConsts.Params.w - 0.92f) < 1e-4f); // metallic
+    }
+    std::cout << "  -> PASS: RHIMaterial pipeline decoupled from legacy OpenGL with Tier-2 Bindless support." << std::endl;
+
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;
 }

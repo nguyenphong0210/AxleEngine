@@ -2485,8 +2485,9 @@ void EditorLayer::OnImGuiRender() {
                             entityTag, spawnPos.x, spawnPos.y, spawnPos.z);
                     }
                 }
-            } else if (ext == ".amat" || ext == ".axlemat" || ext == ".mat" || ext == ".axleasset") {
-                // Drop Material into Viewport onto an Entity under the cursor
+            } else if (ext == ".amat" || ext == ".axlemat" || ext == ".mat" || ext == ".axleasset" ||
+                       ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
+                // Determine target entity under cursor via Physics Raycast or Mesh OBB
                 ImVec2 mousePos = ImGui::GetMousePos();
                 float mouseX = mousePos.x - viewportMin.x;
                 float mouseY = mousePos.y - viewportMin.y;
@@ -2509,19 +2510,112 @@ void EditorLayer::OnImGuiRender() {
                     if (m_PhysicsScene && m_PhysicsScene->CastRay(rayOrigin, rayDir, 500.0f, hit)) {
                         hitEntity = m_Scene->FindEntityByBodyID(hit.HitBodyID);
                     }
+
+                    if (!hitEntity) {
+                        float closestDist = 100000.0f;
+                        auto meshView = m_Scene->GetRegistry().view<Axle::TransformComponent, Axle::MeshInstance3D>();
+                        for (auto entityID : meshView) {
+                            Axle::Entity candidate(entityID, m_Scene.get());
+                            glm::mat4 worldTransform = candidate.GetWorldTransform();
+                            glm::mat4 invTransform = glm::inverse(worldTransform);
+                            glm::vec3 localOrigin = glm::vec3(invTransform * glm::vec4(rayOrigin, 1.0f));
+                            glm::vec3 localDir = glm::vec3(invTransform * glm::vec4(rayDir, 0.0f));
+                            float localDirLen = glm::length(localDir);
+                            if (localDirLen < 1e-6f) continue;
+                            localDir /= localDirLen;
+                            glm::vec3 boxMin(-0.5f), boxMax(0.5f);
+                            glm::vec3 invD = 1.0f / localDir;
+                            glm::vec3 t0 = (boxMin - localOrigin) * invD;
+                            glm::vec3 t1 = (boxMax - localOrigin) * invD;
+                            glm::vec3 tmin = glm::min(t0, t1);
+                            glm::vec3 tmax = glm::max(t0, t1);
+                            float tEnter = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
+                            float tExit = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
+                            if (tEnter <= tExit && tExit >= 0.0f) {
+                                float hitLocalT = (tEnter >= 0.0f) ? tEnter : tExit;
+                                glm::vec3 worldHitPoint = glm::vec3(worldTransform * glm::vec4(localOrigin + localDir * hitLocalT, 1.0f));
+                                float dist = glm::length(worldHitPoint - rayOrigin);
+                                if (dist < closestDist) {
+                                    closestDist = dist;
+                                    hitEntity = candidate;
+                                }
+                            }
+                        }
+                    }
                 }
 
-                Axle::UUID matUUID = Axle::AssetManager::GetAssetUUID(assetPath);
-                auto matAsset = Axle::AssetManager::GetMaterial(assetPath);
-                if (matAsset) {
+                if (!hitEntity && m_SceneHierarchyPanel.GetSelectedEntity()) {
+                    hitEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+                }
+
+                bool isTexture = false;
+                std::string textureSourcePath;
+                std::string textureType = "Color";
+
+                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
+                    isTexture = true;
+                    auto desc = Axle::TextureDescriptor::CreateFromImageFile(assetPath, Axle::FileSystem::GetAssetDirectory());
+                    textureSourcePath = desc.Source;
+                    textureType = desc.Type;
+                } else if (ext == ".axleasset") {
+                    Axle::AssetKind kind = Axle::AssetDSL::PeekAssetKindFromFile(assetPath.string());
+                    if (kind == Axle::AssetKind::Texture) {
+                        isTexture = true;
+                        Axle::TextureDescriptor desc;
+                        if (Axle::TextureDescriptor::Load(assetPath.string(), desc)) {
+                            textureSourcePath = desc.Source;
+                            textureType = desc.Type;
+                        }
+                    }
+                }
+
+                if (isTexture) {
                     if (hitEntity) {
-                        if (hitEntity.HasComponent<Axle::MaterialComponent>()) {
-                            hitEntity.GetComponent<Axle::MaterialComponent>().SetAsset(matUUID, matAsset);
+                        if (!hitEntity.HasComponent<Axle::MaterialComponent>()) {
+                            hitEntity.AddComponent<Axle::MaterialComponent>();
+                        }
+                        auto& mc = hitEntity.GetComponent<Axle::MaterialComponent>();
+                        if (textureType == "NormalMap") {
+                            mc.NormalPath = textureSourcePath;
+                            mc.UseNormalMap = true;
+                            if (mc.MaterialAsset) { mc.MaterialAsset->SetNormalPath(textureSourcePath); mc.MaterialAsset->SetUseNormalMap(true); }
+                            if (mc.RHIMaterialAsset) { mc.RHIMaterialAsset->GetDesc().NormalPath = textureSourcePath; }
+                        } else if (textureType == "Data") {
+                            mc.RoughnessPath = textureSourcePath;
+                            mc.UseRoughnessMap = true;
+                            if (mc.MaterialAsset) { mc.MaterialAsset->SetRoughnessPath(textureSourcePath); }
+                            if (mc.RHIMaterialAsset) { mc.RHIMaterialAsset->GetDesc().RoughnessPath = textureSourcePath; }
                         } else {
-                            hitEntity.AddComponent<Axle::MaterialComponent>(matUUID, matAsset);
+                            mc.AlbedoPath = textureSourcePath;
+                            mc.UseAlbedoMap = true;
+                            if (mc.MaterialAsset) { mc.MaterialAsset->SetAlbedoPath(textureSourcePath); mc.MaterialAsset->SetUseAlbedoMap(true); }
+                            if (mc.RHIMaterialAsset) { mc.RHIMaterialAsset->GetDesc().AlbedoPath = textureSourcePath; }
                         }
                         m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
-                        AXLE_INFO("Applied Shared Material Asset '{0}' onto Entity '{1}' (Handle: {2})",
+                        AXLE_INFO("Applied Texture '{0}' ({1}) onto Entity '{2}'",
+                            assetPath.filename().string(), textureType, hitEntity.GetName());
+                    } else {
+                        m_SceneHierarchyPanel.SetSelectedAsset(assetPath);
+                    }
+                } else {
+                    // Material assignment
+                    Axle::UUID matUUID = Axle::AssetManager::GetAssetUUID(assetPath);
+                    auto matAsset = Axle::AssetManager::GetMaterial(assetPath);
+                    if (hitEntity) {
+                        if (!hitEntity.HasComponent<Axle::MaterialComponent>()) {
+                            hitEntity.AddComponent<Axle::MaterialComponent>();
+                        }
+                        auto& mc = hitEntity.GetComponent<Axle::MaterialComponent>();
+                        mc.AssetPath = assetPath.string();
+                        if (matAsset) {
+                            mc.SetAsset(matUUID, matAsset);
+                        }
+                        auto rhiMat = std::make_shared<Axle::RHI::RHIMaterial>();
+                        if (rhiMat->Load(assetPath)) {
+                            mc.RHIMaterialAsset = rhiMat;
+                        }
+                        m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
+                        AXLE_INFO("Applied Material Asset '{0}' onto Entity '{1}' (Handle: {2})",
                             assetPath.stem().string(), hitEntity.GetName(), (uint64_t)matUUID);
                     } else {
                         m_SceneHierarchyPanel.SetSelectedAsset(assetPath);

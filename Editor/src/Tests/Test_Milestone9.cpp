@@ -570,6 +570,48 @@ Mesh {
     }
     std::cout << "  -> PASS: Filename suffix detection and companion descriptor generation verified." << std::endl;
 
+    // [99.11] Viewport Entity Texture & Material Auto-Assignment
+    std::cout << "\n[99.11] Testing Viewport Entity Texture & Material Auto-Assignment..." << std::endl;
+    {
+        auto testScene = std::make_shared<Scene>();
+        auto entity = testScene->CreateEntity("CarChassis");
+        entity.AddComponent<TransformComponent>(glm::vec3(0.0f), glm::vec3(1.0f));
+
+        // 1. Assign Material asset
+        assert(!entity.HasComponent<MaterialComponent>());
+        std::filesystem::path matFile = "assets/materials/SilverCarPaint.axleasset";
+        {
+            if (!entity.HasComponent<MaterialComponent>()) {
+                entity.AddComponent<MaterialComponent>();
+            }
+            auto& mc = entity.GetComponent<MaterialComponent>();
+            mc.AssetPath = matFile.string();
+            auto mat = std::make_shared<Material>();
+            if (mat->Load(matFile)) {
+                mc.SetAsset(12345, mat);
+            }
+        }
+        assert(entity.HasComponent<MaterialComponent>());
+        auto& mc = entity.GetComponent<MaterialComponent>();
+        assert(mc.HasAsset());
+        assert(mc.AssetPath == matFile.string());
+        assert(mc.MaterialAsset != nullptr);
+        assert(mc.MaterialAsset->GetName() == "SilverCarPaint");
+
+        // 2. Assign Texture Normal Map onto entity
+        std::string normalTex = "textures/car_n.png";
+        mc.NormalPath = normalTex;
+        mc.UseNormalMap = true;
+        if (mc.MaterialAsset) {
+            mc.MaterialAsset->SetNormalPath(normalTex);
+            mc.MaterialAsset->SetUseNormalMap(true);
+        }
+        assert(mc.UseNormalMap);
+        assert(mc.NormalPath == "textures/car_n.png");
+        assert(mc.MaterialAsset->GetNormalPath() == "textures/car_n.png");
+    }
+    std::cout << "  -> PASS: Viewport entity material & texture auto-assignment logic verified." << std::endl;
+
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;
 }

@@ -514,9 +514,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Update `EditorLayer::OnFileDrop` for audio (`.wav`, `.mp3`, `.ogg`, `.flac`): Copy only the audio file to `audio/` or active Content Browser folder.
     - [x] Update `EditorLayer::OnFileDrop` for video (`.mp4`, `.mkv`, `.avi`, `.webm`): Copy only the video file to `video/` or active Content Browser folder.
     - [x] Keep assets directory 100% clean, avoiding file duplication and orphaned descriptors.
-  - [ ] **Step 2 - In-Memory Texture Descriptor Synthesis & Direct Image Loading (`Engine/Asset`)**:
-    - [ ] Enhance `TextureDescriptor::Load(filepath, outDesc)` to detect raw image formats (`.png`, `.jpg`, `.hdr`...) and synthesize in-memory descriptors on the fly via `CreateFromImageFile` with convention heuristics (`_normal` -> NormalMap Linear BC5, `.hdr` -> CubemapHDR, default -> Color sRGB Anisotropic16x) with zero disk footprint.
-    - [ ] Ensure `AssetManager::GetTexture(path)` and `MaterialComponent` load raw image files directly without requiring `.axleasset`.
+  - [x] **Step 2 - In-Memory Texture Descriptor Synthesis & Direct Image Loading (`Engine/Asset`)**:
+    - [x] Enhance `TextureDescriptor::Load(filepath, outDesc)` to detect raw image formats (`.png`, `.jpg`, `.hdr`...) and synthesize in-memory descriptors on the fly via `CreateFromImageFile` with convention heuristics (`_normal` -> NormalMap Linear BC5, `.hdr` -> CubemapHDR, default -> Color sRGB Anisotropic16x) with zero disk footprint.
+    - [x] Ensure `AssetManager::GetTexture(path)` and `MaterialComponent` load raw image files directly without requiring `.axleasset`.
   - [ ] **Step 3 - Opt-in Texture Descriptor Generation in Content Browser (`Engine/UI`)**:
     - [ ] In `ContentBrowserPanel`, add `"Create Texture Descriptor (.axleasset)"` to the right-click context menu of image items.
     - [ ] Allow users to explicitly generate `<stem>.axleasset` only when deep customization is needed (Point filter for Pixel Art, BC7 compression, Clamp wrapping, custom max resolution).

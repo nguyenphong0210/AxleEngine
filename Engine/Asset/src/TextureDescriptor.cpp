@@ -1,6 +1,9 @@
 #include <Axle/TextureDescriptor.hpp>
+#include <Axle/FileSystem.hpp>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
+#include <cctype>
 
 namespace Axle {
 
@@ -53,6 +56,35 @@ namespace Axle {
     }
 
     bool TextureDescriptor::Load(const std::string& filepath, TextureDescriptor& outDesc) {
+        std::filesystem::path p(filepath);
+        std::string ext = p.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
+            // Check if an opt-in companion descriptor exists
+            std::filesystem::path companion = p.parent_path() / (p.stem().string() + ".axleasset");
+            std::filesystem::path resolvedCompanion = FileSystem::ResolveAssetPath(companion);
+            if (FileSystem::Exists(resolvedCompanion) || std::filesystem::exists(companion)) {
+                std::string companionPath = FileSystem::Exists(resolvedCompanion) ? resolvedCompanion.string() : companion.string();
+                std::string content = FileSystem::ReadTextFile(companionPath);
+                if (!content.empty() && Deserialize(content, outDesc)) {
+                    return true;
+                }
+            }
+
+            // Synthesize descriptor in-memory on the fly with convention heuristics
+            outDesc = CreateFromImageFile(p, FileSystem::GetAssetDirectory());
+            return true;
+        }
+
+        std::filesystem::path resolved = FileSystem::ResolveAssetPath(p);
+        if (FileSystem::Exists(resolved)) {
+            std::string content = FileSystem::ReadTextFile(resolved);
+            if (!content.empty()) {
+                return Deserialize(content, outDesc);
+            }
+        }
+
         std::ifstream file(filepath);
         if (!file.is_open()) return false;
 
@@ -75,8 +107,14 @@ namespace Axle {
 
         std::error_code ec;
         if (!assetDirectory.empty()) {
-            std::filesystem::path rel = std::filesystem::relative(imagePath, assetDirectory, ec);
-            desc.Source = ec ? imagePath.generic_string() : rel.generic_string();
+            std::filesystem::path absImage = std::filesystem::absolute(imagePath, ec);
+            std::filesystem::path absAsset = std::filesystem::absolute(assetDirectory, ec);
+            std::filesystem::path rel = std::filesystem::relative(absImage, absAsset, ec);
+            if (!ec && !rel.empty() && rel.native().find(L"..") == std::wstring::npos) {
+                desc.Source = rel.generic_string();
+            } else {
+                desc.Source = imagePath.generic_string();
+            }
         } else {
             desc.Source = imagePath.generic_string();
         }

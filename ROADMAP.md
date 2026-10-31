@@ -486,16 +486,18 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Headless unit test Step 98 verifying Vulkan physical device query, swapchain lifecycle, descriptor set binding, offscreen texture bridge, and headless render parity.
 - [ ] **Phase 36: Unified `.axleasset` Architecture & Multi-Backend Component Resource Standardization (`Engine/Asset`, `Engine/Scene`, `Engine/UI`)**
   - [ ] **Step 1 - Core `AssetDSL` Lexer/Parser & Shared Resource Pipeline (`Engine/Asset`)**:
-    - [ ] Implement centralized `AssetDSL` tokenizer supporting C/QML-style declarative blocks (`Material`, `Canvas`, `ParticleEmitter`, `Mesh`, `Terrain`, `PhysicsMaterial`).
+    - [ ] Implement centralized `AssetDSL` tokenizer supporting C/QML-style declarative blocks (`Material`, `Canvas`, `ParticleEmitter`, `Mesh`, `Texture`, `Terrain`, `PhysicsMaterial`).
     - [ ] Support native Hex color `#RRGGBB` / `#RRGGBBAA`, vectors `[x, y]`, floats, strings, single-line `//` and multi-line `/* */` comments.
     - [ ] Built-in lightweight peek utility `AssetDSL::PeekAssetKind()` to identify asset type for Content Browser icons with zero full-parse cost.
     - [ ] 100% backward compatibility loader for legacy `.axlemat`, `.axleui`, `.axlemesh`, `.amat` files.
-  - [ ] **Step 2 - Material Standardization & RHI Vulkan/D3D12 Preview Parity (`Engine/Asset`, `Engine/UI`, `Engine/Scene`)**:
-    - [ ] Standardize `Material { ... }` in `.axleasset` with bidirectional load/save in `MaterialComponent` and `AssetManager`.
+  - [ ] **Step 2 - Material & Texture Standardization, Drag-and-Drop Image Ingest & RHI Preview Parity (`Engine/Asset`, `Engine/UI`, `Engine/Scene`)**:
+    - [ ] Standardize `Material { ... }` and `Texture { ... }` in `.axleasset` with bidirectional load/save in `MaterialComponent` and `AssetManager`.
+    - [ ] **External Drag-and-Drop Image Ingest Pipeline**: Dragging external `.png`, `.jpg`, `.tga`, `.hdr` files from Windows Explorer into Content Browser or Viewport automatically ingests them, intelligently detects texture type from filename suffixes (`_diffuse`/`_albedo`/`_d` -> sRGB Color, `_normal`/`_norm`/`_n` -> Linear Normal, `_roughness`/`_orm` -> Linear Data, `.hdr` -> CubemapHDR), and auto-generates companion `.axleasset` descriptors.
+    - [ ] **Viewport Entity Drag & Drop**: Dropping an image texture or material `.axleasset` directly onto an Entity in the 3D Viewport auto-assigns it to the corresponding PBR slot under the cursor.
     - [ ] Eliminate legacy OpenGL dependencies in material pipeline (`Window::HasActiveContext()`, `Texture2D::Create`), wiring directly to `RHI::RHIMaterial` and Tier-2 Bindless descriptors.
     - [ ] Upgrade `AssetPreviewPanel` from legacy OpenGL FBO to multi-backend RHI descriptor bridge (`ImGui_ImplVulkan_AddTexture` / `ImGui_ImplDX12_AddTexture`), restoring live 3D PBR turntable preview on Vulkan 1.3 & D3D12.
     - [ ] Add 3D preview mesh selector (Sphere, Cube, Cylinder, Plane) & 1-click PBR material presets bar in Material Inspector.
-    - [ ] Content Browser `Create -> Material Asset (.axleasset)` integration with PBR Sphere icon and smart drag & drop to Entity.
+    - [ ] Content Browser `Create -> Material Asset (.axleasset)` and `Create -> Texture Asset (.axleasset)` integration with PBR Sphere/Texture icons.
   - [ ] **Step 3 - VFX Particle System Asset & Dedicated Inspector Docking (`Engine/VFX`, `Engine/UI`)**:
     - [ ] Standardize `ParticleEmitter { ... }` in `.axleasset` (kinematics, shapes, curves, flipbook, force fields).
     - [ ] Add `Create -> VFX Asset (.axleasset)` in Content Browser.

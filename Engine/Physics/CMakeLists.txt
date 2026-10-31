@@ -17,5 +17,6 @@ target_link_libraries(AxlePhysics
         Axle::Core
         Axle::Renderer
         Axle::RHI
+        Axle::Asset
         Jolt
 )

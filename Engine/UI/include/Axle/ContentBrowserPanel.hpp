@@ -41,6 +41,7 @@ namespace Axle {
         static std::filesystem::path CreateNewScript(const std::filesystem::path& parentDir, const std::string& baseName = "NewScript");
         static std::pair<std::filesystem::path, std::filesystem::path> CreateNewClass(const std::filesystem::path& parentDir, const std::string& baseName = "NewClass");
         static std::filesystem::path CreateNewPhysicsMaterial(const std::filesystem::path& parentDir, const std::string& baseName = "New_PhysicsMaterial");
+        static std::filesystem::path CreateNewTerrain(const std::filesystem::path& parentDir, const std::string& baseName = "New_Terrain");
 
         void OnImGuiRender(bool* p_open = nullptr);
 

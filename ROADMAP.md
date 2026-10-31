@@ -506,7 +506,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **Step 4 - UI Canvas & 3D Geometry Integration (`Engine/UI`, `Engine/Asset`)**:
     - [x] Migrate `.axleui` to `.axleasset` under `Canvas { ... }` root block cleanly replacing `.axleui`.
     - [x] Unify `.axlemesh` into `Mesh { ... }` in `.axleasset` with automatic `.axlebin` baking and zero-overhead GPU loading.
-    - [ ] Standardize `Terrain { ... }` and `PhysicsMaterial { ... }` into `.axleasset`.
+    - [x] Standardize `Terrain { ... }` and `PhysicsMaterial { ... }` into `.axleasset`.
     - [ ] Automated test suite Step 99 (`AxleTests.exe --step99`) validating AST parsing, round-trip serialization, backward compatibility, and Vulkan RHI preview rendering.
 
 ---

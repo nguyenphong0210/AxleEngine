@@ -68,7 +68,7 @@ namespace Axle {
                 ImGui::TextColored(ImVec4(0.25f, 0.85f, 0.50f, 1.0f), "[2D TEXTURE ASSET]");
             } else if (ext == ".axlescene" || ext == ".scene") {
                 ImGui::TextColored(ImVec4(1.0f, 0.80f, 0.30f, 1.0f), "[SCENE ASSET]");
-            } else if (ext == ".physmat") {
+            } else if (ext == ".physmat" || (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::PhysicsMaterial)) {
                 ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.25f, 1.0f), "[PHYSICS MATERIAL ASSET]");
             } else {
                 ImGui::TextColored(ImVec4(0.65f, 0.75f, 0.85f, 1.0f), "[ASSET FILE]");

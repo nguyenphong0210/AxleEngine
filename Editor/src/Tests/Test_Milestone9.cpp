@@ -20,6 +20,8 @@
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/UI/UIParser.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/PhysicsMaterial.hpp>
+#include <Axle/TerrainAsset.hpp>
 
 // =============================================================================
 // STEP 98: PHASE 35 STEP 4 - TRIPLE-BACKEND PARITY & AUTOMATED VULKAN 1.3 VERIFICATION
@@ -963,6 +965,89 @@ Mesh {
         std::filesystem::remove_all(tempDir);
     }
     std::cout << "  -> PASS: 3D Mesh unified into .axleasset with automatic .axlebin cache baking." << std::endl;
+
+    // [99.22] Standardize Terrain and PhysicsMaterial Schemas in .axleasset
+    std::cout << "\n[99.22] Testing Standardized Terrain and PhysicsMaterial Schemas in .axleasset..." << std::endl;
+    {
+        std::filesystem::path tempDir = std::filesystem::temp_directory_path() / "AxleTest_Step99_PhysTerrain";
+        std::filesystem::remove_all(tempDir);
+        std::filesystem::create_directories(tempDir);
+
+        // --- A. PhysicsMaterial Standardization ---
+        auto physPath = ContentBrowserPanel::CreateNewPhysicsMaterial(tempDir, "TestAsphalt");
+        assert(std::filesystem::exists(physPath));
+        assert(physPath.extension() == ".axleasset");
+
+        assert(AssetDSL::PeekAssetKindFromFile(physPath) == AssetKind::PhysicsMaterial);
+        assert(AssetManager::GetAssetType(physPath) == AssetType::PhysicsMaterial);
+
+        PhysicsMaterial physMat;
+        assert(PhysicsMaterial::Load(physPath, physMat));
+        assert(physMat.Name == "TestAsphalt");
+        assert(physMat.Friction == 0.85f);
+        assert(physMat.Restitution == 0.05f);
+        assert(physMat.Density == 1000.0f);
+
+        // Test round-trip modification
+        physMat.Friction = 0.95f;
+        physMat.Restitution = 0.12f;
+        assert(PhysicsMaterial::Save(physPath, physMat));
+
+        PhysicsMaterial reloadedPhys;
+        assert(PhysicsMaterial::Load(physPath, reloadedPhys));
+        assert(reloadedPhys.Friction == 0.95f);
+        assert(reloadedPhys.Restitution == 0.12f);
+
+        // Test legacy fallback
+        std::filesystem::path legacyPhysPath = tempDir / "LegacyMat.physmat";
+        {
+            std::ofstream fout(legacyPhysPath);
+            fout << "# Legacy PhysMat\nPhysicsMaterial:\n  Friction: 0.65\n  Restitution: 0.25\n  Density: 800\n";
+        }
+        PhysicsMaterial legacyPhys;
+        assert(PhysicsMaterial::Load(legacyPhysPath, legacyPhys));
+        assert(legacyPhys.Friction == 0.65f);
+        assert(legacyPhys.Restitution == 0.25f);
+        assert(legacyPhys.Density == 800.0f);
+
+        // --- B. Terrain Asset Standardization ---
+        auto terrainPath = ContentBrowserPanel::CreateNewTerrain(tempDir, "TestMonacoTerrain");
+        assert(std::filesystem::exists(terrainPath));
+        assert(terrainPath.extension() == ".axleasset");
+
+        assert(AssetDSL::PeekAssetKindFromFile(terrainPath) == AssetKind::Terrain);
+        assert(AssetManager::GetAssetType(terrainPath) == AssetType::Terrain);
+
+        TerrainAsset terrain;
+        assert(TerrainAsset::Load(terrainPath, terrain));
+        assert(terrain.Name == "TestMonacoTerrain");
+        assert(terrain.Size.x == 1024.0f && terrain.Size.y == 1024.0f);
+        assert(terrain.HeightScale == 60.0f);
+
+        // Test array properties and round-trip
+        terrain.Heightmap = "textures/tracks/monaco_height.png";
+        terrain.Layers = {
+            "assets/materials/AsphaltRoad.axleasset",
+            "assets/materials/CurbsRedWhite.axleasset"
+        };
+        assert(TerrainAsset::Save(terrainPath, terrain));
+
+        TerrainAsset reloadedTerrain;
+        assert(TerrainAsset::Load(terrainPath, reloadedTerrain));
+        assert(reloadedTerrain.Heightmap == "textures/tracks/monaco_height.png");
+        assert(reloadedTerrain.Layers.size() == 2);
+        assert(reloadedTerrain.Layers[0] == "assets/materials/AsphaltRoad.axleasset");
+        assert(reloadedTerrain.Layers[1] == "assets/materials/CurbsRedWhite.axleasset");
+
+        // Test transparent legacy fallback redirection
+        std::filesystem::path legacyTerrainPath = tempDir / "TestMonacoTerrain.terrain";
+        TerrainAsset legacyTerrain;
+        assert(TerrainAsset::Load(legacyTerrainPath, legacyTerrain));
+        assert(legacyTerrain.Layers.size() == 2);
+
+        std::filesystem::remove_all(tempDir);
+    }
+    std::cout << "  -> PASS: Terrain and PhysicsMaterial standardized into unified .axleasset format." << std::endl;
 
     std::cout << "\n>>> STEP 99 PASSED: AssetDSL Lexer, Parser & Peek Utility 100% verified! <<<\n" << std::endl;
     return true;

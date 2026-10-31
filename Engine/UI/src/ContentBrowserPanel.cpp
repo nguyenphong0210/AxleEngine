@@ -11,6 +11,7 @@
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/PhysicsMaterial.hpp>
+#include <Axle/TerrainAsset.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
@@ -722,13 +723,33 @@ namespace Axle {
     }
 
     std::filesystem::path ContentBrowserPanel::CreateNewPhysicsMaterial(const std::filesystem::path& parentDir, const std::string& baseName) {
-        std::filesystem::path newPath = parentDir / (baseName + ".physmat");
+        std::filesystem::path newPath = parentDir / (baseName + ".axleasset");
         int counter = 1;
         while (std::filesystem::exists(newPath)) {
-            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".physmat");
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
         PhysicsMaterial defaultPhysMat;
+        defaultPhysMat.Name = newPath.stem().string();
+        defaultPhysMat.Friction = 0.85f;
+        defaultPhysMat.Restitution = 0.05f;
+        defaultPhysMat.Density = 1000.0f;
         if (PhysicsMaterial::Save(newPath, defaultPhysMat)) {
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
+    }
+
+    std::filesystem::path ContentBrowserPanel::CreateNewTerrain(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / (baseName + ".axleasset");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
+        }
+        TerrainAsset defaultTerrain;
+        defaultTerrain.Name = newPath.stem().string();
+        defaultTerrain.Size = glm::vec2(1024.0f, 1024.0f);
+        defaultTerrain.HeightScale = 60.0f;
+        if (TerrainAsset::Save(newPath, defaultTerrain)) {
             AssetManager::GetOrCreateMetadata(newPath);
         }
         return newPath;
@@ -812,8 +833,11 @@ namespace Axle {
             if (ImGui::MenuItem("3D Mesh Asset (.axleasset)")) {
                 CreateNewMesh(m_CurrentDirectory);
             }
-            if (ImGui::MenuItem("Physics Material")) {
+            if (ImGui::MenuItem("Physics Material Asset (.axleasset)")) {
                 CreateNewPhysicsMaterial(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("Terrain Asset (.axleasset)")) {
+                CreateNewTerrain(m_CurrentDirectory);
             }
             ImGui::EndPopup();
         }
@@ -1455,9 +1479,14 @@ namespace Axle {
                         SetStatusNotification("Created C++ Class: " + hppP.stem().string() + " (.hpp & .cpp)");
                         RefreshThumbnails();
                     }
-                    if (ImGui::MenuItem("Physics Material (.physmat)")) {
+                    if (ImGui::MenuItem("Physics Material Asset (.axleasset)")) {
                         auto p = CreateNewPhysicsMaterial(m_CurrentDirectory);
                         SetStatusNotification("Created Physics Material: " + p.filename().string());
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("Terrain Asset (.axleasset)")) {
+                        auto p = CreateNewTerrain(m_CurrentDirectory);
+                        SetStatusNotification("Created Terrain Asset: " + p.filename().string());
                         RefreshThumbnails();
                     }
                     if (ImGui::MenuItem("Assembly (.axle)")) {

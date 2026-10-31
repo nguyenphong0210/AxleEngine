@@ -1,4 +1,12 @@
 #include <Axle/AssetThumbnailManager.hpp>
+#include <Axle/Application.hpp>
+#include <Axle/ImGuiLayer.hpp>
+#include <Axle/TextureDescriptor.hpp>
+#include <Axle/AssetDSL.hpp>
+#include <Axle/RHI/RHITexture.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
+#include <Extensions/NRIHelper.h>
+#include <stb_image.h>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/Log.hpp>
@@ -132,7 +140,13 @@ namespace Axle {
     }
 
     void AssetThumbnailManager::Clear() {
-        if (Window::HasActiveContext()) {
+        if (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) {
+            for (const auto& [key, id] : m_ThumbnailCache) {
+                if (id != 0) {
+                    m_ImGuiLayer->UnregisterTextureDescriptor(id);
+                }
+            }
+        } else if (Window::HasActiveContext()) {
             for (u32 texID : m_GeneratedTextures) {
                 if (texID != 0) {
                     glDeleteTextures(1, &texID);
@@ -141,9 +155,20 @@ namespace Axle {
         }
         m_GeneratedTextures.clear();
         m_ThumbnailCache.clear();
+        m_ThumbnailDimensions.clear();
+        m_RHIThumbnails.clear();
         m_MetaCache.clear();
         m_LoadedTextures.clear();
         m_PendingQueue.clear();
+    }
+
+    glm::vec2 AssetThumbnailManager::GetThumbnailDimensions(const std::filesystem::path& path) const {
+        std::string key = path.lexically_normal().string();
+        auto it = m_ThumbnailDimensions.find(key);
+        if (it != m_ThumbnailDimensions.end()) {
+            return it->second;
+        }
+        return glm::vec2(1.0f, 1.0f);
     }
 
     const AssetCachedMeta* AssetThumbnailManager::GetCachedMeta(const std::filesystem::path& path) const {
@@ -155,9 +180,9 @@ namespace Axle {
         return nullptr;
     }
 
-    u32 AssetThumbnailManager::GetOrCreateThumbnail(const std::filesystem::path& path) {
-        if (!Window::HasActiveContext()) {
-            return 0;
+    uint64_t AssetThumbnailManager::GetOrCreateThumbnail(const std::filesystem::path& path) {
+        if (!m_ImGuiLayer) {
+            m_ImGuiLayer = dynamic_cast<ImGuiLayer*>(Application::Get().GetUIContext());
         }
 
         std::string key = path.lexically_normal().string();
@@ -169,16 +194,93 @@ namespace Axle {
         auto ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
-        // 1. Textures: Load directly via Texture2D and cache renderer ID
+        // Resolve source image path if this is a Texture descriptor or raw media
+        std::filesystem::path imagePath;
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
-            auto tex = Texture2D::Create(path.string());
-            if (tex && tex->IsLoaded()) {
-                u32 texID = tex->GetRendererID();
-                m_ThumbnailCache[key] = texID;
-                m_LoadedTextures[key] = tex;
-                return texID;
+            imagePath = FileSystem::ResolveAssetPath(path);
+        } else if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Texture) {
+            TextureDescriptor desc;
+            if (TextureDescriptor::Load(path.string(), desc) && !desc.Source.empty()) {
+                imagePath = FileSystem::ResolveAssetPath(desc.Source);
             }
+        }
+
+        // 1. Textures: Decode and upload to RHI or OpenGL
+        if (!imagePath.empty()) {
+            auto buffer = FileSystem::ReadBinaryFile(imagePath);
+            if (buffer.empty()) {
+                m_ThumbnailCache[key] = 0;
+                return 0;
+            }
+
+            int width = 0, height = 0, channels = 0;
+            stbi_set_flip_vertically_on_load(false);
+            stbi_uc* pixels = stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 4);
+            if (!pixels) {
+                m_ThumbnailCache[key] = 0;
+                return 0;
+            }
+
+            m_ThumbnailDimensions[key] = glm::vec2((float)width, (float)height);
+
+            bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
+            if (isRHI) {
+                auto& rhiDevice = RHI::RHIDevice::Get();
+                if (rhiDevice.IsInitialized()) {
+                    auto rhiTex = std::make_shared<RHI::RHITexture>();
+                    auto desc = RHI::RHITextureDesc::RenderTarget2D((uint32_t)width, (uint32_t)height, RHI::RHITextureFormat::RGBA8_UNORM, "Thumb_" + path.filename().string());
+                    desc.Usage = RHI::RHITextureUsage::ShaderResource;
+                    if (rhiTex->Init(desc)) {
+                        const auto& helper = rhiDevice.GetNRIHelper();
+                        nri::Queue* queue = rhiDevice.GetGraphicsQueue();
+                        if (queue && helper.UploadData) {
+                            nri::TextureSubresourceUploadDesc subres = {};
+                            subres.slices = pixels;
+                            subres.sliceNum = 1;
+                            subres.rowPitch = (uint32_t)width * 4;
+                            subres.slicePitch = (uint32_t)width * (uint32_t)height * 4;
+
+                            nri::TextureUploadDesc upDesc = {};
+                            upDesc.subresources = &subres;
+                            upDesc.texture = rhiTex->GetNative();
+                            upDesc.after.access = nri::AccessBits::SHADER_RESOURCE;
+                            upDesc.after.layout = nri::Layout::SHADER_RESOURCE;
+                            upDesc.after.stages = nri::StageBits::ALL;
+                            upDesc.planes = nri::PlaneBits::ALL;
+
+                            helper.UploadData(*queue, &upDesc, 1, nullptr, 0);
+                        }
+
+                        uint64_t nativeHandle = rhiTex->GetNativeSRVHandle();
+                        if (nativeHandle != 0 && m_ImGuiLayer) {
+                            uint64_t gpuHandle = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                            if (gpuHandle != 0) {
+                                m_ThumbnailCache[key] = gpuHandle;
+                                m_RHIThumbnails[key] = rhiTex;
+                                stbi_image_free(pixels);
+                                return gpuHandle;
+                            }
+                        }
+                    }
+                }
+            } else if (Window::HasActiveContext()) {
+                auto tex = Texture2D::Create(imagePath.string());
+                if (tex && tex->IsLoaded()) {
+                    uint64_t texID = tex->GetRendererID();
+                    m_ThumbnailCache[key] = texID;
+                    m_LoadedTextures[key] = tex;
+                    stbi_image_free(pixels);
+                    return texID;
+                }
+            }
+
+            stbi_image_free(pixels);
             m_ThumbnailCache[key] = 0;
+            return 0;
+        }
+
+        // 2. 3D Meshes & Materials (legacy OpenGL FBO preview)
+        if (!Window::HasActiveContext()) {
             return 0;
         }
 

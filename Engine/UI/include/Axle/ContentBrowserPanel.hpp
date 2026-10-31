@@ -6,6 +6,7 @@
 
 namespace Axle {
 
+    class ImGuiLayer;
     class AssetThumbnailManager;
     class AssetPreviewPanel;
 
@@ -44,6 +45,7 @@ namespace Axle {
         static std::filesystem::path CreateNewTerrain(const std::filesystem::path& parentDir, const std::string& baseName = "New_Terrain");
 
         void OnImGuiRender(bool* p_open = nullptr);
+        void SetImGuiLayer(ImGuiLayer* layer);
 
     private:
         void RenderTopBar();
@@ -65,6 +67,7 @@ namespace Axle {
         std::string m_StatusNotificationMessage;
         float m_StatusNotificationTimer = 0.0f;
 
+        ImGuiLayer* m_ImGuiLayer = nullptr;
         std::unique_ptr<AssetThumbnailManager> m_ThumbnailManager;
         AssetPreviewPanel* m_AssetPreviewPanel = nullptr;
         std::function<void()> m_OnCompileAssetsCallback;

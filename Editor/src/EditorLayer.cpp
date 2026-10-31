@@ -191,6 +191,7 @@ void EditorLayer::OnAttach() {
     m_VFXEditorPanel.InitRHI(imguiLayer);
     m_SceneHierarchyPanel.SetImGuiLayer(imguiLayer);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
+    m_ContentBrowserPanel.SetImGuiLayer(imguiLayer);
 
     m_ContentBrowserPanel.SetOpenUICanvasCallback([this](const std::filesystem::path& path) {
         OpenUICanvasDesigner(path);

@@ -2,6 +2,8 @@
 #include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/UI/UIParser.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
+#include <Axle/Application.hpp>
+#include <Axle/ImGuiLayer.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/AssetSerializer.hpp>
@@ -467,6 +469,13 @@ namespace Axle {
     // -----------------------------------------------------------------------------
     // ContentBrowserPanel Class Implementation
     // -----------------------------------------------------------------------------
+
+    void ContentBrowserPanel::SetImGuiLayer(ImGuiLayer* layer) {
+        m_ImGuiLayer = layer;
+        if (m_ThumbnailManager) {
+            m_ThumbnailManager->SetImGuiLayer(layer);
+        }
+    }
 
     ContentBrowserPanel::ContentBrowserPanel() {
         m_ThumbnailManager = std::make_unique<AssetThumbnailManager>();
@@ -1308,19 +1317,51 @@ namespace Axle {
                     ImVec2 iconCenter = ImVec2(cardMin.x + cardW * 0.5f, cardMin.y + iconAreaH * 0.52f);
                     float iconScale = iconAreaH * 0.36f;
 
-                    u32 thumbTex = 0;
+                    if (!m_ImGuiLayer) {
+                        m_ImGuiLayer = dynamic_cast<ImGuiLayer*>(Application::Get().GetUIContext());
+                        if (m_ImGuiLayer && m_ThumbnailManager) {
+                            m_ThumbnailManager->SetImGuiLayer(m_ImGuiLayer);
+                        }
+                    }
+
+                    uint64_t thumbTex = 0;
                     if ((meta.Kind == CBAssetKind::Model3D || meta.Kind == CBAssetKind::Assembly || 
                          meta.Kind == CBAssetKind::Material || meta.Kind == CBAssetKind::Texture) && m_ThumbnailManager) {
                         thumbTex = m_ThumbnailManager->GetOrCreateThumbnail(path);
                     }
 
                     if (thumbTex != 0) {
-                        ImVec2 thumbMin = ImVec2(cardMin.x + 3.0f, cardMin.y + 3.0f);
-                        ImVec2 thumbMax = ImVec2(cardMax.x - 3.0f, cardMin.y + iconAreaH);
+                        float availW = cardW - 6.0f;
+                        float availH = iconAreaH - 6.0f;
+                        glm::vec2 texDim = m_ThumbnailManager->GetThumbnailDimensions(path);
+                        float drawW = availW;
+                        float drawH = availH;
+                        if (texDim.x > 0.0f && texDim.y > 0.0f) {
+                            float scale = (std::min)(availW / texDim.x, availH / texDim.y);
+                            drawW = texDim.x * scale;
+                            drawH = texDim.y * scale;
+                        }
+                        float offX = (availW - drawW) * 0.5f;
+                        float offY = (availH - drawH) * 0.5f;
+
+                        // Dark thumbnail container background
+                        drawList->AddRectFilled(
+                            ImVec2(cardMin.x + 3.0f, cardMin.y + 3.0f),
+                            ImVec2(cardMax.x - 3.0f, cardMin.y + iconAreaH),
+                            IM_COL32(12, 14, 18, 220), 4.0f
+                        );
+
+                        ImVec2 thumbMin = ImVec2(cardMin.x + 3.0f + offX, cardMin.y + 3.0f + offY);
+                        ImVec2 thumbMax = ImVec2(thumbMin.x + drawW, thumbMin.y + drawH);
+
+                        bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
+                        ImVec2 uv0 = isRHI ? ImVec2(0.0f, 0.0f) : ImVec2(0.0f, 1.0f);
+                        ImVec2 uv1 = isRHI ? ImVec2(1.0f, 1.0f) : ImVec2(1.0f, 0.0f);
+
                         drawList->AddImage(
                             (ImTextureID)(intptr_t)thumbTex,
                             thumbMin, thumbMax,
-                            ImVec2(0, 1), ImVec2(1, 0)
+                            uv0, uv1
                         );
                         // Subtle type badge pill in top right
                         ImVec2 badgeMax = ImVec2(cardMax.x - 4.0f, cardMin.y + 16.0f);

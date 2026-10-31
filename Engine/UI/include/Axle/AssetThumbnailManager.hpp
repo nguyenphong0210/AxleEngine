@@ -13,6 +13,9 @@
 
 namespace Axle {
 
+    class ImGuiLayer;
+    namespace RHI { class RHITexture; }
+
     struct AssetCachedMeta {
         std::string Name;
         size_t VertexCount = 0;
@@ -37,8 +40,13 @@ namespace Axle {
         AssetThumbnailManager(const AssetThumbnailManager&) = delete;
         AssetThumbnailManager& operator=(const AssetThumbnailManager&) = delete;
 
-        // Returns OpenGL Texture ID (or 0 if pending/not available)
-        u32 GetOrCreateThumbnail(const std::filesystem::path& path);
+        void SetImGuiLayer(ImGuiLayer* layer) { m_ImGuiLayer = layer; }
+
+        // Returns GPU Texture Descriptor / GL Texture ID (or 0 if pending/not available)
+        uint64_t GetOrCreateThumbnail(const std::filesystem::path& path);
+
+        // Retrieve native aspect ratio/dimensions of the loaded texture thumbnail
+        glm::vec2 GetThumbnailDimensions(const std::filesystem::path& path) const;
 
         // Retrieve cached metadata (if already loaded/generated)
         const AssetCachedMeta* GetCachedMeta(const std::filesystem::path& path) const;
@@ -54,12 +62,15 @@ namespace Axle {
         bool RenderThumbnail(const std::filesystem::path& path, u32& outTexID, AssetCachedMeta& outMeta);
 
     private:
+        ImGuiLayer* m_ImGuiLayer = nullptr;
         u32 m_FBO = 0;
         u32 m_RBO = 0;
         std::unique_ptr<Shader> m_Shader;
         std::shared_ptr<VertexArray> m_PreviewSphereMesh;
 
-        std::unordered_map<std::string, u32> m_ThumbnailCache;
+        std::unordered_map<std::string, uint64_t> m_ThumbnailCache;
+        std::unordered_map<std::string, glm::vec2> m_ThumbnailDimensions;
+        std::unordered_map<std::string, std::shared_ptr<RHI::RHITexture>> m_RHIThumbnails;
         std::unordered_map<std::string, AssetCachedMeta> m_MetaCache;
         std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_LoadedTextures;
         std::vector<u32> m_GeneratedTextures;

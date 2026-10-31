@@ -186,8 +186,9 @@ void EditorLayer::OnAttach() {
     Axle::AssetManager::Init(Axle::FileSystem::GetAssetDirectory());
     m_ContentBrowserPanel.SetRootPath(Axle::FileSystem::GetAssetDirectory());
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
-    m_AssetPreviewPanel.InitRHI(m_ImGuiLayer);
-    m_VFXEditorPanel.InitRHI(m_ImGuiLayer);
+    auto* imguiLayer = dynamic_cast<Axle::ImGuiLayer*>(Axle::Application::Get().GetUIContext());
+    m_AssetPreviewPanel.InitRHI(imguiLayer);
+    m_VFXEditorPanel.InitRHI(imguiLayer);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);
 
     m_ContentBrowserPanel.SetOpenUICanvasCallback([this](const std::filesystem::path& path) {
@@ -196,7 +197,7 @@ void EditorLayer::OnAttach() {
     m_SceneHierarchyPanel.SetOpenUICanvasDesignerCallback([this](const std::filesystem::path& path) {
         OpenUICanvasDesigner(path);
     });
-    m_SceneHierarchyPanel.SetOpenVFXEditorCallback([this](Entity entity) {
+    m_SceneHierarchyPanel.SetOpenVFXEditorCallback([this](Axle::Entity entity) {
         m_ShowVFXEditor = true;
         m_VFXEditorPanel.SetOpen(true);
         m_VFXEditorPanel.SetSelectedEntity(entity);

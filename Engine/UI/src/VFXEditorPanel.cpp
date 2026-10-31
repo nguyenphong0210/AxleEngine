@@ -6,6 +6,7 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Scene.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 #include <imgui.h>
 #include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -69,6 +70,18 @@ namespace Axle {
                 glDeleteBuffers(1, &m_GridVBO);
                 m_GridVBO = 0;
             }
+        }
+    }
+
+    void VFXEditorPanel::InitRHI(ImGuiLayer* imguiLayer) {
+        m_ImGuiLayer = imguiLayer;
+        if (!m_ImGuiLayer) return;
+
+        if (RHI::RHIDevice::Get().IsInitialized()) {
+            if (!m_RHIViewport) {
+                m_RHIViewport = std::make_unique<RHIViewportDescriptor>();
+            }
+            m_RHIViewport->Init(m_ImGuiLayer, m_ViewportWidth, m_ViewportHeight, RHI::RHITextureFormat::RGBA8_UNORM, true);
         }
     }
 

@@ -1194,13 +1194,13 @@ namespace Axle {
         auto particleUpdateView = m_Registry.view<ParticleEmitterComponent, TransformComponent>();
         for (auto entityID : particleUpdateView) {
             auto& pec = particleUpdateView.get<ParticleEmitterComponent>(entityID);
-            if (!pec.Active || !pec.System) continue;
+            if (!pec.Active) continue;
 
             glm::mat4 worldMat = GetWorldTransform(entityID);
             glm::vec3 worldPos = glm::vec3(worldMat[3]);
             glm::quat worldRot = glm::quat_cast(worldMat);
 
-            pec.System->Update(ts.GetSeconds(), worldPos, worldRot);
+            pec.Update(ts.GetSeconds(), worldPos, worldRot);
         }
     }
 
@@ -1580,10 +1580,14 @@ namespace Axle {
         bool hasParticles = false;
         for (auto entityID : view) {
             auto& pec = view.get<ParticleEmitterComponent>(entityID);
-            if (pec.Visible && pec.System && pec.System->GetActiveParticleCount() > 0) {
-                hasParticles = true;
-                break;
+            if (!pec.Visible) continue;
+            for (const auto& stack : pec.EmitterStacks) {
+                if (stack.Visible && stack.Enabled && stack.System && stack.System->GetActiveParticleCount() > 0) {
+                    hasParticles = true;
+                    break;
+                }
             }
+            if (hasParticles) break;
         }
         if (!hasParticles) {
             auto vvfxView = m_Registry.view<VehicleVFXComponent>();
@@ -1613,9 +1617,12 @@ namespace Axle {
         // 1. Render standalone ParticleEmitterComponents
         for (auto entityID : view) {
             auto& pec = view.get<ParticleEmitterComponent>(entityID);
-            if (!pec.Visible || !pec.System || pec.System->GetActiveParticleCount() == 0) continue;
-
-            particleRenderer.Render(*pec.System, pec.Texture, pec.NormalMap, pec.Config.SoftnessDistance);
+            if (!pec.Visible) continue;
+            for (const auto& stack : pec.EmitterStacks) {
+                if (stack.Visible && stack.Enabled && stack.System && stack.System->GetActiveParticleCount() > 0) {
+                    particleRenderer.Render(*stack.System, pec.Texture, pec.NormalMap, stack.Config.SoftnessDistance);
+                }
+            }
         }
 
         // 2. Render Vehicle VFX particle systems
@@ -1670,10 +1677,14 @@ namespace Axle {
         bool hasParticles = false;
         for (auto entityID : view) {
             auto& pec = view.get<ParticleEmitterComponent>(entityID);
-            if (pec.Visible && pec.System && pec.System->GetActiveParticleCount() > 0) {
-                hasParticles = true;
-                break;
+            if (!pec.Visible) continue;
+            for (const auto& stack : pec.EmitterStacks) {
+                if (stack.Visible && stack.Enabled && stack.System && stack.System->GetActiveParticleCount() > 0) {
+                    hasParticles = true;
+                    break;
+                }
             }
+            if (hasParticles) break;
         }
         if (!hasParticles) {
             auto vvfxView = m_Registry.view<VehicleVFXComponent>();
@@ -1701,9 +1712,12 @@ namespace Axle {
         // 1. Render standalone ParticleEmitterComponents
         for (auto entityID : view) {
             auto& pec = view.get<ParticleEmitterComponent>(entityID);
-            if (!pec.Visible || !pec.System || pec.System->GetActiveParticleCount() == 0) continue;
-
-            particleRenderer.Render(cmd, *pec.System, nullptr, nullptr, pec.Config.SoftnessDistance);
+            if (!pec.Visible) continue;
+            for (const auto& stack : pec.EmitterStacks) {
+                if (stack.Visible && stack.Enabled && stack.System && stack.System->GetActiveParticleCount() > 0) {
+                    particleRenderer.Render(cmd, *stack.System, nullptr, nullptr, stack.Config.SoftnessDistance);
+                }
+            }
         }
 
         // 2. Render Vehicle VFX particle systems (Wheel smoke, drift dust, exhaust flames & sparks)

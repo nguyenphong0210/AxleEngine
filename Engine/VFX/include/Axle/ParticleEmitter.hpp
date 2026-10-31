@@ -29,6 +29,14 @@ namespace Axle {
         float BurstInterval = 0.0f;        // Seconds between bursts (0 = no periodic burst)
         uint32_t MaxParticles = 5000;      // Pool allocation limit
 
+        // Duration & Playback
+        float Duration = 5.0f;
+        bool Looping = true;
+        bool PlayOnAwake = true;
+
+        // Advanced Multi-Bursts (Unity Shuriken style)
+        std::vector<ParticleBurst> Bursts;
+
         // Particle lifecycle & kinematics
         FloatRange Lifetime = { 1.0f, 2.0f };
         FloatRange InitialSpeed = { 2.0f, 5.0f };
@@ -42,8 +50,20 @@ namespace Axle {
         FloatRange StartRotation = { 0.0f, 6.2831853f };
         FloatRange AngularVelocity = { -1.5f, 1.5f };
 
-        // Color & Alpha
+        // Shuriken Modular Curves (Size, Speed, Alpha over Lifetime)
+        FloatCurve SizeOverLifetime = FloatCurve(1.0f, 0.0f);
+        FloatCurve SpeedOverLifetime = FloatCurve(1.0f, 1.0f);
+        FloatCurve AlphaOverLifetime = FloatCurve(1.0f, 1.0f);
+
+        // Color & Multi-Key Alpha Gradient
         ColorGradient ColorOverLifetime = { glm::vec4(1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.0f) };
+
+        // Sub-Emitters (Trigger on Birth, Collision, Death)
+        std::vector<SubEmitterConfig> SubEmitters;
+
+        // Per-Emitter Material Binding
+        std::string MaterialPath;
+        uint64_t MaterialAsset = 0;
 
         // Flipbook Texture Sheet Animation & Sub-Frame Interpolation
         uint32_t TextureRows = 1;

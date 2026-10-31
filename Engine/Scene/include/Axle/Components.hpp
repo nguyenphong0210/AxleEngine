@@ -1312,6 +1312,31 @@ namespace Axle {
         }
     };
 
+    struct ParticleEmitterStack {
+        std::string Name = "Base Emitter";
+        bool Enabled = true;
+        bool Visible = true;
+        ParticleEmitterConfig Config;
+        std::shared_ptr<ParticleSystem> System = nullptr;
+        std::string TexturePath;
+        std::string NormalMapPath;
+        std::string MaterialPath;
+
+        ParticleEmitterStack() = default;
+        ParticleEmitterStack(const std::string& name, const ParticleEmitterConfig& cfg)
+            : Name(name), Config(cfg) {
+            Initialize();
+        }
+
+        void Initialize() {
+            if (!System) {
+                System = std::make_shared<ParticleSystem>(Config);
+            } else {
+                System->SetConfig(Config);
+            }
+        }
+    };
+
     struct ParticleEmitterComponent {
         ParticleEmitterConfig Config;
         std::shared_ptr<ParticleSystem> System = nullptr;
@@ -1330,6 +1355,8 @@ namespace Axle {
         bool Visible = true;
         ParticleSimulationSpace SimulationSpace = ParticleSimulationSpace::World;
 
+        std::vector<ParticleEmitterStack> EmitterStacks;
+
         ParticleEmitterComponent() {
             Initialize();
         }
@@ -1341,11 +1368,68 @@ namespace Axle {
 
         void Initialize() {
             Config.SimulationSpace = SimulationSpace;
+            if (EmitterStacks.empty()) {
+                ParticleEmitterStack primary("Base Emitter", Config);
+                primary.TexturePath = TexturePath;
+                primary.NormalMapPath = NormalMapPath;
+                primary.Visible = Visible;
+                primary.Enabled = Active;
+                EmitterStacks.push_back(std::move(primary));
+            } else {
+                EmitterStacks[0].Config = Config;
+                EmitterStacks[0].TexturePath = TexturePath;
+            }
+
             if (!System) {
                 System = std::make_shared<ParticleSystem>(Config);
             } else {
                 System->SetConfig(Config);
             }
+            EmitterStacks[0].System = System;
+
+            for (size_t i = 1; i < EmitterStacks.size(); ++i) {
+                EmitterStacks[i].Initialize();
+            }
+        }
+
+        void SyncPrimary() {
+            if (!EmitterStacks.empty()) {
+                Config = EmitterStacks[0].Config;
+                System = EmitterStacks[0].System;
+                TexturePath = EmitterStacks[0].TexturePath;
+            }
+        }
+
+        void AddEmitter(const std::string& name, const ParticleEmitterConfig& config = {}) {
+            ParticleEmitterStack stack(name, config);
+            EmitterStacks.push_back(std::move(stack));
+        }
+
+        void RemoveEmitter(size_t index) {
+            if (index > 0 && index < EmitterStacks.size()) {
+                EmitterStacks.erase(EmitterStacks.begin() + index);
+            }
+        }
+
+        size_t GetEmitterCount() const {
+            return EmitterStacks.empty() ? (System ? 1 : 0) : EmitterStacks.size();
+        }
+
+        ParticleEmitterStack* GetEmitter(size_t index) {
+            if (index < EmitterStacks.size()) return &EmitterStacks[index];
+            return nullptr;
+        }
+
+        const ParticleEmitterStack* GetEmitter(size_t index) const {
+            if (index < EmitterStacks.size()) return &EmitterStacks[index];
+            return nullptr;
+        }
+
+        ParticleEmitterStack* GetEmitter(const std::string& name) {
+            for (auto& stack : EmitterStacks) {
+                if (stack.Name == name) return &stack;
+            }
+            return nullptr;
         }
 
         void SetSimulationSpace(ParticleSimulationSpace space) {
@@ -1354,15 +1438,27 @@ namespace Axle {
             if (System) {
                 System->GetConfig().SimulationSpace = space;
             }
+            for (auto& stack : EmitterStacks) {
+                stack.Config.SimulationSpace = space;
+                if (stack.System) stack.System->GetConfig().SimulationSpace = space;
+            }
         }
 
         void Play() {
             Active = true;
+            for (auto& stack : EmitterStacks) {
+                stack.Enabled = true;
+                if (stack.System) stack.System->SetEmitting(true);
+            }
             if (System) System->SetEmitting(true);
         }
 
         void Stop() {
             Active = false;
+            for (auto& stack : EmitterStacks) {
+                stack.Enabled = false;
+                if (stack.System) stack.System->SetEmitting(false);
+            }
             if (System) System->SetEmitting(false);
         }
 
@@ -1384,16 +1480,31 @@ namespace Axle {
         }
 
         void Reset() {
+            for (auto& stack : EmitterStacks) {
+                if (stack.System) stack.System->Reset();
+            }
             if (System) System->Reset();
         }
 
         void EmitBurst(uint32_t count, const glm::vec3& worldPos = glm::vec3(0.0f), const glm::quat& worldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f)) {
-            if (System) System->EmitBurst(count, worldPos, worldRot);
+            if (!EmitterStacks.empty() && EmitterStacks[0].System) {
+                EmitterStacks[0].System->EmitBurst(count, worldPos, worldRot);
+            } else if (System) {
+                System->EmitBurst(count, worldPos, worldRot);
+            }
         }
 
         void Update(float dt, const glm::vec3& worldPos = glm::vec3(0.0f), const glm::quat& worldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f)) {
-            if (Active && System) {
-                System->Update(dt, worldPos, worldRot);
+            if (!Active) return;
+            if (EmitterStacks.empty()) {
+                if (System) System->Update(dt, worldPos, worldRot);
+            } else {
+                for (auto& stack : EmitterStacks) {
+                    if (stack.Enabled && stack.System) {
+                        stack.System->Update(dt, worldPos, worldRot);
+                    }
+                }
+                SyncPrimary();
             }
         }
     };

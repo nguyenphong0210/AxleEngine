@@ -1,6 +1,7 @@
 #include <Axle/ParticleSystem.hpp>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 namespace Axle {
 
@@ -15,17 +16,63 @@ namespace Axle {
         }
     }
 
+    uint32_t ParticleSystem::GetActiveParticleCount() const {
+        uint32_t count = m_Pool.GetActiveCount();
+        for (const auto& [name, child] : m_ChildSystems) {
+            if (child) count += child->GetActiveParticleCount();
+        }
+        return count;
+    }
+
     void ParticleSystem::Reset() {
         m_Pool.Reset();
         m_SpawnAccumulator = 0.0f;
         m_BurstTimer = 0.0f;
         m_TotalSimulationTime = 0.0f;
         m_CollisionCount = 0;
+
+        for (auto& burst : m_Config.Bursts) {
+            burst.Reset();
+        }
+        for (auto& [name, child] : m_ChildSystems) {
+            if (child) child->Reset();
+        }
     }
 
     void ParticleSystem::EmitBurst(uint32_t count, const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot) {
         for (uint32_t i = 0; i < count; ++i) {
             SpawnParticle(emitterWorldPos, emitterWorldRot);
+        }
+    }
+
+    void ParticleSystem::AddChildSystem(const std::string& name, const std::shared_ptr<ParticleSystem>& child) {
+        if (child) {
+            m_ChildSystems[name] = child;
+        }
+    }
+
+    void ParticleSystem::RemoveChildSystem(const std::string& name) {
+        m_ChildSystems.erase(name);
+    }
+
+    std::shared_ptr<ParticleSystem> ParticleSystem::GetChildSystem(const std::string& name) const {
+        auto it = m_ChildSystems.find(name);
+        return (it != m_ChildSystems.end()) ? it->second : nullptr;
+    }
+
+    void ParticleSystem::DispatchSubEmitters(SubEmitterTrigger trigger, const glm::vec3& pos, const glm::vec3& vel, const glm::vec4& color) {
+        for (const auto& sub : m_Config.SubEmitters) {
+            if (sub.Trigger == trigger) {
+                if (sub.Probability >= 1.0f || VFXRandom::Float(0.0f, 1.0f) <= sub.Probability) {
+                    if (m_SubEmitterCallback) {
+                        m_SubEmitterCallback(trigger, sub.TargetEmitterName, pos, vel, color, sub.EmitCount);
+                    }
+                    auto it = m_ChildSystems.find(sub.TargetEmitterName);
+                    if (it != m_ChildSystems.end() && it->second) {
+                        it->second->EmitBurst(sub.EmitCount, pos);
+                    }
+                }
+            }
         }
     }
 
@@ -46,8 +93,8 @@ namespace Axle {
         data.Acceleration = m_Config.ConstantAcceleration;
         data.StartSize = m_Config.StartSize.Sample();
         data.EndSize = m_Config.EndSize.Sample();
-        data.StartColor = m_Config.ColorOverLifetime.StartColor;
-        data.EndColor = m_Config.ColorOverLifetime.EndColor;
+        data.StartColor = m_Config.ColorOverLifetime.Evaluate(0.0f);
+        data.EndColor = m_Config.ColorOverLifetime.Evaluate(1.0f);
         data.StartRotation = m_Config.StartRotation.Sample();
         data.AngularVelocity = m_Config.AngularVelocity.Sample();
         data.Lifetime = m_Config.Lifetime.Sample();
@@ -67,6 +114,9 @@ namespace Axle {
         }
 
         m_Pool.Spawn(data);
+
+        // Sub-Emitter Trigger on Birth
+        DispatchSubEmitters(SubEmitterTrigger::Birth, data.Position, data.Velocity, data.StartColor);
     }
 
     void ParticleSystem::Update(float dt, const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot) {
@@ -85,12 +135,31 @@ namespace Axle {
             }
         }
 
-        // Periodic burst emission
+        // Legacy periodic burst emission
         if (m_IsEmitting && m_Config.BurstCount > 0 && m_Config.BurstInterval > 0.0f) {
             m_BurstTimer += dt;
             if (m_BurstTimer >= m_Config.BurstInterval) {
                 m_BurstTimer -= m_Config.BurstInterval;
                 EmitBurst(m_Config.BurstCount, emitterWorldPos, emitterWorldRot);
+            }
+        }
+
+        // Advanced Multi-Burst list evaluation (Unity Shuriken style)
+        if (m_IsEmitting) {
+            for (auto& burst : m_Config.Bursts) {
+                if (burst.Cycles > 0 && burst.CompletedCycles >= burst.Cycles) continue;
+                if (m_TotalSimulationTime >= burst.NextTriggerTime) {
+                    uint32_t count = burst.SampleCount();
+                    if (count > 0 && (burst.Probability >= 1.0f || VFXRandom::Float(0.0f, 1.0f) <= burst.Probability)) {
+                        EmitBurst(count, emitterWorldPos, emitterWorldRot);
+                    }
+                    burst.CompletedCycles++;
+                    if (burst.Interval > 0.0f) {
+                        burst.NextTriggerTime += burst.Interval;
+                    } else {
+                        burst.NextTriggerTime = 1e9f;
+                    }
+                }
             }
         }
 
@@ -106,8 +175,6 @@ namespace Axle {
         auto& angVels = m_Pool.GetAngularVelocities();
         auto& startSizes = m_Pool.GetStartSizes();
         auto& endSizes = m_Pool.GetEndSizes();
-        auto& startColors = m_Pool.GetStartColors();
-        auto& endColors = m_Pool.GetEndColors();
         auto& uvOffsets = m_Pool.GetUVOffsetScales();
         auto& uvSubFrames = m_Pool.GetUVSubFrames();
 
@@ -122,6 +189,8 @@ namespace Axle {
         while (i < m_Pool.GetActiveCount()) {
             ages[i] += dt;
             if (ages[i] >= lifetimes[i]) {
+                // Sub-Emitter Trigger on Death
+                DispatchSubEmitters(SubEmitterTrigger::Death, positions[i], velocities[i], colors[i]);
                 m_Pool.Kill(i);
                 continue; // Element at last slot was swapped to index i, re-evaluate index i
             }
@@ -150,8 +219,12 @@ namespace Axle {
             velocities[i] *= dragFactor;
             velocities[i] += particleAccel * dt;
 
+            // Speed over Lifetime curve modulation
+            float speedCurveScale = m_Config.SpeedOverLifetime.Evaluate(t);
+            glm::vec3 currentVel = velocities[i] * speedCurveScale;
+
             glm::vec3 prevPos = positions[i];
-            glm::vec3 nextPos = positions[i] + velocities[i] * dt;
+            glm::vec3 nextPos = positions[i] + currentVel * dt;
 
             // Physics collisions
             if (m_Config.Collision.Enabled) {
@@ -186,6 +259,9 @@ namespace Axle {
 
                 if (collided) {
                     m_CollisionCount++;
+                    // Sub-Emitter Trigger on Collision
+                    DispatchSubEmitters(SubEmitterTrigger::Collision, nextPos, velocities[i], colors[i]);
+
                     if (m_Config.Collision.KillOnCollision) {
                         m_Pool.Kill(i);
                         continue;
@@ -196,9 +272,12 @@ namespace Axle {
             positions[i] = nextPos;
             rotations[i] += angVels[i] * dt;
 
-            // Size & Color curves
-            sizes[i] = glm::mix(startSizes[i], endSizes[i], t);
-            colors[i] = glm::mix(startColors[i], endColors[i], t);
+            // Size & Color curves evaluation
+            float curveSize = m_Config.SizeOverLifetime.Evaluate(t);
+            sizes[i] = glm::mix(startSizes[i], endSizes[i], t) * curveSize;
+
+            colors[i] = m_Config.ColorOverLifetime.Evaluate(t);
+            colors[i].a *= m_Config.AlphaOverLifetime.Evaluate(t);
 
             // Flipbook UV frame interpolation & sub-frame blending
             float lightingFlag = m_Config.LightingEnabled ? 1.0f : 0.0f;
@@ -230,6 +309,13 @@ namespace Axle {
             }
 
             ++i;
+        }
+
+        // Propagate simulation update to child sub-emitters
+        for (auto& [name, child] : m_ChildSystems) {
+            if (child) {
+                child->Update(dt, emitterWorldPos, emitterWorldRot);
+            }
         }
     }
 

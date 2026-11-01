@@ -1,4 +1,5 @@
 #include <Axle/AssetPreviewPanel.hpp>
+#include <Axle/AssetSerializer.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Window.hpp>
@@ -441,7 +442,14 @@ namespace Axle {
 
         m_Shader->Bind();
         m_Shader->SetMat4("u_ViewProjection", viewProj);
-        m_Shader->SetFloat3("u_LightDir", glm::vec3(0.5f, 0.85f, 0.6f));
+        float azimRad = glm::radians(m_SunAzimuth);
+        float elevRad = glm::radians(m_SunElevation);
+        glm::vec3 sunLightDir = glm::normalize(glm::vec3(
+            std::cos(elevRad) * std::sin(azimRad),
+            std::sin(elevRad),
+            std::cos(elevRad) * std::cos(azimRad)
+        ));
+        m_Shader->SetFloat3("u_LightDir", sunLightDir);
 
         if (m_WireframeMode) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -585,9 +593,22 @@ namespace Axle {
         if (type == PreviewMeshType::Cube) vao = m_FallbackMesh;
         else if (type == PreviewMeshType::Cylinder) vao = m_SerializerContext->CylinderMesh;
         else if (type == PreviewMeshType::Plane) vao = m_SerializerContext->PlaneMesh;
+        else if (type == PreviewMeshType::Custom && m_CustomMeshVAO) vao = m_CustomMeshVAO;
 
         if (!m_CurrentPackage.Parts.empty()) {
             m_CurrentPackage.Parts[0].LoadedMesh.VAO = vao;
+        }
+    }
+
+    void AssetPreviewPanel::LoadCustomPreviewMesh(const std::filesystem::path& meshPath) {
+        if (!std::filesystem::exists(meshPath)) return;
+        m_CustomMeshPath = meshPath;
+        AxleLoadedPackage pkg = AssetSerializer::LoadPackage(meshPath);
+        if (pkg.Success && !pkg.Parts.empty()) {
+            m_CustomMeshVAO = pkg.Parts[0].LoadedMesh.VAO;
+            m_TotalVertices = pkg.Parts[0].LoadedMesh.SourceData.Vertices.size();
+            m_TotalTriangles = pkg.Parts[0].LoadedMesh.SourceData.Indices.size() / 3;
+            SetPreviewMeshType(PreviewMeshType::Custom);
         }
     }
 
@@ -606,7 +627,8 @@ namespace Axle {
                            m_CurrentAssetPath.extension() == ".axleasset" && 
                            AssetDSL::PeekAssetKindFromFile(m_CurrentAssetPath.string()) == AssetKind::Material);
         if (isMaterial) {
-            float btnW = (ImGui::GetContentRegionAvail().x - 18.0f) / 4.0f;
+            bool hasCustom = (m_CustomMeshVAO != nullptr);
+            float btnW = (ImGui::GetContentRegionAvail().x - (hasCustom ? 24.0f : 18.0f)) / (hasCustom ? 5.0f : 4.0f);
             auto DrawMeshBtn = [&](const char* label, PreviewMeshType type) {
                 bool isSel = (m_PreviewMeshType == type);
                 if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.50f, 0.85f, 0.90f));
@@ -622,6 +644,10 @@ namespace Axle {
             DrawMeshBtn("Cylinder", PreviewMeshType::Cylinder);
             ImGui::SameLine();
             DrawMeshBtn("Plane", PreviewMeshType::Plane);
+            if (hasCustom) {
+                ImGui::SameLine();
+                DrawMeshBtn("Custom", PreviewMeshType::Custom);
+            }
             ImGui::Spacing();
         }
 
@@ -640,6 +666,8 @@ namespace Axle {
                 m_Yaw = 35.0f;
                 m_Zoom = 1.0f;
                 m_PanOffset = glm::vec3(0.0f);
+                m_SunAzimuth = 45.0f;
+                m_SunElevation = 50.0f;
             }
             ImGui::SameLine();
             ImGui::SetNextItemWidth(75.0f);
@@ -708,6 +736,28 @@ namespace Axle {
                 m_PanOffset.x -= delta.x * 0.005f * m_MaxDim;
                 m_PanOffset.y += delta.y * 0.005f * m_MaxDim;
             }
+
+            // Right drag rotate preview sun & environment lighting angle
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+                ImVec2 delta = ImGui::GetIO().MouseDelta;
+                m_SunAzimuth += delta.x * 0.75f;
+                m_SunElevation -= delta.y * 0.75f;
+                m_SunElevation = std::clamp(m_SunElevation, 5.0f, 85.0f);
+            }
+        }
+
+        // Drag & Drop custom mesh into preview turntable
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                const wchar_t* pathStr = (const wchar_t*)payload->Data;
+                std::filesystem::path droppedPath(pathStr);
+                std::string ext = droppedPath.extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                if (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".glb" || ext == ".gltf") {
+                    LoadCustomPreviewMesh(droppedPath);
+                }
+            }
+            ImGui::EndDragDropTarget();
         }
     }
 

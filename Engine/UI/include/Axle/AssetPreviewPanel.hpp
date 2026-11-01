@@ -18,7 +18,8 @@ namespace Axle {
         Sphere = 0,
         Cube = 1,
         Cylinder = 2,
-        Plane = 3
+        Plane = 3,
+        Custom = 4
     };
 
     class AssetPreviewPanel {
@@ -40,6 +41,11 @@ namespace Axle {
         void InitRHI(ImGuiLayer* imguiLayer);
         PreviewMeshType GetPreviewMeshType() const { return m_PreviewMeshType; }
         void SetPreviewMeshType(PreviewMeshType type);
+        void LoadCustomPreviewMesh(const std::filesystem::path& meshPath);
+        float GetSunAzimuth() const { return m_SunAzimuth; }
+        void SetSunAzimuth(float deg) { m_SunAzimuth = deg; }
+        float GetSunElevation() const { return m_SunElevation; }
+        void SetSunElevation(float deg) { m_SunElevation = std::clamp(deg, 5.0f, 85.0f); }
         RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
         void UpdateMaterialPreview(const MaterialComponent& mat);
 
@@ -79,6 +85,10 @@ namespace Axle {
         bool m_ShowPedestal = true;
         PreviewMeshType m_PreviewMeshType = PreviewMeshType::Sphere;
         bool m_IsViewportHovered = false;
+        float m_SunAzimuth = 45.0f;
+        float m_SunElevation = 50.0f;
+        std::filesystem::path m_CustomMeshPath;
+        std::shared_ptr<VertexArray> m_CustomMeshVAO;
 
         // Cached Bounds
         glm::vec3 m_Center{ 0.0f };

@@ -596,9 +596,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 3 - Automotive & Advanced PBR Shading**:
     - [x] Implement two-layer `Clearcoat` (Strength & Roughness) for automotive clear lacquer finish.
     - [x] Implement `Anisotropy` shading for brushed alloy wheel rims and carbon fiber weaves.
-  - [ ] **Step 4 - Multi-Angle Preview Lighting & Custom Mesh Preview**:
-    - [ ] Right-click drag in preview viewport to rotate HDRI environment and sun angle.
-    - [ ] Support dragging custom game meshes (`.axlemesh`) into preview turntable.
+  - [x] **Step 4 - Multi-Angle Preview Lighting & Custom Mesh Preview**:
+    - [x] Right-click drag in preview viewport to rotate HDRI environment and sun angle.
+    - [x] Support dragging custom game meshes (`.axlemesh`) into preview turntable.
   - [ ] **Step 5 - HLSL Compiler Diagnostics Jump & Autocomplete**:
     - [ ] Double-clicking compile error in console jumps cursor directly to erroneous line in `HLSLStudioPanel`.
     - [ ] Autocomplete suggestions for HLSL intrinsic functions (`saturate`, `lerp`, `mul`, `dot`, `cross`, `normalize`).

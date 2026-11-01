@@ -770,14 +770,32 @@ namespace Axle {
             }
         }
 
-        // Add Directional Sun Light
+        // 1. Primary Directional Key Sun Light
         m_PreviewLight = m_PreviewScene->CreateEntity("PreviewSunLight");
         auto& dlc = m_PreviewLight.AddComponent<DirectionalLightComponent>();
         dlc.Azimuth = m_SunAzimuth;
         dlc.Elevation = m_SunElevation;
-        dlc.Color = glm::vec3(1.0f, 0.98f, 0.94f);
-        dlc.Intensity = 2.5f;
-        dlc.AmbientIntensity = 0.45f;
+        dlc.Color = glm::vec3(1.0f, 0.98f, 0.95f);
+        dlc.Intensity = 2.4f;
+        dlc.AmbientIntensity = 0.65f;
+
+        // 2. Secondary Studio Fill Light (Cool Soft Studio Fill)
+        auto fillLight = m_PreviewScene->CreateEntity("PreviewFillLight");
+        auto& flc = fillLight.AddComponent<PointLightComponent>();
+        flc.Color = glm::vec3(0.72f, 0.85f, 1.0f);
+        flc.Intensity = 3.5f;
+        flc.Radius = 12.0f;
+        auto& flt = fillLight.GetComponent<TransformComponent>();
+        flt.Translation = glm::vec3(-2.8f, 1.0f, 2.0f);
+
+        // 3. Studio Rim Light (Back Light for Silhouette)
+        auto rimLight = m_PreviewScene->CreateEntity("PreviewRimLight");
+        auto& rlc = rimLight.AddComponent<PointLightComponent>();
+        rlc.Color = glm::vec3(1.0f, 1.0f, 1.0f);
+        rlc.Intensity = 4.5f;
+        rlc.Radius = 15.0f;
+        auto& rlt = rimLight.GetComponent<TransformComponent>();
+        rlt.Translation = glm::vec3(2.5f, 3.2f, -3.8f);
 
         m_SceneNeedsRebuild = false;
     }
@@ -822,6 +840,7 @@ namespace Axle {
         settings.EnableSkybox = false;
         settings.EnableToneMapping = true;
         settings.EnableFXAA = true;
+        settings.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // Transparent clear for Godot checkerboard
 
         m_RHISceneRenderer->RenderScene(
             m_PreviewScene,
@@ -835,65 +854,30 @@ namespace Axle {
     void AssetPreviewPanel::RenderPreviewViewport() {
         if (!m_HasAsset) return;
 
-        // 0. Primitive Mesh Selector (for Material assets)
         bool isMaterial = (!m_CurrentAssetPath.empty() && 
                            m_CurrentAssetPath.extension() == ".axleasset" && 
                            AssetDSL::PeekAssetKindFromFile(m_CurrentAssetPath.string()) == AssetKind::Material);
-        if (isMaterial) {
-            bool hasCustom = (m_CustomMeshVAO != nullptr);
-            float btnW = (ImGui::GetContentRegionAvail().x - (hasCustom ? 24.0f : 18.0f)) / (hasCustom ? 5.0f : 4.0f);
-            auto DrawMeshBtn = [&](const char* label, PreviewMeshType type) {
-                bool isSel = (m_PreviewMeshType == type);
-                if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.50f, 0.85f, 0.90f));
-                if (ImGui::Button(label, ImVec2(btnW, 24.0f))) {
-                    SetPreviewMeshType(type);
-                }
-                if (isSel) ImGui::PopStyleColor();
-            };
-            DrawMeshBtn("Sphere", PreviewMeshType::Sphere);
-            ImGui::SameLine();
-            DrawMeshBtn("Cube", PreviewMeshType::Cube);
-            ImGui::SameLine();
-            DrawMeshBtn("Cylinder", PreviewMeshType::Cylinder);
-            ImGui::SameLine();
-            DrawMeshBtn("Plane", PreviewMeshType::Plane);
-            if (hasCustom) {
-                ImGui::SameLine();
-                DrawMeshBtn("Custom", PreviewMeshType::Custom);
-            }
-            ImGui::Spacing();
-        }
 
-        // 1. Controls Toolbar
-        {
-            if (ImGui::Button(m_TurntableActive ? "Pause Orbit" : "Play Orbit")) {
-                m_TurntableActive = !m_TurntableActive;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button(m_WireframeMode ? "Shaded" : "Wireframe")) {
-                m_WireframeMode = !m_WireframeMode;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Reset View")) {
-                m_Pitch = 20.0f;
-                m_Yaw = 35.0f;
-                m_Zoom = 1.0f;
-                m_PanOffset = glm::vec3(0.0f);
-                m_SceneNeedsRebuild = true;
-                m_SunAzimuth = 45.0f;
-                m_SunElevation = 50.0f;
-            }
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(75.0f);
-            ImGui::SliderFloat("Speed", &m_TurntableSpeed, 0.1f, 3.0f, "%.1fx");
-        }
-
-        ImGui::Spacing();
-
-        // 2. Interactive 3D Viewport
         float availW = ImGui::GetContentRegionAvail().x;
-        float viewportH = std::clamp(availW * 0.72f, 180.0f, 360.0f);
+        float viewportH = std::clamp(availW * 0.54f, 150.0f, 240.0f);
 
+        ImVec2 p0 = ImGui::GetCursorScreenPos();
+        ImVec2 p1 = ImVec2(p0.x + availW, p0.y + viewportH);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        // 1. Godot-style Checkerboard background grid
+        const float tileSize = 14.0f;
+        for (float y = p0.y; y < p1.y; y += tileSize) {
+            for (float x = p0.x; x < p1.x; x += tileSize) {
+                int cx = static_cast<int>((x - p0.x) / tileSize);
+                int cy = static_cast<int>((y - p0.y) / tileSize);
+                ImU32 col = ((cx + cy) % 2 == 0) ? IM_COL32(32, 35, 41, 255) : IM_COL32(44, 48, 56, 255);
+                ImVec2 tileMax(std::min(x + tileSize, p1.x), std::min(y + tileSize, p1.y));
+                drawList->AddRectFilled(ImVec2(x, y), tileMax, col);
+            }
+        }
+
+        // 2. Render 3D Scene into Viewport
         if (RHI::RHIDevice::Get().IsInitialized()) {
             if (!m_RHIViewport && m_ImGuiLayer) {
                 InitRHI(m_ImGuiLayer);
@@ -917,22 +901,87 @@ namespace Axle {
             u32 texID = m_Framebuffer->GetColorAttachmentRendererID();
             ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(availW, viewportH), ImVec2(0, 1), ImVec2(1, 0));
         } else {
-            ImVec2 dummySize(availW, viewportH);
-            ImVec2 p0 = ImGui::GetCursorScreenPos();
-            ImVec2 p1 = ImVec2(p0.x + dummySize.x, p0.y + dummySize.y);
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            drawList->AddRectFilled(p0, p1, IM_COL32(22, 24, 28, 255));
-            drawList->AddRect(p0, p1, IM_COL32(45, 49, 58, 255));
-            const char* txt = "Preview available under Multi-Backend RHI / OpenGL";
-            ImVec2 txtSize = ImGui::CalcTextSize(txt);
-            ImVec2 txtPos = ImVec2(p0.x + (dummySize.x - txtSize.x) * 0.5f, p0.y + (dummySize.y - txtSize.y) * 0.5f);
-            drawList->AddText(txtPos, IM_COL32(140, 145, 155, 255), txt);
-            ImGui::Dummy(dummySize);
+            ImGui::Dummy(ImVec2(availW, viewportH));
         }
 
         m_IsViewportHovered = ImGui::IsItemHovered();
 
-        // Mouse orbit controls on viewport
+        // 3. Viewport Border
+        drawList->AddRect(p0, p1, IM_COL32(20, 22, 26, 255), 3.0f, 0, 1.5f);
+
+        // 4. Godot-style Primitive Mesh Selector (Vertical strip on top-left inside viewport)
+        if (isMaterial) {
+            ImGui::SetCursorScreenPos(ImVec2(p0.x + 8.0f, p0.y + 8.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 4.0f));
+
+            auto DrawGodotMeshBtn = [&](const char* icon, PreviewMeshType type, const char* tooltip) {
+                bool isSel = (m_PreviewMeshType == type);
+                if (isSel) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.52f, 0.88f, 0.90f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                } else {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.16f, 0.20f, 0.75f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.75f, 0.82f, 1.0f));
+                }
+                if (ImGui::Button(icon, ImVec2(24.0f, 22.0f))) {
+                    SetPreviewMeshType(type);
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
+                ImGui::PopStyleColor(2);
+            };
+
+            DrawGodotMeshBtn("O", PreviewMeshType::Sphere, "Preview on Sphere (Godot)");
+            DrawGodotMeshBtn("#", PreviewMeshType::Cube, "Preview on Cube");
+            DrawGodotMeshBtn("=", PreviewMeshType::Cylinder, "Preview on Cylinder");
+            DrawGodotMeshBtn("-", PreviewMeshType::Plane, "Preview on Plane");
+
+            ImGui::PopStyleVar(2);
+        }
+
+        // 5. Godot-style Controls (Top-right inside viewport)
+        {
+            ImGui::SetCursorScreenPos(ImVec2(p1.x - 62.0f, p0.y + 8.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.16f, 0.20f, 0.75f));
+
+            if (ImGui::Button(m_TurntableActive ? "||" : ">", ImVec2(24.0f, 22.0f))) {
+                m_TurntableActive = !m_TurntableActive;
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_TurntableActive ? "Pause Orbit" : "Play Orbit");
+
+            ImGui::SameLine();
+            if (ImGui::Button("R", ImVec2(24.0f, 22.0f))) {
+                m_Pitch = 15.0f;
+                m_Yaw = 30.0f;
+                m_Zoom = 1.0f;
+                m_PanOffset = glm::vec3(0.0f);
+                m_SunAzimuth = 45.0f;
+                m_SunElevation = 50.0f;
+                m_SceneNeedsRebuild = true;
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset View & Lighting");
+
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar(2);
+        }
+
+        // 6. Godot-style Material Identity Badge Pill (Centered below the viewport)
+        ImGui::SetCursorScreenPos(ImVec2(p0.x, p1.y + 6.0f));
+        ImVec2 badgeP0 = ImGui::GetCursorScreenPos();
+        ImVec2 badgeP1 = ImVec2(badgeP0.x + availW, badgeP0.y + 24.0f);
+        drawList->AddRectFilled(badgeP0, badgeP1, IM_COL32(30, 33, 40, 255), 3.0f);
+        drawList->AddRect(badgeP0, badgeP1, IM_COL32(48, 53, 64, 255), 3.0f);
+
+        std::string assetTitle = isMaterial ? "BaseMaterial3D" : (m_IsAssembly ? "Assembly3D" : "MeshInstance3D");
+        std::string assetName = m_CurrentAssetPath.filename().string();
+        std::string badgeText = assetTitle + "  •  " + assetName;
+        ImVec2 txtSz = ImGui::CalcTextSize(badgeText.c_str());
+        ImVec2 txtPos = ImVec2(badgeP0.x + (availW - txtSz.x) * 0.5f, badgeP0.y + (24.0f - txtSz.y) * 0.5f);
+        drawList->AddText(txtPos, IM_COL32(200, 210, 225, 255), badgeText.c_str());
+        ImGui::Dummy(ImVec2(availW, 26.0f));
+
         if (m_IsViewportHovered) {
             // Scroll zoom
             float wheel = ImGui::GetIO().MouseWheel;

@@ -489,30 +489,39 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float envIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
         ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao;
     } else {
-        // Analytical hemisphere ambient reflection (matches realistic automotive sheen)
-        float upWeight = saturate(N.y * 0.5 + 0.5);
-        float zenithWeight = saturate(N.y);
-        float3 skyZenith = float3(0.18, 0.42, 0.78);
-        float3 skyHorizon = float3(0.70, 0.82, 0.95);
-        float3 groundColor = float3(0.18, 0.16, 0.14);
+        // Photographic Studio & Physical Hemisphere Reflection (Godot & Unity Parity)
+        // Provides smooth continuous ambient bounce and studio softbox highlights without harsh horizon cuts
+        float3 studioTop     = float3(0.92, 0.95, 1.00); // Bright overhead softbox dome
+        float3 studioHorizon = float3(0.68, 0.72, 0.78); // Neutral studio eye-level fill
+        float3 studioGround  = float3(0.40, 0.42, 0.46); // Studio floor ambient bounce
 
-        float3 skyUpper = lerp(skyHorizon, skyZenith, zenithWeight);
-        float3 hemisphereLight = lerp(groundColor, skyUpper, upWeight);
+        // Smooth continuous hemisphere diffuse illumination
+        float upWeight = saturate(N.y * 0.5 + 0.5);
+        float3 hemisphereLight = lerp(studioGround, studioTop, upWeight);
         float3 ambientDiffuse = hemisphereLight * albedo.rgb * ambientKD;
 
+        // Smooth photographic studio specular reflection across all latitudes (eliminates artificial horizontal cuts)
         float3 R = reflect(-V, N);
-        float specZenith = saturate(R.y);
-        float3 specUpper = lerp(skyHorizon, skyZenith, specZenith);
-        float horizonFactor = smoothstep(-0.06, 0.06, R.y);
-        float3 specSky = lerp(groundColor, specUpper, horizonFactor);
+        float3 specUpper = lerp(studioHorizon, studioTop, saturate(R.y));
+        float3 specLower = lerp(studioGround, studioHorizon, saturate(R.y + 1.0));
+        float3 specSky = (R.y >= 0.0) ? specUpper : specLower;
 
-        // Specular sun reflection lobe for glossy metals & car clearcoat
-        float sunSpec = pow(max(dot(R, sunDir), 0.0), lerp(64.0, 8.0, roughness));
-        specSky += sunColor * sunSpec * (1.0 - roughness * 0.8) * 0.5;
+        // Primary Key Softbox Lobe (Crisp main light reflection)
+        float keySpec = pow(max(dot(R, sunDir), 0.0), lerp(96.0, 6.0, roughness));
+        specSky += sunColor * keySpec * (1.0 - roughness * 0.6) * 0.85;
 
-        float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.5);
+        // Secondary Fill Softbox Lobe (Soft fill reflection from opposite quadrant)
+        float3 fillDir = normalize(float3(-sunDir.x * 0.75, 0.5, -sunDir.z * 0.75));
+        float fillSpec = pow(max(dot(R, fillDir), 0.0), lerp(32.0, 4.0, roughness));
+        specSky += float3(0.75, 0.85, 1.0) * fillSpec * (1.0 - roughness * 0.7) * 0.35;
 
-        float ambientIntensity = hasMultiLightSun ? max(0.28, u_SunLight.ColorAndAmbient.w) : 0.85;
+        // Subtle Rim Contour Lobe (Grazing angle highlight defining shape silhouette)
+        float rimFactor = pow(1.0 - NdotV, 3.5);
+        specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.30;
+
+        float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.3);
+
+        float ambientIntensity = hasMultiLightSun ? max(0.35, u_SunLight.ColorAndAmbient.w) : 0.90;
         ambient = (ambientDiffuse * ambientIntensity + specularAmbient) * ao;
     }
     

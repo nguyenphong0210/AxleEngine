@@ -35,6 +35,7 @@ namespace Axle {
         float FXAASubpixQuality = 0.75f;
         float FXAAEdgeThreshold = 0.166f;
         float FXAAEdgeThresholdMin = 0.0833f;
+        glm::vec4 ClearColor{ 0.12f, 0.14f, 0.18f, 1.0f }; // Configurable background clear color (Supports transparent clear for editor viewports)
     };
 
     class SceneRenderer {

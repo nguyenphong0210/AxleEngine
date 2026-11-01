@@ -1196,7 +1196,7 @@ namespace Axle {
         colorAttachment.descriptor = sceneTargetRTV;
         colorAttachment.loadOp = nri::LoadOp::CLEAR;
         colorAttachment.storeOp = nri::StoreOp::STORE;
-        colorAttachment.clearValue.color.f = { 0.12f, 0.14f, 0.18f, 1.0f };
+        colorAttachment.clearValue.color.f = { settings.ClearColor.r, settings.ClearColor.g, settings.ClearColor.b, settings.ClearColor.a };
 
         nri::AttachmentDesc depthAttachment = {};
         if (sceneDepthDSV) {

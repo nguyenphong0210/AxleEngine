@@ -22,6 +22,9 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <functional>
+#include <algorithm>
+#include <cctype>
 
 namespace Axle {
 
@@ -518,6 +521,85 @@ namespace Axle {
         return true;
     }
 
+    namespace {
+        static bool DrawMaterialTextureSlot(
+            const char* id,
+            std::shared_ptr<Axle::Texture2D>& tex,
+            const std::string& path,
+            bool& enabled,
+            const std::function<void(const std::string&)>& onSetPath,
+            float slotSize = 32.0f)
+        {
+            bool changed = false;
+            ImGui::PushID(id);
+
+            ImTextureID texId = 0;
+            if (tex && tex->IsLoaded() && tex->GetRendererID() != 0) {
+                texId = (ImTextureID)(intptr_t)tex->GetRendererID();
+            }
+
+            ImVec2 size(slotSize, slotSize);
+            if (texId != 0) {
+                ImGui::Image(texId, size, ImVec2(0, 1), ImVec2(1, 0), ImVec4(1, 1, 1, 1), ImVec4(0.28f, 0.35f, 0.45f, 1.0f));
+            } else {
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.13f, 0.16f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.22f, 0.28f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.09f, 0.10f, 0.12f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.45f, 0.52f, 1.0f));
+                ImGui::Button("+", size);
+                ImGui::PopStyleColor(4);
+                ImGui::PopStyleVar();
+            }
+
+            // Drag & drop receiver from Content Browser
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    const char* droppedPath = static_cast<const char*>(payload->Data);
+                    std::filesystem::path p(droppedPath);
+                    std::string ext = p.extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return (char)std::tolower(c); });
+                    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".dds" || ext == ".hdr") {
+                        onSetPath(p.string());
+                        enabled = true;
+                        changed = true;
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            // Hover tooltip
+            if (ImGui::IsItemHovered()) {
+                if (!path.empty()) {
+                    std::string filename = std::filesystem::path(path).filename().string();
+                    ImGui::SetTooltip("Texture: %s\nPath: %s\nRight-click to Clear or Copy Path\nDrag & drop a new texture to replace", filename.c_str(), path.c_str());
+                } else {
+                    ImGui::SetTooltip("None (Texture2D)\nDrag and drop an image (.png, .jpg, .tga, .hdr) from Content Browser here");
+                }
+            }
+
+            // Right-click context popup
+            if (ImGui::BeginPopupContextItem("TextureSlotContext")) {
+                if (!path.empty()) {
+                    if (ImGui::MenuItem("Clear Texture")) {
+                        onSetPath("");
+                        enabled = false;
+                        changed = true;
+                    }
+                    if (ImGui::MenuItem("Copy Path")) {
+                        ImGui::SetClipboardText(path.c_str());
+                    }
+                } else {
+                    ImGui::TextDisabled("No texture assigned");
+                }
+                ImGui::EndPopup();
+            }
+
+            ImGui::PopID();
+            return changed;
+        }
+    }
+
     void SceneHierarchyPanel::DrawMaterialAssetProperties(const std::filesystem::path& path) {
         if (m_LoadedMaterialPath != path || !m_MaterialAssetLoaded) {
             m_ActiveMaterialAsset = MaterialComponent();
@@ -528,6 +610,21 @@ namespace Axle {
 
         bool changed = false;
 
+        // Unity-Style Shader Selector
+        {
+            ImGui::TextDisabled("Shader:");
+            ImGui::SameLine();
+            const char* shaderOptions[] = {
+                "Universal Render Pipeline/Lit (Engine/Resources/Shaders/ForwardPBR.hlsl)",
+                "Universal Render Pipeline/Simple Lit",
+                "Universal Render Pipeline/Unlit"
+            };
+            static int currentShader = 0;
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::Combo("##MaterialShaderCombo", &currentShader, shaderOptions, IM_ARRAYSIZE(shaderOptions));
+            ImGui::Spacing();
+        }
+
         // 0. 3D Preview Mesh Selector (Sphere, Cube, Cylinder, Plane)
         if (ImGui::CollapsingHeader("Preview Mesh Selector", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::TextDisabled("Preview Model:");
@@ -536,7 +633,7 @@ namespace Axle {
             auto DrawMeshBtn = [&](const char* label, PreviewMeshType type) {
                 bool isSel = (activeType == type);
                 if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.50f, 0.85f, 0.90f));
-                if (ImGui::Button(label, ImVec2(btnW, 26.0f))) {
+                if (ImGui::Button(label, ImVec2(btnW, 24.0f))) {
                     if (m_AssetPreviewPanel) m_AssetPreviewPanel->SetPreviewMeshType(type);
                 }
                 if (isSel) ImGui::PopStyleColor();
@@ -551,12 +648,19 @@ namespace Axle {
             ImGui::Spacing();
         }
 
-        // 1. Surface Options (Unity Standard / URP Header)
+        // 1. Surface Options (Unity Standard / URP 2-Column Header)
         if (ImGui::CollapsingHeader("Surface Options", ImGuiTreeNodeFlags_DefaultOpen)) {
-            // Surface Type Combo
+            ImGui::Columns(2, "MatSurfaceOptCols", false);
+            ImGui::SetColumnWidth(0, 130.0f);
+
+            // Surface Type
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Surface Type");
+            ImGui::NextColumn();
             const char* surfaceTypes[] = { "Opaque", "Cutout", "Transparent", "Additive" };
             int currentSurfaceType = static_cast<int>(m_ActiveMaterialAsset.SurfaceType);
-            if (ImGui::Combo("Surface Type", &currentSurfaceType, surfaceTypes, IM_ARRAYSIZE(surfaceTypes))) {
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::Combo("##SurfaceType", &currentSurfaceType, surfaceTypes, IM_ARRAYSIZE(surfaceTypes))) {
                 m_ActiveMaterialAsset.SurfaceType = static_cast<Axle::SurfaceType>(currentSurfaceType);
                 if (m_ActiveMaterialAsset.SurfaceType == Axle::SurfaceType::Transparent || m_ActiveMaterialAsset.SurfaceType == Axle::SurfaceType::Additive) {
                     m_ActiveMaterialAsset.DepthWrite = false;
@@ -565,287 +669,197 @@ namespace Axle {
                 }
                 changed = true;
             }
+            ImGui::NextColumn();
 
-            // Render Face (Cull Mode) Combo
+            // Render Face
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Render Face");
+            ImGui::NextColumn();
             const char* cullModes[] = { "Back", "Front", "Both / None (Two-Sided)" };
             int currentCull = (m_ActiveMaterialAsset.CullMode == Axle::CullMode::Back) ? 0 : (m_ActiveMaterialAsset.CullMode == Axle::CullMode::Front ? 1 : 2);
-            if (ImGui::Combo("Render Face", &currentCull, cullModes, IM_ARRAYSIZE(cullModes))) {
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::Combo("##RenderFace", &currentCull, cullModes, IM_ARRAYSIZE(cullModes))) {
                 m_ActiveMaterialAsset.CullMode = (currentCull == 0) ? Axle::CullMode::Back : (currentCull == 1 ? Axle::CullMode::Front : Axle::CullMode::None);
                 changed = true;
             }
+            ImGui::NextColumn();
 
             // Alpha Cutoff (if Cutout)
             if (m_ActiveMaterialAsset.SurfaceType == Axle::SurfaceType::Cutout) {
-                if (ImGui::SliderFloat("Alpha Cutoff", &m_ActiveMaterialAsset.AlphaCutoff, 0.0f, 1.0f, "%.2f")) {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted("Alpha Cutoff");
+                ImGui::NextColumn();
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::SliderFloat("##AlphaCutoff", &m_ActiveMaterialAsset.AlphaCutoff, 0.0f, 1.0f, "%.2f")) {
                     changed = true;
                 }
+                ImGui::NextColumn();
             }
 
             // Depth Write
-            if (ImGui::Checkbox("Depth Write", &m_ActiveMaterialAsset.DepthWrite)) {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Depth Write");
+            ImGui::NextColumn();
+            if (ImGui::Checkbox("##DepthWrite", &m_ActiveMaterialAsset.DepthWrite)) {
                 changed = true;
             }
+            ImGui::NextColumn();
+
+            ImGui::Columns(1);
             ImGui::Spacing();
         }
 
-        // 2. Material Presets Card (16 Professional Presets)
-        if (ImGui::CollapsingHeader("Material Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
-            float btnW = (ImGui::GetContentRegionAvail().x - 12.0f) / 4.0f;
-            
-            // Row 1: Metals & Minerals
-            if (ImGui::Button("Gold", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetGold(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Aluminum", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetAluminum(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Obsidian", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetObsidian(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Chrome", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetChrome(); changed = true; }
+        // 2. Interactive PBR Surface Inputs (Unity-Style 2-Column Layout with Square Texture Wells)
+        if (ImGui::CollapsingHeader("Surface Inputs", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Columns(2, "MatSurfaceInputsCols", false);
+            ImGui::SetColumnWidth(0, 130.0f);
 
-            // Row 2: Automotive & Industrial
-            if (ImGui::Button("Rubber", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetRubber(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Plastic", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetPlastic(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Copper", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCopper(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Cast Iron", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCastIron(); changed = true; }
+            auto DrawChannelRow = [&](const char* label, const char* slotId,
+                                     std::shared_ptr<Axle::Texture2D>& tex,
+                                     std::string& path,
+                                     bool& enabled,
+                                     auto onSetPath,
+                                     auto drawInlineControl)
+            {
+                const float slotSize = 32.0f;
+                const float frameH = ImGui::GetFrameHeight();
+                const float offsetY = (slotSize > frameH) ? (slotSize - frameH) * 0.5f : 0.0f;
 
-            // Row 3: Car Paint & Lighting
-            if (ImGui::Button("Paint Red", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCarPaintRed(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Paint Blue", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCarPaintBlue(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Paint Silver", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetCarPaintSilver(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Headlight", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetHeadlightLED(); changed = true; }
+                // Col 0: Label
+                float startY = ImGui::GetCursorPosY();
+                ImGui::SetCursorPosY(startY + offsetY);
+                ImGui::TextUnformatted(label);
+                ImGui::NextColumn();
 
-            // Row 4: Advanced Shaders & Transparency
-            if (ImGui::Button("Glass", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetGlass(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Foliage", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetFoliage(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Taillight", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.SetPresetTaillightLED(); changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Reset Textures", ImVec2(btnW, 26.0f))) { m_ActiveMaterialAsset.ResetTextures(); changed = true; }
-        }
-
-        ImGui::Spacing();
-
-        // 3. Interactive PBR Surface Inputs (Unity-Style Layout)
-        if (ImGui::CollapsingHeader("PBR Surface Inputs", ImGuiTreeNodeFlags_DefaultOpen)) {
-            float clearBtnW = 24.0f;
-            float inputW = ImGui::GetContentRegionAvail().x - clearBtnW - 6.0f;
-
-            // Albedo Color
-            if (ImGui::ColorEdit4("Base Color", glm::value_ptr(m_ActiveMaterialAsset.AlbedoColor))) {
-                changed = true;
-            }
-
-            // Albedo Texture Slot
-            ImGui::TextDisabled("Base Map");
-            if (m_ActiveMaterialAsset.UseAlbedoMap && m_ActiveMaterialAsset.AlbedoMap && m_ActiveMaterialAsset.AlbedoMap->IsLoaded() && m_ActiveMaterialAsset.AlbedoMap->GetRendererID() != 0) {
-                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.AlbedoMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
-                ImGui::SameLine();
-            }
-            char albedoBuf[256];
-            std::memset(albedoBuf, 0, sizeof(albedoBuf));
-            std::strncpy(albedoBuf, m_ActiveMaterialAsset.AlbedoPath.c_str(), sizeof(albedoBuf) - 1);
-            ImGui::SetNextItemWidth(inputW);
-            if (ImGui::InputText("##AlbedoTexture", albedoBuf, sizeof(albedoBuf))) {
-                m_ActiveMaterialAsset.SetAlbedo(albedoBuf);
-                changed = true;
-            }
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                    std::string droppedPath = static_cast<const char*>(payload->Data);
-                    m_ActiveMaterialAsset.SetAlbedo(droppedPath);
+                // Col 1: Slot + Control
+                float col1StartY = ImGui::GetCursorPosY();
+                if (DrawMaterialTextureSlot(slotId, tex, path, enabled, onSetPath, slotSize)) {
                     changed = true;
                 }
-                ImGui::EndDragDropTarget();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("X##ClearAlbedo", ImVec2(clearBtnW, 0.0f))) {
-                m_ActiveMaterialAsset.SetAlbedo("");
-                changed = true;
-            }
-
-            ImGui::Separator();
-
-            // Roughness
-            if (ImGui::SliderFloat("Roughness", &m_ActiveMaterialAsset.Roughness, 0.0f, 1.0f, "%.2f")) {
-                changed = true;
-            }
-            ImGui::TextDisabled("Roughness Map");
-            if (m_ActiveMaterialAsset.UseRoughnessMap && m_ActiveMaterialAsset.RoughnessMap && m_ActiveMaterialAsset.RoughnessMap->IsLoaded() && m_ActiveMaterialAsset.RoughnessMap->GetRendererID() != 0) {
-                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.RoughnessMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
                 ImGui::SameLine();
-            }
-            char roughBuf[256];
-            std::memset(roughBuf, 0, sizeof(roughBuf));
-            std::strncpy(roughBuf, m_ActiveMaterialAsset.RoughnessPath.c_str(), sizeof(roughBuf) - 1);
-            ImGui::SetNextItemWidth(inputW);
-            if (ImGui::InputText("##RoughnessMap", roughBuf, sizeof(roughBuf))) {
-                m_ActiveMaterialAsset.SetRoughnessMap(roughBuf);
-                changed = true;
-            }
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                    std::string droppedPath = static_cast<const char*>(payload->Data);
-                    m_ActiveMaterialAsset.SetRoughnessMap(droppedPath);
-                    changed = true;
-                }
-                ImGui::EndDragDropTarget();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("X##ClearRoughness", ImVec2(clearBtnW, 0.0f))) {
-                m_ActiveMaterialAsset.SetRoughnessMap("");
-                changed = true;
-            }
+                ImGui::SetCursorPosY(col1StartY + offsetY);
+                drawInlineControl();
 
-            ImGui::Separator();
+                float endY = col1StartY + slotSize + ImGui::GetStyle().ItemSpacing.y;
+                if (ImGui::GetCursorPosY() < endY) {
+                    ImGui::SetCursorPosY(endY);
+                }
+                ImGui::NextColumn();
+            };
+
+            // Base Map
+            DrawChannelRow("Base Map", "##BaseMapSlot", m_ActiveMaterialAsset.AlbedoMap, m_ActiveMaterialAsset.AlbedoPath, m_ActiveMaterialAsset.UseAlbedoMap,
+                [&](const std::string& p) { m_ActiveMaterialAsset.SetAlbedo(p); },
+                [&]() {
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::ColorEdit4("##BaseColor", glm::value_ptr(m_ActiveMaterialAsset.AlbedoColor), ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview)) {
+                        changed = true;
+                    }
+                });
 
             // Metallic
-            if (ImGui::SliderFloat("Metallic", &m_ActiveMaterialAsset.Metallic, 0.0f, 1.0f, "%.2f")) {
-                changed = true;
-            }
-            ImGui::TextDisabled("Metallic Map");
-            if (m_ActiveMaterialAsset.UseMetallicMap && m_ActiveMaterialAsset.MetallicMap && m_ActiveMaterialAsset.MetallicMap->IsLoaded() && m_ActiveMaterialAsset.MetallicMap->GetRendererID() != 0) {
-                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.MetallicMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
-                ImGui::SameLine();
-            }
-            char metalBuf[256];
-            std::memset(metalBuf, 0, sizeof(metalBuf));
-            std::strncpy(metalBuf, m_ActiveMaterialAsset.MetallicPath.c_str(), sizeof(metalBuf) - 1);
-            ImGui::SetNextItemWidth(inputW);
-            if (ImGui::InputText("##MetallicMap", metalBuf, sizeof(metalBuf))) {
-                m_ActiveMaterialAsset.SetMetallicMap(metalBuf);
-                changed = true;
-            }
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                    std::string droppedPath = static_cast<const char*>(payload->Data);
-                    m_ActiveMaterialAsset.SetMetallicMap(droppedPath);
-                    changed = true;
-                }
-                ImGui::EndDragDropTarget();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("X##ClearMetallic", ImVec2(clearBtnW, 0.0f))) {
-                m_ActiveMaterialAsset.SetMetallicMap("");
-                changed = true;
-            }
+            DrawChannelRow("Metallic", "##MetallicSlot", m_ActiveMaterialAsset.MetallicMap, m_ActiveMaterialAsset.MetallicPath, m_ActiveMaterialAsset.UseMetallicMap,
+                [&](const std::string& p) { m_ActiveMaterialAsset.SetMetallicMap(p); },
+                [&]() {
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::SliderFloat("##Metallic", &m_ActiveMaterialAsset.Metallic, 0.0f, 1.0f, "%.2f")) {
+                        changed = true;
+                    }
+                });
 
-            ImGui::Separator();
+            // Roughness
+            DrawChannelRow("Roughness", "##RoughnessSlot", m_ActiveMaterialAsset.RoughnessMap, m_ActiveMaterialAsset.RoughnessPath, m_ActiveMaterialAsset.UseRoughnessMap,
+                [&](const std::string& p) { m_ActiveMaterialAsset.SetRoughnessMap(p); },
+                [&]() {
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::SliderFloat("##Roughness", &m_ActiveMaterialAsset.Roughness, 0.0f, 1.0f, "%.2f")) {
+                        changed = true;
+                    }
+                });
 
             // Normal Map
-            if (ImGui::SliderFloat("Normal Strength", &m_ActiveMaterialAsset.NormalStrength, 0.0f, 5.0f, "%.2f")) {
-                changed = true;
-            }
-            ImGui::TextDisabled("Normal Map");
-            if (m_ActiveMaterialAsset.UseNormalMap && m_ActiveMaterialAsset.NormalMap && m_ActiveMaterialAsset.NormalMap->IsLoaded() && m_ActiveMaterialAsset.NormalMap->GetRendererID() != 0) {
-                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.NormalMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
-                ImGui::SameLine();
-            }
-            char normalBuf[256];
-            std::memset(normalBuf, 0, sizeof(normalBuf));
-            std::strncpy(normalBuf, m_ActiveMaterialAsset.NormalPath.c_str(), sizeof(normalBuf) - 1);
-            ImGui::SetNextItemWidth(inputW);
-            if (ImGui::InputText("##NormalMap", normalBuf, sizeof(normalBuf))) {
-                m_ActiveMaterialAsset.SetNormal(normalBuf);
-                changed = true;
-            }
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                    std::string droppedPath = static_cast<const char*>(payload->Data);
-                    m_ActiveMaterialAsset.SetNormal(droppedPath);
-                    changed = true;
-                }
-                ImGui::EndDragDropTarget();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("X##ClearNormal", ImVec2(clearBtnW, 0.0f))) {
-                m_ActiveMaterialAsset.SetNormal("");
-                changed = true;
-            }
+            DrawChannelRow("Normal Map", "##NormalSlot", m_ActiveMaterialAsset.NormalMap, m_ActiveMaterialAsset.NormalPath, m_ActiveMaterialAsset.UseNormalMap,
+                [&](const std::string& p) { m_ActiveMaterialAsset.SetNormal(p); },
+                [&]() {
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::SliderFloat("##NormalStrength", &m_ActiveMaterialAsset.NormalStrength, 0.0f, 5.0f, "%.2f")) {
+                        changed = true;
+                    }
+                });
 
-            ImGui::Separator();
-
-            // Occlusion Map
-            if (ImGui::SliderFloat("Occlusion", &m_ActiveMaterialAsset.AOStrength, 0.0f, 1.0f, "%.2f")) {
-                changed = true;
-            }
-            ImGui::TextDisabled("Occlusion Map");
-            if (m_ActiveMaterialAsset.UseAOMap && m_ActiveMaterialAsset.AOMap && m_ActiveMaterialAsset.AOMap->IsLoaded() && m_ActiveMaterialAsset.AOMap->GetRendererID() != 0) {
-                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.AOMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
-                ImGui::SameLine();
-            }
-            char aoBuf[256];
-            std::memset(aoBuf, 0, sizeof(aoBuf));
-            std::strncpy(aoBuf, m_ActiveMaterialAsset.AOPath.c_str(), sizeof(aoBuf) - 1);
-            ImGui::SetNextItemWidth(inputW);
-            if (ImGui::InputText("##AOMap", aoBuf, sizeof(aoBuf))) {
-                m_ActiveMaterialAsset.SetAOMap(aoBuf);
-                changed = true;
-            }
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                    std::string droppedPath = static_cast<const char*>(payload->Data);
-                    m_ActiveMaterialAsset.SetAOMap(droppedPath);
-                    changed = true;
-                }
-                ImGui::EndDragDropTarget();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("X##ClearAO", ImVec2(clearBtnW, 0.0f))) {
-                m_ActiveMaterialAsset.SetAOMap("");
-                changed = true;
-            }
-
-            ImGui::Separator();
+            // Occlusion
+            DrawChannelRow("Occlusion", "##OcclusionSlot", m_ActiveMaterialAsset.AOMap, m_ActiveMaterialAsset.AOPath, m_ActiveMaterialAsset.UseAOMap,
+                [&](const std::string& p) { m_ActiveMaterialAsset.SetAOMap(p); },
+                [&]() {
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::SliderFloat("##Occlusion", &m_ActiveMaterialAsset.AOStrength, 0.0f, 1.0f, "%.2f")) {
+                        changed = true;
+                    }
+                });
 
             // Emission
-            if (ImGui::ColorEdit3("Emission Color", glm::value_ptr(m_ActiveMaterialAsset.EmissionColor))) {
-                changed = true;
-            }
-            if (ImGui::DragFloat("Emission Intensity", &m_ActiveMaterialAsset.EmissionIntensity, 0.1f, 0.0f, 50.0f, "%.1f")) {
-                changed = true;
-            }
-            ImGui::TextDisabled("Emissive Map");
-            if (m_ActiveMaterialAsset.UseEmissiveMap && m_ActiveMaterialAsset.EmissiveMap && m_ActiveMaterialAsset.EmissiveMap->IsLoaded() && m_ActiveMaterialAsset.EmissiveMap->GetRendererID() != 0) {
-                ImGui::Image((ImTextureID)(intptr_t)m_ActiveMaterialAsset.EmissiveMap->GetRendererID(), ImVec2(24.0f, 24.0f), ImVec2(0, 1), ImVec2(1, 0));
-                ImGui::SameLine();
-            }
-            char emissiveBuf[256];
-            std::memset(emissiveBuf, 0, sizeof(emissiveBuf));
-            std::strncpy(emissiveBuf, m_ActiveMaterialAsset.EmissivePath.c_str(), sizeof(emissiveBuf) - 1);
-            ImGui::SetNextItemWidth(inputW);
-            if (ImGui::InputText("##EmissiveMap", emissiveBuf, sizeof(emissiveBuf))) {
-                m_ActiveMaterialAsset.SetEmissiveMap(emissiveBuf);
-                changed = true;
-            }
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                    std::string droppedPath = static_cast<const char*>(payload->Data);
-                    m_ActiveMaterialAsset.SetEmissiveMap(droppedPath);
-                    changed = true;
-                }
-                ImGui::EndDragDropTarget();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("X##ClearEmissive", ImVec2(clearBtnW, 0.0f))) {
-                m_ActiveMaterialAsset.SetEmissiveMap("");
-                changed = true;
-            }
+            DrawChannelRow("Emission", "##EmissionSlot", m_ActiveMaterialAsset.EmissiveMap, m_ActiveMaterialAsset.EmissivePath, m_ActiveMaterialAsset.UseEmissiveMap,
+                [&](const std::string& p) { m_ActiveMaterialAsset.SetEmissiveMap(p); },
+                [&]() {
+                    ImGui::SetNextItemWidth(36.0f);
+                    if (ImGui::ColorEdit3("##EmissionColor", glm::value_ptr(m_ActiveMaterialAsset.EmissionColor), ImGuiColorEditFlags_NoLabel)) {
+                        changed = true;
+                    }
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::DragFloat("##EmissionIntensity", &m_ActiveMaterialAsset.EmissionIntensity, 0.1f, 0.0f, 50.0f, "%.1f")) {
+                        changed = true;
+                    }
+                });
 
+            // Tiling & Offset
+            ImGui::Columns(1);
+            ImGui::Spacing();
             ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::Columns(2, "MatUVCols", false);
+            ImGui::SetColumnWidth(0, 130.0f);
 
-            // UV Tiling & Offset
-            if (ImGui::DragFloat2("Tiling", glm::value_ptr(m_ActiveMaterialAsset.UVScale), 0.1f, 0.01f, 100.0f, "%.2f")) {
-                changed = true;
+            // Tiling
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Tiling");
+            ImGui::NextColumn();
+            {
+                float avail = ImGui::GetContentRegionAvail().x;
+                float labelW = 14.0f;
+                float inputW = (avail - labelW * 2.0f - ImGui::GetStyle().ItemSpacing.x * 3.0f) * 0.5f;
+                ImGui::TextDisabled("X"); ImGui::SameLine();
+                ImGui::SetNextItemWidth(inputW);
+                if (ImGui::DragFloat("##TilingX", &m_ActiveMaterialAsset.UVScale.x, 0.05f, 0.01f, 100.0f, "%.2f")) changed = true;
+                ImGui::SameLine();
+                ImGui::TextDisabled("Y"); ImGui::SameLine();
+                ImGui::SetNextItemWidth(inputW);
+                if (ImGui::DragFloat("##TilingY", &m_ActiveMaterialAsset.UVScale.y, 0.05f, 0.01f, 100.0f, "%.2f")) changed = true;
             }
-            if (ImGui::DragFloat2("Offset", glm::value_ptr(m_ActiveMaterialAsset.UVOffset), 0.05f, -10.0f, 10.0f, "%.2f")) {
-                changed = true;
+            ImGui::NextColumn();
+
+            // Offset
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Offset");
+            ImGui::NextColumn();
+            {
+                float avail = ImGui::GetContentRegionAvail().x;
+                float labelW = 14.0f;
+                float inputW = (avail - labelW * 2.0f - ImGui::GetStyle().ItemSpacing.x * 3.0f) * 0.5f;
+                ImGui::TextDisabled("X"); ImGui::SameLine();
+                ImGui::SetNextItemWidth(inputW);
+                if (ImGui::DragFloat("##OffsetX", &m_ActiveMaterialAsset.UVOffset.x, 0.02f, -10.0f, 10.0f, "%.2f")) changed = true;
+                ImGui::SameLine();
+                ImGui::TextDisabled("Y"); ImGui::SameLine();
+                ImGui::SetNextItemWidth(inputW);
+                if (ImGui::DragFloat("##OffsetY", &m_ActiveMaterialAsset.UVOffset.y, 0.02f, -10.0f, 10.0f, "%.2f")) changed = true;
             }
+            ImGui::NextColumn();
+
+            // Quick UV Chips
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Quick Tiling");
+            ImGui::NextColumn();
             if (ImGui::SmallButton("1x1")) { m_ActiveMaterialAsset.UVScale = glm::vec2(1.0f); m_ActiveMaterialAsset.UVOffset = glm::vec2(0.0f); changed = true; }
             ImGui::SameLine();
             if (ImGui::SmallButton("2x2")) { m_ActiveMaterialAsset.UVScale = glm::vec2(2.0f); changed = true; }
@@ -853,9 +867,13 @@ namespace Axle {
             if (ImGui::SmallButton("4x4")) { m_ActiveMaterialAsset.UVScale = glm::vec2(4.0f); changed = true; }
             ImGui::SameLine();
             if (ImGui::SmallButton("8x8")) { m_ActiveMaterialAsset.UVScale = glm::vec2(8.0f); changed = true; }
+            ImGui::NextColumn();
+
+            ImGui::Columns(1);
+            ImGui::Spacing();
         }
 
-        // 3. Live 3D Preview Synchronization
+        // Live 3D Preview Synchronization
         if (changed && m_AssetPreviewPanel) {
             m_AssetPreviewPanel->UpdateMaterialPreview(m_ActiveMaterialAsset);
         }
@@ -865,10 +883,10 @@ namespace Axle {
         ImGui::Spacing();
 
         float availW = ImGui::GetContentRegionAvail().x;
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.55f, 0.32f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.68f, 0.40f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.45f, 0.25f, 1.0f));
-        if (ImGui::Button("Save Material Asset", ImVec2(availW, 30.0f)) || changed) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.40f, 0.65f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.50f, 0.80f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.35f, 0.58f, 1.0f));
+        if (ImGui::Button("Save Material Asset", ImVec2(availW, 26.0f)) || changed) {
             SaveMaterialAsset(path, m_ActiveMaterialAsset);
             AssetManager::ReloadMaterial(path);
         }
@@ -876,7 +894,7 @@ namespace Axle {
 
         if (m_SelectedEntity && m_Scene && m_Scene->GetRegistry().valid((entt::entity)m_SelectedEntity)) {
             ImGui::Spacing();
-            if (ImGui::Button("Apply to Selected Entity", ImVec2(availW, 26.0f))) {
+            if (ImGui::Button("Apply to Selected Entity", ImVec2(availW, 24.0f))) {
                 UUID handle = AssetManager::GetAssetUUID(path);
                 auto matAsset = AssetManager::GetMaterial(path);
                 if (m_SelectedEntity.HasComponent<MaterialComponent>()) {

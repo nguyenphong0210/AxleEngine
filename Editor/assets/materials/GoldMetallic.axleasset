@@ -2,18 +2,27 @@ Material {
     name: "GoldMetallic"
     shader: "ForwardPBR"
 
+    // Surface Options
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    alphaCutoff: 0.5
+    depthWrite: true
+
     // Base Color & Texture
     albedoColor: "#FFD600"
     albedoMap: ""
 
     // Surface Microfacet
-    metallic: 1.0
+    metallic: 1
     roughness: 0.15
     normalMap: ""
-    normalStrength: 1.0
+    normalStrength: 1
+    occlusionMap: ""
+    occlusionStrength: 1
 
     // Emission & UV Scaling
     emissionColor: "#000000"
-    emissionIntensity: 0.0
-    uvScale: [1.0, 1.0]
+    emissionIntensity: 0
+    uvTiling: [ 1 , 1 ]
+    uvOffset: [ 0 , 0 ]
 }

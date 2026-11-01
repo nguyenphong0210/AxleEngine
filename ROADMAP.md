@@ -555,7 +555,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] 3D Preview Turntable with sample mesh switcher: Sphere, Cube, Cylinder, Plane, Teapot.
     - [x] HDRI Environment lighting selector: *Studio Neutral*, *Sunny Sky*, *Sunset Glow*, *Night Sky*.
     - [x] Inspector group accordions (*Surface Options*, *Surface Inputs*, *Advanced Options*).
-    - [x] Toolbar with `Save (.axleasset)`, `Revert`, and Quick Presets (Gold, Car Paint, Rubber, Glass, Chrome, LED Taillight, Foliage Two-Sided).
+    - [x] Toolbar with `Save (.axleasset)`, `Revert`, Shader selector, and Unity-grade 2-column PBR layout.
   - [x] **Step 4 - Automated Verification Suite Step 101 (`AxleTests.exe --step101`)**:
     - [x] Step 101 tests verifying: DSL round-trip serialization of new surface properties, Cutout alpha clipping math, Two-sided culling flags, RHI pipeline blend mode configs, and headless Material Studio operations.
 

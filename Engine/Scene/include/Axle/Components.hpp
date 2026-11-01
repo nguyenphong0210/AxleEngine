@@ -158,6 +158,9 @@ namespace Axle {
 
         glm::vec2 UVScale{ 1.0f, 1.0f };
 
+        // Dynamic Shader Properties (Phase 38.2)
+        std::vector<ShaderPropertyInstance> CustomProperties;
+
         MaterialComponent() = default;
 
         MaterialComponent(UUID handle, const std::shared_ptr<Material>& asset)
@@ -215,6 +218,7 @@ namespace Axle {
             EnableSpecularHighlights = MaterialAsset->GetEnableSpecularHighlights();
             EnableEnvironmentReflections = MaterialAsset->GetEnableEnvironmentReflections();
             RenderQueue = MaterialAsset->GetRenderQueue();
+            CustomProperties = MaterialAsset->GetCustomProperties();
 
             SyncToRHI();
         }
@@ -254,6 +258,7 @@ namespace Axle {
             MaterialAsset->SetEnableEnvironmentReflections(EnableEnvironmentReflections);
             MaterialAsset->SetRenderQueue(RenderQueue);
             MaterialAsset->SetUVOffset(UVOffset);
+            MaterialAsset->SetCustomProperties(CustomProperties);
 
             MaterialAsset->SetAlbedoColor(AlbedoColor);
             MaterialAsset->SetAlbedoTexture(AlbedoMap, AlbedoPath);

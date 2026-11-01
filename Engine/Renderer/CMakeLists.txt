@@ -12,6 +12,7 @@ add_library(AxleRenderer STATIC
     src/stb_image.cpp
     src/Skybox.cpp
     src/Material.cpp
+    src/ShaderPropertyReflection.cpp
     src/Cubemap.cpp
     src/SkinningPipeline.cpp
 )
@@ -26,6 +27,7 @@ target_link_libraries(AxleRenderer
     PUBLIC
         Axle::Core
         Axle::Platform
+        Axle::RHI
     PRIVATE
         glad
 )

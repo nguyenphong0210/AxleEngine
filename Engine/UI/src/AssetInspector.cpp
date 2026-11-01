@@ -910,6 +910,66 @@ namespace Axle {
             ImGui::Spacing();
         }
 
+        // 4. Dynamic Shader Properties (Phase 38.2 Dynamic Reflection)
+        if (!m_ActiveMaterialAsset.CustomProperties.empty()) {
+            if (ImGui::CollapsingHeader("Dynamic Shader Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Columns(2, "DynamicPropertiesColumns", false);
+                ImGui::SetColumnWidth(0, 150.0f);
+
+                for (auto& prop : m_ActiveMaterialAsset.CustomProperties) {
+                    ImGui::PushID(prop.Desc.Name.c_str());
+
+                    if (!prop.Desc.Header.empty()) {
+                        ImGui::Columns(1);
+                        ImGui::Spacing();
+                        ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "%s", prop.Desc.Header.c_str());
+                        ImGui::Separator();
+                        ImGui::Columns(2, "DynamicPropertiesColumns", false);
+                        ImGui::SetColumnWidth(0, 150.0f);
+                    }
+
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted(prop.Desc.DisplayName.c_str());
+                    if (!prop.Desc.Tooltip.empty() && ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("%s", prop.Desc.Tooltip.c_str());
+                    }
+                    ImGui::NextColumn();
+
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (prop.Desc.Type == ShaderPropertyType::Float) {
+                        if (prop.Desc.HasRange) {
+                            if (ImGui::SliderFloat("##FloatVal", &prop.FloatVal, prop.Desc.MinValue, prop.Desc.MaxValue, "%.3f")) {
+                                changed = true;
+                            }
+                        } else {
+                            if (ImGui::DragFloat("##FloatVal", &prop.FloatVal, 0.01f, 0.0f, 0.0f, "%.3f")) {
+                                changed = true;
+                            }
+                        }
+                    } else if (prop.Desc.Type == ShaderPropertyType::Color) {
+                        if (ImGui::ColorEdit4("##ColorVal", glm::value_ptr(prop.Vec4Val), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
+                            changed = true;
+                        }
+                    } else if (prop.Desc.Type == ShaderPropertyType::Int) {
+                        if (ImGui::DragInt("##IntVal", &prop.IntVal)) {
+                            changed = true;
+                        }
+                    } else if (prop.Desc.Type == ShaderPropertyType::Bool) {
+                        if (ImGui::Checkbox("##BoolVal", &prop.BoolVal)) {
+                            changed = true;
+                        }
+                    } else if (prop.Desc.Type == ShaderPropertyType::Texture2D) {
+                        ImGui::TextUnformatted(prop.TexturePath.empty() ? "(None)" : prop.TexturePath.c_str());
+                    }
+                    ImGui::NextColumn();
+                    ImGui::PopID();
+                }
+
+                ImGui::Columns(1);
+                ImGui::Spacing();
+            }
+        }
+
         // Live 3D Preview Synchronization
         if (changed && m_AssetPreviewPanel) {
             m_AssetPreviewPanel->UpdateMaterialPreview(m_ActiveMaterialAsset);

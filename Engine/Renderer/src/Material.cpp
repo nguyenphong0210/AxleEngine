@@ -9,6 +9,30 @@
 
 namespace Axle {
 
+    static glm::vec4 ParseHexColor(const std::string& val) {
+        if (val.empty() || val[0] != '#') return glm::vec4(1.0f);
+        auto hexCharToInt = [](char ch) -> uint32_t {
+            if (ch >= '0' && ch <= '9') return ch - '0';
+            if (ch >= 'a' && ch <= 'f') return 10 + (ch - 'a');
+            if (ch >= 'A' && ch <= 'F') return 10 + (ch - 'A');
+            return 0;
+        };
+        std::string h = val.substr(1);
+        if (h.size() >= 8) {
+            uint32_t r = (hexCharToInt(h[0]) << 4) | hexCharToInt(h[1]);
+            uint32_t g = (hexCharToInt(h[2]) << 4) | hexCharToInt(h[3]);
+            uint32_t b = (hexCharToInt(h[4]) << 4) | hexCharToInt(h[5]);
+            uint32_t a = (hexCharToInt(h[6]) << 4) | hexCharToInt(h[7]);
+            return glm::vec4(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
+        } else if (h.size() >= 6) {
+            uint32_t r = (hexCharToInt(h[0]) << 4) | hexCharToInt(h[1]);
+            uint32_t g = (hexCharToInt(h[2]) << 4) | hexCharToInt(h[3]);
+            uint32_t b = (hexCharToInt(h[4]) << 4) | hexCharToInt(h[5]);
+            return glm::vec4(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+        }
+        return glm::vec4(1.0f);
+    }
+
     static std::string Trim(const std::string& str) {
         size_t first = str.find_first_not_of(" \t\r\n");
         if (first == std::string::npos) return "";
@@ -451,6 +475,20 @@ namespace Axle {
             fout << "    emissionIntensity: " << m_EmissionIntensity << "\n";
             fout << "    uvTiling: [ " << m_UVScale.x << " , " << m_UVScale.y << " ]\n";
             fout << "    uvOffset: [ " << m_UVOffset.x << " , " << m_UVOffset.y << " ]\n";
+            if (!m_CustomProperties.empty()) {
+                fout << "\n    // Dynamic Custom Properties\n";
+                for (const auto& prop : m_CustomProperties) {
+                    if (prop.Desc.Type == ShaderPropertyType::Float) {
+                        fout << "    customFloat." << prop.Desc.Name << ": " << prop.FloatVal << "\n";
+                    } else if (prop.Desc.Type == ShaderPropertyType::Color || prop.Desc.Type == ShaderPropertyType::Float4) {
+                        fout << "    customColor." << prop.Desc.Name << ": \"" << formatHex(prop.Vec4Val) << "\"\n";
+                    } else if (prop.Desc.Type == ShaderPropertyType::Texture2D) {
+                        fout << "    customTexture." << prop.Desc.Name << ": \"" << prop.TexturePath << "\"\n";
+                    } else if (prop.Desc.Type == ShaderPropertyType::Int) {
+                        fout << "    customInt." << prop.Desc.Name << ": " << prop.IntVal << "\n";
+                    }
+                }
+            }
             fout << "}\n";
             return true;
         }
@@ -531,6 +569,30 @@ namespace Axle {
                 } else if (trimmed.rfind("environmentReflections:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(23));
                     m_EnableEnvironmentReflections = (val == "true" || val == "1");
+                } else if (trimmed.rfind("customFloat.", 0) == 0) {
+                    size_t colon = trimmed.find(':');
+                    if (colon != std::string::npos) {
+                        std::string pName = Trim(trimmed.substr(12, colon - 12));
+                        try { SetCustomFloat(pName, std::stof(Trim(trimmed.substr(colon + 1)))); } catch (...) {}
+                    }
+                } else if (trimmed.rfind("customColor.", 0) == 0) {
+                    size_t colon = trimmed.find(':');
+                    if (colon != std::string::npos) {
+                        std::string pName = Trim(trimmed.substr(12, colon - 12));
+                        std::string hexVal = Trim(trimmed.substr(colon + 1));
+                        if (!hexVal.empty() && hexVal.front() == '"') hexVal = hexVal.substr(1);
+                        if (!hexVal.empty() && hexVal.back() == '"') hexVal.pop_back();
+                        SetCustomVec4(pName, ParseHexColor(hexVal));
+                    }
+                } else if (trimmed.rfind("customTexture.", 0) == 0) {
+                    size_t colon = trimmed.find(':');
+                    if (colon != std::string::npos) {
+                        std::string pName = Trim(trimmed.substr(14, colon - 14));
+                        std::string texVal = Trim(trimmed.substr(colon + 1));
+                        if (!texVal.empty() && texVal.front() == '"') texVal = texVal.substr(1);
+                        if (!texVal.empty() && texVal.back() == '"') texVal.pop_back();
+                        SetCustomTexture(pName, texVal);
+                    }
                 } else if (trimmed.rfind("renderQueue:", 0) == 0) {
                     try { m_RenderQueue = std::stoi(Trim(trimmed.substr(12))); } catch (...) {}
                 } else if (trimmed.rfind("albedoColor:", 0) == 0) {
@@ -729,6 +791,73 @@ namespace Axle {
             return mat;
         }
         return nullptr;
+    }
+
+
+    void Material::SetCustomFloat(const std::string& name, float value) {
+        for (auto& prop : m_CustomProperties) {
+            if (prop.Desc.Name == name) {
+                prop.FloatVal = value;
+                return;
+            }
+        }
+        ShaderPropertyInstance inst;
+        inst.Desc.Name = name;
+        inst.Desc.DisplayName = ShaderPropertyParser::FormatDisplayName(name);
+        inst.Desc.Type = ShaderPropertyType::Float;
+        inst.FloatVal = value;
+        m_CustomProperties.push_back(inst);
+    }
+
+    float Material::GetCustomFloat(const std::string& name, float defaultVal) const {
+        for (const auto& prop : m_CustomProperties) {
+            if (prop.Desc.Name == name) return prop.FloatVal;
+        }
+        return defaultVal;
+    }
+
+    void Material::SetCustomVec4(const std::string& name, const glm::vec4& value) {
+        for (auto& prop : m_CustomProperties) {
+            if (prop.Desc.Name == name) {
+                prop.Vec4Val = value;
+                return;
+            }
+        }
+        ShaderPropertyInstance inst;
+        inst.Desc.Name = name;
+        inst.Desc.DisplayName = ShaderPropertyParser::FormatDisplayName(name);
+        inst.Desc.Type = ShaderPropertyType::Color;
+        inst.Vec4Val = value;
+        m_CustomProperties.push_back(inst);
+    }
+
+    glm::vec4 Material::GetCustomVec4(const std::string& name, const glm::vec4& defaultVal) const {
+        for (const auto& prop : m_CustomProperties) {
+            if (prop.Desc.Name == name) return prop.Vec4Val;
+        }
+        return defaultVal;
+    }
+
+    void Material::SetCustomTexture(const std::string& name, const std::string& path) {
+        for (auto& prop : m_CustomProperties) {
+            if (prop.Desc.Name == name) {
+                prop.TexturePath = path;
+                return;
+            }
+        }
+        ShaderPropertyInstance inst;
+        inst.Desc.Name = name;
+        inst.Desc.DisplayName = ShaderPropertyParser::FormatDisplayName(name);
+        inst.Desc.Type = ShaderPropertyType::Texture2D;
+        inst.TexturePath = path;
+        m_CustomProperties.push_back(inst);
+    }
+
+    std::string Material::GetCustomTexture(const std::string& name) const {
+        for (const auto& prop : m_CustomProperties) {
+            if (prop.Desc.Name == name) return prop.TexturePath;
+        }
+        return "";
     }
 
 }

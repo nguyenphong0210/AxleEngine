@@ -2,6 +2,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/Texture2D.hpp>
+#include <Axle/ShaderPropertyReflection.hpp>
 #include <Axle/Shader.hpp>
 #include <glm/glm.hpp>
 #include <string>
@@ -57,6 +58,17 @@ namespace Axle {
         int GetRenderQueue() const { return m_RenderQueue; }
         int& GetRenderQueueRef() { return m_RenderQueue; }
         void SetRenderQueue(int queue) { m_RenderQueue = queue; }
+
+        // Dynamic Shader Properties (Phase 38.2)
+        const std::vector<ShaderPropertyInstance>& GetCustomProperties() const { return m_CustomProperties; }
+        std::vector<ShaderPropertyInstance>& GetCustomPropertiesRef() { return m_CustomProperties; }
+        void SetCustomProperties(const std::vector<ShaderPropertyInstance>& props) { m_CustomProperties = props; }
+        void SetCustomFloat(const std::string& name, float value);
+        float GetCustomFloat(const std::string& name, float defaultVal = 0.0f) const;
+        void SetCustomVec4(const std::string& name, const glm::vec4& value);
+        glm::vec4 GetCustomVec4(const std::string& name, const glm::vec4& defaultVal = glm::vec4(0.0f)) const;
+        void SetCustomTexture(const std::string& name, const std::string& path);
+        std::string GetCustomTexture(const std::string& name) const;
 
         // PBR Core Properties
         const glm::vec4& GetAlbedoColor() const { return m_AlbedoColor; }
@@ -197,6 +209,7 @@ namespace Axle {
         bool m_EnableSpecularHighlights = true;
         bool m_EnableEnvironmentReflections = true;
         int m_RenderQueue = 2000;
+        std::vector<ShaderPropertyInstance> m_CustomProperties;
 
         glm::vec4 m_AlbedoColor{ 1.0f, 1.0f, 1.0f, 1.0f };
         float m_Roughness = 0.5f;

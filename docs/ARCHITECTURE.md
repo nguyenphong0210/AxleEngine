@@ -1,124 +1,68 @@
-# 🏛️ AxleEngine System Architecture
+# AxleEngine Architecture Overview
 
-AxleEngine is a **modern, modular, general-purpose 3D game engine** developed in **C++20**. Designed from the ground up for high-performance physics-driven games, sandboxes, and simulations, AxleEngine blends the ergonomics of commercial game engines (such as Godot and Unity) with cache-friendly **Data-Oriented Design (DOD)** and native C++ execution speed.
+Reviewed: **2026-11-01**. AxleEngine is organized into subsystem libraries and application targets. It has a modular foundation, but its current implementation does **not** yet enforce a strictly layered dependency graph.
 
----
+The complete [architecture and design documentation](architecture/README.md) separates current behavior from the proposed layered architecture:
 
-## 🏗️ Layered Architecture Stack
+| Reference | Contents |
+|---|---|
+| [SAD](architecture/SAD.md) | Context, module boundaries, dependencies, deployment and assessment |
+| [SDD](architecture/SDD.md) | Class responsibilities, ownership, contracts and lifecycle |
+| [Class relationships](architecture/CLASS_RELATIONSHIPS.md) | UML diagrams by subsystem |
+| [Execution flows](architecture/RUNTIME_FLOWS.md) | Startup, simulation, scripting, assets and UI |
+| [Dependency map](architecture/DEPENDENCY_MAP.md) | CMake links, build ordering and source includes |
+| [Target architecture](architecture/TARGET_LAYERED_ARCHITECTURE.md) | Proposed layering and migration acceptance criteria |
+| [Verification](architecture/VERIFICATION.md) | Evidence and limits of the source review |
 
-AxleEngine is organized into a strictly layered architecture. Dependencies flow strictly **downward**; higher layers depend on lower layers, and lower layers never include or depend on higher layers.
-
-```plaintext
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ LEVEL 4: APPLICATIONS & TOOLS                                               │
-│ • AxleEditor.exe (WYSIWYG Docking IDE, ImGuizmo, Live Script Tuning)        │
-│ • AxleRuntime.exe (Standalone Game Launcher, Zero Editor Overhead)          │
-│ • AxleTests.exe (Automated Headless CI/CD Test Suite - 32 Verified Suites)  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ LEVEL 3: GAMEPLAY SYSTEMS & DOMAIN TOOLKITS                                 │
-│ • Engine/Scene: EnTT ECS, Entity, Hierarchy Graph, ParallelECS, Serialization│
-│ • Engine/Vehicle: Advanced Vehicle Drivetrain, Powertrain & Audio Synthesis │
-│ • AxleScripts.dll: User Gameplay Scripts Module (Hot-Reloadable Dynamic Lib)│
-├─────────────────────────────────────────────────────────────────────────────┤
-│ LEVEL 2: ENGINE SUBSYSTEMS                                                  │
-│ • Engine/Renderer: OpenGL 4.5 Core, PBR BRDF, Shadow Mapping, Skybox, Mesh  │
-│ • Engine/Physics:  Jolt Physics Bridge, Multithreaded Scene, Rigid Bodies   │
-│ • Engine/Audio:    miniaudio 3D Spatial Audio Engine, Doppler, Sound Sources│
-│ • Engine/Asset:    AssetManager, UUID .meta Pipeline, Binary Cache (.axlebin│
-│ • Engine/Project:  Project Management (.axleproj), Virtual Asset Paths      │
-│ • Engine/UI:       ImGui Abstraction, Viewport FBO, Content Browser, Tree   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ LEVEL 1: PLATFORM ABSTRACTION                                               │
-│ • Engine/Platform: GLFW Window Lifecycle, Input Polling, Dynamic DLL Loader │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ LEVEL 0: FOUNDATION & UTILITIES                                             │
-│ • Engine/Core: Application Loop, LayerStack, enkiTS JobSystem, Log, Timestep│
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🧩 Core Architectural Principles
-
-### 1. Data-Oriented Design via Entity Component System (ECS)
-AxleEngine uses [EnTT](https://github.com/skypjack/entt) as its primary ECS backplane. Game entities are lightweight 64-bit integer handles (`entt::entity`), while data is stored in contiguous, cache-friendly component pools.
-* **Zero Virtual Method Overhead in Bulk Data**: Thousands of physics objects or mechanical parts can be iterated contiguously in memory with maximum SIMD vectorization.
-* **Safe Scriptable Wrapper**: For gameplay scripts requiring intuitive object-oriented lifecycles (e.g. Player Controller, Camera, Vehicle), the `ScriptableEntity` interface wraps the underlying ECS handle with zero runtime memory penalty.
-
-### 2. Strict Modular Isolation & Zero Raw Graphics Leaks
-No subsystem outside `Engine/Renderer` is permitted to include raw OpenGL headers or issue raw graphics commands (`gl*`).
-* Rendering requests from `Engine/Scene` or `Editor` go through high-level rendering abstractions (`Axle::SceneRenderer`, `Axle::Renderer`, `Axle::RenderCommand`).
-* Swapping the rendering backend (e.g., to Vulkan or Direct3D 12) requires modifications only inside `Engine/Renderer`.
-
-### 3. Persistent Lock-Free Multi-Threading (`enkiTS`)
-AxleEngine completely avoids creating ad-hoc threads or maintaining multiple uncoordinated thread pools.
-* A single unified `Axle::JobSystem` (powered by `enkiTS`) initializes persistent worker threads matching the host machine's hardware thread count.
-* Both **Jolt Physics** (via `JobSystemEnkiTS`) and bulk **ECS systems** (via `ParallelECS::ForEach`) dispatch their workloads into the same unified scheduler, preventing CPU core thrashing and thread oversubscription.
-
-### 4. Dual Runtime Target: Editor IDE vs Standalone Player
-The engine explicitly separates development tools from shipping games:
-* `AxleEditor.exe`: Links `Axle::UI`, ImGui, and ImGuizmo to provide a full multi-window development IDE with real-time viewport picking, live inspection, and hot-reloading.
-* `AxleRuntime.exe`: Stripped of all ImGui, editor panels, and debug tooling. It boots directly into cooked project packages (`Data.axlepak`) for maximum FPS, minimal memory footprint, and instantaneous launch times.
-
----
-
-## 🔄 Application & Simulation Lifecycle
-
-The execution lifecycle of an AxleEngine application is orchestrated by `Axle::Application` and its `Axle::LayerStack`:
+## Current subsystem structure
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant Main as Main Entry
-    participant App as Axle::Application
-    participant Win as Platform Window
-    participant Layer as Active Layer (Editor/Runtime)
-    participant Scene as Active Scene
-    participant Physics as Jolt Physics Scene
-    participant Renderer as SceneRenderer
-
-    Main->>App: Instantiate & Initialize Subsystems
-    App->>Win: Create Window & Context (GLFW)
-    App->>Layer: PushLayer(EditorLayer or RuntimeLayer)
-    Layer->>Layer: OnAttach()
-    
-    loop Engine Main Loop
-        App->>Win: Poll Window Events (Input, Resize, Close)
-        App->>Layer: OnUpdate(Timestep ts)
-        
-        alt Mode is Play (Simulation Active)
-            Layer->>Physics: Step(ts) (Fixed / Scaled DeltaTime)
-            Layer->>Scene: OnUpdateRuntime(ts)
-            Scene->>Scene: Update Native Scripts & Vehicle Kinematics
-            Scene->>Scene: Synchronize Physics Transforms to ECS
-        else Mode is Edit
-            Layer->>Scene: OnUpdateEditor(ts, EditorCamera)
-        end
-        
-        Layer->>Renderer: RenderScene(Scene, Camera, TargetFBO)
-        Renderer->>Renderer: Shadow Pass -> PBR Lighting Pass -> Skybox -> PostProcess
-        
-        App->>Layer: OnImGuiRender() (Editor only)
-        App->>Win: SwapBuffers()
-    end
-    
-    App->>Layer: OnDetach()
-    App->>App: Shutdown Subsystems
+flowchart TD
+    Editor[AxleEditor] --> UI[Editor UI]
+    Editor --> Scene[Scene and runtime integration]
+    Runtime[AxleRuntime] --> Scene
+    Runtime --> Plugins[Spline / Terrain]
+    Plugins --> UI
+    Plugins --> Scene
+    UI --> Scene
+    Scene --> Systems[Physics / Audio / Animation / VFX / Vehicle]
+    Scene --> Graphics[OpenGL Renderer / RHI]
+    Scene --> Assets[Asset and resource loading]
+    Scene --> UI2D[UI2D documents and canvas geometry]
 ```
 
-### Simulation State Management
-In `AxleEditor`, simulation state is managed through a **Safe 3-State Lifecycle**:
-1. **Edit Mode (`Stop`)**: The scene is in authoring mode. Jolt physics bodies are idle or uncreated. Viewport gizmos allow dragging and positioning entities.
-2. **Play Mode (`F5`)**: The editor creates a **deep ephemeral clone** of the editor scene with UUID remapping. Physics simulations, vehicle motors, audio, and gameplay scripts execute inside the runtime clone.
-3. **Pause / Step Mode (`F6` / `O`)**: Simulation pauses, allowing single-frame advance (1/60s) to inspect physics reactions and collision impulses.
-4. **Restoration (`F7` / `Esc`)**: The runtime scene is safely dismantled and destroyed. The original editor scene is restored with **zero lingering transform drift** or altered state.
+This is a selected dependency view, not a strict layer assignment. Most modules have their own CMake target and include/src directories. Spline and Terrain are static libraries combining runtime and editor code.
 
----
+## Important current boundaries
 
-## 💾 Memory & Resource Management Strategy
+- Core includes Application, which uses Platform, Renderer and Physics. Its public include paths expose those higher-level headers. Axle::Foundation is currently an alias of AxleCore rather than an independent foundation library.
+- Scene combines entity/component storage, hierarchy, simulation integration, scripts, serialization and rendering. It is not an isolated ECS-only module.
+- UI2D and UI are separate targets in Engine/UI. Scene links UI2D; the editor UI target links Scene. These do not form a target cycle.
+- Runtime links Spline/Terrain, whose public dependencies include editor UI. Runtime also stages Editor/assets and depends on the scripts target defined under Editor. It is therefore not yet independent at build level.
+- Renderer is the OpenGL path. RHI wraps NRI and exposes native types; several higher subsystems retain both rendering paths.
 
-* **RAII & Smart Pointers**: All heap-allocated resources are managed via standard RAII wrappers (`std::unique_ptr` and `std::shared_ptr`). Raw pointers are strictly non-owning.
-* **UUID-based Asset Referencing**: Every asset (mesh, material, texture, scene, audio clip) possesses a permanent 64-bit `Axle::UUID` declared in its companion `.meta` file. Changing filenames or directories does not break scene references.
-* **Flyweight Shared Assets**: Heavy GPU resources (Textures, Shaders, Materials, Meshes) are managed by `Axle::AssetManager` through centralized cache maps (`TextureCache`, `MaterialCache`, `MeshCache`). Multiple entities referencing the same material or mesh share a single GPU allocation.
-* **Binary Flat Caching (`.axlebin`)**: Human-readable 3D meshes (`.axle`) are automatically compiled into flat binary caches with microsecond load times. Modifying text automatically re-bakes the binary cache on the next run.
-* **Monolithic Virtual Packaging (`.axlepak`)**: For shipping distributions, the `AssetCooker` serializes all referenced assets into a single compressed binary package served transparently by `Axle::FileSystem` in memory.
+## Application and simulation lifecycle
+
+Application owns the window and optional UI context, holds a LayerStack and drives events, jobs, layer updates, UI hooks and buffer swapping. EditorLayer and RuntimeLayer compose application behavior through Layer hooks.
+
+Editor Play clones the edit scene into a separate registry while preserving entity UUIDs. Stop tears down runtime state, restores the edit scene and physics bodies, and rebinds panel contexts. Registry handles are distinct from persistent UUID identity.
+
+Current Editor Play calls Scene::OnUpdateRuntime before PhysicsScene::Step; standalone Runtime calls Step before OnUpdateRuntime. The editor applies simulation speed to physics separately. The sequence diagrams document these differences rather than presenting one idealized shared loop.
+
+## Rendering and UI
+
+Editor selects its backend through command-line/project settings and RHISwitcher, then uses SceneRenderer or RHISceneRenderer. Runtime Main uses Application's default OpenGL configuration and RuntimeLayer owns SceneRenderer. Backend parity between these products is not established by their shared subsystem names.
+
+HLSL Studio is connected to editor open callbacks and compiles selected stages through RHIShaderCompiler. Canvas2D produces CPU geometry and statistics; EndCanvas does not itself issue GPU commands. Editor ImGui previews are a separate integration path.
+
+## Ownership, concurrency and data
+
+Use RAII and explicit owners. Entity and panel contexts observe Scene; Scene owns its registry. Shared resources use shared references. Some GPU/OS wrappers own raw native handles and explicitly destroy them, so raw pointer syntax alone is not an ownership policy.
+
+JobSystem centralizes enkiTS scheduling, including Jolt work through JobSystemEnkiTS. ScriptCompiler has an additional worker thread, whose completion callback currently performs reload/editor state updates directly. Thread ownership is a design concern to address during modularization.
+
+AssetManager combines UUID metadata and shared resource caches. Missing metadata generates a new UUID, while .gitignore currently excludes .meta files. PackageWriter writes uncompressed chunks and a table of contents; AssetCooker traverses an asset directory and stages distribution files.
+
+## Direction for modular layering
+
+The proposed design extracts Application from Core, separates SceneData from subsystem bridges, splits runtime/editor plugins, separates asset identity from resource loading/tools, and establishes Renderer-to-RHI boundaries. CMake target checks and include checks must both enforce the policy. These changes are proposals; this documentation update does not implement a refactor.

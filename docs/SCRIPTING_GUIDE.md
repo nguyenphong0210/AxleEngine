@@ -1,5 +1,7 @@
 # ⚙️ C++ Native Scripting & Live Hot-Reload Guide
 
+For the implemented registry/DLL contracts, reload failure paths and worker-thread callback behavior, see [SDD: Native scripts](architecture/SDD.md#10-native-scripts-and-dll-boundary) and [reload sequence](architecture/RUNTIME_FLOWS.md#7-windows-script-compilation-and-reload). C-linkage exports still pass C++ metadata, so cross-toolchain ABI stability is not implied.
+
 AxleEngine adopts a high-performance **Hybrid ECS / C++ Native Scripting Architecture**. By writing gameplay code directly in native C++20, your game achieves zero language-bridge overhead, direct SIMD vectorization, and seamless integration with Jolt Physics and EnTT ECS—all while maintaining the ergonomic component-attachment workflows of Unity and Unreal Engine.
 
 ---

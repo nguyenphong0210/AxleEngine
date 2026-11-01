@@ -1,0 +1,453 @@
+# C++ Class and Struct Index
+
+This is a lexical declaration index, not a compiler AST. It includes nested/local/test types and duplicate names in samples. It does not resolve namespaces, aliases, templates or conditional compilation completely. See [class diagrams](CLASS_RELATIONSHIPS.md) for manually interpreted ownership and integration relationships.
+
+**445 declaration locations.**
+
+| Name | Declared base | Source |
+|---|---|---|
+| `CarController` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/CarController.hpp:11](../../Editor/assets/scripts/CarController.hpp#L11) |
+| `RacingHUD` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/RacingHUD.hpp:16](../../Editor/assets/scripts/RacingHUD.hpp#L16) |
+| `RotatorScript` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/RotatorScript.hpp:8](../../Editor/assets/scripts/RotatorScript.hpp#L8) |
+| `ThirdPersonCamera` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/ThirdPersonCamera.hpp:14](../../Editor/assets/scripts/ThirdPersonCamera.hpp#L14) |
+| `ThirdPersonController` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/ThirdPersonController.hpp:13](../../Editor/assets/scripts/ThirdPersonController.hpp#L13) |
+| `VehicleChaseCamera` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/VehicleChaseCamera.hpp:23](../../Editor/assets/scripts/VehicleChaseCamera.hpp#L23) |
+| `EditorLayer` | `public Axle::Layer` | [Editor/src/EditorLayer.hpp:40](../../Editor/src/EditorLayer.hpp#L40) |
+| `InitialBodyState` | `—` | [Editor/src/EditorLayer.hpp:203](../../Editor/src/EditorLayer.hpp#L203) |
+| `ModelImportModalData` | `—` | [Editor/src/EditorLayer.hpp:210](../../Editor/src/EditorLayer.hpp#L210) |
+| `MockTransparentItem` | `—` | [Editor/src/Tests/Test_Milestone10.cpp:333](../../Editor/src/Tests/Test_Milestone10.cpp#L333) |
+| `TestComponentItem` | `—` | [Editor/src/Tests/Test_Milestone3.cpp:394](../../Editor/src/Tests/Test_Milestone3.cpp#L394) |
+| `ReflectionDemoScript` | `public Axle::ScriptableEntity` | [Editor/src/Tests/Test_Milestone3.cpp:592](../../Editor/src/Tests/Test_Milestone3.cpp#L592) |
+| `WheelDef` | `—` | [Editor/src/Tests/Test_Milestone5.cpp:780](../../Editor/src/Tests/Test_Milestone5.cpp#L780) |
+| `WheelDef` | `—` | [Editor/src/Tests/Test_Milestone7.cpp:507](../../Editor/src/Tests/Test_Milestone7.cpp#L507) |
+| `Resolution` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:323](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L323) |
+| `VSInput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:522](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L522) |
+| `VSOutput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:528](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L528) |
+| `PSInput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:592](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L592) |
+| `PushConstants` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:694](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L694) |
+| `VSOut` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:699](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L699) |
+| `VSInput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:805](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L805) |
+| `VSOutput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:808](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L808) |
+| `VSOutput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:878](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L878) |
+| `VSInput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:932](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L932) |
+| `VSOutput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:942](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L942) |
+| `Particle` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1057](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1057) |
+| `VSOut` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1267](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1267) |
+| `TestData` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1805](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1805) |
+| `Vertex3D` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1846](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1846) |
+| `CameraUniforms` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1964](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1964) |
+| `ObjectUniforms` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1972](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1972) |
+| `Vertex2D` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:2002](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L2002) |
+| `RenderMeshTag` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:2283](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L2283) |
+| `VSOut` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:3572](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L3572) |
+| `ResizingStep` | `—` | [Editor/src/Tests/Test_Milestone8_Part3.cpp:2441](../../Editor/src/Tests/Test_Milestone8_Part3.cpp#L2441) |
+| `ScopedGLContext` | `—` | [Editor/src/Tests/TestCommon.hpp:159](../../Editor/src/Tests/TestCommon.hpp#L159) |
+| `CarPlayerScript` | `public Axle::ScriptableEntity` | [Editor/src/Tests/TestCommon.hpp:188](../../Editor/src/Tests/TestCommon.hpp#L188) |
+| `Keyframe` | `—` | [Engine/Animation/include/Axle/AnimationClip.hpp:14](../../Engine/Animation/include/Axle/AnimationClip.hpp#L14) |
+| `AnimationChannel` | `—` | [Engine/Animation/include/Axle/AnimationClip.hpp:19](../../Engine/Animation/include/Axle/AnimationClip.hpp#L19) |
+| `AnimationClip` | `—` | [Engine/Animation/include/Axle/AnimationClip.hpp:34](../../Engine/Animation/include/Axle/AnimationClip.hpp#L34) |
+| `BoneTransform` | `—` | [Engine/Animation/include/Axle/AnimationPose.hpp:10](../../Engine/Animation/include/Axle/AnimationPose.hpp#L10) |
+| `AnimationPose` | `—` | [Engine/Animation/include/Axle/AnimationPose.hpp:24](../../Engine/Animation/include/Axle/AnimationPose.hpp#L24) |
+| `AnimationState` | `—` | [Engine/Animation/include/Axle/AnimationStateMachine.hpp:19](../../Engine/Animation/include/Axle/AnimationStateMachine.hpp#L19) |
+| `AnimationTransition` | `—` | [Engine/Animation/include/Axle/AnimationStateMachine.hpp:32](../../Engine/Animation/include/Axle/AnimationStateMachine.hpp#L32) |
+| `AnimationStateMachine` | `—` | [Engine/Animation/include/Axle/AnimationStateMachine.hpp:41](../../Engine/Animation/include/Axle/AnimationStateMachine.hpp#L41) |
+| `Animator` | `—` | [Engine/Animation/include/Axle/Animator.hpp:12](../../Engine/Animation/include/Axle/Animator.hpp#L12) |
+| `BlendSpacePoint1D` | `—` | [Engine/Animation/include/Axle/BlendSpace1D.hpp:10](../../Engine/Animation/include/Axle/BlendSpace1D.hpp#L10) |
+| `BlendSpace1D` | `—` | [Engine/Animation/include/Axle/BlendSpace1D.hpp:15](../../Engine/Animation/include/Axle/BlendSpace1D.hpp#L15) |
+| `Bone` | `—` | [Engine/Animation/include/Axle/Bone.hpp:10](../../Engine/Animation/include/Axle/Bone.hpp#L10) |
+| `SkeletalVertex` | `—` | [Engine/Animation/include/Axle/SkeletalMesh.hpp:12](../../Engine/Animation/include/Axle/SkeletalMesh.hpp#L12) |
+| `SkeletalMeshData` | `—` | [Engine/Animation/include/Axle/SkeletalMesh.hpp:22](../../Engine/Animation/include/Axle/SkeletalMesh.hpp#L22) |
+| `SkeletalMesh` | `—` | [Engine/Animation/include/Axle/SkeletalMesh.hpp:29](../../Engine/Animation/include/Axle/SkeletalMesh.hpp#L29) |
+| `SkeletalMeshImporter` | `—` | [Engine/Animation/include/Axle/SkeletalMeshImporter.hpp:10](../../Engine/Animation/include/Axle/SkeletalMeshImporter.hpp#L10) |
+| `Skeleton` | `—` | [Engine/Animation/include/Axle/Skeleton.hpp:10](../../Engine/Animation/include/Axle/Skeleton.hpp#L10) |
+| `Face` | `—` | [Engine/Animation/src/SkeletalMeshImporter.cpp:479](../../Engine/Animation/src/SkeletalMeshImporter.cpp#L479) |
+| `CookSettings` | `—` | [Engine/Asset/include/Axle/AssetCooker.hpp:11](../../Engine/Asset/include/Axle/AssetCooker.hpp#L11) |
+| `CookResult` | `—` | [Engine/Asset/include/Axle/AssetCooker.hpp:21](../../Engine/Asset/include/Axle/AssetCooker.hpp#L21) |
+| `AssetCooker` | `—` | [Engine/Asset/include/Axle/AssetCooker.hpp:31](../../Engine/Asset/include/Axle/AssetCooker.hpp#L31) |
+| `AssetProperty` | `—` | [Engine/Asset/include/Axle/AssetDSL.hpp:24](../../Engine/Asset/include/Axle/AssetDSL.hpp#L24) |
+| `AssetBlock` | `—` | [Engine/Asset/include/Axle/AssetDSL.hpp:42](../../Engine/Asset/include/Axle/AssetDSL.hpp#L42) |
+| `AssetDocument` | `—` | [Engine/Asset/include/Axle/AssetDSL.hpp:72](../../Engine/Asset/include/Axle/AssetDSL.hpp#L72) |
+| `AssetDSL` | `—` | [Engine/Asset/include/Axle/AssetDSL.hpp:79](../../Engine/Asset/include/Axle/AssetDSL.hpp#L79) |
+| `AssetManager` | `—` | [Engine/Asset/include/Axle/AssetManager.hpp:16](../../Engine/Asset/include/Axle/AssetManager.hpp#L16) |
+| `AssetMetadata` | `—` | [Engine/Asset/include/Axle/AssetMetadata.hpp:9](../../Engine/Asset/include/Axle/AssetMetadata.hpp#L9) |
+| `AssetMetadataSerializer` | `—` | [Engine/Asset/include/Axle/AssetMetadataSerializer.hpp:7](../../Engine/Asset/include/Axle/AssetMetadataSerializer.hpp#L7) |
+| `AxleMeshSource` | `—` | [Engine/Asset/include/Axle/AssetSerializer.hpp:13](../../Engine/Asset/include/Axle/AssetSerializer.hpp#L13) |
+| `AxleLoadedMesh` | `—` | [Engine/Asset/include/Axle/AssetSerializer.hpp:27](../../Engine/Asset/include/Axle/AssetSerializer.hpp#L27) |
+| `AxleSubmeshSource` | `—` | [Engine/Asset/include/Axle/AssetSerializer.hpp:34](../../Engine/Asset/include/Axle/AssetSerializer.hpp#L34) |
+| `AxlePackagePart` | `—` | [Engine/Asset/include/Axle/AssetSerializer.hpp:52](../../Engine/Asset/include/Axle/AssetSerializer.hpp#L52) |
+| `AxleLoadedPackage` | `—` | [Engine/Asset/include/Axle/AssetSerializer.hpp:61](../../Engine/Asset/include/Axle/AssetSerializer.hpp#L61) |
+| `AssetSerializer` | `—` | [Engine/Asset/include/Axle/AssetSerializer.hpp:70](../../Engine/Asset/include/Axle/AssetSerializer.hpp#L70) |
+| `AssetCompileResult` | `—` | [Engine/Asset/include/Axle/AssetSerializer.hpp:142](../../Engine/Asset/include/Axle/AssetSerializer.hpp#L142) |
+| `TerrainAsset` | `—` | [Engine/Asset/include/Axle/TerrainAsset.hpp:12](../../Engine/Asset/include/Axle/TerrainAsset.hpp#L12) |
+| `TextureDescriptor` | `—` | [Engine/Asset/include/Axle/TextureDescriptor.hpp:16](../../Engine/Asset/include/Axle/TextureDescriptor.hpp#L16) |
+| `HeaderProps` | `—` | [Engine/Asset/src/AssetSerializer.cpp:387](../../Engine/Asset/src/AssetSerializer.cpp#L387) |
+| `ObjGroupData` | `—` | [Engine/Asset/src/AssetSerializer.cpp:751](../../Engine/Asset/src/AssetSerializer.cpp#L751) |
+| `RawPart` | `—` | [Engine/Asset/src/AssetSerializer.cpp:932](../../Engine/Asset/src/AssetSerializer.cpp#L932) |
+| `RawPart` | `—` | [Engine/Asset/src/AssetSerializer.cpp:1146](../../Engine/Asset/src/AssetSerializer.cpp#L1146) |
+| `AudioClip` | `—` | [Engine/Audio/include/Axle/AudioClip.hpp:15](../../Engine/Audio/include/Axle/AudioClip.hpp#L15) |
+| `AudioEngineSpecification` | `—` | [Engine/Audio/include/Axle/AudioEngine.hpp:16](../../Engine/Audio/include/Axle/AudioEngine.hpp#L16) |
+| `AudioEngine` | `—` | [Engine/Audio/include/Axle/AudioEngine.hpp:23](../../Engine/Audio/include/Axle/AudioEngine.hpp#L23) |
+| `AudioListener` | `—` | [Engine/Audio/include/Axle/AudioListener.hpp:7](../../Engine/Audio/include/Axle/AudioListener.hpp#L7) |
+| `AudioSource` | `—` | [Engine/Audio/include/Axle/AudioSource.hpp:25](../../Engine/Audio/include/Axle/AudioSource.hpp#L25) |
+| `ApplicationSpecification` | `—` | [Engine/Core/include/Axle/Application.hpp:14](../../Engine/Core/include/Axle/Application.hpp#L14) |
+| `Application` | `—` | [Engine/Core/include/Axle/Application.hpp:23](../../Engine/Core/include/Axle/Application.hpp#L23) |
+| `ApplicationUIContext` | `—` | [Engine/Core/include/Axle/ApplicationUI.hpp:7](../../Engine/Core/include/Axle/ApplicationUI.hpp#L7) |
+| `FileSystem` | `—` | [Engine/Core/include/Axle/FileSystem.hpp:11](../../Engine/Core/include/Axle/FileSystem.hpp#L11) |
+| `JobHandle` | `—` | [Engine/Core/include/Axle/JobSystem.hpp:16](../../Engine/Core/include/Axle/JobSystem.hpp#L16) |
+| `JobSystem` | `—` | [Engine/Core/include/Axle/JobSystem.hpp:32](../../Engine/Core/include/Axle/JobSystem.hpp#L32) |
+| `LambdaTaskSet` | `public enki::ITaskSet` | [Engine/Core/include/Axle/JobSystem.hpp:92](../../Engine/Core/include/Axle/JobSystem.hpp#L92) |
+| `LambdaRangeTaskSet` | `public enki::ITaskSet` | [Engine/Core/include/Axle/JobSystem.hpp:127](../../Engine/Core/include/Axle/JobSystem.hpp#L127) |
+| `Layer` | `—` | [Engine/Core/include/Axle/Layer.hpp:9](../../Engine/Core/include/Axle/Layer.hpp#L9) |
+| `LayerStack` | `—` | [Engine/Core/include/Axle/LayerStack.hpp:8](../../Engine/Core/include/Axle/LayerStack.hpp#L8) |
+| `Log` | `—` | [Engine/Core/include/Axle/Log.hpp:7](../../Engine/Core/include/Axle/Log.hpp#L7) |
+| `PackageHeader` | `—` | [Engine/Core/include/Axle/Package.hpp:14](../../Engine/Core/include/Axle/Package.hpp#L14) |
+| `PackageEntry` | `—` | [Engine/Core/include/Axle/Package.hpp:26](../../Engine/Core/include/Axle/Package.hpp#L26) |
+| `Package` | `—` | [Engine/Core/include/Axle/Package.hpp:37](../../Engine/Core/include/Axle/Package.hpp#L37) |
+| `PackageWriter` | `—` | [Engine/Core/include/Axle/Package.hpp:74](../../Engine/Core/include/Axle/Package.hpp#L74) |
+| `PendingEntry` | `—` | [Engine/Core/include/Axle/Package.hpp:87](../../Engine/Core/include/Axle/Package.hpp#L87) |
+| `Timestep` | `—` | [Engine/Core/include/Axle/Timestep.hpp:6](../../Engine/Core/include/Axle/Timestep.hpp#L6) |
+| `UUID` | `—` | [Engine/Core/include/Axle/UUID.hpp:6](../../Engine/Core/include/Axle/UUID.hpp#L6) |
+| `JobSystemData` | `—` | [Engine/Core/src/JobSystem.cpp:10](../../Engine/Core/src/JobSystem.cpp#L10) |
+| `AsyncLambdaTask` | `public enki::ITaskSet` | [Engine/Core/src/JobSystem.cpp:143](../../Engine/Core/src/JobSystem.cpp#L143) |
+| `CharacterControllerSettings` | `—` | [Engine/Physics/include/Axle/CharacterController.hpp:21](../../Engine/Physics/include/Axle/CharacterController.hpp#L21) |
+| `CharacterController` | `—` | [Engine/Physics/include/Axle/CharacterController.hpp:36](../../Engine/Physics/include/Axle/CharacterController.hpp#L36) |
+| `CharacterContactListenerImpl` | `public JPH::CharacterContactListener` | [Engine/Physics/include/Axle/CharacterController.hpp:100](../../Engine/Physics/include/Axle/CharacterController.hpp#L100) |
+| `JobSystemEnkiTS` | `public JPH::JobSystemWithBarrier` | [Engine/Physics/include/Axle/JobSystemEnkiTS.hpp:21](../../Engine/Physics/include/Axle/JobSystemEnkiTS.hpp#L21) |
+| `EnkiJob` | `public Job` | [Engine/Physics/include/Axle/JobSystemEnkiTS.hpp:41](../../Engine/Physics/include/Axle/JobSystemEnkiTS.hpp#L41) |
+| `EnkiTask` | `public enki::ITaskSet` | [Engine/Physics/include/Axle/JobSystemEnkiTS.hpp:47](../../Engine/Physics/include/Axle/JobSystemEnkiTS.hpp#L47) |
+| `DebugLineVertex` | `—` | [Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp:17](../../Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp#L17) |
+| `PhysicsDebugRenderer` | `public JPH::DebugRendererSimple` | [Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp:23](../../Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp#L23) |
+| `PhysicsEngine` | `—` | [Engine/Physics/include/Axle/PhysicsEngine.hpp:6](../../Engine/Physics/include/Axle/PhysicsEngine.hpp#L6) |
+| `ObjectLayerPairFilterImpl` | `public JPH::ObjectLayerPairFilter` | [Engine/Physics/include/Axle/PhysicsLayers.hpp:22](../../Engine/Physics/include/Axle/PhysicsLayers.hpp#L22) |
+| `BPLayerInterfaceImpl` | `public JPH::BroadPhaseLayerInterface` | [Engine/Physics/include/Axle/PhysicsLayers.hpp:38](../../Engine/Physics/include/Axle/PhysicsLayers.hpp#L38) |
+| `ObjectVsBroadPhaseLayerFilterImpl` | `public JPH::ObjectVsBroadPhaseLayerFilter` | [Engine/Physics/include/Axle/PhysicsLayers.hpp:69](../../Engine/Physics/include/Axle/PhysicsLayers.hpp#L69) |
+| `PhysicsMaterial` | `—` | [Engine/Physics/include/Axle/PhysicsMaterial.hpp:13](../../Engine/Physics/include/Axle/PhysicsMaterial.hpp#L13) |
+| `PhysicsSettings` | `—` | [Engine/Physics/include/Axle/PhysicsScene.hpp:25](../../Engine/Physics/include/Axle/PhysicsScene.hpp#L25) |
+| `RayCastHit` | `—` | [Engine/Physics/include/Axle/PhysicsScene.hpp:34](../../Engine/Physics/include/Axle/PhysicsScene.hpp#L34) |
+| `BoxBodyProps` | `—` | [Engine/Physics/include/Axle/PhysicsScene.hpp:40](../../Engine/Physics/include/Axle/PhysicsScene.hpp#L40) |
+| `SphereBodyProps` | `—` | [Engine/Physics/include/Axle/PhysicsScene.hpp:51](../../Engine/Physics/include/Axle/PhysicsScene.hpp#L51) |
+| `CylinderBodyProps` | `—` | [Engine/Physics/include/Axle/PhysicsScene.hpp:62](../../Engine/Physics/include/Axle/PhysicsScene.hpp#L62) |
+| `ConeBodyProps` | `—` | [Engine/Physics/include/Axle/PhysicsScene.hpp:74](../../Engine/Physics/include/Axle/PhysicsScene.hpp#L74) |
+| `PlaneBodyProps` | `—` | [Engine/Physics/include/Axle/PhysicsScene.hpp:86](../../Engine/Physics/include/Axle/PhysicsScene.hpp#L86) |
+| `PhysicsDrawSettings` | `—` | [Engine/Physics/include/Axle/PhysicsScene.hpp:95](../../Engine/Physics/include/Axle/PhysicsScene.hpp#L95) |
+| `PhysicsScene` | `—` | [Engine/Physics/include/Axle/PhysicsScene.hpp:105](../../Engine/Physics/include/Axle/PhysicsScene.hpp#L105) |
+| `RHIDebugLineVertex` | `—` | [Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp:24](../../Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp#L24) |
+| `RHIPhysicsDebugConstants` | `—` | [Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp:33](../../Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp#L33) |
+| `JoltInitHelper` | `—` | [Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp:41](../../Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp#L41) |
+| `RHIPhysicsDebugRenderer` | `private Internal::JoltInitHelper, public JPH::DebugRendererSimple` | [Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp:49](../../Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp#L49) |
+| `WindowResizeEvent` | `—` | [Engine/Platform/include/Axle/Events.hpp:8](../../Engine/Platform/include/Axle/Events.hpp#L8) |
+| `WindowCloseEvent` | `—` | [Engine/Platform/include/Axle/Events.hpp:13](../../Engine/Platform/include/Axle/Events.hpp#L13) |
+| `KeyPressedEvent` | `—` | [Engine/Platform/include/Axle/Events.hpp:16](../../Engine/Platform/include/Axle/Events.hpp#L16) |
+| `KeyReleasedEvent` | `—` | [Engine/Platform/include/Axle/Events.hpp:21](../../Engine/Platform/include/Axle/Events.hpp#L21) |
+| `MouseMovedEvent` | `—` | [Engine/Platform/include/Axle/Events.hpp:26](../../Engine/Platform/include/Axle/Events.hpp#L26) |
+| `MouseScrolledEvent` | `—` | [Engine/Platform/include/Axle/Events.hpp:31](../../Engine/Platform/include/Axle/Events.hpp#L31) |
+| `MouseButtonPressedEvent` | `—` | [Engine/Platform/include/Axle/Events.hpp:36](../../Engine/Platform/include/Axle/Events.hpp#L36) |
+| `MouseButtonReleasedEvent` | `—` | [Engine/Platform/include/Axle/Events.hpp:40](../../Engine/Platform/include/Axle/Events.hpp#L40) |
+| `InputContext` | `—` | [Engine/Platform/include/Axle/Input.hpp:9](../../Engine/Platform/include/Axle/Input.hpp#L9) |
+| `Input` | `—` | [Engine/Platform/include/Axle/Input.hpp:22](../../Engine/Platform/include/Axle/Input.hpp#L22) |
+| `FileDialogs` | `—` | [Engine/Platform/include/Axle/PlatformUtils.hpp:6](../../Engine/Platform/include/Axle/PlatformUtils.hpp#L6) |
+| `WindowProps` | `—` | [Engine/Platform/include/Axle/Window.hpp:18](../../Engine/Platform/include/Axle/Window.hpp#L18) |
+| `Window` | `—` | [Engine/Platform/include/Axle/Window.hpp:27](../../Engine/Platform/include/Axle/Window.hpp#L27) |
+| `WindowData` | `—` | [Engine/Platform/include/Axle/Window.hpp:85](../../Engine/Platform/include/Axle/Window.hpp#L85) |
+| `ProjectConfig` | `—` | [Engine/Project/include/Axle/Project.hpp:9](../../Engine/Project/include/Axle/Project.hpp#L9) |
+| `Project` | `—` | [Engine/Project/include/Axle/Project.hpp:16](../../Engine/Project/include/Axle/Project.hpp#L16) |
+| `ProjectSerializer` | `—` | [Engine/Project/include/Axle/ProjectSerializer.hpp:8](../../Engine/Project/include/Axle/ProjectSerializer.hpp#L8) |
+| `BufferElement` | `—` | [Engine/Renderer/include/Axle/Buffer.hpp:34](../../Engine/Renderer/include/Axle/Buffer.hpp#L34) |
+| `BufferLayout` | `—` | [Engine/Renderer/include/Axle/Buffer.hpp:60](../../Engine/Renderer/include/Axle/Buffer.hpp#L60) |
+| `VertexBuffer` | `—` | [Engine/Renderer/include/Axle/Buffer.hpp:87](../../Engine/Renderer/include/Axle/Buffer.hpp#L87) |
+| `IndexBuffer` | `—` | [Engine/Renderer/include/Axle/Buffer.hpp:106](../../Engine/Renderer/include/Axle/Buffer.hpp#L106) |
+| `CubemapSpecification` | `—` | [Engine/Renderer/include/Axle/Cubemap.hpp:11](../../Engine/Renderer/include/Axle/Cubemap.hpp#L11) |
+| `IBLMaps` | `—` | [Engine/Renderer/include/Axle/Cubemap.hpp:18](../../Engine/Renderer/include/Axle/Cubemap.hpp#L18) |
+| `Cubemap` | `—` | [Engine/Renderer/include/Axle/Cubemap.hpp:25](../../Engine/Renderer/include/Axle/Cubemap.hpp#L25) |
+| `FramebufferSpecification` | `—` | [Engine/Renderer/include/Axle/Framebuffer.hpp:7](../../Engine/Renderer/include/Axle/Framebuffer.hpp#L7) |
+| `Framebuffer` | `—` | [Engine/Renderer/include/Axle/Framebuffer.hpp:14](../../Engine/Renderer/include/Axle/Framebuffer.hpp#L14) |
+| `Material` | `—` | [Engine/Renderer/include/Axle/Material.hpp:14](../../Engine/Renderer/include/Axle/Material.hpp#L14) |
+| `PerspectiveCamera` | `—` | [Engine/Renderer/include/Axle/PerspectiveCamera.hpp:12](../../Engine/Renderer/include/Axle/PerspectiveCamera.hpp#L12) |
+| `PerspectiveCameraController` | `—` | [Engine/Renderer/include/Axle/PerspectiveCameraController.hpp:9](../../Engine/Renderer/include/Axle/PerspectiveCameraController.hpp#L9) |
+| `MeshInfo` | `—` | [Engine/Renderer/include/Axle/PrimitiveMesh.hpp:9](../../Engine/Renderer/include/Axle/PrimitiveMesh.hpp#L9) |
+| `PrimitiveMesh` | `—` | [Engine/Renderer/include/Axle/PrimitiveMesh.hpp:15](../../Engine/Renderer/include/Axle/PrimitiveMesh.hpp#L15) |
+| `RenderCommand` | `—` | [Engine/Renderer/include/Axle/RenderCommand.hpp:11](../../Engine/Renderer/include/Axle/RenderCommand.hpp#L11) |
+| `Shader` | `—` | [Engine/Renderer/include/Axle/Shader.hpp:9](../../Engine/Renderer/include/Axle/Shader.hpp#L9) |
+| `ShadowMapSpecification` | `—` | [Engine/Renderer/include/Axle/ShadowMap.hpp:12](../../Engine/Renderer/include/Axle/ShadowMap.hpp#L12) |
+| `ShadowMap` | `—` | [Engine/Renderer/include/Axle/ShadowMap.hpp:23](../../Engine/Renderer/include/Axle/ShadowMap.hpp#L23) |
+| `SkinningPipeline` | `—` | [Engine/Renderer/include/Axle/SkinningPipeline.hpp:11](../../Engine/Renderer/include/Axle/SkinningPipeline.hpp#L11) |
+| `SkyboxSpecification` | `—` | [Engine/Renderer/include/Axle/Skybox.hpp:18](../../Engine/Renderer/include/Axle/Skybox.hpp#L18) |
+| `Skybox` | `—` | [Engine/Renderer/include/Axle/Skybox.hpp:36](../../Engine/Renderer/include/Axle/Skybox.hpp#L36) |
+| `TextureSpecification` | `—` | [Engine/Renderer/include/Axle/Texture2D.hpp:28](../../Engine/Renderer/include/Axle/Texture2D.hpp#L28) |
+| `Texture2D` | `—` | [Engine/Renderer/include/Axle/Texture2D.hpp:41](../../Engine/Renderer/include/Axle/Texture2D.hpp#L41) |
+| `VertexArray` | `—` | [Engine/Renderer/include/Axle/VertexArray.hpp:8](../../Engine/Renderer/include/Axle/VertexArray.hpp#L8) |
+| `OpenGLFramebuffer` | `public Framebuffer` | [Engine/Renderer/src/Framebuffer.cpp:7](../../Engine/Renderer/src/Framebuffer.cpp#L7) |
+| `RHITextureBarrier` | `—` | [Engine/RHI/include/Axle/RHI/RHIBarrier.hpp:127](../../Engine/RHI/include/Axle/RHI/RHIBarrier.hpp#L127) |
+| `RHIBufferBarrier` | `—` | [Engine/RHI/include/Axle/RHI/RHIBarrier.hpp:179](../../Engine/RHI/include/Axle/RHI/RHIBarrier.hpp#L179) |
+| `RHIGlobalBarrier` | `—` | [Engine/RHI/include/Axle/RHI/RHIBarrier.hpp:201](../../Engine/RHI/include/Axle/RHI/RHIBarrier.hpp#L201) |
+| `RHIBarrierGroup` | `—` | [Engine/RHI/include/Axle/RHI/RHIBarrier.hpp:224](../../Engine/RHI/include/Axle/RHI/RHIBarrier.hpp#L224) |
+| `RHIBufferState` | `—` | [Engine/RHI/include/Axle/RHI/RHIBarrier.hpp:289](../../Engine/RHI/include/Axle/RHI/RHIBarrier.hpp#L289) |
+| `RHIResourceStateTracker` | `—` | [Engine/RHI/include/Axle/RHI/RHIBarrier.hpp:294](../../Engine/RHI/include/Axle/RHI/RHIBarrier.hpp#L294) |
+| `RHIBindlessRegistry` | `—` | [Engine/RHI/include/Axle/RHI/RHIBindless.hpp:18](../../Engine/RHI/include/Axle/RHI/RHIBindless.hpp#L18) |
+| `RHIBufferDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIBuffer.hpp:60](../../Engine/RHI/include/Axle/RHI/RHIBuffer.hpp#L60) |
+| `RHIBuffer` | `—` | [Engine/RHI/include/Axle/RHI/RHIBuffer.hpp:120](../../Engine/RHI/include/Axle/RHI/RHIBuffer.hpp#L120) |
+| `RHIVideoMemoryInfo` | `—` | [Engine/RHI/include/Axle/RHI/RHIBuffer.hpp:175](../../Engine/RHI/include/Axle/RHI/RHIBuffer.hpp#L175) |
+| `RHIMemoryManager` | `—` | [Engine/RHI/include/Axle/RHI/RHIBuffer.hpp:183](../../Engine/RHI/include/Axle/RHI/RHIBuffer.hpp#L183) |
+| `RHICommandBuffer` | `—` | [Engine/RHI/include/Axle/RHI/RHICommandBuffer.hpp:21](../../Engine/RHI/include/Axle/RHI/RHICommandBuffer.hpp#L21) |
+| `RHIAdapterInfo` | `—` | [Engine/RHI/include/Axle/RHI/RHICommon.hpp:38](../../Engine/RHI/include/Axle/RHI/RHICommon.hpp#L38) |
+| `RHIDeviceCapabilities` | `—` | [Engine/RHI/include/Axle/RHI/RHICommon.hpp:52](../../Engine/RHI/include/Axle/RHI/RHICommon.hpp#L52) |
+| `RHIDeviceDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHICommon.hpp:80](../../Engine/RHI/include/Axle/RHI/RHICommon.hpp#L80) |
+| `RHIDescriptorPoolDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIDescriptorPool.hpp:15](../../Engine/RHI/include/Axle/RHI/RHIDescriptorPool.hpp#L15) |
+| `RHIDescriptorPool` | `—` | [Engine/RHI/include/Axle/RHI/RHIDescriptorPool.hpp:38](../../Engine/RHI/include/Axle/RHI/RHIDescriptorPool.hpp#L38) |
+| `NRIInterfaces` | `—` | [Engine/RHI/include/Axle/RHI/RHIDevice.hpp:16](../../Engine/RHI/include/Axle/RHI/RHIDevice.hpp#L16) |
+| `RHIDevice` | `—` | [Engine/RHI/include/Axle/RHI/RHIDevice.hpp:24](../../Engine/RHI/include/Axle/RHI/RHIDevice.hpp#L24) |
+| `GPUInstanceData` | `—` | [Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp:26](../../Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp#L26) |
+| `GPUIndirectDrawCommand` | `—` | [Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp:39](../../Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp#L39) |
+| `GPUIndirectDrawIndexedCommand` | `—` | [Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp:47](../../Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp#L47) |
+| `RHIECSStreamResult` | `—` | [Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp:57](../../Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp#L57) |
+| `RHIMeshBatchKey` | `—` | [Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp:67](../../Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp#L67) |
+| `RHIMultiMeshBatch` | `—` | [Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp:75](../../Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp#L75) |
+| `RHIECSStreamer` | `—` | [Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp:80](../../Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp#L80) |
+| `RHIDirectionalLight` | `—` | [Engine/RHI/include/Axle/RHI/RHILight.hpp:37](../../Engine/RHI/include/Axle/RHI/RHILight.hpp#L37) |
+| `RHIPointLight` | `—` | [Engine/RHI/include/Axle/RHI/RHILight.hpp:66](../../Engine/RHI/include/Axle/RHI/RHILight.hpp#L66) |
+| `RHISpotLight` | `—` | [Engine/RHI/include/Axle/RHI/RHILight.hpp:102](../../Engine/RHI/include/Axle/RHI/RHILight.hpp#L102) |
+| `RHIGPUDirectionalLight` | `—` | [Engine/RHI/include/Axle/RHI/RHILight.hpp:155](../../Engine/RHI/include/Axle/RHI/RHILight.hpp#L155) |
+| `RHIGPUPointLight` | `—` | [Engine/RHI/include/Axle/RHI/RHILight.hpp:163](../../Engine/RHI/include/Axle/RHI/RHILight.hpp#L163) |
+| `RHIGPUSpotLight` | `—` | [Engine/RHI/include/Axle/RHI/RHILight.hpp:171](../../Engine/RHI/include/Axle/RHI/RHILight.hpp#L171) |
+| `RHIMultiLightBufferData` | `—` | [Engine/RHI/include/Axle/RHI/RHILight.hpp:179](../../Engine/RHI/include/Axle/RHI/RHILight.hpp#L179) |
+| `RHIMultiLightBuffer` | `—` | [Engine/RHI/include/Axle/RHI/RHILight.hpp:196](../../Engine/RHI/include/Axle/RHI/RHILight.hpp#L196) |
+| `RHIMaterialDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIMaterial.hpp:42](../../Engine/RHI/include/Axle/RHI/RHIMaterial.hpp#L42) |
+| `RHIMaterial` | `—` | [Engine/RHI/include/Axle/RHI/RHIMaterial.hpp:68](../../Engine/RHI/include/Axle/RHI/RHIMaterial.hpp#L68) |
+| `RHISubmesh` | `—` | [Engine/RHI/include/Axle/RHI/RHIMesh.hpp:16](../../Engine/RHI/include/Axle/RHI/RHIMesh.hpp#L16) |
+| `RHIMesh` | `—` | [Engine/RHI/include/Axle/RHI/RHIMesh.hpp:26](../../Engine/RHI/include/Axle/RHI/RHIMesh.hpp#L26) |
+| `RHIPipelineLayout` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:20](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L20) |
+| `RHIRasterizerDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:58](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L58) |
+| `RHIDepthStencilDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:68](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L68) |
+| `RHIBlendAttachmentDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:77](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L77) |
+| `RHIInputAssemblyDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:130](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L130) |
+| `RHIVertexLayoutAttribute` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:136](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L136) |
+| `RHIVertexStream` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:145](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L145) |
+| `RHIVertexInputDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:151](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L151) |
+| `RHIGraphicsPipelineDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:156](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L156) |
+| `RHIComputePipelineDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:168](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L168) |
+| `RHIPipelineCache` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:185](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L185) |
+| `PipelineEntry` | `—` | [Engine/RHI/include/Axle/RHI/RHIPipeline.hpp:227](../../Engine/RHI/include/Axle/RHI/RHIPipeline.hpp#L227) |
+| `RHISamplerDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHISampler.hpp:76](../../Engine/RHI/include/Axle/RHI/RHISampler.hpp#L76) |
+| `RHISampler` | `—` | [Engine/RHI/include/Axle/RHI/RHISampler.hpp:167](../../Engine/RHI/include/Axle/RHI/RHISampler.hpp#L167) |
+| `RHIShaderMacro` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:37](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L37) |
+| `RHIShaderCompileDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:42](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L42) |
+| `RHIShaderBytecode` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:58](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L58) |
+| `RHIShaderVariable` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:92](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L92) |
+| `RHIShaderConstantBuffer` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:98](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L98) |
+| `RHIShaderResourceBinding` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:106](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L106) |
+| `RHIVertexAttribute` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:115](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L115) |
+| `RHIAutoPipelineLayout` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:122](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L122) |
+| `DescriptorSetStorage` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:127](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L127) |
+| `RHIShaderReflection` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:141](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L141) |
+| `RHIShaderCompileResult` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:171](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L171) |
+| `RHIShaderCompiler` | `—` | [Engine/RHI/include/Axle/RHI/RHIShader.hpp:181](../../Engine/RHI/include/Axle/RHI/RHIShader.hpp#L181) |
+| `RHIStreamerDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIStreamer.hpp:26](../../Engine/RHI/include/Axle/RHI/RHIStreamer.hpp#L26) |
+| `RHIStreamedBuffer` | `—` | [Engine/RHI/include/Axle/RHI/RHIStreamer.hpp:40](../../Engine/RHI/include/Axle/RHI/RHIStreamer.hpp#L40) |
+| `RHIStreamChunk` | `—` | [Engine/RHI/include/Axle/RHI/RHIStreamer.hpp:48](../../Engine/RHI/include/Axle/RHI/RHIStreamer.hpp#L48) |
+| `RHIStreamTextureDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHIStreamer.hpp:53](../../Engine/RHI/include/Axle/RHI/RHIStreamer.hpp#L53) |
+| `RHIStreamer` | `—` | [Engine/RHI/include/Axle/RHI/RHIStreamer.hpp:71](../../Engine/RHI/include/Axle/RHI/RHIStreamer.hpp#L71) |
+| `RHISurface` | `—` | [Engine/RHI/include/Axle/RHI/RHISurface.hpp:12](../../Engine/RHI/include/Axle/RHI/RHISurface.hpp#L12) |
+| `RHISwapChainDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHISwapChain.hpp:11](../../Engine/RHI/include/Axle/RHI/RHISwapChain.hpp#L11) |
+| `SwapChainTextureEntry` | `—` | [Engine/RHI/include/Axle/RHI/RHISwapChain.hpp:20](../../Engine/RHI/include/Axle/RHI/RHISwapChain.hpp#L20) |
+| `FrameInFlight` | `—` | [Engine/RHI/include/Axle/RHI/RHISwapChain.hpp:26](../../Engine/RHI/include/Axle/RHI/RHISwapChain.hpp#L26) |
+| `RHISwapChain` | `—` | [Engine/RHI/include/Axle/RHI/RHISwapChain.hpp:31](../../Engine/RHI/include/Axle/RHI/RHISwapChain.hpp#L31) |
+| `RHIBackendConfig` | `—` | [Engine/RHI/include/Axle/RHI/RHISwitcher.hpp:11](../../Engine/RHI/include/Axle/RHI/RHISwitcher.hpp#L11) |
+| `RHISwitcher` | `—` | [Engine/RHI/include/Axle/RHI/RHISwitcher.hpp:19](../../Engine/RHI/include/Axle/RHI/RHISwitcher.hpp#L19) |
+| `RHITextureDesc` | `—` | [Engine/RHI/include/Axle/RHI/RHITexture.hpp:78](../../Engine/RHI/include/Axle/RHI/RHITexture.hpp#L78) |
+| `RHITexture` | `—` | [Engine/RHI/include/Axle/RHI/RHITexture.hpp:134](../../Engine/RHI/include/Axle/RHI/RHITexture.hpp#L134) |
+| `RHIObjectPushConstants` | `—` | [Engine/RHI/include/Axle/RHI/RHITransform.hpp:18](../../Engine/RHI/include/Axle/RHI/RHITransform.hpp#L18) |
+| `RHISceneConstants` | `—` | [Engine/RHI/include/Axle/RHI/RHITransform.hpp:41](../../Engine/RHI/include/Axle/RHI/RHITransform.hpp#L41) |
+| `RHIVertex3D` | `—` | [Engine/RHI/include/Axle/RHI/RHIVertexLayout.hpp:13](../../Engine/RHI/include/Axle/RHI/RHIVertexLayout.hpp#L13) |
+| `RHISkinnedVertex3D` | `—` | [Engine/RHI/include/Axle/RHI/RHIVertexLayout.hpp:31](../../Engine/RHI/include/Axle/RHI/RHIVertexLayout.hpp#L31) |
+| `FaceDef` | `—` | [Engine/RHI/src/RHIMesh.cpp:215](../../Engine/RHI/src/RHIMesh.cpp#L215) |
+| `SmoothingGroup` | `—` | [Engine/RHI/src/RHIMesh.cpp:693](../../Engine/RHI/src/RHIMesh.cpp#L693) |
+| `AssemblyNode` | `—` | [Engine/Scene/include/Axle/AssemblySerializer.hpp:17](../../Engine/Scene/include/Axle/AssemblySerializer.hpp#L17) |
+| `AssemblyData` | `—` | [Engine/Scene/include/Axle/AssemblySerializer.hpp:31](../../Engine/Scene/include/Axle/AssemblySerializer.hpp#L31) |
+| `AssemblySerializer` | `—` | [Engine/Scene/include/Axle/AssemblySerializer.hpp:38](../../Engine/Scene/include/Axle/AssemblySerializer.hpp#L38) |
+| `CharacterVFXConfig` | `—` | [Engine/Scene/include/Axle/CharacterVFX.hpp:15](../../Engine/Scene/include/Axle/CharacterVFX.hpp#L15) |
+| `CharacterVFX` | `—` | [Engine/Scene/include/Axle/CharacterVFX.hpp:37](../../Engine/Scene/include/Axle/CharacterVFX.hpp#L37) |
+| `IDComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:39](../../Engine/Scene/include/Axle/Components.hpp#L39) |
+| `TagComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:47](../../Engine/Scene/include/Axle/Components.hpp#L47) |
+| `TransformComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:55](../../Engine/Scene/include/Axle/Components.hpp#L55) |
+| `MeshInstance3D` | `—` | [Engine/Scene/include/Axle/Components.hpp:82](../../Engine/Scene/include/Axle/Components.hpp#L82) |
+| `MaterialComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:108](../../Engine/Scene/include/Axle/Components.hpp#L108) |
+| `CollisionShape3D` | `—` | [Engine/Scene/include/Axle/Components.hpp:639](../../Engine/Scene/include/Axle/Components.hpp#L639) |
+| `RigidBody3D` | `—` | [Engine/Scene/include/Axle/Components.hpp:685](../../Engine/Scene/include/Axle/Components.hpp#L685) |
+| `HierarchyComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:705](../../Engine/Scene/include/Axle/Components.hpp#L705) |
+| `NativeScriptComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:719](../../Engine/Scene/include/Axle/Components.hpp#L719) |
+| `VehicleComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:758](../../Engine/Scene/include/Axle/Components.hpp#L758) |
+| `WheelComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:810](../../Engine/Scene/include/Axle/Components.hpp#L810) |
+| `DirectionalLightComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:846](../../Engine/Scene/include/Axle/Components.hpp#L846) |
+| `PointLightComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:887](../../Engine/Scene/include/Axle/Components.hpp#L887) |
+| `SpotLightComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:898](../../Engine/Scene/include/Axle/Components.hpp#L898) |
+| `CameraComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:913](../../Engine/Scene/include/Axle/Components.hpp#L913) |
+| `SkyboxComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:929](../../Engine/Scene/include/Axle/Components.hpp#L929) |
+| `AssemblyComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1005](../../Engine/Scene/include/Axle/Components.hpp#L1005) |
+| `AudioListenerComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1015](../../Engine/Scene/include/Axle/Components.hpp#L1015) |
+| `AudioSourceComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1023](../../Engine/Scene/include/Axle/Components.hpp#L1023) |
+| `VehicleAudioComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1109](../../Engine/Scene/include/Axle/Components.hpp#L1109) |
+| `SkeletalMeshComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1199](../../Engine/Scene/include/Axle/Components.hpp#L1199) |
+| `AnimatorComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1216](../../Engine/Scene/include/Axle/Components.hpp#L1216) |
+| `CharacterControllerComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1260](../../Engine/Scene/include/Axle/Components.hpp#L1260) |
+| `ParticleEmitterStack` | `—` | [Engine/Scene/include/Axle/Components.hpp:1326](../../Engine/Scene/include/Axle/Components.hpp#L1326) |
+| `ParticleEmitterComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1351](../../Engine/Scene/include/Axle/Components.hpp#L1351) |
+| `VehicleVFXComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1523](../../Engine/Scene/include/Axle/Components.hpp#L1523) |
+| `CharacterVFXComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1554](../../Engine/Scene/include/Axle/Components.hpp#L1554) |
+| `UICanvasComponent` | `—` | [Engine/Scene/include/Axle/Components.hpp:1587](../../Engine/Scene/include/Axle/Components.hpp#L1587) |
+| `Entity` | `—` | [Engine/Scene/include/Axle/Entity.hpp:14](../../Engine/Scene/include/Axle/Entity.hpp#L14) |
+| `ParallelECS` | `—` | [Engine/Scene/include/Axle/ParallelECS.hpp:17](../../Engine/Scene/include/Axle/ParallelECS.hpp#L17) |
+| `CommandBuffer` | `—` | [Engine/Scene/include/Axle/ParallelECS.hpp:146](../../Engine/Scene/include/Axle/ParallelECS.hpp#L146) |
+| `always_false` | `std::false_type` | [Engine/Scene/include/Axle/ParallelECS.hpp:214](../../Engine/Scene/include/Axle/ParallelECS.hpp#L214) |
+| `RHIMeshRegistry` | `—` | [Engine/Scene/include/Axle/RHIMeshRegistry.hpp:12](../../Engine/Scene/include/Axle/RHIMeshRegistry.hpp#L12) |
+| `RHIObjectIDPushConstants` | `—` | [Engine/Scene/include/Axle/RHIObjectPicker.hpp:22](../../Engine/Scene/include/Axle/RHIObjectPicker.hpp#L22) |
+| `RHIObjectPicker` | `—` | [Engine/Scene/include/Axle/RHIObjectPicker.hpp:32](../../Engine/Scene/include/Axle/RHIObjectPicker.hpp#L32) |
+| `RHISkyboxConstants` | `—` | [Engine/Scene/include/Axle/RHISceneRenderer.hpp:32](../../Engine/Scene/include/Axle/RHISceneRenderer.hpp#L32) |
+| `RHIToneMappingConstants` | `—` | [Engine/Scene/include/Axle/RHISceneRenderer.hpp:45](../../Engine/Scene/include/Axle/RHISceneRenderer.hpp#L45) |
+| `RHIFXAAConstants` | `—` | [Engine/Scene/include/Axle/RHISceneRenderer.hpp:53](../../Engine/Scene/include/Axle/RHISceneRenderer.hpp#L53) |
+| `RHISceneRenderer` | `—` | [Engine/Scene/include/Axle/RHISceneRenderer.hpp:60](../../Engine/Scene/include/Axle/RHISceneRenderer.hpp#L60) |
+| `RuntimeVehicleData` | `—` | [Engine/Scene/include/Axle/Scene.hpp:27](../../Engine/Scene/include/Axle/Scene.hpp#L27) |
+| `Scene` | `—` | [Engine/Scene/include/Axle/Scene.hpp:33](../../Engine/Scene/include/Axle/Scene.hpp#L33) |
+| `SceneRenderSettings` | `—` | [Engine/Scene/include/Axle/SceneRenderer.hpp:20](../../Engine/Scene/include/Axle/SceneRenderer.hpp#L20) |
+| `SceneRenderer` | `—` | [Engine/Scene/include/Axle/SceneRenderer.hpp:40](../../Engine/Scene/include/Axle/SceneRenderer.hpp#L40) |
+| `SceneSerializerContext` | `—` | [Engine/Scene/include/Axle/SceneSerializer.hpp:16](../../Engine/Scene/include/Axle/SceneSerializer.hpp#L16) |
+| `SceneSerializer` | `—` | [Engine/Scene/include/Axle/SceneSerializer.hpp:27](../../Engine/Scene/include/Axle/SceneSerializer.hpp#L27) |
+| `ScriptableEntity` | `—` | [Engine/Scene/include/Axle/ScriptableEntity.hpp:7](../../Engine/Scene/include/Axle/ScriptableEntity.hpp#L7) |
+| `CompilerDiagnostic` | `—` | [Engine/Scene/include/Axle/ScriptCompiler.hpp:21](../../Engine/Scene/include/Axle/ScriptCompiler.hpp#L21) |
+| `CompilationResult` | `—` | [Engine/Scene/include/Axle/ScriptCompiler.hpp:32](../../Engine/Scene/include/Axle/ScriptCompiler.hpp#L32) |
+| `ScriptCompiler` | `—` | [Engine/Scene/include/Axle/ScriptCompiler.hpp:48](../../Engine/Scene/include/Axle/ScriptCompiler.hpp#L48) |
+| `ScriptField` | `—` | [Engine/Scene/include/Axle/ScriptField.hpp:22](../../Engine/Scene/include/Axle/ScriptField.hpp#L22) |
+| `ScriptFieldRegistry` | `—` | [Engine/Scene/include/Axle/ScriptField.hpp:41](../../Engine/Scene/include/Axle/ScriptField.hpp#L41) |
+| `HotReloadResult` | `—` | [Engine/Scene/include/Axle/ScriptHotReloadManager.hpp:12](../../Engine/Scene/include/Axle/ScriptHotReloadManager.hpp#L12) |
+| `ScriptHotReloadManager` | `—` | [Engine/Scene/include/Axle/ScriptHotReloadManager.hpp:28](../../Engine/Scene/include/Axle/ScriptHotReloadManager.hpp#L28) |
+| `ScriptMetadata` | `—` | [Engine/Scene/include/Axle/ScriptModule.hpp:22](../../Engine/Scene/include/Axle/ScriptModule.hpp#L22) |
+| `ScriptModuleRegistry` | `—` | [Engine/Scene/include/Axle/ScriptModule.hpp:35](../../Engine/Scene/include/Axle/ScriptModule.hpp#L35) |
+| `ScriptRegistry` | `—` | [Engine/Scene/include/Axle/ScriptRegistry.hpp:14](../../Engine/Scene/include/Axle/ScriptRegistry.hpp#L14) |
+| `RawAssemblyEntity` | `—` | [Engine/Scene/src/AssemblySerializer.cpp:377](../../Engine/Scene/src/AssemblySerializer.cpp#L377) |
+| `VSInput` | `—` | [Engine/Scene/src/RHISceneRenderer.cpp:44](../../Engine/Scene/src/RHISceneRenderer.cpp#L44) |
+| `PSInput` | `—` | [Engine/Scene/src/RHISceneRenderer.cpp:52](../../Engine/Scene/src/RHISceneRenderer.cpp#L52) |
+| `DrawItem` | `—` | [Engine/Scene/src/RHISceneRenderer.cpp:1250](../../Engine/Scene/src/RHISceneRenderer.cpp#L1250) |
+| `PointLight` | `—` | [Engine/Scene/src/SceneRenderer.cpp:105](../../Engine/Scene/src/SceneRenderer.cpp#L105) |
+| `SpotLight` | `—` | [Engine/Scene/src/SceneRenderer.cpp:111](../../Engine/Scene/src/SceneRenderer.cpp#L111) |
+| `PendingHierarchy` | `—` | [Engine/Scene/src/SceneSerializer.cpp:573](../../Engine/Scene/src/SceneSerializer.cpp#L573) |
+| `AssemblyEditorPanel` | `—` | [Engine/UI/include/Axle/AssemblyEditorPanel.hpp:15](../../Engine/UI/include/Axle/AssemblyEditorPanel.hpp#L15) |
+| `AssetPreviewPanel` | `—` | [Engine/UI/include/Axle/AssetPreviewPanel.hpp:24](../../Engine/UI/include/Axle/AssetPreviewPanel.hpp#L24) |
+| `AssetCachedMeta` | `—` | [Engine/UI/include/Axle/AssetThumbnailManager.hpp:19](../../Engine/UI/include/Axle/AssetThumbnailManager.hpp#L19) |
+| `AssetThumbnailManager` | `—` | [Engine/UI/include/Axle/AssetThumbnailManager.hpp:34](../../Engine/UI/include/Axle/AssetThumbnailManager.hpp#L34) |
+| `ConsoleMessage` | `—` | [Engine/UI/include/Axle/ConsolePanel.hpp:11](../../Engine/UI/include/Axle/ConsolePanel.hpp#L11) |
+| `EditorConsoleSink` | `public spdlog::sinks::base_sink<std::mutex>` | [Engine/UI/include/Axle/ConsolePanel.hpp:18](../../Engine/UI/include/Axle/ConsolePanel.hpp#L18) |
+| `ConsolePanel` | `—` | [Engine/UI/include/Axle/ConsolePanel.hpp:35](../../Engine/UI/include/Axle/ConsolePanel.hpp#L35) |
+| `ContentBrowserPanel` | `—` | [Engine/UI/include/Axle/ContentBrowserPanel.hpp:13](../../Engine/UI/include/Axle/ContentBrowserPanel.hpp#L13) |
+| `CurveEditorWidget` | `—` | [Engine/UI/include/Axle/CurveEditorWidget.hpp:8](../../Engine/UI/include/Axle/CurveEditorWidget.hpp#L8) |
+| `TelemetryData` | `—` | [Engine/UI/include/Axle/DebugPanel.hpp:7](../../Engine/UI/include/Axle/DebugPanel.hpp#L7) |
+| `DebugPanel` | `—` | [Engine/UI/include/Axle/DebugPanel.hpp:43](../../Engine/UI/include/Axle/DebugPanel.hpp#L43) |
+| `HLSLStudioPanel` | `—` | [Engine/UI/include/Axle/HLSLStudioPanel.hpp:18](../../Engine/UI/include/Axle/HLSLStudioPanel.hpp#L18) |
+| `ImGuiLayer` | `public ApplicationUIContext` | [Engine/UI/include/Axle/ImGuiLayer.hpp:38](../../Engine/UI/include/Axle/ImGuiLayer.hpp#L38) |
+| `RHIViewportDesc` | `—` | [Engine/UI/include/Axle/RHIViewportDescriptor.hpp:11](../../Engine/UI/include/Axle/RHIViewportDescriptor.hpp#L11) |
+| `RHIViewportDescriptor` | `—` | [Engine/UI/include/Axle/RHIViewportDescriptor.hpp:20](../../Engine/UI/include/Axle/RHIViewportDescriptor.hpp#L20) |
+| `SceneHierarchyPanel` | `—` | [Engine/UI/include/Axle/SceneHierarchyPanel.hpp:28](../../Engine/UI/include/Axle/SceneHierarchyPanel.hpp#L28) |
+| `Canvas2DStats` | `—` | [Engine/UI/include/Axle/UI/Canvas2D.hpp:11](../../Engine/UI/include/Axle/UI/Canvas2D.hpp#L11) |
+| `Canvas2D` | `—` | [Engine/UI/include/Axle/UI/Canvas2D.hpp:18](../../Engine/UI/include/Axle/UI/Canvas2D.hpp#L18) |
+| `RectTransform` | `—` | [Engine/UI/include/Axle/UI/RectTransform.hpp:11](../../Engine/UI/include/Axle/UI/RectTransform.hpp#L11) |
+| `RectTransformGizmoSettings` | `—` | [Engine/UI/include/Axle/UI/RectTransformGizmo.hpp:27](../../Engine/UI/include/Axle/UI/RectTransformGizmo.hpp#L27) |
+| `RectTransformGizmo` | `—` | [Engine/UI/include/Axle/UI/RectTransformGizmo.hpp:45](../../Engine/UI/include/Axle/UI/RectTransformGizmo.hpp#L45) |
+| `UIDataContext` | `—` | [Engine/UI/include/Axle/UI/UIDataContext.hpp:14](../../Engine/UI/include/Axle/UI/UIDataContext.hpp#L14) |
+| `UIPropertyBinding` | `—` | [Engine/UI/include/Axle/UI/UIDocument.hpp:17](../../Engine/UI/include/Axle/UI/UIDocument.hpp#L17) |
+| `UIDocument` | `—` | [Engine/UI/include/Axle/UI/UIDocument.hpp:31](../../Engine/UI/include/Axle/UI/UIDocument.hpp#L31) |
+| `GlyphMetrics` | `—` | [Engine/UI/include/Axle/UI/UIFont.hpp:10](../../Engine/UI/include/Axle/UI/UIFont.hpp#L10) |
+| `UIFont` | `—` | [Engine/UI/include/Axle/UI/UIFont.hpp:17](../../Engine/UI/include/Axle/UI/UIFont.hpp#L17) |
+| `UINode` | `—` | [Engine/UI/include/Axle/UI/UINode.hpp:13](../../Engine/UI/include/Axle/UI/UINode.hpp#L13) |
+| `UICanvasNode` | `public UINode` | [Engine/UI/include/Axle/UI/UINode.hpp:56](../../Engine/UI/include/Axle/UI/UINode.hpp#L56) |
+| `UIRectangleNode` | `public UINode` | [Engine/UI/include/Axle/UI/UINode.hpp:74](../../Engine/UI/include/Axle/UI/UINode.hpp#L74) |
+| `UITextNode` | `public UINode` | [Engine/UI/include/Axle/UI/UINode.hpp:84](../../Engine/UI/include/Axle/UI/UINode.hpp#L84) |
+| `UIImageNode` | `public UINode` | [Engine/UI/include/Axle/UI/UINode.hpp:99](../../Engine/UI/include/Axle/UI/UINode.hpp#L99) |
+| `UIProgressBarNode` | `public UINode` | [Engine/UI/include/Axle/UI/UINode.hpp:110](../../Engine/UI/include/Axle/UI/UINode.hpp#L110) |
+| `UIRadialGaugeNode` | `public UINode` | [Engine/UI/include/Axle/UI/UINode.hpp:124](../../Engine/UI/include/Axle/UI/UINode.hpp#L124) |
+| `UIBoxContainerNode` | `public UINode` | [Engine/UI/include/Axle/UI/UINode.hpp:140](../../Engine/UI/include/Axle/UI/UINode.hpp#L140) |
+| `UIButtonNode` | `public UIRectangleNode` | [Engine/UI/include/Axle/UI/UINode.hpp:155](../../Engine/UI/include/Axle/UI/UINode.hpp#L155) |
+| `UIParser` | `—` | [Engine/UI/include/Axle/UI/UIParser.hpp:8](../../Engine/UI/include/Axle/UI/UIParser.hpp#L8) |
+| `UIRect` | `—` | [Engine/UI/include/Axle/UI/UITypes.hpp:31](../../Engine/UI/include/Axle/UI/UITypes.hpp#L31) |
+| `UIStyle` | `—` | [Engine/UI/include/Axle/UI/UITypes.hpp:52](../../Engine/UI/include/Axle/UI/UITypes.hpp#L52) |
+| `UIVertex` | `—` | [Engine/UI/include/Axle/UI/UITypes.hpp:59](../../Engine/UI/include/Axle/UI/UITypes.hpp#L59) |
+| `UICanvasDesignerPanel` | `—` | [Engine/UI/include/Axle/UICanvasDesignerPanel.hpp:12](../../Engine/UI/include/Axle/UICanvasDesignerPanel.hpp#L12) |
+| `UICanvasMapping` | `—` | [Engine/UI/include/Axle/UICanvasImGuiRenderer.hpp:8](../../Engine/UI/include/Axle/UICanvasImGuiRenderer.hpp#L8) |
+| `UICanvasImGuiRenderer` | `—` | [Engine/UI/include/Axle/UICanvasImGuiRenderer.hpp:22](../../Engine/UI/include/Axle/UICanvasImGuiRenderer.hpp#L22) |
+| `UIWidgetDescriptor` | `—` | [Engine/UI/include/Axle/UIPalettePanel.hpp:25](../../Engine/UI/include/Axle/UIPalettePanel.hpp#L25) |
+| `UIPalettePanel` | `—` | [Engine/UI/include/Axle/UIPalettePanel.hpp:35](../../Engine/UI/include/Axle/UIPalettePanel.hpp#L35) |
+| `VFXEditorPanel` | `—` | [Engine/UI/include/Axle/VFXEditorPanel.hpp:21](../../Engine/UI/include/Axle/VFXEditorPanel.hpp#L21) |
+| `GLStateScope` | `—` | [Engine/UI/src/AssetThumbnailManager.cpp:485](../../Engine/UI/src/AssetThumbnailManager.cpp#L485) |
+| `DisplayEntry` | `—` | [Engine/UI/src/ConsolePanel.cpp:177](../../Engine/UI/src/ConsolePanel.cpp#L177) |
+| `AssetVisualMeta` | `—` | [Engine/UI/src/ContentBrowserPanel.cpp:59](../../Engine/UI/src/ContentBrowserPanel.cpp#L59) |
+| `AvailableItem` | `—` | [Engine/UI/src/EntityInspector.cpp:2500](../../Engine/UI/src/EntityInspector.cpp#L2500) |
+| `TextEditCallbackData` | `—` | [Engine/UI/src/HLSLStudioPanel.cpp:375](../../Engine/UI/src/HLSLStudioPanel.cpp#L375) |
+| `VulkanDispatchTable` | `—` | [Engine/UI/src/ImGuiLayer.cpp:47](../../Engine/UI/src/ImGuiLayer.cpp#L47) |
+| `ImGuiLoaderContext` | `—` | [Engine/UI/src/ImGuiLayer.cpp:486](../../Engine/UI/src/ImGuiLayer.cpp#L486) |
+| `CanvasViewportMapping` | `—` | [Engine/UI/src/RectTransformGizmo.cpp:16](../../Engine/UI/src/RectTransformGizmo.cpp#L16) |
+| `Vehicle` | `—` | [Engine/Vehicle/include/Axle/Vehicle.hpp:18](../../Engine/Vehicle/include/Axle/Vehicle.hpp#L18) |
+| `VehicleAudioConfig` | `—` | [Engine/Vehicle/include/Axle/VehicleAudio.hpp:14](../../Engine/Vehicle/include/Axle/VehicleAudio.hpp#L14) |
+| `VehicleAudio` | `—` | [Engine/Vehicle/include/Axle/VehicleAudio.hpp:47](../../Engine/Vehicle/include/Axle/VehicleAudio.hpp#L47) |
+| `WheelConfig` | `—` | [Engine/Vehicle/include/Axle/VehicleConfig.hpp:17](../../Engine/Vehicle/include/Axle/VehicleConfig.hpp#L17) |
+| `VehicleConfig` | `—` | [Engine/Vehicle/include/Axle/VehicleConfig.hpp:33](../../Engine/Vehicle/include/Axle/VehicleConfig.hpp#L33) |
+| `WheelTelemetryData` | `—` | [Engine/Vehicle/include/Axle/VehicleTelemetry.hpp:7](../../Engine/Vehicle/include/Axle/VehicleTelemetry.hpp#L7) |
+| `VehicleTelemetryData` | `—` | [Engine/Vehicle/include/Axle/VehicleTelemetry.hpp:17](../../Engine/Vehicle/include/Axle/VehicleTelemetry.hpp#L17) |
+| `VehicleVFXConfig` | `—` | [Engine/Vehicle/include/Axle/VehicleVFX.hpp:26](../../Engine/Vehicle/include/Axle/VehicleVFX.hpp#L26) |
+| `VehicleVFX` | `—` | [Engine/Vehicle/include/Axle/VehicleVFX.hpp:62](../../Engine/Vehicle/include/Axle/VehicleVFX.hpp#L62) |
+| `CurlNoiseConfig` | `—` | [Engine/VFX/include/Axle/CurlNoise.hpp:8](../../Engine/VFX/include/Axle/CurlNoise.hpp#L8) |
+| `CurlNoise` | `—` | [Engine/VFX/include/Axle/CurlNoise.hpp:18](../../Engine/VFX/include/Axle/CurlNoise.hpp#L18) |
+| `ParticleCollisionPlane` | `—` | [Engine/VFX/include/Axle/ParticleCollision.hpp:10](../../Engine/VFX/include/Axle/ParticleCollision.hpp#L10) |
+| `ParticleCollisionBox` | `—` | [Engine/VFX/include/Axle/ParticleCollision.hpp:28](../../Engine/VFX/include/Axle/ParticleCollision.hpp#L28) |
+| `ParticleCollisionConfig` | `—` | [Engine/VFX/include/Axle/ParticleCollision.hpp:49](../../Engine/VFX/include/Axle/ParticleCollision.hpp#L49) |
+| `ParticleCollisionSolver` | `—` | [Engine/VFX/include/Axle/ParticleCollision.hpp:62](../../Engine/VFX/include/Axle/ParticleCollision.hpp#L62) |
+| `ParticleEmitterShape` | `—` | [Engine/VFX/include/Axle/ParticleEmitter.hpp:11](../../Engine/VFX/include/Axle/ParticleEmitter.hpp#L11) |
+| `ParticleEmitterConfig` | `—` | [Engine/VFX/include/Axle/ParticleEmitter.hpp:23](../../Engine/VFX/include/Axle/ParticleEmitter.hpp#L23) |
+| `ParticleEmitterSerializer` | `—` | [Engine/VFX/include/Axle/ParticleEmitterSerializer.hpp:9](../../Engine/VFX/include/Axle/ParticleEmitterSerializer.hpp#L9) |
+| `ParticleForceField` | `—` | [Engine/VFX/include/Axle/ParticleForceField.hpp:22](../../Engine/VFX/include/Axle/ParticleForceField.hpp#L22) |
+| `ParticleForceFieldManager` | `—` | [Engine/VFX/include/Axle/ParticleForceField.hpp:57](../../Engine/VFX/include/Axle/ParticleForceField.hpp#L57) |
+| `ParticleSpawnData` | `—` | [Engine/VFX/include/Axle/ParticlePool.hpp:9](../../Engine/VFX/include/Axle/ParticlePool.hpp#L9) |
+| `ParticlePool` | `—` | [Engine/VFX/include/Axle/ParticlePool.hpp:25](../../Engine/VFX/include/Axle/ParticlePool.hpp#L25) |
+| `ParticleInstanceVertex` | `—` | [Engine/VFX/include/Axle/ParticleRenderer.hpp:17](../../Engine/VFX/include/Axle/ParticleRenderer.hpp#L17) |
+| `ParticlePointLight` | `—` | [Engine/VFX/include/Axle/ParticleRenderer.hpp:28](../../Engine/VFX/include/Axle/ParticleRenderer.hpp#L28) |
+| `ParticleLightEnvironment` | `—` | [Engine/VFX/include/Axle/ParticleRenderer.hpp:35](../../Engine/VFX/include/Axle/ParticleRenderer.hpp#L35) |
+| `ParticleRenderer` | `—` | [Engine/VFX/include/Axle/ParticleRenderer.hpp:42](../../Engine/VFX/include/Axle/ParticleRenderer.hpp#L42) |
+| `ParticleSystem` | `—` | [Engine/VFX/include/Axle/ParticleSystem.hpp:11](../../Engine/VFX/include/Axle/ParticleSystem.hpp#L11) |
+| `RHIParticleConstants` | `—` | [Engine/VFX/include/Axle/RHIParticleRenderer.hpp:29](../../Engine/VFX/include/Axle/RHIParticleRenderer.hpp#L29) |
+| `RHIParticleRenderer` | `—` | [Engine/VFX/include/Axle/RHIParticleRenderer.hpp:53](../../Engine/VFX/include/Axle/RHIParticleRenderer.hpp#L53) |
+| `FloatRange` | `—` | [Engine/VFX/include/Axle/VFXCommon.hpp:42](../../Engine/VFX/include/Axle/VFXCommon.hpp#L42) |
+| `ParticleBurst` | `—` | [Engine/VFX/include/Axle/VFXCommon.hpp:56](../../Engine/VFX/include/Axle/VFXCommon.hpp#L56) |
+| `CurveKeyframe` | `—` | [Engine/VFX/include/Axle/VFXCommon.hpp:96](../../Engine/VFX/include/Axle/VFXCommon.hpp#L96) |
+| `FloatCurve` | `—` | [Engine/VFX/include/Axle/VFXCommon.hpp:101](../../Engine/VFX/include/Axle/VFXCommon.hpp#L101) |
+| `GradientColorKey` | `—` | [Engine/VFX/include/Axle/VFXCommon.hpp:184](../../Engine/VFX/include/Axle/VFXCommon.hpp#L184) |
+| `GradientAlphaKey` | `—` | [Engine/VFX/include/Axle/VFXCommon.hpp:189](../../Engine/VFX/include/Axle/VFXCommon.hpp#L189) |
+| `ColorGradient` | `—` | [Engine/VFX/include/Axle/VFXCommon.hpp:194](../../Engine/VFX/include/Axle/VFXCommon.hpp#L194) |
+| `SubEmitterConfig` | `—` | [Engine/VFX/include/Axle/VFXCommon.hpp:326](../../Engine/VFX/include/Axle/VFXCommon.hpp#L326) |
+| `VFXRandom` | `—` | [Engine/VFX/include/Axle/VFXCommon.hpp:339](../../Engine/VFX/include/Axle/VFXCommon.hpp#L339) |
+| `SplineNode` | `—` | [Plugins/Spline/include/AxleSpline/Curve3D.hpp:16](../../Plugins/Spline/include/AxleSpline/Curve3D.hpp#L16) |
+| `SplineFrame` | `—` | [Plugins/Spline/include/AxleSpline/Curve3D.hpp:30](../../Plugins/Spline/include/AxleSpline/Curve3D.hpp#L30) |
+| `ArcLengthSample` | `—` | [Plugins/Spline/include/AxleSpline/Curve3D.hpp:40](../../Plugins/Spline/include/AxleSpline/Curve3D.hpp#L40) |
+| `Curve3D` | `—` | [Plugins/Spline/include/AxleSpline/Curve3D.hpp:46](../../Plugins/Spline/include/AxleSpline/Curve3D.hpp#L46) |
+| `SplineComponent` | `—` | [Plugins/Spline/include/AxleSpline/SplineComponent.hpp:11](../../Plugins/Spline/include/AxleSpline/SplineComponent.hpp#L11) |
+| `SplineEditor` | `—` | [Plugins/Spline/include/AxleSpline/SplineEditor.hpp:9](../../Plugins/Spline/include/AxleSpline/SplineEditor.hpp#L9) |
+| `SplinePlugin` | `—` | [Plugins/Spline/include/AxleSpline/SplinePlugin.hpp:6](../../Plugins/Spline/include/AxleSpline/SplinePlugin.hpp#L6) |
+| `SplineSerializer` | `—` | [Plugins/Spline/include/AxleSpline/SplineSerializer.hpp:9](../../Plugins/Spline/include/AxleSpline/SplineSerializer.hpp#L9) |
+| `TrackMeshData` | `—` | [Plugins/Spline/include/AxleSpline/TrackGenerator.hpp:13](../../Plugins/Spline/include/AxleSpline/TrackGenerator.hpp#L13) |
+| `TrackGenerator` | `—` | [Plugins/Spline/include/AxleSpline/TrackGenerator.hpp:23](../../Plugins/Spline/include/AxleSpline/TrackGenerator.hpp#L23) |
+| `ProfilePoint` | `—` | [Plugins/Spline/src/TrackGenerator.cpp:15](../../Plugins/Spline/src/TrackGenerator.cpp#L15) |
+| `TerrainVertex` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainChunk.hpp:11](../../Plugins/Terrain/include/AxleTerrain/TerrainChunk.hpp#L11) |
+| `TerrainChunk` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainChunk.hpp:18](../../Plugins/Terrain/include/AxleTerrain/TerrainChunk.hpp#L18) |
+| `TerrainCollider` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainCollider.hpp:9](../../Plugins/Terrain/include/AxleTerrain/TerrainCollider.hpp#L9) |
+| `TerrainComponent` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainComponent.hpp:13](../../Plugins/Terrain/include/AxleTerrain/TerrainComponent.hpp#L13) |
+| `TerrainSplatLayers` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainData.hpp:10](../../Plugins/Terrain/include/AxleTerrain/TerrainData.hpp#L10) |
+| `TerrainData` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainData.hpp:17](../../Plugins/Terrain/include/AxleTerrain/TerrainData.hpp#L17) |
+| `TerrainEditor` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainEditor.hpp:10](../../Plugins/Terrain/include/AxleTerrain/TerrainEditor.hpp#L10) |
+| `TerrainMesh` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainMesh.hpp:11](../../Plugins/Terrain/include/AxleTerrain/TerrainMesh.hpp#L11) |
+| `TerrainPlugin` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainPlugin.hpp:8](../../Plugins/Terrain/include/AxleTerrain/TerrainPlugin.hpp#L8) |
+| `SculptSettings` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainSculptor.hpp:25](../../Plugins/Terrain/include/AxleTerrain/TerrainSculptor.hpp#L25) |
+| `SculptResult` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainSculptor.hpp:34](../../Plugins/Terrain/include/AxleTerrain/TerrainSculptor.hpp#L34) |
+| `TerrainSculptor` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainSculptor.hpp:40](../../Plugins/Terrain/include/AxleTerrain/TerrainSculptor.hpp#L40) |
+| `TerrainSerializer` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainSerializer.hpp:9](../../Plugins/Terrain/include/AxleTerrain/TerrainSerializer.hpp#L9) |
+| `CarveSettings` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainSplineCarver.hpp:9](../../Plugins/Terrain/include/AxleTerrain/TerrainSplineCarver.hpp#L9) |
+| `TerrainSplineCarver` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainSplineCarver.hpp:16](../../Plugins/Terrain/include/AxleTerrain/TerrainSplineCarver.hpp#L16) |
+| `CanvasItem` | `—` | [Runtime/src/RuntimeLayer.cpp:380](../../Runtime/src/RuntimeLayer.cpp#L380) |
+| `RuntimeLayer` | `public Layer` | [Runtime/src/RuntimeLayer.hpp:23](../../Runtime/src/RuntimeLayer.hpp#L23) |
+| `CarController` | `public Axle::ScriptableEntity` | [Samples/TestProject/assets/scripts/CarController.hpp:11](../../Samples/TestProject/assets/scripts/CarController.hpp#L11) |
+| `RacingHUD` | `public Axle::ScriptableEntity` | [Samples/TestProject/assets/scripts/RacingHUD.hpp:16](../../Samples/TestProject/assets/scripts/RacingHUD.hpp#L16) |
+| `VehicleChaseCamera` | `public Axle::ScriptableEntity` | [Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp:23](../../Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp#L23) |

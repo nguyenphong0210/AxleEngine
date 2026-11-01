@@ -1,12 +1,12 @@
 # 🎨 Rendering Architecture & Graphics Pipeline
 
-AxleEngine features a high-performance **PBR (Physically Based Rendering) Forward+ Pipeline** built strictly on **OpenGL 4.5 Core Profile**. The rendering subsystem is completely decoupled from the Editor and Scene, ensuring identical visual fidelity in both the WYSIWYG Editor and the standalone game runtime.
+AxleEngine currently has an OpenGL rendering path and a separate NRI-based RHI path for Direct3D 12/Vulkan. EditorLayer selects SceneRenderer or RHISceneRenderer; standalone RuntimeLayer currently uses the OpenGL SceneRenderer. This guide primarily explains the OpenGL pipeline. See the [SAD rendering view](architecture/SAD.md#5-rendering-paths-and-backend-selection), [SDD](architecture/SDD.md) and [execution flows](architecture/RUNTIME_FLOWS.md) for current cross-backend boundaries and limitations.
 
 ---
 
 ## 🏛️ Pipeline Overview & Multi-Pass Execution
 
-All rendering operations for a scene are driven by [`Axle::SceneRenderer`](file:///d:/WorkSpace/AxleEngine/Engine/Scene/include/Axle/SceneRenderer.hpp). Every frame traverses four distinct rendering passes:
+The OpenGL scene path is orchestrated by [`Axle::SceneRenderer`](../Engine/Scene/include/Axle/SceneRenderer.hpp). Its principal pass structure is illustrated below; feature flags and other rendering paths can change the work executed:
 
 ```mermaid
 flowchart TD

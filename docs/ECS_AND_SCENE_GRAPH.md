@@ -1,12 +1,14 @@
 # 🌿 Entity Component System (ECS) & Scene Graph Guide
 
+For current ownership, component integration and clone behavior, see [SDD](architecture/SDD.md#4-scene-and-entity) and [execution flows](architecture/RUNTIME_FLOWS.md#3-editor-play-pause-and-stop). Scene::Copy preserves entity UUIDs while creating new registry handles; assembly instantiation has a separate remapping policy.
+
 AxleEngine adopts a **Hybrid Data-Oriented / Scene Graph Architecture** centered on [EnTT](https://github.com/skypjack/entt). This document describes the component schema, entity relationship traversal, matrix propagation, prefab assemblies, and multithreaded processing.
 
 ---
 
 ## 🏛️ ECS Architecture & Entity Representation
 
-* **`entt::entity`**: An entity is a lightweight 64-bit integer identifier index in the `entt::registry`.
+* **`entt::entity`**: An entity is a lightweight registry-local identifier (`entt::entity`). Persistent 64-bit Axle::UUID identity is stored separately in IDComponent.
 * **`Axle::Entity`**: A lightweight value-type wrapper holding an `entt::entity` and a pointer to its owning `Axle::Scene`. It provides convenient helper methods:
   ```cpp
   Axle::Entity entity = scene->CreateEntity("Player");

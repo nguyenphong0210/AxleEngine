@@ -2,16 +2,18 @@
 
 This guide is written specifically for **AI coding assistants** (e.g. Antigravity, Gemini, Claude, GPT) and **software engineers** contributing to or extending **AxleEngine**. It outlines the non-negotiable architectural rules, step-by-step implementation recipes, and common pitfalls to avoid.
 
+For implemented behavior, ownership and thread boundaries, consult the [architecture documentation](architecture/README.md).
+
 ---
 
 ## ⚠️ Core Architectural Invariants (Non-Negotiable Rules)
 
-1. **Zero Raw Graphics Leaks**:
-   Never include OpenGL headers (`glad.h`, `glfw3.h`) or call `gl*` functions outside `Engine/Renderer`. If a higher layer (such as `Engine/Scene` or `Editor`) needs a rendering operation, expose a clean abstraction method on `Axle::SceneRenderer` or `Axle::RenderCommand`.
-2. **Strict Layered Dependency Hierarchy**:
-   Dependencies flow strictly downward (`Core` $\rightarrow$ `Platform` $\rightarrow$ `Renderer`/`Physics`/`Audio`/`Asset` $\rightarrow$ `Scene` $\rightarrow$ `Editor`/`Runtime`). Lower layers must **never** include or link against higher layers.
-3. **RAII Ownership Semantics**:
-   Do not use raw pointers for resource ownership. Always use `std::unique_ptr` for exclusive ownership and `std::shared_ptr` for shared resource caches. Raw pointers are strictly non-owning observers.
+1. **Graphics Boundaries**:
+   Keep new raw graphics operations inside the relevant graphics backend implementation. GLFW window/input operations belong in Platform or explicit integration code. Current legacy graphics calls also exist in VFX and other integration paths; do not treat this existing debt as a reason to add more leaks. See [current boundaries](architecture/SAD.md) before changing either rendering path.
+2. **Layered Dependency Direction**:
+   New dependencies should follow the [proposed layered policy](architecture/TARGET_LAYERED_ARCHITECTURE.md). The current engine is not strictly layered: Core/Application uses Platform/Renderer/Physics, and runtime plugins pull editor UI. Do not add reverse dependencies or conceal them with include paths. Check both CMake targets and includes; the [dependency map](architecture/DEPENDENCY_MAP.md) records the current exceptions.
+3. **Explicit Ownership and RAII**:
+   Prefer value members and unique_ptr for exclusive ownership and shared_ptr for shared resources. Observer pointers must have a documented lifetime. Existing wrappers can own native GPU/OS handles represented as raw pointers and must release them explicitly. Destroy script instances through their matching callbacks before unloading their DLL.
 4. **Public Visibility for Script Reflection**:
    The reflection macro `AXLE_SCRIPT_FIELDS` **must always be declared under `public:` visibility**. AxleEngine uses a C++20 concept to verify field registration:
    ```cpp
@@ -30,36 +32,15 @@ This guide is written specifically for **AI coding assistants** (e.g. Antigravit
 
 ### Recipe 1: Adding a New ECS Component
 
-When introducing a new component (e.g., `HealthComponent`):
+When introducing a new component:
 
-1. **Declare the struct** in [`Engine/Scene/include/Axle/Components.hpp`](file:///d:/WorkSpace/AxleEngine/Engine/Scene/include/Axle/Components.hpp):
-   ```cpp
-   struct HealthComponent {
-       float CurrentHealth = 100.0f;
-       float MaxHealth = 100.0f;
-       bool Invulnerable = false;
+1. Define its data and ownership. Current built-in types are in [Components.hpp](../Engine/Scene/include/Axle/Components.hpp); a future domain module should not create another dependency from generic Scene data to optional gameplay tooling.
+2. Update the actual text-writing/parsing paths in [SceneSerializer.cpp](../Engine/Scene/src/SceneSerializer.cpp) and [AssemblySerializer.cpp](../Engine/Scene/src/AssemblySerializer.cpp). Follow the implementation in the current checkout rather than assuming a YAML library API.
+3. Check Scene::Copy, duplicate/destroy and runtime start/update/stop behavior. Preserve persistent UUIDs where appropriate and remap registry handles/references when cloning.
+4. Add inspection and add-component UI through the current inspector/hierarchy implementation. Consider asset/prefab editing paths separately.
+5. For plugin components, use SceneSerializerContext callbacks where possible. Add a behavioral regression test covering the component's meaningful lifecycle or persistence contract.
 
-       HealthComponent() = default;
-       HealthComponent(float maxHp) : CurrentHealth(maxHp), MaxHealth(maxHp) {}
-   };
-   ```
-2. **Add YAML serialization** in [`Engine/Scene/src/SceneSerializer.cpp`](file:///d:/WorkSpace/AxleEngine/Engine/Scene/src/SceneSerializer.cpp):
-   * Inside `SerializeEntity()`:
-     ```cpp
-     if (entity.HasComponent<HealthComponent>()) {
-         out << YAML::Key << "HealthComponent";
-         out << YAML::BeginMap;
-         out << YAML::Key << "CurrentHealth" << YAML::Value << entity.GetComponent<HealthComponent>().CurrentHealth;
-         out << YAML::Key << "MaxHealth" << YAML::Value << entity.GetComponent<HealthComponent>().MaxHealth;
-         out << YAML::Key << "Invulnerable" << YAML::Value << entity.GetComponent<HealthComponent>().Invulnerable;
-         out << YAML::EndMap;
-     }
-     ```
-   * Inside `Deserialize()`: parse the `HealthComponent` YAML node and attach to the entity via `deserializedEntity.AddComponent<HealthComponent>()`.
-   * Repeat for [`Engine/Scene/src/AssemblySerializer.cpp`](file:///d:/WorkSpace/AxleEngine/Engine/Scene/src/AssemblySerializer.cpp) for prefab support.
-3. **Add Editor UI Inspection** in [`Engine/UI/src/SceneHierarchyPanel.cpp`](file:///d:/WorkSpace/AxleEngine/Engine/UI/src/SceneHierarchyPanel.cpp):
-   * Add a `DrawComponent<HealthComponent>(...)` block rendering sliders and checkboxes.
-   * Add an entry in the `+ Add Component` popup menu.
+See [Scene design](architecture/SDD.md#4-scene-and-entity) and [class relationships](architecture/CLASS_RELATIONSHIPS.md) for the current integration points.
 
 ---
 
@@ -97,7 +78,7 @@ AXLE_REGISTER_SCRIPT(RotateObject);
 
 ### Recipe 3: Writing an Automated Headless Test in `AxleTests.exe`
 
-All regression tests are maintained in [`Editor/src/Test.cpp`](file:///d:/WorkSpace/AxleEngine/Editor/src/Test.cpp).
+The test runner is [Editor/src/Test.cpp](../Editor/src/Test.cpp); test groups are implemented in [Editor/src/Tests](../Editor/src/Tests) and share TestCommon.hpp. Register new groups in the runner/build definition as required. Test builds currently depend on AxleEditor resource staging.
 
 ```cpp
 bool RunTest_MyNewFeature() {

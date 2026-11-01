@@ -24,7 +24,7 @@ Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Phys
   * Hierarchical **Parent-Child Scene Graph** (`HierarchyComponent`) with world-space matrix propagation and transform cycle prevention.
   * Multithreaded batch processing via `Axle::ParallelECS` utilizing worker threads without lock contention.
 * **Modern Physically Based Rendering (PBR) Pipeline**:
-  * Pure **OpenGL 4.5 Core Profile** abstraction with zero graphics API leaks outside the renderer.
+  * **OpenGL 4.5 Core Profile** rendering plus a separate NRI-based RHI path for Direct3D 12/Vulkan in the editor; see the architecture documentation for current backend boundaries.
   * **Cook-Torrance Microfacet Specular BRDF** (GGX normal distribution, Smith-Schlick shadowing, Fresnel-Schlick reflectance).
   * **16-Tap Vogel Spiral / Poisson Disk Soft Shadows** with hardware bilinear PCF and slope-scaled normal bias.
   * **Atmospheric Skybox** (analytical Rayleigh/Mie scattering) and **HDR Cubemaps with Image-Based Lighting (IBL)** (Irradiance, Pre-filtered Specular, 2D BRDF LUT).
@@ -44,7 +44,7 @@ Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Phys
   * Dynamic DLL hot-reloading (`AxleScripts.dll`) with shadow-copy anti-locking (`F9` / `[🔨 Compile]`)—edit code and reload without restarting the editor.
 * **Dual Runtime Targets**:
   * **`AxleEditor.exe`**: Multi-window docking IDE with ImGuizmo 3D gizmos, viewport mouse picking, asset browser, prefab authoring, and safe 3-state simulation (Play, Pause, Step, Stop).
-  * **`AxleRuntime.exe`**: Standalone, lightweight game player executing direct backbuffer rendering, transparent in-game HUD overlay canvas (`ScriptableEntity::OnImGuiRender()`), and zero-overhead distribution booting directly from monolithic cooked packages (`Data.axlepak`).
+  * **`AxleRuntime.exe`**: Standalone player using the OpenGL SceneRenderer, project/start-scene loading, native scripts and cooked-package reads (`Data.axlepak`). UI canvas submission and transitive editor build dependencies are documented in the SAD/SDD.
 * **Skeletal Animation & GPU Vertex Skinning (`Engine/Animation`)**:
   * Embedded zero-dependency asset parsing using **[ufbx](https://github.com/bqqbarbhg/ufbx)** (`.fbx`) and **[cgltf](https://github.com/jkuhlmann/cgltf)** (`.gltf`/`.glb`) with procedural biped fallback skeleton.
   * **Linear Blend Skinning (LBS)** pipeline (`SkinningPipeline`) with 64-byte vertex stride (`ivec4 BoneIDs`, `vec4 BoneWeights`) supporting up to 128 bones per palette in both forward PBR and directional shadow depth passes.
@@ -70,6 +70,8 @@ Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Phys
 
 ## 🏛️ Architecture Stack
 
+The grouping below is an overview, not an enforced dependency hierarchy. Core/Application currently uses upper subsystems, and runtime plugins pull editor UI. See [current dependencies](docs/architecture/DEPENDENCY_MAP.md) and the [proposed layered design](docs/architecture/TARGET_LAYERED_ARCHITECTURE.md).
+
 ```plaintext
 Level 4:  [ AxleEditor (IDE) ]           [ AxleRuntime (Game Player) ]  [ AxleTests (CI/CD) ]
 Level 3:  [ Engine/Scene (ECS) ]         [ Engine/Vehicle (Toolkit) ]   [ AxleScripts (DLL) ]
@@ -89,7 +91,8 @@ For in-depth guides, API references, and architectural walk-throughs, refer to t
 
 | Document | Description |
 | :--- | :--- |
-| **[Architecture Overview](docs/ARCHITECTURE.md)** | Core design principles, layered stack, application lifecycle, memory strategy, and thread scheduling. |
+| **[Architecture Overview](docs/ARCHITECTURE.md)** | Current subsystem structure, lifecycle and dependency boundaries. |
+| **[Architecture & Design Set](docs/architecture/README.md)** | SAD, SDD, UML class relationships, execution flows, dependency inventory and proposed layered architecture. |
 | **[Subsystems & Module Reference](docs/SUBSYSTEMS.md)** | Detailed breakdown of every engine module (`Core`, `Platform`, `Renderer`, `Physics`, `Audio`, `Scene`, `UI`, `Asset`, `VFX`). |
 | **[ECS & Scene Graph Guide](docs/ECS_AND_SCENE_GRAPH.md)** | EnTT component schemas, parent-child transform propagation, prefab assemblies (`.axle`), and `ParallelECS`. |
 | **[C++ Native Scripting Guide](docs/SCRIPTING_GUIDE.md)** | `ScriptableEntity` lifecycle, reflection macros (`AXLE_SCRIPT_FIELDS`), and dynamic DLL hot-reloading (`F9`). |

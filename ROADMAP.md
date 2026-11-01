@@ -11,6 +11,12 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 * **Automated Test Verification**: **85 Comprehensive Headless Test Suites** (`AxleTests.exe`, 102 individual test steps up through **Step 102**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Milestone 10: Complete Visual Tooling Ecosystem (Material ➔ VFX ➔ Animation)** and beyond.
 
+### 🛡️ Core Engineering & Contribution Principles
+1. **Language Standard**: All source code, header files, docstrings, architectural documentation, commit messages, and automated tests must be written exclusively in **English**.
+2. **Granular Sub-Step Execution**: Every implementation task must be decomposed into its smallest discrete sub-step. Bulk or monolithic commits combining unrelated sub-steps are strictly forbidden.
+3. **Mandatory Test Verification**: Every single sub-step must be compiled cleanly with zero errors/warnings and verified using the automated test suite (`AxleTests.exe`) prior to committing.
+4. **Sequential Commit Pipeline**: Each verified sub-step must receive its own atomic Git commit and be pushed sequentially to `origin/main` until the phase is 100% complete.
+
 ---
 
 ## 🏛️ Milestone Breakdown

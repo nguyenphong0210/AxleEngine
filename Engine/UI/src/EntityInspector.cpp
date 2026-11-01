@@ -752,7 +752,7 @@ namespace Axle {
                     [&](const std::string& p) { mat.SetAlbedo(p); if (mat.HasAsset()) mat.SyncToAsset(); },
                     [&]() {
                         ImGui::SetNextItemWidth(-1.0f);
-                        if (ImGui::ColorEdit4("##EntityBaseColor", glm::value_ptr(mat.AlbedoColor), ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview)) {
+                        if (ImGui::ColorEdit4("##EntityBaseColor", glm::value_ptr(mat.AlbedoColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview)) {
                             if (mat.HasAsset()) mat.SyncToAsset();
                         }
                     });
@@ -802,12 +802,12 @@ namespace Axle {
                     [&](const std::string& p) { mat.SetEmissiveMap(p); if (mat.HasAsset()) mat.SyncToAsset(); },
                     [&]() {
                         ImGui::SetNextItemWidth(36.0f);
-                        if (ImGui::ColorEdit3("##EntityEmissionColor", glm::value_ptr(mat.EmissionColor), ImGuiColorEditFlags_NoLabel)) {
+                        if (ImGui::ColorEdit3("##EntityEmissionColor", glm::value_ptr(mat.EmissionColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
                             if (mat.HasAsset()) mat.SyncToAsset();
                         }
                         ImGui::SameLine();
                         ImGui::SetNextItemWidth(-1.0f);
-                        if (ImGui::DragFloat("##EntityEmissionIntensity", &mat.EmissionIntensity, 0.1f, 0.0f, 50.0f, "%.1f")) {
+                        if (ImGui::DragFloat("##EntityEmissionIntensity", &mat.EmissionIntensity, 0.1f, 0.0f, 50.0f, "HDR: %.1f")) {
                             if (mat.HasAsset()) mat.SyncToAsset();
                         }
                     });

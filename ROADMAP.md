@@ -570,9 +570,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Embed live 3D preview viewport directly inside Material Inspector via `AssetPreviewPanel`.
     - [x] Interactive camera controls: Left-drag Orbit 360°, Scroll-wheel Zoom in/out, Middle-drag Pan.
     - [x] Seamless mesh switching: Sphere, Cube, Cylinder, Plane.
-  - [ ] **Step 2 - Modern Unity-Grade Color Swatch & Compact Texture Slots**:
-    - [ ] Replace 4-element numeric RGBA boxes with compact Color Swatch popup picker (`ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar`).
-    - [ ] Implement square compact texture slot UI (`24x24 px` preview thumbnail, asset drag-drop target, clear button `[X]`).
+  - [x] **Step 2 - Modern Unity-Grade Color Swatch & Compact Texture Slots**:
+    - [x] Replace 4-element numeric RGBA boxes with compact Color Swatch popup picker (`ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar`).
+    - [x] Implement square compact texture slot UI (`24x24 px` preview thumbnail, asset drag-drop target, clear button `[X]`).
   - [ ] **Step 3 - Advanced Surface Options Accordion**:
     - [ ] Add `Specular Highlights` toggle (ON/OFF).
     - [ ] Add `Environment Reflections` toggle (ON/OFF).

@@ -730,7 +730,7 @@ namespace Axle {
                 [&](const std::string& p) { m_ActiveMaterialAsset.SetAlbedo(p); },
                 [&]() {
                     ImGui::SetNextItemWidth(-1.0f);
-                    if (ImGui::ColorEdit4("##BaseColor", glm::value_ptr(m_ActiveMaterialAsset.AlbedoColor), ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview)) {
+                    if (ImGui::ColorEdit4("##BaseColor", glm::value_ptr(m_ActiveMaterialAsset.AlbedoColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview)) {
                         changed = true;
                     }
                 });
@@ -780,12 +780,12 @@ namespace Axle {
                 [&](const std::string& p) { m_ActiveMaterialAsset.SetEmissiveMap(p); },
                 [&]() {
                     ImGui::SetNextItemWidth(36.0f);
-                    if (ImGui::ColorEdit3("##EmissionColor", glm::value_ptr(m_ActiveMaterialAsset.EmissionColor), ImGuiColorEditFlags_NoLabel)) {
+                    if (ImGui::ColorEdit3("##EmissionColor", glm::value_ptr(m_ActiveMaterialAsset.EmissionColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
                         changed = true;
                     }
                     ImGui::SameLine();
                     ImGui::SetNextItemWidth(-1.0f);
-                    if (ImGui::DragFloat("##EmissionIntensity", &m_ActiveMaterialAsset.EmissionIntensity, 0.1f, 0.0f, 50.0f, "%.1f")) {
+                    if (ImGui::DragFloat("##EmissionIntensity", &m_ActiveMaterialAsset.EmissionIntensity, 0.1f, 0.0f, 50.0f, "HDR: %.1f")) {
                         changed = true;
                     }
                 });

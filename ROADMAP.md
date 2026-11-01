@@ -551,13 +551,53 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Sorter in `SceneRenderer`: separate opaque queue from back-to-front sorted translucent queue.
   - [x] **Step 3 - Dedicated Material Studio Panel & Content Browser Integration (`Engine/UI`, `Editor`)**:
     - [x] Create `MaterialEditorPanel` (dockable or standalone tab).
-    - [x] Double-clicking any `.axleasset` (Material) or `.axlemat` in Content Browser opens `MaterialEditorPanel`.
+    - [x] Double-clicking any `.axleasset` (Material) in Content Browser opens `MaterialEditorPanel`.
     - [x] 3D Preview Turntable with sample mesh switcher: Sphere, Cube, Cylinder, Plane, Teapot.
     - [x] HDRI Environment lighting selector: *Studio Neutral*, *Sunny Sky*, *Sunset Glow*, *Night Sky*.
     - [x] Inspector group accordions (*Surface Options*, *Surface Inputs*, *Advanced Options*).
     - [x] Toolbar with `Save (.axleasset)`, `Revert`, Shader selector, and Unity-grade 2-column PBR layout.
   - [x] **Step 4 - Automated Verification Suite Step 101 (`AxleTests.exe --step101`)**:
     - [x] Step 101 tests verifying: DSL round-trip serialization of new surface properties, Cutout alpha clipping math, Two-sided culling flags, RHI pipeline blend mode configs, and headless Material Studio operations.
+
+- [ ] **Phase 38.1: Unity & Godot Parity Phase 1 - Embedded 3D Material Preview & HLSL Studio (`Engine/UI`, `Engine/RHI`, `Editor`)**
+  - [ ] **Step 1 - Embedded 3D Interactive Material Preview Viewport**:
+    - [ ] Embed live 3D preview viewport directly inside Material Inspector via `AssetPreviewPanel`.
+    - [ ] Interactive camera controls: Left-drag Orbit 360°, Scroll-wheel Zoom in/out, Middle-drag Pan.
+    - [ ] Seamless mesh switching: Sphere, Cube, Cylinder, Plane.
+  - [ ] **Step 2 - Modern Unity-Grade Color Swatch & Compact Texture Slots**:
+    - [ ] Replace 4-element numeric RGBA boxes with compact Color Swatch popup picker (`ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar`).
+    - [ ] Implement square compact texture slot UI (`24x24 px` preview thumbnail, asset drag-drop target, clear button `[X]`).
+  - [ ] **Step 3 - Advanced Surface Options Accordion**:
+    - [ ] Add `Specular Highlights` toggle (ON/OFF).
+    - [ ] Add `Environment Reflections` toggle (ON/OFF).
+    - [ ] Add `Render Queue Offset` (Geometry 2000, Cutout 2450, Transparent 3000).
+    - [ ] Add `[ </> Edit HLSL ]` shortcut button adjacent to Shader dropdown.
+  - [ ] **Step 4 - In-Editor HLSL Shader Studio Panel & Content Browser Integration**:
+    - [ ] Add dockable `HLSLStudioPanel` with multi-line code editor, line numbering, and HLSL syntax highlighting.
+    - [ ] Right-click in Content Browser -> `Create > HLSL Shader` in `assets/shaders/` generating standard PBR template.
+    - [ ] Zero-downtime hot-reloading: `Ctrl + S` / `F5` compiles via `RHIShaderCompiler` (DXC) to DXIL/SPIR-V and updates live GPU PSOs.
+  - [ ] **Step 5 - Automated Verification Suite Step 104 (`AxleTests.exe --step104`)**:
+    - [ ] Step 104 tests verifying: Material preview offscreen render targets, orbit camera math, advanced options serialization, and runtime HLSL compilation hot-reload.
+
+- [ ] **Phase 38.2: Unity & Godot Parity Phase 2 - Dynamic Shader Reflection & Advanced Shading (`Engine/RHI`, `Engine/Asset`, `Engine/UI`)**
+  - [ ] **Step 1 - Dynamic Shader Property Reflection via DXC**:
+    - [ ] Extract uniform reflection metadata from DXC bytecode (`IDxcContainerReflection` / `ID3D12ShaderReflection`).
+    - [ ] Parse annotation comments (e.g. `// [Range(0, 1)] float Dissolve;`) for UI bounds and formatting.
+    - [ ] Dynamically generate Inspector controls (sliders, swatches, texture slots) without hardcoded C++ fields.
+  - [ ] **Step 2 - Texture Channel Packing (Packed ORM Map)**:
+    - [ ] Add `TextureMode` switch: `Separate Maps` vs `Packed ORM Map (R: Occlusion, G: Roughness, B: Metallic)`.
+    - [ ] Update `ForwardPBR.hlsl` to sample ORM map from a single texture sampler.
+  - [ ] **Step 3 - Automotive & Advanced PBR Shading**:
+    - [ ] Implement two-layer `Clearcoat` (Strength & Roughness) for automotive clear lacquer finish.
+    - [ ] Implement `Anisotropy` shading for brushed alloy wheel rims and carbon fiber weaves.
+  - [ ] **Step 4 - Multi-Angle Preview Lighting & Custom Mesh Preview**:
+    - [ ] Right-click drag in preview viewport to rotate HDRI environment and sun angle.
+    - [ ] Support dragging custom game meshes (`.axlemesh`) into preview turntable.
+  - [ ] **Step 5 - HLSL Compiler Diagnostics Jump & Autocomplete**:
+    - [ ] Double-clicking compile error in console jumps cursor directly to erroneous line in `HLSLStudioPanel`.
+    - [ ] Autocomplete suggestions for HLSL intrinsic functions (`saturate`, `lerp`, `mul`, `dot`, `cross`, `normalize`).
+  - [ ] **Step 6 - Automated Verification Suite Step 105 (`AxleTests.exe --step105`)**:
+    - [ ] Step 105 tests verifying: DXC reflection parser, packed ORM texture sampling, Clearcoat push constants, and error jump navigation.
 
 - [x] **Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (`Engine/VFX`, `Engine/UI`, `Editor`)**
   - [x] **Step 1 - Multi-Emitter Architecture & Bursts (`Engine/VFX`, `Engine/Asset`)**:

@@ -101,11 +101,24 @@ namespace Axle::RHI {
                                       shadingModelVal,
                                       m_Desc.Roughness,
                                       m_Desc.Metallic);
-        float extraZ = (m_Desc.SurfaceType == Axle::SurfaceType::Cutout) ? m_Desc.AlphaCutoff : m_Desc.ClearcoatStrength;
-        pushConsts.MaterialExtra = glm::vec4(m_Desc.UVOffset.x,
-                                             m_Desc.UVOffset.y,
-                                             extraZ,
-                                             surfaceTypeVal);
+        pushConsts.MaterialExtra = glm::vec4(m_Desc.UVOffset, m_Desc.AlphaCutoff, surfaceTypeVal);
+
+    }
+
+    RHIMaterialConstants RHIMaterial::BuildConstants() const {
+        RHIMaterialConstants data;
+        data.UVTransform = glm::vec4(m_Desc.UVScale, m_Desc.UVOffset);
+        data.Surface = glm::vec4(m_Desc.NormalStrength, m_Desc.AO,
+            m_Desc.EnableSpecularHighlights ? 1.0f : 0.0f, m_Desc.EnableEnvironmentReflections ? 1.0f : 0.0f);
+        data.CoatAnisotropy = glm::vec4(m_Desc.ClearcoatStrength, m_Desc.ClearcoatRoughness,
+            m_Desc.AnisotropyStrength, m_Desc.AnisotropyRotation);
+        for (uint32_t i = 0; i < static_cast<uint32_t>(RHITextureSlot::Count); ++i) {
+            if (!GetTexturePath(static_cast<RHITextureSlot>(i)).empty() || HasTexture(static_cast<RHITextureSlot>(i)))
+                data.Flags.x |= 1u << i;
+        }
+        if (m_Desc.TextureMode == Axle::TextureMode::PackedORM && !m_Desc.ORMPath.empty()) data.Flags.x |= 1u << 2;
+        data.Flags.y = 1u;
+        return data;
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultWhiteTexture() {

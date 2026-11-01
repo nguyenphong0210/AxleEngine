@@ -270,12 +270,24 @@ namespace Axle {
             RHIMaterialAsset->SetEmissiveIntensity(EmissionIntensity);
             RHIMaterialAsset->SetUVScale(UVScale);
             RHIMaterialAsset->SetUVOffset(UVOffset);
-            if (UseNormalMap) {
-                RHIMaterialAsset->GetDesc().NormalPath = NormalPath;
-            }
-            if (UseAlbedoMap) {
-                RHIMaterialAsset->GetDesc().AlbedoPath = AlbedoPath;
-            }
+            RHIMaterialAsset->SetAO(AOStrength);
+            auto& desc = RHIMaterialAsset->GetDesc();
+            desc.EnableSpecularHighlights = EnableSpecularHighlights;
+            desc.EnableEnvironmentReflections = EnableEnvironmentReflections;
+            desc.RenderQueue = RenderQueue;
+            desc.AlbedoPath = UseAlbedoMap ? AlbedoPath : "";
+            desc.NormalPath = UseNormalMap ? NormalPath : "";
+            desc.RoughnessPath = UseRoughnessMap ? RoughnessPath : "";
+            desc.MetallicPath = UseMetallicMap ? MetallicPath : "";
+            desc.AOPath = UseAOMap ? AOPath : "";
+            desc.EmissivePath = UseEmissiveMap ? EmissivePath : "";
+            desc.ORMPath = UseORMMap ? ORMPath : "";
+            bool hasMaps = !desc.AlbedoPath.empty() || !desc.NormalPath.empty() || !desc.RoughnessPath.empty() ||
+                !desc.MetallicPath.empty() || !desc.AOPath.empty() || !desc.EmissivePath.empty();
+            desc.ShadingModel = TextureMode == Axle::TextureMode::PackedORM && !desc.ORMPath.empty()
+                ? RHI::RHIShadingModel::PackedORMTexturedPBR
+                : (hasMaps ? RHI::RHIShadingModel::TexturedPBR : RHI::RHIShadingModel::SolidColor);
+
         }
 
         void SyncToAsset() {

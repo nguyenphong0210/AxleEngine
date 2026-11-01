@@ -51,3 +51,8 @@ binding, and visible shading agree in the preview and scene.
   serialization now preserves existing advanced scalar and map settings.
 - Release build and test steps 101, 105, and 106 passed. Existing LNK4098 runtime
   library conflict warnings remain; they are not material implementation errors.
+- A dedicated 256-byte material constant layout now carries UV X/Y, normal and
+  AO strengths, independent coat/anisotropy values, and reflection flags. Component
+  synchronization clears disabled texture paths and transfers all existing scalar
+  settings. CPU layout and zero-cutoff separation checks pass in Step 106; shader
+  binding and visible GPU behavior are still pending.

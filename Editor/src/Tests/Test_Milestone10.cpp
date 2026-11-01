@@ -1118,7 +1118,8 @@ bool RunTest_Step105_Phase38_2_DynamicReflectionAndAutomotiveShading() {
         rhiCar.SetClearcoatStrength(0.95f);
         RHI::RHIObjectPushConstants pc{};
         rhiCar.ApplyToPushConstants(pc);
-        assert(std::abs(pc.MaterialExtra.z - 0.95f) < 1e-4f);
+        assert(std::abs(rhiCar.BuildConstants().CoatAnisotropy.x - 0.95f) < 1e-4f);
+        assert(std::abs(pc.MaterialExtra.z - rhiCar.GetAlphaCutoff()) < 1e-4f);
     }
     std::cout << "  -> PASS: Automotive Clearcoat, Anisotropy, preset configs, and 128B push constant streaming verified." << std::endl;
 
@@ -1235,6 +1236,16 @@ bool RunTest_Step106_MaterialPipeline() {
     if (!check(!view.empty(), "Restored entity material")) return false;
     const auto& inlineMat = view.get<MaterialComponent>(*view.begin());
     if (!check(inlineMat.ORMPath == source.ORMPath && inlineMat.TextureMode == source.TextureMode && inlineMat.ClearcoatStrength == source.ClearcoatStrength && inlineMat.AnisotropyStrength == source.AnisotropyStrength && inlineMat.AOStrength == source.AOStrength && inlineMat.EmissivePath == source.EmissivePath && inlineMat.RenderQueue == source.RenderQueue && !inlineMat.EnableEnvironmentReflections, "Inline advanced material persistence")) return false;
+    source.SyncToRHI();
+    auto gpu = source.RHIMaterialAsset->BuildConstants();
+    if (!check(gpu.UVTransform == glm::vec4(source.UVScale, source.UVOffset) && gpu.Surface.x == 0.0f && gpu.Surface.y == source.AOStrength && gpu.Surface.z == 0.0f && gpu.Surface.w == 0.0f, "Explicit GPU scalar layout")) return false;
+    if (!check(gpu.CoatAnisotropy == glm::vec4(source.ClearcoatStrength, source.ClearcoatRoughness, source.AnisotropyStrength, source.AnisotropyRotation), "Independent GPU coat and anisotropy")) return false;
+    if (!check(source.RHIMaterialAsset->GetDesc().RoughnessPath.empty() && source.RHIMaterialAsset->GetDesc().AOPath.empty() && source.RHIMaterialAsset->GetDesc().MetallicPath == source.MetallicPath, "Disabled GPU maps clear stale paths")) return false;
+    source.AlphaCutoff = 0.0f;
+    source.SyncToRHI();
+    RHI::RHIObjectPushConstants constants;
+    source.RHIMaterialAsset->ApplyToPushConstants(constants);
+    if (!check(constants.MaterialExtra.z == 0.0f && source.RHIMaterialAsset->BuildConstants().CoatAnisotropy.x == 0.8f, "Zero alpha cutoff is independent of clearcoat")) return false;
     std::cout << "[106] PASS: Material inspector and inline scene save/reload, maps, HDR colors, alpha, coat, anisotropy, flags, and custom values." << std::endl;
     return true;
 }

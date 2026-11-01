@@ -4,6 +4,7 @@
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHI/RHITransform.hpp>
+#include <Axle/RHI/RHIMaterialConstants.hpp>
 
 #include <glm/glm.hpp>
 #include <string>
@@ -61,6 +62,9 @@ namespace Axle::RHI {
         float ClearcoatRoughness = 0.04f;
         float AnisotropyStrength = 0.0f;
         float AnisotropyRotation = 0.0f;
+        bool EnableSpecularHighlights = true;
+        bool EnableEnvironmentReflections = true;
+        int RenderQueue = 2000;
         RHIShadingModel ShadingModel = RHIShadingModel::MetallicRoughness;
 
         // Optional texture map source paths
@@ -161,6 +165,7 @@ namespace Axle::RHI {
 
         // Shader Streaming: Applies PBR parameters to 128B RHIObjectPushConstants
         void ApplyToPushConstants(RHIObjectPushConstants& pushConsts) const;
+        RHIMaterialConstants BuildConstants() const;
 
         // Static Default Textures (1x1 GPU resident fallbacks)
         static std::shared_ptr<RHITexture> GetDefaultWhiteTexture();       // 0xFFFFFFFF (Albedo, AO)

@@ -118,6 +118,11 @@ namespace Axle {
         bool DepthWrite = true;
         glm::vec2 UVOffset{ 0.0f, 0.0f };
 
+        // Advanced Options (Unity URP Standard)
+        bool EnableSpecularHighlights = true;
+        bool EnableEnvironmentReflections = true;
+        int RenderQueue = 2000;
+
         // Local instance properties (active when MaterialHandle == 0 or when editing local values)
         std::string AlbedoPath;
         std::shared_ptr<Texture2D> AlbedoMap;
@@ -207,6 +212,9 @@ namespace Axle {
             CullMode = MaterialAsset->GetCullMode();
             AlphaCutoff = MaterialAsset->GetAlphaCutoff();
             DepthWrite = MaterialAsset->GetDepthWrite();
+            EnableSpecularHighlights = MaterialAsset->GetEnableSpecularHighlights();
+            EnableEnvironmentReflections = MaterialAsset->GetEnableEnvironmentReflections();
+            RenderQueue = MaterialAsset->GetRenderQueue();
 
             SyncToRHI();
         }
@@ -242,6 +250,9 @@ namespace Axle {
             MaterialAsset->SetCullMode(CullMode);
             MaterialAsset->SetAlphaCutoff(AlphaCutoff);
             MaterialAsset->SetDepthWrite(DepthWrite);
+            MaterialAsset->SetEnableSpecularHighlights(EnableSpecularHighlights);
+            MaterialAsset->SetEnableEnvironmentReflections(EnableEnvironmentReflections);
+            MaterialAsset->SetRenderQueue(RenderQueue);
             MaterialAsset->SetUVOffset(UVOffset);
 
             MaterialAsset->SetAlbedoColor(AlbedoColor);

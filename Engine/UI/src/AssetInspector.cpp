@@ -512,6 +512,9 @@ namespace Axle {
         m->SetCullMode(mat.CullMode);
         m->SetAlphaCutoff(mat.AlphaCutoff);
         m->SetDepthWrite(mat.DepthWrite);
+        m->SetEnableSpecularHighlights(mat.EnableSpecularHighlights);
+        m->SetEnableEnvironmentReflections(mat.EnableEnvironmentReflections);
+        m->SetRenderQueue(mat.RenderQueue);
         return m->Save(path);
     }
 
@@ -611,7 +614,7 @@ namespace Axle {
 
         bool changed = false;
 
-        // Unity-Style Shader Selector
+        // Unity-Style Shader Selector & Quick HLSL Code Access
         {
             ImGui::TextDisabled("Shader:");
             ImGui::SameLine();
@@ -621,8 +624,20 @@ namespace Axle {
                 "Universal Render Pipeline/Unlit"
             };
             static int currentShader = 0;
-            ImGui::SetNextItemWidth(-1.0f);
+            float btnW = 92.0f;
+            float availW = ImGui::GetContentRegionAvail().x;
+            ImGui::SetNextItemWidth(std::max(availW - btnW - 6.0f, 100.0f));
             ImGui::Combo("##MaterialShaderCombo", &currentShader, shaderOptions, IM_ARRAYSIZE(shaderOptions));
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.23f, 0.28f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.33f, 0.40f, 1.0f));
+            if (ImGui::Button("</> Edit HLSL", ImVec2(btnW, 0.0f))) {
+                AXLE_INFO("Navigated to HLSL Shader Studio for 'Engine/Resources/Shaders/ForwardPBR.hlsl'");
+            }
+            ImGui::PopStyleColor(2);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Open this HLSL shader in the in-editor Shader Studio for live editing and hot-reloading");
+            }
             ImGui::Spacing();
         }
 
@@ -845,6 +860,46 @@ namespace Axle {
             if (ImGui::SmallButton("4x4")) { m_ActiveMaterialAsset.UVScale = glm::vec2(4.0f); changed = true; }
             ImGui::SameLine();
             if (ImGui::SmallButton("8x8")) { m_ActiveMaterialAsset.UVScale = glm::vec2(8.0f); changed = true; }
+            ImGui::NextColumn();
+
+            ImGui::Columns(1);
+            ImGui::Spacing();
+        }
+
+        // 3. Advanced Surface Options (Unity Standard / URP Lit)
+        if (ImGui::CollapsingHeader("Advanced Options", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Columns(2, "MatAdvancedOptCols", false);
+            ImGui::SetColumnWidth(0, 150.0f);
+
+            // Specular Highlights
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Specular Highlights");
+            ImGui::NextColumn();
+            if (ImGui::Checkbox("##SpecularHighlights", &m_ActiveMaterialAsset.EnableSpecularHighlights)) {
+                changed = true;
+            }
+            ImGui::NextColumn();
+
+            // Environment Reflections
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Environment Reflections");
+            ImGui::NextColumn();
+            if (ImGui::Checkbox("##EnvironmentReflections", &m_ActiveMaterialAsset.EnableEnvironmentReflections)) {
+                changed = true;
+            }
+            ImGui::NextColumn();
+
+            // Render Queue
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Render Queue");
+            ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragInt("##RenderQueue", &m_ActiveMaterialAsset.RenderQueue, 1.0f, 1000, 5000, "%d")) {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Opaque: 2000 | AlphaTest / Cutout: 2450 | Transparent: 3000 | Overlay: 4000");
+            }
             ImGui::NextColumn();
 
             ImGui::Columns(1);

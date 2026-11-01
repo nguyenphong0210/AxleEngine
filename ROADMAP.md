@@ -573,11 +573,11 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 2 - Modern Unity-Grade Color Swatch & Compact Texture Slots**:
     - [x] Replace 4-element numeric RGBA boxes with compact Color Swatch popup picker (`ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar`).
     - [x] Implement square compact texture slot UI (`24x24 px` preview thumbnail, asset drag-drop target, clear button `[X]`).
-  - [ ] **Step 3 - Advanced Surface Options Accordion**:
-    - [ ] Add `Specular Highlights` toggle (ON/OFF).
-    - [ ] Add `Environment Reflections` toggle (ON/OFF).
-    - [ ] Add `Render Queue Offset` (Geometry 2000, Cutout 2450, Transparent 3000).
-    - [ ] Add `[ </> Edit HLSL ]` shortcut button adjacent to Shader dropdown.
+  - [x] **Step 3 - Advanced Surface Options Accordion**:
+    - [x] Add `Specular Highlights` toggle (ON/OFF).
+    - [x] Add `Environment Reflections` toggle (ON/OFF).
+    - [x] Add `Render Queue Offset` (Geometry 2000, Cutout 2450, Transparent 3000).
+    - [x] Add `[ </> Edit HLSL ]` shortcut button adjacent to Shader dropdown.
   - [ ] **Step 4 - In-Editor HLSL Shader Studio Panel & Content Browser Integration**:
     - [ ] Add dockable `HLSLStudioPanel` with multi-line code editor, line numbering, and HLSL syntax highlighting.
     - [ ] Right-click in Content Browser -> `Create > HLSL Shader` in `assets/shaders/` generating standard PBR template.

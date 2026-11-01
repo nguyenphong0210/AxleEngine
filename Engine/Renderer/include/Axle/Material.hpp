@@ -45,6 +45,19 @@ namespace Axle {
         bool& GetDepthWriteRef() { return m_DepthWrite; }
         void SetDepthWrite(bool depthWrite) { m_DepthWrite = depthWrite; }
 
+        // Advanced Options (Unity URP Standard)
+        bool GetEnableSpecularHighlights() const { return m_EnableSpecularHighlights; }
+        bool& GetEnableSpecularHighlightsRef() { return m_EnableSpecularHighlights; }
+        void SetEnableSpecularHighlights(bool enable) { m_EnableSpecularHighlights = enable; }
+
+        bool GetEnableEnvironmentReflections() const { return m_EnableEnvironmentReflections; }
+        bool& GetEnableEnvironmentReflectionsRef() { return m_EnableEnvironmentReflections; }
+        void SetEnableEnvironmentReflections(bool enable) { m_EnableEnvironmentReflections = enable; }
+
+        int GetRenderQueue() const { return m_RenderQueue; }
+        int& GetRenderQueueRef() { return m_RenderQueue; }
+        void SetRenderQueue(int queue) { m_RenderQueue = queue; }
+
         // PBR Core Properties
         const glm::vec4& GetAlbedoColor() const { return m_AlbedoColor; }
         glm::vec4& GetAlbedoColorRef() { return m_AlbedoColor; }
@@ -181,6 +194,9 @@ namespace Axle {
         CullMode m_CullMode = CullMode::Back;
         float m_AlphaCutoff = 0.5f;
         bool m_DepthWrite = true;
+        bool m_EnableSpecularHighlights = true;
+        bool m_EnableEnvironmentReflections = true;
+        int m_RenderQueue = 2000;
 
         glm::vec4 m_AlbedoColor{ 1.0f, 1.0f, 1.0f, 1.0f };
         float m_Roughness = 0.5f;

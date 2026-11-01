@@ -879,6 +879,47 @@ namespace Axle {
 
                 ImGui::Columns(1);
                 ImGui::Spacing();
+
+                // Advanced Options (Unity Standard / URP Lit)
+                if (ImGui::CollapsingHeader("Advanced Options", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    ImGui::Columns(2, "EntityMatAdvancedOptCols", false);
+                    ImGui::SetColumnWidth(0, 150.0f);
+
+                    // Specular Highlights
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted("Specular Highlights");
+                    ImGui::NextColumn();
+                    if (ImGui::Checkbox("##EntitySpecularHighlights", &mat.EnableSpecularHighlights)) {
+                        if (mat.HasAsset()) mat.SyncToAsset();
+                    }
+                    ImGui::NextColumn();
+
+                    // Environment Reflections
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted("Environment Reflections");
+                    ImGui::NextColumn();
+                    if (ImGui::Checkbox("##EntityEnvironmentReflections", &mat.EnableEnvironmentReflections)) {
+                        if (mat.HasAsset()) mat.SyncToAsset();
+                    }
+                    ImGui::NextColumn();
+
+                    // Render Queue
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted("Render Queue");
+                    ImGui::NextColumn();
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::DragInt("##EntityRenderQueue", &mat.RenderQueue, 1.0f, 1000, 5000, "%d")) {
+                        if (mat.HasAsset()) mat.SyncToAsset();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Opaque: 2000 | AlphaTest / Cutout: 2450 | Transparent: 3000 | Overlay: 4000");
+                    }
+                    ImGui::NextColumn();
+
+                    ImGui::Columns(1);
+                    ImGui::Spacing();
+                }
+
                 ImGui::Separator();
                 ImGui::Spacing();
 

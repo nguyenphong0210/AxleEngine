@@ -432,7 +432,10 @@ namespace Axle {
             fout << "    surfaceType: \"" << SurfaceTypeToString(m_SurfaceType) << "\"\n";
             fout << "    cullMode: \"" << CullModeToString(m_CullMode) << "\"\n";
             fout << "    alphaCutoff: " << m_AlphaCutoff << "\n";
-            fout << "    depthWrite: " << (m_DepthWrite ? "true" : "false") << "\n\n";
+            fout << "    depthWrite: " << (m_DepthWrite ? "true" : "false") << "\n";
+            fout << "    specularHighlights: " << (m_EnableSpecularHighlights ? "true" : "false") << "\n";
+            fout << "    environmentReflections: " << (m_EnableEnvironmentReflections ? "true" : "false") << "\n";
+            fout << "    renderQueue: " << m_RenderQueue << "\n\n";
             fout << "    // Base Color & Texture\n";
             fout << "    albedoColor: \"" << formatHex(m_AlbedoColor) << "\"\n";
             fout << "    albedoMap: \"" << m_AlbedoPath << "\"\n\n";
@@ -522,6 +525,14 @@ namespace Axle {
                 } else if (trimmed.rfind("depthWrite:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(11));
                     m_DepthWrite = (val == "true" || val == "1");
+                } else if (trimmed.rfind("specularHighlights:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(19));
+                    m_EnableSpecularHighlights = (val == "true" || val == "1");
+                } else if (trimmed.rfind("environmentReflections:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(23));
+                    m_EnableEnvironmentReflections = (val == "true" || val == "1");
+                } else if (trimmed.rfind("renderQueue:", 0) == 0) {
+                    try { m_RenderQueue = std::stoi(Trim(trimmed.substr(12))); } catch (...) {}
                 } else if (trimmed.rfind("albedoColor:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(12));
                     if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);

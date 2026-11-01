@@ -1,4 +1,5 @@
 #include <Axle/Material.hpp>
+#include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
@@ -8,30 +9,6 @@
 #include <cstdio>
 
 namespace Axle {
-
-    static glm::vec4 ParseHexColor(const std::string& val) {
-        if (val.empty() || val[0] != '#') return glm::vec4(1.0f);
-        auto hexCharToInt = [](char ch) -> uint32_t {
-            if (ch >= '0' && ch <= '9') return ch - '0';
-            if (ch >= 'a' && ch <= 'f') return 10 + (ch - 'a');
-            if (ch >= 'A' && ch <= 'F') return 10 + (ch - 'A');
-            return 0;
-        };
-        std::string h = val.substr(1);
-        if (h.size() >= 8) {
-            uint32_t r = (hexCharToInt(h[0]) << 4) | hexCharToInt(h[1]);
-            uint32_t g = (hexCharToInt(h[2]) << 4) | hexCharToInt(h[3]);
-            uint32_t b = (hexCharToInt(h[4]) << 4) | hexCharToInt(h[5]);
-            uint32_t a = (hexCharToInt(h[6]) << 4) | hexCharToInt(h[7]);
-            return glm::vec4(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
-        } else if (h.size() >= 6) {
-            uint32_t r = (hexCharToInt(h[0]) << 4) | hexCharToInt(h[1]);
-            uint32_t g = (hexCharToInt(h[2]) << 4) | hexCharToInt(h[3]);
-            uint32_t b = (hexCharToInt(h[4]) << 4) | hexCharToInt(h[5]);
-            return glm::vec4(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
-        }
-        return glm::vec4(1.0f);
-    }
 
     static std::string Trim(const std::string& str) {
         size_t first = str.find_first_not_of(" \t\r\n");
@@ -490,15 +467,6 @@ namespace Axle {
         std::string ext = filepath.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
         if (ext == ".axleasset" || ext.empty()) {
-            auto formatHex = [](const glm::vec4& c) {
-                uint32_t r = (uint32_t)std::clamp(c.r * 255.0f + 0.5f, 0.0f, 255.0f);
-                uint32_t g = (uint32_t)std::clamp(c.g * 255.0f + 0.5f, 0.0f, 255.0f);
-                uint32_t b = (uint32_t)std::clamp(c.b * 255.0f + 0.5f, 0.0f, 255.0f);
-                std::ostringstream ss;
-                ss << "#" << std::uppercase << std::hex << std::setfill('0')
-                   << std::setw(2) << r << std::setw(2) << g << std::setw(2) << b;
-                return ss.str();
-            };
             fout << "Material {\n";
             fout << "    name: \"" << m_Name << "\"\n";
             fout << "    shader: \"ForwardPBR\"\n";
@@ -550,20 +518,7 @@ namespace Axle {
             fout << "    useMetallicMap: " << (m_UseMetallicMap ? "true" : "false") << "\n";
             fout << "    useAOMap: " << (m_UseAOMap ? "true" : "false") << "\n";
             fout << "    useEmissiveMap: " << (m_UseEmissiveMap ? "true" : "false") << "\n";
-            if (!m_CustomProperties.empty()) {
-                fout << "\n    // Dynamic Custom Properties\n";
-                for (const auto& prop : m_CustomProperties) {
-                    if (prop.Desc.Type == ShaderPropertyType::Float) {
-                        fout << "    customFloat." << prop.Desc.Name << ": " << prop.FloatVal << "\n";
-                    } else if (prop.Desc.Type == ShaderPropertyType::Color || prop.Desc.Type == ShaderPropertyType::Float4) {
-                        fout << "    customColor." << prop.Desc.Name << ": \"" << formatHex(prop.Vec4Val) << "\"\n";
-                    } else if (prop.Desc.Type == ShaderPropertyType::Texture2D) {
-                        fout << "    customTexture." << prop.Desc.Name << ": \"" << prop.TexturePath << "\"\n";
-                    } else if (prop.Desc.Type == ShaderPropertyType::Int) {
-                        fout << "    customInt." << prop.Desc.Name << ": " << prop.IntVal << "\n";
-                    }
-                }
-            }
+            WriteShaderProperties(fout,m_CustomProperties);
             fout << "}\n";
             return true;
         }
@@ -664,30 +619,8 @@ namespace Axle {
                 } else if (trimmed.rfind("environmentReflections:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(23));
                     m_EnableEnvironmentReflections = (val == "true" || val == "1");
-                } else if (trimmed.rfind("customFloat.", 0) == 0) {
-                    size_t colon = trimmed.find(':');
-                    if (colon != std::string::npos) {
-                        std::string pName = Trim(trimmed.substr(12, colon - 12));
-                        try { SetCustomFloat(pName, std::stof(Trim(trimmed.substr(colon + 1)))); } catch (...) {}
-                    }
-                } else if (trimmed.rfind("customColor.", 0) == 0) {
-                    size_t colon = trimmed.find(':');
-                    if (colon != std::string::npos) {
-                        std::string pName = Trim(trimmed.substr(12, colon - 12));
-                        std::string hexVal = Trim(trimmed.substr(colon + 1));
-                        if (!hexVal.empty() && hexVal.front() == '"') hexVal = hexVal.substr(1);
-                        if (!hexVal.empty() && hexVal.back() == '"') hexVal.pop_back();
-                        SetCustomVec4(pName, ParseHexColor(hexVal));
-                    }
-                } else if (trimmed.rfind("customTexture.", 0) == 0) {
-                    size_t colon = trimmed.find(':');
-                    if (colon != std::string::npos) {
-                        std::string pName = Trim(trimmed.substr(14, colon - 14));
-                        std::string texVal = Trim(trimmed.substr(colon + 1));
-                        if (!texVal.empty() && texVal.front() == '"') texVal = texVal.substr(1);
-                        if (!texVal.empty() && texVal.back() == '"') texVal.pop_back();
-                        SetCustomTexture(pName, texVal);
-                    }
+                } else if (ReadShaderPropertyLine(trimmed,m_CustomProperties)) {
+                    // Typed values and range metadata share the scene/material schema.
                 } else if (trimmed.rfind("renderQueue:", 0) == 0) {
                     try { m_RenderQueue = std::stoi(Trim(trimmed.substr(12))); } catch (...) {}
                 } else if (trimmed.rfind("useORMMap:", 0) == 0) {

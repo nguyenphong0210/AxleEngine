@@ -13,6 +13,7 @@ add_library(AxleRenderer STATIC
     src/Skybox.cpp
     src/Material.cpp
     src/ShaderPropertyReflection.cpp
+    src/ShaderPropertyPersistence.cpp
     src/Cubemap.cpp
     src/SkinningPipeline.cpp
 )

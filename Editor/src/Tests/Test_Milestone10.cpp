@@ -1215,6 +1215,18 @@ bool RunTest_Step106_MaterialPipeline() {
     custom.Desc.Type = ShaderPropertyType::Float;
     custom.FloatVal = 0.73f;
     source.CustomProperties.push_back(custom);
+    for (auto type : {ShaderPropertyType::Float2,ShaderPropertyType::Float3,ShaderPropertyType::Float4,ShaderPropertyType::Color,ShaderPropertyType::Int,ShaderPropertyType::Bool,ShaderPropertyType::Texture2D}) {
+        ShaderPropertyInstance property;
+        property.Desc.Name="Parameter"+std::to_string(static_cast<int>(type));
+        property.Desc.Type=type;
+        property.Vec4Val=glm::vec4(1.25f,-2.0f,0.4f,0.31f);
+        property.IntVal=7; property.BoolVal=true; property.TexturePath="textures/flake.png";
+        source.CustomProperties.push_back(property);
+    }
+    source.CustomProperties[0].Desc.HasRange=true;
+    source.CustomProperties[0].Desc.MinValue=-1.0f;
+    source.CustomProperties[0].Desc.MaxValue=2.0f;
+
     auto assetPath = root / "body.axleasset";
     if (!check(SceneHierarchyPanel::SaveMaterialAsset(assetPath, source), "Inspector save")) return false;
     MaterialComponent loaded;
@@ -1224,7 +1236,12 @@ bool RunTest_Step106_MaterialPipeline() {
     if (!check(loaded.RoughnessPath == source.RoughnessPath && !loaded.UseRoughnessMap && loaded.MetallicPath == source.MetallicPath && loaded.UseMetallicMap, "Separate map paths and disabled assignments")) return false;
     if (!check(loaded.EmissivePath == source.EmissivePath && loaded.UseEmissiveMap && !loaded.UseAOMap, "Emission / AO map state")) return false;
     if (!check(std::abs(loaded.ClearcoatStrength-source.ClearcoatStrength)<1e-5f && std::abs(loaded.ClearcoatRoughness-source.ClearcoatRoughness)<1e-5f && std::abs(loaded.AnisotropyStrength-source.AnisotropyStrength)<1e-5f && std::abs(loaded.AnisotropyRotation-source.AnisotropyRotation)<1e-5f, "Coat and anisotropy persistence")) return false;
-    if (!check(loaded.CustomProperties.size()==1 && std::abs(loaded.CustomProperties[0].FloatVal-custom.FloatVal)<1e-5f, "Custom property persistence")) return false;
+    if (!check(loaded.CustomProperties.size()==source.CustomProperties.size() && std::abs(loaded.CustomProperties[0].FloatVal-custom.FloatVal)<1e-5f, "Custom property persistence")) return false;
+    for (size_t i=1;i<source.CustomProperties.size();++i) {
+        const auto& before=source.CustomProperties[i]; const auto& after=loaded.CustomProperties[i];
+        if (!check(before.Desc.Type==after.Desc.Type && (before.Desc.Type==ShaderPropertyType::Int ? before.IntVal==after.IntVal : before.Desc.Type==ShaderPropertyType::Bool ? before.BoolVal==after.BoolVal : before.Desc.Type==ShaderPropertyType::Texture2D ? before.TexturePath==after.TexturePath : before.Vec4Val==after.Vec4Val), "Typed custom parameter round trip")) return false;
+    }
+    if (!check(loaded.CustomProperties[0].Desc.HasRange && loaded.CustomProperties[0].Desc.MinValue==-1.0f && loaded.CustomProperties[0].Desc.MaxValue==2.0f, "Custom slider bounds survive reload")) return false;
     if (!check(loaded.UVScale == source.UVScale && loaded.UVOffset == source.UVOffset && loaded.NormalStrength == 0.0f && loaded.RenderQueue == source.RenderQueue && !loaded.EnableSpecularHighlights && !loaded.EnableEnvironmentReflections, "UVs and shader flags")) return false;
 
     Scene scene;
@@ -1238,6 +1255,7 @@ bool RunTest_Step106_MaterialPipeline() {
     if (!check(!view.empty(), "Restored entity material")) return false;
     const auto& inlineMat = view.get<MaterialComponent>(*view.begin());
     if (!check(inlineMat.ORMPath == source.ORMPath && inlineMat.TextureMode == source.TextureMode && inlineMat.ClearcoatStrength == source.ClearcoatStrength && inlineMat.AnisotropyStrength == source.AnisotropyStrength && inlineMat.AOStrength == source.AOStrength && inlineMat.EmissivePath == source.EmissivePath && inlineMat.RenderQueue == source.RenderQueue && !inlineMat.EnableEnvironmentReflections, "Inline advanced material persistence")) return false;
+    if (!check(inlineMat.CustomProperties.size()==source.CustomProperties.size() && inlineMat.CustomProperties[6].BoolVal, "Inline typed shader parameter persistence")) return false;
     source.SyncToRHI();
     auto gpu = source.RHIMaterialAsset->BuildConstants();
     if (!check(gpu.UVTransform == glm::vec4(source.UVScale, source.UVOffset) && gpu.Surface.x == 0.0f && gpu.Surface.y == source.AOStrength && gpu.Surface.z == 0.0f && gpu.Surface.w == 0.0f, "Explicit GPU scalar layout")) return false;

@@ -1,3 +1,4 @@
+#include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
@@ -273,6 +274,7 @@ namespace Axle {
                 ss << "      AnisotropyStrength: " << mat.AnisotropyStrength << "\n";
                 ss << "      AnisotropyRotation: " << mat.AnisotropyRotation << "\n";
                 ss << "      RenderQueue: " << mat.RenderQueue << "\n";
+                WriteShaderProperties(ss,mat.CustomProperties,"      ");
                 ss << "      NormalPath: " << mat.NormalPath << "\n";
                 ss << "      UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
                 ss << "      NormalStrength: " << mat.NormalStrength << "\n";
@@ -1114,7 +1116,9 @@ namespace Axle {
                             currentEntity.AddComponent<MaterialComponent>();
                         }
                         auto& mat = currentEntity.GetComponent<MaterialComponent>();
-                        if (trimmed.rfind("MaterialHandle:", 0) == 0) {
+                        if (ReadShaderPropertyLine(trimmed,mat.CustomProperties)) {
+                            // Parsed a typed shader parameter.
+                        } else if (trimmed.rfind("MaterialHandle:", 0) == 0) {
                             mat.MaterialHandle = std::stoull(Trim(trimmed.substr(15)));
                             if (mat.MaterialHandle != 0) {
                                 mat.MaterialAsset = AssetManager::GetMaterial(mat.MaterialHandle);

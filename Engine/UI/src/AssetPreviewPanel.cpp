@@ -1,4 +1,5 @@
 #include <Axle/AssetPreviewPanel.hpp>
+#include <Axle/AssetDSL.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/Components.hpp>
@@ -176,7 +177,7 @@ namespace Axle {
         std::string ext = assetPath.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-        bool isMaterial = (ext == ".axlemat" || ext == ".amat" || ext == ".mat");
+        bool isMaterial = (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(assetPath.string()) == AssetKind::Material);
         bool is3D = (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx" || isMaterial);
         if (!is3D) {
             m_HasAsset = false;

@@ -2523,7 +2523,7 @@ void EditorLayer::OnImGuiRender() {
                             entityTag, spawnPos.x, spawnPos.y, spawnPos.z);
                     }
                 }
-            } else if (ext == ".amat" || ext == ".axlemat" || ext == ".mat" || ext == ".axleasset" ||
+            } else if (ext == ".axleasset" ||
                        ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
                 // Determine target entity under cursor via Physics Raycast or Mesh OBB
                 ImVec2 mousePos = ImGui::GetMousePos();

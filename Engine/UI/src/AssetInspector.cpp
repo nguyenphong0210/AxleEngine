@@ -149,8 +149,7 @@ namespace Axle {
         }
 
         bool isAssembly = (ext == ".axle");
-        bool isMaterial = (ext == ".axlemat" || ext == ".amat" || ext == ".mat" ||
-                           (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material));
+        bool isMaterial = (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material);
         bool isMesh = (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
         bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr");
 

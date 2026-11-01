@@ -285,9 +285,10 @@ namespace Axle {
         }
 
         // 2. Check if path is supported 3D format or Material
+        bool isMaterial = (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material);
         bool isSupported = (ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" || 
                             ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx" ||
-                            ext == ".axlemat" || ext == ".amat" || ext == ".mat");
+                            isMaterial);
         if (!isSupported) {
             return 0;
         }
@@ -346,8 +347,8 @@ namespace Axle {
 
         AxleLoadedPackage pkg;
 
-        // Case A: Material Asset (.axlemat) -> render on preview sphere
-        if (ext == ".axlemat" || ext == ".amat" || ext == ".mat") {
+        // Case A: Material Asset (.axleasset) -> render on preview sphere
+        if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material) {
             MaterialComponent mat;
             if (!SceneHierarchyPanel::LoadMaterialAsset(path, mat)) {
                 return false;

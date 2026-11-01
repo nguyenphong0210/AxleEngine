@@ -909,7 +909,7 @@ namespace Axle {
                     }
                     m_SelectedEntity = entity;
                     AXLE_INFO("Attached Native Script '{0}' to Entity '{1}' via Tree Drag & Drop", scriptName, tag);
-                } else if (ext == ".amat" || ext == ".axlemat" || ext == ".mat") {
+                } else if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(p.string()) == AssetKind::Material) {
                     MaterialComponent matComp;
                     if (LoadMaterialAsset(p, matComp)) {
                         if (entity.HasComponent<MaterialComponent>()) {

@@ -571,7 +571,7 @@ namespace Axle {
                 ImGui::Button("None (Local Instance)", ImVec2(ImGui::GetContentRegionAvail().x - 65.0f, 24.0f));
                 ImGui::PopStyleColor();
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Local Material: values are stored directly on this entity.\nDrag an .amat / .axlemat file here to bind a shared asset.");
+                    ImGui::SetTooltip("Local Material: values are stored directly on this entity.\nDrag an .axleasset Material here to bind a shared asset.");
                 }
             }
 
@@ -581,7 +581,7 @@ namespace Axle {
                     std::filesystem::path droppedPath(pathStr);
                     std::string ext = droppedPath.extension().string();
                     std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-                    if (ext == ".amat" || ext == ".axlemat" || ext == ".mat") {
+                    if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(droppedPath.string()) == AssetKind::Material) {
                         UUID handle = AssetManager::GetAssetUUID(droppedPath);
                         auto asset = AssetManager::GetMaterial(droppedPath);
                         if (asset) {

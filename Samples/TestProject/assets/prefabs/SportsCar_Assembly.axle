@@ -91,7 +91,7 @@ Entities:
       Color1: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
       Color2: [ 0.150000 , 0.150000 , 0.150000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/GoldMetallic.axlemat
+      AssetPath: assets/materials/GoldMetallic.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 1.000000 , 0.770000 , 0.340000 , 1.000000 ]
@@ -124,7 +124,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -161,7 +161,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -198,7 +198,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
@@ -235,7 +235,7 @@ Entities:
       Color1: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]
       Color2: [ 0.800000 , 0.800000 , 0.800000 , 1.000000 ]
     MaterialComponent:
-      AssetPath: assets/materials/BlackRubber.axlemat
+      AssetPath: assets/materials/BlackRubber.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 0.080000 , 0.080000 , 0.090000 , 1.000000 ]

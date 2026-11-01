@@ -82,7 +82,7 @@ namespace Axle {
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") {
             return { CBAssetKind::Texture, "Texture", "IMG", IM_COL32(46, 204, 113, 255) };
         }
-        if (ext == ".vert" || ext == ".frag" || ext == ".glsl" || ext == ".comp") {
+        if (ext == ".hlsl" || ext == ".vert" || ext == ".frag" || ext == ".glsl" || ext == ".comp") {
             return { CBAssetKind::Shader, "Shader", "SHD", IM_COL32(205, 105, 255, 255) };
         }
         if (ext == ".axlescene" || ext == ".scene") {
@@ -90,9 +90,6 @@ namespace Axle {
         }
         if (ext == ".axleproj") {
             return { CBAssetKind::Project, "Axle Project", "PRJ", IM_COL32(0, 210, 180, 255) };
-        }
-        if (ext == ".axlemat" || ext == ".amat" || ext == ".mat") {
-            return { CBAssetKind::Material, "Material", "MAT", IM_COL32(255, 135, 45, 255) };
         }
         if (ext == ".physmat") {
             return { CBAssetKind::PhysicsMaterial, "Physics Material", "PHY", IM_COL32(255, 165, 50, 255) };

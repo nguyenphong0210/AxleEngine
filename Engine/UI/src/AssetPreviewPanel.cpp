@@ -142,17 +142,35 @@ namespace Axle {
 
     uint64_t AssetPreviewPanel::GetOrCreateIconTexture(const std::string& iconFilename) {
         bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
+        auto FindIconPath = [](const std::string& filename) -> std::filesystem::path {
+            std::vector<std::filesystem::path> searchDirs = {
+                std::filesystem::path("Engine/Resources/Icons"),
+                std::filesystem::path("../Engine/Resources/Icons"),
+                std::filesystem::path("../../Engine/Resources/Icons"),
+                std::filesystem::path("../../../Engine/Resources/Icons"),
+                std::filesystem::current_path() / "Engine" / "Resources" / "Icons",
+                std::filesystem::current_path().parent_path() / "Engine" / "Resources" / "Icons",
+                std::filesystem::current_path().parent_path().parent_path() / "Engine" / "Resources" / "Icons",
+                std::filesystem::current_path().parent_path().parent_path().parent_path() / "Engine" / "Resources" / "Icons",
+                std::filesystem::path("D:/WorkSpace/AxleEngine/Engine/Resources/Icons")
+            };
+            for (const auto& dir : searchDirs) {
+                auto candidate = dir / filename;
+                if (std::filesystem::exists(candidate)) {
+                    return candidate;
+                }
+            }
+            return {};
+        };
+
         if (isRHI) {
             auto it = m_IconCache.find(iconFilename);
             if (it != m_IconCache.end() && it->second.second != 0) {
                 return it->second.second;
             }
 
-            std::filesystem::path iconPath = std::filesystem::path("Engine/Resources/Icons") / iconFilename;
-            if (!std::filesystem::exists(iconPath)) {
-                iconPath = FileSystem::ResolveAssetPath(iconPath);
-            }
-            if (!std::filesystem::exists(iconPath)) return 0;
+            std::filesystem::path iconPath = FindIconPath(iconFilename);
+            if (iconPath.empty()) return 0;
 
             int width = 0, height = 0, channels = 0;
             stbi_set_flip_vertically_on_load(false);
@@ -207,7 +225,8 @@ namespace Axle {
                 return it->second->GetRendererID();
             }
 
-            std::filesystem::path iconPath = std::filesystem::path("Engine/Resources/Icons") / iconFilename;
+            std::filesystem::path iconPath = FindIconPath(iconFilename);
+            if (iconPath.empty()) return 0;
             auto tex = Texture2D::Create(iconPath.string());
             if (tex && tex->IsLoaded()) {
                 m_GLIconCache[iconFilename] = tex;
@@ -943,27 +962,22 @@ namespace Axle {
             distance * std::cos(pitchRad) * std::cos(yawRad)
         );
 
-        // Dynamically align studio 3-point lighting relative to camera view
-        // Guarantees clean, smooth illumination without dark smudges from all orbit perspectives
-        glm::vec3 fwd = glm::normalize(m_PanOffset - camPos);
-        glm::vec3 right = glm::normalize(glm::cross(fwd, glm::vec3(0.0f, 1.0f, 0.0f)));
-        glm::vec3 up = glm::normalize(glm::cross(right, fwd));
-
+        // Studio 3-point lighting in fixed World Space (Godot, Blender & Unreal studio parity)
+        // Lights stay grounded in world space so orbiting the camera inspects specular reflections naturally across all angles
         if (m_PreviewLight && m_PreviewLight.HasComponent<DirectionalLightComponent>()) {
-            glm::vec3 keyDir = glm::normalize(-fwd + right * 0.50f + up * 0.65f);
             auto& dlc = m_PreviewLight.GetComponent<DirectionalLightComponent>();
-            dlc.Elevation = glm::degrees(std::asin(std::clamp(keyDir.y, -1.0f, 1.0f)));
-            dlc.Azimuth = glm::degrees(std::atan2(keyDir.x, keyDir.z));
+            dlc.Elevation = m_SunElevation;
+            dlc.Azimuth = m_SunAzimuth;
         }
 
         if (m_PreviewFillLight && m_PreviewFillLight.HasComponent<TransformComponent>()) {
             m_PreviewFillLight.GetComponent<TransformComponent>().Translation = 
-                m_PanOffset - fwd * (m_MaxDim * 2.2f) - right * (m_MaxDim * 2.5f) + up * (m_MaxDim * 2.2f);
+                m_PanOffset + glm::vec3(-m_MaxDim * 2.6f, m_MaxDim * 2.2f, m_MaxDim * 1.8f);
         }
 
         if (m_PreviewRimLight && m_PreviewRimLight.HasComponent<TransformComponent>()) {
             m_PreviewRimLight.GetComponent<TransformComponent>().Translation = 
-                m_PanOffset + fwd * (m_MaxDim * 3.0f) + right * (m_MaxDim * 1.5f) + up * (m_MaxDim * 2.0f);
+                m_PanOffset + glm::vec3(m_MaxDim * 1.8f, m_MaxDim * 2.5f, -m_MaxDim * 3.2f);
         }
 
         float aspect = (height > 0.0f) ? (width / height) : 1.0f;

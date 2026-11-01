@@ -497,17 +497,17 @@ float4 PSMain(PSInput input) : SV_Target0 {
         ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao;
     } else {
         // Photographic Studio & Physical Hemisphere Reflection (Godot 4 Studio Environment Parity)
-        // Balanced studio ambient levels providing clear 3D depth, rich contrast, and no blown-out whites
-        float3 studioTop     = float3(0.52, 0.54, 0.58); // Overhead softbox dome
-        float3 studioHorizon = float3(0.32, 0.34, 0.38); // Neutral studio eye-level fill
-        float3 studioGround  = float3(0.18, 0.19, 0.22); // Studio floor ambient bounce
+        // High-fidelity studio lighting: bright photographic softbox dome, luminous reflections, no metallic smudges
+        float3 studioTop     = float3(0.82, 0.85, 0.90); // Bright overhead studio softbox dome
+        float3 studioHorizon = float3(0.62, 0.65, 0.70); // Neutral eye-level studio fill
+        float3 studioGround  = float3(0.38, 0.40, 0.44); // Studio floor ambient bounce
 
-        // Smooth continuous hemisphere diffuse illumination
+        // Smooth continuous hemisphere diffuse illumination (scaled for realistic non-metal diffuse contrast)
         float upWeight = saturate(N.y * 0.5 + 0.5);
         float3 hemisphereLight = lerp(studioGround, studioTop, upWeight);
-        float3 ambientDiffuse = hemisphereLight * albedo.rgb * ambientKD;
+        float3 ambientDiffuse = hemisphereLight * albedo.rgb * ambientKD * 0.40;
 
-        // Smooth photographic studio specular reflection across all latitudes (eliminates artificial horizontal cuts)
+        // Smooth photographic studio specular reflection across all latitudes (seamless panoramic wrap)
         float3 R = reflect(-V, N);
         float3 specUpper = lerp(studioHorizon, studioTop, saturate(R.y));
         float3 specLower = lerp(studioGround, studioHorizon, saturate(R.y + 1.0));
@@ -522,14 +522,16 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float fillSpec = pow(max(dot(R, fillDir), 0.0), lerp(32.0, 4.0, roughness));
         specSky += float3(0.75, 0.85, 1.0) * fillSpec * (1.0 - roughness * 0.7) * 0.35;
 
+        // Frontal Camera Softbox (Standard studio fill facing object center - completely eliminates dark hollow smudges in metals)
+        float frontSpec = pow(max(dot(R, V), 0.0), lerp(20.0, 3.0, roughness));
+        specSky += float3(0.80, 0.83, 0.88) * frontSpec * (1.0 - roughness * 0.4) * 0.40;
+
         // Subtle Rim Contour Lobe (Grazing angle highlight defining shape silhouette)
         float rimFactor = pow(1.0 - NdotV, 4.0);
-        specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.15;
+        specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.20;
 
-        float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.3);
-
-        float ambientIntensity = hasMultiLightSun ? max(0.40, u_SunLight.ColorAndAmbient.w) : 0.65;
-        ambient = (ambientDiffuse * ambientIntensity + specularAmbient) * ao;
+        float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.25);
+        ambient = (ambientDiffuse + specularAmbient) * ao;
     }
     
     // 10. Total Radiance Accumulation (Linear HDR Radiance)

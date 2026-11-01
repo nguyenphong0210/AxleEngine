@@ -3,6 +3,8 @@
 #endif
 #include <Axle/ShaderPropertyReflection.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
+#include <Axle/CustomShaderPicker.hpp>
+#include <chrono>
 #if defined(AXLE_HAS_VULKAN)
 #if !defined(VK_NO_PROTOTYPES)
 #define VK_NO_PROTOTYPES 1
@@ -833,6 +835,66 @@ bool RunTest_Step104_Phase38_1_MaterialStudioParityAndHLSLCompiler() {
         assert(studio.IsDirty() == true);
     }
     std::cout << "  -> PASS: HLSL template generation, register layout, and buffer manipulation verified." << std::endl;
+
+    // [104.3b] Named shader creation, project discovery, and assignment must be
+    // independent of the editor working directory and must never overwrite files.
+    {
+        namespace fs = std::filesystem;
+        fs::path tempBase = fs::temp_directory_path();
+        fs::path root = tempBase / ("AxleShaderPicker_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        struct Cleanup {
+            fs::path Root, Base;
+            ~Cleanup() {
+                // Only remove this test's uniquely named directory under the temp root.
+                if (Root.parent_path() == Base && Root.filename().string().rfind("AxleShaderPicker_", 0) == 0) {
+                    std::error_code ec;
+                    fs::remove_all(Root, ec);
+                }
+            }
+        } cleanup{root, tempBase};
+        fs::create_directories(root);
+        auto require = [](bool condition, const char* message) {
+            if (!condition) std::cerr << "FAIL: " << message << std::endl;
+            return condition;
+        };
+        std::string error;
+        fs::path created;
+        if (!require(CustomShaderPicker::CreateShader(root, " Water Rim.hlsl ", created, error), "Could not create a named shader.")) return false;
+        if (!require(created == root / "shaders/Water Rim.hlsl", "Named shaders must be created under the active asset root.")) return false;
+        std::string original = FileSystem::ReadTextFile(created);
+        if (!require(original.find("Water Rim.hlsl") != std::string::npos && original.find("PSMain") != std::string::npos &&
+                     original.find("VSMain") != std::string::npos, "Created shader must contain the named, compilable HLSL template.")) return false;
+        fs::path duplicate;
+        if (!require(!CustomShaderPicker::CreateShader(root, "Water Rim", duplicate, error) && !error.empty() && duplicate.empty() &&
+                     FileSystem::ReadTextFile(created) == original, "Creating a duplicate must leave the existing shader untouched.")) return false;
+        for (const char* name : { "", "  ", ".", "..", "../escape", "bad/name", "bad\\name", "bad:name", "CON", "aux.hlsl", "trailing." }) {
+            if (!require(!CustomShaderPicker::GetNewShaderPath(root, name, duplicate, error) && !error.empty(),
+                         "Invalid shader names must be rejected.")) return false;
+        }
+        fs::path extensionPath;
+        if (!require(CustomShaderPicker::GetNewShaderPath(root, "OptionalExtension.HLSL", extensionPath, error) &&
+                     extensionPath.filename() == "OptionalExtension.hlsl", "Optional HLSL extension must not be duplicated.")) return false;
+
+        fs::create_directories(root / "shaders/nested");
+        FileSystem::WriteTextFile(root / "shaders/nested/Glow.HLSL", "// [Range(0.2, 0.8)]\nfloat Glow;\n");
+        FileSystem::WriteTextFile(root / "shaders/Legacy.shader", "// Legacy shader\n");
+        FileSystem::WriteTextFile(root / "shaders/readme.txt", "Not a shader");
+        auto found = CustomShaderPicker::FindShaders(root);
+        if (!require(found.size() == 3 && std::find(found.begin(), found.end(), root / "shaders/nested/Glow.HLSL") != found.end(),
+                     "Shader discovery must recurse, accept uppercase extensions, and ignore non-shader files.")) return false;
+        MaterialComponent material;
+        material.CustomShaderPath = "old.hlsl";
+        if (!require(!CustomShaderPicker::AssignShader(material, root, root / "missing.hlsl", error) && material.CustomShaderPath == "old.hlsl",
+                     "An unreadable shader must not replace the material's current assignment.")) return false;
+        if (!require(CustomShaderPicker::AssignShader(material, root, root / "shaders/nested/Glow.HLSL", error) &&
+                     material.CustomShaderPath == "shaders/nested/Glow.HLSL" && material.CustomProperties.size() == 1 &&
+                     std::abs(material.CustomProperties[0].FloatVal - 0.2f) < 0.0001f,
+                     "Selecting a shader must store an asset-relative path and initialize its reflected properties.")) return false;
+        FileSystem::WriteTextFile(root / "blocked", "Cannot create a folder here");
+        if (!require(!CustomShaderPicker::CreateShader(root / "blocked", "Unwritable", duplicate, error) && !error.empty(),
+                     "Creation failures must be reported without assigning an invalid path.")) return false;
+    }
+    std::cout << "  -> PASS: Named shader creation, duplicate protection, search discovery, and reflection assignment verified." << std::endl;
 
     // [104.4] Runtime DXC Shader Compilation to DXIL & SPIR-V Bytecode
     std::cout << "\n[104.4] Testing Runtime DXC Dual-Stage Compilation (VSMain & PSMain)..." << std::endl;

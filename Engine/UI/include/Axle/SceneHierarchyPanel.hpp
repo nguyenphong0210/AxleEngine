@@ -3,6 +3,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/CustomShaderPicker.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <filesystem>
 #include <functional>
@@ -97,6 +98,7 @@ namespace Axle {
         std::filesystem::path m_LoadedMaterialPath;
         MaterialComponent m_ActiveMaterialAsset;
         bool m_MaterialAssetLoaded = false;
+        CustomShaderPicker m_CustomShaderPicker;
 
         std::shared_ptr<AudioSource> m_EditorPreviewAudioSource;
         std::string m_EditorPreviewPath;

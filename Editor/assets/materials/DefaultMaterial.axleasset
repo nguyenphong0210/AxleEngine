@@ -2,6 +2,7 @@ Material {
     name: "DefaultMaterial"
     shader: "ForwardPBR"
     useCustomShader: false
+    customShaderPath: "shaders/DefaultMaterial.hlsl"
 
     // Texture Packing Mode
     textureMode: "SeparateMaps"
@@ -14,7 +15,7 @@ Material {
     environmentReflections: true
     renderQueue: 2000
 
-    // Base Color & Texture (Clean Neutral White)
+    // Base Color & Texture
     albedoColor: "#FFFFFF"
     albedoMap: ""
 
@@ -36,4 +37,3 @@ Material {
     uvTiling: [ 1 , 1 ]
     uvOffset: [ 0 , 0 ]
 }
-

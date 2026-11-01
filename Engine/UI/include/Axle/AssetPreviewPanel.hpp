@@ -8,11 +8,15 @@
 #include <Axle/Scene.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/Components.hpp>
 #include <filesystem>
 #include <memory>
 #include <string>
 
 namespace Axle {
+
+    class RHISceneRenderer;
 
     enum class PreviewMeshType {
         Sphere = 0,
@@ -25,7 +29,7 @@ namespace Axle {
     class AssetPreviewPanel {
     public:
         AssetPreviewPanel();
-        ~AssetPreviewPanel() = default;
+        ~AssetPreviewPanel();
 
         void SetAsset(const std::filesystem::path& assetPath);
         const std::filesystem::path& GetCurrentAsset() const { return m_CurrentAssetPath; }
@@ -43,9 +47,9 @@ namespace Axle {
         void SetPreviewMeshType(PreviewMeshType type);
         void LoadCustomPreviewMesh(const std::filesystem::path& meshPath);
         float GetSunAzimuth() const { return m_SunAzimuth; }
-        void SetSunAzimuth(float deg) { m_SunAzimuth = deg; }
+        void SetSunAzimuth(float deg);
         float GetSunElevation() const { return m_SunElevation; }
-        void SetSunElevation(float deg) { m_SunElevation = std::clamp(deg, 5.0f, 85.0f); }
+        void SetSunElevation(float deg);
         RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
         void UpdateMaterialPreview(const MaterialComponent& mat);
 
@@ -54,6 +58,8 @@ namespace Axle {
 
     private:
         void RenderPreview3D(float width, float height);
+        void RenderPreviewRHI(float width, float height);
+        void RebuildPreviewScene();
         void DrawPedestalGrid(const glm::mat4& viewProj, float radius);
         void SpawnCurrentAssetIntoScene();
 
@@ -102,6 +108,14 @@ namespace Axle {
         PhysicsScene* m_PhysicsScene = nullptr;
         std::shared_ptr<VertexArray> m_FallbackMesh;
         const SceneSerializerContext* m_SerializerContext = nullptr;
+
+        // RHI Multi-Backend Scene & Lighting Preview
+        std::unique_ptr<RHISceneRenderer> m_RHISceneRenderer;
+        std::shared_ptr<Scene> m_PreviewScene;
+        Entity m_PreviewEntity;
+        Entity m_PreviewLight;
+        MaterialComponent m_ActiveMaterial;
+        bool m_SceneNeedsRebuild = true;
     };
 
 }

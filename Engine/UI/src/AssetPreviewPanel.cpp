@@ -1,4 +1,8 @@
 #include <Axle/AssetPreviewPanel.hpp>
+#include <Axle/RHISceneRenderer.hpp>
+#include <Axle/RHIMeshRegistry.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <Axle/RenderCommand.hpp>
@@ -120,6 +124,17 @@ namespace Axle {
         }
     }
 
+    AssetPreviewPanel::~AssetPreviewPanel() {
+        if (m_RHISceneRenderer) {
+            m_RHISceneRenderer->Shutdown();
+            m_RHISceneRenderer.reset();
+        }
+        if (m_PreviewScene) {
+            m_PreviewScene->Clear();
+            m_PreviewScene.reset();
+        }
+    }
+
     void AssetPreviewPanel::InitRHI(ImGuiLayer* imguiLayer) {
         m_ImGuiLayer = imguiLayer;
         if (!m_ImGuiLayer) return;
@@ -128,7 +143,20 @@ namespace Axle {
             if (!m_RHIViewport) {
                 m_RHIViewport = std::make_unique<RHIViewportDescriptor>();
             }
-            m_RHIViewport->Init(m_ImGuiLayer, m_ViewportWidth, m_ViewportHeight, RHI::RHITextureFormat::RGBA8_UNORM, true);
+            RHIViewportDesc desc;
+            desc.Width = m_ViewportWidth;
+            desc.Height = m_ViewportHeight;
+            desc.ColorFormat = RHI::RHITextureFormat::RGBA8_UNORM;
+            desc.EnableDepth = true;
+            desc.DepthFormat = RHI::RHITextureFormat::D32_FLOAT;
+            desc.DebugName = "AssetPreviewViewport";
+            m_RHIViewport->Init(m_ImGuiLayer, desc);
+
+            if (!m_RHISceneRenderer) {
+                m_RHISceneRenderer = std::make_unique<RHISceneRenderer>();
+                m_RHISceneRenderer->Init();
+            }
+            m_SceneNeedsRebuild = true;
         }
     }
 
@@ -246,6 +274,8 @@ namespace Axle {
                 m_Yaw = 30.0f;
                 m_Zoom = 1.0f;
                 m_PanOffset = glm::vec3(0.0f);
+                m_ActiveMaterial = mat;
+                m_SceneNeedsRebuild = true;
                 return;
             }
         }
@@ -332,6 +362,7 @@ namespace Axle {
             m_Yaw = 35.0f;
             m_Zoom = 1.0f;
             m_PanOffset = glm::vec3(0.0f);
+            m_SceneNeedsRebuild = true;
             return;
         }
 
@@ -382,6 +413,7 @@ namespace Axle {
         m_Yaw = 35.0f;
         m_Zoom = 1.0f;
         m_PanOffset = glm::vec3(0.0f);
+        m_SceneNeedsRebuild = true;
     }
 
     void AssetPreviewPanel::RenderPreview3D(float width, float height) {
@@ -588,6 +620,7 @@ namespace Axle {
 
     void AssetPreviewPanel::SetPreviewMeshType(PreviewMeshType type) {
         m_PreviewMeshType = type;
+        m_SceneNeedsRebuild = true;
         if (!m_SerializerContext) return;
         std::shared_ptr<VertexArray> vao = m_SerializerContext->SphereMesh;
         if (type == PreviewMeshType::Cube) vao = m_FallbackMesh;
@@ -608,15 +641,195 @@ namespace Axle {
             m_CustomMeshVAO = pkg.Parts[0].LoadedMesh.VAO;
             m_TotalVertices = pkg.Parts[0].LoadedMesh.SourceData.Vertices.size();
             m_TotalTriangles = pkg.Parts[0].LoadedMesh.SourceData.Indices.size() / 3;
+            m_SceneNeedsRebuild = true;
             SetPreviewMeshType(PreviewMeshType::Custom);
         }
     }
 
     void AssetPreviewPanel::UpdateMaterialPreview(const MaterialComponent& mat) {
+        m_ActiveMaterial = mat;
+        if (m_PreviewEntity && m_PreviewScene && m_PreviewEntity.HasComponent<MaterialComponent>()) {
+            auto& comp = m_PreviewEntity.GetComponent<MaterialComponent>();
+            comp = mat;
+            comp.SyncToRHI();
+        } else {
+            m_SceneNeedsRebuild = true;
+        }
+
         if (!m_CurrentPackage.Parts.empty()) {
             m_CurrentPackage.Parts[0].LoadedMesh.SourceData.ColorPrimary = mat.AlbedoColor;
             m_CurrentPackage.Parts[0].LoadedMesh.SourceData.ColorSecondary = mat.AlbedoColor * 0.85f;
         }
+    }
+
+    void AssetPreviewPanel::SetSunAzimuth(float deg) {
+        m_SunAzimuth = deg;
+        if (m_PreviewLight && m_PreviewScene && m_PreviewLight.HasComponent<DirectionalLightComponent>()) {
+            m_PreviewLight.GetComponent<DirectionalLightComponent>().Azimuth = m_SunAzimuth;
+        }
+    }
+
+    void AssetPreviewPanel::SetSunElevation(float deg) {
+        m_SunElevation = std::clamp(deg, 5.0f, 85.0f);
+        if (m_PreviewLight && m_PreviewScene && m_PreviewLight.HasComponent<DirectionalLightComponent>()) {
+            m_PreviewLight.GetComponent<DirectionalLightComponent>().Elevation = m_SunElevation;
+        }
+    }
+
+    void AssetPreviewPanel::RebuildPreviewScene() {
+        if (!RHI::RHIDevice::Get().IsInitialized()) return;
+
+        if (!m_PreviewScene) {
+            m_PreviewScene = std::make_shared<Scene>();
+        }
+        m_PreviewScene->Clear();
+
+        bool isMaterial = (!m_CurrentAssetPath.empty() && 
+                           m_CurrentAssetPath.extension() == ".axleasset" && 
+                           AssetDSL::PeekAssetKindFromFile(m_CurrentAssetPath.string()) == AssetKind::Material);
+
+        if (isMaterial) {
+            m_PreviewEntity = m_PreviewScene->CreateEntity("PreviewMaterialObject");
+            auto& tc = m_PreviewEntity.GetComponent<TransformComponent>();
+            tc.Translation = glm::vec3(0.0f);
+            tc.Scale = glm::vec3(1.0f);
+
+            auto& mc = m_PreviewEntity.AddComponent<MeshInstance3D>();
+            switch (m_PreviewMeshType) {
+                case PreviewMeshType::Sphere:
+                    mc.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+                    break;
+                case PreviewMeshType::Cube:
+                    mc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+                    break;
+                case PreviewMeshType::Cylinder:
+                    mc.RHIMeshAsset = RHIMeshRegistry::Get().GetCylinder();
+                    break;
+                case PreviewMeshType::Plane:
+                    mc.RHIMeshAsset = RHIMeshRegistry::Get().GetPlane();
+                    break;
+                case PreviewMeshType::Custom:
+                    if (!m_CustomMeshPath.empty()) {
+                        mc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(m_CustomMeshPath.string());
+                    }
+                    if (!mc.RHIMeshAsset) mc.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+                    break;
+            }
+
+            auto& matComp = m_PreviewEntity.AddComponent<MaterialComponent>(m_ActiveMaterial);
+            matComp.SyncToRHI();
+        } else if (m_IsAssembly) {
+            std::function<void(const AssemblyNode&, glm::vec3)> spawnNodes = [&](const AssemblyNode& node, glm::vec3 parentPos) {
+                glm::vec3 worldPos = parentPos + node.Transform.Translation;
+                if (node.HasMesh) {
+                    auto partEnt = m_PreviewScene->CreateEntity(node.Tag.empty() ? "Node" : node.Tag);
+                    auto& ptc = partEnt.GetComponent<TransformComponent>();
+                    ptc.Translation = worldPos - m_Center;
+                    ptc.Rotation = node.Transform.Rotation;
+                    ptc.Scale = node.Transform.Scale;
+
+                    auto& pmc = partEnt.AddComponent<MeshInstance3D>();
+                    if (!node.Mesh.AssetPath.empty()) {
+                        if (node.Mesh.AssetPath == "builtin://sphere") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+                        else if (node.Mesh.AssetPath == "builtin://cylinder") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCylinder();
+                        else if (node.Mesh.AssetPath == "builtin://cone") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCone();
+                        else if (node.Mesh.AssetPath == "builtin://plane") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetPlane();
+                        else if (node.Mesh.AssetPath == "builtin://cube") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+                        else {
+                            auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
+                            pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(resolved.string());
+                        }
+                    }
+                    if (!pmc.RHIMeshAsset) pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+                    pmc.Color1 = node.Mesh.Color1;
+                    pmc.Color2 = node.Mesh.Color2;
+                    pmc.PatternMode = node.Mesh.PatternMode;
+                }
+                for (const auto& child : node.Children) {
+                    spawnNodes(child, worldPos);
+                }
+            };
+            spawnNodes(m_CurrentAssembly.RootNode, glm::vec3(0.0f));
+        } else {
+            for (const auto& part : m_CurrentPackage.Parts) {
+                auto partEnt = m_PreviewScene->CreateEntity(part.Name.empty() ? "Part" : part.Name);
+                auto& ptc = partEnt.GetComponent<TransformComponent>();
+                ptc.Translation = part.LocalTranslation - m_Center;
+                ptc.Rotation = part.LocalRotation;
+                ptc.Scale = part.LocalScale;
+
+                auto& pmc = partEnt.AddComponent<MeshInstance3D>();
+                if (!m_CurrentAssetPath.empty()) {
+                    auto partFullPath = m_CurrentAssetPath.parent_path() / part.RelativePath;
+                    pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(partFullPath.string());
+                }
+                if (!pmc.RHIMeshAsset) pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+                pmc.Color1 = part.LoadedMesh.SourceData.ColorPrimary;
+                pmc.Color2 = part.LoadedMesh.SourceData.ColorSecondary;
+                pmc.PatternMode = part.LoadedMesh.SourceData.PatternMode;
+            }
+        }
+
+        // Add Directional Sun Light
+        m_PreviewLight = m_PreviewScene->CreateEntity("PreviewSunLight");
+        auto& dlc = m_PreviewLight.AddComponent<DirectionalLightComponent>();
+        dlc.Azimuth = m_SunAzimuth;
+        dlc.Elevation = m_SunElevation;
+        dlc.Color = glm::vec3(1.0f, 0.98f, 0.94f);
+        dlc.Intensity = 2.5f;
+        dlc.AmbientIntensity = 0.45f;
+
+        m_SceneNeedsRebuild = false;
+    }
+
+    void AssetPreviewPanel::RenderPreviewRHI(float width, float height) {
+        if (!m_RHIViewport || !m_RHIViewport->IsValid()) return;
+
+        if (!m_RHISceneRenderer) {
+            m_RHISceneRenderer = std::make_unique<RHISceneRenderer>();
+            m_RHISceneRenderer->Init();
+        }
+
+        if (m_SceneNeedsRebuild || !m_PreviewScene) {
+            RebuildPreviewScene();
+        }
+        if (!m_PreviewScene) return;
+
+        // Turntable update
+        if (m_TurntableActive && !m_IsViewportHovered) {
+            m_Yaw += ImGui::GetIO().DeltaTime * m_TurntableSpeed * 30.0f;
+            if (m_Yaw > 360.0f) m_Yaw -= 360.0f;
+        }
+
+        // Camera setup
+        float pitchRad = glm::radians(m_Pitch);
+        float yawRad = glm::radians(m_Yaw);
+        float distance = m_MaxDim * 2.2f * m_Zoom;
+
+        glm::vec3 camPos = m_PanOffset + glm::vec3(
+            distance * std::cos(pitchRad) * std::sin(yawRad),
+            distance * std::sin(pitchRad),
+            distance * std::cos(pitchRad) * std::cos(yawRad)
+        );
+
+        float aspect = (height > 0.0f) ? (width / height) : 1.0f;
+        PerspectiveCamera camera(45.0f, aspect, 0.05f, distance * 8.0f);
+        glm::mat4 view = glm::lookAt(camPos, m_PanOffset, glm::vec3(0.0f, 1.0f, 0.0f));
+        camera.SetViewMatrix(view, camPos);
+
+        SceneRenderSettings settings;
+        settings.EnableShadows = false;
+        settings.EnableSkybox = false;
+        settings.EnableToneMapping = true;
+        settings.EnableFXAA = true;
+
+        m_RHISceneRenderer->RenderScene(
+            m_PreviewScene,
+            camera,
+            m_RHIViewport->GetColorTexture(),
+            m_RHIViewport->GetDepthTexture(),
+            settings
+        );
     }
 
     void AssetPreviewPanel::RenderPreviewViewport() {
@@ -666,6 +879,7 @@ namespace Axle {
                 m_Yaw = 35.0f;
                 m_Zoom = 1.0f;
                 m_PanOffset = glm::vec3(0.0f);
+                m_SceneNeedsRebuild = true;
                 m_SunAzimuth = 45.0f;
                 m_SunElevation = 50.0f;
             }
@@ -680,21 +894,26 @@ namespace Axle {
         float availW = ImGui::GetContentRegionAvail().x;
         float viewportH = std::clamp(availW * 0.72f, 180.0f, 360.0f);
 
-        RenderPreview3D(availW, viewportH);
-
-        uint64_t rhiTexID = 0;
-        if (m_RHIViewport && m_RHIViewport->IsValid()) {
-            if ((uint32_t)availW != m_ViewportWidth || (uint32_t)viewportH != m_ViewportHeight) {
-                m_ViewportWidth = (uint32_t)availW;
-                m_ViewportHeight = (uint32_t)viewportH;
-                m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
+        if (RHI::RHIDevice::Get().IsInitialized()) {
+            if (!m_RHIViewport && m_ImGuiLayer) {
+                InitRHI(m_ImGuiLayer);
             }
-            rhiTexID = m_RHIViewport->GetImTextureID();
-        }
-
-        if (rhiTexID != 0) {
-            ImGui::Image((ImTextureID)(intptr_t)rhiTexID, ImVec2(availW, viewportH), ImVec2(0, 0), ImVec2(1, 1));
-        } else if (m_Framebuffer) {
+            if (m_RHIViewport && m_RHIViewport->IsValid()) {
+                if ((uint32_t)availW != m_ViewportWidth || (uint32_t)viewportH != m_ViewportHeight) {
+                    m_ViewportWidth = (uint32_t)availW;
+                    m_ViewportHeight = (uint32_t)viewportH;
+                    m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
+                }
+                RenderPreviewRHI(availW, viewportH);
+                uint64_t rhiTexID = m_RHIViewport->GetImTextureID();
+                if (rhiTexID != 0) {
+                    glm::vec2 uv0 = m_RHIViewport->GetUV0();
+                    glm::vec2 uv1 = m_RHIViewport->GetUV1();
+                    ImGui::Image((ImTextureID)(intptr_t)rhiTexID, ImVec2(availW, viewportH), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
+                }
+            }
+        } else if (Window::HasActiveContext() && m_Framebuffer) {
+            RenderPreview3D(availW, viewportH);
             u32 texID = m_Framebuffer->GetColorAttachmentRendererID();
             ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(availW, viewportH), ImVec2(0, 1), ImVec2(1, 0));
         } else {
@@ -743,6 +962,11 @@ namespace Axle {
                 m_SunAzimuth += delta.x * 0.75f;
                 m_SunElevation -= delta.y * 0.75f;
                 m_SunElevation = std::clamp(m_SunElevation, 5.0f, 85.0f);
+                if (m_PreviewLight && m_PreviewScene && m_PreviewLight.HasComponent<DirectionalLightComponent>()) {
+                    auto& dlc = m_PreviewLight.GetComponent<DirectionalLightComponent>();
+                    dlc.Azimuth = m_SunAzimuth;
+                    dlc.Elevation = m_SunElevation;
+                }
             }
         }
 

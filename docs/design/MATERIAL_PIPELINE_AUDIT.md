@@ -42,3 +42,12 @@ binding, and visible shading agree in the preview and scene.
   and CPU tests alone do not establish visible GPU correctness.
 - Record unsupported or unverified backend/environment combinations explicitly.
 - Update this audit as gaps close; leave unfinished roadmap checkboxes pending.
+
+## Verified progress
+
+- Inspector saves now use the complete component-to-asset mapping. Floating-point
+  colors retain alpha and HDR values; separate-map assignments and enable states
+  survive reload. Clearing emission no longer resets packed ORM. Inline scene
+  serialization now preserves existing advanced scalar and map settings.
+- Release build and test steps 101, 105, and 106 passed. Existing LNK4098 runtime
+  library conflict warnings remain; they are not material implementation errors.

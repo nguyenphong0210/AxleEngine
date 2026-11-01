@@ -610,6 +610,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **Step 1 - Complete Existing Inspector -> Asset -> Renderer -> Shader Paths**:
     - [x] Audit every existing material property across the asset inspector, entity inspector, material component, `.axleasset` serialization, renderer bindings, and shader consumption; record missing or ineffective connections. See [Material Pipeline Audit](docs/design/MATERIAL_PIPELINE_AUDIT.md).
     - [ ] Complete both save/load and live updates for Albedo, Normal Strength, Metallic, Roughness, AO Strength, Emission, Separate Maps / Packed ORM, independent UV X/Y tiling, and UV offset.
+      - [x] Preserve inspector asset and inline scene material values on save/reload, including HDR color, alpha, map paths and enable states, ORM, coat, anisotropy, and shader flags (Step 106).
     - [ ] Verify Surface Type, Alpha Cutoff, Cull Mode, Depth Write, Specular Highlights, Environment Reflections, and Render Queue affect the intended shader or pipeline state, including transparent draw ordering.
     - [ ] Finish existing Clearcoat Strength / Roughness and Anisotropy Strength / Rotation shading through actual BRDF evaluation; ensure every exposed parameter reaches and affects the GPU rather than only being serialized or stored in an unused function.
     - [ ] Define an explicit, matching CPU/GPU material layout without overloading unrelated parameters; keep preview and scene rendering consistent and preserve backward-compatible defaults for existing assets.

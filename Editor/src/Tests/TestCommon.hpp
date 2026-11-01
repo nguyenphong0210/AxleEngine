@@ -348,3 +348,5 @@ bool RunTest_Step102_Phase39_VisualParticleAndVFXStudio();
 // Milestone 10 - Phase 38.1: Material Studio Parity & HLSL Compiler Suite (Step 104)
 bool RunTest_Step104_Phase38_1_MaterialStudioParityAndHLSLCompiler();
 bool RunTest_Step105_Phase38_2_DynamicReflectionAndAutomotiveShading();
+
+bool RunTest_Step106_MaterialPipeline();

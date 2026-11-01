@@ -249,13 +249,30 @@ namespace Axle {
                 ss << "    MaterialComponent:\n";
                 if (mat.HasAsset()) {
                     ss << "      MaterialHandle: " << (uint64_t)mat.MaterialHandle << "\n";
-                    if (!mat.MaterialAsset->GetFilePath().empty()) {
+                    if (mat.MaterialAsset && !mat.MaterialAsset->GetFilePath().empty()) {
                         ss << "      AssetPath: " << mat.MaterialAsset->GetFilePath().string() << "\n";
                     }
                 }
                 ss << "      AlbedoPath: " << mat.AlbedoPath << "\n";
                 ss << "      UseAlbedoMap: " << (mat.UseAlbedoMap ? "true" : "false") << "\n";
                 ss << "      AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
+                ss << "      AOPath: " << mat.AOPath << "\n";
+                ss << "      EmissivePath: " << mat.EmissivePath << "\n";
+                ss << "      ORMPath: " << mat.ORMPath << "\n";
+                ss << "      CustomShaderPath: " << mat.CustomShaderPath << "\n";
+                ss << "      TextureMode: " << TextureModeToString(mat.TextureMode) << "\n";
+                ss << "      UseAOMap: " << (mat.UseAOMap ? "true" : "false") << "\n";
+                ss << "      UseEmissiveMap: " << (mat.UseEmissiveMap ? "true" : "false") << "\n";
+                ss << "      UseORMMap: " << (mat.UseORMMap ? "true" : "false") << "\n";
+                ss << "      EnableSpecularHighlights: " << (mat.EnableSpecularHighlights ? "true" : "false") << "\n";
+                ss << "      EnableEnvironmentReflections: " << (mat.EnableEnvironmentReflections ? "true" : "false") << "\n";
+                ss << "      UseCustomShader: " << (mat.UseCustomShader ? "true" : "false") << "\n";
+                ss << "      AOStrength: " << mat.AOStrength << "\n";
+                ss << "      ClearcoatStrength: " << mat.ClearcoatStrength << "\n";
+                ss << "      ClearcoatRoughness: " << mat.ClearcoatRoughness << "\n";
+                ss << "      AnisotropyStrength: " << mat.AnisotropyStrength << "\n";
+                ss << "      AnisotropyRotation: " << mat.AnisotropyRotation << "\n";
+                ss << "      RenderQueue: " << mat.RenderQueue << "\n";
                 ss << "      NormalPath: " << mat.NormalPath << "\n";
                 ss << "      UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
                 ss << "      NormalStrength: " << mat.NormalStrength << "\n";
@@ -1117,6 +1134,40 @@ namespace Axle {
                             float r = 1, g = 1, b = 1, a = 1;
                             sscanf(trimmed.c_str(), "AlbedoColor: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
                             mat.AlbedoColor = glm::vec4(r, g, b, a);
+                        } else if (trimmed.rfind("AOPath:", 0) == 0) {
+                            mat.AOPath = Trim(trimmed.substr(7));
+                        } else if (trimmed.rfind("EmissivePath:", 0) == 0) {
+                            mat.EmissivePath = Trim(trimmed.substr(13));
+                        } else if (trimmed.rfind("ORMPath:", 0) == 0) {
+                            mat.ORMPath = Trim(trimmed.substr(8));
+                        } else if (trimmed.rfind("CustomShaderPath:", 0) == 0) {
+                            mat.CustomShaderPath = Trim(trimmed.substr(17));
+                        } else if (trimmed.rfind("TextureMode:", 0) == 0) {
+                            mat.TextureMode = StringToTextureMode(Trim(trimmed.substr(12)));
+                        } else if (trimmed.rfind("UseAOMap:", 0) == 0) {
+                            mat.UseAOMap = Trim(trimmed.substr(9)) == "true";
+                        } else if (trimmed.rfind("UseEmissiveMap:", 0) == 0) {
+                            mat.UseEmissiveMap = Trim(trimmed.substr(15)) == "true";
+                        } else if (trimmed.rfind("UseORMMap:", 0) == 0) {
+                            mat.UseORMMap = Trim(trimmed.substr(10)) == "true";
+                        } else if (trimmed.rfind("EnableSpecularHighlights:", 0) == 0) {
+                            mat.EnableSpecularHighlights = Trim(trimmed.substr(25)) == "true";
+                        } else if (trimmed.rfind("EnableEnvironmentReflections:", 0) == 0) {
+                            mat.EnableEnvironmentReflections = Trim(trimmed.substr(29)) == "true";
+                        } else if (trimmed.rfind("UseCustomShader:", 0) == 0) {
+                            mat.UseCustomShader = Trim(trimmed.substr(16)) == "true";
+                        } else if (trimmed.rfind("AOStrength:", 0) == 0) {
+                            mat.AOStrength = std::stof(Trim(trimmed.substr(11)));
+                        } else if (trimmed.rfind("ClearcoatStrength:", 0) == 0) {
+                            mat.ClearcoatStrength = std::stof(Trim(trimmed.substr(18)));
+                        } else if (trimmed.rfind("ClearcoatRoughness:", 0) == 0) {
+                            mat.ClearcoatRoughness = std::stof(Trim(trimmed.substr(19)));
+                        } else if (trimmed.rfind("AnisotropyStrength:", 0) == 0) {
+                            mat.AnisotropyStrength = std::stof(Trim(trimmed.substr(19)));
+                        } else if (trimmed.rfind("AnisotropyRotation:", 0) == 0) {
+                            mat.AnisotropyRotation = std::stof(Trim(trimmed.substr(19)));
+                        } else if (trimmed.rfind("RenderQueue:", 0) == 0) {
+                            mat.RenderQueue = std::stoi(Trim(trimmed.substr(12)));
                         } else if (trimmed.rfind("NormalPath:", 0) == 0) {
                             std::string p = Trim(trimmed.substr(11));
                             if (!p.empty()) mat.SetNormal(p);

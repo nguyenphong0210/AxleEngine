@@ -485,36 +485,10 @@ namespace Axle {
 
     bool SceneHierarchyPanel::SaveMaterialAsset(const std::filesystem::path& path, const MaterialComponent& mat) {
         auto m = std::make_shared<Material>(path.stem().string());
-        m->SetAlbedoColor(mat.AlbedoColor);
-        m->SetAlbedoTexture(mat.AlbedoMap, mat.AlbedoPath);
-        m->SetUseAlbedoMap(mat.UseAlbedoMap);
-        m->SetNormalTexture(mat.NormalMap, mat.NormalPath);
-        m->SetUseNormalMap(mat.UseNormalMap);
-        m->SetNormalStrength(mat.NormalStrength);
-        m->SetRoughness(mat.Roughness);
-        m->SetRoughnessTexture(mat.RoughnessMap, mat.RoughnessPath);
-        m->SetUseRoughnessMap(mat.UseRoughnessMap);
-        m->SetMetallic(mat.Metallic);
-        m->SetMetallicTexture(mat.MetallicMap, mat.MetallicPath);
-        m->SetUseMetallicMap(mat.UseMetallicMap);
-        m->SetAO(mat.AOStrength);
-        m->SetAOTexture(mat.AOMap, mat.AOPath);
-        m->SetUseAOMap(mat.UseAOMap);
-        m->SetEmissionColor(mat.EmissionColor);
-        m->SetEmissionIntensity(mat.EmissionIntensity);
-        m->SetEmissiveTexture(mat.EmissiveMap, mat.EmissivePath);
-        m->SetUseEmissiveMap(mat.UseEmissiveMap);
-        m->SetUVScale(mat.UVScale);
-        m->SetUVOffset(mat.UVOffset);
-        m->SetSurfaceType(mat.SurfaceType);
-        m->SetCullMode(mat.CullMode);
-        m->SetAlphaCutoff(mat.AlphaCutoff);
-        m->SetDepthWrite(mat.DepthWrite);
-        m->SetEnableSpecularHighlights(mat.EnableSpecularHighlights);
-        m->SetEnableEnvironmentReflections(mat.EnableEnvironmentReflections);
-        m->SetRenderQueue(mat.RenderQueue);
-        m->SetUseCustomShader(mat.UseCustomShader);
-        m->SetCustomShaderPath(mat.CustomShaderPath);
+        // Save through the same complete mapping used by entity materials.
+        MaterialComponent snapshot = mat;
+        snapshot.MaterialAsset = m;
+        snapshot.SyncToAsset();
         return m->Save(path);
     }
 

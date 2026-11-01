@@ -1163,3 +1163,78 @@ bool RunTest_Step105_Phase38_2_DynamicReflectionAndAutomotiveShading() {
     std::cout << "\n>>> STEP 105 PASSED: Phase 38.2 Dynamic Reflection & Automotive Shading 100% verified! <<<\n" << std::endl;
     return true;
 }
+
+
+bool RunTest_Step106_MaterialPipeline() {
+    using namespace Axle;
+    auto check = [](bool ok, const char* message) {
+        if (!ok) std::cerr << "[106] FAIL: " << message << std::endl;
+        return ok;
+    };
+    auto root = std::filesystem::temp_directory_path() /
+        ("AxleMaterial106_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(root);
+    struct Cleanup {
+        std::filesystem::path Root;
+        ~Cleanup() { std::error_code ec; std::filesystem::remove_all(Root, ec); }
+    } cleanup{root};
+
+    MaterialComponent source;
+    source.TextureMode = TextureMode::PackedORM;
+    source.ORMPath = "textures/body_orm.png";
+    source.UseORMMap = true;
+    source.AlbedoColor = glm::vec4(0.13f, 0.27f, 0.42f, 0.31f);
+    source.EmissionColor = glm::vec3(2.5f, 0.23f, 1.2f);
+    source.EmissionIntensity = 0.25f;
+    source.UVScale = glm::vec2(2.0f, 7.0f);
+    source.UVOffset = glm::vec2(-0.25f, 0.7f);
+    source.ClearcoatStrength = 0.8f;
+    source.ClearcoatRoughness = 0.12f;
+    source.AnisotropyStrength = -0.6f;
+    source.AnisotropyRotation = 0.35f;
+    source.NormalStrength = 0.0f;
+    source.AOStrength = 0.2f;
+    source.RoughnessPath = "textures/r.png";
+    source.MetallicPath = "textures/m.png";
+    source.EmissivePath = "textures/e.png";
+    source.AOPath = "textures/ao.png";
+    source.UseRoughnessMap = false; // Retain assignment without re-enabling it on load.
+    source.UseMetallicMap = true;
+    source.UseEmissiveMap = true;
+    source.UseAOMap = false;
+    source.EnableSpecularHighlights = false;
+    source.EnableEnvironmentReflections = false;
+    source.RenderQueue = 3107;
+    source.UseCustomShader = true;
+    source.CustomShaderPath = "shaders/body.hlsl";
+    ShaderPropertyInstance custom;
+    custom.Desc.Name = "Wetness";
+    custom.Desc.Type = ShaderPropertyType::Float;
+    custom.FloatVal = 0.73f;
+    source.CustomProperties.push_back(custom);
+    auto assetPath = root / "body.axleasset";
+    if (!check(SceneHierarchyPanel::SaveMaterialAsset(assetPath, source), "Inspector save")) return false;
+    MaterialComponent loaded;
+    if (!check(SceneHierarchyPanel::LoadMaterialAsset(assetPath, loaded), "Inspector load")) return false;
+    if (!check(loaded.TextureMode == source.TextureMode && loaded.ORMPath == source.ORMPath && loaded.UseORMMap, "Packed ORM persistence")) return false;
+    if (!check(glm::length(loaded.AlbedoColor-source.AlbedoColor) < 1e-5f && glm::length(loaded.EmissionColor-source.EmissionColor) < 1e-5f, "Linear HDR color and alpha persistence")) return false;
+    if (!check(loaded.RoughnessPath == source.RoughnessPath && !loaded.UseRoughnessMap && loaded.MetallicPath == source.MetallicPath && loaded.UseMetallicMap, "Separate map paths and disabled assignments")) return false;
+    if (!check(loaded.EmissivePath == source.EmissivePath && loaded.UseEmissiveMap && !loaded.UseAOMap, "Emission / AO map state")) return false;
+    if (!check(std::abs(loaded.ClearcoatStrength-source.ClearcoatStrength)<1e-5f && std::abs(loaded.ClearcoatRoughness-source.ClearcoatRoughness)<1e-5f && std::abs(loaded.AnisotropyStrength-source.AnisotropyStrength)<1e-5f && std::abs(loaded.AnisotropyRotation-source.AnisotropyRotation)<1e-5f, "Coat and anisotropy persistence")) return false;
+    if (!check(loaded.CustomProperties.size()==1 && std::abs(loaded.CustomProperties[0].FloatVal-custom.FloatVal)<1e-5f, "Custom property persistence")) return false;
+    if (!check(loaded.UVScale == source.UVScale && loaded.UVOffset == source.UVOffset && loaded.NormalStrength == 0.0f && loaded.RenderQueue == source.RenderQueue && !loaded.EnableSpecularHighlights && !loaded.EnableEnvironmentReflections, "UVs and shader flags")) return false;
+
+    Scene scene;
+    auto entity = scene.CreateEntity("MaterialRoundTrip");
+    entity.AddComponent<MaterialComponent>() = source;
+    SceneSerializer writer(&scene);
+    Scene restored;
+    SceneSerializer reader(&restored);
+    if (!check(reader.DeserializeFromString(writer.SerializeToString()), "Inline scene material reload")) return false;
+    auto view = restored.GetRegistry().view<MaterialComponent>();
+    if (!check(!view.empty(), "Restored entity material")) return false;
+    const auto& inlineMat = view.get<MaterialComponent>(*view.begin());
+    if (!check(inlineMat.ORMPath == source.ORMPath && inlineMat.TextureMode == source.TextureMode && inlineMat.ClearcoatStrength == source.ClearcoatStrength && inlineMat.AnisotropyStrength == source.AnisotropyStrength && inlineMat.AOStrength == source.AOStrength && inlineMat.EmissivePath == source.EmissivePath && inlineMat.RenderQueue == source.RenderQueue && !inlineMat.EnableEnvironmentReflections, "Inline advanced material persistence")) return false;
+    std::cout << "[106] PASS: Material inspector and inline scene save/reload, maps, HDR colors, alpha, coat, anisotropy, flags, and custom values." << std::endl;
+    return true;
+}

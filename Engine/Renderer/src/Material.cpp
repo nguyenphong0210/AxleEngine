@@ -189,8 +189,6 @@ namespace Axle {
         m_EmissivePath = path;
         if (path.empty()) {
             ClearEmissiveTexture();
-        ClearORMTexture();
-        m_TextureMode = TextureMode::SeparateMaps;
         } else {
             if (Window::HasActiveContext()) {
                 std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
@@ -217,9 +215,13 @@ namespace Axle {
     void Material::SetORMPath(const std::string& path) {
         m_ORMPath = path;
         if (!path.empty()) {
-            auto resolved = FileSystem::ResolveAssetPath(path);
-            m_ORMMap = Texture2D::Create(resolved.string());
-            m_UseORMMap = (m_ORMMap && m_ORMMap->IsLoaded());
+            if (Window::HasActiveContext()) {
+                auto resolved = FileSystem::ResolveAssetPath(path);
+                m_ORMMap = Texture2D::Create(resolved.string());
+                m_UseORMMap = (m_ORMMap && m_ORMMap->IsLoaded());
+            } else {
+                m_UseORMMap = true;
+            }
         } else {
             m_ORMMap = nullptr;
             m_UseORMMap = false;
@@ -520,12 +522,15 @@ namespace Axle {
             fout << "    environmentReflections: " << (m_EnableEnvironmentReflections ? "true" : "false") << "\n";
             fout << "    renderQueue: " << m_RenderQueue << "\n\n";
             fout << "    // Base Color & Texture\n";
-            fout << "    albedoColor: \"" << formatHex(m_AlbedoColor) << "\"\n";
+            fout << "    albedoColor: [ " << m_AlbedoColor.r << " , " << m_AlbedoColor.g << " , " << m_AlbedoColor.b << " , " << m_AlbedoColor.a << " ]\n";
             fout << "    albedoMap: \"" << m_AlbedoPath << "\"\n\n";
             fout << "    // Surface Microfacet\n";
             fout << "    metallic: " << m_Metallic << "\n";
             fout << "    roughness: " << m_Roughness << "\n";
             fout << "    normalMap: \"" << m_NormalPath << "\"\n";
+            fout << "    roughnessMap: \"" << m_RoughnessPath << "\"\n";
+            fout << "    metallicMap: \"" << m_MetallicPath << "\"\n";
+            fout << "    emissiveMap: \"" << m_EmissivePath << "\"\n";
             fout << "    normalStrength: " << m_NormalStrength << "\n";
             fout << "    clearcoatStrength: " << m_ClearcoatStrength << "\n";
             fout << "    clearcoatRoughness: " << m_ClearcoatRoughness << "\n";
@@ -534,10 +539,17 @@ namespace Axle {
             fout << "    occlusionMap: \"" << m_AOPath << "\"\n";
             fout << "    occlusionStrength: " << m_AOStrength << "\n\n";
             fout << "    // Emission & UV Scaling\n";
-            fout << "    emissionColor: \"" << formatHex(glm::vec4(m_EmissionColor, 1.0f)) << "\"\n";
+            fout << "    emissionColor: [ " << m_EmissionColor.r << " , " << m_EmissionColor.g << " , " << m_EmissionColor.b << " ]\n";
             fout << "    emissionIntensity: " << m_EmissionIntensity << "\n";
             fout << "    uvTiling: [ " << m_UVScale.x << " , " << m_UVScale.y << " ]\n";
             fout << "    uvOffset: [ " << m_UVOffset.x << " , " << m_UVOffset.y << " ]\n";
+            fout << "    useORMMap: " << (m_UseORMMap ? "true" : "false") << "\n";
+            fout << "    useAlbedoMap: " << (m_UseAlbedoMap ? "true" : "false") << "\n";
+            fout << "    useNormalMap: " << (m_UseNormalMap ? "true" : "false") << "\n";
+            fout << "    useRoughnessMap: " << (m_UseRoughnessMap ? "true" : "false") << "\n";
+            fout << "    useMetallicMap: " << (m_UseMetallicMap ? "true" : "false") << "\n";
+            fout << "    useAOMap: " << (m_UseAOMap ? "true" : "false") << "\n";
+            fout << "    useEmissiveMap: " << (m_UseEmissiveMap ? "true" : "false") << "\n";
             if (!m_CustomProperties.empty()) {
                 fout << "\n    // Dynamic Custom Properties\n";
                 for (const auto& prop : m_CustomProperties) {
@@ -676,6 +688,35 @@ namespace Axle {
                     }
                 } else if (trimmed.rfind("renderQueue:", 0) == 0) {
                     try { m_RenderQueue = std::stoi(Trim(trimmed.substr(12))); } catch (...) {}
+                } else if (trimmed.rfind("useORMMap:", 0) == 0) {
+                    m_UseORMMap = Trim(trimmed.substr(10)) == "true";
+                } else if (trimmed.rfind("useAlbedoMap:", 0) == 0) {
+                    m_UseAlbedoMap = Trim(trimmed.substr(13)) == "true";
+                } else if (trimmed.rfind("useNormalMap:", 0) == 0) {
+                    m_UseNormalMap = Trim(trimmed.substr(13)) == "true";
+                } else if (trimmed.rfind("useRoughnessMap:", 0) == 0) {
+                    m_UseRoughnessMap = Trim(trimmed.substr(16)) == "true";
+                } else if (trimmed.rfind("useMetallicMap:", 0) == 0) {
+                    m_UseMetallicMap = Trim(trimmed.substr(15)) == "true";
+                } else if (trimmed.rfind("useAOMap:", 0) == 0) {
+                    m_UseAOMap = Trim(trimmed.substr(9)) == "true";
+                } else if (trimmed.rfind("useEmissiveMap:", 0) == 0) {
+                    m_UseEmissiveMap = Trim(trimmed.substr(15)) == "true";
+                } else if (trimmed.rfind("roughnessMap:", 0) == 0) {
+                    std::string value = Trim(trimmed.substr(13));
+                    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
+                    SetRoughnessPath(value);
+                    m_UseRoughnessMap = !value.empty();
+                } else if (trimmed.rfind("metallicMap:", 0) == 0) {
+                    std::string value = Trim(trimmed.substr(12));
+                    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
+                    SetMetallicPath(value);
+                    m_UseMetallicMap = !value.empty();
+                } else if (trimmed.rfind("emissiveMap:", 0) == 0) {
+                    std::string value = Trim(trimmed.substr(12));
+                    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
+                    SetEmissivePath(value);
+                    m_UseEmissiveMap = !value.empty();
                 } else if (trimmed.rfind("albedoColor:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(12));
                     if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);

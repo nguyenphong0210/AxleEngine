@@ -239,6 +239,12 @@ namespace Axle {
         ClearMetallicTexture();
         ClearAOTexture();
         ClearEmissiveTexture();
+        ClearORMTexture();
+        m_TextureMode = TextureMode::SeparateMaps;
+        m_ClearcoatStrength = 0.0f;
+        m_ClearcoatRoughness = 0.04f;
+        m_AnisotropyStrength = 0.0f;
+        m_AnisotropyRotation = 0.0f;
         m_SurfaceType = SurfaceType::Opaque;
         m_CullMode = CullMode::Back;
         m_AlphaCutoff = 0.5f;
@@ -253,6 +259,8 @@ namespace Axle {
         m_Metallic = 0.0f;
         m_EmissionColor = glm::vec3(0.0f);
         m_EmissionIntensity = 0.0f;
+        m_ClearcoatStrength = 1.0f;
+        m_ClearcoatRoughness = 0.03f;
     }
 
     void Material::SetPresetCarPaintBlue() {
@@ -262,6 +270,8 @@ namespace Axle {
         m_Metallic = 0.75f;
         m_EmissionColor = glm::vec3(0.0f);
         m_EmissionIntensity = 0.0f;
+        m_ClearcoatStrength = 1.0f;
+        m_ClearcoatRoughness = 0.03f;
     }
 
     void Material::SetPresetCarPaintSilver() {
@@ -271,6 +281,8 @@ namespace Axle {
         m_Metallic = 0.92f;
         m_EmissionColor = glm::vec3(0.0f);
         m_EmissionIntensity = 0.0f;
+        m_ClearcoatStrength = 1.0f;
+        m_ClearcoatRoughness = 0.03f;
     }
 
     void Material::SetPresetChrome() {

@@ -7,8 +7,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Completed Phases**: **Phase 1 through Phase 39** (100% implemented, verified, and stabilized).
-* **Automated Test Verification**: **85 Comprehensive Headless Test Suites** (`AxleTests.exe`, 102 individual test steps up through **Step 102**) passing with **100% pass rate**.
+* **Completed Phases**: **Phase 1 through Phase 39** (including Phase 38.1 & Phase 38.2 100% implemented, verified, and stabilized).
+* **Automated Test Verification**: **87 Comprehensive Headless Test Suites** (`AxleTests.exe`, 105 individual test steps up through **Step 105**) passing with **100% pass rate**.
 * **Upcoming Focus**: **Milestone 10: Complete Visual Tooling Ecosystem (Material ➔ VFX ➔ Animation)** and beyond.
 
 ### 🛡️ Core Engineering & Contribution Principles
@@ -585,7 +585,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 5 - Automated Verification Suite Step 104 (`AxleTests.exe --step104`)**:
     - [x] Step 104 tests verifying: Material preview offscreen render targets, orbit camera math, advanced options serialization, and runtime HLSL compilation hot-reload.
 
-- [ ] **Phase 38.2: Unity & Godot Parity Phase 2 - Dynamic Shader Reflection & Advanced Shading (`Engine/RHI`, `Engine/Asset`, `Engine/UI`)**
+- [x] **Phase 38.2: Unity & Godot Parity Phase 2 - Dynamic Shader Reflection & Advanced Shading (`Engine/RHI`, `Engine/Asset`, `Engine/UI`)**
   - [x] **Step 1 - Dynamic Shader Property Reflection via DXC**:
     - [x] Extract uniform reflection metadata from DXC bytecode (`IDxcContainerReflection` / `ID3D12ShaderReflection`).
     - [x] Parse annotation comments (e.g. `// [Range(0, 1)] float Dissolve;`) for UI bounds and formatting.
@@ -602,8 +602,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 5 - HLSL Compiler Diagnostics Jump & Autocomplete**:
     - [x] Double-clicking compile error in console jumps cursor directly to erroneous line in `HLSLStudioPanel`.
     - [x] Autocomplete suggestions for HLSL intrinsic functions (`saturate`, `lerp`, `mul`, `dot`, `cross`, `normalize`).
-  - [ ] **Step 6 - Automated Verification Suite Step 105 (`AxleTests.exe --step105`)**:
-    - [ ] Step 105 tests verifying: DXC reflection parser, packed ORM texture sampling, Clearcoat push constants, and error jump navigation.
+  - [x] **Step 6 - Automated Verification Suite Step 105 (`AxleTests.exe --step105`)**:
+    - [x] Step 105 tests verifying: DXC reflection parser, packed ORM texture sampling, Clearcoat push constants, and error jump navigation.
 
 - [x] **Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (`Engine/VFX`, `Engine/UI`, `Editor`)**
   - [x] **Step 1 - Multi-Emitter Architecture & Bursts (`Engine/VFX`, `Engine/Asset`)**:

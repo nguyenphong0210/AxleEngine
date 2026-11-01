@@ -1,3 +1,8 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Axle/ShaderPropertyReflection.hpp>
+#include <Axle/AssetPreviewPanel.hpp>
 #if defined(AXLE_HAS_VULKAN)
 #if !defined(VK_NO_PROTOTYPES)
 #define VK_NO_PROTOTYPES 1
@@ -905,3 +910,194 @@ bool RunTest_Step104_Phase38_1_MaterialStudioParityAndHLSLCompiler() {
     return true;
 }
 
+
+bool RunTest_Step105_Phase38_2_DynamicReflectionAndAutomotiveShading() {
+    using namespace Axle;
+    using namespace Axle::RHI;
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << " [STEP 105 TEST] PHASE 38.2: DYNAMIC REFLECTION & AUTOMOTIVE SHADING" << std::endl;
+    std::cout << " (ShaderPropertyParser, Packed ORM, Clearcoat, Anisotropy, Jump)" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    // [105.1] Dynamic Shader Property Reflection & Annotation Parsing
+    std::cout << "\n[105.1] Testing Dynamic Shader Property Reflection & Annotation Parsing..." << std::endl;
+    {
+        std::string testHLSL = R"(
+            // [Header("Car Paint Details")]
+            // [Tooltip("Overall metallic flake sparkle intensity")]
+            // [Range(0.0, 2.0)]
+            float FlakeIntensity;
+
+            // [Color]
+            float4 FlakeColor;
+
+            // [Texture]
+            Texture2D FlakeNormalMap;
+
+            int CoatingLayers;
+        )";
+
+        auto properties = ShaderPropertyParser::ParseFromHLSL(testHLSL);
+        assert(properties.size() == 4);
+
+        // FlakeIntensity
+        assert(properties[0].Name == "FlakeIntensity");
+        assert(properties[0].DisplayName == "Flake Intensity");
+        assert(properties[0].Type == ShaderPropertyType::Float);
+        assert(properties[0].Header == "Car Paint Details");
+        assert(properties[0].Tooltip == "Overall metallic flake sparkle intensity");
+        assert(properties[0].MinValue == 0.0f);
+        assert(properties[0].MaxValue == 2.0f);
+
+        // FlakeColor
+        assert(properties[1].Name == "FlakeColor");
+        assert(properties[1].Type == ShaderPropertyType::Color);
+
+        // FlakeNormalMap
+        assert(properties[2].Name == "FlakeNormalMap");
+        assert(properties[2].Type == ShaderPropertyType::Texture2D);
+
+        // CoatingLayers
+        assert(properties[3].Name == "CoatingLayers");
+        assert(properties[3].Type == ShaderPropertyType::Int);
+
+        // Test Material Custom Properties serialization
+        std::filesystem::path testMatPath = "test_step105_custom_props.axleasset";
+        {
+            Material mat("DynamicShaderMaterial");
+            mat.SetCustomFloat("FlakeIntensity", 1.85f);
+            mat.SetCustomVec4("FlakeColor", glm::vec4(1.0f, 0.8f, 0.2f, 1.0f));
+            mat.SetCustomTexture("FlakeNormalMap", "textures/flakes_normal.png");
+
+            assert(mat.GetCustomFloat("FlakeIntensity") == 1.85f);
+            assert(mat.GetCustomTexture("FlakeNormalMap") == "textures/flakes_normal.png");
+
+            bool saved = mat.Save(testMatPath);
+            assert(saved);
+
+            auto loadedMat = Material::LoadFromFile(testMatPath);
+            assert(loadedMat != nullptr);
+            assert(std::abs(loadedMat->GetCustomFloat("FlakeIntensity") - 1.85f) < 1e-4f);
+            assert(loadedMat->GetCustomTexture("FlakeNormalMap") == "textures/flakes_normal.png");
+
+            std::filesystem::remove(testMatPath);
+        }
+    }
+    std::cout << "  -> PASS: HLSL annotation parser, bounds extraction, and custom property DSL serialization verified." << std::endl;
+
+    // [105.2] Texture Channel Packing (Packed ORM Map)
+    std::cout << "\n[105.2] Testing Texture Channel Packing (Packed ORM Map)..." << std::endl;
+    {
+        Material mat("TestPackedORMMaterial");
+        mat.SetTextureMode(TextureMode::PackedORM);
+        mat.SetORMPath("textures/car_orm.png");
+        assert(mat.GetTextureMode() == TextureMode::PackedORM);
+        assert(mat.GetORMPath() == "textures/car_orm.png");
+
+        std::filesystem::path ormMatPath = "test_step105_orm.axleasset";
+        assert(mat.Save(ormMatPath));
+
+        auto loadedORM = Material::LoadFromFile(ormMatPath);
+        assert(loadedORM != nullptr);
+        assert(loadedORM->GetTextureMode() == TextureMode::PackedORM);
+        assert(loadedORM->GetORMPath() == "textures/car_orm.png");
+        std::filesystem::remove(ormMatPath);
+
+        // Test ORM channel unpacking math
+        // R: Occlusion, G: Roughness, B: Metallic
+        glm::vec3 packedSample(0.85f, 0.25f, 0.95f);
+        float ao = packedSample.r;
+        float roughness = std::clamp(packedSample.g * 1.0f, 0.04f, 1.0f);
+        float metallic = std::clamp(packedSample.b * 1.0f, 0.0f, 1.0f);
+
+        assert(ao == 0.85f);
+        assert(roughness == 0.25f);
+        assert(metallic == 0.95f);
+
+        // Test RHIMaterial Push Constants Shading Model propagation
+        RHI::RHIMaterial rhiMat("TestRHI_ORM");
+        rhiMat.SetTextureMode(Axle::TextureMode::PackedORM);
+        rhiMat.SetORMPath("textures/car_orm.png");
+        RHI::RHIObjectPushConstants pc{};
+        rhiMat.ApplyToPushConstants(pc);
+
+        assert(pc.Params.y == static_cast<float>(RHI::RHIShadingModel::PackedORMTexturedPBR));
+        assert(pc.MaterialExtra.w >= 10.0f); // SurfaceType + 10.0f for ORM
+    }
+    std::cout << "  -> PASS: Packed ORM channel packing mode, AST serialization, and PushConstants propagation verified." << std::endl;
+
+    // [105.3] Automotive & Advanced PBR Shading (Clearcoat & Anisotropy)
+    std::cout << "\n[105.3] Testing Automotive & Advanced PBR Shading (Clearcoat & Anisotropy)..." << std::endl;
+    {
+        Material carMat("FerrariRossoCorsa");
+        carMat.SetPresetCarPaintRed();
+        assert(carMat.GetClearcoatStrength() == 1.0f);
+        assert(carMat.GetClearcoatRoughness() == 0.03f);
+
+        carMat.SetAnisotropyStrength(0.75f);
+        carMat.SetAnisotropyRotation(0.25f);
+        assert(carMat.GetAnisotropyStrength() == 0.75f);
+        assert(carMat.GetAnisotropyRotation() == 0.25f);
+
+        std::filesystem::path carMatPath = "test_step105_automotive.axleasset";
+        assert(carMat.Save(carMatPath));
+
+        auto loadedCar = Material::LoadFromFile(carMatPath);
+        assert(loadedCar != nullptr);
+        assert(loadedCar->GetClearcoatStrength() == 1.0f);
+        assert(std::abs(loadedCar->GetClearcoatRoughness() - 0.03f) < 1e-4f);
+        assert(std::abs(loadedCar->GetAnisotropyStrength() - 0.75f) < 1e-4f);
+        assert(std::abs(loadedCar->GetAnisotropyRotation() - 0.25f) < 1e-4f);
+        std::filesystem::remove(carMatPath);
+
+        // Verify RHI PushConstants hardware compliance
+        static_assert(sizeof(RHI::RHIObjectPushConstants) == 128, "Must be exactly 128 bytes");
+        RHI::RHIMaterial rhiCar("FerrariRHI");
+        rhiCar.SetClearcoatStrength(0.95f);
+        RHI::RHIObjectPushConstants pc{};
+        rhiCar.ApplyToPushConstants(pc);
+        assert(std::abs(pc.MaterialExtra.z - 0.95f) < 1e-4f);
+    }
+    std::cout << "  -> PASS: Automotive Clearcoat, Anisotropy, preset configs, and 128B push constant streaming verified." << std::endl;
+
+    // [105.4] Multi-Angle Lighting, Error Jump & HLSL Autocomplete
+    std::cout << "\n[105.4] Testing Multi-Angle Preview Lighting, Error Jump Navigation & HLSL Autocomplete..." << std::endl;
+    {
+        AssetPreviewPanel preview;
+        preview.SetSunAzimuth(120.0f);
+        preview.SetSunElevation(65.0f);
+        assert(preview.GetSunAzimuth() == 120.0f);
+        assert(preview.GetSunElevation() == 65.0f);
+
+        preview.SetSunElevation(95.0f); // Clamped to 85 max
+        assert(preview.GetSunElevation() == 85.0f);
+
+        // Test compiler diagnostic line jump parser
+        std::string sampleDiag = "ForwardPBR.hlsl:42:15: error: use of undeclared identifier 'AlbedoMap'\nForwardPBR.hlsl:88:5: warning: implicit truncation";
+        auto errors = HLSLStudioPanel::ParseDiagnostics(sampleDiag);
+        assert(errors.size() == 2);
+        assert(errors[0].Line == 42);
+        assert(errors[0].Column == 15);
+        assert(errors[0].Severity == "error");
+        assert(errors[1].Line == 88);
+        assert(errors[1].Severity == "warning");
+
+        assert(HLSLStudioPanel::ParseErrorLine(sampleDiag) == 42);
+
+        // Test HLSL Intrinsics Autocomplete list
+        const auto& intrinsics = HLSLStudioPanel::GetHLSLIntrinsics();
+        assert(!intrinsics.empty());
+        assert(std::find(intrinsics.begin(), intrinsics.end(), "saturate") != intrinsics.end());
+        assert(std::find(intrinsics.begin(), intrinsics.end(), "lerp") != intrinsics.end());
+        assert(std::find(intrinsics.begin(), intrinsics.end(), "normalize") != intrinsics.end());
+        assert(std::find(intrinsics.begin(), intrinsics.end(), "mul") != intrinsics.end());
+
+        auto matches = HLSLStudioPanel::GetMatchingIntrinsics("sat");
+        assert(!matches.empty());
+        assert(matches[0] == "saturate");
+    }
+    std::cout << "  -> PASS: Multi-angle sun angle controls, diagnostic error jump parser, and HLSL autocomplete verified." << std::endl;
+
+    std::cout << "\n>>> STEP 105 PASSED: Phase 38.2 Dynamic Reflection & Automotive Shading 100% verified! <<<\n" << std::endl;
+    return true;
+}

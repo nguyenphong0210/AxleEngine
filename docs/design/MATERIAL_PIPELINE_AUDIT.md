@@ -78,3 +78,6 @@ binding, and visible shading agree in the preview and scene.
   states. Make Unique detaches asset paths and mutable GPU state. Scene reload
   restores asset defaults before inline overrides. Step 106 verifies shared reload
   and unique-material isolation with GPU images; 101 and 105 remain passing.
+- GPU acceptance now also covers transparent queue priority versus distance,
+  transparent depth writes, and front/back/two-sided rasterization. These tests
+  compare rendered pixels, rather than reproducing sorting or blend formulas.

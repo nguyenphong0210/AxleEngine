@@ -439,6 +439,10 @@ namespace Axle {
         shader.SetFloat4("u_Color1", m_AlbedoColor);
         shader.SetInt("u_SurfaceType", static_cast<int>(m_SurfaceType));
         shader.SetFloat("u_AlphaCutoff", m_AlphaCutoff);
+        shader.SetFloat("u_ClearcoatStrength", m_ClearcoatStrength);
+        shader.SetFloat("u_ClearcoatRoughness", m_ClearcoatRoughness);
+        shader.SetFloat("u_AnisotropyStrength", m_AnisotropyStrength);
+        shader.SetFloat("u_AnisotropyRotation", m_AnisotropyRotation);
     }
 
     void Material::BindDefault(Shader& shader, const glm::vec4& color1, const glm::vec4& color2,
@@ -506,6 +510,10 @@ namespace Axle {
             fout << "    roughness: " << m_Roughness << "\n";
             fout << "    normalMap: \"" << m_NormalPath << "\"\n";
             fout << "    normalStrength: " << m_NormalStrength << "\n";
+            fout << "    clearcoatStrength: " << m_ClearcoatStrength << "\n";
+            fout << "    clearcoatRoughness: " << m_ClearcoatRoughness << "\n";
+            fout << "    anisotropyStrength: " << m_AnisotropyStrength << "\n";
+            fout << "    anisotropyRotation: " << m_AnisotropyRotation << "\n";
             fout << "    occlusionMap: \"" << m_AOPath << "\"\n";
             fout << "    occlusionStrength: " << m_AOStrength << "\n\n";
             fout << "    // Emission & UV Scaling\n";
@@ -551,6 +559,10 @@ namespace Axle {
         fout << "  NormalPath: " << m_NormalPath << "\n";
         fout << "  UseNormalMap: " << (m_UseNormalMap ? "true" : "false") << "\n";
         fout << "  NormalStrength: " << m_NormalStrength << "\n";
+        fout << "  ClearcoatStrength: " << m_ClearcoatStrength << "\n";
+        fout << "  ClearcoatRoughness: " << m_ClearcoatRoughness << "\n";
+        fout << "  AnisotropyStrength: " << m_AnisotropyStrength << "\n";
+        fout << "  AnisotropyRotation: " << m_AnisotropyRotation << "\n";
         fout << "  Roughness: " << m_Roughness << "\n";
         fout << "  RoughnessPath: " << m_RoughnessPath << "\n";
         fout << "  UseRoughnessMap: " << (m_UseRoughnessMap ? "true" : "false") << "\n";
@@ -690,6 +702,14 @@ namespace Axle {
                     if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
                     if (!p.empty()) { SetNormalPath(p); m_UseNormalMap = true; }
                     else ClearNormalTexture();
+                } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
+                    try { m_ClearcoatStrength = std::clamp(std::stof(Trim(trimmed.substr(18))), 0.0f, 1.0f); } catch (...) {}
+                } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {
+                    try { m_ClearcoatRoughness = std::clamp(std::stof(Trim(trimmed.substr(19))), 0.001f, 1.0f); } catch (...) {}
+                } else if (trimmed.rfind("anisotropyStrength:", 0) == 0) {
+                    try { m_AnisotropyStrength = std::clamp(std::stof(Trim(trimmed.substr(19))), -1.0f, 1.0f); } catch (...) {}
+                } else if (trimmed.rfind("anisotropyRotation:", 0) == 0) {
+                    try { m_AnisotropyRotation = std::clamp(std::stof(Trim(trimmed.substr(19))), 0.0f, 1.0f); } catch (...) {}
                 } else if (trimmed.rfind("normalStrength:", 0) == 0) {
                     try { m_NormalStrength = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
                 } else if (trimmed.rfind("uvScale:", 0) == 0 || trimmed.rfind("uvTiling:", 0) == 0) {
@@ -786,7 +806,15 @@ namespace Axle {
                     else ClearNormalTexture();
                 } else if (trimmed.rfind("UseNormalMap:", 0) == 0) {
                     m_UseNormalMap = (Trim(trimmed.substr(13)) == "true");
-                } else if (trimmed.rfind("NormalStrength:", 0) == 0) {
+                } else if (trimmed.rfind("ClearcoatStrength:", 0) == 0) {
+                try { m_ClearcoatStrength = std::clamp(std::stof(Trim(trimmed.substr(18))), 0.0f, 1.0f); } catch (...) {}
+            } else if (trimmed.rfind("ClearcoatRoughness:", 0) == 0) {
+                try { m_ClearcoatRoughness = std::clamp(std::stof(Trim(trimmed.substr(19))), 0.001f, 1.0f); } catch (...) {}
+            } else if (trimmed.rfind("AnisotropyStrength:", 0) == 0) {
+                try { m_AnisotropyStrength = std::clamp(std::stof(Trim(trimmed.substr(19))), -1.0f, 1.0f); } catch (...) {}
+            } else if (trimmed.rfind("AnisotropyRotation:", 0) == 0) {
+                try { m_AnisotropyRotation = std::clamp(std::stof(Trim(trimmed.substr(19))), 0.0f, 1.0f); } catch (...) {}
+            } else if (trimmed.rfind("NormalStrength:", 0) == 0) {
                     m_NormalStrength = std::stof(Trim(trimmed.substr(15)));
                 } else if (trimmed.rfind("RoughnessPath:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(14));

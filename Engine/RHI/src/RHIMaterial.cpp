@@ -101,9 +101,10 @@ namespace Axle::RHI {
                                       shadingModelVal,
                                       m_Desc.Roughness,
                                       m_Desc.Metallic);
+        float extraZ = (m_Desc.SurfaceType == Axle::SurfaceType::Cutout) ? m_Desc.AlphaCutoff : m_Desc.ClearcoatStrength;
         pushConsts.MaterialExtra = glm::vec4(m_Desc.UVOffset.x,
                                              m_Desc.UVOffset.y,
-                                             m_Desc.AlphaCutoff,
+                                             extraZ,
                                              surfaceTypeVal);
     }
 

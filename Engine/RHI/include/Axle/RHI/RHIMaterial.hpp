@@ -57,6 +57,10 @@ namespace Axle::RHI {
         glm::vec2 UVOffset{ 0.0f, 0.0f };
         Axle::TextureMode TextureMode = Axle::TextureMode::SeparateMaps;
         std::string ORMPath;
+        float ClearcoatStrength = 0.0f;
+        float ClearcoatRoughness = 0.04f;
+        float AnisotropyStrength = 0.0f;
+        float AnisotropyRotation = 0.0f;
         RHIShadingModel ShadingModel = RHIShadingModel::MetallicRoughness;
 
         // Optional texture map source paths
@@ -80,6 +84,14 @@ namespace Axle::RHI {
         void SetTextureMode(Axle::TextureMode mode) { m_Desc.TextureMode = mode; }
         const std::string& GetORMPath() const { return m_Desc.ORMPath; }
         void SetORMPath(const std::string& path) { m_Desc.ORMPath = path; }
+        float GetClearcoatStrength() const { return m_Desc.ClearcoatStrength; }
+        void SetClearcoatStrength(float val) { m_Desc.ClearcoatStrength = val; }
+        float GetClearcoatRoughness() const { return m_Desc.ClearcoatRoughness; }
+        void SetClearcoatRoughness(float val) { m_Desc.ClearcoatRoughness = val; }
+        float GetAnisotropyStrength() const { return m_Desc.AnisotropyStrength; }
+        void SetAnisotropyStrength(float val) { m_Desc.AnisotropyStrength = val; }
+        float GetAnisotropyRotation() const { return m_Desc.AnisotropyRotation; }
+        void SetAnisotropyRotation(float val) { m_Desc.AnisotropyRotation = val; }
         void SetName(const std::string& name) { m_Desc.Name = name; }
 
         Axle::SurfaceType GetSurfaceType() const { return m_Desc.SurfaceType; }

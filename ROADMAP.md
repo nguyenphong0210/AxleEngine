@@ -593,9 +593,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 2 - Texture Channel Packing (Packed ORM Map)**:
     - [x] Add `TextureMode` switch: `Separate Maps` vs `Packed ORM Map (R: Occlusion, G: Roughness, B: Metallic)`.
     - [x] Update `ForwardPBR.hlsl` to sample ORM map from a single texture sampler.
-  - [ ] **Step 3 - Automotive & Advanced PBR Shading**:
-    - [ ] Implement two-layer `Clearcoat` (Strength & Roughness) for automotive clear lacquer finish.
-    - [ ] Implement `Anisotropy` shading for brushed alloy wheel rims and carbon fiber weaves.
+  - [x] **Step 3 - Automotive & Advanced PBR Shading**:
+    - [x] Implement two-layer `Clearcoat` (Strength & Roughness) for automotive clear lacquer finish.
+    - [x] Implement `Anisotropy` shading for brushed alloy wheel rims and carbon fiber weaves.
   - [ ] **Step 4 - Multi-Angle Preview Lighting & Custom Mesh Preview**:
     - [ ] Right-click drag in preview viewport to rotate HDRI environment and sun angle.
     - [ ] Support dragging custom game meshes (`.axlemesh`) into preview turntable.

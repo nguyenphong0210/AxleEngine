@@ -41,6 +41,23 @@ namespace Axle {
         void SetORMPath(const std::string& path);
         void ClearORMTexture();
 
+        // Automotive & Advanced Shading (Clearcoat & Anisotropy)
+        float GetClearcoatStrength() const { return m_ClearcoatStrength; }
+        float& GetClearcoatStrengthRef() { return m_ClearcoatStrength; }
+        void SetClearcoatStrength(float val) { m_ClearcoatStrength = std::clamp(val, 0.0f, 1.0f); }
+
+        float GetClearcoatRoughness() const { return m_ClearcoatRoughness; }
+        float& GetClearcoatRoughnessRef() { return m_ClearcoatRoughness; }
+        void SetClearcoatRoughness(float val) { m_ClearcoatRoughness = std::clamp(val, 0.001f, 1.0f); }
+
+        float GetAnisotropyStrength() const { return m_AnisotropyStrength; }
+        float& GetAnisotropyStrengthRef() { return m_AnisotropyStrength; }
+        void SetAnisotropyStrength(float val) { m_AnisotropyStrength = std::clamp(val, -1.0f, 1.0f); }
+
+        float GetAnisotropyRotation() const { return m_AnisotropyRotation; }
+        float& GetAnisotropyRotationRef() { return m_AnisotropyRotation; }
+        void SetAnisotropyRotation(float val) { m_AnisotropyRotation = std::clamp(val, 0.0f, 1.0f); }
+
         // Surface Options (Unity / Unreal Standard)
         SurfaceType GetSurfaceType() const { return m_SurfaceType; }
         void SetSurfaceType(SurfaceType type) {
@@ -229,6 +246,10 @@ namespace Axle {
         float m_Roughness = 0.5f;
         float m_Metallic = 0.0f;
         float m_NormalStrength = 1.0f;
+        float m_ClearcoatStrength = 0.0f;
+        float m_ClearcoatRoughness = 0.04f;
+        float m_AnisotropyStrength = 0.0f;
+        float m_AnisotropyRotation = 0.0f;
         glm::vec3 m_EmissionColor{ 0.0f, 0.0f, 0.0f };
         float m_EmissionIntensity = 0.0f;
         glm::vec2 m_UVScale{ 1.0f, 1.0f };

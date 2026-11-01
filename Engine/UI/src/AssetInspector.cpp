@@ -920,6 +920,58 @@ namespace Axle {
             ImGui::Spacing();
         }
 
+        // Automotive & Advanced Shading Accordion (Clearcoat & Anisotropy)
+        if (ImGui::CollapsingHeader("Automotive & Advanced Shading", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Columns(2, "AssetAutoShadingCols", false);
+            ImGui::SetColumnWidth(0, 130.0f);
+
+            // Clearcoat Strength
+            ImGui::TextUnformatted("Clearcoat");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Secondary reflective lacquer coat for car body paint & carbon fiber");
+            ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::SliderFloat("##ClearcoatStrength", &m_ActiveMaterialAsset.ClearcoatStrength, 0.0f, 1.0f, "%.2f")) {
+                if (m_ActiveMaterialAsset.HasAsset()) m_ActiveMaterialAsset.SyncToAsset();
+                changed = true;
+            }
+            ImGui::NextColumn();
+
+            // Clearcoat Roughness
+            ImGui::TextUnformatted("Coat Roughness");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Smoothness of the clear lacquer coat (typical automotive paint: 0.02 - 0.05)");
+            ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::SliderFloat("##ClearcoatRoughness", &m_ActiveMaterialAsset.ClearcoatRoughness, 0.01f, 0.5f, "%.2f")) {
+                if (m_ActiveMaterialAsset.HasAsset()) m_ActiveMaterialAsset.SyncToAsset();
+                changed = true;
+            }
+            ImGui::NextColumn();
+
+            // Anisotropy Strength
+            ImGui::TextUnformatted("Anisotropy");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Directional specular stretch for brushed wheel rims & carbon weave");
+            ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::SliderFloat("##AnisotropyStrength", &m_ActiveMaterialAsset.AnisotropyStrength, -1.0f, 1.0f, "%.2f")) {
+                if (m_ActiveMaterialAsset.HasAsset()) m_ActiveMaterialAsset.SyncToAsset();
+                changed = true;
+            }
+            ImGui::NextColumn();
+
+            // Anisotropy Rotation
+            ImGui::TextUnformatted("Aniso Rotation");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rotation angle of tangent reflection vector (0.0 - 1.0 = 0 - 360 deg)");
+            ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::SliderFloat("##AnisotropyRotation", &m_ActiveMaterialAsset.AnisotropyRotation, 0.0f, 1.0f, "%.2f")) {
+                if (m_ActiveMaterialAsset.HasAsset()) m_ActiveMaterialAsset.SyncToAsset();
+                changed = true;
+            }
+            ImGui::NextColumn();
+
+            ImGui::Columns(1);
+        }
+
         // 3. Advanced Surface Options (Unity Standard / URP Lit)
         if (ImGui::CollapsingHeader("Advanced Options", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Columns(2, "MatAdvancedOptCols", false);

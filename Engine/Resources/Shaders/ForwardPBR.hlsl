@@ -158,6 +158,20 @@ PSInput VSMain(VSInput input) {
 static const float PI = 3.14159265358979323846;
 
 // 1. Trowbridge-Reitz GGX Normal Distribution Function (NDF)
+// Anisotropic GGX Microfacet Distribution (Walter / Burley standard for brushed alloy & carbon fiber)
+float DistributionAnisotropicGGX(float3 N, float3 H, float3 T, float3 B, float roughness, float anisotropy) {
+    float at = max(roughness * (1.0 + anisotropy), 0.001);
+    float ab = max(roughness * (1.0 - anisotropy), 0.001);
+    float NdotH = max(dot(N, H), 0.0);
+    float TdotH = dot(T, H);
+    float BdotH = dot(B, H);
+    float a2 = at * ab;
+    float3 v = float3(ab * TdotH, at * BdotH, a2 * NdotH);
+    float v2 = dot(v, v);
+    float w2 = a2 / max(v2, 0.0000001);
+    return a2 * w2 * w2 * (1.0 / PI);
+}
+
 float DistributionGGX(float3 N, float3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;

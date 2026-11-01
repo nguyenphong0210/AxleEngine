@@ -128,6 +128,10 @@ namespace Axle {
         std::string ORMPath;
         std::shared_ptr<Texture2D> ORMMap;
         bool UseORMMap = false;
+        float ClearcoatStrength = 0.0f;
+        float ClearcoatRoughness = 0.04f;
+        float AnisotropyStrength = 0.0f;
+        float AnisotropyRotation = 0.0f;
 
         // Local instance properties (active when MaterialHandle == 0 or when editing local values)
         std::string AlbedoPath;
@@ -188,6 +192,10 @@ namespace Axle {
             ORMPath = MaterialAsset->GetORMPath();
             ORMMap = MaterialAsset->GetORMMap();
             UseORMMap = MaterialAsset->IsORMMapEnabled();
+            ClearcoatStrength = MaterialAsset->GetClearcoatStrength();
+            ClearcoatRoughness = MaterialAsset->GetClearcoatRoughness();
+            AnisotropyStrength = MaterialAsset->GetAnisotropyStrength();
+            AnisotropyRotation = MaterialAsset->GetAnisotropyRotation();
             AlbedoColor = MaterialAsset->GetAlbedoColor();
             AlbedoPath = MaterialAsset->GetAlbedoPath();
             AlbedoMap = MaterialAsset->GetAlbedoMap();
@@ -240,6 +248,10 @@ namespace Axle {
             }
             RHIMaterialAsset->SetTextureMode(TextureMode);
             RHIMaterialAsset->SetORMPath(ORMPath);
+            RHIMaterialAsset->SetClearcoatStrength(ClearcoatStrength);
+            RHIMaterialAsset->SetClearcoatRoughness(ClearcoatRoughness);
+            RHIMaterialAsset->SetAnisotropyStrength(AnisotropyStrength);
+            RHIMaterialAsset->SetAnisotropyRotation(AnisotropyRotation);
             RHIMaterialAsset->SetSurfaceType(SurfaceType);
             RHIMaterialAsset->SetCullMode(CullMode);
             RHIMaterialAsset->SetAlphaCutoff(AlphaCutoff);
@@ -265,6 +277,10 @@ namespace Axle {
             MaterialAsset->SetTextureMode(TextureMode);
             MaterialAsset->SetORMTexture(ORMMap, ORMPath);
             MaterialAsset->SetUseORMMap(UseORMMap);
+            MaterialAsset->SetClearcoatStrength(ClearcoatStrength);
+            MaterialAsset->SetClearcoatRoughness(ClearcoatRoughness);
+            MaterialAsset->SetAnisotropyStrength(AnisotropyStrength);
+            MaterialAsset->SetAnisotropyRotation(AnisotropyRotation);
             MaterialAsset->SetSurfaceType(SurfaceType);
             MaterialAsset->SetCullMode(CullMode);
             MaterialAsset->SetAlphaCutoff(AlphaCutoff);

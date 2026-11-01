@@ -1,0 +1,18 @@
+Material {
+    name: "Reference_CarPaint"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+    albedoColor: [0.45,0.015,0.025,1]
+    metallic: 0
+    roughness: 0.25
+    normalStrength: 1
+    uvTiling: [1,1]
+    uvOffset: [0,0]
+    clearcoatStrength: 1
+    clearcoatRoughness: 0.08
+    clearcoatMap: "materials/reference/textures/coat.tga"
+    useClearcoatMap: true
+}

@@ -1,0 +1,17 @@
+Material {
+    name: "Reference_BrushedMetal"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+    albedoColor: [0.75,0.78,0.82,1]
+    metallic: 1
+    roughness: 0.32
+    normalStrength: 1
+    uvTiling: [1,1]
+    uvOffset: [0,0]
+    anisotropyStrength: 0.85
+    anisotropyFlowMap: "materials/reference/textures/flow.tga"
+    useAnisotropyFlowMap: true
+}

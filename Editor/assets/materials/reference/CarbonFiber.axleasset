@@ -1,0 +1,22 @@
+Material {
+    name: "Reference_CarbonFiber"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+    albedoColor: [0.3,0.3,0.3,1]
+    metallic: 0.6
+    roughness: 0.35
+    normalStrength: 1
+    uvTiling: [1,1]
+    uvOffset: [0,0]
+    albedoMap: "materials/reference/textures/carbon_weave.tga"
+    clearcoatStrength: 1
+    clearcoatRoughness: 0.1
+    anisotropyStrength: 0.55
+    detailNormalMap: "materials/reference/textures/detail_normal.tga"
+    useDetailNormalMap: true
+    detailNormalStrength: 0.35
+    detailUVScale: [4,4]
+}

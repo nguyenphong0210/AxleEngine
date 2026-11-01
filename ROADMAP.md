@@ -630,7 +630,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **Glass Refraction**: Add refraction enable / strength, IOR, and tint with suitable opaque scene-color / depth inputs, transparent blending, and draw ordering; document the chosen screen-space approximation and provide a fallback when required buffers are unavailable.
     - [x] Add complete schema, serialization, texture bindings, inspector groups, and preview support for each new feature as its own implementation step.
   - [ ] **Step 4 - Acceptance Scenes & Backend Verification**:
-    - [ ] Maintain reference materials for car paint, brushed metal, carbon fiber, rubber / leather with detail normal, and automotive glass under fixed lighting.
+    - [x] Maintain reference materials for car paint, brushed metal, carbon fiber, rubber / leather with detail normal, and automotive glass under fixed lighting.
     - [ ] Check save/reopen, material reuse across entities, live editing, missing textures, old assets, and preview-versus-scene consistency with focused automated checks and visual inspection.
     - [ ] Validate DX12 and Vulkan rendering on available supported environments, record unverified backends, and measure the cost of optional detail-normal and refraction paths.
     - [ ] Complete and verify each implementation sub-step before its own commit; mark the phase complete only after its renderer and visual acceptance checks pass.

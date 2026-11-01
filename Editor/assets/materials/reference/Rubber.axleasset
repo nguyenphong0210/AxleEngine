@@ -1,0 +1,18 @@
+Material {
+    name: "Reference_Rubber"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+    albedoColor: [0.025,0.028,0.032,1]
+    metallic: 0
+    roughness: 0.8
+    normalStrength: 1
+    uvTiling: [1,1]
+    uvOffset: [0,0]
+    detailNormalMap: "materials/reference/textures/detail_normal.tga"
+    useDetailNormalMap: true
+    detailNormalStrength: 1.2
+    detailUVScale: [10,10]
+}

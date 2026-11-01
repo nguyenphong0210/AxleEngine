@@ -1,0 +1,17 @@
+Material {
+    name: "Reference_Backdrop"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+    albedoColor: [1,1,1,1]
+    metallic: 0
+    roughness: 1
+    normalStrength: 1
+    uvTiling: [1,1]
+    uvOffset: [0,0]
+    albedoMap: "materials/reference/textures/background.tga"
+    specularHighlights: false
+    environmentReflections: false
+}

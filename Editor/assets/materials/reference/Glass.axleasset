@@ -1,0 +1,20 @@
+Material {
+    name: "Reference_Glass"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    surfaceType: "Transparent"
+    cullMode: "Back"
+    depthWrite: false
+    albedoColor: [0.9,0.97,1,0.15]
+    metallic: 0
+    roughness: 0.06
+    normalStrength: 1
+    uvTiling: [1,1]
+    uvOffset: [0,0]
+    refractionEnabled: true
+    refractionStrength: 1
+    refractionIOR: 1.5
+    refractionThickness: 0.4
+    refractionTint: [0.72,0.92,0.98]
+    renderQueue: 3000
+}

@@ -516,8 +516,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
         specSky += float3(0.75, 0.85, 1.0) * fillSpec * (1.0 - roughness * 0.7) * 0.35;
 
         // Subtle Rim Contour Lobe (Grazing angle highlight defining shape silhouette)
-        float rimFactor = pow(1.0 - NdotV, 3.5);
-        specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.30;
+        float rimFactor = pow(1.0 - NdotV, 4.0);
+        specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.15;
 
         float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.3);
 

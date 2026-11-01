@@ -354,7 +354,7 @@ namespace Axle {
                 return false;
             }
             if (!m_PreviewSphereMesh) {
-                m_PreviewSphereMesh = PrimitiveMesh::CreateSphere(24, 32);
+                m_PreviewSphereMesh = PrimitiveMesh::CreateSphere(48, 64);
             }
             pkg.Name = path.stem().string();
             pkg.BoundingSize = glm::vec3(1.0f);

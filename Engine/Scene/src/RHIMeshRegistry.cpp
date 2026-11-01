@@ -24,12 +24,12 @@ namespace Axle {
         auto& device = RHIDevice::Get();
         if (!device.IsInitialized()) return false;
 
-        // Generate built-in primitive meshes
+        // Generate built-in primitive meshes with high-fidelity curvature (Godot & Unity parity)
         m_Cube = RHIMesh::CreateCube(1.0f);
-        m_Sphere = RHIMesh::CreateSphere(0.5f, 24, 24);
-        m_Cylinder = RHIMesh::CreateCylinder(0.5f, 1.0f, 24);
-        m_Cone = RHIMesh::CreateCone(0.5f, 1.0f, 24);
-        m_Plane = RHIMesh::CreatePlane(1.0f, 1.0f, 10, 10);
+        m_Sphere = RHIMesh::CreateSphere(0.5f, 64, 96);
+        m_Cylinder = RHIMesh::CreateCylinder(0.5f, 1.0f, 64);
+        m_Cone = RHIMesh::CreateCone(0.5f, 1.0f, 64);
+        m_Plane = RHIMesh::CreatePlane(1.0f, 1.0f, 16, 16);
 
         if (m_Cube) m_MeshCache["Cube"] = m_Cube;
         if (m_Sphere) m_MeshCache["Sphere"] = m_Sphere;

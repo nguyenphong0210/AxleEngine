@@ -252,7 +252,7 @@ namespace Axle {
                     default:
                         previewPart.Name = "MaterialSphere";
                         previewPart.LoadedMesh.VAO = (m_SerializerContext && m_SerializerContext->SphereMesh) ? m_SerializerContext->SphereMesh : m_FallbackMesh;
-                        if (!previewPart.LoadedMesh.VAO) previewPart.LoadedMesh.VAO = PrimitiveMesh::CreateSphere(24, 32);
+                        if (!previewPart.LoadedMesh.VAO) previewPart.LoadedMesh.VAO = PrimitiveMesh::CreateSphere(64, 96);
                         m_TotalVertices = 768;
                         m_TotalTriangles = 512;
                         break;
@@ -791,8 +791,8 @@ namespace Axle {
         // 3. Studio Rim Light (Back Light for Silhouette)
         auto rimLight = m_PreviewScene->CreateEntity("PreviewRimLight");
         auto& rlc = rimLight.AddComponent<PointLightComponent>();
-        rlc.Color = glm::vec3(1.0f, 1.0f, 1.0f);
-        rlc.Intensity = 4.5f;
+        rlc.Color = glm::vec3(0.85f, 0.90f, 1.0f);
+        rlc.Intensity = 2.2f;
         rlc.Radius = 15.0f;
         auto& rlt = rimLight.GetComponent<TransformComponent>();
         rlt.Translation = glm::vec3(2.5f, 3.2f, -3.8f);
@@ -840,6 +840,7 @@ namespace Axle {
         settings.EnableSkybox = false;
         settings.EnableToneMapping = true;
         settings.EnableFXAA = true;
+        settings.MSAASamples = 4;
         settings.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // Transparent clear for Godot checkerboard
 
         m_RHISceneRenderer->RenderScene(

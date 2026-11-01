@@ -208,6 +208,17 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     lm.AnisotropyStrength = 0.85f;
     auto anisotropic = render();
     if (!check(!anisotropic.empty() && isotropic!=anisotropic, "Anisotropy changes rendered image")) return false;
+    lm.AnisotropyFlowPath=writeTGA("flow_x.tga",{255,128,0,255}); lm.UseAnisotropyFlowMap=true;
+    auto flowX=render();
+    lm.AnisotropyFlowPath=writeTGA("flow_y.tga",{128,255,0,255});
+    auto flowY=render();
+    if (!check(!flowY.empty() && flowY!=flowX, "Anisotropy flow RG changes reflection direction")) return false;
+    lm.AnisotropyFlowPath=writeTGA("flow_masked.tga",{128,255,0,0});
+    auto flowMasked=render();
+    uint64_t maskDifference=0;
+    for (size_t i=0;i<flowMasked.size();++i) maskDifference+=static_cast<uint64_t>(std::abs(static_cast<int>(flowMasked[i])-static_cast<int>(isotropic[i])));
+    if (!check(!flowMasked.empty() && maskDifference<100, "Anisotropy flow alpha masks strength")) return false;
+    lm.UseAnisotropyFlowMap=false;
     lm.AnisotropyRotation = 0.25f;
     auto rotated = render();
     if (!check(!rotated.empty() && rotated!=anisotropic, "Anisotropy rotation changes rendered image")) return false;

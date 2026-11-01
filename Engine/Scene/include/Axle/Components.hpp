@@ -135,6 +135,9 @@ namespace Axle {
         std::string ClearcoatPath;
         std::shared_ptr<Texture2D> ClearcoatMap;
         bool UseClearcoatMap=false;
+        std::string AnisotropyFlowPath;
+        std::shared_ptr<Texture2D> AnisotropyFlowMap;
+        bool UseAnisotropyFlowMap=false;
         float ClearcoatStrength = 0.0f;
         float ClearcoatRoughness = 0.04f;
         float AnisotropyStrength = 0.0f;
@@ -202,6 +205,9 @@ namespace Axle {
             ClearcoatPath=MaterialAsset->GetClearcoatPath();
             ClearcoatMap=MaterialAsset->GetClearcoatMap();
             UseClearcoatMap=MaterialAsset->IsClearcoatMapEnabled();
+            AnisotropyFlowPath=MaterialAsset->GetAnisotropyFlowPath();
+            AnisotropyFlowMap=MaterialAsset->GetAnisotropyFlowMap();
+            UseAnisotropyFlowMap=MaterialAsset->IsAnisotropyFlowMapEnabled();
             ClearcoatStrength = MaterialAsset->GetClearcoatStrength();
             ClearcoatRoughness = MaterialAsset->GetClearcoatRoughness();
             AnisotropyStrength = MaterialAsset->GetAnisotropyStrength();
@@ -282,6 +288,7 @@ namespace Axle {
             desc.EnableEnvironmentReflections = EnableEnvironmentReflections;
             desc.TextureEnableMask=(1u<<static_cast<uint32_t>(RHI::RHITextureSlot::Count))-1u;
             desc.ClearcoatPath=UseClearcoatMap?ClearcoatPath:"";
+            desc.AnisotropyFlowPath=UseAnisotropyFlowMap?AnisotropyFlowPath:"";
             desc.RenderQueue = RenderQueue;
             desc.UseORMMap = UseORMMap;
             desc.AlbedoPath = UseAlbedoMap ? AlbedoPath : "";
@@ -291,7 +298,7 @@ namespace Axle {
             desc.AOPath = UseAOMap ? AOPath : "";
             desc.EmissivePath = UseEmissiveMap ? EmissivePath : "";
             desc.ORMPath = UseORMMap ? ORMPath : "";
-            bool hasMaps = !desc.ClearcoatPath.empty() || !desc.AlbedoPath.empty() || !desc.NormalPath.empty() || !desc.RoughnessPath.empty() ||
+            bool hasMaps = !desc.AnisotropyFlowPath.empty() || !desc.ClearcoatPath.empty() || !desc.AlbedoPath.empty() || !desc.NormalPath.empty() || !desc.RoughnessPath.empty() ||
                 !desc.MetallicPath.empty() || !desc.AOPath.empty() || !desc.EmissivePath.empty();
             desc.ShadingModel = TextureMode == Axle::TextureMode::PackedORM
                 ? RHI::RHIShadingModel::PackedORMTexturedPBR
@@ -306,6 +313,8 @@ namespace Axle {
             MaterialAsset->SetUseORMMap(UseORMMap);
             MaterialAsset->SetClearcoatTexture(ClearcoatMap,ClearcoatPath);
             MaterialAsset->SetUseClearcoatMap(UseClearcoatMap);
+            MaterialAsset->SetAnisotropyFlowTexture(AnisotropyFlowMap,AnisotropyFlowPath);
+            MaterialAsset->SetUseAnisotropyFlowMap(UseAnisotropyFlowMap);
             MaterialAsset->SetClearcoatStrength(ClearcoatStrength);
             MaterialAsset->SetClearcoatRoughness(ClearcoatRoughness);
             MaterialAsset->SetAnisotropyStrength(AnisotropyStrength);
@@ -424,6 +433,8 @@ namespace Axle {
         }
 
         void ResetTextures() {
+            AnisotropyFlowPath.clear(); AnisotropyFlowMap.reset(); UseAnisotropyFlowMap=false;
+
             ClearcoatPath.clear(); ClearcoatMap.reset(); UseClearcoatMap=false;
 
             AlbedoPath.clear();

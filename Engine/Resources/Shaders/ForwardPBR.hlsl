@@ -121,6 +121,7 @@ TextureCube  u_IrradianceMap: register(t6, space1);
 TextureCube  u_PrefilterMap : register(t7, space1);
 Texture2D    u_BRDFLUT      : register(t8, space1);
 Texture2D u_ClearcoatMap : register(t9, space1);
+Texture2D u_AnisotropyFlowMap : register(t10, space1);
 SamplerState u_Sampler      : register(s0, space0);
 
 // -----------------------------------------------------------------------------
@@ -212,13 +213,13 @@ float glsl_mod(float x, float y) {
     return x - y * floor(x / y);
 }
 
-float2 AnisotropicAxes(float roughness) {
-    float aspect = sqrt(1.0 - 0.9 * abs(clamp(u_CoatAnisotropy.z, -1.0, 1.0)));
+float2 AnisotropicAxes(float roughness, float anisotropy) {
+    float aspect = sqrt(1.0 - 0.9 * abs(clamp(anisotropy, -1.0, 1.0)));
     float a = max(roughness * roughness, 0.001);
-    return u_CoatAnisotropy.z >= 0 ? float2(a / aspect, a * aspect) : float2(a * aspect, a / aspect);
+    return anisotropy >= 0 ? float2(a / aspect, a * aspect) : float2(a * aspect, a / aspect);
 }
-float MaterialDistribution(float3 N, float3 H, float3 T, float3 B, float roughness) {
-    float2 axes = AnisotropicAxes(roughness);
+float MaterialDistribution(float3 N, float3 H, float3 T, float3 B, float roughness, float anisotropy) {
+    float2 axes = AnisotropicAxes(roughness,anisotropy);
     float3 v = float3(dot(T,H) / axes.x, dot(B,H) / axes.y, dot(N,H));
     float d = dot(v, v);
     return 1.0 / max(PI * axes.x * axes.y * d * d, 1e-8);
@@ -228,8 +229,8 @@ float AnisotropicLambda(float3 N, float3 W, float3 T, float3 B, float2 axes) {
     float2 projected = float2(dot(T,W), dot(B,W)) * axes;
     return 0.5 * (sqrt(1.0 + dot(projected,projected) / (nw*nw)) - 1.0);
 }
-float MaterialGeometry(float3 N, float3 V, float3 L, float3 T, float3 B, float roughness) {
-    float2 axes = AnisotropicAxes(roughness);
+float MaterialGeometry(float3 N, float3 V, float3 L, float3 T, float3 B, float roughness, float anisotropy) {
+    float2 axes = AnisotropicAxes(roughness,anisotropy);
     return 1.0 / (1.0 + AnisotropicLambda(N,V,T,B,axes) + AnisotropicLambda(N,L,T,B,axes));
 }
 float3 ApplyClearcoat(float3 baseLighting, float3 N, float3 V, float3 L, float nl, float coatStrength, float coatRoughness) {
@@ -366,6 +367,18 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 bitangent = normalize(cross(N, tangent)) * (input.TangentWS.w < 0.0 ? -1.0 : 1.0);
     float sn, cs;
     sincos(coatAnisotropy.w * 2.0 * PI, sn, cs);
+    if (HasMaterialMap(7)) {
+        float2 flowUV=input.TexCoord*u_MaterialUV.xy+u_MaterialUV.zw;
+        float4 flowMap=u_AnisotropyFlowMap.Sample(u_Sampler,flowUV);
+        float2 flow=flowMap.rg*2.0-1.0;
+        if (dot(flow,flow)>1e-6) {
+            flow=normalize(flow);
+            float rotatedSin=sn*flow.x+cs*flow.y;
+            cs=cs*flow.x-sn*flow.y;
+            sn=rotatedSin;
+        }
+        coatAnisotropy.z*=saturate(flowMap.a);
+    }
     float3 rotatedT = tangent * cs + bitangent * sn;
     bitangent = bitangent * cs - tangent * sn;
     tangent = rotatedT;
@@ -398,8 +411,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     if (NdotL_Sun > 0.0 || NdotL_Sun_Diff > 0.0) {
         float3 H = normalize(V + sunDir);
-        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness);
-        float  G   = MaterialGeometry(N, V, sunDir, tangent, bitangent, roughness);
+        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness, coatAnisotropy.z);
+        float  G   = MaterialGeometry(N, V, sunDir, tangent, bitangent, roughness, coatAnisotropy.z);
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
@@ -449,8 +462,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
         if (NdotL <= 0.0 && NdotL_Diff <= 0.0) continue;
 
         float3 H = normalize(V + L);
-        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness);
-        float  G   = MaterialGeometry(N, V, L, tangent, bitangent, roughness);
+        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness, coatAnisotropy.z);
+        float  G   = MaterialGeometry(N, V, L, tangent, bitangent, roughness, coatAnisotropy.z);
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
@@ -502,8 +515,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 radiance = sLight.ColorAndInnerAngle.rgb * (sLight.DirectionAndIntensity.w * totalAtten * 0.05);
 
         float3 H = normalize(V + L);
-        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness);
-        float  G   = MaterialGeometry(N, V, L, tangent, bitangent, roughness);
+        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness, coatAnisotropy.z);
+        float  G   = MaterialGeometry(N, V, L, tangent, bitangent, roughness, coatAnisotropy.z);
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;

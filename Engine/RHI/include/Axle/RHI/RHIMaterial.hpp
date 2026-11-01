@@ -39,7 +39,8 @@ namespace Axle::RHI {
         AO        = 4, // Ambient Occlusion (linear float, channel R)
         Emissive  = 5, // Self-illumination radiance (linear RGB)
         Clearcoat = 6, // R: coat strength, G: glossiness (linear)
-        Count     = 7
+        AnisotropyFlow = 7,
+        Count     = 8
     };
 
     struct RHIMaterialDesc {
@@ -59,6 +60,7 @@ namespace Axle::RHI {
         glm::vec2 UVOffset{ 0.0f, 0.0f };
         Axle::TextureMode TextureMode = Axle::TextureMode::SeparateMaps;
         std::string ORMPath;
+        std::string AnisotropyFlowPath;
         std::string ClearcoatPath;
         float ClearcoatStrength = 0.0f;
         float ClearcoatRoughness = 0.04f;

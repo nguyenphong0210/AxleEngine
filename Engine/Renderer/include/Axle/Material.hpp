@@ -47,6 +47,12 @@ namespace Axle {
         void SetUseClearcoatMap(bool value) { m_UseClearcoatMap=value; }
         void SetClearcoatTexture(const std::shared_ptr<Texture2D>& texture,const std::string& path="") { m_ClearcoatMap=texture; m_ClearcoatPath=path; m_UseClearcoatMap=!path.empty(); }
 
+        const std::string& GetAnisotropyFlowPath() const { return m_AnisotropyFlowPath; }
+        const std::shared_ptr<Texture2D>& GetAnisotropyFlowMap() const { return m_AnisotropyFlowMap; }
+        bool IsAnisotropyFlowMapEnabled() const { return m_UseAnisotropyFlowMap; }
+        void SetUseAnisotropyFlowMap(bool value) { m_UseAnisotropyFlowMap=value; }
+        void SetAnisotropyFlowTexture(const std::shared_ptr<Texture2D>& texture,const std::string& path="") { m_AnisotropyFlowMap=texture; m_AnisotropyFlowPath=path; m_UseAnisotropyFlowMap=!path.empty(); }
+
         // Automotive & Advanced Shading (Clearcoat & Anisotropy)
         float GetClearcoatStrength() const { return m_ClearcoatStrength; }
         float& GetClearcoatStrengthRef() { return m_ClearcoatStrength; }
@@ -276,6 +282,9 @@ namespace Axle {
         std::string m_ClearcoatPath;
         std::shared_ptr<Texture2D> m_ClearcoatMap;
         bool m_UseClearcoatMap=false;
+        std::string m_AnisotropyFlowPath;
+        std::shared_ptr<Texture2D> m_AnisotropyFlowMap;
+        bool m_UseAnisotropyFlowMap=false;
         std::string m_ORMPath;
         std::shared_ptr<Texture2D> m_ORMMap;
         bool m_UseORMMap = false;

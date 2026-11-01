@@ -1193,6 +1193,8 @@ bool RunTest_Step106_MaterialPipeline() {
     source.UVOffset = glm::vec2(-0.25f, 0.7f);
     source.ClearcoatPath="textures/coat.png";
     source.UseClearcoatMap=true;
+    source.AnisotropyFlowPath="textures/anisotropyFlowMap.png";
+    source.UseAnisotropyFlowMap=true;
     source.ClearcoatStrength = 0.8f;
     source.ClearcoatRoughness = 0.12f;
     source.AnisotropyStrength = -0.6f;
@@ -1234,6 +1236,7 @@ bool RunTest_Step106_MaterialPipeline() {
     MaterialComponent loaded;
     if (!check(SceneHierarchyPanel::LoadMaterialAsset(assetPath, loaded), "Inspector load")) return false;
     if (!check(loaded.ClearcoatPath==source.ClearcoatPath && loaded.UseClearcoatMap, "Clearcoat map asset persistence")) return false;
+    if (!check(loaded.AnisotropyFlowPath==source.AnisotropyFlowPath && loaded.UseAnisotropyFlowMap, "AnisotropyFlow asset persistence")) return false;
     if (!check(loaded.TextureMode == source.TextureMode && loaded.ORMPath == source.ORMPath && loaded.UseORMMap, "Packed ORM persistence")) return false;
     if (!check(glm::length(loaded.AlbedoColor-source.AlbedoColor) < 1e-5f && glm::length(loaded.EmissionColor-source.EmissionColor) < 1e-5f, "Linear HDR color and alpha persistence")) return false;
     if (!check(loaded.RoughnessPath == source.RoughnessPath && !loaded.UseRoughnessMap && loaded.MetallicPath == source.MetallicPath && loaded.UseMetallicMap, "Separate map paths and disabled assignments")) return false;
@@ -1260,6 +1263,7 @@ bool RunTest_Step106_MaterialPipeline() {
     if (!check(inlineMat.ORMPath == source.ORMPath && inlineMat.TextureMode == source.TextureMode && inlineMat.ClearcoatStrength == source.ClearcoatStrength && inlineMat.AnisotropyStrength == source.AnisotropyStrength && inlineMat.AOStrength == source.AOStrength && inlineMat.EmissivePath == source.EmissivePath && inlineMat.RenderQueue == source.RenderQueue && !inlineMat.EnableEnvironmentReflections, "Inline advanced material persistence")) return false;
     if (!check(inlineMat.CustomProperties.size()==source.CustomProperties.size() && inlineMat.CustomProperties[6].BoolVal, "Inline typed shader parameter persistence")) return false;
     if (!check(inlineMat.ClearcoatPath==source.ClearcoatPath && inlineMat.UseClearcoatMap, "Clearcoat map scene persistence")) return false;
+    if (!check(inlineMat.AnisotropyFlowPath==source.AnisotropyFlowPath && inlineMat.UseAnisotropyFlowMap, "AnisotropyFlow scene persistence")) return false;
     source.SyncToRHI();
     auto gpu = source.RHIMaterialAsset->BuildConstants();
     if (!check(gpu.UVTransform == glm::vec4(source.UVScale, source.UVOffset) && gpu.Surface.x == 0.0f && gpu.Surface.y == source.AOStrength && gpu.Surface.z == 0.0f && gpu.Surface.w == 0.0f, "Explicit GPU scalar layout")) return false;

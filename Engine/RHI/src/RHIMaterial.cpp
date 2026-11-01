@@ -76,6 +76,7 @@ namespace Axle::RHI {
 
         m_Textures[index] = texture;
         switch (slot) {
+            case RHITextureSlot::AnisotropyFlow: m_Desc.AnisotropyFlowPath = path; break;
             case RHITextureSlot::Clearcoat: m_Desc.ClearcoatPath = path; break;
             case RHITextureSlot::Albedo:    m_Desc.AlbedoPath = path; break;
             case RHITextureSlot::Normal:    m_Desc.NormalPath = path; break;
@@ -119,6 +120,7 @@ namespace Axle::RHI {
 
     const std::string& RHIMaterial::GetTexturePath(RHITextureSlot slot) const {
         switch (slot) {
+            case RHITextureSlot::AnisotropyFlow: return m_Desc.AnisotropyFlowPath;
             case RHITextureSlot::Clearcoat: return m_Desc.ClearcoatPath;
             case RHITextureSlot::Albedo:    return m_Desc.AlbedoPath;
             case RHITextureSlot::Normal:    return m_Desc.NormalPath;
@@ -432,6 +434,8 @@ namespace Axle::RHI {
             fout << "    ormMap: \"" << m_Desc.ORMPath << "\"\n";
             fout << "    clearcoatMap: \"" << m_Desc.ClearcoatPath << "\"\n";
             fout << "    useClearcoatMap: " << ((m_Desc.TextureEnableMask & (1u<<6)) ? "true" : "false") << "\n";
+            fout << "    anisotropyFlowMap: \"" << m_Desc.AnisotropyFlowPath << "\"\n";
+            fout << "    useAnisotropyFlowMap: " << ((m_Desc.TextureEnableMask & (1u<<7))?"true":"false") << "\n";
             fout << "    textureMode: \"" << TextureModeToString(m_Desc.TextureMode) << "\"\n";
             fout << "    specularHighlights: " << (m_Desc.EnableSpecularHighlights ? "true" : "false") << "\n";
             fout << "    environmentReflections: " << (m_Desc.EnableEnvironmentReflections ? "true" : "false") << "\n";
@@ -520,6 +524,13 @@ namespace Axle::RHI {
                 } else if (trimmed.rfind("useClearcoatMap:", 0) == 0) {
                     if (Trim(trimmed.substr(16))=="true") m_Desc.TextureEnableMask|=1u<<6;
                     else m_Desc.TextureEnableMask&=~(1u<<6);
+                } else if (trimmed.rfind("anisotropyFlowMap:", 0) == 0) {
+                    auto value=Trim(trimmed.substr(18));
+                    if (value.size()>=2 && value.front()=='"' && value.back()=='"') value=value.substr(1,value.size()-2);
+                    m_Desc.AnisotropyFlowPath=value;
+                } else if (trimmed.rfind("useAnisotropyFlowMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(21))=="true") m_Desc.TextureEnableMask|=1u<<7;
+                    else m_Desc.TextureEnableMask&=~(1u<<7);
                 } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
                     try { m_Desc.ClearcoatStrength = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
                 } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {

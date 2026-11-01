@@ -97,3 +97,6 @@ binding, and visible shading agree in the preview and scene.
   and scene shading. R masks coat strength and G stores glossiness, matching
   Godot clearcoat maps. GPU tests cover zero mask and changing glossiness.
   Smooth-coat GGX evaluation avoids cancellation and FP16 radiance stays finite.
+- Anisotropy flow maps now round-trip and bind per draw. RG rotates the tangent
+  direction and alpha masks strength. Step 106 validates both on the GPU;
+  imported-mesh tangent orientation remains an acceptance-scene check.

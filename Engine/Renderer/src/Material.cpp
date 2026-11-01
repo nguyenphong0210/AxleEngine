@@ -212,6 +212,7 @@ namespace Axle {
     }
 
     void Material::ResetTextures() {
+        m_AnisotropyFlowPath.clear(); m_AnisotropyFlowMap.reset(); m_UseAnisotropyFlowMap=false;
         m_ClearcoatPath.clear(); m_ClearcoatMap.reset(); m_UseClearcoatMap=false;
         ClearAlbedoTexture();
         ClearNormalTexture();
@@ -521,6 +522,8 @@ namespace Axle {
             fout << "    useEmissiveMap: " << (m_UseEmissiveMap ? "true" : "false") << "\n";
             fout << "    clearcoatMap: \"" << m_ClearcoatPath << "\"\n";
             fout << "    useClearcoatMap: " << (m_UseClearcoatMap ? "true" : "false") << "\n";
+            fout << "    anisotropyFlowMap: \"" << m_AnisotropyFlowPath << "\"\n";
+            fout << "    useAnisotropyFlowMap: " << (m_UseAnisotropyFlowMap?"true":"false") << "\n";
             WriteShaderProperties(fout,m_CustomProperties);
             fout << "}\n";
             return true;
@@ -712,6 +715,12 @@ namespace Axle {
                     m_ClearcoatPath=value; m_UseClearcoatMap=!value.empty();
                 } else if (trimmed.rfind("useClearcoatMap:", 0) == 0) {
                     m_UseClearcoatMap=Trim(trimmed.substr(16))=="true";
+                } else if (trimmed.rfind("anisotropyFlowMap:", 0) == 0) {
+                    auto value=Trim(trimmed.substr(18));
+                    if (value.size()>=2 && value.front()=='"' && value.back()=='"') value=value.substr(1,value.size()-2);
+                    m_AnisotropyFlowPath=value; m_UseAnisotropyFlowMap=!value.empty();
+                } else if (trimmed.rfind("useAnisotropyFlowMap:", 0) == 0) {
+                    m_UseAnisotropyFlowMap=Trim(trimmed.substr(21))=="true";
                 } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
                     try { m_ClearcoatStrength = std::clamp(std::stof(Trim(trimmed.substr(18))), 0.0f, 1.0f); } catch (...) {}
                 } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {

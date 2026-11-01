@@ -211,6 +211,8 @@ namespace Axle {
         if (BeginGroup("Anisotropy")) {
             Row("Strength"); changed|=ImGui::SliderFloat("##Strength",&m.AnisotropyStrength,-1,1);
             Row("Rotation"); changed|=ImGui::SliderFloat("##Rotation",&m.AnisotropyRotation,0,1,"%.3f turns");
+            Row("Texture"); changed|=TextureSlot("AnisotropyFlow",m.AnisotropyFlowPath,m.UseAnisotropyFlowMap,[&](const auto& p){AssignTexture(m.AnisotropyFlowPath,m.AnisotropyFlowMap,m.UseAnisotropyFlowMap,p);});
+            Row("Channels"); ImGui::TextDisabled("RG: Direction  A: Strength");
             EndGroup();
         }
         if (BeginGroup("UV")) {
@@ -262,6 +264,7 @@ namespace Axle {
                 m.SetAlbedo(""); m.SetNormal(""); m.SetRoughnessMap(""); m.SetMetallicMap("");
                 m.SetAOMap(""); m.SetEmissiveMap(""); m.SetORMMap("");
                 AssignTexture(m.ClearcoatPath,m.ClearcoatMap,m.UseClearcoatMap,"");
+                AssignTexture(m.AnisotropyFlowPath,m.AnisotropyFlowMap,m.UseAnisotropyFlowMap,"");
                 changed=true;
             }
             EndGroup();

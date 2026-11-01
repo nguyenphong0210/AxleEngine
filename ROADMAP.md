@@ -625,6 +625,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **Step 3 - Automotive Material Extensions (After Existing Features Work)**:
     - [x] **Clearcoat**: Extend the validated two-layer shading with texture-driven coat strength and roughness for car paint and carbon fiber; verify direct-light and environment-reflection behavior.
     - [ ] **Anisotropy**: Add texture-driven direction / flow control for brushed wheels and carbon weave; validate tangent orientation, rotation, and strength on imported meshes.
+      - [x] Complete flowmap persistence, texture binding, RG direction and alpha strength; verify direction and mask with GPU readback. Imported-mesh acceptance remains in Step 4.
     - [ ] **Detail Normal**: Add a secondary normal map, strength, independent UV tiling / offset, and optional mask; blend it correctly with the base normal for rubber, leather, paint, and carbon fiber.
     - [ ] **Glass Refraction**: Add refraction enable / strength, IOR, and tint with suitable opaque scene-color / depth inputs, transparent blending, and draw ordering; document the chosen screen-space approximation and provide a fallback when required buffers are unavailable.
     - [ ] Add complete schema, serialization, texture bindings, inspector groups, and preview support for each new feature as its own implementation step.

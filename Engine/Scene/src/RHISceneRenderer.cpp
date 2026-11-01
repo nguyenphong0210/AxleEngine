@@ -1338,7 +1338,8 @@ namespace Axle {
                     // Entity material overrides the mesh resource material.
                     if (registry.all_of<MaterialComponent>(entityID)) {
                         auto& mat = registry.get<MaterialComponent>(entityID);
-                        mat.SyncToRHI();
+                        if (mat.HasAsset() && mat.MaterialAsset) mat.SyncFromAsset();
+                        else mat.SyncToRHI();
                         item.Material = mat.RHIMaterialAsset;
                     } else {
                         item.Material = mc.RHIMaterialAsset;

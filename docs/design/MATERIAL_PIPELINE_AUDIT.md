@@ -73,3 +73,8 @@ binding, and visible shading agree in the preview and scene.
   Packed ORM uses its own shading mode instead of overloading surface type.
   Both material loaders reset omitted fields to legacy defaults on reload, and
   RHI material reads use the virtual filesystem. Tests 101, 105, and 106 pass.
+- Shared external materials now refresh entity values from the cached resource;
+  editing an asset updates both legacy and RHI caches without changing map enable
+  states. Make Unique detaches asset paths and mutable GPU state. Scene reload
+  restores asset defaults before inline overrides. Step 106 verifies shared reload
+  and unique-material isolation with GPU images; 101 and 105 remain passing.

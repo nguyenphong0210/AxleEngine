@@ -41,6 +41,7 @@ namespace Axle {
         s_PathToUUID.clear();
         ClearTextureCache();
         ClearMaterialCache();
+        ClearRHIMaterialCache();
         s_Initialized = true;
         AXLE_INFO("AssetManager initialized with AssetDirectory: '{0}'", s_AssetDirectory.string());
         Sync();
@@ -50,6 +51,7 @@ namespace Axle {
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
         ClearTextureCache();
         ClearMaterialCache();
+        ClearRHIMaterialCache();
         s_Assets.clear();
         s_PathToUUID.clear();
         s_AssetDirectory.clear();
@@ -329,6 +331,52 @@ namespace Axle {
     // -------------------------------------------------------------------------
     // Centralized MaterialCache
     // -------------------------------------------------------------------------
+    static void AttachMaterialTextures(const std::shared_ptr<Material>& material) {
+        // Loading a texture must not silently re-enable an explicitly disabled map.
+        if (!material->GetAlbedoPath().empty()) {
+            bool enabled = material->IsAlbedoMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetAlbedoPath());
+            material->SetAlbedoTexture(texture, material->GetAlbedoPath());
+            material->SetUseAlbedoMap(enabled);
+        }
+        if (!material->GetNormalPath().empty()) {
+            bool enabled = material->IsNormalMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetNormalPath());
+            material->SetNormalTexture(texture, material->GetNormalPath());
+            material->SetUseNormalMap(enabled);
+        }
+        if (!material->GetRoughnessPath().empty()) {
+            bool enabled = material->IsRoughnessMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetRoughnessPath());
+            material->SetRoughnessTexture(texture, material->GetRoughnessPath());
+            material->SetUseRoughnessMap(enabled);
+        }
+        if (!material->GetMetallicPath().empty()) {
+            bool enabled = material->IsMetallicMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetMetallicPath());
+            material->SetMetallicTexture(texture, material->GetMetallicPath());
+            material->SetUseMetallicMap(enabled);
+        }
+        if (!material->GetAOPath().empty()) {
+            bool enabled = material->IsAOMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetAOPath());
+            material->SetAOTexture(texture, material->GetAOPath());
+            material->SetUseAOMap(enabled);
+        }
+        if (!material->GetEmissivePath().empty()) {
+            bool enabled = material->IsEmissiveMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetEmissivePath());
+            material->SetEmissiveTexture(texture, material->GetEmissivePath());
+            material->SetUseEmissiveMap(enabled);
+        }
+        if (!material->GetORMPath().empty()) {
+            bool enabled = material->IsORMMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetORMPath());
+            material->SetORMTexture(texture, material->GetORMPath());
+            material->SetUseORMMap(enabled);
+        }
+    }
+
     std::shared_ptr<Material> AssetManager::GetMaterial(const std::filesystem::path& path) {
         if (path.empty()) return nullptr;
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
@@ -356,23 +404,7 @@ namespace Axle {
             return nullptr;
         }
 
-        // Attach textures through centralized TextureCache
-        if (!material->GetAlbedoPath().empty()) {
-            auto tex = GetTexture(material->GetAlbedoPath());
-            if (tex) material->SetAlbedoTexture(tex, material->GetAlbedoPath());
-        }
-        if (!material->GetNormalPath().empty()) {
-            auto tex = GetTexture(material->GetNormalPath());
-            if (tex) material->SetNormalTexture(tex, material->GetNormalPath());
-        }
-        if (!material->GetRoughnessPath().empty()) {
-            auto tex = GetTexture(material->GetRoughnessPath());
-            if (tex) material->SetRoughnessTexture(tex, material->GetRoughnessPath());
-        }
-        if (!material->GetMetallicPath().empty()) {
-            auto tex = GetTexture(material->GetMetallicPath());
-            if (tex) material->SetMetallicTexture(tex, material->GetMetallicPath());
-        }
+        AttachMaterialTextures(material);
 
         s_MaterialCacheByPath[key] = material;
         if (uuid != 0) {
@@ -404,48 +436,33 @@ namespace Axle {
     void AssetManager::ReloadMaterial(UUID uuid) {
         if (uuid == 0) return;
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-
-        auto it = s_MaterialCacheByUUID.find(uuid);
-        if (it != s_MaterialCacheByUUID.end() && it->second) {
-            std::filesystem::path path = it->second->GetFilePath();
-            if (path.empty()) path = GetAssetPath(uuid);
-            if (!path.empty()) {
-                std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
-                it->second->Load(resolved);
-
-                if (!it->second->GetAlbedoPath().empty()) {
-                    auto tex = GetTexture(it->second->GetAlbedoPath());
-                    if (tex) it->second->SetAlbedoTexture(tex, it->second->GetAlbedoPath());
-                }
-                if (!it->second->GetNormalPath().empty()) {
-                    auto tex = GetTexture(it->second->GetNormalPath());
-                    if (tex) it->second->SetNormalTexture(tex, it->second->GetNormalPath());
-                }
-                if (!it->second->GetRoughnessPath().empty()) {
-                    auto tex = GetTexture(it->second->GetRoughnessPath());
-                    if (tex) it->second->SetRoughnessTexture(tex, it->second->GetRoughnessPath());
-                }
-                if (!it->second->GetMetallicPath().empty()) {
-                    auto tex = GetTexture(it->second->GetMetallicPath());
-                    if (tex) it->second->SetMetallicTexture(tex, it->second->GetMetallicPath());
-                }
-            }
-        }
+        auto path = GetAssetPath(uuid);
+        auto cached = s_MaterialCacheByUUID.find(uuid);
+        if (cached != s_MaterialCacheByUUID.end() && cached->second && !cached->second->GetFilePath().empty()) path = cached->second->GetFilePath();
+        if (!path.empty()) ReloadMaterial(path);
     }
 
     void AssetManager::ReloadMaterial(const std::filesystem::path& path) {
-        UUID uuid = GetAssetUUID(path);
-        if (uuid != 0) {
-            ReloadMaterial(uuid);
-        } else {
-            std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-            std::string key = NormalizePathKey(path);
-            auto it = s_MaterialCacheByPath.find(key);
-            if (it != s_MaterialCacheByPath.end() && it->second) {
-                std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
-                it->second->Load(resolved);
-            }
+        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        auto uuid = GetAssetUUID(path);
+        auto key = NormalizePathKey(path);
+        auto resolved = FileSystem::ResolveAssetPath(path);
+        std::shared_ptr<Material> material;
+        auto byPath = s_MaterialCacheByPath.find(key);
+        if (byPath != s_MaterialCacheByPath.end()) material = byPath->second;
+        if (!material && uuid != 0) {
+            auto byID = s_MaterialCacheByUUID.find(uuid);
+            if (byID != s_MaterialCacheByUUID.end()) material = byID->second;
         }
+        if (material && material->Load(resolved)) AttachMaterialTextures(material);
+        std::shared_ptr<RHI::RHIMaterial> rhiMaterial;
+        auto rhiPath = s_RHIMaterialCacheByPath.find(key);
+        if (rhiPath != s_RHIMaterialCacheByPath.end()) rhiMaterial = rhiPath->second;
+        if (!rhiMaterial && uuid != 0) {
+            auto byID = s_RHIMaterialCacheByUUID.find(uuid);
+            if (byID != s_RHIMaterialCacheByUUID.end()) rhiMaterial = byID->second;
+        }
+        if (rhiMaterial) rhiMaterial->Load(resolved);
     }
 
     void AssetManager::ClearMaterialCache() {

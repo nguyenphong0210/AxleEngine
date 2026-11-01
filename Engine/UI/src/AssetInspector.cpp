@@ -1018,6 +1018,8 @@ namespace Axle {
             }
         }
 
+        if (changed) m_ActiveMaterialAsset.SyncToAsset();
+
         // Live 3D Preview Synchronization
         if (changed && m_AssetPreviewPanel) {
             m_AssetPreviewPanel->UpdateMaterialPreview(m_ActiveMaterialAsset);

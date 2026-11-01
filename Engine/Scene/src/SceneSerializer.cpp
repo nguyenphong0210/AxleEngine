@@ -1118,12 +1118,17 @@ namespace Axle {
                             mat.MaterialHandle = std::stoull(Trim(trimmed.substr(15)));
                             if (mat.MaterialHandle != 0) {
                                 mat.MaterialAsset = AssetManager::GetMaterial(mat.MaterialHandle);
+                                if (mat.MaterialAsset) mat.SyncFromAsset();
                             }
                         } else if (trimmed.rfind("AssetPath:", 0) == 0) {
                             std::string path = Trim(trimmed.substr(10));
+                            mat.AssetPath = path;
                             if (!path.empty() && !mat.MaterialAsset) {
                                 mat.MaterialAsset = AssetManager::GetMaterial(path);
-                                if (mat.MaterialAsset) mat.MaterialHandle = mat.MaterialAsset->GetHandle();
+                                if (mat.MaterialAsset) {
+                                    mat.MaterialHandle = mat.MaterialAsset->GetHandle();
+                                    mat.SyncFromAsset();
+                                }
                             }
                         } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
                             std::string p = Trim(trimmed.substr(11));
@@ -1896,6 +1901,14 @@ namespace Axle {
                 parentEntity.GetComponent<HierarchyComponent>().Children.push_back(
                     static_cast<entt::entity>(childEntity));
             }
+        }
+
+        // Inline values saved with a shared resource represent the scene's latest
+        // edits; apply them once before renderers synchronize from that resource.
+        auto materialView = m_Scene->GetRegistry().view<MaterialComponent>();
+        for (auto entity : materialView) {
+            auto& material = materialView.get<MaterialComponent>(entity);
+            if (material.MaterialAsset) material.SyncToAsset();
         }
 
         return true;

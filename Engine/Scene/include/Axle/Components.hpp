@@ -182,7 +182,7 @@ namespace Axle {
             SyncFromAsset();
         }
 
-        bool HasAsset() const { return (MaterialHandle != 0 && MaterialAsset != nullptr) || !AssetPath.empty(); }
+        bool HasAsset() const { return (MaterialAsset && (MaterialHandle != 0 || !MaterialAsset->GetFilePath().empty())) || !AssetPath.empty(); }
 
         void SetAsset(UUID handle, const std::shared_ptr<Material>& asset) {
             MaterialHandle = handle;
@@ -248,7 +248,7 @@ namespace Axle {
         }
 
         void SyncToRHI() {
-            if (!RHIMaterialAsset) {
+            if (!RHIMaterialAsset || RHIMaterialAsset.use_count() > 1) {
                 std::string name = MaterialAsset ? MaterialAsset->GetName() : "Material";
                 RHIMaterialAsset = std::make_shared<RHI::RHIMaterial>(name);
             }
@@ -342,7 +342,10 @@ namespace Axle {
 
         void MakeUnique() {
             MaterialHandle = 0;
-            MaterialAsset = nullptr;
+            MaterialAsset.reset();
+            AssetPath.clear();
+            RHIMaterialAsset.reset();
+
         }
 
         Axle::SurfaceType GetSurfaceType() const { return MaterialAsset ? MaterialAsset->GetSurfaceType() : SurfaceType; }

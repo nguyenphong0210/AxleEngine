@@ -507,6 +507,11 @@ namespace Axle {
             fout << "    detailNormalStrength: " << m_DetailNormalStrength << "\n";
             fout << "    detailUVScale: " << "[ " << m_DetailUVScale.x << " , " << m_DetailUVScale.y << " ]\n";
             fout << "    detailUVOffset: " << "[ " << m_DetailUVOffset.x << " , " << m_DetailUVOffset.y << " ]\n";
+            fout << "    refractionEnabled: " << (m_RefractionEnabled?"true":"false") << "\n";
+            fout << "    refractionStrength: " << m_RefractionStrength << "\n";
+            fout << "    refractionIOR: " << m_RefractionIOR << "\n";
+            fout << "    refractionThickness: " << m_RefractionThickness << "\n";
+            fout << "    refractionTint: " << "[ " << m_RefractionTint.x << " , " << m_RefractionTint.y << " , " << m_RefractionTint.z << " ]\n";
             fout << "    clearcoatStrength: " << m_ClearcoatStrength << "\n";
             fout << "    clearcoatRoughness: " << m_ClearcoatRoughness << "\n";
             fout << "    anisotropyStrength: " << m_AnisotropyStrength << "\n";
@@ -748,6 +753,16 @@ namespace Axle {
                     std::sscanf(trimmed.c_str(), "detailUVScale: [ %f , %f ]", &m_DetailUVScale.x, &m_DetailUVScale.y);
                 } else if (trimmed.rfind("detailUVOffset:", 0) == 0) {
                     std::sscanf(trimmed.c_str(), "detailUVOffset: [ %f , %f ]", &m_DetailUVOffset.x, &m_DetailUVOffset.y);
+                } else if (trimmed.rfind("refractionEnabled:", 0) == 0) {
+                    m_RefractionEnabled=Trim(trimmed.substr(18))=="true";
+                } else if (trimmed.rfind("refractionStrength:", 0) == 0) {
+                    m_RefractionStrength=std::stof(Trim(trimmed.substr(19)));
+                } else if (trimmed.rfind("refractionIOR:", 0) == 0) {
+                    m_RefractionIOR=std::stof(Trim(trimmed.substr(14)));
+                } else if (trimmed.rfind("refractionThickness:", 0) == 0) {
+                    m_RefractionThickness=std::stof(Trim(trimmed.substr(20)));
+                } else if (trimmed.rfind("refractionTint:", 0) == 0) {
+                    std::sscanf(trimmed.c_str(), "refractionTint: [ %f , %f , %f ]", &m_RefractionTint.x, &m_RefractionTint.y, &m_RefractionTint.z);
                 } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
                     try { m_ClearcoatStrength = std::clamp(std::stof(Trim(trimmed.substr(18))), 0.0f, 1.0f); } catch (...) {}
                 } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {

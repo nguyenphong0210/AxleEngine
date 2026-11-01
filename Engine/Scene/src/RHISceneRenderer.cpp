@@ -252,6 +252,8 @@ namespace Axle {
                     };
                     for (uint32_t slot=6;slot<static_cast<uint32_t>(RHITextureSlot::Count);++slot)
                         defaultSRVs.push_back(RHIMaterial::GetFallbackTexture(static_cast<RHITextureSlot>(slot))->GetSRV());
+                    defaultSRVs.push_back(blackTex->GetSRV());
+                    defaultSRVs.push_back(whiteTex->GetSRV());
                     m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 0, defaultSRVs);
                 }
             }
@@ -404,6 +406,8 @@ namespace Axle {
         m_SceneConstantBuffer.Shutdown();
 
         m_MaterialDraws.clear();
+        m_OpaqueSceneColor.reset();
+        m_OpaqueSceneDepth.reset();
         m_MaterialTextures.Clear();
         m_DefaultDescriptorSet = nullptr;
         m_IrradianceMap = nullptr;
@@ -509,15 +513,20 @@ namespace Axle {
         // Descriptor Set (space 1): 6 PBR textures (t0..t5) + 3 IBL textures (t6..t8) and 1 Sampler (s0)
         nri::DescriptorRangeDesc ranges[2] = {};
         ranges[0].baseRegisterIndex = 0;
-        ranges[0].descriptorNum = static_cast<uint32_t>(RHITextureSlot::Count)+3; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
+        ranges[0].descriptorNum = static_cast<uint32_t>(RHITextureSlot::Count)+5; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        nri::RootSamplerDesc sampler{};
+        nri::RootSamplerDesc samplers[2]{};
+        auto& sampler=samplers[0];
         sampler.registerIndex = 0;
         sampler.desc = RHISamplerDesc::Anisotropic16x().ToNRIDesc();
         sampler.shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
+        samplers[1].registerIndex=1;
+        samplers[1].desc=RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge).ToNRIDesc();
+        samplers[1].shaderStages=nri::StageBits::FRAGMENT_SHADER;
 
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
@@ -530,8 +539,8 @@ namespace Axle {
         layoutDesc.rootConstantNum = 1;
         layoutDesc.rootDescriptors = rootDescs;
         layoutDesc.rootDescriptorNum = 3;
-        layoutDesc.rootSamplers = &sampler;
-        layoutDesc.rootSamplerNum = 1;
+        layoutDesc.rootSamplers = samplers;
+        layoutDesc.rootSamplerNum = 2;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
         layoutDesc.shaderStages = nri::StageBits::ALL;
@@ -1271,6 +1280,79 @@ namespace Axle {
             }
         }
 
+        auto RenderSkybox=[&]() {
+        // 5. Procedural Atmospheric Skybox Pass (Rayleigh & Mie scattering at infinity)
+        if (settings.EnableSkybox && m_SkyboxPipeline) {
+            SkyboxComponent activeSkybox = m_SkyboxParams;
+            if (scene) {
+                SkyboxComponent sceneSkybox;
+                if (scene->GetPrimarySkybox(sceneSkybox)) {
+                    activeSkybox = sceneSkybox;
+                }
+            }
+
+            if (activeSkybox.Enabled && activeSkybox.Type == SkyboxType::ProceduralAtmospheric) {
+                // 1. Determine normalized Sun direction
+                glm::vec3 sunDir(0.45f, 0.85f, 0.25f);
+                if (activeSkybox.SyncWithSun) {
+                    sunDir = glm::vec3(sceneConstants.SunDirection);
+                } else {
+                    float radAz = glm::radians(activeSkybox.CustomAzimuth);
+                    float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
+                    sunDir = glm::vec3(
+                        std::cos(radEl) * std::sin(radAz),
+                        std::sin(radEl),
+                        std::cos(radEl) * std::cos(radAz)
+                    );
+                }
+                if (glm::length(sunDir) > 1e-4f) {
+                    sunDir = glm::normalize(sunDir);
+                } else {
+                    sunDir = glm::vec3(0.0f, 1.0f, 0.0f);
+                }
+
+                // 2. Solar elevation, day factor and sunset horizon warming factors
+                float sunElev = sunDir.y;
+                float dayFactor = std::clamp(sunElev * 3.0f + 0.5f, 0.0f, 1.0f);
+                float sunsetFactor = std::clamp(1.0f - std::abs(sunElev) * 2.5f, 0.0f, 1.0f);
+
+                // 3. Setup 256-byte CBV aligned constant buffer
+                RHISkyboxConstants skyboxConstants{};
+                skyboxConstants.InvViewProjection = glm::inverse(sceneConstants.ViewProjection);
+                skyboxConstants.CameraPosition = sceneConstants.CameraPosition;
+                skyboxConstants.SunDirection = glm::vec4(sunDir, sunElev);
+                skyboxConstants.SunColor = glm::vec4(glm::vec3(sceneConstants.SunColor) * activeSkybox.Intensity, dayFactor);
+                skyboxConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
+                skyboxConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
+                skyboxConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);
+                // If Tone Mapping is enabled, output linear HDR sky radiance (-1.0f mode)
+                float skyboxToneMode = settings.EnableToneMapping ? -1.0f : static_cast<float>(settings.ToneMappingMode);
+                skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, settings.EnableToneMapping ? 1.0f : settings.Gamma);
+
+                if (m_SkyboxConstantBuffer.IsValid()) {
+                    m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants));
+                }
+
+                // 4. Bind Skybox Graphics Pipeline matching active color & depth formats
+                nri::Pipeline* activeSkyboxPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
+                                                          ? m_SkyboxPipelineHDR
+                                                          : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline && activeSampleCount == 1)
+                                                                ? m_SkyboxPipeline
+                                                                : GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
+                m_CommandBuffer.SetPipeline(activeSkyboxPipeline ? activeSkyboxPipeline : m_SkyboxPipeline);
+                m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SkyboxPipelineLayout);
+                if (m_SkyboxConstantBuffer.IsValid() && m_SkyboxConstantBuffer.GetCBV()) {
+                    m_CommandBuffer.SetRootDescriptor(0, m_SkyboxConstantBuffer.GetCBV());
+                }
+
+                // 5. Draw full-screen triangle on far plane (SV_VertexID unproject)
+                m_CommandBuffer.Draw(3, 1, 0, 0);
+                m_LastDrawCallCount++;
+            }
+        }
+
+        };
+
         // 4. Iterate Scene Entities & Stream Transforms via Root Constants (Multi-Pass Forward Pipeline)
         if (scene) {
             auto& registry = scene->GetRegistry();
@@ -1365,6 +1447,7 @@ namespace Axle {
 
             nri::Pipeline* currentPipeline = activePipeline;
 
+            bool refractionReady=false;
             size_t materialDrawIndex = 0;
             auto RenderDrawItem = [&](const DrawItem& item) {
                 nri::Pipeline* needed = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
@@ -1391,7 +1474,7 @@ namespace Axle {
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
                 RHIMaterialConstants materialData;
                 if (item.Material) materialData = item.Material->BuildConstants();
-                std::vector<nri::Descriptor*> srvs(static_cast<size_t>(RHITextureSlot::Count)+3);
+                std::vector<nri::Descriptor*> srvs(static_cast<size_t>(RHITextureSlot::Count)+5);
                 for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
                     auto textureSlot = static_cast<RHITextureSlot>(slot);
                     std::shared_ptr<RHITexture> texture;
@@ -1414,6 +1497,9 @@ namespace Axle {
                 srvs[6]=(m_IrradianceMap ? m_IrradianceMap : RHIMaterial::GetDefaultIrradianceCubemap())->GetSRV();
                 srvs[7]=(m_PrefilterMap ? m_PrefilterMap : RHIMaterial::GetDefaultPrefilterCubemap())->GetSRV();
                 srvs[8]=(m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT())->GetSRV();
+                srvs[13]=refractionReady?m_OpaqueSceneColor->GetSRV():RHIMaterial::GetDefaultBlackTexture()->GetSRV();
+                srvs[14]=refractionReady?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+                materialData.RefractionFrame=glm::vec4(width,height,refractionReady?1.0f:0.0f,0.0f);
                 m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs);
                 if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) return;
                 m_CommandBuffer.SetRootDescriptor(2, resource.Constants.GetCBV());
@@ -1437,6 +1523,48 @@ namespace Axle {
                 RenderDrawItem(item);
             }
 
+            RenderSkybox();
+            bool needsRefraction=std::any_of(transparentQueue.begin(),transparentQueue.end(),[](const DrawItem& item) {
+                return item.SurfaceType==SurfaceType::Transparent && item.Material && item.Material->GetDesc().RefractionEnabled;
+            });
+            if (needsRefraction && activeSampleCount==1 && sceneDepthTexture && sceneDepthDSV) {
+                bool newColor=!m_OpaqueSceneColor || m_OpaqueSceneColor->GetWidth()!=width || m_OpaqueSceneColor->GetHeight()!=height || m_OpaqueSceneColor->GetFormat()!=FromNRIFormat(sceneTargetFormat);
+                bool newDepth=!m_OpaqueSceneDepth || m_OpaqueSceneDepth->GetWidth()!=width || m_OpaqueSceneDepth->GetHeight()!=height || m_OpaqueSceneDepth->GetFormat()!=FromNRIFormat(m_CurrentDepthFormat);
+                if (newColor) {
+                    m_OpaqueSceneColor=std::make_unique<RHITexture>();
+                    m_OpaqueSceneColor->Init(RHITextureDesc::RenderTarget2D(width,height,FromNRIFormat(sceneTargetFormat),"OpaqueSceneColor"));
+                }
+                if (newDepth) {
+                    m_OpaqueSceneDepth=std::make_unique<RHITexture>();
+                    m_OpaqueSceneDepth->Init(RHITextureDesc::DepthStencil2D(width,height,FromNRIFormat(m_CurrentDepthFormat),"OpaqueSceneDepth"));
+                }
+                if (m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth->IsValid()) {
+                    m_CommandBuffer.EndRendering();
+                    m_CommandBuffer.TransitionTexture(sceneTargetTexture,RHIResourceLayout::ColorAttachment,RHIResourceLayout::CopySource);
+                    m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::DepthStencilWrite,RHIResourceLayout::CopySource);
+                    m_CommandBuffer.TransitionTexture(m_OpaqueSceneColor->GetNative(),newColor?RHIResourceLayout::Undefined:RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
+                    m_CommandBuffer.TransitionTexture(m_OpaqueSceneDepth->GetNative(),newDepth?RHIResourceLayout::Undefined:RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
+                    const auto& core=m_Device->GetNRICore();
+                    core.CmdCopyTexture(*m_CommandBuffer.GetNative(),*m_OpaqueSceneColor->GetNative(),nullptr,*sceneTargetTexture,nullptr);
+                    core.CmdCopyTexture(*m_CommandBuffer.GetNative(),*m_OpaqueSceneDepth->GetNative(),nullptr,*sceneDepthTexture,nullptr);
+                    m_CommandBuffer.TransitionTexture(sceneTargetTexture,RHIResourceLayout::CopySource,RHIResourceLayout::ColorAttachment);
+                    m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::CopySource,RHIResourceLayout::DepthStencilWrite);
+                    m_CommandBuffer.TransitionTexture(m_OpaqueSceneColor->GetNative(),RHIResourceLayout::CopyDest,RHIResourceLayout::ShaderResource);
+                    m_CommandBuffer.TransitionTexture(m_OpaqueSceneDepth->GetNative(),RHIResourceLayout::CopyDest,RHIResourceLayout::ShaderResource);
+                    colorAttachment.loadOp=nri::LoadOp::LOAD;
+                    depthAttachment.loadOp=nri::LoadOp::LOAD;
+                    renderingDesc.depth=depthAttachment;
+                    m_CommandBuffer.BeginRendering(renderingDesc);
+                    refractionReady=true;
+                }
+            }
+            // Sky uses a different layout; restore all material bindings before alpha draws.
+            m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS,m_PipelineLayout);
+            m_CommandBuffer.SetRootDescriptor(0,m_SceneConstantBuffer.GetCBV());
+            m_CommandBuffer.SetRootDescriptor(1,m_LightBuffer.GetCBV());
+            m_DescriptorPool.Bind(m_CommandBuffer.GetNative());
+            currentPipeline=nullptr;
+
             // 4b. Render Transparent & Additive Queue (Sorted Back-to-Front)
             if (!transparentQueue.empty()) {
                 std::sort(transparentQueue.begin(), transparentQueue.end(), [](const DrawItem& a, const DrawItem& b) {
@@ -1448,75 +1576,7 @@ namespace Axle {
             }
         }
 
-        // 5. Procedural Atmospheric Skybox Pass (Rayleigh & Mie scattering at infinity)
-        if (settings.EnableSkybox && m_SkyboxPipeline) {
-            SkyboxComponent activeSkybox = m_SkyboxParams;
-            if (scene) {
-                SkyboxComponent sceneSkybox;
-                if (scene->GetPrimarySkybox(sceneSkybox)) {
-                    activeSkybox = sceneSkybox;
-                }
-            }
-
-            if (activeSkybox.Enabled && activeSkybox.Type == SkyboxType::ProceduralAtmospheric) {
-                // 1. Determine normalized Sun direction
-                glm::vec3 sunDir(0.45f, 0.85f, 0.25f);
-                if (activeSkybox.SyncWithSun) {
-                    sunDir = glm::vec3(sceneConstants.SunDirection);
-                } else {
-                    float radAz = glm::radians(activeSkybox.CustomAzimuth);
-                    float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
-                    sunDir = glm::vec3(
-                        std::cos(radEl) * std::sin(radAz),
-                        std::sin(radEl),
-                        std::cos(radEl) * std::cos(radAz)
-                    );
-                }
-                if (glm::length(sunDir) > 1e-4f) {
-                    sunDir = glm::normalize(sunDir);
-                } else {
-                    sunDir = glm::vec3(0.0f, 1.0f, 0.0f);
-                }
-
-                // 2. Solar elevation, day factor and sunset horizon warming factors
-                float sunElev = sunDir.y;
-                float dayFactor = std::clamp(sunElev * 3.0f + 0.5f, 0.0f, 1.0f);
-                float sunsetFactor = std::clamp(1.0f - std::abs(sunElev) * 2.5f, 0.0f, 1.0f);
-
-                // 3. Setup 256-byte CBV aligned constant buffer
-                RHISkyboxConstants skyboxConstants{};
-                skyboxConstants.InvViewProjection = glm::inverse(sceneConstants.ViewProjection);
-                skyboxConstants.CameraPosition = sceneConstants.CameraPosition;
-                skyboxConstants.SunDirection = glm::vec4(sunDir, sunElev);
-                skyboxConstants.SunColor = glm::vec4(glm::vec3(sceneConstants.SunColor) * activeSkybox.Intensity, dayFactor);
-                skyboxConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
-                skyboxConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
-                skyboxConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);
-                // If Tone Mapping is enabled, output linear HDR sky radiance (-1.0f mode)
-                float skyboxToneMode = settings.EnableToneMapping ? -1.0f : static_cast<float>(settings.ToneMappingMode);
-                skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, settings.EnableToneMapping ? 1.0f : settings.Gamma);
-
-                if (m_SkyboxConstantBuffer.IsValid()) {
-                    m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants));
-                }
-
-                // 4. Bind Skybox Graphics Pipeline matching active color & depth formats
-                nri::Pipeline* activeSkyboxPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
-                                                          ? m_SkyboxPipelineHDR
-                                                          : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline && activeSampleCount == 1)
-                                                                ? m_SkyboxPipeline
-                                                                : GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
-                m_CommandBuffer.SetPipeline(activeSkyboxPipeline ? activeSkyboxPipeline : m_SkyboxPipeline);
-                m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SkyboxPipelineLayout);
-                if (m_SkyboxConstantBuffer.IsValid() && m_SkyboxConstantBuffer.GetCBV()) {
-                    m_CommandBuffer.SetRootDescriptor(0, m_SkyboxConstantBuffer.GetCBV());
-                }
-
-                // 5. Draw full-screen triangle on far plane (SV_VertexID unproject)
-                m_CommandBuffer.Draw(3, 1, 0, 0);
-                m_LastDrawCallCount++;
-            }
-        }
+        if (!scene) RenderSkybox();
 
         // 6. GPU Instanced Particle VFX Pass (Tire smoke, drift dust, exhaust backfire flames, impacts)
         if (settings.EnableParticles && m_ParticleRenderer && scene) {

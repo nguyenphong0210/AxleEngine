@@ -105,3 +105,10 @@ binding, and visible shading agree in the preview and scene.
   Step 106 verifies persistence, masking, blending and UV changes through GPU
   readback. Nonuniform and mirrored transforms match CPU-baked reference geometry;
   normals use inverse-transpose and tangent handedness follows the model determinant.
+- Refraction now copies opaque color and depth after sky rendering and before
+  transparent draws. Strength, IOR, thickness and transmission tint round-trip
+  through both inspectors and the RHI schema. Step 106 verifies distortion, tint,
+  IOR=1, MSAA alpha fallback and viewport resize. The approximation samples only
+  visible opaque surfaces; transparent layers and offscreen objects are excluded.
+  Missing depth, multisampling, or a transparent preview clear uses ordinary alpha.
+  SDR snapshots are decoded before tint/Fresnel mixing; HDR snapshots stay linear.

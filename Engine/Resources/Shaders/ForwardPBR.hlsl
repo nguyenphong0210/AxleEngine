@@ -54,7 +54,10 @@ cbuffer MaterialConstants : register(b3, space0) {
     uint4 u_MaterialFlags;     // texture mask, authored material, reserved, reserved
     float4 u_DetailUV;
     float4 u_DetailParameters;
-    float4 u_MaterialReserved[10];
+    float4 u_Refraction;
+    float4 u_RefractionTint;
+    float4 u_RefractionFrame;
+    float4 u_MaterialReserved[7];
 };
 bool HasMaterialMap(uint slot) { return (u_MaterialFlags.x & (1u << slot)) != 0; }
 
@@ -126,6 +129,9 @@ Texture2D u_ClearcoatMap : register(t9, space1);
 Texture2D u_AnisotropyFlowMap : register(t10, space1);
 Texture2D u_DetailNormalMap : register(t11, space1);
 Texture2D u_DetailMaskMap : register(t12, space1);
+Texture2D u_OpaqueSceneColor : register(t13, space1);
+Texture2D<float> u_OpaqueSceneDepth : register(t14, space1);
+SamplerState u_ScreenSampler : register(s1, space0);
 SamplerState u_Sampler      : register(s0, space0);
 
 // -----------------------------------------------------------------------------
@@ -647,5 +653,30 @@ float4 PSMain(PSInput input) : SV_Target0 {
         color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
     }
     
+    if (surfaceType==2 && u_Refraction.w>0.5 && u_RefractionFrame.z>0.5) {
+        float2 screenUV=input.PositionCS.xy/u_RefractionFrame.xy;
+        float3 refracted=refract(-V,N,1.0/u_Refraction.y);
+        float4 endClip=mul(u_ViewProjection,float4(input.WorldPos+refracted*u_Refraction.z,1));
+        float4 startClip=mul(u_ViewProjection,float4(input.WorldPos,1));
+        float2 offset=(endClip.xy/max(endClip.w,1e-5)-startClip.xy/max(startClip.w,1e-5))*float2(0.5,-0.5)*u_Refraction.x;
+        float2 halfPixel=0.5/u_RefractionFrame.xy;
+        float2 sampleUV=clamp(screenUV+offset,halfPixel,1.0-halfPixel);
+        // Do not pull an opaque foreground object across the glass silhouette.
+        if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler,sampleUV,0)<input.PositionCS.z-1e-5) sampleUV=screenUV;
+        float4 background=u_OpaqueSceneColor.SampleLevel(u_ScreenSampler,sampleUV,0);
+        // Transparent editor clear has no rendered checkerboard to refract.
+        if (background.a>0.001) {
+            float f0=(u_Refraction.y-1.0)/(u_Refraction.y+1.0);
+            float fresnel=f0*f0+(1.0-f0*f0)*pow(1.0-NdotV,5.0);
+            float3 transmitted=background.rgb;
+            if (u_CameraPosition.w<=0.0) {
+                transmitted=pow(max(transmitted,0.0),2.2);
+                color=pow(max(color,0.0),2.2);
+            }
+            color=transmitted*u_RefractionTint.rgb*(1.0-fresnel)+color*fresnel;
+            if (u_CameraPosition.w<=0.0) color=pow(max(color,0.0),1.0/2.2);
+            return float4(color,1.0);
+        }
+    }
     return float4(color, albedo.a);
 }

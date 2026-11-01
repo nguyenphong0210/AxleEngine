@@ -627,8 +627,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [ ] **Anisotropy**: Add texture-driven direction / flow control for brushed wheels and carbon weave; validate tangent orientation, rotation, and strength on imported meshes.
       - [x] Complete flowmap persistence, texture binding, RG direction and alpha strength; verify direction and mask with GPU readback. Imported-mesh acceptance remains in Step 4.
     - [x] **Detail Normal**: Add a secondary normal map, strength, independent UV tiling / offset, and optional mask; blend it correctly with the base normal for rubber, leather, paint, and carbon fiber.
-    - [ ] **Glass Refraction**: Add refraction enable / strength, IOR, and tint with suitable opaque scene-color / depth inputs, transparent blending, and draw ordering; document the chosen screen-space approximation and provide a fallback when required buffers are unavailable.
-    - [ ] Add complete schema, serialization, texture bindings, inspector groups, and preview support for each new feature as its own implementation step.
+    - [x] **Glass Refraction**: Add refraction enable / strength, IOR, and tint with suitable opaque scene-color / depth inputs, transparent blending, and draw ordering; document the chosen screen-space approximation and provide a fallback when required buffers are unavailable.
+    - [x] Add complete schema, serialization, texture bindings, inspector groups, and preview support for each new feature as its own implementation step.
   - [ ] **Step 4 - Acceptance Scenes & Backend Verification**:
     - [ ] Maintain reference materials for car paint, brushed metal, carbon fiber, rubber / leather with detail normal, and automotive glass under fixed lighting.
     - [ ] Check save/reopen, material reuse across entities, live editing, missing textures, old assets, and preview-versus-scene consistency with focused automated checks and visual inspection.

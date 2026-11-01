@@ -1201,6 +1201,8 @@ bool RunTest_Step106_MaterialPipeline() {
     source.UseDetailMaskMap=true;
     source.DetailNormalStrength=0.75f;
     source.DetailUVScale={3,7}; source.DetailUVOffset={0.2f,-0.3f};
+    source.RefractionEnabled=true; source.RefractionStrength=0.7f; source.RefractionIOR=1.45f;
+    source.RefractionThickness=0.4f; source.RefractionTint={0.4f,0.7f,0.9f};
     source.ClearcoatStrength = 0.8f;
     source.ClearcoatRoughness = 0.12f;
     source.AnisotropyStrength = -0.6f;
@@ -1246,6 +1248,7 @@ bool RunTest_Step106_MaterialPipeline() {
     if (!check(loaded.DetailNormalPath==source.DetailNormalPath && loaded.UseDetailNormalMap, "DetailNormal asset persistence")) return false;
     if (!check(loaded.DetailMaskPath==source.DetailMaskPath && loaded.UseDetailMaskMap, "DetailMask asset persistence")) return false;
     if (!check(loaded.DetailNormalStrength==source.DetailNormalStrength && loaded.DetailUVScale==source.DetailUVScale && loaded.DetailUVOffset==source.DetailUVOffset,"Detail normal parameters persistence")) return false;
+    if (!check(loaded.RefractionEnabled && loaded.RefractionStrength==source.RefractionStrength && loaded.RefractionIOR==source.RefractionIOR && loaded.RefractionThickness==source.RefractionThickness && loaded.RefractionTint==source.RefractionTint,"Refraction parameters persistence")) return false;
     if (!check(loaded.TextureMode == source.TextureMode && loaded.ORMPath == source.ORMPath && loaded.UseORMMap, "Packed ORM persistence")) return false;
     if (!check(glm::length(loaded.AlbedoColor-source.AlbedoColor) < 1e-5f && glm::length(loaded.EmissionColor-source.EmissionColor) < 1e-5f, "Linear HDR color and alpha persistence")) return false;
     if (!check(loaded.RoughnessPath == source.RoughnessPath && !loaded.UseRoughnessMap && loaded.MetallicPath == source.MetallicPath && loaded.UseMetallicMap, "Separate map paths and disabled assignments")) return false;
@@ -1276,6 +1279,7 @@ bool RunTest_Step106_MaterialPipeline() {
     if (!check(inlineMat.DetailNormalPath==source.DetailNormalPath && inlineMat.UseDetailNormalMap, "DetailNormal scene persistence")) return false;
     if (!check(inlineMat.DetailMaskPath==source.DetailMaskPath && inlineMat.UseDetailMaskMap, "DetailMask scene persistence")) return false;
     if (!check(inlineMat.DetailNormalStrength==source.DetailNormalStrength && inlineMat.DetailUVScale==source.DetailUVScale && inlineMat.DetailUVOffset==source.DetailUVOffset,"Detail normal parameters persistence")) return false;
+    if (!check(inlineMat.RefractionEnabled && inlineMat.RefractionStrength==source.RefractionStrength && inlineMat.RefractionIOR==source.RefractionIOR && inlineMat.RefractionThickness==source.RefractionThickness && inlineMat.RefractionTint==source.RefractionTint,"Refraction parameters persistence")) return false;
     source.SyncToRHI();
     auto gpu = source.RHIMaterialAsset->BuildConstants();
     if (!check(gpu.UVTransform == glm::vec4(source.UVScale, source.UVOffset) && gpu.Surface.x == 0.0f && gpu.Surface.y == source.AOStrength && gpu.Surface.z == 0.0f && gpu.Surface.w == 0.0f, "Explicit GPU scalar layout")) return false;
@@ -1289,6 +1293,7 @@ bool RunTest_Step106_MaterialPipeline() {
     RHI::RHIMaterial directMaterial;
     if (!check(directMaterial.Load(assetPath), "Direct RHI material load")) return false;
     const auto& direct = directMaterial.GetDesc();
+    if (!check(direct.RefractionEnabled && direct.RefractionIOR==source.RefractionIOR && direct.RefractionTint==source.RefractionTint && direct.DetailUVScale==source.DetailUVScale,"Direct RHI extension persistence")) return false;
     if (!check(direct.TextureMode == source.TextureMode && direct.ORMPath == source.ORMPath && direct.ClearcoatStrength == source.ClearcoatStrength && direct.AnisotropyStrength == source.AnisotropyStrength && !direct.EnableSpecularHighlights && direct.RenderQueue == source.RenderQueue, "Direct RHI schema matches inspector assets")) return false;
     if (!check(directMaterial.BuildConstants().Surface.y == source.AOStrength && !(direct.TextureEnableMask & (1u<<2)) && directMaterial.GetShadingModel() == RHI::RHIShadingModel::PackedORMTexturedPBR, "RHI map flags and shader model")) return false;
     auto directPath = root / "direct.axleasset";

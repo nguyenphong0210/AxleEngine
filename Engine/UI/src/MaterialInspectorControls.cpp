@@ -215,6 +215,19 @@ namespace Axle {
             Row("Channels"); ImGui::TextDisabled("RG: Direction  A: Strength");
             EndGroup();
         }
+        if (BeginGroup("Refraction")) {
+            Row("Enabled"); changed|=ImGui::Checkbox("##Enabled",&m.RefractionEnabled);
+            if (m.RefractionEnabled) {
+                Row("Strength"); changed|=ImGui::SliderFloat("##Strength",&m.RefractionStrength,0,1);
+                Row("IOR"); changed|=ImGui::SliderFloat("##IOR",&m.RefractionIOR,1,3);
+                Row("Thickness"); changed|=ImGui::DragFloat("##Thickness",&m.RefractionThickness,0.01f,0,100,"%.3f");
+                Row("Tint"); changed|=ImGui::ColorEdit3("##Tint",glm::value_ptr(m.RefractionTint));
+                Row("Scene input"); ImGui::TextDisabled("Opaque color + depth");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Screen-space opaque-only refraction. Requires Transparent surface. Falls back to alpha when MSAA, scene buffers, or opaque preview background are unavailable.");
+                if (m.SurfaceType!=SurfaceType::Transparent) { Row("Surface"); ImGui::TextDisabled("Select Transparent to refract"); }
+            }
+            EndGroup();
+        }
         if (BeginGroup("Detail Normal")) {
             Row("Texture"); changed|=TextureSlot("DetailNormal",m.DetailNormalPath,m.UseDetailNormalMap,[&](const auto& p){AssignTexture(m.DetailNormalPath,m.DetailNormalMap,m.UseDetailNormalMap,p);});
             Row("Strength"); changed|=ImGui::SliderFloat("##Strength",&m.DetailNormalStrength,0,4);

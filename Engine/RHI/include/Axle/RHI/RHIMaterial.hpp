@@ -69,6 +69,11 @@ namespace Axle::RHI {
         float DetailNormalStrength = 1.0f;
         glm::vec2 DetailUVScale = {1.0f,1.0f};
         glm::vec2 DetailUVOffset = {0.0f,0.0f};
+        bool RefractionEnabled = false;
+        float RefractionStrength = 1.0f;
+        float RefractionIOR = 1.5f;
+        float RefractionThickness = 0.1f;
+        glm::vec3 RefractionTint = {1.0f,1.0f,1.0f};
         float ClearcoatStrength = 0.0f;
         float ClearcoatRoughness = 0.04f;
         float AnisotropyStrength = 0.0f;

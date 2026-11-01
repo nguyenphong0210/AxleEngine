@@ -244,6 +244,8 @@ namespace Axle {
         // Render() waits for queue completion before reusing these resources.
         std::vector<std::unique_ptr<MaterialDrawResources>> m_MaterialDraws;
         MaterialTextureCache m_MaterialTextures;
+        std::unique_ptr<RHI::RHITexture> m_OpaqueSceneColor;
+        std::unique_ptr<RHI::RHITexture> m_OpaqueSceneDepth;
 
 
         std::shared_ptr<RHI::RHITexture> m_IrradianceMap;

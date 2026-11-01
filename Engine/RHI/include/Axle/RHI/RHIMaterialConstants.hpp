@@ -12,7 +12,10 @@ namespace Axle::RHI {
         glm::uvec4 Flags{0u}; // x: assigned texture bitmask, y: authored material (versus procedural mesh)
         glm::vec4 DetailUVTransform{1.0f,1.0f,0.0f,0.0f};
         glm::vec4 DetailParameters{1.0f,0.0f,0.0f,0.0f}; // x: normal strength
-        glm::vec4 Reserved[10]{};
+        glm::vec4 Refraction{1.0f,1.5f,0.1f,0.0f}; // strength, IOR, thickness, enabled
+        glm::vec4 RefractionTint{1.0f};
+        glm::vec4 RefractionFrame{}; // width, height, color/depth snapshot ready, reserved
+        glm::vec4 Reserved[7]{};
     };
     static_assert(sizeof(RHIMaterialConstants) == 256);
     static_assert(offsetof(RHIMaterialConstants, Surface) == 16);
@@ -20,4 +23,6 @@ namespace Axle::RHI {
     static_assert(offsetof(RHIMaterialConstants, Flags) == 48);
     static_assert(offsetof(RHIMaterialConstants, DetailUVTransform) == 64);
     static_assert(offsetof(RHIMaterialConstants, DetailParameters) == 80);
+    static_assert(offsetof(RHIMaterialConstants, Refraction) == 96);
+    static_assert(offsetof(RHIMaterialConstants, RefractionFrame) == 128);
 }

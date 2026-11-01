@@ -147,6 +147,11 @@ namespace Axle {
         float DetailNormalStrength = 1.0f;
         glm::vec2 DetailUVScale = {1.0f,1.0f};
         glm::vec2 DetailUVOffset = {0.0f,0.0f};
+        bool RefractionEnabled = false;
+        float RefractionStrength = 1.0f;
+        float RefractionIOR = 1.5f;
+        float RefractionThickness = 0.1f;
+        glm::vec3 RefractionTint = {1.0f,1.0f,1.0f};
         float ClearcoatStrength = 0.0f;
         float ClearcoatRoughness = 0.04f;
         float AnisotropyStrength = 0.0f;
@@ -226,6 +231,11 @@ namespace Axle {
             DetailNormalStrength=MaterialAsset->GetDetailNormalStrength();
             DetailUVScale=MaterialAsset->GetDetailUVScale();
             DetailUVOffset=MaterialAsset->GetDetailUVOffset();
+            RefractionEnabled=MaterialAsset->GetRefractionEnabled();
+            RefractionStrength=MaterialAsset->GetRefractionStrength();
+            RefractionIOR=MaterialAsset->GetRefractionIOR();
+            RefractionThickness=MaterialAsset->GetRefractionThickness();
+            RefractionTint=MaterialAsset->GetRefractionTint();
             ClearcoatStrength = MaterialAsset->GetClearcoatStrength();
             ClearcoatRoughness = MaterialAsset->GetClearcoatRoughness();
             AnisotropyStrength = MaterialAsset->GetAnisotropyStrength();
@@ -312,6 +322,11 @@ namespace Axle {
             desc.DetailNormalStrength=DetailNormalStrength;
             desc.DetailUVScale=DetailUVScale;
             desc.DetailUVOffset=DetailUVOffset;
+            desc.RefractionEnabled=RefractionEnabled;
+            desc.RefractionStrength=RefractionStrength;
+            desc.RefractionIOR=RefractionIOR;
+            desc.RefractionThickness=RefractionThickness;
+            desc.RefractionTint=RefractionTint;
             desc.RenderQueue = RenderQueue;
             desc.UseORMMap = UseORMMap;
             desc.AlbedoPath = UseAlbedoMap ? AlbedoPath : "";
@@ -345,6 +360,11 @@ namespace Axle {
             MaterialAsset->SetDetailNormalStrength(DetailNormalStrength);
             MaterialAsset->SetDetailUVScale(DetailUVScale);
             MaterialAsset->SetDetailUVOffset(DetailUVOffset);
+            MaterialAsset->SetRefractionEnabled(RefractionEnabled);
+            MaterialAsset->SetRefractionStrength(RefractionStrength);
+            MaterialAsset->SetRefractionIOR(RefractionIOR);
+            MaterialAsset->SetRefractionThickness(RefractionThickness);
+            MaterialAsset->SetRefractionTint(RefractionTint);
             MaterialAsset->SetClearcoatStrength(ClearcoatStrength);
             MaterialAsset->SetClearcoatRoughness(ClearcoatRoughness);
             MaterialAsset->SetAnisotropyStrength(AnisotropyStrength);

@@ -159,6 +159,8 @@ namespace Axle::RHI {
 
     RHIMaterialConstants RHIMaterial::BuildConstants() const {
         RHIMaterialConstants data;
+        data.Refraction=glm::vec4(std::clamp(m_Desc.RefractionStrength,0.0f,1.0f),std::clamp(m_Desc.RefractionIOR,1.0f,3.0f),std::max(0.0f,m_Desc.RefractionThickness),m_Desc.RefractionEnabled?1.0f:0.0f);
+        data.RefractionTint=glm::vec4(glm::clamp(m_Desc.RefractionTint,glm::vec3(0),glm::vec3(1)),1.0f);
         data.DetailUVTransform=glm::vec4(m_Desc.DetailUVScale,m_Desc.DetailUVOffset);
         data.DetailParameters.x=m_Desc.DetailNormalStrength;
         data.UVTransform = glm::vec4(m_Desc.UVScale, m_Desc.UVOffset);
@@ -434,6 +436,11 @@ namespace Axle::RHI {
             fout << "    detailNormalStrength: " << m_Desc.DetailNormalStrength << "\n";
             fout << "    detailUVScale: " << "[ " << m_Desc.DetailUVScale.x << " , " << m_Desc.DetailUVScale.y << " ]\n";
             fout << "    detailUVOffset: " << "[ " << m_Desc.DetailUVOffset.x << " , " << m_Desc.DetailUVOffset.y << " ]\n";
+            fout << "    refractionEnabled: " << (m_Desc.RefractionEnabled?"true":"false") << "\n";
+            fout << "    refractionStrength: " << m_Desc.RefractionStrength << "\n";
+            fout << "    refractionIOR: " << m_Desc.RefractionIOR << "\n";
+            fout << "    refractionThickness: " << m_Desc.RefractionThickness << "\n";
+            fout << "    refractionTint: " << "[ " << m_Desc.RefractionTint.x << " , " << m_Desc.RefractionTint.y << " , " << m_Desc.RefractionTint.z << " ]\n";
             fout << "    clearcoatStrength: " << m_Desc.ClearcoatStrength << "\n";
             fout << "    clearcoatRoughness: " << m_Desc.ClearcoatRoughness << "\n";
             fout << "    anisotropyStrength: " << m_Desc.AnisotropyStrength << "\n";
@@ -566,6 +573,16 @@ namespace Axle::RHI {
                     std::sscanf(trimmed.c_str(), "detailUVScale: [ %f , %f ]", &m_Desc.DetailUVScale.x, &m_Desc.DetailUVScale.y);
                 } else if (trimmed.rfind("detailUVOffset:", 0) == 0) {
                     std::sscanf(trimmed.c_str(), "detailUVOffset: [ %f , %f ]", &m_Desc.DetailUVOffset.x, &m_Desc.DetailUVOffset.y);
+                } else if (trimmed.rfind("refractionEnabled:", 0) == 0) {
+                    m_Desc.RefractionEnabled=Trim(trimmed.substr(18))=="true";
+                } else if (trimmed.rfind("refractionStrength:", 0) == 0) {
+                    m_Desc.RefractionStrength=std::stof(Trim(trimmed.substr(19)));
+                } else if (trimmed.rfind("refractionIOR:", 0) == 0) {
+                    m_Desc.RefractionIOR=std::stof(Trim(trimmed.substr(14)));
+                } else if (trimmed.rfind("refractionThickness:", 0) == 0) {
+                    m_Desc.RefractionThickness=std::stof(Trim(trimmed.substr(20)));
+                } else if (trimmed.rfind("refractionTint:", 0) == 0) {
+                    std::sscanf(trimmed.c_str(), "refractionTint: [ %f , %f , %f ]", &m_Desc.RefractionTint.x, &m_Desc.RefractionTint.y, &m_Desc.RefractionTint.z);
                 } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
                     try { m_Desc.ClearcoatStrength = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
                 } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {

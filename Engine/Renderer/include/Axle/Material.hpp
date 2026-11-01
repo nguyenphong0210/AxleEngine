@@ -72,6 +72,17 @@ namespace Axle {
         glm::vec2 GetDetailUVOffset() const { return m_DetailUVOffset; }
         void SetDetailUVOffset(glm::vec2 value) { m_DetailUVOffset=value; }
 
+        bool GetRefractionEnabled() const { return m_RefractionEnabled; }
+        void SetRefractionEnabled(bool value) { m_RefractionEnabled=value; }
+        float GetRefractionStrength() const { return m_RefractionStrength; }
+        void SetRefractionStrength(float value) { m_RefractionStrength=value; }
+        float GetRefractionIOR() const { return m_RefractionIOR; }
+        void SetRefractionIOR(float value) { m_RefractionIOR=value; }
+        float GetRefractionThickness() const { return m_RefractionThickness; }
+        void SetRefractionThickness(float value) { m_RefractionThickness=value; }
+        glm::vec3 GetRefractionTint() const { return m_RefractionTint; }
+        void SetRefractionTint(glm::vec3 value) { m_RefractionTint=value; }
+
         // Automotive & Advanced Shading (Clearcoat & Anisotropy)
         float GetClearcoatStrength() const { return m_ClearcoatStrength; }
         float& GetClearcoatStrengthRef() { return m_ClearcoatStrength; }
@@ -291,6 +302,11 @@ namespace Axle {
         float m_DetailNormalStrength = 1.0f;
         glm::vec2 m_DetailUVScale = {1.0f,1.0f};
         glm::vec2 m_DetailUVOffset = {0.0f,0.0f};
+        bool m_RefractionEnabled = false;
+        float m_RefractionStrength = 1.0f;
+        float m_RefractionIOR = 1.5f;
+        float m_RefractionThickness = 0.1f;
+        glm::vec3 m_RefractionTint = {1.0f,1.0f,1.0f};
         float m_ClearcoatStrength = 0.0f;
         float m_ClearcoatRoughness = 0.04f;
         float m_AnisotropyStrength = 0.0f;

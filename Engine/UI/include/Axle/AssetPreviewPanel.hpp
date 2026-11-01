@@ -13,8 +13,12 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace Axle {
+
+    namespace RHI { class RHITexture; }
+    class Texture2D;
 
     class RHISceneRenderer;
 
@@ -119,6 +123,17 @@ namespace Axle {
         float m_ObjectYaw = 0.0f;
         MaterialComponent m_ActiveMaterial;
         bool m_SceneNeedsRebuild = true;
+
+        // Studio Light controls (Godot parity)
+        bool m_EnableKeyLight = true;
+        bool m_EnableSecondaryLight = true;
+        void UpdatePreviewLighting();
+
+        // UI Icon Texture Cache
+        uint64_t GetOrCreateIconTexture(const std::string& iconFilename);
+        void FreeIconTextures();
+        std::unordered_map<std::string, std::pair<std::shared_ptr<RHI::RHITexture>, uint64_t>> m_IconCache;
+        std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_GLIconCache;
     };
 
 }

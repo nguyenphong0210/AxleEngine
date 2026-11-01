@@ -3,6 +3,10 @@
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHITexture.hpp>
+#include <Axle/Texture2D.hpp>
+#include <Extensions/NRIHelper.h>
+#include <stb_image.h>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <Axle/RenderCommand.hpp>
@@ -125,6 +129,7 @@ namespace Axle {
     }
 
     AssetPreviewPanel::~AssetPreviewPanel() {
+        FreeIconTextures();
         if (m_RHISceneRenderer) {
             m_RHISceneRenderer->Shutdown();
             m_RHISceneRenderer.reset();
@@ -132,6 +137,111 @@ namespace Axle {
         if (m_PreviewScene) {
             m_PreviewScene->Clear();
             m_PreviewScene.reset();
+        }
+    }
+
+    uint64_t AssetPreviewPanel::GetOrCreateIconTexture(const std::string& iconFilename) {
+        bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
+        if (isRHI) {
+            auto it = m_IconCache.find(iconFilename);
+            if (it != m_IconCache.end() && it->second.second != 0) {
+                return it->second.second;
+            }
+
+            std::filesystem::path iconPath = std::filesystem::path("Engine/Resources/Icons") / iconFilename;
+            if (!std::filesystem::exists(iconPath)) {
+                iconPath = FileSystem::ResolveAssetPath(iconPath);
+            }
+            if (!std::filesystem::exists(iconPath)) return 0;
+
+            int width = 0, height = 0, channels = 0;
+            stbi_set_flip_vertically_on_load(false);
+            stbi_uc* pixels = stbi_load(iconPath.string().c_str(), &width, &height, &channels, 4);
+            if (!pixels) return 0;
+
+            auto& rhiDevice = RHI::RHIDevice::Get();
+            if (!rhiDevice.IsInitialized()) {
+                stbi_image_free(pixels);
+                return 0;
+            }
+
+            auto rhiTex = std::make_shared<RHI::RHITexture>();
+            auto desc = RHI::RHITextureDesc::RenderTarget2D((uint32_t)width, (uint32_t)height, RHI::RHITextureFormat::RGBA8_UNORM, "Icon_" + iconFilename);
+            desc.Usage = RHI::RHITextureUsage::ShaderResource;
+            if (rhiTex->Init(desc)) {
+                const auto& helper = rhiDevice.GetNRIHelper();
+                nri::Queue* queue = rhiDevice.GetGraphicsQueue();
+                if (queue && helper.UploadData) {
+                    nri::TextureSubresourceUploadDesc subres = {};
+                    subres.slices = pixels;
+                    subres.sliceNum = 1;
+                    subres.rowPitch = (uint32_t)width * 4;
+                    subres.slicePitch = (uint32_t)width * (uint32_t)height * 4;
+
+                    nri::TextureUploadDesc upDesc = {};
+                    upDesc.subresources = &subres;
+                    upDesc.texture = rhiTex->GetNative();
+                    upDesc.after.access = nri::AccessBits::SHADER_RESOURCE;
+                    upDesc.after.layout = nri::Layout::SHADER_RESOURCE;
+                    upDesc.after.stages = nri::StageBits::ALL;
+                    upDesc.planes = nri::PlaneBits::ALL;
+
+                    helper.UploadData(*queue, &upDesc, 1, nullptr, 0);
+                }
+
+                uint64_t nativeHandle = rhiTex->GetNativeSRVHandle();
+                if (nativeHandle != 0 && m_ImGuiLayer) {
+                    uint64_t gpuHandle = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                    if (gpuHandle != 0) {
+                        m_IconCache[iconFilename] = { rhiTex, gpuHandle };
+                        stbi_image_free(pixels);
+                        return gpuHandle;
+                    }
+                }
+            }
+            stbi_image_free(pixels);
+            return 0;
+        } else if (Window::HasActiveContext()) {
+            auto it = m_GLIconCache.find(iconFilename);
+            if (it != m_GLIconCache.end() && it->second && it->second->IsLoaded()) {
+                return it->second->GetRendererID();
+            }
+
+            std::filesystem::path iconPath = std::filesystem::path("Engine/Resources/Icons") / iconFilename;
+            auto tex = Texture2D::Create(iconPath.string());
+            if (tex && tex->IsLoaded()) {
+                m_GLIconCache[iconFilename] = tex;
+                return tex->GetRendererID();
+            }
+        }
+        return 0;
+    }
+
+    void AssetPreviewPanel::FreeIconTextures() {
+        if (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) {
+            for (auto& [name, pair] : m_IconCache) {
+                if (pair.second != 0) {
+                    m_ImGuiLayer->UnregisterTextureDescriptor(pair.second);
+                }
+            }
+        }
+        m_IconCache.clear();
+        m_GLIconCache.clear();
+    }
+
+    void AssetPreviewPanel::UpdatePreviewLighting() {
+        if (m_PreviewLight && m_PreviewLight.HasComponent<DirectionalLightComponent>()) {
+            auto& dlc = m_PreviewLight.GetComponent<DirectionalLightComponent>();
+            dlc.Intensity = m_EnableKeyLight ? 1.0f : 0.0f;
+            dlc.AmbientIntensity = m_EnableKeyLight ? 0.65f : 0.25f;
+        }
+        if (m_PreviewFillLight && m_PreviewFillLight.HasComponent<PointLightComponent>()) {
+            auto& flc = m_PreviewFillLight.GetComponent<PointLightComponent>();
+            flc.Intensity = m_EnableSecondaryLight ? 0.85f : 0.0f;
+        }
+        if (m_PreviewRimLight && m_PreviewRimLight.HasComponent<PointLightComponent>()) {
+            auto& rlc = m_PreviewRimLight.GetComponent<PointLightComponent>();
+            rlc.Intensity = m_EnableSecondaryLight ? 0.55f : 0.0f;
         }
     }
 
@@ -776,14 +886,14 @@ namespace Axle {
         dlc.Azimuth = m_SunAzimuth;
         dlc.Elevation = m_SunElevation;
         dlc.Color = glm::vec3(1.0f, 0.98f, 0.95f);
-        dlc.Intensity = 1.35f;
-        dlc.AmbientIntensity = 0.95f;
+        dlc.Intensity = m_EnableKeyLight ? 1.0f : 0.0f;
+        dlc.AmbientIntensity = m_EnableKeyLight ? 0.65f : 0.25f;
 
         // 2. Secondary Studio Fill Light (Elevated Cool Soft Studio Fill)
         m_PreviewFillLight = m_PreviewScene->CreateEntity("PreviewFillLight");
         auto& flc = m_PreviewFillLight.AddComponent<PointLightComponent>();
         flc.Color = glm::vec3(0.88f, 0.93f, 1.0f);
-        flc.Intensity = 2.8f;
+        flc.Intensity = m_EnableSecondaryLight ? 0.85f : 0.0f;
         flc.Radius = 16.0f;
         auto& flt = m_PreviewFillLight.GetComponent<TransformComponent>();
         flt.Translation = glm::vec3(-2.6f, 2.4f, 1.8f);
@@ -792,7 +902,7 @@ namespace Axle {
         m_PreviewRimLight = m_PreviewScene->CreateEntity("PreviewRimLight");
         auto& rlc = m_PreviewRimLight.AddComponent<PointLightComponent>();
         rlc.Color = glm::vec3(0.92f, 0.95f, 1.0f);
-        rlc.Intensity = 1.2f;
+        rlc.Intensity = m_EnableSecondaryLight ? 0.55f : 0.0f;
         rlc.Radius = 16.0f;
         auto& rlt = m_PreviewRimLight.GetComponent<TransformComponent>();
         rlt.Translation = glm::vec3(1.8f, 2.5f, -3.2f);
@@ -892,13 +1002,13 @@ namespace Axle {
         ImVec2 p1 = ImVec2(p0.x + availW, p0.y + viewportH);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        // 1. Godot-style Checkerboard background grid
+        // 1. Godot-style Checkerboard background grid (Refined Neutral Mid-Gray Studio)
         const float tileSize = 14.0f;
         for (float y = p0.y; y < p1.y; y += tileSize) {
             for (float x = p0.x; x < p1.x; x += tileSize) {
                 int cx = static_cast<int>((x - p0.x) / tileSize);
                 int cy = static_cast<int>((y - p0.y) / tileSize);
-                ImU32 col = ((cx + cy) % 2 == 0) ? IM_COL32(32, 35, 41, 255) : IM_COL32(44, 48, 56, 255);
+                ImU32 col = ((cx + cy) % 2 == 0) ? IM_COL32(118, 118, 118, 255) : IM_COL32(76, 76, 76, 255);
                 ImVec2 tileMax(std::min(x + tileSize, p1.x), std::min(y + tileSize, p1.y));
                 drawList->AddRectFilled(ImVec2(x, y), tileMax, col);
             }
@@ -934,52 +1044,91 @@ namespace Axle {
         m_IsViewportHovered = ImGui::IsItemHovered();
 
         // 3. Viewport Border
-        drawList->AddRect(p0, p1, IM_COL32(20, 22, 26, 255), 3.0f, 0, 1.5f);
+        drawList->AddRect(p0, p1, IM_COL32(40, 43, 50, 255), 3.0f, 0, 1.5f);
 
         // 4. Godot-style Primitive Mesh Selector (Vertical strip on top-left inside viewport)
         if (isMaterial) {
             ImGui::SetCursorScreenPos(ImVec2(p0.x + 8.0f, p0.y + 8.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 4.0f));
 
-            auto DrawGodotMeshBtn = [&](const char* icon, PreviewMeshType type, const char* tooltip) {
+            auto DrawGodotMeshBtn = [&](const std::string& iconFile, PreviewMeshType type, const char* fallbackText, const char* tooltip) {
                 bool isSel = (m_PreviewMeshType == type);
-                if (isSel) {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.52f, 0.88f, 0.90f));
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                uint64_t iconTex = GetOrCreateIconTexture(iconFile);
+
+                ImVec2 btnSize(24.0f, 24.0f);
+                ImGui::PushID(iconFile.c_str());
+
+                bool clicked = false;
+                if (iconTex != 0) {
+                    ImVec4 bgCol = isSel ? ImVec4(0.24f, 0.52f, 0.88f, 0.90f) : ImVec4(0.12f, 0.14f, 0.18f, 0.70f);
+                    ImVec4 tintCol = isSel ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.90f, 0.92f, 0.96f, 0.90f);
+                    ImGui::PushStyleColor(ImGuiCol_Button, bgCol);
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.35f, 0.45f, 0.85f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.45f, 0.80f, 1.0f));
+                    clicked = ImGui::ImageButton(iconFile.c_str(), (ImTextureID)(intptr_t)iconTex, btnSize, ImVec2(0, 0), ImVec2(1, 1), bgCol, tintCol);
+                    ImGui::PopStyleColor(3);
                 } else {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.16f, 0.20f, 0.75f));
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.75f, 0.82f, 1.0f));
+                    if (isSel) {
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.52f, 0.88f, 0.90f));
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                    } else {
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.16f, 0.20f, 0.75f));
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.75f, 0.82f, 1.0f));
+                    }
+                    clicked = ImGui::Button(fallbackText, btnSize);
+                    ImGui::PopStyleColor(2);
                 }
-                if (ImGui::Button(icon, ImVec2(24.0f, 22.0f))) {
+
+                if (clicked) {
                     SetPreviewMeshType(type);
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
-                ImGui::PopStyleColor(2);
+                ImGui::PopID();
             };
 
-            DrawGodotMeshBtn("O", PreviewMeshType::Sphere, "Preview on Sphere (Godot)");
-            DrawGodotMeshBtn("#", PreviewMeshType::Cube, "Preview on Cube");
-            DrawGodotMeshBtn("=", PreviewMeshType::Cylinder, "Preview on Cylinder");
-            DrawGodotMeshBtn("-", PreviewMeshType::Plane, "Preview on Plane");
+            DrawGodotMeshBtn("icon_mesh_sphere.png", PreviewMeshType::Sphere, "O", "Preview on Sphere (Godot)");
+            DrawGodotMeshBtn("icon_mesh_cube.png", PreviewMeshType::Cube, "#", "Preview on Cube");
+            DrawGodotMeshBtn("icon_mesh_cylinder.png", PreviewMeshType::Cylinder, "=", "Preview on Cylinder");
+            DrawGodotMeshBtn("icon_mesh_plane.png", PreviewMeshType::Plane, "-", "Preview on Plane");
 
             ImGui::PopStyleVar(2);
         }
 
-        // 5. Godot-style Controls (Top-right inside viewport)
+        // 5. Godot-style Turntable Controls (Top-right inside viewport)
         {
-            ImGui::SetCursorScreenPos(ImVec2(p1.x - 62.0f, p0.y + 8.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+            ImGui::SetCursorScreenPos(ImVec2(p1.x - 64.0f, p0.y + 8.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 0.0f));
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.16f, 0.20f, 0.75f));
+            ImVec2 btnSize(22.0f, 22.0f);
 
-            if (ImGui::Button(m_TurntableActive ? "||" : ">", ImVec2(24.0f, 22.0f))) {
+            uint64_t pausePlayTex = GetOrCreateIconTexture(m_TurntableActive ? "icon_pause.png" : "icon_play.png");
+            ImVec4 ctrlBg(0.12f, 0.14f, 0.18f, 0.70f);
+            ImVec4 ctrlTint(0.90f, 0.92f, 0.96f, 0.90f);
+            ImGui::PushStyleColor(ImGuiCol_Button, ctrlBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.35f, 0.45f, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.45f, 0.80f, 1.0f));
+
+            bool pauseClicked = false;
+            if (pausePlayTex != 0) {
+                pauseClicked = ImGui::ImageButton("##pause_orbit", (ImTextureID)(intptr_t)pausePlayTex, btnSize, ImVec2(0, 0), ImVec2(1, 1), ctrlBg, ctrlTint);
+            } else {
+                pauseClicked = ImGui::Button(m_TurntableActive ? "||" : ">", btnSize);
+            }
+            if (pauseClicked) {
                 m_TurntableActive = !m_TurntableActive;
             }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_TurntableActive ? "Pause Orbit" : "Play Orbit");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_TurntableActive ? "Pause Orbit" : "Play Orbit");
 
             ImGui::SameLine();
-            if (ImGui::Button("R", ImVec2(24.0f, 22.0f))) {
+            uint64_t resetTex = GetOrCreateIconTexture("icon_reset_view.png");
+            bool resetClicked = false;
+            if (resetTex != 0) {
+                resetClicked = ImGui::ImageButton("##reset_orbit", (ImTextureID)(intptr_t)resetTex, btnSize, ImVec2(0, 0), ImVec2(1, 1), ctrlBg, ctrlTint);
+            } else {
+                resetClicked = ImGui::Button("R", btnSize);
+            }
+            if (resetClicked) {
                 m_Pitch = 15.0f;
                 m_Yaw = 30.0f;
                 m_Zoom = 1.0f;
@@ -994,7 +1143,46 @@ namespace Axle {
             }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset View & Lighting");
 
-            ImGui::PopStyleColor();
+            ImGui::PopStyleColor(3);
+            ImGui::PopStyleVar(2);
+        }
+
+        // 6. Godot-style Light Toggles (Vertical strip on right edge inside viewport)
+        if (isMaterial) {
+            ImGui::SetCursorScreenPos(ImVec2(p1.x - 32.0f, p0.y + 42.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 4.0f));
+
+            auto DrawLightToggleBtn = [&](bool& state, const std::string& activeIcon, const std::string& inactiveIcon, const char* name, const char* tooltip) {
+                uint64_t iconTex = GetOrCreateIconTexture(state ? activeIcon : inactiveIcon);
+                ImVec2 btnSize(22.0f, 22.0f);
+                ImGui::PushID(name);
+
+                bool clicked = false;
+                ImVec4 bgCol = state ? ImVec4(0.18f, 0.22f, 0.30f, 0.85f) : ImVec4(0.10f, 0.12f, 0.15f, 0.65f);
+                ImVec4 tintCol = state ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.60f, 0.62f, 0.66f, 0.70f);
+                ImGui::PushStyleColor(ImGuiCol_Button, bgCol);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.35f, 0.45f, 0.90f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.45f, 0.80f, 1.0f));
+
+                if (iconTex != 0) {
+                    clicked = ImGui::ImageButton(name, (ImTextureID)(intptr_t)iconTex, btnSize, ImVec2(0, 0), ImVec2(1, 1), bgCol, tintCol);
+                } else {
+                    clicked = ImGui::Button(state ? name : "-", btnSize);
+                }
+                ImGui::PopStyleColor(3);
+
+                if (clicked) {
+                    state = !state;
+                    UpdatePreviewLighting();
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s: %s", tooltip, state ? "Enabled (Click to Disable)" : "Disabled (Click to Enable)");
+                ImGui::PopID();
+            };
+
+            DrawLightToggleBtn(m_EnableKeyLight, "icon_light_1.png", "icon_light_1_gray.png", "1", "Key Sun Light");
+            DrawLightToggleBtn(m_EnableSecondaryLight, "icon_light_2.png", "icon_light_2_gray.png", "2", "Fill & Rim Lights");
+
             ImGui::PopStyleVar(2);
         }
 

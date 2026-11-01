@@ -496,11 +496,11 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float envIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
         ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao;
     } else {
-        // Photographic Studio & Physical Hemisphere Reflection (Godot & Unity Parity)
-        // Provides smooth continuous ambient bounce and studio softbox highlights without harsh horizon cuts
-        float3 studioTop     = float3(0.96, 0.98, 1.00); // Bright overhead softbox dome
-        float3 studioHorizon = float3(0.82, 0.85, 0.89); // Neutral studio eye-level fill
-        float3 studioGround  = float3(0.68, 0.70, 0.74); // Studio floor ambient bounce (high bounce eliminates dark smudges)
+        // Photographic Studio & Physical Hemisphere Reflection (Godot 4 Studio Environment Parity)
+        // Balanced studio ambient levels providing clear 3D depth, rich contrast, and no blown-out whites
+        float3 studioTop     = float3(0.52, 0.54, 0.58); // Overhead softbox dome
+        float3 studioHorizon = float3(0.32, 0.34, 0.38); // Neutral studio eye-level fill
+        float3 studioGround  = float3(0.18, 0.19, 0.22); // Studio floor ambient bounce
 
         // Smooth continuous hemisphere diffuse illumination
         float upWeight = saturate(N.y * 0.5 + 0.5);
@@ -528,7 +528,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.3);
 
-        float ambientIntensity = hasMultiLightSun ? max(0.50, u_SunLight.ColorAndAmbient.w) : 0.95;
+        float ambientIntensity = hasMultiLightSun ? max(0.40, u_SunLight.ColorAndAmbient.w) : 0.65;
         ambient = (ambientDiffuse * ambientIntensity + specularAmbient) * ao;
     }
     

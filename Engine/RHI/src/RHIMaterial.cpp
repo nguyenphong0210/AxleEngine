@@ -2,6 +2,7 @@
 #include <Axle/RHI/RHIDescriptorPool.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/FileSystem.hpp>
 #include <fstream>
 #include <sstream>
 #include <cstdio>
@@ -131,9 +132,8 @@ namespace Axle::RHI {
         pushConsts.ColorSecondary = glm::vec4(m_Desc.EmissiveColor, m_Desc.EmissiveIntensity);
         float shadingModelVal = static_cast<float>(m_Desc.ShadingModel);
         float surfaceTypeVal = static_cast<float>(m_Desc.SurfaceType);
-        if (m_Desc.TextureMode == Axle::TextureMode::PackedORM && !m_Desc.ORMPath.empty()) {
+        if (m_Desc.TextureMode == Axle::TextureMode::PackedORM) {
             shadingModelVal = static_cast<float>(RHIShadingModel::PackedORMTexturedPBR);
-            surfaceTypeVal += 10.0f;
         }
         pushConsts.Params = glm::vec4(m_Desc.UVScale.x,
                                       shadingModelVal,
@@ -151,10 +151,13 @@ namespace Axle::RHI {
         data.CoatAnisotropy = glm::vec4(m_Desc.ClearcoatStrength, m_Desc.ClearcoatRoughness,
             m_Desc.AnisotropyStrength, m_Desc.AnisotropyRotation);
         for (uint32_t i = 0; i < static_cast<uint32_t>(RHITextureSlot::Count); ++i) {
-            if (!GetTexturePath(static_cast<RHITextureSlot>(i)).empty() || HasTexture(static_cast<RHITextureSlot>(i)))
+            if ((m_Desc.TextureEnableMask & (1u << i)) && (!GetTexturePath(static_cast<RHITextureSlot>(i)).empty() || HasTexture(static_cast<RHITextureSlot>(i))))
                 data.Flags.x |= 1u << i;
         }
-        if (m_Desc.TextureMode == Axle::TextureMode::PackedORM && !m_Desc.ORMPath.empty()) data.Flags.x |= 1u << 2;
+        if (m_Desc.TextureMode == Axle::TextureMode::PackedORM) {
+            data.Flags.x &= ~(1u << 2);
+            if (m_Desc.UseORMMap && !m_Desc.ORMPath.empty()) data.Flags.x |= 1u << 2;
+        }
         data.Flags.y = 1u;
         return data;
     }
@@ -394,15 +397,6 @@ namespace Axle::RHI {
         std::string ext = filepath.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
         if (ext == ".axleasset" || ext.empty()) {
-            auto formatHex = [](const glm::vec4& c) {
-                uint32_t r = (uint32_t)std::clamp(c.r * 255.0f + 0.5f, 0.0f, 255.0f);
-                uint32_t g = (uint32_t)std::clamp(c.g * 255.0f + 0.5f, 0.0f, 255.0f);
-                uint32_t b = (uint32_t)std::clamp(c.b * 255.0f + 0.5f, 0.0f, 255.0f);
-                std::ostringstream ss;
-                ss << "#" << std::uppercase << std::hex << std::setfill('0')
-                   << std::setw(2) << r << std::setw(2) << g << std::setw(2) << b;
-                return ss.str();
-            };
             fout << "Material {\n";
             fout << "    name: \"" << m_Desc.Name << "\"\n";
             fout << "    shader: \"ForwardPBR\"\n\n";
@@ -412,7 +406,7 @@ namespace Axle::RHI {
             fout << "    alphaCutoff: " << m_Desc.AlphaCutoff << "\n";
             fout << "    depthWrite: " << (m_Desc.DepthWrite ? "true" : "false") << "\n\n";
             fout << "    // Base Color & Texture\n";
-            fout << "    albedoColor: \"" << formatHex(m_Desc.BaseColor) << "\"\n";
+            fout << "    albedoColor: [ " << m_Desc.BaseColor.r << " , " << m_Desc.BaseColor.g << " , " << m_Desc.BaseColor.b << " , " << m_Desc.BaseColor.a << " ]\n";
             fout << "    albedoMap: \"" << m_Desc.AlbedoPath << "\"\n\n";
             fout << "    // Surface Microfacet\n";
             fout << "    metallic: " << m_Desc.Metallic << "\n";
@@ -421,8 +415,27 @@ namespace Axle::RHI {
             fout << "    normalStrength: " << m_Desc.NormalStrength << "\n";
             fout << "    occlusionMap: \"" << m_Desc.AOPath << "\"\n";
             fout << "    occlusionStrength: " << m_Desc.AO << "\n\n";
+            fout << "    clearcoatStrength: " << m_Desc.ClearcoatStrength << "\n";
+            fout << "    clearcoatRoughness: " << m_Desc.ClearcoatRoughness << "\n";
+            fout << "    anisotropyStrength: " << m_Desc.AnisotropyStrength << "\n";
+            fout << "    anisotropyRotation: " << m_Desc.AnisotropyRotation << "\n";
+            fout << "    renderQueue: " << m_Desc.RenderQueue << "\n";
+            fout << "    roughnessMap: \"" << m_Desc.RoughnessPath << "\"\n";
+            fout << "    metallicMap: \"" << m_Desc.MetallicPath << "\"\n";
+            fout << "    emissiveMap: \"" << m_Desc.EmissivePath << "\"\n";
+            fout << "    ormMap: \"" << m_Desc.ORMPath << "\"\n";
+            fout << "    textureMode: \"" << TextureModeToString(m_Desc.TextureMode) << "\"\n";
+            fout << "    specularHighlights: " << (m_Desc.EnableSpecularHighlights ? "true" : "false") << "\n";
+            fout << "    environmentReflections: " << (m_Desc.EnableEnvironmentReflections ? "true" : "false") << "\n";
+            fout << "    useORMMap: " << (m_Desc.UseORMMap ? "true" : "false") << "\n";
+            fout << "    useAlbedoMap: " << ((m_Desc.TextureEnableMask & (1u << 0)) ? "true" : "false") << "\n";
+            fout << "    useNormalMap: " << ((m_Desc.TextureEnableMask & (1u << 1)) ? "true" : "false") << "\n";
+            fout << "    useRoughnessMap: " << ((m_Desc.TextureEnableMask & (1u << 2)) ? "true" : "false") << "\n";
+            fout << "    useMetallicMap: " << ((m_Desc.TextureEnableMask & (1u << 3)) ? "true" : "false") << "\n";
+            fout << "    useAOMap: " << ((m_Desc.TextureEnableMask & (1u << 4)) ? "true" : "false") << "\n";
+            fout << "    useEmissiveMap: " << ((m_Desc.TextureEnableMask & (1u << 5)) ? "true" : "false") << "\n";
             fout << "    // Emission & UV Scaling\n";
-            fout << "    emissionColor: \"" << formatHex(glm::vec4(m_Desc.EmissiveColor, 1.0f)) << "\"\n";
+            fout << "    emissionColor: [ " << m_Desc.EmissiveColor.r << " , " << m_Desc.EmissiveColor.g << " , " << m_Desc.EmissiveColor.b << " ]\n";
             fout << "    emissionIntensity: " << m_Desc.EmissiveIntensity << "\n";
             fout << "    uvTiling: [ " << m_Desc.UVScale.x << " , " << m_Desc.UVScale.y << " ]\n";
             fout << "    uvOffset: [ " << m_Desc.UVOffset.x << " , " << m_Desc.UVOffset.y << " ]\n";
@@ -459,16 +472,16 @@ namespace Axle::RHI {
     }
 
     bool RHIMaterial::Load(const std::filesystem::path& filepath) {
-        std::ifstream fin(filepath);
-        if (!fin.is_open()) {
-            AXLE_CORE_ERROR("RHIMaterial::Load: Could not open file '{0}' for reading", filepath.string());
+        std::string content = Axle::FileSystem::ReadTextFile(filepath);
+        if (content.empty()) {
+            AXLE_CORE_ERROR("RHIMaterial::Load: Could not read material '{0}'", filepath.string());
             return false;
         }
-
-        std::stringstream ss;
-        ss << fin.rdbuf();
-        std::string content = ss.str();
-
+        // A reload replaces the asset, including omitted properties from older files.
+        const auto name = m_Desc.Name;
+        m_Desc = RHIMaterialDesc{};
+        m_Desc.Name = name;
+        m_Textures.fill(nullptr);
         if (content.find("Material {") != std::string::npos || content.find("Material{") != std::string::npos) {
             std::istringstream stream(content);
             std::string line;
@@ -492,6 +505,60 @@ namespace Axle::RHI {
                 } else if (trimmed.rfind("depthWrite:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(11));
                     m_Desc.DepthWrite = (val == "true" || val == "1");
+                } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
+                    try { m_Desc.ClearcoatStrength = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
+                } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {
+                    try { m_Desc.ClearcoatRoughness = std::stof(Trim(trimmed.substr(19))); } catch (...) {}
+                } else if (trimmed.rfind("anisotropyStrength:", 0) == 0) {
+                    try { m_Desc.AnisotropyStrength = std::stof(Trim(trimmed.substr(19))); } catch (...) {}
+                } else if (trimmed.rfind("anisotropyRotation:", 0) == 0) {
+                    try { m_Desc.AnisotropyRotation = std::stof(Trim(trimmed.substr(19))); } catch (...) {}
+                } else if (trimmed.rfind("renderQueue:", 0) == 0) {
+                    try { m_Desc.RenderQueue = std::stoi(Trim(trimmed.substr(12))); } catch (...) {}
+                } else if (trimmed.rfind("specularHighlights:", 0) == 0) {
+                    m_Desc.EnableSpecularHighlights = Trim(trimmed.substr(19)) == "true";
+                } else if (trimmed.rfind("environmentReflections:", 0) == 0) {
+                    m_Desc.EnableEnvironmentReflections = Trim(trimmed.substr(23)) == "true";
+                } else if (trimmed.rfind("useORMMap:", 0) == 0) {
+                    m_Desc.UseORMMap = Trim(trimmed.substr(10)) == "true";
+                } else if (trimmed.rfind("useAlbedoMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(13)) == "true") m_Desc.TextureEnableMask |= 1u << 0;
+                    else m_Desc.TextureEnableMask &= ~(1u << 0);
+                } else if (trimmed.rfind("useNormalMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(13)) == "true") m_Desc.TextureEnableMask |= 1u << 1;
+                    else m_Desc.TextureEnableMask &= ~(1u << 1);
+                } else if (trimmed.rfind("useRoughnessMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(16)) == "true") m_Desc.TextureEnableMask |= 1u << 2;
+                    else m_Desc.TextureEnableMask &= ~(1u << 2);
+                } else if (trimmed.rfind("useMetallicMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(15)) == "true") m_Desc.TextureEnableMask |= 1u << 3;
+                    else m_Desc.TextureEnableMask &= ~(1u << 3);
+                } else if (trimmed.rfind("useAOMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(9)) == "true") m_Desc.TextureEnableMask |= 1u << 4;
+                    else m_Desc.TextureEnableMask &= ~(1u << 4);
+                } else if (trimmed.rfind("useEmissiveMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(15)) == "true") m_Desc.TextureEnableMask |= 1u << 5;
+                    else m_Desc.TextureEnableMask &= ~(1u << 5);
+                } else if (trimmed.rfind("roughnessMap:", 0) == 0) {
+                    std::string value = Trim(trimmed.substr(13));
+                    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
+                    m_Desc.RoughnessPath = value;
+                } else if (trimmed.rfind("metallicMap:", 0) == 0) {
+                    std::string value = Trim(trimmed.substr(12));
+                    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
+                    m_Desc.MetallicPath = value;
+                } else if (trimmed.rfind("emissiveMap:", 0) == 0) {
+                    std::string value = Trim(trimmed.substr(12));
+                    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
+                    m_Desc.EmissivePath = value;
+                } else if (trimmed.rfind("ormMap:", 0) == 0) {
+                    std::string value = Trim(trimmed.substr(7));
+                    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
+                    m_Desc.ORMPath = value;
+                } else if (trimmed.rfind("textureMode:", 0) == 0) {
+                    std::string value = Trim(trimmed.substr(12));
+                    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
+                    m_Desc.TextureMode = StringToTextureMode(value);
                 } else if (trimmed.rfind("albedoColor:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(12));
                     if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
@@ -577,15 +644,19 @@ namespace Axle::RHI {
                     try { m_Desc.EmissiveIntensity = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
                 }
             }
+            if (m_Desc.TextureMode == Axle::TextureMode::PackedORM) m_Desc.ShadingModel = RHIShadingModel::PackedORMTexturedPBR;
+            else {
+                for (uint32_t i=0;i<static_cast<uint32_t>(RHITextureSlot::Count);++i)
+                    if ((m_Desc.TextureEnableMask & (1u<<i)) && !GetTexturePath(static_cast<RHITextureSlot>(i)).empty()) m_Desc.ShadingModel = RHIShadingModel::TexturedPBR;
+            }
             return true;
         }
 
         std::string line;
         bool inSection = false;
-        fin.clear();
-        fin.seekg(0);
+        std::istringstream stream(content);
 
-        while (std::getline(fin, line)) {
+        while (std::getline(stream, line)) {
             std::string trimmed = Trim(line);
             if (trimmed.empty() || trimmed[0] == '#') continue;
 
@@ -653,7 +724,6 @@ namespace Axle::RHI {
             }
         }
 
-        fin.close();
         return true;
     }
 

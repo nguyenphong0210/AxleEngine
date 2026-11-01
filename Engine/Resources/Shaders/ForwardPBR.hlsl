@@ -298,7 +298,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         ao = (HasMaterialMap(4) ? u_AOMap.Sample(u_Sampler, uv).r : 1.0);
         float3 emissiveSample = (HasMaterialMap(5) ? u_EmissiveMap.Sample(u_Sampler, uv).rgb : float3(1, 1, 1));
         emissive = emissiveSample * u_ColorSecondary.rgb * max(0.0, u_ColorSecondary.w);
-    } else if (shadingMode == 6 || (int)(u_SurfaceType + 0.5) >= 10) {
+    } else if (shadingMode == 6) {
         // Mode 6: Packed ORM Textured PBR (R: Occlusion, G: Roughness, B: Metallic)
         float2 uv = (u_MaterialFlags.y != 0 ? input.TexCoord * u_MaterialUV.xy + u_MaterialUV.zw : input.TexCoord * tileScale + u_UVOffset);
         float4 albedoSample = (HasMaterialMap(0) ? u_AlbedoMap.Sample(u_Sampler, uv) : float4(1, 1, 1, 1));
@@ -315,7 +315,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
     }
     
     // Cutout alpha test (SurfaceType == 1): discard fragment if alpha < cutoff
-    int surfaceType = ((int)(u_SurfaceType + 0.5)) % 10;
+    int surfaceType = (int)(u_SurfaceType + 0.5);
     float alphaCutoff = saturate(u_AlphaCutoff);
     ao = lerp(1.0, ao, saturate(u_MaterialSurface.y));
     if (surfaceType == 1 && albedo.a < alphaCutoff) {
@@ -332,7 +332,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         if (length(crossN) > 1e-6) {
             N = normalize(crossN);
         }
-    } else if ((shadingMode == 5 || shadingMode == 6 || (int)(u_SurfaceType + 0.5) >= 10) && HasMaterialMap(1) && abs(input.TangentWS.w) > 0.1) {
+    } else if ((shadingMode == 5 || shadingMode == 6) && HasMaterialMap(1) && abs(input.TangentWS.w) > 0.1) {
         float3 T = normalize(input.TangentWS.xyz);
         float3 B = cross(N, T) * input.TangentWS.w;
         float3x3 TBN = float3x3(T, B, N);

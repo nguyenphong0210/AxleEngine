@@ -68,3 +68,8 @@ binding, and visible shading agree in the preview and scene.
   and rotation drive a tangent-frame GGX distribution with Smith visibility.
   Step 106 GPU readback verifies coat strength/roughness, anisotropy/rotation, and
   independent direct-specular and environment-reflection switches.
+- Direct RHI loading now preserves ORM, all map assignments and enable flags,
+  coat/anisotropy, HDR/alpha colors, queue priority, and reflection switches.
+  Packed ORM uses its own shading mode instead of overloading surface type.
+  Both material loaders reset omitted fields to legacy defaults on reload, and
+  RHI material reads use the virtual filesystem. Tests 101, 105, and 106 pass.

@@ -1084,7 +1084,7 @@ bool RunTest_Step105_Phase38_2_DynamicReflectionAndAutomotiveShading() {
         rhiMat.ApplyToPushConstants(pc);
 
         assert(pc.Params.y == static_cast<float>(RHI::RHIShadingModel::PackedORMTexturedPBR));
-        assert(pc.MaterialExtra.w >= 10.0f); // SurfaceType + 10.0f for ORM
+        assert(pc.MaterialExtra.w == static_cast<float>(rhiMat.GetSurfaceType())); // Texture mode no longer overloads surface type
     }
     std::cout << "  -> PASS: Packed ORM channel packing mode, AST serialization, and PushConstants propagation verified." << std::endl;
 
@@ -1248,6 +1248,20 @@ bool RunTest_Step106_MaterialPipeline() {
     RHI::RHIObjectPushConstants constants;
     source.RHIMaterialAsset->ApplyToPushConstants(constants);
     if (!check(constants.MaterialExtra.z == 0.0f && source.RHIMaterialAsset->BuildConstants().CoatAnisotropy.x == 0.8f, "Zero alpha cutoff is independent of clearcoat")) return false;
+    RHI::RHIMaterial directMaterial;
+    if (!check(directMaterial.Load(assetPath), "Direct RHI material load")) return false;
+    const auto& direct = directMaterial.GetDesc();
+    if (!check(direct.TextureMode == source.TextureMode && direct.ORMPath == source.ORMPath && direct.ClearcoatStrength == source.ClearcoatStrength && direct.AnisotropyStrength == source.AnisotropyStrength && !direct.EnableSpecularHighlights && direct.RenderQueue == source.RenderQueue, "Direct RHI schema matches inspector assets")) return false;
+    if (!check(directMaterial.BuildConstants().Surface.y == source.AOStrength && !(direct.TextureEnableMask & (1u<<2)) && directMaterial.GetShadingModel() == RHI::RHIShadingModel::PackedORMTexturedPBR, "RHI map flags and shader model")) return false;
+    auto directPath = root / "direct.axleasset";
+    if (!check(directMaterial.Save(directPath), "Direct RHI material save")) return false;
+    RHI::RHIMaterial restoredDirect;
+    if (!check(restoredDirect.Load(directPath) && restoredDirect.GetDesc().ORMPath == direct.ORMPath && restoredDirect.GetDesc().TextureEnableMask == direct.TextureEnableMask && restoredDirect.GetDesc().BaseColor == direct.BaseColor, "RHI material round trip")) return false;
+    auto oldAsset = root / "legacy_defaults.axleasset";
+    { std::ofstream stream(oldAsset); stream << "Material {\n    albedoColor: \"#FFFFFF\"\n}\n"; }
+    if (!check(restoredDirect.Load(oldAsset) && restoredDirect.GetDesc().TextureMode == TextureMode::SeparateMaps && restoredDirect.GetDesc().ClearcoatStrength == 0.0f && restoredDirect.GetDesc().EnableSpecularHighlights, "RHI reload resets omitted legacy properties")) return false;
+    auto legacyMaterial = loaded.MaterialAsset;
+    if (!check(legacyMaterial->Load(oldAsset) && legacyMaterial->GetTextureMode() == TextureMode::SeparateMaps && legacyMaterial->GetClearcoatStrength() == 0.0f && legacyMaterial->GetCustomProperties().empty(), "Inspector reload resets omitted legacy properties")) return false;
     // Compile the real renderer shader for both backends, not a reduced template.
     auto& compiler = RHI::RHIShaderCompiler::Get();
     if (!check(compiler.Init(), "DXC initialization")) return false;

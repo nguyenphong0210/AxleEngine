@@ -275,6 +275,7 @@ namespace Axle {
             desc.EnableSpecularHighlights = EnableSpecularHighlights;
             desc.EnableEnvironmentReflections = EnableEnvironmentReflections;
             desc.RenderQueue = RenderQueue;
+            desc.UseORMMap = UseORMMap;
             desc.AlbedoPath = UseAlbedoMap ? AlbedoPath : "";
             desc.NormalPath = UseNormalMap ? NormalPath : "";
             desc.RoughnessPath = UseRoughnessMap ? RoughnessPath : "";
@@ -284,7 +285,7 @@ namespace Axle {
             desc.ORMPath = UseORMMap ? ORMPath : "";
             bool hasMaps = !desc.AlbedoPath.empty() || !desc.NormalPath.empty() || !desc.RoughnessPath.empty() ||
                 !desc.MetallicPath.empty() || !desc.AOPath.empty() || !desc.EmissivePath.empty();
-            desc.ShadingModel = TextureMode == Axle::TextureMode::PackedORM && !desc.ORMPath.empty()
+            desc.ShadingModel = TextureMode == Axle::TextureMode::PackedORM
                 ? RHI::RHIShadingModel::PackedORMTexturedPBR
                 : (hasMaps ? RHI::RHIShadingModel::TexturedPBR : RHI::RHIShadingModel::SolidColor);
 

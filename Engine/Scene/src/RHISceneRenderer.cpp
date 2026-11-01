@@ -1392,7 +1392,7 @@ namespace Axle {
                 for (uint32_t slot = 0; slot < 6; ++slot) {
                     auto textureSlot = static_cast<RHITextureSlot>(slot);
                     std::shared_ptr<RHITexture> texture;
-                    if (item.Material) {
+                    if (item.Material && (materialData.Flags.x & (1u << slot))) {
                         if (item.Material->HasTexture(textureSlot)) texture = item.Material->GetTexture(textureSlot);
                         else {
                             const auto& desc = item.Material->GetDesc();

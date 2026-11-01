@@ -62,6 +62,8 @@ namespace Axle::RHI {
         float ClearcoatRoughness = 0.04f;
         float AnisotropyStrength = 0.0f;
         float AnisotropyRotation = 0.0f;
+        uint32_t TextureEnableMask = 0x3fu;
+        bool UseORMMap = true;
         bool EnableSpecularHighlights = true;
         bool EnableEnvironmentReflections = true;
         int RenderQueue = 2000;

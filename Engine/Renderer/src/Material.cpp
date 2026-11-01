@@ -619,6 +619,8 @@ namespace Axle {
             return false;
         }
 
+        // Preserve identity while resetting fields absent from the replacement asset.
+        *this = Material(m_Name, m_Handle);
         m_FilePath = filepath;
         if (m_Name.empty() || m_Name == "New Material") {
             m_Name = filepath.stem().string();

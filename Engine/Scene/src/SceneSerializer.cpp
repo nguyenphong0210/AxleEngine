@@ -274,6 +274,8 @@ namespace Axle {
                 ss << "      AnisotropyStrength: " << mat.AnisotropyStrength << "\n";
                 ss << "      AnisotropyRotation: " << mat.AnisotropyRotation << "\n";
                 ss << "      RenderQueue: " << mat.RenderQueue << "\n";
+                ss << "      ClearcoatPath: " << mat.ClearcoatPath << "\n";
+                ss << "      UseClearcoatMap: " << (mat.UseClearcoatMap?"true":"false") << "\n";
                 WriteShaderProperties(ss,mat.CustomProperties,"      ");
                 ss << "      NormalPath: " << mat.NormalPath << "\n";
                 ss << "      UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
@@ -1167,6 +1169,10 @@ namespace Axle {
                             mat.UseCustomShader = Trim(trimmed.substr(16)) == "true";
                         } else if (trimmed.rfind("AOStrength:", 0) == 0) {
                             mat.AOStrength = std::stof(Trim(trimmed.substr(11)));
+                        } else if (trimmed.rfind("ClearcoatPath:", 0) == 0) {
+                            mat.ClearcoatPath=Trim(trimmed.substr(14));
+                        } else if (trimmed.rfind("UseClearcoatMap:", 0) == 0) {
+                            mat.UseClearcoatMap=Trim(trimmed.substr(16))=="true";
                         } else if (trimmed.rfind("ClearcoatStrength:", 0) == 0) {
                             mat.ClearcoatStrength = std::stof(Trim(trimmed.substr(18)));
                         } else if (trimmed.rfind("ClearcoatRoughness:", 0) == 0) {

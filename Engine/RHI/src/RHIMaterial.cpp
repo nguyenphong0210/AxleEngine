@@ -76,6 +76,7 @@ namespace Axle::RHI {
 
         m_Textures[index] = texture;
         switch (slot) {
+            case RHITextureSlot::Clearcoat: m_Desc.ClearcoatPath = path; break;
             case RHITextureSlot::Albedo:    m_Desc.AlbedoPath = path; break;
             case RHITextureSlot::Normal:    m_Desc.NormalPath = path; break;
             case RHITextureSlot::Roughness: m_Desc.RoughnessPath = path; break;
@@ -96,6 +97,10 @@ namespace Axle::RHI {
             return m_Textures[index];
         }
 
+        return GetFallbackTexture(slot);
+    }
+
+    std::shared_ptr<RHITexture> RHIMaterial::GetFallbackTexture(RHITextureSlot slot) {
         switch (slot) {
             case RHITextureSlot::Albedo:    return GetDefaultWhiteTexture();
             case RHITextureSlot::Normal:    return GetDefaultFlatNormalTexture();
@@ -114,6 +119,7 @@ namespace Axle::RHI {
 
     const std::string& RHIMaterial::GetTexturePath(RHITextureSlot slot) const {
         switch (slot) {
+            case RHITextureSlot::Clearcoat: return m_Desc.ClearcoatPath;
             case RHITextureSlot::Albedo:    return m_Desc.AlbedoPath;
             case RHITextureSlot::Normal:    return m_Desc.NormalPath;
             case RHITextureSlot::Roughness: return m_Desc.RoughnessPath;
@@ -424,6 +430,8 @@ namespace Axle::RHI {
             fout << "    metallicMap: \"" << m_Desc.MetallicPath << "\"\n";
             fout << "    emissiveMap: \"" << m_Desc.EmissivePath << "\"\n";
             fout << "    ormMap: \"" << m_Desc.ORMPath << "\"\n";
+            fout << "    clearcoatMap: \"" << m_Desc.ClearcoatPath << "\"\n";
+            fout << "    useClearcoatMap: " << ((m_Desc.TextureEnableMask & (1u<<6)) ? "true" : "false") << "\n";
             fout << "    textureMode: \"" << TextureModeToString(m_Desc.TextureMode) << "\"\n";
             fout << "    specularHighlights: " << (m_Desc.EnableSpecularHighlights ? "true" : "false") << "\n";
             fout << "    environmentReflections: " << (m_Desc.EnableEnvironmentReflections ? "true" : "false") << "\n";
@@ -505,6 +513,13 @@ namespace Axle::RHI {
                 } else if (trimmed.rfind("depthWrite:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(11));
                     m_Desc.DepthWrite = (val == "true" || val == "1");
+                } else if (trimmed.rfind("clearcoatMap:", 0) == 0) {
+                    auto value=Trim(trimmed.substr(13));
+                    if (value.size()>=2 && value.front()=='"' && value.back()=='"') value=value.substr(1,value.size()-2);
+                    m_Desc.ClearcoatPath=value;
+                } else if (trimmed.rfind("useClearcoatMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(16))=="true") m_Desc.TextureEnableMask|=1u<<6;
+                    else m_Desc.TextureEnableMask&=~(1u<<6);
                 } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
                     try { m_Desc.ClearcoatStrength = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
                 } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {

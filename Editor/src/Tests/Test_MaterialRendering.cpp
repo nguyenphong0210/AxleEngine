@@ -189,6 +189,18 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     lm.ClearcoatRoughness = 0.4f;
     auto roughCoat = render();
     if (!check(!roughCoat.empty() && roughCoat!=coat, "Clearcoat roughness is independent from base roughness")) return false;
+    lm.ClearcoatPath=black; lm.UseClearcoatMap=true;
+    auto coatMaskZero=render();
+    lm.UseClearcoatMap=false; lm.ClearcoatStrength=0;
+    auto noCoat=render();
+    if (!check(!noCoat.empty() && coatMaskZero==noCoat, "Clearcoat red channel masks the layer")) return false;
+    lm.ClearcoatStrength=1; lm.UseClearcoatMap=true;
+    lm.ClearcoatPath=writeTGA("coat_gloss.tga",{255,255,0,255});
+    auto glossMap=render();
+    lm.ClearcoatPath=writeTGA("coat_rough.tga",{255,0,0,255});
+    auto roughMap=render();
+    if (!check(!roughMap.empty() && roughMap!=glossMap, "Clearcoat green channel controls glossiness")) return false;
+    lm.UseClearcoatMap=false;
     lm.ClearcoatStrength = 0;
     lm.Metallic = 1;
     lm.AnisotropyStrength = 0;

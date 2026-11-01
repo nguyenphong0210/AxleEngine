@@ -120,6 +120,7 @@ Texture2D    u_EmissiveMap  : register(t5, space1);
 TextureCube  u_IrradianceMap: register(t6, space1);
 TextureCube  u_PrefilterMap : register(t7, space1);
 Texture2D    u_BRDFLUT      : register(t8, space1);
+Texture2D u_ClearcoatMap : register(t9, space1);
 SamplerState u_Sampler      : register(s0, space0);
 
 // -----------------------------------------------------------------------------
@@ -171,11 +172,11 @@ static const float PI = 3.14159265358979323846;
 float DistributionGGX(float3 N, float3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
-    float NdotH = max(dot(N, H), 0.0);
+    float NdotH = saturate(dot(N, H));
     float NdotH2 = NdotH * NdotH;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    float denom = (1.0 - NdotH2) + a2 * NdotH2;
     denom = PI * denom * denom;
-    return a2 / max(denom, 0.0000001);
+    return a2 / max(denom, 1e-12);
 }
 
 // 2. Schlick-GGX Geometry Function
@@ -231,9 +232,9 @@ float MaterialGeometry(float3 N, float3 V, float3 L, float3 T, float3 B, float r
     float2 axes = AnisotropicAxes(roughness);
     return 1.0 / (1.0 + AnisotropicLambda(N,V,T,B,axes) + AnisotropicLambda(N,L,T,B,axes));
 }
-float3 ApplyClearcoat(float3 baseLighting, float3 N, float3 V, float3 L, float nl) {
-    float coat = saturate(u_CoatAnisotropy.x) * u_MaterialSurface.z;
-    float r = clamp(u_CoatAnisotropy.y, 0.04, 1.0);
+float3 ApplyClearcoat(float3 baseLighting, float3 N, float3 V, float3 L, float nl, float coatStrength, float coatRoughness) {
+    float coat = saturate(coatStrength) * u_MaterialSurface.z;
+    float r = clamp(coatRoughness, 0.04, 1.0);
     float3 H = normalize(V+L);
     float f = 0.04 + 0.96 * pow(1.0-saturate(dot(V,H)), 5.0);
     float nv = max(dot(N,V), 0.001);
@@ -314,6 +315,14 @@ float4 PSMain(PSInput input) : SV_Target0 {
         emissive = emissiveSample * u_ColorSecondary.rgb * max(0.0, u_ColorSecondary.w);
     }
     
+    float4 coatAnisotropy=u_CoatAnisotropy;
+    if (HasMaterialMap(6)) {
+        float2 coatUV=input.TexCoord*u_MaterialUV.xy+u_MaterialUV.zw;
+        float2 coatMap=u_ClearcoatMap.Sample(u_Sampler,coatUV).rg;
+        coatAnisotropy.x*=saturate(coatMap.r);
+        coatAnisotropy.y*=1.0-saturate(coatMap.g); // Godot-compatible green glossiness.
+    }
+
     // Cutout alpha test (SurfaceType == 1): discard fragment if alpha < cutoff
     int surfaceType = (int)(u_SurfaceType + 0.5);
     float alphaCutoff = saturate(u_AlphaCutoff);
@@ -356,7 +365,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
     tangent = normalize(tangent);
     float3 bitangent = normalize(cross(N, tangent)) * (input.TangentWS.w < 0.0 ? -1.0 : 1.0);
     float sn, cs;
-    sincos(u_CoatAnisotropy.w * 2.0 * PI, sn, cs);
+    sincos(coatAnisotropy.w * 2.0 * PI, sn, cs);
     float3 rotatedT = tangent * cs + bitangent * sn;
     bitangent = bitangent * cs - tangent * sn;
     tangent = rotatedT;
@@ -401,7 +410,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb / PI;
 
-        Lo += ApplyClearcoat(diffuse * NdotL_Sun_Diff + specular * NdotL_Sun, N, V, sunDir, NdotL_Sun) * sunRadiance;
+        Lo += ApplyClearcoat(diffuse * NdotL_Sun_Diff + specular * NdotL_Sun, N, V, sunDir, NdotL_Sun, coatAnisotropy.x, coatAnisotropy.y) * sunRadiance;
     }
 
     // 7. Local lights and additional directional lights (up to 16 combined)
@@ -452,7 +461,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb / PI;
 
-        Lo += ApplyClearcoat(diffuse * NdotL_Diff + specular * NdotL, N, V, L, NdotL) * radiance;
+        Lo += ApplyClearcoat(diffuse * NdotL_Diff + specular * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y) * radiance;
     }
 
     // 8. Spot Lights (up to 16 with inner/outer cone cutoff angles)
@@ -505,7 +514,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb / PI;
 
-        Lo += ApplyClearcoat((diffuse + specular) * NdotL, N, V, L, NdotL) * radiance;
+        Lo += ApplyClearcoat((diffuse + specular) * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y) * radiance;
     }
 
     // 9. Ambient Lighting: Image-Based Lighting (IBL) or Analytical Approximation
@@ -528,8 +537,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float2 envBRDF = u_BRDFLUT.Sample(u_Sampler, float2(max(NdotV, 0.0), roughness)).rg;
         float3 specularAmbient = prefilteredColor * (ambientF * envBRDF.x + envBRDF.y);
 
-        float coatF = saturate(u_CoatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
-        float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_Sampler, R, clamp(u_CoatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
+        float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
+        float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_Sampler, R, clamp(coatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
         diffuseAmbient *= (1.0-coatF) * (1.0-coatF);
         specularAmbient = (specularAmbient * (1.0-coatF) * (1.0-coatF) + coatEnvironment * coatF) * u_MaterialSurface.w;
         float envIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
@@ -573,7 +582,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
             specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.20;
         }
 
-        float coatF = saturate(u_CoatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
+        float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
         ambientDiffuse *= (1.0-coatF) * (1.0-coatF);
         float3 specularAmbient = (specSky * ambientF * (1.0 - roughness * 0.25) * (1.0-coatF) * (1.0-coatF) + specSky * coatF) * u_MaterialSurface.w;
         ambient = (ambientDiffuse + specularAmbient) * ao;
@@ -581,6 +590,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
     
     // 10. Total Radiance Accumulation (Linear HDR Radiance)
     float3 color = ambient + Lo + emissive;
+    // Preserve finite radiance when an intense, narrow lobe is stored in FP16.
+    if (u_LightCounts.w == 2u) color = clamp(color, 0.0, 65000.0);
     
     // 11. Tone Mapping & Color Polish (ACES Filmic Operator & Gamma Correction)
     // If u_CameraPosition.w > 0.0 (HDR Post-Processing Mode): Output pure linear HDR radiance

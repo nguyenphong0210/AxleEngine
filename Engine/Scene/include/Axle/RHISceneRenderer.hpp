@@ -239,7 +239,7 @@ namespace Axle {
         struct MaterialDrawResources {
             RHI::RHIBuffer Constants;
             nri::DescriptorSet* Set = nullptr;
-            std::array<std::shared_ptr<RHI::RHITexture>, 6> Textures;
+            std::array<std::shared_ptr<RHI::RHITexture>, static_cast<size_t>(RHI::RHITextureSlot::Count)> Textures;
         };
         // Render() waits for queue completion before reusing these resources.
         std::vector<std::unique_ptr<MaterialDrawResources>> m_MaterialDraws;

@@ -204,6 +204,8 @@ namespace Axle {
         if (BeginGroup("Clearcoat")) {
             Row("Strength"); changed|=ImGui::SliderFloat("##Strength",&m.ClearcoatStrength,0,1);
             Row("Roughness"); changed|=ImGui::SliderFloat("##Roughness",&m.ClearcoatRoughness,0.04f,1);
+            Row("Texture"); changed|=TextureSlot("Clearcoat",m.ClearcoatPath,m.UseClearcoatMap,[&](const auto& p){AssignTexture(m.ClearcoatPath,m.ClearcoatMap,m.UseClearcoatMap,p);});
+            Row("Channels"); ImGui::TextDisabled("R: Strength  G: Glossiness");
             EndGroup();
         }
         if (BeginGroup("Anisotropy")) {
@@ -259,6 +261,7 @@ namespace Axle {
             if (ImGui::Button("Clear All Textures")) {
                 m.SetAlbedo(""); m.SetNormal(""); m.SetRoughnessMap(""); m.SetMetallicMap("");
                 m.SetAOMap(""); m.SetEmissiveMap(""); m.SetORMMap("");
+                AssignTexture(m.ClearcoatPath,m.ClearcoatMap,m.UseClearcoatMap,"");
                 changed=true;
             }
             EndGroup();

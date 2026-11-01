@@ -41,6 +41,12 @@ namespace Axle {
         void SetORMPath(const std::string& path);
         void ClearORMTexture();
 
+        const std::string& GetClearcoatPath() const { return m_ClearcoatPath; }
+        const std::shared_ptr<Texture2D>& GetClearcoatMap() const { return m_ClearcoatMap; }
+        bool IsClearcoatMapEnabled() const { return m_UseClearcoatMap; }
+        void SetUseClearcoatMap(bool value) { m_UseClearcoatMap=value; }
+        void SetClearcoatTexture(const std::shared_ptr<Texture2D>& texture,const std::string& path="") { m_ClearcoatMap=texture; m_ClearcoatPath=path; m_UseClearcoatMap=!path.empty(); }
+
         // Automotive & Advanced Shading (Clearcoat & Anisotropy)
         float GetClearcoatStrength() const { return m_ClearcoatStrength; }
         float& GetClearcoatStrengthRef() { return m_ClearcoatStrength; }
@@ -267,6 +273,9 @@ namespace Axle {
         glm::vec2 m_UVOffset{ 0.0f, 0.0f };
 
         TextureMode m_TextureMode = TextureMode::SeparateMaps;
+        std::string m_ClearcoatPath;
+        std::shared_ptr<Texture2D> m_ClearcoatMap;
+        bool m_UseClearcoatMap=false;
         std::string m_ORMPath;
         std::shared_ptr<Texture2D> m_ORMMap;
         bool m_UseORMMap = false;

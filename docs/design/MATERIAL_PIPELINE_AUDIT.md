@@ -93,3 +93,7 @@ binding, and visible shading agree in the preview and scene.
 - Typed custom values (float, vectors, HDR color/alpha, int, bool and texture) and
   slider ranges now share round-trip persistence across materials and scenes.
   Executable custom shader programs remain a separate integration check.
+- Clearcoat textures now work through asset/entity serialization, caches, preview
+  and scene shading. R masks coat strength and G stores glossiness, matching
+  Godot clearcoat maps. GPU tests cover zero mask and changing glossiness.
+  Smooth-coat GGX evaluation avoids cancellation and FP16 radiance stays finite.

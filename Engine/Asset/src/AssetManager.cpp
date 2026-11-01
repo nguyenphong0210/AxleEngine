@@ -333,6 +333,12 @@ namespace Axle {
     // -------------------------------------------------------------------------
     static void AttachMaterialTextures(const std::shared_ptr<Material>& material) {
         // Loading a texture must not silently re-enable an explicitly disabled map.
+        if (!material->GetClearcoatPath().empty()) {
+            bool enabled=material->IsClearcoatMapEnabled();
+            auto texture=AssetManager::GetTexture(material->GetClearcoatPath());
+            material->SetClearcoatTexture(texture,material->GetClearcoatPath());
+            material->SetUseClearcoatMap(enabled);
+        }
         if (!material->GetAlbedoPath().empty()) {
             bool enabled = material->IsAlbedoMapEnabled();
             auto texture = AssetManager::GetTexture(material->GetAlbedoPath());

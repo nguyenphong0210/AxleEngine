@@ -212,6 +212,7 @@ namespace Axle {
     }
 
     void Material::ResetTextures() {
+        m_ClearcoatPath.clear(); m_ClearcoatMap.reset(); m_UseClearcoatMap=false;
         ClearAlbedoTexture();
         ClearNormalTexture();
         ClearRoughnessTexture();
@@ -518,6 +519,8 @@ namespace Axle {
             fout << "    useMetallicMap: " << (m_UseMetallicMap ? "true" : "false") << "\n";
             fout << "    useAOMap: " << (m_UseAOMap ? "true" : "false") << "\n";
             fout << "    useEmissiveMap: " << (m_UseEmissiveMap ? "true" : "false") << "\n";
+            fout << "    clearcoatMap: \"" << m_ClearcoatPath << "\"\n";
+            fout << "    useClearcoatMap: " << (m_UseClearcoatMap ? "true" : "false") << "\n";
             WriteShaderProperties(fout,m_CustomProperties);
             fout << "}\n";
             return true;
@@ -703,6 +706,12 @@ namespace Axle {
                     if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
                     if (!p.empty()) { SetNormalPath(p); m_UseNormalMap = true; }
                     else ClearNormalTexture();
+                } else if (trimmed.rfind("clearcoatMap:", 0) == 0) {
+                    auto value=Trim(trimmed.substr(13));
+                    if (value.size()>=2 && value.front()=='"' && value.back()=='"') value=value.substr(1,value.size()-2);
+                    m_ClearcoatPath=value; m_UseClearcoatMap=!value.empty();
+                } else if (trimmed.rfind("useClearcoatMap:", 0) == 0) {
+                    m_UseClearcoatMap=Trim(trimmed.substr(16))=="true";
                 } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
                     try { m_ClearcoatStrength = std::clamp(std::stof(Trim(trimmed.substr(18))), 0.0f, 1.0f); } catch (...) {}
                 } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {

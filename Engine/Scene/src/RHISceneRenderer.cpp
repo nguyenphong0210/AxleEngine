@@ -250,6 +250,8 @@ namespace Axle {
                         prefilterTex->GetSRV(),   // t7: Specular Prefilter Cubemap
                         brdfLUTTex->GetSRV()      // t8: BRDF Integration 2D LUT
                     };
+                    for (uint32_t slot=6;slot<static_cast<uint32_t>(RHITextureSlot::Count);++slot)
+                        defaultSRVs.push_back(RHIMaterial::GetFallbackTexture(static_cast<RHITextureSlot>(slot))->GetSRV());
                     m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 0, defaultSRVs);
                 }
             }
@@ -507,7 +509,7 @@ namespace Axle {
         // Descriptor Set (space 1): 6 PBR textures (t0..t5) + 3 IBL textures (t6..t8) and 1 Sampler (s0)
         nri::DescriptorRangeDesc ranges[2] = {};
         ranges[0].baseRegisterIndex = 0;
-        ranges[0].descriptorNum = 9; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
+        ranges[0].descriptorNum = static_cast<uint32_t>(RHITextureSlot::Count)+3; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
@@ -1389,8 +1391,8 @@ namespace Axle {
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
                 RHIMaterialConstants materialData;
                 if (item.Material) materialData = item.Material->BuildConstants();
-                std::vector<nri::Descriptor*> srvs;
-                for (uint32_t slot = 0; slot < 6; ++slot) {
+                std::vector<nri::Descriptor*> srvs(static_cast<size_t>(RHITextureSlot::Count)+3);
+                for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
                     auto textureSlot = static_cast<RHITextureSlot>(slot);
                     std::shared_ptr<RHITexture> texture;
                     if (item.Material && (materialData.Flags.x & (1u << slot))) {
@@ -1404,14 +1406,14 @@ namespace Axle {
                     }
                     if (!texture) {
                         materialData.Flags.x &= ~(1u << slot);
-                        texture = slot == 1 ? RHIMaterial::GetDefaultFlatNormalTexture() : RHIMaterial::GetDefaultWhiteTexture();
+                        texture = RHIMaterial::GetFallbackTexture(textureSlot);
                     }
                     resource.Textures[slot] = texture;
-                    srvs.push_back(texture->GetSRV());
+                    srvs[slot<6?slot:slot+3]=texture->GetSRV();
                 }
-                srvs.push_back((m_IrradianceMap ? m_IrradianceMap : RHIMaterial::GetDefaultIrradianceCubemap())->GetSRV());
-                srvs.push_back((m_PrefilterMap ? m_PrefilterMap : RHIMaterial::GetDefaultPrefilterCubemap())->GetSRV());
-                srvs.push_back((m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT())->GetSRV());
+                srvs[6]=(m_IrradianceMap ? m_IrradianceMap : RHIMaterial::GetDefaultIrradianceCubemap())->GetSRV();
+                srvs[7]=(m_PrefilterMap ? m_PrefilterMap : RHIMaterial::GetDefaultPrefilterCubemap())->GetSRV();
+                srvs[8]=(m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT())->GetSRV();
                 m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs);
                 if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) return;
                 m_CommandBuffer.SetRootDescriptor(2, resource.Constants.GetCBV());

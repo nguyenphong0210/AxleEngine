@@ -132,6 +132,9 @@ namespace Axle {
         std::string ORMPath;
         std::shared_ptr<Texture2D> ORMMap;
         bool UseORMMap = false;
+        std::string ClearcoatPath;
+        std::shared_ptr<Texture2D> ClearcoatMap;
+        bool UseClearcoatMap=false;
         float ClearcoatStrength = 0.0f;
         float ClearcoatRoughness = 0.04f;
         float AnisotropyStrength = 0.0f;
@@ -196,6 +199,9 @@ namespace Axle {
             ORMPath = MaterialAsset->GetORMPath();
             ORMMap = MaterialAsset->GetORMMap();
             UseORMMap = MaterialAsset->IsORMMapEnabled();
+            ClearcoatPath=MaterialAsset->GetClearcoatPath();
+            ClearcoatMap=MaterialAsset->GetClearcoatMap();
+            UseClearcoatMap=MaterialAsset->IsClearcoatMapEnabled();
             ClearcoatStrength = MaterialAsset->GetClearcoatStrength();
             ClearcoatRoughness = MaterialAsset->GetClearcoatRoughness();
             AnisotropyStrength = MaterialAsset->GetAnisotropyStrength();
@@ -274,6 +280,8 @@ namespace Axle {
             auto& desc = RHIMaterialAsset->GetDesc();
             desc.EnableSpecularHighlights = EnableSpecularHighlights;
             desc.EnableEnvironmentReflections = EnableEnvironmentReflections;
+            desc.TextureEnableMask=(1u<<static_cast<uint32_t>(RHI::RHITextureSlot::Count))-1u;
+            desc.ClearcoatPath=UseClearcoatMap?ClearcoatPath:"";
             desc.RenderQueue = RenderQueue;
             desc.UseORMMap = UseORMMap;
             desc.AlbedoPath = UseAlbedoMap ? AlbedoPath : "";
@@ -283,7 +291,7 @@ namespace Axle {
             desc.AOPath = UseAOMap ? AOPath : "";
             desc.EmissivePath = UseEmissiveMap ? EmissivePath : "";
             desc.ORMPath = UseORMMap ? ORMPath : "";
-            bool hasMaps = !desc.AlbedoPath.empty() || !desc.NormalPath.empty() || !desc.RoughnessPath.empty() ||
+            bool hasMaps = !desc.ClearcoatPath.empty() || !desc.AlbedoPath.empty() || !desc.NormalPath.empty() || !desc.RoughnessPath.empty() ||
                 !desc.MetallicPath.empty() || !desc.AOPath.empty() || !desc.EmissivePath.empty();
             desc.ShadingModel = TextureMode == Axle::TextureMode::PackedORM
                 ? RHI::RHIShadingModel::PackedORMTexturedPBR
@@ -296,6 +304,8 @@ namespace Axle {
             MaterialAsset->SetTextureMode(TextureMode);
             MaterialAsset->SetORMTexture(ORMMap, ORMPath);
             MaterialAsset->SetUseORMMap(UseORMMap);
+            MaterialAsset->SetClearcoatTexture(ClearcoatMap,ClearcoatPath);
+            MaterialAsset->SetUseClearcoatMap(UseClearcoatMap);
             MaterialAsset->SetClearcoatStrength(ClearcoatStrength);
             MaterialAsset->SetClearcoatRoughness(ClearcoatRoughness);
             MaterialAsset->SetAnisotropyStrength(AnisotropyStrength);
@@ -414,6 +424,8 @@ namespace Axle {
         }
 
         void ResetTextures() {
+            ClearcoatPath.clear(); ClearcoatMap.reset(); UseClearcoatMap=false;
+
             AlbedoPath.clear();
             AlbedoMap = nullptr;
             UseAlbedoMap = false;

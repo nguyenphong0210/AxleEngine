@@ -38,7 +38,8 @@ namespace Axle::RHI {
         Metallic  = 3, // Conductor / Dielectric mask (linear float, channel R)
         AO        = 4, // Ambient Occlusion (linear float, channel R)
         Emissive  = 5, // Self-illumination radiance (linear RGB)
-        Count     = 6
+        Clearcoat = 6, // R: coat strength, G: glossiness (linear)
+        Count     = 7
     };
 
     struct RHIMaterialDesc {
@@ -58,11 +59,12 @@ namespace Axle::RHI {
         glm::vec2 UVOffset{ 0.0f, 0.0f };
         Axle::TextureMode TextureMode = Axle::TextureMode::SeparateMaps;
         std::string ORMPath;
+        std::string ClearcoatPath;
         float ClearcoatStrength = 0.0f;
         float ClearcoatRoughness = 0.04f;
         float AnisotropyStrength = 0.0f;
         float AnisotropyRotation = 0.0f;
-        uint32_t TextureEnableMask = 0x3fu;
+        uint32_t TextureEnableMask = (1u<<static_cast<uint32_t>(RHITextureSlot::Count))-1u;
         bool UseORMMap = true;
         bool EnableSpecularHighlights = true;
         bool EnableEnvironmentReflections = true;
@@ -156,6 +158,7 @@ namespace Axle::RHI {
         void SetTexture(RHITextureSlot slot, const std::shared_ptr<RHITexture>& texture, const std::string& path = "");
         std::shared_ptr<RHITexture> GetTexture(RHITextureSlot slot) const;
         bool HasTexture(RHITextureSlot slot) const;
+        static std::shared_ptr<RHITexture> GetFallbackTexture(RHITextureSlot slot);
         const std::string& GetTexturePath(RHITextureSlot slot) const;
 
         void SetAlbedoTexture(const std::shared_ptr<RHITexture>& tex, const std::string& path = "") { SetTexture(RHITextureSlot::Albedo, tex, path); }

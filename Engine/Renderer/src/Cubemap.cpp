@@ -127,7 +127,7 @@ namespace Axle {
             return GetBlackCubemap();
         }
 
-        stbi_set_flip_vertically_on_load(true);
+        stbi_set_flip_vertically_on_load_thread(true);
         int width = 0, height = 0, channels = 0;
         float* data = stbi_loadf_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 0);
         if (!data) {

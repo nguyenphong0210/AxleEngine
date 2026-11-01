@@ -241,7 +241,7 @@ namespace Axle {
             }
 
             int width = 0, height = 0, channels = 0;
-            stbi_set_flip_vertically_on_load(false);
+            stbi_set_flip_vertically_on_load_thread(false);
             stbi_uc* pixels = stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 4);
             if (!pixels) {
                 m_ThumbnailCache[key] = 0;
@@ -684,7 +684,7 @@ namespace Axle {
             if (std::filesystem::exists(resolvedTexPath)) {
                 auto buf = FileSystem::ReadBinaryFile(resolvedTexPath);
                 if (!buf.empty()) {
-                    stbi_set_flip_vertically_on_load(false);
+                    stbi_set_flip_vertically_on_load_thread(false);
                     texPixels = stbi_load_from_memory(buf.data(), (int)buf.size(), &texW, &texH, &texChannels, 4);
                 }
             }

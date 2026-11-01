@@ -177,7 +177,7 @@ namespace Axle {
             if (iconPath.empty()) return 0;
 
             int width = 0, height = 0, channels = 0;
-            stbi_set_flip_vertically_on_load(false);
+            stbi_set_flip_vertically_on_load_thread(false);
             stbi_uc* pixels = stbi_load(iconPath.string().c_str(), &width, &height, &channels, 4);
             if (!pixels) return 0;
 

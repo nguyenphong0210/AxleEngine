@@ -81,3 +81,8 @@ binding, and visible shading agree in the preview and scene.
 - GPU acceptance now also covers transparent queue priority versus distance,
   transparent depth writes, and front/back/two-sided rasterization. These tests
   compare rendered pixels, rather than reproducing sorting or blend formulas.
+- Texture acceptance verifies color/data formats, uppercase texture descriptors,
+  fallback behavior, same-path image replacement, and additive alpha. Data-map
+  roles stay linear even when a descriptor is tagged Color. Image decoders now
+  set orientation per thread at every call site so material loads do not change
+  subsequent icon or thumbnail orientation. Step 106 passes on DX12.

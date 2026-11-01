@@ -65,7 +65,7 @@ namespace Axle {
         }
 
         int width = 0, height = 0, channels = 0;
-        stbi_set_flip_vertically_on_load(false);
+        stbi_set_flip_vertically_on_load_thread(false);
         stbi_uc* pixels = stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 4);
         if (!pixels) {
             AXLE_CORE_WARN("SceneHierarchyPanel: Failed to decode texture '{0}': {1}", absPath.string(), stbi_failure_reason());

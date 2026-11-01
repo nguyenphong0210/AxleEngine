@@ -63,7 +63,7 @@ namespace Axle {
             return;
         }
 
-        stbi_set_flip_vertically_on_load(spec.FlipVertically ? 1 : 0);
+        stbi_set_flip_vertically_on_load_thread(spec.FlipVertically ? 1 : 0);
 
         int width = 0, height = 0, channels = 0;
         stbi_uc* data = stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 0);

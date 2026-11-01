@@ -4,10 +4,12 @@
 #include <Axle/MaterialTextureCache.hpp>
 #include <Axle/AssetManager.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/TextureDescriptor.hpp>
 #include <fstream>
 #include <iostream>
 #include <cstring>
 #include <numeric>
+#include <chrono>
 
 bool VerifyMaterialRendering(const std::filesystem::path& root) {
     using namespace Axle;
@@ -40,6 +42,17 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     struct RegistryCleanup {
         ~RegistryCleanup() { RHIMeshRegistry::Get().Shutdown(); RHIMaterial::ReleaseDefaultTextures(); }
     } registryCleanup;
+    MaterialTextureCache textureCache;
+    auto colorTexture = textureCache.Get(red,true);
+    auto dataTexture = textureCache.Get(red,false);
+    if (!check(colorTexture && dataTexture && colorTexture->GetFormat()==RHITextureFormat::RGBA8_SRGB && dataTexture->GetFormat()==RHITextureFormat::RGBA8_UNORM && colorTexture!=dataTexture && textureCache.Get(red,true)==colorTexture, "Stable texture cache and separate color/data views")) return false;
+    TextureDescriptor descriptor;
+    descriptor.Source = red;
+    descriptor.Type = "Color";
+    auto descriptorPath = root / "role.AXLEASSET";
+    if (!check(TextureDescriptor::Save(descriptorPath.string(),descriptor), "Texture descriptor fixture")) return false;
+    auto normalDescriptor = textureCache.Get(descriptorPath.string(),false);
+    if (!check(normalDescriptor && normalDescriptor->GetFormat()==RHITextureFormat::RGBA8_UNORM, "Normal and data roles remain linear even with a color descriptor")) return false;
     RHISceneRenderer renderer;
     if (!check(renderer.Init(device), "Material renderer initialization")) return false;
     constexpr uint32_t resolution = 128;
@@ -103,10 +116,21 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     auto first = render();
     if (!check(!first.empty(), "GPU image readback")) return false;
     if (!check(sum(first,0,64,0)>sum(first,0,64,1)*2+1000 && sum(first,64,128,1)>sum(first,64,128,0)*2+1000, "Two draws keep distinct texture bindings")) return false;
+    auto originalTime = std::filesystem::last_write_time(red);
+    writeTGA("red.tga",{0,0,255,255});
+    std::filesystem::last_write_time(red,originalTime+std::chrono::seconds(2));
+    auto replacedTexture = render();
+    if (!check(!replacedTexture.empty() && sum(replacedTexture,0,64,2)>sum(replacedTexture,0,64,0)*2+1000, "Modified texture uploads new pixels")) return false;
+    writeTGA("red.tga",{255,0,0,255});
+    std::filesystem::last_write_time(red,originalTime+std::chrono::seconds(4));
     lm.UseAlbedoMap = false;
     lm.AlbedoColor = glm::vec4(0,0,1,1);
     auto cleared = render();
     if (!check(!cleared.empty() && sum(cleared,0,64,2)>sum(cleared,0,64,0)*2+1000, "Disabling texture removes previous GPU assignment")) return false;
+    lm.AlbedoPath = (root / "missing.tga").string(); lm.UseAlbedoMap = true;
+    auto missingTexture = render();
+    if (!check(!missingTexture.empty() && sum(missingTexture,0,64,2)>sum(missingTexture,0,64,0)*2+1000, "Missing texture uses initialized fallback and material color")) return false;
+    lm.UseAlbedoMap = false;
     lm.AlbedoColor = glm::vec4(1);
     lm.NormalPath = normal; lm.UseNormalMap = true;
     lm.NormalStrength = 0;
@@ -235,6 +259,13 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     lm.CullMode = CullMode::None;
     auto twoSided = render();
     if (!check(!twoSided.empty() && cullBack!=cullFront && sum(twoSided,0,128,0)>1000, "Front/back/two-sided culling reaches actual pipeline state")) return false;
+    lm.SurfaceType = SurfaceType::Additive;
+    lm.DepthWrite = false;
+    lm.AlbedoColor.a = 0;
+    auto noAdditive = render();
+    lm.AlbedoColor.a = 0.5f;
+    auto additive = render();
+    if (!check(!additive.empty() && sum(additive,0,128,0)>sum(noAdditive,0,128,0)+1000, "Additive blending respects material alpha")) return false;
     std::cout << "[106 GPU] PASS: Per-draw texture colors, disabled maps, normal/AO strength, emission masking, clearcoat and anisotropy readback." << std::endl;
     return true;
 }

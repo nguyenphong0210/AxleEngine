@@ -5,16 +5,20 @@
 #include <Axle/Log.hpp>
 #include <stb_image.h>
 #include <limits>
+#include <algorithm>
+#include <cctype>
 
 namespace Axle {
     std::shared_ptr<RHI::RHITexture> MaterialTextureCache::Get(const std::string& path, bool color) {
         if (path.empty() || !RHI::RHIDevice::Get().IsInitialized()) return nullptr;
         auto source = FileSystem::ResolveAssetPath(path);
-        if (source.extension() == ".axleasset") {
+        auto extension = source.extension().string();
+        std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+        if (extension == ".axleasset") {
             TextureDescriptor descriptor;
             if (!TextureDescriptor::Load(source.string(), descriptor)) return nullptr;
             source = FileSystem::ResolveAssetPath(descriptor.Source);
-            color = descriptor.GetColorSpace() == TextureColorSpace::sRGB;
+            color = color && descriptor.GetColorSpace() == TextureColorSpace::sRGB;
         }
         std::error_code ec;
         auto modified = std::filesystem::last_write_time(source, ec);

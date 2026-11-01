@@ -66,7 +66,7 @@ namespace Axle {
         RHISceneRenderer& operator=(const RHISceneRenderer&) = delete;
 
         // Initialize shader compilation, pipeline layouts, and graphics pipelines
-        bool Init(RHI::RHIDevice& device = RHI::RHIDevice::Get());
+        bool Init(RHI::RHIDevice& device = RHI::RHIDevice::Get(), bool enablePhysicsDebug = true);
 
         // Release GPU pipelines, shaders, and command buffers
         void Shutdown();

@@ -154,7 +154,7 @@ namespace Axle {
 
             if (!m_RHISceneRenderer) {
                 m_RHISceneRenderer = std::make_unique<RHISceneRenderer>();
-                m_RHISceneRenderer->Init();
+                m_RHISceneRenderer->Init(RHI::RHIDevice::Get(), false);
             }
             m_SceneNeedsRebuild = true;
         }
@@ -787,7 +787,7 @@ namespace Axle {
 
         if (!m_RHISceneRenderer) {
             m_RHISceneRenderer = std::make_unique<RHISceneRenderer>();
-            m_RHISceneRenderer->Init();
+            m_RHISceneRenderer->Init(RHI::RHIDevice::Get(), false);
         }
 
         if (m_SceneNeedsRebuild || !m_PreviewScene) {

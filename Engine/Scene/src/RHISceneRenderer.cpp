@@ -178,7 +178,7 @@ namespace Axle {
         Shutdown();
     }
 
-    bool RHISceneRenderer::Init(RHIDevice& device) {
+    bool RHISceneRenderer::Init(RHIDevice& device, bool enablePhysicsDebug) {
         if (m_Initialized) return true;
         if (!device.IsInitialized()) {
             AXLE_CORE_ERROR("RHISceneRenderer::Init failed: RHIDevice is not initialized!");
@@ -328,12 +328,18 @@ namespace Axle {
         }
 
         // Initialize RHI Physics Debug Wireframe Line Renderer
-        if (!PhysicsEngine::IsInitialized()) {
-            PhysicsEngine::Init();
-        }
-        m_PhysicsDebugRenderer = std::make_unique<RHIPhysicsDebugRenderer>();
-        if (!m_PhysicsDebugRenderer->Init(device)) {
-            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize RHI Physics Debug Wireframe Line Renderer!");
+        if (enablePhysicsDebug) {
+            if (JPH::DebugRenderer::sInstance != nullptr) {
+                AXLE_CORE_WARN("RHISceneRenderer: JPH::DebugRenderer singleton already active, skipping embedded physics debug renderer.");
+            } else {
+                if (!PhysicsEngine::IsInitialized()) {
+                    PhysicsEngine::Init();
+                }
+                m_PhysicsDebugRenderer = std::make_unique<RHIPhysicsDebugRenderer>();
+                if (!m_PhysicsDebugRenderer->Init(device)) {
+                    AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize RHI Physics Debug Wireframe Line Renderer!");
+                }
+            }
         }
 
         // Initialize GPU Integer Object ID Picker

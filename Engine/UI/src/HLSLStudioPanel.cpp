@@ -9,6 +9,82 @@
 
 namespace Axle {
 
+    static const std::vector<std::string> s_HLSLIntrinsicsList = {
+        "saturate", "lerp", "mul", "dot", "cross", "normalize",
+        "clamp", "reflect", "refract", "length", "distance",
+        "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+        "pow", "exp", "log", "sqrt", "rsqrt", "abs", "sign",
+        "floor", "ceil", "frac", "fmod", "step", "smoothstep",
+        "ddx", "ddy", "asuint", "asfloat", "f32tof16", "f16tof32"
+    };
+
+    const std::vector<std::string>& HLSLStudioPanel::GetHLSLIntrinsics() {
+        return s_HLSLIntrinsicsList;
+    }
+
+    std::vector<std::string> HLSLStudioPanel::GetMatchingIntrinsics(const std::string& prefix) {
+        std::vector<std::string> matches;
+        if (prefix.empty()) return s_HLSLIntrinsicsList;
+        std::string lowerPrefix = prefix;
+        std::transform(lowerPrefix.begin(), lowerPrefix.end(), lowerPrefix.begin(), ::tolower);
+        for (const auto& intrin : s_HLSLIntrinsicsList) {
+            if (intrin.rfind(lowerPrefix, 0) == 0) {
+                matches.push_back(intrin);
+            }
+        }
+        return matches;
+    }
+
+    std::vector<HLSLErrorEntry> HLSLStudioPanel::ParseDiagnostics(const std::string& diagOutput) {
+        std::vector<HLSLErrorEntry> entries;
+        std::istringstream stream(diagOutput);
+        std::string line;
+        while (std::getline(stream, line)) {
+            size_t firstColon = line.find(':');
+            if (firstColon == std::string::npos) continue;
+            size_t secondColon = line.find(':', firstColon + 1);
+            if (secondColon == std::string::npos) continue;
+            size_t thirdColon = line.find(':', secondColon + 1);
+            if (thirdColon == std::string::npos) continue;
+
+            std::string filePart = line.substr(0, firstColon);
+            std::string lineStr = line.substr(firstColon + 1, secondColon - firstColon - 1);
+            std::string colStr = line.substr(secondColon + 1, thirdColon - secondColon - 1);
+
+            int lineNum = 0, colNum = 0;
+            try {
+                lineNum = std::stoi(lineStr);
+                colNum = std::stoi(colStr);
+            } catch (...) {
+                continue;
+            }
+
+            std::string remainder = line.substr(thirdColon + 1);
+            std::string severity = "error";
+            if (remainder.find("warning") != std::string::npos) severity = "warning";
+
+            HLSLErrorEntry entry;
+            entry.File = filePart;
+            entry.Line = lineNum;
+            entry.Column = colNum;
+            entry.Severity = severity;
+            entry.Message = remainder;
+            entry.RawText = line;
+            entries.push_back(entry);
+        }
+        return entries;
+    }
+
+    int HLSLStudioPanel::ParseErrorLine(const std::string& errorDiagnostic) {
+        auto entries = ParseDiagnostics(errorDiagnostic);
+        if (!entries.empty()) return entries[0].Line;
+        return 0;
+    }
+
+    void HLSLStudioPanel::JumpToLine(int lineNum) {
+        m_JumpToLine = lineNum;
+    }
+
     HLSLStudioPanel::HLSLStudioPanel() {
         m_SourceCode = GetDefaultPBRTemplate("CustomForwardPBR");
         m_SavedSourceCode = m_SourceCode;
@@ -329,6 +405,30 @@ namespace Axle {
         ImGui::InputTextWithHint("##PSMain", "PS Entry", m_PSEntryPoint, sizeof(m_PSEntryPoint));
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pixel Shader Entry Point");
 
+        ImGui::SameLine();
+        if (ImGui::Button(" Intrinsics... ")) {
+            ImGui::OpenPopup("HLSLIntrinsicsPopup");
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Browse and insert HLSL standard intrinsic functions");
+
+        if (ImGui::BeginPopup("HLSLIntrinsicsPopup")) {
+            ImGui::TextColored(ImVec4(0.4f, 0.75f, 1.0f, 1.0f), "HLSL Intrinsics Autocomplete");
+            ImGui::Separator();
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::InputTextWithHint("##IntrinFilter", "Search...", m_IntrinsicFilter, sizeof(m_IntrinsicFilter));
+            auto matches = GetMatchingIntrinsics(m_IntrinsicFilter);
+            ImGui::BeginChild("IntrinsicsList", ImVec2(200.0f, 160.0f), true);
+            for (const auto& intrin : matches) {
+                if (ImGui::Selectable(intrin.c_str())) {
+                    m_SourceCode += intrin + "()";
+                    m_IsDirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndChild();
+            ImGui::EndPopup();
+        }
+
         ImGui::PopStyleVar();
         ImGui::Separator();
     }
@@ -401,7 +501,16 @@ namespace Axle {
             m_IsDirty = (m_SourceCode != m_SavedSourceCode);
         }
 
-        m_ScrollY = ImGui::GetScrollY();
+        if (m_JumpToLine > 0) {
+            float lineHeight = ImGui::GetTextLineHeight();
+            float targetScroll = std::max(0.0f, (m_JumpToLine - 3) * lineHeight);
+            ImGui::SetScrollY(targetScroll);
+            m_ScrollY = targetScroll;
+            m_ActiveLineHighlight = m_JumpToLine;
+            m_JumpToLine = 0;
+        } else {
+            m_ScrollY = ImGui::GetScrollY();
+        }
 
         ImGui::PopStyleVar();
         ImGui::PopStyleColor();
@@ -429,7 +538,24 @@ namespace Axle {
             if (m_LastCompileSuccess) {
                 ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "%s", m_CompileMessage.c_str());
             } else {
-                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_CompileMessage.c_str());
+                auto parsedErrors = ParseDiagnostics(m_CompileMessage);
+                if (!parsedErrors.empty()) {
+                    for (size_t i = 0; i < parsedErrors.size(); ++i) {
+                        const auto& err = parsedErrors[i];
+                        ImVec4 col = (err.Severity == "warning") ? ImVec4(1.0f, 0.85f, 0.3f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+                        ImGui::PushStyleColor(ImGuiCol_Text, col);
+                        std::string label = "[Line " + std::to_string(err.Line) + ":" + std::to_string(err.Column) + "] " + err.Message + "##Err" + std::to_string(i);
+                        if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
+                            JumpToLine(err.Line);
+                        }
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::SetTooltip("Click to jump cursor to Line %d in editor", err.Line);
+                        }
+                        ImGui::PopStyleColor();
+                    }
+                } else {
+                    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_CompileMessage.c_str());
+                }
             }
         }
         if (!m_WarningMessage.empty()) {

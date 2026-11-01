@@ -599,9 +599,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 4 - Multi-Angle Preview Lighting & Custom Mesh Preview**:
     - [x] Right-click drag in preview viewport to rotate HDRI environment and sun angle.
     - [x] Support dragging custom game meshes (`.axlemesh`) into preview turntable.
-  - [ ] **Step 5 - HLSL Compiler Diagnostics Jump & Autocomplete**:
-    - [ ] Double-clicking compile error in console jumps cursor directly to erroneous line in `HLSLStudioPanel`.
-    - [ ] Autocomplete suggestions for HLSL intrinsic functions (`saturate`, `lerp`, `mul`, `dot`, `cross`, `normalize`).
+  - [x] **Step 5 - HLSL Compiler Diagnostics Jump & Autocomplete**:
+    - [x] Double-clicking compile error in console jumps cursor directly to erroneous line in `HLSLStudioPanel`.
+    - [x] Autocomplete suggestions for HLSL intrinsic functions (`saturate`, `lerp`, `mul`, `dot`, `cross`, `normalize`).
   - [ ] **Step 6 - Automated Verification Suite Step 105 (`AxleTests.exe --step105`)**:
     - [ ] Step 105 tests verifying: DXC reflection parser, packed ORM texture sampling, Clearcoat push constants, and error jump navigation.
 

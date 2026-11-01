@@ -15,6 +15,15 @@ namespace Axle {
         ComputeOnly     = 3  // Compute (CSMain)
     };
 
+    struct HLSLErrorEntry {
+        std::string File;
+        int Line = 0;
+        int Column = 0;
+        std::string Severity; // "error" or "warning"
+        std::string Message;
+        std::string RawText;
+    };
+
     class HLSLStudioPanel {
     public:
         HLSLStudioPanel();
@@ -45,6 +54,15 @@ namespace Axle {
 
         // Main ImGui rendering entry point
         void OnImGuiRender(bool* p_open = nullptr);
+
+        // Error jump & Autocomplete
+        static std::vector<HLSLErrorEntry> ParseDiagnostics(const std::string& diagOutput);
+        static int ParseErrorLine(const std::string& errorDiagnostic);
+        void JumpToLine(int lineNum);
+        int GetActiveLineHighlight() const { return m_ActiveLineHighlight; }
+
+        static const std::vector<std::string>& GetHLSLIntrinsics();
+        static std::vector<std::string> GetMatchingIntrinsics(const std::string& prefix);
 
         // Pre-defined template generator
         static std::string GetDefaultPBRTemplate(const std::string& shaderName = "CustomForwardPBR");
@@ -80,6 +98,9 @@ namespace Axle {
         // Layout state
         float m_DiagnosticsHeight = 130.0f;
         float m_ScrollY = 0.0f;
+        int m_JumpToLine = 0;
+        int m_ActiveLineHighlight = 0;
+        char m_IntrinsicFilter[64] = "";
     };
 
 } // namespace Axle

@@ -87,18 +87,19 @@ Level 0:  [ Engine/Core (JobSystem enkiTS, spdlog Log, Timestep, UUID, FileSyste
 
 ## 📚 Comprehensive Documentation Hub
 
-For in-depth guides, API references, and architectural walk-throughs, refer to the documentation suite in `docs/`:
+For in-depth guides, API references, and architectural walk-throughs, start with the [documentation hub](docs/README.md):
 
 | Document | Description |
 | :--- | :--- |
-| **[Architecture Overview](docs/ARCHITECTURE.md)** | Current subsystem structure, lifecycle and dependency boundaries. |
+| **[Current Architecture Assessment](docs/architecture/ASSESSMENT.md)** | Strengths, limitations, risk priorities and future improvement criteria. |
+| **[Architecture Overview](docs/architecture/OVERVIEW.md)** | Current subsystem structure, lifecycle and dependency boundaries. |
 | **[Architecture & Design Set](docs/architecture/README.md)** | SAD, SDD, UML class relationships, execution flows, dependency inventory and proposed layered architecture. |
-| **[Subsystems & Module Reference](docs/SUBSYSTEMS.md)** | Detailed breakdown of every engine module (`Core`, `Platform`, `Renderer`, `Physics`, `Audio`, `Scene`, `UI`, `Asset`, `VFX`). |
-| **[ECS & Scene Graph Guide](docs/ECS_AND_SCENE_GRAPH.md)** | EnTT component schemas, parent-child transform propagation, prefab assemblies (`.axle`), and `ParallelECS`. |
-| **[C++ Native Scripting Guide](docs/SCRIPTING_GUIDE.md)** | `ScriptableEntity` lifecycle, reflection macros (`AXLE_SCRIPT_FIELDS`), and dynamic DLL hot-reloading (`F9`). |
-| **[Rendering Pipeline & Shading](docs/RENDERER_AND_PIPELINE.md)** | Multi-pass rendering, Cook-Torrance BRDF, Vogel spiral soft shadows, atmospheric skybox, and `.axlebin` caching. |
-| **[Physics & Simulation Guide](docs/PHYSICS_AND_SIMULATION.md)** | Jolt Physics integration, rigid body dynamics, collision shapes, raycasting, and vehicle constraint mechanics. |
-| **[AI Agent & Developer Handbook](docs/AI_DEVELOPER_GUIDE.md)** | Engineering handbook for AI agents and developers: non-negotiable rules, extension recipes, and common pitfalls. |
+| **[Subsystems & Module Reference](docs/architecture/MODULES.md)** | Detailed breakdown of every engine module (`Core`, `Platform`, `Renderer`, `Physics`, `Audio`, `Scene`, `UI`, `Asset`, `VFX`). |
+| **[ECS & Scene Graph Guide](docs/guides/SCENE_AND_ECS.md)** | EnTT component schemas, parent-child transform propagation, prefab assemblies (`.axle`), and `ParallelECS`. |
+| **[C++ Native Scripting Guide](docs/guides/SCRIPTING.md)** | `ScriptableEntity` lifecycle, reflection macros (`AXLE_SCRIPT_FIELDS`), and dynamic DLL hot-reloading (`F9`). |
+| **[Rendering Pipeline & Shading](docs/guides/RENDERING.md)** | Multi-pass rendering, Cook-Torrance BRDF, Vogel spiral soft shadows, atmospheric skybox, and `.axlebin` caching. |
+| **[Physics & Simulation Guide](docs/guides/PHYSICS.md)** | Jolt Physics integration, rigid body dynamics, collision shapes, raycasting, and vehicle constraint mechanics. |
+| **[AI Agent & Developer Handbook](docs/guides/DEVELOPMENT.md)** | Engineering handbook for AI agents and developers: non-negotiable rules, extension recipes, and common pitfalls. |
 
 ---
 
@@ -215,4 +216,4 @@ cmake --build build --config Release --parallel
 
 ## 📜 License
 
-AxleEngine is open-source software licensed under the [MIT License](LICENSE).
+AxleEngine is open-source software licensed under the MIT License.

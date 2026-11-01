@@ -2,17 +2,19 @@
 
 Reviewed: **2026-11-01**. AxleEngine is organized into subsystem libraries and application targets. It has a modular foundation, but its current implementation does **not** yet enforce a strictly layered dependency graph.
 
-The complete [architecture and design documentation](architecture/README.md) separates current behavior from the proposed layered architecture:
+The complete [architecture and design documentation](README.md) separates current behavior from the proposed layered architecture:
 
 | Reference | Contents |
 |---|---|
-| [SAD](architecture/SAD.md) | Context, module boundaries, dependencies, deployment and assessment |
-| [SDD](architecture/SDD.md) | Class responsibilities, ownership, contracts and lifecycle |
-| [Class relationships](architecture/CLASS_RELATIONSHIPS.md) | UML diagrams by subsystem |
-| [Execution flows](architecture/RUNTIME_FLOWS.md) | Startup, simulation, scripting, assets and UI |
-| [Dependency map](architecture/DEPENDENCY_MAP.md) | CMake links, build ordering and source includes |
-| [Target architecture](architecture/TARGET_LAYERED_ARCHITECTURE.md) | Proposed layering and migration acceptance criteria |
-| [Verification](architecture/VERIFICATION.md) | Evidence and limits of the source review |
+| [SAD](SAD.md) | Context, module boundaries, dependencies, deployment and assessment |
+| [SDD](SDD.md) | Class responsibilities, ownership, contracts and lifecycle |
+| [Class relationships](CLASS_RELATIONSHIPS.md) | UML diagrams by subsystem |
+| [Execution flows](RUNTIME_FLOWS.md) | Startup, simulation, scripting, assets and UI |
+| [Dependency map](DEPENDENCY_MAP.md) | CMake links, build ordering and source includes |
+| [Target architecture](TARGET_LAYERED_ARCHITECTURE.md) | Proposed layering and migration acceptance criteria |
+| [Verification](VERIFICATION.md) | Evidence and limits of the source review |
+
+For a prioritized evaluation, read the [current architecture assessment](ASSESSMENT.md).
 
 ## Current subsystem structure
 

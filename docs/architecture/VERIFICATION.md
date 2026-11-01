@@ -58,3 +58,11 @@ When updating the engine: recheck target/include edges, class ownership and the 
 - Full Mermaid rendering: no Mermaid renderer was available locally; fenced content and structural checks do not replace a renderer/parser. Use a Mermaid-enabled viewer to display the diagrams.
 
 No source, asset, CMake, feature implementation or build behavior is modified by this update. Existing domain guides are not a replacement for checking the current implementation.
+
+## 6. Documentation maintenance review
+
+The documentation is organized through the [main hub](../README.md): architecture/design records in this directory, feature guides under guides, asset syntax under reference, and future editor work under design. The [assessment](ASSESSMENT.md) ranks current limitations and defines improvement exit criteria.
+
+Superseded phase execution plans were removed after their useful UI contracts were incorporated into the current UI guide. Material/UI/asset/visual-editor specifications were consolidated into maintained topic documents. Their proposed capabilities are not treated as completed functionality.
+
+The maintenance review checks repository-relative file links and Markdown anchors, fences and basic Mermaid block types across the documentation set. Native source examples were aligned with current declarations where revised; snippets were not compiled. No engine build/test or Mermaid rendering result is asserted.

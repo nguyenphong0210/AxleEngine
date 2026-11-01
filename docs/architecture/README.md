@@ -4,8 +4,11 @@ Reviewed: **2026-11-01**. This documentation describes the working tree inspecte
 
 ## Reading order
 
+Start with the [overview](OVERVIEW.md), [module reference](MODULES.md) and [current assessment](ASSESSMENT.md) when reviewing the engine before reading the detailed design.
+
 | Document | Purpose |
 |---|---|
+| [Current architecture assessment](ASSESSMENT.md) | Strengths, limitations, priorities and improvement exit criteria |
 | [Software Architecture Document](SAD.md) | System context, module responsibilities, dependencies, deployment, data and architectural assessment |
 | [Software Design Description](SDD.md) | Class responsibilities, ownership, interfaces, lifecycle and extension mechanisms |
 | [Class relationships](CLASS_RELATIONSHIPS.md) | Subsystem UML diagrams: inheritance, composition, shared ownership and associations |
@@ -16,7 +19,7 @@ Reviewed: **2026-11-01**. This documentation describes the working tree inspecte
 | [Proposed layered architecture](TARGET_LAYERED_ARCHITECTURE.md) | Future boundaries, dependency rules and incremental migration criteria |
 | [Verification and limitations](VERIFICATION.md) | Evidence, survey method, documentation checks and unverified behavior |
 
-For a shorter introduction, read [Architecture Overview](../ARCHITECTURE.md). [Subsystems](../SUBSYSTEMS.md) provides a quick module reference. Existing domain guides remain useful for individual workflows; this architecture set is the reference for current dependency boundaries and cross-subsystem behavior.
+For a shorter introduction, read [Architecture Overview](OVERVIEW.md). [Subsystems](MODULES.md) provides a quick module reference. Existing domain guides remain useful for individual workflows; this architecture set is the reference for current dependency boundaries and cross-subsystem behavior.
 
 ## Diagram conventions
 
@@ -31,3 +34,5 @@ The survey covers first-party engine, editor, runtime, plugins, samples, shaders
 All selected text files were scanned completely by tooling. Manual interpretation focused on public APIs, build configuration, ownership and major integration paths; this is not a line-by-line algorithm audit. Extraction uses lexical patterns rather than a compiler AST. No build, application execution, performance measurement or engine test run is claimed by this documentation update.
 
 Repository-relative links make the documentation portable between checkouts. Source line anchors are navigation aids and may move as the code changes. The proposed module names and build options in the target architecture are design suggestions, not newly implemented targets.
+
+For feature workflows and format references, return to the [documentation hub](../README.md). Future editor feature proposals are in the [tooling roadmap](../design/EDITOR_TOOLING_ROADMAP.md).

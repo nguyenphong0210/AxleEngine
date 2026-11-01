@@ -1,17 +1,19 @@
-# 🤖 AI Agent & Developer Engineering Handbook
+# Development Conventions and Extension Guide
+
+Navigation: [documentation hub](../README.md).
 
 This guide is written specifically for **AI coding assistants** (e.g. Antigravity, Gemini, Claude, GPT) and **software engineers** contributing to or extending **AxleEngine**. It outlines the non-negotiable architectural rules, step-by-step implementation recipes, and common pitfalls to avoid.
 
-For implemented behavior, ownership and thread boundaries, consult the [architecture documentation](architecture/README.md).
+For implemented behavior, ownership and thread boundaries, consult the [architecture documentation](../architecture/README.md).
 
 ---
 
 ## ⚠️ Core Architectural Invariants (Non-Negotiable Rules)
 
 1. **Graphics Boundaries**:
-   Keep new raw graphics operations inside the relevant graphics backend implementation. GLFW window/input operations belong in Platform or explicit integration code. Current legacy graphics calls also exist in VFX and other integration paths; do not treat this existing debt as a reason to add more leaks. See [current boundaries](architecture/SAD.md) before changing either rendering path.
+   Keep new raw graphics operations inside the relevant graphics backend implementation. GLFW window/input operations belong in Platform or explicit integration code. Current legacy graphics calls also exist in VFX and other integration paths; do not treat this existing debt as a reason to add more leaks. See [current boundaries](../architecture/SAD.md) before changing either rendering path.
 2. **Layered Dependency Direction**:
-   New dependencies should follow the [proposed layered policy](architecture/TARGET_LAYERED_ARCHITECTURE.md). The current engine is not strictly layered: Core/Application uses Platform/Renderer/Physics, and runtime plugins pull editor UI. Do not add reverse dependencies or conceal them with include paths. Check both CMake targets and includes; the [dependency map](architecture/DEPENDENCY_MAP.md) records the current exceptions.
+   New dependencies should follow the [proposed layered policy](../architecture/TARGET_LAYERED_ARCHITECTURE.md). The current engine is not strictly layered: Core/Application uses Platform/Renderer/Physics, and runtime plugins pull editor UI. Do not add reverse dependencies or conceal them with include paths. Check both CMake targets and includes; the [dependency map](../architecture/DEPENDENCY_MAP.md) records the current exceptions.
 3. **Explicit Ownership and RAII**:
    Prefer value members and unique_ptr for exclusive ownership and shared_ptr for shared resources. Observer pointers must have a documented lifetime. Existing wrappers can own native GPU/OS handles represented as raw pointers and must release them explicitly. Destroy script instances through their matching callbacks before unloading their DLL.
 4. **Public Visibility for Script Reflection**:
@@ -34,13 +36,13 @@ For implemented behavior, ownership and thread boundaries, consult the [architec
 
 When introducing a new component:
 
-1. Define its data and ownership. Current built-in types are in [Components.hpp](../Engine/Scene/include/Axle/Components.hpp); a future domain module should not create another dependency from generic Scene data to optional gameplay tooling.
-2. Update the actual text-writing/parsing paths in [SceneSerializer.cpp](../Engine/Scene/src/SceneSerializer.cpp) and [AssemblySerializer.cpp](../Engine/Scene/src/AssemblySerializer.cpp). Follow the implementation in the current checkout rather than assuming a YAML library API.
+1. Define its data and ownership. Current built-in types are in [Components.hpp](../../Engine/Scene/include/Axle/Components.hpp); a future domain module should not create another dependency from generic Scene data to optional gameplay tooling.
+2. Update the actual text-writing/parsing paths in [SceneSerializer.cpp](../../Engine/Scene/src/SceneSerializer.cpp) and [AssemblySerializer.cpp](../../Engine/Scene/src/AssemblySerializer.cpp). Follow the implementation in the current checkout rather than assuming a YAML library API.
 3. Check Scene::Copy, duplicate/destroy and runtime start/update/stop behavior. Preserve persistent UUIDs where appropriate and remap registry handles/references when cloning.
 4. Add inspection and add-component UI through the current inspector/hierarchy implementation. Consider asset/prefab editing paths separately.
 5. For plugin components, use SceneSerializerContext callbacks where possible. Add a behavioral regression test covering the component's meaningful lifecycle or persistence contract.
 
-See [Scene design](architecture/SDD.md#4-scene-and-entity) and [class relationships](architecture/CLASS_RELATIONSHIPS.md) for the current integration points.
+See [Scene design](../architecture/SDD.md#4-scene-and-entity) and [class relationships](../architecture/CLASS_RELATIONSHIPS.md) for the current integration points.
 
 ---
 
@@ -78,7 +80,7 @@ AXLE_REGISTER_SCRIPT(RotateObject);
 
 ### Recipe 3: Writing an Automated Headless Test in `AxleTests.exe`
 
-The test runner is [Editor/src/Test.cpp](../Editor/src/Test.cpp); test groups are implemented in [Editor/src/Tests](../Editor/src/Tests) and share TestCommon.hpp. Register new groups in the runner/build definition as required. Test builds currently depend on AxleEditor resource staging.
+The test runner is [Editor/src/Test.cpp](../../Editor/src/Test.cpp); test groups are implemented in [Editor/src/Tests](../../Editor/src/Tests) and share TestCommon.hpp. Register new groups in the runner/build definition as required. Test builds currently depend on AxleEditor resource staging.
 
 ```cpp
 bool RunTest_MyNewFeature() {

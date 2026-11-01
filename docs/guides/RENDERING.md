@@ -1,12 +1,14 @@
-# 🎨 Rendering Architecture & Graphics Pipeline
+# Rendering Guide
 
-AxleEngine currently has an OpenGL rendering path and a separate NRI-based RHI path for Direct3D 12/Vulkan. EditorLayer selects SceneRenderer or RHISceneRenderer; standalone RuntimeLayer currently uses the OpenGL SceneRenderer. This guide primarily explains the OpenGL pipeline. See the [SAD rendering view](architecture/SAD.md#5-rendering-paths-and-backend-selection), [SDD](architecture/SDD.md) and [execution flows](architecture/RUNTIME_FLOWS.md) for current cross-backend boundaries and limitations.
+Navigation: [documentation hub](../README.md).
+
+AxleEngine currently has an OpenGL rendering path and a separate NRI-based RHI path for Direct3D 12/Vulkan. EditorLayer selects SceneRenderer or RHISceneRenderer; standalone RuntimeLayer currently uses the OpenGL SceneRenderer. This guide primarily explains the OpenGL pipeline. See the [SAD rendering view](../architecture/SAD.md#5-rendering-paths-and-backend-selection), [SDD](../architecture/SDD.md) and [execution flows](../architecture/RUNTIME_FLOWS.md) for current cross-backend boundaries and limitations.
 
 ---
 
 ## 🏛️ Pipeline Overview & Multi-Pass Execution
 
-The OpenGL scene path is orchestrated by [`Axle::SceneRenderer`](../Engine/Scene/include/Axle/SceneRenderer.hpp). Its principal pass structure is illustrated below; feature flags and other rendering paths can change the work executed:
+The OpenGL scene path is orchestrated by [`Axle::SceneRenderer`](../../Engine/Scene/include/Axle/SceneRenderer.hpp). Its principal pass structure is illustrated below; feature flags and other rendering paths can change the work executed:
 
 ```mermaid
 flowchart TD
@@ -51,7 +53,7 @@ AxleEngine utilizes a 16-tap **Vogel Spiral / Poisson Disk** soft shadow samplin
    $$\theta_i = i \times 2.399963 \text{ rad}, \quad r_i = \sqrt{\frac{i + 0.5}{16}}$$
    Samples are jittered using interleaved spatial gradient noise per screen pixel to produce smooth, filmic shadow penumbras.
 3. **Slope-Scaled Normal Bias**:
-   Shadow acne and light leaking on steep surfaces are eliminated using slope-scaled normal offset pushing:
+   Shadow acne and light leaking can be reduced using slope-scaled normal offset pushing:
    $$\text{Bias} = \max(\text{ShadowBias} \times (1.0 - \mathbf{N} \cdot \mathbf{L}), \; \text{ShadowBiasMin})$$
 
 ---
@@ -102,7 +104,7 @@ Parsing human-readable 3D formats (such as `.obj` or `.gltf`) at runtime wastes 
 flowchart LR
     A["Raw 3D Model (.obj, .gltf) or Text .axle"] -->|AssetSerializer Ingest| B["Normalized Vertex & Index Buffer"]
     B -->|Save Binary Cache| C["Flat Cache File (.axlebin)"]
-    C -->|Timestamp Check: Cache Fresh| D["Direct Microsecond Read into GPU VBO/EBO"]
+    C -->|Timestamp Check: Cache Fresh| D["Binary read and GPU upload"]
     C -->|Timestamp Check: Text Modified| B
 ```
 
@@ -111,7 +113,7 @@ flowchart LR
   * Vertex Count + Raw Stride Float Array
   * Index Count + Raw 32-bit Uint Array
   * Pre-computed AABB Bounding Box (`Min`, `Max`, `Size`)
-* **Instant Load Times**: Reading an `.axlebin` directly populates host memory and transfers to OpenGL `glBufferData` in **under 1 millisecond**, completely eliminating scene loading hitches.
+* **Cache purpose**: Binary loading avoids reparsing the source mesh. IO, allocation and GPU upload still have a cost; no loading-time benchmark is claimed by this guide.
 
 ---
 

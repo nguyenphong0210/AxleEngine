@@ -1,105 +1,105 @@
 # Subsystems and Module Reference
 
-Reviewed: 2026-11-01. This quick reference describes current responsibilities and important boundaries. See [SAD](architecture/SAD.md), [SDD](architecture/SDD.md), [class diagrams](architecture/CLASS_RELATIONSHIPS.md) and the [complete dependency map](architecture/DEPENDENCY_MAP.md).
+Reviewed: 2026-11-01. This quick reference describes current responsibilities and important boundaries. See [SAD](SAD.md), [SDD](SDD.md), [class diagrams](CLASS_RELATIONSHIPS.md) and the [complete dependency map](DEPENDENCY_MAP.md).
 
 ## 1. Engine/Core
 
 Application, Layer/LayerStack, Log, UUID, JobSystem, FileSystem and Package. Application currently introduces upward Platform/Renderer/Physics dependencies. UUID uses a random-number generator; it is not documented here as cryptographically secure.
 
-Source: [Engine/Core](../Engine/Core).
+Source: [Engine/Core](../../Engine/Core).
 
 ## 2. Engine/Platform
 
 Window/Input, event records and FileDialogs. Native GLFW types and graphics backend selection remain visible in the public API.
 
-Source: [Engine/Platform](../Engine/Platform).
+Source: [Engine/Platform](../../Engine/Platform).
 
 ## 3. Engine/Renderer
 
 OpenGL RenderCommand, shader/buffer/VAO/texture/framebuffer, material, shadow, cubemap, skybox, camera and skinning resources. SceneRenderer orchestration lives in Engine/Scene.
 
-Source: [Engine/Renderer](../Engine/Renderer).
+Source: [Engine/Renderer](../../Engine/Renderer).
 
 ## 4. Engine/Audio
 
 AudioEngine, AudioClip, AudioSource and AudioListener wrap miniaudio. Sources hold shared clip metadata and an owned sound object. Scene and VehicleAudio provide integration.
 
-Source: [Engine/Audio](../Engine/Audio).
+Source: [Engine/Audio](../../Engine/Audio).
 
 ## 5. Engine/Physics
 
 PhysicsEngine/PhysicsScene, Jolt body/query/constraint APIs, CharacterController and the enkiTS job adapter. OpenGL/RHI debug renderers currently bring graphics and asset dependencies into this target.
 
-Source: [Engine/Physics](../Engine/Physics).
+Source: [Engine/Physics](../../Engine/Physics).
 
 ## 6. Engine/Scene
 
 Scene/Entity, component storage, hierarchy/transforms, ParallelECS, scene/assembly serialization, native scripting, simulation and both scene rendering paths. SceneSerializerContext callbacks extend serialization for plugins.
 
-Source: [Engine/Scene](../Engine/Scene).
+Source: [Engine/Scene](../../Engine/Scene).
 
 ## 7. Engine/Asset
 
 AssetMetadata/Serializer, static AssetManager registry/resource caches, AssetDSL, mesh import/serialization, TextureDescriptor, TerrainAsset and AssetCooker. Identity, GPU loading and tools are not yet separate targets.
 
-Source: [Engine/Asset](../Engine/Asset).
+Source: [Engine/Asset](../../Engine/Asset).
 
 ## 8. Engine/Project
 
 ProjectConfig, static active Project and ProjectSerializer manage .axleproj settings and asset-path configuration.
 
-Source: [Engine/Project](../Engine/Project).
+Source: [Engine/Project](../../Engine/Project).
 
 ## 9. Engine/UI
 
 Two targets share this directory: AxleUI2D provides documents/nodes/layout/binding/font/canvas geometry; AxleUI provides ImGui integration, inspectors, previews, content browser, UI/VFX designers and HLSLStudioPanel. Canvas2D currently retains CPU geometry rather than submitting it to the GPU.
 
-Source: [Engine/UI](../Engine/UI).
+Source: [Engine/UI](../../Engine/UI).
 
 ## 10. Engine/Vehicle (Gameplay Toolkit)
 
 Vehicle wraps Jolt chassis/wheel constraints and exposes telemetry. VehicleAudio and VehicleVFX independently consume telemetry. Scene currently links this toolkit unconditionally.
 
-Source: [Engine/Vehicle](../Engine/Vehicle).
+Source: [Engine/Vehicle](../../Engine/Vehicle).
 
 ## 11. Editor Application
 
 EditorLayer composes scenes, physics, renderers/viewports, panels, project IO, import/export and script compile/reload. Play uses a cloned registry preserving entity UUIDs; Stop restores the edit scene. HLSL Studio open callbacks and UI rendering are wired in EditorLayer.
 
-Source: [Editor](../Editor).
+Source: [Editor](../../Editor).
 
 ## 12. Standalone Runtime Player
 
 RuntimeLayer loads a project/package/start scene, rebuilds procedural plugin resources and updates simulation/rendering/UI. It currently uses the OpenGL SceneRenderer. Plugin/script/resource staging dependencies still connect its build to editor tooling.
 
-Source: [Runtime](../Runtime).
+Source: [Runtime](../../Runtime).
 
 ## 13. Engine/RHI
 
 NRI device/surface/swapchain, resources, commands/barriers, DXC compiler/reflection, pipelines, descriptors/bindless, streaming and material/light helpers. RHIECSStreamer currently introduces EnTT at this low-level boundary.
 
-Source: [Engine/RHI](../Engine/RHI).
+Source: [Engine/RHI](../../Engine/RHI).
 
 ## 14. Engine/Animation
 
 Skeletons, clips/channels/keyframes, poses, blend spaces, state machines, Animator, skeletal mesh/import. CPU evaluation, graphics upload and import currently share a target.
 
-Source: [Engine/Animation](../Engine/Animation).
+Source: [Engine/Animation](../../Engine/Animation).
 
 ## 15. Engine/VFX
 
 ParticlePool SoA, emitter configuration/serialization, ParticleSystem, forces/noise/collision and OpenGL/RHI particle renderers. Scene components and vehicle/character effects integrate this subsystem.
 
-Source: [Engine/VFX](../Engine/VFX).
+Source: [Engine/VFX](../../Engine/VFX).
 
 ## 16. Spline and Terrain Plugins
 
 Static libraries contain procedural data/generation, colliders, serialization and authoring in the same targets. Terrain depends on Spline; both publicly depend on AxleUI. They are not a general dynamic plugin loading system.
 
-Source: [Plugins](../Plugins).
+Source: [Plugins](../../Plugins).
 
 ## Tests and build composition
 
 AxleTests is defined in Editor/CMakeLists.txt. Test.cpp selects test groups implemented in src/Tests/Test_Milestone*.cpp. Its build depends on AxleEditor for resources; the first-party CMake configuration does not currently register CTest tests. No test pass count is asserted by this source review.
 
-For proposed optional builds, runtime/editor separation and layering enforcement, see [Target Layered Architecture](architecture/TARGET_LAYERED_ARCHITECTURE.md).
+For proposed optional builds, runtime/editor separation and layering enforcement, see [Target Layered Architecture](TARGET_LAYERED_ARCHITECTURE.md).

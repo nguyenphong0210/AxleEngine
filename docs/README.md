@@ -1,0 +1,46 @@
+# AxleEngine Documentation
+
+Documentation is organized by purpose. Current implementation, usage instructions and future proposals are kept separate. Start with the architecture overview if you are new to the engine.
+
+## Architecture and assessment
+
+| Document | Use it to |
+|---|---|
+| [Architecture overview](architecture/OVERVIEW.md) | Understand the engine's current structure and boundaries |
+| [Current architecture assessment](architecture/ASSESSMENT.md) | Review strengths, limitations, priorities and measurable improvement criteria |
+| [Architecture documentation index](architecture/README.md) | Navigate the detailed design set |
+| [SAD](architecture/SAD.md) | Understand system context, dependencies, deployment and data |
+| [SDD](architecture/SDD.md) | Inspect class responsibilities, ownership and lifecycle |
+| [Module reference](architecture/MODULES.md) | Find the responsibilities of each current module |
+| [Class relationships](architecture/CLASS_RELATIONSHIPS.md) | Read subsystem UML diagrams |
+| [Execution flows](architecture/RUNTIME_FLOWS.md) | Follow startup, simulation, asset, script and UI paths |
+| [Dependency map](architecture/DEPENDENCY_MAP.md) | Inspect CMake and source-level dependencies |
+| [Proposed layered architecture](architecture/TARGET_LAYERED_ARCHITECTURE.md) | Evaluate future module boundaries and migration stages |
+| [Survey verification](architecture/VERIFICATION.md) | Understand the evidence and limitations of the review |
+
+Declaration and file inventories are available through the architecture index. They are reference snapshots, not tutorials.
+
+## Development and feature guides
+
+- [Development conventions](guides/DEVELOPMENT.md): contribution rules, component extension and test organization.
+- [Scene and ECS](guides/SCENE_AND_ECS.md): components, hierarchy, transforms and prefab/scene workflows.
+- [Native scripting](guides/SCRIPTING.md): lifecycle, reflected fields and reload.
+- [Rendering](guides/RENDERING.md): OpenGL pipeline details and links to RHI boundaries.
+- [Physics and simulation](guides/PHYSICS.md): Jolt worlds, collision, queries and vehicles.
+- [UI documents and binding](guides/UI.md): canvas assets, node ownership, datasource scoping and current rendering limits.
+- [Materials and shaders](guides/MATERIALS_AND_SHADERS.md): descriptor editing, preview, HLSL compilation and reload boundaries.
+
+## Reference and future design
+
+- [Asset format reference](reference/ASSET_FORMAT.md): `.axleasset` syntax, consumer boundaries, metadata and package distinctions.
+- [Editor tooling roadmap](design/EDITOR_TOOLING_ROADMAP.md): future material, VFX, UI and animation authoring work, with acceptance criteria.
+- [Project roadmap](../ROADMAP.md): development history and milestones. Milestone completion claims do not substitute for current source or test evidence.
+
+## Maintenance rules
+
+1. Put implemented behavior in architecture, guides or reference documents. Label unimplemented changes as proposals under design or the target architecture.
+2. Update the relevant document and navigation when a public API, ownership rule, dependency or execution sequence changes.
+3. Use repository-relative links. Link source instead of copying large header implementations or source-asset templates into documentation.
+4. Keep one canonical explanation of a subject; link to it from other guides.
+5. Record review dates and verification limits. Do not publish benchmark, parity or test-pass claims without evidence.
+6. Remove superseded execution plans after their useful contracts are incorporated into maintained documents. Do not retain parallel phase-numbered specifications as current API references.

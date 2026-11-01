@@ -20,18 +20,18 @@ struct ObjectConstants_t {
     float4   u_ColorPrimary;        // 16 bytes (Offset 64) - Albedo/BaseColor
     float4   u_ColorSecondary;      // 16 bytes (Offset 80) - Secondary/Pattern tint & Emissive (rgb: tint, w: emission intensity)
     float4   u_Params;              // 16 bytes (Offset 96) - x: TileScale/UVScale, y: ShadingMode, z: Roughness, w: Metallic
-    float4   u_MaterialExtra;       // 16 bytes (Offset 112) - xy: UVOffset, z: AlphaCutoff, w: SurfaceType (0: Opaque, 1: Cutout, 2: Transparent, 3: Additive)
+    float4   MaterialExtra;         // 16 bytes (Offset 112) - xy: UVOffset, z: AlphaCutoff, w: SurfaceType (0: Opaque, 1: Cutout, 2: Transparent, 3: Additive)
 };
 [[vk::push_constant]] ObjectConstants_t ObjectConstants;
 #define u_Model (ObjectConstants.u_Model)
 #define u_ColorPrimary (ObjectConstants.u_ColorPrimary)
 #define u_ColorSecondary (ObjectConstants.u_ColorSecondary)
 #define u_Params (ObjectConstants.u_Params)
-#define u_MaterialExtra (ObjectConstants.u_MaterialExtra)
-#define u_SunDirAndIntensity (ObjectConstants.u_MaterialExtra)
-#define u_UVOffset (ObjectConstants.u_MaterialExtra.xy)
-#define u_AlphaCutoff (ObjectConstants.u_MaterialExtra.z)
-#define u_SurfaceType (ObjectConstants.u_MaterialExtra.w)
+#define u_MaterialExtra (ObjectConstants.MaterialExtra)
+#define u_SunDirAndIntensity (ObjectConstants.MaterialExtra)
+#define u_UVOffset (ObjectConstants.MaterialExtra.xy)
+#define u_AlphaCutoff (ObjectConstants.MaterialExtra.z)
+#define u_SurfaceType (ObjectConstants.MaterialExtra.w)
 #else
 cbuffer ObjectConstants : register(b0, space0) {
     float4x4 u_Model;               // 64 bytes (Offset 0) - Model matrix
@@ -349,21 +349,26 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 sunRadiance = sunColor * sunIntensity;
 
     float NdotL_Sun = max(dot(N, sunDir), 0.0);
-    if (NdotL_Sun > 0.0) {
+    // Photographic Studio Softbox Diffuse Wrap (Area Light Approximation)
+    // Smooths the terminator so white dielectric materials form silky, continuous gradients without harsh dark crescent smudges
+    float sunWrap = 0.22;
+    float NdotL_Sun_Diff = saturate((dot(N, sunDir) + sunWrap) / ((1.0 + sunWrap) * (1.0 + sunWrap)));
+
+    if (NdotL_Sun > 0.0 || NdotL_Sun_Diff > 0.0) {
         float3 H = normalize(V + sunDir);
         float  NDF = DistributionGGX(N, H, roughness);
         float  G   = GeometrySmith(N, V, sunDir, roughness);
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
-        float  denominator = 4.0 * NdotV * NdotL_Sun + 0.0001;
+        float  denominator = 4.0 * NdotV * max(NdotL_Sun, 0.001) + 0.0001;
         float3 specular    = numerator / denominator;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb / PI;
 
-        Lo += (diffuse + specular) * sunRadiance * NdotL_Sun;
+        Lo += (diffuse * NdotL_Sun_Diff + specular * NdotL_Sun) * sunRadiance;
     }
 
     // 7. Point Lights (up to 16 with smooth windowed inverse-square falloff)
@@ -379,7 +384,9 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         float3 L = lightVec / dist;
         float NdotL = max(dot(N, L), 0.0);
-        if (NdotL <= 0.0) continue;
+        float pWrap = 0.18;
+        float NdotL_Diff = saturate((dot(N, L) + pWrap) / ((1.0 + pWrap) * (1.0 + pWrap)));
+        if (NdotL <= 0.0 && NdotL_Diff <= 0.0) continue;
 
         // Smooth windowed inverse-square attenuation (Frostbite / UE standard)
         float minRadius = max(0.0025, pLight.Params.y);
@@ -403,14 +410,14 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
-        float  denominator = 4.0 * NdotV * NdotL + 0.0001;
+        float  denominator = 4.0 * NdotV * max(NdotL, 0.001) + 0.0001;
         float3 specular    = numerator / denominator;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb / PI;
 
-        Lo += (diffuse + specular) * radiance * NdotL;
+        Lo += (diffuse * NdotL_Diff + specular * NdotL) * radiance;
     }
 
     // 8. Spot Lights (up to 16 with inner/outer cone cutoff angles)
@@ -491,9 +498,9 @@ float4 PSMain(PSInput input) : SV_Target0 {
     } else {
         // Photographic Studio & Physical Hemisphere Reflection (Godot & Unity Parity)
         // Provides smooth continuous ambient bounce and studio softbox highlights without harsh horizon cuts
-        float3 studioTop     = float3(0.92, 0.95, 1.00); // Bright overhead softbox dome
-        float3 studioHorizon = float3(0.68, 0.72, 0.78); // Neutral studio eye-level fill
-        float3 studioGround  = float3(0.40, 0.42, 0.46); // Studio floor ambient bounce
+        float3 studioTop     = float3(0.96, 0.98, 1.00); // Bright overhead softbox dome
+        float3 studioHorizon = float3(0.82, 0.85, 0.89); // Neutral studio eye-level fill
+        float3 studioGround  = float3(0.68, 0.70, 0.74); // Studio floor ambient bounce (high bounce eliminates dark smudges)
 
         // Smooth continuous hemisphere diffuse illumination
         float upWeight = saturate(N.y * 0.5 + 0.5);
@@ -521,7 +528,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.3);
 
-        float ambientIntensity = hasMultiLightSun ? max(0.35, u_SunLight.ColorAndAmbient.w) : 0.90;
+        float ambientIntensity = hasMultiLightSun ? max(0.50, u_SunLight.ColorAndAmbient.w) : 0.95;
         ambient = (ambientDiffuse * ambientIntensity + specularAmbient) * ao;
     }
     

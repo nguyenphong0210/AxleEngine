@@ -770,32 +770,32 @@ namespace Axle {
             }
         }
 
-        // 1. Primary Directional Key Sun Light
+        // 1. Primary Directional Key Sun Light (Soft studio key softbox)
         m_PreviewLight = m_PreviewScene->CreateEntity("PreviewSunLight");
         auto& dlc = m_PreviewLight.AddComponent<DirectionalLightComponent>();
         dlc.Azimuth = m_SunAzimuth;
         dlc.Elevation = m_SunElevation;
         dlc.Color = glm::vec3(1.0f, 0.98f, 0.95f);
-        dlc.Intensity = 2.4f;
-        dlc.AmbientIntensity = 0.65f;
+        dlc.Intensity = 1.35f;
+        dlc.AmbientIntensity = 0.95f;
 
-        // 2. Secondary Studio Fill Light (Cool Soft Studio Fill)
-        auto fillLight = m_PreviewScene->CreateEntity("PreviewFillLight");
-        auto& flc = fillLight.AddComponent<PointLightComponent>();
-        flc.Color = glm::vec3(0.72f, 0.85f, 1.0f);
-        flc.Intensity = 3.5f;
-        flc.Radius = 12.0f;
-        auto& flt = fillLight.GetComponent<TransformComponent>();
-        flt.Translation = glm::vec3(-2.8f, 1.0f, 2.0f);
+        // 2. Secondary Studio Fill Light (Elevated Cool Soft Studio Fill)
+        m_PreviewFillLight = m_PreviewScene->CreateEntity("PreviewFillLight");
+        auto& flc = m_PreviewFillLight.AddComponent<PointLightComponent>();
+        flc.Color = glm::vec3(0.88f, 0.93f, 1.0f);
+        flc.Intensity = 2.8f;
+        flc.Radius = 16.0f;
+        auto& flt = m_PreviewFillLight.GetComponent<TransformComponent>();
+        flt.Translation = glm::vec3(-2.6f, 2.4f, 1.8f);
 
         // 3. Studio Rim Light (Back Light for Silhouette)
-        auto rimLight = m_PreviewScene->CreateEntity("PreviewRimLight");
-        auto& rlc = rimLight.AddComponent<PointLightComponent>();
-        rlc.Color = glm::vec3(0.85f, 0.90f, 1.0f);
-        rlc.Intensity = 2.2f;
-        rlc.Radius = 15.0f;
-        auto& rlt = rimLight.GetComponent<TransformComponent>();
-        rlt.Translation = glm::vec3(2.5f, 3.2f, -3.8f);
+        m_PreviewRimLight = m_PreviewScene->CreateEntity("PreviewRimLight");
+        auto& rlc = m_PreviewRimLight.AddComponent<PointLightComponent>();
+        rlc.Color = glm::vec3(0.92f, 0.95f, 1.0f);
+        rlc.Intensity = 1.2f;
+        rlc.Radius = 16.0f;
+        auto& rlt = m_PreviewRimLight.GetComponent<TransformComponent>();
+        rlt.Translation = glm::vec3(1.8f, 2.5f, -3.2f);
 
         m_SceneNeedsRebuild = false;
     }
@@ -813,10 +813,13 @@ namespace Axle {
         }
         if (!m_PreviewScene) return;
 
-        // Turntable update
+        // Turntable update: smoothly rotate the preview object (Godot & Blender inspector parity)
         if (m_TurntableActive && !m_IsViewportHovered) {
-            m_Yaw += ImGui::GetIO().DeltaTime * m_TurntableSpeed * 30.0f;
-            if (m_Yaw > 360.0f) m_Yaw -= 360.0f;
+            m_ObjectYaw += ImGui::GetIO().DeltaTime * m_TurntableSpeed * 30.0f;
+            if (m_ObjectYaw > 360.0f) m_ObjectYaw -= 360.0f;
+            if (m_PreviewEntity && m_PreviewEntity.HasComponent<TransformComponent>()) {
+                m_PreviewEntity.GetComponent<TransformComponent>().Rotation = glm::angleAxis(glm::radians(m_ObjectYaw), glm::vec3(0.0f, 1.0f, 0.0f));
+            }
         }
 
         // Camera setup
@@ -829,6 +832,29 @@ namespace Axle {
             distance * std::sin(pitchRad),
             distance * std::cos(pitchRad) * std::cos(yawRad)
         );
+
+        // Dynamically align studio 3-point lighting relative to camera view
+        // Guarantees clean, smooth illumination without dark smudges from all orbit perspectives
+        glm::vec3 fwd = glm::normalize(m_PanOffset - camPos);
+        glm::vec3 right = glm::normalize(glm::cross(fwd, glm::vec3(0.0f, 1.0f, 0.0f)));
+        glm::vec3 up = glm::normalize(glm::cross(right, fwd));
+
+        if (m_PreviewLight && m_PreviewLight.HasComponent<DirectionalLightComponent>()) {
+            glm::vec3 keyDir = glm::normalize(-fwd + right * 0.50f + up * 0.65f);
+            auto& dlc = m_PreviewLight.GetComponent<DirectionalLightComponent>();
+            dlc.Elevation = glm::degrees(std::asin(std::clamp(keyDir.y, -1.0f, 1.0f)));
+            dlc.Azimuth = glm::degrees(std::atan2(keyDir.x, keyDir.z));
+        }
+
+        if (m_PreviewFillLight && m_PreviewFillLight.HasComponent<TransformComponent>()) {
+            m_PreviewFillLight.GetComponent<TransformComponent>().Translation = 
+                m_PanOffset - fwd * (m_MaxDim * 2.2f) - right * (m_MaxDim * 2.5f) + up * (m_MaxDim * 2.2f);
+        }
+
+        if (m_PreviewRimLight && m_PreviewRimLight.HasComponent<TransformComponent>()) {
+            m_PreviewRimLight.GetComponent<TransformComponent>().Translation = 
+                m_PanOffset + fwd * (m_MaxDim * 3.0f) + right * (m_MaxDim * 1.5f) + up * (m_MaxDim * 2.0f);
+        }
 
         float aspect = (height > 0.0f) ? (width / height) : 1.0f;
         PerspectiveCamera camera(45.0f, aspect, 0.05f, distance * 8.0f);
@@ -958,8 +984,12 @@ namespace Axle {
                 m_Yaw = 30.0f;
                 m_Zoom = 1.0f;
                 m_PanOffset = glm::vec3(0.0f);
+                m_ObjectYaw = 0.0f;
                 m_SunAzimuth = 45.0f;
                 m_SunElevation = 50.0f;
+                if (m_PreviewEntity && m_PreviewEntity.HasComponent<TransformComponent>()) {
+                    m_PreviewEntity.GetComponent<TransformComponent>().Rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+                }
                 m_SceneNeedsRebuild = true;
             }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset View & Lighting");

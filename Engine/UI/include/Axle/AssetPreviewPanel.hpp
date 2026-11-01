@@ -114,6 +114,9 @@ namespace Axle {
         std::shared_ptr<Scene> m_PreviewScene;
         Entity m_PreviewEntity;
         Entity m_PreviewLight;
+        Entity m_PreviewFillLight;
+        Entity m_PreviewRimLight;
+        float m_ObjectYaw = 0.0f;
         MaterialComponent m_ActiveMaterial;
         bool m_SceneNeedsRebuild = true;
     };

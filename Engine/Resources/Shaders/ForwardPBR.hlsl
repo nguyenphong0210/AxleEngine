@@ -168,20 +168,6 @@ PSInput VSMain(VSInput input) {
 static const float PI = 3.14159265358979323846;
 
 // 1. Trowbridge-Reitz GGX Normal Distribution Function (NDF)
-// Anisotropic GGX Microfacet Distribution (Walter / Burley standard for brushed alloy & carbon fiber)
-float DistributionAnisotropicGGX(float3 N, float3 H, float3 T, float3 B, float roughness, float anisotropy) {
-    float at = max(roughness * (1.0 + anisotropy), 0.001);
-    float ab = max(roughness * (1.0 - anisotropy), 0.001);
-    float NdotH = max(dot(N, H), 0.0);
-    float TdotH = dot(T, H);
-    float BdotH = dot(B, H);
-    float a2 = at * ab;
-    float3 v = float3(ab * TdotH, at * BdotH, a2 * NdotH);
-    float v2 = dot(v, v);
-    float w2 = a2 / max(v2, 0.0000001);
-    return a2 * w2 * w2 * (1.0 / PI);
-}
-
 float DistributionGGX(float3 N, float3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
@@ -223,6 +209,36 @@ float3 FresnelSchlickRoughness(float cosTheta, float3 F0, float roughness) {
 // Ensures 100% exact parity with OpenGL across positive and negative coordinate axes.
 float glsl_mod(float x, float y) {
     return x - y * floor(x / y);
+}
+
+float2 AnisotropicAxes(float roughness) {
+    float aspect = sqrt(1.0 - 0.9 * abs(clamp(u_CoatAnisotropy.z, -1.0, 1.0)));
+    float a = max(roughness * roughness, 0.001);
+    return u_CoatAnisotropy.z >= 0 ? float2(a / aspect, a * aspect) : float2(a * aspect, a / aspect);
+}
+float MaterialDistribution(float3 N, float3 H, float3 T, float3 B, float roughness) {
+    float2 axes = AnisotropicAxes(roughness);
+    float3 v = float3(dot(T,H) / axes.x, dot(B,H) / axes.y, dot(N,H));
+    float d = dot(v, v);
+    return 1.0 / max(PI * axes.x * axes.y * d * d, 1e-8);
+}
+float AnisotropicLambda(float3 N, float3 W, float3 T, float3 B, float2 axes) {
+    float nw = max(abs(dot(N, W)), 0.001);
+    float2 projected = float2(dot(T,W), dot(B,W)) * axes;
+    return 0.5 * (sqrt(1.0 + dot(projected,projected) / (nw*nw)) - 1.0);
+}
+float MaterialGeometry(float3 N, float3 V, float3 L, float3 T, float3 B, float roughness) {
+    float2 axes = AnisotropicAxes(roughness);
+    return 1.0 / (1.0 + AnisotropicLambda(N,V,T,B,axes) + AnisotropicLambda(N,L,T,B,axes));
+}
+float3 ApplyClearcoat(float3 baseLighting, float3 N, float3 V, float3 L, float nl) {
+    float coat = saturate(u_CoatAnisotropy.x) * u_MaterialSurface.z;
+    float r = clamp(u_CoatAnisotropy.y, 0.04, 1.0);
+    float3 H = normalize(V+L);
+    float f = 0.04 + 0.96 * pow(1.0-saturate(dot(V,H)), 5.0);
+    float nv = max(dot(N,V), 0.001);
+    float coatBRDF = DistributionGGX(N,H,r) * GeometrySmith(N,V,L,r) * f / max(4.0*nv*max(nl,0.001),0.0001);
+    return baseLighting * (1.0-coat*f) * (1.0-coat*f) + coat * coatBRDF * nl;
 }
 
 // =============================================================================
@@ -335,6 +351,16 @@ float4 PSMain(PSInput input) : SV_Target0 {
     }
     float NdotV = max(dot(N, V), 0.001);
     
+    float3 tangent = input.TangentWS.xyz - N * dot(N, input.TangentWS.xyz);
+    if (dot(tangent, tangent) < 1e-8) tangent = cross(abs(N.y) < 0.99 ? float3(0,1,0) : float3(1,0,0), N);
+    tangent = normalize(tangent);
+    float3 bitangent = normalize(cross(N, tangent)) * (input.TangentWS.w < 0.0 ? -1.0 : 1.0);
+    float sn, cs;
+    sincos(u_CoatAnisotropy.w * 2.0 * PI, sn, cs);
+    float3 rotatedT = tangent * cs + bitangent * sn;
+    bitangent = bitangent * cs - tangent * sn;
+    tangent = rotatedT;
+
     // 5. Base Reflectivity F0 (Dielectric = 0.04, Metal = Albedo)
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, albedo.rgb, metallic);
@@ -363,8 +389,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     if (NdotL_Sun > 0.0 || NdotL_Sun_Diff > 0.0) {
         float3 H = normalize(V + sunDir);
-        float  NDF = DistributionGGX(N, H, roughness);
-        float  G   = GeometrySmith(N, V, sunDir, roughness);
+        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness);
+        float  G   = MaterialGeometry(N, V, sunDir, tangent, bitangent, roughness);
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
@@ -375,7 +401,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb / PI;
 
-        Lo += (diffuse * NdotL_Sun_Diff + specular * NdotL_Sun) * sunRadiance;
+        Lo += ApplyClearcoat(diffuse * NdotL_Sun_Diff + specular * NdotL_Sun, N, V, sunDir, NdotL_Sun) * sunRadiance;
     }
 
     // 7. Local lights and additional directional lights (up to 16 combined)
@@ -414,8 +440,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
         if (NdotL <= 0.0 && NdotL_Diff <= 0.0) continue;
 
         float3 H = normalize(V + L);
-        float  NDF = DistributionGGX(N, H, roughness);
-        float  G   = GeometrySmith(N, V, L, roughness);
+        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness);
+        float  G   = MaterialGeometry(N, V, L, tangent, bitangent, roughness);
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
@@ -426,7 +452,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb / PI;
 
-        Lo += (diffuse * NdotL_Diff + specular * NdotL) * radiance;
+        Lo += ApplyClearcoat(diffuse * NdotL_Diff + specular * NdotL, N, V, L, NdotL) * radiance;
     }
 
     // 8. Spot Lights (up to 16 with inner/outer cone cutoff angles)
@@ -467,8 +493,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 radiance = sLight.ColorAndInnerAngle.rgb * (sLight.DirectionAndIntensity.w * totalAtten * 0.05);
 
         float3 H = normalize(V + L);
-        float  NDF = DistributionGGX(N, H, roughness);
-        float  G   = GeometrySmith(N, V, L, roughness);
+        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness);
+        float  G   = MaterialGeometry(N, V, L, tangent, bitangent, roughness);
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
@@ -479,7 +505,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb / PI;
 
-        Lo += ((diffuse + specular) * NdotL) * radiance;
+        Lo += ApplyClearcoat((diffuse + specular) * NdotL, N, V, L, NdotL) * radiance;
     }
 
     // 9. Ambient Lighting: Image-Based Lighting (IBL) or Analytical Approximation
@@ -502,7 +528,10 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float2 envBRDF = u_BRDFLUT.Sample(u_Sampler, float2(max(NdotV, 0.0), roughness)).rg;
         float3 specularAmbient = prefilteredColor * (ambientF * envBRDF.x + envBRDF.y);
 
-        specularAmbient *= u_MaterialSurface.w;
+        float coatF = saturate(u_CoatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
+        float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_Sampler, R, clamp(u_CoatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
+        diffuseAmbient *= (1.0-coatF) * (1.0-coatF);
+        specularAmbient = (specularAmbient * (1.0-coatF) * (1.0-coatF) + coatEnvironment * coatF) * u_MaterialSurface.w;
         float envIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
         ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao;
     } else {
@@ -544,7 +573,9 @@ float4 PSMain(PSInput input) : SV_Target0 {
             specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.20;
         }
 
-        float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.25) * u_MaterialSurface.w;
+        float coatF = saturate(u_CoatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
+        ambientDiffuse *= (1.0-coatF) * (1.0-coatF);
+        float3 specularAmbient = (specSky * ambientF * (1.0 - roughness * 0.25) * (1.0-coatF) * (1.0-coatF) + specSky * coatF) * u_MaterialSurface.w;
         ambient = (ambientDiffuse + specularAmbient) * ao;
     }
     

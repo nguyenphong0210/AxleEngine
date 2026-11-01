@@ -63,3 +63,8 @@ binding, and visible shading agree in the preview and scene.
   images back to verify distinct material maps, map disabling, normal/AO strength,
   black emission masking, independent Y tiling, and an explicit zero cutoff.
   Steps 101 and 105 also pass. Layered BRDF rendering is the next separate sub-step.
+- Existing coat and anisotropy parameters now drive layered direct-light BRDFs.
+  The coat attenuates the base layer and has its own roughness; signed anisotropy
+  and rotation drive a tangent-frame GGX distribution with Smith visibility.
+  Step 106 GPU readback verifies coat strength/roughness, anisotropy/rotation, and
+  independent direct-specular and environment-reflection switches.

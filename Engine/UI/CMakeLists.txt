@@ -48,6 +48,7 @@ add_library(AxleUI STATIC
     src/UICanvasDesignerPanel.cpp
     src/HLSLStudioPanel.cpp
     src/CustomShaderPicker.cpp
+    src/MaterialInspectorControls.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_draw.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_tables.cpp

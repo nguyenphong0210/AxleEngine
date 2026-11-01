@@ -86,3 +86,10 @@ binding, and visible shading agree in the preview and scene.
   roles stay linear even when a descriptor is tagged Color. Image decoders now
   set orientation per thread at every call site so material loads do not change
   subsequent icon or thumbnail orientation. Step 106 passes on DX12.
+- Both inspectors now use one set of Godot-style collapsible property groups.
+  Texture slots support search, thumbnails, retained enable state, replacement,
+  drag/drop and clearing. UI inspection confirmed grouping and search input; the
+  user default material was unchanged. Tests 101, 105 and 106 pass.
+- Typed custom values (float, vectors, HDR color/alpha, int, bool and texture) and
+  slider ranges now share round-trip persistence across materials and scenes.
+  Executable custom shader programs remain a separate integration check.

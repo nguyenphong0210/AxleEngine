@@ -107,6 +107,10 @@ namespace Axle {
 
     AssetThumbnailManager* AssetThumbnailManager::s_Instance = nullptr;
 
+    uint64_t AssetThumbnailManager::GetPreview(const std::filesystem::path& path) {
+        return s_Instance ? s_Instance->GetOrCreateThumbnail(path) : 0;
+    }
+
     AssetThumbnailManager::AssetThumbnailManager() {
         s_Instance = this;
         if (Window::HasActiveContext()) {

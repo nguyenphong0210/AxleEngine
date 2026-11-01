@@ -617,11 +617,11 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Verify texture loading, color space, bindings, fallback textures, replacement, and clearing for every supported map in the active project.
       - [x] Upload and bind actual textures per draw with initialized fallback pixels; verify distinct materials, map disabling, normal/AO strength, emission masking, Y tiling, and zero alpha cutoff through DX12 GPU readback (Step 106).
     - [ ] Add focused serialization and renderer checks, plus visual comparisons showing that changing each parameter produces the expected result before moving to Step 2.
-  - [ ] **Step 2 - Godot-style Material Inspector Organization & Texture Authoring**:
-    - [ ] Use shared controls for asset and entity inspectors, organized into collapsible groups: Surface / Transparency, Shading, Albedo, Metallic, Roughness, Emission, Normal Map, Ambient Occlusion, Clearcoat, Anisotropy, UV, and Advanced Options.
-    - [ ] Add clear enable toggles where appropriate, consistent defaults and tooltips, and conditional controls for enabled features; expose only features with a working renderer path.
-    - [ ] Make texture slots clickable to open a searchable project texture picker while retaining drag/drop, thumbnail previews, replacement, and Clear Texture actions.
-    - [ ] Preserve material values and asset compatibility during the UI reorganization; keep edits and live preview behavior consistent between both inspectors.
+  - [x] **Step 2 - Godot-style Material Inspector Organization & Texture Authoring**:
+    - [x] Use shared controls for asset and entity inspectors, organized into collapsible groups: Surface / Transparency, Shading, Albedo, Metallic, Roughness, Emission, Normal Map, Ambient Occlusion, Clearcoat, Anisotropy, UV, and Advanced Options.
+    - [x] Add clear enable toggles where appropriate, consistent defaults and tooltips, and conditional controls for enabled features; expose only features with a working renderer path.
+    - [x] Make texture slots clickable to open a searchable project texture picker while retaining drag/drop, thumbnail previews, replacement, and Clear Texture actions.
+    - [x] Preserve material values and asset compatibility during the UI reorganization; keep edits and live preview behavior consistent between both inspectors.
   - [ ] **Step 3 - Automotive Material Extensions (After Existing Features Work)**:
     - [ ] **Clearcoat**: Extend the validated two-layer shading with texture-driven coat strength and roughness for car paint and carbon fiber; verify direct-light and environment-reflection behavior.
     - [ ] **Anisotropy**: Add texture-driven direction / flow control for brushed wheels and carbon weave; validate tangent orientation, rotation, and strength on imported meshes.

@@ -1296,6 +1296,9 @@ bool RunTest_Step106_MaterialPipeline() {
         }
     }
     if (!VerifyMaterialRendering(root)) return false;
+    auto textures=MaterialInspectorControls::FindTextures(root);
+    if (!check(std::any_of(textures.begin(),textures.end(),[](const auto& p){return p.filename()=="red.tga";}) && std::any_of(textures.begin(),textures.end(),[](const auto& p){return p.filename()=="role.AXLEASSET";}) && std::none_of(textures.begin(),textures.end(),[](const auto& p){return p.filename()=="body.axleasset";}), "Texture picker discovers images/descriptors and excludes materials")) return false;
+
     std::cout << "[106] PASS: Material inspector and inline scene save/reload, maps, HDR colors, alpha, coat, anisotropy, flags, and custom values." << std::endl;
     return true;
 }

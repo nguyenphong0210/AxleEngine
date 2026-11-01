@@ -4,6 +4,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/CustomShaderPicker.hpp>
+#include <Axle/MaterialInspectorControls.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <filesystem>
 #include <functional>
@@ -99,6 +100,7 @@ namespace Axle {
         MaterialComponent m_ActiveMaterialAsset;
         bool m_MaterialAssetLoaded = false;
         CustomShaderPicker m_CustomShaderPicker;
+        MaterialInspectorControls m_MaterialInspectorControls;
 
         std::shared_ptr<AudioSource> m_EditorPreviewAudioSource;
         std::string m_EditorPreviewPath;

@@ -57,6 +57,7 @@ namespace Axle {
         // Invalidate and remove a specific thumbnail from cache so it re-renders
         void InvalidateThumbnail(const std::filesystem::path& path);
         static void Invalidate(const std::filesystem::path& path);
+        static uint64_t GetPreview(const std::filesystem::path& path);
 
         // Update tick for queued thumbnail rendering (called each frame)
         void OnUpdate();

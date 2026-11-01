@@ -105,7 +105,10 @@ namespace Axle {
         }
     )";
 
+    AssetThumbnailManager* AssetThumbnailManager::s_Instance = nullptr;
+
     AssetThumbnailManager::AssetThumbnailManager() {
+        s_Instance = this;
         if (Window::HasActiveContext()) {
             InitRenderer();
         }
@@ -113,6 +116,9 @@ namespace Axle {
 
     AssetThumbnailManager::~AssetThumbnailManager() {
         Clear();
+        if (s_Instance == this) {
+            s_Instance = nullptr;
+        }
         if (Window::HasActiveContext()) {
             if (m_RBO) {
                 glDeleteRenderbuffers(1, &m_RBO);
@@ -122,6 +128,27 @@ namespace Axle {
                 glDeleteFramebuffers(1, &m_FBO);
                 m_FBO = 0;
             }
+        }
+    }
+
+    void AssetThumbnailManager::InvalidateThumbnail(const std::filesystem::path& path) {
+        std::string key = path.lexically_normal().string();
+        auto it = m_ThumbnailCache.find(key);
+        if (it != m_ThumbnailCache.end()) {
+            uint64_t id = it->second;
+            if (id != 0 && m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) {
+                m_ImGuiLayer->UnregisterTextureDescriptor(id);
+            }
+            m_ThumbnailCache.erase(it);
+        }
+        m_RHIThumbnails.erase(key);
+        m_ThumbnailDimensions.erase(key);
+        m_MetaCache.erase(key);
+    }
+
+    void AssetThumbnailManager::Invalidate(const std::filesystem::path& path) {
+        if (s_Instance) {
+            s_Instance->InvalidateThumbnail(path);
         }
     }
 
@@ -279,16 +306,81 @@ namespace Axle {
             return 0;
         }
 
-        // 2. 3D Meshes & Materials (legacy OpenGL FBO preview)
+        // 2. Material Assets (.axleasset): High-Fidelity 3D PBR Sphere Thumbnail (Unreal Engine Parity)
+        // Renders an offscreen Cook-Torrance PBR material sphere with 2x2 MSAA supersampling and studio lighting
+        bool isMaterial = (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material);
+        if (isMaterial) {
+            std::vector<uint8_t> pixels;
+            uint32_t width = 0, height = 0;
+            if (RenderMaterialThumbnail(path, pixels, width, height) && !pixels.empty()) {
+                m_ThumbnailDimensions[key] = glm::vec2((float)width, (float)height);
+
+                bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
+                if (isRHI) {
+                    auto& rhiDevice = RHI::RHIDevice::Get();
+                    if (rhiDevice.IsInitialized()) {
+                        auto rhiTex = std::make_shared<RHI::RHITexture>();
+                        auto desc = RHI::RHITextureDesc::RenderTarget2D(width, height, RHI::RHITextureFormat::RGBA8_UNORM, "MatThumb_" + path.filename().string());
+                        desc.Usage = RHI::RHITextureUsage::ShaderResource;
+                        if (rhiTex->Init(desc)) {
+                            const auto& helper = rhiDevice.GetNRIHelper();
+                            nri::Queue* queue = rhiDevice.GetGraphicsQueue();
+                            if (queue && helper.UploadData) {
+                                nri::TextureSubresourceUploadDesc subres = {};
+                                subres.slices = pixels.data();
+                                subres.sliceNum = 1;
+                                subres.rowPitch = width * 4;
+                                subres.slicePitch = width * height * 4;
+
+                                nri::TextureUploadDesc upDesc = {};
+                                upDesc.subresources = &subres;
+                                upDesc.texture = rhiTex->GetNative();
+                                upDesc.after.access = nri::AccessBits::SHADER_RESOURCE;
+                                upDesc.after.layout = nri::Layout::SHADER_RESOURCE;
+                                upDesc.after.stages = nri::StageBits::ALL;
+                                upDesc.planes = nri::PlaneBits::ALL;
+
+                                helper.UploadData(*queue, &upDesc, 1, nullptr, 0);
+                            }
+
+                            uint64_t nativeHandle = rhiTex->GetNativeSRVHandle();
+                            if (nativeHandle != 0 && m_ImGuiLayer) {
+                                uint64_t gpuHandle = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                                if (gpuHandle != 0) {
+                                    m_ThumbnailCache[key] = gpuHandle;
+                                    m_RHIThumbnails[key] = rhiTex;
+                                    return gpuHandle;
+                                }
+                            }
+                        }
+                    }
+                } else if (Window::HasActiveContext()) {
+                    GLuint texID = 0;
+                    glGenTextures(1, &texID);
+                    glBindTexture(GL_TEXTURE_2D, texID);
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+                    m_ThumbnailCache[key] = (uint64_t)texID;
+                    m_GeneratedTextures.push_back(texID);
+                    return (uint64_t)texID;
+                }
+            }
+            m_ThumbnailCache[key] = 0;
+            return 0;
+        }
+
+        // 3. 3D Meshes & Assemblies (legacy OpenGL FBO preview)
         if (!Window::HasActiveContext()) {
             return 0;
         }
 
-        // 2. Check if path is supported 3D format or Material
-        bool isMaterial = (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material);
+        // Check if path is supported 3D format
         bool isSupported = (ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" || 
-                            ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx" ||
-                            isMaterial);
+                            ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
         if (!isSupported) {
             return 0;
         }
@@ -561,6 +653,171 @@ namespace Axle {
         }
 
         outTexID = texID;
+        return true;
+    }
+
+    bool AssetThumbnailManager::RenderMaterialThumbnail(const std::filesystem::path& path, std::vector<uint8_t>& outPixels, uint32_t& outWidth, uint32_t& outHeight) {
+        if (!std::filesystem::exists(path)) return false;
+
+        MaterialComponent mat;
+        if (!SceneHierarchyPanel::LoadMaterialAsset(path, mat)) {
+            return false;
+        }
+
+        const uint32_t res = m_ThumbnailResolution;
+        outWidth = res;
+        outHeight = res;
+        outPixels.resize(res * res * 4);
+
+        glm::vec3 albedo = glm::vec3(mat.AlbedoColor.r, mat.AlbedoColor.g, mat.AlbedoColor.b);
+        float metallic = std::clamp(mat.Metallic, 0.0f, 1.0f);
+        float roughness = std::clamp(mat.Roughness, 0.04f, 1.0f);
+        float clearcoat = std::clamp(mat.ClearcoatStrength, 0.0f, 1.0f);
+        float clearcoatRoughness = std::clamp(mat.ClearcoatRoughness, 0.01f, 1.0f);
+        glm::vec3 emission = glm::vec3(mat.EmissionColor) * mat.EmissionIntensity;
+
+        int texW = 0, texH = 0, texChannels = 0;
+        stbi_uc* texPixels = nullptr;
+
+        if (mat.UseAlbedoMap && !mat.AlbedoPath.empty()) {
+            auto resolvedTexPath = FileSystem::ResolveAssetPath(mat.AlbedoPath);
+            if (std::filesystem::exists(resolvedTexPath)) {
+                auto buf = FileSystem::ReadBinaryFile(resolvedTexPath);
+                if (!buf.empty()) {
+                    stbi_set_flip_vertically_on_load(false);
+                    texPixels = stbi_load_from_memory(buf.data(), (int)buf.size(), &texW, &texH, &texChannels, 4);
+                }
+            }
+        }
+
+        const glm::vec3 keyDir = glm::normalize(glm::vec3(0.45f, 0.65f, 0.60f));
+        const glm::vec3 fillDir = glm::normalize(glm::vec3(-0.55f, 0.50f, 0.50f));
+
+        const float radiusPixels = 54.0f;
+        const float centerOffset = 64.0f;
+
+        for (uint32_t py = 0; py < res; ++py) {
+            for (uint32_t px = 0; px < res; ++px) {
+                float accR = 0.0f, accG = 0.0f, accB = 0.0f, accA = 0.0f;
+
+                for (int sy = 0; sy < 2; ++sy) {
+                    for (int sx = 0; sx < 2; ++sx) {
+                        float x = (((float)px + 0.25f + (float)sx * 0.5f) - centerOffset) / radiusPixels;
+                        float y = (((float)py + 0.25f + (float)sy * 0.5f) - centerOffset) / radiusPixels;
+                        float r2 = x * x + y * y;
+
+                        if (r2 > 1.0f) {
+                            float bgY = 1.0f - ((float)py / (float)res);
+                            float bg = 0.075f + 0.035f * bgY;
+
+                            float shadowY = ((float)py - 100.0f) / 22.0f;
+                            float shadowX = x * 1.25f;
+                            float shadowR2 = shadowX * shadowX + shadowY * shadowY;
+                            if (shadowR2 < 1.0f && py > 85) {
+                                bg *= (0.40f + 0.60f * std::sqrt(shadowR2));
+                            }
+
+                            accR += bg * 0.95f;
+                            accG += bg;
+                            accB += bg * 1.15f;
+                            accA += 1.0f;
+                            continue;
+                        }
+
+                        float z = std::sqrt(std::max(0.0f, 1.0f - r2));
+                        glm::vec3 N(x, -y, z);
+                        glm::vec3 V(0.0f, 0.0f, 1.0f);
+
+                        float NdotV = std::max(0.001f, N.z);
+
+                        glm::vec3 pixelAlbedo = albedo;
+                        if (texPixels && texW > 0 && texH > 0) {
+                            float u = std::atan2(N.x, N.z) / (2.0f * 3.14159265f) + 0.5f;
+                            float v = std::asin(std::clamp(N.y, -1.0f, 1.0f)) / 3.14159265f + 0.5f;
+                            int tx = std::clamp((int)(u * (float)texW), 0, texW - 1);
+                            int ty = std::clamp((int)(v * (float)texH), 0, texH - 1);
+                            int idx = (ty * texW + tx) * 4;
+                            glm::vec3 texColor = glm::vec3(
+                                std::pow(texPixels[idx + 0] / 255.0f, 2.2f),
+                                std::pow(texPixels[idx + 1] / 255.0f, 2.2f),
+                                std::pow(texPixels[idx + 2] / 255.0f, 2.2f)
+                            );
+                            pixelAlbedo *= texColor;
+                        }
+
+                        glm::vec3 F0 = glm::mix(glm::vec3(0.04f), pixelAlbedo, metallic);
+
+                        float NdotL = glm::dot(N, keyDir);
+                        float NdotL_diff = std::clamp((NdotL + 0.22f) / 1.488f, 0.0f, 1.0f);
+                        float NdotL_spec = std::max(0.0f, NdotL);
+
+                        glm::vec3 H = glm::normalize(V + keyDir);
+                        float NdotH = std::max(0.0f, glm::dot(N, H));
+                        float VdotH = std::max(0.0f, glm::dot(V, H));
+
+                        float a2 = roughness * roughness * roughness * roughness;
+                        float dDenom = (NdotH * NdotH * (a2 - 1.0f) + 1.0f);
+                        float ndf = a2 / (3.14159265f * dDenom * dDenom + 1e-5f);
+
+                        float k = (roughness + 1.0f) * (roughness + 1.0f) / 8.0f;
+                        float g = (NdotV / (NdotV * (1.0f - k) + k)) * (NdotL_spec / (NdotL_spec * (1.0f - k) + k + 1e-4f));
+
+                        glm::vec3 F = F0 + (glm::vec3(1.0f) - F0) * std::pow(1.0f - VdotH, 5.0f);
+                        glm::vec3 spec = (ndf * g * F) / (4.0f * NdotV * std::max(NdotL_spec, 0.001f) + 1e-4f);
+
+                        glm::vec3 kD = (glm::vec3(1.0f) - F) * (1.0f - metallic);
+                        glm::vec3 cKey = (kD * pixelAlbedo / 3.14159265f * NdotL_diff + spec * NdotL_spec) * 2.4f;
+
+                        float NdotL_fill = glm::dot(N, fillDir);
+                        float NdotL_fill_diff = std::clamp((NdotL_fill + 0.25f) / 1.5625f, 0.0f, 1.0f);
+                        glm::vec3 cFill = (1.0f - metallic) * pixelAlbedo / 3.14159265f * NdotL_fill_diff * 1.0f * glm::vec3(0.88f, 0.93f, 1.0f);
+
+                        float upW = std::clamp(N.y * 0.5f + 0.5f, 0.0f, 1.0f);
+                        glm::vec3 ambSky = glm::mix(glm::vec3(0.68f, 0.70f, 0.74f), glm::vec3(0.96f, 0.98f, 1.00f), upW);
+                        glm::vec3 ambient = ambSky * pixelAlbedo * (1.0f - metallic) * 0.75f + F0 * (0.2f + 0.7f * upW) * (1.0f - roughness * 0.3f);
+
+                        float rim = std::pow(1.0f - NdotV, 4.0f) * 0.20f;
+                        glm::vec3 cRim = glm::vec3(0.92f, 0.95f, 1.0f) * rim;
+
+                        glm::vec3 cClearcoat(0.0f);
+                        if (clearcoat > 0.001f) {
+                            float ccRough2 = clearcoatRoughness * clearcoatRoughness;
+                            float ccA2 = ccRough2 * ccRough2;
+                            float ccDenom = (NdotH * NdotH * (ccA2 - 1.0f) + 1.0f);
+                            float ccNDF = ccA2 / (3.14159265f * ccDenom * ccDenom + 1e-5f);
+                            float ccK = (clearcoatRoughness + 1.0f) * (clearcoatRoughness + 1.0f) / 8.0f;
+                            float ccG = (NdotV / (NdotV * (1.0f - ccK) + ccK)) * (NdotL_spec / (NdotL_spec * (1.0f - ccK) + ccK + 1e-4f));
+                            float ccF = 0.04f + 0.96f * std::pow(1.0f - VdotH, 5.0f);
+                            float ccSpec = (ccNDF * ccG * ccF) / (4.0f * NdotV * std::max(NdotL_spec, 0.001f) + 1e-4f);
+                            cClearcoat = glm::vec3(ccSpec * NdotL_spec * clearcoat * 0.5f);
+                        }
+
+                        glm::vec3 total = cKey + cFill + ambient + cRim + cClearcoat + emission;
+
+                        const float a = 2.51f, b = 0.03f, c = 2.43f, d = 0.59f, e = 0.14f;
+                        glm::vec3 tm = (total * (a * total + b)) / (total * (c * total + d) + e);
+
+                        glm::vec3 sRGB = glm::pow(glm::clamp(tm, glm::vec3(0.0f), glm::vec3(1.0f)), glm::vec3(1.0f / 2.2f));
+
+                        accR += sRGB.r;
+                        accG += sRGB.g;
+                        accB += sRGB.b;
+                        accA += 1.0f;
+                    }
+                }
+
+                size_t pixelIdx = (py * res + px) * 4;
+                outPixels[pixelIdx + 0] = (uint8_t)std::clamp((int)std::round((accR / 4.0f) * 255.0f), 0, 255);
+                outPixels[pixelIdx + 1] = (uint8_t)std::clamp((int)std::round((accG / 4.0f) * 255.0f), 0, 255);
+                outPixels[pixelIdx + 2] = (uint8_t)std::clamp((int)std::round((accB / 4.0f) * 255.0f), 0, 255);
+                outPixels[pixelIdx + 3] = (uint8_t)std::clamp((int)std::round((accA / 4.0f) * 255.0f), 0, 255);
+            }
+        }
+
+        if (texPixels) {
+            stbi_image_free(texPixels);
+        }
+
         return true;
     }
 

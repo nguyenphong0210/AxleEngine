@@ -1461,7 +1461,10 @@ namespace Axle {
                         ImGui::BeginTooltip();
 
                         if (thumbTex != 0) {
-                            ImGui::Image((ImTextureID)(intptr_t)thumbTex, ImVec2(140.0f, 140.0f), ImVec2(0, 1), ImVec2(1, 0));
+                            bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
+                            ImVec2 tipUV0 = isRHI ? ImVec2(0.0f, 0.0f) : ImVec2(0.0f, 1.0f);
+                            ImVec2 tipUV1 = isRHI ? ImVec2(1.0f, 1.0f) : ImVec2(1.0f, 0.0f);
+                            ImGui::Image((ImTextureID)(intptr_t)thumbTex, ImVec2(140.0f, 140.0f), tipUV0, tipUV1);
                             ImGui::Spacing();
                         }
 

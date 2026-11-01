@@ -1,5 +1,6 @@
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
+#include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/FileSystem.hpp>
@@ -1194,6 +1195,7 @@ namespace Axle {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.35f, 0.58f, 1.0f));
         if (ImGui::Button("Save Material Asset", ImVec2(availW, 26.0f)) || changed) {
             SaveMaterialAsset(path, m_ActiveMaterialAsset);
+            AssetThumbnailManager::Invalidate(path);
             AssetManager::ReloadMaterial(path);
         }
         ImGui::PopStyleColor(3);

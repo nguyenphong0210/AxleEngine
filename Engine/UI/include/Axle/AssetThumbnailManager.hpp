@@ -54,14 +54,20 @@ namespace Axle {
         // Clear all thumbnail textures and caches
         void Clear();
 
+        // Invalidate and remove a specific thumbnail from cache so it re-renders
+        void InvalidateThumbnail(const std::filesystem::path& path);
+        static void Invalidate(const std::filesystem::path& path);
+
         // Update tick for queued thumbnail rendering (called each frame)
         void OnUpdate();
 
     private:
         void InitRenderer();
         bool RenderThumbnail(const std::filesystem::path& path, u32& outTexID, AssetCachedMeta& outMeta);
+        bool RenderMaterialThumbnail(const std::filesystem::path& path, std::vector<uint8_t>& outPixels, uint32_t& outWidth, uint32_t& outHeight);
 
     private:
+        static AssetThumbnailManager* s_Instance;
         ImGuiLayer* m_ImGuiLayer = nullptr;
         u32 m_FBO = 0;
         u32 m_RBO = 0;

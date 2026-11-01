@@ -43,6 +43,7 @@ namespace Axle {
         static std::pair<std::filesystem::path, std::filesystem::path> CreateNewClass(const std::filesystem::path& parentDir, const std::string& baseName = "NewClass");
         static std::filesystem::path CreateNewPhysicsMaterial(const std::filesystem::path& parentDir, const std::string& baseName = "New_PhysicsMaterial");
         static std::filesystem::path CreateNewTerrain(const std::filesystem::path& parentDir, const std::string& baseName = "New_Terrain");
+        static std::filesystem::path CreateNewHLSLShader(const std::filesystem::path& parentDir, const std::string& baseName = "New_CustomShader");
 
         void OnImGuiRender(bool* p_open = nullptr);
         void SetImGuiLayer(ImGuiLayer* layer);
@@ -78,8 +79,10 @@ namespace Axle {
         std::function<void(const std::filesystem::path&)> m_OnSelectAssetCallback;
         std::function<void(uint32_t, const std::filesystem::path&)> m_OnPackageEntityCallback;
         std::function<void(const std::filesystem::path&)> m_OnOpenUICanvasCallback;
+        std::function<void(const std::filesystem::path&)> m_OnOpenHLSLStudioCallback;
     public:
         void SetOpenUICanvasCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenUICanvasCallback = callback; }
+        void SetOpenHLSLStudioCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenHLSLStudioCallback = callback; }
     };
 
 }

@@ -632,7 +632,11 @@ namespace Axle {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.23f, 0.28f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.33f, 0.40f, 1.0f));
             if (ImGui::Button("</> Edit HLSL", ImVec2(btnW, 0.0f))) {
-                AXLE_INFO("Navigated to HLSL Shader Studio for 'Engine/Resources/Shaders/ForwardPBR.hlsl'");
+                if (m_OnOpenHLSLStudioCallback) {
+                    m_OnOpenHLSLStudioCallback("Engine/Resources/Shaders/ForwardPBR.hlsl");
+                } else {
+                    AXLE_INFO("Navigated to HLSL Shader Studio for 'Engine/Resources/Shaders/ForwardPBR.hlsl'");
+                }
             }
             ImGui::PopStyleColor(2);
             if (ImGui::IsItemHovered()) {

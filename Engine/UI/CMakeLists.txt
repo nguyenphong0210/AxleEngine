@@ -46,6 +46,7 @@ add_library(AxleUI STATIC
     src/UIPalettePanel.cpp
     src/UICanvasImGuiRenderer.cpp
     src/UICanvasDesignerPanel.cpp
+    src/HLSLStudioPanel.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_draw.cpp
     ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/imgui_tables.cpp

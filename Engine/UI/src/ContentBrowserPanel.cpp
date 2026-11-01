@@ -14,6 +14,7 @@
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/PhysicsMaterial.hpp>
 #include <Axle/TerrainAsset.hpp>
+#include <Axle/HLSLStudioPanel.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
@@ -764,6 +765,22 @@ namespace Axle {
         return newPath;
     }
 
+    std::filesystem::path ContentBrowserPanel::CreateNewHLSLShader(const std::filesystem::path& parentDir, const std::string& baseName) {
+        std::filesystem::path newPath = parentDir / (baseName + ".hlsl");
+        int counter = 1;
+        while (std::filesystem::exists(newPath)) {
+            newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".hlsl");
+        }
+        std::filesystem::create_directories(newPath.parent_path());
+        std::ofstream fout(newPath);
+        if (fout.is_open()) {
+            fout << HLSLStudioPanel::GetDefaultPBRTemplate(newPath.stem().string());
+            fout.close();
+            AssetManager::GetOrCreateMetadata(newPath);
+        }
+        return newPath;
+    }
+
     void ContentBrowserPanel::SetStatusNotification(const std::string& message, float duration) {
         m_StatusNotificationMessage = message;
         m_StatusNotificationTimer = duration;
@@ -847,6 +864,13 @@ namespace Axle {
             }
             if (ImGui::MenuItem("Terrain Asset (.axleasset)")) {
                 CreateNewTerrain(m_CurrentDirectory);
+            }
+            if (ImGui::MenuItem("HLSL Shader (.hlsl)")) {
+                auto p = CreateNewHLSLShader(m_CurrentDirectory);
+                SetStatusNotification("Created HLSL Shader: " + p.filename().string());
+                if (m_OnOpenHLSLStudioCallback) {
+                    m_OnOpenHLSLStudioCallback(p);
+                }
             }
             if (ImGui::MenuItem("Assembly Prefab (.axleasset)")) {
                 std::filesystem::path newAsmPath = m_CurrentDirectory / "New_Assembly.axleasset";
@@ -1115,6 +1139,9 @@ namespace Axle {
                             } else if (ext == ".axleproj" && m_OnOpenProjectCallback) {
                                 m_OnOpenProjectCallback(path);
                                 SetStatusNotification("Loaded project: " + path.filename().string());
+                            } else if (ext == ".hlsl" && m_OnOpenHLSLStudioCallback) {
+                                m_OnOpenHLSLStudioCallback(path);
+                                SetStatusNotification("Opened HLSL Shader Studio: " + path.filename().string());
                             } else if ((ext == ".axleui" || ext == ".axleasset") && m_OnOpenUICanvasCallback) {
                                 if (ext == ".axleui" || AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::Canvas) {
                                     m_OnOpenUICanvasCallback(path);
@@ -1149,6 +1176,13 @@ namespace Axle {
                         }
                         ImGui::Separator();
 
+                        if (ext == ".hlsl") {
+                            if (ImGui::MenuItem("Open in HLSL Shader Studio")) {
+                                if (m_OnOpenHLSLStudioCallback) {
+                                    m_OnOpenHLSLStudioCallback(path);
+                                }
+                            }
+                        }
                         if (ext == ".axle") {
                             if (ImGui::MenuItem("Open in Assembly Editor")) {
                                 if (m_OnOpenAssemblyCallback) {
@@ -1567,6 +1601,14 @@ namespace Axle {
                     if (ImGui::MenuItem("Terrain Asset (.axleasset)")) {
                         auto p = CreateNewTerrain(m_CurrentDirectory);
                         SetStatusNotification("Created Terrain Asset: " + p.filename().string());
+                        RefreshThumbnails();
+                    }
+                    if (ImGui::MenuItem("HLSL Shader (.hlsl)")) {
+                        auto p = CreateNewHLSLShader(m_CurrentDirectory);
+                        SetStatusNotification("Created HLSL Shader: " + p.filename().string());
+                        if (m_OnOpenHLSLStudioCallback) {
+                            m_OnOpenHLSLStudioCallback(p);
+                        }
                         RefreshThumbnails();
                     }
                     if (ImGui::MenuItem("Assembly (.axle)")) {

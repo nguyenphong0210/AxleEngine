@@ -16,6 +16,7 @@
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/UIPalettePanel.hpp>
 #include <Axle/UICanvasDesignerPanel.hpp>
+#include <Axle/HLSLStudioPanel.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
@@ -177,6 +178,7 @@ private:
     Axle::DebugPanel m_DebugPanel;
     Axle::UIPalettePanel m_UIPalettePanel;
     Axle::UICanvasDesignerPanel m_UICanvasDesignerPanel;
+    Axle::HLSLStudioPanel m_HLSLStudioPanel;
 
     // Panel Visibility Flags
     bool m_ShowSceneHierarchy = true;
@@ -185,6 +187,7 @@ private:
     bool m_ShowContentBrowser = true;
     bool m_ShowAssemblyEditor = false;
     bool m_ShowVFXEditor = false;
+    bool m_ShowHLSLStudio = false;
     bool m_ShowUIPalette = true;
     bool m_ShowUICanvasDesigner = false;
     bool m_ShowTelemetry = false;

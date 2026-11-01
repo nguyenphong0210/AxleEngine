@@ -243,6 +243,12 @@ void EditorLayer::OnAttach() {
         m_AssemblyEditorPanel.SetAssembly(path);
         m_ShowAssemblyEditor = true;
     });
+    m_ContentBrowserPanel.SetOpenHLSLStudioCallback([this](const std::filesystem::path& path) {
+        m_HLSLStudioPanel.OpenFile(path);
+        m_ShowHLSLStudio = true;
+        m_HLSLStudioPanel.SetOpen(true);
+        m_HLSLStudioPanel.Focus();
+    });
     m_ContentBrowserPanel.SetInstantiateAssemblyCallback([this](const std::filesystem::path& path) {
         auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 0.0f, 0.0f), &m_SerializerContext);
         if (ent) {
@@ -338,6 +344,12 @@ void EditorLayer::OnAttach() {
     m_SceneHierarchyPanel.SetOpenAssemblyEditorCallback([this](const std::filesystem::path& path) {
         m_AssemblyEditorPanel.SetAssembly(path);
         m_ShowAssemblyEditor = true;
+    });
+    m_SceneHierarchyPanel.SetOpenHLSLStudioCallback([this](const std::filesystem::path& path) {
+        m_HLSLStudioPanel.OpenFile(path);
+        m_ShowHLSLStudio = true;
+        m_HLSLStudioPanel.SetOpen(true);
+        m_HLSLStudioPanel.Focus();
     });
 
     // Register Plugin Component Drawers (Phase 29A: Spline Track & Phase 29B: Terrain Plugin)
@@ -2211,6 +2223,7 @@ void EditorLayer::OnImGuiRender() {
             ImGui::MenuItem("Visual FX (VFX) Editor", nullptr, &m_ShowVFXEditor);
             ImGui::MenuItem("UI Library", nullptr, &m_ShowUIPalette);
             ImGui::MenuItem("UI Canvas Designer", nullptr, &m_ShowUICanvasDesigner);
+            ImGui::MenuItem("HLSL Shader Studio", nullptr, &m_ShowHLSLStudio);
             ImGui::MenuItem("Performance & Debug", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             if (m_RHIViewport && m_RHIViewport->IsValid()) {
@@ -3305,6 +3318,11 @@ void EditorLayer::OnImGuiRender() {
     // 10c. UI Canvas Designer Panel (Phase 34 Step 7.5 - Dedicated Visual .axleui Designer)
     if (m_ShowUICanvasDesigner) {
         m_UICanvasDesignerPanel.OnImGuiRender(&m_ShowUICanvasDesigner);
+    }
+
+    // 10d. HLSL Shader Studio Panel (Phase 38.1 Step 4)
+    if (m_ShowHLSLStudio) {
+        m_HLSLStudioPanel.OnImGuiRender(&m_ShowHLSLStudio);
     }
 
     // 11. Performance & Telemetry Panel

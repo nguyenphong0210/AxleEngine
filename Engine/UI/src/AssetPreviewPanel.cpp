@@ -197,25 +197,50 @@ namespace Axle {
                 m_CurrentPackage.HalfExtent = glm::vec3(0.5f);
                 m_CurrentPackage.Success = true;
 
-                AxlePackagePart spherePart;
-                spherePart.Name = "MaterialSphere";
-                spherePart.LoadedMesh.Success = true;
-                spherePart.LoadedMesh.VAO = m_SerializerContext ? m_SerializerContext->SphereMesh : m_FallbackMesh;
-                if (!spherePart.LoadedMesh.VAO) spherePart.LoadedMesh.VAO = PrimitiveMesh::CreateSphere(24, 32);
-                spherePart.LoadedMesh.SourceData.ColorPrimary = mat.AlbedoColor;
-                spherePart.LoadedMesh.SourceData.ColorSecondary = mat.AlbedoColor * 0.85f;
-                spherePart.LoadedMesh.SourceData.PatternMode = 2; // Spherical PBR
-                spherePart.LoadedMesh.SourceData.TileScale = 1.0f;
-                spherePart.LoadedMesh.SourceData.Vertices = { glm::vec3(-0.5f), glm::vec3(0.5f) };
-                spherePart.LoadedMesh.SourceData.Indices = { 0, 1, 0 };
-                m_CurrentPackage.Parts.push_back(spherePart);
+                AxlePackagePart previewPart;
+                previewPart.LoadedMesh.Success = true;
+
+                switch (m_PreviewMeshType) {
+                    case PreviewMeshType::Cube:
+                        previewPart.Name = "MaterialCube";
+                        previewPart.LoadedMesh.VAO = PrimitiveMesh::CreateCube();
+                        m_TotalVertices = 36;
+                        m_TotalTriangles = 12;
+                        break;
+                    case PreviewMeshType::Cylinder:
+                        previewPart.Name = "MaterialCylinder";
+                        previewPart.LoadedMesh.VAO = PrimitiveMesh::CreateCylinder(32);
+                        m_TotalVertices = 192;
+                        m_TotalTriangles = 96;
+                        break;
+                    case PreviewMeshType::Plane:
+                        previewPart.Name = "MaterialPlane";
+                        previewPart.LoadedMesh.VAO = PrimitiveMesh::CreatePlane(1, 1);
+                        m_TotalVertices = 4;
+                        m_TotalTriangles = 2;
+                        break;
+                    case PreviewMeshType::Sphere:
+                    default:
+                        previewPart.Name = "MaterialSphere";
+                        previewPart.LoadedMesh.VAO = (m_SerializerContext && m_SerializerContext->SphereMesh) ? m_SerializerContext->SphereMesh : m_FallbackMesh;
+                        if (!previewPart.LoadedMesh.VAO) previewPart.LoadedMesh.VAO = PrimitiveMesh::CreateSphere(24, 32);
+                        m_TotalVertices = 768;
+                        m_TotalTriangles = 512;
+                        break;
+                }
+
+                previewPart.LoadedMesh.SourceData.ColorPrimary = mat.AlbedoColor;
+                previewPart.LoadedMesh.SourceData.ColorSecondary = mat.AlbedoColor * 0.85f;
+                previewPart.LoadedMesh.SourceData.PatternMode = 2; // Spherical PBR
+                previewPart.LoadedMesh.SourceData.TileScale = 1.0f;
+                previewPart.LoadedMesh.SourceData.Vertices = { glm::vec3(-0.5f), glm::vec3(0.5f) };
+                previewPart.LoadedMesh.SourceData.Indices = { 0, 1, 0 };
+                m_CurrentPackage.Parts.push_back(previewPart);
 
                 m_HasAsset = true;
                 m_Center = glm::vec3(0.0f);
                 m_Size = glm::vec3(1.0f);
                 m_MaxDim = 1.0f;
-                m_TotalVertices = 768;
-                m_TotalTriangles = 512;
                 m_Pitch = 15.0f;
                 m_Yaw = 30.0f;
                 m_Zoom = 1.0f;
@@ -576,6 +601,30 @@ namespace Axle {
     void AssetPreviewPanel::RenderPreviewViewport() {
         if (!m_HasAsset) return;
 
+        // 0. Primitive Mesh Selector (for Material assets)
+        bool isMaterial = (!m_CurrentAssetPath.empty() && 
+                           m_CurrentAssetPath.extension() == ".axleasset" && 
+                           AssetDSL::PeekAssetKindFromFile(m_CurrentAssetPath.string()) == AssetKind::Material);
+        if (isMaterial) {
+            float btnW = (ImGui::GetContentRegionAvail().x - 18.0f) / 4.0f;
+            auto DrawMeshBtn = [&](const char* label, PreviewMeshType type) {
+                bool isSel = (m_PreviewMeshType == type);
+                if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.50f, 0.85f, 0.90f));
+                if (ImGui::Button(label, ImVec2(btnW, 24.0f))) {
+                    SetPreviewMeshType(type);
+                }
+                if (isSel) ImGui::PopStyleColor();
+            };
+            DrawMeshBtn("Sphere", PreviewMeshType::Sphere);
+            ImGui::SameLine();
+            DrawMeshBtn("Cube", PreviewMeshType::Cube);
+            ImGui::SameLine();
+            DrawMeshBtn("Cylinder", PreviewMeshType::Cylinder);
+            ImGui::SameLine();
+            DrawMeshBtn("Plane", PreviewMeshType::Plane);
+            ImGui::Spacing();
+        }
+
         // 1. Controls Toolbar
         {
             if (ImGui::Button(m_TurntableActive ? "Pause Orbit" : "Play Orbit")) {
@@ -646,7 +695,7 @@ namespace Axle {
             }
 
             // Left drag orbit
-            if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                 ImVec2 delta = ImGui::GetIO().MouseDelta;
                 m_Yaw -= delta.x * 0.75f;
                 m_Pitch += delta.y * 0.75f;
@@ -654,7 +703,7 @@ namespace Axle {
             }
 
             // Middle drag pan
-            if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
                 ImVec2 delta = ImGui::GetIO().MouseDelta;
                 m_PanOffset.x -= delta.x * 0.005f * m_MaxDim;
                 m_PanOffset.y += delta.y * 0.005f * m_MaxDim;

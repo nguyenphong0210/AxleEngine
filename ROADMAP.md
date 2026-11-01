@@ -566,10 +566,10 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Step 101 tests verifying: DSL round-trip serialization of new surface properties, Cutout alpha clipping math, Two-sided culling flags, RHI pipeline blend mode configs, and headless Material Studio operations.
 
 - [ ] **Phase 38.1: Unity & Godot Parity Phase 1 - Embedded 3D Material Preview & HLSL Studio (`Engine/UI`, `Engine/RHI`, `Editor`)**
-  - [ ] **Step 1 - Embedded 3D Interactive Material Preview Viewport**:
-    - [ ] Embed live 3D preview viewport directly inside Material Inspector via `AssetPreviewPanel`.
-    - [ ] Interactive camera controls: Left-drag Orbit 360°, Scroll-wheel Zoom in/out, Middle-drag Pan.
-    - [ ] Seamless mesh switching: Sphere, Cube, Cylinder, Plane.
+  - [x] **Step 1 - Embedded 3D Interactive Material Preview Viewport**:
+    - [x] Embed live 3D preview viewport directly inside Material Inspector via `AssetPreviewPanel`.
+    - [x] Interactive camera controls: Left-drag Orbit 360°, Scroll-wheel Zoom in/out, Middle-drag Pan.
+    - [x] Seamless mesh switching: Sphere, Cube, Cylinder, Plane.
   - [ ] **Step 2 - Modern Unity-Grade Color Swatch & Compact Texture Slots**:
     - [ ] Replace 4-element numeric RGBA boxes with compact Color Swatch popup picker (`ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar`).
     - [ ] Implement square compact texture slot UI (`24x24 px` preview thumbnail, asset drag-drop target, clear button `[X]`).

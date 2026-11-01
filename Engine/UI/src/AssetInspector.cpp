@@ -188,8 +188,10 @@ namespace Axle {
                     m_AssetPreviewPanel->SetAsset(path);
                 }
                 if (m_AssetPreviewPanel->HasAsset()) {
-                    m_AssetPreviewPanel->RenderPreviewViewport();
-                    ImGui::Spacing();
+                    if (ImGui::CollapsingHeader("Material Preview (3D Viewport)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        m_AssetPreviewPanel->RenderPreviewViewport();
+                        ImGui::Spacing();
+                    }
                     ImGui::Separator();
                     ImGui::Spacing();
                 }
@@ -621,29 +623,6 @@ namespace Axle {
             static int currentShader = 0;
             ImGui::SetNextItemWidth(-1.0f);
             ImGui::Combo("##MaterialShaderCombo", &currentShader, shaderOptions, IM_ARRAYSIZE(shaderOptions));
-            ImGui::Spacing();
-        }
-
-        // 0. 3D Preview Mesh Selector (Sphere, Cube, Cylinder, Plane)
-        if (ImGui::CollapsingHeader("Preview Mesh Selector", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::TextDisabled("Preview Model:");
-            PreviewMeshType activeType = m_AssetPreviewPanel ? m_AssetPreviewPanel->GetPreviewMeshType() : PreviewMeshType::Sphere;
-            float btnW = (ImGui::GetContentRegionAvail().x - 18.0f) / 4.0f;
-            auto DrawMeshBtn = [&](const char* label, PreviewMeshType type) {
-                bool isSel = (activeType == type);
-                if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.50f, 0.85f, 0.90f));
-                if (ImGui::Button(label, ImVec2(btnW, 24.0f))) {
-                    if (m_AssetPreviewPanel) m_AssetPreviewPanel->SetPreviewMeshType(type);
-                }
-                if (isSel) ImGui::PopStyleColor();
-            };
-            DrawMeshBtn("Sphere", PreviewMeshType::Sphere);
-            ImGui::SameLine();
-            DrawMeshBtn("Cube", PreviewMeshType::Cube);
-            ImGui::SameLine();
-            DrawMeshBtn("Cylinder", PreviewMeshType::Cylinder);
-            ImGui::SameLine();
-            DrawMeshBtn("Plane", PreviewMeshType::Plane);
             ImGui::Spacing();
         }
 

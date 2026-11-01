@@ -586,13 +586,13 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Step 104 tests verifying: Material preview offscreen render targets, orbit camera math, advanced options serialization, and runtime HLSL compilation hot-reload.
 
 - [ ] **Phase 38.2: Unity & Godot Parity Phase 2 - Dynamic Shader Reflection & Advanced Shading (`Engine/RHI`, `Engine/Asset`, `Engine/UI`)**
-  - [ ] **Step 1 - Dynamic Shader Property Reflection via DXC**:
-    - [ ] Extract uniform reflection metadata from DXC bytecode (`IDxcContainerReflection` / `ID3D12ShaderReflection`).
-    - [ ] Parse annotation comments (e.g. `// [Range(0, 1)] float Dissolve;`) for UI bounds and formatting.
-    - [ ] Dynamically generate Inspector controls (sliders, swatches, texture slots) without hardcoded C++ fields.
-  - [ ] **Step 2 - Texture Channel Packing (Packed ORM Map)**:
-    - [ ] Add `TextureMode` switch: `Separate Maps` vs `Packed ORM Map (R: Occlusion, G: Roughness, B: Metallic)`.
-    - [ ] Update `ForwardPBR.hlsl` to sample ORM map from a single texture sampler.
+  - [x] **Step 1 - Dynamic Shader Property Reflection via DXC**:
+    - [x] Extract uniform reflection metadata from DXC bytecode (`IDxcContainerReflection` / `ID3D12ShaderReflection`).
+    - [x] Parse annotation comments (e.g. `// [Range(0, 1)] float Dissolve;`) for UI bounds and formatting.
+    - [x] Dynamically generate Inspector controls (sliders, swatches, texture slots) without hardcoded C++ fields.
+  - [x] **Step 2 - Texture Channel Packing (Packed ORM Map)**:
+    - [x] Add `TextureMode` switch: `Separate Maps` vs `Packed ORM Map (R: Occlusion, G: Roughness, B: Metallic)`.
+    - [x] Update `ForwardPBR.hlsl` to sample ORM map from a single texture sampler.
   - [ ] **Step 3 - Automotive & Advanced PBR Shading**:
     - [ ] Implement two-layer `Clearcoat` (Strength & Roughness) for automotive clear lacquer finish.
     - [ ] Implement `Anisotropy` shading for brushed alloy wheel rims and carbon fiber weaves.

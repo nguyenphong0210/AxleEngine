@@ -27,6 +27,20 @@ namespace Axle {
         const std::filesystem::path& GetFilePath() const { return m_FilePath; }
         void SetFilePath(const std::filesystem::path& path) { m_FilePath = path; }
 
+        // Texture Mode (Separate vs Packed ORM)
+        TextureMode GetTextureMode() const { return m_TextureMode; }
+        TextureMode& GetTextureModeRef() { return m_TextureMode; }
+        void SetTextureMode(TextureMode mode) { m_TextureMode = mode; }
+
+        const std::string& GetORMPath() const { return m_ORMPath; }
+        const std::shared_ptr<Texture2D>& GetORMMap() const { return m_ORMMap; }
+        bool UseORMMap() const { return m_UseORMMap && (m_ORMMap != nullptr); }
+        bool IsORMMapEnabled() const { return m_UseORMMap; }
+        void SetUseORMMap(bool use) { m_UseORMMap = use; }
+        void SetORMTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path = "");
+        void SetORMPath(const std::string& path);
+        void ClearORMTexture();
+
         // Surface Options (Unity / Unreal Standard)
         SurfaceType GetSurfaceType() const { return m_SurfaceType; }
         void SetSurfaceType(SurfaceType type) {
@@ -219,6 +233,11 @@ namespace Axle {
         float m_EmissionIntensity = 0.0f;
         glm::vec2 m_UVScale{ 1.0f, 1.0f };
         glm::vec2 m_UVOffset{ 0.0f, 0.0f };
+
+        TextureMode m_TextureMode = TextureMode::SeparateMaps;
+        std::string m_ORMPath;
+        std::shared_ptr<Texture2D> m_ORMMap;
+        bool m_UseORMMap = false;
 
         std::string m_AlbedoPath;
         std::shared_ptr<Texture2D> m_AlbedoMap;

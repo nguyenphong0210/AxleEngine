@@ -123,6 +123,12 @@ namespace Axle {
         bool EnableEnvironmentReflections = true;
         int RenderQueue = 2000;
 
+        // Texture Mode (Separate Maps vs Packed ORM)
+        Axle::TextureMode TextureMode = Axle::TextureMode::SeparateMaps;
+        std::string ORMPath;
+        std::shared_ptr<Texture2D> ORMMap;
+        bool UseORMMap = false;
+
         // Local instance properties (active when MaterialHandle == 0 or when editing local values)
         std::string AlbedoPath;
         std::shared_ptr<Texture2D> AlbedoMap;
@@ -178,6 +184,10 @@ namespace Axle {
 
         void SyncFromAsset() {
             if (!MaterialAsset) return;
+            TextureMode = MaterialAsset->GetTextureMode();
+            ORMPath = MaterialAsset->GetORMPath();
+            ORMMap = MaterialAsset->GetORMMap();
+            UseORMMap = MaterialAsset->IsORMMapEnabled();
             AlbedoColor = MaterialAsset->GetAlbedoColor();
             AlbedoPath = MaterialAsset->GetAlbedoPath();
             AlbedoMap = MaterialAsset->GetAlbedoMap();
@@ -228,6 +238,8 @@ namespace Axle {
                 std::string name = MaterialAsset ? MaterialAsset->GetName() : "Material";
                 RHIMaterialAsset = std::make_shared<RHI::RHIMaterial>(name);
             }
+            RHIMaterialAsset->SetTextureMode(TextureMode);
+            RHIMaterialAsset->SetORMPath(ORMPath);
             RHIMaterialAsset->SetSurfaceType(SurfaceType);
             RHIMaterialAsset->SetCullMode(CullMode);
             RHIMaterialAsset->SetAlphaCutoff(AlphaCutoff);
@@ -250,6 +262,9 @@ namespace Axle {
 
         void SyncToAsset() {
             if (!MaterialAsset) return;
+            MaterialAsset->SetTextureMode(TextureMode);
+            MaterialAsset->SetORMTexture(ORMMap, ORMPath);
+            MaterialAsset->SetUseORMMap(UseORMMap);
             MaterialAsset->SetSurfaceType(SurfaceType);
             MaterialAsset->SetCullMode(CullMode);
             MaterialAsset->SetAlphaCutoff(AlphaCutoff);
@@ -549,6 +564,19 @@ namespace Axle {
             CullMode = CullMode::None;
             AlphaCutoff = 0.5f;
             DepthWrite = true;
+            if (HasAsset()) SyncToAsset();
+        }
+
+        void SetORMMap(const std::string& path) {
+            ORMPath = path;
+            if (!path.empty()) {
+                auto resolved = FileSystem::ResolveAssetPath(path);
+                ORMMap = Texture2D::Create(resolved.string());
+                UseORMMap = (ORMMap && ORMMap->IsLoaded());
+            } else {
+                ORMMap = nullptr;
+                UseORMMap = false;
+            }
             if (HasAsset()) SyncToAsset();
         }
 

@@ -25,7 +25,8 @@ namespace Axle::RHI {
         SolidColor        = 3, // Solid / local Cook-Torrance GGX PBR
         MetallicRoughness = 3, // Alias for SolidColor PBR
         TerrainSplat      = 4, // Vertex Color Splatting (Heightfield)
-        TexturedPBR       = 5  // Full 6-slot textured PBR (Albedo, Normal, Rough, Metal, AO, Emissive)
+        TexturedPBR       = 5, // Full 6-slot textured PBR (Albedo, Normal, Rough, Metal, AO, Emissive)
+        PackedORMTexturedPBR = 6 // Channel-packed ORM PBR (R: AO, G: Roughness, B: Metallic)
     };
 
     // Standard 6 PBR Texture Map Slots
@@ -54,6 +55,8 @@ namespace Axle::RHI {
         float EmissiveIntensity = 0.0f;
         glm::vec2 UVScale{ 1.0f, 1.0f };
         glm::vec2 UVOffset{ 0.0f, 0.0f };
+        Axle::TextureMode TextureMode = Axle::TextureMode::SeparateMaps;
+        std::string ORMPath;
         RHIShadingModel ShadingModel = RHIShadingModel::MetallicRoughness;
 
         // Optional texture map source paths
@@ -73,6 +76,10 @@ namespace Axle::RHI {
 
         // Identification & Properties
         const std::string& GetName() const { return m_Desc.Name; }
+        Axle::TextureMode GetTextureMode() const { return m_Desc.TextureMode; }
+        void SetTextureMode(Axle::TextureMode mode) { m_Desc.TextureMode = mode; }
+        const std::string& GetORMPath() const { return m_Desc.ORMPath; }
+        void SetORMPath(const std::string& path) { m_Desc.ORMPath = path; }
         void SetName(const std::string& name) { m_Desc.Name = name; }
 
         Axle::SurfaceType GetSurfaceType() const { return m_Desc.SurfaceType; }

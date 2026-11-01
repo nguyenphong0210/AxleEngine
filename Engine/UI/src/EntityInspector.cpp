@@ -747,6 +747,18 @@ namespace Axle {
                     ImGui::NextColumn();
                 };
 
+                // Texture Mode Selection (Separate Maps vs Packed ORM)
+                const char* texModeItems[] = { "Separate Maps", "Packed ORM (R:AO, G:Rough, B:Metal)" };
+                int curTexMode = (mat.TextureMode == Axle::TextureMode::PackedORM) ? 1 : 0;
+                ImGui::TextUnformatted("Texture Mode");
+                ImGui::NextColumn();
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::Combo("##EntityTextureModeCombo", &curTexMode, texModeItems, 2)) {
+                    mat.TextureMode = (curTexMode == 1) ? Axle::TextureMode::PackedORM : Axle::TextureMode::SeparateMaps;
+                    if (mat.HasAsset()) mat.SyncToAsset();
+                }
+                ImGui::NextColumn();
+
                 // Base Map
                 DrawChannelRow("Base Map", "##EntityBaseMapSlot", mat.AlbedoMap, mat.AlbedoPath, mat.UseAlbedoMap,
                     [&](const std::string& p) { mat.SetAlbedo(p); if (mat.HasAsset()) mat.SyncToAsset(); },
@@ -757,25 +769,72 @@ namespace Axle {
                         }
                     });
 
-                // Metallic
-                DrawChannelRow("Metallic", "##EntityMetallicSlot", mat.MetallicMap, mat.MetallicPath, mat.UseMetallicMap,
-                    [&](const std::string& p) { mat.SetMetallicMap(p); if (mat.HasAsset()) mat.SyncToAsset(); },
-                    [&]() {
-                        ImGui::SetNextItemWidth(-1.0f);
-                        if (ImGui::SliderFloat("##EntityMetallic", &mat.Metallic, 0.0f, 1.0f, "%.2f")) {
-                            if (mat.HasAsset()) mat.SyncToAsset();
-                        }
-                    });
+                if (mat.TextureMode == Axle::TextureMode::PackedORM) {
+                    // Packed ORM Map Slot
+                    DrawChannelRow("Packed ORM", "##EntityORMSlot", mat.ORMMap, mat.ORMPath, mat.UseORMMap,
+                        [&](const std::string& p) { mat.SetORMMap(p); if (mat.HasAsset()) mat.SyncToAsset(); },
+                        [&]() {
+                            ImGui::TextDisabled("R: AO | G: Rough | B: Metal");
+                        });
 
-                // Roughness
-                DrawChannelRow("Roughness", "##EntityRoughnessSlot", mat.RoughnessMap, mat.RoughnessPath, mat.UseRoughnessMap,
-                    [&](const std::string& p) { mat.SetRoughnessMap(p); if (mat.HasAsset()) mat.SyncToAsset(); },
-                    [&]() {
-                        ImGui::SetNextItemWidth(-1.0f);
-                        if (ImGui::SliderFloat("##EntityRoughness", &mat.Roughness, 0.0f, 1.0f, "%.2f")) {
-                            if (mat.HasAsset()) mat.SyncToAsset();
-                        }
-                    });
+                    // Metallic Scale
+                    ImGui::TextUnformatted("Metallic");
+                    ImGui::NextColumn();
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::SliderFloat("##EntityMetallicScale", &mat.Metallic, 0.0f, 1.0f, "%.2f")) {
+                        if (mat.HasAsset()) mat.SyncToAsset();
+                    }
+                    ImGui::NextColumn();
+
+                    // Roughness Scale
+                    ImGui::TextUnformatted("Roughness");
+                    ImGui::NextColumn();
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::SliderFloat("##EntityRoughnessScale", &mat.Roughness, 0.0f, 1.0f, "%.2f")) {
+                        if (mat.HasAsset()) mat.SyncToAsset();
+                    }
+                    ImGui::NextColumn();
+
+                    // Occlusion Scale
+                    ImGui::TextUnformatted("Occlusion");
+                    ImGui::NextColumn();
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::SliderFloat("##EntityOcclusionScale", &mat.AOStrength, 0.0f, 1.0f, "%.2f")) {
+                        if (mat.HasAsset()) mat.SyncToAsset();
+                    }
+                    ImGui::NextColumn();
+                } else {
+                    // Separate Maps: Metallic, Roughness, Occlusion
+                    // Metallic
+                    DrawChannelRow("Metallic", "##EntityMetallicSlot", mat.MetallicMap, mat.MetallicPath, mat.UseMetallicMap,
+                        [&](const std::string& p) { mat.SetMetallicMap(p); if (mat.HasAsset()) mat.SyncToAsset(); },
+                        [&]() {
+                            ImGui::SetNextItemWidth(-1.0f);
+                            if (ImGui::SliderFloat("##EntityMetallic", &mat.Metallic, 0.0f, 1.0f, "%.2f")) {
+                                if (mat.HasAsset()) mat.SyncToAsset();
+                            }
+                        });
+
+                    // Roughness
+                    DrawChannelRow("Roughness", "##EntityRoughnessSlot", mat.RoughnessMap, mat.RoughnessPath, mat.UseRoughnessMap,
+                        [&](const std::string& p) { mat.SetRoughnessMap(p); if (mat.HasAsset()) mat.SyncToAsset(); },
+                        [&]() {
+                            ImGui::SetNextItemWidth(-1.0f);
+                            if (ImGui::SliderFloat("##EntityRoughness", &mat.Roughness, 0.0f, 1.0f, "%.2f")) {
+                                if (mat.HasAsset()) mat.SyncToAsset();
+                            }
+                        });
+
+                    // Occlusion
+                    DrawChannelRow("Occlusion", "##EntityOcclusionSlot", mat.AOMap, mat.AOPath, mat.UseAOMap,
+                        [&](const std::string& p) { mat.SetAOMap(p); if (mat.HasAsset()) mat.SyncToAsset(); },
+                        [&]() {
+                            ImGui::SetNextItemWidth(-1.0f);
+                            if (ImGui::SliderFloat("##EntityOcclusion", &mat.AOStrength, 0.0f, 1.0f, "%.2f")) {
+                                if (mat.HasAsset()) mat.SyncToAsset();
+                            }
+                        });
+                }
 
                 // Normal Map
                 DrawChannelRow("Normal Map", "##EntityNormalSlot", mat.NormalMap, mat.NormalPath, mat.UseNormalMap,
@@ -783,16 +842,6 @@ namespace Axle {
                     [&]() {
                         ImGui::SetNextItemWidth(-1.0f);
                         if (ImGui::SliderFloat("##EntityNormalStrength", &mat.NormalStrength, 0.0f, 5.0f, "%.2f")) {
-                            if (mat.HasAsset()) mat.SyncToAsset();
-                        }
-                    });
-
-                // Occlusion
-                DrawChannelRow("Occlusion", "##EntityOcclusionSlot", mat.AOMap, mat.AOPath, mat.UseAOMap,
-                    [&](const std::string& p) { mat.SetAOMap(p); if (mat.HasAsset()) mat.SyncToAsset(); },
-                    [&]() {
-                        ImGui::SetNextItemWidth(-1.0f);
-                        if (ImGui::SliderFloat("##EntityOcclusion", &mat.AOStrength, 0.0f, 1.0f, "%.2f")) {
                             if (mat.HasAsset()) mat.SyncToAsset();
                         }
                     });

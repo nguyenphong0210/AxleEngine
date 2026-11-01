@@ -91,14 +91,20 @@ namespace Axle::RHI {
     void RHIMaterial::ApplyToPushConstants(RHIObjectPushConstants& pushConsts) const {
         pushConsts.ColorPrimary = m_Desc.BaseColor;
         pushConsts.ColorSecondary = glm::vec4(m_Desc.EmissiveColor, m_Desc.EmissiveIntensity);
+        float shadingModelVal = static_cast<float>(m_Desc.ShadingModel);
+        float surfaceTypeVal = static_cast<float>(m_Desc.SurfaceType);
+        if (m_Desc.TextureMode == Axle::TextureMode::PackedORM && !m_Desc.ORMPath.empty()) {
+            shadingModelVal = static_cast<float>(RHIShadingModel::PackedORMTexturedPBR);
+            surfaceTypeVal += 10.0f;
+        }
         pushConsts.Params = glm::vec4(m_Desc.UVScale.x,
-                                      static_cast<float>(m_Desc.ShadingModel),
+                                      shadingModelVal,
                                       m_Desc.Roughness,
                                       m_Desc.Metallic);
         pushConsts.MaterialExtra = glm::vec4(m_Desc.UVOffset.x,
                                              m_Desc.UVOffset.y,
                                              m_Desc.AlphaCutoff,
-                                             static_cast<float>(m_Desc.SurfaceType));
+                                             surfaceTypeVal);
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultWhiteTexture() {

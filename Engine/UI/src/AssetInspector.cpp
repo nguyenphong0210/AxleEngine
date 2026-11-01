@@ -744,6 +744,19 @@ namespace Axle {
                 ImGui::NextColumn();
             };
 
+            // Texture Mode Selection (Separate Maps vs Packed ORM)
+            const char* texModeItems[] = { "Separate Maps", "Packed ORM (R:AO, G:Rough, B:Metal)" };
+            int curTexMode = (m_ActiveMaterialAsset.TextureMode == Axle::TextureMode::PackedORM) ? 1 : 0;
+            ImGui::TextUnformatted("Texture Mode");
+            ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::Combo("##TextureModeCombo", &curTexMode, texModeItems, 2)) {
+                m_ActiveMaterialAsset.TextureMode = (curTexMode == 1) ? Axle::TextureMode::PackedORM : Axle::TextureMode::SeparateMaps;
+                if (m_ActiveMaterialAsset.HasAsset()) m_ActiveMaterialAsset.SyncToAsset();
+                changed = true;
+            }
+            ImGui::NextColumn();
+
             // Base Map
             DrawChannelRow("Base Map", "##BaseMapSlot", m_ActiveMaterialAsset.AlbedoMap, m_ActiveMaterialAsset.AlbedoPath, m_ActiveMaterialAsset.UseAlbedoMap,
                 [&](const std::string& p) { m_ActiveMaterialAsset.SetAlbedo(p); },
@@ -754,25 +767,72 @@ namespace Axle {
                     }
                 });
 
-            // Metallic
-            DrawChannelRow("Metallic", "##MetallicSlot", m_ActiveMaterialAsset.MetallicMap, m_ActiveMaterialAsset.MetallicPath, m_ActiveMaterialAsset.UseMetallicMap,
-                [&](const std::string& p) { m_ActiveMaterialAsset.SetMetallicMap(p); },
-                [&]() {
-                    ImGui::SetNextItemWidth(-1.0f);
-                    if (ImGui::SliderFloat("##Metallic", &m_ActiveMaterialAsset.Metallic, 0.0f, 1.0f, "%.2f")) {
-                        changed = true;
-                    }
-                });
+            if (m_ActiveMaterialAsset.TextureMode == Axle::TextureMode::PackedORM) {
+                // Packed ORM Map Slot
+                DrawChannelRow("Packed ORM", "##ORMSlot", m_ActiveMaterialAsset.ORMMap, m_ActiveMaterialAsset.ORMPath, m_ActiveMaterialAsset.UseORMMap,
+                    [&](const std::string& p) { m_ActiveMaterialAsset.SetORMMap(p); },
+                    [&]() {
+                        ImGui::TextDisabled("R: AO | G: Rough | B: Metal");
+                    });
 
-            // Roughness
-            DrawChannelRow("Roughness", "##RoughnessSlot", m_ActiveMaterialAsset.RoughnessMap, m_ActiveMaterialAsset.RoughnessPath, m_ActiveMaterialAsset.UseRoughnessMap,
-                [&](const std::string& p) { m_ActiveMaterialAsset.SetRoughnessMap(p); },
-                [&]() {
-                    ImGui::SetNextItemWidth(-1.0f);
-                    if (ImGui::SliderFloat("##Roughness", &m_ActiveMaterialAsset.Roughness, 0.0f, 1.0f, "%.2f")) {
-                        changed = true;
-                    }
-                });
+                // Metallic Scale
+                ImGui::TextUnformatted("Metallic");
+                ImGui::NextColumn();
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::SliderFloat("##MetallicScale", &m_ActiveMaterialAsset.Metallic, 0.0f, 1.0f, "%.2f")) {
+                    changed = true;
+                }
+                ImGui::NextColumn();
+
+                // Roughness Scale
+                ImGui::TextUnformatted("Roughness");
+                ImGui::NextColumn();
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::SliderFloat("##RoughnessScale", &m_ActiveMaterialAsset.Roughness, 0.0f, 1.0f, "%.2f")) {
+                    changed = true;
+                }
+                ImGui::NextColumn();
+
+                // Occlusion Scale
+                ImGui::TextUnformatted("Occlusion");
+                ImGui::NextColumn();
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::SliderFloat("##OcclusionScale", &m_ActiveMaterialAsset.AOStrength, 0.0f, 1.0f, "%.2f")) {
+                    changed = true;
+                }
+                ImGui::NextColumn();
+            } else {
+                // Separate Maps: Metallic, Roughness, Occlusion
+                // Metallic
+                DrawChannelRow("Metallic", "##MetallicSlot", m_ActiveMaterialAsset.MetallicMap, m_ActiveMaterialAsset.MetallicPath, m_ActiveMaterialAsset.UseMetallicMap,
+                    [&](const std::string& p) { m_ActiveMaterialAsset.SetMetallicMap(p); },
+                    [&]() {
+                        ImGui::SetNextItemWidth(-1.0f);
+                        if (ImGui::SliderFloat("##Metallic", &m_ActiveMaterialAsset.Metallic, 0.0f, 1.0f, "%.2f")) {
+                            changed = true;
+                        }
+                    });
+
+                // Roughness
+                DrawChannelRow("Roughness", "##RoughnessSlot", m_ActiveMaterialAsset.RoughnessMap, m_ActiveMaterialAsset.RoughnessPath, m_ActiveMaterialAsset.UseRoughnessMap,
+                    [&](const std::string& p) { m_ActiveMaterialAsset.SetRoughnessMap(p); },
+                    [&]() {
+                        ImGui::SetNextItemWidth(-1.0f);
+                        if (ImGui::SliderFloat("##Roughness", &m_ActiveMaterialAsset.Roughness, 0.0f, 1.0f, "%.2f")) {
+                            changed = true;
+                        }
+                    });
+
+                // Occlusion
+                DrawChannelRow("Occlusion", "##OcclusionSlot", m_ActiveMaterialAsset.AOMap, m_ActiveMaterialAsset.AOPath, m_ActiveMaterialAsset.UseAOMap,
+                    [&](const std::string& p) { m_ActiveMaterialAsset.SetAOMap(p); },
+                    [&]() {
+                        ImGui::SetNextItemWidth(-1.0f);
+                        if (ImGui::SliderFloat("##Occlusion", &m_ActiveMaterialAsset.AOStrength, 0.0f, 1.0f, "%.2f")) {
+                            changed = true;
+                        }
+                    });
+            }
 
             // Normal Map
             DrawChannelRow("Normal Map", "##NormalSlot", m_ActiveMaterialAsset.NormalMap, m_ActiveMaterialAsset.NormalPath, m_ActiveMaterialAsset.UseNormalMap,
@@ -780,16 +840,6 @@ namespace Axle {
                 [&]() {
                     ImGui::SetNextItemWidth(-1.0f);
                     if (ImGui::SliderFloat("##NormalStrength", &m_ActiveMaterialAsset.NormalStrength, 0.0f, 5.0f, "%.2f")) {
-                        changed = true;
-                    }
-                });
-
-            // Occlusion
-            DrawChannelRow("Occlusion", "##OcclusionSlot", m_ActiveMaterialAsset.AOMap, m_ActiveMaterialAsset.AOPath, m_ActiveMaterialAsset.UseAOMap,
-                [&](const std::string& p) { m_ActiveMaterialAsset.SetAOMap(p); },
-                [&]() {
-                    ImGui::SetNextItemWidth(-1.0f);
-                    if (ImGui::SliderFloat("##Occlusion", &m_ActiveMaterialAsset.AOStrength, 0.0f, 1.0f, "%.2f")) {
                         changed = true;
                     }
                 });

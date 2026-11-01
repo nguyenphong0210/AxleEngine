@@ -244,7 +244,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         // Mode 4: Splatmap Terrain Heightfield (Blended with Vertex Color)
         albedo = u_ColorPrimary * input.VertexColor;
     } else if (shadingMode == 5) {
-        // Mode 5: Textured PBR Material (Sample Albedo, Roughness, Metallic, AO)
+        // Mode 5: Textured PBR Material (Separate Maps: Albedo, Roughness, Metallic, AO)
         float2 uv = input.TexCoord * tileScale + u_UVOffset;
         float4 albedoSample = u_AlbedoMap.Sample(u_Sampler, uv);
         albedo = albedoSample * u_ColorPrimary;
@@ -262,10 +262,28 @@ float4 PSMain(PSInput input) : SV_Target0 {
         } else if (u_ColorSecondary.w > 0.01) {
             emissive = u_ColorSecondary.rgb * u_ColorSecondary.w;
         }
+    } else if (shadingMode == 6 || (int)(u_SurfaceType + 0.5) >= 10) {
+        // Mode 6: Packed ORM Textured PBR (R: Occlusion, G: Roughness, B: Metallic)
+        float2 uv = input.TexCoord * tileScale + u_UVOffset;
+        float4 albedoSample = u_AlbedoMap.Sample(u_Sampler, uv);
+        albedo = albedoSample * u_ColorPrimary;
+        
+        // Sample Packed ORM from slot t2 (u_RoughnessMap)
+        float3 orm = u_RoughnessMap.Sample(u_Sampler, uv).rgb;
+        ao = orm.r;
+        roughness = clamp(orm.g * roughness, 0.04, 1.0);
+        metallic = clamp(orm.b * metallic, 0.0, 1.0);
+        
+        float3 emissiveSample = u_EmissiveMap.Sample(u_Sampler, uv).rgb;
+        if (length(emissiveSample) > 0.001) {
+            emissive = emissiveSample * u_ColorSecondary.rgb * max(1.0, u_ColorSecondary.w);
+        } else if (u_ColorSecondary.w > 0.01) {
+            emissive = u_ColorSecondary.rgb * u_ColorSecondary.w;
+        }
     }
     
     // Cutout alpha test (SurfaceType == 1): discard fragment if alpha < cutoff
-    int surfaceType = (int)(u_SurfaceType + 0.5);
+    int surfaceType = ((int)(u_SurfaceType + 0.5)) % 10;
     float alphaCutoff = (u_AlphaCutoff > 0.001) ? u_AlphaCutoff : 0.5;
     if (surfaceType == 1 && albedo.a < alphaCutoff) {
         discard;
@@ -281,7 +299,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         if (length(crossN) > 1e-6) {
             N = normalize(crossN);
         }
-    } else if (shadingMode == 5 && abs(input.TangentWS.w) > 0.1) {
+    } else if ((shadingMode == 5 || shadingMode == 6 || (int)(u_SurfaceType + 0.5) >= 10) && abs(input.TangentWS.w) > 0.1) {
         float3 T = normalize(input.TangentWS.xyz);
         float3 B = cross(N, T) * input.TangentWS.w;
         float3x3 TBN = float3x3(T, B, N);

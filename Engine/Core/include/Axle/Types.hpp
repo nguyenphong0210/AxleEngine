@@ -62,4 +62,23 @@ namespace Axle {
         if (str == "None" || str == "none" || str == "TwoSided" || str == "twosided" || str == "Two-Sided") return CullMode::None;
         return CullMode::Back;
     }
+
+    // Standard Texture Channel Packing Mode (Unity & Unreal & glTF PBR standard)
+    enum class TextureMode : uint32_t {
+        SeparateMaps = 0, // Individual textures for Metallic, Roughness, and Ambient Occlusion
+        PackedORM    = 1  // Single channel-packed texture (R: Occlusion, G: Roughness, B: Metallic)
+    };
+
+    inline const char* TextureModeToString(TextureMode mode) {
+        switch (mode) {
+            case TextureMode::SeparateMaps: return "SeparateMaps";
+            case TextureMode::PackedORM:    return "PackedORM";
+            default:                        return "SeparateMaps";
+        }
+    }
+
+    inline TextureMode StringToTextureMode(std::string_view str) {
+        if (str == "PackedORM" || str == "ORM" || str == "Packed" || str == "packed_orm") return TextureMode::PackedORM;
+        return TextureMode::SeparateMaps;
+    }
 }

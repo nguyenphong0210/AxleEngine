@@ -189,6 +189,8 @@ namespace Axle {
         m_EmissivePath = path;
         if (path.empty()) {
             ClearEmissiveTexture();
+        ClearORMTexture();
+        m_TextureMode = TextureMode::SeparateMaps;
         } else {
             if (Window::HasActiveContext()) {
                 std::filesystem::path resolved = FileSystem::ResolveAssetPath(path);
@@ -204,6 +206,30 @@ namespace Axle {
         m_EmissivePath.clear();
         m_EmissiveMap = nullptr;
         m_UseEmissiveMap = false;
+    }
+
+    void Material::SetORMTexture(const std::shared_ptr<Texture2D>& texture, const std::string& path) {
+        m_ORMMap = texture;
+        m_ORMPath = path;
+        m_UseORMMap = (m_ORMMap != nullptr);
+    }
+
+    void Material::SetORMPath(const std::string& path) {
+        m_ORMPath = path;
+        if (!path.empty()) {
+            auto resolved = FileSystem::ResolveAssetPath(path);
+            m_ORMMap = Texture2D::Create(resolved.string());
+            m_UseORMMap = (m_ORMMap && m_ORMMap->IsLoaded());
+        } else {
+            m_ORMMap = nullptr;
+            m_UseORMMap = false;
+        }
+    }
+
+    void Material::ClearORMTexture() {
+        m_ORMMap = nullptr;
+        m_ORMPath.clear();
+        m_UseORMMap = false;
     }
 
     void Material::ResetTextures() {
@@ -397,6 +423,12 @@ namespace Axle {
             shader.SetInt("u_UseMetallicMap", 0);
         }
 
+        if (m_TextureMode == TextureMode::PackedORM && UseORMMap() && m_ORMMap->IsLoaded()) {
+            m_ORMMap->Bind(slotRoughness);
+            shader.SetInt("u_TextureMode", 1);
+        } else {
+            shader.SetInt("u_TextureMode", 0);
+        }
         shader.SetFloat2("u_UVScale", m_UVScale);
         shader.SetFloat2("u_UVOffset", m_UVOffset);
         shader.SetFloat("u_Roughness", m_Roughness);
@@ -452,6 +484,12 @@ namespace Axle {
             fout << "Material {\n";
             fout << "    name: \"" << m_Name << "\"\n";
             fout << "    shader: \"ForwardPBR\"\n\n";
+            fout << "    // Texture Packing Mode\n";
+            fout << "    textureMode: \"" << TextureModeToString(m_TextureMode) << "\"\n";
+            if (!m_ORMPath.empty()) {
+                fout << "    ormMap: \"" << m_ORMPath << "\"\n";
+            }
+
             fout << "    // Surface Options\n";
             fout << "    surfaceType: \"" << SurfaceTypeToString(m_SurfaceType) << "\"\n";
             fout << "    cullMode: \"" << CullModeToString(m_CullMode) << "\"\n";
@@ -494,6 +532,12 @@ namespace Axle {
         }
 
         fout << "MaterialAsset:\n";
+        fout << "  TextureMode: " << TextureModeToString(m_TextureMode) << "\n";
+        if (!m_ORMPath.empty()) {
+            fout << "  ORMPath: " << m_ORMPath << "\n";
+            fout << "  UseORMMap: " << (m_UseORMMap ? "true" : "false") << "\n";
+        }
+
         if (!m_Name.empty()) {
             fout << "  Name: " << m_Name << "\n";
         }
@@ -623,6 +667,15 @@ namespace Axle {
                         std::sscanf(val.c_str(), "[ %f , %f , %f , %f ]", &r, &g, &b, &a);
                         m_AlbedoColor = glm::vec4(r, g, b, a);
                     }
+                } else if (trimmed.rfind("textureMode:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(12));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    m_TextureMode = StringToTextureMode(val);
+                } else if (trimmed.rfind("ormMap:", 0) == 0) {
+                    std::string p = Trim(trimmed.substr(7));
+                    if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
+                    if (!p.empty()) { SetORMPath(p); m_UseORMMap = true; }
+                    else ClearORMTexture();
                 } else if (trimmed.rfind("albedoMap:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(10));
                     if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
@@ -711,7 +764,13 @@ namespace Axle {
                 } else if (trimmed.rfind("DepthWrite:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(11));
                     m_DepthWrite = (val == "true" || val == "1");
-                } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
+                } else if (trimmed.rfind("TextureMode:", 0) == 0) {
+                m_TextureMode = StringToTextureMode(Trim(trimmed.substr(12)));
+            } else if (trimmed.rfind("ORMPath:", 0) == 0) {
+                SetORMPath(Trim(trimmed.substr(8)));
+            } else if (trimmed.rfind("UseORMMap:", 0) == 0) {
+                m_UseORMMap = (Trim(trimmed.substr(10)) == "true");
+            } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(11));
                     if (!p.empty()) SetAlbedoPath(p);
                     else ClearAlbedoTexture();

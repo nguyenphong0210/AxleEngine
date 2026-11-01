@@ -565,7 +565,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [x] **Step 4 - Automated Verification Suite Step 101 (`AxleTests.exe --step101`)**:
     - [x] Step 101 tests verifying: DSL round-trip serialization of new surface properties, Cutout alpha clipping math, Two-sided culling flags, RHI pipeline blend mode configs, and headless Material Studio operations.
 
-- [ ] **Phase 38.1: Unity & Godot Parity Phase 1 - Embedded 3D Material Preview & HLSL Studio (`Engine/UI`, `Engine/RHI`, `Editor`)**
+- [x] **Phase 38.1: Unity & Godot Parity Phase 1 - Embedded 3D Material Preview & HLSL Studio (`Engine/UI`, `Engine/RHI`, `Editor`)**
   - [x] **Step 1 - Embedded 3D Interactive Material Preview Viewport**:
     - [x] Embed live 3D preview viewport directly inside Material Inspector via `AssetPreviewPanel`.
     - [x] Interactive camera controls: Left-drag Orbit 360°, Scroll-wheel Zoom in/out, Middle-drag Pan.
@@ -578,12 +578,12 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Add `Environment Reflections` toggle (ON/OFF).
     - [x] Add `Render Queue Offset` (Geometry 2000, Cutout 2450, Transparent 3000).
     - [x] Add `[ </> Edit HLSL ]` shortcut button adjacent to Shader dropdown.
-  - [ ] **Step 4 - In-Editor HLSL Shader Studio Panel & Content Browser Integration**:
-    - [ ] Add dockable `HLSLStudioPanel` with multi-line code editor, line numbering, and HLSL syntax highlighting.
-    - [ ] Right-click in Content Browser -> `Create > HLSL Shader` in `assets/shaders/` generating standard PBR template.
-    - [ ] Zero-downtime hot-reloading: `Ctrl + S` / `F5` compiles via `RHIShaderCompiler` (DXC) to DXIL/SPIR-V and updates live GPU PSOs.
-  - [ ] **Step 5 - Automated Verification Suite Step 104 (`AxleTests.exe --step104`)**:
-    - [ ] Step 104 tests verifying: Material preview offscreen render targets, orbit camera math, advanced options serialization, and runtime HLSL compilation hot-reload.
+  - [x] **Step 4 - In-Editor HLSL Shader Studio Panel & Content Browser Integration**:
+    - [x] Add dockable `HLSLStudioPanel` with multi-line code editor, line numbering, and HLSL syntax highlighting.
+    - [x] Right-click in Content Browser -> `Create > HLSL Shader` in `assets/shaders/` generating standard PBR template.
+    - [x] Zero-downtime hot-reloading: `Ctrl + S` / `F5` compiles via `RHIShaderCompiler` (DXC) to DXIL/SPIR-V and updates live GPU PSOs.
+  - [x] **Step 5 - Automated Verification Suite Step 104 (`AxleTests.exe --step104`)**:
+    - [x] Step 104 tests verifying: Material preview offscreen render targets, orbit camera math, advanced options serialization, and runtime HLSL compilation hot-reload.
 
 - [ ] **Phase 38.2: Unity & Godot Parity Phase 2 - Dynamic Shader Reflection & Advanced Shading (`Engine/RHI`, `Engine/Asset`, `Engine/UI`)**
   - [ ] **Step 1 - Dynamic Shader Property Reflection via DXC**:

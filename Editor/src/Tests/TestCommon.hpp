@@ -344,3 +344,6 @@ bool RunTest_Step101_Phase38_MaterialSchemaInspectorAndHLSLStudio();
 
 // Milestone 10 - Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (Step 102)
 bool RunTest_Step102_Phase39_VisualParticleAndVFXStudio();
+
+// Milestone 10 - Phase 38.1: Material Studio Parity & HLSL Compiler Suite (Step 104)
+bool RunTest_Step104_Phase38_1_MaterialStudioParityAndHLSLCompiler();

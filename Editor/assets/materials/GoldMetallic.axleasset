@@ -1,6 +1,7 @@
 Material {
     name: "GoldMetallic"
     shader: "ForwardPBR"
+    useCustomShader: false
 
     // Texture Packing Mode
     textureMode: "SeparateMaps"
@@ -13,13 +14,13 @@ Material {
     environmentReflections: true
     renderQueue: 2000
 
-    // Base Color & Texture
-    albedoColor: "#FFD600"
+    // Base Color & Texture (Clean Neutral White)
+    albedoColor: "#FFFFFF"
     albedoMap: ""
 
     // Surface Microfacet
-    metallic: 1
-    roughness: 0.15
+    metallic: 0
+    roughness: 0.5
     normalMap: ""
     normalStrength: 1
     clearcoatStrength: 0

@@ -123,6 +123,10 @@ namespace Axle {
         bool EnableEnvironmentReflections = true;
         int RenderQueue = 2000;
 
+        // Custom HLSL Shader Overrides
+        bool UseCustomShader = false;
+        std::string CustomShaderPath;
+
         // Texture Mode (Separate Maps vs Packed ORM)
         Axle::TextureMode TextureMode = Axle::TextureMode::SeparateMaps;
         std::string ORMPath;
@@ -236,6 +240,8 @@ namespace Axle {
             EnableSpecularHighlights = MaterialAsset->GetEnableSpecularHighlights();
             EnableEnvironmentReflections = MaterialAsset->GetEnableEnvironmentReflections();
             RenderQueue = MaterialAsset->GetRenderQueue();
+            UseCustomShader = MaterialAsset->GetUseCustomShader();
+            CustomShaderPath = MaterialAsset->GetCustomShaderPath();
             CustomProperties = MaterialAsset->GetCustomProperties();
 
             SyncToRHI();
@@ -288,6 +294,8 @@ namespace Axle {
             MaterialAsset->SetEnableSpecularHighlights(EnableSpecularHighlights);
             MaterialAsset->SetEnableEnvironmentReflections(EnableEnvironmentReflections);
             MaterialAsset->SetRenderQueue(RenderQueue);
+            MaterialAsset->SetUseCustomShader(UseCustomShader);
+            MaterialAsset->SetCustomShaderPath(CustomShaderPath);
             MaterialAsset->SetUVOffset(UVOffset);
             MaterialAsset->SetCustomProperties(CustomProperties);
 

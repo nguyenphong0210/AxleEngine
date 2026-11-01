@@ -14,6 +14,7 @@
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/Application.hpp>
+#include <Axle/ShaderPropertyReflection.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <stb_image.h>
 #include <Extensions/NRIHelper.h>
@@ -515,6 +516,8 @@ namespace Axle {
         m->SetEnableSpecularHighlights(mat.EnableSpecularHighlights);
         m->SetEnableEnvironmentReflections(mat.EnableEnvironmentReflections);
         m->SetRenderQueue(mat.RenderQueue);
+        m->SetUseCustomShader(mat.UseCustomShader);
+        m->SetCustomShaderPath(mat.CustomShaderPath);
         return m->Save(path);
     }
 
@@ -614,33 +617,137 @@ namespace Axle {
 
         bool changed = false;
 
-        // Unity-Style Shader Selector & Quick HLSL Code Access
+        // 0. Use Custom Shader Checkbox & Adaptive Shader Slot
         {
+            if (ImGui::Checkbox("Use Custom Shader", &m_ActiveMaterialAsset.UseCustomShader)) {
+                changed = true;
+            }
+
+            ImGui::Spacing();
             ImGui::TextDisabled("Shader:");
             ImGui::SameLine();
-            const char* shaderOptions[] = {
-                "Universal Render Pipeline/Lit (Engine/Resources/Shaders/ForwardPBR.hlsl)",
-                "Universal Render Pipeline/Simple Lit",
-                "Universal Render Pipeline/Unlit"
-            };
-            static int currentShader = 0;
-            float btnW = 92.0f;
-            float availW = ImGui::GetContentRegionAvail().x;
-            ImGui::SetNextItemWidth(std::max(availW - btnW - 6.0f, 100.0f));
-            ImGui::Combo("##MaterialShaderCombo", &currentShader, shaderOptions, IM_ARRAYSIZE(shaderOptions));
-            ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.23f, 0.28f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.33f, 0.40f, 1.0f));
-            if (ImGui::Button("</> Edit HLSL", ImVec2(btnW, 0.0f))) {
-                if (m_OnOpenHLSLStudioCallback) {
-                    m_OnOpenHLSLStudioCallback("Engine/Resources/Shaders/ForwardPBR.hlsl");
-                } else {
-                    AXLE_INFO("Navigated to HLSL Shader Studio for 'Engine/Resources/Shaders/ForwardPBR.hlsl'");
+
+            if (!m_ActiveMaterialAsset.UseCustomShader) {
+                // Dimmed / Disabled State for Standard PBR Built-in Shader
+                ImGui::BeginDisabled();
+                char defaultShaderText[] = "Standard PBR (Built-in)";
+                float availW = ImGui::GetContentRegionAvail().x;
+                ImGui::SetNextItemWidth(availW);
+                ImGui::InputText("##DefaultShaderSlot", defaultShaderText, sizeof(defaultShaderText), ImGuiInputTextFlags_ReadOnly);
+                ImGui::EndDisabled();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                    ImGui::SetTooltip("Using AxleEngine high-performance Forward+ PBR built-in pipeline.\nTick 'Use Custom Shader' above to override with custom HLSL.");
                 }
-            }
-            ImGui::PopStyleColor(2);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Open this HLSL shader in the in-editor Shader Studio for live editing and hot-reloading");
+            } else {
+                // Active State for Custom Shader
+                float btnCreateW = 96.0f;
+                float btnEditW = 76.0f;
+                float availW = ImGui::GetContentRegionAvail().x;
+                float inputW = std::max(availW - btnCreateW - btnEditW - 12.0f, 90.0f);
+
+                char shaderPathBuf[256] = {};
+                if (!m_ActiveMaterialAsset.CustomShaderPath.empty()) {
+                    strncpy_s(shaderPathBuf, m_ActiveMaterialAsset.CustomShaderPath.c_str(), sizeof(shaderPathBuf) - 1);
+                } else {
+                    strncpy_s(shaderPathBuf, "<Drag .hlsl here or click + Create>", sizeof(shaderPathBuf) - 1);
+                }
+
+                ImGui::SetNextItemWidth(inputW);
+                if (ImGui::InputText("##CustomShaderPathInput", shaderPathBuf, sizeof(shaderPathBuf))) {
+                    m_ActiveMaterialAsset.CustomShaderPath = shaderPathBuf;
+                    changed = true;
+                }
+
+                // Drag & drop receiver from Content Browser for .hlsl files
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const wchar_t* pathStr = (const wchar_t*)payload->Data;
+                        std::filesystem::path droppedPath(pathStr);
+                        std::string ext = droppedPath.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
+                        if (ext == ".hlsl" || ext == ".shader") {
+                            std::error_code ec;
+                            std::filesystem::path relPath = std::filesystem::relative(droppedPath, std::filesystem::current_path(), ec);
+                            m_ActiveMaterialAsset.CustomShaderPath = ec ? droppedPath.generic_string() : relPath.generic_string();
+                            
+                            std::string hlslSource = FileSystem::ReadTextFile(droppedPath);
+                            if (!hlslSource.empty()) {
+                                auto parsedProps = ShaderPropertyParser::ParseFromHLSL(hlslSource);
+                                m_ActiveMaterialAsset.CustomProperties.clear();
+                                for (const auto& desc : parsedProps) {
+                                    ShaderPropertyInstance inst;
+                                    inst.Desc = desc;
+                                    if (desc.Type == ShaderPropertyType::Float) inst.FloatVal = desc.MinValue;
+                                    else if (desc.Type == ShaderPropertyType::Color) inst.Vec4Val = glm::vec4(1.0f);
+                                    else if (desc.Type == ShaderPropertyType::Int) inst.IntVal = (int)desc.MinValue;
+                                    m_ActiveMaterialAsset.CustomProperties.push_back(inst);
+                                }
+                            }
+                            changed = true;
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
+                ImGui::SameLine();
+                // Button to Create a new HLSL Shader file in assets/shaders/
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.40f, 0.28f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.50f, 0.35f, 1.0f));
+                if (ImGui::Button("+ Create HLSL", ImVec2(btnCreateW, 0.0f))) {
+                    std::filesystem::path shadersDir = "assets/shaders";
+                    if (!std::filesystem::exists(shadersDir)) {
+                        std::filesystem::create_directories(shadersDir);
+                    }
+                    std::string matStem = path.stem().string();
+                    if (matStem.empty()) matStem = "CustomShader";
+                    std::filesystem::path newShaderPath = shadersDir / (matStem + ".hlsl");
+                    int counter = 1;
+                    while (std::filesystem::exists(newShaderPath)) {
+                        newShaderPath = shadersDir / (matStem + "_" + std::to_string(counter++) + ".hlsl");
+                    }
+
+                    std::string templateCode = "// =============================================================================\n// AxleEngine Custom HLSL Shader Template\n// Dynamic Shader Reflection & Interactive Property System\n// =============================================================================\n\n// [Header(\"Custom Surface FX\")]\n// [Tooltip(\"Controls the custom emissive or dissolve strength\")]\n// [Range(0.0, 5.0)]\nfloat EffectIntensity;\n\n// [Color]\n// [Tooltip(\"Custom tint color overlay\")]\nfloat4 TintColor;\n\n// [Texture]\n// [Tooltip(\"Optional secondary detail normal or pattern map\")]\nTexture2D DetailMap;\n\n// [Range(1.0, 16.0)]\nint SubsurfaceLayers;\n";
+                    std::ofstream ofs(newShaderPath);
+                    if (ofs.is_open()) {
+                        ofs << templateCode;
+                        ofs.close();
+                    }
+                    m_ActiveMaterialAsset.CustomShaderPath = newShaderPath.generic_string();
+                    auto parsedProps = ShaderPropertyParser::ParseFromHLSL(templateCode);
+                    m_ActiveMaterialAsset.CustomProperties.clear();
+                    for (const auto& desc : parsedProps) {
+                        ShaderPropertyInstance inst;
+                        inst.Desc = desc;
+                        if (desc.Type == ShaderPropertyType::Float) inst.FloatVal = desc.MinValue;
+                        else if (desc.Type == ShaderPropertyType::Color) inst.Vec4Val = glm::vec4(1.0f);
+                        else if (desc.Type == ShaderPropertyType::Int) inst.IntVal = (int)desc.MinValue;
+                        m_ActiveMaterialAsset.CustomProperties.push_back(inst);
+                    }
+                    changed = true;
+                }
+                ImGui::PopStyleColor(2);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Generate a new custom HLSL shader template in assets/shaders/ and bind it to this material");
+                }
+
+                ImGui::SameLine();
+                // Button to Edit HLSL in editor or external studio
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.23f, 0.28f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.33f, 0.40f, 1.0f));
+                if (ImGui::Button("</> Edit", ImVec2(btnEditW, 0.0f))) {
+                    std::string targetHLSL = m_ActiveMaterialAsset.CustomShaderPath.empty()
+                                                ? "Engine/Resources/Shaders/ForwardPBR.hlsl"
+                                                : m_ActiveMaterialAsset.CustomShaderPath;
+                    if (m_OnOpenHLSLStudioCallback) {
+                        m_OnOpenHLSLStudioCallback(targetHLSL);
+                    } else {
+                        AXLE_INFO("Navigated to HLSL Shader Studio for '{0}'", targetHLSL);
+                    }
+                }
+                ImGui::PopStyleColor(2);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Open this custom HLSL shader for editing and live hot-reloading");
+                }
             }
             ImGui::Spacing();
         }
@@ -1013,7 +1120,7 @@ namespace Axle {
         }
 
         // 4. Dynamic Shader Properties (Phase 38.2 Dynamic Reflection)
-        if (!m_ActiveMaterialAsset.CustomProperties.empty()) {
+        if (m_ActiveMaterialAsset.UseCustomShader && !m_ActiveMaterialAsset.CustomProperties.empty()) {
             if (ImGui::CollapsingHeader("Dynamic Shader Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::Columns(2, "DynamicPropertiesColumns", false);
                 ImGui::SetColumnWidth(0, 150.0f);

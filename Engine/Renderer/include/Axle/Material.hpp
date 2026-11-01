@@ -58,6 +58,15 @@ namespace Axle {
         float& GetAnisotropyRotationRef() { return m_AnisotropyRotation; }
         void SetAnisotropyRotation(float val) { m_AnisotropyRotation = std::clamp(val, 0.0f, 1.0f); }
 
+        // Custom HLSL Shader Overrides
+        bool GetUseCustomShader() const { return m_UseCustomShader; }
+        bool& GetUseCustomShaderRef() { return m_UseCustomShader; }
+        void SetUseCustomShader(bool use) { m_UseCustomShader = use; }
+
+        const std::string& GetCustomShaderPath() const { return m_CustomShaderPath; }
+        std::string& GetCustomShaderPathRef() { return m_CustomShaderPath; }
+        void SetCustomShaderPath(const std::string& path) { m_CustomShaderPath = path; }
+
         // Surface Options (Unity / Unreal Standard)
         SurfaceType GetSurfaceType() const { return m_SurfaceType; }
         void SetSurfaceType(SurfaceType type) {
@@ -240,6 +249,8 @@ namespace Axle {
         bool m_EnableSpecularHighlights = true;
         bool m_EnableEnvironmentReflections = true;
         int m_RenderQueue = 2000;
+        bool m_UseCustomShader = false;
+        std::string m_CustomShaderPath;
         std::vector<ShaderPropertyInstance> m_CustomProperties;
 
         glm::vec4 m_AlbedoColor{ 1.0f, 1.0f, 1.0f, 1.0f };

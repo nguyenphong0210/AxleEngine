@@ -499,7 +499,12 @@ namespace Axle {
             };
             fout << "Material {\n";
             fout << "    name: \"" << m_Name << "\"\n";
-            fout << "    shader: \"ForwardPBR\"\n\n";
+            fout << "    shader: \"ForwardPBR\"\n";
+            fout << "    useCustomShader: " << (m_UseCustomShader ? "true" : "false") << "\n";
+            if (!m_CustomShaderPath.empty()) {
+                fout << "    customShaderPath: \"" << m_CustomShaderPath << "\"\n";
+            }
+            fout << "\n";
             fout << "    // Texture Packing Mode\n";
             fout << "    textureMode: \"" << TextureModeToString(m_TextureMode) << "\"\n";
             if (!m_ORMPath.empty()) {
@@ -618,6 +623,14 @@ namespace Axle {
                     std::string val = Trim(trimmed.substr(5));
                     if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
                     m_Name = val;
+                } else if (trimmed.rfind("useCustomShader:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(16));
+                    m_UseCustomShader = (val == "true" || val == "1");
+                } else if (trimmed.rfind("customShaderPath:", 0) == 0) {
+                    std::string val = Trim(trimmed.substr(17));
+                    if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);
+                    m_CustomShaderPath = val;
+                    if (!m_CustomShaderPath.empty()) m_UseCustomShader = true;
                 } else if (trimmed.rfind("surfaceType:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(12));
                     if (val.size() >= 2 && val.front() == '"' && val.back() == '"') val = val.substr(1, val.size() - 2);

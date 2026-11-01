@@ -9,7 +9,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Completed Phases**: **Phase 1 through Phase 39** (including Phase 38.1 & Phase 38.2 100% implemented, verified, and stabilized).
 * **Automated Test Verification**: **87 Comprehensive Headless Test Suites** (`AxleTests.exe`, 105 individual test steps up through **Step 105**) passing with **100% pass rate**.
-* **Upcoming Focus**: **Milestone 10: Complete Visual Tooling Ecosystem (Material ➔ VFX ➔ Animation)** and beyond.
+* **Upcoming Focus**: **Phase 38.3: Material Pipeline Completion, Godot-style Inspector & Automotive Materials**, followed by **Phase 40: Skeletal Animation Studio**.
 
 ### 🛡️ Core Engineering & Contribution Principles
 1. **Language Standard**: All source code, header files, docstrings, architectural documentation, commit messages, and automated tests must be written exclusively in **English**.
@@ -604,6 +604,33 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Autocomplete suggestions for HLSL intrinsic functions (`saturate`, `lerp`, `mul`, `dot`, `cross`, `normalize`).
   - [x] **Step 6 - Automated Verification Suite Step 105 (`AxleTests.exe --step105`)**:
     - [x] Step 105 tests verifying: DXC reflection parser, packed ORM texture sampling, Clearcoat push constants, and error jump navigation.
+
+- [ ] **Phase 38.3: Material Pipeline Completion, Godot-style Inspector & Automotive Materials (`Engine/Scene`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/UI`, `Editor`)**
+  - **Execution Order**: Complete existing material behavior first, reorganize authoring second, then add automotive extensions. This phase is pending; earlier Phase 38 / 38.1 / 38.2 checkmarks do not replace the backend and visual acceptance checks below.
+  - [ ] **Step 1 - Complete Existing Inspector -> Asset -> Renderer -> Shader Paths**:
+    - [ ] Audit every existing material property across the asset inspector, entity inspector, material component, `.axleasset` serialization, renderer bindings, and shader consumption; record missing or ineffective connections.
+    - [ ] Complete both save/load and live updates for Albedo, Normal Strength, Metallic, Roughness, AO Strength, Emission, Separate Maps / Packed ORM, independent UV X/Y tiling, and UV offset.
+    - [ ] Verify Surface Type, Alpha Cutoff, Cull Mode, Depth Write, Specular Highlights, Environment Reflections, and Render Queue affect the intended shader or pipeline state, including transparent draw ordering.
+    - [ ] Finish existing Clearcoat Strength / Roughness and Anisotropy Strength / Rotation shading through actual BRDF evaluation; ensure every exposed parameter reaches and affects the GPU rather than only being serialized or stored in an unused function.
+    - [ ] Define an explicit, matching CPU/GPU material layout without overloading unrelated parameters; keep preview and scene rendering consistent and preserve backward-compatible defaults for existing assets.
+    - [ ] Verify texture loading, color space, bindings, fallback textures, replacement, and clearing for every supported map in the active project.
+    - [ ] Add focused serialization and renderer checks, plus visual comparisons showing that changing each parameter produces the expected result before moving to Step 2.
+  - [ ] **Step 2 - Godot-style Material Inspector Organization & Texture Authoring**:
+    - [ ] Use shared controls for asset and entity inspectors, organized into collapsible groups: Surface / Transparency, Shading, Albedo, Metallic, Roughness, Emission, Normal Map, Ambient Occlusion, Clearcoat, Anisotropy, UV, and Advanced Options.
+    - [ ] Add clear enable toggles where appropriate, consistent defaults and tooltips, and conditional controls for enabled features; expose only features with a working renderer path.
+    - [ ] Make texture slots clickable to open a searchable project texture picker while retaining drag/drop, thumbnail previews, replacement, and Clear Texture actions.
+    - [ ] Preserve material values and asset compatibility during the UI reorganization; keep edits and live preview behavior consistent between both inspectors.
+  - [ ] **Step 3 - Automotive Material Extensions (After Existing Features Work)**:
+    - [ ] **Clearcoat**: Extend the validated two-layer shading with texture-driven coat strength and roughness for car paint and carbon fiber; verify direct-light and environment-reflection behavior.
+    - [ ] **Anisotropy**: Add texture-driven direction / flow control for brushed wheels and carbon weave; validate tangent orientation, rotation, and strength on imported meshes.
+    - [ ] **Detail Normal**: Add a secondary normal map, strength, independent UV tiling / offset, and optional mask; blend it correctly with the base normal for rubber, leather, paint, and carbon fiber.
+    - [ ] **Glass Refraction**: Add refraction enable / strength, IOR, and tint with suitable opaque scene-color / depth inputs, transparent blending, and draw ordering; document the chosen screen-space approximation and provide a fallback when required buffers are unavailable.
+    - [ ] Add complete schema, serialization, texture bindings, inspector groups, and preview support for each new feature as its own implementation step.
+  - [ ] **Step 4 - Acceptance Scenes & Backend Verification**:
+    - [ ] Maintain reference materials for car paint, brushed metal, carbon fiber, rubber / leather with detail normal, and automotive glass under fixed lighting.
+    - [ ] Check save/reopen, material reuse across entities, live editing, missing textures, old assets, and preview-versus-scene consistency with focused automated checks and visual inspection.
+    - [ ] Validate DX12 and Vulkan rendering on available supported environments, record unverified backends, and measure the cost of optional detail-normal and refraction paths.
+    - [ ] Complete and verify each implementation sub-step before its own commit; mark the phase complete only after its renderer and visual acceptance checks pass.
 
 - [x] **Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (`Engine/VFX`, `Engine/UI`, `Editor`)**
   - [x] **Step 1 - Multi-Emitter Architecture & Bursts (`Engine/VFX`, `Engine/Asset`)**:

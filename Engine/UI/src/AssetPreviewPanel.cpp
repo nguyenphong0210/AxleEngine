@@ -57,6 +57,10 @@ namespace Axle {
         uniform vec4 u_Color1;
         uniform vec4 u_Color2;
         uniform vec3 u_LightDir;
+        uniform vec3 u_CameraPosition;
+        uniform vec3 u_FillDirection;
+        uniform float u_KeyIntensity;
+        uniform float u_FillIntensity;
         uniform mat4 u_Transform;
         uniform int u_WireframeMode;
 
@@ -77,7 +81,7 @@ namespace Axle {
                 vec3 dx = dFdx(v_WorldPos);
                 vec3 dy = dFdy(v_WorldPos);
                 normal = normalize(cross(dx, dy));
-                if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
+                if (dot(normal, normalize(u_CameraPosition - v_WorldPos)) < 0.0) normal = -normal;
 
                 vec3 absN = abs(normal);
                 vec2 uv = (absN.y >= absN.x && absN.y >= absN.z) ? v_LocalPos.xz :
@@ -98,20 +102,20 @@ namespace Axle {
                 vec3 dx = dFdx(v_WorldPos);
                 vec3 dy = dFdy(v_WorldPos);
                 normal = normalize(cross(dx, dy));
-                if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
+                if (dot(normal, normalize(u_CameraPosition - v_WorldPos)) < 0.0) normal = -normal;
                 baseColor = u_Color1;
             }
             vec3 keyLight = normalize(u_LightDir);
-            vec3 fillLight = normalize(vec3(-0.45, 0.45, -0.65));
+            vec3 fillLight = normalize(u_FillDirection);
 
-            float NdotKey = max(dot(normal, keyLight), 0.0);
-            float NdotFill = max(dot(normal, fillLight), 0.0) * 0.38;
+            float NdotKey = max(dot(normal, keyLight), 0.0) * u_KeyIntensity;
+            float NdotFill = max(dot(normal, fillLight), 0.0) * 0.7 * u_FillIntensity;
             float ambient = 0.32;
             float lighting = ambient + 0.58 * NdotKey + NdotFill;
 
-            vec3 viewDir = normalize(-v_WorldPos);
+            vec3 viewDir = normalize(u_CameraPosition - v_WorldPos);
             vec3 halfDir = normalize(keyLight + viewDir);
-            float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.25;
+            float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.25 * u_KeyIntensity;
 
             o_Color = vec4(baseColor.rgb * lighting + vec3(spec), baseColor.a);
         }
@@ -254,13 +258,9 @@ namespace Axle {
             dlc.Intensity = m_EnableKeyLight ? 1.0f : 0.0f;
             dlc.AmbientIntensity = m_EnableKeyLight ? 0.65f : 0.25f;
         }
-        if (m_PreviewFillLight && m_PreviewFillLight.HasComponent<PointLightComponent>()) {
-            auto& flc = m_PreviewFillLight.GetComponent<PointLightComponent>();
-            flc.Intensity = m_EnableSecondaryLight ? 0.85f : 0.0f;
-        }
-        if (m_PreviewRimLight && m_PreviewRimLight.HasComponent<PointLightComponent>()) {
-            auto& rlc = m_PreviewRimLight.GetComponent<PointLightComponent>();
-            rlc.Intensity = m_EnableSecondaryLight ? 0.55f : 0.0f;
+        if (m_PreviewFillLight && m_PreviewFillLight.HasComponent<DirectionalLightComponent>()) {
+            auto& flc = m_PreviewFillLight.GetComponent<DirectionalLightComponent>();
+            flc.Intensity = m_EnableSecondaryLight ? 1.0f : 0.0f;
         }
     }
 
@@ -399,8 +399,10 @@ namespace Axle {
                 m_Center = glm::vec3(0.0f);
                 m_Size = glm::vec3(1.0f);
                 m_MaxDim = 1.0f;
-                m_Pitch = 15.0f;
-                m_Yaw = 30.0f;
+                m_Pitch = 0.0f;
+                m_Yaw = 0.0f;
+                m_ObjectYaw = 30.0f;
+                m_ObjectPitch = -15.0f;
                 m_Zoom = 1.0f;
                 m_PanOffset = glm::vec3(0.0f);
                 m_ActiveMaterial = mat;
@@ -489,6 +491,8 @@ namespace Axle {
             // Reset camera framing
             m_Pitch = 20.0f;
             m_Yaw = 35.0f;
+            m_ObjectYaw = 0.0f;
+            m_ObjectPitch = 0.0f;
             m_Zoom = 1.0f;
             m_PanOffset = glm::vec3(0.0f);
             m_SceneNeedsRebuild = true;
@@ -540,9 +544,38 @@ namespace Axle {
         // Reset camera framing
         m_Pitch = 20.0f;
         m_Yaw = 35.0f;
+        m_ObjectYaw = 0.0f;
+        m_ObjectPitch = 0.0f;
         m_Zoom = 1.0f;
         m_PanOffset = glm::vec3(0.0f);
         m_SceneNeedsRebuild = true;
+    }
+
+    bool AssetPreviewPanel::IsMaterialPreview() const {
+        return !m_CurrentAssetPath.empty() && m_CurrentAssetPath.extension() == ".axleasset"
+            && AssetDSL::PeekAssetKindFromFile(m_CurrentAssetPath.string()) == AssetKind::Material;
+    }
+
+    glm::quat AssetPreviewPanel::GetPreviewRotation() const {
+        float cameraYaw = glm::radians(m_Yaw);
+        glm::vec3 cameraRight(std::cos(cameraYaw), 0.0f, -std::sin(cameraYaw));
+        glm::quat rotation = glm::angleAxis(glm::radians(m_ObjectPitch), cameraRight)
+             * glm::angleAxis(glm::radians(m_ObjectYaw), glm::vec3(0.0f, 1.0f, 0.0f));
+        // The built-in plane lies on XZ; face it toward the fixed material camera.
+        if (IsMaterialPreview() && m_PreviewMeshType == PreviewMeshType::Plane)
+            rotation *= glm::angleAxis(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        return rotation;
+    }
+
+    float AssetPreviewPanel::GetPreviewScale() const {
+        float meshScale = IsMaterialPreview() && m_PreviewMeshType == PreviewMeshType::Cube ? 2.0f / 3.0f : 1.0f;
+        return meshScale / m_Zoom;
+    }
+
+    glm::mat4 AssetPreviewPanel::GetPreviewTransform() const {
+        return glm::translate(glm::mat4(1.0f), m_PanOffset)
+             * glm::mat4_cast(GetPreviewRotation())
+             * glm::scale(glm::mat4(1.0f), glm::vec3(GetPreviewScale()));
     }
 
     void AssetPreviewPanel::RenderPreview3D(float width, float height) {
@@ -569,7 +602,7 @@ namespace Axle {
         m_Framebuffer->Bind();
         glViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
         glEnable(GL_DEPTH_TEST);
-        glClearColor(0.10f, 0.12f, 0.16f, 1.0f); // Sleek studio charcoal
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // Show the same checkerboard as the RHI preview.
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         if (!m_HasAsset || (!m_IsAssembly && m_CurrentPackage.Parts.empty())) {
@@ -579,26 +612,21 @@ namespace Axle {
             return;
         }
 
-        // Turntable update
-        if (m_TurntableActive && !m_IsViewportHovered) {
-            m_Yaw += ImGui::GetIO().DeltaTime * m_TurntableSpeed * 30.0f;
-            if (m_Yaw > 360.0f) m_Yaw -= 360.0f;
-        }
-
-        // Camera setup
+        // Fixed camera; rotation, pan and zoom are applied to the object.
         float pitchRad = glm::radians(m_Pitch);
         float yawRad = glm::radians(m_Yaw);
-        float distance = m_MaxDim * 1.95f * m_Zoom;
+        bool isMaterial = IsMaterialPreview();
+        float distance = m_MaxDim * (isMaterial ? 3.0f : 1.95f);
 
-        glm::vec3 camPos = m_PanOffset + glm::vec3(
+        glm::vec3 camPos = glm::vec3(
             distance * std::cos(pitchRad) * std::sin(yawRad),
             distance * std::sin(pitchRad),
             distance * std::cos(pitchRad) * std::cos(yawRad)
         );
 
-        glm::mat4 view = glm::lookAt(camPos, m_PanOffset, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 view = glm::lookAt(camPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         float aspect = static_cast<float>(m_ViewportWidth) / static_cast<float>(m_ViewportHeight);
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.01f, distance * 8.0f);
+        glm::mat4 proj = glm::perspective(glm::radians(isMaterial ? 20.0f : 45.0f), aspect, 0.01f, distance * 8.0f);
         glm::mat4 viewProj = proj * view;
 
         m_Shader->Bind();
@@ -611,6 +639,11 @@ namespace Axle {
             std::cos(elevRad) * std::cos(azimRad)
         ));
         m_Shader->SetFloat3("u_LightDir", sunLightDir);
+        m_Shader->SetFloat3("u_CameraPosition", camPos);
+        m_Shader->SetFloat3("u_FillDirection", glm::vec3(0.0f, -1.0f, 0.0f));
+        m_Shader->SetFloat("u_KeyIntensity", m_EnableKeyLight ? 1.0f : 0.0f);
+        m_Shader->SetFloat("u_FillIntensity", m_EnableSecondaryLight ? 1.0f : 0.0f);
+        glm::mat4 previewTransform = GetPreviewTransform();
 
         if (m_WireframeMode) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -624,7 +657,7 @@ namespace Axle {
             std::function<void(const AssemblyNode&, const glm::mat4&)> renderNodeRec = [&](const AssemblyNode& node, const glm::mat4& parentMat) {
                 glm::mat4 localMat = node.Transform.GetTransform();
                 glm::mat4 worldMat = parentMat * localMat;
-                glm::mat4 model = glm::translate(glm::mat4(1.0f), -m_Center) * worldMat;
+                glm::mat4 model = previewTransform * glm::translate(glm::mat4(1.0f), -m_Center) * worldMat;
 
                 if (node.HasMesh) {
                     std::shared_ptr<VertexArray> vao = node.Mesh.VAO;
@@ -652,7 +685,7 @@ namespace Axle {
                 glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
                                    * glm::mat4_cast(part.LocalRotation)
                                    * glm::scale(glm::mat4(1.0f), part.LocalScale);
-                glm::mat4 model = glm::translate(glm::mat4(1.0f), -m_Center) * localMat;
+                glm::mat4 model = previewTransform * glm::translate(glm::mat4(1.0f), -m_Center) * localMat;
 
                 m_Shader->SetMat4("u_Transform", model);
                 m_Shader->SetInt("u_PatternMode", part.LoadedMesh.SourceData.PatternMode);
@@ -750,6 +783,12 @@ namespace Axle {
     void AssetPreviewPanel::SetPreviewMeshType(PreviewMeshType type) {
         m_PreviewMeshType = type;
         m_SceneNeedsRebuild = true;
+        if (IsMaterialPreview()) {
+            m_ObjectYaw = type == PreviewMeshType::Plane ? 0.0f : 30.0f;
+            m_ObjectPitch = type == PreviewMeshType::Plane ? 0.0f : -15.0f;
+            m_Zoom = 1.0f;
+            m_PanOffset = glm::vec3(0.0f);
+        }
         if (!m_SerializerContext) return;
         std::shared_ptr<VertexArray> vao = m_SerializerContext->SphereMesh;
         if (type == PreviewMeshType::Cube) vao = m_FallbackMesh;
@@ -812,13 +851,14 @@ namespace Axle {
             m_PreviewScene = std::make_shared<Scene>();
         }
         m_PreviewScene->Clear();
+        // Mesh parts share one transform. Lights remain outside this hierarchy.
+        m_PreviewEntity = m_PreviewScene->CreateEntity("PreviewObject");
 
         bool isMaterial = (!m_CurrentAssetPath.empty() && 
                            m_CurrentAssetPath.extension() == ".axleasset" && 
                            AssetDSL::PeekAssetKindFromFile(m_CurrentAssetPath.string()) == AssetKind::Material);
 
         if (isMaterial) {
-            m_PreviewEntity = m_PreviewScene->CreateEntity("PreviewMaterialObject");
             auto& tc = m_PreviewEntity.GetComponent<TransformComponent>();
             tc.Translation = glm::vec3(0.0f);
             tc.Scale = glm::vec3(1.0f);
@@ -852,6 +892,7 @@ namespace Axle {
                 glm::vec3 worldPos = parentPos + node.Transform.Translation;
                 if (node.HasMesh) {
                     auto partEnt = m_PreviewScene->CreateEntity(node.Tag.empty() ? "Node" : node.Tag);
+                    partEnt.SetParent(m_PreviewEntity, false);
                     auto& ptc = partEnt.GetComponent<TransformComponent>();
                     ptc.Translation = worldPos - m_Center;
                     ptc.Rotation = node.Transform.Rotation;
@@ -882,6 +923,7 @@ namespace Axle {
         } else {
             for (const auto& part : m_CurrentPackage.Parts) {
                 auto partEnt = m_PreviewScene->CreateEntity(part.Name.empty() ? "Part" : part.Name);
+                partEnt.SetParent(m_PreviewEntity, false);
                 auto& ptc = partEnt.GetComponent<TransformComponent>();
                 ptc.Translation = part.LocalTranslation - m_Center;
                 ptc.Rotation = part.LocalRotation;
@@ -899,32 +941,26 @@ namespace Axle {
             }
         }
 
-        // 1. Primary Directional Key Sun Light (Soft studio key softbox)
+        // Godot-style rig: a neutral light from above/front and a dimmer light
+        // from below. Add fill first so the key is the primary directional sun.
+        m_PreviewFillLight = m_PreviewScene->CreateEntity("PreviewFillLight");
+        auto& flc = m_PreviewFillLight.AddComponent<DirectionalLightComponent>();
+        flc.Azimuth = 0.0f;
+        flc.Elevation = -90.0f;
+        flc.Color = glm::vec3(0.7f);
+        flc.Intensity = m_EnableSecondaryLight ? 1.0f : 0.0f;
+        flc.AmbientIntensity = 0.65f;
+        flc.CastShadows = false;
+
         m_PreviewLight = m_PreviewScene->CreateEntity("PreviewSunLight");
         auto& dlc = m_PreviewLight.AddComponent<DirectionalLightComponent>();
         dlc.Azimuth = m_SunAzimuth;
         dlc.Elevation = m_SunElevation;
-        dlc.Color = glm::vec3(1.0f, 0.98f, 0.95f);
+        dlc.Color = glm::vec3(1.0f);
         dlc.Intensity = m_EnableKeyLight ? 1.0f : 0.0f;
         dlc.AmbientIntensity = m_EnableKeyLight ? 0.65f : 0.25f;
 
-        // 2. Secondary Studio Fill Light (Elevated Cool Soft Studio Fill)
-        m_PreviewFillLight = m_PreviewScene->CreateEntity("PreviewFillLight");
-        auto& flc = m_PreviewFillLight.AddComponent<PointLightComponent>();
-        flc.Color = glm::vec3(0.88f, 0.93f, 1.0f);
-        flc.Intensity = m_EnableSecondaryLight ? 0.85f : 0.0f;
-        flc.Radius = 16.0f;
-        auto& flt = m_PreviewFillLight.GetComponent<TransformComponent>();
-        flt.Translation = glm::vec3(-2.6f, 2.4f, 1.8f);
-
-        // 3. Studio Rim Light (Back Light for Silhouette)
-        m_PreviewRimLight = m_PreviewScene->CreateEntity("PreviewRimLight");
-        auto& rlc = m_PreviewRimLight.AddComponent<PointLightComponent>();
-        rlc.Color = glm::vec3(0.92f, 0.95f, 1.0f);
-        rlc.Intensity = m_EnableSecondaryLight ? 0.55f : 0.0f;
-        rlc.Radius = 16.0f;
-        auto& rlt = m_PreviewRimLight.GetComponent<TransformComponent>();
-        rlt.Translation = glm::vec3(1.8f, 2.5f, -3.2f);
+        dlc.CastShadows = false;
 
         m_SceneNeedsRebuild = false;
     }
@@ -942,52 +978,42 @@ namespace Axle {
         }
         if (!m_PreviewScene) return;
 
-        // Turntable update: smoothly rotate the preview object (Godot & Blender inspector parity)
-        if (m_TurntableActive && !m_IsViewportHovered) {
-            m_ObjectYaw += ImGui::GetIO().DeltaTime * m_TurntableSpeed * 30.0f;
-            if (m_ObjectYaw > 360.0f) m_ObjectYaw -= 360.0f;
-            if (m_PreviewEntity && m_PreviewEntity.HasComponent<TransformComponent>()) {
-                m_PreviewEntity.GetComponent<TransformComponent>().Rotation = glm::angleAxis(glm::radians(m_ObjectYaw), glm::vec3(0.0f, 1.0f, 0.0f));
-            }
+        // Apply manual rotation even while automatic rotation is paused.
+        if (m_PreviewEntity && m_PreviewEntity.HasComponent<TransformComponent>()) {
+            auto& tc = m_PreviewEntity.GetComponent<TransformComponent>();
+            tc.Translation = m_PanOffset;
+            tc.Rotation = GetPreviewRotation();
+            tc.Scale = glm::vec3(GetPreviewScale());
         }
 
         // Camera setup
         float pitchRad = glm::radians(m_Pitch);
         float yawRad = glm::radians(m_Yaw);
-        float distance = m_MaxDim * 2.2f * m_Zoom;
+        bool isMaterial = IsMaterialPreview();
+        float distance = m_MaxDim * (isMaterial ? 3.0f : 2.2f);
 
-        glm::vec3 camPos = m_PanOffset + glm::vec3(
+        glm::vec3 camPos = glm::vec3(
             distance * std::cos(pitchRad) * std::sin(yawRad),
             distance * std::sin(pitchRad),
             distance * std::cos(pitchRad) * std::cos(yawRad)
         );
 
-        // Studio 3-point lighting in fixed World Space (Godot, Blender & Unreal studio parity)
-        // Lights stay grounded in world space so orbiting the camera inspects specular reflections naturally across all angles
+        // Two fixed world-space lights, independent of all mouse gestures.
         if (m_PreviewLight && m_PreviewLight.HasComponent<DirectionalLightComponent>()) {
             auto& dlc = m_PreviewLight.GetComponent<DirectionalLightComponent>();
             dlc.Elevation = m_SunElevation;
             dlc.Azimuth = m_SunAzimuth;
         }
 
-        if (m_PreviewFillLight && m_PreviewFillLight.HasComponent<TransformComponent>()) {
-            m_PreviewFillLight.GetComponent<TransformComponent>().Translation = 
-                m_PanOffset + glm::vec3(-m_MaxDim * 2.6f, m_MaxDim * 2.2f, m_MaxDim * 1.8f);
-        }
-
-        if (m_PreviewRimLight && m_PreviewRimLight.HasComponent<TransformComponent>()) {
-            m_PreviewRimLight.GetComponent<TransformComponent>().Translation = 
-                m_PanOffset + glm::vec3(m_MaxDim * 1.8f, m_MaxDim * 2.5f, -m_MaxDim * 3.2f);
-        }
-
         float aspect = (height > 0.0f) ? (width / height) : 1.0f;
-        PerspectiveCamera camera(45.0f, aspect, 0.05f, distance * 8.0f);
-        glm::mat4 view = glm::lookAt(camPos, m_PanOffset, glm::vec3(0.0f, 1.0f, 0.0f));
+        PerspectiveCamera camera(isMaterial ? 20.0f : 45.0f, aspect, 0.05f, distance * 8.0f);
+        glm::mat4 view = glm::lookAt(camPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         camera.SetViewMatrix(view, camPos);
 
         SceneRenderSettings settings;
         settings.EnableShadows = false;
         settings.EnableSkybox = false;
+        settings.EnableStudioLightLobes = false;
         settings.EnableToneMapping = true;
         settings.EnableFXAA = true;
         settings.MSAASamples = 4;
@@ -1005,10 +1031,13 @@ namespace Axle {
     void AssetPreviewPanel::RenderPreviewViewport() {
         if (!m_HasAsset) return;
 
-        bool isMaterial = (!m_CurrentAssetPath.empty() && 
-                           m_CurrentAssetPath.extension() == ".axleasset" && 
-                           AssetDSL::PeekAssetKindFromFile(m_CurrentAssetPath.string()) == AssetKind::Material);
+        if (m_TurntableActive && !m_IsViewportHovered) {
+            m_ObjectYaw += ImGui::GetIO().DeltaTime * m_TurntableSpeed * 30.0f;
+            if (m_ObjectYaw > 360.0f) m_ObjectYaw -= 360.0f;
+        }
 
+        bool isMaterial = IsMaterialPreview();
+        float uiScale = ImGui::GetFontSize() / 15.5f;
         float availW = ImGui::GetContentRegionAvail().x;
         float viewportH = std::clamp(availW * 0.54f, 150.0f, 240.0f);
 
@@ -1017,12 +1046,12 @@ namespace Axle {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
         // 1. Godot-style Checkerboard background grid (Refined Neutral Mid-Gray Studio)
-        const float tileSize = 14.0f;
+        const float tileSize = 32.0f * uiScale;
         for (float y = p0.y; y < p1.y; y += tileSize) {
             for (float x = p0.x; x < p1.x; x += tileSize) {
                 int cx = static_cast<int>((x - p0.x) / tileSize);
                 int cy = static_cast<int>((y - p0.y) / tileSize);
-                ImU32 col = ((cx + cy) % 2 == 0) ? IM_COL32(118, 118, 118, 255) : IM_COL32(76, 76, 76, 255);
+                ImU32 col = ((cx + cy) % 2 == 0) ? IM_COL32(128, 128, 128, 255) : IM_COL32(64, 64, 64, 255);
                 ImVec2 tileMax(std::min(x + tileSize, p1.x), std::min(y + tileSize, p1.y));
                 drawList->AddRectFilled(ImVec2(x, y), tileMax, col);
             }
@@ -1057,201 +1086,6 @@ namespace Axle {
 
         m_IsViewportHovered = ImGui::IsItemHovered();
 
-        // 3. Viewport Border
-        drawList->AddRect(p0, p1, IM_COL32(40, 43, 50, 255), 3.0f, 0, 1.5f);
-
-        // 4. Godot-style Primitive Mesh Selector (Vertical strip on top-left inside viewport)
-        if (isMaterial) {
-            ImGui::SetCursorScreenPos(ImVec2(p0.x + 8.0f, p0.y + 8.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 4.0f));
-
-            auto DrawGodotMeshBtn = [&](const std::string& iconFile, PreviewMeshType type, const char* fallbackText, const char* tooltip) {
-                bool isSel = (m_PreviewMeshType == type);
-                uint64_t iconTex = GetOrCreateIconTexture(iconFile);
-
-                ImVec2 btnSize(24.0f, 24.0f);
-                ImGui::PushID(iconFile.c_str());
-
-                bool clicked = false;
-                if (iconTex != 0) {
-                    ImVec4 bgCol = isSel ? ImVec4(0.24f, 0.52f, 0.88f, 0.90f) : ImVec4(0.12f, 0.14f, 0.18f, 0.70f);
-                    ImVec4 tintCol = isSel ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.90f, 0.92f, 0.96f, 0.90f);
-                    ImGui::PushStyleColor(ImGuiCol_Button, bgCol);
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.35f, 0.45f, 0.85f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.45f, 0.80f, 1.0f));
-                    clicked = ImGui::ImageButton(iconFile.c_str(), (ImTextureID)(intptr_t)iconTex, btnSize, ImVec2(0, 0), ImVec2(1, 1), bgCol, tintCol);
-                    ImGui::PopStyleColor(3);
-                } else {
-                    if (isSel) {
-                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.52f, 0.88f, 0.90f));
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-                    } else {
-                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.16f, 0.20f, 0.75f));
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.75f, 0.82f, 1.0f));
-                    }
-                    clicked = ImGui::Button(fallbackText, btnSize);
-                    ImGui::PopStyleColor(2);
-                }
-
-                if (clicked) {
-                    SetPreviewMeshType(type);
-                }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
-                ImGui::PopID();
-            };
-
-            DrawGodotMeshBtn("icon_mesh_sphere.png", PreviewMeshType::Sphere, "O", "Preview on Sphere (Godot)");
-            DrawGodotMeshBtn("icon_mesh_cube.png", PreviewMeshType::Cube, "#", "Preview on Cube");
-            DrawGodotMeshBtn("icon_mesh_cylinder.png", PreviewMeshType::Cylinder, "=", "Preview on Cylinder");
-            DrawGodotMeshBtn("icon_mesh_plane.png", PreviewMeshType::Plane, "-", "Preview on Plane");
-
-            ImGui::PopStyleVar(2);
-        }
-
-        // 5. Godot-style Turntable Controls (Top-right inside viewport)
-        {
-            ImGui::SetCursorScreenPos(ImVec2(p1.x - 64.0f, p0.y + 8.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 0.0f));
-            ImVec2 btnSize(22.0f, 22.0f);
-
-            uint64_t pausePlayTex = GetOrCreateIconTexture(m_TurntableActive ? "icon_pause.png" : "icon_play.png");
-            ImVec4 ctrlBg(0.12f, 0.14f, 0.18f, 0.70f);
-            ImVec4 ctrlTint(0.90f, 0.92f, 0.96f, 0.90f);
-            ImGui::PushStyleColor(ImGuiCol_Button, ctrlBg);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.35f, 0.45f, 0.85f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.45f, 0.80f, 1.0f));
-
-            bool pauseClicked = false;
-            if (pausePlayTex != 0) {
-                pauseClicked = ImGui::ImageButton("##pause_orbit", (ImTextureID)(intptr_t)pausePlayTex, btnSize, ImVec2(0, 0), ImVec2(1, 1), ctrlBg, ctrlTint);
-            } else {
-                pauseClicked = ImGui::Button(m_TurntableActive ? "||" : ">", btnSize);
-            }
-            if (pauseClicked) {
-                m_TurntableActive = !m_TurntableActive;
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_TurntableActive ? "Pause Orbit" : "Play Orbit");
-
-            ImGui::SameLine();
-            uint64_t resetTex = GetOrCreateIconTexture("icon_reset_view.png");
-            bool resetClicked = false;
-            if (resetTex != 0) {
-                resetClicked = ImGui::ImageButton("##reset_orbit", (ImTextureID)(intptr_t)resetTex, btnSize, ImVec2(0, 0), ImVec2(1, 1), ctrlBg, ctrlTint);
-            } else {
-                resetClicked = ImGui::Button("R", btnSize);
-            }
-            if (resetClicked) {
-                m_Pitch = 15.0f;
-                m_Yaw = 30.0f;
-                m_Zoom = 1.0f;
-                m_PanOffset = glm::vec3(0.0f);
-                m_ObjectYaw = 0.0f;
-                m_SunAzimuth = 45.0f;
-                m_SunElevation = 50.0f;
-                if (m_PreviewEntity && m_PreviewEntity.HasComponent<TransformComponent>()) {
-                    m_PreviewEntity.GetComponent<TransformComponent>().Rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-                }
-                m_SceneNeedsRebuild = true;
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset View & Lighting");
-
-            ImGui::PopStyleColor(3);
-            ImGui::PopStyleVar(2);
-        }
-
-        // 6. Godot-style Light Toggles (Vertical strip on right edge inside viewport)
-        if (isMaterial) {
-            ImGui::SetCursorScreenPos(ImVec2(p1.x - 32.0f, p0.y + 42.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 4.0f));
-
-            auto DrawLightToggleBtn = [&](bool& state, const std::string& activeIcon, const std::string& inactiveIcon, const char* name, const char* tooltip) {
-                uint64_t iconTex = GetOrCreateIconTexture(state ? activeIcon : inactiveIcon);
-                ImVec2 btnSize(22.0f, 22.0f);
-                ImGui::PushID(name);
-
-                bool clicked = false;
-                ImVec4 bgCol = state ? ImVec4(0.18f, 0.22f, 0.30f, 0.85f) : ImVec4(0.10f, 0.12f, 0.15f, 0.65f);
-                ImVec4 tintCol = state ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.60f, 0.62f, 0.66f, 0.70f);
-                ImGui::PushStyleColor(ImGuiCol_Button, bgCol);
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.35f, 0.45f, 0.90f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.45f, 0.80f, 1.0f));
-
-                if (iconTex != 0) {
-                    clicked = ImGui::ImageButton(name, (ImTextureID)(intptr_t)iconTex, btnSize, ImVec2(0, 0), ImVec2(1, 1), bgCol, tintCol);
-                } else {
-                    clicked = ImGui::Button(state ? name : "-", btnSize);
-                }
-                ImGui::PopStyleColor(3);
-
-                if (clicked) {
-                    state = !state;
-                    UpdatePreviewLighting();
-                }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s: %s", tooltip, state ? "Enabled (Click to Disable)" : "Disabled (Click to Enable)");
-                ImGui::PopID();
-            };
-
-            DrawLightToggleBtn(m_EnableKeyLight, "icon_light_1.png", "icon_light_1_gray.png", "1", "Key Sun Light");
-            DrawLightToggleBtn(m_EnableSecondaryLight, "icon_light_2.png", "icon_light_2_gray.png", "2", "Fill & Rim Lights");
-
-            ImGui::PopStyleVar(2);
-        }
-
-        // 6. Godot-style Material Identity Badge Pill (Centered below the viewport)
-        ImGui::SetCursorScreenPos(ImVec2(p0.x, p1.y + 6.0f));
-        ImVec2 badgeP0 = ImGui::GetCursorScreenPos();
-        ImVec2 badgeP1 = ImVec2(badgeP0.x + availW, badgeP0.y + 24.0f);
-        drawList->AddRectFilled(badgeP0, badgeP1, IM_COL32(30, 33, 40, 255), 3.0f);
-        drawList->AddRect(badgeP0, badgeP1, IM_COL32(48, 53, 64, 255), 3.0f);
-
-        std::string assetTitle = isMaterial ? "BaseMaterial3D" : (m_IsAssembly ? "Assembly3D" : "MeshInstance3D");
-        std::string assetName = m_CurrentAssetPath.filename().string();
-        std::string badgeText = assetTitle + "  •  " + assetName;
-        ImVec2 txtSz = ImGui::CalcTextSize(badgeText.c_str());
-        ImVec2 txtPos = ImVec2(badgeP0.x + (availW - txtSz.x) * 0.5f, badgeP0.y + (24.0f - txtSz.y) * 0.5f);
-        drawList->AddText(txtPos, IM_COL32(200, 210, 225, 255), badgeText.c_str());
-        ImGui::Dummy(ImVec2(availW, 26.0f));
-
-        if (m_IsViewportHovered) {
-            // Scroll zoom
-            float wheel = ImGui::GetIO().MouseWheel;
-            if (wheel != 0.0f) {
-                m_Zoom -= wheel * 0.12f;
-                m_Zoom = std::clamp(m_Zoom, 0.25f, 4.0f);
-            }
-
-            // Left drag orbit
-            if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                ImVec2 delta = ImGui::GetIO().MouseDelta;
-                m_Yaw -= delta.x * 0.75f;
-                m_Pitch += delta.y * 0.75f;
-                m_Pitch = std::clamp(m_Pitch, -85.0f, 85.0f);
-            }
-
-            // Middle drag pan
-            if (ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
-                ImVec2 delta = ImGui::GetIO().MouseDelta;
-                m_PanOffset.x -= delta.x * 0.005f * m_MaxDim;
-                m_PanOffset.y += delta.y * 0.005f * m_MaxDim;
-            }
-
-            // Right drag rotate preview sun & environment lighting angle
-            if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
-                ImVec2 delta = ImGui::GetIO().MouseDelta;
-                m_SunAzimuth += delta.x * 0.75f;
-                m_SunElevation -= delta.y * 0.75f;
-                m_SunElevation = std::clamp(m_SunElevation, 5.0f, 85.0f);
-                if (m_PreviewLight && m_PreviewScene && m_PreviewLight.HasComponent<DirectionalLightComponent>()) {
-                    auto& dlc = m_PreviewLight.GetComponent<DirectionalLightComponent>();
-                    dlc.Azimuth = m_SunAzimuth;
-                    dlc.Elevation = m_SunElevation;
-                }
-            }
-        }
-
         // Drag & Drop custom mesh into preview turntable
         if (ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
@@ -1264,6 +1098,148 @@ namespace Axle {
                 }
             }
             ImGui::EndDragDropTarget();
+        }
+
+        // Flat, inset icon strips match the reference without covering the material.
+        // Place every button explicitly: ImGui's normal line flow would put the
+        // second light at the left edge instead of below the first one.
+        const float inset = 2.0f * uiScale;
+        const float buttonSize = 28.0f * uiScale;
+        const float rowStep = 32.0f * uiScale;
+        const float iconSize = 16.0f * uiScale;
+        drawList->PushClipRect(p0, p1, true);
+        auto DrawPreviewIcon = [&](const char* id, const char* icon, const char* fallback,
+                                   ImVec2 position, bool enabled, const char* tooltip) {
+            ImGui::SetCursorScreenPos(position);
+            ImGui::PushID(id);
+            bool clicked = ImGui::InvisibleButton("##button", ImVec2(buttonSize, buttonSize));
+            bool hovered = ImGui::IsItemHovered();
+            if (hovered || ImGui::IsItemActive()) m_IsViewportHovered = false;
+            if (hovered) {
+                drawList->AddRectFilled(position, ImVec2(position.x + buttonSize, position.y + buttonSize),
+                                       IM_COL32(255, 255, 255, 28), 3.0f * uiScale);
+                ImGui::SetTooltip("%s", tooltip);
+            }
+            uint64_t texture = GetOrCreateIconTexture(icon);
+            ImU32 tint = enabled ? IM_COL32(235, 235, 235, 255) : IM_COL32(155, 155, 155, 210);
+            ImVec2 iconPos(position.x + (buttonSize - iconSize) * 0.5f,
+                           position.y + (buttonSize - iconSize) * 0.5f);
+            if (texture) {
+                drawList->AddImage((ImTextureID)(intptr_t)texture, iconPos,
+                                  ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+                                  ImVec2(0, 0), ImVec2(1, 1), tint);
+            } else {
+                ImVec2 textSize = ImGui::CalcTextSize(fallback);
+                drawList->AddText(ImVec2(position.x + (buttonSize - textSize.x) * 0.5f,
+                                         position.y + (buttonSize - textSize.y) * 0.5f), tint, fallback);
+            }
+            ImGui::PopID();
+            return clicked;
+        };
+
+        if (isMaterial) {
+            float left = p0.x + inset;
+            float right = p1.x - inset - buttonSize;
+            if (DrawPreviewIcon("sphere", "icon_mesh_sphere.png", "O", ImVec2(left, p0.y + inset),
+                                m_PreviewMeshType == PreviewMeshType::Sphere, "Preview on sphere"))
+                SetPreviewMeshType(PreviewMeshType::Sphere);
+            if (DrawPreviewIcon("cube", "icon_mesh_cube.png", "#", ImVec2(left, p0.y + inset + rowStep),
+                                m_PreviewMeshType == PreviewMeshType::Cube, "Preview on cube"))
+                SetPreviewMeshType(PreviewMeshType::Cube);
+            if (DrawPreviewIcon("plane", "icon_mesh_plane.png", "-", ImVec2(left, p0.y + inset + rowStep * 2.0f),
+                                m_PreviewMeshType == PreviewMeshType::Plane, "Preview on quad"))
+                SetPreviewMeshType(PreviewMeshType::Plane);
+            if (DrawPreviewIcon("light1", "icon_light_1.png", "1", ImVec2(right, p0.y + inset),
+                                m_EnableKeyLight, "Toggle first light")) {
+                m_EnableKeyLight = !m_EnableKeyLight;
+                UpdatePreviewLighting();
+            }
+            if (DrawPreviewIcon("light2", "icon_light_2.png", "2", ImVec2(right, p0.y + inset + rowStep),
+                                m_EnableSecondaryLight, "Toggle second light")) {
+                m_EnableSecondaryLight = !m_EnableSecondaryLight;
+                UpdatePreviewLighting();
+            }
+        }
+        drawList->PopClipRect();
+
+        // Keep extra preview actions available without adding toolbar clutter.
+        if (m_IsViewportHovered && ImGui::IsMouseReleased(ImGuiMouseButton_Right))
+            ImGui::OpenPopup("PreviewOptions");
+        if (ImGui::BeginPopup("PreviewOptions")) {
+            ImGui::MenuItem("Auto-rotate", nullptr, &m_TurntableActive);
+            if (ImGui::BeginMenu("Preview mesh")) {
+                if (ImGui::MenuItem("Sphere")) SetPreviewMeshType(PreviewMeshType::Sphere);
+                if (ImGui::MenuItem("Cube")) SetPreviewMeshType(PreviewMeshType::Cube);
+                if (ImGui::MenuItem("Quad")) SetPreviewMeshType(PreviewMeshType::Plane);
+                if (ImGui::MenuItem("Cylinder")) SetPreviewMeshType(PreviewMeshType::Cylinder);
+                ImGui::EndMenu();
+            }
+            if (ImGui::MenuItem("Reset preview")) {
+                m_Pitch = isMaterial ? 0.0f : 20.0f;
+                m_Yaw = isMaterial ? 0.0f : 35.0f;
+                m_ObjectPitch = isMaterial && m_PreviewMeshType != PreviewMeshType::Plane ? -15.0f : 0.0f;
+                m_ObjectYaw = isMaterial && m_PreviewMeshType != PreviewMeshType::Plane ? 30.0f : 0.0f;
+                m_Zoom = 1.0f;
+                m_PanOffset = glm::vec3(0.0f);
+                m_SunAzimuth = 45.0f;
+                m_SunElevation = 35.264f;
+                m_EnableKeyLight = true;
+                m_EnableSecondaryLight = true;
+                m_SceneNeedsRebuild = true;
+            }
+            ImGui::EndPopup();
+        }
+        if (ImGui::IsPopupOpen("PreviewOptions")) m_IsViewportHovered = false;
+
+        // Full-width resource type row, like the BaseMaterial3D row in the reference.
+        const float footerGap = 4.0f * uiScale;
+        const float footerHeight = 32.0f * uiScale;
+        ImVec2 footer0(p0.x, p1.y + footerGap);
+        ImVec2 footer1(p1.x, footer0.y + footerHeight);
+        drawList->AddRectFilled(footer0, footer1, IM_COL32(56, 56, 56, 255), 3.0f * uiScale);
+        std::string badgeText = isMaterial ? "BaseMaterial3D" : (m_IsAssembly ? "Assembly3D" : "MeshInstance3D");
+        ImVec2 textSize = ImGui::CalcTextSize(badgeText.c_str());
+        float labelWidth = textSize.x + iconSize + 6.0f * uiScale;
+        float labelX = p0.x + (availW - labelWidth) * 0.5f;
+        uint64_t typeIcon = GetOrCreateIconTexture("icon_mesh_cube.png");
+        if (typeIcon) {
+            ImVec2 iconPos(labelX, footer0.y + (footerHeight - iconSize) * 0.5f);
+            drawList->AddImage((ImTextureID)(intptr_t)typeIcon, iconPos,
+                              ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+                              ImVec2(0, 0), ImVec2(1, 1), IM_COL32(165, 165, 165, 255));
+        }
+        drawList->AddText(ImVec2(labelX + iconSize + 6.0f * uiScale, footer0.y + (footerHeight - textSize.y) * 0.5f),
+                          IM_COL32(210, 210, 210, 255), badgeText.c_str());
+        ImGui::SetCursorScreenPos(footer0);
+        ImGui::Dummy(ImVec2(availW, footerHeight));
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_CurrentAssetPath.filename().string().c_str());
+
+        if (m_IsViewportHovered) {
+            // Zoom scales the object, leaving the camera and lights fixed.
+            float wheel = ImGui::GetIO().MouseWheel;
+            if (wheel != 0.0f) {
+                m_Zoom -= wheel * 0.12f;
+                m_Zoom = std::clamp(m_Zoom, 0.25f, 4.0f);
+            }
+
+            // Left drag rotates the object around its center, not the camera.
+            if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                ImVec2 delta = ImGui::GetIO().MouseDelta;
+                m_ObjectYaw += delta.x * 0.75f;
+                m_ObjectPitch += delta.y * 0.75f;
+                m_ObjectPitch = std::clamp(m_ObjectPitch, -85.0f, 85.0f);
+            }
+
+            // Pan moves the object along the fixed camera's screen axes.
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
+                ImVec2 delta = ImGui::GetIO().MouseDelta;
+                float cameraYaw = glm::radians(m_Yaw);
+                float cameraPitch = glm::radians(m_Pitch);
+                glm::vec3 right(std::cos(cameraYaw), 0.0f, -std::sin(cameraYaw));
+                glm::vec3 up(-std::sin(cameraPitch) * std::sin(cameraYaw), std::cos(cameraPitch),
+                             -std::sin(cameraPitch) * std::cos(cameraYaw));
+                m_PanOffset += (right * delta.x - up * delta.y) * 0.005f * m_MaxDim;
+            }
         }
     }
 

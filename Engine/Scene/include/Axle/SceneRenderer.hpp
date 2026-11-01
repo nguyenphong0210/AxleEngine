@@ -20,6 +20,7 @@ namespace Axle {
     struct SceneRenderSettings {
         bool EnableShadows = true;
         bool EnableSkybox = true;
+        bool EnableStudioLightLobes = true; // Analytical softboxes in the fallback environment.
         bool EnableParticles = true;
         bool EnableToneMapping = false;
         bool EnableFXAA = false;

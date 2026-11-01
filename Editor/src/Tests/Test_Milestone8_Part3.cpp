@@ -1755,6 +1755,47 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
         std::cout << "  -> Root descriptors (SceneConstants b1, MultiLightBuffer b2) successfully bound on CommandBuffer." << std::endl;
         std::cout << "  -> PASS: Live viewport scene dispatch with Forward+ multi-light verified." << std::endl;
 
+        // Material previews need two directional lights; neither may be dropped
+        // or attenuated as a point light, regardless of which becomes primary.
+        auto fill = scene->CreateEntity("PreviewDirectionalFill");
+        auto& fillLight = fill.AddComponent<Axle::DirectionalLightComponent>();
+        fillLight.Azimuth = 0.0f;
+        fillLight.Elevation = -90.0f;
+        fillLight.Color = glm::vec3(0.7f);
+        fillLight.Intensity = 0.5f;
+        sceneRenderer.RenderScene(scene, camera, &colorTarget, &depthTarget);
+        const auto& twoSunData = sceneRenderer.GetLightBuffer().GetData();
+        unsigned int directionalEntries = 0;
+        for (uint32_t i = 0; i < twoSunData.LightCounts.x; ++i)
+            if (twoSunData.PointLights[i].Params.z > 0.5f) ++directionalEntries;
+        if (twoSunData.LightCounts.x != 5 || directionalEntries != 1) {
+            std::cerr << "FAIL: Both directional lights and all four point lights must reach the GPU." << std::endl;
+            return false;
+        }
+        auto fillRadiance = [&]() {
+            const auto& data = sceneRenderer.GetLightBuffer().GetData();
+            glm::vec3 direction(0.0f, -1.0f, 0.0f);
+            if (glm::dot(glm::vec3(data.SunLight.DirectionAndIlluminance), direction) > 0.999f)
+                return data.SunLight.DirectionAndIlluminance.w * 0.000035f;
+            for (uint32_t i = 0; i < data.LightCounts.x; ++i) {
+                const auto& light = data.PointLights[i];
+                if (light.Params.z > 0.5f && glm::dot(glm::vec3(light.PositionAndRadius), direction) > 0.999f)
+                    return light.ColorAndIntensity.w;
+            }
+            return -1.0f;
+        };
+        if (std::abs(fillRadiance() - 1.75f) > 0.001f) {
+            std::cerr << "FAIL: The directional fill must illuminate from below with uniform radiance." << std::endl;
+            return false;
+        }
+        fillLight.Intensity = 0.0f;
+        sceneRenderer.RenderScene(scene, camera, &colorTarget, &depthTarget);
+        if (fillRadiance() != 0.0f) {
+            std::cerr << "FAIL: Disabling the second directional light must remove its radiance." << std::endl;
+            return false;
+        }
+        std::cout << "  -> PASS: Two directional lights, below-object fill direction, and independent fill toggle verified." << std::endl;
+
         colorTarget.Shutdown();
         depthTarget.Shutdown();
         sceneRenderer.Shutdown();

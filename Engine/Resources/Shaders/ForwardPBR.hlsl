@@ -77,7 +77,7 @@ struct DirectionalSunLight {
 struct PointLightData {
     float4 PositionAndRadius; // xyz: World Pos, w: Radius (m)
     float4 ColorAndIntensity; // xyz: Linear RGB Color, w: Luminous Intensity (Lumens/Candela)
-    float4 Params;            // x: Falloff exponent (1.0 = inverse-square), y: MinRadius (0.05m), zw: Reserved
+    float4 Params;            // x: Falloff exponent, y: MinRadius, z: Additional directional light, w: Reserved
     float4 Reserved;          // 64 bytes total
 };
 
@@ -92,7 +92,7 @@ cbuffer MultiLightBuffer : register(b2, space0) {
     DirectionalSunLight u_SunLight;
     uint4               u_LightCounts;        // x: NumPointLights (0..16), y: NumSpotLights (0..16), z: HasSunLight, w: LightingMode
     float4              u_CameraPosExposure;  // xyz: Camera Pos, w: Exposure
-    float4              u_LightReserved[2];   // 32 bytes header padding to 128 bytes
+    float4              u_LightReserved[2];   // [0].x: Disable analytical studio light lobes; remaining fields reserved
     PointLightData      u_PointLights[16];    // 16 * 64 = 1024 bytes
     SpotLightData       u_SpotLights[16];     // 16 * 64 = 1024 bytes
     float4              u_LightTailReserved[8]; // 128 bytes tail padding to 2304 bytes
@@ -339,12 +339,15 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 Lo = float3(0.0, 0.0, 0.0);
 
     // 6. Primary Directional Sun Light (Physical Illuminance in Lux)
-    bool hasMultiLightSun = (u_LightCounts.z > 0 && u_SunLight.DirectionAndIlluminance.w > 0.0);
+    bool hasMultiLightSun = (u_LightCounts.z > 0);
     float3 sunDir = hasMultiLightSun ? normalize(u_SunLight.DirectionAndIlluminance.xyz) 
                                      : (length(u_SunDirection.xyz) > 0.01 ? normalize(u_SunDirection.xyz) : normalize(float3(0.45, 0.85, 0.25)));
 
-    float sunIntensity = hasMultiLightSun ? (u_SunLight.DirectionAndIlluminance.w * 0.000035 + u_SunLight.ColorAndAmbient.w * 0.5) 
-                                          : (u_SunDirection.w > 0.01 ? u_SunDirection.w : max(0.5, u_SunColor.w));
+    float sunIntensity = hasMultiLightSun
+        ? (u_SunLight.DirectionAndIlluminance.w > 0.0
+            ? u_SunLight.DirectionAndIlluminance.w * 0.000035 + u_SunLight.ColorAndAmbient.w * 0.5
+            : 0.0)
+        : (u_SunDirection.w > 0.01 ? u_SunDirection.w : max(0.5, u_SunColor.w));
     float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : ((length(u_SunColor.rgb) > 0.01) ? u_SunColor.rgb : float3(1.0, 0.98, 0.92));
     float3 sunRadiance = sunColor * sunIntensity;
 
@@ -371,38 +374,40 @@ float4 PSMain(PSInput input) : SV_Target0 {
         Lo += (diffuse * NdotL_Sun_Diff + specular * NdotL_Sun) * sunRadiance;
     }
 
-    // 7. Point Lights (up to 16 with smooth windowed inverse-square falloff)
+    // 7. Local lights and additional directional lights (up to 16 combined)
     uint numPointLights = min(u_LightCounts.x, 16u);
     for (uint p = 0; p < numPointLights; ++p) {
         PointLightData pLight = u_PointLights[p];
-        float radius = pLight.PositionAndRadius.w;
-        if (radius <= 0.0) continue;
+        float3 L;
+        float3 radiance;
+        if (pLight.Params.z > 0.5) {
+            L = normalize(pLight.PositionAndRadius.xyz);
+            radiance = pLight.ColorAndIntensity.rgb * pLight.ColorAndIntensity.w;
+        } else {
+            float radius = pLight.PositionAndRadius.w;
+            if (radius <= 0.0) continue;
+            float3 lightVec = pLight.PositionAndRadius.xyz - input.WorldPos;
+            float dist = length(lightVec);
+            if (dist >= radius || dist <= 0.0001) continue;
+            L = lightVec / dist;
 
-        float3 lightVec = pLight.PositionAndRadius.xyz - input.WorldPos;
-        float dist = length(lightVec);
-        if (dist >= radius || dist <= 0.0001) continue;
-
-        float3 L = lightVec / dist;
+            // Smooth windowed inverse-square attenuation.
+            float minRadius = max(0.0025, pLight.Params.y);
+            float distSq = max(dist * dist, minRadius);
+            float ratio = dist / radius;
+            float ratio4 = ratio * ratio * ratio * ratio;
+            float window = ClampZeroOne(1.0 - ratio4);
+            float attenuation = (window * window) / distSq;
+            float falloffExp = pLight.Params.x;
+            if (falloffExp > 0.1 && abs(falloffExp - 1.0) > 0.01) {
+                attenuation = pow(max(attenuation, 0.0), falloffExp);
+            }
+            radiance = pLight.ColorAndIntensity.rgb * (pLight.ColorAndIntensity.w * attenuation * 0.05);
+        }
         float NdotL = max(dot(N, L), 0.0);
         float pWrap = 0.18;
         float NdotL_Diff = saturate((dot(N, L) + pWrap) / ((1.0 + pWrap) * (1.0 + pWrap)));
         if (NdotL <= 0.0 && NdotL_Diff <= 0.0) continue;
-
-        // Smooth windowed inverse-square attenuation (Frostbite / UE standard)
-        float minRadius = max(0.0025, pLight.Params.y);
-        float distSq = max(dist * dist, minRadius);
-        float invDistSq = 1.0 / distSq;
-        float ratio = dist / radius;
-        float ratio4 = ratio * ratio * ratio * ratio;
-        float window = ClampZeroOne(1.0 - ratio4);
-        float attenuation = invDistSq * (window * window);
-
-        float falloffExp = pLight.Params.x;
-        if (falloffExp > 0.1 && abs(falloffExp - 1.0) > 0.01) {
-            attenuation = pow(max(attenuation, 0.0), falloffExp);
-        }
-
-        float3 radiance = pLight.ColorAndIntensity.rgb * (pLight.ColorAndIntensity.w * attenuation * 0.05);
 
         float3 H = normalize(V + L);
         float  NDF = DistributionGGX(N, H, roughness);
@@ -513,22 +518,26 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 specLower = lerp(studioGround, studioHorizon, saturate(R.y + 1.0));
         float3 specSky = (R.y >= 0.0) ? specUpper : specLower;
 
-        // Primary Key Softbox Lobe (Crisp main light reflection)
-        float keySpec = pow(max(dot(R, sunDir), 0.0), lerp(96.0, 6.0, roughness));
-        specSky += sunColor * keySpec * (1.0 - roughness * 0.6) * 0.85;
+        // Editor previews can use just their two actual lights, without extra
+        // analytical softboxes or the camera-facing lobe. Keep the smooth ambient dome.
+        if (u_LightReserved[0].x < 0.5) {
+            // Primary Key Softbox Lobe (Crisp main light reflection)
+            float keySpec = pow(max(dot(R, sunDir), 0.0), lerp(96.0, 6.0, roughness));
+            specSky += sunColor * keySpec * (1.0 - roughness * 0.6) * 0.85;
 
-        // Secondary Fill Softbox Lobe (Soft fill reflection from opposite quadrant)
-        float3 fillDir = normalize(float3(-sunDir.x * 0.75, 0.5, -sunDir.z * 0.75));
-        float fillSpec = pow(max(dot(R, fillDir), 0.0), lerp(32.0, 4.0, roughness));
-        specSky += float3(0.75, 0.85, 1.0) * fillSpec * (1.0 - roughness * 0.7) * 0.35;
+            // Secondary Fill Softbox Lobe (Soft fill reflection from opposite quadrant)
+            float3 fillDir = normalize(float3(-sunDir.x * 0.75, 0.5, -sunDir.z * 0.75));
+            float fillSpec = pow(max(dot(R, fillDir), 0.0), lerp(32.0, 4.0, roughness));
+            specSky += float3(0.75, 0.85, 1.0) * fillSpec * (1.0 - roughness * 0.7) * 0.35;
 
-        // Frontal Camera Softbox (Standard studio fill facing object center - completely eliminates dark hollow smudges in metals)
-        float frontSpec = pow(max(dot(R, V), 0.0), lerp(20.0, 3.0, roughness));
-        specSky += float3(0.80, 0.83, 0.88) * frontSpec * (1.0 - roughness * 0.4) * 0.40;
+            // Frontal Camera Softbox (Standard studio fill facing object center - completely eliminates dark hollow smudges in metals)
+            float frontSpec = pow(max(dot(R, V), 0.0), lerp(20.0, 3.0, roughness));
+            specSky += float3(0.80, 0.83, 0.88) * frontSpec * (1.0 - roughness * 0.4) * 0.40;
 
-        // Subtle Rim Contour Lobe (Grazing angle highlight defining shape silhouette)
-        float rimFactor = pow(1.0 - NdotV, 4.0);
-        specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.20;
+            // Subtle Rim Contour Lobe (Grazing angle highlight defining shape silhouette)
+            float rimFactor = pow(1.0 - NdotV, 4.0);
+            specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.20;
+        }
 
         float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.25);
         ambient = (ambientDiffuse + specularAmbient) * ao;

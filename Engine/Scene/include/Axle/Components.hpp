@@ -932,7 +932,8 @@ namespace Axle {
         // Calculate unit vector pointing toward the sun light source
         glm::vec3 GetDirection() const {
             float radAz = glm::radians(Azimuth);
-            float radEl = glm::radians(std::clamp(Elevation, 1.0f, 89.9f));
+            // Directional fill lights can illuminate from below the object.
+            float radEl = glm::radians(std::clamp(Elevation, -90.0f, 90.0f));
             return glm::normalize(glm::vec3(
                 std::cos(radEl) * std::sin(radAz),
                 std::sin(radEl),

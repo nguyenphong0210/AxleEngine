@@ -64,6 +64,10 @@ namespace Axle {
         void RenderPreview3D(float width, float height);
         void RenderPreviewRHI(float width, float height);
         void RebuildPreviewScene();
+        bool IsMaterialPreview() const;
+        glm::quat GetPreviewRotation() const;
+        float GetPreviewScale() const;
+        glm::mat4 GetPreviewTransform() const;
         void DrawPedestalGrid(const glm::mat4& viewProj, float radius);
         void SpawnCurrentAssetIntoScene();
 
@@ -82,21 +86,21 @@ namespace Axle {
         u32 m_ViewportWidth = 380;
         u32 m_ViewportHeight = 320;
 
-        // Orbit Camera Controls
+        // Fixed camera framing; mouse gestures transform the preview object.
         float m_Pitch = 22.0f;
         float m_Yaw = 40.0f;
         float m_Zoom = 1.0f;
         glm::vec3 m_PanOffset{ 0.0f };
 
         // Interaction States
-        bool m_TurntableActive = true;
+        bool m_TurntableActive = false;
         float m_TurntableSpeed = 1.0f;
         bool m_WireframeMode = false;
         bool m_ShowPedestal = true;
         PreviewMeshType m_PreviewMeshType = PreviewMeshType::Sphere;
         bool m_IsViewportHovered = false;
         float m_SunAzimuth = 45.0f;
-        float m_SunElevation = 50.0f;
+        float m_SunElevation = 35.264f;
         std::filesystem::path m_CustomMeshPath;
         std::shared_ptr<VertexArray> m_CustomMeshVAO;
 
@@ -119,8 +123,8 @@ namespace Axle {
         Entity m_PreviewEntity;
         Entity m_PreviewLight;
         Entity m_PreviewFillLight;
-        Entity m_PreviewRimLight;
         float m_ObjectYaw = 0.0f;
+        float m_ObjectPitch = 0.0f;
         MaterialComponent m_ActiveMaterial;
         bool m_SceneNeedsRebuild = true;
 

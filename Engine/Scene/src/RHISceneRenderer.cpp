@@ -1027,12 +1027,14 @@ namespace Axle {
         if (scene) {
             RHIMultiLightBufferData lightData{};
             lightData.CameraPosAndExposure = glm::vec4(camera.GetPosition(), 1.0f);
+            lightData.ReservedHeader[0].x = settings.EnableStudioLightLobes ? 0.0f : 1.0f;
 
             auto& registry = scene->GetRegistry();
 
             // 1. Primary Directional Sun Light
             auto dirLightView = registry.view<DirectionalLightComponent, TransformComponent>();
             bool foundSun = false;
+            entt::entity primarySun = entt::null;
             for (auto entityID : dirLightView) {
                 const auto& dlc = dirLightView.get<DirectionalLightComponent>(entityID);
                 const auto& tc = dirLightView.get<TransformComponent>(entityID);
@@ -1046,6 +1048,7 @@ namespace Axle {
                 lightData.SunLight.ShadowParams = glm::vec4(dlc.ShadowBias, dlc.ShadowFilterRadius, 0.0f, 0.0f);
                 lightData.LightCounts.z = 1;
                 foundSun = true;
+                primarySun = entityID;
                 break;
             }
 
@@ -1057,9 +1060,22 @@ namespace Axle {
                 lightData.LightCounts.z = 1;
             }
 
-            // 2. Point Lights (up to 16)
-            auto pointLightView = registry.view<PointLightComponent, TransformComponent>();
+            // 2. Additional directional lights share the local-light array.
+            // Params.z marks a direction and radiance instead of a point and falloff.
             uint32_t pointIndex = 0;
+            for (auto entityID : dirLightView) {
+                if (entityID == primarySun) continue;
+                if (pointIndex >= MAX_POINT_LIGHTS) break;
+                const auto& dlc = dirLightView.get<DirectionalLightComponent>(entityID);
+                float lux = dlc.Intensity > 100.0f ? dlc.Intensity : dlc.Intensity * PhysicalIlluminance::DirectSunlight;
+                auto& light = lightData.PointLights[pointIndex++];
+                light.PositionAndRadius = glm::vec4(dlc.GetDirection(), 0.0f);
+                light.ColorAndIntensity = glm::vec4(dlc.Color, lux * 0.000035f);
+                light.Params = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+            }
+
+            // Point lights use the remaining entries (up to 16 combined).
+            auto pointLightView = registry.view<PointLightComponent, TransformComponent>();
             for (auto entityID : pointLightView) {
                 if (pointIndex >= MAX_POINT_LIGHTS) break;
                 const auto& plc = pointLightView.get<PointLightComponent>(entityID);

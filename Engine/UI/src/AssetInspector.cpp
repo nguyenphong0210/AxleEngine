@@ -190,11 +190,7 @@ namespace Axle {
                     m_AssetPreviewPanel->SetAsset(path);
                 }
                 if (m_AssetPreviewPanel->HasAsset()) {
-                    if (ImGui::CollapsingHeader("Material Preview (3D Viewport)", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        m_AssetPreviewPanel->RenderPreviewViewport();
-                        ImGui::Spacing();
-                    }
-                    ImGui::Separator();
+                    m_AssetPreviewPanel->RenderPreviewViewport();
                     ImGui::Spacing();
                 }
             }

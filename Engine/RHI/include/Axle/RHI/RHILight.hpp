@@ -163,7 +163,7 @@ namespace Axle::RHI {
     struct alignas(16) RHIGPUPointLight {
         glm::vec4 PositionAndRadius{ 0.0f, 0.0f, 0.0f, 0.0f }; // xyz: Pos, w: Radius (0 = inactive)
         glm::vec4 ColorAndIntensity{ 0.0f, 0.0f, 0.0f, 0.0f }; // xyz: Color, w: Intensity
-        glm::vec4 Params{ 1.0f, 0.05f, 0.0f, 0.0f };           // x: Falloff, y: MinRadius, zw: 0
+        glm::vec4 Params{ 1.0f, 0.05f, 0.0f, 0.0f };           // x: Falloff, y: MinRadius, z: Directional (xyz direction, intensity radiance), w: 0
         glm::vec4 Reserved{ 0.0f };                            // 64 bytes total
     }; // 64 bytes
     static_assert(sizeof(RHIGPUPointLight) == 64, "RHIGPUPointLight must be 64 bytes!");

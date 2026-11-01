@@ -7,6 +7,7 @@ add_library(AxleScene STATIC
     src/ScriptHotReloadManager.cpp
     src/ScriptCompiler.cpp
     src/SceneRenderer.cpp
+    src/MaterialTextureCache.cpp
     src/RHISceneRenderer.cpp
     src/RHIObjectPicker.cpp
     src/RHIMeshRegistry.cpp

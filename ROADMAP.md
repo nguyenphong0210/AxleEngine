@@ -609,12 +609,13 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - **Execution Order**: Complete existing material behavior first, reorganize authoring second, then add automotive extensions. This phase is pending; earlier Phase 38 / 38.1 / 38.2 checkmarks do not replace the backend and visual acceptance checks below.
   - [ ] **Step 1 - Complete Existing Inspector -> Asset -> Renderer -> Shader Paths**:
     - [x] Audit every existing material property across the asset inspector, entity inspector, material component, `.axleasset` serialization, renderer bindings, and shader consumption; record missing or ineffective connections. See [Material Pipeline Audit](docs/design/MATERIAL_PIPELINE_AUDIT.md).
-    - [ ] Complete both save/load and live updates for Albedo, Normal Strength, Metallic, Roughness, AO Strength, Emission, Separate Maps / Packed ORM, independent UV X/Y tiling, and UV offset.
+    - [x] Complete both save/load and live updates for Albedo, Normal Strength, Metallic, Roughness, AO Strength, Emission, Separate Maps / Packed ORM, independent UV X/Y tiling, and UV offset.
       - [x] Preserve inspector asset and inline scene material values on save/reload, including HDR color, alpha, map paths and enable states, ORM, coat, anisotropy, and shader flags (Step 106).
     - [ ] Verify Surface Type, Alpha Cutoff, Cull Mode, Depth Write, Specular Highlights, Environment Reflections, and Render Queue affect the intended shader or pipeline state, including transparent draw ordering.
     - [ ] Finish existing Clearcoat Strength / Roughness and Anisotropy Strength / Rotation shading through actual BRDF evaluation; ensure every exposed parameter reaches and affects the GPU rather than only being serialized or stored in an unused function.
     - [ ] Define an explicit, matching CPU/GPU material layout without overloading unrelated parameters; keep preview and scene rendering consistent and preserve backward-compatible defaults for existing assets.
     - [ ] Verify texture loading, color space, bindings, fallback textures, replacement, and clearing for every supported map in the active project.
+      - [x] Upload and bind actual textures per draw with initialized fallback pixels; verify distinct materials, map disabling, normal/AO strength, emission masking, Y tiling, and zero alpha cutoff through DX12 GPU readback (Step 106).
     - [ ] Add focused serialization and renderer checks, plus visual comparisons showing that changing each parameter produces the expected result before moving to Step 2.
   - [ ] **Step 2 - Godot-style Material Inspector Organization & Texture Authoring**:
     - [ ] Use shared controls for asset and entity inspectors, organized into collapsible groups: Surface / Transparency, Shading, Albedo, Metallic, Roughness, Emission, Normal Map, Ambient Occlusion, Clearcoat, Anisotropy, UV, and Advanced Options.

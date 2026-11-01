@@ -15,6 +15,7 @@
 #include <Axle/RHI/RHILight.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/MaterialTextureCache.hpp>
 
 #include <memory>
 #include <string>
@@ -235,6 +236,15 @@ namespace Axle {
         RHI::RHISampler m_AnisoSampler;
         RHI::RHIDescriptorPool m_DescriptorPool;
         nri::DescriptorSet* m_DefaultDescriptorSet = nullptr;
+        struct MaterialDrawResources {
+            RHI::RHIBuffer Constants;
+            nri::DescriptorSet* Set = nullptr;
+            std::array<std::shared_ptr<RHI::RHITexture>, 6> Textures;
+        };
+        // Render() waits for queue completion before reusing these resources.
+        std::vector<std::unique_ptr<MaterialDrawResources>> m_MaterialDraws;
+        MaterialTextureCache m_MaterialTextures;
+
 
         std::shared_ptr<RHI::RHITexture> m_IrradianceMap;
         std::shared_ptr<RHI::RHITexture> m_PrefilterMap;

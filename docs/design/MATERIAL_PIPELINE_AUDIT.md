@@ -56,3 +56,10 @@ binding, and visible shading agree in the preview and scene.
   synchronization clears disabled texture paths and transfers all existing scalar
   settings. CPU layout and zero-cutoff separation checks pass in Step 106; shader
   binding and visible GPU behavior are still pending.
+- Scene and preview rendering now bind per-draw material buffers and textures.
+  Image uploads distinguish sRGB color from linear data, and every fallback face
+  and mip is initialized. An immutable sampler avoids the DX12 sampler-heap limit.
+- Step 106 now compiles the actual ForwardPBR to DXIL and SPIR-V and reads DX12
+  images back to verify distinct material maps, map disabling, normal/AO strength,
+  black emission masking, independent Y tiling, and an explicit zero cutoff.
+  Steps 101 and 105 also pass. Layered BRDF rendering is the next separate sub-step.

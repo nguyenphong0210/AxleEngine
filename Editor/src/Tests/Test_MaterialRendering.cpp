@@ -1,0 +1,158 @@
+#include <Axle/RHISceneRenderer.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/MaterialTextureCache.hpp>
+#include <fstream>
+#include <iostream>
+#include <cstring>
+#include <numeric>
+
+bool VerifyMaterialRendering(const std::filesystem::path& root) {
+    using namespace Axle;
+    using namespace Axle::RHI;
+    auto check = [](bool result, const char* message) {
+        if (!result) std::cerr << "[106 GPU] FAIL: " << message << std::endl;
+        return result;
+    };
+    auto writeTGA = [&](const char* name, std::array<uint8_t,4> rgba) {
+        auto path = root / name;
+        std::ofstream stream(path, std::ios::binary);
+        uint8_t header[18]{};
+        header[2] = 2; header[12] = 2; header[14] = 2; header[16] = 32; header[17] = 0x28;
+        stream.write(reinterpret_cast<char*>(header), sizeof(header));
+        uint8_t bgra[] = {rgba[2],rgba[1],rgba[0],rgba[3]};
+        for (int i=0;i<4;++i) stream.write(reinterpret_cast<char*>(bgra),4);
+        return path.string();
+    };
+    auto red = writeTGA("red.tga", {255,0,0,255});
+    auto green = writeTGA("green.tga", {0,255,0,255});
+    auto black = writeTGA("black.tga", {0,0,0,255});
+    auto normal = writeTGA("normal.tga", {210,128,210,255});
+    auto& device = RHIDevice::Get();
+    if (!device.IsInitialized()) {
+        RHIDeviceDesc desc;
+        desc.PreferredBackend = RHIType::Direct3D12;
+        desc.Headless = true;
+        if (!check(device.Init(desc), "Headless DX12 device")) return false;
+    }
+    struct RegistryCleanup {
+        ~RegistryCleanup() { RHIMeshRegistry::Get().Shutdown(); RHIMaterial::ReleaseDefaultTextures(); }
+    } registryCleanup;
+    RHISceneRenderer renderer;
+    if (!check(renderer.Init(device), "Material renderer initialization")) return false;
+    constexpr uint32_t resolution = 128;
+    RHITexture color, depth;
+    auto colorDesc = RHITextureDesc::RenderTarget2D(resolution,resolution);
+    if (!check(color.Init(colorDesc) && depth.Init(RHITextureDesc::DepthStencil2D(resolution,resolution)), "Offscreen material targets")) return false;
+    RHIBuffer readback;
+    RHIBufferDesc readDesc;
+    readDesc.Size = resolution*resolution*4;
+    readDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
+    if (!check(readback.Init(readDesc), "Readback buffer")) return false;
+    RHICommandBuffer copy;
+    if (!check(copy.Init(), "Readback command buffer")) return false;
+    PerspectiveCamera camera(45.0f,1.0f);
+    camera.SetPerspective(45.0f,1.0f);
+    camera.SetPosition(glm::vec3(0,0,4));
+    auto scene = std::make_shared<Scene>();
+    auto left = scene->CreateEntity("LeftSphere");
+    auto right = scene->CreateEntity("RightSphere");
+    left.GetComponent<TransformComponent>().Translation = glm::vec3(-0.8f,0,0);
+    right.GetComponent<TransformComponent>().Translation = glm::vec3(0.8f,0,0);
+    left.GetComponent<TransformComponent>().Scale = glm::vec3(0.65f);
+    right.GetComponent<TransformComponent>().Scale = glm::vec3(0.65f);
+    left.AddComponent<MeshInstance3D>().RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+    right.AddComponent<MeshInstance3D>().RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+    auto& lm = left.AddComponent<MaterialComponent>();
+    auto& rm = right.AddComponent<MaterialComponent>();
+    lm.AlbedoPath = red; lm.UseAlbedoMap = true;
+    rm.AlbedoPath = green; rm.UseAlbedoMap = true;
+    lm.EnableSpecularHighlights = rm.EnableSpecularHighlights = false;
+    lm.EnableEnvironmentReflections = rm.EnableEnvironmentReflections = false;
+    SceneRenderSettings settings;
+    settings.EnableSkybox = settings.EnableParticles = settings.EnableShadows = false;
+    settings.EnableStudioLightLobes = false;
+    settings.ClearColor = glm::vec4(0,0,0,1);
+    auto render = [&]() {
+        renderer.RenderScene(scene,camera,&color,&depth,settings);
+        std::vector<uint8_t> pixels(readDesc.Size);
+        if (!copy.Reset() || !copy.Begin()) return std::vector<uint8_t>{};
+        copy.TransitionTexture(color.GetNative(),RHIResourceLayout::ShaderResource,RHIResourceLayout::CopySource);
+        nri::TextureDataLayoutDesc layout{};
+        layout.rowPitch = resolution*4;
+        layout.slicePitch = resolution*resolution*4;
+        nri::TextureRegionDesc region{};
+        region.width = region.height = resolution; region.depth = 1;
+        device.GetNRICore().CmdReadbackTextureToBuffer(*copy.GetNative(),*readback.GetNative(),layout,*color.GetNative(),region);
+        copy.TransitionTexture(color.GetNative(),RHIResourceLayout::CopySource,RHIResourceLayout::ShaderResource);
+        if (!copy.End() || !copy.Submit()) return std::vector<uint8_t>{};
+        device.WaitIdle();
+        auto* data = readback.Map();
+        if (!data) return std::vector<uint8_t>{};
+        std::memcpy(pixels.data(),data,pixels.size());
+        readback.Unmap();
+        return pixels;
+    };
+    auto sum = [](const std::vector<uint8_t>& pixels, uint32_t minX, uint32_t maxX, uint32_t channel) {
+        uint64_t total = 0;
+        for (uint32_t y=0;y<resolution;++y) for (uint32_t x=minX;x<maxX;++x) total += pixels[(y*resolution+x)*4+channel];
+        return total;
+    };
+    auto first = render();
+    if (!check(!first.empty(), "GPU image readback")) return false;
+    if (!check(sum(first,0,64,0)>sum(first,0,64,1)*2+1000 && sum(first,64,128,1)>sum(first,64,128,0)*2+1000, "Two draws keep distinct texture bindings")) return false;
+    lm.UseAlbedoMap = false;
+    lm.AlbedoColor = glm::vec4(0,0,1,1);
+    auto cleared = render();
+    if (!check(!cleared.empty() && sum(cleared,0,64,2)>sum(cleared,0,64,0)*2+1000, "Disabling texture removes previous GPU assignment")) return false;
+    lm.AlbedoColor = glm::vec4(1);
+    lm.NormalPath = normal; lm.UseNormalMap = true;
+    lm.NormalStrength = 0;
+    auto flat = render();
+    lm.NormalStrength = 1;
+    auto tilted = render();
+    if (!check(!tilted.empty() && flat!=tilted, "Normal strength affects actual shading")) return false;
+    lm.UseNormalMap = false;
+    lm.AOPath = black; lm.UseAOMap = true;
+    lm.AOStrength = 0;
+    auto noAO = render();
+    lm.AOStrength = 1;
+    auto withAO = render();
+    if (!check(!withAO.empty() && sum(withAO,0,64,0)<sum(noAO,0,64,0), "AO strength affects actual ambient lighting")) return false;
+    lm.UseAOMap = false;
+    lm.EmissivePath = black; lm.UseEmissiveMap = true;
+    lm.EmissionColor = glm::vec3(1);
+    lm.EmissionIntensity = 0;
+    auto blackEmission0 = render();
+    lm.EmissionIntensity = 10;
+    auto blackEmission10 = render();
+    if (!check(!blackEmission10.empty() && blackEmission0==blackEmission10, "Black emission texels remain black")) return false;
+    lm.UseEmissiveMap = false; lm.EmissionIntensity = 0;
+    auto checkerPath = root / "checker.tga";
+    {
+        std::ofstream stream(checkerPath,std::ios::binary);
+        uint8_t header[18]{};
+        header[2]=2; header[12]=2; header[14]=2; header[16]=32; header[17]=0x28;
+        stream.write(reinterpret_cast<char*>(header),sizeof(header));
+        const uint8_t pixels[] = {0,0,255,255,0,255,0,255,0,255,0,255,0,0,255,255};
+        stream.write(reinterpret_cast<const char*>(pixels),sizeof(pixels));
+    }
+    lm.AlbedoPath = checkerPath.string(); lm.UseAlbedoMap = true;
+    lm.UVScale = glm::vec2(1,1);
+    auto uv1 = render();
+    lm.UVScale.y = 3;
+    auto uv3 = render();
+    if (!check(!uv3.empty() && uv1!=uv3, "Independent Y tiling reaches the GPU")) return false;
+    lm.UVScale = glm::vec2(1);
+    lm.AlbedoPath = writeTGA("alpha.tga",{255,0,0,0});
+    lm.SurfaceType = SurfaceType::Cutout;
+    lm.AlphaCutoff = 0;
+    auto cutoff0 = render();
+    lm.AlphaCutoff = 0.5f;
+    auto cutoffHalf = render();
+    if (!check(!cutoffHalf.empty() && sum(cutoff0,0,64,0)>sum(cutoffHalf,0,64,0)+1000, "Zero alpha cutoff remains valid")) return false;
+    lm.SurfaceType = SurfaceType::Opaque;
+    lm.UseAlbedoMap = false;
+    std::cout << "[106 GPU] PASS: Per-draw texture colors, disabled maps, normal/AO strength, emission masking, independent Y tiling and zero alpha cutoff readback." << std::endl;
+    return true;
+}

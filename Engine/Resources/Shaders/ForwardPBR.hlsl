@@ -46,6 +46,16 @@ cbuffer ObjectConstants : register(b0, space0) {
 #define u_SurfaceType (u_MaterialExtra.w)
 #endif
 
+// Dedicated material data, matching RHIMaterialConstants exactly (256 bytes).
+cbuffer MaterialConstants : register(b3, space0) {
+    float4 u_MaterialUV;       // scale.xy, offset.xy
+    float4 u_MaterialSurface;  // normal strength, AO strength, direct specular, environment reflections
+    float4 u_CoatAnisotropy;   // clearcoat, coat roughness, anisotropy strength, rotation in turns
+    uint4 u_MaterialFlags;     // texture mask, authored material, reserved, reserved
+    float4 u_MaterialReserved[12];
+};
+bool HasMaterialMap(uint slot) { return (u_MaterialFlags.x & (1u << slot)) != 0; }
+
 // -----------------------------------------------------------------------------
 // Scene Uniform Buffer (Register b1, Space 0)
 // Size: 256 bytes (Hardware 256-byte CBV alignment)
@@ -110,7 +120,7 @@ Texture2D    u_EmissiveMap  : register(t5, space1);
 TextureCube  u_IrradianceMap: register(t6, space1);
 TextureCube  u_PrefilterMap : register(t7, space1);
 Texture2D    u_BRDFLUT      : register(t8, space1);
-SamplerState u_Sampler      : register(s0, space1);
+SamplerState u_Sampler      : register(s0, space0);
 
 // -----------------------------------------------------------------------------
 // Vertex Input Layout (Matches 64-byte RHIVertex3D)
@@ -251,7 +261,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
     } else if (shadingMode == 3) {
         // Mode 3: Solid Color / Solid PBR Material (Matches OpenGL PatternMode 3)
         albedo = u_ColorPrimary;
-        if (u_ColorSecondary.w > 0.01) {
+        if (u_ColorSecondary.w > 0.0) {
             emissive = u_ColorSecondary.rgb * u_ColorSecondary.w;
         }
     } else if (shadingMode == 4) {
@@ -259,46 +269,39 @@ float4 PSMain(PSInput input) : SV_Target0 {
         albedo = u_ColorPrimary * input.VertexColor;
     } else if (shadingMode == 5) {
         // Mode 5: Textured PBR Material (Separate Maps: Albedo, Roughness, Metallic, AO)
-        float2 uv = input.TexCoord * tileScale + u_UVOffset;
-        float4 albedoSample = u_AlbedoMap.Sample(u_Sampler, uv);
+        float2 uv = (u_MaterialFlags.y != 0 ? input.TexCoord * u_MaterialUV.xy + u_MaterialUV.zw : input.TexCoord * tileScale + u_UVOffset);
+        float4 albedoSample = (HasMaterialMap(0) ? u_AlbedoMap.Sample(u_Sampler, uv) : float4(1, 1, 1, 1));
         albedo = albedoSample * u_ColorPrimary;
         
-        roughness = u_RoughnessMap.Sample(u_Sampler, uv).r * roughness;
+        roughness = (HasMaterialMap(2) ? u_RoughnessMap.Sample(u_Sampler, uv).r : 1.0) * roughness;
         roughness = clamp(roughness, 0.04, 1.0);
         
-        metallic = u_MetallicMap.Sample(u_Sampler, uv).r * metallic;
+        metallic = (HasMaterialMap(3) ? u_MetallicMap.Sample(u_Sampler, uv).r : 1.0) * metallic;
         metallic = clamp(metallic, 0.0, 1.0);
         
-        ao = u_AOMap.Sample(u_Sampler, uv).r;
-        float3 emissiveSample = u_EmissiveMap.Sample(u_Sampler, uv).rgb;
-        if (length(emissiveSample) > 0.001) {
-            emissive = emissiveSample * u_ColorSecondary.rgb * max(1.0, u_ColorSecondary.w);
-        } else if (u_ColorSecondary.w > 0.01) {
-            emissive = u_ColorSecondary.rgb * u_ColorSecondary.w;
-        }
+        ao = (HasMaterialMap(4) ? u_AOMap.Sample(u_Sampler, uv).r : 1.0);
+        float3 emissiveSample = (HasMaterialMap(5) ? u_EmissiveMap.Sample(u_Sampler, uv).rgb : float3(1, 1, 1));
+        emissive = emissiveSample * u_ColorSecondary.rgb * max(0.0, u_ColorSecondary.w);
     } else if (shadingMode == 6 || (int)(u_SurfaceType + 0.5) >= 10) {
         // Mode 6: Packed ORM Textured PBR (R: Occlusion, G: Roughness, B: Metallic)
-        float2 uv = input.TexCoord * tileScale + u_UVOffset;
-        float4 albedoSample = u_AlbedoMap.Sample(u_Sampler, uv);
+        float2 uv = (u_MaterialFlags.y != 0 ? input.TexCoord * u_MaterialUV.xy + u_MaterialUV.zw : input.TexCoord * tileScale + u_UVOffset);
+        float4 albedoSample = (HasMaterialMap(0) ? u_AlbedoMap.Sample(u_Sampler, uv) : float4(1, 1, 1, 1));
         albedo = albedoSample * u_ColorPrimary;
         
         // Sample Packed ORM from slot t2 (u_RoughnessMap)
-        float3 orm = u_RoughnessMap.Sample(u_Sampler, uv).rgb;
+        float3 orm = HasMaterialMap(2) ? u_RoughnessMap.Sample(u_Sampler, uv).rgb : float3(1, 1, 1);
         ao = orm.r;
         roughness = clamp(orm.g * roughness, 0.04, 1.0);
         metallic = clamp(orm.b * metallic, 0.0, 1.0);
         
-        float3 emissiveSample = u_EmissiveMap.Sample(u_Sampler, uv).rgb;
-        if (length(emissiveSample) > 0.001) {
-            emissive = emissiveSample * u_ColorSecondary.rgb * max(1.0, u_ColorSecondary.w);
-        } else if (u_ColorSecondary.w > 0.01) {
-            emissive = u_ColorSecondary.rgb * u_ColorSecondary.w;
-        }
+        float3 emissiveSample = (HasMaterialMap(5) ? u_EmissiveMap.Sample(u_Sampler, uv).rgb : float3(1, 1, 1));
+        emissive = emissiveSample * u_ColorSecondary.rgb * max(0.0, u_ColorSecondary.w);
     }
     
     // Cutout alpha test (SurfaceType == 1): discard fragment if alpha < cutoff
     int surfaceType = ((int)(u_SurfaceType + 0.5)) % 10;
-    float alphaCutoff = (u_AlphaCutoff > 0.001) ? u_AlphaCutoff : 0.5;
+    float alphaCutoff = saturate(u_AlphaCutoff);
+    ao = lerp(1.0, ao, saturate(u_MaterialSurface.y));
     if (surfaceType == 1 && albedo.a < alphaCutoff) {
         discard;
     }
@@ -313,14 +316,15 @@ float4 PSMain(PSInput input) : SV_Target0 {
         if (length(crossN) > 1e-6) {
             N = normalize(crossN);
         }
-    } else if ((shadingMode == 5 || shadingMode == 6 || (int)(u_SurfaceType + 0.5) >= 10) && abs(input.TangentWS.w) > 0.1) {
+    } else if ((shadingMode == 5 || shadingMode == 6 || (int)(u_SurfaceType + 0.5) >= 10) && HasMaterialMap(1) && abs(input.TangentWS.w) > 0.1) {
         float3 T = normalize(input.TangentWS.xyz);
         float3 B = cross(N, T) * input.TangentWS.w;
         float3x3 TBN = float3x3(T, B, N);
         
-        float2 uv = input.TexCoord * tileScale + u_UVOffset;
+        float2 uv = (u_MaterialFlags.y != 0 ? input.TexCoord * u_MaterialUV.xy + u_MaterialUV.zw : input.TexCoord * tileScale + u_UVOffset);
         float3 normalSample = u_NormalMap.Sample(u_Sampler, uv).xyz * 2.0 - 1.0;
-        N = normalize(mul(normalSample, TBN));
+        normalSample.xy *= max(0.0, u_MaterialSurface.x);
+        N = normalize(mul(normalize(normalSample), TBN));
     }
     
     // 4. View Vector
@@ -365,7 +369,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         float3 numerator   = NDF * G * F;
         float  denominator = 4.0 * NdotV * max(NdotL_Sun, 0.001) + 0.0001;
-        float3 specular    = numerator / denominator;
+        float3 specular    = numerator / denominator * u_MaterialSurface.z;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
@@ -416,7 +420,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         float3 numerator   = NDF * G * F;
         float  denominator = 4.0 * NdotV * max(NdotL, 0.001) + 0.0001;
-        float3 specular    = numerator / denominator;
+        float3 specular    = numerator / denominator * u_MaterialSurface.z;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
@@ -469,13 +473,13 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         float3 numerator   = NDF * G * F;
         float  denominator = 4.0 * NdotV * NdotL + 0.0001;
-        float3 specular    = numerator / denominator;
+        float3 specular    = numerator / denominator * u_MaterialSurface.z;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb / PI;
 
-        Lo += (diffuse + specular) * radiance * NdotL;
+        Lo += ((diffuse + specular) * NdotL) * radiance;
     }
 
     // 9. Ambient Lighting: Image-Based Lighting (IBL) or Analytical Approximation
@@ -498,6 +502,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float2 envBRDF = u_BRDFLUT.Sample(u_Sampler, float2(max(NdotV, 0.0), roughness)).rg;
         float3 specularAmbient = prefilteredColor * (ambientF * envBRDF.x + envBRDF.y);
 
+        specularAmbient *= u_MaterialSurface.w;
         float envIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
         ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao;
     } else {
@@ -539,7 +544,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
             specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.20;
         }
 
-        float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.25);
+        float3 specularAmbient = specSky * ambientF * (1.0 - roughness * 0.25) * u_MaterialSurface.w;
         ambient = (ambientDiffuse + specularAmbient) * ao;
     }
     

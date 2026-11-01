@@ -1166,6 +1166,8 @@ bool RunTest_Step105_Phase38_2_DynamicReflectionAndAutomotiveShading() {
 }
 
 
+bool VerifyMaterialRendering(const std::filesystem::path& root);
+
 bool RunTest_Step106_MaterialPipeline() {
     using namespace Axle;
     auto check = [](bool ok, const char* message) {
@@ -1246,6 +1248,22 @@ bool RunTest_Step106_MaterialPipeline() {
     RHI::RHIObjectPushConstants constants;
     source.RHIMaterialAsset->ApplyToPushConstants(constants);
     if (!check(constants.MaterialExtra.z == 0.0f && source.RHIMaterialAsset->BuildConstants().CoatAnisotropy.x == 0.8f, "Zero alpha cutoff is independent of clearcoat")) return false;
+    // Compile the real renderer shader for both backends, not a reduced template.
+    auto& compiler = RHI::RHIShaderCompiler::Get();
+    if (!check(compiler.Init(), "DXC initialization")) return false;
+    auto shaderPath = std::filesystem::path("Engine/Resources/Shaders/ForwardPBR.hlsl");
+    for (auto format : {RHI::RHIShaderFormat::DXIL, RHI::RHIShaderFormat::SPIRV}) {
+        for (auto stage : {RHI::RHIShaderStage::Vertex, RHI::RHIShaderStage::Fragment}) {
+            RHI::RHIShaderCompileDesc desc;
+            desc.Format = format;
+            desc.Stage = stage;
+            desc.EntryPoint = stage == RHI::RHIShaderStage::Vertex ? "VSMain" : "PSMain";
+            auto result = compiler.CompileFromFile(shaderPath, desc);
+            if (!result.Success) std::cerr << result.ErrorMessage << std::endl;
+            if (!check(result.Success, "Actual ForwardPBR DXIL / SPIR-V compilation")) return false;
+        }
+    }
+    if (!VerifyMaterialRendering(root)) return false;
     std::cout << "[106] PASS: Material inspector and inline scene save/reload, maps, HDR colors, alpha, coat, anisotropy, flags, and custom values." << std::endl;
     return true;
 }

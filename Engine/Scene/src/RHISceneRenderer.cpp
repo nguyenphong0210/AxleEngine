@@ -219,18 +219,16 @@ namespace Axle {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize 16x Anisotropic Sampler, using defaults.");
         }
 
-        // Initialize Tier 2 Descriptor Pool (2048 textures, 64 sets)
-        if (!m_DescriptorPool.Init(RHIDescriptorPoolDesc::Tier2Bindless(2048, 64))) {
-            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize RHIDescriptorPool!");
+        // Per-draw resource descriptors; the immutable sampler uses no heap slots.
+        auto materialPoolDesc = RHIDescriptorPoolDesc::Tier2Bindless(65536, 4096);
+        materialPoolDesc.MaxSamplers = 0;
+        if (!m_DescriptorPool.Init(materialPoolDesc)) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to initialize material descriptors!");
+            return false;
         } else {
             // Allocate Default PBR Material Descriptor Set (Space 1)
             m_DefaultDescriptorSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 0);
             if (m_DefaultDescriptorSet) {
-                // Bind 16x Anisotropic Sampler to slot 0 of Range 1
-                if (m_AnisoSampler.IsValid()) {
-                    m_DescriptorPool.UpdateSampler(m_DefaultDescriptorSet, 1, 0, m_AnisoSampler.GetNative());
-                }
-
                 // Bind Fallback GPU resident textures to Range 0 (t0..t8: PBR material + IBL cubemaps + BRDF LUT)
                 auto whiteTex = RHIMaterial::GetDefaultWhiteTexture();
                 auto normalTex = RHIMaterial::GetDefaultFlatNormalTexture();
@@ -403,6 +401,8 @@ namespace Axle {
         m_LightBuffer.Shutdown();
         m_SceneConstantBuffer.Shutdown();
 
+        m_MaterialDraws.clear();
+        m_MaterialTextures.Clear();
         m_DefaultDescriptorSet = nullptr;
         m_IrradianceMap = nullptr;
         m_PrefilterMap = nullptr;
@@ -491,7 +491,7 @@ namespace Axle {
         // Root Descriptors (space 0):
         // [0] b1, space 0: 256-byte Scene Constants
         // [1] b2, space 0: 2304-byte Forward+ Multi-Light Buffer
-        nri::RootDescriptorDesc rootDescs[2] = {};
+        nri::RootDescriptorDesc rootDescs[3] = {};
         rootDescs[0].registerIndex = 1;
         rootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[0].shaderStages = nri::StageBits::ALL;
@@ -499,6 +499,10 @@ namespace Axle {
         rootDescs[1].registerIndex = 2;
         rootDescs[1].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[1].shaderStages = nri::StageBits::ALL;
+
+        rootDescs[2].registerIndex = 3;
+        rootDescs[2].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[2].shaderStages = nri::StageBits::ALL;
 
         // Descriptor Set (space 1): 6 PBR textures (t0..t5) + 3 IBL textures (t6..t8) and 1 Sampler (s0)
         nri::DescriptorRangeDesc ranges[2] = {};
@@ -508,23 +512,24 @@ namespace Axle {
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        ranges[1].baseRegisterIndex = 0;
-        ranges[1].descriptorNum = 1;
-        ranges[1].descriptorType = nri::DescriptorType::SAMPLER;
-        ranges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::RootSamplerDesc sampler{};
+        sampler.registerIndex = 0;
+        sampler.desc = RHISamplerDesc::Anisotropic16x().ToNRIDesc();
+        sampler.shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
         descSet.ranges = ranges;
-        descSet.rangeNum = 2;
+        descSet.rangeNum = 1;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
         layoutDesc.rootConstants = &rootConst;
         layoutDesc.rootConstantNum = 1;
         layoutDesc.rootDescriptors = rootDescs;
-        layoutDesc.rootDescriptorNum = 2;
+        layoutDesc.rootDescriptorNum = 3;
+        layoutDesc.rootSamplers = &sampler;
+        layoutDesc.rootSamplerNum = 1;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
         layoutDesc.shaderStages = nri::StageBits::ALL;
@@ -1276,6 +1281,8 @@ namespace Axle {
                 Axle::CullMode CullMode = Axle::CullMode::None;
                 bool DepthWrite = true;
                 float DistanceSq = 0.0f;
+                int RenderQueue = 2000;
+                std::shared_ptr<RHIMaterial> Material;
             };
 
             std::vector<DrawItem> opaqueQueue;
@@ -1328,23 +1335,21 @@ namespace Axle {
                     item.DistanceSq = glm::dot(diff, diff);
 
                     // Apply PBR Material parameters if present
-                    if (mc.RHIMaterialAsset) {
-                        mc.RHIMaterialAsset->ApplyToPushConstants(item.PushConsts);
-                        item.PushConsts.Model = worldMat;
-                        item.SurfaceType = mc.RHIMaterialAsset->GetSurfaceType();
-                        item.CullMode = mc.RHIMaterialAsset->GetCullMode();
-                        item.DepthWrite = mc.RHIMaterialAsset->GetDepthWrite();
-                    } else if (registry.all_of<MaterialComponent>(entityID)) {
+                    // Entity material overrides the mesh resource material.
+                    if (registry.all_of<MaterialComponent>(entityID)) {
                         auto& mat = registry.get<MaterialComponent>(entityID);
-                        if (!mat.RHIMaterialAsset) {
-                            mat.RHIMaterialAsset = std::make_shared<RHI::RHIMaterial>(mat.MaterialAsset ? mat.MaterialAsset->GetName() : "Material");
-                        }
                         mat.SyncToRHI();
-                        mat.RHIMaterialAsset->ApplyToPushConstants(item.PushConsts);
+                        item.Material = mat.RHIMaterialAsset;
+                    } else {
+                        item.Material = mc.RHIMaterialAsset;
+                    }
+                    if (item.Material) {
+                        item.Material->ApplyToPushConstants(item.PushConsts);
                         item.PushConsts.Model = worldMat;
-                        item.SurfaceType = mat.SurfaceType;
-                        item.CullMode = mat.CullMode;
-                        item.DepthWrite = mat.DepthWrite;
+                        item.SurfaceType = item.Material->GetSurfaceType();
+                        item.CullMode = item.Material->GetCullMode();
+                        item.DepthWrite = item.Material->GetDepthWrite();
+                        item.RenderQueue = item.Material->GetDesc().RenderQueue;
                     }
 
                     if (item.SurfaceType == Axle::SurfaceType::Transparent || item.SurfaceType == Axle::SurfaceType::Additive) {
@@ -1357,6 +1362,7 @@ namespace Axle {
 
             nri::Pipeline* currentPipeline = activePipeline;
 
+            size_t materialDrawIndex = 0;
             auto RenderDrawItem = [&](const DrawItem& item) {
                 nri::Pipeline* needed = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
                     ? m_PipelineHDR
@@ -1369,6 +1375,47 @@ namespace Axle {
                     currentPipeline = needed;
                 }
 
+                if (materialDrawIndex == m_MaterialDraws.size()) {
+                    auto resource = std::make_unique<MaterialDrawResources>();
+                    if (!resource->Constants.Init(RHIBufferDesc::Constant(sizeof(RHIMaterialConstants), RHIMemoryLocation::HostUpload, "MaterialConstants"))) return;
+                    resource->Set = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 0);
+                    if (!resource->Set) {
+                        AXLE_CORE_ERROR("Material descriptor capacity exhausted; draw skipped.");
+                        return;
+                    }
+                    m_MaterialDraws.push_back(std::move(resource));
+                }
+                auto& resource = *m_MaterialDraws[materialDrawIndex++];
+                RHIMaterialConstants materialData;
+                if (item.Material) materialData = item.Material->BuildConstants();
+                std::vector<nri::Descriptor*> srvs;
+                for (uint32_t slot = 0; slot < 6; ++slot) {
+                    auto textureSlot = static_cast<RHITextureSlot>(slot);
+                    std::shared_ptr<RHITexture> texture;
+                    if (item.Material) {
+                        if (item.Material->HasTexture(textureSlot)) texture = item.Material->GetTexture(textureSlot);
+                        else {
+                            const auto& desc = item.Material->GetDesc();
+                            auto path = slot == 2 && desc.TextureMode == TextureMode::PackedORM
+                                ? desc.ORMPath : item.Material->GetTexturePath(textureSlot);
+                            texture = m_MaterialTextures.Get(path, slot == 0 || slot == 5);
+                        }
+                    }
+                    if (!texture) {
+                        materialData.Flags.x &= ~(1u << slot);
+                        texture = slot == 1 ? RHIMaterial::GetDefaultFlatNormalTexture() : RHIMaterial::GetDefaultWhiteTexture();
+                    }
+                    resource.Textures[slot] = texture;
+                    srvs.push_back(texture->GetSRV());
+                }
+                srvs.push_back((m_IrradianceMap ? m_IrradianceMap : RHIMaterial::GetDefaultIrradianceCubemap())->GetSRV());
+                srvs.push_back((m_PrefilterMap ? m_PrefilterMap : RHIMaterial::GetDefaultPrefilterCubemap())->GetSRV());
+                srvs.push_back((m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT())->GetSRV());
+                m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs);
+                if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) return;
+                m_CommandBuffer.SetRootDescriptor(2, resource.Constants.GetCBV());
+                RHIDescriptorPool::BindDescriptorSet(m_CommandBuffer.GetNative(), 0, resource.Set);
+
                 m_CommandBuffer.SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
                 m_LastStreamedTransformBytes += sizeof(item.PushConsts);
 
@@ -1379,6 +1426,9 @@ namespace Axle {
                 m_LastRenderedEntityCount++;
             };
 
+            std::sort(opaqueQueue.begin(), opaqueQueue.end(), [](const DrawItem& a, const DrawItem& b) {
+                return a.RenderQueue < b.RenderQueue;
+            });
             // 4a. Render Opaque & Cutout Queue
             for (const auto& item : opaqueQueue) {
                 RenderDrawItem(item);
@@ -1387,7 +1437,7 @@ namespace Axle {
             // 4b. Render Transparent & Additive Queue (Sorted Back-to-Front)
             if (!transparentQueue.empty()) {
                 std::sort(transparentQueue.begin(), transparentQueue.end(), [](const DrawItem& a, const DrawItem& b) {
-                    return a.DistanceSq > b.DistanceSq;
+                    return a.RenderQueue == b.RenderQueue ? a.DistanceSq > b.DistanceSq : a.RenderQueue < b.RenderQueue;
                 });
                 for (const auto& item : transparentQueue) {
                     RenderDrawItem(item);

@@ -16,6 +16,44 @@ namespace Axle::RHI {
     static std::shared_ptr<RHITexture> s_DefaultPrefilterCubemap;
     static std::shared_ptr<RHITexture> s_DefaultBRDFLUT;
 
+    // All fallback subresources must contain defined pixels, including cube faces
+    // and every prefilter mip; allocating an image alone leaves undefined data.
+    static void FillFallback(const std::shared_ptr<RHITexture>& texture, std::array<uint8_t, 4> color) {
+        if (!texture || !texture->IsValid()) return;
+        const auto& desc = texture->GetDesc();
+        std::vector<std::vector<uint8_t>> pixels;
+        std::vector<nri::TextureSubresourceUploadDesc> subresources;
+        const uint32_t count = desc.ArrayLayers * desc.MipLevels;
+        pixels.reserve(count);
+        subresources.reserve(count);
+        for (uint32_t layer = 0; layer < desc.ArrayLayers; ++layer) {
+            for (uint32_t mip = 0; mip < desc.MipLevels; ++mip) {
+                uint32_t width = (std::max)(1u, desc.Width >> mip);
+                uint32_t height = (std::max)(1u, desc.Height >> mip);
+                pixels.emplace_back(static_cast<size_t>(width) * height * 4);
+                auto& data = pixels.back();
+                for (size_t i = 0; i < data.size(); i += 4) std::copy(color.begin(), color.end(), data.begin()+i);
+                nri::TextureSubresourceUploadDesc subresource{};
+                subresource.slices = data.data();
+                subresource.sliceNum = 1;
+                subresource.rowPitch = width * 4;
+                subresource.slicePitch = width * height * 4;
+                subresources.push_back(subresource);
+            }
+        }
+        auto& device = RHIDevice::Get();
+        nri::TextureUploadDesc upload{};
+        upload.subresources = subresources.data();
+        upload.texture = texture->GetNative();
+        upload.planes = nri::PlaneBits::COLOR;
+        upload.after.access = nri::AccessBits::SHADER_RESOURCE;
+        upload.after.layout = nri::Layout::SHADER_RESOURCE;
+        upload.after.stages = nri::StageBits::FRAGMENT_SHADER;
+        const auto& helper = device.GetNRIHelper();
+        if (!device.GetGraphicsQueue() || !helper.UploadData || helper.UploadData(*device.GetGraphicsQueue(), &upload, 1, nullptr, 0) != nri::Result::SUCCESS)
+            AXLE_CORE_ERROR("Could not initialize material fallback texture {0}", desc.DebugName);
+    }
+
     static std::string Trim(const std::string& str) {
         size_t first = str.find_first_not_of(" \t\r\n");
         if (first == std::string::npos) return "";
@@ -131,6 +169,7 @@ namespace Axle::RHI {
             desc.Usage = RHITextureUsage::ShaderResource;
             desc.DebugName = "RHIDefault_White_1x1";
             s_DefaultWhite->Init(desc);
+            FillFallback(s_DefaultWhite, {255, 255, 255, 255});
         }
         return s_DefaultWhite;
     }
@@ -145,6 +184,7 @@ namespace Axle::RHI {
             desc.Usage = RHITextureUsage::ShaderResource;
             desc.DebugName = "RHIDefault_FlatNormal_1x1";
             s_DefaultFlatNormal->Init(desc);
+            FillFallback(s_DefaultFlatNormal, {128, 128, 255, 255});
         }
         return s_DefaultFlatNormal;
     }
@@ -159,6 +199,7 @@ namespace Axle::RHI {
             desc.Usage = RHITextureUsage::ShaderResource;
             desc.DebugName = "RHIDefault_Roughness_1x1";
             s_DefaultRoughness->Init(desc);
+            FillFallback(s_DefaultRoughness, {128, 128, 128, 255});
         }
         return s_DefaultRoughness;
     }
@@ -173,6 +214,7 @@ namespace Axle::RHI {
             desc.Usage = RHITextureUsage::ShaderResource;
             desc.DebugName = "RHIDefault_Black_1x1";
             s_DefaultBlack->Init(desc);
+            FillFallback(s_DefaultBlack, {0, 0, 0, 255});
         }
         return s_DefaultBlack;
     }
@@ -181,6 +223,7 @@ namespace Axle::RHI {
         if (!s_DefaultIrradianceCubemap && RHIDevice::Get().IsInitialized()) {
             s_DefaultIrradianceCubemap = std::make_shared<RHITexture>();
             s_DefaultIrradianceCubemap->Init(RHITextureDesc::Cubemap(16, 1, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Irradiance_Cubemap"));
+            FillFallback(s_DefaultIrradianceCubemap, {128, 128, 128, 255});
         }
         return s_DefaultIrradianceCubemap;
     }
@@ -189,6 +232,7 @@ namespace Axle::RHI {
         if (!s_DefaultPrefilterCubemap && RHIDevice::Get().IsInitialized()) {
             s_DefaultPrefilterCubemap = std::make_shared<RHITexture>();
             s_DefaultPrefilterCubemap->Init(RHITextureDesc::Cubemap(16, 5, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Prefilter_Cubemap"));
+            FillFallback(s_DefaultPrefilterCubemap, {128, 128, 128, 255});
         }
         return s_DefaultPrefilterCubemap;
     }
@@ -203,6 +247,7 @@ namespace Axle::RHI {
             desc.Usage = RHITextureUsage::ShaderResource;
             desc.DebugName = "RHIDefault_BRDFLUT_16x16";
             s_DefaultBRDFLUT->Init(desc);
+            FillFallback(s_DefaultBRDFLUT, {255, 0, 0, 255});
         }
         return s_DefaultBRDFLUT;
     }

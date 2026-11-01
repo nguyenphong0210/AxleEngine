@@ -100,3 +100,8 @@ binding, and visible shading agree in the preview and scene.
 - Anisotropy flow maps now round-trip and bind per draw. RG rotates the tangent
   direction and alpha masks strength. Step 106 validates both on the GPU;
   imported-mesh tangent orientation remains an acceptance-scene check.
+- Detail normal maps now have independent strength, UV tiling/offset and an R mask.
+  Reoriented normal mapping preserves the base when strength or mask is zero.
+  Step 106 verifies persistence, masking, blending and UV changes through GPU
+  readback. Nonuniform and mirrored transforms match CPU-baked reference geometry;
+  normals use inverse-transpose and tangent handedness follows the model determinant.

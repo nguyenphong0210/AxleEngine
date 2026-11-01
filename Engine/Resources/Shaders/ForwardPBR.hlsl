@@ -52,7 +52,9 @@ cbuffer MaterialConstants : register(b3, space0) {
     float4 u_MaterialSurface;  // normal strength, AO strength, direct specular, environment reflections
     float4 u_CoatAnisotropy;   // clearcoat, coat roughness, anisotropy strength, rotation in turns
     uint4 u_MaterialFlags;     // texture mask, authored material, reserved, reserved
-    float4 u_MaterialReserved[12];
+    float4 u_DetailUV;
+    float4 u_DetailParameters;
+    float4 u_MaterialReserved[10];
 };
 bool HasMaterialMap(uint slot) { return (u_MaterialFlags.x & (1u << slot)) != 0; }
 
@@ -122,6 +124,8 @@ TextureCube  u_PrefilterMap : register(t7, space1);
 Texture2D    u_BRDFLUT      : register(t8, space1);
 Texture2D u_ClearcoatMap : register(t9, space1);
 Texture2D u_AnisotropyFlowMap : register(t10, space1);
+Texture2D u_DetailNormalMap : register(t11, space1);
+Texture2D u_DetailMaskMap : register(t12, space1);
 SamplerState u_Sampler      : register(s0, space0);
 
 // -----------------------------------------------------------------------------
@@ -156,8 +160,15 @@ PSInput VSMain(VSInput input) {
     float4 worldPos    = mul(u_Model, float4(input.Position, 1.0));
     output.PositionCS  = mul(u_ViewProjection, worldPos);
     output.WorldPos    = worldPos.xyz;
-    output.NormalWS    = normalize(mul((float3x3)u_Model, input.Normal));
-    output.TangentWS   = float4(normalize(mul((float3x3)u_Model, input.Tangent.xyz)), input.Tangent.w);
+    // Cofactors implement inverse-transpose without requiring a second matrix.
+    float3 a=mul((float3x3)u_Model,float3(1,0,0));
+    float3 b=mul((float3x3)u_Model,float3(0,1,0));
+    float3 c=mul((float3x3)u_Model,float3(0,0,1));
+    float handedness=dot(a,cross(b,c))<0.0?-1.0:1.0;
+    float3 transformedNormal=(cross(b,c)*input.Normal.x+cross(c,a)*input.Normal.y+cross(a,b)*input.Normal.z)*handedness;
+    output.NormalWS=dot(transformedNormal,transformedNormal)>1e-12?normalize(transformedNormal):float3(0,1,0);
+    float3 transformedTangent=mul((float3x3)u_Model,input.Tangent.xyz);
+    output.TangentWS=float4(transformedTangent,input.Tangent.w*handedness);
     output.TexCoord    = input.TexCoord;
     output.VertexColor = input.Color;
     output.LocalPos    = input.Position;
@@ -246,6 +257,14 @@ float3 ApplyClearcoat(float3 baseLighting, float3 N, float3 V, float3 L, float n
 // =============================================================================
 // PIXEL SHADER ENTRY POINT
 // =============================================================================
+// RG normal maps use the +Y convention; reconstruct Z before applying strength.
+float3 DecodeMaterialNormal(float2 rg,float strength) {
+    float2 xy=rg*2.0-1.0;
+    float z=sqrt(saturate(1.0-dot(xy,xy)));
+    float3 n=float3(xy*max(0.0,strength),max(z,1e-4));
+    return normalize(n);
+}
+
 float4 PSMain(PSInput input) : SV_Target0 {
     // 1. Unpack Shading Controls from Object Push Constants
     float tileScale = max(0.01, u_Params.x);
@@ -342,17 +361,25 @@ float4 PSMain(PSInput input) : SV_Target0 {
         if (length(crossN) > 1e-6) {
             N = normalize(crossN);
         }
-    } else if ((shadingMode == 5 || shadingMode == 6) && HasMaterialMap(1) && abs(input.TangentWS.w) > 0.1) {
-        float3 T = normalize(input.TangentWS.xyz);
-        float3 B = cross(N, T) * input.TangentWS.w;
-        float3x3 TBN = float3x3(T, B, N);
-        
-        float2 uv = (u_MaterialFlags.y != 0 ? input.TexCoord * u_MaterialUV.xy + u_MaterialUV.zw : input.TexCoord * tileScale + u_UVOffset);
-        float3 normalSample = u_NormalMap.Sample(u_Sampler, uv).xyz * 2.0 - 1.0;
-        normalSample.xy *= max(0.0, u_MaterialSurface.x);
-        N = normalize(mul(normalize(normalSample), TBN));
+    } else if ((HasMaterialMap(1)||HasMaterialMap(8)) && abs(input.TangentWS.w)>0.1) {
+        float3 T=input.TangentWS.xyz-N*dot(N,input.TangentWS.xyz);
+        T=normalize(T);
+        float3 B=cross(N,T)*(input.TangentWS.w<0.0?-1.0:1.0);
+        float2 uv=input.TexCoord*u_MaterialUV.xy+u_MaterialUV.zw;
+        float3 baseNormal=float3(0,0,1);
+        if (HasMaterialMap(1)) baseNormal=DecodeMaterialNormal(u_NormalMap.Sample(u_Sampler,uv).rg,u_MaterialSurface.x);
+        if (HasMaterialMap(8)) {
+            float2 detailUV=input.TexCoord*u_DetailUV.xy+u_DetailUV.zw;
+            float mask=HasMaterialMap(9)?u_DetailMaskMap.Sample(u_Sampler,detailUV).r:1.0;
+            float3 detail=DecodeMaterialNormal(u_DetailNormalMap.Sample(u_Sampler,detailUV).rg,u_DetailParameters.x*saturate(mask));
+            // Reoriented normal mapping: either flat input preserves the other layer.
+            float3 t=baseNormal+float3(0,0,1);
+            float3 u=detail*float3(-1,-1,1);
+            baseNormal=normalize(t*dot(t,u)/max(t.z,1e-5)-u);
+        }
+        N=normalize(mul(baseNormal,float3x3(T,B,N)));
     }
-    
+
     // 4. View Vector
     float3 camPos = (length(u_CameraPosition.xyz) > 0.001) ? u_CameraPosition.xyz : float3(0.0, 5.0, 10.0);
     float3 V = normalize(camPos - input.WorldPos);

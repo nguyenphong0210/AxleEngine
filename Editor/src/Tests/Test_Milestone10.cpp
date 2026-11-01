@@ -1195,6 +1195,12 @@ bool RunTest_Step106_MaterialPipeline() {
     source.UseClearcoatMap=true;
     source.AnisotropyFlowPath="textures/anisotropyFlowMap.png";
     source.UseAnisotropyFlowMap=true;
+    source.DetailNormalPath="textures/detailNormalMap.png";
+    source.UseDetailNormalMap=true;
+    source.DetailMaskPath="textures/detailMaskMap.png";
+    source.UseDetailMaskMap=true;
+    source.DetailNormalStrength=0.75f;
+    source.DetailUVScale={3,7}; source.DetailUVOffset={0.2f,-0.3f};
     source.ClearcoatStrength = 0.8f;
     source.ClearcoatRoughness = 0.12f;
     source.AnisotropyStrength = -0.6f;
@@ -1237,6 +1243,9 @@ bool RunTest_Step106_MaterialPipeline() {
     if (!check(SceneHierarchyPanel::LoadMaterialAsset(assetPath, loaded), "Inspector load")) return false;
     if (!check(loaded.ClearcoatPath==source.ClearcoatPath && loaded.UseClearcoatMap, "Clearcoat map asset persistence")) return false;
     if (!check(loaded.AnisotropyFlowPath==source.AnisotropyFlowPath && loaded.UseAnisotropyFlowMap, "AnisotropyFlow asset persistence")) return false;
+    if (!check(loaded.DetailNormalPath==source.DetailNormalPath && loaded.UseDetailNormalMap, "DetailNormal asset persistence")) return false;
+    if (!check(loaded.DetailMaskPath==source.DetailMaskPath && loaded.UseDetailMaskMap, "DetailMask asset persistence")) return false;
+    if (!check(loaded.DetailNormalStrength==source.DetailNormalStrength && loaded.DetailUVScale==source.DetailUVScale && loaded.DetailUVOffset==source.DetailUVOffset,"Detail normal parameters persistence")) return false;
     if (!check(loaded.TextureMode == source.TextureMode && loaded.ORMPath == source.ORMPath && loaded.UseORMMap, "Packed ORM persistence")) return false;
     if (!check(glm::length(loaded.AlbedoColor-source.AlbedoColor) < 1e-5f && glm::length(loaded.EmissionColor-source.EmissionColor) < 1e-5f, "Linear HDR color and alpha persistence")) return false;
     if (!check(loaded.RoughnessPath == source.RoughnessPath && !loaded.UseRoughnessMap && loaded.MetallicPath == source.MetallicPath && loaded.UseMetallicMap, "Separate map paths and disabled assignments")) return false;
@@ -1264,6 +1273,9 @@ bool RunTest_Step106_MaterialPipeline() {
     if (!check(inlineMat.CustomProperties.size()==source.CustomProperties.size() && inlineMat.CustomProperties[6].BoolVal, "Inline typed shader parameter persistence")) return false;
     if (!check(inlineMat.ClearcoatPath==source.ClearcoatPath && inlineMat.UseClearcoatMap, "Clearcoat map scene persistence")) return false;
     if (!check(inlineMat.AnisotropyFlowPath==source.AnisotropyFlowPath && inlineMat.UseAnisotropyFlowMap, "AnisotropyFlow scene persistence")) return false;
+    if (!check(inlineMat.DetailNormalPath==source.DetailNormalPath && inlineMat.UseDetailNormalMap, "DetailNormal scene persistence")) return false;
+    if (!check(inlineMat.DetailMaskPath==source.DetailMaskPath && inlineMat.UseDetailMaskMap, "DetailMask scene persistence")) return false;
+    if (!check(inlineMat.DetailNormalStrength==source.DetailNormalStrength && inlineMat.DetailUVScale==source.DetailUVScale && inlineMat.DetailUVOffset==source.DetailUVOffset,"Detail normal parameters persistence")) return false;
     source.SyncToRHI();
     auto gpu = source.RHIMaterialAsset->BuildConstants();
     if (!check(gpu.UVTransform == glm::vec4(source.UVScale, source.UVOffset) && gpu.Surface.x == 0.0f && gpu.Surface.y == source.AOStrength && gpu.Surface.z == 0.0f && gpu.Surface.w == 0.0f, "Explicit GPU scalar layout")) return false;

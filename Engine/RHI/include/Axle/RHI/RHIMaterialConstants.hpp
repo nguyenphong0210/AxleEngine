@@ -10,10 +10,14 @@ namespace Axle::RHI {
         glm::vec4 Surface{1.0f, 1.0f, 1.0f, 1.0f};     // normal, AO, direct specular, environment reflection
         glm::vec4 CoatAnisotropy{0.0f, 0.04f, 0.0f, 0.0f}; // coat, coat roughness, anisotropy, rotation in turns
         glm::uvec4 Flags{0u}; // x: assigned texture bitmask, y: authored material (versus procedural mesh)
-        glm::vec4 Reserved[12]{};
+        glm::vec4 DetailUVTransform{1.0f,1.0f,0.0f,0.0f};
+        glm::vec4 DetailParameters{1.0f,0.0f,0.0f,0.0f}; // x: normal strength
+        glm::vec4 Reserved[10]{};
     };
     static_assert(sizeof(RHIMaterialConstants) == 256);
     static_assert(offsetof(RHIMaterialConstants, Surface) == 16);
     static_assert(offsetof(RHIMaterialConstants, CoatAnisotropy) == 32);
     static_assert(offsetof(RHIMaterialConstants, Flags) == 48);
+    static_assert(offsetof(RHIMaterialConstants, DetailUVTransform) == 64);
+    static_assert(offsetof(RHIMaterialConstants, DetailParameters) == 80);
 }

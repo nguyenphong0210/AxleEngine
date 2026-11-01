@@ -53,6 +53,25 @@ namespace Axle {
         void SetUseAnisotropyFlowMap(bool value) { m_UseAnisotropyFlowMap=value; }
         void SetAnisotropyFlowTexture(const std::shared_ptr<Texture2D>& texture,const std::string& path="") { m_AnisotropyFlowMap=texture; m_AnisotropyFlowPath=path; m_UseAnisotropyFlowMap=!path.empty(); }
 
+        const std::string& GetDetailNormalPath() const { return m_DetailNormalPath; }
+        const std::shared_ptr<Texture2D>& GetDetailNormalMap() const { return m_DetailNormalMap; }
+        bool IsDetailNormalMapEnabled() const { return m_UseDetailNormalMap; }
+        void SetUseDetailNormalMap(bool value) { m_UseDetailNormalMap=value; }
+        void SetDetailNormalTexture(const std::shared_ptr<Texture2D>& texture,const std::string& path="") { m_DetailNormalMap=texture; m_DetailNormalPath=path; m_UseDetailNormalMap=!path.empty(); }
+
+        const std::string& GetDetailMaskPath() const { return m_DetailMaskPath; }
+        const std::shared_ptr<Texture2D>& GetDetailMaskMap() const { return m_DetailMaskMap; }
+        bool IsDetailMaskMapEnabled() const { return m_UseDetailMaskMap; }
+        void SetUseDetailMaskMap(bool value) { m_UseDetailMaskMap=value; }
+        void SetDetailMaskTexture(const std::shared_ptr<Texture2D>& texture,const std::string& path="") { m_DetailMaskMap=texture; m_DetailMaskPath=path; m_UseDetailMaskMap=!path.empty(); }
+
+        float GetDetailNormalStrength() const { return m_DetailNormalStrength; }
+        void SetDetailNormalStrength(float value) { m_DetailNormalStrength=value; }
+        glm::vec2 GetDetailUVScale() const { return m_DetailUVScale; }
+        void SetDetailUVScale(glm::vec2 value) { m_DetailUVScale=value; }
+        glm::vec2 GetDetailUVOffset() const { return m_DetailUVOffset; }
+        void SetDetailUVOffset(glm::vec2 value) { m_DetailUVOffset=value; }
+
         // Automotive & Advanced Shading (Clearcoat & Anisotropy)
         float GetClearcoatStrength() const { return m_ClearcoatStrength; }
         float& GetClearcoatStrengthRef() { return m_ClearcoatStrength; }
@@ -269,6 +288,9 @@ namespace Axle {
         float m_Roughness = 0.5f;
         float m_Metallic = 0.0f;
         float m_NormalStrength = 1.0f;
+        float m_DetailNormalStrength = 1.0f;
+        glm::vec2 m_DetailUVScale = {1.0f,1.0f};
+        glm::vec2 m_DetailUVOffset = {0.0f,0.0f};
         float m_ClearcoatStrength = 0.0f;
         float m_ClearcoatRoughness = 0.04f;
         float m_AnisotropyStrength = 0.0f;
@@ -285,6 +307,12 @@ namespace Axle {
         std::string m_AnisotropyFlowPath;
         std::shared_ptr<Texture2D> m_AnisotropyFlowMap;
         bool m_UseAnisotropyFlowMap=false;
+        std::string m_DetailNormalPath;
+        std::shared_ptr<Texture2D> m_DetailNormalMap;
+        bool m_UseDetailNormalMap=false;
+        std::string m_DetailMaskPath;
+        std::shared_ptr<Texture2D> m_DetailMaskMap;
+        bool m_UseDetailMaskMap=false;
         std::string m_ORMPath;
         std::shared_ptr<Texture2D> m_ORMMap;
         bool m_UseORMMap = false;

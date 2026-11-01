@@ -269,6 +269,9 @@ namespace Axle {
                 ss << "      EnableEnvironmentReflections: " << (mat.EnableEnvironmentReflections ? "true" : "false") << "\n";
                 ss << "      UseCustomShader: " << (mat.UseCustomShader ? "true" : "false") << "\n";
                 ss << "      AOStrength: " << mat.AOStrength << "\n";
+                ss << "      DetailNormalStrength: " << mat.DetailNormalStrength << "\n";
+                ss << "      DetailUVScale: " << "[ " << mat.DetailUVScale.x << " , " << mat.DetailUVScale.y << " ]\n";
+                ss << "      DetailUVOffset: " << "[ " << mat.DetailUVOffset.x << " , " << mat.DetailUVOffset.y << " ]\n";
                 ss << "      ClearcoatStrength: " << mat.ClearcoatStrength << "\n";
                 ss << "      ClearcoatRoughness: " << mat.ClearcoatRoughness << "\n";
                 ss << "      AnisotropyStrength: " << mat.AnisotropyStrength << "\n";
@@ -278,6 +281,10 @@ namespace Axle {
                 ss << "      UseClearcoatMap: " << (mat.UseClearcoatMap?"true":"false") << "\n";
                 ss << "      AnisotropyFlowPath: " << mat.AnisotropyFlowPath << "\n";
                 ss << "      UseAnisotropyFlowMap: " << (mat.UseAnisotropyFlowMap?"true":"false") << "\n";
+                ss << "      DetailNormalPath: " << mat.DetailNormalPath << "\n";
+                ss << "      UseDetailNormalMap: " << (mat.UseDetailNormalMap?"true":"false") << "\n";
+                ss << "      DetailMaskPath: " << mat.DetailMaskPath << "\n";
+                ss << "      UseDetailMaskMap: " << (mat.UseDetailMaskMap?"true":"false") << "\n";
                 WriteShaderProperties(ss,mat.CustomProperties,"      ");
                 ss << "      NormalPath: " << mat.NormalPath << "\n";
                 ss << "      UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
@@ -1179,6 +1186,20 @@ namespace Axle {
                             mat.AnisotropyFlowPath=Trim(trimmed.substr(19));
                         } else if (trimmed.rfind("UseAnisotropyFlowMap:", 0) == 0) {
                             mat.UseAnisotropyFlowMap=Trim(trimmed.substr(21))=="true";
+                        } else if (trimmed.rfind("DetailNormalPath:", 0) == 0) {
+                            mat.DetailNormalPath=Trim(trimmed.substr(17));
+                        } else if (trimmed.rfind("UseDetailNormalMap:", 0) == 0) {
+                            mat.UseDetailNormalMap=Trim(trimmed.substr(19))=="true";
+                        } else if (trimmed.rfind("DetailMaskPath:", 0) == 0) {
+                            mat.DetailMaskPath=Trim(trimmed.substr(15));
+                        } else if (trimmed.rfind("UseDetailMaskMap:", 0) == 0) {
+                            mat.UseDetailMaskMap=Trim(trimmed.substr(17))=="true";
+                        } else if (trimmed.rfind("DetailNormalStrength:", 0) == 0) {
+                            mat.DetailNormalStrength=std::stof(Trim(trimmed.substr(21)));
+                        } else if (trimmed.rfind("DetailUVScale:", 0) == 0) {
+                            std::sscanf(trimmed.c_str(), "DetailUVScale: [ %f , %f ]", &mat.DetailUVScale.x, &mat.DetailUVScale.y);
+                        } else if (trimmed.rfind("DetailUVOffset:", 0) == 0) {
+                            std::sscanf(trimmed.c_str(), "DetailUVOffset: [ %f , %f ]", &mat.DetailUVOffset.x, &mat.DetailUVOffset.y);
                         } else if (trimmed.rfind("ClearcoatStrength:", 0) == 0) {
                             mat.ClearcoatStrength = std::stof(Trim(trimmed.substr(18)));
                         } else if (trimmed.rfind("ClearcoatRoughness:", 0) == 0) {

@@ -138,6 +138,65 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     lm.NormalStrength = 1;
     auto tilted = render();
     if (!check(!tilted.empty() && flat!=tilted, "Normal strength affects actual shading")) return false;
+    lm.DetailNormalPath=writeTGA("detail.tga",{128,210,210,255}); lm.UseDetailNormalMap=true;
+    lm.DetailNormalStrength=0;
+    auto detailZero=render();
+    if (!check(detailZero==tilted,"Zero detail strength preserves base normal")) return false;
+    lm.DetailNormalStrength=1;
+    auto detailLayered=render();
+    if (!check(!detailLayered.empty() && detailLayered!=tilted,"Detail normal blends with base normal")) return false;
+    lm.DetailMaskPath=black; lm.UseDetailMaskMap=true;
+    auto detailMasked=render();
+    if (!check(detailMasked==tilted,"Black detail mask preserves base normal")) return false;
+    lm.UseDetailMaskMap=false;
+    auto detailPattern=root/"detail_pattern.tga";
+    {
+        std::ofstream stream(detailPattern,std::ios::binary);
+        uint8_t header[18]{};
+        header[2]=2; header[12]=2; header[14]=2; header[16]=32; header[17]=0x28;
+        stream.write(reinterpret_cast<char*>(header),18);
+        uint8_t pixels[]={210,128,210,255,210,128,210,255,210,210,128,255,210,210,128,255};
+        stream.write(reinterpret_cast<char*>(pixels),16);
+    }
+    lm.DetailNormalPath=detailPattern.string();
+    auto detailUV1=render();
+    lm.DetailUVScale={1,3};
+    auto detailUV3=render();
+    if (!check(!detailUV3.empty() && detailUV3!=detailUV1,"Independent detail Y tiling affects shading")) return false;
+    lm.DetailUVOffset={0,0.25f};
+    auto detailOffset=render();
+    if (!check(!detailOffset.empty() && detailOffset!=detailUV3,"Independent detail UV offset affects shading")) return false;
+    // Compare GPU transforms with identical geometry transformed and normalized on CPU.
+    auto oldMesh=left.GetComponent<MeshInstance3D>().RHIMeshAsset;
+    auto oldScale=left.GetComponent<TransformComponent>().Scale;
+    for (float mirror : {1.0f,-1.0f}) {
+        std::vector<RHIVertex3D> vertices;
+        std::vector<uint32_t> indices;
+        RHIMesh::GenerateSphere(1,24,32,vertices,indices);
+        auto sourceMesh=std::make_shared<RHIMesh>();
+        if (!check(sourceMesh->Init(vertices,indices,"NormalTransformSource"),"Source transform mesh")) return false;
+        left.GetComponent<MeshInstance3D>().RHIMeshAsset=sourceMesh;
+        glm::vec3 scale(0.65f*mirror,0.4f,0.8f);
+        left.GetComponent<TransformComponent>().Scale=scale;
+        auto gpuTransform=render();
+        for (auto& vertex:vertices) {
+            vertex.Position*=scale;
+            vertex.Normal=glm::normalize(vertex.Normal/scale);
+            vertex.Tangent=glm::vec4(glm::normalize(glm::vec3(vertex.Tangent)*scale),vertex.Tangent.w*mirror);
+        }
+        auto bakedMesh=std::make_shared<RHIMesh>();
+        if (!check(bakedMesh->Init(vertices,indices,"NormalTransformBaked"),"Baked transform mesh")) return false;
+        left.GetComponent<MeshInstance3D>().RHIMeshAsset=bakedMesh;
+        left.GetComponent<TransformComponent>().Scale=glm::vec3(1);
+        auto bakedTransform=render();
+        uint64_t error=0;
+        for (size_t i=0;i<gpuTransform.size();++i) error+=std::abs(int(gpuTransform[i])-int(bakedTransform[i]));
+        if (!check(!gpuTransform.empty() && error<1500,"Nonuniform and mirrored normal transforms match baked geometry")) return false;
+    }
+    left.GetComponent<MeshInstance3D>().RHIMeshAsset=oldMesh;
+    left.GetComponent<TransformComponent>().Scale=oldScale;
+    lm.UseDetailNormalMap=false; lm.DetailUVScale=glm::vec2(1); lm.DetailUVOffset=glm::vec2(0);
+
     lm.UseNormalMap = false;
     lm.AOPath = black; lm.UseAOMap = true;
     lm.AOStrength = 0;

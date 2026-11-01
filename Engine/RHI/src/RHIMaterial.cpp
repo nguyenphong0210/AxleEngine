@@ -77,6 +77,8 @@ namespace Axle::RHI {
         m_Textures[index] = texture;
         switch (slot) {
             case RHITextureSlot::AnisotropyFlow: m_Desc.AnisotropyFlowPath = path; break;
+            case RHITextureSlot::DetailNormal: m_Desc.DetailNormalPath = path; break;
+            case RHITextureSlot::DetailMask: m_Desc.DetailMaskPath = path; break;
             case RHITextureSlot::Clearcoat: m_Desc.ClearcoatPath = path; break;
             case RHITextureSlot::Albedo:    m_Desc.AlbedoPath = path; break;
             case RHITextureSlot::Normal:    m_Desc.NormalPath = path; break;
@@ -103,6 +105,8 @@ namespace Axle::RHI {
 
     std::shared_ptr<RHITexture> RHIMaterial::GetFallbackTexture(RHITextureSlot slot) {
         switch (slot) {
+            case RHITextureSlot::DetailNormal: return GetDefaultFlatNormalTexture();
+
             case RHITextureSlot::Albedo:    return GetDefaultWhiteTexture();
             case RHITextureSlot::Normal:    return GetDefaultFlatNormalTexture();
             case RHITextureSlot::Roughness: return GetDefaultRoughnessTexture();
@@ -121,6 +125,8 @@ namespace Axle::RHI {
     const std::string& RHIMaterial::GetTexturePath(RHITextureSlot slot) const {
         switch (slot) {
             case RHITextureSlot::AnisotropyFlow: return m_Desc.AnisotropyFlowPath;
+            case RHITextureSlot::DetailNormal: return m_Desc.DetailNormalPath;
+            case RHITextureSlot::DetailMask: return m_Desc.DetailMaskPath;
             case RHITextureSlot::Clearcoat: return m_Desc.ClearcoatPath;
             case RHITextureSlot::Albedo:    return m_Desc.AlbedoPath;
             case RHITextureSlot::Normal:    return m_Desc.NormalPath;
@@ -153,6 +159,8 @@ namespace Axle::RHI {
 
     RHIMaterialConstants RHIMaterial::BuildConstants() const {
         RHIMaterialConstants data;
+        data.DetailUVTransform=glm::vec4(m_Desc.DetailUVScale,m_Desc.DetailUVOffset);
+        data.DetailParameters.x=m_Desc.DetailNormalStrength;
         data.UVTransform = glm::vec4(m_Desc.UVScale, m_Desc.UVOffset);
         data.Surface = glm::vec4(m_Desc.NormalStrength, m_Desc.AO,
             m_Desc.EnableSpecularHighlights ? 1.0f : 0.0f, m_Desc.EnableEnvironmentReflections ? 1.0f : 0.0f);
@@ -423,6 +431,9 @@ namespace Axle::RHI {
             fout << "    normalStrength: " << m_Desc.NormalStrength << "\n";
             fout << "    occlusionMap: \"" << m_Desc.AOPath << "\"\n";
             fout << "    occlusionStrength: " << m_Desc.AO << "\n\n";
+            fout << "    detailNormalStrength: " << m_Desc.DetailNormalStrength << "\n";
+            fout << "    detailUVScale: " << "[ " << m_Desc.DetailUVScale.x << " , " << m_Desc.DetailUVScale.y << " ]\n";
+            fout << "    detailUVOffset: " << "[ " << m_Desc.DetailUVOffset.x << " , " << m_Desc.DetailUVOffset.y << " ]\n";
             fout << "    clearcoatStrength: " << m_Desc.ClearcoatStrength << "\n";
             fout << "    clearcoatRoughness: " << m_Desc.ClearcoatRoughness << "\n";
             fout << "    anisotropyStrength: " << m_Desc.AnisotropyStrength << "\n";
@@ -436,6 +447,10 @@ namespace Axle::RHI {
             fout << "    useClearcoatMap: " << ((m_Desc.TextureEnableMask & (1u<<6)) ? "true" : "false") << "\n";
             fout << "    anisotropyFlowMap: \"" << m_Desc.AnisotropyFlowPath << "\"\n";
             fout << "    useAnisotropyFlowMap: " << ((m_Desc.TextureEnableMask & (1u<<7))?"true":"false") << "\n";
+            fout << "    detailNormalMap: \"" << m_Desc.DetailNormalPath << "\"\n";
+            fout << "    useDetailNormalMap: " << ((m_Desc.TextureEnableMask & (1u<<8))?"true":"false") << "\n";
+            fout << "    detailMaskMap: \"" << m_Desc.DetailMaskPath << "\"\n";
+            fout << "    useDetailMaskMap: " << ((m_Desc.TextureEnableMask & (1u<<9))?"true":"false") << "\n";
             fout << "    textureMode: \"" << TextureModeToString(m_Desc.TextureMode) << "\"\n";
             fout << "    specularHighlights: " << (m_Desc.EnableSpecularHighlights ? "true" : "false") << "\n";
             fout << "    environmentReflections: " << (m_Desc.EnableEnvironmentReflections ? "true" : "false") << "\n";
@@ -531,6 +546,26 @@ namespace Axle::RHI {
                 } else if (trimmed.rfind("useAnisotropyFlowMap:", 0) == 0) {
                     if (Trim(trimmed.substr(21))=="true") m_Desc.TextureEnableMask|=1u<<7;
                     else m_Desc.TextureEnableMask&=~(1u<<7);
+                } else if (trimmed.rfind("detailNormalMap:", 0) == 0) {
+                    auto value=Trim(trimmed.substr(16));
+                    if (value.size()>=2 && value.front()=='"' && value.back()=='"') value=value.substr(1,value.size()-2);
+                    m_Desc.DetailNormalPath=value;
+                } else if (trimmed.rfind("useDetailNormalMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(19))=="true") m_Desc.TextureEnableMask|=1u<<8;
+                    else m_Desc.TextureEnableMask&=~(1u<<8);
+                } else if (trimmed.rfind("detailMaskMap:", 0) == 0) {
+                    auto value=Trim(trimmed.substr(14));
+                    if (value.size()>=2 && value.front()=='"' && value.back()=='"') value=value.substr(1,value.size()-2);
+                    m_Desc.DetailMaskPath=value;
+                } else if (trimmed.rfind("useDetailMaskMap:", 0) == 0) {
+                    if (Trim(trimmed.substr(17))=="true") m_Desc.TextureEnableMask|=1u<<9;
+                    else m_Desc.TextureEnableMask&=~(1u<<9);
+                } else if (trimmed.rfind("detailNormalStrength:", 0) == 0) {
+                    m_Desc.DetailNormalStrength=std::stof(Trim(trimmed.substr(21)));
+                } else if (trimmed.rfind("detailUVScale:", 0) == 0) {
+                    std::sscanf(trimmed.c_str(), "detailUVScale: [ %f , %f ]", &m_Desc.DetailUVScale.x, &m_Desc.DetailUVScale.y);
+                } else if (trimmed.rfind("detailUVOffset:", 0) == 0) {
+                    std::sscanf(trimmed.c_str(), "detailUVOffset: [ %f , %f ]", &m_Desc.DetailUVOffset.x, &m_Desc.DetailUVOffset.y);
                 } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
                     try { m_Desc.ClearcoatStrength = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
                 } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {

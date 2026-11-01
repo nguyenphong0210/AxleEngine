@@ -138,6 +138,15 @@ namespace Axle {
         std::string AnisotropyFlowPath;
         std::shared_ptr<Texture2D> AnisotropyFlowMap;
         bool UseAnisotropyFlowMap=false;
+        std::string DetailNormalPath;
+        std::shared_ptr<Texture2D> DetailNormalMap;
+        bool UseDetailNormalMap=false;
+        std::string DetailMaskPath;
+        std::shared_ptr<Texture2D> DetailMaskMap;
+        bool UseDetailMaskMap=false;
+        float DetailNormalStrength = 1.0f;
+        glm::vec2 DetailUVScale = {1.0f,1.0f};
+        glm::vec2 DetailUVOffset = {0.0f,0.0f};
         float ClearcoatStrength = 0.0f;
         float ClearcoatRoughness = 0.04f;
         float AnisotropyStrength = 0.0f;
@@ -208,6 +217,15 @@ namespace Axle {
             AnisotropyFlowPath=MaterialAsset->GetAnisotropyFlowPath();
             AnisotropyFlowMap=MaterialAsset->GetAnisotropyFlowMap();
             UseAnisotropyFlowMap=MaterialAsset->IsAnisotropyFlowMapEnabled();
+            DetailNormalPath=MaterialAsset->GetDetailNormalPath();
+            DetailNormalMap=MaterialAsset->GetDetailNormalMap();
+            UseDetailNormalMap=MaterialAsset->IsDetailNormalMapEnabled();
+            DetailMaskPath=MaterialAsset->GetDetailMaskPath();
+            DetailMaskMap=MaterialAsset->GetDetailMaskMap();
+            UseDetailMaskMap=MaterialAsset->IsDetailMaskMapEnabled();
+            DetailNormalStrength=MaterialAsset->GetDetailNormalStrength();
+            DetailUVScale=MaterialAsset->GetDetailUVScale();
+            DetailUVOffset=MaterialAsset->GetDetailUVOffset();
             ClearcoatStrength = MaterialAsset->GetClearcoatStrength();
             ClearcoatRoughness = MaterialAsset->GetClearcoatRoughness();
             AnisotropyStrength = MaterialAsset->GetAnisotropyStrength();
@@ -289,6 +307,11 @@ namespace Axle {
             desc.TextureEnableMask=(1u<<static_cast<uint32_t>(RHI::RHITextureSlot::Count))-1u;
             desc.ClearcoatPath=UseClearcoatMap?ClearcoatPath:"";
             desc.AnisotropyFlowPath=UseAnisotropyFlowMap?AnisotropyFlowPath:"";
+            desc.DetailNormalPath=UseDetailNormalMap?DetailNormalPath:"";
+            desc.DetailMaskPath=UseDetailMaskMap?DetailMaskPath:"";
+            desc.DetailNormalStrength=DetailNormalStrength;
+            desc.DetailUVScale=DetailUVScale;
+            desc.DetailUVOffset=DetailUVOffset;
             desc.RenderQueue = RenderQueue;
             desc.UseORMMap = UseORMMap;
             desc.AlbedoPath = UseAlbedoMap ? AlbedoPath : "";
@@ -298,7 +321,7 @@ namespace Axle {
             desc.AOPath = UseAOMap ? AOPath : "";
             desc.EmissivePath = UseEmissiveMap ? EmissivePath : "";
             desc.ORMPath = UseORMMap ? ORMPath : "";
-            bool hasMaps = !desc.AnisotropyFlowPath.empty() || !desc.ClearcoatPath.empty() || !desc.AlbedoPath.empty() || !desc.NormalPath.empty() || !desc.RoughnessPath.empty() ||
+            bool hasMaps = !desc.DetailMaskPath.empty() || !desc.DetailNormalPath.empty() || !desc.AnisotropyFlowPath.empty() || !desc.ClearcoatPath.empty() || !desc.AlbedoPath.empty() || !desc.NormalPath.empty() || !desc.RoughnessPath.empty() ||
                 !desc.MetallicPath.empty() || !desc.AOPath.empty() || !desc.EmissivePath.empty();
             desc.ShadingModel = TextureMode == Axle::TextureMode::PackedORM
                 ? RHI::RHIShadingModel::PackedORMTexturedPBR
@@ -315,6 +338,13 @@ namespace Axle {
             MaterialAsset->SetUseClearcoatMap(UseClearcoatMap);
             MaterialAsset->SetAnisotropyFlowTexture(AnisotropyFlowMap,AnisotropyFlowPath);
             MaterialAsset->SetUseAnisotropyFlowMap(UseAnisotropyFlowMap);
+            MaterialAsset->SetDetailNormalTexture(DetailNormalMap,DetailNormalPath);
+            MaterialAsset->SetUseDetailNormalMap(UseDetailNormalMap);
+            MaterialAsset->SetDetailMaskTexture(DetailMaskMap,DetailMaskPath);
+            MaterialAsset->SetUseDetailMaskMap(UseDetailMaskMap);
+            MaterialAsset->SetDetailNormalStrength(DetailNormalStrength);
+            MaterialAsset->SetDetailUVScale(DetailUVScale);
+            MaterialAsset->SetDetailUVOffset(DetailUVOffset);
             MaterialAsset->SetClearcoatStrength(ClearcoatStrength);
             MaterialAsset->SetClearcoatRoughness(ClearcoatRoughness);
             MaterialAsset->SetAnisotropyStrength(AnisotropyStrength);
@@ -433,6 +463,10 @@ namespace Axle {
         }
 
         void ResetTextures() {
+            DetailMaskPath.clear(); DetailMaskMap.reset(); UseDetailMaskMap=false;
+
+            DetailNormalPath.clear(); DetailNormalMap.reset(); UseDetailNormalMap=false;
+
             AnisotropyFlowPath.clear(); AnisotropyFlowMap.reset(); UseAnisotropyFlowMap=false;
 
             ClearcoatPath.clear(); ClearcoatMap.reset(); UseClearcoatMap=false;

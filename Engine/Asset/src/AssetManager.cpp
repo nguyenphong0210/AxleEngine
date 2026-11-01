@@ -345,6 +345,18 @@ namespace Axle {
             material->SetAnisotropyFlowTexture(texture,material->GetAnisotropyFlowPath());
             material->SetUseAnisotropyFlowMap(enabled);
         }
+        if (!material->GetDetailNormalPath().empty()) {
+            bool enabled=material->IsDetailNormalMapEnabled();
+            auto texture=AssetManager::GetTexture(material->GetDetailNormalPath());
+            material->SetDetailNormalTexture(texture,material->GetDetailNormalPath());
+            material->SetUseDetailNormalMap(enabled);
+        }
+        if (!material->GetDetailMaskPath().empty()) {
+            bool enabled=material->IsDetailMaskMapEnabled();
+            auto texture=AssetManager::GetTexture(material->GetDetailMaskPath());
+            material->SetDetailMaskTexture(texture,material->GetDetailMaskPath());
+            material->SetUseDetailMaskMap(enabled);
+        }
         if (!material->GetAlbedoPath().empty()) {
             bool enabled = material->IsAlbedoMapEnabled();
             auto texture = AssetManager::GetTexture(material->GetAlbedoPath());

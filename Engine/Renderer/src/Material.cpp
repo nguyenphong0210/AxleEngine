@@ -213,6 +213,8 @@ namespace Axle {
 
     void Material::ResetTextures() {
         m_AnisotropyFlowPath.clear(); m_AnisotropyFlowMap.reset(); m_UseAnisotropyFlowMap=false;
+        m_DetailNormalPath.clear(); m_DetailNormalMap.reset(); m_UseDetailNormalMap=false;
+        m_DetailMaskPath.clear(); m_DetailMaskMap.reset(); m_UseDetailMaskMap=false;
         m_ClearcoatPath.clear(); m_ClearcoatMap.reset(); m_UseClearcoatMap=false;
         ClearAlbedoTexture();
         ClearNormalTexture();
@@ -502,6 +504,9 @@ namespace Axle {
             fout << "    metallicMap: \"" << m_MetallicPath << "\"\n";
             fout << "    emissiveMap: \"" << m_EmissivePath << "\"\n";
             fout << "    normalStrength: " << m_NormalStrength << "\n";
+            fout << "    detailNormalStrength: " << m_DetailNormalStrength << "\n";
+            fout << "    detailUVScale: " << "[ " << m_DetailUVScale.x << " , " << m_DetailUVScale.y << " ]\n";
+            fout << "    detailUVOffset: " << "[ " << m_DetailUVOffset.x << " , " << m_DetailUVOffset.y << " ]\n";
             fout << "    clearcoatStrength: " << m_ClearcoatStrength << "\n";
             fout << "    clearcoatRoughness: " << m_ClearcoatRoughness << "\n";
             fout << "    anisotropyStrength: " << m_AnisotropyStrength << "\n";
@@ -524,6 +529,10 @@ namespace Axle {
             fout << "    useClearcoatMap: " << (m_UseClearcoatMap ? "true" : "false") << "\n";
             fout << "    anisotropyFlowMap: \"" << m_AnisotropyFlowPath << "\"\n";
             fout << "    useAnisotropyFlowMap: " << (m_UseAnisotropyFlowMap?"true":"false") << "\n";
+            fout << "    detailNormalMap: \"" << m_DetailNormalPath << "\"\n";
+            fout << "    useDetailNormalMap: " << (m_UseDetailNormalMap?"true":"false") << "\n";
+            fout << "    detailMaskMap: \"" << m_DetailMaskPath << "\"\n";
+            fout << "    useDetailMaskMap: " << (m_UseDetailMaskMap?"true":"false") << "\n";
             WriteShaderProperties(fout,m_CustomProperties);
             fout << "}\n";
             return true;
@@ -721,6 +730,24 @@ namespace Axle {
                     m_AnisotropyFlowPath=value; m_UseAnisotropyFlowMap=!value.empty();
                 } else if (trimmed.rfind("useAnisotropyFlowMap:", 0) == 0) {
                     m_UseAnisotropyFlowMap=Trim(trimmed.substr(21))=="true";
+                } else if (trimmed.rfind("detailNormalMap:", 0) == 0) {
+                    auto value=Trim(trimmed.substr(16));
+                    if (value.size()>=2 && value.front()=='"' && value.back()=='"') value=value.substr(1,value.size()-2);
+                    m_DetailNormalPath=value; m_UseDetailNormalMap=!value.empty();
+                } else if (trimmed.rfind("useDetailNormalMap:", 0) == 0) {
+                    m_UseDetailNormalMap=Trim(trimmed.substr(19))=="true";
+                } else if (trimmed.rfind("detailMaskMap:", 0) == 0) {
+                    auto value=Trim(trimmed.substr(14));
+                    if (value.size()>=2 && value.front()=='"' && value.back()=='"') value=value.substr(1,value.size()-2);
+                    m_DetailMaskPath=value; m_UseDetailMaskMap=!value.empty();
+                } else if (trimmed.rfind("useDetailMaskMap:", 0) == 0) {
+                    m_UseDetailMaskMap=Trim(trimmed.substr(17))=="true";
+                } else if (trimmed.rfind("detailNormalStrength:", 0) == 0) {
+                    m_DetailNormalStrength=std::stof(Trim(trimmed.substr(21)));
+                } else if (trimmed.rfind("detailUVScale:", 0) == 0) {
+                    std::sscanf(trimmed.c_str(), "detailUVScale: [ %f , %f ]", &m_DetailUVScale.x, &m_DetailUVScale.y);
+                } else if (trimmed.rfind("detailUVOffset:", 0) == 0) {
+                    std::sscanf(trimmed.c_str(), "detailUVOffset: [ %f , %f ]", &m_DetailUVOffset.x, &m_DetailUVOffset.y);
                 } else if (trimmed.rfind("clearcoatStrength:", 0) == 0) {
                     try { m_ClearcoatStrength = std::clamp(std::stof(Trim(trimmed.substr(18))), 0.0f, 1.0f); } catch (...) {}
                 } else if (trimmed.rfind("clearcoatRoughness:", 0) == 0) {

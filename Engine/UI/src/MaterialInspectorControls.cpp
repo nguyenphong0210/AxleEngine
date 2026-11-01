@@ -215,6 +215,14 @@ namespace Axle {
             Row("Channels"); ImGui::TextDisabled("RG: Direction  A: Strength");
             EndGroup();
         }
+        if (BeginGroup("Detail Normal")) {
+            Row("Texture"); changed|=TextureSlot("DetailNormal",m.DetailNormalPath,m.UseDetailNormalMap,[&](const auto& p){AssignTexture(m.DetailNormalPath,m.DetailNormalMap,m.UseDetailNormalMap,p);});
+            Row("Strength"); changed|=ImGui::SliderFloat("##Strength",&m.DetailNormalStrength,0,4);
+            Row("Mask (R)"); changed|=TextureSlot("DetailMask",m.DetailMaskPath,m.UseDetailMaskMap,[&](const auto& p){AssignTexture(m.DetailMaskPath,m.DetailMaskMap,m.UseDetailMaskMap,p);});
+            Row("Tiling"); changed|=ImGui::DragFloat2("##Tiling",glm::value_ptr(m.DetailUVScale),0.05f,-1000,1000);
+            Row("Offset"); changed|=ImGui::DragFloat2("##Offset",glm::value_ptr(m.DetailUVOffset),0.02f,-1000,1000);
+            EndGroup();
+        }
         if (BeginGroup("UV")) {
             Row("Tiling"); changed|=ImGui::DragFloat2("##Tiling",glm::value_ptr(m.UVScale),0.05f,-1000,1000);
             Row("Offset"); changed|=ImGui::DragFloat2("##Offset",glm::value_ptr(m.UVOffset),0.02f,-1000,1000);
@@ -263,6 +271,8 @@ namespace Axle {
             if (ImGui::Button("Clear All Textures")) {
                 m.SetAlbedo(""); m.SetNormal(""); m.SetRoughnessMap(""); m.SetMetallicMap("");
                 m.SetAOMap(""); m.SetEmissiveMap(""); m.SetORMMap("");
+                AssignTexture(m.DetailNormalPath,m.DetailNormalMap,m.UseDetailNormalMap,"");
+                AssignTexture(m.DetailMaskPath,m.DetailMaskMap,m.UseDetailMaskMap,"");
                 AssignTexture(m.ClearcoatPath,m.ClearcoatMap,m.UseClearcoatMap,"");
                 AssignTexture(m.AnisotropyFlowPath,m.AnisotropyFlowMap,m.UseAnisotropyFlowMap,"");
                 changed=true;

@@ -112,3 +112,11 @@ binding, and visible shading agree in the preview and scene.
   visible opaque surfaces; transparent layers and offscreen objects are excluded.
   Missing depth, multisampling, or a transparent preview clear uses ordinary alpha.
   SDR snapshots are decoded before tint/Fresnel mixing; HDR snapshots stay linear.
+- Import acceptance exposed a source-data gap: mesh conversion discarded normals
+  and UVs, and the RHI registry regenerated planar coordinates. OBJ now retains
+  position/UV/normal corner tuples (including seams and negative indices), glTF
+  retains TEXCOORD_0 and transformed normals, and FBX retains polygon-corner
+  attributes through triangulation. Text and v2 binary caches preserve both arrays;
+  v1 caches remain readable. Step 106 covers all three importers, cache versions,
+  truncated-cache rejection and GPU anisotropy on imported seams. Imported tangent
+  direction/rotation/strength and authored-versus-loaded GPU geometry now pass.

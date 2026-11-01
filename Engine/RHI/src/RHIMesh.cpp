@@ -593,6 +593,16 @@ namespace Axle::RHI {
             vertices[i].Tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
         }
 
+        if (normals.size()!=positions.size()) {
+            for (auto& vertex:vertices) vertex.Normal=glm::vec3(0);
+            for (size_t i=0;i+2<indices.size();i+=3) {
+                auto a=indices[i],b=indices[i+1],c=indices[i+2];
+                if (a>=vertices.size()||b>=vertices.size()||c>=vertices.size()) return nullptr;
+                auto n=glm::cross(positions[b]-positions[a],positions[c]-positions[a]);
+                vertices[a].Normal+=n; vertices[b].Normal+=n; vertices[c].Normal+=n;
+            }
+            for (auto& vertex:vertices) vertex.Normal=glm::length(vertex.Normal)>1e-6f?glm::normalize(vertex.Normal):glm::vec3(0,1,0);
+        }
         ComputeMeshTangents(vertices, indices);
 
         auto mesh = std::make_shared<RHIMesh>();

@@ -3,6 +3,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/MaterialTextureCache.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/AssetSerializer.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
 #include <Axle/TextureDescriptor.hpp>
 #include <fstream>
@@ -10,6 +11,8 @@
 #include <cstring>
 #include <numeric>
 #include <chrono>
+
+bool VerifyMaterialMeshImport(const std::filesystem::path& root);
 
 bool VerifyMaterialRendering(const std::filesystem::path& root) {
     using namespace Axle;
@@ -42,6 +45,7 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     struct RegistryCleanup {
         ~RegistryCleanup() { RHIMeshRegistry::Get().Shutdown(); RHIMaterial::ReleaseDefaultTextures(); }
     } registryCleanup;
+    if (!VerifyMaterialMeshImport(root)) return false;
     MaterialTextureCache textureCache;
     auto colorTexture = textureCache.Get(red,true);
     auto dataTexture = textureCache.Get(red,false);
@@ -287,6 +291,28 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     lm.EnableEnvironmentReflections = true;
     auto withEnvironment = render();
     if (!check(!withEnvironment.empty() && withEnvironment!=noDirectSpecular, "Environment reflection flag affects actual shading")) return false;
+    auto primitiveMesh=left.GetComponent<MeshInstance3D>().RHIMeshAsset;
+    auto importedMesh=RHIMeshRegistry::Get().GetOrCreateMesh((root/"uv_seams.axleasset").string());
+    left.GetComponent<MeshInstance3D>().RHIMeshAsset=importedMesh;
+    lm.EnableSpecularHighlights=true; lm.EnableEnvironmentReflections=false;
+    lm.UseAnisotropyFlowMap=true; lm.AnisotropyFlowPath=(root/"flow_x.tga").string();
+    auto importedFlowX=render();
+    lm.AnisotropyFlowPath=(root/"flow_y.tga").string();
+    auto importedFlowY=render();
+    if (!check(!importedFlowX.empty() && importedFlowX!=importedFlowY,"Imported UV seams and tangent frames support anisotropy flow direction")) return false;
+    AxleMeshSource importedSource;
+    if (!check(AssetSerializer::LoadFromAxleText(root/"uv_seams.axleasset",importedSource),"Imported material geometry")) return false;
+    left.GetComponent<MeshInstance3D>().RHIMeshAsset=RHIMesh::CreateFromRaw(importedSource.Vertices,importedSource.Indices,importedSource.Normals,importedSource.UVs,importedSource.ColorPrimary);
+    auto authoredFlow=render();
+    if (!check(authoredFlow==importedFlowY,"Imported GPU geometry matches authored UVs and normals")) return false;
+    lm.AnisotropyRotation=0.125f;
+    auto importedRotation=render();
+    if (!check(importedRotation!=authoredFlow,"Imported tangent rotation changes reflection")) return false;
+    lm.AnisotropyStrength=0;
+    auto importedIsotropic=render();
+    if (!check(importedIsotropic!=importedRotation,"Imported anisotropy strength changes reflection")) return false;
+    left.GetComponent<MeshInstance3D>().RHIMeshAsset=primitiveMesh;
+    lm.UseAnisotropyFlowMap=false;
     // Editing one external material updates every user; MakeUnique detaches both
     // the asset reference and mutable GPU state for a local override.
     MaterialComponent sharedSource;

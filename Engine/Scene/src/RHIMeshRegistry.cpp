@@ -158,9 +158,10 @@ namespace Axle {
         if (std::filesystem::exists(targetPath)) {
             auto loaded = Axle::AssetSerializer::LoadMesh(targetPath);
             if (loaded.Success && !loaded.SourceData.Vertices.empty()) {
-                auto mesh = RHIMesh::CreateFromAxleMesh(loaded.SourceData.Vertices, loaded.SourceData.Indices,
-                                                        loaded.SourceData.ColorPrimary,
-                                                        targetPath.filename().string());
+                const auto& source=loaded.SourceData;
+                auto mesh=source.UVs.size()==source.Vertices.size()
+                    ? RHIMesh::CreateFromRaw(source.Vertices,source.Indices,source.Normals,source.UVs,source.ColorPrimary,targetPath.filename().string())
+                    : RHIMesh::CreateFromAxleMesh(source.Vertices,source.Indices,source.ColorPrimary,targetPath.filename().string());
                 if (mesh && mesh->IsValid()) {
                     m_MeshCache[assetPath] = mesh;
                     AXLE_CORE_INFO("RHIMeshRegistry: Cached GPU mesh '{0}' ({1} verts, {2} idx)",

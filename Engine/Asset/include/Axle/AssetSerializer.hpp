@@ -18,6 +18,8 @@ namespace Axle {
         glm::vec4 ColorSecondary{ 0.65f, 0.70f, 0.76f, 1.0f };
 
         std::vector<glm::vec3> Vertices;
+        std::vector<glm::vec3> Normals;
+        std::vector<glm::vec2> UVs;
         std::vector<u32> Indices;
 
         glm::vec3 BoundingSize{ 1.0f };
@@ -43,6 +45,8 @@ namespace Axle {
         glm::vec4 ColorSecondary{ 0.65f, 0.70f, 0.76f, 1.0f };
 
         std::vector<glm::vec3> Vertices;
+        std::vector<glm::vec3> Normals;
+        std::vector<glm::vec2> UVs;
         std::vector<u32> Indices;
 
         glm::vec3 BoundingSize{ 1.0f };
@@ -98,7 +102,9 @@ namespace Axle {
                                      int patternMode = 1,
                                      float tileScale = 8.0f,
                                      const glm::vec4& color1 = glm::vec4(0.85f, 0.88f, 0.92f, 1.0f),
-                                     const glm::vec4& color2 = glm::vec4(0.65f, 0.70f, 0.76f, 1.0f));
+                                     const glm::vec4& color2 = glm::vec4(0.65f, 0.70f, 0.76f, 1.0f),
+                                     const std::vector<glm::vec3>& normals = {},
+                                     const std::vector<glm::vec2>& uvs = {});
 
         // Helper to locate or create cache path in .cache/ subfolder
         static std::filesystem::path GetCachePathFor(const std::filesystem::path& axleTextPath);

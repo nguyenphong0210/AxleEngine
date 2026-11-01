@@ -3,6 +3,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/Buffer.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 #include <fstream>
 #include <sstream>
 #include <iomanip>
@@ -70,6 +71,22 @@ namespace Axle {
             }
             file << "    ]\n\n";
 
+            if (mesh.Normals.size()==mesh.Vertices.size()) {
+                file << "    normals: [\n";
+                for (size_t i=0;i<mesh.Normals.size();++i) {
+                    auto n=mesh.Normals[i];
+                    file << "        [" << std::setprecision(9) << n.x << ", " << n.y << ", " << n.z << "]" << (i+1<mesh.Normals.size()?",":"") << "\n";
+                }
+                file << "    ]\n";
+            }
+            if (mesh.UVs.size()==mesh.Vertices.size()) {
+                file << "    texcoords: [\n";
+                for (size_t i=0;i<mesh.UVs.size();++i) {
+                    auto uv=mesh.UVs[i];
+                    file << "        [" << std::setprecision(9) << uv.x << ", " << uv.y << ", 0]" << (i+1<mesh.UVs.size()?",":"") << "\n";
+                }
+                file << "    ]\n";
+            }
             file << "    indices: [\n";
             for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
                 file << "        [" << mesh.Indices[i] << ", " << mesh.Indices[i+1] << ", " << mesh.Indices[i+2] << "]"
@@ -123,6 +140,14 @@ namespace Axle {
         }
         file << "\n";
 
+        if (mesh.Normals.size()==mesh.Vertices.size()) {
+            file << "Normals:\n";
+            for (auto n:mesh.Normals) file << "  - [" << std::setprecision(9) << n.x << ", " << n.y << ", " << n.z << "]\n";
+        }
+        if (mesh.UVs.size()==mesh.Vertices.size()) {
+            file << "UVs:\n";
+            for (auto uv:mesh.UVs) file << "  - [" << std::setprecision(9) << uv.x << ", " << uv.y << "]\n";
+        }
         file << "# Triangle indices (0-based) [v0, v1, v2]\n";
         file << "Triangles:\n";
         for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
@@ -178,6 +203,10 @@ namespace Axle {
                 if (doc.Root->HasProperty("vertices")) {
                     outMesh.Vertices = doc.Root->GetProperty("vertices")->AsVec3Array();
                 }
+                if (doc.Root->HasProperty("normals")) outMesh.Normals=doc.Root->GetProperty("normals")->AsVec3Array();
+                if (doc.Root->HasProperty("texcoords")) {
+                    for (auto uv:doc.Root->GetProperty("texcoords")->AsVec3Array()) outMesh.UVs.emplace_back(uv.x,uv.y);
+                }
                 if (doc.Root->HasProperty("indices")) {
                     auto tris = doc.Root->GetProperty("indices")->AsIVec3Array();
                     outMesh.Indices.reserve(tris.size() * 3);
@@ -208,7 +237,7 @@ namespace Axle {
         outMesh = AxleMeshSource{};
         outMesh.Name = path.stem().string();
 
-        enum class Section { None, Material, Bounds, Vertices, Triangles };
+        enum class Section { None, Material, Bounds, Vertices, Normals, UVs, Triangles };
         Section currentSection = Section::None;
 
         std::string line;
@@ -229,6 +258,10 @@ namespace Axle {
                 currentSection = Section::Bounds;
             } else if (trimmed.rfind("Vertices:", 0) == 0) {
                 currentSection = Section::Vertices;
+            } else if (trimmed=="Normals:") {
+                currentSection=Section::Normals;
+            } else if (trimmed=="UVs:") {
+                currentSection=Section::UVs;
             } else if (trimmed.rfind("Triangles:", 0) == 0) {
                 currentSection = Section::Triangles;
             } else {
@@ -268,6 +301,16 @@ namespace Axle {
                                 outMesh.Vertices.push_back(glm::vec3(x, y, z));
                             }
                         }
+                        break;
+                    }
+                    case Section::Normals: {
+                        glm::vec3 n(0);
+                        if (std::sscanf(trimmed.c_str(),"- [ %f , %f , %f ]",&n.x,&n.y,&n.z)==3) outMesh.Normals.push_back(n);
+                        break;
+                    }
+                    case Section::UVs: {
+                        glm::vec2 uv(0);
+                        if (std::sscanf(trimmed.c_str(),"- [ %f , %f ]",&uv.x,&uv.y)==2) outMesh.UVs.push_back(uv);
                         break;
                     }
                     case Section::Triangles: {
@@ -318,7 +361,7 @@ namespace Axle {
         }
 
         const char magic[8] = "AXLEBIN";
-        const u32 version = 1;
+        const u32 version = 2;
 
         file.write(magic, 8);
         file.write(reinterpret_cast<const char*>(&version), sizeof(version));
@@ -351,6 +394,13 @@ namespace Axle {
             file.write(reinterpret_cast<const char*>(mesh.Indices.data()), indexCount * sizeof(u32));
         }
 
+        u32 normalCount=mesh.Normals.size()==vertexCount?vertexCount:0;
+        u32 uvCount=mesh.UVs.size()==vertexCount?vertexCount:0;
+        file.write(reinterpret_cast<const char*>(&normalCount),sizeof(normalCount));
+        file.write(reinterpret_cast<const char*>(&uvCount),sizeof(uvCount));
+        if (normalCount) file.write(reinterpret_cast<const char*>(mesh.Normals.data()),size_t(normalCount)*sizeof(glm::vec3));
+        if (uvCount) file.write(reinterpret_cast<const char*>(mesh.UVs.data()),size_t(uvCount)*sizeof(glm::vec2));
+
         AXLE_INFO("AssetSerializer: Baked binary cache '{0}' ({1} bytes)", 
             binaryPath.filename().string(), static_cast<uint64_t>(file.tellp()));
 
@@ -373,7 +423,8 @@ namespace Axle {
         if (remaining < sizeof(u32)) return false;
         u32 version = *reinterpret_cast<const u32*>(ptr);
         ptr += sizeof(u32); remaining -= sizeof(u32);
-        if (version != 1) return false;
+        if (version!=1 && version!=2) return false;
+        outMesh=AxleMeshSource{};
 
         if (remaining < sizeof(u32)) return false;
         u32 nameLen = *reinterpret_cast<const u32*>(ptr);
@@ -417,6 +468,21 @@ namespace Axle {
 
         outMesh.Indices.resize(indexCount);
         memcpy(outMesh.Indices.data(), ptr, indexCount * sizeof(u32));
+        ptr+=size_t(indexCount)*sizeof(u32);
+        remaining-=size_t(vertexCount)*sizeof(glm::vec3)+size_t(indexCount)*sizeof(u32);
+        if (version>=2) {
+            if (remaining<sizeof(u32)*2) return false;
+            u32 normalCount=0,uvCount=0;
+            memcpy(&normalCount,ptr,sizeof(u32)); memcpy(&uvCount,ptr+sizeof(u32),sizeof(u32));
+            ptr+=sizeof(u32)*2; remaining-=sizeof(u32)*2;
+            if ((normalCount && normalCount!=vertexCount)||(uvCount && uvCount!=vertexCount)) return false;
+            size_t normalBytes=size_t(normalCount)*sizeof(glm::vec3),uvBytes=size_t(uvCount)*sizeof(glm::vec2);
+            if (remaining<normalBytes+uvBytes) return false;
+            outMesh.Normals.resize(normalCount); outMesh.UVs.resize(uvCount);
+            if (normalBytes) memcpy(outMesh.Normals.data(),ptr,normalBytes);
+            if (uvBytes) memcpy(outMesh.UVs.data(),ptr+normalBytes,uvBytes);
+        }
+
 
         return true;
     }
@@ -461,6 +527,13 @@ namespace Axle {
             result.LoadedFromCache = false;
         }
 
+        // Active RHI renderers upload source attributes through RHIMeshRegistry.
+        if (RHI::RHIDevice::Get().IsInitialized()) {
+            result.SourceData=std::move(source);
+            result.Success=true;
+            return result;
+        }
+
         // Upload to GPU VertexArray
         glm::vec3 minBound(1e9f);
         glm::vec3 maxBound(-1e9f);
@@ -472,12 +545,13 @@ namespace Axle {
 
         std::vector<f32> vertexBufferData;
         vertexBufferData.reserve(source.Vertices.size() * 5);
-        for (const auto& v : source.Vertices) {
+        for (size_t i=0;i<source.Vertices.size();++i) {
+            const auto& v=source.Vertices[i];
             vertexBufferData.push_back(v.x);
             vertexBufferData.push_back(v.y);
             vertexBufferData.push_back(v.z);
-            float u = (v.x - minBound.x) / size.x;
-            float v_coord = (v.z - minBound.z) / size.z;
+            float u = source.UVs.size()==source.Vertices.size()?source.UVs[i].x:(v.x - minBound.x) / size.x;
+            float v_coord = source.UVs.size()==source.Vertices.size()?source.UVs[i].y:(v.z - minBound.z) / size.z;
             vertexBufferData.push_back(u);
             vertexBufferData.push_back(v_coord);
         }
@@ -696,7 +770,9 @@ namespace Axle {
                                            int patternMode,
                                            float tileScale,
                                            const glm::vec4& color1,
-                                           const glm::vec4& color2) {
+                                           const glm::vec4& color2,
+                                           const std::vector<glm::vec3>& normals,
+                                           const std::vector<glm::vec2>& uvs) {
         if (vertices.empty() || indices.empty()) return false;
 
         // Auto-center geometry
@@ -722,6 +798,8 @@ namespace Axle {
             source.Vertices.push_back(v - center);
         }
         source.Indices = indices;
+        if (normals.size()==vertices.size()) source.Normals=normals;
+        if (uvs.size()==vertices.size()) source.UVs=uvs;
 
         // Save text .axle
         if (!SaveToAxleText(axleTextPath, source)) {
@@ -753,7 +831,16 @@ namespace Axle {
             std::vector<u32> Triangles;
         };
 
-        std::vector<glm::vec3> temp_positions;
+        std::vector<glm::vec3> objPositions,objNormals,temp_positions,normals;
+        std::vector<glm::vec2> objUVs,uvs;
+        std::unordered_map<std::string,u32> corners;
+        bool allNormals=true,allUVs=true;
+        auto resolveIndex=[](const std::string& text,size_t count)->int {
+            if (text.empty()) return -1;
+            int index=std::stoi(text);
+            index=index>0?index-1:int(count)+index;
+            return index>=0 && size_t(index)<count?index:-1;
+        };
         std::vector<ObjGroupData> groups;
         groups.push_back({ objPath.stem().string(), {} });
 
@@ -768,7 +855,11 @@ namespace Axle {
                 std::istringstream s(sub.substr(2));
                 glm::vec3 v(0.0f);
                 s >> v.x >> v.y >> v.z;
-                temp_positions.push_back(v);
+                objPositions.push_back(v);
+            } else if (sub.rfind("vt ",0)==0) {
+                std::istringstream values(sub.substr(3)); glm::vec2 uv(0); values>>uv.x>>uv.y; objUVs.push_back(uv);
+            } else if (sub.rfind("vn ",0)==0) {
+                std::istringstream values(sub.substr(3)); glm::vec3 n(0); values>>n.x>>n.y>>n.z; objNormals.push_back(n);
             } else if (sub.rfind("o ", 0) == 0 || sub.rfind("g ", 0) == 0) {
                 if (splitSubmeshes) {
                     std::string gName = Trim(sub.substr(2));
@@ -783,20 +874,23 @@ namespace Axle {
                 std::string token;
                 std::vector<u32> faceIdx;
                 while (s >> token) {
-                    size_t slash = token.find('/');
-                    std::string idxStr = (slash == std::string::npos) ? token : token.substr(0, slash);
-                    if (!idxStr.empty()) {
-                        try {
-                            int idx = std::stoi(idxStr);
-                            if (idx < 0) {
-                                idx = static_cast<int>(temp_positions.size()) + idx + 1;
-                            }
-                            if (idx > 0 && static_cast<size_t>(idx) <= temp_positions.size()) {
-                                faceIdx.push_back(static_cast<u32>(idx - 1));
-                            }
-                        } catch (...) {
+                    if (token[0]=='#') break;
+                    try {
+                        size_t slash=token.find('/'),second=slash==std::string::npos?std::string::npos:token.find('/',slash+1);
+                        int p=resolveIndex(token.substr(0,slash),objPositions.size());
+                        int uv=slash==std::string::npos?-1:resolveIndex(token.substr(slash+1,second==std::string::npos?std::string::npos:second-slash-1),objUVs.size());
+                        int n=second==std::string::npos?-1:resolveIndex(token.substr(second+1),objNormals.size());
+                        if (p<0) continue;
+                        std::string key=std::to_string(p)+"/"+std::to_string(uv)+"/"+std::to_string(n);
+                        auto [it,inserted]=corners.emplace(key,static_cast<u32>(temp_positions.size()));
+                        if (inserted) {
+                            temp_positions.push_back(objPositions[p]);
+                            normals.push_back(n>=0?objNormals[n]:glm::vec3(0));
+                            uvs.push_back(uv>=0?objUVs[uv]:glm::vec2(0));
+                            allNormals&=n>=0; allUVs&=uv>=0;
                         }
-                    }
+                        faceIdx.push_back(it->second);
+                    } catch (...) {}
                 }
                 for (size_t i = 1; i + 1 < faceIdx.size(); ++i) {
                     groups.back().Triangles.push_back(faceIdx[0]);
@@ -805,6 +899,9 @@ namespace Axle {
                 }
             }
         }
+
+        if (!allNormals) normals.clear();
+        if (!allUVs) uvs.clear();
 
         std::vector<ObjGroupData> validGroups;
         for (auto& g : groups) {
@@ -869,6 +966,14 @@ namespace Axle {
                 for (const auto& v : localVertices) {
                     sub.Vertices.push_back(v - partCenter);
                 }
+                if (!normals.empty()) {
+                    sub.Normals.resize(localVertices.size());
+                    for (auto [global,local]:globalToLocal) sub.Normals[local]=normals[global];
+                }
+                if (!uvs.empty()) {
+                    sub.UVs.resize(localVertices.size());
+                    for (auto [global,local]:globalToLocal) sub.UVs[local]=uvs[global];
+                }
                 sub.Indices = std::move(localIndices);
                 submeshes.push_back(std::move(sub));
             }
@@ -883,7 +988,7 @@ namespace Axle {
 
                 for (const auto& sub : submeshes) {
                     auto partAxlePath = partsFolder / (sub.Name + ".axle");
-                    ExportMeshToAxle(partAxlePath, sub.Name, sub.Vertices, sub.Indices, sub.PatternMode, sub.TileScale, sub.ColorPrimary, sub.ColorSecondary);
+                    ExportMeshToAxle(partAxlePath, sub.Name, sub.Vertices, sub.Indices, sub.PatternMode, sub.TileScale, sub.ColorPrimary, sub.ColorSecondary,sub.Normals,sub.UVs);
 
                     AxlePackagePart p;
                     p.Name = sub.Name;
@@ -904,7 +1009,7 @@ namespace Axle {
         }
 
         std::string modelName = objPath.stem().string();
-        return ExportMeshToAxle(outAxlePath, modelName, temp_positions, allIndices, patternMode, tileScale, color1, color2);
+        return ExportMeshToAxle(outAxlePath, modelName, temp_positions, allIndices, patternMode, tileScale, color1, color2,normals,uvs);
     }
 
     bool AssetSerializer::ConvertGLTFToAxle(const std::filesystem::path& gltfPath,
@@ -931,7 +1036,9 @@ namespace Axle {
 
         struct RawPart {
             std::string Name;
-            std::vector<glm::vec3> Vertices;
+            std::vector<glm::vec3> Vertices,Normals;
+            std::vector<glm::vec2> UVs;
+            bool AllNormals=true,HasUVs=false;
             std::vector<u32> Indices;
         };
         std::vector<RawPart> rawParts;
@@ -971,6 +1078,22 @@ namespace Axle {
                         }
                     }
 
+                    const cgltf_accessor* normals=nullptr;
+                    const cgltf_accessor* uvs=nullptr;
+                    for (size_t a=0;a<prim.attributes_count;++a) {
+                        if (prim.attributes[a].type==cgltf_attribute_type_normal) normals=prim.attributes[a].data;
+                        if (prim.attributes[a].type==cgltf_attribute_type_texcoord && prim.attributes[a].index==0) uvs=prim.attributes[a].data;
+                    }
+                    part.AllNormals&=normals!=nullptr; part.HasUVs|=uvs!=nullptr;
+                    for (size_t i=0;i<part.Vertices.size()-vertexOffset;++i) {
+                        float n[3]={0,1,0},uv[2]={0,0};
+                        if (normals) cgltf_accessor_read_float(normals,i,n,3);
+                        if (uvs) cgltf_accessor_read_float(uvs,i,uv,2);
+                        auto transformedNormal=glm::transpose(glm::inverse(glm::mat3(transform)))*glm::vec3(n[0],n[1],n[2]);
+                        part.Normals.push_back(glm::length(transformedNormal)>1e-6f?glm::normalize(transformedNormal):glm::vec3(0,1,0));
+                        part.UVs.emplace_back(uv[0],uv[1]);
+                    }
+
                     if (prim.indices) {
                         cgltf_accessor* idxAcc = prim.indices;
                         part.Indices.reserve(part.Indices.size() + idxAcc->count);
@@ -987,6 +1110,11 @@ namespace Axle {
                     }
                 }
 
+                if (glm::determinant(glm::mat3(transform))<0) {
+                    for (size_t i=0;i+2<part.Indices.size();i+=3) std::swap(part.Indices[i+1],part.Indices[i+2]);
+                }
+                if (!part.AllNormals) part.Normals.clear();
+                if (!part.HasUVs) part.UVs.clear();
                 if (!part.Vertices.empty() && !part.Indices.empty()) {
                     rawParts.push_back(std::move(part));
                 }
@@ -1019,6 +1147,22 @@ namespace Axle {
                         }
                     }
 
+                    const cgltf_accessor* normals=nullptr;
+                    const cgltf_accessor* uvs=nullptr;
+                    for (size_t a=0;a<prim.attributes_count;++a) {
+                        if (prim.attributes[a].type==cgltf_attribute_type_normal) normals=prim.attributes[a].data;
+                        if (prim.attributes[a].type==cgltf_attribute_type_texcoord && prim.attributes[a].index==0) uvs=prim.attributes[a].data;
+                    }
+                    part.AllNormals&=normals!=nullptr; part.HasUVs|=uvs!=nullptr;
+                    for (size_t i=0;i<part.Vertices.size()-vertexOffset;++i) {
+                        float n[3]={0,1,0},uv[2]={0,0};
+                        if (normals) cgltf_accessor_read_float(normals,i,n,3);
+                        if (uvs) cgltf_accessor_read_float(uvs,i,uv,2);
+                        auto transformedNormal=glm::vec3(n[0],n[1],n[2]);
+                        part.Normals.push_back(glm::length(transformedNormal)>1e-6f?glm::normalize(transformedNormal):glm::vec3(0,1,0));
+                        part.UVs.emplace_back(uv[0],uv[1]);
+                    }
+
                     if (prim.indices) {
                         cgltf_accessor* idxAcc = prim.indices;
                         part.Indices.reserve(part.Indices.size() + idxAcc->count);
@@ -1035,6 +1179,8 @@ namespace Axle {
                     }
                 }
 
+                if (!part.AllNormals) part.Normals.clear();
+                if (!part.HasUVs) part.UVs.clear();
                 if (!part.Vertices.empty() && !part.Indices.empty()) {
                     rawParts.push_back(std::move(part));
                 }
@@ -1083,6 +1229,7 @@ namespace Axle {
                 for (const auto& v : raw.Vertices) {
                     sub.Vertices.push_back(v - partCenter);
                 }
+                sub.Normals=std::move(raw.Normals); sub.UVs=std::move(raw.UVs);
                 sub.Indices = std::move(raw.Indices);
                 submeshes.push_back(std::move(sub));
             }
@@ -1097,7 +1244,7 @@ namespace Axle {
 
                 for (const auto& sub : submeshes) {
                     auto partAxlePath = partsFolder / (sub.Name + ".axle");
-                    ExportMeshToAxle(partAxlePath, sub.Name, sub.Vertices, sub.Indices, sub.PatternMode, sub.TileScale, sub.ColorPrimary, sub.ColorSecondary);
+                    ExportMeshToAxle(partAxlePath, sub.Name, sub.Vertices, sub.Indices, sub.PatternMode, sub.TileScale, sub.ColorPrimary, sub.ColorSecondary,sub.Normals,sub.UVs);
 
                     AxlePackagePart p;
                     p.Name = sub.Name;
@@ -1112,18 +1259,25 @@ namespace Axle {
             }
         }
 
-        std::vector<glm::vec3> allVertices;
+        std::vector<glm::vec3> allVertices,allNormals;
+        std::vector<glm::vec2> allUVs;
+        bool completeNormals=true,completeUVs=true;
         std::vector<u32> allIndices;
         for (const auto& part : rawParts) {
             u32 vOffset = static_cast<u32>(allVertices.size());
             allVertices.insert(allVertices.end(), part.Vertices.begin(), part.Vertices.end());
+            completeNormals&=part.Normals.size()==part.Vertices.size(); completeUVs&=part.UVs.size()==part.Vertices.size();
+            allNormals.insert(allNormals.end(),part.Normals.begin(),part.Normals.end());
+            allUVs.insert(allUVs.end(),part.UVs.begin(),part.UVs.end());
             for (u32 idx : part.Indices) {
                 allIndices.push_back(vOffset + idx);
             }
         }
 
+        if (!completeNormals) allNormals.clear();
+        if (!completeUVs) allUVs.clear();
         std::string modelName = gltfPath.stem().string();
-        return ExportMeshToAxle(outAxlePath, modelName, allVertices, allIndices, patternMode, tileScale, color1, color2);
+        return ExportMeshToAxle(outAxlePath, modelName, allVertices, allIndices, patternMode, tileScale, color1, color2,allNormals,allUVs);
     }
 
     bool AssetSerializer::ConvertFBXToAxle(const std::filesystem::path& fbxPath,
@@ -1145,7 +1299,8 @@ namespace Axle {
 
         struct RawPart {
             std::string Name;
-            std::vector<glm::vec3> Vertices;
+            std::vector<glm::vec3> Vertices,Normals;
+            std::vector<glm::vec2> UVs;
             std::vector<u32> Indices;
         };
         std::vector<RawPart> rawParts;
@@ -1161,30 +1316,34 @@ namespace Axle {
 
                 RawPart part;
                 part.Name = partName;
-                part.Vertices.reserve(mesh->vertices.count);
-
-                for (size_t v = 0; v < mesh->vertices.count; ++v) {
-                    ufbx_vec3 world_pos = ufbx_transform_position(&node->geometry_to_world, mesh->vertices.data[v]);
-                    part.Vertices.push_back(glm::vec3(
-                        static_cast<float>(world_pos.x),
-                        static_cast<float>(world_pos.y),
-                        static_cast<float>(world_pos.z)
-                    ));
-                }
-
-                part.Indices.reserve(mesh->num_triangles * 3);
-                for (size_t f = 0; f < mesh->faces.count; ++f) {
-                    ufbx_face face = mesh->faces.data[f];
-                    for (size_t fi = 1; fi + 1 < face.num_indices; ++fi) {
-                        u32 i0 = mesh->vertex_indices.data[face.index_begin];
-                        u32 i1 = mesh->vertex_indices.data[face.index_begin + fi];
-                        u32 i2 = mesh->vertex_indices.data[face.index_begin + fi + 1];
-                        part.Indices.push_back(i0);
-                        part.Indices.push_back(i1);
-                        part.Indices.push_back(i2);
+                ufbx_matrix normalMatrix{};
+                normalMatrix=ufbx_matrix_for_normals(&node->geometry_to_world);
+                std::vector<uint32_t> triangleCorners(mesh->max_face_triangles*3);
+                for (size_t f=0;f<mesh->faces.count;++f) {
+                    size_t triangles=ufbx_triangulate_face(triangleCorners.data(),triangleCorners.size(),mesh,mesh->faces.data[f]);
+                    for (size_t i=0;i<triangles*3;++i) {
+                        auto corner=triangleCorners[i];
+                        auto position=ufbx_get_vertex_vec3(&mesh->vertex_position,corner);
+                        position=ufbx_transform_position(&node->geometry_to_world,position);
+                        part.Vertices.emplace_back(float(position.x),float(position.y),float(position.z));
+                        if (mesh->vertex_normal.exists) {
+                            auto normal=ufbx_get_vertex_vec3(&mesh->vertex_normal,corner);
+                            normal=ufbx_transform_direction(&normalMatrix,normal);
+                            if (ufbx_matrix_determinant(&node->geometry_to_world)<0) { normal.x=-normal.x; normal.y=-normal.y; normal.z=-normal.z; }
+                            auto n=glm::vec3(float(normal.x),float(normal.y),float(normal.z));
+                            part.Normals.push_back(glm::length(n)>1e-6f?glm::normalize(n):glm::vec3(0,1,0));
+                        }
+                        if (mesh->vertex_uv.exists) {
+                            auto uv=ufbx_get_vertex_vec2(&mesh->vertex_uv,corner);
+                            part.UVs.emplace_back(float(uv.x),float(uv.y));
+                        }
+                        part.Indices.push_back(static_cast<u32>(part.Indices.size()));
                     }
                 }
 
+                if (ufbx_matrix_determinant(&node->geometry_to_world)<0) {
+                    for (size_t i=0;i+2<part.Indices.size();i+=3) std::swap(part.Indices[i+1],part.Indices[i+2]);
+                }
                 if (!part.Vertices.empty() && !part.Indices.empty()) {
                     rawParts.push_back(std::move(part));
                 }
@@ -1199,26 +1358,24 @@ namespace Axle {
                 std::string partName = mesh->name.length > 0 ? SanitizeFilename(mesh->name.data) : ("Part_" + std::to_string(m + 1));
                 RawPart part;
                 part.Name = partName;
-                part.Vertices.reserve(mesh->vertices.count);
-
-                for (size_t v = 0; v < mesh->vertices.count; ++v) {
-                    part.Vertices.push_back(glm::vec3(
-                        static_cast<float>(mesh->vertices.data[v].x),
-                        static_cast<float>(mesh->vertices.data[v].y),
-                        static_cast<float>(mesh->vertices.data[v].z)
-                    ));
-                }
-
-                part.Indices.reserve(mesh->num_triangles * 3);
-                for (size_t f = 0; f < mesh->faces.count; ++f) {
-                    ufbx_face face = mesh->faces.data[f];
-                    for (size_t fi = 1; fi + 1 < face.num_indices; ++fi) {
-                        u32 i0 = mesh->vertex_indices.data[face.index_begin];
-                        u32 i1 = mesh->vertex_indices.data[face.index_begin + fi];
-                        u32 i2 = mesh->vertex_indices.data[face.index_begin + fi + 1];
-                        part.Indices.push_back(i0);
-                        part.Indices.push_back(i1);
-                        part.Indices.push_back(i2);
+                ufbx_matrix normalMatrix{};
+                std::vector<uint32_t> triangleCorners(mesh->max_face_triangles*3);
+                for (size_t f=0;f<mesh->faces.count;++f) {
+                    size_t triangles=ufbx_triangulate_face(triangleCorners.data(),triangleCorners.size(),mesh,mesh->faces.data[f]);
+                    for (size_t i=0;i<triangles*3;++i) {
+                        auto corner=triangleCorners[i];
+                        auto position=ufbx_get_vertex_vec3(&mesh->vertex_position,corner);
+                        part.Vertices.emplace_back(float(position.x),float(position.y),float(position.z));
+                        if (mesh->vertex_normal.exists) {
+                            auto normal=ufbx_get_vertex_vec3(&mesh->vertex_normal,corner);
+                            auto n=glm::vec3(float(normal.x),float(normal.y),float(normal.z));
+                            part.Normals.push_back(glm::length(n)>1e-6f?glm::normalize(n):glm::vec3(0,1,0));
+                        }
+                        if (mesh->vertex_uv.exists) {
+                            auto uv=ufbx_get_vertex_vec2(&mesh->vertex_uv,corner);
+                            part.UVs.emplace_back(float(uv.x),float(uv.y));
+                        }
+                        part.Indices.push_back(static_cast<u32>(part.Indices.size()));
                     }
                 }
 
@@ -1270,6 +1427,7 @@ namespace Axle {
                 for (const auto& v : raw.Vertices) {
                     sub.Vertices.push_back(v - partCenter);
                 }
+                sub.Normals=std::move(raw.Normals); sub.UVs=std::move(raw.UVs);
                 sub.Indices = std::move(raw.Indices);
                 submeshes.push_back(std::move(sub));
             }
@@ -1284,7 +1442,7 @@ namespace Axle {
 
                 for (const auto& sub : submeshes) {
                     auto partAxlePath = partsFolder / (sub.Name + ".axle");
-                    ExportMeshToAxle(partAxlePath, sub.Name, sub.Vertices, sub.Indices, sub.PatternMode, sub.TileScale, sub.ColorPrimary, sub.ColorSecondary);
+                    ExportMeshToAxle(partAxlePath, sub.Name, sub.Vertices, sub.Indices, sub.PatternMode, sub.TileScale, sub.ColorPrimary, sub.ColorSecondary,sub.Normals,sub.UVs);
 
                     AxlePackagePart p;
                     p.Name = sub.Name;
@@ -1299,18 +1457,25 @@ namespace Axle {
             }
         }
 
-        std::vector<glm::vec3> allVertices;
+        std::vector<glm::vec3> allVertices,allNormals;
+        std::vector<glm::vec2> allUVs;
+        bool completeNormals=true,completeUVs=true;
         std::vector<u32> allIndices;
         for (const auto& part : rawParts) {
             u32 vOffset = static_cast<u32>(allVertices.size());
             allVertices.insert(allVertices.end(), part.Vertices.begin(), part.Vertices.end());
+            completeNormals&=part.Normals.size()==part.Vertices.size(); completeUVs&=part.UVs.size()==part.Vertices.size();
+            allNormals.insert(allNormals.end(),part.Normals.begin(),part.Normals.end());
+            allUVs.insert(allUVs.end(),part.UVs.begin(),part.UVs.end());
             for (u32 idx : part.Indices) {
                 allIndices.push_back(vOffset + idx);
             }
         }
 
+        if (!completeNormals) allNormals.clear();
+        if (!completeUVs) allUVs.clear();
         std::string modelName = fbxPath.stem().string();
-        return ExportMeshToAxle(outAxlePath, modelName, allVertices, allIndices, patternMode, tileScale, color1, color2);
+        return ExportMeshToAxle(outAxlePath, modelName, allVertices, allIndices, patternMode, tileScale, color1, color2,allNormals,allUVs);
     }
 
     bool AssetSerializer::AutoConvertModel(const std::filesystem::path& modelPath,

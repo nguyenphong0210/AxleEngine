@@ -16,6 +16,7 @@ add_library(AxleRenderer STATIC
     src/ShaderPropertyPersistence.cpp
     src/Cubemap.cpp
     src/SkinningPipeline.cpp
+    src/MaterialBindingPlan.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

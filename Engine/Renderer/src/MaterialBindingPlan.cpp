@@ -2,6 +2,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cctype>
+#include <unordered_set>
 
 namespace Axle {
 
@@ -66,7 +67,7 @@ namespace Axle {
             return false;
         }
 
-        UniformKind InferKindFromSize(uint32_t size, ShaderPropertyType declaredType) {
+        UniformKind DeclaredKind(ShaderPropertyType declaredType) {
             switch (declaredType) {
                 case ShaderPropertyType::Float:     return UniformKind::Float32;
                 case ShaderPropertyType::Float2:    return UniformKind::Float2;
@@ -77,11 +78,6 @@ namespace Axle {
                 case ShaderPropertyType::Bool:      return UniformKind::Bool32;
                 default: break;
             }
-            if (size == 4) return UniformKind::Float32;
-            if (size == 8) return UniformKind::Float2;
-            if (size == 12) return UniformKind::Float3;
-            if (size == 16) return UniformKind::Float4;
-            if (size == 64) return UniformKind::Matrix4x4;
             return UniformKind::Float32;
         }
     }
@@ -130,9 +126,20 @@ namespace Axle {
 
         MaterialBindingPlan plan;
         plan.InterfaceRevision = shaderInterface.InterfaceRevision;
+        std::unordered_set<std::string> propertyNames;
+        std::unordered_set<uint64_t> bufferAddresses;
+        for (const auto& resource : mergedReflection.Resources) {
+            if (resource.BindCount != 1 ||
+                (resource.Type != RHI::RHIResourceType::ConstantBuffer &&
+                 resource.Type != RHI::RHIResourceType::Texture && resource.Type != RHI::RHIResourceType::Sampler) ||
+                (resource.Type == RHI::RHIResourceType::Texture && resource.TextureDimension != 0 && resource.TextureDimension != 2))
+                return MaterialBindingError{"UnsupportedResource",resource.Name,"","Only individual cbuffers, Texture2D and ordinary samplers are supported."};
+        }
 
         // Process Constant Buffers
         for (const auto& cb : mergedReflection.ConstantBuffers) {
+            if (!cb.Size || cb.Size > 65536 || !bufferAddresses.insert((uint64_t(cb.Space)<<32)|cb.BindPoint).second)
+                return MaterialBindingError{"InvalidBuffer",cb.Name,"","Invalid size or duplicate cbuffer binding."};
             ConstantBufferPlan bufPlan;
             bufPlan.Name = cb.Name;
             bufPlan.Address.RegisterIndex = cb.BindPoint;
@@ -143,10 +150,17 @@ namespace Axle {
             plan.Buffers.push_back(bufPlan);
 
             if (ToLower(cb.Name) == "objectconstants") {
+                if (!shaderInterface.AllowLegacyTemplate)
+                    return MaterialBindingError{"LegacyDisabled",cb.Name,"","Legacy shader interface is disabled."};
                 plan.IsLegacyTemplate = true;
             }
 
+            uint32_t previousEnd = 0;
             for (const auto& var : cb.Variables) {
+                if (!var.Size || var.Offset < previousEnd || var.Offset > cb.Size || var.Size > cb.Size-var.Offset || var.Elements)
+                    return MaterialBindingError{"InvalidVariable",cb.Name,var.Name,"Overlapping, out-of-bounds or array variable."};
+                previousEnd = var.Offset+var.Size;
+                if (ToLower(var.Name) == "reserved") continue;
                 EngineUniform engUnif;
                 UniformKind engKind;
                 bool isEngine = IsEngineUniformName(var.Name, engUnif, engKind);
@@ -157,18 +171,47 @@ namespace Axle {
                 binding.ReflectedSize = var.Size;
 
                 if (isEngine) {
+                    if (var.RowMajor || var.Size != GetUniformKindSize(engKind) ||
+                        (var.ScalarType != RHI::RHIShaderScalarType::Unknown && var.ScalarType != RHI::RHIShaderScalarType::Float))
+                        return MaterialBindingError{"EngineUniformType",cb.Name,var.Name,"Engine uniform type/layout does not match the custom interface."};
                     binding.Kind = engKind;
                     binding.Source = engUnif;
                 } else {
-                    // Match declared user property to identify exact type
-                    ShaderPropertyType propType = ShaderPropertyType::Float;
+                    if (!propertyNames.insert(var.Name).second)
+                        return MaterialBindingError{"AmbiguousProperty",cb.Name,var.Name,"Editable names must be unique across constant buffers."};
+                    const ShaderPropertyDesc* declared = nullptr;
                     for (const auto& p : declaredUserProperties) {
-                        if (p.Name == var.Name) {
-                            propType = p.Type;
+                        if (p.Name == var.Name && (p.ConstantBufferName.empty() || p.ConstantBufferName == cb.Name)) {
+                            declared = &p;
                             break;
                         }
                     }
-                    binding.Kind = InferKindFromSize(var.Size, propType);
+                    using Scalar = RHI::RHIShaderScalarType;
+                    if (var.ScalarType == Scalar::Float && var.Rows == 1 && var.Columns >= 1 && var.Columns <= 4)
+                        binding.Kind = static_cast<UniformKind>(static_cast<int>(UniformKind::Float32)+var.Columns-1);
+                    else if ((var.ScalarType == Scalar::Int || var.ScalarType == Scalar::UInt) && var.Rows == 1 && var.Columns == 1)
+                        binding.Kind = UniformKind::Int32;
+                    else if (var.ScalarType == Scalar::Bool && var.Rows == 1 && var.Columns == 1)
+                        binding.Kind = UniformKind::Bool32;
+                    else if (var.ScalarType == Scalar::Unknown && declared && declared->Type != ShaderPropertyType::Texture2D)
+                        binding.Kind = DeclaredKind(declared->Type); // Compatibility for synthetic/older reflection.
+                    else return MaterialBindingError{"UnsupportedType",cb.Name,var.Name,"Missing or unsupported scalar/vector type metadata."};
+                    if (GetUniformKindSize(binding.Kind) != var.Size)
+                        return MaterialBindingError{"ReflectedStorageMismatch",cb.Name,var.Name,"Declared value width differs from reflection."};
+                    ShaderPropertyDesc schema = declared ? *declared : ShaderPropertyDesc{};
+                    schema.Name=var.Name; schema.ConstantBufferName=cb.Name; schema.Offset=var.Offset; schema.Size=var.Size;
+                    if (!declared || DeclaredKind(schema.Type) != binding.Kind) {
+                        switch(binding.Kind) {
+                            case UniformKind::Float32: schema.Type=ShaderPropertyType::Float; break;
+                            case UniformKind::Float2: schema.Type=ShaderPropertyType::Float2; break;
+                            case UniformKind::Float3: schema.Type=ShaderPropertyType::Float3; break;
+                            case UniformKind::Float4: schema.Type=ShaderPropertyType::Float4; break;
+                            case UniformKind::Int32: schema.Type=ShaderPropertyType::Int; break;
+                            case UniformKind::Bool32: schema.Type=ShaderPropertyType::Bool; break;
+                            default: break;
+                        }
+                    }
+                    plan.PropertySchema.push_back(schema);
                     binding.Source = PropertyKey{ cb.Name, var.Name };
                 }
 
@@ -187,13 +230,19 @@ namespace Axle {
                 std::string lower = ToLower(res.Name);
                 if (lower == "u_basemap" || lower == "basemap" || lower == "albedomap") {
                     tb.Role = TextureRole::Color;
-                } else if (lower.find("normal") != std::string::npos) {
+                } else if (lower == "u_normalmap") {
                     tb.Role = TextureRole::TangentNormal;
                 } else {
                     tb.Role = TextureRole::LinearData;
                 }
 
                 plan.Textures.push_back(tb);
+                if (lower != "u_basemap" && lower != "basemap" && lower != "albedomap") {
+                    ShaderPropertyDesc schema;
+                    for (const auto& desc : declaredUserProperties) if (desc.Name == res.Name) schema=desc;
+                    schema.Name=res.Name; schema.Type=ShaderPropertyType::Texture2D;
+                    plan.PropertySchema.push_back(schema);
+                }
             }
         }
 
@@ -215,6 +264,7 @@ namespace Axle {
         std::span<const ShaderPropertyDesc> declaredUserProperties)
     {
         ResolvedMaterialProperties result;
+        if (declaredUserProperties.empty()) declaredUserProperties=plan.PropertySchema;
 
         for (const auto& unif : plan.Uniforms) {
             if (!std::holds_alternative<PropertyKey>(unif.Source)) continue;
@@ -222,7 +272,8 @@ namespace Axle {
 
             const ShaderPropertyInstance* foundInstance = nullptr;
             for (const auto& inst : savedValues) {
-                if (inst.Desc.Name == key.VariableName) {
+                if (inst.Desc.Name == key.VariableName &&
+                    (inst.Desc.ConstantBufferName.empty() || inst.Desc.ConstantBufferName == key.BufferName)) {
                     foundInstance = &inst;
                     break;
                 }
@@ -239,6 +290,8 @@ namespace Axle {
             ResolvedMaterialProperty prop;
             prop.Key = key;
             prop.Kind = unif.Kind;
+            if (foundInstance && (foundInstance->Desc.Type == ShaderPropertyType::Texture2D || DeclaredKind(foundInstance->Desc.Type) != unif.Kind))
+                foundInstance=nullptr;
 
             if (foundInstance) {
                 switch (unif.Kind) {
@@ -410,13 +463,15 @@ namespace Axle {
                         }
                         case UniformKind::Float2: {
                             glm::vec2 v = std::holds_alternative<glm::vec2>(resolved->Value) ? std::get<glm::vec2>(resolved->Value) : glm::vec2(0.0f);
-                            std::memcpy(dest, &v, sizeof(glm::vec2));
+                            const float components[]{v.x,v.y};
+                            std::memcpy(dest, components, sizeof(components));
                             break;
                         }
                         case UniformKind::Float3: {
                             // Exactly 12 bytes - leaving subsequent bytes intact
                             glm::vec3 v = std::holds_alternative<glm::vec3>(resolved->Value) ? std::get<glm::vec3>(resolved->Value) : glm::vec3(0.0f);
-                            std::memcpy(dest, &v, sizeof(glm::vec3));
+                            const float components[]{v.x,v.y,v.z};
+                            std::memcpy(dest, components, sizeof(components));
                             break;
                         }
                         case UniformKind::Float4: {

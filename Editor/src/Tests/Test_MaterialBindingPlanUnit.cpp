@@ -402,6 +402,35 @@ namespace {
 } // namespace
 
 bool RunMaterialBindingPlanUnitTests() {
+    {
+        RHI::RHIShaderReflection reflection;
+        RHI::RHIShaderConstantBuffer buffer{"MaterialParameters",2,0,32,{}};
+        buffer.Variables.push_back({"Tint",0,16,RHI::RHIShaderScalarType::Float,1,4});
+        buffer.Variables.push_back({"Enabled",16,4,RHI::RHIShaderScalarType::UInt});
+        buffer.Variables.push_back({"Reserved",20,4,RHI::RHIShaderScalarType::Float});
+        reflection.ConstantBuffers.push_back(buffer);
+        auto planned=BuildMaterialBindingPlan(reflection,ValidatedShaderInterface{},{});
+        MAT_TEST_CHECK(std::holds_alternative<MaterialBindingPlan>(planned),"Typed reflection creates a complete plan without guessed property types");
+        auto plan=std::get<MaterialBindingPlan>(planned);
+        ShaderPropertyInstance tint,enabled;
+        tint.Desc.Name="Tint"; tint.Desc.Type=ShaderPropertyType::Color; tint.Vec4Val={2,0.25f,1,0.75f};
+        enabled.Desc.Name="Enabled"; enabled.Desc.Type=ShaderPropertyType::Int; enabled.IntVal=1;
+        std::vector<ShaderPropertyInstance> values{tint,enabled};
+        auto resolved=ResolveMaterialProperties(plan,values);
+        auto packed=PackMaterialUniforms(plan,EngineMaterialValues{},std::get<ResolvedMaterialProperties>(resolved));
+        MAT_TEST_CHECK(std::holds_alternative<PackedMaterialResultData>(packed),"Production-style reflected values pack successfully");
+        const auto& bytes=std::get<PackedMaterialResultData>(packed).Buffers[0].Bytes;
+        float red=0; uint32_t enabledValue=0;
+        std::memcpy(&red,bytes.data(),4); std::memcpy(&enabledValue,bytes.data()+16,4);
+        MAT_TEST_CHECK(red==2 && enabledValue==1,"Tint HDR value and uint enabled survive the complete binding path");
+        MAT_TEST_CHECK(plan.Uniforms.size()==2,"Reserved fields are not editable");
+        auto duplicate=reflection.ConstantBuffers[0]; duplicate.Name="Other"; duplicate.BindPoint=3;
+        reflection.ConstantBuffers.push_back(duplicate);
+        MAT_TEST_CHECK(std::holds_alternative<MaterialBindingError>(BuildMaterialBindingPlan(reflection,{},{})),"Ambiguous user names are rejected");
+        reflection.ConstantBuffers.pop_back();
+        reflection.Resources.push_back({"Output",RHI::RHIResourceType::StorageTexture,0,1,0,RHI::RHIShaderStage::Fragment});
+        MAT_TEST_CHECK(std::holds_alternative<MaterialBindingError>(BuildMaterialBindingPlan(reflection,{},{})),"Unsupported storage resources are rejected");
+    }
     std::cout << "  - Running TestExact64BytePackingFixture ...\n";
     if (!TestExact64BytePackingFixture()) return false;
 

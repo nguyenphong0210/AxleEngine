@@ -89,10 +89,17 @@ namespace Axle::RHI {
         Unknown
     };
 
+    enum class RHIShaderScalarType : uint8_t { Unknown, Float, Int, UInt, Bool };
+
     struct RHIShaderVariable {
         std::string Name;
         uint32_t Offset = 0;
         uint32_t Size = 0;
+        RHIShaderScalarType ScalarType = RHIShaderScalarType::Unknown;
+        uint32_t Rows = 1;
+        uint32_t Columns = 1;
+        uint32_t Elements = 0;
+        bool RowMajor = false;
     };
 
     struct RHIShaderConstantBuffer {
@@ -110,6 +117,8 @@ namespace Axle::RHI {
         uint32_t BindCount = 1;
         uint32_t Space = 0;
         RHIShaderStage Stage = RHIShaderStage::Vertex;
+        // Zero means unspecified (legacy/synthetic metadata); 2 means Texture2D.
+        uint32_t TextureDimension = 0;
     };
 
     struct RHIVertexAttribute {

@@ -44,6 +44,7 @@ namespace Axle {
         uint32_t Offset = 0;
         uint32_t Size = 0;
         std::string ConstantBufferName;
+        bool operator==(const ShaderPropertyDesc&) const = default;
     };
 
     struct ShaderPropertyInstance {

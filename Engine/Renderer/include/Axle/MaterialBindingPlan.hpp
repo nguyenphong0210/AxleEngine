@@ -101,6 +101,7 @@ namespace Axle {
         VertexInputPlan VertexInput;
         uint32_t InterfaceRevision = 1;
         bool IsLegacyTemplate = false;
+        std::vector<ShaderPropertyDesc> PropertySchema;
         bool operator==(const MaterialBindingPlan& other) const = default;
     };
 

@@ -1039,6 +1039,8 @@ namespace Axle::RHI {
                 binding.BindCount = bindDesc.BindCount;
                 binding.Space = bindDesc.Space;
                 binding.Stage = stage;
+                if (bindDesc.Type == D3D_SIT_TEXTURE)
+                    binding.TextureDimension = bindDesc.Dimension == D3D_SRV_DIMENSION_TEXTURE2D ? 2u : 0xffffffffu;
 
                 switch (bindDesc.Type) {
                     case D3D_SIT_CBUFFER:
@@ -1108,6 +1110,21 @@ namespace Axle::RHI {
                     var.Name = varDesc.Name ? varDesc.Name : "";
                     var.Offset = varDesc.StartOffset;
                     var.Size = varDesc.Size;
+                    D3D12_SHADER_TYPE_DESC type{};
+                    if (auto* reflectedType = pVar->GetType(); reflectedType && SUCCEEDED(reflectedType->GetDesc(&type))) {
+                        switch (type.Type) {
+                            case D3D_SVT_FLOAT: var.ScalarType = RHIShaderScalarType::Float; break;
+                            case D3D_SVT_INT: var.ScalarType = RHIShaderScalarType::Int; break;
+                            case D3D_SVT_UINT: var.ScalarType = RHIShaderScalarType::UInt; break;
+                            case D3D_SVT_BOOL: var.ScalarType = RHIShaderScalarType::Bool; break;
+                            default: break;
+                        }
+                        var.Rows = type.Rows;
+                        var.Columns = type.Columns;
+                        var.Elements = type.Elements;
+                        var.RowMajor = type.Class == D3D_SVC_MATRIX_ROWS;
+                        if (type.Class == D3D_SVC_STRUCT) var.ScalarType = RHIShaderScalarType::Unknown;
+                    }
                     cb.Variables.push_back(std::move(var));
                 }
 

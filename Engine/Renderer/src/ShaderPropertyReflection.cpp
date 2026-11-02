@@ -170,7 +170,7 @@ namespace Axle {
                 }
 
                 // Ignore standard engine uniforms
-                if (IsEngineUniform(varName)) {
+                if (IsEngineUniform(varName) || varName == "Reserved" || varName == "u_BaseMap") {
                     // Reset pending annotations
                     pendingRange = false;
                     pendingColor = false;
@@ -217,6 +217,8 @@ namespace Axle {
                         if (desc.Type == ShaderPropertyType::Float) {
                             if (defaultValStr.back() == 'f') defaultValStr.pop_back();
                             desc.DefaultFloat = std::stof(defaultValStr);
+                        } else if (desc.Type == ShaderPropertyType::Bool) {
+                            desc.DefaultBool = defaultValStr.find("true") != std::string::npos || defaultValStr == "1";
                         } else if (desc.Type == ShaderPropertyType::Int) {
                             desc.DefaultInt = std::stoi(defaultValStr);
                         }
@@ -238,70 +240,37 @@ namespace Axle {
 
         // If reflection metadata is provided, enrich properties with byte offsets & constant buffer info
         if (reflection) {
+            // Reflection is authoritative for active fields and storage types.
+            std::vector<ShaderPropertyDesc> active;
             for (const auto& cb : reflection->ConstantBuffers) {
-                // Skip engine internal global buffers
-                if (cb.Name == "SceneConstants" || cb.Name == "EngineScene" || cb.Name == "EngineObject") continue;
-
                 for (const auto& var : cb.Variables) {
-                    if (IsEngineUniform(var.Name)) continue;
-
-                    auto it = propIndices.find(var.Name);
-                    if (it != propIndices.end()) {
-                        properties[it->second].Offset = var.Offset;
-                        properties[it->second].Size = var.Size;
-                        properties[it->second].ConstantBufferName = cb.Name;
-                    } else {
-                        // Unannotated variable discovered in DXC reflection
-                        if (IsEngineUniform(var.Name)) continue;
-
-                        ShaderPropertyDesc desc;
-                        desc.Name = var.Name;
-                        desc.DisplayName = FormatDisplayName(var.Name);
-                        desc.Offset = var.Offset;
-                        desc.Size = var.Size;
-                        desc.ConstantBufferName = cb.Name;
-
-                        if (var.Size == sizeof(float)) {
-                            desc.Type = ShaderPropertyType::Float;
-                            desc.HasRange = true;
-                            desc.MinValue = 0.0f;
-                            desc.MaxValue = 1.0f;
-                            desc.DefaultFloat = 0.5f;
-                        } else if (var.Size == sizeof(glm::vec4)) {
-                            if (var.Name.find("Color") != std::string::npos || var.Name.find("Tint") != std::string::npos) {
-                                desc.Type = ShaderPropertyType::Color;
-                            } else {
-                                desc.Type = ShaderPropertyType::Float4;
-                            }
-                        } else if (var.Size == sizeof(int)) {
-                            desc.Type = ShaderPropertyType::Int;
-                        }
-
-                        propIndices[var.Name] = properties.size();
-                        properties.push_back(desc);
-                    }
+                    if (IsEngineUniform(var.Name) || var.Name == "Reserved" || var.Elements) continue;
+                    ShaderPropertyDesc desc;
+                    if (auto it=propIndices.find(var.Name); it!=propIndices.end()) desc=properties[it->second];
+                    desc.Name=var.Name; desc.DisplayName=FormatDisplayName(var.Name);
+                    desc.Offset=var.Offset; desc.Size=var.Size; desc.ConstantBufferName=cb.Name;
+                    using Scalar=RHI::RHIShaderScalarType;
+                    if (var.ScalarType==Scalar::Float && var.Rows==1 && var.Columns>=1 && var.Columns<=4) {
+                        if (var.Columns==1) desc.Type=ShaderPropertyType::Float;
+                        else if (var.Columns==2) desc.Type=ShaderPropertyType::Float2;
+                        else if (var.Columns==3) desc.Type=ShaderPropertyType::Float3;
+                        else if (desc.Type!=ShaderPropertyType::Color) desc.Type=ShaderPropertyType::Float4;
+                    } else if ((var.ScalarType==Scalar::Int || var.ScalarType==Scalar::UInt) && var.Rows==1 && var.Columns==1) desc.Type=ShaderPropertyType::Int;
+                    else if (var.ScalarType==Scalar::Bool && var.Rows==1 && var.Columns==1) desc.Type=ShaderPropertyType::Bool;
+                    else if (var.ScalarType!=Scalar::Unknown || !propIndices.contains(var.Name)) continue;
+                    active.push_back(desc);
                 }
             }
-
-            // Also check reflection texture resource bindings
-            for (const auto& res : reflection->Resources) {
-                if (res.Type == RHI::RHIResourceType::Texture) {
-                    if (res.Name == "u_BaseMap" || res.Name == "u_NormalMap" ||
-                        res.Name == "u_RoughnessMap" || res.Name == "u_MetallicMap") {
-                        continue;
-                    }
-                    if (propIndices.find(res.Name) == propIndices.end()) {
-                        ShaderPropertyDesc desc;
-                        desc.Name = res.Name;
-                        desc.DisplayName = FormatDisplayName(res.Name);
-                        desc.Type = ShaderPropertyType::Texture2D;
-                        propIndices[res.Name] = properties.size();
-                        properties.push_back(desc);
-                    }
-                }
+            for (const auto& resource : reflection->Resources) {
+                if (resource.Type!=RHI::RHIResourceType::Texture || resource.Name=="u_BaseMap" || resource.BindCount!=1 ||
+                    (resource.TextureDimension && resource.TextureDimension!=2)) continue;
+                ShaderPropertyDesc desc;
+                if (auto it=propIndices.find(resource.Name); it!=propIndices.end()) desc=properties[it->second];
+                desc.Name=resource.Name; desc.DisplayName=FormatDisplayName(resource.Name); desc.Type=ShaderPropertyType::Texture2D;
+                active.push_back(desc);
             }
+            return active;
         }
-
         return properties;
     }
 

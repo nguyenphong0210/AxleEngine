@@ -173,7 +173,8 @@ namespace Axle {
         ValidatedShaderInterface iface;
         iface.InterfaceRevision = key.InterfaceRevision;
 
-        auto planResult = BuildMaterialBindingPlan(mergedReflection, iface, {});
+        auto properties = ShaderPropertyParser::ParseFromHLSL(source, &mergedReflection);
+        auto planResult = BuildMaterialBindingPlan(mergedReflection, iface, properties);
         if (std::holds_alternative<MaterialBindingError>(planResult)) {
             const auto& err = std::get<MaterialBindingError>(planResult);
             result.Success = false;

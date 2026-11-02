@@ -1,5 +1,6 @@
 #include <Axle/TextureDescriptor.hpp>
 #include <Axle/ParticleEmitterSerializer.hpp>
+#include <Axle/ParticleEffectSerializer.hpp>
 #include <Axle/UI/UIParser.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
 #include <Axle/Application.hpp>
@@ -569,23 +570,31 @@ namespace Axle {
         while (std::filesystem::exists(newPath)) {
             newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
-        ParticleEmitterConfig config;
-        config.Name = newPath.stem().string();
-        config.MaxParticles = 1000;
-        config.EmissionRate = 50.0f;
-        config.Lifetime = FloatRange(1.0f, 2.0f);
-        config.InitialSpeed = FloatRange(2.0f, 5.0f);
-        config.Shape.Type = ParticleEmitterShapeType::Cone;
-        config.Shape.ConeAngle = 0.52359877f;
-        config.Shape.Radius = 0.5f;
-        config.ColorOverLifetime.StartColor = glm::vec4(1.0f, 0.6f, 0.2f, 1.0f);
-        config.ColorOverLifetime.EndColor = glm::vec4(0.2f, 0.05f, 0.0f, 0.0f);
-        config.BlendMode = ParticleBlendMode::Additive;
+        ParticleEffectDefinition effectDef;
+        effectDef.Name = newPath.stem().string();
+        EmitterDefinition emitter;
+        emitter.Id = "emitter-1";
+        emitter.Name = "Flame Base";
+        emitter.Enabled = true;
+        emitter.Config.Name = newPath.stem().string();
+        emitter.Config.MaxParticles = 1000;
+        emitter.Config.EmissionRate = 50.0f;
+        emitter.Config.Lifetime = FloatRange(1.0f, 2.0f);
+        emitter.Config.InitialSpeed = FloatRange(2.0f, 5.0f);
+        emitter.Config.Shape.Type = ParticleEmitterShapeType::Cone;
+        emitter.Config.Shape.ConeAngle = 0.52359877f;
+        emitter.Config.Shape.Radius = 0.5f;
+        emitter.Config.ColorOverLifetime.StartColor = glm::vec4(1.0f, 0.6f, 0.2f, 1.0f);
+        emitter.Config.ColorOverLifetime.EndColor = glm::vec4(0.2f, 0.05f, 0.0f, 0.0f);
+        emitter.Config.BlendMode = ParticleBlendMode::Additive;
+        effectDef.Emitters.push_back(std::move(emitter));
 
-        if (ParticleEmitterSerializer::SerializeToFile(newPath.string(), config)) {
+        std::vector<VFXDiagnostic> diags;
+        if (ParticleEffectSerializer::SerializeToFile(newPath.string(), effectDef, &diags)) {
             AssetManager::GetOrCreateMetadata(newPath);
+            return newPath;
         }
-        return newPath;
+        return {};
     }
 
     std::filesystem::path ContentBrowserPanel::CreateNewCanvas(const std::filesystem::path& parentDir, const std::string& baseName) {
@@ -1142,10 +1151,13 @@ namespace Axle {
                             } else if (ext == ".hlsl" && m_OnOpenHLSLStudioCallback) {
                                 m_OnOpenHLSLStudioCallback(path);
                                 SetStatusNotification("Opened HLSL Shader Studio: " + path.filename().string());
-                            } else if ((ext == ".axleui" || ext == ".axleasset") && m_OnOpenUICanvasCallback) {
-                                if (ext == ".axleui" || AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::Canvas) {
-                                    m_OnOpenUICanvasCallback(path);
-                                    SetStatusNotification("Opened UI Designer: " + path.filename().string());
+                            } else if ((ext == ".axleui" || ext == ".axleasset") && m_OnOpenUICanvasCallback && (ext == ".axleui" || AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::Canvas)) {
+                                m_OnOpenUICanvasCallback(path);
+                                SetStatusNotification("Opened UI Designer: " + path.filename().string());
+                            } else if ((ext == ".axle_vfx" || ext == ".vfx" || ext == ".axleasset") && m_OnOpenVFXCallback) {
+                                if (ext == ".axle_vfx" || ext == ".vfx" || AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::ParticleEmitter) {
+                                    m_OnOpenVFXCallback(path);
+                                    SetStatusNotification("Opened VFX Editor: " + path.filename().string());
                                 }
                             }
                             // Note: .axle files are inspected via single-click into Properties + Asset Preview tabs
@@ -1223,6 +1235,19 @@ namespace Axle {
                                 if (ImGui::MenuItem("Open in UI Canvas Designer")) {
                                     if (m_OnOpenUICanvasCallback) {
                                         m_OnOpenUICanvasCallback(path);
+                                    }
+                                }
+                                ImGui::Separator();
+                            }
+                        } else if (ext == ".axle_vfx" || ext == ".vfx" || ext == ".axleasset") {
+                            bool isVFX = (ext == ".axle_vfx" || ext == ".vfx");
+                            if (ext == ".axleasset") {
+                                isVFX = (AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::ParticleEmitter);
+                            }
+                            if (isVFX) {
+                                if (ImGui::MenuItem("Open in Visual FX Editor")) {
+                                    if (m_OnOpenVFXCallback) {
+                                        m_OnOpenVFXCallback(path);
                                     }
                                 }
                                 ImGui::Separator();

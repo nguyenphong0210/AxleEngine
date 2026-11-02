@@ -204,6 +204,11 @@ void EditorLayer::OnAttach() {
         m_VFXEditorPanel.SetOpen(true);
         m_VFXEditorPanel.SetSelectedEntity(entity);
     });
+    m_ContentBrowserPanel.SetOpenVFXCallback([this](const std::filesystem::path& path) {
+        m_ShowVFXEditor = true;
+        m_VFXEditorPanel.SetOpen(true);
+        m_VFXEditorPanel.OpenDocument(path.string());
+    });
 
     // Setup Serializer Context for meshes & scripts
     m_SerializerContext.CubeMesh = m_CubeMesh;

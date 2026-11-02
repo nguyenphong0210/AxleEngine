@@ -80,9 +80,11 @@ namespace Axle {
         std::function<void(uint32_t, const std::filesystem::path&)> m_OnPackageEntityCallback;
         std::function<void(const std::filesystem::path&)> m_OnOpenUICanvasCallback;
         std::function<void(const std::filesystem::path&)> m_OnOpenHLSLStudioCallback;
+        std::function<void(const std::filesystem::path&)> m_OnOpenVFXCallback;
     public:
         void SetOpenUICanvasCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenUICanvasCallback = callback; }
         void SetOpenHLSLStudioCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenHLSLStudioCallback = callback; }
+        void SetOpenVFXCallback(std::function<void(const std::filesystem::path&)> callback) { m_OnOpenVFXCallback = callback; }
     };
 
 }

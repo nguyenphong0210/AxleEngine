@@ -77,165 +77,93 @@ namespace Axle {
         std::vector<ShaderPropertyDesc> properties;
         std::unordered_map<std::string, size_t> propIndices;
 
-        std::istringstream stream(hlslSource);
-        std::string line;
-
-        std::string currentHeader;
-        std::string pendingTooltip;
-        bool pendingRange = false;
-        float rangeMin = 0.0f;
-        float rangeMax = 1.0f;
-        bool pendingColor = false;
-        bool pendingTexture = false;
-
-        // Regular expression patterns for annotations and declarations
-        static const std::regex headerRegex(R"(\[\s*Header\s*\(\s*\"([^\"]*)\"\s*\)\s*\])");
-        static const std::regex tooltipRegex(R"(\[\s*Tooltip\s*\(\s*\"([^\"]*)\"\s*\)\s*\])");
-        static const std::regex rangeRegex(R"(\[\s*Range\s*\(\s*([+-]?\d+(?:\.\d+)?f?)\s*,\s*([+-]?\d+(?:\.\d+)?f?)\s*\)\s*\])");
+        // Keep character positions while removing comments and strings from code.
+        // Annotations are read from the original lines; declarations/scopes never are.
+        std::string clean=hlslSource;
+        bool block=false, quoted=false; char quote=0;
+        for(size_t i=0;i<clean.size();++i) {
+            const char c=hlslSource[i], next=i+1<clean.size()?hlslSource[i+1]:0;
+            if(block) {
+                if(c=='*' && next=='/') {clean[i]=clean[i+1]=' ';++i;block=false;}
+                else if(c!='\n') clean[i]=' ';
+            } else if(quoted) {
+                if(c=='\\' && next) {clean[i]=clean[i+1]=' ';++i;}
+                else {if(c==quote)quoted=false;if(c!='\n')clean[i]=' ';}
+            } else if(c=='/' && next=='*') {clean[i]=clean[i+1]=' ';++i;block=true;}
+            else if(c=='/' && next=='/') {while(i<clean.size() && hlslSource[i]!='\n')clean[i++]=' ';if(i==clean.size())break;}
+            else if(c=='"' || c=='\'') {quoted=true;quote=c;clean[i]=' ';}
+        }
+        static const std::regex headerRegex(R"anno(\[\s*Header\s*\(\s*"([^"]*)"\s*\)\s*\])anno");
+        static const std::regex tooltipRegex(R"anno(\[\s*Tooltip\s*\(\s*"([^"]*)"\s*\)\s*\])anno");
+        static const std::regex rangeRegex(R"(\[\s*Range\s*\(\s*([^,]+),\s*([^\)]+)\)\s*\])");
+        static const std::regex defaultRegex(R"(\[\s*Default\s*\(([^\)]*)\)\s*\])");
         static const std::regex colorRegex(R"(\[\s*Color\s*\])");
-        static const std::regex textureRegex(R"(\[\s*Texture\s*\])");
-
-        // Variable declaration matching
-        // e.g. "float u_Dissolve;" or "float4 u_Color;" or "Texture2D u_Noise : register(t0, space1);"
-        static const std::regex declRegex(R"((?:float4|float3|float2|float|int|uint|bool|Texture2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*[^=;]+)?\s*(?:=\s*([^;]+))?;)");
-
-        bool inCbuffer = false;
-        int braceDepth = 0;
-
-        while (std::getline(stream, line)) {
-            // Trim whitespace
-            size_t start = line.find_first_not_of(" \t\r\n");
-            if (start == std::string::npos) {
-                continue;
+        static const std::regex declRegex(R"(\b(float4|float3|float2|float|int|uint|bool|Texture2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*[^=;]+)?\s*(?:=\s*([^;]+))?;)");
+        static const std::regex numberRegex(R"([+-]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][+-]?\d+)?)");
+        std::istringstream original(hlslSource), codeStream(clean);
+        std::string line,code,header,tooltip,defaultValue;
+        bool hasRange=false,color=false,cbufferPending=false;
+        float rangeMin=0,rangeMax=1;
+        std::vector<bool> scopes;
+        while(std::getline(original,line) && std::getline(codeStream,code)) {
+            std::smatch annotation;
+            if(std::regex_search(line,annotation,headerRegex))header=annotation[1];
+            if(std::regex_search(line,annotation,tooltipRegex))tooltip=annotation[1];
+            if(std::regex_search(line,annotation,colorRegex))color=true;
+            if(std::regex_search(line,annotation,defaultRegex))defaultValue=annotation[1];
+            if(std::regex_search(line,annotation,rangeRegex)) {
+                try {rangeMin=std::stof(annotation[1]);rangeMax=std::stof(annotation[2]);hasRange=true;}catch(...) {hasRange=false;}
             }
-            std::string trimmed = line.substr(start);
-
-            // Track cbuffer and brace scopes to distinguish uniforms from function-local variables
-            if (trimmed.find("cbuffer ") != std::string::npos) {
-                inCbuffer = true;
-            }
-            for (char ch : trimmed) {
-                if (ch == '{') {
-                    braceDepth++;
-                } else if (ch == '}') {
-                    if (braceDepth > 0) braceDepth--;
-                    if (braceDepth == 0) inCbuffer = false;
+            size_t cursor=0;
+            auto advance=[&](size_t end) {
+                while(cursor<end) {
+                    if(code.compare(cursor,7,"cbuffer")==0)cbufferPending=true;
+                    if(code[cursor]=='{') {scopes.push_back(cbufferPending);cbufferPending=false;}
+                    else if(code[cursor]=='}' && !scopes.empty())scopes.pop_back();
+                    ++cursor;
                 }
-            }
-
-            // Check for Header annotation
-            std::smatch match;
-            if (std::regex_search(trimmed, match, headerRegex)) {
-                currentHeader = match[1].str();
-            }
-
-            // Check for Tooltip annotation
-            if (std::regex_search(trimmed, match, tooltipRegex)) {
-                pendingTooltip = match[1].str();
-            }
-
-            // Check for Range annotation
-            if (std::regex_search(trimmed, match, rangeRegex)) {
-                try {
-                    std::string minStr = match[1].str();
-                    std::string maxStr = match[2].str();
-                    if (!minStr.empty() && minStr.back() == 'f') minStr.pop_back();
-                    if (!maxStr.empty() && maxStr.back() == 'f') maxStr.pop_back();
-                    rangeMin = std::stof(minStr);
-                    rangeMax = std::stof(maxStr);
-                    pendingRange = true;
-                } catch (...) {
-                    pendingRange = false;
+            };
+            const auto first=code.find_first_not_of(" \t");
+            if(first!=code.npos && code[first]=='#')continue;
+            for(std::sregex_iterator it(code.begin(),code.end(),declRegex),last;it!=last;++it) {
+                advance(static_cast<size_t>(it->position()));
+                const auto& match=*it;
+                if(!scopes.empty() && !scopes.back())continue;
+                const std::string type=match[1],name=match[2];
+                if(IsEngineUniform(name) || name=="Reserved" || name=="u_BaseMap") {
+                    hasRange=false;color=false;tooltip.clear();defaultValue.clear();continue;
                 }
-            }
-
-            // Check for Color annotation
-            if (std::regex_search(trimmed, match, colorRegex)) {
-                pendingColor = true;
-            }
-
-            // Check for Texture annotation
-            if (std::regex_search(trimmed, match, textureRegex)) {
-                pendingTexture = true;
-            }
-
-            // Check for Variable Declaration
-            if (std::regex_search(trimmed, match, declRegex)) {
-                std::string varName = match[1].str();
-                std::string defaultValStr = match[2].matched ? match[2].str() : "";
-
-                // Exclude function-local variables (inside non-cbuffer scopes without explicit property annotations)
-                if (braceDepth > 0 && !inCbuffer && !pendingRange && !pendingColor && !pendingTexture) {
-                    continue;
-                }
-
-                // Ignore standard engine uniforms
-                if (IsEngineUniform(varName) || varName == "Reserved" || varName == "u_BaseMap") {
-                    // Reset pending annotations
-                    pendingRange = false;
-                    pendingColor = false;
-                    pendingTexture = false;
-                    pendingTooltip.clear();
-                    continue;
-                }
-
                 ShaderPropertyDesc desc;
-                desc.Name = varName;
-                desc.DisplayName = FormatDisplayName(varName);
-                desc.Header = currentHeader;
-                desc.Tooltip = pendingTooltip;
-                desc.HasRange = pendingRange;
-                desc.MinValue = rangeMin;
-                desc.MaxValue = rangeMax;
-
-                // Determine type
-                if (trimmed.find("Texture2D") != std::string::npos || pendingTexture) {
-                    desc.Type = ShaderPropertyType::Texture2D;
-                } else if (pendingColor || trimmed.find("float4") != std::string::npos && (varName.find("Color") != std::string::npos || varName.find("Tint") != std::string::npos)) {
-                    desc.Type = ShaderPropertyType::Color;
-                    desc.DefaultVec4 = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-                } else if (trimmed.find("float4") != std::string::npos) {
-                    desc.Type = ShaderPropertyType::Float4;
-                } else if (trimmed.find("float3") != std::string::npos) {
-                    desc.Type = ShaderPropertyType::Float3;
-                } else if (trimmed.find("float2") != std::string::npos) {
-                    desc.Type = ShaderPropertyType::Float2;
-                } else if (trimmed.find("int") != std::string::npos || trimmed.find("uint") != std::string::npos) {
-                    desc.Type = ShaderPropertyType::Int;
-                } else if (trimmed.find("bool") != std::string::npos) {
-                    desc.Type = ShaderPropertyType::Bool;
-                } else {
-                    desc.Type = ShaderPropertyType::Float;
-                    if (pendingRange) {
-                        desc.DefaultFloat = (rangeMin + rangeMax) * 0.5f;
+                desc.Name=name;desc.DisplayName=FormatDisplayName(name);desc.Header=header;desc.Tooltip=tooltip;
+                desc.HasRange=hasRange;desc.MinValue=rangeMin;desc.MaxValue=rangeMax;
+                if(type=="Texture2D")desc.Type=ShaderPropertyType::Texture2D;
+                else if(type=="float4" && (color || name.find("Color")!=name.npos || name.find("Tint")!=name.npos)) {
+                    desc.Type=ShaderPropertyType::Color;desc.DefaultVec4=glm::vec4(1);
+                } else if(type=="float4")desc.Type=ShaderPropertyType::Float4;
+                else if(type=="float3")desc.Type=ShaderPropertyType::Float3;
+                else if(type=="float2")desc.Type=ShaderPropertyType::Float2;
+                else if(type=="int" || type=="uint")desc.Type=ShaderPropertyType::Int;
+                else if(type=="bool")desc.Type=ShaderPropertyType::Bool;
+                else {desc.Type=ShaderPropertyType::Float;desc.DefaultFloat=hasRange?rangeMin:0.0f;}
+                std::string value=defaultValue.empty()?(match[3].matched?match[3].str():""):defaultValue;
+                if(!value.empty())try {
+                    if(desc.Type==ShaderPropertyType::Float)desc.DefaultFloat=std::stof(value);
+                    else if(desc.Type==ShaderPropertyType::Int)desc.DefaultInt=std::stoi(value);
+                    else if(desc.Type==ShaderPropertyType::Bool)desc.DefaultBool=value.find("true")!=value.npos || std::stoi(value)!=0;
+                    else if(desc.Type!=ShaderPropertyType::Texture2D) {
+                        auto open=value.find('(');
+                        if(open!=value.npos)value=value.substr(open+1);
+                        std::vector<float> components;
+                        for(std::sregex_iterator n(value.begin(),value.end(),numberRegex),last;n!=last;++n)components.push_back(std::stof(n->str()));
+                        const int count=type=="float2"?2:type=="float3"?3:4;
+                        if(components.size()==1)for(int i=0;i<count;++i)desc.DefaultVec4[i]=components[0];
+                        else if(components.size()==count)for(int i=0;i<count;++i)desc.DefaultVec4[i]=components[i];
                     }
-                }
-
-                // If default value string is present, try parsing
-                if (!defaultValStr.empty()) {
-                    try {
-                        if (desc.Type == ShaderPropertyType::Float) {
-                            if (defaultValStr.back() == 'f') defaultValStr.pop_back();
-                            desc.DefaultFloat = std::stof(defaultValStr);
-                        } else if (desc.Type == ShaderPropertyType::Bool) {
-                            desc.DefaultBool = defaultValStr.find("true") != std::string::npos || defaultValStr == "1";
-                        } else if (desc.Type == ShaderPropertyType::Int) {
-                            desc.DefaultInt = std::stoi(defaultValStr);
-                        }
-                    } catch (...) {}
-                }
-
-                if (propIndices.find(varName) == propIndices.end()) {
-                    propIndices[varName] = properties.size();
-                    properties.push_back(desc);
-                }
-
-                // Reset pending flags for next declaration
-                pendingRange = false;
-                pendingColor = false;
-                pendingTexture = false;
-                pendingTooltip.clear();
+                }catch(...) {}
+                if(!propIndices.contains(name)) {propIndices[name]=properties.size();properties.push_back(desc);}
+                hasRange=false;color=false;tooltip.clear();defaultValue.clear();
             }
+            advance(code.size());
         }
 
         // If reflection metadata is provided, enrich properties with byte offsets & constant buffer info
@@ -303,7 +231,7 @@ namespace Axle {
             } else {
                 // Initialize with descriptor defaults
                 if (desc.Type == ShaderPropertyType::Float) {
-                    inst.FloatVal = (desc.DefaultFloat != 0.0f) ? desc.DefaultFloat : (desc.HasRange ? desc.DefaultFloat : desc.MinValue);
+                    inst.FloatVal = desc.DefaultFloat;
                 } else if (desc.Type == ShaderPropertyType::Color ||
                            desc.Type == ShaderPropertyType::Float2 ||
                            desc.Type == ShaderPropertyType::Float3 ||

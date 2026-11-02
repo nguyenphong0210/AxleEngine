@@ -299,6 +299,23 @@ namespace {
         MAT_TEST_CHECK(parsedMap.count("localLoopCounter") == 0, "Function local variable localLoopCounter must not be parsed");
         MAT_TEST_CHECK(parsedMap.count("localColor") == 0, "Function local variable localColor must not be parsed");
 
+        auto defaults=ShaderPropertyParser::ParseFromHLSL(R"(
+            // float Commented; {
+            /* } float AlsoCommented; */
+            cbuffer MaterialParameters {
+                // [Default(1)]
+                float Gain;
+                float2 Offset = float2(-2, 3e-1);
+                bool Active = true;
+                // [Range(0.2, 0.8)]
+                float Ranged;
+            };
+            float4 PSMain() { /* } */ float Hidden; return 1; }
+        )");
+        auto instances=SynchronizeCustomProperties(defaults,{});
+        MAT_TEST_CHECK(instances.size()==4,"Comments, braces and one-line function locals never become properties");
+        MAT_TEST_CHECK(instances[0].FloatVal==1 && instances[1].Vec4Val.x==-2 && std::abs(instances[1].Vec4Val.y-0.3f)<0.0001f && instances[2].BoolVal && instances[3].FloatVal==0.2f,"Scalar, vector, bool and range defaults initialize correctly");
+
         return true;
     }
 

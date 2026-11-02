@@ -821,8 +821,8 @@ bool RunTest_Step104_Phase38_1_MaterialStudioParityAndHLSLCompiler() {
         std::string templateCode = HLSLStudioPanel::GetDefaultPBRTemplate("TestAutomotivePBR");
         assert(!templateCode.empty());
         assert(templateCode.find("TestAutomotivePBR.hlsl") != std::string::npos);
-        assert(templateCode.find("cbuffer ObjectConstants : register(b0, space0)") != std::string::npos);
-        assert(templateCode.find("cbuffer SceneConstants : register(b1, space0)") != std::string::npos);
+        assert(templateCode.find("cbuffer EngineObject : register(b0, space0)") != std::string::npos);
+        assert(templateCode.find("cbuffer EngineScene : register(b1, space0)") != std::string::npos);
         assert(templateCode.find("PSInput VSMain(VSInput input)") != std::string::npos);
         assert(templateCode.find("float4 PSMain(PSInput input) : SV_Target0") != std::string::npos);
 

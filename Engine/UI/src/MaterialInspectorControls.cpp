@@ -67,7 +67,7 @@ namespace Axle {
     }
 
     bool MaterialInspectorControls::TextureSlot(const char* id, std::string& path, bool& enabled,
-                                               const std::function<void(const std::string&)>& assign) {
+                                               const std::function<void(const std::string&)>& assign, bool showEnabled) {
         ImGui::PushID(id);
         bool changed=false;
         auto choose = [&](const std::filesystem::path& chosen) {
@@ -81,11 +81,13 @@ namespace Axle {
             m_Error.clear();
             return true;
         };
+        if (showEnabled) {
         ImGui::BeginDisabled(path.empty());
         changed |= ImGui::Checkbox("##Enabled",&enabled);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enable this texture without losing its assignment");
         ImGui::EndDisabled();
         ImGui::SameLine();
+        }
         bool clicked = ImGui::Button("##ChooseTexture",ImVec2(ImGui::GetContentRegionAvail().x,32));
         auto min=ImGui::GetItemRectMin(), max=ImGui::GetItemRectMax();
         auto texture = path.empty() ? 0 : AssetThumbnailManager::GetPreview(FileSystem::ResolveAssetPath(path));
@@ -101,8 +103,11 @@ namespace Axle {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nClick to search, or drag an image here. Right-click for texture actions.",path.empty()?"No texture assigned":path.c_str());
         if (clicked) ImGui::OpenPopup("TexturePicker");
         if (ImGui::BeginDragDropTarget()) {
-            if (const auto* payload=ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-                changed |= choose(std::filesystem::path(static_cast<const char*>(payload->Data)));
+            if (const auto* payload=ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                const auto decoded=DecodeAssetPayload(payload->Data,payload->DataSize);
+                if(decoded.Success)changed|=choose(decoded.Path);
+                else m_Error=decoded.Error;
+            }
             ImGui::EndDragDropTarget();
         }
         if (ImGui::BeginPopupContextItem("TextureActions")) {
@@ -272,26 +277,9 @@ namespace Axle {
                 } else if (property.Desc.Type==ShaderPropertyType::Bool) {
                     changed|=ImGui::Checkbox("##Value",&property.BoolVal);
                 } else if (property.Desc.Type==ShaderPropertyType::Texture2D) {
-                    std::string texLabel = property.TexturePath.empty() ? "None (Drop texture here)" : std::filesystem::path(property.TexturePath).filename().string();
-                    ImGui::Button(texLabel.c_str(), ImVec2(-1.0f, 0));
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nDrop texture asset here or right-click to clear.", property.TexturePath.empty() ? "No texture assigned" : property.TexturePath.c_str());
-                    if (ImGui::BeginDragDropTarget()) {
-                        if (const auto* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                            auto decoded = DecodeAssetPayload(payload->Data, payload->DataSize);
-                            if (decoded.Success) {
-                                property.TexturePath = decoded.Path.generic_string();
-                                changed = true;
-                            }
-                        }
-                        ImGui::EndDragDropTarget();
-                    }
-                    if (ImGui::BeginPopupContextItem("CustomTextureActions")) {
-                        if (ImGui::MenuItem("Clear Texture", nullptr, false, !property.TexturePath.empty())) {
-                            property.TexturePath.clear();
-                            changed = true;
-                        }
-                        ImGui::EndPopup();
-                    }
+                    bool enabled=!property.TexturePath.empty();
+                    changed|=TextureSlot("CustomTexture",property.TexturePath,enabled,
+                        [&](const std::string& path){property.TexturePath=path;},false);
                 } else {
                     ImGui::TextUnformatted(property.TexturePath.empty()?"No texture assigned":property.TexturePath.c_str());
                 }

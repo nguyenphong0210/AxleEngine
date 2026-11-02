@@ -46,13 +46,22 @@ namespace Axle {
                                                  glm::vec3& outHitPoint,
                                                  glm::vec3& outHitNormal)>;
 
+    enum class ParticleCollisionMode : uint8_t {
+        PlanesAndBoxes = 0,
+        Floor = 1,
+        ScenePhysics = 2
+    };
+
     struct ParticleCollisionConfig {
         bool Enabled = false;
+        ParticleCollisionMode CollisionMode = ParticleCollisionMode::Floor;
         float Restitution = 0.5f;        // Global fallback restitution
         float Friction = 0.2f;           // Global fallback friction
         float MinBounceSpeed = 0.1f;     // Threshold (m/s) below which bounce stops to prevent resting jitter
         float ParticleRadius = 0.05f;    // Collision margin radius
         bool KillOnCollision = false;    // Kill particles on impact if true
+        float FloorHeight = 0.0f;        // Floor plane Y position for Floor mode
+        bool FloorKill = false;          // Kill particles when hitting floor
 
         std::vector<ParticleCollisionPlane> Planes;
         std::vector<ParticleCollisionBox> Boxes;

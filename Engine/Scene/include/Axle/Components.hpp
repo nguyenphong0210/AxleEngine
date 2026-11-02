@@ -1606,6 +1606,7 @@ namespace Axle {
         ParticleSimulationSpace SimulationSpace = ParticleSimulationSpace::World;
 
         std::vector<ParticleEmitterStack> EmitterStacks;
+        ParticleRaycastFn RaycastCallback = nullptr;
 
         ParticleEmitterComponent() {
             Initialize();
@@ -1739,6 +1740,22 @@ namespace Axle {
             for (auto& stack : EmitterStacks) {
                 stack.Config.SimulationSpace = space;
                 if (stack.System) stack.System->GetConfig().SimulationSpace = space;
+            }
+        }
+
+        void SetPhysicsRaycastCallback(ParticleRaycastFn fn) {
+            RaycastCallback = fn;
+            for (auto& stack : EmitterStacks) {
+                if (stack.Config.Collision.CollisionMode == ParticleCollisionMode::ScenePhysics || stack.Config.Collision.WorldRaycast != nullptr) {
+                    stack.Config.Collision.WorldRaycast = fn;
+                    if (stack.System) {
+                        stack.System->GetConfig().Collision.WorldRaycast = fn;
+                    }
+                }
+            }
+            if (System) {
+                Config.Collision.WorldRaycast = fn;
+                System->GetConfig().Collision.WorldRaycast = fn;
             }
         }
 

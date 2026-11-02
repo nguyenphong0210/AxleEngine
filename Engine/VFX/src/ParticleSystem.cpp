@@ -345,31 +345,47 @@ namespace Axle {
             // Physics collisions
             if (m_Config.Collision.Enabled) {
                 bool collided = false;
+                bool killParticle = m_Config.Collision.KillOnCollision;
                 float radius = (m_Config.Collision.ParticleRadius > 0.0f) ? m_Config.Collision.ParticleRadius : (sizes[i] * 0.5f);
                 float rest = m_Config.Collision.Restitution;
                 float fric = m_Config.Collision.Friction;
                 float minBounce = m_Config.Collision.MinBounceSpeed;
 
-                // 1. Continuous swept raycast
-                if (m_Config.Collision.WorldRaycast) {
+                // 1. Floor plane (Floor mode)
+                if (m_Config.Collision.CollisionMode == ParticleCollisionMode::Floor) {
+                    ParticleCollisionPlane floorPlane(glm::vec3(0.0f, 1.0f, 0.0f), -m_Config.Collision.FloorHeight, rest, fric, m_Config.Collision.FloorKill);
+                    if (ParticleCollisionSolver::ResolvePlane(floorPlane, nextPos, velocities[i], radius, rest, fric, minBounce)) {
+                        collided = true;
+                        if (floorPlane.KillOnCollision) killParticle = true;
+                    }
+                }
+
+                // 2. Continuous swept raycast (ScenePhysics or explicit raycast)
+                if ((m_Config.Collision.CollisionMode == ParticleCollisionMode::ScenePhysics || m_Config.Collision.WorldRaycast) && m_Config.Collision.WorldRaycast) {
                     if (ParticleCollisionSolver::ResolveRaycast(m_Config.Collision.WorldRaycast, prevPos, nextPos, velocities[i], radius, rest, fric, minBounce)) {
                         collided = true;
                     }
                 }
 
-                // 2. Static Collision Planes
+                // 3. Static Collision Planes
                 for (const auto& plane : m_Config.Collision.Planes) {
                     if (ParticleCollisionSolver::ResolvePlane(plane, nextPos, velocities[i], radius, rest, fric, minBounce)) {
                         collided = true;
-                        if (plane.KillOnCollision) break;
+                        if (plane.KillOnCollision) {
+                            killParticle = true;
+                            break;
+                        }
                     }
                 }
 
-                // 3. Collision Boxes
+                // 4. Collision Boxes
                 for (const auto& box : m_Config.Collision.Boxes) {
                     if (ParticleCollisionSolver::ResolveBox(box, nextPos, velocities[i], radius, rest, fric, minBounce)) {
                         collided = true;
-                        if (box.KillOnCollision) break;
+                        if (box.KillOnCollision) {
+                            killParticle = true;
+                            break;
+                        }
                     }
                 }
 
@@ -378,7 +394,7 @@ namespace Axle {
                     // Sub-Emitter Trigger on Collision
                     DispatchSubEmitters(SubEmitterTrigger::Collision, nextPos, velocities[i], colors[i]);
 
-                    if (m_Config.Collision.KillOnCollision) {
+                    if (killParticle) {
                         m_Pool.Kill(i);
                         continue;
                     }

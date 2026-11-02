@@ -217,9 +217,37 @@ namespace Axle {
 
         if (config.Collision.Enabled) {
             root.SetBool("collisionEnabled", true);
+            root.SetInt("collisionMode", static_cast<int32_t>(config.Collision.CollisionMode));
             root.SetFloat("collisionRestitution", config.Collision.Restitution);
             root.SetFloat("collisionFriction", config.Collision.Friction);
             root.SetBool("killOnCollision", config.Collision.KillOnCollision);
+            root.SetFloat("minBounceSpeed", config.Collision.MinBounceSpeed);
+            root.SetFloat("particleRadius", config.Collision.ParticleRadius);
+            root.SetFloat("floorHeight", config.Collision.FloorHeight);
+            root.SetBool("floorKill", config.Collision.FloorKill);
+
+            for (const auto& plane : config.Collision.Planes) {
+                auto pBlock = std::make_shared<AssetBlock>();
+                pBlock->Type = "CollisionPlane";
+                pBlock->SetVec3("normal", plane.Normal);
+                pBlock->SetFloat("distance", plane.Distance);
+                pBlock->SetFloat("restitution", plane.Restitution);
+                pBlock->SetFloat("friction", plane.Friction);
+                pBlock->SetBool("kill", plane.KillOnCollision);
+                root.Children.push_back(pBlock);
+            }
+
+            for (const auto& box : config.Collision.Boxes) {
+                auto bBlock = std::make_shared<AssetBlock>();
+                bBlock->Type = "CollisionBox";
+                bBlock->SetVec3("min", box.Min);
+                bBlock->SetVec3("max", box.Max);
+                bBlock->SetBool("inside", box.CollideInside);
+                bBlock->SetFloat("restitution", box.Restitution);
+                bBlock->SetFloat("friction", box.Friction);
+                bBlock->SetBool("kill", box.KillOnCollision);
+                root.Children.push_back(bBlock);
+            }
         }
 
         // Bursts child blocks
@@ -415,6 +443,15 @@ namespace Axle {
         outConfig.Collision.Restitution = root.GetFloat("collisionRestitution", outConfig.Collision.Restitution);
         outConfig.Collision.Friction = root.GetFloat("collisionFriction", outConfig.Collision.Friction);
         outConfig.Collision.KillOnCollision = root.GetBool("killOnCollision", outConfig.Collision.KillOnCollision);
+        if (root.HasProperty("collisionMode")) {
+            outConfig.Collision.CollisionMode = static_cast<ParticleCollisionMode>(root.GetInt("collisionMode"));
+        }
+        outConfig.Collision.MinBounceSpeed = root.GetFloat("minBounceSpeed", outConfig.Collision.MinBounceSpeed);
+        outConfig.Collision.ParticleRadius = root.GetFloat("particleRadius", outConfig.Collision.ParticleRadius);
+        outConfig.Collision.FloorHeight = root.GetFloat("floorHeight", outConfig.Collision.FloorHeight);
+        outConfig.Collision.FloorKill = root.GetBool("floorKill", outConfig.Collision.FloorKill);
+        outConfig.Collision.Planes.clear();
+        outConfig.Collision.Boxes.clear();
 
         // Child blocks parsing
         for (const auto& child : root.Children) {
@@ -450,6 +487,23 @@ namespace Axle {
                 ak.Time = child->GetFloat("time", 0.0f);
                 ak.Alpha = child->GetFloat("alpha", 1.0f);
                 outConfig.ColorOverLifetime.AlphaKeys.push_back(ak);
+            } else if (child->Type == "CollisionPlane") {
+                ParticleCollisionPlane plane;
+                plane.Normal = child->GetVec3("normal", plane.Normal);
+                plane.Distance = child->GetFloat("distance", plane.Distance);
+                plane.Restitution = child->GetFloat("restitution", plane.Restitution);
+                plane.Friction = child->GetFloat("friction", plane.Friction);
+                plane.KillOnCollision = child->GetBool("kill", plane.KillOnCollision);
+                outConfig.Collision.Planes.push_back(plane);
+            } else if (child->Type == "CollisionBox") {
+                ParticleCollisionBox box;
+                box.Min = child->GetVec3("min", box.Min);
+                box.Max = child->GetVec3("max", box.Max);
+                box.CollideInside = child->GetBool("inside", box.CollideInside);
+                box.Restitution = child->GetFloat("restitution", box.Restitution);
+                box.Friction = child->GetFloat("friction", box.Friction);
+                box.KillOnCollision = child->GetBool("kill", box.KillOnCollision);
+                outConfig.Collision.Boxes.push_back(box);
             }
         }
 

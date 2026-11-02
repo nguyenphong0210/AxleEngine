@@ -1,6 +1,7 @@
 #include "VFXTestHarness.hpp"
 #include <Axle/VFXCommon.hpp>
 #include <Axle/ParticleEffectDefinition.hpp>
+#include <Axle/ParticleEffectSerializer.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ParticleMeshSampler.hpp>
 
@@ -226,6 +227,179 @@ namespace {
 
         return true;
     }
+
+    bool TestParticleCollisionSimulation() {
+        // 1. Floor Plane Collision & Bounce
+        {
+            Axle::ParticleEmitterConfig config;
+            config.MaxParticles = 10;
+            config.EmissionRate = 0.0f;
+            config.Lifetime = { 2.0f, 2.0f };
+            config.InitialSpeed = { 0.0f, 0.0f };
+            config.ConstantAcceleration = glm::vec3(0.0f);
+            config.GravityModifier = 0.0f;
+            config.Drag = 0.0f;
+            config.Collision.Enabled = true;
+            config.Collision.CollisionMode = Axle::ParticleCollisionMode::Floor;
+            config.Collision.FloorHeight = 0.0f;
+            config.Collision.Restitution = 0.6f;
+            config.Collision.Friction = 0.0f;
+            config.Collision.ParticleRadius = 0.1f;
+            config.Collision.MinBounceSpeed = 0.01f;
+
+            Axle::ParticleSystem system(config);
+            system.SetSeed(12345);
+
+            Axle::ParticleSpawnData spawnData;
+            spawnData.Position = glm::vec3(0.0f, 1.0f, 0.0f);
+            spawnData.Velocity = glm::vec3(0.0f, -10.0f, 0.0f);
+            spawnData.StartSize = 0.2f;
+            spawnData.EndSize = 0.2f;
+            spawnData.Lifetime = 2.0f;
+            spawnData.StartColor = glm::vec4(1.0f);
+            spawnData.EndColor = glm::vec4(1.0f);
+            system.GetPool().Spawn(spawnData);
+
+            system.Update(0.15f);
+
+            VFX_TEST_CHECK(system.GetActiveParticleCount() == 1, "Particle is still alive after floor bounce");
+            VFX_TEST_CHECK(system.GetCollisionCount() == 1, "Collision count incremented on floor bounce");
+            const auto& pos = system.GetPool().GetPositions()[0];
+            const auto& vel = system.GetPool().GetVelocities()[0];
+            VFX_TEST_CHECK(pos.y >= 0.1f - 1e-4f, "Particle kept above floor plane");
+            VFX_TEST_CHECK(vel.y > 5.0f && vel.y < 7.0f, "Particle velocity reflected upwards with restitution damping");
+        }
+
+        // 2. Per-Collider KillOnCollision vs Global
+        {
+            Axle::ParticleEmitterConfig fireConfig;
+            fireConfig.Name = "Fire";
+            fireConfig.MaxParticles = 10;
+            fireConfig.EmissionRate = 0.0f;
+            fireConfig.Lifetime = { 2.0f, 2.0f };
+            fireConfig.Collision.Enabled = true;
+            fireConfig.Collision.CollisionMode = Axle::ParticleCollisionMode::PlanesAndBoxes;
+            fireConfig.Collision.KillOnCollision = false; // Global kill is FALSE
+
+            // Add plane with per-plane KillOnCollision = TRUE
+            Axle::ParticleCollisionPlane killPlane(glm::vec3(0.0f, 1.0f, 0.0f), 0.0f, 0.5f, 0.0f, true);
+            fireConfig.Collision.Planes.push_back(killPlane);
+
+            // Sub-emitter triggered on Collision targeting Sparks
+            fireConfig.SubEmitters.emplace_back(Axle::SubEmitterTrigger::Collision, "Sparks", 5, 1.0f);
+
+            Axle::ParticleEmitterConfig sparkConfig;
+            sparkConfig.Name = "Sparks";
+            sparkConfig.MaxParticles = 20;
+            sparkConfig.EmissionRate = 0.0f;
+            sparkConfig.Lifetime = { 1.0f, 1.0f };
+
+            std::vector<Axle::ParticleEmitterStack> stacks;
+            stacks.emplace_back("Fire", fireConfig);
+            stacks.emplace_back("Sparks", sparkConfig);
+            stacks[0].Initialize(100);
+            stacks[1].Initialize(101);
+
+            Axle::ParticleSpawnData spawnData;
+            spawnData.Position = glm::vec3(0.0f, 0.5f, 0.0f);
+            spawnData.Velocity = glm::vec3(0.0f, -10.0f, 0.0f);
+            spawnData.Lifetime = 2.0f;
+            stacks[0].System->GetPool().Spawn(spawnData);
+
+            stacks[0].System->Update(0.1f);
+            stacks[1].System->Update(0.1f);
+            Axle::DispatchEffectEvents(stacks);
+
+            VFX_TEST_CHECK(stacks[0].System->GetActiveParticleCount() == 0, "Particle killed by per-plane KillOnCollision");
+            VFX_TEST_CHECK(stacks[0].System->GetCollisionCount() == 1, "Collision occurred");
+            VFX_TEST_CHECK(stacks[1].System->GetActiveParticleCount() == 5, "Collision triggered 5 sparks to spawn");
+        }
+
+        // 3. Scene Physics Raycast Service Binding
+        {
+            Axle::ParticleEmitterConfig config;
+            config.MaxParticles = 10;
+            config.EmissionRate = 0.0f;
+            config.Lifetime = { 2.0f, 2.0f };
+            config.Collision.Enabled = true;
+            config.Collision.CollisionMode = Axle::ParticleCollisionMode::ScenePhysics;
+            config.Collision.Restitution = 0.8f;
+            config.Collision.Friction = 0.1f;
+            config.Collision.ParticleRadius = 0.05f;
+
+            bool raycastInvoked = false;
+            config.Collision.WorldRaycast = [&raycastInvoked](const glm::vec3& origin, const glm::vec3& dir, float maxDist, glm::vec3& outHitPoint, glm::vec3& outHitNormal) -> bool {
+                raycastInvoked = true;
+                if (dir.y < 0.0f) {
+                    float t = (origin.y - (-1.0f)) / (-dir.y);
+                    if (t >= 0.0f && t <= maxDist) {
+                        outHitPoint = origin + dir * t;
+                        outHitNormal = glm::vec3(0.0f, 1.0f, 0.0f);
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            Axle::ParticleSystem system(config);
+            system.SetSeed(777);
+
+            Axle::ParticleSpawnData spawnData;
+            spawnData.Position = glm::vec3(0.0f, -0.8f, 0.0f);
+            spawnData.Velocity = glm::vec3(0.0f, -5.0f, 0.0f);
+            spawnData.Lifetime = 2.0f;
+            system.GetPool().Spawn(spawnData);
+
+            system.Update(0.1f);
+
+            VFX_TEST_CHECK(raycastInvoked, "Physics raycast service callback was invoked");
+            VFX_TEST_CHECK(system.GetCollisionCount() == 1, "Collision registered from raycast hit");
+            VFX_TEST_CHECK(system.GetPool().GetVelocities()[0].y > 0.0f, "Velocity reflected upwards from raycast normal");
+        }
+
+        // 4. Persistence Round-Trip for Collision Module
+        {
+            Axle::ParticleEffectDefinition effectDef;
+            effectDef.SchemaVersion = 2;
+            effectDef.Name = "CollisionEffect";
+
+            Axle::EmitterDefinition emitter;
+            emitter.Id = "e1";
+            emitter.Name = "CollisionEmitter";
+            emitter.Config.Collision.Enabled = true;
+            emitter.Config.Collision.CollisionMode = Axle::ParticleCollisionMode::Floor;
+            emitter.Config.Collision.FloorHeight = -2.5f;
+            emitter.Config.Collision.FloorKill = true;
+            emitter.Config.Collision.Restitution = 0.75f;
+            emitter.Config.Collision.Friction = 0.35f;
+            emitter.Config.Collision.MinBounceSpeed = 0.15f;
+            emitter.Config.Collision.ParticleRadius = 0.12f;
+            emitter.Config.Collision.Planes.emplace_back(glm::vec3(1.0f, 0.0f, 0.0f), 5.0f, 0.9f, 0.1f, false);
+            emitter.Config.Collision.Boxes.emplace_back(glm::vec3(-5.0f), glm::vec3(5.0f), true, 0.8f, 0.2f, false);
+
+            effectDef.Emitters.push_back(emitter);
+
+            std::string serialized = Axle::ParticleEffectSerializer::Serialize(effectDef);
+            Axle::ParticleEffectDefinition loadedDef;
+            VFX_TEST_CHECK(Axle::ParticleEffectSerializer::Deserialize(serialized, loadedDef), "Deserialize collision effect succeeds");
+            VFX_TEST_CHECK(loadedDef.Emitters.size() == 1, "1 emitter loaded");
+
+            const auto& col = loadedDef.Emitters[0].Config.Collision;
+            VFX_TEST_CHECK(col.Enabled == true, "Collision enabled round-trips");
+            VFX_TEST_CHECK(col.CollisionMode == Axle::ParticleCollisionMode::Floor, "CollisionMode Floor round-trips");
+            VFX_TEST_CHECK(std::abs(col.FloorHeight - (-2.5f)) < 1e-4f, "FloorHeight round-trips");
+            VFX_TEST_CHECK(col.FloorKill == true, "FloorKill round-trips");
+            VFX_TEST_CHECK(std::abs(col.Restitution - 0.75f) < 1e-4f, "Restitution round-trips");
+            VFX_TEST_CHECK(std::abs(col.Friction - 0.35f) < 1e-4f, "Friction round-trips");
+            VFX_TEST_CHECK(std::abs(col.ParticleRadius - 0.12f) < 1e-4f, "ParticleRadius round-trips");
+            VFX_TEST_CHECK(col.Planes.size() == 1, "Planes collection round-trips");
+            VFX_TEST_CHECK(std::abs(col.Planes[0].Distance - 5.0f) < 1e-4f, "Plane distance round-trips");
+            VFX_TEST_CHECK(col.Boxes.size() == 1, "Boxes collection round-trips");
+            VFX_TEST_CHECK(col.Boxes[0].CollideInside == true, "Box CollideInside round-trips");
+        }
+
+        return true;
+    }
 }
 
 bool RunVFXEventsAndMeshUnitTests() {
@@ -237,5 +411,7 @@ bool RunVFXEventsAndMeshUnitTests() {
     VFX_TEST_CHECK(TestBoundedSubEmitterEventSpawning(), "TestBoundedSubEmitterEventSpawning failed");
     std::cout << "  - Running TestMeshSurfaceAreaWeightedSampling ...\n";
     VFX_TEST_CHECK(TestMeshSurfaceAreaWeightedSampling(), "TestMeshSurfaceAreaWeightedSampling failed");
+    std::cout << "  - Running TestParticleCollisionSimulation ...\n";
+    VFX_TEST_CHECK(TestParticleCollisionSimulation(), "TestParticleCollisionSimulation failed");
     return true;
 }

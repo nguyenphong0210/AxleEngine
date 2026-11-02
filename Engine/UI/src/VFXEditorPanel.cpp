@@ -963,9 +963,65 @@ namespace Axle {
             ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.35f, 1.0f), "Ground / Surface Collisions:");
             ImGui::Checkbox("Enable Collisions", &m_Config.Collision.Enabled);
             if (m_Config.Collision.Enabled) {
-                ImGui::SliderFloat("Restitution (Bounce)", &m_Config.Collision.Restitution, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("Friction (Tangential)", &m_Config.Collision.Friction, 0.0f, 1.0f, "%.2f");
-                ImGui::Checkbox("Kill on Collision", &m_Config.Collision.KillOnCollision);
+                const char* collisionModes[] = { "Planes & Boxes", "Floor Plane", "Scene Physics" };
+                int currentMode = static_cast<int>(m_Config.Collision.CollisionMode);
+                if (ImGui::Combo("Collision Mode", &currentMode, collisionModes, IM_ARRAYSIZE(collisionModes))) {
+                    m_Config.Collision.CollisionMode = static_cast<ParticleCollisionMode>(currentMode);
+                    SyncCurrentStackConfig();
+                }
+
+                if (m_Config.Collision.CollisionMode == ParticleCollisionMode::Floor) {
+                    if (ImGui::DragFloat("Floor Height (Y)", &m_Config.Collision.FloorHeight, 0.05f, -100.0f, 100.0f, "%.2f m")) {
+                        SyncCurrentStackConfig();
+                    }
+                    if (ImGui::Checkbox("Kill on Floor Impact", &m_Config.Collision.FloorKill)) {
+                        SyncCurrentStackConfig();
+                    }
+                } else if (m_Config.Collision.CollisionMode == ParticleCollisionMode::ScenePhysics) {
+                    ImGui::TextDisabled("Queries bound scene physics service (Jolt Raycast)");
+                }
+
+                if (ImGui::SliderFloat("Restitution (Bounce)", &m_Config.Collision.Restitution, 0.0f, 1.0f, "%.2f")) {
+                    SyncCurrentStackConfig();
+                }
+                if (ImGui::SliderFloat("Friction (Tangential)", &m_Config.Collision.Friction, 0.0f, 1.0f, "%.2f")) {
+                    SyncCurrentStackConfig();
+                }
+                if (ImGui::DragFloat("Collision Radius Margin", &m_Config.Collision.ParticleRadius, 0.01f, 0.001f, 1.0f, "%.3f m")) {
+                    SyncCurrentStackConfig();
+                }
+                if (ImGui::Checkbox("Kill on Collision (Global)", &m_Config.Collision.KillOnCollision)) {
+                    SyncCurrentStackConfig();
+                }
+
+                if (m_Config.Collision.CollisionMode == ParticleCollisionMode::PlanesAndBoxes) {
+                    ImGui::Separator();
+                    ImGui::Text("Planes (%zu):", m_Config.Collision.Planes.size());
+                    ImGui::SameLine();
+                    if (ImGui::Button("+ Add Plane")) {
+                        m_Config.Collision.Planes.emplace_back(glm::vec3(0.0f, 1.0f, 0.0f), 0.0f);
+                        SyncCurrentStackConfig();
+                    }
+                    for (size_t p = 0; p < m_Config.Collision.Planes.size(); ++p) {
+                        ImGui::PushID(static_cast<int>(p));
+                        auto& plane = m_Config.Collision.Planes[p];
+                        ImGui::Text("Plane %zu", p + 1);
+                        ImGui::SameLine();
+                        if (ImGui::Button("Remove")) {
+                            m_Config.Collision.Planes.erase(m_Config.Collision.Planes.begin() + p);
+                            SyncCurrentStackConfig();
+                            ImGui::PopID();
+                            break;
+                        }
+                        if (ImGui::DragFloat3("Normal", glm::value_ptr(plane.Normal), 0.02f, -1.0f, 1.0f)) {
+                            if (glm::length(plane.Normal) > 0.0001f) plane.Normal = glm::normalize(plane.Normal);
+                            SyncCurrentStackConfig();
+                        }
+                        if (ImGui::DragFloat("Distance", &plane.Distance, 0.05f)) SyncCurrentStackConfig();
+                        if (ImGui::Checkbox("Per-Plane Kill", &plane.KillOnCollision)) SyncCurrentStackConfig();
+                        ImGui::PopID();
+                    }
+                }
             }
 
             ImGui::Spacing();

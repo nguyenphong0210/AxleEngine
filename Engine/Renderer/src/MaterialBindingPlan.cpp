@@ -86,6 +86,12 @@ namespace Axle {
         }
     }
 
+    bool IsEngineUniform(const std::string& name) {
+        EngineUniform engUnif;
+        UniformKind engKind;
+        return IsEngineUniformName(name, engUnif, engKind);
+    }
+
     uint32_t GetUniformKindSize(UniformKind kind) {
         switch (kind) {
             case UniformKind::Float32:   return 4;

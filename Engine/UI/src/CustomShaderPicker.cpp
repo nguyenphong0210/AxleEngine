@@ -107,17 +107,8 @@ namespace Axle {
         auto source = FileSystem::ReadTextFile(resolved);
         if (source.empty()) { error = "The shader is empty or could not be read."; return false; }
         auto properties = ShaderPropertyParser::ParseFromHLSL(source);
-        std::vector<ShaderPropertyInstance> instances;
-        for (const auto& desc : properties) {
-            ShaderPropertyInstance instance;
-            instance.Desc = desc;
-            if (desc.Type == ShaderPropertyType::Float) instance.FloatVal = desc.MinValue;
-            else if (desc.Type == ShaderPropertyType::Color) instance.Vec4Val = glm::vec4(1.0f);
-            else if (desc.Type == ShaderPropertyType::Int) instance.IntVal = (int)desc.MinValue;
-            instances.push_back(instance);
-        }
         material.CustomShaderPath = ShaderLabel(assetRoot, resolved);
-        material.CustomProperties = std::move(instances);
+        material.CustomProperties = SynchronizeCustomProperties(properties, material.CustomProperties);
         return true;
     }
 

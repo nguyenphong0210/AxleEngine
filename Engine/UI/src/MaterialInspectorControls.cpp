@@ -5,6 +5,7 @@
 #include <Axle/TextureDescriptor.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Window.hpp>
+#include <Axle/ShaderDragDropDecoder.hpp>
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
@@ -265,6 +266,27 @@ namespace Axle {
                     changed|=ImGui::DragInt("##Value",&property.IntVal);
                 } else if (property.Desc.Type==ShaderPropertyType::Bool) {
                     changed|=ImGui::Checkbox("##Value",&property.BoolVal);
+                } else if (property.Desc.Type==ShaderPropertyType::Texture2D) {
+                    std::string texLabel = property.TexturePath.empty() ? "None (Drop texture here)" : std::filesystem::path(property.TexturePath).filename().string();
+                    ImGui::Button(texLabel.c_str(), ImVec2(-1.0f, 0));
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nDrop texture asset here or right-click to clear.", property.TexturePath.empty() ? "No texture assigned" : property.TexturePath.c_str());
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const auto* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                            auto decoded = DecodeAssetPayload(payload->Data, payload->DataSize);
+                            if (decoded.Success) {
+                                property.TexturePath = decoded.Path.generic_string();
+                                changed = true;
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+                    if (ImGui::BeginPopupContextItem("CustomTextureActions")) {
+                        if (ImGui::MenuItem("Clear Texture", nullptr, false, !property.TexturePath.empty())) {
+                            property.TexturePath.clear();
+                            changed = true;
+                        }
+                        ImGui::EndPopup();
+                    }
                 } else {
                     ImGui::TextUnformatted(property.TexturePath.empty()?"No texture assigned":property.TexturePath.c_str());
                 }

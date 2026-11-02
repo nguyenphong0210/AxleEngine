@@ -71,5 +71,13 @@ namespace Axle {
         static std::string FormatDisplayName(const std::string& identifier);
     };
 
+    // Synchronize material custom properties against a newly parsed or reloaded set of property descriptors.
+    // Preserves compatible values when names and types match, initializes new properties with defaults,
+    // and filters out engine uniforms and function-local variables.
+    std::vector<ShaderPropertyInstance> SynchronizeCustomProperties(
+        const std::vector<ShaderPropertyDesc>& newProperties,
+        const std::vector<ShaderPropertyInstance>& existingInstances
+    );
+
 } // namespace Axle
 

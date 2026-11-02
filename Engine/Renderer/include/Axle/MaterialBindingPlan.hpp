@@ -179,6 +179,8 @@ namespace Axle {
     };
 
     // Pure functions
+    bool IsEngineUniform(const std::string& name);
+
     BindingPlanResult BuildMaterialBindingPlan(
         const RHI::RHIShaderReflection& mergedReflection,
         const ValidatedShaderInterface& shaderInterface,

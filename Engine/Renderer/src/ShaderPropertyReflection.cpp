@@ -1,4 +1,5 @@
 #include <Axle/ShaderPropertyReflection.hpp>
+#include <Axle/MaterialBindingPlan.hpp>
 #include <algorithm>
 #include <sstream>
 #include <regex>
@@ -95,8 +96,11 @@ namespace Axle {
         static const std::regex textureRegex(R"(\[\s*Texture\s*\])");
 
         // Variable declaration matching
-        // e.g. "float u_Dissolve;" or "float4 u_Color;" or "Texture2D u_Noise;"
-        static const std::regex declRegex(R"((?:float4|float3|float2|float|int|uint|bool|Texture2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=\s*([^;]+))?;)");
+        // e.g. "float u_Dissolve;" or "float4 u_Color;" or "Texture2D u_Noise : register(t0, space1);"
+        static const std::regex declRegex(R"((?:float4|float3|float2|float|int|uint|bool|Texture2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*[^=;]+)?\s*(?:=\s*([^;]+))?;)");
+
+        bool inCbuffer = false;
+        int braceDepth = 0;
 
         while (std::getline(stream, line)) {
             // Trim whitespace
@@ -105,6 +109,19 @@ namespace Axle {
                 continue;
             }
             std::string trimmed = line.substr(start);
+
+            // Track cbuffer and brace scopes to distinguish uniforms from function-local variables
+            if (trimmed.find("cbuffer ") != std::string::npos) {
+                inCbuffer = true;
+            }
+            for (char ch : trimmed) {
+                if (ch == '{') {
+                    braceDepth++;
+                } else if (ch == '}') {
+                    if (braceDepth > 0) braceDepth--;
+                    if (braceDepth == 0) inCbuffer = false;
+                }
+            }
 
             // Check for Header annotation
             std::smatch match;
@@ -147,10 +164,13 @@ namespace Axle {
                 std::string varName = match[1].str();
                 std::string defaultValStr = match[2].matched ? match[2].str() : "";
 
-                // Ignore standard engine root constant variables
-                if (varName == "u_Model" || varName == "u_ViewProjection" ||
-                    varName == "u_CameraPosition" || varName == "u_SunDirection" ||
-                    varName == "u_SunColor") {
+                // Exclude function-local variables (inside non-cbuffer scopes without explicit property annotations)
+                if (braceDepth > 0 && !inCbuffer && !pendingRange && !pendingColor && !pendingTexture) {
+                    continue;
+                }
+
+                // Ignore standard engine uniforms
+                if (IsEngineUniform(varName)) {
                     // Reset pending annotations
                     pendingRange = false;
                     pendingColor = false;
@@ -220,9 +240,11 @@ namespace Axle {
         if (reflection) {
             for (const auto& cb : reflection->ConstantBuffers) {
                 // Skip engine internal global buffers
-                if (cb.Name == "SceneConstants") continue;
+                if (cb.Name == "SceneConstants" || cb.Name == "EngineScene" || cb.Name == "EngineObject") continue;
 
                 for (const auto& var : cb.Variables) {
+                    if (IsEngineUniform(var.Name)) continue;
+
                     auto it = propIndices.find(var.Name);
                     if (it != propIndices.end()) {
                         properties[it->second].Offset = var.Offset;
@@ -230,7 +252,7 @@ namespace Axle {
                         properties[it->second].ConstantBufferName = cb.Name;
                     } else {
                         // Unannotated variable discovered in DXC reflection
-                        if (var.Name == "u_Model" || var.Name == "u_ViewProjection") continue;
+                        if (IsEngineUniform(var.Name)) continue;
 
                         ShaderPropertyDesc desc;
                         desc.Name = var.Name;
@@ -281,6 +303,55 @@ namespace Axle {
         }
 
         return properties;
+    }
+
+    std::vector<ShaderPropertyInstance> SynchronizeCustomProperties(
+        const std::vector<ShaderPropertyDesc>& newProperties,
+        const std::vector<ShaderPropertyInstance>& existingInstances)
+    {
+        std::unordered_map<std::string, const ShaderPropertyInstance*> existingMap;
+        for (const auto& inst : existingInstances) {
+            existingMap[inst.Desc.Name] = &inst;
+        }
+
+        std::vector<ShaderPropertyInstance> result;
+        for (const auto& desc : newProperties) {
+            if (IsEngineUniform(desc.Name)) {
+                continue;
+            }
+
+            ShaderPropertyInstance inst;
+            inst.Desc = desc;
+
+            auto it = existingMap.find(desc.Name);
+            if (it != existingMap.end() && it->second->Desc.Type == desc.Type) {
+                // Compatible! Preserve existing saved values
+                inst.FloatVal = it->second->FloatVal;
+                inst.Vec4Val = it->second->Vec4Val;
+                inst.IntVal = it->second->IntVal;
+                inst.BoolVal = it->second->BoolVal;
+                inst.TexturePath = it->second->TexturePath;
+            } else {
+                // Initialize with descriptor defaults
+                if (desc.Type == ShaderPropertyType::Float) {
+                    inst.FloatVal = (desc.DefaultFloat != 0.0f) ? desc.DefaultFloat : (desc.HasRange ? desc.DefaultFloat : desc.MinValue);
+                } else if (desc.Type == ShaderPropertyType::Color ||
+                           desc.Type == ShaderPropertyType::Float2 ||
+                           desc.Type == ShaderPropertyType::Float3 ||
+                           desc.Type == ShaderPropertyType::Float4) {
+                    inst.Vec4Val = desc.DefaultVec4;
+                } else if (desc.Type == ShaderPropertyType::Int) {
+                    inst.IntVal = desc.DefaultInt;
+                } else if (desc.Type == ShaderPropertyType::Bool) {
+                    inst.BoolVal = desc.DefaultBool;
+                } else if (desc.Type == ShaderPropertyType::Texture2D) {
+                    inst.TexturePath = desc.DefaultTexturePath;
+                }
+            }
+            result.push_back(std::move(inst));
+        }
+
+        return result;
     }
 
 } // namespace Axle

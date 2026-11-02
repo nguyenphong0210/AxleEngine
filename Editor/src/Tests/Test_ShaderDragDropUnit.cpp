@@ -1,5 +1,6 @@
 #include "MaterialTestHarness.hpp"
 #include <Axle/ShaderDragDropDecoder.hpp>
+#include <Axle/ShaderPropertyReflection.hpp>
 #include <cstring>
 
 using namespace Axle;
@@ -122,6 +123,184 @@ namespace {
         return true;
     }
 
+    bool TestCustomPropertySynchronization() {
+        // Build initial instances representing user-edited properties in inspector
+        std::vector<ShaderPropertyInstance> existingInstances;
+        {
+            ShaderPropertyInstance p1;
+            p1.Desc.Name = "u_RoughnessMultiplier";
+            p1.Desc.Type = ShaderPropertyType::Float;
+            p1.FloatVal = 0.77f;
+            existingInstances.push_back(p1);
+
+            ShaderPropertyInstance p2;
+            p2.Desc.Name = "u_CustomTint";
+            p2.Desc.Type = ShaderPropertyType::Color;
+            p2.Vec4Val = glm::vec4(1.0f, 0.5f, 0.2f, 1.0f);
+            existingInstances.push_back(p2);
+
+            ShaderPropertyInstance p3;
+            p3.Desc.Name = "u_SampleCount";
+            p3.Desc.Type = ShaderPropertyType::Int;
+            p3.IntVal = 16;
+            existingInstances.push_back(p3);
+
+            ShaderPropertyInstance p4;
+            p4.Desc.Name = "u_PatternMap";
+            p4.Desc.Type = ShaderPropertyType::Texture2D;
+            p4.TexturePath = "textures/custom_pattern.png";
+            existingInstances.push_back(p4);
+
+            ShaderPropertyInstance p5;
+            p5.Desc.Name = "u_ModeChange";
+            p5.Desc.Type = ShaderPropertyType::Int;
+            p5.IntVal = 42;
+            existingInstances.push_back(p5);
+        }
+
+        // New shader has:
+        // - u_RoughnessMultiplier (same type -> preserve 0.77f)
+        // - u_CustomTint (same type -> preserve vec4)
+        // - u_SampleCount (same type -> preserve 16)
+        // - u_PatternMap (same type -> preserve texture path)
+        // - u_ModeChange (changed to Float -> must reset to default!)
+        // - u_BrandNewParam (new -> default 0.5f)
+        // - u_Model, u_View, u_BaseColor (engine uniforms -> must be ignored!)
+        std::vector<ShaderPropertyDesc> newDescs;
+        {
+            ShaderPropertyDesc d1;
+            d1.Name = "u_RoughnessMultiplier";
+            d1.Type = ShaderPropertyType::Float;
+            d1.DefaultFloat = 0.1f;
+            newDescs.push_back(d1);
+
+            ShaderPropertyDesc d2;
+            d2.Name = "u_CustomTint";
+            d2.Type = ShaderPropertyType::Color;
+            d2.DefaultVec4 = glm::vec4(1.0f);
+            newDescs.push_back(d2);
+
+            ShaderPropertyDesc d3;
+            d3.Name = "u_SampleCount";
+            d3.Type = ShaderPropertyType::Int;
+            d3.DefaultInt = 4;
+            newDescs.push_back(d3);
+
+            ShaderPropertyDesc d4;
+            d4.Name = "u_PatternMap";
+            d4.Type = ShaderPropertyType::Texture2D;
+            newDescs.push_back(d4);
+
+            ShaderPropertyDesc d5;
+            d5.Name = "u_ModeChange";
+            d5.Type = ShaderPropertyType::Float; // Changed type!
+            d5.DefaultFloat = 3.14f;
+            newDescs.push_back(d5);
+
+            ShaderPropertyDesc d6;
+            d6.Name = "u_BrandNewParam";
+            d6.Type = ShaderPropertyType::Float;
+            d6.HasRange = true;
+            d6.DefaultFloat = 0.5f;
+            newDescs.push_back(d6);
+
+            // Engine uniforms that must be filtered out
+            ShaderPropertyDesc eng1; eng1.Name = "u_Model"; eng1.Type = ShaderPropertyType::Float4; newDescs.push_back(eng1);
+            ShaderPropertyDesc eng2; eng2.Name = "u_View"; eng2.Type = ShaderPropertyType::Float4; newDescs.push_back(eng2);
+            ShaderPropertyDesc eng3; eng3.Name = "u_BaseColor"; eng3.Type = ShaderPropertyType::Color; newDescs.push_back(eng3);
+        }
+
+        auto syncd = SynchronizeCustomProperties(newDescs, existingInstances);
+
+        // Verify count: 6 user properties (all 3 engine uniforms filtered out)
+        MAT_TEST_CHECK(syncd.size() == 6, "Expected 6 user properties (engine uniforms must be excluded)");
+
+        // Map syncd properties by name
+        std::unordered_map<std::string, const ShaderPropertyInstance*> syncdMap;
+        for (const auto& item : syncd) syncdMap[item.Desc.Name] = &item;
+
+        // 1. Preserved compatible float
+        MAT_TEST_CHECK(syncdMap.count("u_RoughnessMultiplier") > 0, "Missing u_RoughnessMultiplier");
+        MAT_TEST_APPROX_EQUAL(syncdMap["u_RoughnessMultiplier"]->FloatVal, 0.77f, 1e-5f, "Compatible FloatVal must be preserved");
+
+        // 2. Preserved compatible color
+        MAT_TEST_CHECK(syncdMap.count("u_CustomTint") > 0, "Missing u_CustomTint");
+        MAT_TEST_APPROX_EQUAL(syncdMap["u_CustomTint"]->Vec4Val.y, 0.5f, 1e-5f, "Compatible Vec4Val must be preserved");
+
+        // 3. Preserved compatible int
+        MAT_TEST_CHECK(syncdMap.count("u_SampleCount") > 0, "Missing u_SampleCount");
+        MAT_TEST_CHECK(syncdMap["u_SampleCount"]->IntVal == 16, "Compatible IntVal must be preserved");
+
+        // 4. Preserved compatible texture
+        MAT_TEST_CHECK(syncdMap.count("u_PatternMap") > 0, "Missing u_PatternMap");
+        MAT_TEST_CHECK(syncdMap["u_PatternMap"]->TexturePath == "textures/custom_pattern.png", "Compatible texture path must be preserved");
+
+        // 5. Incompatible type reset to new default
+        MAT_TEST_CHECK(syncdMap.count("u_ModeChange") > 0, "Missing u_ModeChange");
+        MAT_TEST_CHECK(syncdMap["u_ModeChange"]->Desc.Type == ShaderPropertyType::Float, "u_ModeChange must adopt new type");
+        MAT_TEST_APPROX_EQUAL(syncdMap["u_ModeChange"]->FloatVal, 3.14f, 1e-5f, "Incompatible type must adopt default value");
+
+        // 6. Brand new property receives default
+        MAT_TEST_CHECK(syncdMap.count("u_BrandNewParam") > 0, "Missing u_BrandNewParam");
+        MAT_TEST_APPROX_EQUAL(syncdMap["u_BrandNewParam"]->FloatVal, 0.5f, 1e-5f, "New property must adopt default value");
+
+        // 7. Verify engine uniforms are not present
+        MAT_TEST_CHECK(syncdMap.count("u_Model") == 0, "Engine uniform u_Model must not be present");
+        MAT_TEST_CHECK(syncdMap.count("u_View") == 0, "Engine uniform u_View must not be present");
+        MAT_TEST_CHECK(syncdMap.count("u_BaseColor") == 0, "Engine uniform u_BaseColor must not be present");
+
+        return true;
+    }
+
+    bool TestFunctionLocalVariableAndEngineUniformFiltering() {
+        // HLSL snippet containing cbuffer parameters, engine uniforms, and function local variables
+        const std::string hlslSource = R"(
+            cbuffer ObjectConstants : register(b0, space0) {
+                float4x4 u_Model;
+                float4   u_BaseColor;
+            };
+
+            cbuffer MaterialParameters : register(b2, space0) {
+                [Range(0.0, 1.0)]
+                float u_ExposedRoughness = 0.5f;
+
+                [Color]
+                float4 u_ExposedTint;
+            };
+
+            Texture2D u_ExposedTexture : register(t0, space1);
+
+            float4 PSMain() : SV_Target0 {
+                float localVariableA = 12.34f;
+                int localLoopCounter = 0;
+                float4 localColor = float4(1, 1, 1, 1);
+                return localColor * localVariableA;
+            }
+        )";
+
+        auto parsed = ShaderPropertyParser::ParseFromHLSL(hlslSource);
+
+        std::unordered_map<std::string, const ShaderPropertyDesc*> parsedMap;
+        for (const auto& p : parsed) parsedMap[p.Name] = &p;
+
+        // Check valid properties
+        MAT_TEST_CHECK(parsedMap.count("u_ExposedRoughness") > 0, "u_ExposedRoughness must be parsed");
+        MAT_TEST_CHECK(parsedMap["u_ExposedRoughness"]->HasRange, "u_ExposedRoughness must have range");
+        MAT_TEST_CHECK(parsedMap.count("u_ExposedTint") > 0, "u_ExposedTint must be parsed");
+        MAT_TEST_CHECK(parsedMap.count("u_ExposedTexture") > 0, "u_ExposedTexture must be parsed");
+
+        // Check engine uniforms are filtered out
+        MAT_TEST_CHECK(parsedMap.count("u_Model") == 0, "Engine uniform u_Model must be filtered out");
+        MAT_TEST_CHECK(parsedMap.count("u_BaseColor") == 0, "Engine uniform u_BaseColor must be filtered out");
+
+        // Check function-local variables are filtered out
+        MAT_TEST_CHECK(parsedMap.count("localVariableA") == 0, "Function local variable localVariableA must not be parsed");
+        MAT_TEST_CHECK(parsedMap.count("localLoopCounter") == 0, "Function local variable localLoopCounter must not be parsed");
+        MAT_TEST_CHECK(parsedMap.count("localColor") == 0, "Function local variable localColor must not be parsed");
+
+        return true;
+    }
+
 } // namespace
 
 bool RunShaderDragDropUnitTests() {
@@ -136,6 +315,12 @@ bool RunShaderDragDropUnitTests() {
 
     std::cout << "  - Running TestNonAsciiUtf8Payloads ...\n";
     if (!TestNonAsciiUtf8Payloads()) return false;
+
+    std::cout << "  - Running TestCustomPropertySynchronization ...\n";
+    if (!TestCustomPropertySynchronization()) return false;
+
+    std::cout << "  - Running TestFunctionLocalVariableAndEngineUniformFiltering ...\n";
+    if (!TestFunctionLocalVariableAndEngineUniformFiltering()) return false;
 
     return true;
 }

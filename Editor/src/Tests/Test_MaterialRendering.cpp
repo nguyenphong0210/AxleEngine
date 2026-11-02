@@ -511,6 +511,18 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     lm.CustomProperties={tintProperty({0,0,1,1}),gain,enabled};
     auto recovered=render();
     if (!check(lm.CustomShaderDiagnostic.empty() && sum(recovered,0,64,2)>sum(recovered,0,64,0)*2+1000,"Custom shader recovers after file restoration")) return false;
+    lm.MaterialAsset=std::make_shared<Material>("ReflectedPreviewAsset");
+    lm.SyncToAsset();
+    lm.MaterialAsset->SetCustomProperties({});
+    auto assetDefaults=render();
+    const auto& reflected=lm.MaterialAsset->GetCustomProperties();
+    auto findProperty=[&](const char* name) {return std::find_if(reflected.begin(),reflected.end(),[&](const auto& p){return p.Desc.Name==name;});};
+    auto reflectedTint=findProperty("Tint"),reflectedGain=findProperty("Gain"),reflectedEnabled=findProperty("Enabled");
+    if(!check(!assetDefaults.empty() && reflectedTint!=reflected.end() && reflectedTint->Desc.Type==ShaderPropertyType::Color &&
+        reflectedGain!=reflected.end() && reflectedGain->FloatVal==1 && reflectedEnabled!=reflected.end() && reflectedEnabled->IntVal==1,
+        "Shared preview asset receives reflected schema and template defaults"))return false;
+    writeShader("invalid HLSL");
+    if(!check(render()==assetDefaults && !lm.MaterialAsset->GetCustomShaderDiagnostic().empty(),"Shared preview asset receives reload diagnostics while last good pixels remain"))return false;
     std::cout << "[106 GPU] PASS: Surface maps, layered shading, glass, custom/legacy programs, per-draw bindings and reload recovery." << std::endl;
     return true;
 }

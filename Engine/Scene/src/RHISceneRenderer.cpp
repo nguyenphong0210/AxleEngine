@@ -1387,6 +1387,7 @@ namespace Axle {
                 std::shared_ptr<const CustomReadyGeneration> CustomGeneration;
                 PackedMaterialResultData PackedConstants;
                 std::vector<TextureRequest> TextureRequests;
+                entt::entity DiagnosticEntity = entt::null;
             };
 
             std::vector<DrawItem> opaqueQueue;
@@ -1430,6 +1431,7 @@ namespace Axle {
                     glm::mat4 worldMat = scene->GetWorldTransform(entityID);
 
                     DrawItem item;
+                    item.DiagnosticEntity=entityID;
                     item.Mesh = mesh;
                     item.PushConsts.Model = worldMat;
                     item.PushConsts.ColorPrimary = mc.Color1;
@@ -1464,7 +1466,13 @@ namespace Axle {
                             diagnostic(selected.Diagnostic);
                             if (selected.Kind==ProgramSelectionKind::Custom && selected.Generation) {
                                 const auto& plan=selected.Generation->BindingPlan;
-                                if (mat.CustomShaderGeneration!=selected.Generation->GenerationID) {
+                                auto matchesSchema=[&](const auto& properties) {
+                                    return properties.size()==plan.PropertySchema.size() &&
+                                        std::equal(properties.begin(),properties.end(),plan.PropertySchema.begin(),
+                                            [](const auto& property,const auto& desc){return property.Desc==desc;});
+                                };
+                                if (mat.CustomShaderGeneration!=selected.Generation->GenerationID || !matchesSchema(mat.CustomProperties) ||
+                                    (mat.MaterialAsset && !matchesSchema(mat.MaterialAsset->GetCustomProperties()))) {
                                     mat.CustomProperties=SynchronizeCustomProperties(plan.PropertySchema,mat.CustomProperties);
                                     mat.CustomShaderGeneration=selected.Generation->GenerationID;
                                     if (mat.MaterialAsset) mat.MaterialAsset->SetCustomProperties(mat.CustomProperties);
@@ -1578,6 +1586,10 @@ namespace Axle {
                     m_CommandBuffer.SetRootDescriptor(1,m_LightBuffer.GetCBV());
                     currentPipeline=nullptr;
                     if (drawn) return;
+                    if(auto* material=registry.try_get<MaterialComponent>(item.DiagnosticEntity)) {
+                        material->CustomShaderDiagnostic="Custom draw pipeline or resource preparation failed; using built-in material.";
+                        if(material->MaterialAsset)material->MaterialAsset->SetCustomShaderDiagnostic(material->CustomShaderDiagnostic);
+                    }
                 }
                 nri::Pipeline* needed = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
                     ? m_PipelineHDR

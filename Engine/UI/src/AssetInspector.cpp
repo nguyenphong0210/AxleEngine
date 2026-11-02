@@ -505,6 +505,9 @@ namespace Axle {
             LoadMaterialAsset(path, m_ActiveMaterialAsset);
             m_LoadedMaterialPath = path;
             m_MaterialAssetLoaded = true;
+            // The renderer publishes reflected schema and diagnostics into this
+            // material instance. Share it from the first frame, before any edit.
+            if (m_AssetPreviewPanel) m_AssetPreviewPanel->UpdateMaterialPreview(m_ActiveMaterialAsset);
         }
 
         bool changed = false;

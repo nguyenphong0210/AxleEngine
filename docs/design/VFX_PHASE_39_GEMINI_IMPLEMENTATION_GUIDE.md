@@ -8,6 +8,12 @@ IDs A1-J4, acceptance gates and commit subjects. This companion specifies how
 to implement those contracts. It does not create production APIs or establish
 any new runtime acceptance result. Reinspect HEAD and user changes before work.
 
+Follow-up status: the implementation has received a corrective integration
+review. See the [current review/acceptance report](VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md)
+for actual source names, fixes and verification. In particular, current code
+uses `VFXEditorDocument`, `ParticleEmitterStack` and a private `RHISceneRenderer`
+preview; suggested class names below are not a second set of production APIs.
+
 ## 1. Assignment and execution limits
 
 Implement the scoped Phase 39 editor/runtime work and meaningful CPU unit tests,

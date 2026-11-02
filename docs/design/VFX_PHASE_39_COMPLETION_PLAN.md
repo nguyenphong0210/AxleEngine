@@ -1,6 +1,6 @@
 # Phase 39: VFX Editor Completion Plan
 
-Status: **planned implementation; Phase 39 reopened**.
+Status: **corrective implementation delivered; interactive editor/OpenGL acceptance remains open**.
 Reviewed: 2026-11-02.
 
 This plan replaces the earlier interpretation that a three-column panel and
@@ -15,6 +15,11 @@ proposed C++ types, algorithms, integration flows, explicit fixtures and a
 copyable assignment prompt for a code/CPU-test-only implementer. Phase 38.3 material UI
 acceptance remains a separate user-owned task; this plan does not close it or
 start Phase 40.
+
+Current implementation and automated/physical verification are recorded in the
+[follow-up review and acceptance report](VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
+The gaps in Section 2 describe the pre-implementation baseline; proposed type
+names and commit subjects below are design guidance rather than proof of closure.
 
 ## 1. Delivery goal and boundaries
 

@@ -7,9 +7,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Phase Status**: Phases 1-37 and the Phase 38/38.1/38.2 foundation milestones are recorded as completed below. **Phase 38.3 remains open for its outstanding acceptance checks; Phase 39 is fully implemented and CPU-tested, remaining open for physical GPU/UI acceptance. Phase 40 is not started.**
-* **Automated Test Verification**: Record results per suite and backend rather than treating an aggregate pass count as feature acceptance. Material CPU suites and regressions through Step 106 have recorded results; VFX CPU unit tests (`AxleVFXUnitTests`, 7 suites, 100% pass) and Step 102 (102.1–102.6 pass, 102.7 marked NOT RUN) have recorded results; physical GPU and interactive UI acceptance remain pending.
-* **Upcoming Focus**: **Phase 39 Physical GPU & UI Acceptance**, followed by **Phase 40: Skeletal Animation Studio**. Remaining Phase 38.3 manual acceptance is tracked separately for the user. See the [VFX completion plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md) and [material acceptance report](docs/design/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md).
+* **Phase Status**: Phases 1-37 and the Phase 38/38.1/38.2 foundations are recorded below. **Phase 38.3 remains open for its outstanding acceptance checks. Phase 39 corrective implementation passes CPU and physical DX12/Vulkan checks; interactive UI and OpenGL regression remain open. Phase 40 is not started.**
+* **Automated Test Verification**: Record evidence per suite/backend. VFX CPU (7 suites), physical DX12/Vulkan VFX readbacks, Step 102 with physical DX12, and material Step 106 on both backends pass. Interactive VFX UI/OpenGL checks and separately tracked material manual checks remain pending. See the [VFX review and acceptance report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
+* **Upcoming Focus**: **Phase 39 Interactive UI Acceptance & OpenGL Regression** (CPU and physical DX12/Vulkan checks pass), followed by **Phase 40: Skeletal Animation Studio**. Remaining Phase 38.3 manual acceptance is tracked separately for the user. See the [VFX completion plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md) and [material acceptance report](docs/design/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md).
 
 ### 🛡️ Core Engineering & Contribution Principles
 1. **Language Standard**: All source code, header files, docstrings, architectural documentation, commit messages, and automated tests must be written exclusively in **English**.
@@ -671,74 +671,64 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
       - [ ] Verify camera/lights stay fixed during the intended preview object rotation.
 
 - [ ] **Phase 39: Visual Particle & VFX Studio - End-to-End Editor Completion (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Editor`)**
-  - **Status (2026-11-02): All production wiring, runtime features, and CPU unit tests implemented (Packages A1–J3 committed).** 7 CPU unit-test suites in `AxleVFXUnitTests` and historical Step 102 pass 100%. Physical DX12/Vulkan GPU integration and interactive UI editor acceptance are prepared and registered but marked explicitly as **NOT RUN** in this headless environment. Phase 39 remains **OPEN** pending external physical verification. Do not begin Phase 40.
-  - **Detailed plan**: [Phase 39 VFX Editor Completion Plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md).
-  - **Coding guide**: [Gemini implementation guide](docs/design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md).
-  - [x] **Existing foundations (not full editor acceptance)**:
-    - [x] CPU particle pools, emitter stacks, burst evaluation, basic shapes, collision solvers, runtime child-system APIs and flipbook calculations.
-    - [x] VFXEditorPanel window with emitter list, transport controls, module groups and curve/color-gradient widgets.
-    - [x] Single-emitter asset serialization and Step 102 CPU assertions; replaced misleading historical completion message with accurate multi-emitter status.
-  - [x] **A - Selection, Ownership & Lifecycle**:
-    - [x] **A1 (Selection and Lifetime Guarding)**: Made selection idempotent (`BindSelectedEntity`); preserved active emitter selection, dirty edits, and preview playback time across repeated selection. Handled entity deletion and scene teardown cleanly (`DetachSceneContext`) (`commit 84b48a7`).
-    - [x] **A2 (Preview Runtime Isolation)**: Decoupled preview runtime (`m_PreviewEffectInstance`) from scene simulation. Scene particle pools and preview particle instances operate in completely separate memory allocations without crosstalk or double simulation (`commit 90fd6f1`).
-    - [x] **A3 (Edit Synchronization & Disable Preservation)**: Synchronized module edits to intended emitter definitions without replacing primary component stacks. Preserved authored emitter enabled/disabled states across Play/Pause/Restart transport cycles (`commit a434397`).
-  - [x] **B - Versioned Effect Assets & Scene Persistence**:
-    - [x] **B1 (Minimal Definition Boundary)**: Established `ParticleEffectDefinition` and `ParticleEmitterDefinition` with stable string UUIDs, schema versioning (v2), complete authored modules, and distinct runtime counters (`commit a75b41e`).
-    - [x] **B2 (Multi-Emitter Asset Serialization & Migration)**: Implemented transactional multi-emitter serialization (`ParticleEffectSerializer`) for `.axle_vfx` and `.axleasset`. Supported automatic lossless migration of legacy single-emitter assets to versioned multi-emitter containers (`commit 53d3854`).
-    - [x] **B3 (Scene Multi-Emitter Round-Trip)**: Extended `SceneSerializer` to serialize and deserialize multi-emitter effect stacks, inline effect definitions, and asset references (`EffectAssetPath`) with 100% round-trip fidelity (`commit 77b584b`).
-  - [x] **C - Playback & Deterministic Scrubbing**:
-    - [x] **C1 (Duration, Looping & Bounded Bursts)**: Implemented finite effect duration, loop restart boundaries, PlayOnAwake, and bounded burst catch-up preventing particle explosion during large delta times (`commit faa79e1`).
-    - [x] **C2 (Deterministic Seeded Random Streams)**: Isolated PCG-based deterministic pseudo-random number streams per effect instance (`ParticleRandomStream`), ensuring reproducible particle trajectories, colors, and burst distributions across replays (`commit b701463`).
-    - [x] **C3 (Fixed-step Transport & Simulation Scrubbing)**: Added fixed-step simulation controller (`TransportController`) supporting Play, Pause, Stop, Step Forward (fixed dt), playback speed scaling (0.1x–5.0x), and deterministic timeline scrubbing (`SeekTo`) from t=0 (`commit ec51ea1`).
-  - [x] **D - RHI Preview & Multi-Emitter Rendering**:
-    - [x] **D1 (Per-Draw Buffers & Descriptors Isolation)**: Isolated particle vertex buffers, dynamic instance buffers, and descriptor sets per emitter draw in `RHIParticleRenderer`, preventing buffer overwrites across multi-emitter passes (`commit d05dcfd`).
-    - [x] **D2 (Active RHI Preview Viewport Rendering)**: Rendered preview particles directly through the active RHI backend (DX12/Vulkan) in `VFXEditorPanel` with camera orbit, grid overlay, bounding box visualizer, and safe swapchain resize handling (`commit f20f1dd`).
-    - [x] **D3 (Emitter Transforms, Sorting & Batch Capacity)**: Supported local vs world simulation space, camera-distance back-to-front sorting for alpha particles, and multi-batch chunking exceeding 20,000 particles (`commit 0fef6f3`).
-  - [x] **E - Complete VFX Authoring Session**:
-    - [x] **E1 (Document Model Open/Save & Dirty State)**: Implemented `VFXDocumentModel` managing New, Open, Save, Save As, dirty state tracking (`*`), unsaved change prompts, and direct Content Browser asset loading (`commit b71c066`).
-    - [x] **E2 (Manage Stable Emitter Stacks & References)**: Implemented stable emitter operations: Add, Duplicate, Delete, Rename, Reorder (Move Up/Down), Solo, and Mute with reference-aware dependency checks (`commit 2146839`).
-    - [x] **E3 (Unify Module Editing & Scene Apply Workflows)**: Unified module editing across narrow/wide panel layouts, module reset toggles, live scene Apply, and "Make Unique" / shared asset reload workflows (`commit a6e9ff6`).
-  - [x] **F - Texture, Material & Depth-Aware Shading**:
-    - [x] **F1 (Bind Authored Emitter Textures in Preview & Scene)**: Added searchable per-emitter texture slots with drag-and-drop ingestion, thumbnail preview, clear actions, and live GPU shader resource binding (`commit 7a6220f`).
-    - [x] **F2 (Apply Particle-Compatible Material Properties)**: Extracted and applied particle-compatible material properties (albedo tint, emissive intensity, roughness/metallic lighting parameters) from assigned `Material` assets (`commit 9855b5e`).
-    - [x] **F3 (Explicit Cutout & Depth-Aware Particle Shading)**: Implemented `Cutout` alpha testing (`AlphaCutoff`), two-sided culling, camera-depth fading, and analytical soft-particle depth intersection fallback in HLSL/shaders (`commit 1d75306`).
-  - [x] **G - Undo/Redo, Curves & Gradient Alpha**:
-    - [x] **G1 (Undoable Edit Commands)**: Added snapshot-based `EffectEditCommand` undo/redo stack in `VFXDocumentModel` tracking clean save tokens and restoring selection states (`commit 921ff43`).
-    - [x] **G2 (Independent Curve & Color/Alpha Key Editing)**: Completed independent spline curve editing (`VFXCurveWidget`) and gradient color/alpha key editing (`VFXColorGradientWidget`) per emitter without static state leakage (`commit 921ff43`).
-  - [x] **H - Authored Sub-Emitter Relationships**:
-    - [x] **H1 (Resolve Authored Sub-Emitter Graphs Safely)**: Resolved sub-emitter target IDs into runtime effect instances, validated DAG cycle rejection, and prevented duplicate recursive updates (`commit 92d6c31`).
-    - [x] **H2 (Bounded Inherited Particle Event Spawning)**: Implemented decoupled `ParticleEvent` queue for Birth, Collision, and Death triggers with budget bounds, probability, and inherited color/velocity multipliers (`commit 8babaa9`).
-  - [x] **I - Real Mesh Emission & Collision Workflow**:
-    - [x] **I1 (Sample Authored Mesh Surfaces by Triangle Area)**: Implemented `ParticleMeshSampler` utilizing cumulative area distribution (CDF) and Turk's square-root barycentric sampling with degenerate face handling and fallback diagnostics (`commit 89b5d12`).
-    - [x] **I2 (Persist and Bind Collision Geometry and Physics Services)**: Persisted collision planes, bounding boxes, analytic floor bounce/kill (`ParticleCollisionConfig`), and decoupled `PhysicsRaycastCallback` service bridge (`commit c9bdc09`).
-  - [ ] **J - Reference Effects & Acceptance**:
-    - [x] **J1 (Device-Free CPU Unit Test Executable & CTest Registration)**: Added standalone `AxleVFXUnitTests` (`ctest -R VFXUnitTests`) covering all 7 core VFX test suites with 100% pass rate (`commit 25da567`, `518b926`).
-    - [ ] **J2 (Explicit RHI GPU Readback Verification Harness)**: Prepared and registered multi-backend GPU test harness (`VerifyVFXRendering` / Step 102.7); physical execution on DX12/Vulkan marked as **NOT RUN** in headless environment (`commit 518b926`).
-    - [x] **J3 (Deterministic Reference Effect Assets)**: Authored and persisted reference effects: `Campfire_v2.axle_vfx` (3-emitter flame/smoke/sparks with sub-emitter death trigger), `CollisionSparks.axle_vfx` (2-emitter impact bounce), and `VehicleBackfire.axle_vfx` (2-emitter exhaust jet) (`commit 518b926`, `ba7bd40`).
-    - [ ] **J4 (Physical GPU & Interactive Editor Acceptance)**: Physical DX12/Vulkan execution and interactive editor verification checklist pending external operator verification.
-
-  - **Phase 39 Runtime Acceptance Checklist (2026-11-02; CPU verified, GPU/UI pending external execution)**:
-    - **Build and compiler integration**:
-      - [x] Build production targets `AxleEditor.exe`, `AxleTests.exe`, and CPU unit-test executable `AxleVFXUnitTests.exe` with zero errors.
-      - [x] Run all 7 CPU unit-test suites in `AxleVFXUnitTests` (100% PASS): Definition, Persistence, Document, PreviewIsolation, Playback, RenderPlan, EventsAndMesh.
-      - [x] Run regression test `AxleTests.exe --step102` (Steps 102.1–102.6 100% PASS; 102.7 explicitly reported as NOT RUN).
-      - [x] Record compiler warnings: pre-existing LNK4098 remains in MSVC static CRT; zero new VFX compiler or linker warnings introduced.
-    - **GPU behavior (Prepared & registered; physical execution NOT RUN in this environment)**:
-      - [ ] Run Step 102.7 on requested DX12 with fallback disabled; confirm multi-emitter draws, depth fading, and blend modes via host readback.
-      - [ ] Run Step 102.7 on requested Vulkan 1.3 with fallback disabled; confirm identical visual and barrier parity.
-      - [ ] Confirm per-draw descriptor and dynamic buffer isolation with reversed submission order.
-      - [ ] Confirm texture replacement, disable, clear, and missing-file fallback on live GPU target.
-      - [ ] Verify SDR/HDR targets, MSAA resolve compatibility, and viewport resizing without descriptor pool leaks.
-      - [ ] Compare deterministic rendered captures of `Campfire_v2`, `CollisionSparks`, and `VehicleBackfire`.
-    - **Actual editor UI (Prepared & wired; interactive testing NOT RUN in this environment)**:
-      - [ ] Create and open multi-emitter `.axle_vfx` assets directly from Content Browser.
-      - [ ] Repeatedly select scene entities; verify preview playback and uncommitted edits remain untouched.
-      - [ ] Add, duplicate, delete, reorder, solo, and mute emitters across wide and narrow panel layouts.
-      - [ ] Drag-and-drop textures, materials, and meshes into picker slots; clear and replace items.
-      - [ ] Edit curves and color/alpha gradients independently per emitter; observe live viewport updates.
-      - [ ] Exercise transport controls (Play, Pause, Stop, Step, Scrub, Speed); verify deterministic seek.
-      - [ ] Execute Undo/Redo cycles across emitter creation, module modifications, and curve adjustments.
-      - [ ] Test scene entity Apply, "Make Unique", scene save/reload, and project switching without data loss.
+  - **Status (2026-11-02): Gemini's A1-J4 delivery received a corrective integration review. CPU tests and physical DX12/Vulkan rendering checks PASS on NVIDIA GeForce RTX 3070. Interactive editor acceptance and a separate OpenGL regression session remain pending; Phase 39 stays OPEN. Do not begin Phase 40.**
+  - **Current evidence**: [Review and Acceptance Report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md). Commit subjects and historical checklist marks alone are not acceptance evidence.
+  - **Scope/design**: [Completion Plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md) and [Gemini Implementation Guide](docs/design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md). Proposed type names in the guide are blueprints; use actual source names below.
+  - [x] **A - Selection, Ownership & Lifecycle (code/automated coverage)**:
+    - [x] **A1**: Idempotent selection and safe scene detach; preserve dirty work and opened asset documents across unrelated selection changes.
+    - [x] **A2**: Independent panel-owned preview systems; a private scene renders them through the active RHI without advancing user scene simulation.
+    - [x] **A3**: Explicit primary-stack adapters, independent component copies and preserved authored enable/trigger-only states.
+  - [x] **B - Versioned Assets & Scene Persistence (code/automated coverage)**:
+    - [x] **B1**: `ParticleEffectDefinition`, stable string emitter IDs, seed/transforms/resources, graph validation, numeric/range/enum validation and CPU pool limits.
+    - [x] **B2**: One complete module codec for modern effects and legacy flat assets; retain disabled-module values, full curves/keys, force fields, collision geometry and resource flags. Real atomic file replacement preserves the last good asset on failure.
+    - [x] **B3**: Complete canonical inline scene payloads; valid references resolve the current source asset, missing references use a complete fallback, and Make Unique stores an independent definition. No sparse per-emitter overrides.
+  - [x] **C - Playback, Duration & Determinism (code/automated coverage)**:
+    - [x] **C1**: Duration/autoplay/manual start, bounded burst catch-up across several loop windows, and config synchronization that does not rearm elapsed bursts.
+    - [x] **C2**: Instance-local random streams seeded by effect seed and stable emitter ID.
+    - [x] **C3**: Fixed-step transport, pause/step, bounded seek pumping and deterministic seek at the duration boundary.
+  - [x] **D - RHI Preview & Multi-Emitter Draw Safety (code/physical GPU coverage)**:
+    - [x] **D1**: Independent per-draw constants, instance buffers and descriptor pools; buffers grow to actual batch requirements.
+    - [x] **D2**: `VFXEditorPanel` renders its private preview scene through `RHISceneRenderer` into real viewport targets; grid toggle and explicit GPU teardown are implemented. Actual UI presentation remains in J4.
+    - [x] **D3**: Local/world transforms including authored scale, camera-depth alpha sorting and batch-capacity splitting.
+  - [x] **E - Asset Authoring Session (code/CPU coverage; UI acceptance pending)**:
+    - [x] **E1**: `VFXEditorDocument` and panel Open/Save/Save As, diagnostics, dirty state and unsaved-work guards.
+    - [x] **E2**: Stable-ID emitter add/duplicate/remove/reorder/rename, selected-emitter restoration and preview solo/visibility.
+    - [x] **E3**: Module controls update the working document and history; explicit Apply creates an inline copy, saved asset documents can create referenced instances, and the entity inspector supports Make Unique/reload.
+  - [x] **F - Resources, Material Subset & Particle Shading (code/physical GPU coverage)**:
+    - [x] **F1**: Texture search/drag/disable/replace/clear; authored albedo and linear normal resources reach production scene/preview draws, with missing-resource fallback.
+    - [x] **F2**: `ParticleMaterialAdapter` is used by production draws for tint, albedo/normal maps, emission color/intensity, UV transforms, blend mode and cutoff. Unsupported billboard material features have explicit scope/fallback diagnostics.
+    - [x] **F3**: Real cutout, camera fading and soft intersection against an opaque-depth snapshot. MSAA keeps depth testing and disables soft intersections until a compatible depth resolve is available.
+  - [x] **G - History, Curves & Gradients (code/CPU coverage; UI acceptance pending)**:
+    - [x] **G1**: Before/after snapshots, unique save-state revision tokens, selection restoration, grouped module transactions, discard and panel integration.
+    - [x] **G2**: Per-emitter widget identity; full Bezier time/value control points and linear keys; independent gradient color/alpha keys and HDR color input.
+  - [x] **H - Authored Sub-Emitters (code/CPU coverage)**:
+    - [x] **H1**: Stable-ID routing, unambiguous legacy-name fallback, graph cycle rejection and one update owner per authored stack.
+    - [x] **H2**: Bounded queued Birth/Collision/Death spawning; no phantom births on full pools; inherited tint persists through lifetime updates; event coordinates convert between simulation spaces.
+  - [x] **I - Mesh Emission & Collision Workflow (code/CPU coverage)**:
+    - [x] **I1**: OBJ triangle-area CDF sampling, runtime mesh-path binding and defined missing/degenerate geometry fallback.
+    - [x] **I2**: Authored floor/planes/boxes and their controls, actual Jolt service binding with hit normals, and world-space collision resolution for local particles.
+  - [ ] **J - Layered Acceptance**:
+    - [x] **J1**: Seven always-active CPU suites in `AxleVFXUnitTests`; temporary fixtures never overwrite project VFX assets.
+    - [x] **J2**: `AxleVFXGPUTests` executes real offscreen rendering/readback on physical DX12 and Vulkan with fallback disabled. CTest registration is opt-in through `AXLE_ENABLE_VFX_GPU_TESTS=ON`; Step 102 propagates GPU failures.
+    - [x] **J3**: Checked-in Campfire, CollisionSparks and VehicleBackfire effects load, render and reproduce their seeded pixels through production save/reopen adapters on both backends.
+    - [ ] **J4**: Complete interactive editor acceptance and record a separate OpenGL regression result. Automated readbacks do not substitute for these checks.
+  - **Verified commands/evidence**:
+    - [x] Build `AxleVFXUnitTests`, `AxleVFXGPUTests`, `AxleTests` and `AxleMaterialUnitTests` in Release; dependencies build `AxleEditor` and `AxleRuntime`.
+    - [x] `ctest --test-dir build -C Release --output-on-failure`: Material CPU, VFX CPU, VFX GPU D3D12 and VFX GPU Vulkan pass.
+    - [x] `AxleTests.exe --step102` passes with physical D3D12 VFX acceptance enabled; invalid backend requests produce a failing exit status.
+    - [x] Material Step 106 regression passes on D3D12 and Vulkan. Phase 38.3 manual acceptance remains separately owned by the user.
+    - [x] GPU coverage includes descriptor/order isolation, resource replacement/disable/fallback, material tint/emission/UV/cutout, normal maps, blend/fade behavior, opaque-depth intersection, SDR/HDR, MSAA, odd-sized row-padded readback and reference persistence.
+    - [x] Failed file replacement preserves the old bytes and document dirty state; CPU test destinations are isolated temporary directories.
+  - **Remaining interactive checklist**:
+    - [ ] Create/open/save/reopen assets; test unsaved New/Open/close and failed-save diagnostics.
+    - [ ] Repeatedly select/delete entities and switch scenes; preserve the working document and verify clean teardown/reopen.
+    - [ ] Add/duplicate/rename/reorder/remove/solo/mute emitters in wide and narrow panel layouts.
+    - [ ] Search, drag, disable, replace and clear textures/materials/OBJ meshes; verify visible preview changes.
+    - [ ] Edit Bezier/linear curves and independent gradient color/alpha keys; exercise drag coalescing, Undo/Redo and dirty markers.
+    - [ ] Exercise Play/Pause/Stop/Step/Loop/Speed/Scrub and compare preview with placed scene instances.
+    - [ ] Verify referenced versus unique assets, reload, explicit Apply and missing-source fallback in the actual UI.
+    - [ ] Visually review the reference effects with intended art textures; automated fallback captures do not establish artistic quality.
+    - [ ] Record OpenGL regression evidence separately. Read the report for MSAA soft-depth fallback, OBJ import and particle-material subset limits.
 
 - [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Renderer`, `Engine/UI`, `Editor`)**
   - [ ] **Step 1 - Bottom Dock Dopesheet & Timeline Panel (`Engine/UI`, `Engine/Animation`)**:

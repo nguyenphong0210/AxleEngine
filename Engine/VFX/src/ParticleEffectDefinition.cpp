@@ -1,4 +1,5 @@
 #include <Axle/ParticleEffectDefinition.hpp>
+#include <Axle/ParticleEffectSerializer.hpp>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -22,17 +23,17 @@ namespace Axle {
             return false;
         if (Resources != other.Resources)
             return false;
-        if (Config.Name != other.Config.Name ||
-            Config.MaxParticles != other.Config.MaxParticles ||
-            Config.EmissionRate != other.Config.EmissionRate ||
-            Config.Duration != other.Config.Duration ||
-            Config.Looping != other.Config.Looping ||
-            Config.PlayOnAwake != other.Config.PlayOnAwake ||
-            Config.SimulationSpace != other.Config.SimulationSpace ||
-            Config.BlendMode != other.Config.BlendMode ||
-            Config.Orientation != other.Config.Orientation)
-            return false;
-        return true;
+        return ParticleEmitterConfigsEqual(Config, other.Config);
+    }
+
+    bool ParticleEmitterConfigsEqual(const ParticleEmitterConfig& a, const ParticleEmitterConfig& b) {
+        // Compare all persisted module fields, excluding runtime callbacks and mesh caches.
+        ParticleEffectDefinition left, right;
+        left.Emitters.emplace_back();
+        right.Emitters.emplace_back();
+        left.Emitters[0].Config = a;
+        right.Emitters[0].Config = b;
+        return ParticleEffectSerializer::Serialize(left) == ParticleEffectSerializer::Serialize(right);
     }
 
     bool ParticleEffectDefinition::operator==(const ParticleEffectDefinition& other) const {

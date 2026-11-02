@@ -22,6 +22,7 @@ namespace Axle {
         m_IsDirty = false;
         m_CurrentRevision = 0;
         m_SavedRevision = 0;
+        m_NextRevision = 1;
         m_UndoStack.clear();
         m_RedoStack.clear();
         m_TransactionBefore.reset();
@@ -38,6 +39,7 @@ namespace Axle {
         m_IsDirty = false;
         m_CurrentRevision = 0;
         m_SavedRevision = 0;
+        m_NextRevision = 1;
         m_UndoStack.clear();
         m_RedoStack.clear();
         m_TransactionBefore.reset();
@@ -97,8 +99,9 @@ namespace Axle {
     void VFXEditorDocument::SetEffectName(const std::string& name) {
         if (m_Definition.Name != name) {
             ParticleEffectDefinition before = m_Definition;
+        const auto beforeSelection = m_SelectedEmitterId;
             m_Definition.Name = name;
-            RecordChange("Rename Effect", before);
+            RecordChange("Rename Effect", before, beforeSelection);
         }
     }
 
@@ -132,9 +135,10 @@ namespace Axle {
 
     std::string VFXEditorDocument::AddEmitter(const std::string& name, const ParticleEmitterConfig& cfg) {
         ParticleEffectDefinition before = m_Definition;
+        const auto beforeSelection = m_SelectedEmitterId;
 
         EmitterDefinition emitter;
-        emitter.Id = GenerateUniqueEmitterId();
+        do { emitter.Id = GenerateUniqueEmitterId(); } while (m_Definition.HasEmitter(emitter.Id));
         emitter.Name = name;
         emitter.Config = cfg;
         emitter.Enabled = true;
@@ -143,7 +147,7 @@ namespace Axle {
         m_Definition.Emitters.push_back(std::move(emitter));
         m_SelectedEmitterId = newId;
 
-        RecordChange("Add Emitter", before);
+        RecordChange("Add Emitter", before, beforeSelection);
         return newId;
     }
 
@@ -152,16 +156,17 @@ namespace Axle {
         if (!src) return "";
 
         ParticleEffectDefinition before = m_Definition;
+        const auto beforeSelection = m_SelectedEmitterId;
 
         EmitterDefinition dup = *src;
-        dup.Id = GenerateUniqueEmitterId();
+        do { dup.Id = GenerateUniqueEmitterId(); } while (m_Definition.HasEmitter(dup.Id));
         dup.Name = src->Name + " (Copy)";
 
         std::string newId = dup.Id;
         m_Definition.Emitters.push_back(std::move(dup));
         m_SelectedEmitterId = newId;
 
-        RecordChange("Duplicate Emitter", before);
+        RecordChange("Duplicate Emitter", before, beforeSelection);
         return newId;
     }
 
@@ -196,13 +201,17 @@ namespace Axle {
         }
 
         ParticleEffectDefinition before = m_Definition;
+        const auto beforeSelection = m_SelectedEmitterId;
+        const auto removedName = it->Name;
         m_Definition.Emitters.erase(it);
+        for (auto& source : m_Definition.Emitters)
+            std::erase_if(source.Config.SubEmitters, [&](const auto& link) { return link.TargetEmitterName == id || link.TargetEmitterName == removedName; });
 
         if (m_SelectedEmitterId == id) {
             m_SelectedEmitterId = m_Definition.Emitters.empty() ? "" : m_Definition.Emitters[0].Id;
         }
 
-        RecordChange("Remove Emitter", before);
+        RecordChange("Remove Emitter", before, beforeSelection);
         return true;
     }
 
@@ -211,8 +220,12 @@ namespace Axle {
         if (!emitter || emitter->Name == newName) return false;
 
         ParticleEffectDefinition before = m_Definition;
+        const auto beforeSelection = m_SelectedEmitterId;
+        for (auto& source : m_Definition.Emitters)
+            for (auto& link : source.Config.SubEmitters)
+                if (link.TargetEmitterName == emitter->Name) link.TargetEmitterName = id;
         emitter->Name = newName;
-        RecordChange("Rename Emitter", before);
+        RecordChange("Rename Emitter", before, beforeSelection);
         return true;
     }
 
@@ -222,11 +235,12 @@ namespace Axle {
         }
 
         ParticleEffectDefinition before = m_Definition;
+        const auto beforeSelection = m_SelectedEmitterId;
         auto elem = std::move(m_Definition.Emitters[fromIndex]);
         m_Definition.Emitters.erase(m_Definition.Emitters.begin() + fromIndex);
         m_Definition.Emitters.insert(m_Definition.Emitters.begin() + toIndex, std::move(elem));
 
-        RecordChange("Reorder Emitters", before);
+        RecordChange("Reorder Emitters", before, beforeSelection);
         return true;
     }
 
@@ -235,8 +249,9 @@ namespace Axle {
         if (!emitter || emitter->Enabled == enabled) return false;
 
         ParticleEffectDefinition before = m_Definition;
+        const auto beforeSelection = m_SelectedEmitterId;
         emitter->Enabled = enabled;
-        RecordChange("Toggle Emitter Enabled", before);
+        RecordChange("Toggle Emitter Enabled", before, beforeSelection);
         return true;
     }
 
@@ -245,8 +260,9 @@ namespace Axle {
         if (!emitter) return false;
 
         ParticleEffectDefinition before = m_Definition;
+        const auto beforeSelection = m_SelectedEmitterId;
         emitter->Config = cfg;
-        RecordChange("Edit Emitter Config", before);
+        RecordChange("Edit Emitter Config", before, beforeSelection);
         return true;
     }
 
@@ -255,82 +271,86 @@ namespace Axle {
         if (!emitter) return false;
 
         ParticleEffectDefinition before = m_Definition;
+        const auto beforeSelection = m_SelectedEmitterId;
         emitter->Resources = res;
-        RecordChange("Edit Emitter Resources", before);
+        RecordChange("Edit Emitter Resources", before, beforeSelection);
+        return true;
+    }
+
+    void VFXEditorDocument::LoadDefinition(const ParticleEffectDefinition& definition) {
+        NewEffect(definition.Name);
+        m_Definition = definition;
+        m_SelectedEmitterId = definition.Emitters.empty() ? "" : definition.Emitters.front().Id;
+    }
+
+    bool VFXEditorDocument::ReplaceDefinition(const ParticleEffectDefinition& definition, const std::string& label) {
+        if (m_Definition == definition) return false;
+        auto before = m_Definition;
+        auto selection = m_SelectedEmitterId;
+        m_Definition = definition;
+        if (!FindEmitterById(m_SelectedEmitterId))
+            m_SelectedEmitterId = definition.Emitters.empty() ? "" : definition.Emitters.front().Id;
+        RecordChange(label, before, selection);
         return true;
     }
 
     void VFXEditorDocument::BeginTransaction() {
-        if (!m_TransactionBefore.has_value()) {
+        if (!m_TransactionBefore) {
             m_TransactionBefore = m_Definition;
+            m_TransactionSelection = m_SelectedEmitterId;
         }
     }
 
     void VFXEditorDocument::CommitTransaction(const std::string& label) {
-        if (m_TransactionBefore.has_value()) {
-            RecordChange(label, *m_TransactionBefore);
+        if (m_TransactionBefore) {
+            auto before = std::move(*m_TransactionBefore);
             m_TransactionBefore.reset();
+            RecordChange(label, before, m_TransactionSelection);
         }
     }
 
-    void VFXEditorDocument::RecordChange(const std::string& label, const ParticleEffectDefinition& before) {
+    void VFXEditorDocument::RecordChange(const std::string& label, const ParticleEffectDefinition& before, const std::string& selection) {
+        if (before == m_Definition) return;
+        if (m_TransactionBefore) { MarkDirty(); return; }
         EffectEditCommand cmd;
         cmd.Label = label;
         cmd.Before = before;
         cmd.After = m_Definition;
-        cmd.SelectedEmitterId = m_SelectedEmitterId;
-
+        cmd.BeforeSelection = selection;
+        cmd.AfterSelection = m_SelectedEmitterId;
+        cmd.BeforeRevision = m_CurrentRevision;
+        cmd.AfterRevision = m_NextRevision++;
+        m_CurrentRevision = cmd.AfterRevision;
         m_UndoStack.push_back(std::move(cmd));
         m_RedoStack.clear();
-
-        m_CurrentRevision++;
         MarkDirty();
     }
 
     bool VFXEditorDocument::Undo() {
         if (m_UndoStack.empty()) return false;
-
         auto cmd = std::move(m_UndoStack.back());
         m_UndoStack.pop_back();
-
-        EffectEditCommand redoCmd;
-        redoCmd.Label = cmd.Label;
-        redoCmd.Before = m_Definition;
-        redoCmd.After = cmd.Before;
-        redoCmd.SelectedEmitterId = m_SelectedEmitterId;
-        m_RedoStack.push_back(std::move(redoCmd));
-
-        m_Definition = std::move(cmd.Before);
-        m_SelectedEmitterId = cmd.SelectedEmitterId;
-
-        if (m_CurrentRevision > 0) m_CurrentRevision--;
+        m_Definition = cmd.Before;
+        m_SelectedEmitterId = cmd.BeforeSelection;
+        m_CurrentRevision = cmd.BeforeRevision;
+        m_RedoStack.push_back(std::move(cmd));
         MarkDirty();
         return true;
     }
 
     bool VFXEditorDocument::Redo() {
         if (m_RedoStack.empty()) return false;
-
         auto cmd = std::move(m_RedoStack.back());
         m_RedoStack.pop_back();
-
-        EffectEditCommand undoCmd;
-        undoCmd.Label = cmd.Label;
-        undoCmd.Before = m_Definition;
-        undoCmd.After = cmd.After;
-        undoCmd.SelectedEmitterId = m_SelectedEmitterId;
-        m_UndoStack.push_back(std::move(undoCmd));
-
-        m_Definition = std::move(cmd.After);
-        m_SelectedEmitterId = cmd.SelectedEmitterId;
-
-        m_CurrentRevision++;
+        m_Definition = cmd.After;
+        m_SelectedEmitterId = cmd.AfterSelection;
+        m_CurrentRevision = cmd.AfterRevision;
+        m_UndoStack.push_back(std::move(cmd));
         MarkDirty();
         return true;
     }
 
     void VFXEditorDocument::MarkDirty() {
-        m_IsDirty = (m_CurrentRevision != m_SavedRevision);
+        m_IsDirty = (m_CurrentRevision != m_SavedRevision) || (m_TransactionBefore && *m_TransactionBefore != m_Definition);
     }
-
 }

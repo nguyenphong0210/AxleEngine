@@ -120,7 +120,38 @@ namespace {
     }
 }
 
+static bool TestHistoryRestoresValuesAndBranchIdentity() {
+    Axle::VFXEditorDocument doc;
+    auto original = doc.GetDefinition();
+    auto originalSelection = doc.GetSelectedEmitterId();
+    auto added = doc.AddEmitter("Second");
+    auto edited = doc.GetDefinition();
+    VFX_TEST_CHECK(doc.Undo() && doc.GetDefinition() == original, "Undo restores values");
+    VFX_TEST_CHECK(doc.GetSelectedEmitterId() == originalSelection, "Undo restores previous selection");
+    VFX_TEST_CHECK(doc.Redo() && doc.GetDefinition() == edited, "Redo restores added emitter, not the undo snapshot");
+    VFX_TEST_CHECK(doc.GetSelectedEmitterId() == added, "Redo restores edited selection");
+    Axle::VFXTests::ScopedTempDir temp;
+    std::vector<Axle::VFXDiagnostic> diagnostics;
+    VFX_TEST_CHECK(doc.SaveAs((temp.Path / "saved.axle_vfx").string(), diagnostics), "Save history state");
+    VFX_TEST_CHECK(doc.Undo(), "Undo saved edit");
+    doc.AddEmitter("Different branch");
+    VFX_TEST_CHECK(doc.IsDirty(), "New branch at same history depth is dirty");
+    VFX_TEST_CHECK(!doc.CanRedo(), "Branch discards stale redo");
+    auto beforeTransaction = doc.GetDefinition();
+    doc.BeginTransaction();
+    doc.AddEmitter("Third");
+    doc.AddEmitter("Fourth");
+    doc.CommitTransaction("Grouped edit");
+    VFX_TEST_CHECK(doc.Undo() && doc.GetDefinition() == beforeTransaction, "Transaction is one undo step");
+    auto config = doc.GetDefinition().Emitters[0].Config;
+    config.Drag += 0.123f;
+    doc.ReplaceEmitterConfig(doc.GetDefinition().Emitters[0].Id, config);
+    VFX_TEST_CHECK(doc.Undo() && doc.GetDefinition() == beforeTransaction, "Non-core module edits participate in history");
+    return true;
+}
+
 bool RunVFXDocumentUnitTests() {
+    VFX_TEST_CHECK(TestHistoryRestoresValuesAndBranchIdentity(), "History regression failed");
     std::cout << "  - Running TestBaselineDocumentContract ...\n";
     VFX_TEST_CHECK(TestBaselineDocumentContract(), "TestBaselineDocumentContract failed");
 

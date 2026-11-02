@@ -13,7 +13,8 @@ namespace Axle {
         std::string Label;
         ParticleEffectDefinition Before;
         ParticleEffectDefinition After;
-        std::string SelectedEmitterId;
+        std::string BeforeSelection, AfterSelection;
+        uint64_t BeforeRevision = 0, AfterRevision = 0;
     };
 
     class VFXEditorDocument {
@@ -34,6 +35,8 @@ namespace Axle {
         // Effect Definition Access
         const ParticleEffectDefinition& GetDefinition() const { return m_Definition; }
         ParticleEffectDefinition& GetDefinition() { return m_Definition; }
+        void LoadDefinition(const ParticleEffectDefinition& definition);
+        bool ReplaceDefinition(const ParticleEffectDefinition& definition, const std::string& label = "Edit Effect");
         void SetEffectName(const std::string& name);
 
         // Emitter Operations
@@ -62,7 +65,7 @@ namespace Axle {
         bool CanRedo() const { return !m_RedoStack.empty(); }
 
     private:
-        void RecordChange(const std::string& label, const ParticleEffectDefinition& before);
+        void RecordChange(const std::string& label, const ParticleEffectDefinition& before, const std::string& beforeSelection);
         void MarkDirty();
 
     private:
@@ -73,6 +76,8 @@ namespace Axle {
         bool m_IsDirty = false;
         uint64_t m_CurrentRevision = 0;
         uint64_t m_SavedRevision = 0;
+        uint64_t m_NextRevision = 1;
+        std::string m_TransactionSelection;
 
         std::optional<ParticleEffectDefinition> m_TransactionBefore;
 

@@ -75,6 +75,8 @@ namespace Axle {
         bool HasEmitter(const EmitterId& id) const { return FindEmitter(id) != nullptr; }
     };
 
+    bool ParticleEmitterConfigsEqual(const ParticleEmitterConfig& a, const ParticleEmitterConfig& b);
+
     // Validation & Factory Helpers
     bool ValidateParticleEffectDefinition(const ParticleEffectDefinition& definition, std::vector<std::string>& outErrors);
     bool ValidateSubEmitterGraph(const ParticleEffectDefinition& definition, std::vector<std::string>& outErrors);

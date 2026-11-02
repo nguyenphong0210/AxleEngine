@@ -19,6 +19,7 @@ namespace Axle {
         float Lifetime = 1.0f;
         glm::vec4 UVOffsetScale = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
         glm::vec4 UVSubFrame = glm::vec4(0.0f);
+        glm::vec4 ColorMultiplier{1.0f};
         uint32_t CustomFlags = 0;
     };
 
@@ -80,6 +81,8 @@ namespace Axle {
         std::vector<glm::vec4>& GetStartColors() { return m_StartColors; }
         const std::vector<glm::vec4>& GetStartColors() const { return m_StartColors; }
 
+        const std::vector<glm::vec4>& GetColorMultipliers() const { return m_ColorMultipliers; }
+
         std::vector<glm::vec4>& GetEndColors() { return m_EndColors; }
         const std::vector<glm::vec4>& GetEndColors() const { return m_EndColors; }
 
@@ -110,6 +113,7 @@ namespace Axle {
         std::vector<glm::vec4> m_UVSubFrames;
         std::vector<glm::vec4> m_StartColors;
         std::vector<glm::vec4> m_EndColors;
+        std::vector<glm::vec4> m_ColorMultipliers;
         std::vector<float> m_StartSizes;
         std::vector<float> m_EndSizes;
         std::vector<uint32_t> m_CustomFlags;

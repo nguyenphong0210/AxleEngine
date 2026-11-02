@@ -16,6 +16,7 @@
 #include <Axle/ParticleEmitter.hpp>
 #include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/ParticleEffectSerializer.hpp>
+#include <Axle/ParticleMeshSampler.hpp>
 #include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
 #include <Axle/UI/UIDocument.hpp>
@@ -1535,7 +1536,14 @@ namespace Axle {
             def.Resources = {TexturePath, NormalMapPath, MaterialPath, UseTexture, UseNormalMap};
             return def;
         }
+        EmitterTransform GetWorldTransform(const glm::vec3& pos = glm::vec3(0), const glm::quat& rot = glm::quat(1,0,0,0), const glm::vec3& scale = glm::vec3(1)) const {
+            return {pos + rot * (LocalTransform.Translation * scale), rot * LocalTransform.Rotation, scale * LocalTransform.Scale};
+        }
         void Initialize(uint32_t baseSeed = 1) {
+            if (Config.Shape.Type == ParticleEmitterShapeType::MeshSurface && !Config.Shape.MeshPath.empty() && !Config.Shape.MeshSampler) {
+                Config.Shape.MeshSampler = std::make_shared<ParticleMeshSampler>();
+                Config.Shape.MeshSampler->LoadFromOBJ(FileSystem::ResolveAssetPath(Config.Shape.MeshPath).string());
+            }
             if (!System) System = std::make_shared<ParticleSystem>(Config);
             else System->SetConfig(Config);
             System->SetSeed(HashEmitterSeed(baseSeed, Id));
@@ -1544,49 +1552,25 @@ namespace Axle {
     };
 
     inline void DispatchEffectEvents(std::vector<ParticleEmitterStack>& stacks, uint32_t maxEventsPerTick = 500) {
-        if (stacks.empty()) return;
-
-        std::vector<ParticleEvent> pendingEvents;
-        for (auto& stack : stacks) {
-            if (stack.System) {
-                stack.System->DrainEvents(pendingEvents);
+        uint32_t eventsLeft = maxEventsPerTick, spawnsLeft = 2000;
+        // A single effect owns these systems. Events route by stable ID, legacy names only as a fallback.
+        for (int generation=0; generation<4; ++generation) {
+            std::vector<ParticleEvent> events;
+            for (auto& stack : stacks) if (stack.System) stack.System->DrainEvents(events);
+            if (events.empty()) break;
+            for (const auto& event : events) {
+                if (!eventsLeft || !spawnsLeft) break;
+                --eventsLeft;
+                auto target = std::find_if(stacks.begin(), stacks.end(), [&](const auto& s) { return s.Id == event.TargetEmitterName; });
+                if (target == stacks.end()) target = std::find_if(stacks.begin(), stacks.end(), [&](const auto& s) { return s.Name == event.TargetEmitterName; });
+                if (target == stacks.end() || !target->Enabled || !target->System) continue;
+                const auto count = std::min({event.Count, spawnsLeft, 200u});
+                target->System->SpawnInherited(event.WorldPosition, event.WorldVelocity, event.Color, event.InheritColor, event.InheritVelocity, count);
+                spawnsLeft -= count;
             }
         }
-
-        if (pendingEvents.empty()) return;
-
-        if (pendingEvents.size() > maxEventsPerTick) {
-            pendingEvents.resize(maxEventsPerTick);
-        }
-
-        int maxGenerations = 2;
-        while (!pendingEvents.empty() && maxGenerations-- > 0) {
-            std::vector<ParticleEvent> nextGenEvents;
-
-            for (const auto& ev : pendingEvents) {
-                ParticleEmitterStack* targetStack = nullptr;
-                for (auto& s : stacks) {
-                    if (s.Name == ev.TargetEmitterName) {
-                        targetStack = &s;
-                        break;
-                    }
-                }
-
-                if (targetStack && targetStack->System && targetStack->Enabled) {
-                    targetStack->System->SpawnInherited(ev.WorldPosition, ev.WorldVelocity, ev.Color, ev.InheritColor, ev.InheritVelocity, ev.Count);
-                }
-            }
-
-            for (auto& stack : stacks) {
-                if (stack.System) {
-                    stack.System->DrainEvents(nextGenEvents);
-                }
-            }
-            if (nextGenEvents.size() > maxEventsPerTick) {
-                nextGenEvents.resize(maxEventsPerTick);
-            }
-            pendingEvents = std::move(nextGenEvents);
-        }
+        // Drop excess generations instead of replaying them in a later frame.
+        for (auto& stack : stacks) if (stack.System) stack.System->ClearEventQueue();
     }
 
     struct ParticleEmitterComponent {
@@ -1825,14 +1809,19 @@ namespace Axle {
             }
         }
 
-        void Update(float dt, const glm::vec3& worldPos = glm::vec3(0.0f), const glm::quat& worldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f)) {
+        void Update(float dt, const glm::vec3& worldPos = glm::vec3(0.0f), const glm::quat& worldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f), const glm::vec3& worldScale = glm::vec3(1)) {
             if (!Active) return;
             if (EmitterStacks.empty()) {
                 if (System) System->Update(dt, worldPos, worldRot);
             } else {
+                for (auto& stack : EmitterStacks) if (stack.System) {
+                    const auto t = stack.GetWorldTransform(worldPos, worldRot, worldScale);
+                    stack.System->SetEmitterTransform(t.Translation, t.Rotation, t.Scale);
+                }
                 for (auto& stack : EmitterStacks) {
                     if (stack.Enabled && stack.System) {
-                        stack.System->Update(dt, worldPos, worldRot);
+                        const auto transform = stack.GetWorldTransform(worldPos, worldRot, worldScale);
+                        stack.System->Update(dt, transform.Translation, transform.Rotation, transform.Scale);
                     }
                 }
                 DispatchEffectEvents(EmitterStacks);

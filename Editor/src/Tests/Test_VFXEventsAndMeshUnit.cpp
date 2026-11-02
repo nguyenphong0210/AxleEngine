@@ -402,7 +402,34 @@ namespace {
     }
 }
 
+static bool TestInheritedEventsAndStableRouting() {
+    Axle::ParticleEmitterConfig cfg; cfg.EmissionRate=0; cfg.Lifetime={10,10};
+    cfg.ColorOverLifetime=Axle::ColorGradient(glm::vec4(1),glm::vec4(1));
+    cfg.AlphaOverLifetime=Axle::FloatCurve(1,1);
+    cfg.MaxParticles=1;
+    cfg.SubEmitters.emplace_back(Axle::SubEmitterTrigger::Birth,"leaf-id",1,1);
+    Axle::ParticleSystem system(cfg);
+    glm::vec4 tint(0.2f,0.6f,0.4f,0.5f);
+    system.SpawnInherited({0,0,0},{0,0,0},tint,true,false,1);
+    VFX_TEST_CHECK(system.GetEventQueue().size()==1,"Inherited spawn generates a real Birth");
+    system.ClearEventQueue();
+    system.EmitBurst(10);
+    VFX_TEST_CHECK(system.GetEventQueue().empty(),"Full pool generates no phantom Birth");
+    system.Update(0.1f);
+    VFX_TEST_CHECK(glm::length(system.GetPool().GetColors()[0]-tint)<0.0001f,"Inherited tint survives lifetime evaluation");
+    Axle::ParticleEffectDefinition effect;
+    Axle::EmitterDefinition source; source.Id="source-id"; source.Name="Source"; source.Config=cfg;
+    Axle::EmitterDefinition target; target.Id="leaf-id"; target.Name="Renamed target"; target.TriggerOnly=true; target.Config=cfg; target.Config.SubEmitters.clear(); target.Config.EmissionRate=100;
+    effect.Emitters={source,target};
+    Axle::ParticleEmitterComponent component; component.SetEffectDefinition(effect);
+    component.EmitterStacks[0].System->EmitBurst(1);
+    component.Update(0.01f);
+    VFX_TEST_CHECK(component.EmitterStacks[1].System->GetActiveParticleCount()==1,"ID routing survives rename and TriggerOnly suppresses continuous emission");
+    return true;
+}
+
 bool RunVFXEventsAndMeshUnitTests() {
+    VFX_TEST_CHECK(TestInheritedEventsAndStableRouting(), "Inherited events regression");
     std::cout << "  - Running TestBaselineEventsAndMesh ...\n";
     VFX_TEST_CHECK(TestBaselineEventsAndMesh(), "TestBaselineEventsAndMesh failed");
     std::cout << "  - Running TestSubEmitterGraphValidation ...\n";

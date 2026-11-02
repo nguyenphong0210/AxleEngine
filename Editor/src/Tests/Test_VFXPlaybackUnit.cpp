@@ -224,7 +224,21 @@ namespace {
     }
 }
 
+static bool TestConfigSyncDoesNotRearmBursts() {
+    Axle::ParticleEmitterConfig cfg; cfg.EmissionRate=0; cfg.Looping=false;
+    cfg.Lifetime={10,10}; cfg.Bursts.emplace_back(0, 2, 2, 1, 0, 1);
+    Axle::ParticleSystem system(cfg);
+    system.Update(0.01f);
+    VFX_TEST_CHECK(system.GetActiveParticleCount()==2, "Initial burst");
+    for(int i=0;i<20;++i) { system.SetConfig(cfg); system.Update(0.01f); }
+    VFX_TEST_CHECK(system.GetActiveParticleCount()==2, "Identical config does not rearm elapsed bursts");
+    cfg.Drag+=0.1f; system.SetConfig(cfg); system.Update(0.01f);
+    VFX_TEST_CHECK(system.GetActiveParticleCount()==2, "Unrelated module edit preserves burst schedule");
+    return true;
+}
+
 bool RunVFXPlaybackUnitTests() {
+    VFX_TEST_CHECK(TestConfigSyncDoesNotRearmBursts(), "Burst synchronization regression");
     std::cout << "  - Running TestBaselinePlayback ...\n";
     VFX_TEST_CHECK(TestBaselinePlayback(), "TestBaselinePlayback failed");
 

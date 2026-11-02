@@ -34,16 +34,21 @@ namespace Axle {
 
         void Update(float dt,
                     const glm::vec3& emitterWorldPos = glm::vec3(0.0f),
-                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                    const glm::vec3& emitterWorldScale = glm::vec3(1.0f));
 
         void EmitBurst(uint32_t count,
                        const glm::vec3& emitterWorldPos = glm::vec3(0.0f),
-                       const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+                       const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                    const glm::vec3& emitterWorldScale = glm::vec3(1.0f));
 
         void SetEmitting(bool emitting) { m_IsEmitting = emitting; }
         bool IsEmitting() const { return m_IsEmitting; }
 
         void Reset();
+        void SetEmitterTransform(const glm::vec3& position, const glm::quat& rotation, const glm::vec3& scale = glm::vec3(1)) {
+            m_WorldPosition = position; m_WorldRotation = rotation; m_WorldScale = scale;
+        }
 
         const ParticlePool& GetPool() const { return m_Pool; }
         ParticlePool& GetPool() { return m_Pool; }
@@ -84,6 +89,8 @@ namespace Axle {
         ParticleEmitterConfig m_Config;
         ParticlePool m_Pool;
 
+        glm::vec3 m_WorldPosition{0}, m_WorldScale{1};
+        glm::quat m_WorldRotation{1,0,0,0};
         float m_SpawnAccumulator = 0.0f;
         float m_BurstTimer = 0.0f;
         float m_TotalSimulationTime = 0.0f;

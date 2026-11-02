@@ -1,4 +1,5 @@
 #include <Axle/ParticleSystem.hpp>
+#include <Axle/ParticleMeshSampler.hpp>
 #include <iostream>
 #include <cmath>
 #include <algorithm>
@@ -16,14 +17,26 @@ namespace Axle {
     }
 
     void ParticleSystem::SetConfig(const ParticleEmitterConfig& config) {
-        m_Config = config;
-        if (config.MaxParticles != m_Pool.GetCapacity()) {
-            m_Pool.Allocate(config.MaxParticles);
+        bool scheduleChanged = config.Bursts.size() != m_Config.Bursts.size();
+        if (!scheduleChanged) for (size_t i=0; i<config.Bursts.size(); ++i) {
+            const auto& a=config.Bursts[i]; const auto& b=m_Config.Bursts[i];
+            if (a.Time!=b.Time || a.Cycles!=b.Cycles || a.Interval!=b.Interval) scheduleChanged=true;
         }
-        m_BurstRuntime.resize(m_Config.Bursts.size());
-        for (size_t i = 0; i < m_Config.Bursts.size(); ++i) {
-            m_BurstRuntime[i].CompletedCycles = 0;
-            m_BurstRuntime[i].NextTriggerTime = m_Config.Bursts[i].Time;
+        m_Config = config;
+        if (config.MaxParticles != m_Pool.GetCapacity()) m_Pool.Allocate(config.MaxParticles);
+        if (scheduleChanged) {
+            m_BurstRuntime.resize(m_Config.Bursts.size());
+            for (size_t i=0; i<m_Config.Bursts.size(); ++i) {
+                auto& state=m_BurstRuntime[i]; const auto& burst=m_Config.Bursts[i];
+                state.CompletedCycles=0; state.NextTriggerTime=burst.Time;
+                // Edits take effect from now; they never replay elapsed events.
+                if (state.NextTriggerTime < m_EmitterTime) {
+                    if (burst.Interval > 0) {
+                        auto skipped=static_cast<uint32_t>(std::ceil((m_EmitterTime-burst.Time)/burst.Interval));
+                        state.CompletedCycles=skipped; state.NextTriggerTime+=skipped*burst.Interval;
+                    } else { state.CompletedCycles=1; state.NextTriggerTime=std::numeric_limits<float>::infinity(); }
+                }
+            }
         }
     }
 
@@ -63,7 +76,9 @@ namespace Axle {
         }
     }
 
-    void ParticleSystem::EmitBurst(uint32_t count, const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot) {
+    void ParticleSystem::EmitBurst(uint32_t count, const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot, const glm::vec3& emitterWorldScale) {
+        SetEmitterTransform(emitterWorldPos, emitterWorldRot, emitterWorldScale);
+        count = std::min(count, m_Pool.GetCapacity() - m_Pool.GetActiveCount());
         for (uint32_t i = 0; i < count; ++i) {
             SpawnParticle(emitterWorldPos, emitterWorldRot);
         }
@@ -91,7 +106,12 @@ namespace Axle {
                     if (m_SubEmitterCallback) {
                         m_SubEmitterCallback(trigger, sub.TargetEmitterName, pos, vel, color, sub.EmitCount);
                     }
-                    m_EventQueue.push_back({ m_Config.Name, sub.TargetEmitterName, trigger, pos, vel, color, sub.EmitCount, sub.InheritColor, sub.InheritVelocity });
+                    if (m_EventQueue.size() < 500) {
+                        const bool local = m_Config.SimulationSpace == ParticleSimulationSpace::Local;
+                        const auto worldPos = local ? m_WorldPosition + m_WorldRotation * (pos * m_WorldScale) : pos;
+                        const auto worldVel = local ? m_WorldRotation * (vel * m_WorldScale) : vel;
+                        m_EventQueue.push_back({m_Config.Name, sub.TargetEmitterName, trigger, worldPos, worldVel, color, sub.EmitCount, sub.InheritColor, sub.InheritVelocity});
+                    }
 
                     auto it = m_ChildSystems.find(sub.TargetEmitterName);
                     if (it != m_ChildSystems.end() && it->second) {
@@ -112,11 +132,15 @@ namespace Axle {
             m_Config.Shape.Sample(offset, dir, m_RNG);
 
             ParticleSpawnData data;
-            data.Position = worldPos + offset;
+            const bool local = m_Config.SimulationSpace == ParticleSimulationSpace::Local;
+            glm::vec3 safeScale = m_WorldScale;
+            for (int axis=0; axis<3; ++axis) if (std::abs(safeScale[axis]) < 0.0001f) safeScale[axis]=0.0001f;
+            data.Position = local ? glm::inverse(m_WorldRotation) * (worldPos - m_WorldPosition) / safeScale + offset
+                                  : worldPos + m_WorldRotation * (offset * m_WorldScale);
             float speed = m_Config.InitialSpeed.Sample(m_RNG);
-            data.Velocity = glm::normalize(dir) * speed;
+            data.Velocity = (local ? glm::normalize(dir) : m_WorldRotation * glm::normalize(dir)) * speed;
             if (inheritVel) {
-                data.Velocity += inheritedVel;
+                data.Velocity += local ? glm::inverse(m_WorldRotation) * inheritedVel / safeScale : inheritedVel;
             }
             data.Acceleration = m_Config.ConstantAcceleration;
 
@@ -133,6 +157,7 @@ namespace Axle {
                 data.EndColor = authoredEndCol;
             }
 
+            data.ColorMultiplier = inheritColor ? inheritedColor : glm::vec4(1);
             data.Lifetime = std::max(0.01f, m_Config.Lifetime.Sample(m_RNG));
             data.StartRotation = m_Config.StartRotation.Sample(m_RNG);
             data.AngularVelocity = m_Config.AngularVelocity.Sample(m_RNG);
@@ -141,9 +166,8 @@ namespace Axle {
             data.UVSubFrame = glm::vec4(0.0f);
 
             uint32_t spawnedIdx = m_Pool.Spawn(data);
-            if (spawnedIdx == ParticlePool::INVALID_INDEX) {
-                break;
-            }
+            if (spawnedIdx == ParticlePool::INVALID_INDEX) break;
+            DispatchSubEmitters(SubEmitterTrigger::Birth, data.Position, data.Velocity, data.StartColor);
         }
     }
 
@@ -154,7 +178,7 @@ namespace Axle {
 
         ParticleSpawnData data;
         if (m_Config.SimulationSpace == ParticleSimulationSpace::World) {
-            data.Position = emitterWorldPos + (emitterWorldRot * offset);
+            data.Position = emitterWorldPos + (emitterWorldRot * (offset * m_WorldScale));
             data.Velocity = glm::normalize(emitterWorldRot * dir) * m_Config.InitialSpeed.Sample(m_RNG);
         } else {
             data.Position = offset;
@@ -184,13 +208,14 @@ namespace Axle {
             data.UVSubFrame = glm::vec4(0.0f, 0.0f, 0.0f, lightingFlag);
         }
 
-        m_Pool.Spawn(data);
+        if (m_Pool.Spawn(data) == ParticlePool::INVALID_INDEX) return;
 
-        // Sub-Emitter Trigger on Birth
+        // Only successful births generate events.
         DispatchSubEmitters(SubEmitterTrigger::Birth, data.Position, data.Velocity, data.StartColor);
     }
 
-    void ParticleSystem::Update(float dt, const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot) {
+    void ParticleSystem::Update(float dt, const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot, const glm::vec3& emitterWorldScale) {
+        SetEmitterTransform(emitterWorldPos, emitterWorldRot, emitterWorldScale);
         if (dt <= 0.0f) return;
 
         m_TotalSimulationTime += dt;
@@ -225,7 +250,7 @@ namespace Axle {
                     budget++;
                     uint32_t count = burst.SampleCount(m_RNG);
                     if (count > 0 && (burst.Probability >= 1.0f || VFXRandom::Float(m_RNG, 0.0f, 1.0f) <= burst.Probability)) {
-                        EmitBurst(count, emitterWorldPos, emitterWorldRot);
+                        EmitBurst(count, emitterWorldPos, emitterWorldRot, m_WorldScale);
                     }
                     runtime.CompletedCycles++;
                     if (burst.Interval > 0.0f) {
@@ -260,7 +285,7 @@ namespace Axle {
                 m_BurstTimer += dt;
                 if (m_BurstTimer >= m_Config.BurstInterval) {
                     m_BurstTimer -= m_Config.BurstInterval;
-                    EmitBurst(m_Config.BurstCount, emitterWorldPos, emitterWorldRot);
+                    EmitBurst(m_Config.BurstCount, emitterWorldPos, emitterWorldRot, m_WorldScale);
                 }
             }
 
@@ -408,7 +433,7 @@ namespace Axle {
             float curveSize = m_Config.SizeOverLifetime.Evaluate(t);
             sizes[i] = glm::mix(startSizes[i], endSizes[i], t) * curveSize;
 
-            colors[i] = m_Config.ColorOverLifetime.Evaluate(t);
+            colors[i] = m_Config.ColorOverLifetime.Evaluate(t) * m_Pool.GetColorMultipliers()[i];
             colors[i].a *= m_Config.AlphaOverLifetime.Evaluate(t);
 
             // Flipbook UV frame interpolation & sub-frame blending

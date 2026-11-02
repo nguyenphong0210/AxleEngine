@@ -26,6 +26,7 @@ namespace Axle {
         m_StartSizes.resize(capacity, 1.0f);
         m_EndSizes.resize(capacity, 1.0f);
         m_CustomFlags.resize(capacity, 0);
+        m_ColorMultipliers.resize(capacity, glm::vec4(1));
     }
 
     void ParticlePool::Reset() {
@@ -54,6 +55,7 @@ namespace Axle {
         m_UVOffsetScales[idx] = data.UVOffsetScale;
         m_UVSubFrames[idx] = data.UVSubFrame;
         m_CustomFlags[idx] = data.CustomFlags;
+        m_ColorMultipliers[idx] = data.ColorMultiplier;
 
         return idx;
     }
@@ -81,6 +83,7 @@ namespace Axle {
             m_StartSizes[index] = m_StartSizes[lastIdx];
             m_EndSizes[index] = m_EndSizes[lastIdx];
             m_CustomFlags[index] = m_CustomFlags[lastIdx];
+            m_ColorMultipliers[index] = m_ColorMultipliers[lastIdx];
         }
 
         --m_ActiveCount;

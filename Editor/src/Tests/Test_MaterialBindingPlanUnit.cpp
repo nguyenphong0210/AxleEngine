@@ -1,5 +1,6 @@
 #include "MaterialTestHarness.hpp"
 #include <Axle/MaterialBindingPlan.hpp>
+#include <Axle/CustomShaderInterface.hpp>
 #include <cstring>
 #include <vector>
 
@@ -288,6 +289,116 @@ namespace {
         return true;
     }
 
+    bool TestCustomShaderInterfaceRecognition() {
+        // 1. Canonical interface
+        {
+            RHI::RHIShaderReflection refl;
+            RHI::RHIShaderConstantBuffer objCb;
+            objCb.Name = "EngineObject";
+            objCb.BindPoint = 0; objCb.Space = 0; objCb.Size = 96;
+            objCb.Variables.push_back({ "u_Model", 0, 64 });
+            objCb.Variables.push_back({ "u_BaseColor", 64, 16 });
+            objCb.Variables.push_back({ "u_BaseUV", 80, 16 });
+            refl.ConstantBuffers.push_back(objCb);
+
+            RHI::RHIShaderConstantBuffer scnCb;
+            scnCb.Name = "EngineScene";
+            scnCb.BindPoint = 1; scnCb.Space = 0; scnCb.Size = 80;
+            scnCb.Variables.push_back({ "u_ViewProjection", 0, 64 });
+            scnCb.Variables.push_back({ "u_CameraPosition", 64, 16 });
+            refl.ConstantBuffers.push_back(scnCb);
+
+            MAT_TEST_CHECK(CustomShaderInterface::DetectInterface(refl) == CustomInterfaceType::Canonical, "Must detect Canonical");
+            auto val = CustomShaderInterface::Validate(refl);
+            MAT_TEST_CHECK(val.IsValid, "Canonical interface validation must succeed");
+        }
+
+        // 2. Legacy template interface
+        {
+            RHI::RHIShaderReflection refl;
+            RHI::RHIShaderConstantBuffer objCb;
+            objCb.Name = "ObjectConstants";
+            objCb.BindPoint = 0; objCb.Space = 0; objCb.Size = 96;
+            objCb.Variables.push_back({ "u_Model", 0, 64 });
+            objCb.Variables.push_back({ "u_BaseColor", 64, 16 });
+            objCb.Variables.push_back({ "u_Params", 80, 16 });
+            refl.ConstantBuffers.push_back(objCb);
+
+            MAT_TEST_CHECK(CustomShaderInterface::DetectInterface(refl) == CustomInterfaceType::LegacyTemplate, "Must detect LegacyTemplate");
+            auto val = CustomShaderInterface::Validate(refl);
+            MAT_TEST_CHECK(val.IsValid, "Legacy template interface validation must succeed");
+        }
+
+        // 3. Unknown interface
+        {
+            RHI::RHIShaderReflection refl;
+            RHI::RHIShaderConstantBuffer ranCb;
+            ranCb.Name = "RandomBuffer";
+            ranCb.BindPoint = 0; ranCb.Space = 0; ranCb.Size = 64;
+            refl.ConstantBuffers.push_back(ranCb);
+
+            MAT_TEST_CHECK(CustomShaderInterface::DetectInterface(refl) == CustomInterfaceType::Unknown, "Must detect Unknown");
+            auto val = CustomShaderInterface::Validate(refl);
+            MAT_TEST_CHECK(!val.IsValid, "Unknown interface validation must fail");
+        }
+
+        // 4. Canonical template text check
+        {
+            std::string templ = CustomShaderInterface::GetCanonicalTemplate("MyTestShader");
+            MAT_TEST_CHECK(templ.find("EngineObject") != std::string::npos, "Template must contain EngineObject");
+            MAT_TEST_CHECK(templ.find("EngineScene") != std::string::npos, "Template must contain EngineScene");
+            MAT_TEST_CHECK(templ.find("MaterialParameters") != std::string::npos, "Template must contain MaterialParameters");
+            MAT_TEST_CHECK(templ.find("space1") != std::string::npos, "Template must use space1 for textures");
+        }
+
+        return true;
+    }
+
+    bool TestVulkanBindingCollisionDetection() {
+        // Collision case: b0 at space 0, and t0 at space 0
+        {
+            RHI::RHIShaderReflection refl;
+            RHI::RHIShaderConstantBuffer cb;
+            cb.Name = "ObjectConstants";
+            cb.BindPoint = 0;
+            cb.Space = 0;
+            refl.ConstantBuffers.push_back(cb);
+
+            RHI::RHIShaderResourceBinding res;
+            res.Name = "u_BaseMap";
+            res.Type = RHI::RHIResourceType::Texture;
+            res.BindPoint = 0;
+            res.Space = 0; // collision!
+            refl.Resources.push_back(res);
+
+            std::string details;
+            MAT_TEST_CHECK(CustomShaderInterface::HasVulkanBindingCollision(refl, details), "Must detect collision when cb and tex share space and register");
+            MAT_TEST_CHECK(!details.empty(), "Collision details must be non-empty");
+        }
+
+        // Clean canonical case: b0 at space 0, and t0 at space 1
+        {
+            RHI::RHIShaderReflection refl;
+            RHI::RHIShaderConstantBuffer cb;
+            cb.Name = "EngineObject";
+            cb.BindPoint = 0;
+            cb.Space = 0;
+            refl.ConstantBuffers.push_back(cb);
+
+            RHI::RHIShaderResourceBinding res;
+            res.Name = "u_BaseMap";
+            res.Type = RHI::RHIResourceType::Texture;
+            res.BindPoint = 0;
+            res.Space = 1; // Different space -> No collision!
+            refl.Resources.push_back(res);
+
+            std::string details;
+            MAT_TEST_CHECK(!CustomShaderInterface::HasVulkanBindingCollision(refl, details), "Canonical interface with separate spaces must not collide");
+        }
+
+        return true;
+    }
+
 } // namespace
 
 bool RunMaterialBindingPlanUnitTests() {
@@ -305,6 +416,12 @@ bool RunMaterialBindingPlanUnitTests() {
 
     std::cout << "  - Running TestVertexInputPlanFixture ...\n";
     if (!TestVertexInputPlanFixture()) return false;
+
+    std::cout << "  - Running TestCustomShaderInterfaceRecognition ...\n";
+    if (!TestCustomShaderInterfaceRecognition()) return false;
+
+    std::cout << "  - Running TestVulkanBindingCollisionDetection ...\n";
+    if (!TestVulkanBindingCollisionDetection()) return false;
 
     return true;
 }

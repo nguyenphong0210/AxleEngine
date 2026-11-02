@@ -2,6 +2,7 @@
 #include <Axle/FileSystem.hpp>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
 
 namespace Axle {
 
@@ -17,24 +18,22 @@ namespace Axle {
             return "";
         }
 
-        auto fileSize = std::filesystem::file_size(shaderPath, ec);
-        if (ec) return "";
-
-        std::ifstream f(shaderPath, std::ios::binary);
-        if (!f.is_open()) return "";
-
-        std::stringstream ss;
-        ss << f.rdbuf();
-        std::string content = ss.str();
-
-        // Compute 64-bit FNV-1a hash over file contents
+        auto dependencies=RHI::RHIShaderCompiler::ExtractIncludeDependencies(shaderPath);
+        dependencies.push_back(shaderPath);
+        std::sort(dependencies.begin(),dependencies.end());
+        dependencies.erase(std::unique(dependencies.begin(),dependencies.end()),dependencies.end());
+        // Include identities and contents, so same-size edits and include removal invalidate.
         uint64_t hash = 14695981039346656037ull;
-        for (unsigned char c : content) {
-            hash ^= c;
-            hash *= 1099511628211ull;
+        for (const auto& dependency : dependencies) {
+            std::ifstream file(dependency,std::ios::binary);
+            if (!file) return "";
+            const auto identity=std::filesystem::absolute(dependency,ec).lexically_normal().generic_string();
+            for (unsigned char c : identity) { hash^=c; hash*=1099511628211ull; }
+            char c;
+            while(file.get(c)) { hash^=static_cast<unsigned char>(c); hash*=1099511628211ull; }
+            hash^=0xff; hash*=1099511628211ull;
         }
-
-        return std::to_string(fileSize) + ":" + std::to_string(hash);
+        return std::to_string(hash);
     }
 
     ProgramEntry& CustomProgramCache::RefreshEntry(const CustomProgramKey& key, const std::string& fingerprint) {
@@ -82,9 +81,9 @@ namespace Axle {
             return SelectedProgram{ ProgramSelectionKind::BuiltIn, nullptr, "Custom shader enabled but no shader path specified." };
         }
 
-        if (!fingerprint.empty()) {
-            RefreshEntry(key, fingerprint);
-        }
+        if (fingerprint.empty())
+            return {ProgramSelectionKind::BuiltIn,nullptr,"Custom shader is missing or unreadable: "+shaderPath};
+        RefreshEntry(key, fingerprint);
 
         auto it = m_Entries.find(key);
         if (it != m_Entries.end() && it->second.ReadyGeneration) {

@@ -1,6 +1,7 @@
 #include "MaterialTestHarness.hpp"
 #include <Axle/CustomMaterialProgram.hpp>
 #include <Axle/RHISceneRenderer.hpp>
+#include <fstream>
 
 using namespace Axle;
 using namespace Axle::MaterialTests;
@@ -184,6 +185,23 @@ namespace {
 } // namespace
 
 bool RunMaterialProgramCacheUnitTests() {
+    {
+        ScopedTempDir temp("shader_dependencies");
+        auto main=temp.Path/"main.hlsl",inc=temp.Path/"common.hlsl";
+        {std::ofstream f(main); f << "#include \"common.hlsl\"\n";}
+        {std::ofstream f(inc); f << "float Value=1;";}
+        auto first=CustomProgramCache::ComputeFingerprint(main);
+        {std::ofstream f(inc); f << "float Value=2;";}
+        auto second=CustomProgramCache::ComputeFingerprint(main);
+        MAT_TEST_CHECK(!first.empty() && first!=second,"Same-size include edits invalidate cached programs");
+        CustomProgramCache cache;
+        cache.SetCandidateBuilder([](const auto&,const auto&){CandidateBuildResult r;r.Success=true;r.Generation=std::make_shared<CustomReadyGeneration>();return r;});
+        CustomProgramKey key; key.ShaderPath=main.string();
+        MAT_TEST_CHECK(cache.SelectProgram(true,key.ShaderPath,key,first).Generation,"First generation ready");
+        std::filesystem::remove(main);
+        auto missing=cache.SelectProgram(true,key.ShaderPath,key,CustomProgramCache::ComputeFingerprint(main));
+        MAT_TEST_CHECK(missing.Kind==ProgramSelectionKind::BuiltIn && !missing.Diagnostic.empty(),"Deleting the main shader selects a diagnosed built-in fallback");
+    }
     std::cout << "  - Running TestProgramCacheSequenceAndGenerations ...\n";
     if (!TestProgramCacheSequenceAndGenerations()) return false;
 

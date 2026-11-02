@@ -1478,66 +1478,68 @@ namespace Axle {
     };
 
     struct ParticleEmitterStack {
+        EmitterId Id = GenerateUniqueEmitterId();
         std::string Name = "Base Emitter";
         bool Enabled = true;
-        bool Visible = true;
+        bool Visible = true; // Editor-only visibility; never overwrites authored Enabled.
+        bool TriggerOnly = false;
+        EmitterTransform LocalTransform;
+        bool UseTexture = true;
+        bool UseNormalMap = true;
         ParticleEmitterConfig Config;
-        std::shared_ptr<ParticleSystem> System = nullptr;
-        std::string TexturePath;
-        std::string NormalMapPath;
-        std::string MaterialPath;
-        std::shared_ptr<Texture2D> Texture = nullptr;
-        std::shared_ptr<Texture2D> NormalMap = nullptr;
+        std::shared_ptr<ParticleSystem> System;
+        std::string TexturePath, NormalMapPath, MaterialPath;
+        std::shared_ptr<Texture2D> Texture, NormalMap;
 
         ParticleEmitterStack() = default;
-
-        // Deep copy: construct a distinct ParticleSystem instance rather than sharing the pointer
-        ParticleEmitterStack(const ParticleEmitterStack& other)
-            : Name(other.Name),
-              Enabled(other.Enabled),
-              Visible(other.Visible),
-              Config(other.Config),
-              System(std::make_shared<ParticleSystem>(other.Config)),
-              TexturePath(other.TexturePath),
-              NormalMapPath(other.NormalMapPath),
-              MaterialPath(other.MaterialPath),
-              Texture(other.Texture),
-              NormalMap(other.NormalMap) {
-        }
-
+        ParticleEmitterStack(const ParticleEmitterStack& other) { *this = other; }
         ParticleEmitterStack& operator=(const ParticleEmitterStack& other) {
             if (this != &other) {
-                Name = other.Name;
-                Enabled = other.Enabled;
+                SetDefinition(other.GetDefinition());
                 Visible = other.Visible;
-                Config = other.Config;
-                System = std::make_shared<ParticleSystem>(other.Config);
-                TexturePath = other.TexturePath;
-                NormalMapPath = other.NormalMapPath;
-                MaterialPath = other.MaterialPath;
                 Texture = other.Texture;
                 NormalMap = other.NormalMap;
+                System = std::make_shared<ParticleSystem>(Config);
+                if (other.System) System->SetSeed(other.System->GetSeed());
+                System->SetEmitting(Enabled && !TriggerOnly);
             }
             return *this;
         }
-
         ParticleEmitterStack(ParticleEmitterStack&&) noexcept = default;
         ParticleEmitterStack& operator=(ParticleEmitterStack&&) noexcept = default;
         ParticleEmitterStack(const std::string& name, const ParticleEmitterConfig& cfg)
-            : Name(name), Config(cfg) {
-            Initialize();
-        }
+            : Name(name), Config(cfg) { Initialize(); }
+        explicit ParticleEmitterStack(const EmitterDefinition& def) { SetDefinition(def); }
 
-        void Initialize(uint32_t baseSeed = 1337) {
-            if (!System) {
-                System = std::make_shared<ParticleSystem>(Config);
-            } else {
-                System->SetConfig(Config);
-            }
-            if (System) {
-                System->SetSeed(HashEmitterSeed(baseSeed, Name));
-                System->SetEmitting(Enabled);
-            }
+        void SetDefinition(const EmitterDefinition& def) {
+            Id = def.Id;
+            Name = def.Name;
+            Enabled = def.Enabled;
+            TriggerOnly = def.TriggerOnly;
+            LocalTransform = def.LocalTransform;
+            Config = def.Config;
+            TexturePath = def.Resources.TexturePath;
+            NormalMapPath = def.Resources.NormalMapPath;
+            MaterialPath = def.Resources.MaterialPath;
+            UseTexture = def.Resources.UseTexture;
+            UseNormalMap = def.Resources.UseNormalMap;
+        }
+        EmitterDefinition GetDefinition() const {
+            EmitterDefinition def;
+            def.Id = Id;
+            def.Name = Name;
+            def.Enabled = Enabled;
+            def.TriggerOnly = TriggerOnly;
+            def.LocalTransform = LocalTransform;
+            def.Config = Config;
+            def.Resources = {TexturePath, NormalMapPath, MaterialPath, UseTexture, UseNormalMap};
+            return def;
+        }
+        void Initialize(uint32_t baseSeed = 1) {
+            if (!System) System = std::make_shared<ParticleSystem>(Config);
+            else System->SetConfig(Config);
+            System->SetSeed(HashEmitterSeed(baseSeed, Id));
+            System->SetEmitting(Enabled && !TriggerOnly);
         }
     };
 
@@ -1591,6 +1593,8 @@ namespace Axle {
         ParticleEmitterConfig Config;
         std::shared_ptr<ParticleSystem> System = nullptr;
         std::string AssetPath;
+        std::string EffectName = "ParticleEffect";
+        uint32_t EffectSeed = 1;
 
         UUID TextureAsset = 0;
         std::string TexturePath;
@@ -1621,6 +1625,8 @@ namespace Axle {
         ParticleEmitterComponent(const ParticleEmitterComponent& other)
             : Config(other.Config),
               AssetPath(other.AssetPath),
+              EffectName(other.EffectName),
+              EffectSeed(other.EffectSeed),
               TextureAsset(other.TextureAsset),
               TexturePath(other.TexturePath),
               Texture(other.Texture),
@@ -1639,6 +1645,8 @@ namespace Axle {
             if (this != &other) {
                 Config = other.Config;
                 AssetPath = other.AssetPath;
+                EffectName = other.EffectName;
+                EffectSeed = other.EffectSeed;
                 TextureAsset = other.TextureAsset;
                 TexturePath = other.TexturePath;
                 Texture = other.Texture;
@@ -1672,23 +1680,11 @@ namespace Axle {
                 EmitterStacks[0].TexturePath = TexturePath;
             }
 
-            if (!System) {
-                System = std::make_shared<ParticleSystem>(Config);
-            } else {
-                System->SetConfig(Config);
+            for (auto& stack : EmitterStacks) {
+                stack.Initialize(EffectSeed);
+                stack.System->SetEmitting(Active && stack.Enabled && !stack.TriggerOnly);
             }
-            if (System) {
-                System->SetSeed(HashEmitterSeed(1337, EmitterStacks.empty() ? "Primary" : EmitterStacks[0].Name));
-                System->SetEmitting(Active && (EmitterStacks.empty() || EmitterStacks[0].Enabled));
-            }
-            EmitterStacks[0].System = System;
-
-            for (size_t i = 1; i < EmitterStacks.size(); ++i) {
-                EmitterStacks[i].Initialize(1337);
-                if (EmitterStacks[i].System) {
-                    EmitterStacks[i].System->SetEmitting(Active && EmitterStacks[i].Enabled);
-                }
-            }
+            SyncPrimary();
         }
 
         void SyncPrimary() {
@@ -1696,6 +1692,8 @@ namespace Axle {
                 Config = EmitterStacks[0].Config;
                 System = EmitterStacks[0].System;
                 TexturePath = EmitterStacks[0].TexturePath;
+                NormalMapPath = EmitterStacks[0].NormalMapPath;
+                SimulationSpace = Config.SimulationSpace;
             }
         }
 
@@ -1762,11 +1760,11 @@ namespace Axle {
         void Play() {
             Active = true;
             for (auto& stack : EmitterStacks) {
-                if (stack.Enabled && stack.System) {
+                if (stack.Enabled && !stack.TriggerOnly && stack.System) {
                     stack.System->SetEmitting(true);
                 }
             }
-            if (System && (!EmitterStacks.empty() ? EmitterStacks[0].Enabled : true)) {
+            if (System && (!EmitterStacks.empty() ? (EmitterStacks[0].Enabled && !EmitterStacks[0].TriggerOnly) : true)) {
                 System->SetEmitting(true);
             }
         }
@@ -1783,55 +1781,33 @@ namespace Axle {
             }
         }
 
-        bool LoadFromAsset(const std::string& path) {
-            AssetPath = path;
+        ParticleEffectDefinition GetEffectDefinition() const {
             ParticleEffectDefinition effect;
-            if (ParticleEffectSerializer::DeserializeFromFile(path, effect)) {
-                EmitterStacks.clear();
-                for (const auto& emitter : effect.Emitters) {
-                    ParticleEmitterStack stack(emitter.Name, emitter.Config);
-                    stack.Enabled = emitter.Enabled;
-                    stack.Visible = true;
-                    stack.TexturePath = emitter.Resources.TexturePath;
-                    stack.NormalMapPath = emitter.Resources.NormalMapPath;
-                    stack.MaterialPath = emitter.Resources.MaterialPath;
-                    EmitterStacks.push_back(std::move(stack));
-                }
-                SyncPrimary();
-                Initialize();
-                return true;
-            }
-            std::string texPath;
-            if (ParticleEmitterSerializer::DeserializeFromFile(path, Config, texPath)) {
-                if (!texPath.empty()) {
-                    TexturePath = texPath;
-                }
-                Initialize();
-                return true;
-            }
-            return false;
+            effect.Name = EffectName;
+            effect.Seed = EffectSeed;
+            for (const auto& stack : EmitterStacks) effect.Emitters.push_back(stack.GetDefinition());
+            return effect;
+        }
+
+        void SetEffectDefinition(const ParticleEffectDefinition& effect) {
+            EffectName = effect.Name;
+            EffectSeed = effect.Seed;
+            EmitterStacks.clear();
+            for (const auto& emitter : effect.Emitters) EmitterStacks.emplace_back(emitter);
+            SyncPrimary();
+            Initialize();
+        }
+
+        bool LoadFromAsset(const std::string& path) {
+            ParticleEffectDefinition effect;
+            if (!ParticleEffectSerializer::DeserializeFromFile(FileSystem::ResolveAssetPath(path).string(), effect)) return false;
+            SetEffectDefinition(effect);
+            AssetPath = path;
+            return true;
         }
 
         bool SaveToAsset(const std::string& path) const {
-            ParticleEffectDefinition effect;
-            effect.SchemaVersion = 2;
-            effect.Name = Config.Name.empty() ? "ParticleEffect" : Config.Name;
-            effect.Seed = 1;
-            for (size_t i = 0; i < EmitterStacks.size(); ++i) {
-                const auto& stack = EmitterStacks[i];
-                EmitterDefinition def;
-                def.Id = "emitter-" + std::to_string(i + 1);
-                def.Name = stack.Name;
-                def.Enabled = stack.Enabled;
-                def.Config = stack.Config;
-                def.Resources.TexturePath = stack.TexturePath;
-                def.Resources.NormalMapPath = stack.NormalMapPath;
-                def.Resources.MaterialPath = stack.MaterialPath;
-                def.Resources.UseTexture = !stack.TexturePath.empty();
-                def.Resources.UseNormalMap = !stack.NormalMapPath.empty();
-                effect.Emitters.push_back(std::move(def));
-            }
-            return ParticleEffectSerializer::SerializeToFile(path, effect);
+            return ParticleEffectSerializer::SerializeToFile(path, GetEffectDefinition());
         }
 
         void Reset() {

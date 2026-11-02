@@ -30,6 +30,24 @@ namespace Axle {
         return str.substr(first, (last - first + 1));
     }
 
+    static std::string EncodeVFXSceneData(const std::string& text) {
+        static constexpr char digits[] = "0123456789abcdef";
+        std::string encoded;
+        encoded.reserve(text.size() * 2);
+        for (unsigned char c : text) { encoded += digits[c >> 4]; encoded += digits[c & 15]; }
+        return encoded;
+    }
+    static bool DecodeVFXSceneData(const std::string& text, std::string& decoded) {
+        if (text.size() % 2) return false;
+        auto digit = [](char c) -> int { return c >= '0' && c <= '9' ? c-'0' : c >= 'a' && c <= 'f' ? c-'a'+10 : -1; };
+        for (size_t i = 0; i < text.size(); i += 2) {
+            int a = digit(text[i]), b = digit(text[i+1]);
+            if (a < 0 || b < 0) return false;
+            decoded += static_cast<char>((a << 4) | b);
+        }
+        return true;
+    }
+
     SceneSerializer::SceneSerializer(Scene* scene, PhysicsScene* physicsScene)
         : m_Scene(scene), m_PhysicsScene(physicsScene) {
     }
@@ -529,6 +547,8 @@ namespace Axle {
                     ss << "      Stack_" << i << "_Duration: " << s.Config.Duration << "\n";
                     ss << "      Stack_" << i << "_Looping: " << (s.Config.Looping ? "true" : "false") << "\n";
                 }
+                // Canonical versioned payload supersedes the legacy per-field adapter above.
+                ss << "      EffectData: " << EncodeVFXSceneData(ParticleEffectSerializer::Serialize(pec.GetEffectDefinition())) << "\n";
             }
 
             // VehicleVFXComponent
@@ -1527,7 +1547,13 @@ namespace Axle {
                             currentEntity.AddComponent<ParticleEmitterComponent>();
                         }
                         auto& pec = currentEntity.GetComponent<ParticleEmitterComponent>();
-                        if (trimmed.rfind("AssetPath:", 0) == 0) {
+                        if (trimmed.rfind("EffectData:", 0) == 0) {
+                            std::string text;
+                            ParticleEffectDefinition effect;
+                            if (!DecodeVFXSceneData(Trim(trimmed.substr(11)), text) ||
+                                !ParticleEffectSerializer::Deserialize(text, effect)) return false;
+                            pec.SetEffectDefinition(effect);
+                        } else if (trimmed.rfind("AssetPath:", 0) == 0) {
                             pec.AssetPath = Trim(trimmed.substr(10));
                             if (!pec.AssetPath.empty()) {
                                 pec.LoadFromAsset(pec.AssetPath);

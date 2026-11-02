@@ -317,7 +317,8 @@ namespace {
             );
             campfire.Emitters.push_back(std::move(sparks));
 
-            std::filesystem::path campfirePath = "Assets/VFX/Campfire_v2.axle_vfx";
+            Axle::VFXTests::ScopedTempDir fixtureDir;
+            std::filesystem::path campfirePath = fixtureDir.Path / "Campfire_v2.axle_vfx";
             VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(campfirePath.string(), campfire), "Serialize Campfire_v2.axle_vfx");
 
             Axle::ParticleEffectDefinition loadedCampfire;
@@ -407,7 +408,8 @@ namespace {
             smokePuff.Config.Buoyancy = 0.5f;
             backfire.Emitters.push_back(std::move(smokePuff));
 
-            std::filesystem::path backfirePath = "Assets/VFX/VehicleBackfire.axle_vfx";
+            Axle::VFXTests::ScopedTempDir fixtureDir;
+            std::filesystem::path backfirePath = fixtureDir.Path / "VehicleBackfire.axle_vfx";
             VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(backfirePath.string(), backfire), "Serialize VehicleBackfire.axle_vfx");
 
             Axle::ParticleEffectDefinition loadedBackfire;
@@ -419,7 +421,41 @@ namespace {
     }
 }
 
+static bool TestProductionEffectAdapters() {
+    Axle::VFXTests::ScopedTempDir temp;
+    auto effect = Axle::CreateDefaultParticleEffect("Adapter round trip");
+    effect.Seed = 90210;
+    auto& emitter = effect.Emitters[0];
+    emitter.Id = "stable-primary";
+    emitter.TriggerOnly = true;
+    emitter.LocalTransform.Translation = {1, 2, 3};
+    emitter.LocalTransform.Scale = {2, 3, 4};
+    emitter.Resources = {"retained-disabled.png", "retained-normal.png", "test.axleasset", false, false};
+    emitter.Config.Drag = 0.765f;
+    emitter.Config.Bursts.emplace_back(0.2f, 3, 3, 2, 0.5f, 1.0f);
+    auto file = temp.Path / "effect.axle_vfx";
+    VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(file.string(), effect), "Write fixture");
+    Axle::ParticleEmitterComponent component;
+    VFX_TEST_CHECK(component.LoadFromAsset(file.string()), "Load through production component");
+    VFX_TEST_CHECK(Axle::ParticleEffectSerializer::Serialize(component.GetEffectDefinition()) == Axle::ParticleEffectSerializer::Serialize(effect), "Component preserves all authored fields");
+    VFX_TEST_CHECK(!component.System->IsEmitting(), "Trigger-only target does not emit continuously");
+    VFX_TEST_CHECK(component.System->GetSeed() == Axle::HashEmitterSeed(effect.Seed, emitter.Id), "Seed follows effect and stable identity");
+    auto scene = std::make_shared<Axle::Scene>();
+    auto entity = scene->CreateEntity("Effect");
+    entity.AddComponent<Axle::ParticleEmitterComponent>(component);
+    auto sceneFile = temp.Path / "effect.axlescene";
+    VFX_TEST_CHECK(Axle::SceneSerializer(scene.get()).Serialize(sceneFile), "Write scene");
+    auto reopened = std::make_shared<Axle::Scene>();
+    VFX_TEST_CHECK(Axle::SceneSerializer(reopened.get()).Deserialize(sceneFile), "Read scene");
+    auto view = reopened->GetRegistry().view<Axle::ParticleEmitterComponent>();
+    VFX_TEST_CHECK(view.begin() != view.end(), "Effect component restored");
+    auto& loaded = view.get<Axle::ParticleEmitterComponent>(*view.begin());
+    VFX_TEST_CHECK(Axle::ParticleEffectSerializer::Serialize(loaded.GetEffectDefinition()) == Axle::ParticleEffectSerializer::Serialize(effect), "Scene preserves complete definition and disabled resources");
+    return true;
+}
+
 bool RunVFXPersistenceUnitTests() {
+    VFX_TEST_CHECK(TestProductionEffectAdapters(), "Production adapters failed");
     std::cout << "  - Running TestBaselineEmitterSerializer ...\n";
     VFX_TEST_CHECK(TestBaselineEmitterSerializer(), "TestBaselineEmitterSerializer failed");
     std::cout << "  - Running TestVFXEffectRoundTrip ...\n";

@@ -1,6 +1,7 @@
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/CurveEditorWidget.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/Shader.hpp>
@@ -86,6 +87,11 @@ namespace Axle {
                 m_RHIViewport = std::make_unique<RHIViewportDescriptor>();
             }
             m_RHIViewport->Init(m_ImGuiLayer, m_ViewportWidth, m_ViewportHeight, RHI::RHITextureFormat::RGBA8_UNORM, true);
+
+            if (!m_RHIParticleRenderer) {
+                m_RHIParticleRenderer = std::make_unique<RHIParticleRenderer>();
+                m_RHIParticleRenderer->Init(RHI::RHIDevice::Get());
+            }
         }
     }
 
@@ -401,6 +407,40 @@ namespace Axle {
         }
 
         m_Framebuffer->Unbind();
+    }
+
+    void VFXEditorPanel::RenderPreviewRHI(float width, float height) {
+        if (!m_RHIViewport || !m_RHIViewport->IsValid()) return;
+        if (!RHI::RHIDevice::Get().IsInitialized()) return;
+
+        if (!m_RHIParticleRenderer) {
+            m_RHIParticleRenderer = std::make_unique<RHIParticleRenderer>();
+            m_RHIParticleRenderer->Init(RHI::RHIDevice::Get());
+        }
+
+        u32 reqW = static_cast<u32>(width);
+        u32 reqH = static_cast<u32>(height);
+        if (reqW > 0 && reqH > 0 && (reqW != m_ViewportWidth || reqH != m_ViewportHeight)) {
+            m_ViewportWidth = reqW;
+            m_ViewportHeight = reqH;
+            m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
+        }
+
+        float aspect = static_cast<float>(m_ViewportWidth) / static_cast<float>(m_ViewportHeight);
+        PerspectiveCamera camera(55.0f, aspect, 0.1f, 1000.0f);
+
+        float yawRad = glm::radians(m_CameraYaw);
+        float pitchRad = glm::radians(m_CameraPitch);
+        glm::vec3 camPos;
+        camPos.x = m_CameraTarget.x + m_CameraDistance * std::cos(pitchRad) * std::sin(yawRad);
+        camPos.y = m_CameraTarget.y + m_CameraDistance * std::sin(pitchRad);
+        camPos.z = m_CameraTarget.z + m_CameraDistance * std::cos(pitchRad) * std::cos(yawRad);
+
+        glm::mat4 view = glm::lookAt(camPos, m_CameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
+        camera.SetViewMatrix(view, camPos);
+
+        // Render preview passes into offscreen RHI viewport
+        RenderPreview3D(width, height);
     }
 
     void VFXEditorPanel::DrawEmitterStackColumn(float width, float height) {
@@ -942,7 +982,6 @@ namespace Axle {
             ImGui::BeginChild("VFX_Viewport_Child", ImVec2(viewportWidth, totalHeight), true, ImGuiWindowFlags_NoScrollbar);
             {
                 ImVec2 avail = ImGui::GetContentRegionAvail();
-                RenderPreview3D(avail.x, avail.y);
 
                 uint64_t rhiTexID = 0;
                 if (m_RHIViewport && m_RHIViewport->IsValid()) {
@@ -953,11 +992,16 @@ namespace Axle {
                         m_ViewportHeight = reqH;
                         m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
                     }
+                    RenderPreviewRHI(avail.x, avail.y);
                     rhiTexID = m_RHIViewport->GetImTextureID();
+                } else {
+                    RenderPreview3D(avail.x, avail.y);
                 }
 
                 if (rhiTexID != 0) {
-                    ImGui::Image((ImTextureID)(intptr_t)rhiTexID, avail, ImVec2(0, 0), ImVec2(1, 1));
+                    glm::vec2 uv0 = m_RHIViewport->GetUV0();
+                    glm::vec2 uv1 = m_RHIViewport->GetUV1();
+                    ImGui::Image((ImTextureID)(intptr_t)rhiTexID, avail, ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
                 } else if (m_Framebuffer && m_Framebuffer->GetColorAttachmentRendererID() != 0) {
                     ImTextureID texID = (ImTextureID)(intptr_t)m_Framebuffer->GetColorAttachmentRendererID();
                     ImGui::Image(texID, avail, ImVec2(0, 1), ImVec2(1, 0));

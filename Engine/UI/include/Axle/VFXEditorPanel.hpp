@@ -79,6 +79,7 @@ namespace Axle {
 
     private:
         void RenderPreview3D(float width, float height);
+        void RenderPreviewRHI(float width, float height);
         void DrawGrid(const glm::mat4& viewProj, float radius = 5.0f);
         
         // 3-Column Unity Shuriken Layout
@@ -107,6 +108,7 @@ namespace Axle {
 
 
         std::unique_ptr<ParticleRenderer> m_ParticleRenderer;
+        std::unique_ptr<RHIParticleRenderer> m_RHIParticleRenderer;
         std::shared_ptr<Framebuffer> m_Framebuffer;
         std::unique_ptr<RHIViewportDescriptor> m_RHIViewport;
         class ImGuiLayer* m_ImGuiLayer = nullptr;

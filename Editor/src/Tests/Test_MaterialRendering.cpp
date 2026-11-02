@@ -452,6 +452,19 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     lm.UseCustomShader=false; lm.AlbedoColor={0,0,1,1};
     auto mixed=render();
     if (!check(sum(mixed,0,64,2)>sum(mixed,0,64,0)*2+1000 && sum(mixed,64,128,1)>1000,"Built-in and custom layouts can alternate in a frame")) return false;
+    settings.EnableSkybox=true;
+    rm.SurfaceType=SurfaceType::Transparent;rm.DepthWrite=false;
+    auto afterSky=render();
+    size_t checkedPixels=0;
+    for(size_t i=0;i<mixed.size() && i+3<afterSky.size();i+=4) {
+        if(mixed[i]<20 && (mixed[i+1]>128 || mixed[i+2]>128)) {
+            ++checkedPixels;
+            if(!check(afterSky[i]==mixed[i] && afterSky[i+1]==mixed[i+1] && afterSky[i+2]==mixed[i+2],"Sky pass restores custom and built-in material bindings"))return false;
+        }
+    }
+    if(!check(checkedPixels>100 && renderer.GetDrawCallCount()>=3,"Sky and both material queues execute during layout-switch verification"))return false;
+    settings.EnableSkybox=false;
+    rm.SurfaceType=SurfaceType::Opaque;rm.DepthWrite=true;
     lm.UseCustomShader=true;
     lm.AlbedoColor=glm::vec4(1);
     std::string textured=source;

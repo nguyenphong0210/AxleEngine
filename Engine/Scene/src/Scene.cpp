@@ -1712,10 +1712,11 @@ namespace Axle {
         // 1. Render standalone ParticleEmitterComponents
         for (auto entityID : view) {
             auto& pec = view.get<ParticleEmitterComponent>(entityID);
+            const auto& tc = view.get<TransformComponent>(entityID);
             if (!pec.Visible) continue;
             for (const auto& stack : pec.EmitterStacks) {
                 if (stack.Visible && stack.Enabled && stack.System && stack.System->GetActiveParticleCount() > 0) {
-                    particleRenderer.Render(cmd, *stack.System, nullptr, nullptr, stack.Config.SoftnessDistance);
+                    particleRenderer.Render(cmd, *stack.System, nullptr, nullptr, stack.Config.SoftnessDistance, tc.Translation, glm::quat(tc.Rotation));
                 }
             }
         }

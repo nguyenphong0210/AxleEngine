@@ -1522,13 +1522,14 @@ namespace Axle {
             Initialize();
         }
 
-        void Initialize() {
+        void Initialize(uint32_t baseSeed = 1337) {
             if (!System) {
                 System = std::make_shared<ParticleSystem>(Config);
             } else {
                 System->SetConfig(Config);
             }
             if (System) {
+                System->SetSeed(HashEmitterSeed(baseSeed, Name));
                 System->SetEmitting(Enabled);
             }
         }
@@ -1624,12 +1625,13 @@ namespace Axle {
                 System->SetConfig(Config);
             }
             if (System) {
+                System->SetSeed(HashEmitterSeed(1337, EmitterStacks.empty() ? "Primary" : EmitterStacks[0].Name));
                 System->SetEmitting(Active && (EmitterStacks.empty() || EmitterStacks[0].Enabled));
             }
             EmitterStacks[0].System = System;
 
             for (size_t i = 1; i < EmitterStacks.size(); ++i) {
-                EmitterStacks[i].Initialize();
+                EmitterStacks[i].Initialize(1337);
                 if (EmitterStacks[i].System) {
                     EmitterStacks[i].System->SetEmitting(Active && EmitterStacks[i].Enabled);
                 }

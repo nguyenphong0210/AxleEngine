@@ -10,37 +10,71 @@ namespace Axle {
     }
 
     float VFXRandom::Float(float min, float max) {
-        std::uniform_real_distribution<float> dist(min, max);
-        return dist(s_RNG);
+        return Float(s_RNG, min, max);
     }
 
     glm::vec3 VFXRandom::UnitVector() {
-        float z = Float(-1.0f, 1.0f);
-        float phi = Float(0.0f, 6.2831853f);
+        return UnitVector(s_RNG);
+    }
+
+    glm::vec3 VFXRandom::InUnitSphere() {
+        return InUnitSphere(s_RNG);
+    }
+
+    glm::vec3 VFXRandom::InUnitBox(const glm::vec3& halfExtents) {
+        return InUnitBox(s_RNG, halfExtents);
+    }
+
+    float VFXRandom::Float(std::mt19937& rng, float min, float max) {
+        std::uniform_real_distribution<float> dist(min, max);
+        return dist(rng);
+    }
+
+    glm::vec3 VFXRandom::UnitVector(std::mt19937& rng) {
+        float z = Float(rng, -1.0f, 1.0f);
+        float phi = Float(rng, 0.0f, 6.2831853f);
         float r = std::sqrt(std::max(0.0f, 1.0f - z * z));
         return glm::vec3(r * std::cos(phi), r * std::sin(phi), z);
     }
 
-    glm::vec3 VFXRandom::InUnitSphere() {
-        glm::vec3 u = UnitVector();
-        float r = std::cbrt(Float(0.0f, 1.0f));
+    glm::vec3 VFXRandom::InUnitSphere(std::mt19937& rng) {
+        glm::vec3 u = UnitVector(rng);
+        float r = std::cbrt(Float(rng, 0.0f, 1.0f));
         return u * r;
     }
 
-    glm::vec3 VFXRandom::InUnitBox(const glm::vec3& halfExtents) {
+    glm::vec3 VFXRandom::InUnitBox(std::mt19937& rng, const glm::vec3& halfExtents) {
         return glm::vec3(
-            Float(-halfExtents.x, halfExtents.x),
-            Float(-halfExtents.y, halfExtents.y),
-            Float(-halfExtents.z, halfExtents.z)
+            Float(rng, -halfExtents.x, halfExtents.x),
+            Float(rng, -halfExtents.y, halfExtents.y),
+            Float(rng, -halfExtents.z, halfExtents.z)
         );
     }
 
     float FloatRange::Sample() const {
+        return Sample(s_RNG);
+    }
+
+    float FloatRange::Sample(std::mt19937& rng) const {
         if (Min >= Max) return Min;
-        return VFXRandom::Float(Min, Max);
+        return VFXRandom::Float(rng, Min, Max);
+    }
+
+    uint32_t ParticleBurst::SampleCount() const {
+        return SampleCount(s_RNG);
+    }
+
+    uint32_t ParticleBurst::SampleCount(std::mt19937& rng) const {
+        if (MinCount >= MaxCount) return MinCount;
+        std::uniform_int_distribution<uint32_t> dist(MinCount, MaxCount);
+        return dist(rng);
     }
 
     void ParticleEmitterShape::Sample(glm::vec3& outOffset, glm::vec3& outDir) const {
+        Sample(outOffset, outDir, s_RNG);
+    }
+
+    void ParticleEmitterShape::Sample(glm::vec3& outOffset, glm::vec3& outDir, std::mt19937& rng) const {
         glm::vec3 normDir = (glm::length(Direction) > 0.0001f) ? glm::normalize(Direction) : glm::vec3(0.0f, 1.0f, 0.0f);
 
         switch (Type) {
@@ -51,15 +85,15 @@ namespace Axle {
             }
             case ParticleEmitterShapeType::Sphere: {
                 if (SurfaceOnly) {
-                    outOffset = VFXRandom::UnitVector() * Radius;
+                    outOffset = VFXRandom::UnitVector(rng) * Radius;
                 } else {
-                    outOffset = VFXRandom::InUnitSphere() * Radius;
+                    outOffset = VFXRandom::InUnitSphere(rng) * Radius;
                 }
                 outDir = (glm::length(outOffset) > 0.0001f) ? glm::normalize(outOffset) : normDir;
                 break;
             }
             case ParticleEmitterShapeType::Hemisphere: {
-                glm::vec3 r = VFXRandom::InUnitSphere();
+                glm::vec3 r = VFXRandom::InUnitSphere(rng);
                 if (glm::dot(r, normDir) < 0.0f) {
                     r = -r;
                 }
@@ -72,8 +106,8 @@ namespace Axle {
             }
             case ParticleEmitterShapeType::Box: {
                 if (SurfaceOnly) {
-                    outOffset = VFXRandom::InUnitBox(BoxExtents);
-                    int face = static_cast<int>(VFXRandom::Float(0.0f, 6.0f));
+                    outOffset = VFXRandom::InUnitBox(rng, BoxExtents);
+                    int face = static_cast<int>(VFXRandom::Float(rng, 0.0f, 6.0f));
                     if (face == 0) outOffset.x = BoxExtents.x;
                     else if (face == 1) outOffset.x = -BoxExtents.x;
                     else if (face == 2) outOffset.y = BoxExtents.y;
@@ -81,7 +115,7 @@ namespace Axle {
                     else if (face == 4) outOffset.z = BoxExtents.z;
                     else outOffset.z = -BoxExtents.z;
                 } else {
-                    outOffset = VFXRandom::InUnitBox(BoxExtents);
+                    outOffset = VFXRandom::InUnitBox(rng, BoxExtents);
                 }
                 outDir = normDir;
                 break;
@@ -93,20 +127,20 @@ namespace Axle {
                 up = glm::cross(right, normDir);
 
                 // Sample base circle
-                float r = Radius * std::sqrt(VFXRandom::Float(0.0f, 1.0f));
-                float phi = VFXRandom::Float(0.0f, 6.2831853f);
+                float r = Radius * std::sqrt(VFXRandom::Float(rng, 0.0f, 1.0f));
+                float phi = VFXRandom::Float(rng, 0.0f, 6.2831853f);
                 outOffset = (right * std::cos(phi) + up * std::sin(phi)) * r;
 
                 // Sample cone angle
-                float theta = VFXRandom::Float(0.0f, ConeAngle);
-                float dirPhi = VFXRandom::Float(0.0f, 6.2831853f);
+                float theta = VFXRandom::Float(rng, 0.0f, ConeAngle);
+                float dirPhi = VFXRandom::Float(rng, 0.0f, 6.2831853f);
                 float sinTheta = std::sin(theta);
                 glm::vec3 localDir(sinTheta * std::cos(dirPhi), sinTheta * std::sin(dirPhi), std::cos(theta));
                 outDir = glm::normalize(right * localDir.x + up * localDir.y + normDir * localDir.z);
                 break;
             }
             case ParticleEmitterShapeType::Line: {
-                float t = VFXRandom::Float(-0.5f, 0.5f) * LineLength;
+                float t = VFXRandom::Float(rng, -0.5f, 0.5f) * LineLength;
                 outOffset = glm::vec3(t, 0.0f, 0.0f);
                 outDir = normDir;
                 break;
@@ -115,14 +149,14 @@ namespace Axle {
                 glm::vec3 up = (std::abs(normDir.y) < 0.999f) ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
                 glm::vec3 right = glm::normalize(glm::cross(normDir, up));
                 up = glm::cross(right, normDir);
-                float r = SurfaceOnly ? Radius : (Radius * std::sqrt(VFXRandom::Float(0.0f, 1.0f)));
-                float phi = VFXRandom::Float(0.0f, 6.2831853f);
+                float r = SurfaceOnly ? Radius : (Radius * std::sqrt(VFXRandom::Float(rng, 0.0f, 1.0f)));
+                float phi = VFXRandom::Float(rng, 0.0f, 6.2831853f);
                 outOffset = (right * std::cos(phi) + up * std::sin(phi)) * r;
                 outDir = normDir;
                 break;
             }
             case ParticleEmitterShapeType::MeshSurface: {
-                outOffset = VFXRandom::UnitVector() * Radius;
+                outOffset = VFXRandom::UnitVector(rng) * Radius;
                 outDir = glm::normalize(outOffset);
                 break;
             }

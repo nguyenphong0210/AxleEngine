@@ -18,6 +18,7 @@ namespace Axle {
         bool SurfaceOnly = false; // For sphere/box: emit only on surface shell vs inside volume
 
         void Sample(glm::vec3& outOffset, glm::vec3& outDir) const;
+        void Sample(glm::vec3& outOffset, glm::vec3& outDir, std::mt19937& rng) const;
     };
 
     struct ParticleEmitterConfig {

@@ -45,6 +45,10 @@ namespace Axle {
         float GetEmitterTime() const { return m_EmitterTime; }
         uint64_t GetCollisionCount() const { return m_CollisionCount; }
 
+        void SetSeed(uint32_t seed);
+        uint32_t GetSeed() const { return m_InitialSeed; }
+        std::mt19937& GetRNG() { return m_RNG; }
+
         // Sub-Emitter & Multi-Emitter Child Management
         void SetSubEmitterCallback(SubEmitterCallback cb) { m_SubEmitterCallback = std::move(cb); }
         void AddChildSystem(const std::string& name, const std::shared_ptr<ParticleSystem>& child);
@@ -66,6 +70,9 @@ namespace Axle {
         float m_EmitterTime = 0.0f;
         uint64_t m_CollisionCount = 0;
         bool m_IsEmitting = true;
+
+        uint32_t m_InitialSeed = 1337;
+        std::mt19937 m_RNG{ 1337 };
 
         std::vector<BurstRuntimeState> m_BurstRuntime;
         SubEmitterCallback m_SubEmitterCallback;

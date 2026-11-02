@@ -48,6 +48,7 @@ namespace Axle {
         FloatRange(float minVal, float maxVal) : Min(minVal), Max(maxVal) {}
 
         float Sample() const;
+        float Sample(std::mt19937& rng) const;
     };
 
     // =========================================================================
@@ -74,10 +75,8 @@ namespace Axle {
             NextTriggerTime = Time;
         }
 
-        uint32_t SampleCount() const {
-            if (MinCount >= MaxCount) return MinCount;
-            return MinCount + (std::rand() % (MaxCount - MinCount + 1));
-        }
+        uint32_t SampleCount() const;
+        uint32_t SampleCount(std::mt19937& rng) const;
     };
 
     // =========================================================================
@@ -336,6 +335,18 @@ namespace Axle {
             : Trigger(trig), TargetEmitterName(target), EmitCount(count), Probability(prob) {}
     };
 
+    inline uint32_t HashEmitterSeed(uint32_t baseSeed, std::string_view emitterId) {
+        uint64_t hash = 14695981039346656037ULL;
+        for (char c : emitterId) {
+            hash ^= static_cast<uint64_t>(c);
+            hash *= 1099511628211ULL;
+        }
+        hash ^= static_cast<uint64_t>(baseSeed);
+        hash *= 1099511628211ULL;
+        hash ^= (hash >> 32);
+        return static_cast<uint32_t>(hash);
+    }
+
     class VFXRandom {
     public:
         static void SetSeed(uint32_t seed);
@@ -343,6 +354,12 @@ namespace Axle {
         static glm::vec3 UnitVector();
         static glm::vec3 InUnitSphere();
         static glm::vec3 InUnitBox(const glm::vec3& halfExtents);
+
+        // Instance-isolated RNG overloads
+        static float Float(std::mt19937& rng, float min = 0.0f, float max = 1.0f);
+        static glm::vec3 UnitVector(std::mt19937& rng);
+        static glm::vec3 InUnitSphere(std::mt19937& rng);
+        static glm::vec3 InUnitBox(std::mt19937& rng, const glm::vec3& halfExtents);
     };
 
 }

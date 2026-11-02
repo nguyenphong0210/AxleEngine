@@ -26,6 +26,11 @@ namespace Axle {
         }
     }
 
+    void ParticleSystem::SetSeed(uint32_t seed) {
+        m_InitialSeed = seed;
+        m_RNG.seed(seed);
+    }
+
     uint32_t ParticleSystem::GetActiveParticleCount() const {
         uint32_t count = m_Pool.GetActiveCount();
         for (const auto& [name, child] : m_ChildSystems) {
@@ -41,6 +46,7 @@ namespace Axle {
         m_TotalSimulationTime = 0.0f;
         m_EmitterTime = 0.0f;
         m_CollisionCount = 0;
+        m_RNG.seed(m_InitialSeed);
 
         m_BurstRuntime.resize(m_Config.Bursts.size());
         for (size_t i = 0; i < m_Config.Bursts.size(); ++i) {
@@ -79,7 +85,7 @@ namespace Axle {
     void ParticleSystem::DispatchSubEmitters(SubEmitterTrigger trigger, const glm::vec3& pos, const glm::vec3& vel, const glm::vec4& color) {
         for (const auto& sub : m_Config.SubEmitters) {
             if (sub.Trigger == trigger) {
-                if (sub.Probability >= 1.0f || VFXRandom::Float(0.0f, 1.0f) <= sub.Probability) {
+                if (sub.Probability >= 1.0f || VFXRandom::Float(m_RNG, 0.0f, 1.0f) <= sub.Probability) {
                     if (m_SubEmitterCallback) {
                         m_SubEmitterCallback(trigger, sub.TargetEmitterName, pos, vel, color, sub.EmitCount);
                     }
@@ -95,25 +101,25 @@ namespace Axle {
     void ParticleSystem::SpawnParticle(const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot) {
         glm::vec3 offset(0.0f);
         glm::vec3 dir(0.0f, 1.0f, 0.0f);
-        m_Config.Shape.Sample(offset, dir);
+        m_Config.Shape.Sample(offset, dir, m_RNG);
 
         ParticleSpawnData data;
         if (m_Config.SimulationSpace == ParticleSimulationSpace::World) {
             data.Position = emitterWorldPos + (emitterWorldRot * offset);
-            data.Velocity = glm::normalize(emitterWorldRot * dir) * m_Config.InitialSpeed.Sample();
+            data.Velocity = glm::normalize(emitterWorldRot * dir) * m_Config.InitialSpeed.Sample(m_RNG);
         } else {
             data.Position = offset;
-            data.Velocity = glm::normalize(dir) * m_Config.InitialSpeed.Sample();
+            data.Velocity = glm::normalize(dir) * m_Config.InitialSpeed.Sample(m_RNG);
         }
 
         data.Acceleration = m_Config.ConstantAcceleration;
-        data.StartSize = m_Config.StartSize.Sample();
-        data.EndSize = m_Config.EndSize.Sample();
+        data.StartSize = m_Config.StartSize.Sample(m_RNG);
+        data.EndSize = m_Config.EndSize.Sample(m_RNG);
         data.StartColor = m_Config.ColorOverLifetime.Evaluate(0.0f);
         data.EndColor = m_Config.ColorOverLifetime.Evaluate(1.0f);
-        data.StartRotation = m_Config.StartRotation.Sample();
-        data.AngularVelocity = m_Config.AngularVelocity.Sample();
-        data.Lifetime = m_Config.Lifetime.Sample();
+        data.StartRotation = m_Config.StartRotation.Sample(m_RNG);
+        data.AngularVelocity = m_Config.AngularVelocity.Sample(m_RNG);
+        data.Lifetime = m_Config.Lifetime.Sample(m_RNG);
 
         float lightingFlag = m_Config.LightingEnabled ? 1.0f : 0.0f;
         if (m_Config.TotalFrames > 1 && m_Config.TextureCols > 0 && m_Config.TextureRows > 0) {
@@ -168,8 +174,8 @@ namespace Axle {
                        runtime.NextTriggerTime <= windowEnd &&
                        budget < MAX_BURST_EVENTS_PER_TICK) {
                     budget++;
-                    uint32_t count = burst.SampleCount();
-                    if (count > 0 && (burst.Probability >= 1.0f || VFXRandom::Float(0.0f, 1.0f) <= burst.Probability)) {
+                    uint32_t count = burst.SampleCount(m_RNG);
+                    if (count > 0 && (burst.Probability >= 1.0f || VFXRandom::Float(m_RNG, 0.0f, 1.0f) <= burst.Probability)) {
                         EmitBurst(count, emitterWorldPos, emitterWorldRot);
                     }
                     runtime.CompletedCycles++;

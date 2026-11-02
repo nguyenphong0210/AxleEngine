@@ -99,6 +99,82 @@ namespace {
 
         return true;
     }
+
+    bool TestDeterministicSeededSpawning() {
+        Axle::ParticleEmitterConfig cfg;
+        cfg.MaxParticles = 100;
+        cfg.EmissionRate = 20.0f;
+        cfg.Duration = 5.0f;
+        cfg.Looping = true;
+        cfg.Shape.Type = Axle::ParticleEmitterShapeType::Sphere;
+        cfg.Shape.Radius = 2.0f;
+
+        Axle::ParticleSystem system(cfg);
+        system.SetSeed(4242);
+        system.SetEmitting(true);
+
+        for (int i = 0; i < 5; ++i) {
+            system.Update(0.1f);
+        }
+
+        uint32_t count1 = system.GetActiveParticleCount();
+        VFX_TEST_CHECK(count1 > 0, "Spawned particles in run 1");
+        glm::vec3 pos1 = system.GetPool().GetPositions()[0];
+        glm::vec3 vel1 = system.GetPool().GetVelocities()[0];
+
+        // Reset and re-simulate same sequence
+        system.Reset();
+        for (int i = 0; i < 5; ++i) {
+            system.Update(0.1f);
+        }
+
+        uint32_t count2 = system.GetActiveParticleCount();
+        glm::vec3 pos2 = system.GetPool().GetPositions()[0];
+        glm::vec3 vel2 = system.GetPool().GetVelocities()[0];
+
+        VFX_TEST_CHECK(count1 == count2, "Particle counts match after reset and replay");
+        VFX_TEST_CHECK(pos1 == pos2, "Particle positions match after reset and replay");
+        VFX_TEST_CHECK(vel1 == vel2, "Particle velocities match after reset and replay");
+
+        return true;
+    }
+
+    bool TestRNGIsolationAcrossInstances() {
+        Axle::ParticleEmitterConfig cfg;
+        cfg.MaxParticles = 100;
+        cfg.EmissionRate = 20.0f;
+        cfg.Shape.Type = Axle::ParticleEmitterShapeType::Box;
+
+        Axle::ParticleSystem sysA(cfg);
+        sysA.SetSeed(100);
+
+        Axle::ParticleSystem sysB(cfg);
+        sysB.SetSeed(200);
+
+        Axle::ParticleSystem sysA_isolated(cfg);
+        sysA_isolated.SetSeed(100);
+
+        // Interleaved execution of A and B
+        for (int i = 0; i < 5; ++i) {
+            sysA.Update(0.1f);
+            sysB.Update(0.1f);
+        }
+
+        // Isolated execution of A_isolated alone
+        for (int i = 0; i < 5; ++i) {
+            sysA_isolated.Update(0.1f);
+        }
+
+        VFX_TEST_CHECK(sysA.GetActiveParticleCount() == sysA_isolated.GetActiveParticleCount(), "Interleaved execution preserves count");
+        VFX_TEST_CHECK(sysA.GetPool().GetPositions()[0] == sysA_isolated.GetPool().GetPositions()[0], "Interleaved execution preserves positions");
+        VFX_TEST_CHECK(sysA.GetPool().GetVelocities()[0] == sysA_isolated.GetPool().GetVelocities()[0], "Interleaved execution preserves velocities");
+
+        // Verify distinct seeds generate distinct streams
+        VFX_TEST_CHECK(Axle::HashEmitterSeed(100, "Flame") != Axle::HashEmitterSeed(100, "Smoke"), "HashEmitterSeed generates distinct seeds for distinct emitters");
+        VFX_TEST_CHECK(sysA.GetPool().GetPositions()[0] != sysB.GetPool().GetPositions()[0], "Different seeds yield different random streams");
+
+        return true;
+    }
 }
 
 bool RunVFXPlaybackUnitTests() {
@@ -113,6 +189,12 @@ bool RunVFXPlaybackUnitTests() {
 
     std::cout << "  - Running TestBoundedBurstCatchup ...\n";
     VFX_TEST_CHECK(TestBoundedBurstCatchup(), "TestBoundedBurstCatchup failed");
+
+    std::cout << "  - Running TestDeterministicSeededSpawning ...\n";
+    VFX_TEST_CHECK(TestDeterministicSeededSpawning(), "TestDeterministicSeededSpawning failed");
+
+    std::cout << "  - Running TestRNGIsolationAcrossInstances ...\n";
+    VFX_TEST_CHECK(TestRNGIsolationAcrossInstances(), "TestRNGIsolationAcrossInstances failed");
 
     return true;
 }

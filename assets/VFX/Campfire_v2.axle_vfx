@@ -1,0 +1,221 @@
+ParticleEmitter {
+    schemaVersion: 2
+    name: "Campfire_v2"
+    seed: 42
+
+    Emitter {
+        id: "flame-emitter"
+        name: "Flame"
+        enabled: true
+        triggerOnly: false
+        translation: [0, 0, 0]
+        rotation: [1, 0, 0, 0]
+        scale: [1, 1, 1]
+        texture: "Assets/Textures/Particles/Flame.png"
+        useTexture: true
+        useNormalMap: false
+
+        Config {
+            name: "Flame"
+            maxParticles: 5000
+            emissionRate: 50
+            duration: 5
+            looping: true
+            playOnAwake: true
+            lifetime: [0.8, 1.4]
+            speed: [2, 4]
+            drag: 0.1
+            shape: "Cone"
+            coneAngle: 0.25
+            radius: 0.2
+            startSize: [0.3, 0.5]
+            endSize: [0.1, 0.2]
+            startRotation: [0, 6.28319]
+            angularVelocity: [-1.5, 1.5]
+            sizeCurveBezier: [1, 0.666667, 0.333333, 0]
+            sizeCurveType: 0
+            speedCurveBezier: [1, 1, 1, 1]
+            speedCurveType: 0
+            alphaCurveBezier: [1, 1, 1, 1]
+            alphaCurveType: 0
+            startColor: [1, 0.8, 0.2, 1]
+            endColor: [0.9, 0.2, 0.05, 0]
+            blendMode: "Additive"
+            simulationSpace: "World"
+            orientation: "CameraFacing"
+            nearFadeStart: 0.2
+            nearFadeEnd: 1
+            softnessDistance: 0.5
+
+            SubEmitter {
+                trigger: "Death"
+                target: "sparks-emitter"
+                emitCount: 3
+                probability: 0.8
+                inheritColor: true
+                inheritVelocity: true
+            }
+
+            ColorKey {
+                time: 0
+                color: [1, 0.8, 0.2]
+            }
+
+            ColorKey {
+                time: 1
+                color: [0.9, 0.2, 0.05]
+            }
+
+            AlphaKey {
+                time: 0
+                alpha: 1
+            }
+
+            AlphaKey {
+                time: 1
+                alpha: 0
+            }
+        }
+    }
+
+    Emitter {
+        id: "smoke-emitter"
+        name: "Smoke"
+        enabled: true
+        triggerOnly: false
+        translation: [0, 0, 0]
+        rotation: [1, 0, 0, 0]
+        scale: [1, 1, 1]
+        texture: "Assets/Textures/Particles/Smoke.png"
+        useTexture: true
+        useNormalMap: false
+
+        Config {
+            name: "Smoke"
+            maxParticles: 5000
+            emissionRate: 25
+            duration: 5
+            looping: true
+            playOnAwake: true
+            lifetime: [2, 3.5]
+            speed: [1, 2.2]
+            drag: 0.1
+            shape: "Cone"
+            coneAngle: 0.35
+            radius: 0.3
+            startSize: [0.4, 0.7]
+            endSize: [1.8, 2.5]
+            startRotation: [0, 6.28319]
+            angularVelocity: [-1.5, 1.5]
+            sizeCurveBezier: [1, 0.666667, 0.333333, 0]
+            sizeCurveType: 0
+            speedCurveBezier: [1, 1, 1, 1]
+            speedCurveType: 0
+            alphaCurveBezier: [1, 1, 1, 1]
+            alphaCurveType: 0
+            startColor: [0.3, 0.3, 0.32, 0.6]
+            endColor: [0.15, 0.15, 0.18, 0]
+            blendMode: "AlphaBlend"
+            simulationSpace: "World"
+            orientation: "CameraFacing"
+            nearFadeStart: 0.2
+            nearFadeEnd: 1
+            softnessDistance: 0.5
+            buoyancy: 1.5
+
+            ColorKey {
+                time: 0
+                color: [0.3, 0.3, 0.32]
+            }
+
+            ColorKey {
+                time: 1
+                color: [0.15, 0.15, 0.18]
+            }
+
+            AlphaKey {
+                time: 0
+                alpha: 0.6
+            }
+
+            AlphaKey {
+                time: 1
+                alpha: 0
+            }
+        }
+    }
+
+    Emitter {
+        id: "sparks-emitter"
+        name: "Sparks"
+        enabled: true
+        triggerOnly: true
+        translation: [0, 0, 0]
+        rotation: [1, 0, 0, 0]
+        scale: [1, 1, 1]
+        useTexture: false
+        useNormalMap: false
+
+        Config {
+            name: "Sparks"
+            maxParticles: 5000
+            emissionRate: 0
+            duration: 5
+            looping: true
+            playOnAwake: true
+            lifetime: [0.6, 1.2]
+            speed: [2.5, 5]
+            drag: 0.1
+            shape: "Sphere"
+            radius: 0.1
+            surfaceOnly: false
+            startSize: [0.05, 0.08]
+            endSize: [0.01, 0.02]
+            startRotation: [0, 6.28319]
+            angularVelocity: [-1.5, 1.5]
+            sizeCurveBezier: [1, 0.666667, 0.333333, 0]
+            sizeCurveType: 0
+            speedCurveBezier: [1, 1, 1, 1]
+            speedCurveType: 0
+            alphaCurveBezier: [1, 1, 1, 1]
+            alphaCurveType: 0
+            startColor: [1, 0.6, 0.1, 1]
+            endColor: [0.8, 0.1, 0, 0]
+            blendMode: "Additive"
+            simulationSpace: "World"
+            orientation: "CameraFacing"
+            nearFadeStart: 0.2
+            nearFadeEnd: 1
+            softnessDistance: 0.5
+            collisionEnabled: true
+            collisionMode: 1
+            collisionRestitution: 0.65
+            collisionFriction: 0.25
+            killOnCollision: false
+            minBounceSpeed: 0.1
+            particleRadius: 0.05
+            floorHeight: 0
+            floorKill: false
+
+            ColorKey {
+                time: 0
+                color: [1, 0.6, 0.1]
+            }
+
+            ColorKey {
+                time: 1
+                color: [0.8, 0.1, 0]
+            }
+
+            AlphaKey {
+                time: 0
+                alpha: 1
+            }
+
+            AlphaKey {
+                time: 1
+                alpha: 0
+            }
+        }
+    }
+}

@@ -1,0 +1,159 @@
+ParticleEmitter {
+    schemaVersion: 2
+    name: "CollisionSparks"
+    seed: 101
+
+    Emitter {
+        id: "flash"
+        name: "Flash"
+        enabled: true
+        triggerOnly: false
+        translation: [0, 0, 0]
+        rotation: [1, 0, 0, 0]
+        scale: [1, 1, 1]
+        useTexture: false
+        useNormalMap: false
+
+        Config {
+            name: "Flash"
+            maxParticles: 5000
+            emissionRate: 0
+            duration: 5
+            looping: true
+            playOnAwake: true
+            lifetime: 0.08
+            speed: [2, 5]
+            drag: 0.1
+            shape: "Point"
+            startSize: 0.8
+            endSize: 0
+            startRotation: [0, 6.28319]
+            angularVelocity: [-1.5, 1.5]
+            sizeCurveBezier: [1, 0.666667, 0.333333, 0]
+            sizeCurveType: 0
+            speedCurveBezier: [1, 1, 1, 1]
+            speedCurveType: 0
+            alphaCurveBezier: [1, 1, 1, 1]
+            alphaCurveType: 0
+            startColor: [1, 1, 1, 1]
+            endColor: [1, 1, 1, 0]
+            blendMode: "Additive"
+            simulationSpace: "World"
+            orientation: "CameraFacing"
+            nearFadeStart: 0.2
+            nearFadeEnd: 1
+            softnessDistance: 0.5
+
+            Burst {
+                time: 0
+                minCount: 1
+                maxCount: 1
+                cycles: 1
+                interval: 0
+                probability: 1
+            }
+
+            ColorKey {
+                time: 0
+                color: [1, 1, 1]
+            }
+
+            ColorKey {
+                time: 1
+                color: [1, 1, 1]
+            }
+
+            AlphaKey {
+                time: 0
+                alpha: 1
+            }
+
+            AlphaKey {
+                time: 1
+                alpha: 0
+            }
+        }
+    }
+
+    Emitter {
+        id: "debris"
+        name: "DebrisSparks"
+        enabled: true
+        triggerOnly: false
+        translation: [0, 0, 0]
+        rotation: [1, 0, 0, 0]
+        scale: [1, 1, 1]
+        useTexture: false
+        useNormalMap: false
+
+        Config {
+            name: "DebrisSparks"
+            maxParticles: 5000
+            emissionRate: 0
+            duration: 5
+            looping: true
+            playOnAwake: true
+            lifetime: [0.8, 1.5]
+            speed: [3, 7]
+            gravityModifier: 1.2
+            drag: 0.1
+            shape: "Point"
+            startSize: [0.2, 0.4]
+            endSize: [0.8, 1.2]
+            startRotation: [0, 6.28319]
+            angularVelocity: [-1.5, 1.5]
+            sizeCurveBezier: [1, 0.666667, 0.333333, 0]
+            sizeCurveType: 0
+            speedCurveBezier: [1, 1, 1, 1]
+            speedCurveType: 0
+            alphaCurveBezier: [1, 1, 1, 1]
+            alphaCurveType: 0
+            startColor: [1, 1, 1, 1]
+            endColor: [1, 1, 1, 0]
+            blendMode: "Additive"
+            simulationSpace: "World"
+            orientation: "CameraFacing"
+            nearFadeStart: 0.2
+            nearFadeEnd: 1
+            softnessDistance: 0.5
+            collisionEnabled: true
+            collisionMode: 1
+            collisionRestitution: 0.7
+            collisionFriction: 0.3
+            killOnCollision: false
+            minBounceSpeed: 0.1
+            particleRadius: 0.05
+            floorHeight: 0
+            floorKill: false
+
+            Burst {
+                time: 0
+                minCount: 30
+                maxCount: 50
+                cycles: 1
+                interval: 0
+                probability: 1
+            }
+
+            ColorKey {
+                time: 0
+                color: [1, 1, 1]
+            }
+
+            ColorKey {
+                time: 1
+                color: [1, 1, 1]
+            }
+
+            AlphaKey {
+                time: 0
+                alpha: 1
+            }
+
+            AlphaKey {
+                time: 1
+                alpha: 0
+            }
+        }
+    }
+}

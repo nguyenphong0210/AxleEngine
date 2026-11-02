@@ -1,0 +1,152 @@
+ParticleEmitter {
+    schemaVersion: 2
+    name: "VehicleBackfire"
+    seed: 202
+
+    Emitter {
+        id: "flame-jet"
+        name: "FlameJet"
+        enabled: true
+        triggerOnly: false
+        translation: [0, 0, 0]
+        rotation: [1, 0, 0, 0]
+        scale: [1, 1, 1]
+        useTexture: false
+        useNormalMap: false
+
+        Config {
+            name: "FlameJet"
+            maxParticles: 5000
+            emissionRate: 0
+            duration: 5
+            looping: true
+            playOnAwake: true
+            lifetime: [0.1, 0.2]
+            speed: [8, 15]
+            drag: 0.1
+            shape: "Cone"
+            coneAngle: 0.15
+            radius: 1
+            startSize: [0.2, 0.4]
+            endSize: [0.8, 1.2]
+            startRotation: [0, 6.28319]
+            angularVelocity: [-1.5, 1.5]
+            sizeCurveBezier: [1, 0.666667, 0.333333, 0]
+            sizeCurveType: 0
+            speedCurveBezier: [1, 1, 1, 1]
+            speedCurveType: 0
+            alphaCurveBezier: [1, 1, 1, 1]
+            alphaCurveType: 0
+            startColor: [1, 1, 1, 1]
+            endColor: [1, 1, 1, 0]
+            blendMode: "Additive"
+            simulationSpace: "World"
+            orientation: "CameraFacing"
+            nearFadeStart: 0.2
+            nearFadeEnd: 1
+            softnessDistance: 0.5
+
+            Burst {
+                time: 0
+                minCount: 25
+                maxCount: 35
+                cycles: 1
+                interval: 0
+                probability: 1
+            }
+
+            ColorKey {
+                time: 0
+                color: [1, 1, 1]
+            }
+
+            ColorKey {
+                time: 1
+                color: [1, 1, 1]
+            }
+
+            AlphaKey {
+                time: 0
+                alpha: 1
+            }
+
+            AlphaKey {
+                time: 1
+                alpha: 0
+            }
+        }
+    }
+
+    Emitter {
+        id: "smoke-puff"
+        name: "SmokePuff"
+        enabled: true
+        triggerOnly: false
+        translation: [0, 0, 0]
+        rotation: [1, 0, 0, 0]
+        scale: [1, 1, 1]
+        useTexture: false
+        useNormalMap: false
+
+        Config {
+            name: "SmokePuff"
+            maxParticles: 5000
+            emissionRate: 0
+            duration: 5
+            looping: true
+            playOnAwake: true
+            lifetime: [1, 1.8]
+            speed: [2, 5]
+            drag: 0.4
+            shape: "Point"
+            startSize: [0.2, 0.4]
+            endSize: [0.8, 1.2]
+            startRotation: [0, 6.28319]
+            angularVelocity: [-1.5, 1.5]
+            sizeCurveBezier: [1, 0.666667, 0.333333, 0]
+            sizeCurveType: 0
+            speedCurveBezier: [1, 1, 1, 1]
+            speedCurveType: 0
+            alphaCurveBezier: [1, 1, 1, 1]
+            alphaCurveType: 0
+            startColor: [1, 1, 1, 1]
+            endColor: [1, 1, 1, 0]
+            blendMode: "AlphaBlend"
+            simulationSpace: "World"
+            orientation: "CameraFacing"
+            nearFadeStart: 0.2
+            nearFadeEnd: 1
+            softnessDistance: 0.5
+            buoyancy: 0.5
+
+            Burst {
+                time: 0.05
+                minCount: 15
+                maxCount: 25
+                cycles: 1
+                interval: 0
+                probability: 1
+            }
+
+            ColorKey {
+                time: 0
+                color: [1, 1, 1]
+            }
+
+            ColorKey {
+                time: 1
+                color: [1, 1, 1]
+            }
+
+            AlphaKey {
+                time: 0
+                alpha: 1
+            }
+
+            AlphaKey {
+                time: 1
+                alpha: 0
+            }
+        }
+    }
+}

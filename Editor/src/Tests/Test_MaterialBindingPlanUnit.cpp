@@ -285,6 +285,10 @@ namespace {
         MAT_TEST_CHECK(std::holds_alternative<MaterialBindingError>(invalidResult), "Expected UnsupportedSemantic");
         const auto& err = std::get<MaterialBindingError>(invalidResult);
         MAT_TEST_CHECK(err.Code == "UnsupportedSemantic", "Error code must be UnsupportedSemantic");
+        auto uv1=attrs;uv1.back().SemanticIndex=1;
+        MAT_TEST_CHECK(std::holds_alternative<MaterialBindingError>(BuildMaterialVertexInputPlan(uv1)),"UV1 cannot silently alias the mesh UV0 stream");
+        auto duplicate=attrs;duplicate.back().Register=0;
+        MAT_TEST_CHECK(std::holds_alternative<MaterialBindingError>(BuildMaterialVertexInputPlan(duplicate)),"Duplicate backend vertex locations are rejected");
 
         return true;
     }
@@ -435,6 +439,10 @@ bool RunMaterialBindingPlanUnitTests() {
         reflection.ConstantBuffers.push_back(duplicate);
         MAT_TEST_CHECK(std::holds_alternative<MaterialBindingError>(BuildMaterialBindingPlan(reflection,{},{})),"Ambiguous user names are rejected");
         reflection.ConstantBuffers.pop_back();
+        reflection.Resources.push_back({"First",RHI::RHIResourceType::Texture,0,1,1,RHI::RHIShaderStage::Vertex});
+        reflection.Resources.push_back({"Second",RHI::RHIResourceType::Texture,0,1,1,RHI::RHIShaderStage::Fragment});
+        MAT_TEST_CHECK(std::holds_alternative<MaterialBindingError>(BuildMaterialBindingPlan(reflection,{},{})),"Conflicting per-stage texture names cannot share one descriptor address");
+        reflection.Resources.clear();
         reflection.Resources.push_back({"Output",RHI::RHIResourceType::StorageTexture,0,1,0,RHI::RHIShaderStage::Fragment});
         MAT_TEST_CHECK(std::holds_alternative<MaterialBindingError>(BuildMaterialBindingPlan(reflection,{},{})),"Unsupported storage resources are rejected");
     }

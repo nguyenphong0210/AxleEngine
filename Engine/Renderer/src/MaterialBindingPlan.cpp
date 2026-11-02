@@ -128,12 +128,16 @@ namespace Axle {
         plan.InterfaceRevision = shaderInterface.InterfaceRevision;
         std::unordered_set<std::string> propertyNames;
         std::unordered_set<uint64_t> bufferAddresses;
+        std::unordered_set<uint64_t> resourceAddresses;
         for (const auto& resource : mergedReflection.Resources) {
             if (resource.BindCount != 1 ||
                 (resource.Type != RHI::RHIResourceType::ConstantBuffer &&
                  resource.Type != RHI::RHIResourceType::Texture && resource.Type != RHI::RHIResourceType::Sampler) ||
                 (resource.Type == RHI::RHIResourceType::Texture && resource.TextureDimension != 0 && resource.TextureDimension != 2))
                 return MaterialBindingError{"UnsupportedResource",resource.Name,"","Only individual cbuffers, Texture2D and ordinary samplers are supported."};
+            const uint64_t registerIndex=uint64_t(resource.BindPoint)+(resource.Type==RHI::RHIResourceType::Sampler?128u:0u);
+            if(registerIndex>UINT32_MAX || !resourceAddresses.insert((uint64_t(resource.Space)<<32)|registerIndex).second)
+                return MaterialBindingError{"ResourceCollision",resource.Name,"","Resources overlap in the backend descriptor namespace."};
         }
 
         // Process Constant Buffers
@@ -172,7 +176,9 @@ namespace Axle {
 
                 if (isEngine) {
                     if (var.RowMajor || var.Size != GetUniformKindSize(engKind) ||
-                        (var.ScalarType != RHI::RHIShaderScalarType::Unknown && var.ScalarType != RHI::RHIShaderScalarType::Float))
+                        (var.ScalarType != RHI::RHIShaderScalarType::Unknown &&
+                            (var.ScalarType != RHI::RHIShaderScalarType::Float ||
+                             var.Rows != (engKind==UniformKind::Matrix4x4?4u:1u) || var.Columns!=4)))
                         return MaterialBindingError{"EngineUniformType",cb.Name,var.Name,"Engine uniform type/layout does not match the custom interface."};
                     binding.Kind = engKind;
                     binding.Source = engUnif;
@@ -504,10 +510,14 @@ namespace Axle {
     {
         VertexInputPlan plan;
         plan.Stride = static_cast<uint32_t>(sizeof(RHI::RHIVertex3D)); // 64 bytes
+        std::unordered_set<std::string> semantics;
+        std::unordered_set<uint32_t> locations;
 
         for (const auto& attr : reflectedInputs) {
             std::string upper = attr.SemanticName;
             std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char c) { return (char)std::toupper(c); });
+            if(attr.SemanticIndex!=0 || !semantics.insert(upper).second || !locations.insert(attr.Register).second)
+                return MaterialBindingError{"UnsupportedVertexInput","",attr.SemanticName,"Only one index-zero input per supported mesh semantic and backend location is available."};
 
             VertexAttributeBinding binding;
             binding.SemanticName = attr.SemanticName;

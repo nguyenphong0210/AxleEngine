@@ -1,4 +1,5 @@
 #include "MaterialTestHarness.hpp"
+#include "Test_MaterialAcceptance.hpp"
 #include <Axle/ShaderDragDropDecoder.hpp>
 #include <Axle/ShaderPropertyReflection.hpp>
 #include <cstring>
@@ -301,6 +302,78 @@ namespace {
         return true;
     }
 
+    bool TestMaterialAcceptanceHelpers() {
+        // 1. Backend option parsing
+        RHI::RHIType backend;
+        std::string err;
+
+        // Unset / empty -> D3D12
+        MAT_TEST_CHECK(ParseMaterialBackendOption(nullptr, backend, err), "Null backend must succeed");
+        MAT_TEST_CHECK(backend == RHI::RHIType::Direct3D12, "Null backend must default to Direct3D12");
+
+        MAT_TEST_CHECK(ParseMaterialBackendOption("", backend, err), "Empty backend must succeed");
+        MAT_TEST_CHECK(backend == RHI::RHIType::Direct3D12, "Empty backend must default to Direct3D12");
+
+        // "dx12" / "d3d12" -> D3D12
+        MAT_TEST_CHECK(ParseMaterialBackendOption("dx12", backend, err), "'dx12' must parse");
+        MAT_TEST_CHECK(backend == RHI::RHIType::Direct3D12, "Expected Direct3D12");
+
+        MAT_TEST_CHECK(ParseMaterialBackendOption("D3D12", backend, err), "'D3D12' uppercase must parse");
+        MAT_TEST_CHECK(backend == RHI::RHIType::Direct3D12, "Expected Direct3D12");
+
+        // "vulkan" / "vk" -> Vulkan
+        MAT_TEST_CHECK(ParseMaterialBackendOption("vulkan", backend, err), "'vulkan' must parse");
+        MAT_TEST_CHECK(backend == RHI::RHIType::Vulkan, "Expected Vulkan");
+
+        MAT_TEST_CHECK(ParseMaterialBackendOption("VK", backend, err), "'VK' must parse");
+        MAT_TEST_CHECK(backend == RHI::RHIType::Vulkan, "Expected Vulkan");
+
+        // Unknown backend -> reject with error
+        MAT_TEST_CHECK(!ParseMaterialBackendOption("opengl", backend, err), "Unknown backend must fail");
+        MAT_TEST_CHECK(err.find("Unknown explicit backend") != std::string::npos, "Error must describe invalid backend");
+
+        MAT_TEST_CHECK(!ParseMaterialBackendOption("metal", backend, err), "Metal must fail on Windows");
+
+        // 2. Capture directory validation
+        std::filesystem::path outDir;
+        MAT_TEST_CHECK(!ValidateMaterialCaptureDirectory("", outDir, err), "Empty capture dir must fail");
+
+        // Forbidden write into project assets or engine source
+        MAT_TEST_CHECK(!ValidateMaterialCaptureDirectory("Editor/assets/captures", outDir, err), "Writing into Editor/assets must be rejected");
+        MAT_TEST_CHECK(!ValidateMaterialCaptureDirectory("Engine/captures", outDir, err), "Writing into Engine source must be rejected");
+
+        // Valid temp capture directory
+        ScopedTempDir tempCap("axle_test_cap");
+        MAT_TEST_CHECK(ValidateMaterialCaptureDirectory(tempCap.Path.string(), outDir, err), "Valid temp capture dir must succeed");
+
+        // 3. Timing report formatting
+        std::vector<double> emptyTimes;
+        auto emptyRep = FormatMaterialTimingReport("Adapter", "Direct3D12", 1024, 640, 1, emptyTimes);
+        MAT_TEST_CHECK(emptyRep.find("No timing data") != std::string::npos, "Empty times should report no data");
+
+        std::vector<double> samples = { 16.6, 16.7, 16.5, 16.8, 16.4 };
+        auto rep = FormatMaterialTimingReport("NVIDIA RTX", "Direct3D12", 1024, 640, 1, samples);
+        MAT_TEST_CHECK(rep.find("Average:") != std::string::npos, "Report must include Average");
+        MAT_TEST_CHECK(rep.find("Min Frame:") != std::string::npos, "Report must include Min Frame");
+        MAT_TEST_CHECK(rep.find("Max Frame:") != std::string::npos, "Report must include Max Frame");
+        MAT_TEST_CHECK(rep.find("queue idle time") != std::string::npos, "Report must note that timings include submission/queue idle");
+
+        // 4. PPM image writing
+        uint8_t dummyPixels[4 * 4] = {
+            255, 0, 0, 255,   0, 255, 0, 255,
+            0, 0, 255, 255,   255, 255, 255, 255
+        };
+        auto ppmPath = tempCap.Path / "test_image.ppm";
+        MAT_TEST_CHECK(WritePPMImage(ppmPath, 2, 2, dummyPixels), "Write PPM image must succeed");
+        MAT_TEST_CHECK(std::filesystem::exists(ppmPath), "PPM image file must exist");
+        MAT_TEST_CHECK(std::filesystem::file_size(ppmPath) > 12, "PPM image size must include header and 12 RGB bytes");
+
+        MAT_TEST_CHECK(!WritePPMImage(ppmPath, 0, 2, dummyPixels), "Zero width must fail");
+        MAT_TEST_CHECK(!WritePPMImage(ppmPath, 2, 2, nullptr), "Null pixels must fail");
+
+        return true;
+    }
+
 } // namespace
 
 bool RunShaderDragDropUnitTests() {
@@ -321,6 +394,9 @@ bool RunShaderDragDropUnitTests() {
 
     std::cout << "  - Running TestFunctionLocalVariableAndEngineUniformFiltering ...\n";
     if (!TestFunctionLocalVariableAndEngineUniformFiltering()) return false;
+
+    std::cout << "  - Running TestMaterialAcceptanceHelpers ...\n";
+    if (!TestMaterialAcceptanceHelpers()) return false;
 
     return true;
 }

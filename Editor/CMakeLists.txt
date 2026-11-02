@@ -116,6 +116,7 @@ add_executable(AxleTests
     src/Tests/Test_Milestone10.cpp
     src/Tests/Test_MaterialRendering.cpp
     src/Tests/Test_MaterialMeshImport.cpp
+    src/Tests/Test_MaterialAcceptance.cpp
 )
 
 if (MSVC)
@@ -162,6 +163,7 @@ add_executable(AxleMaterialUnitTests
     src/Tests/Test_MaterialBindingPlanUnit.cpp
     src/Tests/Test_MaterialProgramCacheUnit.cpp
     src/Tests/Test_ShaderDragDropUnit.cpp
+    src/Tests/Test_MaterialAcceptance.cpp
 )
 
 target_include_directories(AxleMaterialUnitTests PRIVATE

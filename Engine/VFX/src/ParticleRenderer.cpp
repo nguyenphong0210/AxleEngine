@@ -394,6 +394,9 @@ namespace Axle {
             case ParticleBlendMode::Multiply:
                 RenderCommand::SetBlendMultiply();
                 break;
+            case ParticleBlendMode::Cutout:
+                RenderCommand::SetBlendAlpha();
+                break;
         }
     }
 

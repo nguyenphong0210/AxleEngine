@@ -14,7 +14,8 @@ namespace Axle {
     enum class ParticleBlendMode : uint8_t {
         Additive = 0,
         AlphaBlend,
-        Multiply
+        Multiply,
+        Cutout
     };
 
     enum class ParticleSimulationSpace : uint8_t {

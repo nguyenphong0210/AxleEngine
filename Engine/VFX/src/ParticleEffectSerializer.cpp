@@ -39,6 +39,7 @@ namespace Axle {
             case ParticleBlendMode::Additive: return "Additive";
             case ParticleBlendMode::AlphaBlend: return "AlphaBlend";
             case ParticleBlendMode::Multiply: return "Multiply";
+            case ParticleBlendMode::Cutout: return "Cutout";
             default: return "AlphaBlend";
         }
     }
@@ -47,6 +48,7 @@ namespace Axle {
         if (str == "Additive") return ParticleBlendMode::Additive;
         if (str == "AlphaBlend") return ParticleBlendMode::AlphaBlend;
         if (str == "Multiply") return ParticleBlendMode::Multiply;
+        if (str == "Cutout") return ParticleBlendMode::Cutout;
         return ParticleBlendMode::AlphaBlend;
     }
 

@@ -3,6 +3,7 @@
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/ParticleMaterialAdapter.hpp>
 
 namespace {
     bool TestBaselineParticleVertexStride() {
@@ -133,6 +134,68 @@ namespace {
         VFX_TEST_CHECK(stack.NormalMapPath.empty(), "Normal map path cleared");
         return true;
     }
+
+    bool TestParticleMaterialAdapterResolution() {
+        Axle::ParticleEmitterConfig cfg;
+        cfg.BlendMode = Axle::ParticleBlendMode::Additive;
+
+        Axle::EmitterResources res;
+        res.MaterialPath = "materials/SparkPBR.axleasset";
+
+        auto mat = std::make_shared<Axle::Material>("SparkPBR");
+        mat->SetAlbedoColor(glm::vec4(1.0f, 0.6f, 0.2f, 0.9f));
+        mat->SetSurfaceType(Axle::SurfaceType::Cutout);
+        mat->SetAlphaCutoff(0.35f);
+        mat->SetAlbedoPath("textures/spark_albedo.png");
+        mat->SetUseAlbedoMap(true);
+        mat->SetNormalPath("textures/spark_normal.png");
+        mat->SetUseNormalMap(true);
+        mat->SetEmissionColor(glm::vec3(2.5f, 1.2f, 0.4f));
+        mat->SetEmissionIntensity(4.0f);
+
+        auto settings = Axle::ParticleMaterialAdapter::Resolve(cfg, res, [&mat](const std::string&) {
+            return mat;
+        });
+
+        VFX_TEST_CHECK(settings.BlendMode == Axle::ParticleBlendMode::Cutout, "SurfaceType::Cutout mapped to ParticleBlendMode::Cutout");
+        VFX_TEST_CHECK(settings.AlphaCutoff == 0.35f, "Alpha cutoff accurately transferred");
+        VFX_TEST_CHECK(settings.DepthWrite == true, "Cutout enabled depth write");
+        VFX_TEST_CHECK(settings.BaseColor.x == 1.0f && settings.BaseColor.y == 0.6f, "Base color accurately mapped");
+        VFX_TEST_CHECK(settings.TexturePath == "textures/spark_albedo.png", "Albedo texture path mapped");
+        VFX_TEST_CHECK(settings.NormalMapPath == "textures/spark_normal.png", "Normal texture path mapped");
+        VFX_TEST_CHECK(settings.EmissiveIntensity == 4.0f, "Emissive intensity mapped");
+        VFX_TEST_CHECK(settings.Diagnostics.empty(), "Valid material produced 0 diagnostics");
+
+        return true;
+    }
+
+    bool TestParticleMaterialAdapterMissingAndUnsupportedFeatures() {
+        Axle::ParticleEmitterConfig cfg;
+        Axle::EmitterResources res;
+        res.MaterialPath = "materials/NonExistent.axleasset";
+
+        // Missing material produces diagnostic
+        auto settingsMissing = Axle::ParticleMaterialAdapter::Resolve(cfg, res, [](const std::string&) -> std::shared_ptr<Axle::Material> {
+            return nullptr;
+        });
+        VFX_TEST_CHECK(!settingsMissing.Diagnostics.empty(), "Missing material produces diagnostics");
+        VFX_TEST_CHECK(settingsMissing.Diagnostics[0].Code == "VFX_RESOURCE_MISSING", "Resource missing code reported");
+        VFX_TEST_CHECK(settingsMissing.Diagnostics[0].Severity == Axle::VFXDiagnosticSeverity::Warning, "Resource missing is Warning severity");
+
+        // Material with unsupported clearcoat / custom shader produces Info diagnostics
+        auto matAdv = std::make_shared<Axle::Material>("AdvancedMat");
+        matAdv->SetClearcoatStrength(0.8f);
+        matAdv->SetUseCustomShader(true);
+
+        auto settingsAdv = Axle::ParticleMaterialAdapter::Resolve(cfg, res, [&matAdv](const std::string&) {
+            return matAdv;
+        });
+        VFX_TEST_CHECK(settingsAdv.Diagnostics.size() >= 2, "Unsupported features produce diagnostics");
+        VFX_TEST_CHECK(settingsAdv.Diagnostics[0].Code == "VFX_UNSUPPORTED_FEATURE", "Unsupported feature code reported");
+        VFX_TEST_CHECK(settingsAdv.Diagnostics[0].Severity == Axle::VFXDiagnosticSeverity::Info, "Unsupported feature is Info severity");
+
+        return true;
+    }
 }
 
 bool RunVFXRenderPlanUnitTests() {
@@ -150,6 +213,12 @@ bool RunVFXRenderPlanUnitTests() {
 
     std::cout << "  - Running TestEmitterTexturePathAndBindingContract ...\n";
     VFX_TEST_CHECK(TestEmitterTexturePathAndBindingContract(), "TestEmitterTexturePathAndBindingContract failed");
+
+    std::cout << "  - Running TestParticleMaterialAdapterResolution ...\n";
+    VFX_TEST_CHECK(TestParticleMaterialAdapterResolution(), "TestParticleMaterialAdapterResolution failed");
+
+    std::cout << "  - Running TestParticleMaterialAdapterMissingAndUnsupportedFeatures ...\n";
+    VFX_TEST_CHECK(TestParticleMaterialAdapterMissingAndUnsupportedFeatures(), "TestParticleMaterialAdapterMissingAndUnsupportedFeatures failed");
 
     return true;
 }

@@ -175,11 +175,13 @@ namespace Axle {
         RHI::RHIShaderBytecode m_PixelShader;
         RHI::RHIPipelineLayout m_PipelineLayout;
 
-        // Default PSOs (AlphaBlend, Additive, Multiply in SDR & HDR formats)
+        // Default PSOs (AlphaBlend, Additive, Multiply, Cutout in SDR & HDR formats)
         nri::Pipeline* m_PipelineAlphaBlendSDR = nullptr;
         nri::Pipeline* m_PipelineAlphaBlendHDR = nullptr;
         nri::Pipeline* m_PipelineAdditiveSDR = nullptr;
         nri::Pipeline* m_PipelineAdditiveHDR = nullptr;
+        nri::Pipeline* m_PipelineCutoutSDR = nullptr;
+        nri::Pipeline* m_PipelineCutoutHDR = nullptr;
 
         // GPU Buffers
         RHI::RHIBuffer m_ConstantBuffer;

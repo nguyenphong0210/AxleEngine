@@ -11,6 +11,7 @@ add_library(AxleVFX STATIC
     src/ParticleEffectDefinition.cpp
     src/ParticleEffectSerializer.cpp
     src/VFXEditorDocument.cpp
+    src/ParticleMaterialAdapter.cpp
 )
 add_library(Axle::VFX ALIAS AxleVFX)
 

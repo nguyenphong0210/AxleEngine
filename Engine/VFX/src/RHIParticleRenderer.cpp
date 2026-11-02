@@ -271,6 +271,9 @@ namespace Axle {
             blendDesc.SrcAlpha = nri::BlendFactor::DST_ALPHA;
             blendDesc.DstAlpha = nri::BlendFactor::ZERO;
             blendDesc.AlphaOp = nri::BlendOp::ADD;
+        } else if (blendMode == ParticleBlendMode::Cutout) {
+            blendDesc.BlendEnabled = false;
+            gfxDesc.DepthStencil.DepthWriteEnable = true;
         } else {
             blendDesc = RHI::RHIBlendAttachmentDesc::AlphaBlend();
         }
@@ -304,6 +307,8 @@ namespace Axle {
         m_PipelineAlphaBlendHDR = GetOrCreatePipeline(ParticleBlendMode::AlphaBlend, nri::Format::RGBA16_SFLOAT);
         m_PipelineAdditiveSDR = GetOrCreatePipeline(ParticleBlendMode::Additive, nri::Format::RGBA8_UNORM);
         m_PipelineAdditiveHDR = GetOrCreatePipeline(ParticleBlendMode::Additive, nri::Format::RGBA16_SFLOAT);
+        m_PipelineCutoutSDR = GetOrCreatePipeline(ParticleBlendMode::Cutout, nri::Format::RGBA8_UNORM);
+        m_PipelineCutoutHDR = GetOrCreatePipeline(ParticleBlendMode::Cutout, nri::Format::RGBA16_SFLOAT);
 
         return m_PipelineAlphaBlendSDR != nullptr && m_PipelineAdditiveSDR != nullptr;
     }
@@ -520,7 +525,9 @@ namespace Axle {
             // 4. Select Graphics Pipeline State Object
             nri::Pipeline* pipeline = GetOrCreatePipeline(config.BlendMode, m_ActiveColorFormat, m_ActiveDepthFormat, m_ActiveSampleCount);
             if (!pipeline) {
-                pipeline = (config.BlendMode == ParticleBlendMode::Additive) ? m_PipelineAdditiveSDR : m_PipelineAlphaBlendSDR;
+                if (config.BlendMode == ParticleBlendMode::Additive) pipeline = m_PipelineAdditiveSDR;
+                else if (config.BlendMode == ParticleBlendMode::Cutout) pipeline = m_PipelineCutoutSDR;
+                else pipeline = m_PipelineAlphaBlendSDR;
             }
 
             cmd.SetPipeline(pipeline);

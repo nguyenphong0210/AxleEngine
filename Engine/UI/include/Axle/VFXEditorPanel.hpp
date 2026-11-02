@@ -16,6 +16,13 @@
 
 namespace Axle {
 
+    struct VFXPreviewClock {
+        uint64_t Tick = 0;
+        double Accumulator = 0.0;
+        double StepSeconds = 1.0 / 60.0;
+        float PlaybackSpeed = 1.0f;
+    };
+
     class Scene;
 
     class VFXEditorPanel {
@@ -50,9 +57,13 @@ namespace Axle {
         void PlayPreview();
         void PausePreview();
         void StopPreview();
+        void Step(float stepTime = -1.0f);
+        void SeekTo(float targetTime);
 
+        float GetPlaybackSpeed() const { return m_Clock.PlaybackSpeed; }
+        void SetPlaybackSpeed(float speed) { m_Clock.PlaybackSpeed = speed; }
         float GetPlaybackScrubberTime() const { return m_PlaybackScrubberTime; }
-        void SetPlaybackScrubberTime(float time) { m_PlaybackScrubberTime = time; }
+        void SetPlaybackScrubberTime(float time) { SeekTo(time); }
 
         ParticleEmitterConfig& GetConfig() { return m_Config; }
         const ParticleEmitterConfig& GetConfig() const { return m_Config; }
@@ -106,6 +117,9 @@ namespace Axle {
         bool m_ShowGroundGrid = true;
         bool m_ShowBounds = false;
         float m_PlaybackScrubberTime = 0.0f;
+        VFXPreviewClock m_Clock;
+        bool m_IsSeeking = false;
+        uint64_t m_TargetSeekTick = 0;
 
         // Viewport resolution & Orbit Camera
         u32 m_ViewportWidth = 640;

@@ -216,6 +216,9 @@ namespace Axle {
 
     void VFXEditorPanel::ResetPreview() {
         m_PlaybackScrubberTime = 0.0f;
+        m_Clock.Tick = 0;
+        m_Clock.Accumulator = 0.0;
+        m_IsSeeking = false;
         for (auto& stack : m_EmitterStacks) {
             stack.Initialize();
             if (stack.System) {
@@ -242,11 +245,62 @@ namespace Axle {
     void VFXEditorPanel::StopPreview() {
         m_IsPlaying = false;
         m_PlaybackScrubberTime = 0.0f;
+        m_Clock.Tick = 0;
+        m_Clock.Accumulator = 0.0;
+        m_IsSeeking = false;
         for (auto& stack : m_EmitterStacks) {
             if (stack.System) {
                 stack.System->SetEmitting(false);
                 stack.System->Reset();
             }
+        }
+    }
+
+    void VFXEditorPanel::Step(float stepTime) {
+        if (stepTime <= 0.0f) stepTime = static_cast<float>(m_Clock.StepSeconds);
+        m_Clock.Tick++;
+
+        float maxDuration = m_Config.Duration > 0.0f ? m_Config.Duration : 5.0f;
+        for (const auto& stack : m_EmitterStacks) {
+            if (stack.Config.Duration > maxDuration) {
+                maxDuration = stack.Config.Duration;
+            }
+        }
+
+        float currentTime = static_cast<float>(m_Clock.Tick * m_Clock.StepSeconds);
+        if (m_IsLooping && maxDuration > 0.0f && currentTime >= maxDuration) {
+            m_Clock.Tick = 0;
+        }
+
+        for (auto& stack : m_EmitterStacks) {
+            if (stack.Enabled && stack.System) {
+                stack.System->Update(stepTime, glm::vec3(0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+            }
+        }
+    }
+
+    void VFXEditorPanel::SeekTo(float targetTime) {
+        if (targetTime < 0.0f) targetTime = 0.0f;
+        float maxDuration = m_Config.Duration > 0.0f ? m_Config.Duration : 10.0f;
+        if (targetTime > maxDuration) targetTime = maxDuration;
+
+        uint64_t targetTick = static_cast<uint64_t>(std::round(targetTime / m_Clock.StepSeconds));
+        if (targetTick < m_Clock.Tick) {
+            ResetPreview();
+            m_Clock.Tick = 0;
+            m_Clock.Accumulator = 0.0;
+        }
+
+        m_TargetSeekTick = targetTick;
+        m_IsSeeking = true;
+
+        uint64_t immediateTicks = std::min(m_TargetSeekTick - m_Clock.Tick, static_cast<uint64_t>(300));
+        for (uint64_t i = 0; i < immediateTicks; ++i) {
+            Step(static_cast<float>(m_Clock.StepSeconds));
+        }
+        m_PlaybackScrubberTime = static_cast<float>(m_Clock.Tick * m_Clock.StepSeconds);
+        if (m_Clock.Tick >= m_TargetSeekTick) {
+            m_IsSeeking = false;
         }
     }
 
@@ -259,20 +313,28 @@ namespace Axle {
     void VFXEditorPanel::OnUpdate(Timestep ts) {
         if (!m_IsOpen) return;
 
-        if (m_IsPlaying) {
-            float dt = ts.GetSeconds();
-            m_PlaybackScrubberTime += dt;
-            if (m_Config.Duration > 0.0f && m_PlaybackScrubberTime >= m_Config.Duration) {
-                if (m_IsLooping) {
-                    m_PlaybackScrubberTime = fmod(m_PlaybackScrubberTime, m_Config.Duration);
-                }
+        if (m_IsSeeking) {
+            const uint64_t MAX_SEEK_TICKS_PER_PUMP = 120;
+            uint64_t ticksRemaining = (m_TargetSeekTick > m_Clock.Tick) ? (m_TargetSeekTick - m_Clock.Tick) : 0;
+            uint64_t ticksToPump = std::min(ticksRemaining, MAX_SEEK_TICKS_PER_PUMP);
+            for (uint64_t i = 0; i < ticksToPump; ++i) {
+                Step(static_cast<float>(m_Clock.StepSeconds));
             }
+            m_PlaybackScrubberTime = static_cast<float>(m_Clock.Tick * m_Clock.StepSeconds);
+            if (m_Clock.Tick >= m_TargetSeekTick) {
+                m_IsSeeking = false;
+            }
+            return;
+        }
 
-            for (auto& stack : m_EmitterStacks) {
-                if (stack.Enabled && stack.System) {
-                    stack.System->Update(dt, glm::vec3(0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-                }
+        if (m_IsPlaying) {
+            float dt = ts.GetSeconds() * m_Clock.PlaybackSpeed;
+            m_Clock.Accumulator += dt;
+            while (m_Clock.Accumulator >= m_Clock.StepSeconds) {
+                m_Clock.Accumulator -= m_Clock.StepSeconds;
+                Step(static_cast<float>(m_Clock.StepSeconds));
             }
+            m_PlaybackScrubberTime = static_cast<float>(m_Clock.Tick * m_Clock.StepSeconds);
         }
     }
 
@@ -431,6 +493,17 @@ namespace Axle {
             ResetPreview();
         }
         ImGui::SameLine();
+        if (ImGui::Button("Step", ImVec2(50, 26))) {
+            PausePreview();
+            Step();
+            m_PlaybackScrubberTime = static_cast<float>(m_Clock.Tick * m_Clock.StepSeconds);
+        }
+        ImGui::SameLine();
+        ImGui::PushItemWidth(70.0f);
+        ImGui::SliderFloat("##Speed", &m_Clock.PlaybackSpeed, 0.1f, 3.0f, "%.1fx");
+        ImGui::PopItemWidth();
+
+        ImGui::SameLine();
         ImGui::TextDisabled("|");
         ImGui::SameLine();
 
@@ -461,10 +534,20 @@ namespace Axle {
         // Timeline scrubber
         ImGui::SameLine();
         ImGui::PushItemWidth(140.0f);
-        if (ImGui::SliderFloat("##Scrubber", &m_PlaybackScrubberTime, 0.0f, m_Config.Duration, "%.2fs")) {
-            // Scrubbing
+        float maxDuration = m_Config.Duration > 0.0f ? m_Config.Duration : 5.0f;
+        for (const auto& s : m_EmitterStacks) {
+            if (s.Config.Duration > maxDuration) maxDuration = s.Config.Duration;
+        }
+        float scrubber = m_PlaybackScrubberTime;
+        if (ImGui::SliderFloat("##Scrubber", &scrubber, 0.0f, maxDuration, "%.2fs")) {
+            SeekTo(scrubber);
         }
         ImGui::PopItemWidth();
+
+        if (m_IsSeeking) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "(Seeking...)");
+        }
 
         ImGui::PopStyleVar();
     }

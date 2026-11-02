@@ -175,6 +175,53 @@ namespace {
 
         return true;
     }
+
+    bool TestSeekMatchesStepSimulation() {
+        Axle::ParticleEmitterConfig cfg;
+        cfg.MaxParticles = 500;
+        cfg.EmissionRate = 30.0f;
+        cfg.Duration = 5.0f;
+        cfg.Looping = true;
+        cfg.Bursts.push_back(Axle::ParticleBurst(0.2f, 15, 15, 1, 0.0f));
+
+        const float stepDt = 1.0f / 60.0f;
+        const int totalSteps = 60;
+
+        // Normal straight playback
+        Axle::ParticleSystem normalSys(cfg);
+        normalSys.SetSeed(777);
+        normalSys.SetEmitting(true);
+        for (int i = 0; i < totalSteps; ++i) {
+            normalSys.Update(stepDt);
+        }
+
+        // Seeking playback: run partially, then reset and advance to the same target tick
+        Axle::ParticleSystem seekSys(cfg);
+        seekSys.SetSeed(777);
+        seekSys.SetEmitting(true);
+        for (int i = 0; i < 25; ++i) {
+            seekSys.Update(stepDt);
+        }
+
+        // Seek backward to 0 then forward to tick 60
+        seekSys.Reset();
+        seekSys.SetSeed(777);
+        for (int i = 0; i < totalSteps; ++i) {
+            seekSys.Update(stepDt);
+        }
+
+        VFX_TEST_CHECK(normalSys.GetActiveParticleCount() == seekSys.GetActiveParticleCount(), "Seek matches normal simulation particle count");
+        VFX_TEST_CHECK(normalSys.GetEmitterTime() == seekSys.GetEmitterTime(), "Seek matches normal simulation emitter time");
+        VFX_TEST_CHECK(normalSys.GetTotalSimulationTime() == seekSys.GetTotalSimulationTime(), "Seek matches normal simulation total time");
+
+        uint32_t active = normalSys.GetActiveParticleCount();
+        for (uint32_t p = 0; p < active; ++p) {
+            VFX_TEST_CHECK(normalSys.GetPool().GetPositions()[p] == seekSys.GetPool().GetPositions()[p], "Particle position exact match after seek");
+            VFX_TEST_CHECK(normalSys.GetPool().GetVelocities()[p] == seekSys.GetPool().GetVelocities()[p], "Particle velocity exact match after seek");
+        }
+
+        return true;
+    }
 }
 
 bool RunVFXPlaybackUnitTests() {
@@ -195,6 +242,9 @@ bool RunVFXPlaybackUnitTests() {
 
     std::cout << "  - Running TestRNGIsolationAcrossInstances ...\n";
     VFX_TEST_CHECK(TestRNGIsolationAcrossInstances(), "TestRNGIsolationAcrossInstances failed");
+
+    std::cout << "  - Running TestSeekMatchesStepSimulation ...\n";
+    VFX_TEST_CHECK(TestSeekMatchesStepSimulation(), "TestSeekMatchesStepSimulation failed");
 
     return true;
 }

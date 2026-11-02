@@ -1721,9 +1721,24 @@ void EditorLayer::RenderToolbar() {
         ImVec2 winMax = ImVec2(winMin.x + ImGui::GetWindowWidth(), winMin.y + toolbarHeight);
         dl->AddLine(ImVec2(winMin.x, winMax.y - 1.0f), ImVec2(winMax.x, winMax.y - 1.0f), IM_COL32(30, 30, 30, 255));
 
+        // Helper lambda to draw button icon (PNG texture with vector fallback)
+        auto DrawButtonIcon = [this](ImDrawList* dl, ImVec2 bMin, ImVec2 bMax, const char* iconFile,
+                                     void(*drawFallback)(ImDrawList*, ImVec2, float, ImU32),
+                                     float iconSize, ImU32 col) {
+            ImVec2 center((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f);
+            uint64_t tex = iconFile ? m_AssetPreviewPanel.GetOrCreateIconTexture(iconFile) : 0;
+            if (tex != 0) {
+                ImVec2 iMin(center.x - iconSize * 0.5f, center.y - iconSize * 0.5f);
+                ImVec2 iMax(center.x + iconSize * 0.5f, center.y + iconSize * 0.5f);
+                dl->AddImage((ImTextureID)(intptr_t)tex, iMin, iMax, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), col);
+            } else if (drawFallback) {
+                drawFallback(dl, center, iconSize, col);
+            }
+        };
+
         // Helper lambda for segmented tool icon buttons (no gap between buttons)
-        auto DrawSegmentIconButton = [](const char* id, const char* tooltip, bool active, ImVec2 size, int cornerFlags,
-                                        void(*drawIcon)(ImDrawList*, ImVec2, float, ImU32)) -> bool {
+        auto DrawSegmentIconButton = [this, &DrawButtonIcon](const char* id, const char* iconFile, const char* tooltip, bool active, ImVec2 size, int cornerFlags,
+                                                             void(*drawIcon)(ImDrawList*, ImVec2, float, ImU32)) -> bool {
             ImDrawFlags roundFlags = ImDrawFlags_RoundNone;
             if (cornerFlags == 1) roundFlags = ImDrawFlags_RoundLeft;
             else if (cornerFlags == 2) roundFlags = ImDrawFlags_RoundRight;
@@ -1746,12 +1761,9 @@ void EditorLayer::RenderToolbar() {
             dl->AddRectFilled(pMin, pMax, bgCol, rounding, roundFlags);
             dl->AddRect(pMin, pMax, IM_COL32(36, 36, 36, 255), rounding, roundFlags, 1.0f);
 
-            // Vector icon
-            ImVec2 center((pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f);
+            // Icon: PNG texture with vector fallback
             ImU32 iconCol = active ? IM_COL32(255, 255, 255, 255) : (hovered ? IM_COL32(245, 248, 255, 255) : IM_COL32(205, 210, 220, 240));
-            if (drawIcon) {
-                drawIcon(dl, center, 14.0f, iconCol);
-            }
+            DrawButtonIcon(dl, pMin, pMax, iconFile, drawIcon, 18.0f, iconCol);
 
             if (hovered && tooltip) {
                 ImGui::SetTooltip("%s", tooltip);
@@ -1801,35 +1813,35 @@ void EditorLayer::RenderToolbar() {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f)); // Zero gap between tools!
 
         // Tool 1: Select (Q)
-        if (DrawSegmentIconButton("##ToolSelect", "Select Tool (Q)", m_GizmoType == -1 && !is2DMode, toolBtnSize, 1,
+        if (DrawSegmentIconButton("##ToolSelect", "icon_tool_select.png", "Select Tool (Q)", m_GizmoType == -1 && !is2DMode, toolBtnSize, 1,
             Axle::UIIcons::DrawToolSelectIcon)) {
             m_GizmoType = -1;
         }
         ImGui::SameLine();
 
         // Tool 2: Move (W)
-        if (DrawSegmentIconButton("##ToolMove", "Move Tool (W)", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE, toolBtnSize, 0,
+        if (DrawSegmentIconButton("##ToolMove", "icon_tool_move.png", "Move Tool (W)", m_GizmoType == ImGuizmo::OPERATION::TRANSLATE, toolBtnSize, 0,
             Axle::UIIcons::DrawToolMoveIcon)) {
             m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
         }
         ImGui::SameLine();
 
         // Tool 3: Rotate (E)
-        if (DrawSegmentIconButton("##ToolRotate", "Rotate Tool (E)", m_GizmoType == ImGuizmo::OPERATION::ROTATE, toolBtnSize, 0,
+        if (DrawSegmentIconButton("##ToolRotate", "icon_tool_rotate.png", "Rotate Tool (E)", m_GizmoType == ImGuizmo::OPERATION::ROTATE, toolBtnSize, 0,
             Axle::UIIcons::DrawToolRotateIcon)) {
             m_GizmoType = ImGuizmo::OPERATION::ROTATE;
         }
         ImGui::SameLine();
 
         // Tool 4: Scale (R)
-        if (DrawSegmentIconButton("##ToolScale", "Scale Tool (R)", m_GizmoType == ImGuizmo::OPERATION::SCALE, toolBtnSize, 0,
+        if (DrawSegmentIconButton("##ToolScale", "icon_tool_scale.png", "Scale Tool (R)", m_GizmoType == ImGuizmo::OPERATION::SCALE, toolBtnSize, 0,
             Axle::UIIcons::DrawToolScaleIcon)) {
             m_GizmoType = ImGuizmo::OPERATION::SCALE;
         }
         ImGui::SameLine();
 
         // Tool 5: Rect (T)
-        if (DrawSegmentIconButton("##ToolRect", "Rect Tool / 2D UI Edit Mode (T)", is2DMode, toolBtnSize, 2,
+        if (DrawSegmentIconButton("##ToolRect", "icon_tool_rect.png", "Rect Tool / 2D UI Edit Mode (T)", is2DMode, toolBtnSize, 2,
             Axle::UIIcons::DrawToolRectIcon)) {
             Set2DViewMode(!is2DMode);
         }
@@ -1927,7 +1939,7 @@ void EditorLayer::RenderToolbar() {
             }
             ImVec2 bMin = ImGui::GetItemRectMin();
             ImVec2 bMax = ImGui::GetItemRectMax();
-            Axle::UIIcons::DrawStopIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f);
+            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_stop.png", Axle::UIIcons::DrawStopIcon, 18.0f, IM_COL32(255, 255, 255, 255));
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop Simulation (F5 / F7)");
@@ -1941,7 +1953,7 @@ void EditorLayer::RenderToolbar() {
             }
             ImVec2 bMin = ImGui::GetItemRectMin();
             ImVec2 bMax = ImGui::GetItemRectMax();
-            Axle::UIIcons::DrawPlayIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f);
+            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_play.png", Axle::UIIcons::DrawPlayIcon, 18.0f, IM_COL32(235, 240, 250, 255));
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play Simulation (F5)");
@@ -1957,7 +1969,7 @@ void EditorLayer::RenderToolbar() {
             }
             ImVec2 bMin = ImGui::GetItemRectMin();
             ImVec2 bMax = ImGui::GetItemRectMax();
-            Axle::UIIcons::DrawPauseIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f);
+            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_pause.png", Axle::UIIcons::DrawPauseIcon, 18.0f, IM_COL32(235, 240, 250, 255));
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pause Simulation (F6)");
         } else if (m_SceneState == SceneState::Pause) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.70f, 0.45f, 0.12f, 1.0f)); // Warm Amber
@@ -1966,7 +1978,7 @@ void EditorLayer::RenderToolbar() {
             }
             ImVec2 bMin = ImGui::GetItemRectMin();
             ImVec2 bMax = ImGui::GetItemRectMax();
-            Axle::UIIcons::DrawPauseIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f, IM_COL32(255, 235, 140, 255));
+            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_pause.png", Axle::UIIcons::DrawPauseIcon, 18.0f, IM_COL32(255, 235, 140, 255));
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Resume Simulation (F6)");
         } else {
@@ -1974,7 +1986,7 @@ void EditorLayer::RenderToolbar() {
             ImGui::Button("##DisabledPauseBtn", pauseBtnSize);
             ImVec2 bMin = ImGui::GetItemRectMin();
             ImVec2 bMax = ImGui::GetItemRectMax();
-            Axle::UIIcons::DrawPauseIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f, IM_COL32(110, 110, 110, 255));
+            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_pause_gray.png", Axle::UIIcons::DrawPauseIcon, 18.0f, IM_COL32(120, 125, 135, 255));
             ImGui::EndDisabled();
         }
         ImGui::PopStyleVar();
@@ -1989,14 +2001,14 @@ void EditorLayer::RenderToolbar() {
             }
             ImVec2 bMin = ImGui::GetItemRectMin();
             ImVec2 bMax = ImGui::GetItemRectMax();
-            Axle::UIIcons::DrawStepIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f);
+            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_step.png", Axle::UIIcons::DrawStepIcon, 18.0f, IM_COL32(235, 240, 250, 255));
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Step 1 Frame (O)");
         } else {
             ImGui::BeginDisabled(true);
             ImGui::Button("##DisabledStepBtn", stepBtnSize);
             ImVec2 bMin = ImGui::GetItemRectMin();
             ImVec2 bMax = ImGui::GetItemRectMax();
-            Axle::UIIcons::DrawStepIcon(ImGui::GetWindowDrawList(), ImVec2((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f), 13.0f, IM_COL32(110, 110, 110, 255));
+            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_step_gray.png", Axle::UIIcons::DrawStepIcon, 18.0f, IM_COL32(120, 125, 135, 255));
             ImGui::EndDisabled();
         }
         ImGui::PopStyleVar();

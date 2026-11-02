@@ -102,31 +102,36 @@ namespace Axle::UIIcons {
 
     inline void DrawToolRotateIcon(ImDrawList* dl, ImVec2 center, float size, ImU32 col = IM_COL32(220, 225, 235, 255)) {
         float r = size * 0.38f;
-        // Top arc (clockwise)
-        dl->PathArcTo(center, r, -2.6f, -0.3f, 12);
-        dl->PathStroke(col, 0, 1.5f);
-        // Tangent arrowhead at end of top arc
-        ImVec2 tip1(center.x + r * cosf(-0.3f), center.y + r * sinf(-0.3f));
-        float tLen = size * 0.22f;
-        float tWidth = size * 0.16f;
-        ImVec2 tDir(0.295f, 0.955f);
-        ImVec2 nDir(-0.955f, 0.295f);
-        ImVec2 base1(tip1.x - tDir.x * tLen, tip1.y - tDir.y * tLen);
-        dl->AddTriangleFilled(tip1,
-                              ImVec2(base1.x - nDir.x * tWidth, base1.y - nDir.y * tWidth),
-                              ImVec2(base1.x + nDir.x * tWidth, base1.y + nDir.y * tWidth), col);
+        float stroke = 1.6f;
+        float arrowLen = size * 0.22f;
+        float arrowW = size * 0.16f;
 
-        // Bottom arc (clockwise)
-        dl->PathArcTo(center, r, 0.55f, 2.85f, 12);
-        dl->PathStroke(col, 0, 1.5f);
-        // Tangent arrowhead at end of bottom arc
-        ImVec2 tip2(center.x + r * cosf(2.85f), center.y + r * sinf(2.85f));
-        ImVec2 tDir2(-0.295f, -0.955f);
-        ImVec2 nDir2(0.955f, -0.295f);
-        ImVec2 base2(tip2.x - tDir2.x * tLen, tip2.y - tDir2.y * tLen);
-        dl->AddTriangleFilled(tip2,
-                              ImVec2(base2.x - nDir2.x * tWidth, base2.y - nDir2.y * tWidth),
-                              ImVec2(base2.x + nDir2.x * tWidth, base2.y + nDir2.y * tWidth), col);
+        // Angle -25 deg
+        float tEnd = -0.4363f; // -25 deg in rad
+        float tStart = tEnd - 2.4435f; // -165 deg (140 deg sweep)
+
+        // Arc 1 (Top-right)
+        dl->PathArcTo(center, r, tStart, tEnd, 16);
+        dl->PathStroke(col, 0, stroke);
+
+        // Arrowhead 1 (Tangent at tEnd)
+        ImVec2 e1(center.x + r * cosf(tEnd), center.y + r * sinf(tEnd));
+        ImVec2 tDir(-sinf(tEnd), cosf(tEnd));
+        ImVec2 nDir(cosf(tEnd), sinf(tEnd));
+        ImVec2 tip1(e1.x + tDir.x * arrowLen, e1.y + tDir.y * arrowLen);
+        ImVec2 w1(e1.x + nDir.x * arrowW, e1.y + nDir.y * arrowW);
+        ImVec2 w2(e1.x - nDir.x * arrowW, e1.y - nDir.y * arrowW);
+        dl->AddTriangleFilled(tip1, w1, w2, col);
+
+        // Arc 2 (Bottom-left, 180 deg symmetry)
+        dl->PathArcTo(center, r, tStart + 3.14159f, tEnd + 3.14159f, 16);
+        dl->PathStroke(col, 0, stroke);
+
+        // Arrowhead 2 (Tangent at tEnd + PI)
+        ImVec2 tip2(2.0f * center.x - tip1.x, 2.0f * center.y - tip1.y);
+        ImVec2 w1_2(2.0f * center.x - w1.x, 2.0f * center.y - w1.y);
+        ImVec2 w2_2(2.0f * center.x - w2.x, 2.0f * center.y - w2.y);
+        dl->AddTriangleFilled(tip2, w1_2, w2_2, col);
     }
 
     inline void DrawToolScaleIcon(ImDrawList* dl, ImVec2 center, float size, ImU32 col = IM_COL32(220, 225, 235, 255)) {

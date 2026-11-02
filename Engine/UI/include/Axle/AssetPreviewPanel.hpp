@@ -60,6 +60,9 @@ namespace Axle {
         void RenderPreviewViewport();
         void OnImGuiRender(bool* p_open = nullptr);
 
+        // UI Icon Texture Cache
+        uint64_t GetOrCreateIconTexture(const std::string& iconFilename);
+
     private:
         void RenderPreview3D(float width, float height);
         void RenderPreviewRHI(float width, float height);
@@ -134,7 +137,6 @@ namespace Axle {
         void UpdatePreviewLighting();
 
         // UI Icon Texture Cache
-        uint64_t GetOrCreateIconTexture(const std::string& iconFilename);
         void FreeIconTextures();
         std::unordered_map<std::string, std::pair<std::shared_ptr<RHI::RHITexture>, uint64_t>> m_IconCache;
         std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_GLIconCache;

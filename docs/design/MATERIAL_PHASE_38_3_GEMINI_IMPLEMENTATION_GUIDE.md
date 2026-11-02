@@ -13,6 +13,10 @@ The intended result is a reliable material authoring pipeline with the automotiv
 features already listed in `ROADMAP.md`. This assignment does not promise complete
 feature parity with every Godot material feature.
 
+For concrete data structures, proposed function signatures, implementation flow
+and exact unit-test fixtures, use the [reference implementation blueprint](#15-reference-implementation-blueprint)
+alongside the work packages below.
+
 You can edit code and run unit tests. You cannot operate the editor, inspect GPU
 images, run a rendering acceptance session, or establish GPU performance. Design
 your implementation so its decisions can be unit tested without a graphics device.
@@ -601,11 +605,495 @@ The correct handoff status can be **implemented and CPU-unit-tested; runtime
 acceptance pending**. It must never be **fully verified on DX12/Vulkan** when only
 code and unit tests were available.
 
-## 15. Ready-to-use prompt for Gemini
+## 15. Reference implementation blueprint
+
+This section supplies the recommended implementation shape for packages A-F.
+These are **proposed interfaces and illustrative pseudocode**, not APIs that
+already exist in the repository. Adapt naming to local conventions, but preserve
+the ownership rules, validation behavior and test boundaries described below.
+
+The project uses C++20. Prefer ordinary structs, `std::span`, `std::variant`,
+`std::optional`, `std::vector` and RAII. Do not assume C++23 `std::expected` is
+available. Avoid a new generic dependency-injection or rendering framework.
+
+### 15.1 File responsibilities and ownership
+
+| Proposed file/type | Owns | Must not own |
+| --- | --- | --- |
+| `MaterialBindingPlan.hpp/.cpp` in Renderer | Validated CPU binding metadata, value resolution, byte packing, semantic mapping | Device, GPU buffers, editor widgets |
+| `MaterialProgramCachePolicy.hpp/.cpp` in Renderer, if extraction is useful | Cache transition decisions and generation selection | Compiler DLL initialization, GPU submission |
+| `CustomMaterialProgram.hpp/.cpp` in Scene | Actual shader compilation, immutable ready generations, layouts and PSO integration | Entity component mutation or UI rendering |
+| `RHISceneRenderer::DrawItem` | Effective values for one draw and an owning reference to its selected generation | A pointer to temporary reflection or a transient property vector |
+| Renderer-retained custom draw resources | Per-draw uniform buffers, descriptor sets, texture references and packed values | Shared mutable property values for every shader user |
+| Shared material inspector | Authoring values and display of compiler status | A separate preview-only shader execution implementation |
+
+For the first implementation, copy the small property vector into an effective
+draw snapshot if necessary. Optimize only after ownership is correct. Do not retain
+references into an entity registry across mutations that can relocate components.
+
+Keep the CPU binding plan free of native GPU pointers. An immutable runtime
+generation owns its binding plan and the backend objects created from that plan.
+Each recorded draw holds an owning reference to the generation it uses.
+
+Pipeline cache identity must include the program key and generation, or a
+generation identifier guaranteed unique across the entire renderer. A per-entry
+counter alone would give unrelated shaders the same generation number.
+
+### 15.2 Proposed CPU data model
+
+The following sketch intentionally omits hashing, includes and ordinary equality
+operators. Add them using the existing project conventions.
+
+```cpp
+namespace Axle {
+    enum class UniformKind {
+        Float32, Float2, Float3, Float4, Int32, Bool32, Matrix4x4
+    };
+
+    enum class TextureRole {
+        Color, LinearData, TangentNormal
+    };
+
+    enum class EngineUniform {
+        Model, ViewProjection, View, Projection,
+        CameraPosition, SunDirection, SunColor,
+        BaseColor, LegacySurfaceParams, BaseUVTransform
+    };
+
+    struct ShaderAddress {
+        uint32_t RegisterSpace = 0;
+        uint32_t RegisterIndex = 0;
+        // Resource type and array element also participate in descriptor identity.
+    };
+
+    struct PropertyKey {
+        std::string BufferName;
+        std::string VariableName;
+    };
+
+    struct UniformBinding {
+        size_t BufferIndex = 0;
+        uint32_t Offset = 0;
+        uint32_t ReflectedSize = 0;
+        UniformKind Kind = UniformKind::Float32;
+        std::variant<EngineUniform, PropertyKey> Source;
+    };
+
+    struct ConstantBufferPlan {
+        std::string Name;
+        ShaderAddress Address;
+        uint32_t LogicalSize = 0;
+    };
+
+    struct TextureBinding {
+        std::string ResourceName;
+        ShaderAddress Address;
+        TextureRole Role = TextureRole::LinearData;
+        // Add validated dimension, engine-slot/property source and fallback role.
+    };
+
+    struct MaterialBindingPlan {
+        std::vector<ConstantBufferPlan> Buffers;
+        std::vector<UniformBinding> Uniforms;
+        std::vector<TextureBinding> Textures;
+        // Add validated sampler declarations and vertex-input mappings.
+        uint32_t InterfaceRevision = 1;
+    };
+
+    struct MaterialBindingError {
+        std::string Code;
+        std::string BufferOrResource;
+        std::string Variable;
+        std::string Message;
+    };
+
+    using BindingPlanResult =
+        std::variant<MaterialBindingPlan, MaterialBindingError>;
+}
+```
+
+Store actual variable type/dimension and shader-stage visibility in the validated
+metadata where needed. `UniformKind::Float4` can represent the storage of a Color
+property; keep the Color authoring metadata so the inspector still uses a color
+control. Texture properties never become `UniformBinding` entries.
+
+Use `PropertyKey` as a structured runtime identity. The current persistence helper
+keys properties primarily by name. Do not concatenate `Buffer::Variable` into
+`Desc.Name` without a compatible format change: the text parser also uses colons
+as key/value delimiters. Initially reject duplicate editable names that cannot be
+persisted unambiguously, or add a versioned qualified-key format with migration
+tests before accepting them. Never bind an ambiguous name to the first match.
+
+### 15.3 Proposed pure-function boundaries
+
+```cpp
+// ValidatedShaderInterface is a CPU description of the canonical or legacy ABI.
+BindingPlanResult BuildMaterialBindingPlan(
+    const RHI::RHIShaderReflection& mergedReflection,
+    const ValidatedShaderInterface& shaderInterface,
+    std::span<const ShaderPropertyDesc> declaredUserProperties);
+
+// Resolve defaults and saved values by validated identity and compatible type.
+ResolvedPropertyResult ResolveMaterialProperties(
+    const MaterialBindingPlan& plan,
+    std::span<const ShaderPropertyInstance> savedValues);
+
+// EngineMaterialValues contains only CPU matrices, vectors and scalar values.
+// The result owns byte arrays; it contains no GPU resources or registry pointers.
+PackedMaterialResult PackMaterialUniforms(
+    const MaterialBindingPlan& plan,
+    const EngineMaterialValues& engineValues,
+    const ResolvedMaterialProperties& properties);
+
+VertexInputPlanResult BuildMaterialVertexInputPlan(
+    std::span<const RHI::RHIVertexAttribute> reflectedInputs);
+
+// Resource references are resolved later through MaterialTextureCache.
+TextureRequestResult ResolveMaterialTextureRequests(
+    const MaterialBindingPlan& plan,
+    const EffectiveMaterialValues& materialValues);
+```
+
+Define the omitted input/result types as small concrete structs. Prefer a result
+with a value or structured error to an output buffer plus an unrelated global
+error string. Do not silently return a partially built valid-looking plan.
+
+`EffectiveMaterialValues` is an engine-level snapshot, not a copy of the entire
+entity component. Include only fields the selected interface consumes. Resolve
+asset-versus-inline ownership before constructing it; rendering should read it
+without writing back into the asset.
+
+Suggested implementation order inside `BuildMaterialBindingPlan`:
+
+```text
+validate declared interface revision
+merge/check duplicate reflected resources and cross-stage buffer declarations
+validate supported types, counts, dimensions, stages and register-space mapping
+validate actual backend binding collisions after the selected mapping
+classify each reflected buffer variable as engine-owned or editable user data
+resolve editable identities; reject ambiguity and incompatible declarations
+validate offsets, serialized byte widths and forbidden overlaps
+build vertex semantic mapping from the vertex-stage reflection only
+return the complete immutable CPU plan, or one actionable error
+```
+
+Unused declarations optimized out of a compiled shader do not need fabricated GPU
+bindings. A user field present in one stage must still be discovered when the
+stage reflections are merged. Conflicting cross-stage declarations are errors.
+
+### 15.4 Uniform packing pseudocode and exact fixture
+
+Keep value resolution separate from byte writing. `ShaderPropertyInstance` stores
+a Float in `FloatVal`, an Int in `IntVal`, a Bool in `BoolVal`, vectors/colors in
+`Vec4Val`, and a texture reference in `TexturePath`. Do not read every numeric type
+from `Vec4Val` merely because that member is always present.
+
+```text
+PackMaterialUniforms(plan, engineValues, properties):
+    allocate each logical buffer as zero-filled bytes
+    for each validated uniform binding:
+        find the engine value or resolved user value
+        serialize it to an explicitly typed scalar/component array
+        compute bytesToWrite from UniformKind, not sizeof(the authoring struct)
+        if offset > buffer.size:
+            return OutOfBounds
+        if bytesToWrite > buffer.size - offset:
+            return OutOfBounds
+        if bytesToWrite exceeds the validated reflected storage:
+            return ReflectedStorageMismatch
+        copy bytesToWrite bytes at offset
+    return all packed buffers only after every binding succeeds
+```
+
+Use `memcpy` into byte storage. Avoid dereferencing potentially unaligned
+`reinterpret_cast<float*>` or `reinterpret_cast<glm::vec3*>` pointers. Serialize
+vectors component by component or through fixed scalar arrays so GLM alignment
+configuration cannot change the payload size. Never use `sizeof(std::variant)` or
+`sizeof(ShaderPropertyInstance)` as a shader value size.
+
+Use this synthetic HLSL-shaped user-buffer fixture as a first test. Its logical
+size is 64 bytes and the default matrix convention is not involved:
+
+| Property | Type | Offset | Input | Expected stored components |
+| --- | --- | --- | --- | --- |
+| `Gain` | Float | 0 | `0.5` | One float: `0.5` |
+| `Enabled` | Bool | 4 | `true` | One `uint32_t`: `1` |
+| Padding | None | 8..15 | None | Eight zero bytes |
+| `Tint` | Float3 | 16 | `[2.0, 0.25, 1.0]` | Three floats, exactly 12 bytes |
+| `Mode` | Int | 28 | `-2` | One `int32_t`: `-2` |
+| `Accent` | Color | 32 | `[0.125, 0.5, 4.0, 0.75]` | Four floats; HDR and alpha preserved |
+| `UVScale` | Float2 | 48 | `[2.0, 7.0]` | Two floats |
+| `UVOffset` | Float2 | 56 | `[-0.25, 0.75]` | Two floats |
+
+Compare decoded components with explicit expected values and check the padding.
+Also test an isolated Float3 write into sentinel-filled storage: bytes 28..31 must
+remain unchanged. Checking only the final buffer can hide an overrun if a later
+Mode write happens to repair those four bytes.
+
+Required negative cases:
+
+- Float4 at offset 56 in a 64-byte buffer returns `OutOfBounds`.
+- An offset larger than the buffer is rejected before subtracting it.
+- A reflected 4-byte Int field with a saved Float returns a type error or uses the
+  explicitly documented incompatible-value default policy; it is never bit-cast.
+- A missing saved property receives the declared default, including false/zero.
+- A texture property creates a texture request and writes no uniform bytes.
+- A user property targeting `u_Model` is rejected as an engine-owned collision.
+
+For a separate matrix test, initialize GLM columns with `(1,2,3,4)`, `(5,6,7,8)`,
+`(9,10,11,12)` and `(13,14,15,16)`. With the documented column-major contract,
+the packed scalar sequence is 1 through 16 and multiplying by `(1,0,0,1)` produces
+`(14,16,18,20)`. Add a separate row-major adapter fixture if that interface is
+supported. Identity matrices cannot detect accidental transposition.
+
+### 15.5 Concrete custom interface starting point
+
+Use this as a minimal **proposed canonical interface**, not as a declaration that
+it matches the built-in PBR block. Its engine values are packed by reflected name
+and validated offset through the custom path:
+
+```hlsl
+// All three cbuffers are descriptor-bound for this custom interface.
+cbuffer EngineObject : register(b0, space0) {
+    column_major float4x4 u_Model;
+    float4 u_BaseColor;
+    float4 u_BaseUV; // scale.xy, offset.xy
+};
+cbuffer EngineScene : register(b1, space0) {
+    column_major float4x4 u_ViewProjection;
+    float4 u_CameraPosition;
+};
+cbuffer MaterialParameters : register(b2, space0) {
+    float4 Tint;
+    float Gain;
+    uint Enabled;
+    float2 Reserved;
+};
+Texture2D u_BaseMap : register(t0, space1);
+SamplerState u_Sampler : register(s0, space1);
+```
+
+For this example, Object is logically 96 bytes, Scene is 80 bytes, and
+MaterialParameters is 32 bytes. GPU allocation alignment is separate. Zero-fill
+Reserved; it is not an editable property. Map Bool authoring values to `Enabled`
+as an explicitly allowed Bool32/uint storage convention.
+
+Initially implement this small diagnostic shader with reflected `POSITION0`,
+`NORMAL0` and `TEXCOORD0` inputs, `VSMain` and `PSMain`. Its pixel shader should
+output a predictable texture/base-color/tint/gain expression so a later readback
+test can distinguish it from PBR. Mark it accurately as a minimal custom shader,
+not a complete custom PBR implementation. Extend engine-lighting fields only when
+their semantics and packing are specified.
+
+The known legacy adapter maps legacy `u_Params` to
+`[roughness, metallic, AO strength, base UV tiling X]`, and maps camera/sun fields
+to their legacy reflected offsets. A legacy scalar UV tiling field cannot express
+independent X/Y tiling or offset: preserve its original behavior and document that
+limitation. The canonical `u_BaseUV` supports all four components.
+
+For a descriptor-only custom layout, choose a root register space outside the used
+descriptor spaces if required by NRI. Confirm that the layout builder actually
+respects this choice. Do not bind a 96-byte custom object cbuffer as the built-in
+128-byte root block simply because both contain a model matrix.
+
+Concrete vertex-plan fixture:
+
+```text
+Reflected inputs: POSITION0 at location/register 0,
+                 NORMAL0 at 1, TEXCOORD0 at 2
+Expected source stride: 64 bytes
+Expected source offsets: Position=0, Normal=12, TexCoord=40
+Expected TEXCOORD0 backend location: 2, not the built-in shader's location
+```
+
+Production code should use `offsetof(RHIVertex3D, field)`; the unit fixture asserts
+the explicit ABI expectations and the existing stride assertion. A semantic such
+as `BLENDINDICES0` is unsupported by this static-mesh contract unless a separate
+skinned vertex path is fully implemented.
+
+### 15.6 Cache state machine and immutable generations
+
+Keep a cache entry for each complete program key. Never reuse a last-good shader
+from another shader path or backend after the material changes its request.
+
+```text
+ProgramKey:
+    resolved source identity, backend, VS/PS entry points,
+    compiler options/macros, interface revision
+
+ProgramEntry:
+    optional lastAttemptFingerprint
+    owning reference to readyGeneration, possibly empty
+    optional diagnostic for the last attempt
+
+ReadyGeneration (immutable after publication):
+    monotonically assigned generation ID
+    actual dependency fingerprint
+    shader bytecode and validated CPU binding plan
+    ready backend layout/resources needed to use the generation
+```
+
+The fingerprint includes source/include contents and dependency identities. A
+missing/unreadable dependency is a reported error, not the hash of an empty file.
+An unchanged valid fingerprint suppresses duplicate work; an unchanged failed
+fingerprint suppresses repeated compilation and repeated diagnostic spam.
+
+```text
+RefreshEntry(entry, fingerprint, buildCandidate):
+    if fingerprint == entry.lastAttemptFingerprint:
+        return existing entry state
+
+    candidate = buildCandidate() // compiler + validation + runtime construction
+    entry.lastAttemptFingerprint = fingerprint
+    if candidate failed:
+        entry.diagnostic = candidate.error
+        retain entry.readyGeneration
+    else:
+        publish the complete candidate as a new immutable generation
+        entry.diagnostic = none
+    return entry state
+```
+
+For CPU tests, inject a candidate builder returning a fake ready-generation owner
+or an error. In production, a candidate is not ready until backend layout/resource
+creation succeeds. Compiler success followed by layout creation failure must not
+replace the working generation. Include that failure in the unit transition tests.
+
+Selection is a separate small function:
+
+```text
+SelectProgram(request, entryForExactlyThisProgramKey):
+    if custom disabled: return BuiltIn
+    if main shader path empty or missing: return BuiltIn with diagnostic
+    if matching entry has a ready generation:
+        return Custom(owning generation reference, possible reload diagnostic)
+    return BuiltIn with the current diagnostic
+```
+
+For this initial policy, deleting the main shader is a missing-path fallback;
+editing it into a compiler error retains its last good generation. Encode these
+distinct cases in tests. Recreating the file must be eligible for a fresh attempt.
+Disabling custom mode must skip custom compilation/selection work for that draw.
+
+Required cache sequence, verified using a fake builder invocation counter:
+
+| Event | Builder calls added | Selected program |
+| --- | --- | --- |
+| First request A, fingerprint F1, success G1 | 1 | G1 |
+| Same A/F1 | 0 | G1 |
+| A/F2 compiler failure | 1 | G1 with error |
+| Same A/F2 | 0 | G1 with the same error |
+| A/F3 backend-construction failure | 1 | G1 with error |
+| A/F4 success G2 | 1 | G2 |
+| Request B, first compilation fails | 1 | Built-in; never G2 from A |
+| Disable custom mode | 0 | Built-in |
+
+A draw that captured G1 before G2 was published must still own G1 until its work
+has completed. Test this with an observable destruction counter: replacement
+releases the cache's old reference, not the draw's old reference. Do not invent
+fake GPU fences to claim hardware lifetime validation.
+
+### 15.7 End-to-end draw preparation and recording
+
+Use this sequence to connect the independently tested helpers. The example is a
+design sketch; use the renderer's existing queue construction and retained draw
+storage rather than replacing them wholesale.
+
+```text
+PrepareDraw(entity, frameInputs):
+    resolve effective shared-asset or inline material values
+    snapshot values; retain model/mesh and surface/queue state
+    if custom mode requested:
+        resolve requested shader and its exact ProgramKey
+        refresh corresponding cache entry when its dependency fingerprint changes
+        select custom ready generation or built-in fallback
+    if built-in selected:
+        prepare through the existing built-in material path
+    else:
+        resolve user values against the selected generation's property schema
+        pack engine and user constants using that generation's binding plan
+        resolve texture requests using that same binding plan
+        retain the selected generation and snapshot with this draw
+    enqueue using the existing opaque/transparent ordering rules
+
+RecordCustomDraw(preparedDraw, retainedDrawResources):
+    choose PSO for generation + target formats + MSAA + surface/cull/depth state
+    upload each packed constant buffer into this draw's retained buffers
+    resolve each texture request; keep owning texture references
+    fill descriptor sets for the plan's actual spaces/ranges
+    bind the matching layout, pools/sets, sampler and graphics pipeline
+    bind mesh with the validated custom vertex input contract
+    issue draw
+    retain buffers, descriptors, textures and generation until completion
+```
+
+If properties are incompatible after selecting a generation, apply the declared
+default policy before recording or take a diagnosed built-in fallback. Never
+upload a partially packed custom buffer and proceed as if it succeeded.
+
+In particular, a failed reload uses the **old generation's schema** to interpret
+values for the old generation. New editor-only annotations are not authority to
+change its reflected offsets. On a successful reload, migrate compatible values
+to the new schema transactionally; do not silently save those migrations to disk.
+
+Do not cache one uploaded user-parameter buffer per shader and overwrite it for
+every entity. A required two-draw fixture uses one generation with red Tint for
+draw A and green Tint for draw B; both prepared buffer payloads must remain distinct.
+
+### 15.8 Suggested CPU-test target wiring
+
+Keep the new target independent from the `AxleTests -> AxleEditor` dependency.
+This is a minimal sketch, not a requirement to add all source files immediately:
+
+```cmake
+# In a suitable existing test/CMake section, with CTest enabled at the root.
+if(BUILD_TESTING)
+    add_executable(AxleMaterialUnitTests
+        src/Tests/MaterialUnitTestMain.cpp
+        src/Tests/Test_MaterialSerializationUnit.cpp
+        src/Tests/Test_MaterialBindingPlanUnit.cpp
+        src/Tests/Test_MaterialProgramCacheUnit.cpp
+    )
+    target_link_libraries(AxleMaterialUnitTests PRIVATE Axle::Renderer)
+    add_test(NAME MaterialUnitTests
+        COMMAND $<TARGET_FILE:AxleMaterialUnitTests>)
+endif()
+```
+
+Enable CTest in the existing root configuration if it is not already enabled.
+Link additional libraries only for CPU logic actually tested; do not add a
+dependency on the editor executable to obtain deployed shader DLLs or assets.
+The unit suite uses synthetic reflection and does not need those DLLs.
+
+The test main should run named cases, count/report failures and return nonzero
+when any check fails. Prefer the project's existing explicit check style or a
+test framework already present. Do not introduce a downloaded framework solely
+for these material tests.
+
+### 15.9 First vertical slice and completion gates
+
+Implement the smallest complete route before extending support to more resources:
+
+1. CPU tests for the 64-byte packing fixture and diagnostic failures.
+2. A validated plan for the minimal canonical shader above.
+3. Cache tests using fake compilation/build outcomes, including G1 retention.
+4. A static-mesh custom draw consuming the same plan and packed bytes.
+5. Per-draw Tint/Gain/Enabled values, then one Texture2D property with fallback.
+6. Legacy template support, source/include invalidation and editor diagnostics.
+7. Prepared real compiler/GPU readback checks, left NOT RUN in Gemini's report.
+
+Commit each verified discrete step according to packages A-G. The vertical slice
+is an implementation ordering aid; it does not collapse those packages into one
+commit or justify omitting persistence and legacy-compatibility tests.
+
+## 16. Ready-to-use prompt for Gemini
 
 > Implement the remaining AxleEngine Phase 38.3 work according to this document.
 > Begin by inspecting the current branch and the listed files. Work through
 > packages A-G in order, splitting each package into the stated atomic commits.
+> Use section 15 as the reference implementation blueprint: adapt its proposed
+> interfaces to the repository, while preserving its ownership, validation and
+> unit-test contracts. Start with the smallest complete vertical slice.
 > You are authorized to edit code, add deterministic fixtures, run CPU unit tests
 > and create local commits. You have no GPU/UI acceptance capability: separate
 > CPU-testable binding/packing/cache decisions from runtime resource operations,

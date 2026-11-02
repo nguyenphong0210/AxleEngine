@@ -16,6 +16,7 @@
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/MaterialTextureCache.hpp>
+#include <Axle/CustomMaterialProgram.hpp>
 
 #include <memory>
 #include <string>
@@ -207,6 +208,34 @@ namespace Axle {
         uint32_t PickEntity(const std::shared_ptr<Scene>& scene, const PerspectiveCamera& camera,
                             uint32_t width, uint32_t height, uint32_t x, uint32_t y);
 
+        // Custom Material Program Cache
+        CustomProgramCache& GetCustomProgramCache() { return m_CustomProgramCache; }
+        const CustomProgramCache& GetCustomProgramCache() const { return m_CustomProgramCache; }
+
+        struct CustomPipelineKey {
+            uint64_t GenerationID = 0;
+            nri::Format ColorFormat = nri::Format::RGBA8_UNORM;
+            nri::Format DepthFormat = nri::Format::D32_SFLOAT;
+            uint8_t SampleCount = 1;
+            Axle::SurfaceType SurfaceType = Axle::SurfaceType::Opaque;
+            Axle::CullMode CullMode = Axle::CullMode::None;
+            bool DepthWrite = true;
+            bool operator==(const CustomPipelineKey& other) const = default;
+        };
+
+        struct CustomPipelineKeyHash {
+            size_t operator()(const CustomPipelineKey& k) const noexcept {
+                size_t h = std::hash<uint64_t>{}(k.GenerationID);
+                h ^= std::hash<uint32_t>{}(static_cast<uint32_t>(k.ColorFormat)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(static_cast<uint32_t>(k.DepthFormat)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= std::hash<uint8_t>{}(k.SampleCount) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= std::hash<uint8_t>{}(static_cast<uint8_t>(k.SurfaceType)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= std::hash<uint8_t>{}(static_cast<uint8_t>(k.CullMode)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= std::hash<bool>{}(k.DepthWrite) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                return h;
+            }
+        };
+
     private:
         bool CompileShaders(RHI::RHIDevice& device);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
@@ -243,6 +272,25 @@ namespace Axle {
         };
         // Render() waits for queue completion before reusing these resources.
         std::vector<std::unique_ptr<MaterialDrawResources>> m_MaterialDraws;
+        struct CustomDrawResources {
+            std::vector<RHI::RHIBuffer> ConstantBuffers;
+            nri::DescriptorSet* Set = nullptr;
+            std::vector<std::shared_ptr<RHI::RHITexture>> Textures;
+        };
+        std::vector<std::unique_ptr<CustomDrawResources>> m_CustomDraws;
+        CustomProgramCache m_CustomProgramCache;
+
+        std::unordered_map<CustomPipelineKey, nri::Pipeline*, CustomPipelineKeyHash> m_CustomPipelines;
+
+        nri::Pipeline* GetOrCreateCustomPipeline(
+            const CustomReadyGeneration& generation,
+            nri::Format colorFormat,
+            nri::Format depthFormat,
+            uint8_t sampleCount,
+            Axle::SurfaceType surfaceType,
+            Axle::CullMode cullMode,
+            bool depthWrite);
+
         MaterialTextureCache m_MaterialTextures;
         std::unique_ptr<RHI::RHITexture> m_OpaqueSceneColor;
         std::unique_ptr<RHI::RHITexture> m_OpaqueSceneDepth;

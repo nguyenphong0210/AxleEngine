@@ -619,6 +619,86 @@ namespace Axle {
         return cache.GetOrCreateGraphicsPipeline(gfxDesc);
     }
 
+    nri::Pipeline* RHISceneRenderer::GetOrCreateCustomPipeline(
+        const CustomReadyGeneration& generation,
+        nri::Format colorFormat,
+        nri::Format depthFormat,
+        uint8_t sampleCount,
+        Axle::SurfaceType surfaceType,
+        Axle::CullMode cullMode,
+        bool depthWrite)
+    {
+        CustomPipelineKey key;
+        key.GenerationID = generation.GenerationID;
+        key.ColorFormat = colorFormat;
+        key.DepthFormat = depthFormat;
+        key.SampleCount = sampleCount;
+        key.SurfaceType = surfaceType;
+        key.CullMode = cullMode;
+        key.DepthWrite = depthWrite;
+
+        auto it = m_CustomPipelines.find(key);
+        if (it != m_CustomPipelines.end()) return it->second;
+
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = generation.PipelineLayout ? generation.PipelineLayout.get() : &m_PipelineLayout;
+        gfxDesc.Shaders = { generation.VSBytecode, generation.PSBytecode };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        if (cullMode == Axle::CullMode::Back) {
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::BACK;
+        } else if (cullMode == Axle::CullMode::Front) {
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::FRONT;
+        } else {
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        }
+        gfxDesc.Rasterizer.FrontCounterClockwise = true;
+
+        gfxDesc.DepthStencil.DepthTestEnable = true;
+        gfxDesc.DepthStencil.DepthWriteEnable = depthWrite;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS;
+        gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
+
+        if (surfaceType == Axle::SurfaceType::Transparent) {
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::AlphaBlend() };
+        } else if (surfaceType == Axle::SurfaceType::Additive) {
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Additive() };
+        } else {
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        }
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.SampleCount = sampleCount;
+
+        RHIVertexInputDesc inputDesc;
+        uint32_t stride = generation.BindingPlan.VertexInput.Stride > 0 ? generation.BindingPlan.VertexInput.Stride : static_cast<uint32_t>(sizeof(RHIVertex3D));
+        inputDesc.Streams.push_back({ 0, static_cast<uint16_t>(stride), nri::VertexStreamStepRate::PER_VERTEX });
+
+        if (!generation.BindingPlan.VertexInput.Attributes.empty()) {
+            for (const auto& attr : generation.BindingPlan.VertexInput.Attributes) {
+                inputDesc.Attributes.push_back({
+                    attr.SemanticName,
+                    attr.SemanticIndex,
+                    attr.BackendLocation,
+                    attr.Offset,
+                    attr.Format,
+                    static_cast<uint16_t>(attr.InputSlot)
+                });
+            }
+        } else {
+            inputDesc.Attributes.push_back({ "POSITION", 0, 0, static_cast<uint32_t>(offsetof(RHIVertex3D, Position)), nri::Format::RGB32_SFLOAT, 0 });
+            inputDesc.Attributes.push_back({ "NORMAL", 0, 1, static_cast<uint32_t>(offsetof(RHIVertex3D, Normal)), nri::Format::RGB32_SFLOAT, 0 });
+            inputDesc.Attributes.push_back({ "TANGENT", 0, 2, static_cast<uint32_t>(offsetof(RHIVertex3D, Tangent)), nri::Format::RGBA32_SFLOAT, 0 });
+            inputDesc.Attributes.push_back({ "TEXCOORD", 0, 3, static_cast<uint32_t>(offsetof(RHIVertex3D, TexCoord)), nri::Format::RG32_SFLOAT, 0 });
+            inputDesc.Attributes.push_back({ "COLOR", 0, 4, static_cast<uint32_t>(offsetof(RHIVertex3D, Color)), nri::Format::RGBA32_SFLOAT, 0 });
+        }
+        gfxDesc.VertexInput = inputDesc;
+
+        auto& cache = RHIPipelineCache::Get();
+        nri::Pipeline* pso = cache.GetOrCreateGraphicsPipeline(gfxDesc);
+        m_CustomPipelines[key] = pso;
+        return pso;
+    }
+
     bool RHISceneRenderer::CreateGraphicsPipeline(RHIDevice& device) {
         m_Pipeline = GetOrCreatePipeline(nri::Format::RGBA8_UNORM, nri::Format::D32_SFLOAT);
         m_PipelineHDR = GetOrCreatePipeline(nri::Format::RGBA16_SFLOAT, nri::Format::D32_SFLOAT);
@@ -1367,6 +1447,10 @@ namespace Axle {
                 float DistanceSq = 0.0f;
                 int RenderQueue = 2000;
                 std::shared_ptr<RHIMaterial> Material;
+                bool UseCustomShader = false;
+                std::shared_ptr<const CustomReadyGeneration> CustomGeneration;
+                PackedMaterialResultData PackedConstants;
+                std::vector<TextureRequest> TextureRequests;
             };
 
             std::vector<DrawItem> opaqueQueue;
@@ -1425,6 +1509,50 @@ namespace Axle {
                         if (mat.HasAsset() && mat.MaterialAsset) mat.SyncFromAsset();
                         else mat.SyncToRHI();
                         item.Material = mat.RHIMaterialAsset;
+
+                        if (mat.UseCustomShader && !mat.CustomShaderPath.empty()) {
+                            CustomProgramKey key;
+                            key.ShaderPath = mat.CustomShaderPath;
+                            key.Backend = m_Device ? m_Device->GetBackend() : RHI::RHIType::Direct3D12;
+                            auto fp = CustomProgramCache::ComputeFingerprint(FileSystem::ResolveAssetPath(mat.CustomShaderPath));
+                            auto sel = m_CustomProgramCache.SelectProgram(true, mat.CustomShaderPath, key, fp);
+                            if (sel.Kind == ProgramSelectionKind::Custom && sel.Generation) {
+                                item.UseCustomShader = true;
+                                item.CustomGeneration = sel.Generation;
+
+                                EngineMaterialValues engVals;
+                                engVals.Model = worldMat;
+                                engVals.ViewProjection = camera.GetViewProjectionMatrixZO();
+                                engVals.View = camera.GetViewMatrix();
+                                engVals.Projection = camera.GetProjectionMatrixZO();
+                                engVals.CameraPosition = glm::vec4(camPos, 1.0f);
+                                engVals.SunDirection = sceneConstants.SunDirection;
+                                engVals.SunColor = sceneConstants.SunColor;
+                                engVals.BaseColor = mat.AlbedoColor;
+                                engVals.BaseUVTransform = glm::vec4(mat.UVScale, mat.UVOffset);
+                                engVals.LegacySurfaceParams = glm::vec4(mat.Roughness, mat.Metallic, mat.AOStrength, mat.UVScale.x);
+
+                                auto resolvedProps = ResolveMaterialProperties(sel.Generation->BindingPlan, mat.CustomProperties);
+                                if (std::holds_alternative<ResolvedMaterialProperties>(resolvedProps)) {
+                                    auto packedRes = PackMaterialUniforms(sel.Generation->BindingPlan, engVals, std::get<ResolvedMaterialProperties>(resolvedProps));
+                                    if (std::holds_alternative<PackedMaterialResultData>(packedRes)) {
+                                        item.PackedConstants = std::get<PackedMaterialResultData>(packedRes);
+                                    }
+                                }
+
+                                EffectiveMaterialValues effMat;
+                                effMat.BaseColor = mat.AlbedoColor;
+                                effMat.UVScale = mat.UVScale;
+                                effMat.UVOffset = mat.UVOffset;
+                                effMat.BaseMapPath = mat.AlbedoPath;
+                                effMat.UseBaseMap = mat.UseAlbedoMap;
+                                effMat.Properties = mat.CustomProperties;
+                                auto texRes = ResolveMaterialTextureRequests(sel.Generation->BindingPlan, effMat);
+                                if (std::holds_alternative<TextureRequestResultData>(texRes)) {
+                                    item.TextureRequests = std::get<TextureRequestResultData>(texRes).Requests;
+                                }
+                            }
+                        }
                     } else {
                         item.Material = mc.RHIMaterialAsset;
                     }
@@ -1449,7 +1577,65 @@ namespace Axle {
 
             bool refractionReady=false;
             size_t materialDrawIndex = 0;
+            size_t customDrawIndex = 0;
             auto RenderDrawItem = [&](const DrawItem& item) {
+                if (item.UseCustomShader && item.CustomGeneration) {
+                    nri::Pipeline* customPso = GetOrCreateCustomPipeline(
+                        *item.CustomGeneration,
+                        sceneTargetFormat,
+                        m_CurrentDepthFormat,
+                        activeSampleCount,
+                        item.SurfaceType,
+                        item.CullMode,
+                        item.DepthWrite
+                    );
+
+                    if (customPso && customPso != currentPipeline) {
+                        m_CommandBuffer.SetPipeline(customPso);
+                        currentPipeline = customPso;
+                    }
+
+                    if (item.CustomGeneration->PipelineLayout && item.CustomGeneration->PipelineLayout->IsValid()) {
+                        m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, *item.CustomGeneration->PipelineLayout);
+                    }
+
+                    if (customDrawIndex == m_CustomDraws.size()) {
+                        m_CustomDraws.push_back(std::make_unique<CustomDrawResources>());
+                    }
+                    auto& customRes = *m_CustomDraws[customDrawIndex++];
+
+                    const auto& packedBuffers = item.PackedConstants.Buffers;
+                    while (customRes.ConstantBuffers.size() < packedBuffers.size()) {
+                        size_t idx = customRes.ConstantBuffers.size();
+                        uint32_t bufSize = (static_cast<uint32_t>(packedBuffers[idx].Bytes.size()) + 255u) & ~255u;
+                        if (bufSize == 0) bufSize = 256;
+                        RHI::RHIBuffer cbuf;
+                        cbuf.Init(RHI::RHIBufferDesc::Constant(bufSize, RHI::RHIMemoryLocation::HostUpload, "CustomCBuffer_" + std::to_string(idx)));
+                        customRes.ConstantBuffers.push_back(std::move(cbuf));
+                    }
+
+                    for (size_t i = 0; i < packedBuffers.size(); ++i) {
+                        if (i < customRes.ConstantBuffers.size() && customRes.ConstantBuffers[i].IsValid()) {
+                            customRes.ConstantBuffers[i].UpdateData(packedBuffers[i].Bytes.data(), packedBuffers[i].Bytes.size());
+                            m_CommandBuffer.SetRootDescriptor(static_cast<uint32_t>(i), customRes.ConstantBuffers[i].GetCBV());
+                        }
+                    }
+
+                    item.Mesh->Bind(m_CommandBuffer);
+                    item.Mesh->Draw(m_CommandBuffer);
+
+                    m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+                    m_LastRenderedEntityCount++;
+
+                    m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+                    if (m_SceneConstantBuffer.IsValid() && m_SceneConstantBuffer.GetCBV()) {
+                        m_CommandBuffer.SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
+                    }
+                    if (m_LightBuffer.IsValid() && m_LightBuffer.GetCBV()) {
+                        m_CommandBuffer.SetRootDescriptor(1, m_LightBuffer.GetCBV());
+                    }
+                    return;
+                }
                 nri::Pipeline* needed = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
                     ? m_PipelineHDR
                     : (sceneTargetFormat == nri::Format::RGBA8_UNORM && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_Pipeline)

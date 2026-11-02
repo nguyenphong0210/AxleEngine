@@ -1,5 +1,6 @@
 #include "MaterialTestHarness.hpp"
 #include <Axle/CustomMaterialProgram.hpp>
+#include <Axle/RHISceneRenderer.hpp>
 
 using namespace Axle;
 using namespace Axle::MaterialTests;
@@ -127,11 +128,67 @@ namespace {
         return true;
     }
 
+    bool TestCustomPipelineKeyHashAndEquality() {
+        RHISceneRenderer::CustomPipelineKey keyBase;
+        keyBase.GenerationID = 101;
+        keyBase.ColorFormat = nri::Format::RGBA8_UNORM;
+        keyBase.DepthFormat = nri::Format::D32_SFLOAT;
+        keyBase.SampleCount = 1;
+        keyBase.SurfaceType = Axle::SurfaceType::Opaque;
+        keyBase.CullMode = Axle::CullMode::Back;
+        keyBase.DepthWrite = true;
+
+        RHISceneRenderer::CustomPipelineKey keyIdentical = keyBase;
+        MAT_TEST_CHECK(keyBase == keyIdentical, "Identical pipeline keys must compare equal");
+
+        RHISceneRenderer::CustomPipelineKeyHash hasher;
+        MAT_TEST_CHECK(hasher(keyBase) == hasher(keyIdentical), "Identical pipeline keys must hash to same value");
+
+        // Generation difference
+        RHISceneRenderer::CustomPipelineKey keyGen = keyBase;
+        keyGen.GenerationID = 102;
+        MAT_TEST_CHECK(keyBase != keyGen, "Different generations must yield distinct keys");
+        MAT_TEST_CHECK(hasher(keyBase) != hasher(keyGen), "Different generations must yield different hash");
+
+        // Color format difference (SDR vs HDR)
+        RHISceneRenderer::CustomPipelineKey keyHdr = keyBase;
+        keyHdr.ColorFormat = nri::Format::RGBA16_SFLOAT;
+        MAT_TEST_CHECK(keyBase != keyHdr, "SDR vs HDR formats must yield distinct keys");
+        MAT_TEST_CHECK(hasher(keyBase) != hasher(keyHdr), "SDR vs HDR formats must yield different hash");
+
+        // Sample count difference (MSAA 1 vs 4)
+        RHISceneRenderer::CustomPipelineKey keyMsaa = keyBase;
+        keyMsaa.SampleCount = 4;
+        MAT_TEST_CHECK(keyBase != keyMsaa, "Sample counts 1 vs 4 must yield distinct keys");
+        MAT_TEST_CHECK(hasher(keyBase) != hasher(keyMsaa), "Sample counts 1 vs 4 must yield different hash");
+
+        // Surface type difference (Opaque vs Transparent vs Additive)
+        RHISceneRenderer::CustomPipelineKey keyTrans = keyBase;
+        keyTrans.SurfaceType = Axle::SurfaceType::Transparent;
+        keyTrans.DepthWrite = false;
+        MAT_TEST_CHECK(keyBase != keyTrans, "Opaque vs Transparent must yield distinct keys");
+
+        RHISceneRenderer::CustomPipelineKey keyAdd = keyBase;
+        keyAdd.SurfaceType = Axle::SurfaceType::Additive;
+        keyAdd.DepthWrite = false;
+        MAT_TEST_CHECK(keyTrans != keyAdd, "Transparent vs Additive must yield distinct keys");
+
+        // Cull mode difference
+        RHISceneRenderer::CustomPipelineKey keyCullNone = keyBase;
+        keyCullNone.CullMode = Axle::CullMode::None;
+        MAT_TEST_CHECK(keyBase != keyCullNone, "Cull mode differences must yield distinct keys");
+
+        return true;
+    }
+
 } // namespace
 
 bool RunMaterialProgramCacheUnitTests() {
     std::cout << "  - Running TestProgramCacheSequenceAndGenerations ...\n";
     if (!TestProgramCacheSequenceAndGenerations()) return false;
+
+    std::cout << "  - Running TestCustomPipelineKeyHashAndEquality ...\n";
+    if (!TestCustomPipelineKeyHashAndEquality()) return false;
 
     return true;
 }

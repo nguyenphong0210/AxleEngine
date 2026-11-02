@@ -10,6 +10,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/ParticleEmitterSerializer.hpp>
+#include <Axle/ParticleMeshSampler.hpp>
 #include <imgui.h>
 #include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -832,6 +833,30 @@ namespace Axle {
                 case ParticleEmitterShapeType::Line:
                     ImGui::DragFloat("Line Length", &m_Config.Shape.LineLength, 0.05f, 0.01f, 50.0f, "%.2f m");
                     break;
+                case ParticleEmitterShapeType::MeshSurface: {
+                    char meshBuffer[256] = {};
+                    strncpy_s(meshBuffer, m_Config.Shape.MeshPath.c_str(), sizeof(meshBuffer) - 1);
+                    if (ImGui::InputText("Mesh Asset Path (.obj)", meshBuffer, sizeof(meshBuffer))) {
+                        m_Config.Shape.MeshPath = meshBuffer;
+                        if (!m_Config.Shape.MeshPath.empty()) {
+                            m_Config.Shape.MeshSampler = std::make_shared<ParticleMeshSampler>();
+                            m_Config.Shape.MeshSampler->LoadFromOBJ(m_Config.Shape.MeshPath);
+                        } else {
+                            m_Config.Shape.MeshSampler.reset();
+                        }
+                        SyncCurrentStackConfig();
+                    }
+                    if (m_Config.Shape.MeshSampler && m_Config.Shape.MeshSampler->IsValid()) {
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "Mesh Loaded: %zu triangles, Surface Area: %.2f",
+                            m_Config.Shape.MeshSampler->GetTriangleCount(),
+                            m_Config.Shape.MeshSampler->GetTotalArea());
+                    } else if (!m_Config.Shape.MeshPath.empty()) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.2f, 1.0f), "Warning: Mesh failed to load or has degenerate geometry; falling back to origin point.");
+                    } else {
+                        ImGui::TextDisabled("No mesh assigned (fallback: emits at origin)");
+                    }
+                    break;
+                }
                 default:
                     break;
             }

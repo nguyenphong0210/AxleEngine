@@ -134,6 +134,8 @@ namespace Axle {
             block.SetBool("surfaceOnly", config.Shape.SurfaceOnly);
         } else if (config.Shape.Type == ParticleEmitterShapeType::Line) {
             block.SetFloat("lineLength", config.Shape.LineLength);
+        } else if (config.Shape.Type == ParticleEmitterShapeType::MeshSurface) {
+            block.SetString("meshPath", config.Shape.MeshPath);
         }
         if (config.Shape.Direction != glm::vec3(0.0f, 1.0f, 0.0f)) {
             block.SetVec3("direction", config.Shape.Direction);
@@ -291,6 +293,9 @@ namespace Axle {
         outConfig.Shape.LineLength = block.GetFloat("lineLength", outConfig.Shape.LineLength);
         outConfig.Shape.SurfaceOnly = block.GetBool("surfaceOnly", outConfig.Shape.SurfaceOnly);
         outConfig.Shape.Direction = block.GetVec3("direction", outConfig.Shape.Direction);
+        if (block.HasProperty("meshPath")) {
+            outConfig.Shape.MeshPath = block.GetString("meshPath");
+        }
 
         if (block.HasProperty("startSize")) {
             outConfig.StartSize = ParseFloatRange(block, "startSize", outConfig.StartSize);

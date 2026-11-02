@@ -1,4 +1,5 @@
 #include <Axle/ParticleEmitter.hpp>
+#include <Axle/ParticleMeshSampler.hpp>
 #include <cmath>
 
 namespace Axle {
@@ -156,8 +157,18 @@ namespace Axle {
                 break;
             }
             case ParticleEmitterShapeType::MeshSurface: {
-                outOffset = VFXRandom::UnitVector(rng) * Radius;
-                outDir = glm::normalize(outOffset);
+                if (MeshSampler && MeshSampler->IsValid()) {
+                    glm::vec3 sampledPos(0.0f);
+                    glm::vec3 sampledNormal(0.0f, 1.0f, 0.0f);
+                    if (MeshSampler->Sample(sampledPos, sampledNormal, rng)) {
+                        outOffset = sampledPos;
+                        outDir = sampledNormal;
+                        break;
+                    }
+                }
+                // Fallback for missing, empty, or degenerate mesh: origin point + (0, 1, 0)
+                outOffset = glm::vec3(0.0f);
+                outDir = glm::vec3(0.0f, 1.0f, 0.0f);
                 break;
             }
         }

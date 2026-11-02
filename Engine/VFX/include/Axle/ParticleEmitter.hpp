@@ -8,6 +8,8 @@
 
 namespace Axle {
 
+    class ParticleMeshSampler;
+
     struct ParticleEmitterShape {
         ParticleEmitterShapeType Type = ParticleEmitterShapeType::Point;
         float Radius = 1.0f;
@@ -16,6 +18,10 @@ namespace Axle {
         float LineLength = 1.0f;
         glm::vec3 Direction = glm::vec3(0.0f, 1.0f, 0.0f); // Primary emission axis
         bool SurfaceOnly = false; // For sphere/box: emit only on surface shell vs inside volume
+
+        // Mesh surface sampling
+        std::string MeshPath;
+        std::shared_ptr<ParticleMeshSampler> MeshSampler;
 
         void Sample(glm::vec3& outOffset, glm::vec3& outDir) const;
         void Sample(glm::vec3& outOffset, glm::vec3& outDir, std::mt19937& rng) const;

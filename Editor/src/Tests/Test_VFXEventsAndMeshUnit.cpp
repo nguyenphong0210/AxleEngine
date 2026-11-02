@@ -2,6 +2,7 @@
 #include <Axle/VFXCommon.hpp>
 #include <Axle/ParticleEffectDefinition.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/ParticleMeshSampler.hpp>
 
 namespace {
     bool TestBaselineEventsAndMesh() {
@@ -133,6 +134,98 @@ namespace {
 
         return true;
     }
+
+    bool TestMeshSurfaceAreaWeightedSampling() {
+        // 1. Two unequal-area non-spherical triangles
+        // Triangle A (Area = 1.0): (0,0,0), (2,0,0), (0,1,0)
+        // Triangle B (Area = 9.0): (10,0,0), (10,6,0), (13,0,0)
+        std::vector<glm::vec3> positions = {
+            // Triangle A: indices 0, 1, 2
+            glm::vec3(0.0f, 0.0f, 0.0f),
+            glm::vec3(2.0f, 0.0f, 0.0f),
+            glm::vec3(0.0f, 1.0f, 0.0f),
+            // Triangle B: indices 3, 4, 5
+            glm::vec3(10.0f, 0.0f, 0.0f),
+            glm::vec3(10.0f, 6.0f, 0.0f),
+            glm::vec3(13.0f, 0.0f, 0.0f),
+            // Degenerate triangle: collinear points indices 6, 7, 8
+            glm::vec3(5.0f, 5.0f, 5.0f),
+            glm::vec3(6.0f, 6.0f, 6.0f),
+            glm::vec3(7.0f, 7.0f, 7.0f)
+        };
+        std::vector<uint32_t> indices = {
+            0, 1, 2, // Tri A
+            3, 4, 5, // Tri B
+            6, 7, 8  // Degenerate
+        };
+
+        Axle::ParticleMeshSampler sampler;
+        VFX_TEST_CHECK(sampler.Build(positions, indices), "Sampler build succeeded with valid + degenerate triangles");
+        VFX_TEST_CHECK(sampler.GetTriangleCount() == 2, "Degenerate triangle filtered out, leaving exactly 2 triangles");
+        VFX_TEST_CHECK(std::abs(sampler.GetTotalArea() - 10.0f) < 1e-4f, "Total area equals 1.0 + 9.0 = 10.0");
+
+        // Sample 2000 points
+        std::mt19937 rng(42);
+        uint32_t countA = 0;
+        uint32_t countB = 0;
+        for (int i = 0; i < 2000; ++i) {
+            glm::vec3 pos;
+            glm::vec3 normal;
+            bool ok = sampler.Sample(pos, normal, rng);
+            VFX_TEST_CHECK(ok, "Sampling point on valid mesh succeeds");
+            VFX_TEST_CHECK(std::isfinite(pos.x) && std::isfinite(pos.y) && std::isfinite(pos.z), "Sampled position is finite");
+            VFX_TEST_CHECK(std::abs(normal.z) > 0.9f, "Normal is perpendicular to XY plane");
+
+            if (pos.x <= 5.0f) {
+                countA++;
+                // Check within Triangle A bounding box
+                VFX_TEST_CHECK(pos.x >= -1e-4f && pos.x <= 2.0f + 1e-4f, "Sample on Tri A within X bounds");
+                VFX_TEST_CHECK(pos.y >= -1e-4f && pos.y <= 1.0f + 1e-4f, "Sample on Tri A within Y bounds");
+            } else {
+                countB++;
+                // Check within Triangle B bounding box
+                VFX_TEST_CHECK(pos.x >= 10.0f - 1e-4f && pos.x <= 13.0f + 1e-4f, "Sample on Tri B within X bounds");
+                VFX_TEST_CHECK(pos.y >= -1e-4f && pos.y <= 6.0f + 1e-4f, "Sample on Tri B within Y bounds");
+            }
+        }
+
+        // Expected ~10% on A (200), ~90% on B (1800)
+        VFX_TEST_CHECK(countA >= 140 && countA <= 260, "Triangle A received ~10% of samples (area-weighted)");
+        VFX_TEST_CHECK(countB >= 1740 && countB <= 1860, "Triangle B received ~90% of samples (area-weighted)");
+        VFX_TEST_CHECK(countA + countB == 2000, "All samples partitioned cleanly");
+
+        // 2. Pure degenerate mesh fallback
+        std::vector<glm::vec3> degenPositions = {
+            glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(2.0f)
+        };
+        std::vector<uint32_t> degenIndices = { 0, 1, 2 };
+        Axle::ParticleMeshSampler degenSampler;
+        VFX_TEST_CHECK(!degenSampler.Build(degenPositions, degenIndices), "Pure degenerate mesh build fails gracefully");
+        VFX_TEST_CHECK(!degenSampler.IsValid(), "Degenerate sampler is invalid");
+
+        glm::vec3 fallbackPos, fallbackNormal;
+        bool sampleDegen = degenSampler.Sample(fallbackPos, fallbackNormal, rng);
+        VFX_TEST_CHECK(!sampleDegen, "Sample degenerate mesh returns false");
+        VFX_TEST_CHECK(fallbackPos == glm::vec3(0.0f), "Fallback position is origin");
+        VFX_TEST_CHECK(fallbackNormal == glm::vec3(0.0f, 1.0f, 0.0f), "Fallback normal is (0,1,0)");
+        VFX_TEST_CHECK(!degenSampler.GetLastError().empty(), "Diagnostic error reported");
+
+        // 3. Emitter shape integration test
+        Axle::ParticleEmitterConfig config;
+        config.Shape.Type = Axle::ParticleEmitterShapeType::MeshSurface;
+        config.Shape.MeshSampler = std::make_shared<Axle::ParticleMeshSampler>(sampler);
+
+        glm::vec3 shapePos, shapeDir;
+        config.Shape.Sample(shapePos, shapeDir, rng);
+        VFX_TEST_CHECK((shapePos.x <= 2.0f + 1e-4f) || (shapePos.x >= 10.0f - 1e-4f), "Emitter shape samples mesh surface");
+
+        // Empty sampler fallback
+        config.Shape.MeshSampler = nullptr;
+        config.Shape.Sample(shapePos, shapeDir, rng);
+        VFX_TEST_CHECK(shapePos == glm::vec3(0.0f), "Emitter shape with null sampler falls back to origin");
+
+        return true;
+    }
 }
 
 bool RunVFXEventsAndMeshUnitTests() {
@@ -142,5 +235,7 @@ bool RunVFXEventsAndMeshUnitTests() {
     VFX_TEST_CHECK(TestSubEmitterGraphValidation(), "TestSubEmitterGraphValidation failed");
     std::cout << "  - Running TestBoundedSubEmitterEventSpawning ...\n";
     VFX_TEST_CHECK(TestBoundedSubEmitterEventSpawning(), "TestBoundedSubEmitterEventSpawning failed");
+    std::cout << "  - Running TestMeshSurfaceAreaWeightedSampling ...\n";
+    VFX_TEST_CHECK(TestMeshSurfaceAreaWeightedSampling(), "TestMeshSurfaceAreaWeightedSampling failed");
     return true;
 }

@@ -208,6 +208,7 @@ target_link_libraries(AxleVFXUnitTests PRIVATE
     Axle::Asset
     Axle::VFX
     Axle::Scene
+    Axle::UI
 )
 
 if (MSVC)

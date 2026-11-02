@@ -177,26 +177,37 @@ namespace Axle {
     }
 
     void VFXEditorPanel::SetSelectedEntity(Entity entity) {
-        m_SelectedEntity = entity;
-        if (m_SelectedEntity && m_SelectedEntity.HasComponent<ParticleEmitterComponent>()) {
-            auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
-            m_Config = pec.Config;
-            if (!pec.EmitterStacks.empty()) {
-                pec.EmitterStacks[0].Config = pec.Config;
-                if (!pec.Config.Name.empty()) {
-                    pec.EmitterStacks[0].Name = pec.Config.Name;
-                }
-                m_EmitterStacks = pec.EmitterStacks;
-                m_SelectedStackIndex = 0;
-            } else {
-                m_EmitterStacks.clear();
-                ParticleEmitterStack baseStack(m_Config.Name.empty() ? "Base Emitter" : m_Config.Name, m_Config);
-                baseStack.Initialize();
-                m_EmitterStacks.push_back(std::move(baseStack));
-                m_SelectedStackIndex = 0;
+        // 1. Guard against re-binding the same entity repeatedly (fixes frame-by-frame selection and preview reset)
+        if (m_SelectedEntity == entity && entity) {
+            if (entity.HasComponent<ParticleEmitterComponent>()) {
+                return;
             }
-            ResetPreview();
         }
+
+        // 2. If entity is invalid or does not have ParticleEmitterComponent, record binding and preserve working state
+        if (!entity || !entity.HasComponent<ParticleEmitterComponent>()) {
+            m_SelectedEntity = entity;
+            return;
+        }
+
+        m_SelectedEntity = entity;
+        auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
+        m_Config = pec.Config;
+        if (!pec.EmitterStacks.empty()) {
+            pec.EmitterStacks[0].Config = pec.Config;
+            if (!pec.Config.Name.empty()) {
+                pec.EmitterStacks[0].Name = pec.Config.Name;
+            }
+            m_EmitterStacks = pec.EmitterStacks;
+            m_SelectedStackIndex = 0;
+        } else {
+            m_EmitterStacks.clear();
+            ParticleEmitterStack baseStack(m_Config.Name.empty() ? "Base Emitter" : m_Config.Name, m_Config);
+            baseStack.Initialize();
+            m_EmitterStacks.push_back(std::move(baseStack));
+            m_SelectedStackIndex = 0;
+        }
+        ResetPreview();
     }
 
     void VFXEditorPanel::ResetPreview() {

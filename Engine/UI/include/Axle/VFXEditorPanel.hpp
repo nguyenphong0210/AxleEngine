@@ -26,8 +26,16 @@ namespace Axle {
         void OnUpdate(Timestep ts);
         void OnImGuiRender(bool* p_open = nullptr);
 
-        void SetSceneContext(Scene* scene) { m_Scene = scene; }
+        void SetSceneContext(Scene* scene) {
+            if (m_Scene != scene) {
+                m_Scene = scene;
+                if (m_SelectedEntity && m_SelectedEntity.GetScene() != scene) {
+                    m_SelectedEntity = {};
+                }
+            }
+        }
         void SetSelectedEntity(Entity entity);
+        Entity GetSelectedEntity() const { return m_SelectedEntity; }
         void SetEmitterConfig(const ParticleEmitterConfig& config);
 
         void InitRHI(class ImGuiLayer* imguiLayer);
@@ -43,12 +51,16 @@ namespace Axle {
         void PausePreview();
         void StopPreview();
 
+        float GetPlaybackScrubberTime() const { return m_PlaybackScrubberTime; }
+        void SetPlaybackScrubberTime(float time) { m_PlaybackScrubberTime = time; }
+
         ParticleEmitterConfig& GetConfig() { return m_Config; }
         const ParticleEmitterConfig& GetConfig() const { return m_Config; }
         ParticleSystem* GetPreviewSystem() const { return m_PreviewSystem.get(); }
 
         // Emitter Stack API
         size_t GetEmitterStackCount() const { return m_EmitterStacks.size(); }
+        size_t GetSelectedStackIndex() const { return m_SelectedStackIndex; }
         ParticleEmitterStack* GetCurrentEmitterStack();
         void AddEmitterStack(const std::string& name, const ParticleEmitterConfig& config = {});
         void RemoveEmitterStack(size_t index);

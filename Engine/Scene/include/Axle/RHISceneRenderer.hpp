@@ -296,6 +296,7 @@ namespace Axle {
         MaterialTextureCache m_MaterialTextures;
         std::unique_ptr<RHI::RHITexture> m_OpaqueSceneColor;
         std::unique_ptr<RHI::RHITexture> m_OpaqueSceneDepth;
+        std::unique_ptr<RHI::RHITexture> m_ParticleSceneDepth;
 
 
         std::shared_ptr<RHI::RHITexture> m_IrradianceMap;

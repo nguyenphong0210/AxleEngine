@@ -5,6 +5,7 @@
 #include <Axle/ParticlePool.hpp>
 #include <Axle/ParticleEmitter.hpp>
 #include <Axle/ParticleSystem.hpp>
+#include <Axle/ParticleMaterialAdapter.hpp>
 #include <Axle/ParticleRenderer.hpp>
 
 #include <Axle/RHI/RHICommon.hpp>
@@ -44,9 +45,12 @@ namespace Axle {
         glm::vec4 PointLightPositions[4]{};                // 64 bytes (xyz = Position, w = Radius) (offset 352..416)
         glm::vec4 PointLightColors[4]{};                   // 64 bytes (rgb = Color, w = Intensity) (offset 416..480)
         glm::vec4 CutoutAndMaterial = glm::vec4(0.0f);     // 16 bytes (x=AlphaCutoff, y=DepthFadeDist, z=EmissiveIntensity, w=IsCutoutMode) (offset 480..496)
+        glm::vec4 UVTransform{1,1,0,0};
+        glm::vec4 MaterialTint{1};
+        glm::vec4 MaterialEmission{0};
         glm::vec4 Reserved = glm::vec4(0.0f);              // 16 bytes padding -> Total 512 bytes (offset 496..512)
     };
-    static_assert(sizeof(RHIParticleConstants) == 512, "RHIParticleConstants must be exactly 512 bytes (256-byte aligned)!");
+    static_assert(sizeof(RHIParticleConstants) == 768, "RHIParticleConstants must be exactly 768 bytes (256-byte aligned)!");
 
     // =========================================================================
     // ParticleRenderPlanner: CPU Instance Packing, Transform & Depth Sorting
@@ -70,13 +74,15 @@ namespace Axle {
             const glm::vec3& emitterWorldPos,
             const glm::quat& emitterWorldRot,
             std::vector<ParticleDrawPacket>& outPackets,
-            uint32_t maxBatchSize = 20000
+            uint32_t maxBatchSize = 20000,
+            const glm::vec3& emitterWorldScale = glm::vec3(1)
         );
     };
 
     struct ParticleDrawResources {
         RHI::RHIBuffer Instances;
         RHI::RHIBuffer Constants;
+        RHI::RHIDescriptorPool Pool;
         nri::DescriptorSet* Set = nullptr;
     };
 
@@ -109,6 +115,11 @@ namespace Axle {
                    nri::Format depthFormat = nri::Format::D32_SFLOAT,
                    uint8_t sampleCount = 1);
 
+        void SetSceneDepth(RHI::RHITexture* depth, uint32_t width, uint32_t height) {
+            m_SceneDepth = depth && depth->IsValid() ? depth->GetSRV() : nullptr;
+            m_ActiveConstants.ScreenSize = glm::vec4(width, height, 1.0f/std::max(width,1u), 1.0f/std::max(height,1u));
+        }
+
         // End batch rendering pass
         void End();
 
@@ -119,7 +130,9 @@ namespace Axle {
                     RHI::RHITexture* normalMap = nullptr,
                     float softnessDistance = 0.5f,
                     const glm::vec3& emitterWorldPos = glm::vec3(0.0f),
-                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                    const glm::vec3& emitterWorldScale = glm::vec3(1),
+                    const EffectiveParticleRenderSettings* material = nullptr);
 
         // Render directly from ParticlePool & ParticleEmitterConfig
         void Render(RHI::RHICommandBuffer& cmd,
@@ -129,7 +142,9 @@ namespace Axle {
                     RHI::RHITexture* normalMap = nullptr,
                     float softnessDistance = 0.5f,
                     const glm::vec3& emitterWorldPos = glm::vec3(0.0f),
-                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                    const glm::vec3& emitterWorldScale = glm::vec3(1),
+                    const EffectiveParticleRenderSettings* material = nullptr);
 
         // Render with native NRI descriptors (for bindless / shared textures)
         void Render(RHI::RHICommandBuffer& cmd,
@@ -139,7 +154,9 @@ namespace Axle {
                     nri::Descriptor* normalMapSRV,
                     float softnessDistance = 0.5f,
                     const glm::vec3& emitterWorldPos = glm::vec3(0.0f),
-                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                    const glm::vec3& emitterWorldScale = glm::vec3(1),
+                    const EffectiveParticleRenderSettings* material = nullptr);
 
         // Environment lighting
         void SetLightEnvironment(const ParticleLightEnvironment& env) { m_LightEnvironment = env; }
@@ -171,6 +188,7 @@ namespace Axle {
         RHI::RHIDevice* m_Device = nullptr;
         bool m_Initialized = false;
         bool m_InBatch = false;
+        nri::Descriptor* m_SceneDepth = nullptr;
 
         RHI::RHIShaderBytecode m_VertexShader;
         RHI::RHIShaderBytecode m_PixelShader;

@@ -254,7 +254,24 @@ namespace {
     }
 }
 
+static bool TestAuthoredScaleAndDisabledResources() {
+    Axle::ParticlePool pool(1);
+    Axle::ParticleSpawnData spawn;spawn.Position={1,0,0};spawn.StartSize=2;pool.Spawn(spawn);
+    Axle::ParticleEmitterConfig cfg;cfg.SimulationSpace=Axle::ParticleSimulationSpace::Local;
+    Axle::PerspectiveCamera camera(45,1);
+    std::vector<Axle::ParticleDrawPacket> packets;
+    Axle::ParticleRenderPlanner::BuildDrawPackets(pool,cfg,camera,{3,0,0},glm::quat(1,0,0,0),packets,20000,{2,3,4});
+    VFX_TEST_CHECK(packets.size()==1,"One scaled packet");
+    VFX_TEST_CHECK(packets[0].Instances[0].Position==glm::vec3(5,0,0),"Local scale participates in world-space packing");
+    VFX_TEST_APPROX_EQUAL(packets[0].Instances[0].Size,8,0.0001f,"Billboard respects largest local scale axis");
+    Axle::EmitterResources resources;resources.TexturePath="retained.png";resources.NormalMapPath="retained-normal.png";
+    auto settings=Axle::ParticleMaterialAdapter::Resolve(cfg,resources);
+    VFX_TEST_CHECK(!settings.UseTexture && !settings.UseNormalMap,"Retained paths do not override authored disabled flags");
+    return true;
+}
+
 bool RunVFXRenderPlanUnitTests() {
+    VFX_TEST_CHECK(TestAuthoredScaleAndDisabledResources(), "Resource/scale regressions");
     std::cout << "  - Running TestBaselineParticleVertexStride ...\n";
     VFX_TEST_CHECK(TestBaselineParticleVertexStride(), "TestBaselineParticleVertexStride failed");
 

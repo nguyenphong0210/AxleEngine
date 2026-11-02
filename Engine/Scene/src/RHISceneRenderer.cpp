@@ -417,6 +417,7 @@ namespace Axle {
         m_CustomProgramCache.Clear();
         m_OpaqueSceneColor.reset();
         m_OpaqueSceneDepth.reset();
+        m_ParticleSceneDepth.reset();
         m_MaterialTextures.Clear();
         m_DefaultDescriptorSet = nullptr;
         m_IrradianceMap = nullptr;
@@ -1722,8 +1723,34 @@ namespace Axle {
         // 6. GPU Instanced Particle VFX Pass (Tire smoke, drift dust, exhaust backfire flames, impacts)
         if (settings.EnableParticles && m_ParticleRenderer && scene) {
             m_ParticleRenderer->ResetMetrics();
+            // Sample a separate opaque-depth snapshot. A writable DSV is never bound simultaneously as an SRV.
+            RHITexture* particleDepth = nullptr;
+            bool hasEmitters = !scene->GetRegistry().view<ParticleEmitterComponent>().empty() ||
+                !scene->GetRegistry().view<VehicleVFXComponent>().empty() || !scene->GetRegistry().view<CharacterVFXComponent>().empty();
+            if (hasEmitters && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV) {
+                bool fresh = !m_ParticleSceneDepth || m_ParticleSceneDepth->GetWidth()!=width || m_ParticleSceneDepth->GetHeight()!=height || m_ParticleSceneDepth->GetFormat()!=FromNRIFormat(m_CurrentDepthFormat);
+                if (fresh) {
+                    m_ParticleSceneDepth=std::make_unique<RHITexture>();
+                    m_ParticleSceneDepth->Init(RHITextureDesc::DepthStencil2D(width,height,FromNRIFormat(m_CurrentDepthFormat),"ParticleSceneDepth"));
+                }
+                if (m_ParticleSceneDepth->IsValid()) {
+                    m_CommandBuffer.EndRendering();
+                    m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::DepthStencilWrite,RHIResourceLayout::CopySource);
+                    m_CommandBuffer.TransitionTexture(m_ParticleSceneDepth->GetNative(),fresh?RHIResourceLayout::Undefined:RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
+                    m_Device->GetNRICore().CmdCopyTexture(*m_CommandBuffer.GetNative(),*m_ParticleSceneDepth->GetNative(),nullptr,*sceneDepthTexture,nullptr);
+                    m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::CopySource,RHIResourceLayout::DepthStencilWrite);
+                    m_CommandBuffer.TransitionTexture(m_ParticleSceneDepth->GetNative(),RHIResourceLayout::CopyDest,RHIResourceLayout::ShaderResource);
+                    colorAttachment.loadOp=nri::LoadOp::LOAD;
+                    depthAttachment.loadOp=nri::LoadOp::LOAD;
+                    renderingDesc.depth=depthAttachment;
+                    m_CommandBuffer.BeginRendering(renderingDesc);
+                    particleDepth=m_ParticleSceneDepth.get();
+                }
+            }
+            // MSAA uses depth testing with soft intersections disabled until a compatible depth resolve exists.
             m_ParticleRenderer->Begin(m_CommandBuffer, camera, sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
-            scene->RenderParticles(*m_ParticleRenderer, camera, m_CommandBuffer);
+            m_ParticleRenderer->SetSceneDepth(particleDepth, width, height);
+            scene->RenderParticles(*m_ParticleRenderer, camera, m_CommandBuffer, &m_MaterialTextures);
             m_ParticleRenderer->End();
             m_LastDrawCallCount += m_ParticleRenderer->GetDrawCallCount();
         }

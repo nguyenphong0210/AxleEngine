@@ -10,6 +10,8 @@
 #include <Axle/SkinningPipeline.hpp>
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
+#include <Axle/MaterialTextureCache.hpp>
+#include <Axle/AssetManager.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -1198,9 +1200,11 @@ namespace Axle {
 
             glm::mat4 worldMat = GetWorldTransform(entityID);
             glm::vec3 worldPos = glm::vec3(worldMat[3]);
-            glm::quat worldRot = glm::quat_cast(worldMat);
-
-            pec.Update(ts.GetSeconds(), worldPos, worldRot);
+            glm::vec3 worldScale(glm::length(glm::vec3(worldMat[0])), glm::length(glm::vec3(worldMat[1])), glm::length(glm::vec3(worldMat[2])));
+            auto axes = glm::mat3(worldMat);
+            for (int a=0; a<3; ++a) axes[a] /= std::max(worldScale[a], 0.0001f);
+            glm::quat worldRot = glm::quat_cast(axes);
+            pec.Update(ts.GetSeconds(), worldPos, worldRot, worldScale);
         }
     }
 
@@ -1673,7 +1677,7 @@ namespace Axle {
     }
 
     void Scene::RenderParticles(RHIParticleRenderer& particleRenderer, const PerspectiveCamera& camera,
-                                RHI::RHICommandBuffer& cmd) {
+                                RHI::RHICommandBuffer& cmd, MaterialTextureCache* textures) {
         auto view = m_Registry.view<ParticleEmitterComponent, TransformComponent>();
 
         bool hasParticles = false;
@@ -1718,7 +1722,22 @@ namespace Axle {
             if (!pec.Visible) continue;
             for (const auto& stack : pec.EmitterStacks) {
                 if (stack.Visible && stack.Enabled && stack.System && stack.System->GetActiveParticleCount() > 0) {
-                    particleRenderer.Render(cmd, *stack.System, nullptr, nullptr, stack.Config.SoftnessDistance, tc.Translation, glm::quat(tc.Rotation));
+                    auto resources = stack.GetDefinition().Resources;
+                    if (resources.MaterialPath.empty()) resources.MaterialPath = stack.Config.MaterialPath;
+                    const auto settings = ParticleMaterialAdapter::Resolve(stack.Config, resources, [](const auto& path) { return AssetManager::GetMaterial(FileSystem::ResolveAssetPath(path)); });
+                    auto texture = textures && settings.UseTexture ? textures->Get(settings.TexturePath, true) : nullptr;
+                    auto normal = textures && settings.UseNormalMap ? textures->Get(settings.NormalMapPath, false) : nullptr;
+                    auto config = stack.Config;
+                    config.BlendMode = settings.BlendMode;
+                    config.LightingEnabled = settings.LightingEnabled;
+                    config.WrapLighting = settings.WrapLighting;
+                    config.ScatteringFactor = settings.ScatteringFactor;
+                    config.NormalMapStrength = settings.NormalMapStrength;
+                    auto owner = GetWorldTransform(entityID);
+                    glm::vec3 scale(glm::length(glm::vec3(owner[0])),glm::length(glm::vec3(owner[1])),glm::length(glm::vec3(owner[2])));
+                    auto axes=glm::mat3(owner); for(int a=0;a<3;++a) axes[a]/=std::max(scale[a],0.0001f);
+                    const auto transform = stack.GetWorldTransform(glm::vec3(owner[3]), glm::quat_cast(axes), scale);
+                    particleRenderer.Render(cmd, stack.System->GetPool(), config, texture.get(), normal.get(), config.SoftnessDistance, transform.Translation, transform.Rotation, transform.Scale, &settings);
                 }
             }
         }

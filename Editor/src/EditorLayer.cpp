@@ -1622,8 +1622,11 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
             if (pec.Active) {
                 glm::mat4 worldMat = m_Scene->GetWorldTransform(entityID);
                 glm::vec3 worldPos = glm::vec3(worldMat[3]);
-                glm::quat worldRot = glm::quat_cast(worldMat);
-                pec.Update(ts.GetSeconds(), worldPos, worldRot);
+                glm::vec3 worldScale(glm::length(glm::vec3(worldMat[0])), glm::length(glm::vec3(worldMat[1])), glm::length(glm::vec3(worldMat[2])));
+                auto axes = glm::mat3(worldMat);
+                for (int a=0; a<3; ++a) axes[a] /= std::max(worldScale[a], 0.0001f);
+                glm::quat worldRot = glm::quat_cast(axes);
+                pec.Update(ts.GetSeconds(), worldPos, worldRot, worldScale);
             }
         }
     }

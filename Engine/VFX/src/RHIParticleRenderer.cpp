@@ -92,12 +92,10 @@ namespace Axle {
         if (!res->Instances.Init(RHI::RHIBufferDesc::Vertex(MAX_PARTICLES_PER_BATCH * sizeof(ParticleInstanceVertex), RHI::RHIMemoryLocation::HostUpload, "Particle_VBO_" + suffix))) {
             return nullptr;
         }
-        if (m_DescriptorPool.IsValid()) {
-            res->Set = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 0);
-            if (res->Set && m_LinearSampler.IsValid()) {
-                m_DescriptorPool.UpdateSampler(res->Set, 2, 0, m_LinearSampler.GetNative());
-            }
-        }
+        if (!res->Pool.Init(RHI::RHIDescriptorPoolDesc::Tier2Bindless(3, 1))) return nullptr;
+        res->Set = res->Pool.AllocateDescriptorSet(m_PipelineLayout, 0);
+        if (!res->Set) return nullptr;
+        res->Pool.UpdateSampler(res->Set, 3, 0, m_LinearSampler.GetNative());
         m_DrawResources.push_back(std::move(res));
         m_DrawResourceCursor = m_DrawResources.size();
         return m_DrawResources.back().get();
@@ -327,7 +325,7 @@ namespace Axle {
         const glm::vec3& emitterWorldPos,
         const glm::quat& emitterWorldRot,
         std::vector<ParticleDrawPacket>& outPackets,
-        uint32_t maxBatchSize)
+        uint32_t maxBatchSize, const glm::vec3& emitterWorldScale)
     {
         uint32_t activeCount = pool.GetActiveCount();
         if (activeCount == 0 || maxBatchSize == 0) return;
@@ -351,7 +349,7 @@ namespace Axle {
 
         for (uint32_t i = 0; i < activeCount; ++i) {
             sortedKeys[i].Index = i;
-            glm::vec3 worldP = isLocal ? (emitterWorldPos + (emitterWorldRot * positions[i])) : positions[i];
+            glm::vec3 worldP = isLocal ? (emitterWorldPos + (emitterWorldRot * (positions[i] * emitterWorldScale))) : positions[i];
             glm::vec3 toCam = camPos - worldP;
             sortedKeys[i].DistSq = glm::dot(toCam, toCam);
         }
@@ -379,13 +377,13 @@ namespace Axle {
                 uint32_t srcIdx = sortedKeys[offset + j].Index;
                 auto& v = packet.Instances[j];
                 if (isLocal) {
-                    v.Position = emitterWorldPos + (emitterWorldRot * positions[srcIdx]);
-                    v.Velocity = emitterWorldRot * velocities[srcIdx];
+                    v.Position = emitterWorldPos + (emitterWorldRot * (positions[srcIdx] * emitterWorldScale));
+                    v.Velocity = emitterWorldRot * (velocities[srcIdx] * emitterWorldScale);
                 } else {
                     v.Position = positions[srcIdx];
                     v.Velocity = velocities[srcIdx];
                 }
-                v.Size = sizes[srcIdx];
+                v.Size = sizes[srcIdx] * (isLocal ? glm::max(glm::max(glm::abs(emitterWorldScale.x), glm::abs(emitterWorldScale.y)), glm::abs(emitterWorldScale.z)) : 1.0f);
                 v.Color = colors[srcIdx];
                 v.Rotation = rotations[srcIdx];
                 v.Orientation = orientation;
@@ -440,6 +438,7 @@ namespace Axle {
 
     void RHIParticleRenderer::End() {
         m_InBatch = false;
+        m_SceneDepth = nullptr;
     }
 
     void RHIParticleRenderer::Render(RHI::RHICommandBuffer& cmd,
@@ -448,9 +447,9 @@ namespace Axle {
                                     RHI::RHITexture* normalMap,
                                     float softnessDistance,
                                     const glm::vec3& emitterWorldPos,
-                                    const glm::quat& emitterWorldRot)
+                                    const glm::quat& emitterWorldRot, const glm::vec3& emitterWorldScale, const EffectiveParticleRenderSettings* material)
     {
-        Render(cmd, system.GetPool(), system.GetConfig(), texture, normalMap, softnessDistance, emitterWorldPos, emitterWorldRot);
+        Render(cmd, system.GetPool(), system.GetConfig(), texture, normalMap, softnessDistance, emitterWorldPos, emitterWorldRot, emitterWorldScale, material);
     }
 
     void RHIParticleRenderer::Render(RHI::RHICommandBuffer& cmd,
@@ -460,11 +459,11 @@ namespace Axle {
                                     RHI::RHITexture* normalMap,
                                     float softnessDistance,
                                     const glm::vec3& emitterWorldPos,
-                                    const glm::quat& emitterWorldRot)
+                                    const glm::quat& emitterWorldRot, const glm::vec3& emitterWorldScale, const EffectiveParticleRenderSettings* material)
     {
         nri::Descriptor* texSRV = (texture && texture->IsValid()) ? texture->GetSRV() : nullptr;
         nri::Descriptor* normSRV = (normalMap && normalMap->IsValid()) ? normalMap->GetSRV() : nullptr;
-        Render(cmd, pool, config, texSRV, normSRV, softnessDistance, emitterWorldPos, emitterWorldRot);
+        Render(cmd, pool, config, texSRV, normSRV, softnessDistance, emitterWorldPos, emitterWorldRot, emitterWorldScale, material);
     }
 
     void RHIParticleRenderer::Render(RHI::RHICommandBuffer& cmd,
@@ -474,16 +473,16 @@ namespace Axle {
                                     nri::Descriptor* normalMapSRV,
                                     float softnessDistance,
                                     const glm::vec3& emitterWorldPos,
-                                    const glm::quat& emitterWorldRot)
+                                    const glm::quat& emitterWorldRot, const glm::vec3& emitterWorldScale, const EffectiveParticleRenderSettings* material)
     {
         uint32_t activeCount = pool.GetActiveCount();
-        if (activeCount == 0 || !m_Initialized) return;
+        if (activeCount == 0 || !m_Initialized || !m_InBatch) return;
 
         PerspectiveCamera cam(55.0f, 1.0f, 0.1f, 1000.0f);
         cam.SetViewMatrix(m_ActiveConstants.View, glm::vec3(m_ActiveConstants.CameraPosition));
 
         std::vector<ParticleDrawPacket> packets;
-        ParticleRenderPlanner::BuildDrawPackets(pool, config, cam, emitterWorldPos, emitterWorldRot, packets, MAX_PARTICLES_PER_BATCH);
+        ParticleRenderPlanner::BuildDrawPackets(pool, config, cam, emitterWorldPos, emitterWorldRot, packets, MAX_PARTICLES_PER_BATCH, emitterWorldScale);
 
         for (const auto& packet : packets) {
             ParticleDrawResources* drawRes = AcquireDrawResources();
@@ -506,46 +505,45 @@ namespace Axle {
             drawConstants.FadeParams = glm::vec4(config.NearFadeStart, config.NearFadeEnd, config.FarFadeStart, config.FarFadeEnd);
             drawConstants.Flags2.x = config.NearFadeEnabled ? 1u : 0u;
             drawConstants.Flags2.y = config.FarFadeEnabled ? 1u : 0u;
-            drawConstants.Flags2.z = (softnessDistance > 0.0f) ? 1u : 0u;
+            drawConstants.Flags2.z = (m_SceneDepth && softnessDistance > 0.0f) ? 1u : 0u;
             drawConstants.CameraUp.w = (softnessDistance > 0.0f) ? softnessDistance : config.SoftnessDistance;
 
             bool isCutout = (config.BlendMode == ParticleBlendMode::Cutout);
-            drawConstants.CutoutAndMaterial = glm::vec4(0.5f, config.SoftnessDistance, 0.0f, isCutout ? 1.0f : 0.0f);
+            drawConstants.CutoutAndMaterial = glm::vec4(material ? material->AlphaCutoff : 0.5f, config.SoftnessDistance, 0.0f, isCutout ? 1.0f : 0.0f);
+            drawConstants.MaterialTint = material ? material->BaseColor : glm::vec4(1);
+            drawConstants.MaterialEmission = material ? glm::vec4(material->EmissiveColor, material->EmissiveIntensity) : glm::vec4(0);
+            drawConstants.UVTransform = material ? glm::vec4(material->UVScale, material->UVOffset) : glm::vec4(1,1,0,0);
 
             if (drawRes->Constants.IsValid()) {
                 drawRes->Constants.UpdateData(&drawConstants, sizeof(RHIParticleConstants));
             }
 
             // 3. Update Texture Descriptors in Descriptor Set (Space 1)
-            if (m_DescriptorPool.IsValid() && drawRes->Set) {
+            if (drawRes->Pool.IsValid() && drawRes->Set) {
                 auto defaultWhite = RHI::RHIMaterial::GetDefaultWhiteTexture();
                 auto defaultFlatNormal = RHI::RHIMaterial::GetDefaultFlatNormalTexture();
 
                 nri::Descriptor* finalTexSRV = textureSRV ? textureSRV : (defaultWhite ? defaultWhite->GetSRV() : nullptr);
                 nri::Descriptor* finalNormSRV = normalMapSRV ? normalMapSRV : (defaultFlatNormal ? defaultFlatNormal->GetSRV() : nullptr);
-                nri::Descriptor* finalDepthSRV = defaultWhite ? defaultWhite->GetSRV() : nullptr;
+                nri::Descriptor* finalDepthSRV = m_SceneDepth ? m_SceneDepth : (defaultWhite ? defaultWhite->GetSRV() : nullptr);
 
                 if (finalTexSRV) {
-                    m_DescriptorPool.UpdateTexture(drawRes->Set, 0, 0, finalTexSRV);
+                    drawRes->Pool.UpdateTexture(drawRes->Set, 0, 0, finalTexSRV);
                 }
                 if (finalNormSRV) {
-                    m_DescriptorPool.UpdateTexture(drawRes->Set, 1, 0, finalNormSRV);
+                    drawRes->Pool.UpdateTexture(drawRes->Set, 1, 0, finalNormSRV);
                 }
                 if (finalDepthSRV) {
-                    m_DescriptorPool.UpdateTexture(drawRes->Set, 2, 0, finalDepthSRV);
+                    drawRes->Pool.UpdateTexture(drawRes->Set, 2, 0, finalDepthSRV);
                 }
                 if (m_LinearSampler.IsValid()) {
-                    m_DescriptorPool.UpdateSampler(drawRes->Set, 3, 0, m_LinearSampler.GetNative());
+                    drawRes->Pool.UpdateSampler(drawRes->Set, 3, 0, m_LinearSampler.GetNative());
                 }
             }
 
             // 4. Select Graphics Pipeline State Object
             nri::Pipeline* pipeline = GetOrCreatePipeline(config.BlendMode, m_ActiveColorFormat, m_ActiveDepthFormat, m_ActiveSampleCount);
-            if (!pipeline) {
-                if (config.BlendMode == ParticleBlendMode::Additive) pipeline = m_PipelineAdditiveSDR;
-                else if (config.BlendMode == ParticleBlendMode::Cutout) pipeline = m_PipelineCutoutSDR;
-                else pipeline = m_PipelineAlphaBlendSDR;
-            }
+            if (!pipeline) continue; // Never substitute an SDR/single-sample PSO into an incompatible pass.
 
             cmd.SetPipeline(pipeline);
             cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
@@ -556,8 +554,8 @@ namespace Axle {
             }
 
             // Bind Descriptor Set [0]: Particle Textures & Sampler (Space 1)
-            if (m_DescriptorPool.IsValid() && drawRes->Set) {
-                m_DescriptorPool.Bind(cmd.GetNative());
+            if (drawRes->Pool.IsValid() && drawRes->Set) {
+                drawRes->Pool.Bind(cmd.GetNative());
                 RHI::RHIDescriptorPool::BindDescriptorSet(cmd.GetNative(), 0, drawRes->Set);
             }
 

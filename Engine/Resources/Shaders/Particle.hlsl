@@ -25,6 +25,9 @@ cbuffer ParticleConstants : register(b0, space0) {
     float4   u_PointLightPositions[4];// 64 bytes (xyz = Position, w = Radius) (offset 352..416)
     float4   u_PointLightColors[4];   // 64 bytes (rgb = Color, w = Intensity) (offset 416..480)
     float4   u_CutoutAndMaterial;     // 16 bytes (x = AlphaCutoff, y = DepthFadeDist, z = EmissiveIntensity, w = IsCutoutMode) (offset 480..496)
+    float4   u_UVTransform;
+    float4   u_MaterialTint;
+    float4   u_MaterialEmission;
     float4   u_Reserved;              // 16 bytes padding -> Total 512 bytes (offset 496..512)
 };
 
@@ -172,9 +175,9 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float4 texColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
 
     if (u_Flags.x == 1) { // HasTexture
-        float4 colA = u_ParticleTexture.Sample(u_LinearSampler, input.TexCoord);
+        float4 colA = u_ParticleTexture.Sample(u_LinearSampler, (input.TexCoord * u_UVTransform.xy + u_UVTransform.zw));
         if (u_Flags.y == 1 && input.SubFrameBlend > 0.0f) { // SubFrameBlending
-            float4 colB = u_ParticleTexture.Sample(u_LinearSampler, input.TexCoordNext);
+            float4 colB = u_ParticleTexture.Sample(u_LinearSampler, (input.TexCoordNext * u_UVTransform.xy + u_UVTransform.zw));
             texColor = lerp(colA, colB, input.SubFrameBlend);
         } else {
             texColor = colA;
@@ -190,7 +193,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         texColor = float4(1.0f, 1.0f, 1.0f, alphaMask);
     }
 
-    float4 finalColor = input.Color * texColor;
+    float4 finalColor = input.Color * texColor * u_MaterialTint;
     if (u_CutoutAndMaterial.w > 0.5f) {
         if (finalColor.a < u_CutoutAndMaterial.x) {
             discard;
@@ -203,7 +206,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
     if (u_Flags.w == 1 && input.LightingFlag > 0.5f) { // LightingEnabled
         float3 N = normalize(input.Normal);
         if (u_Flags.z == 1) { // HasNormalMap
-            float3 normalTex = u_ParticleNormalMap.Sample(u_LinearSampler, input.TexCoord).xyz * 2.0f - 1.0f;
+            float3 normalTex = u_ParticleNormalMap.Sample(u_LinearSampler, (input.TexCoord * u_UVTransform.xy + u_UVTransform.zw)).xyz * 2.0f - 1.0f;
             N = normalize(lerp(N, normalTex, saturate(u_AmbientColor.w))); // u_AmbientColor.w = NormalMapStrength
         }
 
@@ -236,6 +239,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
         finalColor.rgb *= totalLight;
     }
 
+    finalColor.rgb += u_MaterialEmission.rgb * u_MaterialEmission.w;
+
     // Near & far camera distance fading
     float camDist = -input.ViewPos.z;
     if (u_Flags2.x == 1) { // NearFadeEnabled
@@ -259,11 +264,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float particleLinearZ = camDist;
         
         float depthDiff = sceneLinearZ - particleLinearZ;
-        if (depthDiff > 0.0f) {
-            float fadeDist = max(0.001f, u_CameraUp.w);
-            float softFade = saturate(depthDiff / fadeDist);
-            finalColor.a *= softFade;
-        }
+        float fadeDist = max(0.001f, u_CameraUp.w);
+        finalColor.a *= saturate(depthDiff / fadeDist);
     }
 
     return finalColor;

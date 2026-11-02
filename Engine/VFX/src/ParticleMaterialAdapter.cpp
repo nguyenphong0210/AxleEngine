@@ -19,8 +19,8 @@ namespace Axle {
         settings.BlendMode = config.BlendMode;
         settings.AlphaCutoff = 0.5f;
         settings.DepthWrite = (config.BlendMode == ParticleBlendMode::Cutout);
-        settings.UseTexture = resources.UseTexture || !resources.TexturePath.empty();
-        settings.UseNormalMap = resources.UseNormalMap || !resources.NormalMapPath.empty();
+        settings.UseTexture = resources.UseTexture && !resources.TexturePath.empty();
+        settings.UseNormalMap = resources.UseNormalMap && !resources.NormalMapPath.empty();
 
         settings.LightingEnabled = config.LightingEnabled;
         settings.WrapLighting = config.WrapLighting;

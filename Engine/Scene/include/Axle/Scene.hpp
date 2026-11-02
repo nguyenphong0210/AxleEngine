@@ -100,7 +100,7 @@ namespace Axle {
         void RenderParticles(ParticleRenderer& particleRenderer, const PerspectiveCamera& camera,
                              const std::shared_ptr<class Framebuffer>& targetFBO = nullptr);
         void RenderParticles(RHIParticleRenderer& particleRenderer, const PerspectiveCamera& camera,
-                             RHI::RHICommandBuffer& cmd);
+                             RHI::RHICommandBuffer& cmd, class MaterialTextureCache* textures = nullptr);
 
         // Simulation runtime lifecycle & dynamic vehicle assembly (Phase 20.3 Stage 2)
         void OnRuntimeStart(PhysicsScene* physicsScene = nullptr);

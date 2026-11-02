@@ -3329,11 +3329,15 @@ bool RunTest_Step79_GPUParticleVFXPass() {
     // [79.2] Hardware Constant Buffer (RHIParticleConstants) & Instance Vertex Structure Layout
     std::cout << "\n[79.2] Validating RHIParticleConstants 256-Byte CBV Alignment & ParticleInstanceVertex Packing..." << std::endl;
     {
-        static_assert(sizeof(Axle::RHIParticleConstants) == 512, "RHIParticleConstants must be exactly 512 bytes!");
+        static_assert(sizeof(Axle::RHIParticleConstants) == 768,
+                      "RHIParticleConstants must be exactly 768 bytes!");
         static_assert(alignof(Axle::RHIParticleConstants) == 256, "RHIParticleConstants must have 256-byte alignment!");
-        assert(sizeof(Axle::RHIParticleConstants) == 512);
+        assert(sizeof(Axle::RHIParticleConstants) == 768);
 
-        // Verify member offsets in 512-byte constant buffer
+        static_assert(offsetof(Axle::RHIParticleConstants, UVTransform) == 496);
+        static_assert(offsetof(Axle::RHIParticleConstants, MaterialTint) == 512);
+        static_assert(offsetof(Axle::RHIParticleConstants, MaterialEmission) == 528);
+        // Verify member offsets in the expanded material-aware constant buffer
         assert(offsetof(Axle::RHIParticleConstants, ViewProjection) == 0);
         assert(offsetof(Axle::RHIParticleConstants, View) == 64);
         assert(offsetof(Axle::RHIParticleConstants, Projection) == 128);

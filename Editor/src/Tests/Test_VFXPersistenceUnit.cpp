@@ -1,5 +1,6 @@
 #include "VFXTestHarness.hpp"
 #include <Axle/ParticleEmitterSerializer.hpp>
+#include <Axle/ParticleEffectSerializer.hpp>
 
 namespace {
     bool TestBaselineEmitterSerializer() {
@@ -20,10 +21,151 @@ namespace {
         VFX_TEST_APPROX_EQUAL(loaded.EmissionRate, 25.0f, 0.001f, "EmissionRate preserved");
         return true;
     }
+
+    bool TestVFXEffectRoundTrip() {
+        Axle::ParticleEffectDefinition effect;
+        effect.SchemaVersion = 2;
+        effect.Name = "CampfireEffect";
+        effect.Seed = 1337;
+
+        // Emitter 1: Flame
+        Axle::EmitterDefinition flame;
+        flame.Id = "flame-0001";
+        flame.Name = "Flame";
+        flame.Enabled = true;
+        flame.TriggerOnly = false;
+        flame.LocalTransform.Translation = glm::vec3(0.0f, 0.5f, 0.0f);
+        flame.Config.Name = "Flame";
+        flame.Config.MaxParticles = 400;
+        flame.Config.EmissionRate = 60.0f;
+        flame.Config.Duration = 5.0f;
+        flame.Config.Looping = true;
+        flame.Resources.TexturePath = "vfx/textures/flame.png";
+        flame.Resources.UseTexture = true;
+        flame.Config.Bursts.emplace_back(1.0f, 20, 40, 2, 0.5f, 0.9f);
+        effect.Emitters.push_back(std::move(flame));
+
+        // Emitter 2: Sparks (TriggerOnly)
+        Axle::EmitterDefinition sparks;
+        sparks.Id = "sparks-0002";
+        sparks.Name = "Sparks";
+        sparks.Enabled = true;
+        sparks.TriggerOnly = true;
+        sparks.LocalTransform.Translation = glm::vec3(0.0f, 1.0f, 0.0f);
+        sparks.Config.Name = "Sparks";
+        sparks.Config.MaxParticles = 150;
+        sparks.Config.EmissionRate = 0.0f; // trigger only
+        sparks.Config.Duration = 2.0f;
+        sparks.Config.Looping = false;
+        sparks.Config.Collision.Enabled = true;
+        sparks.Config.Collision.Restitution = 0.6f;
+        effect.Emitters.push_back(std::move(sparks));
+
+        // Serialize to file
+        Axle::VFXTests::ScopedTempDir tempDir;
+        auto filePath = tempDir.Path / "campfire.axleasset";
+        std::vector<Axle::VFXDiagnostic> diags;
+        bool saved = Axle::ParticleEffectSerializer::SerializeToFile(filePath.string(), effect, &diags);
+        VFX_TEST_CHECK(saved, "ParticleEffectSerializer::SerializeToFile should succeed");
+
+        // Deserialize from file
+        Axle::ParticleEffectDefinition loaded;
+        bool loadedOk = Axle::ParticleEffectSerializer::DeserializeFromFile(filePath.string(), loaded, &diags);
+        VFX_TEST_CHECK(loadedOk, "ParticleEffectSerializer::DeserializeFromFile should succeed");
+
+        // Verify roundtrip equivalence
+        VFX_TEST_CHECK(loaded.SchemaVersion == 2, "Loaded SchemaVersion must be 2");
+        VFX_TEST_CHECK(loaded.Name == "CampfireEffect", "Loaded Name must match");
+        VFX_TEST_CHECK(loaded.Seed == 1337, "Loaded Seed must match");
+        VFX_TEST_CHECK(loaded.Emitters.size() == 2, "Loaded Emitters count must be 2");
+
+        VFX_TEST_CHECK(loaded.Emitters[0].Id == "flame-0001", "Emitter 0 ID must match");
+        VFX_TEST_CHECK(loaded.Emitters[0].Name == "Flame", "Emitter 0 Name must match");
+        VFX_TEST_CHECK(loaded.Emitters[0].Enabled == true, "Emitter 0 Enabled must match");
+        VFX_TEST_CHECK(loaded.Emitters[0].TriggerOnly == false, "Emitter 0 TriggerOnly must match");
+        VFX_TEST_CHECK(loaded.Emitters[0].Resources.TexturePath == "vfx/textures/flame.png", "Emitter 0 TexturePath must match");
+        VFX_TEST_CHECK(loaded.Emitters[0].Config.MaxParticles == 400, "Emitter 0 MaxParticles must match");
+        VFX_TEST_CHECK(loaded.Emitters[0].Config.Bursts.size() == 1, "Emitter 0 Bursts size must match");
+
+        VFX_TEST_CHECK(loaded.Emitters[1].Id == "sparks-0002", "Emitter 1 ID must match");
+        VFX_TEST_CHECK(loaded.Emitters[1].Name == "Sparks", "Emitter 1 Name must match");
+        VFX_TEST_CHECK(loaded.Emitters[1].TriggerOnly == true, "Emitter 1 TriggerOnly must match");
+        VFX_TEST_CHECK(loaded.Emitters[1].Config.Collision.Enabled == true, "Emitter 1 Collision.Enabled must match");
+
+        VFX_TEST_CHECK(loaded == effect, "operator== must report loaded effect identical to source");
+
+        return true;
+    }
+
+    bool TestLegacyV1Migration() {
+        // Save a legacy single-emitter v1 asset
+        Axle::ParticleEmitterConfig v1Config;
+        v1Config.Name = "LegacySmoke";
+        v1Config.MaxParticles = 256;
+        v1Config.EmissionRate = 18.0f;
+        std::string v1Tex = "vfx/smoke.png";
+
+        Axle::VFXTests::ScopedTempDir tempDir;
+        auto filePath = tempDir.Path / "legacy_smoke.axleasset";
+        bool saved = Axle::ParticleEmitterSerializer::SerializeToFile(filePath.string(), v1Config, v1Tex);
+        VFX_TEST_CHECK(saved, "Legacy v1 file must save successfully");
+
+        // Read using v2 ParticleEffectSerializer
+        Axle::ParticleEffectDefinition migrated;
+        std::vector<Axle::VFXDiagnostic> diags;
+        bool ok = Axle::ParticleEffectSerializer::DeserializeFromFile(filePath.string(), migrated, &diags);
+        VFX_TEST_CHECK(ok, "ParticleEffectSerializer should seamlessly migrate legacy v1 asset");
+
+        VFX_TEST_CHECK(migrated.SchemaVersion == 2, "Migrated effect schemaVersion must be upgraded to 2");
+        VFX_TEST_CHECK(migrated.Name == "LegacySmoke", "Migrated effect name matches legacy config");
+        VFX_TEST_CHECK(migrated.Emitters.size() == 1, "Migrated effect must contain exactly 1 emitter");
+        VFX_TEST_CHECK(migrated.Emitters[0].Id == "legacy-0001", "Migrated emitter ID must be deterministic");
+        VFX_TEST_CHECK(migrated.Emitters[0].Config.MaxParticles == 256, "MaxParticles matches");
+        VFX_TEST_APPROX_EQUAL(migrated.Emitters[0].Config.EmissionRate, 18.0f, 0.001f, "EmissionRate matches");
+        VFX_TEST_CHECK(migrated.Emitters[0].Resources.TexturePath == "vfx/smoke.png", "Texture path migrated");
+
+        return true;
+    }
+
+    bool TestTransactionalSaveAndErrorPreservation() {
+        Axle::ParticleEffectDefinition validEffect = Axle::CreateDefaultParticleEffect("Baseline");
+        Axle::ParticleEffectDefinition targetEffect = validEffect;
+
+        // Malformed DSL should fail and preserve targetEffect
+        std::string badDsl = "InvalidRootBlock { bad syntax {";
+        std::vector<Axle::VFXDiagnostic> diags;
+        bool res1 = Axle::ParticleEffectSerializer::Deserialize(badDsl, targetEffect, &diags);
+        VFX_TEST_CHECK(!res1, "Deserializing invalid DSL must return false");
+        VFX_TEST_CHECK(targetEffect == validEffect, "Target effect must be left untouched on deserialization failure");
+        VFX_TEST_CHECK(!diags.empty(), "Diagnostics must report the error");
+
+        // Duplicate emitter IDs should fail validation and preserve targetEffect
+        Axle::ParticleEffectDefinition dupEffect;
+        dupEffect.SchemaVersion = 2;
+        dupEffect.Name = "DupTest";
+        Axle::EmitterDefinition e1; e1.Id = "dup-id"; e1.Name = "E1";
+        Axle::EmitterDefinition e2; e2.Id = "dup-id"; e2.Name = "E2"; // duplicate ID!
+        dupEffect.Emitters.push_back(e1);
+        dupEffect.Emitters.push_back(e2);
+        std::string dupDsl = Axle::ParticleEffectSerializer::Serialize(dupEffect);
+
+        diags.clear();
+        bool res2 = Axle::ParticleEffectSerializer::Deserialize(dupDsl, targetEffect, &diags);
+        VFX_TEST_CHECK(!res2, "Deserializing duplicate emitter IDs must fail validation");
+        VFX_TEST_CHECK(targetEffect == validEffect, "Target effect must remain untouched");
+
+        return true;
+    }
 }
 
 bool RunVFXPersistenceUnitTests() {
     std::cout << "  - Running TestBaselineEmitterSerializer ...\n";
     VFX_TEST_CHECK(TestBaselineEmitterSerializer(), "TestBaselineEmitterSerializer failed");
+    std::cout << "  - Running TestVFXEffectRoundTrip ...\n";
+    VFX_TEST_CHECK(TestVFXEffectRoundTrip(), "TestVFXEffectRoundTrip failed");
+    std::cout << "  - Running TestLegacyV1Migration ...\n";
+    VFX_TEST_CHECK(TestLegacyV1Migration(), "TestLegacyV1Migration failed");
+    std::cout << "  - Running TestTransactionalSaveAndErrorPreservation ...\n";
+    VFX_TEST_CHECK(TestTransactionalSaveAndErrorPreservation(), "TestTransactionalSaveAndErrorPreservation failed");
     return true;
 }

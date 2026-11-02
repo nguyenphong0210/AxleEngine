@@ -9,6 +9,7 @@ add_library(AxleVFX STATIC
     src/ParticleForceField.cpp
     src/ParticleEmitterSerializer.cpp
     src/ParticleEffectDefinition.cpp
+    src/ParticleEffectSerializer.cpp
 )
 add_library(Axle::VFX ALIAS AxleVFX)
 

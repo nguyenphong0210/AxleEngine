@@ -673,6 +673,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 - [ ] **Phase 39: Visual Particle & VFX Studio - End-to-End Editor Completion (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Editor`)**
   - **Status (2026-11-02): Reopened after source review.** A three-column window, CPU particle simulation, curves/gradients, bursts and serializer helpers already exist. Step 102 passes its current assertions, but complete multi-emitter authoring, RHI preview, persistence and runtime/UI acceptance are not established.
   - **Detailed plan**: [Phase 39 VFX Editor Completion Plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md). Implement each independently verifiable sub-step in its own local commit; record implemented, CPU-tested and GPU/UI-accepted states separately.
+  - **Coding handoff**: [Gemini implementation guide](docs/design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) supplies proposed data structures, code/integration flows, test fixtures and a copyable assignment; GPU/UI execution must be recorded separately from coding and CPU tests.
   - **Execution order**: A -> B -> C -> D -> E -> F -> G -> H -> I -> J. H/I may be prepared after their B/C dependencies; integrate and accept the complete workflow before closing this phase.
   - [x] **Existing foundations (not full editor acceptance)**:
     - [x] CPU particle pools, emitter stacks, burst evaluation, basic shapes, collision solvers, runtime child-system APIs and flipbook calculations.

@@ -35,6 +35,7 @@ Declaration and file inventories are available through the architecture index. T
 - [Asset format reference](reference/ASSET_FORMAT.md): `.axleasset` syntax, consumer boundaries, metadata and package distinctions.
 - [Editor tooling roadmap](design/EDITOR_TOOLING_ROADMAP.md): future material, VFX, UI and animation authoring work, with acceptance criteria.
 - [Phase 39 VFX editor completion plan](design/VFX_PHASE_39_COMPLETION_PLAN.md): audited gaps, implementation order, atomic work packages and CPU/GPU/UI acceptance for the reopened VFX phase.
+- [Phase 39 Gemini coding guide](design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md): proposed C++ interfaces, integration algorithms, concrete test fixtures and a copyable code/CPU-test assignment.
 - [Project roadmap](../ROADMAP.md): development history and milestones. Milestone completion claims do not substitute for current source or test evidence.
 
 ## Maintenance rules

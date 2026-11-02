@@ -36,6 +36,9 @@ for the A-J work packages, stable authored-definition/runtime-instance boundary,
 atomic sub-steps and CPU/GPU/UI matrix. First isolate preview from scene state and
 make unchanged selection idempotent; then complete multi-emitter persistence,
 playback, real RHI rendering, authoring/resources/undo and advertised module paths.
+The [Gemini coding guide](VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) expands those
+contracts into proposed C++ types, implementation flows, test fixtures and a
+code/CPU-test handoff; physical GPU/UI acceptance remains an external check.
 
 Acceptance: preview controls and scene playback use compatible configuration; saved assets reproduce emitter behavior; births/collisions/deaths and sub-emitter recursion have explicit limits/lifetimes. Separate CPU simulation checks from backend draw checks.
 

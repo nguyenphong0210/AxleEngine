@@ -9,7 +9,10 @@ code are foundations to preserve. The work below is not implemented by this
 document, and its proposed names are not existing APIs.
 
 The parent checklist is [ROADMAP.md](../../ROADMAP.md). Related guidance is in
-the [editor tooling roadmap](EDITOR_TOOLING_ROADMAP.md). Phase 38.3 material UI
+the [editor tooling roadmap](EDITOR_TOOLING_ROADMAP.md). The companion
+[Gemini coding guide](VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) provides
+proposed C++ types, algorithms, integration flows, explicit fixtures and a
+copyable assignment prompt for a code/CPU-test-only implementer. Phase 38.3 material UI
 acceptance remains a separate user-owned task; this plan does not close it or
 start Phase 40.
 
@@ -470,12 +473,15 @@ implementation commit carries its relevant tests and evidence; document-only
 planning commits do not require rebuilding unrelated binaries. Keep local commits
 within the user's authorization; pushing to a remote is a separate action.
 
-If handing work to Gemini, start with B1/B2 and deterministic CPU fixtures under
-a frozen schema contract; later consider C or G model helpers. Keep ownership,
-renderer integration and physical DX12/Vulkan/UI acceptance with an operator who
-can run them. Assign file ownership and dependencies before concurrent work;
-avoid simultaneous edits to Components, SceneSerializer or VFXEditorPanel. A
-CPU-only contributor records GPU/UI results as NOT RUN, even if test code exists.
+If Gemini is the coding assignee, follow the companion guide: establish CPU
+tests and A1, introduce B1's minimal value boundary for A2, then continue through
+the documented sub-steps. Gemini can implement ownership, renderer and panel
+integration as well as CPU tests; physical DX12/Vulkan/UI execution remains with
+an operator who can run it. If splitting work between contributors, B1/B2 is a
+useful bounded assignment under a frozen schema contract. Assign file ownership
+and dependencies first; avoid simultaneous edits to Components, SceneSerializer
+or VFXEditorPanel. A CPU-only contributor records GPU/UI results as NOT RUN,
+even when production wiring and GPU test code have been implemented/compiled.
 
 No calendar estimate or completion percentage is asserted: renderer resource
 isolation and legacy migration may reveal additional defects. M1 is the first

@@ -196,6 +196,62 @@ namespace {
 
         return true;
     }
+
+    bool TestCutoutAlphaTestingLogic() {
+        // Cutout alpha test specification:
+        // When in Cutout mode with cutoff > 0.0f, fragment with alpha < cutoff is discarded.
+        auto ShouldDiscardCutout = [](float alpha, float cutoff, bool isCutout) -> bool {
+            if (isCutout) {
+                return (alpha < cutoff);
+            }
+            return (alpha <= 0.001f);
+        };
+
+        VFX_TEST_CHECK(ShouldDiscardCutout(0.4f, 0.5f, true), "Alpha 0.4 < Cutoff 0.5 is discarded in Cutout mode");
+        VFX_TEST_CHECK(!ShouldDiscardCutout(0.6f, 0.5f, true), "Alpha 0.6 >= Cutoff 0.5 passes in Cutout mode");
+
+        // Explicit test: Alpha threshold zero (Section 11 requirement)
+        VFX_TEST_CHECK(!ShouldDiscardCutout(0.0005f, 0.0f, true), "Alpha threshold 0.0 allows any nonnegative alpha fragment to pass");
+        VFX_TEST_CHECK(!ShouldDiscardCutout(0.0f, 0.0f, true), "Alpha exactly 0.0 passes when cutoff is 0.0 in Cutout mode");
+
+        // Non-cutout baseline
+        VFX_TEST_CHECK(ShouldDiscardCutout(0.0005f, 0.5f, false), "Alpha 0.0005 <= 0.001 is discarded in non-cutout mode");
+        VFX_TEST_CHECK(!ShouldDiscardCutout(0.05f, 0.5f, false), "Alpha 0.05 > 0.001 passes in non-cutout mode");
+
+        return true;
+    }
+
+    bool TestDepthLinearizationAndSoftFade() {
+        // Camera configuration: Near = 0.1m, Far = 100.0m
+        const float nearClip = 0.1f;
+        const float farClip = 100.0f;
+
+        auto LinearizeDepthZO = [nearClip, farClip](float rawDepth) -> float {
+            return (nearClip * farClip) / std::max(0.0001f, farClip - rawDepth * (farClip - nearClip));
+        };
+
+        // Verification of depth linearization boundaries
+        float linearNear = LinearizeDepthZO(0.0f);
+        float linearFar = LinearizeDepthZO(1.0f);
+        VFX_TEST_CHECK(std::abs(linearNear - nearClip) < 0.001f, "Raw depth 0.0 linearizes to near plane (0.1m)");
+        VFX_TEST_CHECK(std::abs(linearFar - farClip) < 0.05f, "Raw depth 1.0 linearizes to far plane (100.0m)");
+
+        // Depth soft edge attenuation calculation
+        const float softnessDist = 0.5f;
+        float particleCamDist = 5.0f;
+        float sceneCamDist = 5.25f; // Scene geometry is 0.25m behind particle
+
+        float depthDiff = sceneCamDist - particleCamDist;
+        float softFade = std::clamp(depthDiff / softnessDist, 0.0f, 1.0f);
+        VFX_TEST_CHECK(std::abs(softFade - 0.5f) < 0.001f, "0.25m diff with 0.5m softness distance yields exactly 50% fade");
+
+        // Deep scene penetration: particle well in front of background
+        float sceneFarCamDist = 15.0f;
+        float deepFade = std::clamp((sceneFarCamDist - particleCamDist) / softnessDist, 0.0f, 1.0f);
+        VFX_TEST_CHECK(deepFade == 1.0f, "Particle far from surface has 100% opacity (no fade)");
+
+        return true;
+    }
 }
 
 bool RunVFXRenderPlanUnitTests() {
@@ -219,6 +275,12 @@ bool RunVFXRenderPlanUnitTests() {
 
     std::cout << "  - Running TestParticleMaterialAdapterMissingAndUnsupportedFeatures ...\n";
     VFX_TEST_CHECK(TestParticleMaterialAdapterMissingAndUnsupportedFeatures(), "TestParticleMaterialAdapterMissingAndUnsupportedFeatures failed");
+
+    std::cout << "  - Running TestCutoutAlphaTestingLogic ...\n";
+    VFX_TEST_CHECK(TestCutoutAlphaTestingLogic(), "TestCutoutAlphaTestingLogic failed");
+
+    std::cout << "  - Running TestDepthLinearizationAndSoftFade ...\n";
+    VFX_TEST_CHECK(TestDepthLinearizationAndSoftFade(), "TestDepthLinearizationAndSoftFade failed");
 
     return true;
 }

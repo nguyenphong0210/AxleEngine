@@ -43,7 +43,8 @@ namespace Axle {
         glm::uvec4 Flags2 = glm::uvec4(0);                 // 16 bytes (x=NearFade, y=FarFade, z=SoftParticles, w=LightCount) (offset 336)
         glm::vec4 PointLightPositions[4]{};                // 64 bytes (xyz = Position, w = Radius) (offset 352..416)
         glm::vec4 PointLightColors[4]{};                   // 64 bytes (rgb = Color, w = Intensity) (offset 416..480)
-        glm::vec4 Reserved[2]{};                           // 32 bytes padding -> Total 512 bytes (offset 480..512)
+        glm::vec4 CutoutAndMaterial = glm::vec4(0.0f);     // 16 bytes (x=AlphaCutoff, y=DepthFadeDist, z=EmissiveIntensity, w=IsCutoutMode) (offset 480..496)
+        glm::vec4 Reserved = glm::vec4(0.0f);              // 16 bytes padding -> Total 512 bytes (offset 496..512)
     };
     static_assert(sizeof(RHIParticleConstants) == 512, "RHIParticleConstants must be exactly 512 bytes (256-byte aligned)!");
 

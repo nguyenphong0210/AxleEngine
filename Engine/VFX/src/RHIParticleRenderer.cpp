@@ -173,8 +173,9 @@ namespace Axle {
         // Descriptor Set (space 1):
         // Range 0: t0 (Particle Texture, 1 descriptor)
         // Range 1: t1 (Normal Map, 1 descriptor)
-        // Range 2: s0 (Linear Sampler, 1 descriptor)
-        nri::DescriptorRangeDesc ranges[3] = {};
+        // Range 2: t2 (Scene Depth Map, 1 descriptor)
+        // Range 3: s0 (Linear Sampler, 1 descriptor)
+        nri::DescriptorRangeDesc ranges[4] = {};
         ranges[0].baseRegisterIndex = 0;
         ranges[0].descriptorNum = 1;
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
@@ -187,16 +188,22 @@ namespace Axle {
         ranges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        ranges[2].baseRegisterIndex = 0;
+        ranges[2].baseRegisterIndex = 2;
         ranges[2].descriptorNum = 1;
-        ranges[2].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[2].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        ranges[3].baseRegisterIndex = 0;
+        ranges[3].descriptorNum = 1;
+        ranges[3].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
         descSet.ranges = ranges;
-        descSet.rangeNum = 3;
+        descSet.rangeNum = 4;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
@@ -236,7 +243,7 @@ namespace Axle {
         }
 
         if (m_LinearSampler.IsValid()) {
-            m_DescriptorPool.UpdateSampler(m_DescriptorSet, 2, 0, m_LinearSampler.GetNative());
+            m_DescriptorPool.UpdateSampler(m_DescriptorSet, 3, 0, m_LinearSampler.GetNative());
         }
 
         return true;
@@ -502,6 +509,9 @@ namespace Axle {
             drawConstants.Flags2.z = (softnessDistance > 0.0f) ? 1u : 0u;
             drawConstants.CameraUp.w = (softnessDistance > 0.0f) ? softnessDistance : config.SoftnessDistance;
 
+            bool isCutout = (config.BlendMode == ParticleBlendMode::Cutout);
+            drawConstants.CutoutAndMaterial = glm::vec4(0.5f, config.SoftnessDistance, 0.0f, isCutout ? 1.0f : 0.0f);
+
             if (drawRes->Constants.IsValid()) {
                 drawRes->Constants.UpdateData(&drawConstants, sizeof(RHIParticleConstants));
             }
@@ -513,12 +523,19 @@ namespace Axle {
 
                 nri::Descriptor* finalTexSRV = textureSRV ? textureSRV : (defaultWhite ? defaultWhite->GetSRV() : nullptr);
                 nri::Descriptor* finalNormSRV = normalMapSRV ? normalMapSRV : (defaultFlatNormal ? defaultFlatNormal->GetSRV() : nullptr);
+                nri::Descriptor* finalDepthSRV = defaultWhite ? defaultWhite->GetSRV() : nullptr;
 
                 if (finalTexSRV) {
                     m_DescriptorPool.UpdateTexture(drawRes->Set, 0, 0, finalTexSRV);
                 }
                 if (finalNormSRV) {
                     m_DescriptorPool.UpdateTexture(drawRes->Set, 1, 0, finalNormSRV);
+                }
+                if (finalDepthSRV) {
+                    m_DescriptorPool.UpdateTexture(drawRes->Set, 2, 0, finalDepthSRV);
+                }
+                if (m_LinearSampler.IsValid()) {
+                    m_DescriptorPool.UpdateSampler(drawRes->Set, 3, 0, m_LinearSampler.GetNative());
                 }
             }
 

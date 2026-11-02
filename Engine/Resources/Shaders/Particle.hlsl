@@ -24,7 +24,8 @@ cbuffer ParticleConstants : register(b0, space0) {
     uint4    u_Flags2;                // 16 bytes (x = NearFadeEnabled, y = FarFadeEnabled, z = SoftParticlesEnabled, w = PointLightCount) (offset 336)
     float4   u_PointLightPositions[4];// 64 bytes (xyz = Position, w = Radius) (offset 352..416)
     float4   u_PointLightColors[4];   // 64 bytes (rgb = Color, w = Intensity) (offset 416..480)
-    float4   u_Reserved[2];           // 32 bytes padding -> Total 512 bytes (offset 480..512)
+    float4   u_CutoutAndMaterial;     // 16 bytes (x = AlphaCutoff, y = DepthFadeDist, z = EmissiveIntensity, w = IsCutoutMode) (offset 480..496)
+    float4   u_Reserved;              // 16 bytes padding -> Total 512 bytes (offset 496..512)
 };
 
 // -----------------------------------------------------------------------------
@@ -32,6 +33,7 @@ cbuffer ParticleConstants : register(b0, space0) {
 // -----------------------------------------------------------------------------
 Texture2D    u_ParticleTexture   : register(t0, space1);
 Texture2D    u_ParticleNormalMap : register(t1, space1);
+Texture2D    u_SceneDepthMap     : register(t2, space1);
 SamplerState u_LinearSampler     : register(s0, space1);
 
 // -----------------------------------------------------------------------------
@@ -189,7 +191,11 @@ float4 PSMain(PSInput input) : SV_Target0 {
     }
 
     float4 finalColor = input.Color * texColor;
-    if (finalColor.a <= 0.001f) {
+    if (u_CutoutAndMaterial.w > 0.5f) {
+        if (finalColor.a < u_CutoutAndMaterial.x) {
+            discard;
+        }
+    } else if (finalColor.a <= 0.001f) {
         discard;
     }
 
@@ -240,6 +246,24 @@ float4 PSMain(PSInput input) : SV_Target0 {
     if (u_Flags2.y == 1) { // FarFadeEnabled
         float farFade = 1.0f - smoothstep(u_FadeParams.z, u_FadeParams.w, camDist);
         finalColor.a *= farFade;
+    }
+
+    // Depth-aware soft particle edge fading
+    if (u_Flags2.z == 1) { // SoftParticlesEnabled
+        float2 screenUV = input.Position.xy * u_ScreenSize.zw;
+        float sceneDepthRaw = u_SceneDepthMap.SampleLevel(u_LinearSampler, screenUV, 0).r;
+        
+        float nearClip = u_CameraPosition.w;
+        float farClip = u_CameraRight.w;
+        float sceneLinearZ = (nearClip * farClip) / max(0.0001f, farClip - sceneDepthRaw * (farClip - nearClip));
+        float particleLinearZ = camDist;
+        
+        float depthDiff = sceneLinearZ - particleLinearZ;
+        if (depthDiff > 0.0f) {
+            float fadeDist = max(0.001f, u_CameraUp.w);
+            float softFade = saturate(depthDiff / fadeDist);
+            finalColor.a *= softFade;
+        }
     }
 
     return finalColor;

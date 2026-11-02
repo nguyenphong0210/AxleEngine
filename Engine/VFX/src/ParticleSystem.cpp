@@ -7,12 +7,22 @@ namespace Axle {
 
     ParticleSystem::ParticleSystem(const ParticleEmitterConfig& config)
         : m_Config(config), m_Pool(config.MaxParticles) {
+        m_BurstRuntime.resize(m_Config.Bursts.size());
+        for (size_t i = 0; i < m_Config.Bursts.size(); ++i) {
+            m_BurstRuntime[i].CompletedCycles = 0;
+            m_BurstRuntime[i].NextTriggerTime = m_Config.Bursts[i].Time;
+        }
     }
 
     void ParticleSystem::SetConfig(const ParticleEmitterConfig& config) {
         m_Config = config;
         if (config.MaxParticles != m_Pool.GetCapacity()) {
             m_Pool.Allocate(config.MaxParticles);
+        }
+        m_BurstRuntime.resize(m_Config.Bursts.size());
+        for (size_t i = 0; i < m_Config.Bursts.size(); ++i) {
+            m_BurstRuntime[i].CompletedCycles = 0;
+            m_BurstRuntime[i].NextTriggerTime = m_Config.Bursts[i].Time;
         }
     }
 
@@ -29,8 +39,14 @@ namespace Axle {
         m_SpawnAccumulator = 0.0f;
         m_BurstTimer = 0.0f;
         m_TotalSimulationTime = 0.0f;
+        m_EmitterTime = 0.0f;
         m_CollisionCount = 0;
 
+        m_BurstRuntime.resize(m_Config.Bursts.size());
+        for (size_t i = 0; i < m_Config.Bursts.size(); ++i) {
+            m_BurstRuntime[i].CompletedCycles = 0;
+            m_BurstRuntime[i].NextTriggerTime = m_Config.Bursts[i].Time;
+        }
         for (auto& burst : m_Config.Bursts) {
             burst.Reset();
         }
@@ -123,43 +139,88 @@ namespace Axle {
         if (dt <= 0.0f) return;
 
         m_TotalSimulationTime += dt;
+        float prevEmitterTime = m_EmitterTime;
+        m_EmitterTime += dt;
 
-        // Continuous particle spawning
-        if (m_IsEmitting && m_Config.EmissionRate > 0.0f) {
-            m_SpawnAccumulator += dt * m_Config.EmissionRate;
-            uint32_t toSpawn = static_cast<uint32_t>(m_SpawnAccumulator);
-            m_SpawnAccumulator -= static_cast<float>(toSpawn);
-
-            for (uint32_t i = 0; i < toSpawn; ++i) {
-                SpawnParticle(emitterWorldPos, emitterWorldRot);
+        bool isEmittingWindow = m_IsEmitting;
+        bool looped = false;
+        if (m_Config.Duration > 0.0f) {
+            if (m_Config.Looping) {
+                if (m_EmitterTime >= m_Config.Duration) {
+                    looped = true;
+                }
+            } else {
+                if (prevEmitterTime >= m_Config.Duration) {
+                    isEmittingWindow = false;
+                }
             }
         }
 
-        // Legacy periodic burst emission
-        if (m_IsEmitting && m_Config.BurstCount > 0 && m_Config.BurstInterval > 0.0f) {
-            m_BurstTimer += dt;
-            if (m_BurstTimer >= m_Config.BurstInterval) {
-                m_BurstTimer -= m_Config.BurstInterval;
-                EmitBurst(m_Config.BurstCount, emitterWorldPos, emitterWorldRot);
-            }
-        }
+        auto processBursts = [&](float windowStart, float windowEnd) {
+            for (size_t b = 0; b < m_Config.Bursts.size(); ++b) {
+                if (b >= m_BurstRuntime.size()) continue;
+                const auto& burst = m_Config.Bursts[b];
+                auto& runtime = m_BurstRuntime[b];
 
-        // Advanced Multi-Burst list evaluation (Unity Shuriken style)
-        if (m_IsEmitting) {
-            for (auto& burst : m_Config.Bursts) {
-                if (burst.Cycles > 0 && burst.CompletedCycles >= burst.Cycles) continue;
-                if (m_TotalSimulationTime >= burst.NextTriggerTime) {
+                uint32_t budget = 0;
+                const uint32_t MAX_BURST_EVENTS_PER_TICK = 64;
+                while ((burst.Cycles == 0 || runtime.CompletedCycles < burst.Cycles) &&
+                       runtime.NextTriggerTime <= windowEnd &&
+                       budget < MAX_BURST_EVENTS_PER_TICK) {
+                    budget++;
                     uint32_t count = burst.SampleCount();
                     if (count > 0 && (burst.Probability >= 1.0f || VFXRandom::Float(0.0f, 1.0f) <= burst.Probability)) {
                         EmitBurst(count, emitterWorldPos, emitterWorldRot);
                     }
-                    burst.CompletedCycles++;
+                    runtime.CompletedCycles++;
                     if (burst.Interval > 0.0f) {
-                        burst.NextTriggerTime += burst.Interval;
+                        runtime.NextTriggerTime += burst.Interval;
                     } else {
-                        burst.NextTriggerTime = 1e9f;
+                        runtime.NextTriggerTime = std::numeric_limits<float>::infinity();
+                        break;
                     }
                 }
+            }
+        };
+
+        if (isEmittingWindow) {
+            // Continuous particle spawning
+            if (m_Config.EmissionRate > 0.0f) {
+                float activeDt = dt;
+                if (!m_Config.Looping && m_Config.Duration > 0.0f && m_EmitterTime > m_Config.Duration) {
+                    activeDt = std::max(0.0f, m_Config.Duration - prevEmitterTime);
+                }
+                m_SpawnAccumulator += activeDt * m_Config.EmissionRate;
+                uint32_t toSpawn = static_cast<uint32_t>(m_SpawnAccumulator);
+                m_SpawnAccumulator -= static_cast<float>(toSpawn);
+
+                uint32_t spawnBudget = std::min(toSpawn, m_Pool.GetCapacity());
+                for (uint32_t i = 0; i < spawnBudget; ++i) {
+                    SpawnParticle(emitterWorldPos, emitterWorldRot);
+                }
+            }
+
+            // Legacy periodic burst emission
+            if (m_Config.BurstCount > 0 && m_Config.BurstInterval > 0.0f) {
+                m_BurstTimer += dt;
+                if (m_BurstTimer >= m_Config.BurstInterval) {
+                    m_BurstTimer -= m_Config.BurstInterval;
+                    EmitBurst(m_Config.BurstCount, emitterWorldPos, emitterWorldRot);
+                }
+            }
+
+            // Advanced Multi-Burst list evaluation (Unity Shuriken style)
+            if (looped) {
+                processBursts(prevEmitterTime, m_Config.Duration);
+                m_EmitterTime = std::fmod(m_EmitterTime, m_Config.Duration);
+                for (size_t b = 0; b < m_Config.Bursts.size(); ++b) {
+                    m_BurstRuntime[b].CompletedCycles = 0;
+                    m_BurstRuntime[b].NextTriggerTime = m_Config.Bursts[b].Time;
+                }
+                processBursts(0.0f, m_EmitterTime);
+            } else {
+                float effectiveEnd = (!m_Config.Looping && m_Config.Duration > 0.0f) ? std::min(m_EmitterTime, m_Config.Duration) : m_EmitterTime;
+                processBursts(prevEmitterTime, effectiveEnd);
             }
         }
 

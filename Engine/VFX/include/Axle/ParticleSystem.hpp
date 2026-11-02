@@ -8,6 +8,11 @@
 
 namespace Axle {
 
+    struct BurstRuntimeState {
+        uint32_t CompletedCycles = 0;
+        float NextTriggerTime = 0.0f;
+    };
+
     class ParticleSystem {
     public:
         using SubEmitterCallback = std::function<void(SubEmitterTrigger trigger, const std::string& targetName, const glm::vec3& pos, const glm::vec3& vel, const glm::vec4& color, uint32_t count)>;
@@ -37,6 +42,7 @@ namespace Axle {
 
         uint32_t GetActiveParticleCount() const;
         float GetTotalSimulationTime() const { return m_TotalSimulationTime; }
+        float GetEmitterTime() const { return m_EmitterTime; }
         uint64_t GetCollisionCount() const { return m_CollisionCount; }
 
         // Sub-Emitter & Multi-Emitter Child Management
@@ -57,9 +63,11 @@ namespace Axle {
         float m_SpawnAccumulator = 0.0f;
         float m_BurstTimer = 0.0f;
         float m_TotalSimulationTime = 0.0f;
+        float m_EmitterTime = 0.0f;
         uint64_t m_CollisionCount = 0;
         bool m_IsEmitting = true;
 
+        std::vector<BurstRuntimeState> m_BurstRuntime;
         SubEmitterCallback m_SubEmitterCallback;
         std::unordered_map<std::string, std::shared_ptr<ParticleSystem>> m_ChildSystems;
     };

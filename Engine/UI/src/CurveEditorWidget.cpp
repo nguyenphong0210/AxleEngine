@@ -4,11 +4,30 @@
 #include <vector>
 #include <cmath>
 #include <string>
+#include <unordered_map>
 
 namespace Axle {
 
+    namespace {
+        struct CurveWidgetState {
+            int ActiveHandle = -1;
+        };
+
+        struct GradientWidgetState {
+            int SelectedColorKey = -1;
+            int SelectedAlphaKey = -1;
+            bool ActiveTrackIsAlpha = false;
+        };
+
+        static std::unordered_map<ImGuiID, CurveWidgetState> s_CurveStates;
+        static std::unordered_map<ImGuiID, GradientWidgetState> s_GradientStates;
+    }
+
     bool CurveEditorWidget::DrawCurveEditor(const char* label, FloatCurve& curve, float height) {
         bool modified = false;
+
+        ImGuiID widgetId = ImGui::GetID(label);
+        CurveWidgetState& state = s_CurveStates[widgetId];
 
         ImGui::PushID(label);
         ImGui::Text("%s", label);
@@ -46,6 +65,11 @@ namespace Axle {
             curve.SetConstant(1.0f);
             modified = true;
         }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Reset")) {
+            curve.SetLinear(1.0f, 0.0f);
+            modified = true;
+        }
         ImGui::PopStyleVar(2);
 
         float width = ImGui::GetContentRegionAvail().x;
@@ -72,7 +96,6 @@ namespace Axle {
         // Invisible button to capture mouse interaction
         ImGui::InvisibleButton("##CurveCanvas", canvasSize);
         bool isHovered = ImGui::IsItemHovered();
-        bool isActive = ImGui::IsItemActive();
 
         auto ValueToScreen = [&](const glm::vec2& pt) -> ImVec2 {
             float sx = p0.x + std::clamp(pt.x, 0.0f, 1.0f) * canvasSize.x;
@@ -106,35 +129,34 @@ namespace Axle {
         drawList->AddPolyline(polyPoints, numSegments + 1, IM_COL32(60, 200, 255, 255), false, 2.0f);
 
         // Control point handles interaction
-        static int s_ActiveHandle = -1;
         ImVec2 mousePos = ImGui::GetIO().MousePos;
 
         if (ImGui::IsMouseClicked(0) && isHovered) {
-            s_ActiveHandle = -1;
+            state.ActiveHandle = -1;
             auto CheckHandle = [&](const ImVec2& hp, int idx) {
                 float distSq = (hp.x - mousePos.x) * (hp.x - mousePos.x) + (hp.y - mousePos.y) * (hp.y - mousePos.y);
-                if (distSq <= 100.0f) s_ActiveHandle = idx;
+                if (distSq <= 100.0f) state.ActiveHandle = idx;
             };
             CheckHandle(sp0, 0);
-            if (s_ActiveHandle == -1) CheckHandle(sp1, 1);
-            if (s_ActiveHandle == -1) CheckHandle(sp2, 2);
-            if (s_ActiveHandle == -1) CheckHandle(sp3, 3);
+            if (state.ActiveHandle == -1) CheckHandle(sp1, 1);
+            if (state.ActiveHandle == -1) CheckHandle(sp2, 2);
+            if (state.ActiveHandle == -1) CheckHandle(sp3, 3);
         }
 
         if (ImGui::IsMouseReleased(0)) {
-            s_ActiveHandle = -1;
+            state.ActiveHandle = -1;
         }
 
-        if (s_ActiveHandle >= 0 && ImGui::IsMouseDragging(0)) {
+        if (state.ActiveHandle >= 0 && ImGui::IsMouseDragging(0)) {
             glm::vec2 val = ScreenToValue(mousePos);
             curve.Type = CurveType::CubicBezier;
-            if (s_ActiveHandle == 0) {
+            if (state.ActiveHandle == 0) {
                 curve.P0.y = val.y;
-            } else if (s_ActiveHandle == 1) {
+            } else if (state.ActiveHandle == 1) {
                 curve.P1 = val;
-            } else if (s_ActiveHandle == 2) {
+            } else if (state.ActiveHandle == 2) {
                 curve.P2 = val;
-            } else if (s_ActiveHandle == 3) {
+            } else if (state.ActiveHandle == 3) {
                 curve.P3.y = val.y;
             }
             modified = true;
@@ -151,12 +173,40 @@ namespace Axle {
         DrawHandle(sp2, IM_COL32(240, 200, 60, 255), true);
         DrawHandle(sp3, IM_COL32(230, 80, 80, 255), false);
 
+        // Numeric entry row for control points
+        ImGui::PushItemWidth(70.0f);
+        if (ImGui::DragFloat("P0 Y", &curve.P0.y, 0.01f, 0.0f, 1.0f, "%.2f")) {
+            curve.Type = CurveType::CubicBezier;
+            modified = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::DragFloat2("P1 (T,V)", &curve.P1.x, 0.01f, 0.0f, 1.0f, "%.2f")) {
+            curve.P1 = glm::clamp(curve.P1, glm::vec2(0.0f), glm::vec2(1.0f));
+            curve.Type = CurveType::CubicBezier;
+            modified = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::DragFloat2("P2 (T,V)", &curve.P2.x, 0.01f, 0.0f, 1.0f, "%.2f")) {
+            curve.P2 = glm::clamp(curve.P2, glm::vec2(0.0f), glm::vec2(1.0f));
+            curve.Type = CurveType::CubicBezier;
+            modified = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::DragFloat("P3 Y", &curve.P3.y, 0.01f, 0.0f, 1.0f, "%.2f")) {
+            curve.Type = CurveType::CubicBezier;
+            modified = true;
+        }
+        ImGui::PopItemWidth();
+
         ImGui::PopID();
         return modified;
     }
 
     bool CurveEditorWidget::DrawGradientEditor(const char* label, ColorGradient& gradient, float height) {
         bool modified = false;
+
+        ImGuiID widgetId = ImGui::GetID(label);
+        GradientWidgetState& state = s_GradientStates[widgetId];
 
         ImGui::PushID(label);
         ImGui::Text("%s", label);
@@ -167,16 +217,22 @@ namespace Axle {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 2));
         if (ImGui::SmallButton("Flame")) {
             gradient.SetFlamePreset();
+            state.SelectedColorKey = -1;
+            state.SelectedAlphaKey = -1;
             modified = true;
         }
         ImGui::SameLine();
         if (ImGui::SmallButton("Smoke")) {
             gradient.SetSmokePreset();
+            state.SelectedColorKey = -1;
+            state.SelectedAlphaKey = -1;
             modified = true;
         }
         ImGui::SameLine();
         if (ImGui::SmallButton("Sparks")) {
             gradient.SetSparksPreset();
+            state.SelectedColorKey = -1;
+            state.SelectedAlphaKey = -1;
             modified = true;
         }
         ImGui::SameLine();
@@ -192,6 +248,15 @@ namespace Axle {
             gradient.AlphaKeys = { { 0.0f, 1.0f }, { 1.0f, 1.0f } };
             gradient.StartColor = glm::vec4(gradient.ColorKeys.front().Color, 1.0f);
             gradient.EndColor = glm::vec4(gradient.ColorKeys.back().Color, 1.0f);
+            state.SelectedColorKey = -1;
+            state.SelectedAlphaKey = -1;
+            modified = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Reset")) {
+            gradient.SetSimple(glm::vec4(1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.0f));
+            state.SelectedColorKey = -1;
+            state.SelectedAlphaKey = -1;
             modified = true;
         }
         ImGui::PopStyleVar(2);
@@ -199,22 +264,36 @@ namespace Axle {
         float width = ImGui::GetContentRegionAvail().x;
         if (width < 50.0f) width = 50.0f;
 
+        const float alphaTrackHeight = 12.0f;
+        const float rampHeight = height;
+        const float colorTrackHeight = 12.0f;
+        const float totalHeight = alphaTrackHeight + rampHeight + colorTrackHeight;
+
         ImVec2 p0 = ImGui::GetCursorScreenPos();
-        ImVec2 p1 = ImVec2(p0.x + width, p0.y + height);
+        ImVec2 pAlphaEnd = ImVec2(p0.x + width, p0.y + alphaTrackHeight);
+        ImVec2 pRampStart = ImVec2(p0.x, pAlphaEnd.y);
+        ImVec2 pRampEnd = ImVec2(p0.x + width, pRampStart.y + rampHeight);
+        ImVec2 pColorStart = ImVec2(p0.x, pRampEnd.y);
+        ImVec2 pColorEnd = ImVec2(p0.x + width, pColorStart.y + colorTrackHeight);
+
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        // 1. Draw Checkerboard background for alpha transparency indication
+        // 1. Draw Alpha Track Background
+        drawList->AddRectFilled(p0, pAlphaEnd, IM_COL32(30, 32, 38, 255));
+        drawList->AddRect(p0, pAlphaEnd, IM_COL32(50, 55, 65, 255));
+
+        // 2. Draw Checkerboard background for the gradient ramp
         const float checkSize = 6.0f;
-        for (float y = p0.y; y < p1.y; y += checkSize) {
-            for (float x = p0.x; x < p1.x; x += checkSize) {
-                int cx = static_cast<int>((x - p0.x) / checkSize);
-                int cy = static_cast<int>((y - p0.y) / checkSize);
+        for (float y = pRampStart.y; y < pRampEnd.y; y += checkSize) {
+            for (float x = pRampStart.x; x < pRampEnd.x; x += checkSize) {
+                int cx = static_cast<int>((x - pRampStart.x) / checkSize);
+                int cy = static_cast<int>((y - pRampStart.y) / checkSize);
                 ImU32 col = ((cx + cy) % 2 == 0) ? IM_COL32(40, 40, 45, 255) : IM_COL32(60, 60, 68, 255);
-                drawList->AddRectFilled(ImVec2(x, y), ImVec2(std::min(x + checkSize, p1.x), std::min(y + checkSize, p1.y)), col);
+                drawList->AddRectFilled(ImVec2(x, y), ImVec2(std::min(x + checkSize, pRampEnd.x), std::min(y + checkSize, pRampEnd.y)), col);
             }
         }
 
-        // 2. Draw gradient ramp slices
+        // 3. Draw gradient ramp slices
         const int numSlices = 64;
         float sliceWidth = width / static_cast<float>(numSlices);
         for (int i = 0; i < numSlices; ++i) {
@@ -226,82 +305,187 @@ namespace Axle {
             ImU32 col0 = IM_COL32(static_cast<int>(c0.r * 255), static_cast<int>(c0.g * 255), static_cast<int>(c0.b * 255), static_cast<int>(c0.a * 255));
             ImU32 col1 = IM_COL32(static_cast<int>(c1.r * 255), static_cast<int>(c1.g * 255), static_cast<int>(c1.b * 255), static_cast<int>(c1.a * 255));
 
-            ImVec2 sp0 = ImVec2(p0.x + i * sliceWidth, p0.y);
-            ImVec2 sp1 = ImVec2(p0.x + (i + 1) * sliceWidth, p1.y);
+            ImVec2 sp0 = ImVec2(pRampStart.x + i * sliceWidth, pRampStart.y);
+            ImVec2 sp1 = ImVec2(pRampStart.x + (i + 1) * sliceWidth, pRampEnd.y);
 
             drawList->AddRectFilledMultiColor(sp0, sp1, col0, col1, col1, col0);
         }
+        drawList->AddRect(pRampStart, pRampEnd, IM_COL32(80, 85, 95, 255), 1.0f);
 
-        // Border
-        drawList->AddRect(p0, p1, IM_COL32(80, 85, 95, 255), 2.0f);
+        // 4. Draw Color Track Background
+        drawList->AddRectFilled(pColorStart, pColorEnd, IM_COL32(30, 32, 38, 255));
+        drawList->AddRect(pColorStart, pColorEnd, IM_COL32(50, 55, 65, 255));
 
-        // Invisible button for interaction
-        ImGui::InvisibleButton("##GradientRamp", ImVec2(width, height + 16.0f));
-        bool isHovered = ImGui::IsItemHovered();
+        // 5. Draw Alpha Markers (downward pointing triangles in alpha track)
+        for (size_t k = 0; k < gradient.AlphaKeys.size(); ++k) {
+            float kx = p0.x + gradient.AlphaKeys[k].Time * width;
+            ImVec2 tip = ImVec2(kx, pRampStart.y);
+            ImVec2 tl = ImVec2(kx - 5.0f, p0.y + 1.0f);
+            ImVec2 tr = ImVec2(kx + 5.0f, p0.y + 1.0f);
 
-        static int s_SelectedColorKey = -1;
-        ImVec2 mousePos = ImGui::GetIO().MousePos;
+            float a = gradient.AlphaKeys[k].Alpha;
+            int gray = static_cast<int>(a * 255.0f);
+            ImU32 acol = IM_COL32(gray, gray, gray, 255);
 
-        // Key markers
-        float markerY = p1.y + 4.0f;
+            drawList->AddTriangleFilled(tip, tl, tr, acol);
+            bool isSelected = state.ActiveTrackIsAlpha && (state.SelectedAlphaKey == static_cast<int>(k));
+            drawList->AddTriangle(tip, tl, tr, isSelected ? IM_COL32(255, 220, 50, 255) : IM_COL32(0, 0, 0, 220), isSelected ? 1.5f : 1.0f);
+        }
+
+        // 6. Draw Color Markers (upward pointing triangles in color track)
         for (size_t k = 0; k < gradient.ColorKeys.size(); ++k) {
             float kx = p0.x + gradient.ColorKeys[k].Time * width;
-            ImVec2 tip = ImVec2(kx, p1.y);
-            ImVec2 bl = ImVec2(kx - 5.0f, markerY + 8.0f);
-            ImVec2 br = ImVec2(kx + 5.0f, markerY + 8.0f);
+            ImVec2 tip = ImVec2(kx, pRampEnd.y);
+            ImVec2 bl = ImVec2(kx - 5.0f, pColorEnd.y - 1.0f);
+            ImVec2 br = ImVec2(kx + 5.0f, pColorEnd.y - 1.0f);
 
             const auto& rgb = gradient.ColorKeys[k].Color;
             ImU32 kcol = IM_COL32(static_cast<int>(rgb.r * 255), static_cast<int>(rgb.g * 255), static_cast<int>(rgb.b * 255), 255);
 
             drawList->AddTriangleFilled(tip, bl, br, kcol);
-            drawList->AddTriangle(tip, bl, br, (s_SelectedColorKey == static_cast<int>(k)) ? IM_COL32(255, 255, 255, 255) : IM_COL32(0, 0, 0, 200), 1.2f);
+            bool isSelected = !state.ActiveTrackIsAlpha && (state.SelectedColorKey == static_cast<int>(k));
+            drawList->AddTriangle(tip, bl, br, isSelected ? IM_COL32(255, 255, 255, 255) : IM_COL32(0, 0, 0, 220), isSelected ? 1.5f : 1.0f);
         }
 
-        // Handle clicking / selecting keys
+        // Invisible button capturing the whole widget area
+        ImGui::InvisibleButton("##GradientWidget", ImVec2(width, totalHeight));
+        bool isHovered = ImGui::IsItemHovered();
+        ImVec2 mousePos = ImGui::GetIO().MousePos;
+
+        // Interaction: Selecting Keys
         if (ImGui::IsMouseClicked(0) && isHovered) {
-            s_SelectedColorKey = -1;
-            for (size_t k = 0; k < gradient.ColorKeys.size(); ++k) {
-                float kx = p0.x + gradient.ColorKeys[k].Time * width;
-                if (std::abs(mousePos.x - kx) <= 7.0f && mousePos.y >= p0.y && mousePos.y <= markerY + 12.0f) {
-                    s_SelectedColorKey = static_cast<int>(k);
-                    break;
+            if (mousePos.y <= pRampStart.y + (rampHeight * 0.4f)) {
+                // Alpha track or upper ramp clicked
+                state.ActiveTrackIsAlpha = true;
+                state.SelectedAlphaKey = -1;
+                for (size_t k = 0; k < gradient.AlphaKeys.size(); ++k) {
+                    float kx = p0.x + gradient.AlphaKeys[k].Time * width;
+                    if (std::abs(mousePos.x - kx) <= 8.0f) {
+                        state.SelectedAlphaKey = static_cast<int>(k);
+                        break;
+                    }
+                }
+            } else {
+                // Color track or lower ramp clicked
+                state.ActiveTrackIsAlpha = false;
+                state.SelectedColorKey = -1;
+                for (size_t k = 0; k < gradient.ColorKeys.size(); ++k) {
+                    float kx = p0.x + gradient.ColorKeys[k].Time * width;
+                    if (std::abs(mousePos.x - kx) <= 8.0f) {
+                        state.SelectedColorKey = static_cast<int>(k);
+                        break;
+                    }
                 }
             }
         }
 
-        // Dragging key
-        if (s_SelectedColorKey >= 0 && s_SelectedColorKey < static_cast<int>(gradient.ColorKeys.size()) && ImGui::IsMouseDragging(0)) {
+        // Interaction: Dragging
+        if (ImGui::IsMouseDragging(0)) {
             float newT = std::clamp((mousePos.x - p0.x) / width, 0.0f, 1.0f);
-            gradient.ColorKeys[s_SelectedColorKey].Time = newT;
-            modified = true;
+            if (state.ActiveTrackIsAlpha && state.SelectedAlphaKey >= 0 && state.SelectedAlphaKey < static_cast<int>(gradient.AlphaKeys.size())) {
+                gradient.AlphaKeys[state.SelectedAlphaKey].Time = newT;
+                modified = true;
+            } else if (!state.ActiveTrackIsAlpha && state.SelectedColorKey >= 0 && state.SelectedColorKey < static_cast<int>(gradient.ColorKeys.size())) {
+                gradient.ColorKeys[state.SelectedColorKey].Time = newT;
+                modified = true;
+            }
         }
 
-        // Double click to add key
+        // Interaction: Double click to add key
         if (ImGui::IsMouseDoubleClicked(0) && isHovered) {
             float newT = std::clamp((mousePos.x - p0.x) / width, 0.0f, 1.0f);
-            glm::vec4 sampleCol = gradient.Evaluate(newT);
-            gradient.ColorKeys.push_back({ newT, glm::vec3(sampleCol) });
-            std::sort(gradient.ColorKeys.begin(), gradient.ColorKeys.end(), [](const auto& a, const auto& b) {
-                return a.Time < b.Time;
-            });
-            modified = true;
+            if (mousePos.y <= pRampStart.y + (rampHeight * 0.4f)) {
+                // Add Alpha Key
+                float sampleA = gradient.Evaluate(newT).a;
+                gradient.AddAlphaKey(newT, sampleA);
+                for (size_t k = 0; k < gradient.AlphaKeys.size(); ++k) {
+                    if (std::abs(gradient.AlphaKeys[k].Time - newT) < 1e-4f) {
+                        state.SelectedAlphaKey = static_cast<int>(k);
+                        break;
+                    }
+                }
+                state.ActiveTrackIsAlpha = true;
+                modified = true;
+            } else {
+                // Add Color Key
+                glm::vec3 sampleCol = glm::vec3(gradient.Evaluate(newT));
+                gradient.AddColorKey(newT, sampleCol);
+                for (size_t k = 0; k < gradient.ColorKeys.size(); ++k) {
+                    if (std::abs(gradient.ColorKeys[k].Time - newT) < 1e-4f) {
+                        state.SelectedColorKey = static_cast<int>(k);
+                        break;
+                    }
+                }
+                state.ActiveTrackIsAlpha = false;
+                modified = true;
+            }
         }
 
-        // Edit selected color key
-        if (s_SelectedColorKey >= 0 && s_SelectedColorKey < static_cast<int>(gradient.ColorKeys.size())) {
+        // Re-sort keys on mouse release if dragging was done
+        if (ImGui::IsMouseReleased(0) && modified) {
+            if (state.ActiveTrackIsAlpha && state.SelectedAlphaKey >= 0 && state.SelectedAlphaKey < static_cast<int>(gradient.AlphaKeys.size())) {
+                float curT = gradient.AlphaKeys[state.SelectedAlphaKey].Time;
+                float curA = gradient.AlphaKeys[state.SelectedAlphaKey].Alpha;
+                std::stable_sort(gradient.AlphaKeys.begin(), gradient.AlphaKeys.end(), [](const auto& a, const auto& b) {
+                    return a.Time < b.Time;
+                });
+                for (size_t k = 0; k < gradient.AlphaKeys.size(); ++k) {
+                    if (gradient.AlphaKeys[k].Time == curT && gradient.AlphaKeys[k].Alpha == curA) {
+                        state.SelectedAlphaKey = static_cast<int>(k);
+                        break;
+                    }
+                }
+            } else if (!state.ActiveTrackIsAlpha && state.SelectedColorKey >= 0 && state.SelectedColorKey < static_cast<int>(gradient.ColorKeys.size())) {
+                float curT = gradient.ColorKeys[state.SelectedColorKey].Time;
+                glm::vec3 curC = gradient.ColorKeys[state.SelectedColorKey].Color;
+                std::stable_sort(gradient.ColorKeys.begin(), gradient.ColorKeys.end(), [](const auto& a, const auto& b) {
+                    return a.Time < b.Time;
+                });
+                for (size_t k = 0; k < gradient.ColorKeys.size(); ++k) {
+                    if (gradient.ColorKeys[k].Time == curT && gradient.ColorKeys[k].Color == curC) {
+                        state.SelectedColorKey = static_cast<int>(k);
+                        break;
+                    }
+                }
+            }
+            if (!gradient.ColorKeys.empty()) {
+                gradient.StartColor = glm::vec4(gradient.ColorKeys.front().Color, gradient.AlphaKeys.empty() ? 1.0f : gradient.AlphaKeys.front().Alpha);
+                gradient.EndColor = glm::vec4(gradient.ColorKeys.back().Color, gradient.AlphaKeys.empty() ? 0.0f : gradient.AlphaKeys.back().Alpha);
+            }
+        }
+
+        // Key Inspector & Numerical Controls
+        if (state.ActiveTrackIsAlpha && state.SelectedAlphaKey >= 0 && state.SelectedAlphaKey < static_cast<int>(gradient.AlphaKeys.size())) {
+            ImGui::Spacing();
+            ImGui::PushItemWidth(140.0f);
+            if (ImGui::SliderFloat("Alpha Value", &gradient.AlphaKeys[state.SelectedAlphaKey].Alpha, 0.0f, 1.0f, "%.2f")) {
+                modified = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SliderFloat("Alpha Time", &gradient.AlphaKeys[state.SelectedAlphaKey].Time, 0.0f, 1.0f, "%.2f")) {
+                modified = true;
+            }
+            ImGui::SameLine();
+            if (gradient.AlphaKeys.size() > 1 && ImGui::SmallButton("Delete Alpha Key")) {
+                gradient.AlphaKeys.erase(gradient.AlphaKeys.begin() + state.SelectedAlphaKey);
+                state.SelectedAlphaKey = -1;
+                modified = true;
+            }
+            ImGui::PopItemWidth();
+        } else if (!state.ActiveTrackIsAlpha && state.SelectedColorKey >= 0 && state.SelectedColorKey < static_cast<int>(gradient.ColorKeys.size())) {
             ImGui::Spacing();
             ImGui::PushItemWidth(180.0f);
-            if (ImGui::ColorEdit3("Key Color", &gradient.ColorKeys[s_SelectedColorKey].Color.r)) {
+            if (ImGui::ColorEdit3("Key Color", &gradient.ColorKeys[state.SelectedColorKey].Color.r)) {
                 modified = true;
             }
             ImGui::SameLine();
-            if (ImGui::SliderFloat("Key Time", &gradient.ColorKeys[s_SelectedColorKey].Time, 0.0f, 1.0f, "%.2f")) {
+            if (ImGui::SliderFloat("Key Time", &gradient.ColorKeys[state.SelectedColorKey].Time, 0.0f, 1.0f, "%.2f")) {
                 modified = true;
             }
             ImGui::SameLine();
-            if (gradient.ColorKeys.size() > 1 && ImGui::SmallButton("Delete Key")) {
-                gradient.ColorKeys.erase(gradient.ColorKeys.begin() + s_SelectedColorKey);
-                s_SelectedColorKey = -1;
+            if (gradient.ColorKeys.size() > 1 && ImGui::SmallButton("Delete Color Key")) {
+                gradient.ColorKeys.erase(gradient.ColorKeys.begin() + state.SelectedColorKey);
+                state.SelectedColorKey = -1;
                 modified = true;
             }
             ImGui::PopItemWidth();

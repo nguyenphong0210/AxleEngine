@@ -119,8 +119,8 @@ namespace Axle {
         }
         void SetLinear(float start, float end) {
             Type = CurveType::Linear;
-            P0 = { 0.0f, start }; P1 = { 0.33f, glm::mix(start, end, 0.33f) };
-            P2 = { 0.66f, glm::mix(start, end, 0.66f) }; P3 = { 1.0f, end };
+            P0 = { 0.0f, start }; P1 = { 1.0f / 3.0f, glm::mix(start, end, 1.0f / 3.0f) };
+            P2 = { 2.0f / 3.0f, glm::mix(start, end, 2.0f / 3.0f) }; P3 = { 1.0f, end };
         }
         void SetEaseIn(float start, float end) {
             Type = CurveType::EaseIn;
@@ -156,6 +156,7 @@ namespace Axle {
         float Evaluate(float t) const {
             t = std::clamp(t, 0.0f, 1.0f);
             if (Type == CurveType::Constant) return P0.y;
+            if (Type == CurveType::Linear) return glm::mix(P0.y, P3.y, t);
             if (!Keyframes.empty()) {
                 if (t <= Keyframes.front().Time) return Keyframes.front().Value;
                 if (t >= Keyframes.back().Time) return Keyframes.back().Value;

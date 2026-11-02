@@ -548,7 +548,9 @@ namespace Axle {
                     ss << "      Stack_" << i << "_Looping: " << (s.Config.Looping ? "true" : "false") << "\n";
                 }
                 // Canonical versioned payload supersedes the legacy per-field adapter above.
-                ss << "      EffectData: " << EncodeVFXSceneData(ParticleEffectSerializer::Serialize(pec.GetEffectDefinition())) << "\n";
+                ss << (pec.AssetPath.empty() ? "      EffectData: " : "      EffectFallbackData: ")
+                   << EncodeVFXSceneData(ParticleEffectSerializer::Serialize(pec.GetEffectDefinition()))
+                   << "\n";
             }
 
             // VehicleVFXComponent
@@ -651,6 +653,7 @@ namespace Axle {
         std::vector<PendingHierarchy> pendingHierarchy;
 
         Entity currentEntity{};
+        bool vfxReferenceLoaded = false;
         enum class ComponentSection {
             None,
             Tag,
@@ -809,6 +812,7 @@ namespace Axle {
             } else if (trimmed == "ParticleEmitterComponent:") {
                 flushCustomSection();
                 currentSection = ComponentSection::ParticleEmitter;
+                vfxReferenceLoaded = false;
                 if (!currentEntity.HasComponent<ParticleEmitterComponent>()) {
                     currentEntity.AddComponent<ParticleEmitterComponent>();
                 }
@@ -1547,16 +1551,22 @@ namespace Axle {
                             currentEntity.AddComponent<ParticleEmitterComponent>();
                         }
                         auto& pec = currentEntity.GetComponent<ParticleEmitterComponent>();
-                        if (trimmed.rfind("EffectData:", 0) == 0) {
+                        if (vfxReferenceLoaded && trimmed.rfind("Active:", 0) != 0 &&
+                            trimmed.rfind("AutoPlay:", 0) != 0 && trimmed.rfind("Visible:", 0) != 0)
+                            break;
+                        if (trimmed.rfind("EffectData:", 0) == 0 ||
+                            trimmed.rfind("EffectFallbackData:", 0) == 0) {
                             std::string text;
                             ParticleEffectDefinition effect;
-                            if (!DecodeVFXSceneData(Trim(trimmed.substr(11)), text) ||
-                                !ParticleEffectSerializer::Deserialize(text, effect)) return false;
+                            const auto colon = trimmed.find(':');
+                            if (!DecodeVFXSceneData(Trim(trimmed.substr(colon + 1)), text) ||
+                                !ParticleEffectSerializer::Deserialize(text, effect))
+                                return false;
                             pec.SetEffectDefinition(effect);
                         } else if (trimmed.rfind("AssetPath:", 0) == 0) {
                             pec.AssetPath = Trim(trimmed.substr(10));
                             if (!pec.AssetPath.empty()) {
-                                pec.LoadFromAsset(pec.AssetPath);
+                                vfxReferenceLoaded = pec.LoadFromAsset(pec.AssetPath);
                             }
                         } else if (trimmed.rfind("EmitterStackCount:", 0) == 0) {
                             try {
@@ -1710,7 +1720,8 @@ namespace Axle {
                             try { pec.Config.CurlNoise.Frequency = std::stof(Trim(trimmed.substr(19))); } catch (...) {}
                         } else if (trimmed.rfind("CollisionEnabled:", 0) == 0) {
                             pec.Config.Collision.Enabled = (Trim(trimmed.substr(17)) == "true");
-                        } else if (trimmed.rfind("CollisionRestitution:", 0) == 0 || trimmed.rfind("CollisionBounciness:", 0) == 0) {
+                        } else if (trimmed.rfind("CollisionRestitution:", 0) == 0 ||
+                                   trimmed.rfind("CollisionBounciness:", 0) == 0) {
                             try { pec.Config.Collision.Restitution = std::stof(Trim(trimmed.substr(trimmed.find(':') + 1))); } catch (...) {}
                         } else if (trimmed.rfind("CollisionFriction:", 0) == 0) {
                             try { pec.Config.Collision.Friction = std::stof(Trim(trimmed.substr(18))); } catch (...) {}

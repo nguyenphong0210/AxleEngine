@@ -1,10 +1,12 @@
 #include <Axle/ParticleEffectSerializer.hpp>
 #include <Axle/AssetDSL.hpp>
+#include "ParticleAssetFileIO.hpp"
 #include <fstream>
 #include <sstream>
 #include <filesystem>
 #include <chrono>
 #include <cmath>
+#include <algorithm>
 
 namespace Axle {
 
@@ -96,7 +98,7 @@ namespace Axle {
     }
 
     void ParticleEffectSerializer::WriteEmitterConfig(AssetBlock& block, const ParticleEmitterConfig& config) {
-        block.SetString("name", config.Name.empty() ? "Emitter" : config.Name);
+        block.SetString("name", config.Name);
         block.SetUInt("maxParticles", config.MaxParticles);
         block.SetFloat("emissionRate", config.EmissionRate);
         block.SetFloat("duration", config.Duration);
@@ -107,10 +109,9 @@ namespace Axle {
             block.SetString("material", config.MaterialPath);
         }
 
-        if (config.BurstCount > 0) {
-            block.SetUInt("burstCount", config.BurstCount);
-            block.SetFloat("burstInterval", config.BurstInterval);
-        }
+        block.SetUInt("burstCount", config.BurstCount);
+        block.SetFloat("burstInterval", config.BurstInterval);
+        block.SetString("materialAsset", std::to_string(config.MaterialAsset));
 
         SerializeFloatRange(block, "lifetime", config.Lifetime);
         SerializeFloatRange(block, "speed", config.InitialSpeed);
@@ -123,23 +124,13 @@ namespace Axle {
         block.SetFloat("drag", config.Drag);
 
         block.SetString("shape", ShapeTypeToString(config.Shape.Type));
-        if (config.Shape.Type == ParticleEmitterShapeType::Cone) {
-            block.SetFloat("coneAngle", config.Shape.ConeAngle);
-            block.SetFloat("radius", config.Shape.Radius);
-        } else if (config.Shape.Type == ParticleEmitterShapeType::Sphere || config.Shape.Type == ParticleEmitterShapeType::Hemisphere || config.Shape.Type == ParticleEmitterShapeType::Circle) {
-            block.SetFloat("radius", config.Shape.Radius);
-            block.SetBool("surfaceOnly", config.Shape.SurfaceOnly);
-        } else if (config.Shape.Type == ParticleEmitterShapeType::Box) {
-            block.SetVec3("boxExtents", config.Shape.BoxExtents);
-            block.SetBool("surfaceOnly", config.Shape.SurfaceOnly);
-        } else if (config.Shape.Type == ParticleEmitterShapeType::Line) {
-            block.SetFloat("lineLength", config.Shape.LineLength);
-        } else if (config.Shape.Type == ParticleEmitterShapeType::MeshSurface) {
-            block.SetString("meshPath", config.Shape.MeshPath);
-        }
-        if (config.Shape.Direction != glm::vec3(0.0f, 1.0f, 0.0f)) {
-            block.SetVec3("direction", config.Shape.Direction);
-        }
+        block.SetFloat("coneAngle", config.Shape.ConeAngle);
+        block.SetFloat("radius", config.Shape.Radius);
+        block.SetBool("surfaceOnly", config.Shape.SurfaceOnly);
+        block.SetVec3("boxExtents", config.Shape.BoxExtents);
+        block.SetFloat("lineLength", config.Shape.LineLength);
+        block.SetString("meshPath", config.Shape.MeshPath);
+        block.SetVec3("direction", config.Shape.Direction);
 
         SerializeFloatRange(block, "startSize", config.StartSize);
         SerializeFloatRange(block, "endSize", config.EndSize);
@@ -156,10 +147,26 @@ namespace Axle {
         block.SetVec4("alphaCurveBezier", glm::vec4(config.AlphaOverLifetime.P0.y, config.AlphaOverLifetime.P1.y, config.AlphaOverLifetime.P2.y, config.AlphaOverLifetime.P3.y));
         block.SetInt("alphaCurveType", static_cast<int32_t>(config.AlphaOverLifetime.Type));
 
+        auto writeCurve = [&](const char *prefix, const FloatCurve &curve) {
+            const auto name = std::string(prefix);
+            block.SetVec4(name + "P01", glm::vec4(curve.P0, curve.P1));
+            block.SetVec4(name + "P23", glm::vec4(curve.P2, curve.P3));
+            for (const auto &key : curve.Keyframes) {
+                auto child = std::make_shared<AssetBlock>();
+                child->Type = name + "Key";
+                child->SetFloat("time", key.Time);
+                child->SetFloat("value", key.Value);
+                block.Children.push_back(child);
+            }
+        };
+        writeCurve("SizeCurve", config.SizeOverLifetime);
+        writeCurve("SpeedCurve", config.SpeedOverLifetime);
+        writeCurve("AlphaCurve", config.AlphaOverLifetime);
+
         block.SetVec4("startColor", config.ColorOverLifetime.StartColor);
         block.SetVec4("endColor", config.ColorOverLifetime.EndColor);
 
-        if (config.TextureRows > 1 || config.TextureCols > 1) {
+        { // Single-cell animation settings are authored values too.
             block.SetUInt("textureRows", config.TextureRows);
             block.SetUInt("textureCols", config.TextureCols);
             block.SetUInt("totalFrames", config.TotalFrames);
@@ -171,75 +178,73 @@ namespace Axle {
         block.SetString("simulationSpace", SimSpaceToString(config.SimulationSpace));
         block.SetString("orientation", OrientationToString(config.Orientation));
 
-        if (config.LightingEnabled) {
-            block.SetBool("lightingEnabled", true);
-            block.SetFloat("wrapLighting", config.WrapLighting);
-            block.SetFloat("scatteringFactor", config.ScatteringFactor);
-            block.SetFloat("normalMapStrength", config.NormalMapStrength);
-        }
-
-        if (!config.NearFadeEnabled) {
-            block.SetBool("nearFadeEnabled", false);
-        } else {
-            block.SetFloat("nearFadeStart", config.NearFadeStart);
-            block.SetFloat("nearFadeEnd", config.NearFadeEnd);
-        }
-
-        if (config.FarFadeEnabled) {
-            block.SetBool("farFadeEnabled", true);
-            block.SetFloat("farFadeStart", config.FarFadeStart);
-            block.SetFloat("farFadeEnd", config.FarFadeEnd);
-        }
+        block.SetBool("lightingEnabled", config.LightingEnabled);
+        block.SetFloat("wrapLighting", config.WrapLighting);
+        block.SetFloat("scatteringFactor", config.ScatteringFactor);
+        block.SetFloat("normalMapStrength", config.NormalMapStrength);
+        block.SetBool("nearFadeEnabled", config.NearFadeEnabled);
+        block.SetFloat("nearFadeStart", config.NearFadeStart);
+        block.SetFloat("nearFadeEnd", config.NearFadeEnd);
+        block.SetBool("farFadeEnabled", config.FarFadeEnabled);
+        block.SetFloat("farFadeStart", config.FarFadeStart);
+        block.SetFloat("farFadeEnd", config.FarFadeEnd);
         block.SetFloat("softnessDistance", config.SoftnessDistance);
-
-        if (config.CurlNoise.Enabled) {
-            block.SetBool("curlNoiseEnabled", true);
-            block.SetFloat("curlNoiseFrequency", config.CurlNoise.Frequency);
-            block.SetFloat("curlNoiseStrength", config.CurlNoise.Strength);
-            block.SetUInt("curlNoiseOctaves", config.CurlNoise.Octaves);
+        block.SetBool("curlNoiseEnabled", config.CurlNoise.Enabled);
+        block.SetFloat("curlNoiseFrequency", config.CurlNoise.Frequency);
+        block.SetFloat("curlNoiseStrength", config.CurlNoise.Strength);
+        block.SetUInt("curlNoiseOctaves", config.CurlNoise.Octaves);
+        block.SetFloat("curlNoiseLacunarity", config.CurlNoise.Lacunarity);
+        block.SetFloat("curlNoisePersistence", config.CurlNoise.Persistence);
+        block.SetVec3("curlNoiseScroll", config.CurlNoise.ScrollSpeed);
+        block.SetVec3("wind", config.Wind);
+        block.SetFloat("windInfluence", config.WindInfluence);
+        block.SetFloat("buoyancy", config.Buoyancy);
+        block.SetBool("collisionEnabled", config.Collision.Enabled);
+        block.SetInt("collisionMode", static_cast<int32_t>(config.Collision.CollisionMode));
+        block.SetFloat("collisionRestitution", config.Collision.Restitution);
+        block.SetFloat("collisionFriction", config.Collision.Friction);
+        block.SetBool("killOnCollision", config.Collision.KillOnCollision);
+        block.SetFloat("minBounceSpeed", config.Collision.MinBounceSpeed);
+        block.SetFloat("particleRadius", config.Collision.ParticleRadius);
+        block.SetFloat("floorHeight", config.Collision.FloorHeight);
+        block.SetBool("floorKill", config.Collision.FloorKill);
+        for (const auto &plane : config.Collision.Planes) {
+            auto child = std::make_shared<AssetBlock>();
+            child->Type = "CollisionPlane";
+            child->SetVec3("normal", plane.Normal);
+            child->SetFloat("distance", plane.Distance);
+            child->SetFloat("restitution", plane.Restitution);
+            child->SetFloat("friction", plane.Friction);
+            child->SetBool("kill", plane.KillOnCollision);
+            block.Children.push_back(child);
         }
-
-        if (config.Wind != glm::vec3(0.0f)) {
-            block.SetVec3("wind", config.Wind);
-            block.SetFloat("windInfluence", config.WindInfluence);
+        for (const auto &box : config.Collision.Boxes) {
+            auto child = std::make_shared<AssetBlock>();
+            child->Type = "CollisionBox";
+            child->SetVec3("min", box.Min);
+            child->SetVec3("max", box.Max);
+            child->SetBool("inside", box.CollideInside);
+            child->SetFloat("restitution", box.Restitution);
+            child->SetFloat("friction", box.Friction);
+            child->SetBool("kill", box.KillOnCollision);
+            block.Children.push_back(child);
         }
-        if (config.Buoyancy != 0.0f) {
-            block.SetFloat("buoyancy", config.Buoyancy);
-        }
-
-        if (config.Collision.Enabled) {
-            block.SetBool("collisionEnabled", true);
-            block.SetInt("collisionMode", static_cast<int32_t>(config.Collision.CollisionMode));
-            block.SetFloat("collisionRestitution", config.Collision.Restitution);
-            block.SetFloat("collisionFriction", config.Collision.Friction);
-            block.SetBool("killOnCollision", config.Collision.KillOnCollision);
-            block.SetFloat("minBounceSpeed", config.Collision.MinBounceSpeed);
-            block.SetFloat("particleRadius", config.Collision.ParticleRadius);
-            block.SetFloat("floorHeight", config.Collision.FloorHeight);
-            block.SetBool("floorKill", config.Collision.FloorKill);
-
-            for (const auto& plane : config.Collision.Planes) {
-                auto pBlock = std::make_shared<AssetBlock>();
-                pBlock->Type = "CollisionPlane";
-                pBlock->SetVec3("normal", plane.Normal);
-                pBlock->SetFloat("distance", plane.Distance);
-                pBlock->SetFloat("restitution", plane.Restitution);
-                pBlock->SetFloat("friction", plane.Friction);
-                pBlock->SetBool("kill", plane.KillOnCollision);
-                block.Children.push_back(pBlock);
-            }
-
-            for (const auto& box : config.Collision.Boxes) {
-                auto bBlock = std::make_shared<AssetBlock>();
-                bBlock->Type = "CollisionBox";
-                bBlock->SetVec3("min", box.Min);
-                bBlock->SetVec3("max", box.Max);
-                bBlock->SetBool("inside", box.CollideInside);
-                bBlock->SetFloat("restitution", box.Restitution);
-                bBlock->SetFloat("friction", box.Friction);
-                bBlock->SetBool("kill", box.KillOnCollision);
-                block.Children.push_back(bBlock);
-            }
+        for (const auto &field : config.ForceFields) {
+            auto child = std::make_shared<AssetBlock>();
+            child->Type = "ForceField";
+            child->SetInt("type", static_cast<int>(field.Type));
+            child->SetInt("falloff", static_cast<int>(field.Falloff));
+            child->SetVec3("position", field.Position);
+            child->SetVec3("direction", field.Direction);
+            child->SetFloat("strength", field.Strength);
+            child->SetFloat("radius", field.Radius);
+            child->SetFloat("falloffExponent", field.FalloffExponent);
+            child->SetFloat("suction", field.RadialSuction);
+            child->SetFloat("lift", field.AxialLift);
+            child->SetFloat("windInfluence", field.WindInfluence);
+            child->SetFloat("gustFrequency", field.GustFrequency);
+            child->SetFloat("gustAmplitude", field.GustAmplitude);
+            block.Children.push_back(child);
         }
 
         // Bursts child blocks
@@ -295,6 +300,13 @@ namespace Axle {
         outConfig.Looping = block.GetBool("looping", outConfig.Looping);
         outConfig.PlayOnAwake = block.GetBool("playOnAwake", outConfig.PlayOnAwake);
         outConfig.MaterialPath = block.GetString("material", outConfig.MaterialPath);
+        if (block.HasProperty("materialAsset")) {
+            try {
+                outConfig.MaterialAsset = std::stoull(block.GetString("materialAsset", "0"));
+            } catch (const std::exception &) {
+                return false;
+            }
+        }
 
         outConfig.BurstCount = block.GetUInt("burstCount", outConfig.BurstCount);
         outConfig.BurstInterval = block.GetFloat("burstInterval", outConfig.BurstInterval);
@@ -360,6 +372,25 @@ namespace Axle {
             }
         }
 
+        auto readCurve = [&](const char *prefix, FloatCurve &curve) {
+            const auto name = std::string(prefix);
+            const auto a = block.GetVec4(name + "P01", glm::vec4(curve.P0, curve.P1));
+            const auto b = block.GetVec4(name + "P23", glm::vec4(curve.P2, curve.P3));
+            curve.P0 = {a.x, a.y};
+            curve.P1 = {a.z, a.w};
+            curve.P2 = {b.x, b.y};
+            curve.P3 = {b.z, b.w};
+            curve.Keyframes.clear();
+            for (const auto &child : block.Children)
+                if (child && child->Type == name + "Key")
+                    curve.Keyframes.push_back({child->GetFloat("time", 0), child->GetFloat("value", 1)});
+            std::stable_sort(curve.Keyframes.begin(), curve.Keyframes.end(),
+                             [](const auto &x, const auto &y) { return x.Time < y.Time; });
+        };
+        readCurve("SizeCurve", outConfig.SizeOverLifetime);
+        readCurve("SpeedCurve", outConfig.SpeedOverLifetime);
+        readCurve("AlphaCurve", outConfig.AlphaOverLifetime);
+
         if (block.HasProperty("startColor")) {
             outConfig.ColorOverLifetime.StartColor = block.GetVec4("startColor", outConfig.ColorOverLifetime.StartColor);
         }
@@ -400,6 +431,11 @@ namespace Axle {
         outConfig.CurlNoise.Frequency = block.GetFloat("curlNoiseFrequency", outConfig.CurlNoise.Frequency);
         outConfig.CurlNoise.Strength = block.GetFloat("curlNoiseStrength", outConfig.CurlNoise.Strength);
         outConfig.CurlNoise.Octaves = block.GetUInt("curlNoiseOctaves", outConfig.CurlNoise.Octaves);
+        outConfig.CurlNoise.Lacunarity =
+            block.GetFloat("curlNoiseLacunarity", outConfig.CurlNoise.Lacunarity);
+        outConfig.CurlNoise.Persistence =
+            block.GetFloat("curlNoisePersistence", outConfig.CurlNoise.Persistence);
+        outConfig.CurlNoise.ScrollSpeed = block.GetVec3("curlNoiseScroll", outConfig.CurlNoise.ScrollSpeed);
 
         outConfig.Wind = block.GetVec3("wind", outConfig.Wind);
         outConfig.WindInfluence = block.GetFloat("windInfluence", outConfig.WindInfluence);
@@ -421,6 +457,7 @@ namespace Axle {
 
         // Clear child collections before appending
         outConfig.Bursts.clear();
+        outConfig.ForceFields.clear();
         outConfig.SubEmitters.clear();
         outConfig.ColorOverLifetime.ColorKeys.clear();
         outConfig.ColorOverLifetime.AlphaKeys.clear();
@@ -436,6 +473,21 @@ namespace Axle {
                 b.Probability = child->GetFloat("probability", 1.0f);
                 b.Reset();
                 outConfig.Bursts.push_back(b);
+            } else if (child->Type == "ForceField") {
+                ParticleForceField field;
+                field.Type = static_cast<ForceFieldType>(child->GetInt("type", 0));
+                field.Falloff = static_cast<ForceFieldFalloff>(child->GetInt("falloff", 1));
+                field.Position = child->GetVec3("position", field.Position);
+                field.Direction = child->GetVec3("direction", field.Direction);
+                field.Strength = child->GetFloat("strength", field.Strength);
+                field.Radius = child->GetFloat("radius", field.Radius);
+                field.FalloffExponent = child->GetFloat("falloffExponent", field.FalloffExponent);
+                field.RadialSuction = child->GetFloat("suction", field.RadialSuction);
+                field.AxialLift = child->GetFloat("lift", field.AxialLift);
+                field.WindInfluence = child->GetFloat("windInfluence", field.WindInfluence);
+                field.GustFrequency = child->GetFloat("gustFrequency", field.GustFrequency);
+                field.GustAmplitude = child->GetFloat("gustAmplitude", field.GustAmplitude);
+                outConfig.ForceFields.push_back(field);
             } else if (child->Type == "SubEmitter") {
                 SubEmitterConfig sub;
                 std::string trigStr = child->GetString("trigger", "Collision");
@@ -478,6 +530,12 @@ namespace Axle {
             }
         }
 
+        std::stable_sort(outConfig.ColorOverLifetime.ColorKeys.begin(),
+                         outConfig.ColorOverLifetime.ColorKeys.end(),
+                         [](const auto &a, const auto &b) { return a.Time < b.Time; });
+        std::stable_sort(outConfig.ColorOverLifetime.AlphaKeys.begin(),
+                         outConfig.ColorOverLifetime.AlphaKeys.end(),
+                         [](const auto &a, const auto &b) { return a.Time < b.Time; });
         return true;
     }
 
@@ -670,48 +728,7 @@ namespace Axle {
             return false;
         }
 
-        std::string dsl = Serialize(effect);
-        std::filesystem::path target(filePath);
-        if (target.has_parent_path()) {
-            std::filesystem::create_directories(target.parent_path());
-        }
-
-        auto now = std::chrono::steady_clock::now().time_since_epoch().count();
-        std::filesystem::path tempPath = target.string() + ".tmp." + std::to_string(now);
-
-        {
-            std::ofstream out(tempPath, std::ios::binary);
-            if (!out.is_open()) {
-                if (outDiagnostics) {
-                    outDiagnostics->push_back({ VFXDiagnosticSeverity::Error, "IO_OPEN_FAILED", "", "Failed to open sibling temp file for write: " + tempPath.string() });
-                }
-                return false;
-            }
-            out << dsl;
-            out.flush();
-            if (out.fail()) {
-                out.close();
-                std::filesystem::remove(tempPath);
-                if (outDiagnostics) {
-                    outDiagnostics->push_back({ VFXDiagnosticSeverity::Error, "IO_WRITE_FAILED", "", "Failed to write temp file: " + tempPath.string() });
-                }
-                return false;
-            }
-            out.close();
-        }
-
-        std::error_code ec;
-        std::filesystem::copy_file(tempPath, target, std::filesystem::copy_options::overwrite_existing, ec);
-        std::filesystem::remove(tempPath);
-
-        if (ec) {
-            if (outDiagnostics) {
-                outDiagnostics->push_back({ VFXDiagnosticSeverity::Error, "IO_REPLACE_FAILED", "", "Failed to atomic-replace target file: " + ec.message() });
-            }
-            return false;
-        }
-
-        return true;
+        return Detail::WriteParticleAssetAtomically(filePath, Serialize(effect), outDiagnostics);
     }
 
     bool ParticleEffectSerializer::DeserializeFromFile(const std::string& filePath,

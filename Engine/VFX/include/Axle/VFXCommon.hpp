@@ -169,7 +169,28 @@ namespace Axle {
                     }
                 }
             }
-            // Cubic Bezier evaluation for y with parameter t
+            // Resolve the Bezier time coordinate before evaluating its value.
+            // Linear/constant curves keep their exact historical endpoint interpolation.
+            if (Type == CurveType::Linear)
+                return glm::mix(P0.y, P3.y, t);
+            if (Type == CurveType::Constant)
+                return P0.y;
+            if (t <= P0.x)
+                return P0.y;
+            if (t >= P3.x)
+                return P3.y;
+            float low = 0, high = 1;
+            for (int iteration = 0; iteration < 20; ++iteration) {
+                const float parameter = (low + high) * 0.5f, inverse = 1 - parameter;
+                const float x =
+                    inverse * inverse * inverse * P0.x + 3 * inverse * inverse * parameter * P1.x +
+                    3 * inverse * parameter * parameter * P2.x + parameter * parameter * parameter * P3.x;
+                if (x < t)
+                    low = parameter;
+                else
+                    high = parameter;
+            }
+            t = (low + high) * 0.5f;
             float u = 1.0f - t;
             float tt = t * t;
             float uu = u * u;

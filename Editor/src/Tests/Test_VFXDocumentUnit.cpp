@@ -1,3 +1,12 @@
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 #include "VFXTestHarness.hpp"
 #include <Axle/VFXEditorDocument.hpp>
 #include <filesystem>
@@ -44,7 +53,8 @@ namespace {
         Axle::VFXEditorDocument doc;
         std::vector<Axle::VFXDiagnostic> diags;
 
-        std::string tempPath = (std::filesystem::temp_directory_path() / "test_vfx_doc_dirty.axle_vfx").string();
+        Axle::VFXTests::ScopedTempDir tempDir;
+        std::string tempPath = (tempDir.Path / "test_vfx_doc_dirty.axle_vfx").string();
 
         // 1. Initial state is clean
         VFX_TEST_CHECK(!doc.IsDirty(), "Initial document is clean");
@@ -137,6 +147,9 @@ static bool TestHistoryRestoresValuesAndBranchIdentity() {
     doc.AddEmitter("Different branch");
     VFX_TEST_CHECK(doc.IsDirty(), "New branch at same history depth is dirty");
     VFX_TEST_CHECK(!doc.CanRedo(), "Branch discards stale redo");
+    doc.DiscardChanges();
+    VFX_TEST_CHECK(!doc.IsDirty() && doc.GetDefinition() == edited,
+                   "Discard returns to saved values, not an empty effect");
     auto beforeTransaction = doc.GetDefinition();
     doc.BeginTransaction();
     doc.AddEmitter("Third");
@@ -150,7 +163,34 @@ static bool TestHistoryRestoresValuesAndBranchIdentity() {
     return true;
 }
 
+static bool TestFailedReplacementPreservesSavedAsset() {
+#ifdef _WIN32
+    Axle::VFXTests::ScopedTempDir temporary;
+    const auto path = temporary.Path / "locked.axle_vfx";
+    Axle::VFXEditorDocument document;
+    std::vector<Axle::VFXDiagnostic> diagnostics;
+    VFX_TEST_CHECK(document.SaveAs(path.string(), diagnostics), "Initial atomic save");
+    auto read = [&]() {
+        std::ifstream file(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    };
+    const auto original = read();
+    document.SetEffectName("Unsaved edit");
+    HANDLE lock = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    VFX_TEST_CHECK(lock != INVALID_HANDLE_VALUE, "Hold destination without delete sharing");
+    bool saved = document.Save(diagnostics);
+    CloseHandle(lock);
+    VFX_TEST_CHECK(!saved && document.IsDirty() && read() == original,
+                   "Failed replacement preserves previous file and dirty working document");
+    VFX_TEST_CHECK(document.Save(diagnostics) && !document.IsDirty(),
+                   "Retry succeeds after the destination is unlocked");
+#endif
+    return true;
+}
+
 bool RunVFXDocumentUnitTests() {
+    VFX_TEST_CHECK(TestFailedReplacementPreservesSavedAsset(), "Atomic replacement failure regression");
     VFX_TEST_CHECK(TestHistoryRestoresValuesAndBranchIdentity(), "History regression failed");
     std::cout << "  - Running TestBaselineDocumentContract ...\n";
     VFX_TEST_CHECK(TestBaselineDocumentContract(), "TestBaselineDocumentContract failed");

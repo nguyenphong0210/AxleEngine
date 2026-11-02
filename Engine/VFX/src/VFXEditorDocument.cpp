@@ -26,6 +26,7 @@ namespace Axle {
         m_UndoStack.clear();
         m_RedoStack.clear();
         m_TransactionBefore.reset();
+        m_SavedDefinition = m_Definition;
     }
 
     bool VFXEditorDocument::OpenEffect(const std::string& filePath, std::vector<VFXDiagnostic>& diagnostics) {
@@ -43,6 +44,7 @@ namespace Axle {
         m_UndoStack.clear();
         m_RedoStack.clear();
         m_TransactionBefore.reset();
+        m_SavedDefinition = m_Definition;
 
         if (!m_Definition.Emitters.empty()) {
             m_SelectedEmitterId = m_Definition.Emitters[0].Id;
@@ -92,6 +94,7 @@ namespace Axle {
 
         m_FilePath = newPath;
         m_SavedRevision = m_CurrentRevision;
+        m_SavedDefinition = m_Definition;
         m_IsDirty = false;
         return true;
     }
@@ -278,9 +281,17 @@ namespace Axle {
     }
 
     void VFXEditorDocument::LoadDefinition(const ParticleEffectDefinition& definition) {
-        NewEffect(definition.Name);
-        m_Definition = definition;
-        m_SelectedEmitterId = definition.Emitters.empty() ? "" : definition.Emitters.front().Id;
+        auto value = definition;
+        NewEffect(value.Name);
+        m_Definition = std::move(value);
+        m_SavedDefinition = m_Definition;
+        m_SelectedEmitterId = m_Definition.Emitters.empty() ? "" : m_Definition.Emitters.front().Id;
+    }
+
+    void VFXEditorDocument::DiscardChanges() {
+        auto file = m_FilePath;
+        LoadDefinition(m_SavedDefinition);
+        m_FilePath = std::move(file);
     }
 
     bool VFXEditorDocument::ReplaceDefinition(const ParticleEffectDefinition& definition, const std::string& label) {

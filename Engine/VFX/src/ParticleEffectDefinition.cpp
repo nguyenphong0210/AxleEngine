@@ -77,6 +77,9 @@ namespace Axle {
             outErrors.push_back("Effect definition contains zero emitters. At least one emitter is required.");
         }
 
+        if (definition.Emitters.size() > 256)
+            outErrors.push_back("Effect exceeds the 256-emitter authoring limit.");
+        uint64_t poolCapacity = 0;
         std::unordered_set<EmitterId> seenIds;
         for (size_t i = 0; i < definition.Emitters.size(); ++i) {
             const auto& emitter = definition.Emitters[i];
@@ -99,22 +102,125 @@ namespace Axle {
                 outErrors.push_back("Emitter '" + emitter.Id + "' has invalid zero or non-finite rotation quaternion.");
             }
 
-            if (t.Scale.x <= 0.0f || t.Scale.y <= 0.0f || t.Scale.z <= 0.0f ||
-                std::isnan(t.Scale.x) || std::isnan(t.Scale.y) || std::isnan(t.Scale.z)) {
+            if (t.Scale.x <= 0.0f || t.Scale.y <= 0.0f || t.Scale.z <= 0.0f || !std::isfinite(t.Scale.x) ||
+                !std::isfinite(t.Scale.y) || !std::isfinite(t.Scale.z)) {
                 outErrors.push_back("Emitter '" + emitter.Id + "' has non-positive or non-finite scale.");
             }
 
             // Validate basic config
-            if (emitter.Config.MaxParticles == 0) {
-                outErrors.push_back("Emitter '" + emitter.Id + "' has MaxParticles == 0.");
+            poolCapacity += emitter.Config.MaxParticles;
+            if (emitter.Config.MaxParticles == 0 || emitter.Config.MaxParticles > 1000000) {
+                outErrors.push_back("Emitter '" + emitter.Id + "' has MaxParticles outside [1, 1000000].");
             }
-            if (emitter.Config.Duration < 0.0f) {
-                outErrors.push_back("Emitter '" + emitter.Id + "' has negative Duration.");
+            if (!std::isfinite(emitter.Config.Duration) || emitter.Config.Duration < 0.0f) {
+                outErrors.push_back("Emitter '" + emitter.Id + "' has negative or non-finite Duration.");
             }
-            if (emitter.Config.EmissionRate < 0.0f) {
-                outErrors.push_back("Emitter '" + emitter.Id + "' has negative EmissionRate.");
+            if (!std::isfinite(emitter.Config.EmissionRate) || emitter.Config.EmissionRate < 0.0f) {
+                outErrors.push_back("Emitter '" + emitter.Id + "' has negative or non-finite EmissionRate.");
             }
+            const auto &config = emitter.Config;
+            auto require = [&](bool valid, const std::string &field) {
+                if (!valid)
+                    outErrors.push_back("Emitter '" + emitter.Id + "' has invalid " + field + ".");
+            };
+            auto finite = [](const auto &value) {
+                for (int axis = 0; axis < value.length(); ++axis)
+                    if (!std::isfinite(value[axis]))
+                        return false;
+                return true;
+            };
+            auto unit = [](float value) { return std::isfinite(value) && value >= 0 && value <= 1; };
+            require(std::abs(rotNormSq - 1.0f) < 0.001f, "non-unit rotation quaternion");
+            for (const auto *range : {&config.Lifetime, &config.InitialSpeed, &config.StartSize,
+                                      &config.EndSize, &config.StartRotation, &config.AngularVelocity})
+                require(std::isfinite(range->Min) && std::isfinite(range->Max) && range->Min <= range->Max,
+                        "numeric range");
+            require(config.Lifetime.Min > 0 && config.StartSize.Min >= 0 && config.EndSize.Min >= 0,
+                    "lifetime or size range");
+            require(static_cast<unsigned>(config.SimulationSpace) <= 1 &&
+                        static_cast<unsigned>(config.BlendMode) <= 3 &&
+                        static_cast<unsigned>(config.Orientation) <= 2 &&
+                        static_cast<unsigned>(config.Shape.Type) <= 7,
+                    "enum value");
+            require(finite(config.ConstantAcceleration) && finite(config.Wind) &&
+                        finite(config.Shape.Direction) && finite(config.Shape.BoxExtents),
+                    "vector");
+            for (float value :
+                 {config.Drag, config.GravityModifier, config.Buoyancy, config.WrapLighting,
+                  config.ScatteringFactor, config.NormalMapStrength, config.NearFadeStart, config.NearFadeEnd,
+                  config.FarFadeStart, config.FarFadeEnd, config.SoftnessDistance, config.Shape.Radius,
+                  config.Shape.LineLength, config.Shape.ConeAngle})
+                require(std::isfinite(value), "non-finite parameter");
+            require(config.Drag >= 0 && config.SoftnessDistance >= 0 && config.NormalMapStrength >= 0,
+                    "negative dynamics/shading parameter");
+            require(unit(config.WrapLighting) && unit(config.ScatteringFactor) && unit(config.WindInfluence),
+                    "lighting/wind factor");
+            require(!config.NearFadeEnabled || config.NearFadeEnd > config.NearFadeStart,
+                    "near fade interval");
+            require(!config.FarFadeEnabled || config.FarFadeEnd > config.FarFadeStart, "far fade interval");
+            require(config.TextureRows > 0 && config.TextureCols > 0 && config.TextureRows <= 1024 &&
+                        config.TextureCols <= 1024 && config.TotalFrames > 0 &&
+                        config.TotalFrames <=
+                            static_cast<uint64_t>(config.TextureRows) * config.TextureCols &&
+                        std::isfinite(config.AnimationCycles),
+                    "flipbook dimensions");
+            for (const auto *curve :
+                 {&config.SizeOverLifetime, &config.SpeedOverLifetime, &config.AlphaOverLifetime}) {
+                require(finite(curve->P0) && finite(curve->P1) && finite(curve->P2) && finite(curve->P3) &&
+                            static_cast<unsigned>(curve->Type) <= 6,
+                        "curve controls");
+                for (const auto &key : curve->Keyframes)
+                    require(unit(key.Time) && std::isfinite(key.Value), "curve key");
+            }
+            require(finite(config.ColorOverLifetime.StartColor) && finite(config.ColorOverLifetime.EndColor),
+                    "gradient endpoints");
+            for (const auto &key : config.ColorOverLifetime.ColorKeys)
+                require(unit(key.Time) && finite(key.Color), "gradient color key");
+            for (const auto &key : config.ColorOverLifetime.AlphaKeys)
+                require(unit(key.Time) && unit(key.Alpha), "gradient alpha key");
+            for (const auto &burst : config.Bursts)
+                require(std::isfinite(burst.Time) && burst.Time >= 0 && std::isfinite(burst.Interval) &&
+                            burst.Interval >= 0 && burst.MinCount <= burst.MaxCount &&
+                            unit(burst.Probability),
+                        "burst");
+            for (const auto &link : config.SubEmitters)
+                require(static_cast<unsigned>(link.Trigger) <= 2 && unit(link.Probability),
+                        "sub-emitter event");
+            const auto &noise = config.CurlNoise;
+            require(std::isfinite(noise.Frequency) && std::isfinite(noise.Strength) &&
+                        std::isfinite(noise.Lacunarity) && unit(noise.Persistence) &&
+                        finite(noise.ScrollSpeed) && noise.Frequency >= 0 && noise.Strength >= 0 &&
+                        noise.Lacunarity > 0 && noise.Octaves >= 1 && noise.Octaves <= 8,
+                    "noise settings");
+            const auto &collision = config.Collision;
+            require(static_cast<unsigned>(collision.CollisionMode) <= 2 && unit(collision.Restitution) &&
+                        unit(collision.Friction) && std::isfinite(collision.FloorHeight) &&
+                        std::isfinite(collision.ParticleRadius) && collision.ParticleRadius >= 0 &&
+                        std::isfinite(collision.MinBounceSpeed) && collision.MinBounceSpeed >= 0,
+                    "collision settings");
+            for (const auto &plane : collision.Planes)
+                require(finite(plane.Normal) && glm::dot(plane.Normal, plane.Normal) > 0.000001f &&
+                            std::isfinite(plane.Distance) && std::isfinite(plane.Restitution) &&
+                            std::isfinite(plane.Friction),
+                        "collision plane");
+            for (const auto &box : collision.Boxes)
+                require(finite(box.Min) && finite(box.Max) && box.Min.x < box.Max.x &&
+                            box.Min.y < box.Max.y && box.Min.z < box.Max.z &&
+                            std::isfinite(box.Restitution) && std::isfinite(box.Friction),
+                        "collision box");
+            for (const auto &field : config.ForceFields)
+                require(static_cast<unsigned>(field.Type) <= 3 && static_cast<unsigned>(field.Falloff) <= 2 &&
+                            finite(field.Position) && finite(field.Direction) &&
+                            std::isfinite(field.Strength) && std::isfinite(field.Radius) &&
+                            field.Radius >= 0 && std::isfinite(field.FalloffExponent) &&
+                            std::isfinite(field.RadialSuction) && std::isfinite(field.AxialLift) &&
+                            std::isfinite(field.WindInfluence) && std::isfinite(field.GustFrequency) &&
+                            std::isfinite(field.GustAmplitude),
+                        "force field");
         }
+
+        if (poolCapacity > 4000000)
+            outErrors.push_back("Effect exceeds the aggregate 4000000-particle CPU pool limit.");
 
         // Sub-Emitter Graph Cycle and Target Validation
         ValidateSubEmitterGraph(definition, outErrors);
@@ -152,7 +258,11 @@ namespace Axle {
                 } else {
                     auto itName = nameToIndex.find(sub.TargetEmitterName);
                     if (itName != nameToIndex.end()) {
-                        targetIdx = itName->second;
+                        const auto matches = std::count_if(
+                            definition.Emitters.begin(), definition.Emitters.end(),
+                            [&](const auto &candidate) { return candidate.Name == sub.TargetEmitterName; });
+                        if (matches == 1)
+                            targetIdx = itName->second;
                     }
                 }
 

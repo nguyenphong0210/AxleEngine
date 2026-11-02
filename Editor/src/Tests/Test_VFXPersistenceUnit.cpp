@@ -366,7 +366,8 @@ namespace {
             debris.Config.Collision.Friction = 0.3f;
             collisionSparks.Emitters.push_back(std::move(debris));
 
-            std::filesystem::path sparksPath = "Assets/VFX/CollisionSparks.axle_vfx";
+            Axle::VFXTests::ScopedTempDir fixtureDir;
+            std::filesystem::path sparksPath = fixtureDir.Path / "CollisionSparks.axle_vfx";
             VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(sparksPath.string(), collisionSparks), "Serialize CollisionSparks.axle_vfx");
 
             Axle::ParticleEffectDefinition loadedSparks;
@@ -432,6 +433,10 @@ static bool TestProductionEffectAdapters() {
     emitter.LocalTransform.Scale = {2, 3, 4};
     emitter.Resources = {"retained-disabled.png", "retained-normal.png", "test.axleasset", false, false};
     emitter.Config.Drag = 0.765f;
+    emitter.Config.SizeOverLifetime.SetCubicBezier(0, 0.5f, 0.8f, 1);
+    emitter.Config.SizeOverLifetime.P1.x = 0.08f;
+    emitter.Config.SizeOverLifetime.P2.x = 0.91f;
+    emitter.Config.SpeedOverLifetime.Keyframes = {{0, 0.25f}, {0.3f, 0.8f}, {1, 1}};
     emitter.Config.Bursts.emplace_back(0.2f, 3, 3, 2, 0.5f, 1.0f);
     auto file = temp.Path / "effect.axle_vfx";
     VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(file.string(), effect), "Write fixture");
@@ -454,7 +459,127 @@ static bool TestProductionEffectAdapters() {
     return true;
 }
 
+static bool TestSharedReferenceVersusUniqueStorage() {
+    Axle::VFXTests::ScopedTempDir temp;
+    auto definition = Axle::CreateDefaultParticleEffect("Shared");
+    auto asset = temp.Path / "shared.axle_vfx";
+    VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(asset.string(), definition),
+                   "Write shared asset");
+    auto scene = std::make_shared<Axle::Scene>();
+    auto entity = scene->CreateEntity("Reference");
+    auto &component = entity.AddComponent<Axle::ParticleEmitterComponent>();
+    VFX_TEST_CHECK(component.LoadFromAsset(asset.string()), "Bind reference");
+    const auto referencedScene = Axle::SceneSerializer(scene.get()).SerializeToString();
+    definition.Emitters[0].Config.EmissionRate = 321;
+    VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(asset.string(), definition),
+                   "Change shared source");
+    auto loaded = std::make_shared<Axle::Scene>();
+    VFX_TEST_CHECK(Axle::SceneSerializer(loaded.get()).DeserializeFromString(referencedScene),
+                   "Reload reference scene");
+    auto view = loaded->GetRegistry().view<Axle::ParticleEmitterComponent>();
+    auto &reference = view.get<Axle::ParticleEmitterComponent>(*view.begin());
+    VFX_TEST_CHECK(reference.Config.EmissionRate == 321,
+                   "Reference follows current shared asset, not its old fallback snapshot");
+    reference.AssetPath.clear();
+    const auto uniqueScene = Axle::SceneSerializer(loaded.get()).SerializeToString();
+    definition.Emitters[0].Config.EmissionRate = 456;
+    VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(asset.string(), definition),
+                   "Change shared source again");
+    auto unique = std::make_shared<Axle::Scene>();
+    VFX_TEST_CHECK(Axle::SceneSerializer(unique.get()).DeserializeFromString(uniqueScene),
+                   "Reload unique scene");
+    auto uniqueView = unique->GetRegistry().view<Axle::ParticleEmitterComponent>();
+    VFX_TEST_CHECK(uniqueView.get<Axle::ParticleEmitterComponent>(*uniqueView.begin()).Config.EmissionRate ==
+                       321,
+                   "Make Unique retains authored values independently");
+    std::filesystem::remove(asset);
+    auto missing = std::make_shared<Axle::Scene>();
+    VFX_TEST_CHECK(Axle::SceneSerializer(missing.get()).DeserializeFromString(referencedScene),
+                   "Missing reference uses complete fallback definition");
+    return true;
+}
+
+static bool TestLegacyCodecRetainsCompleteCurves() {
+    Axle::ParticleEmitterConfig source;
+    source.SizeOverLifetime.SetEaseIn(0, 1);
+    source.SizeOverLifetime.P1.x = 0.05f;
+    source.SpeedOverLifetime.SetEaseOut(0, 1);
+    source.AlphaOverLifetime.Keyframes = {{0, 0}, {0.2f, 0.8f}, {1, 1}};
+    auto text = Axle::ParticleEmitterSerializer::Serialize(source);
+    Axle::ParticleEmitterConfig restored;
+    std::string texture;
+    VFX_TEST_CHECK(Axle::ParticleEmitterSerializer::Deserialize(text, restored, texture),
+                   "Read legacy flat container");
+    VFX_TEST_CHECK(Axle::ParticleEmitterConfigsEqual(source, restored),
+                   "Legacy API shares the complete module codec");
+    auto modern = Axle::CreateDefaultParticleEffect();
+    modern.Emitters.push_back(modern.Emitters.front());
+    modern.Emitters.back().Id = "second";
+    VFX_TEST_CHECK(!Axle::ParticleEmitterSerializer::Deserialize(
+                       Axle::ParticleEffectSerializer::Serialize(modern), restored, texture),
+                   "Single-emitter API cannot silently truncate modern effects");
+    return true;
+}
+
+static bool TestDisabledModuleStateIsAuthored() {
+    auto effect = Axle::CreateDefaultParticleEffect();
+    auto &config = effect.Emitters[0].Config;
+    config.LightingEnabled = false;
+    config.WrapLighting = 0.73f;
+    config.ScatteringFactor = 0.61f;
+    config.NormalMapStrength = 1.7f;
+    config.CurlNoise.Enabled = false;
+    config.CurlNoise.Lacunarity = 3.4f;
+    config.CurlNoise.Persistence = 0.2f;
+    config.CurlNoise.ScrollSpeed = {1, 2, 3};
+    config.Collision.Enabled = false;
+    config.Collision.FloorHeight = -4;
+    config.Collision.Planes.emplace_back(glm::vec3(0, 1, 0), -2.0f);
+    config.Collision.Boxes.emplace_back(glm::vec3(-2), glm::vec3(2));
+    config.Wind = {0, 0, 0};
+    config.WindInfluence = 0.81f;
+    config.BurstCount = 0;
+    config.BurstInterval = 0.9f;
+    config.Shape.Type = Axle::ParticleEmitterShapeType::Point;
+    config.Shape.MeshPath = "retained.obj";
+    config.Shape.ConeAngle = 0.25f;
+    config.Shape.BoxExtents = {2, 3, 4};
+    config.Shape.LineLength = 3;
+    config.NearFadeEnabled = false;
+    config.NearFadeStart = 3;
+    config.NearFadeEnd = 4;
+    config.FarFadeEnabled = false;
+    config.FarFadeStart = 60;
+    config.FarFadeEnd = 80;
+    config.ForceFields = {Axle::ParticleForceField::CreateWind({1, 0, 0}, 4, 0.3f, 2, 0.5f),
+                          Axle::ParticleForceField::CreateVortex({1, 2, 3}, {0, 1, 0}, 5, 2, 3, 4)};
+    config.MaterialAsset = 1234567890123456789ull;
+    Axle::ParticleEffectDefinition restored;
+    VFX_TEST_CHECK(Axle::ParticleEffectSerializer::Deserialize(
+                       Axle::ParticleEffectSerializer::Serialize(effect), restored),
+                   "Disabled modules deserialize");
+    const auto &loaded = restored.Emitters[0].Config;
+    VFX_TEST_CHECK(loaded.WrapLighting == config.WrapLighting &&
+                       loaded.CurlNoise.ScrollSpeed == config.CurlNoise.ScrollSpeed,
+                   "Disabled lighting/noise values retained");
+    VFX_TEST_CHECK(loaded.Collision.Planes.size() == 1 && loaded.Collision.Boxes.size() == 1,
+                   "Disabled collision geometry retained");
+    VFX_TEST_CHECK(loaded.Shape.MeshPath == config.Shape.MeshPath &&
+                       loaded.Shape.BoxExtents == config.Shape.BoxExtents,
+                   "Inactive shape parameters retained");
+    VFX_TEST_CHECK(loaded.ForceFields.size() == 2 && loaded.ForceFields[1].RadialSuction == 3,
+                   "Full force-field modules retained");
+    VFX_TEST_CHECK(loaded.MaterialAsset == config.MaterialAsset &&
+                       loaded.BurstInterval == config.BurstInterval,
+                   "Full-width identity and disabled burst timing retained");
+    VFX_TEST_CHECK(Axle::ParticleEmitterConfigsEqual(config, loaded), "Complete canonical state matches");
+    return true;
+}
+
 bool RunVFXPersistenceUnitTests() {
+    VFX_TEST_CHECK(TestDisabledModuleStateIsAuthored(), "Disabled module persistence");
+    VFX_TEST_CHECK(TestLegacyCodecRetainsCompleteCurves(), "Legacy module codec regression");
+    VFX_TEST_CHECK(TestSharedReferenceVersusUniqueStorage(), "Shared/unique storage regression");
     VFX_TEST_CHECK(TestProductionEffectAdapters(), "Production adapters failed");
     std::cout << "  - Running TestBaselineEmitterSerializer ...\n";
     VFX_TEST_CHECK(TestBaselineEmitterSerializer(), "TestBaselineEmitterSerializer failed");

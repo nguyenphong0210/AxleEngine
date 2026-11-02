@@ -29,6 +29,7 @@ namespace Axle {
         bool SaveAs(const std::string& newPath, std::vector<VFXDiagnostic>& diagnostics);
 
         const std::string& GetFilePath() const { return m_FilePath; }
+        void DiscardChanges();
         bool IsDirty() const { return m_IsDirty; }
         uint64_t GetCurrentRevision() const { return m_CurrentRevision; }
 
@@ -70,6 +71,7 @@ namespace Axle {
 
     private:
         ParticleEffectDefinition m_Definition;
+        ParticleEffectDefinition m_SavedDefinition;
         std::string m_FilePath;
         std::string m_SelectedEmitterId;
 

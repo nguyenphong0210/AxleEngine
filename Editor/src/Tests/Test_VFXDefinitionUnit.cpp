@@ -1,4 +1,5 @@
 #include "VFXTestHarness.hpp"
+#include <limits>
 #include <Axle/ParticleEffectDefinition.hpp>
 #include <Axle/ParticlePool.hpp>
 
@@ -132,7 +133,31 @@ namespace {
     }
 }
 
+static bool TestRejectInvalidAuthoredParameters() {
+    auto original = Axle::CreateDefaultParticleEffect();
+    std::vector<std::string> errors;
+    auto invalid = original;
+    invalid.Emitters[0].Config.EmissionRate = std::numeric_limits<float>::quiet_NaN();
+    VFX_TEST_CHECK(!Axle::ValidateParticleEffectDefinition(invalid, errors), "Reject NaN emission");
+    invalid = original;
+    invalid.Emitters[0].LocalTransform.Scale.x = std::numeric_limits<float>::infinity();
+    VFX_TEST_CHECK(!Axle::ValidateParticleEffectDefinition(invalid, errors), "Reject infinite scale");
+    invalid = original;
+    invalid.Emitters[0].Config.Lifetime = {2, 1};
+    VFX_TEST_CHECK(!Axle::ValidateParticleEffectDefinition(invalid, errors),
+                   "Reject inverted lifetime range");
+    invalid = original;
+    invalid.Emitters[0].Config.BlendMode = static_cast<Axle::ParticleBlendMode>(99);
+    VFX_TEST_CHECK(!Axle::ValidateParticleEffectDefinition(invalid, errors), "Reject unsupported enum");
+    invalid = original;
+    invalid.Emitters[0].Config.MaxParticles = 0xffffffffu;
+    VFX_TEST_CHECK(!Axle::ValidateParticleEffectDefinition(invalid, errors),
+                   "Reject accidental huge CPU allocation before instantiation");
+    return true;
+}
+
 bool RunVFXDefinitionUnitTests() {
+    VFX_TEST_CHECK(TestRejectInvalidAuthoredParameters(), "Authored parameter validation");
     std::cout << "  - Running TestBaselineVFXTypes ...\n";
     VFX_TEST_CHECK(TestBaselineVFXTypes(), "TestBaselineVFXTypes failed");
     std::cout << "  - Running TestDefaultEffectDefinition ...\n";

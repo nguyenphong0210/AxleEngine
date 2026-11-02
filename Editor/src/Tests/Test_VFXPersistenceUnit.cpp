@@ -231,6 +231,192 @@ namespace {
 
         return true;
     }
+
+    bool TestReferenceVFXAssetsRoundTrip() {
+        // 1. Author and save Campfire_v2.axle_vfx
+        {
+            Axle::ParticleEffectDefinition campfire;
+            campfire.SchemaVersion = 2;
+            campfire.Name = "Campfire_v2";
+            campfire.Seed = 42;
+
+            Axle::EmitterDefinition flame;
+            flame.Id = "flame-emitter";
+            flame.Name = "Flame";
+            flame.Enabled = true;
+            flame.Config.Name = "Flame";
+            flame.Config.BlendMode = Axle::ParticleBlendMode::Additive;
+            flame.Config.Shape.Type = Axle::ParticleEmitterShapeType::Cone;
+            flame.Config.Shape.ConeAngle = 0.25f;
+            flame.Config.Shape.Radius = 0.2f;
+            flame.Config.EmissionRate = 50.0f;
+            flame.Config.Lifetime = { 0.8f, 1.4f };
+            flame.Config.InitialSpeed = { 2.0f, 4.0f };
+            flame.Config.StartSize = { 0.3f, 0.5f };
+            flame.Config.EndSize = { 0.1f, 0.2f };
+            flame.Config.ColorOverLifetime = Axle::ColorGradient(
+                glm::vec4(1.0f, 0.8f, 0.2f, 1.0f),
+                glm::vec4(0.9f, 0.2f, 0.05f, 0.0f)
+            );
+            flame.Resources.TexturePath = "Assets/Textures/Particles/Flame.png";
+            flame.Resources.UseTexture = true;
+            Axle::SubEmitterConfig sub(Axle::SubEmitterTrigger::Death, "sparks-emitter", 3, 0.8f);
+            sub.InheritColor = true;
+            sub.InheritVelocity = true;
+            flame.Config.SubEmitters.push_back(sub);
+            campfire.Emitters.push_back(std::move(flame));
+
+            Axle::EmitterDefinition smoke;
+            smoke.Id = "smoke-emitter";
+            smoke.Name = "Smoke";
+            smoke.Enabled = true;
+            smoke.Config.Name = "Smoke";
+            smoke.Config.BlendMode = Axle::ParticleBlendMode::AlphaBlend;
+            smoke.Config.Shape.Type = Axle::ParticleEmitterShapeType::Cone;
+            smoke.Config.Shape.ConeAngle = 0.35f;
+            smoke.Config.Shape.Radius = 0.3f;
+            smoke.Config.EmissionRate = 25.0f;
+            smoke.Config.Lifetime = { 2.0f, 3.5f };
+            smoke.Config.InitialSpeed = { 1.0f, 2.2f };
+            smoke.Config.StartSize = { 0.4f, 0.7f };
+            smoke.Config.EndSize = { 1.8f, 2.5f };
+            smoke.Config.Buoyancy = 1.5f;
+            smoke.Config.CurlNoise.Strength = 0.8f;
+            smoke.Config.CurlNoise.Frequency = 0.5f;
+            smoke.Config.CurlNoise.Octaves = 2;
+            smoke.Config.ColorOverLifetime = Axle::ColorGradient(
+                glm::vec4(0.3f, 0.3f, 0.32f, 0.6f),
+                glm::vec4(0.15f, 0.15f, 0.18f, 0.0f)
+            );
+            smoke.Resources.TexturePath = "Assets/Textures/Particles/Smoke.png";
+            smoke.Resources.UseTexture = true;
+            campfire.Emitters.push_back(std::move(smoke));
+
+            Axle::EmitterDefinition sparks;
+            sparks.Id = "sparks-emitter";
+            sparks.Name = "Sparks";
+            sparks.Enabled = true;
+            sparks.TriggerOnly = true;
+            sparks.Config.Name = "Sparks";
+            sparks.Config.BlendMode = Axle::ParticleBlendMode::Additive;
+            sparks.Config.Shape.Type = Axle::ParticleEmitterShapeType::Sphere;
+            sparks.Config.Shape.Radius = 0.1f;
+            sparks.Config.EmissionRate = 0.0f;
+            sparks.Config.Lifetime = { 0.6f, 1.2f };
+            sparks.Config.InitialSpeed = { 2.5f, 5.0f };
+            sparks.Config.StartSize = { 0.05f, 0.08f };
+            sparks.Config.EndSize = { 0.01f, 0.02f };
+            sparks.Config.Collision.Enabled = true;
+            sparks.Config.Collision.CollisionMode = Axle::ParticleCollisionMode::Floor;
+            sparks.Config.Collision.FloorHeight = 0.0f;
+            sparks.Config.Collision.Restitution = 0.65f;
+            sparks.Config.Collision.Friction = 0.25f;
+            sparks.Config.ColorOverLifetime = Axle::ColorGradient(
+                glm::vec4(1.0f, 0.6f, 0.1f, 1.0f),
+                glm::vec4(0.8f, 0.1f, 0.0f, 0.0f)
+            );
+            campfire.Emitters.push_back(std::move(sparks));
+
+            std::filesystem::path campfirePath = "Assets/VFX/Campfire_v2.axle_vfx";
+            VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(campfirePath.string(), campfire), "Serialize Campfire_v2.axle_vfx");
+
+            Axle::ParticleEffectDefinition loadedCampfire;
+            VFX_TEST_CHECK(Axle::ParticleEffectSerializer::DeserializeFromFile(campfirePath.string(), loadedCampfire), "Deserialize Campfire_v2.axle_vfx");
+            VFX_TEST_CHECK(loadedCampfire.Emitters.size() == 3, "Campfire has 3 emitters");
+            std::vector<std::string> errors;
+            VFX_TEST_CHECK(Axle::ValidateSubEmitterGraph(loadedCampfire, errors), "Campfire sub-emitter graph is valid DAG");
+        }
+
+        // 2. Author and save CollisionSparks.axle_vfx
+        {
+            Axle::ParticleEffectDefinition collisionSparks;
+            collisionSparks.SchemaVersion = 2;
+            collisionSparks.Name = "CollisionSparks";
+            collisionSparks.Seed = 101;
+
+            Axle::EmitterDefinition flash;
+            flash.Id = "flash";
+            flash.Name = "Flash";
+            flash.Enabled = true;
+            flash.Config.Name = "Flash";
+            flash.Config.BlendMode = Axle::ParticleBlendMode::Additive;
+            flash.Config.EmissionRate = 0.0f;
+            flash.Config.Bursts.emplace_back(0.0f, 1, 1, 1, 0.0f, 1.0f);
+            flash.Config.Lifetime = { 0.08f, 0.08f };
+            flash.Config.StartSize = { 0.8f, 0.8f };
+            flash.Config.EndSize = { 0.0f, 0.0f };
+            collisionSparks.Emitters.push_back(std::move(flash));
+
+            Axle::EmitterDefinition debris;
+            debris.Id = "debris";
+            debris.Name = "DebrisSparks";
+            debris.Enabled = true;
+            debris.Config.Name = "DebrisSparks";
+            debris.Config.BlendMode = Axle::ParticleBlendMode::Additive;
+            debris.Config.EmissionRate = 0.0f;
+            debris.Config.Bursts.emplace_back(0.0f, 30, 50, 1, 0.0f, 1.0f);
+            debris.Config.Lifetime = { 0.8f, 1.5f };
+            debris.Config.InitialSpeed = { 3.0f, 7.0f };
+            debris.Config.GravityModifier = 1.2f;
+            debris.Config.Collision.Enabled = true;
+            debris.Config.Collision.CollisionMode = Axle::ParticleCollisionMode::Floor;
+            debris.Config.Collision.FloorHeight = 0.0f;
+            debris.Config.Collision.Restitution = 0.7f;
+            debris.Config.Collision.Friction = 0.3f;
+            collisionSparks.Emitters.push_back(std::move(debris));
+
+            std::filesystem::path sparksPath = "Assets/VFX/CollisionSparks.axle_vfx";
+            VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(sparksPath.string(), collisionSparks), "Serialize CollisionSparks.axle_vfx");
+
+            Axle::ParticleEffectDefinition loadedSparks;
+            VFX_TEST_CHECK(Axle::ParticleEffectSerializer::DeserializeFromFile(sparksPath.string(), loadedSparks), "Deserialize CollisionSparks.axle_vfx");
+            VFX_TEST_CHECK(loadedSparks.Emitters.size() == 2, "CollisionSparks has 2 emitters");
+        }
+
+        // 3. Author and save VehicleBackfire.axle_vfx
+        {
+            Axle::ParticleEffectDefinition backfire;
+            backfire.SchemaVersion = 2;
+            backfire.Name = "VehicleBackfire";
+            backfire.Seed = 202;
+
+            Axle::EmitterDefinition flameJet;
+            flameJet.Id = "flame-jet";
+            flameJet.Name = "FlameJet";
+            flameJet.Enabled = true;
+            flameJet.Config.Name = "FlameJet";
+            flameJet.Config.BlendMode = Axle::ParticleBlendMode::Additive;
+            flameJet.Config.Shape.Type = Axle::ParticleEmitterShapeType::Cone;
+            flameJet.Config.Shape.ConeAngle = 0.15f;
+            flameJet.Config.EmissionRate = 0.0f;
+            flameJet.Config.Bursts.emplace_back(0.0f, 25, 35, 1, 0.0f, 1.0f);
+            flameJet.Config.Lifetime = { 0.1f, 0.2f };
+            flameJet.Config.InitialSpeed = { 8.0f, 15.0f };
+            backfire.Emitters.push_back(std::move(flameJet));
+
+            Axle::EmitterDefinition smokePuff;
+            smokePuff.Id = "smoke-puff";
+            smokePuff.Name = "SmokePuff";
+            smokePuff.Enabled = true;
+            smokePuff.Config.Name = "SmokePuff";
+            smokePuff.Config.BlendMode = Axle::ParticleBlendMode::AlphaBlend;
+            smokePuff.Config.EmissionRate = 0.0f;
+            smokePuff.Config.Bursts.emplace_back(0.05f, 15, 25, 1, 0.0f, 1.0f);
+            smokePuff.Config.Lifetime = { 1.0f, 1.8f };
+            smokePuff.Config.Drag = 0.4f;
+            smokePuff.Config.Buoyancy = 0.5f;
+            backfire.Emitters.push_back(std::move(smokePuff));
+
+            std::filesystem::path backfirePath = "Assets/VFX/VehicleBackfire.axle_vfx";
+            VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(backfirePath.string(), backfire), "Serialize VehicleBackfire.axle_vfx");
+
+            Axle::ParticleEffectDefinition loadedBackfire;
+            VFX_TEST_CHECK(Axle::ParticleEffectSerializer::DeserializeFromFile(backfirePath.string(), loadedBackfire), "Deserialize VehicleBackfire.axle_vfx");
+            VFX_TEST_CHECK(loadedBackfire.Emitters.size() == 2, "VehicleBackfire has 2 emitters");
+        }
+
+        return true;
+    }
 }
 
 bool RunVFXPersistenceUnitTests() {
@@ -244,5 +430,7 @@ bool RunVFXPersistenceUnitTests() {
     VFX_TEST_CHECK(TestTransactionalSaveAndErrorPreservation(), "TestTransactionalSaveAndErrorPreservation failed");
     std::cout << "  - Running TestSceneVFXRoundTrip ...\n";
     VFX_TEST_CHECK(TestSceneVFXRoundTrip(), "TestSceneVFXRoundTrip failed");
+    std::cout << "  - Running TestReferenceVFXAssetsRoundTrip ...\n";
+    VFX_TEST_CHECK(TestReferenceVFXAssetsRoundTrip(), "TestReferenceVFXAssetsRoundTrip failed");
     return true;
 }

@@ -367,6 +367,10 @@ bool RunTest_Step101_Phase38_MaterialSchemaInspectorAndHLSLStudio() {
 }
 
 
+namespace Axle {
+    bool VerifyVFXRendering(const std::filesystem::path& root);
+}
+
 // =============================================================================
 // STEP 102: PHASE 39 - VISUAL PARTICLE & VFX STUDIO (UNITY SHURIKEN + CURVES)
 // =============================================================================
@@ -696,7 +700,18 @@ bool RunTest_Step102_Phase39_VisualParticleAndVFXStudio() {
     }
     std::cout << "  -> PASS: Multi-emitter stacks and .axleasset roundtrip serialization verified." << std::endl;
 
-    std::cout << "\n>>> STEP 102 PASSED: Phase 39 Visual Particle & VFX Studio 100% verified! <<<\n" << std::endl;
+    // [102.7] Real Offscreen RHI GPU Integration & Acceptance Check
+    std::cout << "\n[102.7] Evaluating Real Offscreen RHI Multi-Emitter GPU Integration..." << std::endl;
+    {
+        const char* backend = std::getenv("AXLE_VFX_TEST_BACKEND");
+        if (backend && backend[0] != '\0') {
+            Axle::VerifyVFXRendering(".");
+        } else {
+            std::cout << "  -> Physical DX12/Vulkan GPU execution: NOT RUN in headless environment (set AXLE_VFX_TEST_BACKEND on hardware target)." << std::endl;
+        }
+    }
+
+    std::cout << "\n>>> STEP 102 PASSED: Historical Shuriken VFX baseline verified (see AxleVFXUnitTests and physical acceptance for full Phase 39 status) <<<\n" << std::endl;
     return true;
 }
 

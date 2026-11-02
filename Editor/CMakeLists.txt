@@ -117,6 +117,7 @@ add_executable(AxleTests
     src/Tests/Test_MaterialRendering.cpp
     src/Tests/Test_MaterialMeshImport.cpp
     src/Tests/Test_MaterialAcceptance.cpp
+    src/Tests/Test_VFXRendering.cpp
 )
 
 if (MSVC)

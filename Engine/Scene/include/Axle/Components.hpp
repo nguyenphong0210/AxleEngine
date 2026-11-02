@@ -15,6 +15,7 @@
 #include <Axle/ParticleSystem.hpp>
 #include <Axle/ParticleEmitter.hpp>
 #include <Axle/ParticleEmitterSerializer.hpp>
+#include <Axle/ParticleEffectSerializer.hpp>
 #include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
 #include <Axle/UI/UIDocument.hpp>
@@ -1713,6 +1714,22 @@ namespace Axle {
 
         bool LoadFromAsset(const std::string& path) {
             AssetPath = path;
+            ParticleEffectDefinition effect;
+            if (ParticleEffectSerializer::DeserializeFromFile(path, effect)) {
+                EmitterStacks.clear();
+                for (const auto& emitter : effect.Emitters) {
+                    ParticleEmitterStack stack(emitter.Name, emitter.Config);
+                    stack.Enabled = emitter.Enabled;
+                    stack.Visible = true;
+                    stack.TexturePath = emitter.Resources.TexturePath;
+                    stack.NormalMapPath = emitter.Resources.NormalMapPath;
+                    stack.MaterialPath = emitter.Resources.MaterialPath;
+                    EmitterStacks.push_back(std::move(stack));
+                }
+                SyncPrimary();
+                Initialize();
+                return true;
+            }
             std::string texPath;
             if (ParticleEmitterSerializer::DeserializeFromFile(path, Config, texPath)) {
                 if (!texPath.empty()) {
@@ -1725,7 +1742,25 @@ namespace Axle {
         }
 
         bool SaveToAsset(const std::string& path) const {
-            return ParticleEmitterSerializer::SerializeToFile(path, Config, TexturePath);
+            ParticleEffectDefinition effect;
+            effect.SchemaVersion = 2;
+            effect.Name = Config.Name.empty() ? "ParticleEffect" : Config.Name;
+            effect.Seed = 1;
+            for (size_t i = 0; i < EmitterStacks.size(); ++i) {
+                const auto& stack = EmitterStacks[i];
+                EmitterDefinition def;
+                def.Id = "emitter-" + std::to_string(i + 1);
+                def.Name = stack.Name;
+                def.Enabled = stack.Enabled;
+                def.Config = stack.Config;
+                def.Resources.TexturePath = stack.TexturePath;
+                def.Resources.NormalMapPath = stack.NormalMapPath;
+                def.Resources.MaterialPath = stack.MaterialPath;
+                def.Resources.UseTexture = !stack.TexturePath.empty();
+                def.Resources.UseNormalMap = !stack.NormalMapPath.empty();
+                effect.Emitters.push_back(std::move(def));
+            }
+            return ParticleEffectSerializer::SerializeToFile(path, effect);
         }
 
         void Reset() {

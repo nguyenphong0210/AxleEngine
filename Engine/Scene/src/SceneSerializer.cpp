@@ -460,6 +460,9 @@ namespace Axle {
             if (entity.HasComponent<ParticleEmitterComponent>()) {
                 auto& pec = entity.GetComponent<ParticleEmitterComponent>();
                 ss << "    ParticleEmitterComponent:\n";
+                if (!pec.AssetPath.empty()) {
+                    ss << "      AssetPath: " << pec.AssetPath << "\n";
+                }
                 ss << "      Name: " << pec.Config.Name << "\n";
                 ss << "      Active: " << (pec.Active ? "true" : "false") << "\n";
                 ss << "      AutoPlay: " << (pec.AutoPlay ? "true" : "false") << "\n";
@@ -512,6 +515,20 @@ namespace Axle {
                 ss << "      CollisionRestitution: " << pec.Config.Collision.Restitution << "\n";
                 ss << "      CollisionFriction: " << pec.Config.Collision.Friction << "\n";
                 ss << "      CollisionParticleRadius: " << pec.Config.Collision.ParticleRadius << "\n";
+                ss << "      EmitterStackCount: " << pec.EmitterStacks.size() << "\n";
+                for (size_t i = 0; i < pec.EmitterStacks.size(); ++i) {
+                    const auto& s = pec.EmitterStacks[i];
+                    ss << "      Stack_" << i << "_Name: " << s.Name << "\n";
+                    ss << "      Stack_" << i << "_Enabled: " << (s.Enabled ? "true" : "false") << "\n";
+                    ss << "      Stack_" << i << "_Visible: " << (s.Visible ? "true" : "false") << "\n";
+                    ss << "      Stack_" << i << "_TexturePath: " << s.TexturePath << "\n";
+                    ss << "      Stack_" << i << "_NormalMapPath: " << s.NormalMapPath << "\n";
+                    ss << "      Stack_" << i << "_MaterialPath: " << s.MaterialPath << "\n";
+                    ss << "      Stack_" << i << "_MaxParticles: " << s.Config.MaxParticles << "\n";
+                    ss << "      Stack_" << i << "_EmissionRate: " << s.Config.EmissionRate << "\n";
+                    ss << "      Stack_" << i << "_Duration: " << s.Config.Duration << "\n";
+                    ss << "      Stack_" << i << "_Looping: " << (s.Config.Looping ? "true" : "false") << "\n";
+                }
             }
 
             // VehicleVFXComponent
@@ -1510,7 +1527,45 @@ namespace Axle {
                             currentEntity.AddComponent<ParticleEmitterComponent>();
                         }
                         auto& pec = currentEntity.GetComponent<ParticleEmitterComponent>();
-                        if (trimmed.rfind("Name:", 0) == 0) {
+                        if (trimmed.rfind("AssetPath:", 0) == 0) {
+                            pec.AssetPath = Trim(trimmed.substr(10));
+                            if (!pec.AssetPath.empty()) {
+                                pec.LoadFromAsset(pec.AssetPath);
+                            }
+                        } else if (trimmed.rfind("EmitterStackCount:", 0) == 0) {
+                            try {
+                                size_t count = std::stoul(Trim(trimmed.substr(18)));
+                                if (count > 0 && pec.EmitterStacks.size() < count) {
+                                    pec.EmitterStacks.resize(count);
+                                }
+                            } catch (...) {}
+                        } else if (trimmed.rfind("Stack_", 0) == 0) {
+                            size_t firstUnder = 6;
+                            size_t secondUnder = trimmed.find('_', firstUnder);
+                            if (secondUnder != std::string::npos) {
+                                try {
+                                    size_t idx = std::stoul(trimmed.substr(firstUnder, secondUnder - firstUnder));
+                                    if (idx < pec.EmitterStacks.size()) {
+                                        size_t colon = trimmed.find(':', secondUnder);
+                                        if (colon != std::string::npos) {
+                                            std::string prop = trimmed.substr(secondUnder + 1, colon - secondUnder - 1);
+                                            std::string val = Trim(trimmed.substr(colon + 1));
+                                            auto& s = pec.EmitterStacks[idx];
+                                            if (prop == "Name") s.Name = val;
+                                            else if (prop == "Enabled") s.Enabled = (val == "true");
+                                            else if (prop == "Visible") s.Visible = (val == "true");
+                                            else if (prop == "TexturePath") s.TexturePath = val;
+                                            else if (prop == "NormalMapPath") s.NormalMapPath = val;
+                                            else if (prop == "MaterialPath") s.MaterialPath = val;
+                                            else if (prop == "MaxParticles") try { s.Config.MaxParticles = std::stoul(val); } catch (...) {}
+                                            else if (prop == "EmissionRate") try { s.Config.EmissionRate = std::stof(val); } catch (...) {}
+                                            else if (prop == "Duration") try { s.Config.Duration = std::stof(val); } catch (...) {}
+                                            else if (prop == "Looping") s.Config.Looping = (val == "true");
+                                        }
+                                    }
+                                } catch (...) {}
+                            }
+                        } else if (trimmed.rfind("Name:", 0) == 0) {
                             pec.Config.Name = Trim(trimmed.substr(5));
                         } else if (trimmed.rfind("Active:", 0) == 0) {
                             pec.Active = (Trim(trimmed.substr(7)) == "true");

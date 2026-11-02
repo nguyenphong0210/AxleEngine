@@ -1,6 +1,10 @@
 #include "VFXTestHarness.hpp"
 #include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/ParticleEffectSerializer.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/SceneSerializer.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/Components.hpp>
 
 namespace {
     bool TestBaselineEmitterSerializer() {
@@ -156,6 +160,77 @@ namespace {
 
         return true;
     }
+
+    bool TestSceneVFXRoundTrip() {
+        auto scene = std::make_shared<Axle::Scene>();
+        auto entity = scene->CreateEntity("CampfireSceneEntity");
+        auto& pec = entity.AddComponent<Axle::ParticleEmitterComponent>();
+        pec.Config.Name = "CampfireBase";
+        pec.Config.MaxParticles = 500;
+        pec.Config.EmissionRate = 45.0f;
+        pec.EmitterStacks.clear();
+
+        // Stack 0
+        Axle::ParticleEmitterStack s0("FlameStack", pec.Config);
+        s0.TexturePath = "vfx/flame.png";
+        pec.EmitterStacks.push_back(std::move(s0));
+
+        // Stack 1
+        Axle::ParticleEmitterConfig s1Cfg;
+        s1Cfg.Name = "SmokeStack";
+        s1Cfg.MaxParticles = 200;
+        s1Cfg.EmissionRate = 12.0f;
+        Axle::ParticleEmitterStack s1("SmokeStack", s1Cfg);
+        s1.TexturePath = "vfx/smoke.png";
+        pec.EmitterStacks.push_back(std::move(s1));
+
+        pec.SyncPrimary();
+        pec.Initialize();
+
+        // Second entity: referenced asset
+        auto refEntity = scene->CreateEntity("ReferencedVFX");
+        auto& refPec = refEntity.AddComponent<Axle::ParticleEmitterComponent>();
+        refPec.AssetPath = "vfx/prefabs/torch.axleasset";
+
+        // Serialize scene
+        Axle::SceneSerializer serializer(scene.get());
+        std::string sceneData = serializer.SerializeToString();
+        VFX_TEST_CHECK(!sceneData.empty(), "Scene serialization must succeed");
+
+        // Deserialize scene
+        auto loadedScene = std::make_shared<Axle::Scene>();
+        Axle::SceneSerializer deserializer(loadedScene.get());
+        bool deserialized = deserializer.DeserializeFromString(sceneData);
+        VFX_TEST_CHECK(deserialized, "Scene deserialization must succeed");
+
+        Axle::Entity loadedEnt{};
+        Axle::Entity loadedRef{};
+        auto tagView = loadedScene->GetRegistry().view<Axle::TagComponent>();
+        for (auto entityID : tagView) {
+            const auto& tag = tagView.get<Axle::TagComponent>(entityID);
+            if (tag.Tag == "CampfireSceneEntity") {
+                loadedEnt = Axle::Entity{ entityID, loadedScene.get() };
+            } else if (tag.Tag == "ReferencedVFX") {
+                loadedRef = Axle::Entity{ entityID, loadedScene.get() };
+            }
+        }
+
+        VFX_TEST_CHECK(loadedEnt, "Entity CampfireSceneEntity must exist");
+        VFX_TEST_CHECK(loadedEnt.HasComponent<Axle::ParticleEmitterComponent>(), "Must have ParticleEmitterComponent");
+        auto& lPec = loadedEnt.GetComponent<Axle::ParticleEmitterComponent>();
+        VFX_TEST_CHECK(lPec.EmitterStacks.size() == 2, "Loaded entity must preserve 2 emitter stacks");
+        VFX_TEST_CHECK(lPec.EmitterStacks[0].Name == "FlameStack", "Stack 0 Name must match");
+        VFX_TEST_CHECK(lPec.EmitterStacks[0].TexturePath == "vfx/flame.png", "Stack 0 TexturePath must match");
+        VFX_TEST_CHECK(lPec.EmitterStacks[1].Name == "SmokeStack", "Stack 1 Name must match");
+        VFX_TEST_CHECK(lPec.EmitterStacks[1].TexturePath == "vfx/smoke.png", "Stack 1 TexturePath must match");
+        VFX_TEST_APPROX_EQUAL(lPec.EmitterStacks[1].Config.EmissionRate, 12.0f, 0.001f, "Stack 1 EmissionRate must match");
+
+        VFX_TEST_CHECK(loadedRef, "Referenced entity must exist");
+        auto& lRefPec = loadedRef.GetComponent<Axle::ParticleEmitterComponent>();
+        VFX_TEST_CHECK(lRefPec.AssetPath == "vfx/prefabs/torch.axleasset", "Referenced AssetPath must be preserved");
+
+        return true;
+    }
 }
 
 bool RunVFXPersistenceUnitTests() {
@@ -167,5 +242,7 @@ bool RunVFXPersistenceUnitTests() {
     VFX_TEST_CHECK(TestLegacyV1Migration(), "TestLegacyV1Migration failed");
     std::cout << "  - Running TestTransactionalSaveAndErrorPreservation ...\n";
     VFX_TEST_CHECK(TestTransactionalSaveAndErrorPreservation(), "TestTransactionalSaveAndErrorPreservation failed");
+    std::cout << "  - Running TestSceneVFXRoundTrip ...\n";
+    VFX_TEST_CHECK(TestSceneVFXRoundTrip(), "TestSceneVFXRoundTrip failed");
     return true;
 }

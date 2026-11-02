@@ -184,3 +184,36 @@ endif()
 
 add_test(NAME MaterialUnitTests COMMAND $<TARGET_FILE:AxleMaterialUnitTests>)
 
+# Dedicated CPU-Only VFX Unit Test Target (Phase 39)
+add_executable(AxleVFXUnitTests
+    src/Tests/VFXUnitTestMain.cpp
+    src/Tests/Test_VFXDefinitionUnit.cpp
+    src/Tests/Test_VFXPersistenceUnit.cpp
+    src/Tests/Test_VFXDocumentUnit.cpp
+    src/Tests/Test_VFXPreviewIsolationUnit.cpp
+    src/Tests/Test_VFXPlaybackUnit.cpp
+    src/Tests/Test_VFXRenderPlanUnit.cpp
+    src/Tests/Test_VFXEventsAndMeshUnit.cpp
+)
+
+target_include_directories(AxleVFXUnitTests PRIVATE
+    src
+    src/Tests
+)
+
+target_link_libraries(AxleVFXUnitTests PRIVATE
+    Axle::Core
+    Axle::Platform
+    Axle::Renderer
+    Axle::Asset
+    Axle::VFX
+    Axle::Scene
+)
+
+if (MSVC)
+    target_compile_options(AxleVFXUnitTests PRIVATE /bigobj /FS)
+endif()
+
+add_test(NAME VFXUnitTests COMMAND $<TARGET_FILE:AxleVFXUnitTests>)
+
+

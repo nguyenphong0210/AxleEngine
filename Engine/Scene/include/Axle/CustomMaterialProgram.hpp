@@ -71,6 +71,7 @@ namespace Axle {
         bool Success = false;
         std::shared_ptr<CustomReadyGeneration> Generation;
         std::string Diagnostic;
+        std::vector<std::filesystem::path> Dependencies;
     };
 
     using CandidateBuilderFunc = std::function<CandidateBuildResult(const CustomProgramKey& key, const std::string& fingerprint)>;
@@ -79,6 +80,7 @@ namespace Axle {
         std::string LastAttemptFingerprint;
         std::shared_ptr<const CustomReadyGeneration> ReadyGeneration;
         std::string Diagnostic;
+        std::vector<std::filesystem::path> Dependencies;
     };
 
     class CustomProgramCache {
@@ -90,7 +92,9 @@ namespace Axle {
         void SetCandidateBuilder(CandidateBuilderFunc builder) { m_CandidateBuilder = std::move(builder); }
 
         // Compute fingerprint for shader file and its dependencies
-        static std::string ComputeFingerprint(const std::filesystem::path& shaderPath);
+        static std::string ComputeFingerprint(const std::filesystem::path& shaderPath,
+            const std::vector<std::filesystem::path>& dependencies = {});
+        std::string ComputeFingerprint(const CustomProgramKey& key) const;
 
         // Refresh cache entry for the key
         ProgramEntry& RefreshEntry(const CustomProgramKey& key, const std::string& fingerprint);

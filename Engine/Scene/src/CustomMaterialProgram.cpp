@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <regex>
 
 namespace Axle {
     nri::Pipeline* CreateCustomMaterialPipeline(const CustomReadyGeneration& generation,
@@ -72,13 +73,15 @@ namespace Axle {
         };
     }
 
-    std::string CustomProgramCache::ComputeFingerprint(const std::filesystem::path& shaderPath) {
+    std::string CustomProgramCache::ComputeFingerprint(const std::filesystem::path& shaderPath,
+        const std::vector<std::filesystem::path>& observedDependencies) {
         std::error_code ec;
         if (!std::filesystem::is_regular_file(shaderPath, ec)) {
             return "";
         }
 
         auto dependencies=RHI::RHIShaderCompiler::ExtractIncludeDependencies(shaderPath);
+        dependencies.insert(dependencies.end(),observedDependencies.begin(),observedDependencies.end());
         dependencies.push_back(shaderPath);
         std::sort(dependencies.begin(),dependencies.end());
         dependencies.erase(std::unique(dependencies.begin(),dependencies.end()),dependencies.end());
@@ -86,14 +89,19 @@ namespace Axle {
         uint64_t hash = 14695981039346656037ull;
         for (const auto& dependency : dependencies) {
             std::ifstream file(dependency,std::ios::binary);
-            if (!file) return "";
             const auto identity=std::filesystem::absolute(dependency,ec).lexically_normal().generic_string();
             for (unsigned char c : identity) { hash^=c; hash*=1099511628211ull; }
+            if (!file) { hash^=0xfe; hash*=1099511628211ull; continue; }
             char c;
             while(file.get(c)) { hash^=static_cast<unsigned char>(c); hash*=1099511628211ull; }
             hash^=0xff; hash*=1099511628211ull;
         }
         return std::to_string(hash);
+    }
+
+    std::string CustomProgramCache::ComputeFingerprint(const CustomProgramKey& key) const {
+        const auto* entry=FindEntry(key);
+        return ComputeFingerprint(std::filesystem::path(key.ShaderPath),entry?entry->Dependencies:std::vector<std::filesystem::path>{});
     }
 
     ProgramEntry& CustomProgramCache::RefreshEntry(const CustomProgramKey& key, const std::string& fingerprint) {
@@ -111,6 +119,10 @@ namespace Axle {
 
         CandidateBuildResult candidate = m_CandidateBuilder(key, fingerprint);
         entry.LastAttemptFingerprint = fingerprint;
+        if (!candidate.Dependencies.empty()) {
+            entry.Dependencies=std::move(candidate.Dependencies);
+            entry.LastAttemptFingerprint=ComputeFingerprint(key);
+        }
 
         if (candidate.Success && candidate.Generation) {
             if (candidate.Generation->GenerationID == 0) {
@@ -208,8 +220,26 @@ namespace Axle {
         vsDesc.Format = (key.Backend == RHI::RHIType::Vulkan) ? RHI::RHIShaderFormat::SPIRV : RHI::RHIShaderFormat::DXIL;
         std::string expanded,preprocessError;
         if (!compiler.Preprocess(vsDesc,expanded,preprocessError)) {
+            static const std::regex missingInclude(R"deps(['"]([^'"]+)['"] file not found)deps");
+            std::smatch missing;
+            if(std::regex_search(preprocessError,missing,missingInclude))
+                result.Dependencies.push_back((std::filesystem::path(resolvedPath).parent_path()/missing[1].str()).lexically_normal());
             result.Diagnostic=preprocessError; return result;
         }
+        // DXC reports active includes after macro expansion, including nested includes.
+        static const std::regex lineDirective(R"deps(^\s*#\s*(?:line\s+)?\d+\s+"([^"]+)")deps");
+        std::istringstream preprocessed(expanded);
+        std::string line;
+        while(std::getline(preprocessed,line)) {
+            std::smatch match;
+            if(!std::regex_search(line,match,lineDirective))continue;
+            std::filesystem::path dependency=match[1].str();
+            if(dependency.is_relative())dependency=std::filesystem::path(resolvedPath).parent_path()/dependency;
+            dependency=std::filesystem::weakly_canonical(dependency,ec);
+            if(!ec && std::filesystem::is_regular_file(dependency,ec))result.Dependencies.push_back(dependency);
+        }
+        std::sort(result.Dependencies.begin(),result.Dependencies.end());
+        result.Dependencies.erase(std::unique(result.Dependencies.begin(),result.Dependencies.end()),result.Dependencies.end());
         vsDesc.Source=CustomShaderInterface::NormalizeLegacyBindings(expanded);
 
         auto vsResult = compiler.Compile(vsDesc);
@@ -242,7 +272,9 @@ namespace Axle {
         ValidatedShaderInterface iface;
         iface.InterfaceRevision = key.InterfaceRevision;
 
-        auto properties = ShaderPropertyParser::ParseFromHLSL(source+"\n"+vsDesc.Source, &mergedReflection);
+        std::string annotatedSource=source;
+        for(const auto& dependency:result.Dependencies)annotatedSource+="\n"+FileSystem::ReadTextFile(dependency);
+        auto properties = ShaderPropertyParser::ParseFromHLSL(annotatedSource+"\n"+vsDesc.Source, &mergedReflection);
         auto planResult = BuildMaterialBindingPlan(mergedReflection, iface, properties);
         if (std::holds_alternative<MaterialBindingError>(planResult)) {
             const auto& err = std::get<MaterialBindingError>(planResult);

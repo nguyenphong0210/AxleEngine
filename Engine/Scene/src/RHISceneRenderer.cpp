@@ -1391,6 +1391,7 @@ namespace Axle {
 
             std::vector<DrawItem> opaqueQueue;
             std::vector<DrawItem> transparentQueue;
+            std::unordered_map<CustomProgramKey,std::string,CustomProgramKeyHash> customFingerprints;
 
             glm::vec3 camPos = camera.GetPosition();
 
@@ -1455,8 +1456,11 @@ namespace Axle {
                             CustomProgramKey key;
                             key.ShaderPath=mat.CustomShaderPath.empty()?"":FileSystem::ResolveAssetPath(mat.CustomShaderPath).lexically_normal().string();
                             key.Backend=m_Device->GetBackend();
-                            auto fp=key.ShaderPath.empty()?"":CustomProgramCache::ComputeFingerprint(key.ShaderPath);
+                            auto [fingerprint,inserted]=customFingerprints.try_emplace(key);
+                            if(inserted && !key.ShaderPath.empty())fingerprint->second=m_CustomProgramCache.ComputeFingerprint(key);
+                            auto fp=fingerprint->second;
                             auto selected=m_CustomProgramCache.SelectProgram(true,key.ShaderPath,key,fp);
+                            if(const auto* entry=m_CustomProgramCache.FindEntry(key))fingerprint->second=entry->LastAttemptFingerprint;
                             diagnostic(selected.Diagnostic);
                             if (selected.Kind==ProgramSelectionKind::Custom && selected.Generation) {
                                 const auto& plan=selected.Generation->BindingPlan;

@@ -1527,6 +1527,9 @@ namespace Axle {
             } else {
                 System->SetConfig(Config);
             }
+            if (System) {
+                System->SetEmitting(Enabled);
+            }
         }
     };
 
@@ -1619,10 +1622,16 @@ namespace Axle {
             } else {
                 System->SetConfig(Config);
             }
+            if (System) {
+                System->SetEmitting(Active && (EmitterStacks.empty() || EmitterStacks[0].Enabled));
+            }
             EmitterStacks[0].System = System;
 
             for (size_t i = 1; i < EmitterStacks.size(); ++i) {
                 EmitterStacks[i].Initialize();
+                if (EmitterStacks[i].System) {
+                    EmitterStacks[i].System->SetEmitting(Active && EmitterStacks[i].Enabled);
+                }
             }
         }
 
@@ -1681,19 +1690,25 @@ namespace Axle {
         void Play() {
             Active = true;
             for (auto& stack : EmitterStacks) {
-                stack.Enabled = true;
-                if (stack.System) stack.System->SetEmitting(true);
+                if (stack.Enabled && stack.System) {
+                    stack.System->SetEmitting(true);
+                }
             }
-            if (System) System->SetEmitting(true);
+            if (System && (!EmitterStacks.empty() ? EmitterStacks[0].Enabled : true)) {
+                System->SetEmitting(true);
+            }
         }
 
         void Stop() {
             Active = false;
             for (auto& stack : EmitterStacks) {
-                stack.Enabled = false;
-                if (stack.System) stack.System->SetEmitting(false);
+                if (stack.System) {
+                    stack.System->SetEmitting(false);
+                }
             }
-            if (System) System->SetEmitting(false);
+            if (System) {
+                System->SetEmitting(false);
+            }
         }
 
         bool LoadFromAsset(const std::string& path) {

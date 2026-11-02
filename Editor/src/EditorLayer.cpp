@@ -1614,11 +1614,11 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
                 pec.Initialize();
                 if (pec.AutoPlay) pec.Play();
             }
-            if (pec.Active && pec.System) {
+            if (pec.Active) {
                 glm::mat4 worldMat = m_Scene->GetWorldTransform(entityID);
                 glm::vec3 worldPos = glm::vec3(worldMat[3]);
                 glm::quat worldRot = glm::quat_cast(worldMat);
-                pec.System->Update(ts.GetSeconds(), worldPos, worldRot);
+                pec.Update(ts.GetSeconds(), worldPos, worldRot);
             }
         }
     }

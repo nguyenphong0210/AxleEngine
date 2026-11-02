@@ -136,6 +136,7 @@ namespace Axle {
 
     void VFXEditorPanel::SelectEmitterStack(size_t index) {
         if (index < m_EmitterStacks.size()) {
+            SyncCurrentStackConfig();
             m_SelectedStackIndex = index;
             m_Config = m_EmitterStacks[index].Config;
         }
@@ -766,20 +767,43 @@ namespace Axle {
             if (ImGui::Button("Apply Stacks to Selected Entity", ImVec2(-1.0f, 30.0f))) {
                 auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
                 SyncCurrentStackConfig();
-                pec.EmitterStacks = m_EmitterStacks;
-                pec.Config = m_Config;
+                pec.EmitterStacks.clear();
+                for (const auto& stack : m_EmitterStacks) {
+                    ParticleEmitterStack sceneStack(stack.Name, stack.Config);
+                    sceneStack.Enabled = stack.Enabled;
+                    sceneStack.Visible = stack.Visible;
+                    sceneStack.TexturePath = stack.TexturePath;
+                    sceneStack.NormalMapPath = stack.NormalMapPath;
+                    sceneStack.MaterialPath = stack.MaterialPath;
+                    pec.EmitterStacks.push_back(std::move(sceneStack));
+                }
+                pec.SyncPrimary();
                 pec.Initialize();
-                pec.Play();
+                if (pec.Active) {
+                    pec.Play();
+                }
             }
         }
 
         if (m_Scene) {
             if (ImGui::Button("Create New VFX Entity in Scene", ImVec2(-1.0f, 28.0f))) {
-                std::string entName = m_Config.Name.empty() ? "VFX_Emitter" : m_Config.Name;
+                SyncCurrentStackConfig();
+                std::string entName = m_EmitterStacks.empty() ? "VFX_Emitter" : m_EmitterStacks[0].Name;
                 Entity newEnt = m_Scene->CreateEntity(entName);
                 newEnt.AddComponent<TransformComponent>(glm::vec3(0.0f, 1.0f, 0.0f));
-                auto& pec = newEnt.AddComponent<ParticleEmitterComponent>(m_Config);
-                pec.EmitterStacks = m_EmitterStacks;
+                auto primaryConfig = m_EmitterStacks.empty() ? m_Config : m_EmitterStacks[0].Config;
+                auto& pec = newEnt.AddComponent<ParticleEmitterComponent>(primaryConfig);
+                pec.EmitterStacks.clear();
+                for (const auto& stack : m_EmitterStacks) {
+                    ParticleEmitterStack sceneStack(stack.Name, stack.Config);
+                    sceneStack.Enabled = stack.Enabled;
+                    sceneStack.Visible = stack.Visible;
+                    sceneStack.TexturePath = stack.TexturePath;
+                    sceneStack.NormalMapPath = stack.NormalMapPath;
+                    sceneStack.MaterialPath = stack.MaterialPath;
+                    pec.EmitterStacks.push_back(std::move(sceneStack));
+                }
+                pec.SyncPrimary();
                 pec.Initialize();
                 pec.Play();
                 SetSelectedEntity(newEnt);
@@ -800,6 +824,7 @@ namespace Axle {
             DrawSubEmittersModule();
             DrawShadingAndBillboarding();
             DrawSceneActions();
+            SyncCurrentStackConfig();
         }
         ImGui::EndChild();
     }

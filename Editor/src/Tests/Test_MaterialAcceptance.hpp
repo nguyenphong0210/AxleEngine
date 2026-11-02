@@ -16,6 +16,11 @@ namespace Axle {
                                           const std::vector<double>& frameTimesMs);
     bool VerifyMaterialReferenceSceneStructure(const Scene& scene, std::string& outError);
     bool WritePPMImage(const std::filesystem::path& filePath, uint32_t width, uint32_t height, const uint8_t* rgbaPixels);
+    struct MaterialReadbackLayout {
+        uint32_t BytesPerPixel, RowPitch;
+        uint64_t SlicePitch;
+    };
+    MaterialReadbackLayout GetMaterialReadbackLayout(uint32_t width, uint32_t height, bool hdr);
 
     // Full GPU integration acceptance test
     bool RunMaterialAcceptanceTests(const std::filesystem::path& projectRoot);

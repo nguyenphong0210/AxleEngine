@@ -356,8 +356,14 @@ namespace {
         MAT_TEST_CHECK(!ValidateMaterialCaptureDirectory("", outDir, err), "Empty capture dir must fail");
 
         // Forbidden write into project assets or engine source
-        MAT_TEST_CHECK(!ValidateMaterialCaptureDirectory("Editor/assets/captures", outDir, err), "Writing into Editor/assets must be rejected");
-        MAT_TEST_CHECK(!ValidateMaterialCaptureDirectory("Engine/captures", outDir, err), "Writing into Engine source must be rejected");
+        const auto repo=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
+        MAT_TEST_CHECK(!ValidateMaterialCaptureDirectory((repo/"Editor/assets/captures").string(), outDir, err), "Writing into Editor/assets must be rejected");
+        MAT_TEST_CHECK(!ValidateMaterialCaptureDirectory((repo/"Engine/captures").string(), outDir, err), "Writing into Engine source must be rejected");
+        MAT_TEST_CHECK(!ValidateMaterialCaptureDirectory((repo/"build/../eNgInE/captures").string(), outDir, err), "Traversal and Windows path case cannot bypass protected directories");
+        auto sdr=GetMaterialReadbackLayout(3,2,false);
+        auto hdr=GetMaterialReadbackLayout(1024,640,true);
+        MAT_TEST_CHECK(sdr.BytesPerPixel==4 && sdr.RowPitch==256 && sdr.SlicePitch==512,"SDR readback aligns short rows");
+        MAT_TEST_CHECK(hdr.BytesPerPixel==8 && hdr.RowPitch==8192 && hdr.SlicePitch==5242880,"HDR readback allocates eight bytes per pixel");
 
         // Valid temp capture directory
         ScopedTempDir tempCap("axle_test_cap");

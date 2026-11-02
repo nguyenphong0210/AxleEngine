@@ -19,6 +19,7 @@
 #define NOMINMAX
 #endif
 #include "TestCommon.hpp"
+#include "Test_MaterialAcceptance.hpp"
 #include <Axle/AssetDSL.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHISceneRenderer.hpp>
@@ -1321,6 +1322,7 @@ bool RunTest_Step106_MaterialPipeline() {
         }
     }
     if (!VerifyMaterialRendering(root)) return false;
+    if (!Axle::RunMaterialAcceptanceTests(std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path())) return false;
     auto textures=MaterialInspectorControls::FindTextures(root);
     if (!check(std::any_of(textures.begin(),textures.end(),[](const auto& p){return p.filename()=="red.tga";}) && std::any_of(textures.begin(),textures.end(),[](const auto& p){return p.filename()=="role.AXLEASSET";}) && std::none_of(textures.begin(),textures.end(),[](const auto& p){return p.filename()=="body.axleasset";}), "Texture picker discovers images/descriptors and excludes materials")) return false;
 

@@ -9,6 +9,8 @@
 #include <Axle/CustomShaderInterface.hpp>
 #include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/PerspectiveCamera.hpp>
+#include <glm/gtc/packing.hpp>
+#include <cstring>
 
 #include <algorithm>
 #include <cctype>
@@ -68,17 +70,20 @@ namespace Axle {
             return false;
         }
 
-        std::filesystem::path path(dirPath);
-        std::string normalized = path.generic_string();
-
-        // Safety: ensure we never write captures into source files or production assets
-        if (normalized.find("Editor/assets") != std::string::npos ||
-            normalized.find("Engine/") != std::string::npos) {
-            outError = "Capture directory must not target project assets or engine source directories: " + dirPath;
-            return false;
-        }
-
         std::error_code ec;
+        auto path=std::filesystem::weakly_canonical(std::filesystem::absolute(dirPath),ec);
+        if (ec) { outError="Invalid capture directory: "+ec.message(); return false; }
+        const auto repo=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
+        for (const auto& protectedPath : {repo/"Engine",repo/"Editor/assets",std::filesystem::path(FileSystem::GetAssetDirectory())}) {
+            auto root=std::filesystem::weakly_canonical(protectedPath,ec);
+            if (ec) continue;
+            auto candidate=ToLower(path.generic_string())+"/";
+            auto prefix=ToLower(root.generic_string())+"/";
+            if (candidate.starts_with(prefix)) {
+                outError="Capture directory must not target project assets or engine sources: "+dirPath;
+                return false;
+            }
+        }
         std::filesystem::create_directories(path, ec);
         if (ec) {
             outError = "Could not create capture directory: " + ec.message();
@@ -87,6 +92,12 @@ namespace Axle {
 
         outDir = std::filesystem::absolute(path);
         return true;
+    }
+
+    MaterialReadbackLayout GetMaterialReadbackLayout(uint32_t width, uint32_t height, bool hdr) {
+        const uint32_t bytes=hdr?8u:4u;
+        const uint32_t pitch=(width*bytes+255u)&~255u;
+        return {bytes,pitch,uint64_t(pitch)*height};
     }
 
     std::string FormatMaterialTimingReport(const std::string& deviceName, const std::string& backend,
@@ -219,6 +230,7 @@ namespace Axle {
         if (!device.IsInitialized()) {
             RHIDeviceDesc desc;
             desc.PreferredBackend = targetBackend;
+            desc.AllowFallback = false;
             desc.Headless = true;
             if (!check(device.Init(desc), "Headless device initialization for requested backend")) return false;
         }
@@ -230,6 +242,9 @@ namespace Axle {
             }
         }
 
+        struct RegistryCleanup {
+            ~RegistryCleanup() { RHIMeshRegistry::Get().Shutdown(); RHIMaterial::ReleaseDefaultTextures(); }
+        } registryCleanup;
         // 4. Load MaterialReference scene
         std::filesystem::path scenePath = projectRoot / "Editor/assets/scenes/MaterialReference.axlescene";
         auto scene = std::make_shared<Scene>();
@@ -241,7 +256,12 @@ namespace Axle {
         std::cout << "  - MaterialReference scene loaded & verified (9 reference entities present).\n";
 
         // 5. Save to temp path and reopen to verify round-trip
-        auto tempScenePath = std::filesystem::temp_directory_path() / "temp_material_reference.axlescene";
+        auto tempScenePath = std::filesystem::temp_directory_path() /
+            ("axle_reference_"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".axlescene");
+        struct TempCleanup {
+            std::filesystem::path Path;
+            ~TempCleanup() { std::error_code ec; std::filesystem::remove(Path,ec); }
+        } tempCleanup{tempScenePath};
         if (!check(serializer.Serialize(tempScenePath.string()), "Serialize scene to temp path")) return false;
 
         auto reloadedScene = std::make_shared<Scene>();
@@ -266,7 +286,7 @@ namespace Axle {
 
         RHIBuffer readbackBuffer;
         RHIBufferDesc readDesc;
-        readDesc.Size = width * height * 4;
+        readDesc.Size = GetMaterialReadbackLayout(width,height,true).SlicePitch;
         readDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
         if (!check(readbackBuffer.Init(readDesc), "Init Readback Buffer")) return false;
 
@@ -283,13 +303,15 @@ namespace Axle {
         settings.ClearColor = glm::vec4(0.05f, 0.05f, 0.07f, 1.0f);
 
         auto readbackPixels = [&](RHITexture& texture) -> std::vector<uint8_t> {
-            std::vector<uint8_t> pixels(readDesc.Size, 0);
+            const bool hdr=texture.GetFormat()==RHITextureFormat::RGBA16_FLOAT;
+            const auto footprint=GetMaterialReadbackLayout(width,height,hdr);
+            std::vector<uint8_t> pixels(width*height*4, 0);
             if (!copyCmd.Reset() || !copyCmd.Begin()) return {};
 
             copyCmd.TransitionTexture(texture.GetNative(), RHIResourceLayout::ShaderResource, RHIResourceLayout::CopySource);
             nri::TextureDataLayoutDesc layout{};
-            layout.rowPitch = width * 4;
-            layout.slicePitch = width * height * 4;
+            layout.rowPitch = footprint.RowPitch;
+            layout.slicePitch = footprint.SlicePitch;
             nri::TextureRegionDesc region{};
             region.width = width;
             region.height = height;
@@ -303,7 +325,17 @@ namespace Axle {
 
             void* data = readbackBuffer.Map();
             if (!data) return {};
-            std::memcpy(pixels.data(), data, pixels.size());
+            for(uint32_t y=0;y<height;++y) {
+                const auto* row=static_cast<const uint8_t*>(data)+y*footprint.RowPitch;
+                if (!hdr) std::memcpy(pixels.data()+y*width*4,row,width*4);
+                else for(uint32_t x=0;x<width*4;++x) {
+                    uint16_t half;
+                    std::memcpy(&half,row+x*2,2);
+                    const float value=glm::unpackHalf1x16(half);
+                    if (!std::isfinite(value)) { readbackBuffer.Unmap(); return {}; }
+                    pixels[y*width*4+x]=static_cast<uint8_t>(std::lround(std::clamp(value,0.0f,1.0f)*255.0f));
+                }
+            }
             readbackBuffer.Unmap();
             return pixels;
         };
@@ -312,6 +344,12 @@ namespace Axle {
         renderer.RenderScene(scene, camera, &colorSDR, &depthTarget, settings);
         auto sdrPixels = readbackPixels(colorSDR);
         if (!check(!sdrPixels.empty(), "SDR Render & Readback")) return false;
+        renderer.RenderScene(reloadedScene,camera,&colorSDR,&depthTarget,settings);
+        if (!check(readbackPixels(colorSDR)==sdrPixels,"Saved/reopened reference scene renders identical pixels")) return false;
+        for(auto id:reloadedScene->GetRegistry().view<MaterialComponent>())
+            reloadedScene->GetRegistry().get<MaterialComponent>(id).MakeUnique();
+        renderer.RenderScene(reloadedScene,camera,&colorSDR,&depthTarget,settings);
+        if (!check(readbackPixels(colorSDR)==sdrPixels,"Detached inline materials match shared asset rendering")) return false;
 
         if (doCapture) {
             auto sdrCapturePath = captureDir / ("capture_reference_sdr_" + ToLower(backendName) + "_" + std::to_string(width) + "x" + std::to_string(height) + ".ppm");
@@ -320,9 +358,11 @@ namespace Axle {
         }
 
         // 8. Render HDR and capture if requested
+        settings.EnableToneMapping=true;
         renderer.RenderScene(scene, camera, &colorHDR, &depthTarget, settings);
         auto hdrPixels = readbackPixels(colorHDR);
         if (!check(!hdrPixels.empty(), "HDR Render & Readback")) return false;
+        settings.EnableToneMapping=false;
 
         if (doCapture) {
             auto hdrCapturePath = captureDir / ("capture_reference_hdr_" + ToLower(backendName) + "_" + std::to_string(width) + "x" + std::to_string(height) + ".ppm");
@@ -330,30 +370,33 @@ namespace Axle {
             std::cout << "  - Saved HDR PPM capture to: " << hdrCapturePath.string() << "\n";
         }
 
-        // 9. Timings: 3 warm-up frames, 24 measured frames
-        std::vector<double> frameTimes;
-        frameTimes.reserve(24);
-        for (int i = 0; i < 3; ++i) {
-            renderer.RenderScene(scene, camera, &colorSDR, &depthTarget, settings);
-            device.WaitIdle();
-        }
-
-        for (int i = 0; i < 24; ++i) {
-            auto t0 = std::chrono::high_resolution_clock::now();
-            renderer.RenderScene(scene, camera, &colorSDR, &depthTarget, settings);
-            device.WaitIdle();
-            auto t1 = std::chrono::high_resolution_clock::now();
-            double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-            frameTimes.push_back(ms);
-        }
-
-        std::string report = FormatMaterialTimingReport(device.GetCapabilities().AdapterName, backendName, width, height, 1, frameTimes);
+        // 9. Same scene/camera for each optional-path configuration. These short
+        // end-to-end measurements are diagnostic, not isolated shader benchmarks.
+        auto timings=[&](const std::shared_ptr<Scene>& target,const char* label) {
+            for(int i=0;i<3;++i) {renderer.RenderScene(target,camera,&colorSDR,&depthTarget,settings);device.WaitIdle();}
+            std::vector<double> times;
+            for(int i=0;i<24;++i) {
+                auto start=std::chrono::steady_clock::now();
+                renderer.RenderScene(target,camera,&colorSDR,&depthTarget,settings);device.WaitIdle();
+                times.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());
+            }
+            return std::string("\nConfiguration: ")+label+FormatMaterialTimingReport(device.GetCapabilities().AdapterName,backendName,width,height,1,times);
+        };
+        std::string report=timings(scene,"detail normal + refraction");
+        for(auto id:reloadedScene->GetRegistry().view<MaterialComponent>())
+            reloadedScene->GetRegistry().get<MaterialComponent>(id).RefractionEnabled=false;
+        report+=timings(reloadedScene,"detail normal, refraction disabled");
+        for(auto id:reloadedScene->GetRegistry().view<MaterialComponent>())
+            reloadedScene->GetRegistry().get<MaterialComponent>(id).UseDetailNormalMap=false;
+        report+=timings(reloadedScene,"baseline, detail normal and refraction disabled");
         std::cout << report << "\n";
 
         if (doCapture) {
             auto timingPath = captureDir / ("timings_" + ToLower(backendName) + ".txt");
             std::ofstream tf(timingPath);
-            if (tf) tf << report;
+            tf << report;
+            tf.flush();
+            if (!check(tf.good(),"Write material timing report")) return false;
         }
 
         std::cout << "  [PASS] Automotive material rendering acceptance checks completed successfully.\n";

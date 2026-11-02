@@ -53,6 +53,15 @@ namespace Axle {
     void RHIParticleRenderer::Shutdown() {
         if (!m_Initialized) return;
 
+        for (auto& res : m_DrawResources) {
+            if (res) {
+                res->Constants.Shutdown();
+                res->Instances.Shutdown();
+            }
+        }
+        m_DrawResources.clear();
+        m_DrawResourceCursor = 0;
+
         m_ConstantBuffer.Shutdown();
         m_InstanceBuffer.Shutdown();
         m_LinearSampler.Shutdown();
@@ -68,6 +77,30 @@ namespace Axle {
         m_InstanceStagingBuffer.clear();
         m_InBatch = false;
         m_Initialized = false;
+    }
+
+    ParticleDrawResources* RHIParticleRenderer::AcquireDrawResources() {
+        if (m_DrawResourceCursor < m_DrawResources.size()) {
+            return m_DrawResources[m_DrawResourceCursor++].get();
+        }
+
+        auto res = std::make_unique<ParticleDrawResources>();
+        std::string suffix = std::to_string(m_DrawResources.size());
+        if (!res->Constants.Init(RHI::RHIBufferDesc::Constant(sizeof(RHIParticleConstants), RHI::RHIMemoryLocation::HostUpload, "Particle_CBV_" + suffix))) {
+            return nullptr;
+        }
+        if (!res->Instances.Init(RHI::RHIBufferDesc::Vertex(MAX_PARTICLES_PER_BATCH * sizeof(ParticleInstanceVertex), RHI::RHIMemoryLocation::HostUpload, "Particle_VBO_" + suffix))) {
+            return nullptr;
+        }
+        if (m_DescriptorPool.IsValid()) {
+            res->Set = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 0);
+            if (res->Set && m_LinearSampler.IsValid()) {
+                m_DescriptorPool.UpdateSampler(res->Set, 2, 0, m_LinearSampler.GetNative());
+            }
+        }
+        m_DrawResources.push_back(std::move(res));
+        m_DrawResourceCursor = m_DrawResources.size();
+        return m_DrawResources.back().get();
     }
 
     bool RHIParticleRenderer::CompileShaders(RHI::RHIDevice& device) {
@@ -275,12 +308,90 @@ namespace Axle {
         return m_PipelineAlphaBlendSDR != nullptr && m_PipelineAdditiveSDR != nullptr;
     }
 
+    void ParticleRenderPlanner::BuildDrawPackets(
+        const ParticlePool& pool,
+        const ParticleEmitterConfig& config,
+        const PerspectiveCamera& camera,
+        const glm::vec3& emitterWorldPos,
+        const glm::quat& emitterWorldRot,
+        std::vector<ParticleDrawPacket>& outPackets,
+        uint32_t maxBatchSize)
+    {
+        uint32_t activeCount = pool.GetActiveCount();
+        if (activeCount == 0 || maxBatchSize == 0) return;
+
+        const auto& positions = pool.GetPositions();
+        const auto& sizes = pool.GetSizes();
+        const auto& colors = pool.GetColors();
+        const auto& rotations = pool.GetRotations();
+        const auto& velocities = pool.GetVelocities();
+        const auto& uvs = pool.GetUVOffsetScales();
+        const auto& subFrames = pool.GetUVSubFrames();
+        int orientation = static_cast<int>(config.Orientation);
+        glm::vec3 camPos = camera.GetPosition();
+
+        struct ParticleIndexKey {
+            uint32_t Index;
+            float DistSq;
+        };
+        std::vector<ParticleIndexKey> sortedKeys(activeCount);
+        bool isLocal = (config.SimulationSpace == ParticleSimulationSpace::Local);
+
+        for (uint32_t i = 0; i < activeCount; ++i) {
+            sortedKeys[i].Index = i;
+            glm::vec3 worldP = isLocal ? (emitterWorldPos + (emitterWorldRot * positions[i])) : positions[i];
+            glm::vec3 toCam = camPos - worldP;
+            sortedKeys[i].DistSq = glm::dot(toCam, toCam);
+        }
+
+        // Alpha sorting (back-to-front, i.e. descending distance)
+        if (config.BlendMode == ParticleBlendMode::AlphaBlend) {
+            std::stable_sort(sortedKeys.begin(), sortedKeys.end(), [](const ParticleIndexKey& a, const ParticleIndexKey& b) {
+                return a.DistSq > b.DistSq;
+            });
+        }
+
+        uint32_t totalPackets = (activeCount + maxBatchSize - 1) / maxBatchSize;
+        outPackets.reserve(outPackets.size() + totalPackets);
+
+        for (uint32_t offset = 0; offset < activeCount; offset += maxBatchSize) {
+            uint32_t batchCount = std::min(activeCount - offset, maxBatchSize);
+            ParticleDrawPacket packet;
+            packet.EmitterName = config.Name;
+            packet.BlendMode = config.BlendMode;
+            packet.InstanceOffset = offset;
+            packet.InstanceCount = batchCount;
+            packet.Instances.resize(batchCount);
+
+            for (uint32_t j = 0; j < batchCount; ++j) {
+                uint32_t srcIdx = sortedKeys[offset + j].Index;
+                auto& v = packet.Instances[j];
+                if (isLocal) {
+                    v.Position = emitterWorldPos + (emitterWorldRot * positions[srcIdx]);
+                    v.Velocity = emitterWorldRot * velocities[srcIdx];
+                } else {
+                    v.Position = positions[srcIdx];
+                    v.Velocity = velocities[srcIdx];
+                }
+                v.Size = sizes[srcIdx];
+                v.Color = colors[srcIdx];
+                v.Rotation = rotations[srcIdx];
+                v.Orientation = orientation;
+                v.UVOffsetScale = uvs[srcIdx];
+                v.UVSubFrame = subFrames[srcIdx];
+            }
+
+            outPackets.push_back(std::move(packet));
+        }
+    }
+
     void RHIParticleRenderer::Begin(RHI::RHICommandBuffer& cmd,
                                    const PerspectiveCamera& camera,
                                    nri::Format colorFormat,
                                    nri::Format depthFormat,
                                    uint8_t sampleCount)
     {
+        m_DrawResourceCursor = 0;
         m_ActiveColorFormat = colorFormat;
         m_ActiveDepthFormat = depthFormat;
         m_ActiveSampleCount = sampleCount;
@@ -323,9 +434,11 @@ namespace Axle {
                                     const ParticleSystem& system,
                                     RHI::RHITexture* texture,
                                     RHI::RHITexture* normalMap,
-                                    float softnessDistance)
+                                    float softnessDistance,
+                                    const glm::vec3& emitterWorldPos,
+                                    const glm::quat& emitterWorldRot)
     {
-        Render(cmd, system.GetPool(), system.GetConfig(), texture, normalMap, softnessDistance);
+        Render(cmd, system.GetPool(), system.GetConfig(), texture, normalMap, softnessDistance, emitterWorldPos, emitterWorldRot);
     }
 
     void RHIParticleRenderer::Render(RHI::RHICommandBuffer& cmd,
@@ -333,11 +446,13 @@ namespace Axle {
                                     const ParticleEmitterConfig& config,
                                     RHI::RHITexture* texture,
                                     RHI::RHITexture* normalMap,
-                                    float softnessDistance)
+                                    float softnessDistance,
+                                    const glm::vec3& emitterWorldPos,
+                                    const glm::quat& emitterWorldRot)
     {
         nri::Descriptor* texSRV = (texture && texture->IsValid()) ? texture->GetSRV() : nullptr;
         nri::Descriptor* normSRV = (normalMap && normalMap->IsValid()) ? normalMap->GetSRV() : nullptr;
-        Render(cmd, pool, config, texSRV, normSRV, softnessDistance);
+        Render(cmd, pool, config, texSRV, normSRV, softnessDistance, emitterWorldPos, emitterWorldRot);
     }
 
     void RHIParticleRenderer::Render(RHI::RHICommandBuffer& cmd,
@@ -345,104 +460,92 @@ namespace Axle {
                                     const ParticleEmitterConfig& config,
                                     nri::Descriptor* textureSRV,
                                     nri::Descriptor* normalMapSRV,
-                                    float softnessDistance)
+                                    float softnessDistance,
+                                    const glm::vec3& emitterWorldPos,
+                                    const glm::quat& emitterWorldRot)
     {
         uint32_t activeCount = pool.GetActiveCount();
         if (activeCount == 0 || !m_Initialized) return;
 
-        uint32_t toRender = std::min(activeCount, MAX_PARTICLES_PER_BATCH);
-        if (m_InstanceStagingBuffer.size() < toRender) {
-            m_InstanceStagingBuffer.resize(toRender);
-        }
+        PerspectiveCamera cam(55.0f, 1.0f, 0.1f, 1000.0f);
+        cam.SetViewMatrix(m_ActiveConstants.View, glm::vec3(m_ActiveConstants.CameraPosition));
 
-        // 1. Pack instance buffer from ParticlePool
-        const auto& positions = pool.GetPositions();
-        const auto& sizes = pool.GetSizes();
-        const auto& colors = pool.GetColors();
-        const auto& rotations = pool.GetRotations();
-        const auto& velocities = pool.GetVelocities();
-        const auto& uvs = pool.GetUVOffsetScales();
-        const auto& subFrames = pool.GetUVSubFrames();
-        int orientation = static_cast<int>(config.Orientation);
+        std::vector<ParticleDrawPacket> packets;
+        ParticleRenderPlanner::BuildDrawPackets(pool, config, cam, emitterWorldPos, emitterWorldRot, packets, MAX_PARTICLES_PER_BATCH);
 
-        for (uint32_t i = 0; i < toRender; ++i) {
-            m_InstanceStagingBuffer[i].Position = positions[i];
-            m_InstanceStagingBuffer[i].Size = sizes[i];
-            m_InstanceStagingBuffer[i].Color = colors[i];
-            m_InstanceStagingBuffer[i].Rotation = rotations[i];
-            m_InstanceStagingBuffer[i].Orientation = orientation;
-            m_InstanceStagingBuffer[i].Velocity = velocities[i];
-            m_InstanceStagingBuffer[i].UVOffsetScale = uvs[i];
-            m_InstanceStagingBuffer[i].UVSubFrame = subFrames[i];
-        }
+        for (const auto& packet : packets) {
+            ParticleDrawResources* drawRes = AcquireDrawResources();
+            if (!drawRes) continue;
 
-        // 2. Upload to GPU Instance Buffer
-        m_InstanceBuffer.UpdateData(m_InstanceStagingBuffer.data(), toRender * sizeof(ParticleInstanceVertex));
+            // 1. Upload to GPU Instance Buffer
+            drawRes->Instances.UpdateData(packet.Instances.data(), packet.InstanceCount * sizeof(ParticleInstanceVertex));
 
-        // 3. Update Constant Buffer Parameters
-        m_ActiveConstants.Flags.x = (textureSRV != nullptr) ? 1u : 0u;
-        m_ActiveConstants.Flags.y = config.SubFrameBlending ? 1u : 0u;
-        m_ActiveConstants.Flags.z = (normalMapSRV != nullptr) ? 1u : 0u;
-        m_ActiveConstants.Flags.w = config.LightingEnabled ? 1u : 0u;
+            // 2. Update Constant Buffer Parameters
+            RHIParticleConstants drawConstants = m_ActiveConstants;
+            drawConstants.Flags.x = (textureSRV != nullptr) ? 1u : 0u;
+            drawConstants.Flags.y = config.SubFrameBlending ? 1u : 0u;
+            drawConstants.Flags.z = (normalMapSRV != nullptr) ? 1u : 0u;
+            drawConstants.Flags.w = config.LightingEnabled ? 1u : 0u;
 
-        m_ActiveConstants.SunDirection.w = config.WrapLighting;
-        m_ActiveConstants.SunColor.w = config.ScatteringFactor;
-        m_ActiveConstants.AmbientColor.w = config.NormalMapStrength;
+            drawConstants.SunDirection.w = config.WrapLighting;
+            drawConstants.SunColor.w = config.ScatteringFactor;
+            drawConstants.AmbientColor.w = config.NormalMapStrength;
 
-        m_ActiveConstants.FadeParams = glm::vec4(config.NearFadeStart, config.NearFadeEnd, config.FarFadeStart, config.FarFadeEnd);
-        m_ActiveConstants.Flags2.x = config.NearFadeEnabled ? 1u : 0u;
-        m_ActiveConstants.Flags2.y = config.FarFadeEnabled ? 1u : 0u;
-        m_ActiveConstants.Flags2.z = (softnessDistance > 0.0f) ? 1u : 0u;
-        m_ActiveConstants.CameraUp.w = (softnessDistance > 0.0f) ? softnessDistance : config.SoftnessDistance;
+            drawConstants.FadeParams = glm::vec4(config.NearFadeStart, config.NearFadeEnd, config.FarFadeStart, config.FarFadeEnd);
+            drawConstants.Flags2.x = config.NearFadeEnabled ? 1u : 0u;
+            drawConstants.Flags2.y = config.FarFadeEnabled ? 1u : 0u;
+            drawConstants.Flags2.z = (softnessDistance > 0.0f) ? 1u : 0u;
+            drawConstants.CameraUp.w = (softnessDistance > 0.0f) ? softnessDistance : config.SoftnessDistance;
 
-        if (m_ConstantBuffer.IsValid()) {
-            m_ConstantBuffer.UpdateData(&m_ActiveConstants, sizeof(RHIParticleConstants));
-        }
-
-        // 4. Update Texture Descriptors in Descriptor Set (Space 1)
-        if (m_DescriptorPool.IsValid() && m_DescriptorSet) {
-            auto defaultWhite = RHI::RHIMaterial::GetDefaultWhiteTexture();
-            auto defaultFlatNormal = RHI::RHIMaterial::GetDefaultFlatNormalTexture();
-
-            nri::Descriptor* finalTexSRV = textureSRV ? textureSRV : (defaultWhite ? defaultWhite->GetSRV() : nullptr);
-            nri::Descriptor* finalNormSRV = normalMapSRV ? normalMapSRV : (defaultFlatNormal ? defaultFlatNormal->GetSRV() : nullptr);
-
-            if (finalTexSRV) {
-                m_DescriptorPool.UpdateTexture(m_DescriptorSet, 0, 0, finalTexSRV);
+            if (drawRes->Constants.IsValid()) {
+                drawRes->Constants.UpdateData(&drawConstants, sizeof(RHIParticleConstants));
             }
-            if (finalNormSRV) {
-                m_DescriptorPool.UpdateTexture(m_DescriptorSet, 1, 0, finalNormSRV);
+
+            // 3. Update Texture Descriptors in Descriptor Set (Space 1)
+            if (m_DescriptorPool.IsValid() && drawRes->Set) {
+                auto defaultWhite = RHI::RHIMaterial::GetDefaultWhiteTexture();
+                auto defaultFlatNormal = RHI::RHIMaterial::GetDefaultFlatNormalTexture();
+
+                nri::Descriptor* finalTexSRV = textureSRV ? textureSRV : (defaultWhite ? defaultWhite->GetSRV() : nullptr);
+                nri::Descriptor* finalNormSRV = normalMapSRV ? normalMapSRV : (defaultFlatNormal ? defaultFlatNormal->GetSRV() : nullptr);
+
+                if (finalTexSRV) {
+                    m_DescriptorPool.UpdateTexture(drawRes->Set, 0, 0, finalTexSRV);
+                }
+                if (finalNormSRV) {
+                    m_DescriptorPool.UpdateTexture(drawRes->Set, 1, 0, finalNormSRV);
+                }
             }
+
+            // 4. Select Graphics Pipeline State Object
+            nri::Pipeline* pipeline = GetOrCreatePipeline(config.BlendMode, m_ActiveColorFormat, m_ActiveDepthFormat, m_ActiveSampleCount);
+            if (!pipeline) {
+                pipeline = (config.BlendMode == ParticleBlendMode::Additive) ? m_PipelineAdditiveSDR : m_PipelineAlphaBlendSDR;
+            }
+
+            cmd.SetPipeline(pipeline);
+            cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+
+            // Bind Root Descriptor [0]: ParticleConstants (b0)
+            if (drawRes->Constants.IsValid() && drawRes->Constants.GetCBV()) {
+                cmd.SetRootDescriptor(0, drawRes->Constants.GetCBV());
+            }
+
+            // Bind Descriptor Set [0]: Particle Textures & Sampler (Space 1)
+            if (m_DescriptorPool.IsValid() && drawRes->Set) {
+                m_DescriptorPool.Bind(cmd.GetNative());
+                RHI::RHIDescriptorPool::BindDescriptorSet(cmd.GetNative(), 0, drawRes->Set);
+            }
+
+            // Bind Instanced Vertex Buffer (Stream 0, StepRate = PER_INSTANCE)
+            cmd.SetVertexBuffer(0, drawRes->Instances.GetNative(), 0, sizeof(ParticleInstanceVertex));
+
+            // Draw 6-vertex quad per particle instance
+            cmd.Draw(6, packet.InstanceCount, 0, 0);
+
+            m_DrawCallCount++;
+            m_RenderedParticleCount += packet.InstanceCount;
         }
-
-        // 5. Select Graphics Pipeline State Object
-        nri::Pipeline* pipeline = GetOrCreatePipeline(config.BlendMode, m_ActiveColorFormat, m_ActiveDepthFormat, m_ActiveSampleCount);
-        if (!pipeline) {
-            pipeline = (config.BlendMode == ParticleBlendMode::Additive) ? m_PipelineAdditiveSDR : m_PipelineAlphaBlendSDR;
-        }
-
-        cmd.SetPipeline(pipeline);
-        cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
-
-        // Bind Root Descriptor [0]: ParticleConstants (b0)
-        if (m_ConstantBuffer.IsValid() && m_ConstantBuffer.GetCBV()) {
-            cmd.SetRootDescriptor(0, m_ConstantBuffer.GetCBV());
-        }
-
-        // Bind Descriptor Set [0]: Particle Textures & Sampler (Space 1)
-        if (m_DescriptorPool.IsValid() && m_DescriptorSet) {
-            m_DescriptorPool.Bind(cmd.GetNative());
-            RHI::RHIDescriptorPool::BindDescriptorSet(cmd.GetNative(), 0, m_DescriptorSet);
-        }
-
-        // Bind Instanced Vertex Buffer (Stream 0, StepRate = PER_INSTANCE)
-        cmd.SetVertexBuffer(0, m_InstanceBuffer.GetNative(), 0, sizeof(ParticleInstanceVertex));
-
-        // Draw 6-vertex quad per particle instance
-        cmd.Draw(6, toRender, 0, 0);
-
-        m_DrawCallCount++;
-        m_RenderedParticleCount += toRender;
     }
 
 }

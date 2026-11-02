@@ -48,6 +48,38 @@ namespace Axle {
     static_assert(sizeof(RHIParticleConstants) == 512, "RHIParticleConstants must be exactly 512 bytes (256-byte aligned)!");
 
     // =========================================================================
+    // ParticleRenderPlanner: CPU Instance Packing, Transform & Depth Sorting
+    // =========================================================================
+    struct ParticleDrawPacket {
+        std::string EmitterName;
+        ParticleBlendMode BlendMode = ParticleBlendMode::AlphaBlend;
+        nri::Format ColorFormat = nri::Format::RGBA8_UNORM;
+        uint32_t InstanceOffset = 0;
+        uint32_t InstanceCount = 0;
+        std::vector<ParticleInstanceVertex> Instances;
+        RHIParticleConstants Constants{};
+    };
+
+    class ParticleRenderPlanner {
+    public:
+        static void BuildDrawPackets(
+            const ParticlePool& pool,
+            const ParticleEmitterConfig& config,
+            const PerspectiveCamera& camera,
+            const glm::vec3& emitterWorldPos,
+            const glm::quat& emitterWorldRot,
+            std::vector<ParticleDrawPacket>& outPackets,
+            uint32_t maxBatchSize = 20000
+        );
+    };
+
+    struct ParticleDrawResources {
+        RHI::RHIBuffer Instances;
+        RHI::RHIBuffer Constants;
+        nri::DescriptorSet* Set = nullptr;
+    };
+
+    // =========================================================================
     // RHIParticleRenderer: Multi-Backend GPU Instanced Particle VFX Renderer
     // =========================================================================
     class RHIParticleRenderer {
@@ -84,7 +116,9 @@ namespace Axle {
                     const ParticleSystem& system,
                     RHI::RHITexture* texture = nullptr,
                     RHI::RHITexture* normalMap = nullptr,
-                    float softnessDistance = 0.5f);
+                    float softnessDistance = 0.5f,
+                    const glm::vec3& emitterWorldPos = glm::vec3(0.0f),
+                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
 
         // Render directly from ParticlePool & ParticleEmitterConfig
         void Render(RHI::RHICommandBuffer& cmd,
@@ -92,7 +126,9 @@ namespace Axle {
                     const ParticleEmitterConfig& config,
                     RHI::RHITexture* texture = nullptr,
                     RHI::RHITexture* normalMap = nullptr,
-                    float softnessDistance = 0.5f);
+                    float softnessDistance = 0.5f,
+                    const glm::vec3& emitterWorldPos = glm::vec3(0.0f),
+                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
 
         // Render with native NRI descriptors (for bindless / shared textures)
         void Render(RHI::RHICommandBuffer& cmd,
@@ -100,7 +136,9 @@ namespace Axle {
                     const ParticleEmitterConfig& config,
                     nri::Descriptor* textureSRV,
                     nri::Descriptor* normalMapSRV,
-                    float softnessDistance = 0.5f);
+                    float softnessDistance = 0.5f,
+                    const glm::vec3& emitterWorldPos = glm::vec3(0.0f),
+                    const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
 
         // Environment lighting
         void SetLightEnvironment(const ParticleLightEnvironment& env) { m_LightEnvironment = env; }
@@ -126,6 +164,7 @@ namespace Axle {
         bool CreatePipelineLayout(RHI::RHIDevice& device);
         bool CreatePipelines(RHI::RHIDevice& device);
         bool CreateBuffers(RHI::RHIDevice& device);
+        ParticleDrawResources* AcquireDrawResources();
 
     private:
         RHI::RHIDevice* m_Device = nullptr;
@@ -145,6 +184,8 @@ namespace Axle {
         // GPU Buffers
         RHI::RHIBuffer m_ConstantBuffer;
         RHI::RHIBuffer m_InstanceBuffer;
+        std::vector<std::unique_ptr<ParticleDrawResources>> m_DrawResources;
+        size_t m_DrawResourceCursor = 0;
         RHI::RHISampler m_LinearSampler;
         RHI::RHIDescriptorPool m_DescriptorPool;
         nri::DescriptorSet* m_DescriptorSet = nullptr;

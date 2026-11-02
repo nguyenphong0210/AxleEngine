@@ -77,6 +77,7 @@ namespace Axle {
 
     // Validation & Factory Helpers
     bool ValidateParticleEffectDefinition(const ParticleEffectDefinition& definition, std::vector<std::string>& outErrors);
+    bool ValidateSubEmitterGraph(const ParticleEffectDefinition& definition, std::vector<std::string>& outErrors);
     ParticleEffectDefinition CreateDefaultParticleEffect(const std::string& name = "Default Effect");
     EmitterId GenerateUniqueEmitterId(const std::string& prefix = "emitter");
 

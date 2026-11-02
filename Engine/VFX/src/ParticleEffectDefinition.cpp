@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <functional>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace Axle {
@@ -113,7 +115,89 @@ namespace Axle {
             }
         }
 
+        // Sub-Emitter Graph Cycle and Target Validation
+        ValidateSubEmitterGraph(definition, outErrors);
+
         return outErrors.empty();
+    }
+
+    bool ValidateSubEmitterGraph(const ParticleEffectDefinition& definition, std::vector<std::string>& outErrors) {
+        bool valid = true;
+
+        std::unordered_map<std::string, size_t> idToIndex;
+        std::unordered_map<std::string, size_t> nameToIndex;
+        for (size_t i = 0; i < definition.Emitters.size(); ++i) {
+            idToIndex[definition.Emitters[i].Id] = i;
+            if (!definition.Emitters[i].Name.empty()) {
+                nameToIndex[definition.Emitters[i].Name] = i;
+            }
+        }
+
+        std::vector<std::vector<size_t>> adj(definition.Emitters.size());
+
+        for (size_t i = 0; i < definition.Emitters.size(); ++i) {
+            const auto& emitter = definition.Emitters[i];
+            for (const auto& sub : emitter.Config.SubEmitters) {
+                if (sub.TargetEmitterName.empty()) {
+                    outErrors.push_back("Emitter '" + emitter.Id + "' has a sub-emitter trigger with an empty target.");
+                    valid = false;
+                    continue;
+                }
+
+                size_t targetIdx = definition.Emitters.size();
+                auto itId = idToIndex.find(sub.TargetEmitterName);
+                if (itId != idToIndex.end()) {
+                    targetIdx = itId->second;
+                } else {
+                    auto itName = nameToIndex.find(sub.TargetEmitterName);
+                    if (itName != nameToIndex.end()) {
+                        targetIdx = itName->second;
+                    }
+                }
+
+                if (targetIdx >= definition.Emitters.size()) {
+                    outErrors.push_back("Emitter '" + emitter.Id + "' references non-existent sub-emitter target: '" + sub.TargetEmitterName + "'.");
+                    valid = false;
+                    continue;
+                }
+
+                if (targetIdx == i) {
+                    outErrors.push_back("Emitter '" + emitter.Id + "' contains self-referencing sub-emitter target.");
+                    valid = false;
+                    continue;
+                }
+
+                adj[i].push_back(targetIdx);
+            }
+        }
+
+        // Cycle detection via 3-color DFS
+        std::vector<int> visitState(definition.Emitters.size(), 0);
+        std::function<bool(size_t)> hasCycle = [&](size_t u) -> bool {
+            visitState[u] = 1;
+            for (size_t v : adj[u]) {
+                if (visitState[v] == 1) {
+                    outErrors.push_back("Cycle detected in sub-emitter graph: '" + definition.Emitters[u].Id + "' -> '" + definition.Emitters[v].Id + "'.");
+                    return true;
+                }
+                if (visitState[v] == 0) {
+                    if (hasCycle(v)) return true;
+                }
+            }
+            visitState[u] = 2;
+            return false;
+        };
+
+        for (size_t i = 0; i < definition.Emitters.size(); ++i) {
+            if (visitState[i] == 0) {
+                if (hasCycle(i)) {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+
+        return valid;
     }
 
     ParticleEffectDefinition CreateDefaultParticleEffect(const std::string& name) {

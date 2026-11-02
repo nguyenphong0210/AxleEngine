@@ -954,7 +954,14 @@ namespace Axle {
             ImGui::TextDisabled("Spawn child particle systems on particle events:");
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 70.0f);
             if (ImGui::SmallButton("+ Add Sub")) {
-                m_Config.SubEmitters.emplace_back(SubEmitterTrigger::Collision, "Sparks", 10, 1.0f);
+                std::string defaultTarget = "Sparks";
+                for (size_t i = 0; i < m_EmitterStacks.size(); ++i) {
+                    if (i != m_SelectedStackIndex) {
+                        defaultTarget = m_EmitterStacks[i].Name;
+                        break;
+                    }
+                }
+                m_Config.SubEmitters.emplace_back(SubEmitterTrigger::Collision, defaultTarget, 10, 1.0f);
                 SyncCurrentStackConfig();
             }
 
@@ -967,19 +974,60 @@ namespace Axle {
                 int currentTrig = static_cast<int>(sub.Trigger);
                 if (ImGui::Combo("Event Trigger", &currentTrig, triggerNames, IM_ARRAYSIZE(triggerNames))) {
                     sub.Trigger = static_cast<SubEmitterTrigger>(currentTrig);
+                    SyncCurrentStackConfig();
                 }
 
-                char targetBuf[64];
-                strncpy_s(targetBuf, sub.TargetEmitterName.c_str(), sizeof(targetBuf));
-                if (ImGui::InputText("Target Emitter", targetBuf, sizeof(targetBuf))) {
-                    sub.TargetEmitterName = targetBuf;
+                // Target Emitter Selection Combo
+                std::string currentTarget = sub.TargetEmitterName;
+                if (ImGui::BeginCombo("Target Emitter", currentTarget.empty() ? "<Select Target>" : currentTarget.c_str())) {
+                    for (size_t i = 0; i < m_EmitterStacks.size(); ++i) {
+                        if (i == m_SelectedStackIndex) continue; // Exclude self
+                        const auto& targetName = m_EmitterStacks[i].Name;
+                        bool isSelected = (currentTarget == targetName);
+                        if (ImGui::Selectable(targetName.c_str(), isSelected)) {
+                            sub.TargetEmitterName = targetName;
+                            SyncCurrentStackConfig();
+                        }
+                        if (isSelected) {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+                // Check for invalid target or self-reference
+                auto* curStack = GetCurrentEmitterStack();
+                if (curStack && sub.TargetEmitterName == curStack->Name) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Warning: Self-referencing sub-emitter target!");
+                } else if (!sub.TargetEmitterName.empty()) {
+                    bool targetExists = false;
+                    for (const auto& stack : m_EmitterStacks) {
+                        if (stack.Name == sub.TargetEmitterName) {
+                            targetExists = true;
+                            break;
+                        }
+                    }
+                    if (!targetExists) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "Warning: Target emitter not found!");
+                    }
                 }
 
                 int count = static_cast<int>(sub.EmitCount);
                 if (ImGui::DragInt("Spawn Count", &count, 1, 1, 200)) {
                     sub.EmitCount = static_cast<uint32_t>(std::max(1, count));
+                    SyncCurrentStackConfig();
                 }
-                ImGui::SliderFloat("Trigger Probability", &sub.Probability, 0.0f, 1.0f, "%.2f");
+                if (ImGui::SliderFloat("Trigger Probability", &sub.Probability, 0.0f, 1.0f, "%.2f")) {
+                    SyncCurrentStackConfig();
+                }
+
+                if (ImGui::Checkbox("Inherit Color", &sub.InheritColor)) {
+                    SyncCurrentStackConfig();
+                }
+                ImGui::SameLine();
+                if (ImGui::Checkbox("Inherit Velocity", &sub.InheritVelocity)) {
+                    SyncCurrentStackConfig();
+                }
 
                 if (ImGui::SmallButton("Delete Sub-Emitter")) {
                     m_Config.SubEmitters.erase(m_Config.SubEmitters.begin() + s);

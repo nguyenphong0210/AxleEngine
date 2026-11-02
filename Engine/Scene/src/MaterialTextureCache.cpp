@@ -66,7 +66,7 @@ namespace Axle {
             upload.planes = nri::PlaneBits::COLOR;
             upload.after.access = nri::AccessBits::SHADER_RESOURCE;
             upload.after.layout = nri::Layout::SHADER_RESOURCE;
-            upload.after.stages = nri::StageBits::FRAGMENT_SHADER;
+            upload.after.stages = nri::StageBits::ALL;
             success = queue && helper.UploadData && helper.UploadData(*queue, &upload, 1, nullptr, 0) == nri::Result::SUCCESS;
         }
         stbi_image_free(pixels);

@@ -16,6 +16,8 @@ namespace Axle {
     public:
         Material(const std::string& name = "New Material", UUID handle = 0);
         ~Material() = default;
+        const std::string& GetCustomShaderDiagnostic() const { return m_CustomShaderDiagnostic; }
+        void SetCustomShaderDiagnostic(std::string diagnostic) { m_CustomShaderDiagnostic=std::move(diagnostic); }
 
         // Identification
         UUID GetHandle() const { return m_Handle; }
@@ -280,6 +282,7 @@ namespace Axle {
         static std::shared_ptr<Material> LoadFromFile(const std::filesystem::path& filepath);
 
     private:
+        std::string m_CustomShaderDiagnostic; // Transient renderer status; never serialized.
         UUID m_Handle = 0;
         std::string m_Name;
         std::filesystem::path m_FilePath;

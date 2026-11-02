@@ -403,6 +403,13 @@ namespace {
 
 bool RunMaterialBindingPlanUnitTests() {
     {
+        const std::string legacy="// register(t9, space0)\ncbuffer ObjectConstants { float4x4 u_Model; };\nTexture2D Base:register(t0, space0);\nTexture2D Other:register(t1);\nSamplerState S:register(s0, space0);\n";
+        auto normalized=CustomShaderInterface::NormalizeLegacyBindings(legacy);
+        MAT_TEST_CHECK(normalized.find("// register(t9, space0)")!=std::string::npos,"Legacy adapter leaves comments intact");
+        MAT_TEST_CHECK(normalized.find("Base:register(t0, space1)")!=std::string::npos && normalized.find("Other:register(t1, space1)")!=std::string::npos,"Legacy textures receive a distinct namespace");
+        MAT_TEST_CHECK(normalized.find("S:register(s0, space0)")!=std::string::npos,"Sampler binding remains consistent with device offsets");
+    }
+    {
         RHI::RHIShaderReflection reflection;
         RHI::RHIShaderConstantBuffer buffer{"MaterialParameters",2,0,32,{}};
         buffer.Variables.push_back({"Tint",0,16,RHI::RHIShaderScalarType::Float,1,4});

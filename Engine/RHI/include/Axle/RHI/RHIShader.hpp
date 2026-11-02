@@ -207,6 +207,8 @@ namespace Axle::RHI {
 
         // Compile HLSL source string to target bytecode (DXIL or SPIR-V)
         RHIShaderCompileResult Compile(const RHIShaderCompileDesc& desc);
+        // Expand includes/macros using the same DXC include handler and source directory.
+        bool Preprocess(const RHIShaderCompileDesc& desc, std::string& source, std::string& error);
 
         // Compile HLSL shader file from disk
         RHIShaderCompileResult CompileFromFile(const std::filesystem::path& filepath, const RHIShaderCompileDesc& desc);

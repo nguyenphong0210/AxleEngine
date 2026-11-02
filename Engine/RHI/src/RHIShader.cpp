@@ -456,6 +456,31 @@ namespace Axle::RHI {
         return Compile(activeDesc);
     }
 
+    bool RHIShaderCompiler::Preprocess(const RHIShaderCompileDesc& desc, std::string& source, std::string& error) {
+        source.clear(); error.clear();
+        if (!m_Initialized && !Init()) { error="DXC initialization failed."; return false; }
+        std::vector<std::wstring> arguments{L"-P",L"-HV",ToWide(desc.HLSLVersion)};
+        arguments.push_back(L"-D"); arguments.push_back(desc.Format==RHIShaderFormat::SPIRV?L"__spirv__=1":L"__directx__=1");
+        if (desc.Format!=RHIShaderFormat::SPIRV) {arguments.push_back(L"-D");arguments.push_back(L"_DX12=1");}
+        if (!desc.SourcePath.empty()) {arguments.push_back(L"-I");arguments.push_back(ToWide(std::filesystem::path(desc.SourcePath).parent_path().string()));}
+        for (const auto& dir:desc.IncludeDirs) {arguments.push_back(L"-I");arguments.push_back(ToWide(dir));}
+        for (const auto& macro:desc.Macros) {arguments.push_back(L"-D");arguments.push_back(ToWide(macro.Name+"="+macro.Definition));}
+        std::vector<LPCWSTR> raw;
+        for (auto& argument:arguments) raw.push_back(argument.c_str());
+        DxcBuffer buffer{desc.Source.data(),desc.Source.size(),DXC_CP_UTF8};
+        Microsoft::WRL::ComPtr<IDxcResult> result;
+        HRESULT hr=static_cast<IDxcCompiler3*>(m_DxcCompiler)->Compile(&buffer,raw.data(),static_cast<UINT32>(raw.size()),static_cast<IDxcIncludeHandler*>(m_DxcIncludeHandler),IID_PPV_ARGS(&result));
+        if (FAILED(hr) || !result) {error="DXC preprocessing failed.";return false;}
+        HRESULT status; result->GetStatus(&status);
+        Microsoft::WRL::ComPtr<IDxcBlobUtf8> messages,output;
+        result->GetOutput(DXC_OUT_ERRORS,IID_PPV_ARGS(&messages),nullptr);
+        if (FAILED(status)) {error=messages?messages->GetStringPointer():"DXC preprocessing failed.";return false;}
+        result->GetOutput(DXC_OUT_HLSL,IID_PPV_ARGS(&output),nullptr);
+        if (!output) {error="DXC did not return preprocessed source.";return false;}
+        source.assign(output->GetStringPointer(),output->GetStringLength());
+        return true;
+    }
+
     static uint32_t FNV1aHash(const std::string& str, uint32_t seed = 2166136261u) {
         uint32_t hash = seed;
         for (char c : str) {

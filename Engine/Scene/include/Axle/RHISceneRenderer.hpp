@@ -274,13 +274,15 @@ namespace Axle {
         std::vector<std::unique_ptr<MaterialDrawResources>> m_MaterialDraws;
         struct CustomDrawResources {
             std::vector<RHI::RHIBuffer> ConstantBuffers;
-            nri::DescriptorSet* Set = nullptr;
+            std::vector<nri::DescriptorSet*> Sets;
             std::vector<std::shared_ptr<RHI::RHITexture>> Textures;
+            std::shared_ptr<const CustomReadyGeneration> Generation;
         };
         std::vector<std::unique_ptr<CustomDrawResources>> m_CustomDraws;
         CustomProgramCache m_CustomProgramCache;
 
-        std::unordered_map<CustomPipelineKey, nri::Pipeline*, CustomPipelineKeyHash> m_CustomPipelines;
+        RHI::RHIDescriptorPool m_CustomDescriptorPool;
+        RHI::RHISampler m_CustomSampler;
 
         nri::Pipeline* GetOrCreateCustomPipeline(
             const CustomReadyGeneration& generation,

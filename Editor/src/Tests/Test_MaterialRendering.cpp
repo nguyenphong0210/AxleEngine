@@ -11,6 +11,7 @@
 #include <cstring>
 #include <numeric>
 #include <chrono>
+#include <Axle/CustomShaderInterface.hpp>
 
 bool VerifyMaterialMeshImport(const std::filesystem::path& root);
 
@@ -418,6 +419,62 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     renderer.RenderScene(scene,camera,&resizedColor,&resizedDepth,settings);
     auto glassResizedBack=render();
     if (!check(!glassResizedBack.empty() && glassResizedBack==glassTinted,"Refraction snapshots recreate after viewport resize")) return false;
-    std::cout << "[106 GPU] PASS: Per-draw texture colors, disabled maps, normal/AO strength, emission masking, clearcoat and anisotropy readback." << std::endl;
+    // Exercise the actual compiled custom-program path and its per-draw resources.
+    left.GetComponent<TransformComponent>()=TransformComponent({-0.8f,0,0});
+    right.GetComponent<TransformComponent>()=TransformComponent({0.8f,0,0});
+    left.GetComponent<TransformComponent>().Scale=right.GetComponent<TransformComponent>().Scale=glm::vec3(0.65f);
+    lm=MaterialComponent{}; rm=MaterialComponent{};
+    const auto shaderPath=root/"custom_material.hlsl";
+    auto source=CustomShaderInterface::GetCanonicalTemplate("GPUAcceptance");
+    auto writeShader=[&](const std::string& text){std::ofstream file(shaderPath);file<<text;};
+    auto tintProperty=[](glm::vec4 value){ShaderPropertyInstance p;p.Desc.Name="Tint";p.Desc.Type=ShaderPropertyType::Color;p.Vec4Val=value;return p;};
+    ShaderPropertyInstance gain,enabled;
+    gain.Desc.Name="Gain";gain.Desc.Type=ShaderPropertyType::Float;gain.FloatVal=1;
+    enabled.Desc.Name="Enabled";enabled.Desc.Type=ShaderPropertyType::Int;enabled.IntVal=1;
+    writeShader(source);
+    lm.UseCustomShader=rm.UseCustomShader=true; lm.CustomShaderPath=rm.CustomShaderPath=shaderPath.string();
+    lm.CustomProperties={tintProperty({1,0,0,1}),gain,enabled};
+    rm.CustomProperties={tintProperty({0,1,0,1}),gain,enabled};
+    auto custom=render();
+    if (!check(lm.CustomShaderDiagnostic.empty() && rm.CustomShaderDiagnostic.empty(),"Canonical custom shader compiles and binds")) {
+        std::cerr<<lm.CustomShaderDiagnostic<<std::endl; return false;
+    }
+    if (!check(!custom.empty() && sum(custom,0,64,0)>sum(custom,0,64,1)*2+1000 && sum(custom,64,128,1)>sum(custom,64,128,0)*2+1000,"Shared custom program retains distinct per-draw Tint values")) return false;
+    lm.UseCustomShader=false; lm.AlbedoColor={0,0,1,1};
+    auto mixed=render();
+    if (!check(sum(mixed,0,64,2)>sum(mixed,0,64,0)*2+1000 && sum(mixed,64,128,1)>1000,"Built-in and custom layouts can alternate in a frame")) return false;
+    lm.UseCustomShader=true;
+    lm.AlbedoColor=glm::vec4(1);
+    std::string textured=source;
+    textured.insert(textured.find("SamplerState"),"Texture2D DetailColor : register(t1, space1);\n");
+    const std::string baseExpression="u_BaseColor.rgb * texColor.rgb";
+    textured.replace(textured.find(baseExpression),baseExpression.size(),baseExpression+" * DetailColor.Sample(u_Sampler,input.TexCoord).rgb");
+    writeShader(textured);
+    ShaderPropertyInstance textureProperty;
+    textureProperty.Desc.Name="DetailColor";textureProperty.Desc.Type=ShaderPropertyType::Texture2D;textureProperty.TexturePath=red;
+    lm.CustomProperties={tintProperty(glm::vec4(1)),gain,enabled,textureProperty};
+    auto textureRed=render();
+    for(auto& p:lm.CustomProperties) if(p.Desc.Name=="DetailColor") p.TexturePath=green;
+    auto textureGreen=render();
+    if (!check(lm.CustomShaderDiagnostic.empty() && sum(textureRed,0,64,0)>sum(textureRed,0,64,1)*2+1000 && sum(textureGreen,0,64,1)>sum(textureGreen,0,64,0)*2+1000,"Custom texture properties bind, sample and replace per draw")) return false;
+    for(auto& p:lm.CustomProperties) if(p.Desc.Name=="DetailColor") p.TexturePath.clear();
+    auto textureCleared=render();
+    if (!check(sum(textureCleared,0,64,0)>sum(textureGreen,0,64,0)+1000,"Clearing custom texture removes stale SRV and uses initialized white fallback")) return false;
+    auto legacy=CustomShaderInterface::GetLegacyTemplate(); writeShader(legacy);
+    lm.AlbedoColor={1,0,0,1}; rm.AlbedoColor={0,1,0,1};
+    auto legacyImage=render();
+    if (!check(lm.CustomShaderDiagnostic.empty() && sum(legacyImage,0,64,0)>sum(legacyImage,0,64,1)*2+1000,"Legacy template maps reflected engine fields and resource namespaces")) return false;
+    writeShader("this is not valid HLSL");
+    auto broken=render();
+    if (!check(!lm.CustomShaderDiagnostic.empty() && broken==legacyImage,"Failed reload retains last usable generation and reports diagnostics")) return false;
+    std::filesystem::remove(shaderPath);
+    auto missingShader=render();
+    if (!check(!missingShader.empty() && !lm.CustomShaderDiagnostic.empty(),"Deleted custom shader takes diagnosed built-in fallback")) return false;
+    writeShader(source);
+    lm.AlbedoColor=glm::vec4(1);
+    lm.CustomProperties={tintProperty({0,0,1,1}),gain,enabled};
+    auto recovered=render();
+    if (!check(lm.CustomShaderDiagnostic.empty() && sum(recovered,0,64,2)>sum(recovered,0,64,0)*2+1000,"Custom shader recovers after file restoration")) return false;
+    std::cout << "[106 GPU] PASS: Surface maps, layered shading, glass, custom/legacy programs, per-draw bindings and reload recovery." << std::endl;
     return true;
 }

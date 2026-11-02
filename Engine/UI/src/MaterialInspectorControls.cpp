@@ -139,6 +139,11 @@ namespace Axle {
     }
 
     bool MaterialInspectorControls::Draw(MaterialComponent& m) {
+        if (m.UseCustomShader && m.MaterialAsset && m.MaterialAsset->GetCustomShaderPath()==m.CustomShaderPath) {
+            std::vector<ShaderPropertyDesc> schema;
+            for (const auto& property:m.MaterialAsset->GetCustomProperties()) schema.push_back(property.Desc);
+            m.CustomProperties=SynchronizeCustomProperties(schema,m.CustomProperties);
+        }
         ImGui::PushID(&m);
         bool changed=false;
         if (BeginGroup("Surface / Transparency")) {

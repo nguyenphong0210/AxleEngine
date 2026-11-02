@@ -5,6 +5,66 @@
 #include <algorithm>
 
 namespace Axle {
+    nri::Pipeline* CreateCustomMaterialPipeline(const CustomReadyGeneration& generation,
+        nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount,
+        SurfaceType surfaceType, CullMode cullMode, bool depthWrite) {
+        using namespace RHI;
+        if (!generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return nullptr;
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = generation.PipelineLayout.get();
+        gfxDesc.Shaders = { generation.VSBytecode, generation.PSBytecode };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        if (cullMode == Axle::CullMode::Back) {
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::BACK;
+        } else if (cullMode == Axle::CullMode::Front) {
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::FRONT;
+        } else {
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        }
+        gfxDesc.Rasterizer.FrontCounterClockwise = true;
+
+        gfxDesc.DepthStencil.DepthTestEnable = true;
+        gfxDesc.DepthStencil.DepthWriteEnable = depthWrite;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS;
+        gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
+
+        if (surfaceType == Axle::SurfaceType::Transparent) {
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::AlphaBlend() };
+        } else if (surfaceType == Axle::SurfaceType::Additive) {
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Additive() };
+        } else {
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        }
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.SampleCount = sampleCount;
+
+        RHIVertexInputDesc inputDesc;
+        uint32_t stride = generation.BindingPlan.VertexInput.Stride > 0 ? generation.BindingPlan.VertexInput.Stride : static_cast<uint32_t>(sizeof(RHIVertex3D));
+        inputDesc.Streams.push_back({ 0, static_cast<uint16_t>(stride), nri::VertexStreamStepRate::PER_VERTEX });
+
+        if (!generation.BindingPlan.VertexInput.Attributes.empty()) {
+            for (const auto& attr : generation.BindingPlan.VertexInput.Attributes) {
+                inputDesc.Attributes.push_back({
+                    attr.SemanticName,
+                    attr.SemanticIndex,
+                    attr.BackendLocation,
+                    attr.Offset,
+                    attr.Format,
+                    static_cast<uint16_t>(attr.InputSlot)
+                });
+            }
+        } else {
+            inputDesc.Attributes.push_back({ "POSITION", 0, 0, static_cast<uint32_t>(offsetof(RHIVertex3D, Position)), nri::Format::RGB32_SFLOAT, 0 });
+            inputDesc.Attributes.push_back({ "NORMAL", 0, 1, static_cast<uint32_t>(offsetof(RHIVertex3D, Normal)), nri::Format::RGB32_SFLOAT, 0 });
+            inputDesc.Attributes.push_back({ "TANGENT", 0, 2, static_cast<uint32_t>(offsetof(RHIVertex3D, Tangent)), nri::Format::RGBA32_SFLOAT, 0 });
+            inputDesc.Attributes.push_back({ "TEXCOORD", 0, 3, static_cast<uint32_t>(offsetof(RHIVertex3D, TexCoord)), nri::Format::RG32_SFLOAT, 0 });
+            inputDesc.Attributes.push_back({ "COLOR", 0, 4, static_cast<uint32_t>(offsetof(RHIVertex3D, Color)), nri::Format::RGBA32_SFLOAT, 0 });
+        }
+        gfxDesc.VertexInput = inputDesc;
+
+        return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
+    }
 
     CustomProgramCache::CustomProgramCache() {
         m_CandidateBuilder = [this](const CustomProgramKey& key, const std::string& fingerprint) {
@@ -146,6 +206,11 @@ namespace Axle {
         vsDesc.EntryPoint = key.EntryPointVS;
         vsDesc.Stage = RHI::RHIShaderStage::Vertex;
         vsDesc.Format = (key.Backend == RHI::RHIType::Vulkan) ? RHI::RHIShaderFormat::SPIRV : RHI::RHIShaderFormat::DXIL;
+        std::string expanded,preprocessError;
+        if (!compiler.Preprocess(vsDesc,expanded,preprocessError)) {
+            result.Diagnostic=preprocessError; return result;
+        }
+        vsDesc.Source=CustomShaderInterface::NormalizeLegacyBindings(expanded);
 
         auto vsResult = compiler.Compile(vsDesc);
         if (!vsResult.Success) {
@@ -155,7 +220,7 @@ namespace Axle {
         }
 
         RHI::RHIShaderCompileDesc psDesc;
-        psDesc.Source = source;
+        psDesc.Source = vsDesc.Source;
         psDesc.SourcePath = resolvedPath;
         psDesc.EntryPoint = key.EntryPointPS;
         psDesc.Stage = RHI::RHIShaderStage::Fragment;
@@ -169,10 +234,15 @@ namespace Axle {
         }
 
         auto mergedReflection = RHI::RHIShaderReflection::Merge({ vsResult.Reflection, psResult.Reflection });
+        auto validation=CustomShaderInterface::Validate(mergedReflection);
+        std::string collision;
+        if (!validation.IsValid || CustomShaderInterface::HasVulkanBindingCollision(mergedReflection,collision)) {
+            result.Diagnostic=validation.IsValid?collision:validation.Diagnostic; return result;
+        }
         ValidatedShaderInterface iface;
         iface.InterfaceRevision = key.InterfaceRevision;
 
-        auto properties = ShaderPropertyParser::ParseFromHLSL(source, &mergedReflection);
+        auto properties = ShaderPropertyParser::ParseFromHLSL(source+"\n"+vsDesc.Source, &mergedReflection);
         auto planResult = BuildMaterialBindingPlan(mergedReflection, iface, properties);
         if (std::holds_alternative<MaterialBindingError>(planResult)) {
             const auto& err = std::get<MaterialBindingError>(planResult);
@@ -188,14 +258,24 @@ namespace Axle {
         generation->BindingPlan = std::get<MaterialBindingPlan>(planResult);
 
         // Build pipeline layout from merged reflection
-        auto autoLayout = mergedReflection.BuildPipelineLayoutDesc(1);
+        uint32_t rootSpace=0;
+        for (const auto& resource:mergedReflection.Resources) rootSpace=std::max(rootSpace,resource.Space+1);
+        generation->LayoutDescription=mergedReflection.BuildPipelineLayoutDesc(rootSpace);
+        if (!generation->LayoutDescription.RootConstants.empty()) {
+            result.Diagnostic="Custom material cbuffers must be descriptor-bound, not push/root constants.";return result;
+        }
+        for(auto& set:generation->LayoutDescription.DescriptorSets)
+            for(auto& range:set.Ranges) range.shaderStages=nri::StageBits::ALL;
         generation->PipelineLayout = std::make_shared<RHI::RHIPipelineLayout>();
-        if (!generation->PipelineLayout->Init(autoLayout)) {
+        if (!generation->PipelineLayout->Init(generation->LayoutDescription)) {
             result.Success = false;
             result.Diagnostic = "Pipeline layout creation failed.";
             return result;
         }
 
+        if (!CreateCustomMaterialPipeline(*generation,nri::Format::RGBA8_UNORM,nri::Format::D32_SFLOAT,1,SurfaceType::Opaque,CullMode::None,true)) {
+            result.Diagnostic="Custom material pipeline validation failed.";return result;
+        }
         result.Success = true;
         result.Generation = generation;
         return result;

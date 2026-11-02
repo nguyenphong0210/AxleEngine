@@ -42,6 +42,8 @@ namespace Axle {
         RHI::RHIShaderBytecode VSBytecode;
         RHI::RHIShaderBytecode PSBytecode;
         RHI::RHIShaderReflection Reflection;
+        // Own range storage referenced by the native layout's descriptor descriptions.
+        RHI::RHIAutoPipelineLayout LayoutDescription;
 
         // Shared ownership of pipeline layout if backend device is active
         std::shared_ptr<RHI::RHIPipelineLayout> PipelineLayout;
@@ -49,6 +51,10 @@ namespace Axle {
         // Lifetime tracker for CPU testing observable destruction
         std::shared_ptr<int> LifetimeTracker;
     };
+
+    nri::Pipeline* CreateCustomMaterialPipeline(const CustomReadyGeneration& generation,
+        nri::Format colorFormat, nri::Format depthFormat, uint8_t samples,
+        SurfaceType surface, CullMode cull, bool depthWrite);
 
     enum class ProgramSelectionKind : uint8_t {
         BuiltIn = 0,

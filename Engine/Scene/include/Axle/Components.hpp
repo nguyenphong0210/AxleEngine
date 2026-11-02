@@ -126,6 +126,8 @@ namespace Axle {
         // Custom HLSL Shader Overrides
         bool UseCustomShader = false;
         std::string CustomShaderPath;
+        std::string CustomShaderDiagnostic; // Transient renderer/inspector status.
+        uint64_t CustomShaderGeneration = 0;
 
         // Texture Mode (Separate Maps vs Packed ORM)
         Axle::TextureMode TextureMode = Axle::TextureMode::SeparateMaps;

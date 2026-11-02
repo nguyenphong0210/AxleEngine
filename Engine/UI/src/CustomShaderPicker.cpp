@@ -124,6 +124,8 @@ namespace Axle {
                                   const std::function<void(const std::filesystem::path&)>& openShader) {
         ImGui::PushID(id);
         bool changed = ImGui::Checkbox("Use Custom Shader", &material.UseCustomShader);
+        const auto& diagnostic=material.MaterialAsset?material.MaterialAsset->GetCustomShaderDiagnostic():material.CustomShaderDiagnostic;
+        if (material.UseCustomShader && !diagnostic.empty()) ImGui::TextWrapped("%s",diagnostic.c_str());
         ImGui::Spacing();
         ImGui::AlignTextToFramePadding();
         ImGui::TextDisabled("Shader:");

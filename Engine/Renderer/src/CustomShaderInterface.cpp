@@ -5,6 +5,42 @@
 
 namespace Axle {
 
+    std::string CustomShaderInterface::NormalizeLegacyBindings(const std::string& source) {
+        struct Token { std::string Text; size_t Begin,End; };
+        std::vector<Token> tokens;
+        for (size_t i=0;i<source.size();) {
+            if (std::isspace(static_cast<unsigned char>(source[i]))) {++i;continue;}
+            if (source[i]=='#') {while(i<source.size() && source[i]!='\n') ++i;continue;}
+            if (source.compare(i,2,"//")==0) {while(i<source.size() && source[i]!='\n') ++i;continue;}
+            if (source.compare(i,2,"/*")==0) {auto end=source.find("*/",i+2);i=end==source.npos?source.size():end+2;continue;}
+            if (source[i]=='"' || source[i]=='\'') {
+                char quote=source[i++];
+                while(i<source.size()) {if(source[i]=='\\') {i=std::min(source.size(),i+2);continue;} if(source[i++]==quote)break;}
+                continue;
+            }
+            size_t begin=i++;
+            if (std::isalnum(static_cast<unsigned char>(source[begin])) || source[begin]=='_')
+                while(i<source.size() && (std::isalnum(static_cast<unsigned char>(source[i])) || source[i]=='_')) ++i;
+            tokens.push_back({source.substr(begin,i-begin),begin,i});
+        }
+        bool legacy=false;
+        for(size_t i=0;i+1<tokens.size();++i) if(tokens[i].Text=="cbuffer" && tokens[i+1].Text=="ObjectConstants") legacy=true;
+        if(!legacy) return source;
+        struct Edit {size_t Begin,End;std::string Text;};
+        std::vector<Edit> edits;
+        for(size_t i=0;i+3<tokens.size();++i) {
+            const auto& reg=tokens[i+2].Text;
+            if(tokens[i].Text!="register" || tokens[i+1].Text!="(" || reg.size()<2 || reg[0]!='t' ||
+                !std::all_of(reg.begin()+1,reg.end(),[](unsigned char c){return std::isdigit(c);})) continue;
+            if(tokens[i+3].Text==")") edits.push_back({tokens[i+3].Begin,tokens[i+3].Begin,", space1"});
+            else if(i+5<tokens.size() && tokens[i+3].Text=="," && tokens[i+4].Text=="space0" && tokens[i+5].Text==")")
+                edits.push_back({tokens[i+4].Begin,tokens[i+4].End,"space1"});
+        }
+        std::string normalized=source;
+        for(auto it=edits.rbegin();it!=edits.rend();++it) normalized.replace(it->Begin,it->End-it->Begin,it->Text);
+        return normalized;
+    }
+
     namespace {
         std::string ToLower(std::string str) {
             std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) { return (char)std::tolower(c); });
@@ -136,7 +172,8 @@ namespace Axle {
         for (const auto& cb : reflection.ConstantBuffers) {
             for (const auto& res : reflection.Resources) {
                 if (res.Type == RHI::RHIResourceType::Texture || res.Type == RHI::RHIResourceType::Sampler) {
-                    if (cb.Space == res.Space && cb.BindPoint == res.BindPoint) {
+                    uint32_t effectiveRegister=res.BindPoint+(res.Type==RHI::RHIResourceType::Sampler?128u:0u);
+                    if (cb.Space == res.Space && cb.BindPoint == effectiveRegister) {
                         outDetails = "Collision in space " + std::to_string(cb.Space) + " at register " +
                                      std::to_string(cb.BindPoint) + " between cbuffer '" + cb.Name + "' and resource '" + res.Name + "'";
                         return true;

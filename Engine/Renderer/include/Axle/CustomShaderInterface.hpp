@@ -25,6 +25,8 @@ namespace Axle {
 
         // Returns the legacy HLSL Studio template for backward compatibility
         static std::string GetLegacyTemplate(const std::string& shaderName = "CustomMaterial");
+        // Compile-view compatibility adapter. Input must have includes expanded.
+        static std::string NormalizeLegacyBindings(const std::string& source);
 
         // Detect interface type from reflected constant buffers and resources
         static CustomInterfaceType DetectInterface(const RHI::RHIShaderReflection& reflection);

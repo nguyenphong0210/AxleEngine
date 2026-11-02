@@ -34,6 +34,7 @@ namespace Axle {
     struct RayCastHit {
         BodyID HitBodyID;
         glm::vec3 Position{ 0.0f };
+        glm::vec3 Normal{0.0f, 1.0f, 0.0f};
         f32 Distance = 0.0f;
     };
 

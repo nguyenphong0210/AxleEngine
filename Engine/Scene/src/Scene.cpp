@@ -980,9 +980,7 @@ namespace Axle {
         for (auto entityID : particleView) {
             auto& pec = particleView.get<ParticleEmitterComponent>(entityID);
             pec.Initialize();
-            if (pec.AutoPlay) {
-                pec.Play();
-            }
+            pec.BindPhysicsScene(physicsScene);
         }
     }
 
@@ -1204,6 +1202,7 @@ namespace Axle {
             auto axes = glm::mat3(worldMat);
             for (int a=0; a<3; ++a) axes[a] /= std::max(worldScale[a], 0.0001f);
             glm::quat worldRot = glm::quat_cast(axes);
+            pec.BindPhysicsScene(pScene);
             pec.Update(ts.GetSeconds(), worldPos, worldRot, worldScale);
         }
     }
@@ -1274,6 +1273,7 @@ namespace Axle {
         for (auto entityID : pecStopView) {
             auto& pec = pecStopView.get<ParticleEmitterComponent>(entityID);
             pec.Reset();
+            pec.BindPhysicsScene(nullptr);
         }
 
         auto view = m_Registry.view<NativeScriptComponent>();

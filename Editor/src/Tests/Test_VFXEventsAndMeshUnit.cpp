@@ -403,11 +403,20 @@ namespace {
 }
 
 static bool TestInheritedEventsAndStableRouting() {
+    auto parent = std::make_shared<Axle::ParticleSystem>();
+    auto child = std::make_shared<Axle::ParticleSystem>();
+    parent->AddChildSystem("child", child);
+    child->AddChildSystem("cycle", parent);
+    parent->AddChildSystem("alias", child);
+    parent->AddChildSystem("self", parent);
+    VFX_TEST_CHECK(child->GetChildSystems().empty() && parent->GetChildSystems().size() == 1,
+                   "Legacy runtime API rejects cycles and duplicate direct ownership");
+
     Axle::ParticleEmitterConfig cfg; cfg.EmissionRate=0; cfg.Lifetime={10,10};
     cfg.ColorOverLifetime=Axle::ColorGradient(glm::vec4(1),glm::vec4(1));
     cfg.AlphaOverLifetime=Axle::FloatCurve(1,1);
     cfg.MaxParticles=1;
-    cfg.SubEmitters.emplace_back(Axle::SubEmitterTrigger::Birth,"leaf-id",1,1);
+    cfg.SubEmitters.emplace_back(Axle::SubEmitterTrigger::Birth, "leaf-id", 1u, 1.0f);
     Axle::ParticleSystem system(cfg);
     glm::vec4 tint(0.2f,0.6f,0.4f,0.5f);
     system.SpawnInherited({0,0,0},{0,0,0},tint,true,false,1);
@@ -428,7 +437,49 @@ static bool TestInheritedEventsAndStableRouting() {
     return true;
 }
 
+static bool TestBoundScenePhysicsAndLocalCollision() {
+    Axle::PhysicsSettings settings;
+    settings.MaxBodies = 128;
+    settings.MaxBodyPairs = 128;
+    settings.MaxContactConstraints = 128;
+    settings.TempAllocatorSizeMB = 2;
+    Axle::PhysicsScene physics(settings);
+    physics.CreatePlane(glm::vec3(0), glm::vec3(0, 1, 0));
+    Axle::RayCastHit hit;
+    VFX_TEST_CHECK(physics.CastRay({0, 1, 0}, {0, -1, 0}, 2, hit), "Real Jolt raycast");
+    VFX_TEST_CHECK(hit.Normal.y > 0.99f, "Physics bridge supplies the hit normal");
+    auto definition = Axle::CreateDefaultParticleEffect("Physics bridge");
+    auto &emitter = definition.Emitters[0];
+    emitter.LocalTransform.Translation = {0, 2, 0};
+    emitter.Config.EmissionRate = 0;
+    emitter.Config.Drag = 0;
+    emitter.Config.GravityModifier = 0;
+    emitter.Config.SimulationSpace = Axle::ParticleSimulationSpace::Local;
+    emitter.Config.Collision.Enabled = true;
+    emitter.Config.Collision.CollisionMode = Axle::ParticleCollisionMode::ScenePhysics;
+    emitter.Config.Collision.Restitution = 0.5f;
+    Axle::ParticleEmitterComponent component;
+    component.SetEffectDefinition(definition);
+    component.BindPhysicsScene(&physics);
+    Axle::ParticleSpawnData particle;
+    particle.Position = {0, -1.6f, 0};
+    particle.Velocity = {0, -10, 0};
+    particle.Lifetime = 10;
+    component.System->GetPool().Spawn(particle);
+    component.Update(0.1f);
+    VFX_TEST_CHECK(component.System->GetCollisionCount() == 1,
+                   "Local simulation queries physics in world coordinates");
+    VFX_TEST_CHECK(component.System->GetPool().GetVelocities()[0].y > 0,
+                   "Physics collision reflects velocity");
+    VFX_TEST_CHECK(component.System->GetPool().GetPositions()[0].y + 2 > 0,
+                   "Resolved position converts back to emitter space");
+    component.BindPhysicsScene(nullptr);
+    VFX_TEST_CHECK(!component.System->GetConfig().Collision.WorldRaycast, "Unbind clears runtime service");
+    return true;
+}
+
 bool RunVFXEventsAndMeshUnitTests() {
+    VFX_TEST_CHECK(TestBoundScenePhysicsAndLocalCollision(), "Physics bridge regression");
     VFX_TEST_CHECK(TestInheritedEventsAndStableRouting(), "Inherited events regression");
     std::cout << "  - Running TestBaselineEventsAndMesh ...\n";
     VFX_TEST_CHECK(TestBaselineEventsAndMesh(), "TestBaselineEventsAndMesh failed");

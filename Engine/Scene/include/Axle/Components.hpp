@@ -1502,7 +1502,8 @@ namespace Axle {
                 NormalMap = other.NormalMap;
                 System = std::make_shared<ParticleSystem>(Config);
                 if (other.System) System->SetSeed(other.System->GetSeed());
-                System->SetEmitting(Enabled && !TriggerOnly);
+                System->SetEmitting(other.System ? other.System->IsEmitting()
+                                                 : Enabled && !TriggerOnly && Config.PlayOnAwake);
             }
             return *this;
         }
@@ -1533,6 +1534,7 @@ namespace Axle {
             def.TriggerOnly = TriggerOnly;
             def.LocalTransform = LocalTransform;
             def.Config = Config;
+            def.Config.Collision.WorldRaycast = nullptr;
             def.Resources = {TexturePath, NormalMapPath, MaterialPath, UseTexture, UseNormalMap};
             return def;
         }
@@ -1547,7 +1549,7 @@ namespace Axle {
             if (!System) System = std::make_shared<ParticleSystem>(Config);
             else System->SetConfig(Config);
             System->SetSeed(HashEmitterSeed(baseSeed, Id));
-            System->SetEmitting(Enabled && !TriggerOnly);
+            System->SetEmitting(Enabled && !TriggerOnly && Config.PlayOnAwake);
         }
     };
 
@@ -1590,6 +1592,7 @@ namespace Axle {
 
         bool Active = true;
         bool AutoPlay = true;
+        bool RuntimePlaying = true; // Transient transport state, not serialized.
         bool Visible = true;
         ParticleSimulationSpace SimulationSpace = ParticleSimulationSpace::World;
 
@@ -1606,22 +1609,13 @@ namespace Axle {
         }
 
         // Deep copy: instantiates independent runtime systems for each stack and syncs primary alias
-        ParticleEmitterComponent(const ParticleEmitterComponent& other)
-            : Config(other.Config),
-              AssetPath(other.AssetPath),
-              EffectName(other.EffectName),
-              EffectSeed(other.EffectSeed),
-              TextureAsset(other.TextureAsset),
-              TexturePath(other.TexturePath),
-              Texture(other.Texture),
-              NormalMapAsset(other.NormalMapAsset),
-              NormalMapPath(other.NormalMapPath),
-              NormalMap(other.NormalMap),
-              Active(other.Active),
-              AutoPlay(other.AutoPlay),
-              Visible(other.Visible),
-              SimulationSpace(other.SimulationSpace),
-              EmitterStacks(other.EmitterStacks) {
+        ParticleEmitterComponent(const ParticleEmitterComponent &other)
+            : Config(other.Config), AssetPath(other.AssetPath), EffectName(other.EffectName),
+              EffectSeed(other.EffectSeed), TextureAsset(other.TextureAsset), TexturePath(other.TexturePath),
+              Texture(other.Texture), NormalMapAsset(other.NormalMapAsset),
+              NormalMapPath(other.NormalMapPath), NormalMap(other.NormalMap), Active(other.Active),
+              AutoPlay(other.AutoPlay), RuntimePlaying(other.RuntimePlaying), Visible(other.Visible),
+              SimulationSpace(other.SimulationSpace), EmitterStacks(other.EmitterStacks) {
             SyncPrimary();
         }
 
@@ -1639,6 +1633,7 @@ namespace Axle {
                 NormalMap = other.NormalMap;
                 Active = other.Active;
                 AutoPlay = other.AutoPlay;
+                RuntimePlaying = other.RuntimePlaying;
                 Visible = other.Visible;
                 SimulationSpace = other.SimulationSpace;
                 EmitterStacks = other.EmitterStacks;
@@ -1664,9 +1659,11 @@ namespace Axle {
                 EmitterStacks[0].TexturePath = TexturePath;
             }
 
+            RuntimePlaying = Active && AutoPlay;
             for (auto& stack : EmitterStacks) {
                 stack.Initialize(EffectSeed);
-                stack.System->SetEmitting(Active && stack.Enabled && !stack.TriggerOnly);
+                stack.System->SetEmitting(RuntimePlaying && stack.Enabled && !stack.TriggerOnly &&
+                                          stack.Config.PlayOnAwake);
             }
             SyncPrimary();
         }
@@ -1725,6 +1722,21 @@ namespace Axle {
             }
         }
 
+        void BindPhysicsScene(PhysicsScene *scene) {
+            ParticleRaycastFn callback;
+            if (scene)
+                callback = [scene](const glm::vec3 &origin, const glm::vec3 &direction, float distance,
+                                   glm::vec3 &point, glm::vec3 &normal) {
+                    RayCastHit hit;
+                    if (!scene->CastRay(origin, direction, distance, hit))
+                        return false;
+                    point = hit.Position;
+                    normal = hit.Normal;
+                    return true;
+                };
+            SetPhysicsRaycastCallback(std::move(callback));
+        }
+
         void SetPhysicsRaycastCallback(ParticleRaycastFn fn) {
             RaycastCallback = fn;
             for (auto& stack : EmitterStacks) {
@@ -1743,6 +1755,7 @@ namespace Axle {
 
         void Play() {
             Active = true;
+            RuntimePlaying = true;
             for (auto& stack : EmitterStacks) {
                 if (stack.Enabled && !stack.TriggerOnly && stack.System) {
                     stack.System->SetEmitting(true);
@@ -1755,6 +1768,7 @@ namespace Axle {
 
         void Stop() {
             Active = false;
+            RuntimePlaying = false;
             for (auto& stack : EmitterStacks) {
                 if (stack.System) {
                     stack.System->SetEmitting(false);
@@ -1810,7 +1824,8 @@ namespace Axle {
         }
 
         void Update(float dt, const glm::vec3& worldPos = glm::vec3(0.0f), const glm::quat& worldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f), const glm::vec3& worldScale = glm::vec3(1)) {
-            if (!Active) return;
+            if (!Active || !RuntimePlaying)
+                return;
             if (EmitterStacks.empty()) {
                 if (System) System->Update(dt, worldPos, worldRot);
             } else {

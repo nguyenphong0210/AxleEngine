@@ -4,11 +4,12 @@
 #include <cmath>
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 
 namespace Axle {
 
-    ParticleSystem::ParticleSystem(const ParticleEmitterConfig& config)
-        : m_Config(config), m_Pool(config.MaxParticles) {
+    ParticleSystem::ParticleSystem(const ParticleEmitterConfig &config)
+        : m_Config(config), m_Pool(config.MaxParticles), m_IsEmitting(config.PlayOnAwake) {
         m_BurstRuntime.resize(m_Config.Bursts.size());
         for (size_t i = 0; i < m_Config.Bursts.size(); ++i) {
             m_BurstRuntime[i].CompletedCycles = 0;
@@ -85,9 +86,25 @@ namespace Axle {
     }
 
     void ParticleSystem::AddChildSystem(const std::string& name, const std::shared_ptr<ParticleSystem>& child) {
-        if (child) {
-            m_ChildSystems[name] = child;
-        }
+        if (!child)
+            return;
+        std::unordered_set<const ParticleSystem *> visited;
+        std::function<bool(const ParticleSystem *)> reachesThis = [&](const ParticleSystem *system) {
+            if (system == this)
+                return true;
+            if (!visited.insert(system).second)
+                return false;
+            for (const auto &entry : system->m_ChildSystems)
+                if (entry.second && reachesThis(entry.second.get()))
+                    return true;
+            return false;
+        };
+        if (reachesThis(child.get()))
+            return;
+        for (const auto &entry : m_ChildSystems)
+            if (entry.first != name && entry.second == child)
+                return;
+        m_ChildSystems[name] = child;
     }
 
     void ParticleSystem::RemoveChildSystem(const std::string& name) {
@@ -102,20 +119,23 @@ namespace Axle {
     void ParticleSystem::DispatchSubEmitters(SubEmitterTrigger trigger, const glm::vec3& pos, const glm::vec3& vel, const glm::vec4& color) {
         for (const auto& sub : m_Config.SubEmitters) {
             if (sub.Trigger == trigger) {
-                if (sub.Probability >= 1.0f || VFXRandom::Float(m_RNG, 0.0f, 1.0f) <= sub.Probability) {
-                    if (m_SubEmitterCallback) {
-                        m_SubEmitterCallback(trigger, sub.TargetEmitterName, pos, vel, color, sub.EmitCount);
-                    }
-                    if (m_EventQueue.size() < 500) {
-                        const bool local = m_Config.SimulationSpace == ParticleSimulationSpace::Local;
-                        const auto worldPos = local ? m_WorldPosition + m_WorldRotation * (pos * m_WorldScale) : pos;
-                        const auto worldVel = local ? m_WorldRotation * (vel * m_WorldScale) : vel;
-                        m_EventQueue.push_back({m_Config.Name, sub.TargetEmitterName, trigger, worldPos, worldVel, color, sub.EmitCount, sub.InheritColor, sub.InheritVelocity});
-                    }
-
+                if (sub.Probability >= 1.0f || VFXRandom::Float(m_RNG, 0.0f, 1.0f) < sub.Probability) {
+                    const bool local = m_Config.SimulationSpace == ParticleSimulationSpace::Local;
+                    const auto worldPos =
+                        local ? m_WorldPosition + m_WorldRotation * (pos * m_WorldScale) : pos;
+                    const auto worldVel = local ? m_WorldRotation * (vel * m_WorldScale) : vel;
+                    if (m_SubEmitterCallback)
+                        m_SubEmitterCallback(trigger, sub.TargetEmitterName, worldPos, worldVel, color,
+                                             sub.EmitCount);
+                    if (m_EventQueue.size() < 500)
+                        m_EventQueue.push_back({m_Config.Name, sub.TargetEmitterName, trigger, worldPos,
+                                                worldVel, color, sub.EmitCount, sub.InheritColor,
+                                                sub.InheritVelocity});
                     auto it = m_ChildSystems.find(sub.TargetEmitterName);
                     if (it != m_ChildSystems.end() && it->second) {
-                        it->second->EmitBurst(sub.EmitCount, pos);
+                        it->second->SetEmitterTransform(m_WorldPosition, m_WorldRotation, m_WorldScale);
+                        it->second->SpawnInherited(worldPos, worldVel, color, sub.InheritColor,
+                                                   sub.InheritVelocity, sub.EmitCount);
                     }
                 }
             }
@@ -146,6 +166,12 @@ namespace Axle {
 
             data.StartSize = m_Config.StartSize.Sample(m_RNG);
             data.EndSize = m_Config.EndSize.Sample(m_RNG);
+            if (!local) {
+                const float scale =
+                    std::max({std::abs(m_WorldScale.x), std::abs(m_WorldScale.y), std::abs(m_WorldScale.z)});
+                data.StartSize *= scale;
+                data.EndSize *= scale;
+            }
 
             glm::vec4 authoredStartCol = m_Config.ColorOverLifetime.Evaluate(0.0f);
             glm::vec4 authoredEndCol = m_Config.ColorOverLifetime.Evaluate(1.0f);
@@ -188,6 +214,12 @@ namespace Axle {
         data.Acceleration = m_Config.ConstantAcceleration;
         data.StartSize = m_Config.StartSize.Sample(m_RNG);
         data.EndSize = m_Config.EndSize.Sample(m_RNG);
+        if (m_Config.SimulationSpace == ParticleSimulationSpace::World) {
+            const float scale =
+                std::max({std::abs(m_WorldScale.x), std::abs(m_WorldScale.y), std::abs(m_WorldScale.z)});
+            data.StartSize *= scale;
+            data.EndSize *= scale;
+        }
         data.StartColor = m_Config.ColorOverLifetime.Evaluate(0.0f);
         data.EndColor = m_Config.ColorOverLifetime.Evaluate(1.0f);
         data.StartRotation = m_Config.StartRotation.Sample(m_RNG);
@@ -216,11 +248,13 @@ namespace Axle {
 
     void ParticleSystem::Update(float dt, const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot, const glm::vec3& emitterWorldScale) {
         SetEmitterTransform(emitterWorldPos, emitterWorldRot, emitterWorldScale);
-        if (dt <= 0.0f) return;
+        if (dt <= 0.0f || !std::isfinite(dt))
+            return;
 
         m_TotalSimulationTime += dt;
         float prevEmitterTime = m_EmitterTime;
-        m_EmitterTime += dt;
+        if (m_IsEmitting)
+            m_EmitterTime += dt; // Draining particles does not consume a not-yet-started emission window.
 
         bool isEmittingWindow = m_IsEmitting;
         bool looped = false;
@@ -236,18 +270,16 @@ namespace Axle {
             }
         }
 
+        uint32_t burstEventsLeft = 64;
         auto processBursts = [&](float windowStart, float windowEnd) {
             for (size_t b = 0; b < m_Config.Bursts.size(); ++b) {
                 if (b >= m_BurstRuntime.size()) continue;
                 const auto& burst = m_Config.Bursts[b];
                 auto& runtime = m_BurstRuntime[b];
 
-                uint32_t budget = 0;
-                const uint32_t MAX_BURST_EVENTS_PER_TICK = 64;
                 while ((burst.Cycles == 0 || runtime.CompletedCycles < burst.Cycles) &&
-                       runtime.NextTriggerTime <= windowEnd &&
-                       budget < MAX_BURST_EVENTS_PER_TICK) {
-                    budget++;
+                       runtime.NextTriggerTime <= windowEnd && burstEventsLeft > 0) {
+                    --burstEventsLeft;
                     uint32_t count = burst.SampleCount(m_RNG);
                     if (count > 0 && (burst.Probability >= 1.0f || VFXRandom::Float(m_RNG, 0.0f, 1.0f) <= burst.Probability)) {
                         EmitBurst(count, emitterWorldPos, emitterWorldRot, m_WorldScale);
@@ -271,10 +303,10 @@ namespace Axle {
                     activeDt = std::max(0.0f, m_Config.Duration - prevEmitterTime);
                 }
                 m_SpawnAccumulator += activeDt * m_Config.EmissionRate;
-                uint32_t toSpawn = static_cast<uint32_t>(m_SpawnAccumulator);
-                m_SpawnAccumulator -= static_cast<float>(toSpawn);
-
-                uint32_t spawnBudget = std::min(toSpawn, m_Pool.GetCapacity());
+                const float whole = std::floor(m_SpawnAccumulator);
+                uint32_t spawnBudget =
+                    static_cast<uint32_t>(std::min(whole, static_cast<float>(m_Pool.GetCapacity())));
+                m_SpawnAccumulator -= whole;
                 for (uint32_t i = 0; i < spawnBudget; ++i) {
                     SpawnParticle(emitterWorldPos, emitterWorldRot);
                 }
@@ -282,22 +314,32 @@ namespace Axle {
 
             // Legacy periodic burst emission
             if (m_Config.BurstCount > 0 && m_Config.BurstInterval > 0.0f) {
-                m_BurstTimer += dt;
-                if (m_BurstTimer >= m_Config.BurstInterval) {
+                const float activeDt = (!m_Config.Looping && m_Config.Duration > 0)
+                                           ? std::min(dt, std::max(0.0f, m_Config.Duration - prevEmitterTime))
+                                           : dt;
+                m_BurstTimer += activeDt;
+                unsigned budget = 64;
+                while (m_BurstTimer >= m_Config.BurstInterval && budget--) {
                     m_BurstTimer -= m_Config.BurstInterval;
                     EmitBurst(m_Config.BurstCount, emitterWorldPos, emitterWorldRot, m_WorldScale);
                 }
+                m_BurstTimer = std::fmod(m_BurstTimer, m_Config.BurstInterval);
             }
 
             // Advanced Multi-Burst list evaluation (Unity Shuriken style)
             if (looped) {
+                const unsigned loops = static_cast<unsigned>(
+                    std::min(64.0, std::floor(static_cast<double>(m_EmitterTime) / m_Config.Duration)));
                 processBursts(prevEmitterTime, m_Config.Duration);
-                m_EmitterTime = std::fmod(m_EmitterTime, m_Config.Duration);
-                for (size_t b = 0; b < m_Config.Bursts.size(); ++b) {
-                    m_BurstRuntime[b].CompletedCycles = 0;
-                    m_BurstRuntime[b].NextTriggerTime = m_Config.Bursts[b].Time;
+                const float remainder = std::fmod(m_EmitterTime, m_Config.Duration);
+                for (unsigned loop = 0; loop < loops; ++loop) {
+                    for (size_t b = 0; b < m_Config.Bursts.size(); ++b) {
+                        m_BurstRuntime[b].CompletedCycles = 0;
+                        m_BurstRuntime[b].NextTriggerTime = m_Config.Bursts[b].Time;
+                    }
+                    processBursts(0, loop + 1 == loops ? remainder : m_Config.Duration);
                 }
-                processBursts(0.0f, m_EmitterTime);
+                m_EmitterTime = remainder;
             } else {
                 float effectiveEnd = (!m_Config.Looping && m_Config.Duration > 0.0f) ? std::min(m_EmitterTime, m_Config.Duration) : m_EmitterTime;
                 processBursts(prevEmitterTime, effectiveEnd);
@@ -376,10 +418,24 @@ namespace Axle {
                 float fric = m_Config.Collision.Friction;
                 float minBounce = m_Config.Collision.MinBounceSpeed;
 
+                const bool local = m_Config.SimulationSpace == ParticleSimulationSpace::Local;
+                glm::vec3 safeScale = m_WorldScale;
+                for (int axis = 0; axis < 3; ++axis)
+                    if (std::abs(safeScale[axis]) < 0.0001f)
+                        safeScale[axis] = 0.0001f;
+                auto collisionPrev =
+                    local ? m_WorldPosition + m_WorldRotation * (prevPos * m_WorldScale) : prevPos;
+                auto collisionPos =
+                    local ? m_WorldPosition + m_WorldRotation * (nextPos * m_WorldScale) : nextPos;
+                auto collisionVel = local ? m_WorldRotation * (velocities[i] * m_WorldScale) : velocities[i];
+                if (local)
+                    radius *= std::max({std::abs(safeScale.x), std::abs(safeScale.y), std::abs(safeScale.z)});
+
                 // 1. Floor plane (Floor mode)
                 if (m_Config.Collision.CollisionMode == ParticleCollisionMode::Floor) {
                     ParticleCollisionPlane floorPlane(glm::vec3(0.0f, 1.0f, 0.0f), -m_Config.Collision.FloorHeight, rest, fric, m_Config.Collision.FloorKill);
-                    if (ParticleCollisionSolver::ResolvePlane(floorPlane, nextPos, velocities[i], radius, rest, fric, minBounce)) {
+                    if (ParticleCollisionSolver::ResolvePlane(floorPlane, collisionPos, collisionVel, radius,
+                                                              rest, fric, minBounce)) {
                         collided = true;
                         if (floorPlane.KillOnCollision) killParticle = true;
                     }
@@ -387,34 +443,45 @@ namespace Axle {
 
                 // 2. Continuous swept raycast (ScenePhysics or explicit raycast)
                 if ((m_Config.Collision.CollisionMode == ParticleCollisionMode::ScenePhysics || m_Config.Collision.WorldRaycast) && m_Config.Collision.WorldRaycast) {
-                    if (ParticleCollisionSolver::ResolveRaycast(m_Config.Collision.WorldRaycast, prevPos, nextPos, velocities[i], radius, rest, fric, minBounce)) {
+                    if (ParticleCollisionSolver::ResolveRaycast(m_Config.Collision.WorldRaycast,
+                                                                collisionPrev, collisionPos, collisionVel,
+                                                                radius, rest, fric, minBounce)) {
                         collided = true;
                     }
                 }
 
                 // 3. Static Collision Planes
-                for (const auto& plane : m_Config.Collision.Planes) {
-                    if (ParticleCollisionSolver::ResolvePlane(plane, nextPos, velocities[i], radius, rest, fric, minBounce)) {
-                        collided = true;
-                        if (plane.KillOnCollision) {
-                            killParticle = true;
-                            break;
+                if (m_Config.Collision.CollisionMode == ParticleCollisionMode::PlanesAndBoxes)
+                    for (const auto &plane : m_Config.Collision.Planes) {
+                        if (ParticleCollisionSolver::ResolvePlane(plane, collisionPos, collisionVel, radius,
+                                                                  rest, fric, minBounce)) {
+                            collided = true;
+                            if (plane.KillOnCollision) {
+                                killParticle = true;
+                                break;
+                            }
                         }
                     }
-                }
 
                 // 4. Collision Boxes
-                for (const auto& box : m_Config.Collision.Boxes) {
-                    if (ParticleCollisionSolver::ResolveBox(box, nextPos, velocities[i], radius, rest, fric, minBounce)) {
-                        collided = true;
-                        if (box.KillOnCollision) {
-                            killParticle = true;
-                            break;
+                if (m_Config.Collision.CollisionMode == ParticleCollisionMode::PlanesAndBoxes)
+                    for (const auto &box : m_Config.Collision.Boxes) {
+                        if (ParticleCollisionSolver::ResolveBox(box, collisionPos, collisionVel, radius, rest,
+                                                                fric, minBounce)) {
+                            collided = true;
+                            if (box.KillOnCollision) {
+                                killParticle = true;
+                                break;
+                            }
                         }
                     }
-                }
 
                 if (collided) {
+                    nextPos =
+                        local ? glm::inverse(m_WorldRotation) * (collisionPos - m_WorldPosition) / safeScale
+                              : collisionPos;
+                    velocities[i] =
+                        local ? glm::inverse(m_WorldRotation) * collisionVel / safeScale : collisionVel;
                     m_CollisionCount++;
                     // Sub-Emitter Trigger on Collision
                     DispatchSubEmitters(SubEmitterTrigger::Collision, nextPos, velocities[i], colors[i]);

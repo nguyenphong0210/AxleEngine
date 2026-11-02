@@ -1,5 +1,6 @@
 #include "VFXTestHarness.hpp"
 #include <Axle/ParticleSystem.hpp>
+#include <Axle/Components.hpp>
 
 namespace {
     bool TestBaselinePlayback() {
@@ -226,7 +227,8 @@ namespace {
 
 static bool TestConfigSyncDoesNotRearmBursts() {
     Axle::ParticleEmitterConfig cfg; cfg.EmissionRate=0; cfg.Looping=false;
-    cfg.Lifetime={10,10}; cfg.Bursts.emplace_back(0, 2, 2, 1, 0, 1);
+    cfg.Lifetime = {10, 10};
+    cfg.Bursts.emplace_back(0.0f, 2u, 2u, 1u, 0.0f, 1.0f);
     Axle::ParticleSystem system(cfg);
     system.Update(0.01f);
     VFX_TEST_CHECK(system.GetActiveParticleCount()==2, "Initial burst");
@@ -237,7 +239,52 @@ static bool TestConfigSyncDoesNotRearmBursts() {
     return true;
 }
 
+static bool TestSeveralLoopWindowsInOneUpdate() {
+    Axle::ParticleEmitterConfig config;
+    config.Duration = 0.1f;
+    config.Looping = true;
+    config.EmissionRate = 0;
+    config.Lifetime = {10, 10};
+    config.Bursts.emplace_back(0.05f, 1u, 1u, 1u, 0.0f, 1.0f);
+    Axle::ParticleSystem system(config);
+    system.Update(0.36f);
+    VFX_TEST_CHECK(system.GetActiveParticleCount() == 4, "All crossed emitter loops schedule their bursts");
+    system.Reset();
+    system.Update(10000);
+    VFX_TEST_CHECK(system.GetEventQueue().size() <= 500, "Large delta does bounded event work");
+    return true;
+}
+
+static bool TestAuthoredAutoplayAndManualStart() {
+    Axle::ParticleEmitterConfig config;
+    config.PlayOnAwake = false;
+    config.EmissionRate = 100;
+    config.Duration = 0.1f;
+    config.Looping = false;
+    Axle::ParticleSystem standalone(config);
+    standalone.Update(0.01f);
+    VFX_TEST_CHECK(standalone.GetActiveParticleCount() == 0, "PlayOnAwake disables automatic emission");
+    standalone.Update(1.0f);
+    standalone.SetEmitting(true);
+    standalone.Update(0.01f);
+    VFX_TEST_CHECK(standalone.GetActiveParticleCount() > 0,
+                   "Manual start retains a complete non-looping emission window");
+    Axle::ParticleEmitterComponent component(config);
+    component.AutoPlay = false;
+    component.Initialize();
+    component.Update(1.0f);
+    VFX_TEST_CHECK(component.System->GetTotalSimulationTime() == 0,
+                   "Disabled component autoplay does not consume its non-looping lifetime");
+    component.Play();
+    component.Update(0.01f);
+    VFX_TEST_CHECK(component.System->GetActiveParticleCount() > 0,
+                   "Explicit Play starts an effect with authored autoplay disabled");
+    return true;
+}
+
 bool RunVFXPlaybackUnitTests() {
+    VFX_TEST_CHECK(TestAuthoredAutoplayAndManualStart(), "Autoplay regression");
+    VFX_TEST_CHECK(TestSeveralLoopWindowsInOneUpdate(), "Multiple-loop scheduling regression");
     VFX_TEST_CHECK(TestConfigSyncDoesNotRearmBursts(), "Burst synchronization regression");
     std::cout << "  - Running TestBaselinePlayback ...\n";
     VFX_TEST_CHECK(TestBaselinePlayback(), "TestBaselinePlayback failed");

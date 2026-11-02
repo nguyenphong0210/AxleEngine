@@ -219,3 +219,21 @@ endif()
 add_test(NAME VFXUnitTests COMMAND $<TARGET_FILE:AxleVFXUnitTests>)
 
 
+
+# Opt-in physical GPU verification. CPU-only environments never silently substitute a mock.
+add_executable(AxleVFXGPUTests src/Tests/VFXGPUTestMain.cpp src/Tests/Test_VFXRendering.cpp)
+target_include_directories(AxleVFXGPUTests PRIVATE src/Tests)
+target_link_libraries(AxleVFXGPUTests PRIVATE Axle::Scene Axle::VFX Axle::Asset)
+target_compile_definitions(AxleVFXGPUTests PRIVATE AXLE_VFX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+if(WIN32)
+    add_custom_command(TARGET AxleVFXGPUTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll $<TARGET_FILE_DIR:AxleVFXGPUTests>/dxcompiler.dll
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll $<TARGET_FILE_DIR:AxleVFXGPUTests>/dxil.dll)
+endif()
+option(AXLE_ENABLE_VFX_GPU_TESTS "Register physical DX12/Vulkan VFX readback tests" OFF)
+if(AXLE_ENABLE_VFX_GPU_TESTS)
+    foreach(backend D3D12 Vulkan)
+        add_test(NAME VFXGPU_${backend} COMMAND $<TARGET_FILE:AxleVFXGPUTests>)
+        set_tests_properties(VFXGPU_${backend} PROPERTIES ENVIRONMENT "AXLE_VFX_TEST_BACKEND=${backend}" LABELS "gpu;vfx" RUN_SERIAL TRUE)
+    endforeach()
+endif()

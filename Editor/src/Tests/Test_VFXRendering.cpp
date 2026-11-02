@@ -4,6 +4,14 @@
 #include <Axle/ParticleEffectDefinition.hpp>
 #include <Axle/ParticleEffectSerializer.hpp>
 #include <Axle/ParticleSystem.hpp>
+#include <Axle/RHISceneRenderer.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/AssetManager.hpp>
+#include <Axle/FileSystem.hpp>
+#include <cstring>
+#include <chrono>
+#include <array>
 #include <fstream>
 #include <iostream>
 #include <algorithm>
@@ -40,7 +48,17 @@ namespace Axle {
         }
 
         try {
-            outDir = std::filesystem::absolute(dirPath);
+            outDir = std::filesystem::weakly_canonical(std::filesystem::absolute(dirPath));
+            const auto assets = std::filesystem::weakly_canonical(FileSystem::GetAssetDirectory());
+            const auto relative = outDir.lexically_relative(assets);
+            if (!relative.empty() && !relative.is_absolute() && *relative.begin() != "..") {
+                outError = "Capture output must be outside the project's asset directory.";
+                return false;
+            }
+            if (std::filesystem::exists(outDir) && !std::filesystem::is_directory(outDir)) {
+                outError = "Capture output is not a directory.";
+                return false;
+            }
             if (!std::filesystem::exists(outDir)) {
                 std::filesystem::create_directories(outDir);
             }
@@ -53,10 +71,14 @@ namespace Axle {
 
     VFXReadbackLayout GetVFXReadbackLayout(uint32_t width, uint32_t height, bool hdr) {
         VFXReadbackLayout layout;
+        if (!width || !height)
+            return layout;
         layout.BytesPerPixel = hdr ? 8 : 4; // 8 bytes for RGBA16F, 4 bytes for RGBA8
-        uint32_t rawRowPitch = width * layout.BytesPerPixel;
+        const uint64_t rawRowPitch = static_cast<uint64_t>(width) * layout.BytesPerPixel;
+        if (rawRowPitch > 0xffffff00ull)
+            return {};
         // Align to 256 bytes per D3D12 texture pitch alignment requirement
-        layout.RowPitch = (rawRowPitch + 255) & ~255;
+        layout.RowPitch = static_cast<uint32_t>((rawRowPitch + 255) & ~255ull);
         layout.SlicePitch = static_cast<uint64_t>(layout.RowPitch) * height;
         return layout;
     }
@@ -89,7 +111,7 @@ namespace Axle {
         std::string error;
         if (!ParseVFXBackendOption(backendEnv, targetBackend, error)) {
             std::cout << "  [VFX GPU ACCEPTANCE] " << error << "\n";
-            std::cout << "  [VFX GPU ACCEPTANCE] Physical GPU tests marked as NOT RUN in this headless container environment.\n";
+            std::cout << "  [VFX GPU ACCEPTANCE] GPU tests were not requested.\n";
             return false;
         }
 
@@ -100,7 +122,8 @@ namespace Axle {
             desc.AllowFallback = false;
             desc.Headless = true;
             if (!device.Init(desc)) {
-                std::cout << "  [VFX GPU ACCEPTANCE] Failed to initialize hardware device on backend (no physical GPU present in container).\n";
+                std::cout << "  [VFX GPU ACCEPTANCE] Failed to initialize the explicitly requested hardware "
+                             "backend.\n";
                 std::cout << "  [VFX GPU ACCEPTANCE] Physical GPU execution status: NOT RUN.\n";
                 return false;
             }
@@ -113,8 +136,361 @@ namespace Axle {
         }
 
         std::cout << "  [VFX GPU ACCEPTANCE] Hardware device active: " << RHITypeToString(device.GetBackend()) << "\n";
-        // When physical GPU is present, run full offscreen multi-emitter submission and readback checks
-        return true;
+        auto check = [](bool ok, const char *message) {
+            std::cout << "  [VFX GPU] " << (ok ? "PASS: " : "FAIL: ") << message << std::endl;
+            return ok;
+        };
+        if (!check(!device.GetCapabilities().IsSoftwareAdapter,
+                   "Physical hardware; software adapters are rejected"))
+            return false;
+        std::filesystem::path captures;
+        const char *captureEnv = std::getenv("AXLE_VFX_CAPTURE_DIR");
+        const auto output = captureEnv ? std::filesystem::path(captureEnv)
+                                       : root / "build" / "vfx-captures" /
+                                             (targetBackend == RHIType::Vulkan ? "vulkan" : "d3d12");
+        if (!ValidateVFXCaptureDirectory(output.string(), captures, error)) {
+            std::cerr << error << std::endl;
+            return false;
+        }
+        auto writeTexture = [&](const char *name, std::array<uint8_t, 4> rgba) {
+            auto path = captures / name;
+            std::ofstream file(path, std::ios::binary);
+            uint8_t header[18]{};
+            header[2] = 2;
+            header[12] = 2;
+            header[14] = 2;
+            header[16] = 32;
+            header[17] = 0x28;
+            file.write(reinterpret_cast<char *>(header), 18);
+            uint8_t bgra[] = {rgba[2], rgba[1], rgba[0], rgba[3]};
+            for (int i = 0; i < 4; ++i)
+                file.write(reinterpret_cast<char *>(bgra), 4);
+            return path.string();
+        };
+        auto red = writeTexture("red.tga", {255, 0, 0, 255});
+        auto green = writeTexture("green.tga", {0, 255, 0, 255});
+        auto translucent = writeTexture("translucent.tga", {255, 0, 0, 64});
+        RHISceneRenderer renderer;
+        if (!check(renderer.Init(device, false), "Production scene/particle renderer initialization"))
+            return false;
+        constexpr uint32_t resolution = 128;
+        RHITexture color, depth;
+        if (!check(color.Init(RHITextureDesc::RenderTarget2D(resolution, resolution)) &&
+                       depth.Init(RHITextureDesc::DepthStencil2D(resolution, resolution)),
+                   "Offscreen render targets"))
+            return false;
+        const auto layout = GetVFXReadbackLayout(resolution, resolution, false);
+        RHIBuffer readback;
+        RHIBufferDesc readDesc;
+        readDesc.Size = layout.SlicePitch * 2;
+        readDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
+        RHICommandBuffer copy;
+        if (!check(readback.Init(readDesc) && copy.Init(), "Host readback resources"))
+            return false;
+        PerspectiveCamera camera(45.0f, 1.0f, 0.1f, 100.0f);
+        camera.SetViewMatrix(glm::lookAt(glm::vec3(0, 0, 4), glm::vec3(0), glm::vec3(0, 1, 0)),
+                             glm::vec3(0, 0, 4));
+        auto scene = std::make_shared<Scene>();
+        auto entity = scene->CreateEntity("Particle readback fixture");
+        auto &effect = entity.AddComponent<ParticleEmitterComponent>();
+        effect.EmitterStacks.clear();
+        ParticleEmitterConfig cfg;
+        cfg.EmissionRate = 0;
+        cfg.LightingEnabled = false;
+        cfg.SoftnessDistance = 0;
+        cfg.SimulationSpace = ParticleSimulationSpace::World;
+        for (int i = 0; i < 2; ++i) {
+            ParticleEmitterStack stack(i ? "Right" : "Left", cfg);
+            stack.TexturePath = i ? green : red;
+            stack.UseTexture = true;
+            ParticleSpawnData particle;
+            particle.Position = {i ? 0.8f : -0.8f, 0, 0};
+            particle.StartSize = particle.EndSize = 0.9f;
+            particle.StartColor = glm::vec4(1);
+            stack.System->GetPool().Spawn(particle);
+            effect.EmitterStacks.push_back(std::move(stack));
+        }
+        effect.SyncPrimary();
+        SceneRenderSettings settings;
+        settings.EnableShadows = false;
+        settings.EnableSkybox = false;
+        settings.EnableStudioLightLobes = false;
+        settings.ClearColor = glm::vec4(0, 0, 0, 1);
+        std::vector<double> timings;
+        auto *renderTarget = &color;
+        auto *renderDepth = &depth;
+        auto render = [&]() {
+            auto start = std::chrono::steady_clock::now();
+            renderer.RenderScene(scene, camera, renderTarget, renderDepth, settings);
+            timings.push_back(
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+            const auto w = renderTarget->GetWidth(), h = renderTarget->GetHeight();
+            const auto imageLayout =
+                GetVFXReadbackLayout(w, h, renderTarget->GetFormat() == RHITextureFormat::RGBA16_FLOAT);
+            if (imageLayout.SlicePitch > readback.GetSize())
+                return std::vector<uint8_t>{};
+            if (!copy.Reset() || !copy.Begin())
+                return std::vector<uint8_t>{};
+            copy.TransitionTexture(renderTarget->GetNative(), RHIResourceLayout::ShaderResource,
+                                   RHIResourceLayout::CopySource);
+            nri::TextureDataLayoutDesc textureLayout{};
+            textureLayout.rowPitch = imageLayout.RowPitch;
+            textureLayout.slicePitch = imageLayout.SlicePitch;
+            nri::TextureRegionDesc region{};
+            region.width = w;
+            region.height = h;
+            region.depth = 1;
+            device.GetNRICore().CmdReadbackTextureToBuffer(*copy.GetNative(), *readback.GetNative(),
+                                                           textureLayout, *renderTarget->GetNative(), region);
+            copy.TransitionTexture(renderTarget->GetNative(), RHIResourceLayout::CopySource,
+                                   RHIResourceLayout::ShaderResource);
+            if (!copy.End() || !copy.Submit())
+                return std::vector<uint8_t>{};
+            device.WaitIdle();
+            auto *mapped = static_cast<const uint8_t *>(readback.Map());
+            if (!mapped)
+                return std::vector<uint8_t>{};
+            std::vector<uint8_t> pixels(w * h * imageLayout.BytesPerPixel);
+            for (uint32_t y = 0; y < h; ++y)
+                std::memcpy(pixels.data() + y * w * imageLayout.BytesPerPixel,
+                            mapped + y * imageLayout.RowPitch, w * imageLayout.BytesPerPixel);
+            readback.Unmap();
+            return pixels;
+        };
+        auto sum = [](const auto &pixels, uint32_t minX, uint32_t maxX, uint32_t channel) {
+            uint64_t value = 0;
+            if (pixels.size() != resolution * resolution * 4)
+                return value;
+            for (uint32_t y = 0; y < resolution; ++y)
+                for (uint32_t x = minX; x < maxX; ++x)
+                    value += pixels[(y * resolution + x) * 4 + channel];
+            return value;
+        };
+        auto capture = [&](const std::string &name, const std::vector<uint8_t> &pixels) {
+            if (pixels.size() != resolution * resolution * 4)
+                return false;
+            std::ofstream file(captures / (name + ".tga"), std::ios::binary);
+            uint8_t header[18]{};
+            header[2] = 2;
+            header[12] = resolution;
+            header[14] = resolution;
+            header[16] = 32;
+            header[17] = 0x28;
+            file.write(reinterpret_cast<char *>(header), 18);
+            for (size_t i = 0; i < pixels.size(); i += 4) {
+                uint8_t bgra[] = {pixels[i + 2], pixels[i + 1], pixels[i], pixels[i + 3]};
+                file.write(reinterpret_cast<char *>(bgra), 4);
+            }
+            return file.good();
+        };
+        auto first = render();
+        if (!check(sum(first, 0, 64, 0) > sum(first, 0, 64, 1) * 2 + 1000 &&
+                       sum(first, 64, 128, 1) > sum(first, 64, 128, 0) * 2 + 1000,
+                   "Distinct textures survive two GPU draws"))
+            return false;
+        if (!capture("descriptor-isolation", first))
+            return false;
+        std::reverse(effect.EmitterStacks.begin(), effect.EmitterStacks.end());
+        if (!check(render() == first,
+                   "Reversed disjoint submission preserves descriptors and instance buffers"))
+            return false;
+        std::reverse(effect.EmitterStacks.begin(), effect.EmitterStacks.end());
+        auto &left = effect.EmitterStacks[0];
+        left.UseTexture = false;
+        auto disabled = render();
+        if (!check(sum(disabled, 0, 64, 1) > 1000,
+                   "Disabled texture uses untextured fallback without losing assignment"))
+            return false;
+        left.UseTexture = true;
+        left.TexturePath = green;
+        auto replaced = render();
+        if (!check(sum(replaced, 0, 64, 1) > sum(replaced, 0, 64, 0) * 2 + 1000,
+                   "Texture replacement reaches shader"))
+            return false;
+        left.TexturePath = "missing-vfx-fixture.png";
+        auto missing = render();
+        if (!check(sum(missing, 0, 64, 1) > 1000, "Missing texture has a visible fallback"))
+            return false;
+        left.TexturePath = red;
+        Material material("Particle cutout");
+        material.SetSurfaceType(SurfaceType::Cutout);
+        material.SetAlphaCutoff(0.5f);
+        auto materialPath = (captures / "cutout.axleasset").string();
+        if (!material.Save(materialPath))
+            return false;
+        left.MaterialPath = materialPath;
+        left.TexturePath = translucent;
+        auto cutout = render();
+        if (!check(sum(cutout, 0, 64, 0) == 0, "Assigned material alpha cutoff actually discards fragments"))
+            return false;
+        auto loadedMaterial = AssetManager::GetMaterial(materialPath);
+        if (!loadedMaterial)
+            return false;
+        loadedMaterial->SetAlphaCutoff(0.1f);
+        auto visible = render();
+        if (!check(sum(visible, 0, 64, 0) > 1000, "Changed material cutoff reaches the real particle shader"))
+            return false;
+        loadedMaterial->SetEmissionColor({0, 0, 1});
+        loadedMaterial->SetEmissionIntensity(0.5f);
+        auto emissive = render();
+        if (!check(sum(emissive, 0, 64, 2) > sum(visible, 0, 64, 2) + 1000,
+                   "Material emission reaches GPU particles"))
+            return false;
+        loadedMaterial->SetEmissionIntensity(0);
+        loadedMaterial->SetAlbedoColor({0.2f, 1, 1, 1});
+        if (!check(sum(render(), 0, 64, 0) + 1000 < sum(visible, 0, 64, 0),
+                   "Material base tint reaches GPU particles"))
+            return false;
+        loadedMaterial->SetAlbedoColor(glm::vec4(1));
+        auto split = writeTexture("split.tga", {255, 0, 0, 255});
+        {
+            std::fstream image(split, std::ios::in | std::ios::out | std::ios::binary);
+            image.seekp(18);
+            for (int y = 0; y < 2; ++y) {
+                uint8_t row[] = {0, 0, 255, 255, 255, 0, 0, 255};
+                image.write(reinterpret_cast<char *>(row), 8);
+            }
+        }
+        left.TexturePath = split;
+        loadedMaterial->SetUVScale({0.25f, 1});
+        loadedMaterial->SetUVOffset({0, 0});
+        auto uvLeft = render();
+        loadedMaterial->SetUVOffset({0.75f, 0});
+        auto uvRight = render();
+        if (!check(sum(uvLeft, 0, 64, 0) > sum(uvLeft, 0, 64, 2) * 2 + 1000 &&
+                       sum(uvRight, 0, 64, 2) > sum(uvRight, 0, 64, 0) * 2 + 1000,
+                   "Material UV transform changes sampled texels"))
+            return false;
+        left.MaterialPath.clear();
+        left.TexturePath = red;
+        settings.ClearColor = glm::vec4(0.4f, 0.4f, 0.4f, 1);
+        auto alphaOnGray = render();
+        left.Config.BlendMode = ParticleBlendMode::Multiply;
+        auto multiplied = render();
+        if (!check(sum(multiplied, 0, 64, 0) + 1000 < sum(alphaOnGray, 0, 64, 0) &&
+                       sum(multiplied, 0, 64, 0) > sum(multiplied, 0, 64, 1) + 1000,
+                   "Multiply blending modulates the destination"))
+            return false;
+        left.Config.BlendMode = ParticleBlendMode::AlphaBlend;
+        settings.ClearColor = {0, 0, 0, 1};
+        left.Config.NearFadeEnabled = true;
+        left.Config.NearFadeStart = 10;
+        left.Config.NearFadeEnd = 20;
+        if (!check(sum(render(), 0, 64, 0) == 0, "Near camera fading reaches shader"))
+            return false;
+        left.Config.NearFadeEnabled = false;
+        left.Config.FarFadeEnabled = true;
+        left.Config.FarFadeStart = 1;
+        left.Config.FarFadeEnd = 2;
+        if (!check(sum(render(), 0, 64, 0) == 0, "Far camera fading reaches shader"))
+            return false;
+        left.Config.FarFadeEnabled = false;
+        // Normal maps and lighting are changed on already-spawned particles, including paused previews.
+        left.Config.LightingEnabled = true;
+        auto lit = render();
+        left.NormalMapPath = writeTexture("normal.tga", {0, 128, 128, 255});
+        left.UseNormalMap = true;
+        auto normalMapped = render();
+        if (!check(normalMapped != lit, "Normal texture and live lighting flags change GPU pixels"))
+            return false;
+        left.NormalMapPath.clear();
+        left.UseNormalMap = false;
+        left.Config.LightingEnabled = false;
+        auto occluder = scene->CreateEntity("Opaque depth fixture");
+        occluder.AddComponent<MeshInstance3D>().RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+        auto &transform = occluder.GetComponent<TransformComponent>();
+        transform.Translation = {-0.8f, 0, -0.4f};
+        transform.Scale = {0.45f, 0.45f, 0.05f};
+        auto &opaqueMaterial = occluder.AddComponent<MaterialComponent>();
+        opaqueMaterial.AlbedoColor = {0, 0, 0, 1};
+        opaqueMaterial.EnableSpecularHighlights = false;
+        opaqueMaterial.EnableEnvironmentReflections = false;
+        left.Config.SoftnessDistance = 0;
+        auto hardIntersection = render();
+        left.Config.SoftnessDistance = 1;
+        auto softIntersection = render();
+        if (!check(sum(softIntersection, 0, 64, 0) + 1000 < sum(hardIntersection, 0, 64, 0),
+                   "Soft intersections sample actual opaque geometry depth"))
+            return false;
+        if (!capture("soft-depth", softIntersection))
+            return false;
+        scene->DestroyEntity(occluder);
+        left.Config.SoftnessDistance = 0;
+        // Explicit MSAA and HDR fallback paths must remain drawable.
+        settings.MSAASamples = 4;
+        if (!check(sum(render(), 0, 64, 0) > 1000, "MSAA particle pipeline and resolve"))
+            return false;
+        settings.MSAASamples = 1;
+        settings.EnableToneMapping = true;
+        if (!check(sum(render(), 0, 64, 0) > 1000, "HDR particle target and tone mapping"))
+            return false;
+        settings.EnableToneMapping = false;
+        RHITexture oddColor, oddDepth, hdrColor;
+        if (!oddColor.Init(RHITextureDesc::RenderTarget2D(65, 33)) ||
+            !oddDepth.Init(RHITextureDesc::DepthStencil2D(65, 33)))
+            return false;
+        renderTarget = &oddColor;
+        renderDepth = &oddDepth;
+        auto odd = render();
+        if (!check(odd.size() == 65 * 33 * 4 && std::any_of(odd.begin(), odd.end(),
+                                                            [index = size_t{0}](uint8_t byte) mutable {
+                                                                return index++ % 4 != 3 && byte != 0;
+                                                            }),
+                   "Odd-sized resize uses aligned readback rows"))
+            return false;
+        if (!hdrColor.Init(
+                RHITextureDesc::RenderTarget2D(resolution, resolution, RHITextureFormat::RGBA16_FLOAT)))
+            return false;
+        renderTarget = &hdrColor;
+        renderDepth = &depth;
+        auto hdr = render();
+        bool finite = hdr.size() == resolution * resolution * 8;
+        uint64_t hdrEnergy = 0;
+        for (size_t i = 0; i + 1 < hdr.size(); i += 2) {
+            uint16_t half = static_cast<uint16_t>(hdr[i] | (hdr[i + 1] << 8));
+            if ((half & 0x7c00) == 0x7c00)
+                finite = false;
+            if (i % 8 < 6)
+                hdrEnergy += half;
+        }
+        if (!check(finite && hdrEnergy > 1000, "RGBA16F readback contains finite rendered HDR pixels"))
+            return false;
+        renderTarget = &color;
+        renderDepth = &depth;
+        // Each authored reference is loaded, simulated, saved and reopened through production adapters.
+        for (const char *name : {"Campfire_v2", "CollisionSparks", "VehicleBackfire"}) {
+            auto source = root / "assets" / "VFX" / (std::string(name) + ".axle_vfx");
+            if (!effect.LoadFromAsset(source.string()))
+                return false;
+            for (int tick = 0; tick < 30; ++tick)
+                effect.Update(1.0f / 60.0f);
+            auto before = render();
+            if (!check(sum(before, 0, 128, 0) + sum(before, 0, 128, 1) + sum(before, 0, 128, 2) > 100,
+                       "Authored reference renders visible particles"))
+                return false;
+            auto saved = (captures / (std::string(name) + ".axle_vfx")).string();
+            if (!effect.SaveToAsset(saved) || !effect.LoadFromAsset(saved))
+                return false;
+            for (int tick = 0; tick < 30; ++tick)
+                effect.Update(1.0f / 60.0f);
+            if (!check(render() == before,
+                       "Reference save/reopen reproduces GPU output at the same seeded tick"))
+                return false;
+            if (!capture(name, before))
+                return false;
+        }
+        timings.clear();
+        for (int frame = 0; frame < 10; ++frame)
+            render();
+        std::ofstream report(captures / "report.txt");
+        report << FormatVFXTimingReport(device.GetCapabilities().AdapterName,
+                                        RHITypeToString(device.GetBackend()), resolution, resolution, 1,
+                                        timings);
+        report << "CPU wall time includes submission and queue synchronization; no GPU timestamp claim.\n";
+        report << "PASS: texture binding/order/replacement/disable/fallback, material "
+                  "tint/cutout/emission/UVs, multiply/alpha/additive blending, normal maps, camera fades, "
+                  "opaque depth, MSAA, SDR/HDR readback, odd resize, reference save-reopen.\n";
+        return check(report.good(), "Capture metadata written");
     }
 
 } // namespace Axle

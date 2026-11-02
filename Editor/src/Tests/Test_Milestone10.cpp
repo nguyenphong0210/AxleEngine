@@ -705,7 +705,8 @@ bool RunTest_Step102_Phase39_VisualParticleAndVFXStudio() {
     {
         const char* backend = std::getenv("AXLE_VFX_TEST_BACKEND");
         if (backend && backend[0] != '\0') {
-            Axle::VerifyVFXRendering(".");
+            if (!Axle::VerifyVFXRendering("."))
+                return false;
         } else {
             std::cout << "  -> Physical DX12/Vulkan GPU execution: NOT RUN in headless environment (set AXLE_VFX_TEST_BACKEND on hardware target)." << std::endl;
         }

@@ -2,6 +2,7 @@
 #include <Axle/CurveEditorWidget.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
+#include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/Shader.hpp>
@@ -11,6 +12,8 @@
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/ParticleMeshSampler.hpp>
+#include <Axle/ShaderDragDropDecoder.hpp>
+#include <Axle/AssetDSL.hpp>
 #include <imgui.h>
 #include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -53,7 +56,10 @@ namespace Axle {
         baseStack.Initialize();
         m_EmitterStacks.push_back(std::move(baseStack));
         m_SelectedStackIndex = 0;
-
+        ParticleEffectDefinition initial;
+        initial.Name = "Fire";
+        initial.Emitters.push_back(m_EmitterStacks.front().GetDefinition());
+        m_Document.LoadDefinition(initial);
 
         if (Window::HasActiveContext()) {
             FramebufferSpecification spec;
@@ -67,6 +73,7 @@ namespace Axle {
     }
 
     VFXEditorPanel::~VFXEditorPanel() {
+        ShutdownRHI();
         if (Window::HasActiveContext()) {
             if (glad_glDeleteVertexArrays && m_GridVAO) {
                 glDeleteVertexArrays(1, &m_GridVAO);
@@ -79,6 +86,17 @@ namespace Axle {
         }
     }
 
+    void VFXEditorPanel::ShutdownRHI() {
+        if (RHI::RHIDevice::Get().IsInitialized() && (m_RHISceneRenderer || m_RHIViewport))
+            RHI::RHIDevice::Get().WaitIdle();
+        m_PreviewGrid.clear();
+        m_PreviewEntity = {};
+        m_PreviewScene.reset();
+        m_RHISceneRenderer.reset();
+        m_RHIViewport.reset();
+        m_ImGuiLayer = nullptr;
+    }
+
     void VFXEditorPanel::InitRHI(ImGuiLayer* imguiLayer) {
         m_ImGuiLayer = imguiLayer;
         if (!m_ImGuiLayer) return;
@@ -89,10 +107,6 @@ namespace Axle {
             }
             m_RHIViewport->Init(m_ImGuiLayer, m_ViewportWidth, m_ViewportHeight, RHI::RHITextureFormat::RGBA8_UNORM, true);
 
-            if (!m_RHIParticleRenderer) {
-                m_RHIParticleRenderer = std::make_unique<RHIParticleRenderer>();
-                m_RHIParticleRenderer->Init(RHI::RHIDevice::Get());
-            }
         }
     }
 
@@ -136,115 +150,113 @@ namespace Axle {
 
     void VFXEditorPanel::SyncStacksFromDocument() {
         const auto& def = m_Document.GetDefinition();
-        m_Config.Name = def.Name;
+        const auto selectedId = m_Document.GetSelectedEmitterId();
         m_EmitterStacks.clear();
-        for (const auto& emitter : def.Emitters) {
-            ParticleEmitterStack stack(emitter.Name, emitter.Config);
-            stack.Enabled = emitter.Enabled;
-            stack.Visible = true;
-            stack.TexturePath = emitter.Resources.TexturePath;
-            stack.NormalMapPath = emitter.Resources.NormalMapPath;
-            stack.MaterialPath = emitter.Resources.MaterialPath;
-            stack.Initialize();
-            m_EmitterStacks.push_back(std::move(stack));
-        }
-        if (m_EmitterStacks.empty()) {
-            ParticleEmitterStack base("Base Emitter", m_Config);
-            base.Initialize();
-            m_EmitterStacks.push_back(std::move(base));
-        }
         m_SelectedStackIndex = 0;
-        m_Config = m_EmitterStacks[0].Config;
+        for (const auto& emitter : def.Emitters) {
+            if (emitter.Id == selectedId)
+                m_SelectedStackIndex = m_EmitterStacks.size();
+            m_EmitterStacks.emplace_back(emitter);
+        }
+        if (!m_EmitterStacks.empty())
+            m_Config = m_EmitterStacks[m_SelectedStackIndex].Config;
         ResetPreview();
     }
 
     void VFXEditorPanel::SyncDocumentFromStacks() {
-        SyncCurrentStackConfig();
-        auto& def = m_Document.GetDefinition();
-        def.Name = m_Config.Name.empty() ? "ParticleEffect" : m_Config.Name;
-        def.Emitters.clear();
-        for (size_t i = 0; i < m_EmitterStacks.size(); ++i) {
-            const auto& stack = m_EmitterStacks[i];
-            EmitterDefinition edef;
-            edef.Id = "emitter-" + std::to_string(i + 1);
-            edef.Name = stack.Name;
-            edef.Enabled = stack.Enabled;
-            edef.Config = stack.Config;
-            edef.Resources.TexturePath = stack.TexturePath;
-            edef.Resources.NormalMapPath = stack.NormalMapPath;
-            edef.Resources.MaterialPath = stack.MaterialPath;
-            edef.Resources.UseTexture = !stack.TexturePath.empty();
-            edef.Resources.UseNormalMap = !stack.NormalMapPath.empty();
-            def.Emitters.push_back(std::move(edef));
-        }
+        auto definition = m_Document.GetDefinition();
+        definition.Emitters.clear();
+        for (const auto &stack : m_EmitterStacks)
+            definition.Emitters.push_back(stack.GetDefinition());
+        m_Document.ReplaceDefinition(definition);
     }
 
     void VFXEditorPanel::NewDocument(const std::string& name) {
+        if (m_Document.IsDirty() && !m_DiscardApproved) {
+            m_PendingAction = 1;
+            m_PendingPath = name;
+            return;
+        }
+        m_DiscardApproved = false;
         m_Document.NewEffect(name);
+        m_AssetDocumentMode = true;
         SyncStacksFromDocument();
     }
-
     bool VFXEditorPanel::OpenDocument(const std::string& filePath) {
-        std::vector<VFXDiagnostic> diags;
-        if (m_Document.OpenEffect(filePath, diags)) {
-            SyncStacksFromDocument();
-            return true;
+        if (m_Document.IsDirty() && !m_DiscardApproved) {
+            m_PendingAction = 2;
+            m_PendingPath = filePath;
+            return false;
         }
-        return false;
+        m_DiscardApproved = false;
+        m_Diagnostics.clear();
+        if (!m_Document.OpenEffect(filePath, m_Diagnostics))
+            return false;
+        m_AssetDocumentMode = true;
+        SyncStacksFromDocument();
+        return true;
     }
-
     bool VFXEditorPanel::SaveDocument() {
-        SyncDocumentFromStacks();
-        std::vector<VFXDiagnostic> diags;
-        return m_Document.Save(diags);
+        SyncCurrentStackConfig();
+        m_Document.CommitTransaction("Edit Emitter Modules");
+        m_Diagnostics.clear();
+        return m_Document.Save(m_Diagnostics);
     }
-
     bool VFXEditorPanel::SaveDocumentAs(const std::string& filePath) {
-        SyncDocumentFromStacks();
-        std::vector<VFXDiagnostic> diags;
-        return m_Document.SaveAs(filePath, diags);
+        SyncCurrentStackConfig();
+        m_Document.CommitTransaction("Edit Emitter Modules");
+        m_Diagnostics.clear();
+        return m_Document.SaveAs(filePath, m_Diagnostics);
     }
-
     ParticleEmitterStack* VFXEditorPanel::GetCurrentEmitterStack() {
-        if (m_SelectedStackIndex < m_EmitterStacks.size()) {
-            return &m_EmitterStacks[m_SelectedStackIndex];
-        }
-        return nullptr;
+        return m_SelectedStackIndex < m_EmitterStacks.size() ? &m_EmitterStacks[m_SelectedStackIndex]
+                                                             : nullptr;
     }
-
     void VFXEditorPanel::SelectEmitterStack(size_t index) {
-        if (index < m_EmitterStacks.size()) {
-            SyncCurrentStackConfig();
-            m_SelectedStackIndex = index;
-            m_Config = m_EmitterStacks[index].Config;
-        }
+        if (index >= m_EmitterStacks.size())
+            return;
+        SyncCurrentStackConfig();
+        m_SelectedStackIndex = index;
+        m_Config = m_EmitterStacks[index].Config;
+        m_Document.SelectEmitter(m_EmitterStacks[index].Id);
     }
-
     void VFXEditorPanel::AddEmitterStack(const std::string& name, const ParticleEmitterConfig& config) {
-        ParticleEmitterStack stack(name, config);
-        stack.Initialize();
-        m_EmitterStacks.push_back(std::move(stack));
-        SelectEmitterStack(m_EmitterStacks.size() - 1);
-        ResetPreview();
+        SyncCurrentStackConfig();
+        m_Document.AddEmitter(name, config);
+        SyncStacksFromDocument();
     }
-
     void VFXEditorPanel::RemoveEmitterStack(size_t index) {
-        if (m_EmitterStacks.size() > 1 && index < m_EmitterStacks.size()) {
-            m_EmitterStacks.erase(m_EmitterStacks.begin() + index);
-            if (m_SelectedStackIndex >= m_EmitterStacks.size()) {
-                m_SelectedStackIndex = m_EmitterStacks.size() - 1;
-            }
-            SelectEmitterStack(m_SelectedStackIndex);
-            ResetPreview();
-        }
+        if (index >= m_EmitterStacks.size())
+            return;
+        SyncCurrentStackConfig();
+        m_Diagnostics.clear();
+        if (m_Document.RemoveEmitter(m_EmitterStacks[index].Id, m_Diagnostics))
+            SyncStacksFromDocument();
     }
-
+    bool VFXEditorPanel::Undo() {
+        SyncCurrentStackConfig();
+        m_Document.CommitTransaction("Edit Emitter Modules");
+        if (!m_Document.Undo())
+            return false;
+        SyncStacksFromDocument();
+        return true;
+    }
+    bool VFXEditorPanel::Redo() {
+        SyncCurrentStackConfig();
+        m_Document.CommitTransaction("Edit Emitter Modules");
+        if (!m_Document.Redo())
+            return false;
+        SyncStacksFromDocument();
+        return true;
+    }
     void VFXEditorPanel::SyncCurrentStackConfig() {
-        if (m_SelectedStackIndex < m_EmitterStacks.size()) {
-            m_EmitterStacks[m_SelectedStackIndex].Config = m_Config;
-            if (m_EmitterStacks[m_SelectedStackIndex].System) {
-                m_EmitterStacks[m_SelectedStackIndex].System->SetConfig(m_Config);
+        if (auto *stack = GetCurrentEmitterStack()) {
+            if (!ParticleEmitterConfigsEqual(stack->Config, m_Config)) {
+                stack->Config = m_Config;
+                if (stack->System)
+                    stack->System->SetConfig(m_Config);
             }
+            SyncDocumentFromStacks();
         }
     }
 
@@ -252,6 +264,19 @@ namespace Axle {
         m_Config = config;
         SyncCurrentStackConfig();
         ResetPreview();
+    }
+
+    void VFXEditorPanel::OpenEntityEffect(Entity entity) {
+        if (!entity || !entity.HasComponent<ParticleEmitterComponent>())
+            return;
+        if (m_Document.IsDirty()) {
+            m_Diagnostics = {{VFXDiagnosticSeverity::Warning, "UNSAVED_EFFECT", "",
+                              "Save or discard the working effect before opening a scene emitter."}};
+            return;
+        }
+        m_AssetDocumentMode = false;
+        m_SelectedEntity = {};
+        SetSelectedEntity(entity);
     }
 
     void VFXEditorPanel::SetSelectedEntity(Entity entity) {
@@ -269,27 +294,11 @@ namespace Axle {
         }
 
         m_SelectedEntity = entity;
+        if (m_Document.IsDirty() || m_AssetDocumentMode)
+            return;
         auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
-        m_Config = pec.Config;
-        m_EmitterStacks.clear();
-        if (!pec.EmitterStacks.empty()) {
-            for (const auto& stack : pec.EmitterStacks) {
-                ParticleEmitterStack previewStack(stack.Name, stack.Config);
-                previewStack.Enabled = stack.Enabled;
-                previewStack.Visible = stack.Visible;
-                previewStack.TexturePath = stack.TexturePath;
-                previewStack.NormalMapPath = stack.NormalMapPath;
-                previewStack.MaterialPath = stack.MaterialPath;
-                m_EmitterStacks.push_back(std::move(previewStack));
-            }
-            m_SelectedStackIndex = 0;
-        } else {
-            ParticleEmitterStack baseStack(m_Config.Name.empty() ? "Base Emitter" : m_Config.Name, m_Config);
-            baseStack.Initialize();
-            m_EmitterStacks.push_back(std::move(baseStack));
-            m_SelectedStackIndex = 0;
-        }
-        ResetPreview();
+        m_Document.LoadDefinition(pec.GetEffectDefinition());
+        SyncStacksFromDocument();
     }
 
     void VFXEditorPanel::ResetPreview() {
@@ -298,10 +307,10 @@ namespace Axle {
         m_Clock.Accumulator = 0.0;
         m_IsSeeking = false;
         for (auto& stack : m_EmitterStacks) {
-            stack.Initialize();
+            stack.Initialize(m_Document.GetDefinition().Seed);
             if (stack.System) {
                 stack.System->Reset();
-                if (m_IsPlaying && stack.Enabled) stack.System->SetEmitting(true);
+                stack.System->SetEmitting(stack.Enabled && !stack.TriggerOnly);
             }
         }
     }
@@ -309,15 +318,13 @@ namespace Axle {
     void VFXEditorPanel::PlayPreview() {
         m_IsPlaying = true;
         for (auto& stack : m_EmitterStacks) {
-            if (stack.System && stack.Enabled) stack.System->SetEmitting(true);
+            if (stack.System)
+                stack.System->SetEmitting(stack.Enabled && !stack.TriggerOnly);
         }
     }
 
     void VFXEditorPanel::PausePreview() {
-        m_IsPlaying = false;
-        for (auto& stack : m_EmitterStacks) {
-            if (stack.System) stack.System->SetEmitting(false);
-        }
+        m_IsPlaying = false; // Pause the clock, not the authored emission state used by Step/Seek.
     }
 
     void VFXEditorPanel::StopPreview() {
@@ -338,30 +345,41 @@ namespace Axle {
         if (stepTime <= 0.0f) stepTime = static_cast<float>(m_Clock.StepSeconds);
         m_Clock.Tick++;
 
-        float maxDuration = m_Config.Duration > 0.0f ? m_Config.Duration : 5.0f;
-        for (const auto& stack : m_EmitterStacks) {
-            if (stack.Config.Duration > maxDuration) {
-                maxDuration = stack.Config.Duration;
-            }
-        }
-
-        float currentTime = static_cast<float>(m_Clock.Tick * m_Clock.StepSeconds);
-        if (m_IsLooping && maxDuration > 0.0f && currentTime >= maxDuration) {
-            m_Clock.Tick = 0;
-        }
-
         for (auto& stack : m_EmitterStacks) {
-            if (stack.Enabled && stack.System) {
-                stack.System->Update(stepTime, glm::vec3(0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+            if (!stack.System)
+                continue;
+            const auto t = stack.GetWorldTransform();
+            stack.System->SetEmitterTransform(t.Translation, t.Rotation, t.Scale);
+            stack.System->GetConfig().Collision.WorldRaycast = {};
+            if (m_PhysicsScene &&
+                stack.Config.Collision.CollisionMode == ParticleCollisionMode::ScenePhysics) {
+                stack.System->GetConfig().Collision.WorldRaycast =
+                    [this](const glm::vec3 &origin, const glm::vec3 &direction, float distance,
+                           glm::vec3 &point, glm::vec3 &normal) {
+                        RayCastHit hit;
+                        if (!m_PhysicsScene->CastRay(origin, direction, distance, hit))
+                            return false;
+                        point = hit.Position;
+                        normal = hit.Normal;
+                        return true;
+                    };
             }
+            stack.System->SetEmitting(stack.Enabled && !stack.TriggerOnly);
+            stack.System->GetConfig().Looping = m_IsLooping && stack.Config.Looping;
+            if (stack.Enabled)
+                stack.System->Update(stepTime, t.Translation, t.Rotation, t.Scale);
         }
         DispatchEffectEvents(m_EmitterStacks);
     }
 
     void VFXEditorPanel::SeekTo(float targetTime) {
         if (targetTime < 0.0f) targetTime = 0.0f;
-        float maxDuration = m_Config.Duration > 0.0f ? m_Config.Duration : 10.0f;
-        if (targetTime > maxDuration) targetTime = maxDuration;
+        if (!std::isfinite(targetTime))
+            return;
+        float maxDuration = 0.0f;
+        for (const auto &stack : m_EmitterStacks)
+            maxDuration = std::max(maxDuration, stack.Config.Duration);
+        targetTime = std::min(targetTime, std::max(maxDuration, 1.0f));
 
         uint64_t targetTick = static_cast<uint64_t>(std::round(targetTime / m_Clock.StepSeconds));
         if (targetTick < m_Clock.Tick) {
@@ -385,7 +403,9 @@ namespace Axle {
 
     void VFXEditorPanel::TriggerBurst(uint32_t count) {
         if (!m_EmitterStacks.empty() && m_EmitterStacks[m_SelectedStackIndex].System) {
-            m_EmitterStacks[m_SelectedStackIndex].System->EmitBurst(count);
+            auto &stack = m_EmitterStacks[m_SelectedStackIndex];
+            const auto t = stack.GetWorldTransform();
+            stack.System->EmitBurst(count, t.Translation, t.Rotation, t.Scale);
         }
     }
 
@@ -409,7 +429,8 @@ namespace Axle {
         if (m_IsPlaying) {
             float dt = ts.GetSeconds() * m_Clock.PlaybackSpeed;
             m_Clock.Accumulator += dt;
-            while (m_Clock.Accumulator >= m_Clock.StepSeconds) {
+            unsigned steps = 0;
+            while (m_Clock.Accumulator >= m_Clock.StepSeconds && steps++ < 120) {
                 m_Clock.Accumulator -= m_Clock.StepSeconds;
                 Step(static_cast<float>(m_Clock.StepSeconds));
             }
@@ -485,7 +506,9 @@ namespace Axle {
                             stack.NormalMap = Texture2D::Create(resolved.string());
                         }
                     }
-                    m_ParticleRenderer->Render(*stack.System, stack.Texture, stack.NormalMap, stack.Config.SoftnessDistance);
+                    m_ParticleRenderer->Render(*stack.System, stack.UseTexture ? stack.Texture : nullptr,
+                                               stack.UseNormalMap ? stack.NormalMap : nullptr,
+                                               stack.Config.SoftnessDistance);
                 }
             }
             m_ParticleRenderer->End();
@@ -498,10 +521,49 @@ namespace Axle {
         if (!m_RHIViewport || !m_RHIViewport->IsValid()) return;
         if (!RHI::RHIDevice::Get().IsInitialized()) return;
 
-        if (!m_RHIParticleRenderer) {
-            m_RHIParticleRenderer = std::make_unique<RHIParticleRenderer>();
-            m_RHIParticleRenderer->Init(RHI::RHIDevice::Get());
+        if (!m_RHISceneRenderer) {
+            m_RHISceneRenderer = std::make_unique<RHISceneRenderer>();
+            if (!m_RHISceneRenderer->Init(RHI::RHIDevice::Get(), false)) {
+                m_RHISceneRenderer.reset();
+                return;
+            }
         }
+        if (!m_PreviewScene) {
+            m_PreviewScene = std::make_shared<Scene>();
+            m_PreviewEntity = m_PreviewScene->CreateEntity("VFX Preview");
+            m_PreviewEntity.AddComponent<ParticleEmitterComponent>();
+            for (int axis = 0; axis < 2; ++axis)
+                for (int line = -10; line <= 10; ++line) {
+                    auto entity = m_PreviewScene->CreateEntity("Preview Grid");
+                    auto &tc = entity.GetComponent<TransformComponent>();
+                    tc.Translation = axis == 0 ? glm::vec3(line * 0.5f, 0, 0) : glm::vec3(0, 0, line * 0.5f);
+                    tc.Scale = axis == 0 ? glm::vec3(0.006f, 0.004f, 10) : glm::vec3(10, 0.004f, 0.006f);
+                    auto &material = entity.AddComponent<MaterialComponent>();
+                    material.AlbedoColor = line == 0 ? (axis == 0 ? glm::vec4(0.12f, 0.18f, 0.35f, 1)
+                                                                  : glm::vec4(0.35f, 0.12f, 0.12f, 1))
+                                                     : glm::vec4(0.08f, 0.09f, 0.1f, 1);
+                    material.EnableSpecularHighlights = false;
+                    material.EnableEnvironmentReflections = false;
+                    m_PreviewGrid.push_back(entity);
+                }
+        }
+        for (auto entity : m_PreviewGrid) {
+            if (m_ShowGroundGrid && !entity.HasComponent<MeshInstance3D>())
+                entity.AddComponent<MeshInstance3D>().RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+            if (!m_ShowGroundGrid && entity.HasComponent<MeshInstance3D>())
+                entity.RemoveComponent<MeshInstance3D>();
+        }
+        auto &component = m_PreviewEntity.GetComponent<ParticleEmitterComponent>();
+        component.EmitterStacks.clear();
+        // This private scene renders the panel-owned systems. It is never ticked and never shares user scene
+        // systems.
+        for (const auto &stack : m_EmitterStacks) {
+            ParticleEmitterStack renderStack(stack.GetDefinition());
+            renderStack.Visible = stack.Visible;
+            renderStack.System = stack.System;
+            component.EmitterStacks.push_back(std::move(renderStack));
+        }
+        component.SyncPrimary();
 
         u32 reqW = static_cast<u32>(width);
         u32 reqH = static_cast<u32>(height);
@@ -524,8 +586,13 @@ namespace Axle {
         glm::mat4 view = glm::lookAt(camPos, m_CameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
         camera.SetViewMatrix(view, camPos);
 
-        // Render preview passes into offscreen RHI viewport
-        RenderPreview3D(width, height);
+        SceneRenderSettings settings;
+        settings.EnableShadows = false;
+        settings.EnableSkybox = false;
+        settings.EnableStudioLightLobes = false;
+        settings.ClearColor = glm::vec4(0.07f, 0.08f, 0.10f, 1.0f);
+        m_RHISceneRenderer->RenderScene(m_PreviewScene, camera, m_RHIViewport->GetColorTexture(),
+                                        m_RHIViewport->GetDepthTexture(), settings);
     }
 
     void VFXEditorPanel::DrawEmitterStackColumn(float width, float height) {
@@ -540,17 +607,91 @@ namespace Axle {
             }
             ImGui::SameLine();
             if (ImGui::Button("Save", ImVec2(40, 20))) {
-                SaveDocument();
+                if (m_Document.GetFilePath().empty()) {
+                    m_FileAction = 2;
+                    ImGui::OpenPopup("Effect File");
+                } else
+                    SaveDocument();
             }
             ImGui::SameLine();
             if (ImGui::Button("Undo", ImVec2(40, 20))) {
-                if (m_Document.Undo()) SyncStacksFromDocument();
+                Undo();
             }
             ImGui::SameLine();
             if (ImGui::Button("Redo", ImVec2(40, 20))) {
-                if (m_Document.Redo()) SyncStacksFromDocument();
+                Redo();
             }
 
+            if (ImGui::Button("Open...")) {
+                m_FileAction = 1;
+                ImGui::OpenPopup("Effect File");
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Save As...")) {
+                m_FileAction = 2;
+                ImGui::OpenPopup("Effect File");
+            }
+            if (ImGui::BeginPopup("Effect File")) {
+                ImGui::InputText("Asset path", m_FilePath, sizeof(m_FilePath));
+                if (ImGui::Button(m_FileAction == 1 ? "Open" : "Save As")) {
+                    bool ok = m_FileAction == 1 ? OpenDocument(m_FilePath) : SaveDocumentAs(m_FilePath);
+                    if (ok || m_PendingAction)
+                        ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+            if (m_PendingAction)
+                ImGui::OpenPopup("Unsaved Effect");
+            if (ImGui::BeginPopupModal("Unsaved Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::TextUnformatted("Save or discard the current effect before continuing.");
+                ImGui::InputText("Save path", m_FilePath, sizeof(m_FilePath));
+                auto proceed = [&]() {
+                    const auto action = m_PendingAction;
+                    const auto path = m_PendingPath;
+                    m_PendingAction = 0;
+                    m_DiscardApproved = true;
+                    if (action == 1)
+                        NewDocument(path);
+                    else if (action == 2)
+                        OpenDocument(path);
+                    else if (action == 3) {
+                        m_Document.DiscardChanges();
+                        SyncStacksFromDocument();
+                        m_DiscardApproved = true;
+                        m_IsOpen = false;
+                    }
+                    ImGui::CloseCurrentPopup();
+                };
+                if (ImGui::Button("Save and Continue")) {
+                    bool saved =
+                        m_Document.GetFilePath().empty() ? SaveDocumentAs(m_FilePath) : SaveDocument();
+                    if (saved)
+                        proceed();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Discard"))
+                    proceed();
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel")) {
+                    m_PendingAction = 0;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+            for (const auto &diag : m_Diagnostics)
+                ImGui::TextWrapped("%s", diag.Message.c_str());
+
+            char effectName[256]{};
+            strncpy_s(effectName, m_Document.GetDefinition().Name.c_str(), sizeof(effectName) - 1);
+            if (ImGui::InputText("Effect", effectName, sizeof(effectName)))
+                m_Document.SetEffectName(effectName);
+            int seed = static_cast<int>(m_Document.GetDefinition().Seed);
+            if (ImGui::InputInt("Seed", &seed)) {
+                auto definition = m_Document.GetDefinition();
+                definition.Seed = static_cast<uint32_t>(seed);
+                m_Document.ReplaceDefinition(definition, "Change Effect Seed");
+                SyncStacksFromDocument();
+            }
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.2f, 1.0f), "Emitter Stacks");
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
@@ -571,7 +712,12 @@ namespace Axle {
                 }
 
                 // Enabled toggle
-                ImGui::Checkbox("##Enabled", &m_EmitterStacks[i].Enabled);
+                if (ImGui::Checkbox("##Enabled", &m_EmitterStacks[i].Enabled)) {
+                    if (m_EmitterStacks[i].System)
+                        m_EmitterStacks[i].System->SetEmitting(m_EmitterStacks[i].Enabled &&
+                                                               !m_EmitterStacks[i].TriggerOnly);
+                    SyncDocumentFromStacks();
+                }
                 ImGui::SameLine();
 
                 // Selectable stack row
@@ -594,9 +740,24 @@ namespace Axle {
                 // Right click context menu on row
                 if (ImGui::BeginPopupContextItem()) {
                     if (ImGui::MenuItem("Duplicate Emitter")) {
-                        std::string dupName = m_EmitterStacks[i].Name + " (Copy)";
-                        AddEmitterStack(dupName, m_EmitterStacks[i].Config);
+                        SyncCurrentStackConfig();
+                        m_Document.DuplicateEmitter(m_EmitterStacks[i].Id);
+                        SyncStacksFromDocument();
                     }
+                    if (ImGui::MenuItem("Move Up", nullptr, false, i > 0)) {
+                        m_Document.ReorderEmitter(i, i - 1);
+                        SyncStacksFromDocument();
+                    }
+                    if (ImGui::MenuItem("Move Down", nullptr, false, i + 1 < m_EmitterStacks.size())) {
+                        m_Document.ReorderEmitter(i, i + 1);
+                        SyncStacksFromDocument();
+                    }
+                    if (ImGui::MenuItem("Solo Preview"))
+                        for (size_t j = 0; j < m_EmitterStacks.size(); ++j)
+                            m_EmitterStacks[j].Visible = j == i;
+                    if (ImGui::MenuItem("Show All"))
+                        for (auto &stack : m_EmitterStacks)
+                            stack.Visible = true;
                     if (m_EmitterStacks.size() > 1 && ImGui::MenuItem("Delete Emitter")) {
                         RemoveEmitterStack(i);
                         ImGui::EndPopup();
@@ -668,6 +829,9 @@ namespace Axle {
         ImGui::TextDisabled("|");
         ImGui::SameLine();
 
+        if (ImGui::Checkbox("Loop Emitters", &m_IsLooping))
+            ResetPreview();
+        ImGui::SameLine();
         ImGui::Checkbox("Ground Grid", &m_ShowGroundGrid);
         ImGui::SameLine();
         if (ImGui::Button("Reset Camera", ImVec2(95, 26))) {
@@ -727,12 +891,23 @@ namespace Axle {
 
     void VFXEditorPanel::DrawMainModule() {
         if (ImGui::CollapsingHeader("📦 Main Module", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (auto *stack = GetCurrentEmitterStack()) {
+                ImGui::Checkbox("Trigger Only", &stack->TriggerOnly);
+                ImGui::DragFloat3("Emitter Offset", glm::value_ptr(stack->LocalTransform.Translation), 0.01f);
+                glm::vec3 rotation = glm::degrees(glm::eulerAngles(stack->LocalTransform.Rotation));
+                if (ImGui::DragFloat3("Emitter Rotation", glm::value_ptr(rotation), 0.5f))
+                    stack->LocalTransform.Rotation = glm::quat(glm::radians(rotation));
+                ImGui::DragFloat3("Emitter Scale", glm::value_ptr(stack->LocalTransform.Scale), 0.01f, 0.001f,
+                                  100.0f);
+            }
             char nameBuf[128];
             strncpy_s(nameBuf, m_Config.Name.c_str(), sizeof(nameBuf));
             if (ImGui::InputText("Emitter Name", nameBuf, sizeof(nameBuf))) {
-                m_Config.Name = nameBuf;
-                if (m_SelectedStackIndex < m_EmitterStacks.size()) {
-                    m_EmitterStacks[m_SelectedStackIndex].Name = nameBuf;
+                SyncCurrentStackConfig();
+                if (auto *stack = GetCurrentEmitterStack()) {
+                    m_Document.RenameEmitter(stack->Id, nameBuf);
+                    SyncStacksFromDocument();
+                    m_Config.Name = nameBuf;
                 }
             }
 
@@ -815,6 +990,7 @@ namespace Axle {
                 SyncCurrentStackConfig();
             }
 
+            ImGui::DragFloat3("Emission Direction", glm::value_ptr(m_Config.Shape.Direction), 0.01f, -1, 1);
             switch (m_Config.Shape.Type) {
                 case ParticleEmitterShapeType::Sphere:
                 case ParticleEmitterShapeType::Hemisphere:
@@ -834,15 +1010,12 @@ namespace Axle {
                     ImGui::DragFloat("Line Length", &m_Config.Shape.LineLength, 0.05f, 0.01f, 50.0f, "%.2f m");
                     break;
                 case ParticleEmitterShapeType::MeshSurface: {
-                    char meshBuffer[256] = {};
-                    strncpy_s(meshBuffer, m_Config.Shape.MeshPath.c_str(), sizeof(meshBuffer) - 1);
-                    if (ImGui::InputText("Mesh Asset Path (.obj)", meshBuffer, sizeof(meshBuffer))) {
-                        m_Config.Shape.MeshPath = meshBuffer;
+                    if (DrawResourcePicker("Emitter Mesh (.obj)", m_Config.Shape.MeshPath, true)) {
+                        m_Config.Shape.MeshSampler.reset();
                         if (!m_Config.Shape.MeshPath.empty()) {
                             m_Config.Shape.MeshSampler = std::make_shared<ParticleMeshSampler>();
-                            m_Config.Shape.MeshSampler->LoadFromOBJ(m_Config.Shape.MeshPath);
-                        } else {
-                            m_Config.Shape.MeshSampler.reset();
+                            m_Config.Shape.MeshSampler->LoadFromOBJ(
+                                FileSystem::ResolveAssetPath(m_Config.Shape.MeshPath).string());
                         }
                         SyncCurrentStackConfig();
                     }
@@ -894,37 +1067,96 @@ namespace Axle {
         }
     }
 
+    bool VFXEditorPanel::DrawResourcePicker(const char *label, std::string &path, bool mesh) {
+        ImGui::PushID(label);
+        ImGui::TextUnformatted(label);
+        bool changed = false;
+        auto accepts = [&](const std::filesystem::path &candidate) {
+            auto extension = candidate.extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return mesh ? extension == ".obj"
+                        : extension == ".axleasset" &&
+                              AssetDSL::PeekAssetKindFromFile(candidate.string()) == AssetKind::Material;
+        };
+        auto assign = [&](const std::filesystem::path &candidate) {
+            const auto resolved = FileSystem::ResolveAssetPath(candidate);
+            if (!std::filesystem::is_regular_file(resolved) || !accepts(resolved)) {
+                m_Diagnostics = {{VFXDiagnosticSeverity::Error, "RESOURCE_TYPE", label,
+                                  "Choose a compatible project resource."}};
+                return;
+            }
+            std::error_code error;
+            auto relative = std::filesystem::relative(resolved, FileSystem::GetAssetDirectory(), error);
+            path = !error && !relative.empty() && *relative.begin() != ".." ? relative.generic_string()
+                                                                            : resolved.generic_string();
+            changed = true;
+        };
+        const auto text = path.empty() ? std::string("Select resource...")
+                                       : std::filesystem::path(path).filename().string();
+        if (ImGui::Button(text.c_str(), ImVec2(-1, 0)))
+            ImGui::OpenPopup("ResourcePicker");
+        if (ImGui::BeginDragDropTarget()) {
+            if (const auto *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                const auto decoded = DecodeAssetPayload(payload->Data, payload->DataSize);
+                if (decoded.Success)
+                    assign(decoded.Path);
+            }
+            ImGui::EndDragDropTarget();
+        }
+        if (ImGui::BeginPopupContextItem("ResourceActions")) {
+            if (ImGui::MenuItem("Clear")) {
+                path.clear();
+                changed = true;
+            }
+            ImGui::EndPopup();
+        }
+        if (ImGui::BeginPopup("ResourcePicker")) {
+            if (ImGui::IsWindowAppearing()) {
+                m_ResourceFiles.clear();
+                m_ResourceSearch[0] = 0;
+                std::error_code ec;
+                std::filesystem::recursive_directory_iterator it(
+                    FileSystem::GetAssetDirectory(),
+                    std::filesystem::directory_options::skip_permission_denied, ec);
+                for (; !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec))
+                    if (it->is_regular_file(ec) && accepts(it->path()))
+                        m_ResourceFiles.push_back(it->path());
+                std::sort(m_ResourceFiles.begin(), m_ResourceFiles.end());
+            }
+            ImGui::InputTextWithHint("##Search", "Search resources...", m_ResourceSearch,
+                                     sizeof(m_ResourceSearch));
+            ImGui::BeginChild("Results", ImVec2(320, 240));
+            for (const auto &file : m_ResourceFiles) {
+                if (!m_ResourceSearch[0] || file.generic_string().find(m_ResourceSearch) != std::string::npos)
+                    if (ImGui::Selectable(file.filename().string().c_str())) {
+                        assign(file);
+                        ImGui::CloseCurrentPopup();
+                    }
+            }
+            ImGui::EndChild();
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+        return changed;
+    }
+
     void VFXEditorPanel::DrawTextureFlipbookControls() {
         if (ImGui::CollapsingHeader("🖼️ Texture & Flipbook Animation")) {
             auto* currentStack = GetCurrentEmitterStack();
             if (currentStack) {
-                char texBuf[256];
-                strncpy_s(texBuf, currentStack->TexturePath.c_str(), sizeof(texBuf));
-                if (ImGui::InputText("Texture Path", texBuf, sizeof(texBuf))) {
-                    currentStack->TexturePath = texBuf;
-                    currentStack->Texture.reset();
-                    SyncDocumentFromStacks();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Clear##Tex")) {
-                    currentStack->TexturePath.clear();
-                    currentStack->Texture.reset();
-                    SyncDocumentFromStacks();
-                }
-
-                char normBuf[256];
-                strncpy_s(normBuf, currentStack->NormalMapPath.c_str(), sizeof(normBuf));
-                if (ImGui::InputText("Normal Map", normBuf, sizeof(normBuf))) {
-                    currentStack->NormalMapPath = normBuf;
-                    currentStack->NormalMap.reset();
-                    SyncDocumentFromStacks();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Clear##Norm")) {
-                    currentStack->NormalMapPath.clear();
-                    currentStack->NormalMap.reset();
-                    SyncDocumentFromStacks();
-                }
+                ImGui::TextUnformatted("Albedo Texture");
+                m_TexturePicker.TextureSlot("ParticleAlbedo", currentStack->TexturePath,
+                                            currentStack->UseTexture, [&](const std::string &path) {
+                                                currentStack->TexturePath = path;
+                                                currentStack->Texture.reset();
+                                            });
+                ImGui::TextUnformatted("Normal Map");
+                m_TexturePicker.TextureSlot("ParticleNormal", currentStack->NormalMapPath,
+                                            currentStack->UseNormalMap, [&](const std::string &path) {
+                                                currentStack->NormalMapPath = path;
+                                                currentStack->NormalMap.reset();
+                                            });
                 ImGui::Separator();
             }
 
@@ -953,6 +1185,9 @@ namespace Axle {
             if (m_Config.CurlNoise.Enabled) {
                 ImGui::DragFloat("Curl Frequency", &m_Config.CurlNoise.Frequency, 0.05f, 0.05f, 10.0f, "%.2f");
                 ImGui::DragFloat("Curl Strength", &m_Config.CurlNoise.Strength, 0.1f, 0.0f, 20.0f, "%.2f m/s²");
+                ImGui::DragFloat("Noise Lacunarity", &m_Config.CurlNoise.Lacunarity, 0.01f, 0.01f, 8);
+                ImGui::SliderFloat("Noise Persistence", &m_Config.CurlNoise.Persistence, 0, 1);
+                ImGui::DragFloat3("Noise Scroll", glm::value_ptr(m_Config.CurlNoise.ScrollSpeed), 0.01f);
                 int oct = static_cast<int>(m_Config.CurlNoise.Octaves);
                 if (ImGui::SliderInt("Noise Octaves", &oct, 1, 4)) {
                     m_Config.CurlNoise.Octaves = static_cast<uint32_t>(oct);
@@ -978,7 +1213,10 @@ namespace Axle {
                         SyncCurrentStackConfig();
                     }
                 } else if (m_Config.Collision.CollisionMode == ParticleCollisionMode::ScenePhysics) {
-                    ImGui::TextDisabled("Queries bound scene physics service (Jolt Raycast)");
+                    ImGui::TextWrapped("%s", m_PhysicsScene ? "Scene physics queries use the current scene "
+                                                              "origin; preview does not advance physics."
+                                                            : "No scene physics service bound. Choose Floor "
+                                                              "or Planes and Boxes for standalone preview.");
                 }
 
                 if (ImGui::SliderFloat("Restitution (Bounce)", &m_Config.Collision.Restitution, 0.0f, 1.0f, "%.2f")) {
@@ -1018,6 +1256,8 @@ namespace Axle {
                             SyncCurrentStackConfig();
                         }
                         if (ImGui::DragFloat("Distance", &plane.Distance, 0.05f)) SyncCurrentStackConfig();
+                        ImGui::SliderFloat("Plane Restitution", &plane.Restitution, 0, 1);
+                        ImGui::SliderFloat("Plane Friction", &plane.Friction, 0, 1);
                         if (ImGui::Checkbox("Per-Plane Kill", &plane.KillOnCollision)) SyncCurrentStackConfig();
                         ImGui::PopID();
                     }
@@ -1025,9 +1265,67 @@ namespace Axle {
             }
 
             ImGui::Spacing();
+            if (m_Config.Collision.Enabled &&
+                m_Config.Collision.CollisionMode == ParticleCollisionMode::PlanesAndBoxes) {
+                ImGui::TextUnformatted("Collision Boxes");
+                if (ImGui::Button("Add Box"))
+                    m_Config.Collision.Boxes.emplace_back();
+                for (size_t i = 0; i < m_Config.Collision.Boxes.size(); ++i) {
+                    ImGui::PushID(("CollisionBox" + std::to_string(i)).c_str());
+                    auto &box = m_Config.Collision.Boxes[i];
+                    ImGui::DragFloat3("Minimum", glm::value_ptr(box.Min), 0.01f);
+                    ImGui::DragFloat3("Maximum", glm::value_ptr(box.Max), 0.01f);
+                    box.Max = glm::max(box.Max, box.Min + glm::vec3(0.001f));
+                    ImGui::Checkbox("Contain Particles", &box.CollideInside);
+                    ImGui::SliderFloat("Box Restitution", &box.Restitution, 0, 1);
+                    ImGui::SliderFloat("Box Friction", &box.Friction, 0, 1);
+                    ImGui::Checkbox("Kill on Box", &box.KillOnCollision);
+                    bool remove = ImGui::SmallButton("Remove Box");
+                    ImGui::PopID();
+                    if (remove) {
+                        m_Config.Collision.Boxes.erase(m_Config.Collision.Boxes.begin() + i);
+                        break;
+                    }
+                }
+            }
             ImGui::TextColored(ImVec4(0.75f, 0.75f, 1.0f, 1.0f), "Environmental Forces:");
             ImGui::DragFloat3("Directional Wind", glm::value_ptr(m_Config.Wind), 0.1f, -50.0f, 50.0f, "%.1f m/s");
             ImGui::DragFloat("Thermal Buoyancy", &m_Config.Buoyancy, 0.1f, -20.0f, 20.0f, "%.1f m/s²");
+            ImGui::SliderFloat("Wind Influence", &m_Config.WindInfluence, 0, 1);
+            if (ImGui::Button("Add Force Field"))
+                m_Config.ForceFields.emplace_back();
+            for (size_t i = 0; i < m_Config.ForceFields.size(); ++i) {
+                ImGui::PushID(("ForceField" + std::to_string(i)).c_str());
+                auto &field = m_Config.ForceFields[i];
+                const char *types[] = {"Directional Wind", "Buoyancy", "Point Attractor", "Vortex"};
+                int type = static_cast<int>(field.Type);
+                if (ImGui::Combo("Field Type", &type, types, 4))
+                    field.Type = static_cast<ForceFieldType>(type);
+                ImGui::DragFloat3("Position", glm::value_ptr(field.Position), 0.01f);
+                ImGui::DragFloat3("Direction / Axis", glm::value_ptr(field.Direction), 0.01f, -1, 1);
+                ImGui::DragFloat("Strength", &field.Strength, 0.1f);
+                ImGui::DragFloat("Radius", &field.Radius, 0.1f, 0.001f, 10000);
+                const char *falloffs[] = {"None", "Linear", "Inverse Square"};
+                int falloff = static_cast<int>(field.Falloff);
+                if (ImGui::Combo("Falloff", &falloff, falloffs, 3))
+                    field.Falloff = static_cast<ForceFieldFalloff>(falloff);
+                ImGui::DragFloat("Falloff Exponent", &field.FalloffExponent, 0.01f, 0, 10);
+                if (field.Type == ForceFieldType::Vortex) {
+                    ImGui::DragFloat("Radial Suction", &field.RadialSuction, 0.01f);
+                    ImGui::DragFloat("Axial Lift", &field.AxialLift, 0.01f);
+                }
+                if (field.Type == ForceFieldType::DirectionalWind) {
+                    ImGui::SliderFloat("Field Wind Influence", &field.WindInfluence, 0, 1);
+                    ImGui::DragFloat("Gust Frequency", &field.GustFrequency, 0.01f, 0, 100);
+                    ImGui::DragFloat("Gust Amplitude", &field.GustAmplitude, 0.01f, 0, 100);
+                }
+                bool remove = ImGui::SmallButton("Remove Field");
+                ImGui::PopID();
+                if (remove) {
+                    m_Config.ForceFields.erase(m_Config.ForceFields.begin() + i);
+                    break;
+                }
+            }
         }
     }
 
@@ -1039,7 +1337,7 @@ namespace Axle {
                 std::string defaultTarget = "Sparks";
                 for (size_t i = 0; i < m_EmitterStacks.size(); ++i) {
                     if (i != m_SelectedStackIndex) {
-                        defaultTarget = m_EmitterStacks[i].Name;
+                        defaultTarget = m_EmitterStacks[i].Id;
                         break;
                     }
                 }
@@ -1065,9 +1363,9 @@ namespace Axle {
                     for (size_t i = 0; i < m_EmitterStacks.size(); ++i) {
                         if (i == m_SelectedStackIndex) continue; // Exclude self
                         const auto& targetName = m_EmitterStacks[i].Name;
-                        bool isSelected = (currentTarget == targetName);
+                        bool isSelected = (currentTarget == m_EmitterStacks[i].Id);
                         if (ImGui::Selectable(targetName.c_str(), isSelected)) {
-                            sub.TargetEmitterName = targetName;
+                            sub.TargetEmitterName = m_EmitterStacks[i].Id;
                             SyncCurrentStackConfig();
                         }
                         if (isSelected) {
@@ -1079,12 +1377,12 @@ namespace Axle {
 
                 // Check for invalid target or self-reference
                 auto* curStack = GetCurrentEmitterStack();
-                if (curStack && sub.TargetEmitterName == curStack->Name) {
+                if (curStack && sub.TargetEmitterName == curStack->Id) {
                     ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Warning: Self-referencing sub-emitter target!");
                 } else if (!sub.TargetEmitterName.empty()) {
                     bool targetExists = false;
                     for (const auto& stack : m_EmitterStacks) {
-                        if (stack.Name == sub.TargetEmitterName) {
+                        if (stack.Id == sub.TargetEmitterName || stack.Name == sub.TargetEmitterName) {
                             targetExists = true;
                             break;
                         }
@@ -1136,13 +1434,29 @@ namespace Axle {
                 m_Config.BlendMode = static_cast<ParticleBlendMode>(currentBlend);
             }
 
-            ImGui::DragFloat("Softness Distance", &m_Config.SoftnessDistance, 0.05f, 0.05f, 5.0f, "%.2f m");
+            ImGui::Checkbox("Lighting", &m_Config.LightingEnabled);
+            if (m_Config.LightingEnabled) {
+                ImGui::SliderFloat("Wrap Lighting", &m_Config.WrapLighting, 0, 1);
+                ImGui::SliderFloat("Scattering", &m_Config.ScatteringFactor, 0, 1);
+                ImGui::SliderFloat("Normal Strength", &m_Config.NormalMapStrength, 0, 2);
+            }
+            ImGui::Checkbox("Near Fade", &m_Config.NearFadeEnabled);
+            if (m_Config.NearFadeEnabled)
+                ImGui::DragFloatRange2("Near Fade Range", &m_Config.NearFadeStart, &m_Config.NearFadeEnd,
+                                       0.01f, 0, 1000);
+            ImGui::Checkbox("Far Fade", &m_Config.FarFadeEnabled);
+            if (m_Config.FarFadeEnabled)
+                ImGui::DragFloatRange2("Far Fade Range", &m_Config.FarFadeStart, &m_Config.FarFadeEnd, 0.1f,
+                                       0, 10000);
+            ImGui::DragFloat("Softness Distance", &m_Config.SoftnessDistance, 0.05f, 0.0f, 5.0f, "%.2f m");
 
-            char matBuf[256];
-            strncpy_s(matBuf, m_Config.MaterialPath.c_str(), sizeof(matBuf));
-            if (ImGui::InputText("Material Path", matBuf, sizeof(matBuf))) {
-                m_Config.MaterialPath = matBuf;
-                SyncCurrentStackConfig();
+            if (auto *stack = GetCurrentEmitterStack()) {
+                if (DrawResourcePicker("Material", stack->MaterialPath, false))
+                    m_Config.MaterialPath = stack->MaterialPath;
+                const auto settings =
+                    ParticleMaterialAdapter::Resolve(m_Config, stack->GetDefinition().Resources);
+                for (const auto &diagnostic : settings.Diagnostics)
+                    ImGui::TextWrapped("%s", diagnostic.Message.c_str());
             }
         }
     }
@@ -1162,18 +1476,8 @@ namespace Axle {
             if (ImGui::Button("Apply Stacks to Selected Entity", ImVec2(-1.0f, 30.0f))) {
                 auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
                 SyncCurrentStackConfig();
-                pec.EmitterStacks.clear();
-                for (const auto& stack : m_EmitterStacks) {
-                    ParticleEmitterStack sceneStack(stack.Name, stack.Config);
-                    sceneStack.Enabled = stack.Enabled;
-                    sceneStack.Visible = stack.Visible;
-                    sceneStack.TexturePath = stack.TexturePath;
-                    sceneStack.NormalMapPath = stack.NormalMapPath;
-                    sceneStack.MaterialPath = stack.MaterialPath;
-                    pec.EmitterStacks.push_back(std::move(sceneStack));
-                }
-                pec.SyncPrimary();
-                pec.Initialize();
+                pec.SetEffectDefinition(m_Document.GetDefinition());
+                pec.AssetPath.clear(); // Applying a working copy explicitly creates an inline instance.
                 if (pec.Active) {
                     pec.Play();
                 }
@@ -1188,18 +1492,9 @@ namespace Axle {
                 newEnt.AddComponent<TransformComponent>(glm::vec3(0.0f, 1.0f, 0.0f));
                 auto primaryConfig = m_EmitterStacks.empty() ? m_Config : m_EmitterStacks[0].Config;
                 auto& pec = newEnt.AddComponent<ParticleEmitterComponent>(primaryConfig);
-                pec.EmitterStacks.clear();
-                for (const auto& stack : m_EmitterStacks) {
-                    ParticleEmitterStack sceneStack(stack.Name, stack.Config);
-                    sceneStack.Enabled = stack.Enabled;
-                    sceneStack.Visible = stack.Visible;
-                    sceneStack.TexturePath = stack.TexturePath;
-                    sceneStack.NormalMapPath = stack.NormalMapPath;
-                    sceneStack.MaterialPath = stack.MaterialPath;
-                    pec.EmitterStacks.push_back(std::move(sceneStack));
-                }
-                pec.SyncPrimary();
-                pec.Initialize();
+                pec.SetEffectDefinition(m_Document.GetDefinition());
+                if (!m_Document.IsDirty())
+                    pec.AssetPath = m_Document.GetFilePath();
                 pec.Play();
                 SetSelectedEntity(newEnt);
             }
@@ -1209,6 +1504,8 @@ namespace Axle {
     void VFXEditorPanel::DrawShurikenInspector(float width, float height) {
         ImGui::BeginChild("VFX_Shuriken_Inspector", ImVec2(width, height), true);
         {
+            m_Document.BeginTransaction();
+            ImGui::PushID(GetCurrentEmitterStack() ? GetCurrentEmitterStack()->Id.c_str() : "NoEmitter");
             DrawPresetSelector();
             DrawMainModule();
             DrawEmissionAndBurstsModule();
@@ -1220,6 +1517,9 @@ namespace Axle {
             DrawShadingAndBillboarding();
             DrawSceneActions();
             SyncCurrentStackConfig();
+            ImGui::PopID();
+            if (!ImGui::IsAnyItemActive())
+                m_Document.CommitTransaction("Edit Emitter Modules");
         }
         ImGui::EndChild();
     }
@@ -1227,6 +1527,7 @@ namespace Axle {
     void VFXEditorPanel::OnImGuiRender(bool* p_open) {
         if (p_open) m_IsOpen = *p_open;
         if (!m_IsOpen) return;
+        m_DiscardApproved = false;
 
         ImGui::SetNextWindowSize(ImVec2(1200, 760), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Visual Particle & VFX Studio (Unity Shuriken)", &m_IsOpen, ImGuiWindowFlags_NoScrollbar)) {
@@ -1284,16 +1585,7 @@ namespace Axle {
                     drawList->AddRectFilled(p0, p1, IM_COL32(18, 20, 24, 255));
                     drawList->AddRect(p0, p1, IM_COL32(40, 44, 52, 255));
 
-                    ImVec2 center = ImVec2(p0.x + avail.x * 0.5f, p0.y + avail.y * 0.55f);
-                    drawList->AddCircle(center, 24.0f, IM_COL32(255, 120, 40, 160), 24, 1.5f);
-                    for (int i = 0; i < 8; ++i) {
-                        float angle = (i * 0.785f);
-                        float dist = 28.0f + (i % 3) * 15.0f;
-                        ImVec2 sparkPos = ImVec2(center.x + std::cos(angle) * dist, center.y - std::sin(angle) * dist * 1.4f);
-                        drawList->AddCircleFilled(sparkPos, 3.0f, IM_COL32(255, 180, 50, 220));
-                    }
-
-                    const char* txt = "Multi-Backend RHI Viewport Active";
+                    const char *txt = "VFX preview renderer unavailable";
                     ImVec2 txtSize = ImGui::CalcTextSize(txt);
                     ImVec2 txtPos = ImVec2(p0.x + (avail.x - txtSize.x) * 0.5f, p0.y + 12.0f);
                     drawList->AddText(txtPos, IM_COL32(100, 200, 255, 255), txt);
@@ -1347,6 +1639,10 @@ namespace Axle {
         }
         ImGui::End();
 
+        if (!m_IsOpen && m_Document.IsDirty() && !m_DiscardApproved && m_PendingAction != 3) {
+            m_IsOpen = true;
+            m_PendingAction = 3;
+        }
         if (p_open) *p_open = m_IsOpen;
     }
 

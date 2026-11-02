@@ -202,7 +202,7 @@ void EditorLayer::OnAttach() {
     m_SceneHierarchyPanel.SetOpenVFXEditorCallback([this](Axle::Entity entity) {
         m_ShowVFXEditor = true;
         m_VFXEditorPanel.SetOpen(true);
-        m_VFXEditorPanel.SetSelectedEntity(entity);
+        m_VFXEditorPanel.OpenEntityEffect(entity);
     });
     m_ContentBrowserPanel.SetOpenVFXCallback([this](const std::filesystem::path& path) {
         m_ShowVFXEditor = true;
@@ -548,6 +548,7 @@ void EditorLayer::OnDetach() {
     m_AssetPreviewPanel.SetSceneContext(nullptr, nullptr, nullptr, nullptr);
     m_AssemblyEditorPanel.SetSceneContext(nullptr, nullptr, nullptr);
     m_VFXEditorPanel.SetSceneContext(nullptr);
+    m_VFXEditorPanel.ShutdownRHI();
 
     AXLE_INFO("EditorLayer::OnDetach -> [4/14] Clear and reset scenes");
     if (m_Scene) {
@@ -1617,7 +1618,6 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
             auto& pec = particleView.get<Axle::ParticleEmitterComponent>(entityID);
             if (!pec.System) {
                 pec.Initialize();
-                if (pec.AutoPlay) pec.Play();
             }
             if (pec.Active) {
                 glm::mat4 worldMat = m_Scene->GetWorldTransform(entityID);
@@ -1626,11 +1626,13 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
                 auto axes = glm::mat3(worldMat);
                 for (int a=0; a<3; ++a) axes[a] /= std::max(worldScale[a], 0.0001f);
                 glm::quat worldRot = glm::quat_cast(axes);
+                pec.BindPhysicsScene(m_PhysicsScene.get());
                 pec.Update(ts.GetSeconds(), worldPos, worldRot, worldScale);
             }
         }
     }
 
+    m_VFXEditorPanel.SetPhysicsScene(m_PhysicsScene.get());
     m_VFXEditorPanel.OnUpdate(ts);
 
     // Editor Free-Fly Camera (Active in Edit mode, Pause mode, or Eject Free-Fly mode during Play)
@@ -3331,6 +3333,7 @@ void EditorLayer::OnImGuiRender() {
     // 10b. Visual FX (VFX) Editor Panel (Phase 31 Step 6)
     if (m_ShowVFXEditor) {
         m_VFXEditorPanel.SetSceneContext(m_Scene.get());
+        m_VFXEditorPanel.SetPhysicsScene(m_PhysicsScene.get());
         m_VFXEditorPanel.SetSelectedEntity(m_SceneHierarchyPanel.GetSelectedEntity());
         m_VFXEditorPanel.OnImGuiRender(&m_ShowVFXEditor);
     }

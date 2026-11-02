@@ -4,6 +4,7 @@
 #include <Axle/ParticleSystem.hpp>
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/VFXEditorDocument.hpp>
+#include <Axle/MaterialInspectorControls.hpp>
 #include <Axle/Framebuffer.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/Entity.hpp>
@@ -35,17 +36,24 @@ namespace Axle {
         void OnImGuiRender(bool* p_open = nullptr);
 
         void SetSceneContext(Scene* scene) {
+            // Compare raw ownership before consulting an entity registry that may already have been
+            // destroyed.
+            if (m_SelectedEntity.GetScene() != scene)
+                m_SelectedEntity = {};
             if (m_Scene != scene) {
                 m_Scene = scene;
-                if (m_SelectedEntity && m_SelectedEntity.GetScene() != scene) {
-                    m_SelectedEntity = {};
-                }
+                m_PhysicsScene = nullptr;
             }
         }
         void SetSelectedEntity(Entity entity);
+        void OpenEntityEffect(Entity entity);
+        void SetPhysicsScene(PhysicsScene *scene) {
+            m_PhysicsScene = scene;
+        }
         Entity GetSelectedEntity() const { return m_SelectedEntity; }
         void SetEmitterConfig(const ParticleEmitterConfig& config);
 
+        void ShutdownRHI();
         void InitRHI(class ImGuiLayer* imguiLayer);
         RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
         bool HasRHIViewport() const { return m_RHIViewport != nullptr && m_RHIViewport->IsValid(); }
@@ -76,6 +84,8 @@ namespace Axle {
         void NewDocument(const std::string& name = "NewEffect");
         bool OpenDocument(const std::string& filePath);
         bool SaveDocument();
+        bool Undo();
+        bool Redo();
         bool SaveDocumentAs(const std::string& filePath);
         void SyncStacksFromDocument();
         void SyncDocumentFromStacks();
@@ -89,6 +99,10 @@ namespace Axle {
         void SelectEmitterStack(size_t index);
 
     private:
+        bool DrawResourcePicker(const char *label, std::string &path, bool mesh);
+        MaterialInspectorControls m_TexturePicker;
+        char m_ResourceSearch[128]{};
+        std::vector<std::filesystem::path> m_ResourceFiles;
         void RenderPreview3D(float width, float height);
         void RenderPreviewRHI(float width, float height);
         void DrawGrid(const glm::mat4& viewProj, float radius = 5.0f);
@@ -120,7 +134,10 @@ namespace Axle {
 
 
         std::unique_ptr<ParticleRenderer> m_ParticleRenderer;
-        std::unique_ptr<RHIParticleRenderer> m_RHIParticleRenderer;
+        std::unique_ptr<class RHISceneRenderer> m_RHISceneRenderer;
+        std::shared_ptr<Scene> m_PreviewScene;
+        Entity m_PreviewEntity;
+        std::vector<Entity> m_PreviewGrid;
         std::shared_ptr<Framebuffer> m_Framebuffer;
         std::unique_ptr<RHIViewportDescriptor> m_RHIViewport;
         class ImGuiLayer* m_ImGuiLayer = nullptr;
@@ -132,6 +149,11 @@ namespace Axle {
         bool m_ShowBounds = false;
         float m_PlaybackScrubberTime = 0.0f;
         VFXPreviewClock m_Clock;
+        std::vector<VFXDiagnostic> m_Diagnostics;
+        int m_PendingAction = 0, m_FileAction = 0;
+        bool m_DiscardApproved = false;
+        std::string m_PendingPath;
+        char m_FilePath[512] = "assets/VFX/NewEffect.axle_vfx";
         bool m_IsSeeking = false;
         uint64_t m_TargetSeekTick = 0;
 
@@ -147,8 +169,9 @@ namespace Axle {
 
         // Scene linkage
         Scene* m_Scene = nullptr;
+        PhysicsScene *m_PhysicsScene = nullptr;
         Entity m_SelectedEntity{};
-        bool m_AutoSyncWithSelectedEntity = false;
+        bool m_AssetDocumentMode = false;
 
         // Simple line drawing shader for reference ground grid
         u32 m_GridVAO = 0;

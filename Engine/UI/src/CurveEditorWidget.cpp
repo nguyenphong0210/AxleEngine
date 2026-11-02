@@ -198,6 +198,35 @@ namespace Axle {
         }
         ImGui::PopItemWidth();
 
+        if (modified)
+            curve.Keyframes
+                .clear(); // Editing a Bezier control explicitly switches away from keyed interpolation.
+        if (ImGui::TreeNode("Linear Keyframes")) {
+            ImGui::TextWrapped("Keys override Bezier interpolation. Editing a Bezier control switches back.");
+            if (ImGui::SmallButton("Add Key")) {
+                float value = curve.Evaluate(0.5f);
+                curve.Keyframes.push_back({0.5f, value});
+                modified = true;
+            }
+            for (size_t i = 0; i < curve.Keyframes.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                auto &key = curve.Keyframes[i];
+                modified |= ImGui::SliderFloat("Time", &key.Time, 0, 1);
+                modified |= ImGui::DragFloat("Value", &key.Value, 0.01f);
+                bool remove = ImGui::SmallButton("Remove Key");
+                ImGui::PopID();
+                if (remove) {
+                    curve.Keyframes.erase(curve.Keyframes.begin() + i);
+                    modified = true;
+                    break;
+                }
+            }
+            if (modified)
+                std::stable_sort(curve.Keyframes.begin(), curve.Keyframes.end(),
+                                 [](const auto &x, const auto &y) { return x.Time < y.Time; });
+            ImGui::TreePop();
+        }
+
         ImGui::PopID();
         return modified;
     }
@@ -475,7 +504,8 @@ namespace Axle {
         } else if (!state.ActiveTrackIsAlpha && state.SelectedColorKey >= 0 && state.SelectedColorKey < static_cast<int>(gradient.ColorKeys.size())) {
             ImGui::Spacing();
             ImGui::PushItemWidth(180.0f);
-            if (ImGui::ColorEdit3("Key Color", &gradient.ColorKeys[state.SelectedColorKey].Color.r)) {
+            if (ImGui::ColorEdit3("Key Color", &gradient.ColorKeys[state.SelectedColorKey].Color.r,
+                                  ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float)) {
                 modified = true;
             }
             ImGui::SameLine();

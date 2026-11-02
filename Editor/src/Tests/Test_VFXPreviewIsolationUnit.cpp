@@ -205,7 +205,76 @@ namespace {
     }
 }
 
+static bool TestPanelDocumentIntegration() {
+    Axle::VFXEditorPanel panel;
+    auto first = panel.GetDocument().GetDefinition().Emitters[0].Id;
+    auto firstConfig = panel.GetConfig();
+    Axle::ParticleEmitterConfig second;
+    second.Name = "Secondary";
+    second.EmissionRate = 12;
+    panel.AddEmitterStack("Secondary", second);
+    VFX_TEST_CHECK(panel.GetDocument().IsDirty(), "Panel add marks document dirty");
+    VFX_TEST_CHECK(panel.Undo() && panel.GetEmitterStackCount() == 1, "Panel undo removes added emitter");
+    VFX_TEST_CHECK(panel.Redo() && panel.GetEmitterStackCount() == 2, "Panel redo restores added emitter");
+    panel.RemoveEmitterStack(1);
+    VFX_TEST_CHECK(panel.GetConfig().Name == firstConfig.Name,
+                   "Delete selected emitter does not overwrite survivor");
+    VFX_TEST_CHECK(panel.GetDocument().GetDefinition().Emitters[0].Id == first,
+                   "Surviving ID remains stable");
+    Axle::VFXTests::ScopedTempDir temp;
+    auto path = (temp.Path / "panel.axle_vfx").string();
+    VFX_TEST_CHECK(panel.SaveDocumentAs(path), "Panel save");
+    VFX_TEST_CHECK(!panel.GetDocument().IsDirty(), "Save marks document clean");
+    auto before = panel.GetDocument().GetDefinition();
+    panel.GetConfig().Drag += 0.33f;
+    panel.SelectEmitterStack(0);
+    VFX_TEST_CHECK(panel.GetDocument().IsDirty(), "Module edit is dirty");
+    VFX_TEST_CHECK(panel.Undo() && panel.GetDocument().GetDefinition() == before,
+                   "Panel undo restores module values");
+    VFX_TEST_CHECK(panel.SaveDocument() && panel.OpenDocument(path), "Panel save/reopen");
+    VFX_TEST_CHECK(panel.GetDocument().GetDefinition() == before,
+                   "Panel open/save round trip preserves identity");
+    auto scene = std::make_shared<Axle::Scene>();
+    auto sceneEntity = scene->CreateEntity("Other effect");
+    sceneEntity.AddComponent<Axle::ParticleEmitterComponent>();
+    panel.SetSceneContext(scene.get());
+    panel.SetSelectedEntity(sceneEntity);
+    VFX_TEST_CHECK(panel.GetDocument().GetDefinition() == before,
+                   "Scene polling cannot replace an opened asset document");
+    scene.reset();
+    panel.SetSceneContext(nullptr);
+    VFX_TEST_CHECK(!panel.GetSelectedEntity(), "Scene detach does not dereference a destroyed registry");
+    return true;
+}
+
+static bool TestPausedSeekAndLoopBoundary() {
+    Axle::VFXEditorPanel direct, seek;
+    auto cfg = direct.GetConfig();
+    cfg.Duration = 1.0f;
+    cfg.Looping = true;
+    direct.SetEmitterConfig(cfg);
+    seek.GetDocument().LoadDefinition(direct.GetDocument().GetDefinition());
+    seek.SyncStacksFromDocument();
+    direct.PausePreview();
+    seek.PausePreview();
+    for (int i = 0; i < 60; ++i)
+        direct.Step();
+    seek.SeekTo(1.0f);
+    VFX_TEST_APPROX_EQUAL(seek.GetPlaybackScrubberTime(), 1.0f, 0.0001f,
+                          "Seek finishes exactly at looping duration");
+    VFX_TEST_CHECK(direct.GetPreviewSystem()->GetPool().GetActiveCount() ==
+                       seek.GetPreviewSystem()->GetPool().GetActiveCount(),
+                   "Paused seek emits exactly as stepped simulation");
+    const auto &a = direct.GetPreviewSystem()->GetPool();
+    const auto &b = seek.GetPreviewSystem()->GetPool();
+    for (uint32_t i = 0; i < a.GetActiveCount(); ++i)
+        VFX_TEST_CHECK(a.GetPositions()[i] == b.GetPositions()[i], "Seek preserves deterministic positions");
+    return true;
+}
+
 bool RunVFXPreviewIsolationUnitTests() {
+    VFX_TEST_CHECK(TestPausedSeekAndLoopBoundary(), "Transport regression");
+    VFX_TEST_CHECK(TestPanelDocumentIntegration(), "Panel document regression failed");
     std::cout << "  - Running TestBaselineSystemIsolation ...\n";
     VFX_TEST_CHECK(TestBaselineSystemIsolation(), "TestBaselineSystemIsolation failed");
     std::cout << "  - Running TestSelectionIdempotenceAndPreservation ...\n";

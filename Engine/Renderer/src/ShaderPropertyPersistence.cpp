@@ -51,7 +51,7 @@ namespace Axle {
     bool ReadShaderPropertyLine(std::string_view line,std::vector<ShaderPropertyInstance>& properties) {
         auto dot=line.find('.'), colon=line.find(':');
         if (dot==line.npos || colon==line.npos || dot>=colon) return false;
-        auto key=line.substr(0,dot);
+        auto key=Trim(line.substr(0,dot));
         bool range=key=="customRange";
         ShaderPropertyType type=ShaderPropertyType::Float;
         bool known=range;

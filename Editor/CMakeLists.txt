@@ -153,3 +153,31 @@ target_link_libraries(AxleTests PRIVATE
 )
 
 add_dependencies(AxleTests AxleScripts)
+
+# Dedicated CPU-Only Material Unit Test Target (Phase 38.3)
+add_executable(AxleMaterialUnitTests
+    src/Tests/MaterialUnitTestMain.cpp
+    src/Tests/Test_MaterialSerializationUnit.cpp
+    src/Tests/Test_MaterialTextureSelectionUnit.cpp
+    src/Tests/Test_MaterialBindingPlanUnit.cpp
+    src/Tests/Test_MaterialProgramCacheUnit.cpp
+)
+
+target_include_directories(AxleMaterialUnitTests PRIVATE
+    src
+    src/Tests
+)
+
+target_link_libraries(AxleMaterialUnitTests PRIVATE
+    Axle::Core
+    Axle::Platform
+    Axle::Renderer
+    Axle::Scene
+)
+
+if (MSVC)
+    target_compile_options(AxleMaterialUnitTests PRIVATE /bigobj /FS)
+endif()
+
+add_test(NAME MaterialUnitTests COMMAND $<TARGET_FILE:AxleMaterialUnitTests>)
+

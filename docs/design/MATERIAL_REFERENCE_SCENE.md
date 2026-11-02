@@ -34,6 +34,38 @@ Remove-Item Env:AXLE_MATERIAL_TEST_BACKEND
 Remove-Item Env:AXLE_MATERIAL_CAPTURE_DIR
 ```
 
-Images use portable PPM format. Timings report 24 warmed-up frames at 1024x640,
+### Environment Variables & Options
+
+The acceptance test harness in `Editor/src/Tests/Test_MaterialAcceptance.cpp` implements and enforces these configuration options:
+
+- `AXLE_MATERIAL_TEST_BACKEND`:
+  - Accepted values: `dx12` (or `d3d12`), `vulkan` (or `vk`).
+  - Unset defaults to Direct3D 12 for backwards compatibility.
+  - Specifying an unknown or unsupported backend strictly fails the test (no silent fallback).
+- `AXLE_MATERIAL_CAPTURE_DIR`:
+  - Explicit output path for captured offscreen framebuffers.
+  - Automatically created if it does not already exist.
+  - Must not be inside the project source tree or assets directory (`Editor/assets`, `Engine/Resources`). Capturing into protected asset trees fails immediately with a validation error.
+
+Images use portable PPM (P6 binary) format. Timings report 24 warmed-up frames at 1024x640,
 including CPU recording, GPU submission and queue idle. They are not isolated
 shader timings and have no pass/fail performance threshold.
+
+### Acceptance Report Template
+
+When executing physical acceptance runs on target hardware, document the results using the following template:
+
+```text
+Revision:
+Platform / toolchain:
+Unit-test command and exit code:
+Editor / integration build: RUN or NOT RUN
+DXC DXIL / SPIR-V compilation: RUN or NOT RUN
+DX12 GPU acceptance: RUN or NOT RUN
+Vulkan GPU acceptance: RUN or NOT RUN
+UI acceptance: RUN or NOT RUN
+Capture paths:
+Performance method and measurements, if actually run:
+Known failures / unsupported cases:
+```
+

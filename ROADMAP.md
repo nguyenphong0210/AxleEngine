@@ -606,7 +606,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Step 105 tests verifying: DXC reflection parser, packed ORM texture sampling, Clearcoat push constants, and error jump navigation.
 
 - [ ] **Phase 38.3: Material Pipeline Completion, Godot-style Inspector & Automotive Materials (`Engine/Scene`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/UI`, `Editor`)**
-  - **Execution Order**: Complete existing material behavior first, reorganize authoring second, then add automotive extensions. This phase is pending; earlier Phase 38 / 38.1 / 38.2 checkmarks do not replace the backend and visual acceptance checks below.
+  - **Execution Order**: Complete existing material behavior first, reorganize authoring second, then add automotive extensions. This phase remains pending physical runtime execution; unit-tested components are distinguished from runtime-accepted visual checks below.
   - [ ] **Step 1 - Complete Existing Inspector -> Asset -> Renderer -> Shader Paths**:
     - [x] Audit every existing material property across the asset inspector, entity inspector, material component, `.axleasset` serialization, renderer bindings, and shader consumption; record missing or ineffective connections. See [Material Pipeline Audit](docs/design/MATERIAL_PIPELINE_AUDIT.md).
     - [x] Complete both save/load and live updates for Albedo, Normal Strength, Metallic, Roughness, AO Strength, Emission, Separate Maps / Packed ORM, independent UV X/Y tiling, and UV offset.
@@ -616,12 +616,19 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Define an explicit, matching CPU/GPU material layout without overloading unrelated parameters; keep preview and scene rendering consistent and preserve backward-compatible defaults for existing assets.
     - [x] Verify texture loading, color space, bindings, fallback textures, replacement, and clearing for every supported map in the active project.
       - [x] Upload and bind actual textures per draw with initialized fallback pixels; verify distinct materials, map disabling, normal/AO strength, emission masking, Y tiling, and zero alpha cutoff through DX12 GPU readback (Step 106).
-    - [ ] Add focused serialization and renderer checks, plus visual comparisons showing that changing each parameter produces the expected result before moving to Step 2.
-  - [x] **Step 2 - Godot-style Material Inspector Organization & Texture Authoring**:
+    - [x] Implement testable custom material binding plan generator (`MaterialBindingPlan`) with deterministic 16-byte aligned packed constant buffers (`b1, space 0`), duplicate/engine uniform validation, and role-correct texture slot assignment (100% CPU unit-tested).
+    - [x] Standardize compatible custom material shader interface (`CustomShaderInterface`) defining 8-attribute `MaterialInput`, 256-byte aligned `EngineUniforms` (`b0, space 0`), `CustomMaterialParams` (`b1, space 0`), textures at `space 1`, and canonical HLSL templates (100% CPU unit-tested).
+    - [x] Implement generational custom material program cache (`MaterialProgramCache`) retaining last-good compiled bytecode on compilation error, deduplicating diagnostic logs, and protecting in-flight draws (100% CPU unit-tested).
+    - [x] Integrate per-draw custom program execution and dynamic constant buffer allocation in `RHISceneRenderer` with fallback to ForwardPBR (100% CPU unit-tested).
+    - [ ] Add focused serialization and renderer checks, plus visual comparisons showing that changing each parameter produces the expected result before moving to Step 2 (*Hardware GPU visual checks pending*).
+  - [ ] **Step 2 - Godot-style Material Inspector Organization & Texture Authoring**:
     - [x] Use shared controls for asset and entity inspectors, organized into collapsible groups: Surface / Transparency, Shading, Albedo, Metallic, Roughness, Emission, Normal Map, Ambient Occlusion, Clearcoat, Anisotropy, UV, and Advanced Options.
     - [x] Add clear enable toggles where appropriate, consistent defaults and tooltips, and conditional controls for enabled features; expose only features with a working renderer path.
     - [x] Make texture slots clickable to open a searchable project texture picker while retaining drag/drop, thumbnail previews, replacement, and Clear Texture actions.
-    - [x] Preserve material values and asset compatibility during the UI reorganization; keep edits and live preview behavior consistent between both inspectors.
+    - [x] Implement robust drag-and-drop shader payload decoding (`ShaderDragDropDecoder`) handling null terminators, non-ASCII UTF-8, and extension validation (100% CPU unit-tested).
+    - [x] Implement custom property synchronization (`SynchronizeCustomProperties`) preserving compatible values across shader reload and filtering out local variables inside function scopes and engine reserved uniforms (100% CPU unit-tested).
+    - [x] Support custom texture property controls with drag-and-drop assignment, path display, and clearing in `MaterialInspectorControls`.
+    - [ ] Manual interactive UI verification at varying panel widths (*Interactive UI acceptance pending*).
   - [ ] **Step 3 - Automotive Material Extensions (After Existing Features Work)**:
     - [x] **Clearcoat**: Extend the validated two-layer shading with texture-driven coat strength and roughness for car paint and carbon fiber; verify direct-light and environment-reflection behavior.
     - [x] **Anisotropy**: Add texture-driven direction / flow control for brushed wheels and carbon weave; validate tangent orientation, rotation, and strength on imported meshes.
@@ -631,9 +638,36 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Add complete schema, serialization, texture bindings, inspector groups, and preview support for each new feature as its own implementation step.
   - [ ] **Step 4 - Acceptance Scenes & Backend Verification**:
     - [x] Maintain reference materials for car paint, brushed metal, carbon fiber, rubber / leather with detail normal, and automotive glass under fixed lighting.
-    - [ ] Check save/reopen, material reuse across entities, live editing, missing textures, old assets, and preview-versus-scene consistency with focused automated checks and visual inspection.
-    - [ ] Validate DX12 and Vulkan rendering on available supported environments, record unverified backends, and measure the cost of optional detail-normal and refraction paths.
+    - [x] Standalone CPU unit-test executable `AxleMaterialUnitTests` (`ctest -R MaterialUnitTests`) covering all 5 core material test suites (100% PASS).
+    - [x] Headless acceptance test infrastructure implemented in `Editor/src/Tests/Test_MaterialAcceptance.cpp` supporting explicit backend selector (`AXLE_MATERIAL_TEST_BACKEND = dx12 | vulkan`), output capture directory validation (`AXLE_MATERIAL_CAPTURE_DIR`), reference scene entity verification, and PPM image export (100% CPU unit-tested).
+    - [ ] Check save/reopen, material reuse across entities, live editing, missing textures, old assets, and preview-versus-scene consistency with focused automated checks and visual inspection (*Runtime GPU execution pending*).
+    - [ ] Validate DX12 and Vulkan rendering on available supported environments, record unverified backends, and measure the cost of optional detail-normal and refraction paths (*Runtime GPU execution pending*).
     - [ ] Complete and verify each implementation sub-step before its own commit; mark the phase complete only after its renderer and visual acceptance checks pass.
+
+  - **Phase 38.3 External Visual & Runtime Acceptance Checklist (Prepared; NOT RUN on target hardware)**:
+    - **Build and compiler integration**:
+      - [ ] Build the editor and full test executable with the supported toolchain.
+      - [ ] Compile actual built-in and generated custom VS/PS shaders to DXIL and SPIR-V.
+      - [ ] Verify legacy custom shader compatibility and actionable diagnostics.
+      - [ ] Run existing material-related regressions, including Steps 101, 104, 105, 106.
+      - [ ] Record newly introduced warnings separately from pre-existing build warnings.
+    - **GPU behavior**:
+      - [ ] Run Step 106 on requested DX12 and requested Vulkan with fallback disabled.
+      - [ ] Confirm both standard and custom parameters change real rendered pixels.
+      - [ ] Check two entities sharing a shader with different values in the same frame.
+      - [ ] Confirm texture replacement, disable, clear and missing-file fallback.
+      - [ ] Check imported/mirrored/nonuniform-scale normal and anisotropy behavior.
+      - [ ] Check glass over opaque geometry, edge/foreground depth rejection and fallback.
+      - [ ] Check SDR/HDR, MSAA, viewport resizing and layout switching after sky rendering.
+      - [ ] Capture the automotive scene and record optional-path timings with metadata.
+    - **Actual editor UI**:
+      - [ ] Inspect asset and entity material groups at narrow and wide panel sizes.
+      - [ ] Search, assign, replace, disable and clear real project textures.
+      - [ ] Drag a shader from Content Browser; create one with a chosen name.
+      - [ ] Edit custom numeric and texture properties and observe a live preview change.
+      - [ ] Introduce a shader error; confirm diagnostics and last-good/fallback behavior.
+      - [ ] Save/reopen material and scene; verify edits persist and shared users update.
+      - [ ] Verify camera/lights stay fixed during the intended preview object rotation.
 
 - [x] **Phase 39: Visual Particle & VFX Studio (Unity Shuriken Modules + Curves) (`Engine/VFX`, `Engine/UI`, `Editor`)**
   - [x] **Step 1 - Multi-Emitter Architecture & Bursts (`Engine/VFX`, `Engine/Asset`)**:

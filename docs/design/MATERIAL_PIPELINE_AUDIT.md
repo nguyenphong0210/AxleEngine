@@ -120,3 +120,58 @@ binding, and visible shading agree in the preview and scene.
   v1 caches remain readable. Step 106 covers all three importers, cache versions,
   truncated-cache rejection and GPU anisotropy on imported seams. Imported tangent
   direction/rotation/strength and authored-versus-loaded GPU geometry now pass.
+
+## Phase 38.3 Custom Material & Shading Pipeline Implementation
+
+The Phase 38.3 custom shader and material execution subsystem has been implemented and verified via granular, CPU-only unit tests (`AxleMaterialUnitTests`, 5 suites passing 100%):
+
+1. **CPU-Only Unit Test Target (`AxleMaterialUnitTests`)**:
+   - Established standalone, headless test suite running completely without GPU, RHI device, GLFW window, or filesystem requirements.
+   - Covers material serialization, synchronization, texture role matching, binding plan packing, generational program caching, and drag/drop payload decoding.
+
+2. **Testable Material Binding Plans & Packed Constant Layout (`MaterialBindingPlan`)**:
+   - `MaterialBindingPlan::Build` inspects reflected shader resources and validates uniform layouts.
+   - Generates deterministic 16-byte aligned packed constant buffers (`b1, space 0`) for custom material parameters (`Float`, `Float2/3/4`, `Color`, `Int`, `Bool`).
+   - Automatically rejects duplicate uniform names, filters out engine reserved uniforms (`b0`), and handles reordered properties.
+   - Resolves texture slots by parameter name / semantic role to avoid colliding with default engine bindings.
+
+3. **Compatible Custom Material Shader Interfaces (`CustomShaderInterface`)**:
+   - Defines standard HLSL shader interface contract for custom surface shaders.
+   - Standard vertex layout `MaterialInput` (8 vertex attributes: `Position`, `Normal`, `Tangent`, `Color`, `TexCoord0`, `TexCoord1`, `Custom0`, `Custom1`) with verified byte offsets matching `RHISceneRenderer`.
+   - Explicit engine constant buffer `EngineUniforms` (`b0, space 0`, exact 256-byte alignment).
+   - Dedicated custom constant buffer `CustomMaterialParams` (`b1, space 0`).
+   - Custom material textures bound exclusively in `space 1` (`t0..t15, space 1` with samplers at `s0..s15, space 1`).
+   - Canonical PBR and Unlit templates with structured entry points (`EvaluateCustomMaterial`, `ComputeCustomSurface`).
+   - Diagnostic validation helper detecting illegal register overlaps, reserved namespace collisions, and missing declarations.
+
+4. **Generational Material Program Caching (`MaterialProgramCache`)**:
+   - Thread-safe generational cache storing compiled custom VS/PS bytecode pairs (`MaterialProgramGeneration`).
+   - Retains last-known-good compiled generation upon shader compilation failures, preventing runtime null pointer dereferences or pipeline crashes.
+   - Deduplicates compilation error diagnostics to prevent repetitive console log spam when source code is unchanged.
+   - Generational reference-counting ensures in-flight draws can complete safely even when a new generation is compiled.
+
+5. **Per-Draw Custom Program & Constant Buffer Execution (`RHISceneRenderer`)**:
+   - Integrated `CustomProgramCache` into `RHISceneRenderer` with fallback to default ForwardPBR when custom shaders are disabled, empty, or uncompiled.
+   - Dynamic per-draw constant buffer allocation and upload for `CustomMaterialParams` (`b1, space 0`), guaranteeing draw-call parameter isolation.
+   - LRU custom pipeline caching (`CustomPipelineKey`) matching custom VS/PS bytecode, render target formats, depth/stencil state, blend modes, and rasterizer states.
+
+6. **Editor Drag-and-Drop & Property Synchronization**:
+   - `ShaderDragDropDecoder`: Robust decoding of drag-and-drop payloads with null-terminator clamping, length overflow protection, non-ASCII UTF-8 path handling, and case-insensitive `.HLSL` / `.shader` extension validation.
+   - `ShaderPropertyReflection` / `CustomShaderPicker`: Property synchronization retaining compatible existing property values across shader recompilation, and robustly filtering out local variables inside function scopes as well as engine reserved uniforms.
+   - `MaterialInspectorControls`: Added full UI controls for custom `Texture2D` properties with asset drag-and-drop, path display, clear buttons, and live updates.
+
+7. **Automotive Rendering Acceptance Infrastructure (`Test_MaterialAcceptance`)**:
+   - Implemented headless acceptance test framework in `Editor/src/Tests/Test_MaterialAcceptance.hpp` / `.cpp`.
+   - `ParseMaterialBackendOption`: Configurable via `AXLE_MATERIAL_TEST_BACKEND = dx12 | vulkan` without silent fallback; strictly rejects unknown backends.
+   - `ValidateMaterialCaptureDirectory`: Configurable via `AXLE_MATERIAL_CAPTURE_DIR` with strict safety checks forbidding writes into source or asset trees.
+   - `FormatMaterialTimingReport`: Computes mean, min, max, standard deviation over warmed-up frames, clearly labeling frame-to-frame CPU/GPU overhead.
+   - `VerifyMaterialReferenceSceneStructure`: Validates structure and entities of `MaterialReference.axlescene`.
+   - Image readback and portable PPM export (`WritePPMImage`) for headless diffs.
+
+## Pending External Runtime & GPU Acceptance
+
+While all foundational code, data structures, parsing logic, and CPU-only unit tests are fully implemented and verified, the following runtime and hardware execution items remain **NOT RUN** (pending physical GPU test execution):
+- Direct3D 12 and Vulkan 1.3 physical GPU execution of Step 106 integration tests.
+- Physical compilation of custom shaders to DXIL and SPIR-V via DXC on target hardware.
+- Real rendered pixel readback comparisons for car paint, brushed metal, carbon fiber, rubber, leather, and glass refraction.
+- Interactive editor UI manual acceptance (narrow/wide inspector panels, interactive drag/drop in live window).

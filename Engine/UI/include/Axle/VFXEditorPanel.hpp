@@ -3,6 +3,7 @@
 #include <Axle/ParticleEmitter.hpp>
 #include <Axle/ParticleSystem.hpp>
 #include <Axle/ParticleRenderer.hpp>
+#include <Axle/VFXEditorDocument.hpp>
 #include <Axle/Framebuffer.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/Entity.hpp>
@@ -69,6 +70,16 @@ namespace Axle {
         const ParticleEmitterConfig& GetConfig() const { return m_Config; }
         ParticleSystem* GetPreviewSystem() const { return m_EmitterStacks.empty() ? nullptr : m_EmitterStacks[0].System.get(); }
 
+        // Document Model API
+        VFXEditorDocument& GetDocument() { return m_Document; }
+        const VFXEditorDocument& GetDocument() const { return m_Document; }
+        void NewDocument(const std::string& name = "NewEffect");
+        bool OpenDocument(const std::string& filePath);
+        bool SaveDocument();
+        bool SaveDocumentAs(const std::string& filePath);
+        void SyncStacksFromDocument();
+        void SyncDocumentFromStacks();
+
         // Emitter Stack API
         size_t GetEmitterStackCount() const { return m_EmitterStacks.size(); }
         size_t GetSelectedStackIndex() const { return m_SelectedStackIndex; }
@@ -102,6 +113,7 @@ namespace Axle {
         void SyncCurrentStackConfig();
 
     private:
+        VFXEditorDocument m_Document;
         ParticleEmitterConfig m_Config;
         std::vector<ParticleEmitterStack> m_EmitterStacks;
         size_t m_SelectedStackIndex = 0;

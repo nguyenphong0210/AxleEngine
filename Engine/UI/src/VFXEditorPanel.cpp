@@ -133,6 +133,77 @@ namespace Axle {
         glBindVertexArray(0);
     }
 
+    void VFXEditorPanel::SyncStacksFromDocument() {
+        const auto& def = m_Document.GetDefinition();
+        m_Config.Name = def.Name;
+        m_EmitterStacks.clear();
+        for (const auto& emitter : def.Emitters) {
+            ParticleEmitterStack stack(emitter.Name, emitter.Config);
+            stack.Enabled = emitter.Enabled;
+            stack.Visible = true;
+            stack.TexturePath = emitter.Resources.TexturePath;
+            stack.NormalMapPath = emitter.Resources.NormalMapPath;
+            stack.MaterialPath = emitter.Resources.MaterialPath;
+            stack.Initialize();
+            m_EmitterStacks.push_back(std::move(stack));
+        }
+        if (m_EmitterStacks.empty()) {
+            ParticleEmitterStack base("Base Emitter", m_Config);
+            base.Initialize();
+            m_EmitterStacks.push_back(std::move(base));
+        }
+        m_SelectedStackIndex = 0;
+        m_Config = m_EmitterStacks[0].Config;
+        ResetPreview();
+    }
+
+    void VFXEditorPanel::SyncDocumentFromStacks() {
+        SyncCurrentStackConfig();
+        auto& def = m_Document.GetDefinition();
+        def.Name = m_Config.Name.empty() ? "ParticleEffect" : m_Config.Name;
+        def.Emitters.clear();
+        for (size_t i = 0; i < m_EmitterStacks.size(); ++i) {
+            const auto& stack = m_EmitterStacks[i];
+            EmitterDefinition edef;
+            edef.Id = "emitter-" + std::to_string(i + 1);
+            edef.Name = stack.Name;
+            edef.Enabled = stack.Enabled;
+            edef.Config = stack.Config;
+            edef.Resources.TexturePath = stack.TexturePath;
+            edef.Resources.NormalMapPath = stack.NormalMapPath;
+            edef.Resources.MaterialPath = stack.MaterialPath;
+            edef.Resources.UseTexture = !stack.TexturePath.empty();
+            edef.Resources.UseNormalMap = !stack.NormalMapPath.empty();
+            def.Emitters.push_back(std::move(edef));
+        }
+    }
+
+    void VFXEditorPanel::NewDocument(const std::string& name) {
+        m_Document.NewEffect(name);
+        SyncStacksFromDocument();
+    }
+
+    bool VFXEditorPanel::OpenDocument(const std::string& filePath) {
+        std::vector<VFXDiagnostic> diags;
+        if (m_Document.OpenEffect(filePath, diags)) {
+            SyncStacksFromDocument();
+            return true;
+        }
+        return false;
+    }
+
+    bool VFXEditorPanel::SaveDocument() {
+        SyncDocumentFromStacks();
+        std::vector<VFXDiagnostic> diags;
+        return m_Document.Save(diags);
+    }
+
+    bool VFXEditorPanel::SaveDocumentAs(const std::string& filePath) {
+        SyncDocumentFromStacks();
+        std::vector<VFXDiagnostic> diags;
+        return m_Document.SaveAs(filePath, diags);
+    }
+
     ParticleEmitterStack* VFXEditorPanel::GetCurrentEmitterStack() {
         if (m_SelectedStackIndex < m_EmitterStacks.size()) {
             return &m_EmitterStacks[m_SelectedStackIndex];
@@ -446,6 +517,27 @@ namespace Axle {
     void VFXEditorPanel::DrawEmitterStackColumn(float width, float height) {
         ImGui::BeginChild("VFX_EmitterStack_Column", ImVec2(width, height), true);
         {
+            std::string docTitle = m_Document.GetDefinition().Name;
+            if (m_Document.IsDirty()) docTitle += " *";
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", docTitle.c_str());
+
+            if (ImGui::Button("New", ImVec2(38, 20))) {
+                NewDocument();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Save", ImVec2(40, 20))) {
+                SaveDocument();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Undo", ImVec2(40, 20))) {
+                if (m_Document.Undo()) SyncStacksFromDocument();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Redo", ImVec2(40, 20))) {
+                if (m_Document.Redo()) SyncStacksFromDocument();
+            }
+
+            ImGui::Separator();
             ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.2f, 1.0f), "Emitter Stacks");
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
             if (ImGui::Button("+", ImVec2(22.0f, 20.0f))) {
@@ -864,7 +956,7 @@ namespace Axle {
                 m_Config.Orientation = static_cast<ParticleOrientation>(currentOrient);
             }
 
-            const char* blendModes[] = { "Additive (Fire, Sparks)", "Alpha Blending (Smoke, Dust)", "Premultiplied Alpha" };
+            const char* blendModes[] = { "Additive (Fire, Sparks)", "Alpha Blending (Smoke, Dust)", "Multiply", "Cutout (Alpha Tested)" };
             int currentBlend = static_cast<int>(m_Config.BlendMode);
             if (ImGui::Combo("Blend Mode", &currentBlend, blendModes, IM_ARRAYSIZE(blendModes))) {
                 m_Config.BlendMode = static_cast<ParticleBlendMode>(currentBlend);
@@ -887,6 +979,12 @@ namespace Axle {
         ImGui::Spacing();
 
         if (m_SelectedEntity && m_SelectedEntity.HasComponent<ParticleEmitterComponent>()) {
+            auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
+            if (!pec.AssetPath.empty()) {
+                if (ImGui::Button("Make Unique (Detach Shared Asset)", ImVec2(-1.0f, 26.0f))) {
+                    pec.AssetPath.clear();
+                }
+            }
             if (ImGui::Button("Apply Stacks to Selected Entity", ImVec2(-1.0f, 30.0f))) {
                 auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
                 SyncCurrentStackConfig();

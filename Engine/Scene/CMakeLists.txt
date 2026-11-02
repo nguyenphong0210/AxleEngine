@@ -12,6 +12,7 @@ add_library(AxleScene STATIC
     src/RHIObjectPicker.cpp
     src/RHIMeshRegistry.cpp
     src/CharacterVFX.cpp
+    src/CustomMaterialProgram.cpp
 )
 add_library(Axle::Scene ALIAS AxleScene)
 

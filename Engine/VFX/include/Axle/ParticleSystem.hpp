@@ -13,6 +13,18 @@ namespace Axle {
         float NextTriggerTime = 0.0f;
     };
 
+    struct ParticleEvent {
+        std::string SourceEmitterName;
+        std::string TargetEmitterName;
+        SubEmitterTrigger Trigger = SubEmitterTrigger::Collision;
+        glm::vec3 WorldPosition{ 0.0f };
+        glm::vec3 WorldVelocity{ 0.0f };
+        glm::vec4 Color{ 1.0f };
+        uint32_t Count = 10;
+        bool InheritColor = true;
+        bool InheritVelocity = false;
+    };
+
     class ParticleSystem {
     public:
         using SubEmitterCallback = std::function<void(SubEmitterTrigger trigger, const std::string& targetName, const glm::vec3& pos, const glm::vec3& vel, const glm::vec4& color, uint32_t count)>;
@@ -56,6 +68,14 @@ namespace Axle {
         std::shared_ptr<ParticleSystem> GetChildSystem(const std::string& name) const;
         const std::unordered_map<std::string, std::shared_ptr<ParticleSystem>>& GetChildSystems() const { return m_ChildSystems; }
 
+        const std::vector<ParticleEvent>& GetEventQueue() const { return m_EventQueue; }
+        void ClearEventQueue() { m_EventQueue.clear(); }
+        void DrainEvents(std::vector<ParticleEvent>& outEvents) {
+            outEvents.insert(outEvents.end(), m_EventQueue.begin(), m_EventQueue.end());
+            m_EventQueue.clear();
+        }
+        void SpawnInherited(const glm::vec3& worldPos, const glm::vec3& inheritedVel, const glm::vec4& inheritedColor, bool inheritColor, bool inheritVel, uint32_t count);
+
     private:
         void SpawnParticle(const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot);
         void DispatchSubEmitters(SubEmitterTrigger trigger, const glm::vec3& pos, const glm::vec3& vel, const glm::vec4& color);
@@ -77,6 +97,7 @@ namespace Axle {
         std::vector<BurstRuntimeState> m_BurstRuntime;
         SubEmitterCallback m_SubEmitterCallback;
         std::unordered_map<std::string, std::shared_ptr<ParticleSystem>> m_ChildSystems;
+        std::vector<ParticleEvent> m_EventQueue;
     };
 
 }

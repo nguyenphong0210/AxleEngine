@@ -1,4 +1,5 @@
 #include <Axle/ParticleSystem.hpp>
+#include <iostream>
 #include <cmath>
 #include <algorithm>
 #include <limits>
@@ -47,6 +48,7 @@ namespace Axle {
         m_EmitterTime = 0.0f;
         m_CollisionCount = 0;
         m_RNG.seed(m_InitialSeed);
+        m_EventQueue.clear();
 
         m_BurstRuntime.resize(m_Config.Bursts.size());
         for (size_t i = 0; i < m_Config.Bursts.size(); ++i) {
@@ -89,11 +91,58 @@ namespace Axle {
                     if (m_SubEmitterCallback) {
                         m_SubEmitterCallback(trigger, sub.TargetEmitterName, pos, vel, color, sub.EmitCount);
                     }
+                    m_EventQueue.push_back({ m_Config.Name, sub.TargetEmitterName, trigger, pos, vel, color, sub.EmitCount, sub.InheritColor, sub.InheritVelocity });
+
                     auto it = m_ChildSystems.find(sub.TargetEmitterName);
                     if (it != m_ChildSystems.end() && it->second) {
                         it->second->EmitBurst(sub.EmitCount, pos);
                     }
                 }
+            }
+        }
+    }
+
+    void ParticleSystem::SpawnInherited(const glm::vec3& worldPos, const glm::vec3& inheritedVel, const glm::vec4& inheritedColor, bool inheritColor, bool inheritVel, uint32_t count) {
+        const uint32_t MAX_SPAWNS_PER_BATCH = 200;
+        count = std::min(count, MAX_SPAWNS_PER_BATCH);
+
+        for (uint32_t i = 0; i < count; ++i) {
+            glm::vec3 offset(0.0f);
+            glm::vec3 dir(0.0f, 1.0f, 0.0f);
+            m_Config.Shape.Sample(offset, dir, m_RNG);
+
+            ParticleSpawnData data;
+            data.Position = worldPos + offset;
+            float speed = m_Config.InitialSpeed.Sample(m_RNG);
+            data.Velocity = glm::normalize(dir) * speed;
+            if (inheritVel) {
+                data.Velocity += inheritedVel;
+            }
+            data.Acceleration = m_Config.ConstantAcceleration;
+
+            data.StartSize = m_Config.StartSize.Sample(m_RNG);
+            data.EndSize = m_Config.EndSize.Sample(m_RNG);
+
+            glm::vec4 authoredStartCol = m_Config.ColorOverLifetime.Evaluate(0.0f);
+            glm::vec4 authoredEndCol = m_Config.ColorOverLifetime.Evaluate(1.0f);
+            if (inheritColor) {
+                data.StartColor = authoredStartCol * inheritedColor;
+                data.EndColor = authoredEndCol * inheritedColor;
+            } else {
+                data.StartColor = authoredStartCol;
+                data.EndColor = authoredEndCol;
+            }
+
+            data.Lifetime = std::max(0.01f, m_Config.Lifetime.Sample(m_RNG));
+            data.StartRotation = m_Config.StartRotation.Sample(m_RNG);
+            data.AngularVelocity = m_Config.AngularVelocity.Sample(m_RNG);
+
+            data.UVOffsetScale = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+            data.UVSubFrame = glm::vec4(0.0f);
+
+            uint32_t spawnedIdx = m_Pool.Spawn(data);
+            if (spawnedIdx == ParticlePool::INVALID_INDEX) {
+                break;
             }
         }
     }

@@ -354,6 +354,7 @@ namespace Axle {
                 stack.System->Update(stepTime, glm::vec3(0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
             }
         }
+        DispatchEffectEvents(m_EmitterStacks);
     }
 
     void VFXEditorPanel::SeekTo(float targetTime) {

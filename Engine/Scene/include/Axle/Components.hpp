@@ -1541,6 +1541,52 @@ namespace Axle {
         }
     };
 
+    inline void DispatchEffectEvents(std::vector<ParticleEmitterStack>& stacks, uint32_t maxEventsPerTick = 500) {
+        if (stacks.empty()) return;
+
+        std::vector<ParticleEvent> pendingEvents;
+        for (auto& stack : stacks) {
+            if (stack.System) {
+                stack.System->DrainEvents(pendingEvents);
+            }
+        }
+
+        if (pendingEvents.empty()) return;
+
+        if (pendingEvents.size() > maxEventsPerTick) {
+            pendingEvents.resize(maxEventsPerTick);
+        }
+
+        int maxGenerations = 2;
+        while (!pendingEvents.empty() && maxGenerations-- > 0) {
+            std::vector<ParticleEvent> nextGenEvents;
+
+            for (const auto& ev : pendingEvents) {
+                ParticleEmitterStack* targetStack = nullptr;
+                for (auto& s : stacks) {
+                    if (s.Name == ev.TargetEmitterName) {
+                        targetStack = &s;
+                        break;
+                    }
+                }
+
+                if (targetStack && targetStack->System && targetStack->Enabled) {
+                    targetStack->System->SpawnInherited(ev.WorldPosition, ev.WorldVelocity, ev.Color, ev.InheritColor, ev.InheritVelocity, ev.Count);
+                }
+            }
+
+            for (auto& stack : stacks) {
+                if (stack.System) {
+                    stack.System->DrainEvents(nextGenEvents);
+                }
+            }
+            if (nextGenEvents.size() > maxEventsPerTick) {
+                nextGenEvents.resize(maxEventsPerTick);
+            }
+            pendingEvents = std::move(nextGenEvents);
+        }
+    }
+
     struct ParticleEmitterComponent {
         ParticleEmitterConfig Config;
         std::shared_ptr<ParticleSystem> System = nullptr;
@@ -1796,6 +1842,7 @@ namespace Axle {
                         stack.System->Update(dt, worldPos, worldRot);
                     }
                 }
+                DispatchEffectEvents(EmitterStacks);
                 SyncPrimary();
             }
         }

@@ -606,8 +606,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Step 105 tests verifying: DXC reflection parser, packed ORM texture sampling, Clearcoat push constants, and error jump navigation.
 
 - [ ] **Phase 38.3: Material Pipeline Completion, Godot-style Inspector & Automotive Materials (`Engine/Scene`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/UI`, `Editor`)**
-  - **Execution Order**: Complete existing material behavior first, reorganize authoring second, then add automotive extensions. This phase remains pending physical runtime execution; unit-tested components are distinguished from runtime-accepted visual checks below.
-  - [ ] **Step 1 - Complete Existing Inspector -> Asset -> Renderer -> Shader Paths**:
+  - **Execution Order**: Complete existing material behavior first, reorganize authoring second, then add automotive extensions. DX12/Vulkan GPU acceptance now passes on RTX 3070; the remaining interactive editor checklist keeps the phase open. See [acceptance report](docs/design/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md).
+  - [x] **Step 1 - Complete Existing Inspector -> Asset -> Renderer -> Shader Paths**:
     - [x] Audit every existing material property across the asset inspector, entity inspector, material component, `.axleasset` serialization, renderer bindings, and shader consumption; record missing or ineffective connections. See [Material Pipeline Audit](docs/design/MATERIAL_PIPELINE_AUDIT.md).
     - [x] Complete both save/load and live updates for Albedo, Normal Strength, Metallic, Roughness, AO Strength, Emission, Separate Maps / Packed ORM, independent UV X/Y tiling, and UV offset.
       - [x] Preserve inspector asset and inline scene material values on save/reload, including HDR color, alpha, map paths and enable states, ORM, coat, anisotropy, and shader flags (Step 106).
@@ -616,20 +616,20 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] Define an explicit, matching CPU/GPU material layout without overloading unrelated parameters; keep preview and scene rendering consistent and preserve backward-compatible defaults for existing assets.
     - [x] Verify texture loading, color space, bindings, fallback textures, replacement, and clearing for every supported map in the active project.
       - [x] Upload and bind actual textures per draw with initialized fallback pixels; verify distinct materials, map disabling, normal/AO strength, emission masking, Y tiling, and zero alpha cutoff through DX12 GPU readback (Step 106).
-    - [x] Implement testable custom material binding plan generator (`MaterialBindingPlan`) with deterministic 16-byte aligned packed constant buffers (`b1, space 0`), duplicate/engine uniform validation, and role-correct texture slot assignment (100% CPU unit-tested).
-    - [x] Standardize compatible custom material shader interface (`CustomShaderInterface`) defining 8-attribute `MaterialInput`, 256-byte aligned `EngineUniforms` (`b0, space 0`), `CustomMaterialParams` (`b1, space 0`), textures at `space 1`, and canonical HLSL templates (100% CPU unit-tested).
-    - [x] Implement generational custom material program cache (`MaterialProgramCache`) retaining last-good compiled bytecode on compilation error, deduplicating diagnostic logs, and protecting in-flight draws (100% CPU unit-tested).
-    - [x] Integrate per-draw custom program execution and dynamic constant buffer allocation in `RHISceneRenderer` with fallback to ForwardPBR (100% CPU unit-tested).
-    - [ ] Add focused serialization and renderer checks, plus visual comparisons showing that changing each parameter produces the expected result before moving to Step 2 (*Hardware GPU visual checks pending*).
+    - [x] Implement typed reflected binding plans with exact scalar/vector storage, duplicate/engine uniform validation, role-correct texture slots and rejection of unsupported layouts (CPU and GPU verified).
+    - [x] Standardize canonical `EngineObject` b0, `EngineScene` b1 and `MaterialParameters` b2 in space0, descriptor-bound textures/samplers in space1, 256-byte aligned CBV allocations and the existing five-attribute mesh stream; retain legacy template compatibility on DX12/Vulkan.
+    - [x] Implement generational custom material caching with last-good retention, deduplicated failures, main/include invalidation (including macro includes), recovery and in-flight ownership (CPU and GPU verified).
+    - [x] Integrate per-draw custom descriptor sets, textures, samplers, resizable constant buffers, pipeline validation, state restoration and diagnosed ForwardPBR fallback (DX12/Vulkan Step 106).
+    - [x] Add serialization and real pixel comparisons for standard/custom properties, per-draw isolation, texture changes, reload errors, HDR and automotive shading; inspect reference-scene captures.
   - [ ] **Step 2 - Godot-style Material Inspector Organization & Texture Authoring**:
     - [x] Use shared controls for asset and entity inspectors, organized into collapsible groups: Surface / Transparency, Shading, Albedo, Metallic, Roughness, Emission, Normal Map, Ambient Occlusion, Clearcoat, Anisotropy, UV, and Advanced Options.
     - [x] Add clear enable toggles where appropriate, consistent defaults and tooltips, and conditional controls for enabled features; expose only features with a working renderer path.
     - [x] Make texture slots clickable to open a searchable project texture picker while retaining drag/drop, thumbnail previews, replacement, and Clear Texture actions.
     - [x] Implement robust drag-and-drop shader payload decoding (`ShaderDragDropDecoder`) handling null terminators, non-ASCII UTF-8, and extension validation (100% CPU unit-tested).
     - [x] Implement custom property synchronization (`SynchronizeCustomProperties`) preserving compatible values across shader reload and filtering out local variables inside function scopes and engine reserved uniforms (100% CPU unit-tested).
-    - [x] Support custom texture property controls with drag-and-drop assignment, path display, and clearing in `MaterialInspectorControls`.
-    - [ ] Manual interactive UI verification at varying panel widths (*Interactive UI acceptance pending*).
-  - [ ] **Step 3 - Automotive Material Extensions (After Existing Features Work)**:
+    - [x] Support custom texture properties with the shared searchable picker, thumbnail, validated drag/drop, replacement and clearing; initialize typed scalar/vector/default annotations and publish runtime diagnostics/schema to the shared Inspector/preview material.
+    - [ ] Manual interactive UI verification at varying panel widths (Rubber preview inspected at ~560px; remaining input blocked by Computer Use activation failure, documented in acceptance report).
+  - [x] **Step 3 - Automotive Material Extensions (After Existing Features Work)**:
     - [x] **Clearcoat**: Extend the validated two-layer shading with texture-driven coat strength and roughness for car paint and carbon fiber; verify direct-light and environment-reflection behavior.
     - [x] **Anisotropy**: Add texture-driven direction / flow control for brushed wheels and carbon weave; validate tangent orientation, rotation, and strength on imported meshes.
       - [x] Complete flowmap persistence, texture binding, RG direction and alpha strength; verify direction and mask with GPU readback. Imported OBJ tangent orientation, rotation and strength now pass GPU acceptance.
@@ -639,27 +639,28 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **Step 4 - Acceptance Scenes & Backend Verification**:
     - [x] Maintain reference materials for car paint, brushed metal, carbon fiber, rubber / leather with detail normal, and automotive glass under fixed lighting.
     - [x] Standalone CPU unit-test executable `AxleMaterialUnitTests` (`ctest -R MaterialUnitTests`) covering all 5 core material test suites (100% PASS).
-    - [x] Headless acceptance test infrastructure implemented in `Editor/src/Tests/Test_MaterialAcceptance.cpp` supporting explicit backend selector (`AXLE_MATERIAL_TEST_BACKEND = dx12 | vulkan`), output capture directory validation (`AXLE_MATERIAL_CAPTURE_DIR`), reference scene entity verification, and PPM image export (100% CPU unit-tested).
-    - [ ] Check save/reopen, material reuse across entities, live editing, missing textures, old assets, and preview-versus-scene consistency with focused automated checks and visual inspection (*Runtime GPU execution pending*).
-    - [ ] Validate DX12 and Vulkan rendering on available supported environments, record unverified backends, and measure the cost of optional detail-normal and refraction paths (*Runtime GPU execution pending*).
+    - [x] Wire headless acceptance into Step 106 with strict backend selection, actual-backend checks, protected capture paths, aligned RGBA8/RGBA16F readback, PPM export and report write-failure handling (CPU and real GPU verified).
+    - [x] Check save/reopen pixel equivalence, shared/inline reuse, live parameter changes, missing/replaced textures, old assets and common preview/scene material rendering with automated checks and reference capture inspection.
+    - [ ] Complete interactive preview-versus-scene comparisons and authoring/save/reopen checks listed in the acceptance report.
+    - [x] Run strict DX12 and Vulkan Step 106 on RTX 3070; capture SDR/HDR images and warmed-up baseline/detail-normal/refraction end-to-end timings at 1024x640, 1x MSAA.
     - [ ] Complete and verify each implementation sub-step before its own commit; mark the phase complete only after its renderer and visual acceptance checks pass.
 
-  - **Phase 38.3 External Visual & Runtime Acceptance Checklist (Prepared; NOT RUN on target hardware)**:
+  - **Phase 38.3 Runtime Acceptance Checklist (2026-11-02; GPU verified, UI partially inspected)**:
     - **Build and compiler integration**:
-      - [ ] Build the editor and full test executable with the supported toolchain.
-      - [ ] Compile actual built-in and generated custom VS/PS shaders to DXIL and SPIR-V.
-      - [ ] Verify legacy custom shader compatibility and actionable diagnostics.
-      - [ ] Run existing material-related regressions, including Steps 101, 104, 105, 106.
-      - [ ] Record newly introduced warnings separately from pre-existing build warnings.
+      - [x] Build the editor and full test executable with the supported toolchain.
+      - [x] Compile actual built-in and generated custom VS/PS shaders to DXIL and SPIR-V.
+      - [x] Verify legacy custom shader compatibility and actionable diagnostics.
+      - [x] Run material-related regressions 101, 104, 105, 106 in separate processes.
+      - [x] Record warnings: pre-existing LNK4098 remains; no new material compiler warning observed.
     - **GPU behavior**:
-      - [ ] Run Step 106 on requested DX12 and requested Vulkan with fallback disabled.
-      - [ ] Confirm both standard and custom parameters change real rendered pixels.
-      - [ ] Check two entities sharing a shader with different values in the same frame.
-      - [ ] Confirm texture replacement, disable, clear and missing-file fallback.
-      - [ ] Check imported/mirrored/nonuniform-scale normal and anisotropy behavior.
+      - [x] Run Step 106 on requested DX12 and requested Vulkan with fallback disabled.
+      - [x] Confirm both standard and custom parameters change real rendered pixels.
+      - [x] Check two entities sharing a shader with different values in the same frame.
+      - [x] Confirm texture replacement, disable, clear and missing-file fallback.
+      - [x] Check imported/mirrored/nonuniform-scale normal and anisotropy behavior.
       - [ ] Check glass over opaque geometry, edge/foreground depth rejection and fallback.
-      - [ ] Check SDR/HDR, MSAA, viewport resizing and layout switching after sky rendering.
-      - [ ] Capture the automotive scene and record optional-path timings with metadata.
+      - [x] Check SDR/HDR, MSAA, viewport resizing and built-in/custom layout switching after sky rendering.
+      - [x] Capture the automotive scene and record optional-path timings with metadata.
     - **Actual editor UI**:
       - [ ] Inspect asset and entity material groups at narrow and wide panel sizes.
       - [ ] Search, assign, replace, disable and clear real project textures.

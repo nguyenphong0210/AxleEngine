@@ -6,6 +6,11 @@ Repository inspected: AxleEngine
 
 Baseline inspected: `01da2d3` (`added icons`)
 
+Status update: this is the original implementation handoff. Post-review runtime
+fixes and actual DX12/Vulkan results are recorded in the
+[acceptance report](MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md); its remaining UI
+checks supersede the original NOT RUN status in this planning document.
+
 ## 1. Assignment and execution limits
 
 Complete the remaining **implementation and CPU unit-test work** for Phase 38.3.

@@ -25,6 +25,7 @@ editor preview intentionally uses its own studio lights and camera framing.
 To export reference images and end-to-end timings in PowerShell:
 
 ```powershell
+$env:AXLE_MATERIAL_TEST_BACKEND = 'dx12'
 $env:AXLE_MATERIAL_CAPTURE_DIR = "$PWD/build/material-captures/dx12"
 ./build/Editor/Release/AxleTests.exe --step106
 $env:AXLE_MATERIAL_TEST_BACKEND = 'vulkan'
@@ -47,9 +48,20 @@ The acceptance test harness in `Editor/src/Tests/Test_MaterialAcceptance.cpp` im
   - Automatically created if it does not already exist.
   - Must not be inside the project source tree or assets directory (`Editor/assets`, `Engine/Resources`). Capturing into protected asset trees fails immediately with a validation error.
 
-Images use portable PPM (P6 binary) format. Timings report 24 warmed-up frames at 1024x640,
-including CPU recording, GPU submission and queue idle. They are not isolated
-shader timings and have no pass/fail performance threshold.
+Images use portable PPM (P6 binary) format. HDR inspection images are tone mapped
+by the renderer and decoded from eight-byte RGBA16F pixels before conversion to
+8-bit PPM; they do not preserve the original HDR radiance. Readback rows are
+aligned to 256 bytes. Step 106 compares original, reopened and detached inline
+materials using identical camera/light settings.
+
+Each timing configuration uses three warm-up frames followed by 24 measured
+frames at 1024x640, 1x MSAA: baseline (detail/refraction disabled), detail normal,
+and detail normal with refraction. Results include CPU recording, GPU submission
+and queue idle. They are not isolated shader timings and have no pass/fail
+performance threshold. Run one `--stepNNN` option per AxleTests process.
+
+See the [2026-11-02 acceptance report](MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md)
+for verified DX12/Vulkan results, measurements and remaining interactive checks.
 
 ### Acceptance Report Template
 

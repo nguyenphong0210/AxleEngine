@@ -1,6 +1,6 @@
 # Editor Tooling Improvement Roadmap
 
-Status: **proposed work**, reviewed 2026-11-01. This consolidates durable ideas from older visual-editor and parity specifications. It is not a list of implemented capabilities or a fixed phase schedule.
+Status: **proposed work**, reviewed 2026-11-01; Phase 39 VFX sequencing updated 2026-11-02. This consolidates durable ideas from older visual-editor and parity specifications. It is not a list of implemented capabilities or a fixed phase schedule.
 
 Current material/UI behavior is documented in the [material guide](../guides/MATERIALS_AND_SHADERS.md) and [UI guide](../guides/UI.md). Address dependency and lifecycle issues in the [architecture assessment](../architecture/ASSESSMENT.md) alongside feature development.
 
@@ -28,6 +28,14 @@ Comparisons with commercial tools are inspiration, not a claim of feature parity
 ## 3. VFX authoring
 
 Build on ParticleSystem, emitter stacks, curves/gradients and VFXEditorPanel. Improve multi-emitter selection/enable/ordering, deterministic preview reset, module discoverability and asset persistence. Define runtime ownership for child systems and sub-emitter triggers.
+
+Phase 39 has been **reopened** after inspecting its actual editor/runtime paths.
+The existing panel and Step 102 CPU checks do not establish a complete VFX asset
+workflow. Follow the [detailed Phase 39 completion plan](VFX_PHASE_39_COMPLETION_PLAN.md)
+for the A-J work packages, stable authored-definition/runtime-instance boundary,
+atomic sub-steps and CPU/GPU/UI matrix. First isolate preview from scene state and
+make unchanged selection idempotent; then complete multi-emitter persistence,
+playback, real RHI rendering, authoring/resources/undo and advertised module paths.
 
 Acceptance: preview controls and scene playback use compatible configuration; saved assets reproduce emitter behavior; births/collisions/deaths and sub-emitter recursion have explicit limits/lifetimes. Separate CPU simulation checks from backend draw checks.
 

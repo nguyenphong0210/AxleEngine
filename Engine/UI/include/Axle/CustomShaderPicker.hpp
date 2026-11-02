@@ -22,6 +22,8 @@ namespace Axle {
                                  std::filesystem::path& result, std::string& error);
         static bool AssignShader(MaterialComponent& material, const std::filesystem::path& assetRoot,
                                  const std::filesystem::path& shaderPath, std::string& error);
+        static bool DecodeDragDropPayload(const void* data, size_t size,
+                                          std::filesystem::path& outPath, std::string& error);
 
     private:
         char m_Search[128] = {};

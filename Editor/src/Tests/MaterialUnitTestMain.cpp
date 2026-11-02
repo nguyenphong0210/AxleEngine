@@ -8,6 +8,7 @@ bool RunMaterialSerializationUnitTests();
 bool RunMaterialTextureSelectionUnitTests();
 bool RunMaterialBindingPlanUnitTests();
 bool RunMaterialProgramCacheUnitTests();
+bool RunShaderDragDropUnitTests();
 
 int main(int argc, char** argv) {
     (void)argc;
@@ -29,6 +30,7 @@ int main(int argc, char** argv) {
         { "Material Texture Role & Slot Selection",   RunMaterialTextureSelectionUnitTests },
         { "Material Binding Plan & Packing",          RunMaterialBindingPlanUnitTests },
         { "Material Program Cache & Generations",     RunMaterialProgramCacheUnitTests },
+        { "Shader Asset Drag/Drop & Extension Decoding", RunShaderDragDropUnitTests },
     };
 
     size_t passedCount = 0;

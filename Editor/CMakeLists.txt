@@ -161,6 +161,7 @@ add_executable(AxleMaterialUnitTests
     src/Tests/Test_MaterialTextureSelectionUnit.cpp
     src/Tests/Test_MaterialBindingPlanUnit.cpp
     src/Tests/Test_MaterialProgramCacheUnit.cpp
+    src/Tests/Test_ShaderDragDropUnit.cpp
 )
 
 target_include_directories(AxleMaterialUnitTests PRIVATE

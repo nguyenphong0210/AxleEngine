@@ -2,6 +2,7 @@
 #include <Axle/RHI/RHIShader.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/CustomShaderInterface.hpp>
 #include <imgui.h>
 #include <fstream>
 #include <sstream>
@@ -245,67 +246,7 @@ namespace Axle {
     }
 
     std::string HLSLStudioPanel::GetDefaultPBRTemplate(const std::string& shaderName) {
-        std::ostringstream oss;
-        oss << "// =============================================================================\n"
-            << "// " << shaderName << ".hlsl - AxleEngine Standard PBR Forward Shader\n"
-            << "// Direct3D 12 (DXIL) & Vulkan 1.3 (SPIR-V) Standard HLSL 2021 Codebase\n"
-            << "// =============================================================================\n\n"
-            << "// Per-Object Constants (Register b0, Space 0)\n"
-            << "cbuffer ObjectConstants : register(b0, space0) {\n"
-            << "    float4x4 u_Model;\n"
-            << "    float4   u_BaseColor;\n"
-            << "    float4   u_Params; // x: Roughness, y: Metallic, z: AO, w: Tiling\n"
-            << "};\n\n"
-            << "// Global Scene Constants (Register b1, Space 0)\n"
-            << "cbuffer SceneConstants : register(b1, space0) {\n"
-            << "    float4x4 u_ViewProjection;\n"
-            << "    float4   u_CameraPosition;\n"
-            << "    float4   u_SunDirection;\n"
-            << "    float4   u_SunColor;\n"
-            << "};\n\n"
-            << "// Texture & Sampler Bindings\n"
-            << "Texture2D    u_BaseMap : register(t0, space0);\n"
-            << "SamplerState u_Sampler : register(s0, space0);\n\n"
-            << "// Vertex Input & Pixel Input Structs\n"
-            << "struct VSInput {\n"
-            << "    float3 Position : POSITION;\n"
-            << "    float3 Normal   : NORMAL;\n"
-            << "    float2 TexCoord : TEXCOORD0;\n"
-            << "};\n\n"
-            << "struct PSInput {\n"
-            << "    float4 Position : SV_Position;\n"
-            << "    float3 WorldPos : POSITION0;\n"
-            << "    float3 Normal   : NORMAL0;\n"
-            << "    float2 TexCoord : TEXCOORD0;\n"
-            << "};\n\n"
-            << "// -----------------------------------------------------------------------------\n"
-            << "// Vertex Shader Entry Point\n"
-            << "// -----------------------------------------------------------------------------\n"
-            << "PSInput VSMain(VSInput input) {\n"
-            << "    PSInput output;\n"
-            << "    float4 worldPos = mul(u_Model, float4(input.Position, 1.0));\n"
-            << "    output.Position = mul(u_ViewProjection, worldPos);\n"
-            << "    output.WorldPos = worldPos.xyz;\n"
-            << "    output.Normal   = normalize(mul((float3x3)u_Model, input.Normal));\n"
-            << "    output.TexCoord = input.TexCoord * u_Params.w;\n"
-            << "    return output;\n"
-            << "}\n\n"
-            << "// -----------------------------------------------------------------------------\n"
-            << "// Pixel Shader Entry Point\n"
-            << "// -----------------------------------------------------------------------------\n"
-            << "float4 PSMain(PSInput input) : SV_Target0 {\n"
-            << "    float4 texColor = u_BaseMap.Sample(u_Sampler, input.TexCoord);\n"
-            << "    float3 albedo   = u_BaseColor.rgb * texColor.rgb;\n\n"
-            << "    // Lambertian Diffuse + Directional Sun Lighting\n"
-            << "    float3 N = normalize(input.Normal);\n"
-            << "    float3 L = normalize(-u_SunDirection.xyz);\n"
-            << "    float NdotL = max(dot(N, L), 0.0);\n\n"
-            << "    float3 diffuse  = albedo * u_SunColor.rgb * NdotL;\n"
-            << "    float3 ambient  = albedo * 0.15;\n"
-            << "    float3 finalRgb = diffuse + ambient;\n\n"
-            << "    return float4(finalRgb, u_BaseColor.a * texColor.a);\n"
-            << "}\n";
-        return oss.str();
+        return CustomShaderInterface::GetCanonicalTemplate(shaderName);
     }
 
     void HLSLStudioPanel::OnImGuiRender(bool* p_open) {

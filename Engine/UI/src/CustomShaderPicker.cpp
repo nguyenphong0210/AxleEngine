@@ -3,6 +3,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/HLSLStudioPanel.hpp>
 #include <Axle/ShaderPropertyReflection.hpp>
+#include <Axle/ShaderDragDropDecoder.hpp>
 #include <imgui.h>
 #include <algorithm>
 #include <cctype>
@@ -120,6 +121,14 @@ namespace Axle {
         return true;
     }
 
+    bool CustomShaderPicker::DecodeDragDropPayload(const void* data, size_t size,
+                                                  std::filesystem::path& outPath, std::string& error) {
+        auto res = DecodeShaderPayload(data, size);
+        outPath = res.Path;
+        error = res.Error;
+        return res.Success;
+    }
+
     bool CustomShaderPicker::Draw(const char* id, MaterialComponent& material, const std::string& suggestedName,
                                   const std::function<void(const std::filesystem::path&)>& openShader) {
         ImGui::PushID(id);
@@ -183,8 +192,13 @@ namespace Axle {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to search project shaders, or drop a .hlsl file here.");
         if (ImGui::BeginDragDropTarget()) {
             if (const auto* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                const auto* path = static_cast<const wchar_t*>(payload->Data);
-                if (AssignShader(material, assetRoot, std::filesystem::path(path), m_Error)) changed = true;
+                std::filesystem::path droppedPath;
+                std::string decodeError;
+                if (DecodeDragDropPayload(payload->Data, payload->DataSize, droppedPath, decodeError)) {
+                    if (AssignShader(material, assetRoot, droppedPath, m_Error)) changed = true;
+                } else {
+                    m_Error = decodeError;
+                }
             }
             ImGui::EndDragDropTarget();
         }

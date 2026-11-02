@@ -52,7 +52,6 @@ namespace Axle {
         m_EmitterStacks.push_back(std::move(baseStack));
         m_SelectedStackIndex = 0;
 
-        m_PreviewSystem = std::make_unique<ParticleSystem>(m_Config);
 
         if (Window::HasActiveContext()) {
             FramebufferSpecification spec;
@@ -193,15 +192,19 @@ namespace Axle {
         m_SelectedEntity = entity;
         auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
         m_Config = pec.Config;
+        m_EmitterStacks.clear();
         if (!pec.EmitterStacks.empty()) {
-            pec.EmitterStacks[0].Config = pec.Config;
-            if (!pec.Config.Name.empty()) {
-                pec.EmitterStacks[0].Name = pec.Config.Name;
+            for (const auto& stack : pec.EmitterStacks) {
+                ParticleEmitterStack previewStack(stack.Name, stack.Config);
+                previewStack.Enabled = stack.Enabled;
+                previewStack.Visible = stack.Visible;
+                previewStack.TexturePath = stack.TexturePath;
+                previewStack.NormalMapPath = stack.NormalMapPath;
+                previewStack.MaterialPath = stack.MaterialPath;
+                m_EmitterStacks.push_back(std::move(previewStack));
             }
-            m_EmitterStacks = pec.EmitterStacks;
             m_SelectedStackIndex = 0;
         } else {
-            m_EmitterStacks.clear();
             ParticleEmitterStack baseStack(m_Config.Name.empty() ? "Base Emitter" : m_Config.Name, m_Config);
             baseStack.Initialize();
             m_EmitterStacks.push_back(std::move(baseStack));
@@ -219,10 +222,6 @@ namespace Axle {
                 if (m_IsPlaying && stack.Enabled) stack.System->SetEmitting(true);
             }
         }
-        m_PreviewSystem = std::make_unique<ParticleSystem>(m_Config);
-        if (m_IsPlaying) {
-            m_PreviewSystem->SetEmitting(true);
-        }
     }
 
     void VFXEditorPanel::PlayPreview() {
@@ -230,7 +229,6 @@ namespace Axle {
         for (auto& stack : m_EmitterStacks) {
             if (stack.System && stack.Enabled) stack.System->SetEmitting(true);
         }
-        if (m_PreviewSystem) m_PreviewSystem->SetEmitting(true);
     }
 
     void VFXEditorPanel::PausePreview() {
@@ -238,7 +236,6 @@ namespace Axle {
         for (auto& stack : m_EmitterStacks) {
             if (stack.System) stack.System->SetEmitting(false);
         }
-        if (m_PreviewSystem) m_PreviewSystem->SetEmitting(false);
     }
 
     void VFXEditorPanel::StopPreview() {
@@ -250,17 +247,12 @@ namespace Axle {
                 stack.System->Reset();
             }
         }
-        if (m_PreviewSystem) {
-            m_PreviewSystem->SetEmitting(false);
-            m_PreviewSystem->Reset();
-        }
     }
 
     void VFXEditorPanel::TriggerBurst(uint32_t count) {
         if (!m_EmitterStacks.empty() && m_EmitterStacks[m_SelectedStackIndex].System) {
             m_EmitterStacks[m_SelectedStackIndex].System->EmitBurst(count);
         }
-        if (m_PreviewSystem) m_PreviewSystem->EmitBurst(count);
     }
 
     void VFXEditorPanel::OnUpdate(Timestep ts) {
@@ -279,9 +271,6 @@ namespace Axle {
                 if (stack.Enabled && stack.System) {
                     stack.System->Update(dt, glm::vec3(0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
                 }
-            }
-            if (m_PreviewSystem) {
-                m_PreviewSystem->Update(dt, glm::vec3(0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
             }
         }
     }
@@ -344,9 +333,6 @@ namespace Axle {
                 if (stack.Visible && stack.Enabled && stack.System) {
                     m_ParticleRenderer->Render(*stack.System, nullptr, stack.Config.SoftnessDistance);
                 }
-            }
-            if (m_EmitterStacks.empty() && m_PreviewSystem) {
-                m_ParticleRenderer->Render(*m_PreviewSystem, nullptr, m_Config.SoftnessDistance);
             }
             m_ParticleRenderer->End();
         }

@@ -56,7 +56,7 @@ namespace Axle {
 
         ParticleEmitterConfig& GetConfig() { return m_Config; }
         const ParticleEmitterConfig& GetConfig() const { return m_Config; }
-        ParticleSystem* GetPreviewSystem() const { return m_PreviewSystem.get(); }
+        ParticleSystem* GetPreviewSystem() const { return m_EmitterStacks.empty() ? nullptr : m_EmitterStacks[0].System.get(); }
 
         // Emitter Stack API
         size_t GetEmitterStackCount() const { return m_EmitterStacks.size(); }
@@ -94,7 +94,7 @@ namespace Axle {
         std::vector<ParticleEmitterStack> m_EmitterStacks;
         size_t m_SelectedStackIndex = 0;
 
-        std::unique_ptr<ParticleSystem> m_PreviewSystem;
+
         std::unique_ptr<ParticleRenderer> m_ParticleRenderer;
         std::shared_ptr<Framebuffer> m_Framebuffer;
         std::unique_ptr<RHIViewportDescriptor> m_RHIViewport;

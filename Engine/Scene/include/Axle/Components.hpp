@@ -1487,6 +1487,35 @@ namespace Axle {
         std::string MaterialPath;
 
         ParticleEmitterStack() = default;
+
+        // Deep copy: construct a distinct ParticleSystem instance rather than sharing the pointer
+        ParticleEmitterStack(const ParticleEmitterStack& other)
+            : Name(other.Name),
+              Enabled(other.Enabled),
+              Visible(other.Visible),
+              Config(other.Config),
+              System(std::make_shared<ParticleSystem>(other.Config)),
+              TexturePath(other.TexturePath),
+              NormalMapPath(other.NormalMapPath),
+              MaterialPath(other.MaterialPath) {
+        }
+
+        ParticleEmitterStack& operator=(const ParticleEmitterStack& other) {
+            if (this != &other) {
+                Name = other.Name;
+                Enabled = other.Enabled;
+                Visible = other.Visible;
+                Config = other.Config;
+                System = std::make_shared<ParticleSystem>(other.Config);
+                TexturePath = other.TexturePath;
+                NormalMapPath = other.NormalMapPath;
+                MaterialPath = other.MaterialPath;
+            }
+            return *this;
+        }
+
+        ParticleEmitterStack(ParticleEmitterStack&&) noexcept = default;
+        ParticleEmitterStack& operator=(ParticleEmitterStack&&) noexcept = default;
         ParticleEmitterStack(const std::string& name, const ParticleEmitterConfig& cfg)
             : Name(name), Config(cfg) {
             Initialize();
@@ -1529,6 +1558,47 @@ namespace Axle {
             : Config(config), SimulationSpace(config.SimulationSpace) {
             Initialize();
         }
+
+        // Deep copy: instantiates independent runtime systems for each stack and syncs primary alias
+        ParticleEmitterComponent(const ParticleEmitterComponent& other)
+            : Config(other.Config),
+              AssetPath(other.AssetPath),
+              TextureAsset(other.TextureAsset),
+              TexturePath(other.TexturePath),
+              Texture(other.Texture),
+              NormalMapAsset(other.NormalMapAsset),
+              NormalMapPath(other.NormalMapPath),
+              NormalMap(other.NormalMap),
+              Active(other.Active),
+              AutoPlay(other.AutoPlay),
+              Visible(other.Visible),
+              SimulationSpace(other.SimulationSpace),
+              EmitterStacks(other.EmitterStacks) {
+            SyncPrimary();
+        }
+
+        ParticleEmitterComponent& operator=(const ParticleEmitterComponent& other) {
+            if (this != &other) {
+                Config = other.Config;
+                AssetPath = other.AssetPath;
+                TextureAsset = other.TextureAsset;
+                TexturePath = other.TexturePath;
+                Texture = other.Texture;
+                NormalMapAsset = other.NormalMapAsset;
+                NormalMapPath = other.NormalMapPath;
+                NormalMap = other.NormalMap;
+                Active = other.Active;
+                AutoPlay = other.AutoPlay;
+                Visible = other.Visible;
+                SimulationSpace = other.SimulationSpace;
+                EmitterStacks = other.EmitterStacks;
+                SyncPrimary();
+            }
+            return *this;
+        }
+
+        ParticleEmitterComponent(ParticleEmitterComponent&&) noexcept = default;
+        ParticleEmitterComponent& operator=(ParticleEmitterComponent&&) noexcept = default;
 
         void Initialize() {
             Config.SimulationSpace = SimulationSpace;

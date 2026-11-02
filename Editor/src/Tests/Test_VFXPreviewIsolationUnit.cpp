@@ -67,6 +67,46 @@ namespace {
 
         return true;
     }
+
+    bool TestPreviewRuntimeIsolation() {
+        // 1. ParticleEmitterStack copy independence
+        Axle::ParticleEmitterConfig cfg;
+        cfg.MaxParticles = 100;
+        cfg.EmissionRate = 50.0f;
+        Axle::ParticleEmitterStack stack1("TestStack", cfg);
+        stack1.Initialize();
+        Axle::ParticleEmitterStack stack2 = stack1; // copy constructor
+        VFX_TEST_CHECK(stack1.System != nullptr, "Stack1 system must exist");
+        VFX_TEST_CHECK(stack2.System != nullptr, "Stack2 system must exist");
+        VFX_TEST_CHECK(stack1.System != stack2.System, "Stack copy must instantiate distinct ParticleSystem");
+
+        // 2. ParticleEmitterComponent copy independence
+        Axle::ParticleEmitterComponent pec1(cfg);
+        Axle::ParticleEmitterComponent pec2 = pec1; // copy constructor
+        VFX_TEST_CHECK(pec1.System != nullptr, "pec1 system must exist");
+        VFX_TEST_CHECK(pec2.System != nullptr, "pec2 system must exist");
+        VFX_TEST_CHECK(pec1.System != pec2.System, "Component copy must instantiate distinct primary ParticleSystem");
+        VFX_TEST_CHECK(pec1.EmitterStacks[0].System != pec2.EmitterStacks[0].System, "Component copy must instantiate distinct stack ParticleSystem");
+
+        // 3. VFXEditorPanel preview system independence from scene entity
+        auto scene = std::make_shared<Axle::Scene>();
+        auto entity = scene->CreateEntity("VFXEntity");
+        auto& entityPec = entity.AddComponent<Axle::ParticleEmitterComponent>(cfg);
+        Axle::VFXEditorPanel panel;
+        panel.SetSceneContext(scene.get());
+        panel.SetSelectedEntity(entity);
+
+        VFX_TEST_CHECK(panel.GetPreviewSystem() != nullptr, "Preview system must exist");
+        VFX_TEST_CHECK(panel.GetPreviewSystem() != entityPec.System.get(), "Preview system must be independent from scene entity system");
+
+        // 4. Updating preview does not advance or mutate scene entity system
+        panel.GetPreviewSystem()->SetEmitting(true);
+        panel.GetPreviewSystem()->Update(0.1f);
+        VFX_TEST_CHECK(panel.GetPreviewSystem()->GetActiveParticleCount() > 0, "Preview system should have particles");
+        VFX_TEST_CHECK(entityPec.System->GetActiveParticleCount() == 0, "Scene entity system must remain at 0 particles");
+
+        return true;
+    }
 }
 
 bool RunVFXPreviewIsolationUnitTests() {
@@ -74,5 +114,7 @@ bool RunVFXPreviewIsolationUnitTests() {
     VFX_TEST_CHECK(TestBaselineSystemIsolation(), "TestBaselineSystemIsolation failed");
     std::cout << "  - Running TestSelectionIdempotenceAndPreservation ...\n";
     VFX_TEST_CHECK(TestSelectionIdempotenceAndPreservation(), "TestSelectionIdempotenceAndPreservation failed");
+    std::cout << "  - Running TestPreviewRuntimeIsolation ...\n";
+    VFX_TEST_CHECK(TestPreviewRuntimeIsolation(), "TestPreviewRuntimeIsolation failed");
     return true;
 }

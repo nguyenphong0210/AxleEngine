@@ -469,9 +469,21 @@ namespace Axle {
         // 2. Render all visible emitter stacks
         if (m_ParticleRenderer) {
             m_ParticleRenderer->Begin(camera, m_Framebuffer, 0.1f, 1000.0f);
-            for (const auto& stack : m_EmitterStacks) {
+            for (auto& stack : m_EmitterStacks) {
                 if (stack.Visible && stack.Enabled && stack.System) {
-                    m_ParticleRenderer->Render(*stack.System, nullptr, stack.Config.SoftnessDistance);
+                    if (!stack.Texture && !stack.TexturePath.empty()) {
+                        auto resolved = FileSystem::ResolveAssetPath(stack.TexturePath);
+                        if (std::filesystem::exists(resolved)) {
+                            stack.Texture = Texture2D::Create(resolved.string());
+                        }
+                    }
+                    if (!stack.NormalMap && !stack.NormalMapPath.empty()) {
+                        auto resolved = FileSystem::ResolveAssetPath(stack.NormalMapPath);
+                        if (std::filesystem::exists(resolved)) {
+                            stack.NormalMap = Texture2D::Create(resolved.string());
+                        }
+                    }
+                    m_ParticleRenderer->Render(*stack.System, stack.Texture, stack.NormalMap, stack.Config.SoftnessDistance);
                 }
             }
             m_ParticleRenderer->End();
@@ -858,6 +870,38 @@ namespace Axle {
 
     void VFXEditorPanel::DrawTextureFlipbookControls() {
         if (ImGui::CollapsingHeader("🖼️ Texture & Flipbook Animation")) {
+            auto* currentStack = GetCurrentEmitterStack();
+            if (currentStack) {
+                char texBuf[256];
+                strncpy_s(texBuf, currentStack->TexturePath.c_str(), sizeof(texBuf));
+                if (ImGui::InputText("Texture Path", texBuf, sizeof(texBuf))) {
+                    currentStack->TexturePath = texBuf;
+                    currentStack->Texture.reset();
+                    SyncDocumentFromStacks();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear##Tex")) {
+                    currentStack->TexturePath.clear();
+                    currentStack->Texture.reset();
+                    SyncDocumentFromStacks();
+                }
+
+                char normBuf[256];
+                strncpy_s(normBuf, currentStack->NormalMapPath.c_str(), sizeof(normBuf));
+                if (ImGui::InputText("Normal Map", normBuf, sizeof(normBuf))) {
+                    currentStack->NormalMapPath = normBuf;
+                    currentStack->NormalMap.reset();
+                    SyncDocumentFromStacks();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear##Norm")) {
+                    currentStack->NormalMapPath.clear();
+                    currentStack->NormalMap.reset();
+                    SyncDocumentFromStacks();
+                }
+                ImGui::Separator();
+            }
+
             int rows = static_cast<int>(m_Config.TextureRows);
             int cols = static_cast<int>(m_Config.TextureCols);
             if (ImGui::DragInt("Flipbook Rows (N)", &rows, 1, 1, 16)) {

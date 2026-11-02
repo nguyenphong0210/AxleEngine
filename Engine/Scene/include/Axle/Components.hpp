@@ -1486,6 +1486,8 @@ namespace Axle {
         std::string TexturePath;
         std::string NormalMapPath;
         std::string MaterialPath;
+        std::shared_ptr<Texture2D> Texture = nullptr;
+        std::shared_ptr<Texture2D> NormalMap = nullptr;
 
         ParticleEmitterStack() = default;
 
@@ -1498,7 +1500,9 @@ namespace Axle {
               System(std::make_shared<ParticleSystem>(other.Config)),
               TexturePath(other.TexturePath),
               NormalMapPath(other.NormalMapPath),
-              MaterialPath(other.MaterialPath) {
+              MaterialPath(other.MaterialPath),
+              Texture(other.Texture),
+              NormalMap(other.NormalMap) {
         }
 
         ParticleEmitterStack& operator=(const ParticleEmitterStack& other) {
@@ -1511,6 +1515,8 @@ namespace Axle {
                 TexturePath = other.TexturePath;
                 NormalMapPath = other.NormalMapPath;
                 MaterialPath = other.MaterialPath;
+                Texture = other.Texture;
+                NormalMap = other.NormalMap;
             }
             return *this;
         }

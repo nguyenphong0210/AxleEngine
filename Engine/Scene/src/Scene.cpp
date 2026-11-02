@@ -1620,7 +1620,9 @@ namespace Axle {
             if (!pec.Visible) continue;
             for (const auto& stack : pec.EmitterStacks) {
                 if (stack.Visible && stack.Enabled && stack.System && stack.System->GetActiveParticleCount() > 0) {
-                    particleRenderer.Render(*stack.System, pec.Texture, pec.NormalMap, stack.Config.SoftnessDistance);
+                    auto tex = stack.Texture ? stack.Texture : pec.Texture;
+                    auto norm = stack.NormalMap ? stack.NormalMap : pec.NormalMap;
+                    particleRenderer.Render(*stack.System, tex, norm, stack.Config.SoftnessDistance);
                 }
             }
         }

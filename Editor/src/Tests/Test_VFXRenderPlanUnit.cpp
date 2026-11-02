@@ -2,6 +2,7 @@
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/PerspectiveCamera.hpp>
+#include <Axle/Components.hpp>
 
 namespace {
     bool TestBaselineParticleVertexStride() {
@@ -111,6 +112,27 @@ namespace {
 
         return true;
     }
+
+    bool TestEmitterTexturePathAndBindingContract() {
+        Axle::ParticleEmitterStack stack("TexturedFire", {});
+        stack.TexturePath = "textures/fire_alpha.png";
+        stack.NormalMapPath = "textures/fire_normal.png";
+
+        VFX_TEST_CHECK(stack.TexturePath == "textures/fire_alpha.png", "Texture path preserved on stack");
+        VFX_TEST_CHECK(stack.NormalMapPath == "textures/fire_normal.png", "Normal map path preserved on stack");
+
+        // Copy constructor preserves authored texture paths
+        Axle::ParticleEmitterStack copyStack = stack;
+        VFX_TEST_CHECK(copyStack.TexturePath == stack.TexturePath, "Texture path preserved on copy");
+        VFX_TEST_CHECK(copyStack.NormalMapPath == stack.NormalMapPath, "Normal map path preserved on copy");
+
+        // Clear removes paths
+        stack.TexturePath.clear();
+        stack.NormalMapPath.clear();
+        VFX_TEST_CHECK(stack.TexturePath.empty(), "Texture path cleared");
+        VFX_TEST_CHECK(stack.NormalMapPath.empty(), "Normal map path cleared");
+        return true;
+    }
 }
 
 bool RunVFXRenderPlanUnitTests() {
@@ -125,6 +147,9 @@ bool RunVFXRenderPlanUnitTests() {
 
     std::cout << "  - Running TestAlphaDepthSorting ...\n";
     VFX_TEST_CHECK(TestAlphaDepthSorting(), "TestAlphaDepthSorting failed");
+
+    std::cout << "  - Running TestEmitterTexturePathAndBindingContract ...\n";
+    VFX_TEST_CHECK(TestEmitterTexturePathAndBindingContract(), "TestEmitterTexturePathAndBindingContract failed");
 
     return true;
 }

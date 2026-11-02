@@ -264,6 +264,19 @@ static bool TestAuthoredScaleAndDisabledResources() {
     VFX_TEST_CHECK(packets.size()==1,"One scaled packet");
     VFX_TEST_CHECK(packets[0].Instances[0].Position==glm::vec3(5,0,0),"Local scale participates in world-space packing");
     VFX_TEST_APPROX_EQUAL(packets[0].Instances[0].Size,8,0.0001f,"Billboard respects largest local scale axis");
+    Axle::ParticlePool sorting(2);
+    spawn.Position = {5, 0, -2};
+    sorting.Spawn(spawn);
+    spawn.Position = {0, 0, -4};
+    sorting.Spawn(spawn);
+    cfg.SimulationSpace = Axle::ParticleSimulationSpace::World;
+    cfg.BlendMode = Axle::ParticleBlendMode::AlphaBlend;
+    packets.clear();
+    camera.SetViewMatrix(glm::mat4(1), glm::vec3(0));
+    Axle::ParticleRenderPlanner::BuildDrawPackets(sorting, cfg, camera, glm::vec3(0), glm::quat(1, 0, 0, 0),
+                                                  packets);
+    VFX_TEST_CHECK(packets[0].Instances[0].Position.z == -4,
+                   "Alpha order follows camera depth rather than radial distance");
     Axle::EmitterResources resources;resources.TexturePath="retained.png";resources.NormalMapPath="retained-normal.png";
     auto settings=Axle::ParticleMaterialAdapter::Resolve(cfg,resources);
     VFX_TEST_CHECK(!settings.UseTexture && !settings.UseNormalMap,"Retained paths do not override authored disabled flags");

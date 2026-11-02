@@ -5,7 +5,7 @@
 // =============================================================================
 
 // -----------------------------------------------------------------------------
-// Uniform Constant Buffer (b0, space 0) - Exactly 512 bytes (CBV aligned)
+// Uniform Constant Buffer (b0, space 0) - 768-byte aligned CPU allocation
 // -----------------------------------------------------------------------------
 cbuffer ParticleConstants : register(b0, space0) {
     float4x4 u_ViewProjection;        // 64 bytes (offset 0)
@@ -24,11 +24,11 @@ cbuffer ParticleConstants : register(b0, space0) {
     uint4    u_Flags2;                // 16 bytes (x = NearFadeEnabled, y = FarFadeEnabled, z = SoftParticlesEnabled, w = PointLightCount) (offset 336)
     float4   u_PointLightPositions[4];// 64 bytes (xyz = Position, w = Radius) (offset 352..416)
     float4   u_PointLightColors[4];   // 64 bytes (rgb = Color, w = Intensity) (offset 416..480)
-    float4   u_CutoutAndMaterial;     // 16 bytes (x = AlphaCutoff, y = DepthFadeDist, z = EmissiveIntensity, w = IsCutoutMode) (offset 480..496)
+    float4   u_CutoutAndMaterial;     // 16 bytes (x = AlphaCutoff, y = AuthoredSoftness, z = Reserved, w = IsCutoutMode) (offset 480..496)
     float4   u_UVTransform;
     float4   u_MaterialTint;
     float4   u_MaterialEmission;
-    float4   u_Reserved;              // 16 bytes padding -> Total 512 bytes (offset 496..512)
+    float4   u_Reserved;              // offset 544..560; CPU allocation padded to 768 bytes
 };
 
 // -----------------------------------------------------------------------------
@@ -67,6 +67,8 @@ struct PSInput {
     float3 WorldPos       : WORLDPOS;
     float3 ViewPos        : VIEWPOS;
     float3 Normal         : NORMAL;
+    float3 Tangent        : TEXCOORD2;
+    float3 Bitangent      : TEXCOORD3;
     float  LightingFlag   : LIGHTINGFLAG;
 };
 
@@ -162,6 +164,8 @@ PSInput VSMain(VSInput input) {
     float2 d = (quadUV - float2(0.5f, 0.5f)) * 2.0f;
     float r2 = dot(d, d);
     float3 sphereNormalLocal = float3(d.x, d.y, sqrt(max(0.0f, 1.0f - r2)));
+    output.Tangent = worldRight;
+    output.Bitangent = worldUp;
     output.Normal = normalize(worldRight * sphereNormalLocal.x + worldUp * sphereNormalLocal.y + forward * sphereNormalLocal.z);
 
     output.Position = mul(u_Projection, viewPos);
@@ -203,11 +207,14 @@ float4 PSMain(PSInput input) : SV_Target0 {
     }
 
     // Volumetric wrap lighting
-    if (u_Flags.w == 1 && input.LightingFlag > 0.5f) { // LightingEnabled
+    if (u_Flags.w == 1) { // LightingEnabled
         float3 N = normalize(input.Normal);
         if (u_Flags.z == 1) { // HasNormalMap
             float3 normalTex = u_ParticleNormalMap.Sample(u_LinearSampler, (input.TexCoord * u_UVTransform.xy + u_UVTransform.zw)).xyz * 2.0f - 1.0f;
-            N = normalize(lerp(N, normalTex, saturate(u_AmbientColor.w))); // u_AmbientColor.w = NormalMapStrength
+            normalTex.xy *= max(0.0f, u_AmbientColor.w);
+            normalTex.z = lerp(1.0f,normalTex.z,saturate(u_AmbientColor.w));
+            float3 mappedNormal = normalize(input.Tangent * normalTex.x + input.Bitangent * normalTex.y + normalize(cross(input.Tangent,input.Bitangent)) * normalTex.z);
+            N = normalize(lerp(N, mappedNormal, saturate(u_AmbientColor.w))); // u_AmbientColor.w = NormalMapStrength
         }
 
         float3 sunDir = normalize(u_SunDirection.xyz);

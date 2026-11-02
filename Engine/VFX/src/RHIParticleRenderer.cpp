@@ -79,9 +79,17 @@ namespace Axle {
         m_Initialized = false;
     }
 
-    ParticleDrawResources* RHIParticleRenderer::AcquireDrawResources() {
+    ParticleDrawResources *RHIParticleRenderer::AcquireDrawResources(uint32_t instanceCount) {
         if (m_DrawResourceCursor < m_DrawResources.size()) {
-            return m_DrawResources[m_DrawResourceCursor++].get();
+            auto *resource = m_DrawResources[m_DrawResourceCursor++].get();
+            if (resource->Instances.GetSize() < instanceCount * sizeof(ParticleInstanceVertex)) {
+                resource->Instances.Shutdown();
+                if (!resource->Instances.Init(
+                        RHI::RHIBufferDesc::Vertex(instanceCount * sizeof(ParticleInstanceVertex),
+                                                   RHI::RHIMemoryLocation::HostUpload, "ParticleInstances")))
+                    return nullptr;
+            }
+            return resource;
         }
 
         auto res = std::make_unique<ParticleDrawResources>();
@@ -89,7 +97,9 @@ namespace Axle {
         if (!res->Constants.Init(RHI::RHIBufferDesc::Constant(sizeof(RHIParticleConstants), RHI::RHIMemoryLocation::HostUpload, "Particle_CBV_" + suffix))) {
             return nullptr;
         }
-        if (!res->Instances.Init(RHI::RHIBufferDesc::Vertex(MAX_PARTICLES_PER_BATCH * sizeof(ParticleInstanceVertex), RHI::RHIMemoryLocation::HostUpload, "Particle_VBO_" + suffix))) {
+        if (!res->Instances.Init(RHI::RHIBufferDesc::Vertex(instanceCount * sizeof(ParticleInstanceVertex),
+                                                            RHI::RHIMemoryLocation::HostUpload,
+                                                            "Particle_VBO_" + suffix))) {
             return nullptr;
         }
         if (!res->Pool.Init(RHI::RHIDescriptorPoolDesc::Tier2Bindless(3, 1))) return nullptr;
@@ -162,7 +172,7 @@ namespace Axle {
     }
 
     bool RHIParticleRenderer::CreatePipelineLayout(RHI::RHIDevice& device) {
-        // Root Descriptor [0] b0, space 0: 512-byte RHIParticleConstants
+        // Root Descriptor [0] b0, space 0: aligned RHIParticleConstants
         nri::RootDescriptorDesc rootDesc = {};
         rootDesc.registerIndex = 0;
         rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
@@ -215,7 +225,7 @@ namespace Axle {
     }
 
     bool RHIParticleRenderer::CreateBuffers(RHI::RHIDevice& device) {
-        // 1. Hardware Constant Buffer (512 bytes aligned to 256B boundary)
+        // 1. Hardware Constant Buffer (aligned to 256B boundary)
         if (!m_ConstantBuffer.Init(RHI::RHIBufferDesc::Constant(sizeof(RHIParticleConstants), RHI::RHIMemoryLocation::HostUpload, "Particle_ConstantBuffer"))) {
             return false;
         }
@@ -350,8 +360,7 @@ namespace Axle {
         for (uint32_t i = 0; i < activeCount; ++i) {
             sortedKeys[i].Index = i;
             glm::vec3 worldP = isLocal ? (emitterWorldPos + (emitterWorldRot * (positions[i] * emitterWorldScale))) : positions[i];
-            glm::vec3 toCam = camPos - worldP;
-            sortedKeys[i].DistSq = glm::dot(toCam, toCam);
+            sortedKeys[i].DistSq = -(camera.GetViewMatrix() * glm::vec4(worldP, 1)).z;
         }
 
         // Alpha sorting (back-to-front, i.e. descending distance)
@@ -485,7 +494,7 @@ namespace Axle {
         ParticleRenderPlanner::BuildDrawPackets(pool, config, cam, emitterWorldPos, emitterWorldRot, packets, MAX_PARTICLES_PER_BATCH, emitterWorldScale);
 
         for (const auto& packet : packets) {
-            ParticleDrawResources* drawRes = AcquireDrawResources();
+            ParticleDrawResources *drawRes = AcquireDrawResources(packet.InstanceCount);
             if (!drawRes) continue;
 
             // 1. Upload to GPU Instance Buffer

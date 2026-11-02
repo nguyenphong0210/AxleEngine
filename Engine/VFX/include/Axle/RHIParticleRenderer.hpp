@@ -19,13 +19,14 @@
 #include <Axle/RHI/RHIShader.hpp>
 
 #include <memory>
+#include <algorithm>
 #include <vector>
 #include <glm/glm.hpp>
 
 namespace Axle {
 
     // =========================================================================
-    // RHIParticleConstants: 512-Byte Hardware Aligned Constant Buffer (CBV)
+    // RHIParticleConstants: hardware-aligned constant buffer (CBV)
     // =========================================================================
     struct alignas(256) RHIParticleConstants {
         glm::mat4 ViewProjection = glm::mat4(1.0f);        // 64 bytes (offset 0)
@@ -44,11 +45,11 @@ namespace Axle {
         glm::uvec4 Flags2 = glm::uvec4(0);                 // 16 bytes (x=NearFade, y=FarFade, z=SoftParticles, w=LightCount) (offset 336)
         glm::vec4 PointLightPositions[4]{};                // 64 bytes (xyz = Position, w = Radius) (offset 352..416)
         glm::vec4 PointLightColors[4]{};                   // 64 bytes (rgb = Color, w = Intensity) (offset 416..480)
-        glm::vec4 CutoutAndMaterial = glm::vec4(0.0f);     // 16 bytes (x=AlphaCutoff, y=DepthFadeDist, z=EmissiveIntensity, w=IsCutoutMode) (offset 480..496)
-        glm::vec4 UVTransform{1,1,0,0};
-        glm::vec4 MaterialTint{1};
-        glm::vec4 MaterialEmission{0};
-        glm::vec4 Reserved = glm::vec4(0.0f);              // 16 bytes padding -> Total 512 bytes (offset 496..512)
+        glm::vec4 CutoutAndMaterial = glm::vec4(0.0f);     // 16 bytes (x=AlphaCutoff, y=AuthoredSoftness, z=Reserved, w=IsCutoutMode) (offset 480..496)
+        glm::vec4 UVTransform{1,1,0,0}; // offset 496
+        glm::vec4 MaterialTint{1}; // offset 512
+        glm::vec4 MaterialEmission{0}; // RGB and intensity, offset 528
+        glm::vec4 Reserved = glm::vec4(0.0f);              // 16 bytes reserved (offset 544..560); allocation padded to 768 bytes
     };
     static_assert(sizeof(RHIParticleConstants) == 768, "RHIParticleConstants must be exactly 768 bytes (256-byte aligned)!");
 
@@ -182,7 +183,7 @@ namespace Axle {
         bool CreatePipelineLayout(RHI::RHIDevice& device);
         bool CreatePipelines(RHI::RHIDevice& device);
         bool CreateBuffers(RHI::RHIDevice& device);
-        ParticleDrawResources* AcquireDrawResources();
+        ParticleDrawResources *AcquireDrawResources(uint32_t instanceCount);
 
     private:
         RHI::RHIDevice* m_Device = nullptr;

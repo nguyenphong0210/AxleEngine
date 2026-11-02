@@ -100,6 +100,13 @@ namespace Axle {
                 break;
         }
 
+        if (mat->IsEmissiveMapEnabled() && !mat->GetEmissivePath().empty()) {
+            settings.Diagnostics.push_back({VFXDiagnosticSeverity::Info, "VFX_UNSUPPORTED_FEATURE",
+                                            "emissionTexture",
+                                            "Particle emission uses material color and intensity; emission "
+                                            "textures are not supported."});
+        }
+
         // 6. Diagnostics for unsupported custom shader or advanced PBR features
         if (mat->GetUseCustomShader()) {
             VFXDiagnostic diag;

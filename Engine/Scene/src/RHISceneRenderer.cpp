@@ -1151,6 +1151,23 @@ namespace Axle {
             lightData.LightCounts.w = useIBL ? 1u : 0u;
 
             m_LightBuffer.Update(lightData);
+            if (m_ParticleRenderer) {
+                ParticleLightEnvironment environment;
+                environment.SunDirection = glm::vec3(lightData.SunLight.DirectionAndIlluminance);
+                environment.SunColor = glm::vec3(lightData.SunLight.ColorAndAmbient) *
+                                       lightData.SunLight.DirectionAndIlluminance.w * 0.000035f;
+                environment.AmbientColor =
+                    glm::vec3(lightData.SunLight.AmbientColor) * lightData.SunLight.ColorAndAmbient.w;
+                for (uint32_t i = 0; i < lightData.LightCounts.x && environment.PointLights.size() < 4; ++i) {
+                    const auto &point = lightData.PointLights[i];
+                    if (point.Params.z > 0.5f)
+                        continue;
+                    environment.PointLights.push_back({glm::vec3(point.PositionAndRadius),
+                                                       glm::vec3(point.ColorAndIntensity),
+                                                       point.PositionAndRadius.w, point.ColorAndIntensity.w});
+                }
+                m_ParticleRenderer->SetLightEnvironment(environment);
+            }
 
             const auto& sun = lightData.SunLight;
             sceneConstants.SunDirection = glm::vec4(sun.DirectionAndIlluminance.x,

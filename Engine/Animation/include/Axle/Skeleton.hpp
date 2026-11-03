@@ -29,13 +29,15 @@ namespace Axle {
 
         int GetRootBoneIndex() const { return m_RootBoneIndex; }
         void SetRootBoneIndex(int index) { m_RootBoneIndex = index; }
-        bool IsValid() const { return !m_Bones.empty(); }
+        bool IsValid() const;
+        bool BuildEvaluationOrder(std::vector<size_t>& order, std::vector<std::string>* errors = nullptr) const;
+        bool RebuildDerivedData(std::vector<std::string>* errors = nullptr);
 
         // Compute bind-pose global transforms: Global[i] = Global[parent] * Local[i]
-        void ComputeBindPoseGlobalTransforms(std::vector<glm::mat4>& outGlobalMatrices) const;
+        bool ComputeBindPoseGlobalTransforms(std::vector<glm::mat4>& outGlobalMatrices) const;
 
         // Auto-compute InverseBindMatrices from bind pose if not explicitly provided
-        void ComputeInverseBindMatrices();
+        bool ComputeInverseBindMatrices();
 
     private:
         std::string m_Name;

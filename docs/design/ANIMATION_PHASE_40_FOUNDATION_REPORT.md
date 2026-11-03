@@ -11,7 +11,7 @@ by a passing CPU foundation test.
 | Package | Status and evidence |
 | --- | --- |
 | A0 | PASS: `AxleAnimationUnitTests` links the existing Animation library and evaluates a tiny rig/clip without starting the application or creating a window/device. The Release harness uses always-active checks. CTest's expected-failure case verifies a failing expectation returns a nonzero status. |
-| A1 | Pending. |
+| A1 | PASS: Skeleton topological sorting via DFS/Kahn validates child-before-parent ordering, multi-root rigs, and cycle rejection. Partial-channel sampling preserves bind-pose translation/scale for rotation-only tracks. Antipodal quaternions SLERP smoothly without hemisphere flipping. Signed TRS matrices with reflection scales decompose and recompose accurately; sheared matrices are rejected. Mismatched pose sizes are strictly rejected during blending. Verified via `AxleAnimationUnitTests` (100% PASS). |
 | A2 | Pending. |
 | A3 | Pending. |
 | B1-K3 | Pending; see the completion plan. |

@@ -29,6 +29,7 @@ namespace Axle {
         glm::vec3 InterpolateScale(float time) const;
         glm::mat4 EvaluateTransform(float time) const;
         BoneTransform EvaluateBoneTransform(float time) const;
+        BoneTransform EvaluateBoneTransform(float time, const BoneTransform& bind) const;
     };
 
     class AnimationClip {
@@ -54,18 +55,23 @@ namespace Axle {
         std::vector<AnimationChannel>& GetChannels() { return m_Channels; }
         size_t GetChannelCount() const { return m_Channels.size(); }
 
+        bool Validate(const Skeleton* skeleton = nullptr, std::vector<std::string>* errors = nullptr) const;
+        bool RebuildDerivedData(const Skeleton* skeleton = nullptr, std::vector<std::string>* errors = nullptr);
+        bool ReplaceChannels(std::vector<AnimationChannel> channels, const Skeleton* skeleton = nullptr,
+                             std::vector<std::string>* errors = nullptr);
+
         // Wrap or clamp time to clip duration
         float WrapTime(float time, bool loop = true) const;
 
         // Sample local bone poses at time t for a given skeleton (into raw matrices or AnimationPose)
-        void SamplePose(float time, const Skeleton& skeleton, std::vector<glm::mat4>& outLocalTransforms, bool loop = true) const;
-        void SamplePose(float time, const Skeleton& skeleton, AnimationPose& outPose, bool loop = true) const;
+        bool SamplePose(float time, const Skeleton& skeleton, std::vector<glm::mat4>& outLocalTransforms, bool loop = true) const;
+        bool SamplePose(float time, const Skeleton& skeleton, AnimationPose& outPose, bool loop = true) const;
 
         // Hierarchical forward kinematics solving global transforms: Global[i] = Global[parent] * Local[i]
-        static void ComputeGlobalPose(const Skeleton& skeleton, const std::vector<glm::mat4>& localTransforms, std::vector<glm::mat4>& outGlobalMatrices);
+        static bool ComputeGlobalPose(const Skeleton& skeleton, const std::vector<glm::mat4>& localTransforms, std::vector<glm::mat4>& outGlobalMatrices);
 
         // Compute final GPU skinning palette matrices: Skinning[i] = Global[i] * InverseBindMatrix[i]
-        static void ComputeSkinningMatrices(const Skeleton& skeleton, const std::vector<glm::mat4>& globalMatrices, std::vector<glm::mat4>& outSkinningMatrices);
+        static bool ComputeSkinningMatrices(const Skeleton& skeleton, const std::vector<glm::mat4>& globalMatrices, std::vector<glm::mat4>& outSkinningMatrices);
 
     private:
         std::string m_Name;

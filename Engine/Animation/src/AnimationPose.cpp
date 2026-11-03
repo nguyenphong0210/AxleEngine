@@ -12,10 +12,92 @@ namespace Axle {
         return t * r * s;
     }
 
+    bool BoneTransform::IsValid() const {
+        if (!std::isfinite(Translation.x) || !std::isfinite(Translation.y) || !std::isfinite(Translation.z))
+            return false;
+        if (!std::isfinite(Scale.x) || !std::isfinite(Scale.y) || !std::isfinite(Scale.z))
+            return false;
+        if (std::abs(Scale.x) < 1e-6f || std::abs(Scale.y) < 1e-6f || std::abs(Scale.z) < 1e-6f)
+            return false;
+        if (!std::isfinite(Rotation.x) || !std::isfinite(Rotation.y) || !std::isfinite(Rotation.z) || !std::isfinite(Rotation.w))
+            return false;
+        float qlen2 = glm::dot(Rotation, Rotation);
+        if (!std::isfinite(qlen2) || qlen2 < 1e-6f)
+            return false;
+        return true;
+    }
+
+    bool BoneTransform::TryFromMatrix(const glm::mat4& mat, BoneTransform& out) {
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                if (!std::isfinite(mat[c][r])) return false;
+            }
+        }
+        // Affine bottom row check [0, 0, 0, 1]
+        if (std::abs(mat[0][3]) > 1e-4f || std::abs(mat[1][3]) > 1e-4f ||
+            std::abs(mat[2][3]) > 1e-4f || std::abs(mat[3][3] - 1.0f) > 1e-4f) {
+            return false;
+        }
+
+        glm::vec3 col0 = glm::vec3(mat[0]);
+        glm::vec3 col1 = glm::vec3(mat[1]);
+        glm::vec3 col2 = glm::vec3(mat[2]);
+
+        float sx = glm::length(col0);
+        float sy = glm::length(col1);
+        float sz = glm::length(col2);
+
+        if (sx < 1e-6f || sy < 1e-6f || sz < 1e-6f) return false;
+
+        col0 /= sx;
+        col1 /= sy;
+        col2 /= sz;
+
+        // Orthogonality check (reject sheared matrices)
+        if (std::abs(glm::dot(col0, col1)) > 1e-3f ||
+            std::abs(glm::dot(col1, col2)) > 1e-3f ||
+            std::abs(glm::dot(col2, col0)) > 1e-3f) {
+            return false;
+        }
+
+        // Signed determinant / handedness check
+        float det = glm::dot(col0, glm::cross(col1, col2));
+        if (std::abs(det) < 1e-6f) return false;
+
+        if (det < 0.0f) {
+            // Negative determinant indicates reflection: flip col0 and sx
+            col0 = -col0;
+            sx = -sx;
+        }
+
+        glm::mat3 rotMat(col0, col1, col2);
+        out.Translation = glm::vec3(mat[3]);
+        out.Rotation = glm::normalize(glm::quat_cast(rotMat));
+        out.Scale = glm::vec3(sx, sy, sz);
+
+        if (!out.IsValid()) return false;
+
+        // Verify recompose against mat
+        glm::mat4 recomposed = out.ToMatrix();
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                if (std::abs(recomposed[c][r] - mat[c][r]) > 1e-3f) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     BoneTransform BoneTransform::FromMatrix(const glm::mat4& mat) {
         BoneTransform result;
-        result.Translation = glm::vec3(mat[3]);
+        if (TryFromMatrix(mat, result)) {
+            return result;
+        }
 
+        // Fallback for non-strictly-affine matrices: best-effort extraction
+        result.Translation = glm::vec3(mat[3]);
         glm::vec3 col0 = glm::vec3(mat[0]);
         glm::vec3 col1 = glm::vec3(mat[1]);
         glm::vec3 col2 = glm::vec3(mat[2]);
@@ -24,10 +106,15 @@ namespace Axle {
         result.Scale.y = glm::length(col1);
         result.Scale.z = glm::length(col2);
 
-        // Normalize rotation columns if scale is non-zero
         if (result.Scale.x > 1e-6f) col0 /= result.Scale.x;
         if (result.Scale.y > 1e-6f) col1 /= result.Scale.y;
         if (result.Scale.z > 1e-6f) col2 /= result.Scale.z;
+
+        float det = glm::dot(col0, glm::cross(col1, col2));
+        if (det < 0.0f) {
+            col0 = -col0;
+            result.Scale.x = -result.Scale.x;
+        }
 
         glm::mat3 rotMat(col0, col1, col2);
         result.Rotation = glm::normalize(glm::quat_cast(rotMat));
@@ -39,12 +126,13 @@ namespace Axle {
         BoneTransform result;
         result.Translation = glm::mix(a.Translation, b.Translation, factor);
 
+        glm::quat rotA = glm::normalize(a.Rotation);
+        glm::quat rotB = glm::normalize(b.Rotation);
         // Shortest-path spherical linear interpolation (SLERP)
-        glm::quat rotB = b.Rotation;
-        if (glm::dot(a.Rotation, rotB) < 0.0f) {
+        if (glm::dot(rotA, rotB) < 0.0f) {
             rotB = -rotB;
         }
-        result.Rotation = glm::normalize(glm::slerp(a.Rotation, rotB, factor));
+        result.Rotation = glm::normalize(glm::slerp(rotA, rotB, factor));
         result.Scale = glm::mix(a.Scale, b.Scale, factor);
         return result;
     }
@@ -57,31 +145,42 @@ namespace Axle {
         Transforms.resize(boneCount);
     }
 
-    void AnimationPose::InitFromSkeletonBindPose(const Skeleton& skeleton) {
+    bool AnimationPose::InitFromSkeletonBindPose(const Skeleton& skeleton) {
+        if (!skeleton.IsValid()) return false;
         size_t count = skeleton.GetBoneCount();
         Transforms.resize(count);
         for (size_t i = 0; i < count; ++i) {
-            Transforms[i] = BoneTransform::FromMatrix(skeleton.GetBones()[i].LocalTransform);
+            if (!BoneTransform::TryFromMatrix(skeleton.GetBones()[i].LocalTransform, Transforms[i])) {
+                Transforms[i] = BoneTransform::FromMatrix(skeleton.GetBones()[i].LocalTransform);
+            }
         }
+        BindSkeleton(skeleton);
+        return true;
     }
 
-    void AnimationPose::Blend(const AnimationPose& a, const AnimationPose& b, float weight, AnimationPose& outPose) {
-        size_t count = std::min(a.Transforms.size(), b.Transforms.size());
+    bool AnimationPose::Blend(const AnimationPose& a, const AnimationPose& b, float weight, AnimationPose& outPose) {
+        if (a.Transforms.size() != b.Transforms.size() || a.Transforms.empty()) {
+            return false;
+        }
+
+        size_t count = a.Transforms.size();
         outPose.Transforms.resize(count);
 
         float factor = std::clamp(weight, 0.0f, 1.0f);
         if (factor <= 0.0001f) {
             outPose = a;
-            return;
+            return true;
         }
         if (factor >= 0.9999f) {
             outPose = b;
-            return;
+            return true;
         }
 
         for (size_t i = 0; i < count; ++i) {
             outPose.Transforms[i] = BoneTransform::Blend(a.Transforms[i], b.Transforms[i], factor);
         }
+        outPose.m_SkeletonBinding = a.m_SkeletonBinding ? a.m_SkeletonBinding : b.m_SkeletonBinding;
+        return true;
     }
 
     void AnimationPose::ToLocalMatrices(std::vector<glm::mat4>& outLocalMatrices) const {
@@ -91,11 +190,17 @@ namespace Axle {
         }
     }
 
-    void AnimationPose::ComputeGlobalMatrices(const Skeleton& skeleton, std::vector<glm::mat4>& outGlobalMatrices) const {
-        size_t count = skeleton.GetBoneCount();
-        outGlobalMatrices.resize(count, glm::mat4(1.0f));
+    bool AnimationPose::ComputeGlobalMatrices(const Skeleton& skeleton, std::vector<glm::mat4>& outGlobalMatrices) const {
+        std::vector<size_t> order;
+        if (!skeleton.BuildEvaluationOrder(order)) {
+            outGlobalMatrices.clear();
+            return false;
+        }
 
-        for (size_t i = 0; i < count; ++i) {
+        size_t count = skeleton.GetBoneCount();
+        outGlobalMatrices.assign(count, glm::mat4(1.0f));
+
+        for (size_t i : order) {
             const Bone& bone = skeleton.GetBones()[i];
             glm::mat4 localMat = (i < Transforms.size()) ? Transforms[i].ToMatrix() : bone.LocalTransform;
 
@@ -106,17 +211,22 @@ namespace Axle {
                 outGlobalMatrices[i] = localMat;
             }
         }
+        return true;
     }
 
-    void AnimationPose::ComputeSkinningMatrices(const Skeleton& skeleton, std::vector<glm::mat4>& outSkinningMatrices) const {
+    bool AnimationPose::ComputeSkinningMatrices(const Skeleton& skeleton, std::vector<glm::mat4>& outSkinningMatrices) const {
         std::vector<glm::mat4> globalMatrices;
-        ComputeGlobalMatrices(skeleton, globalMatrices);
+        if (!ComputeGlobalMatrices(skeleton, globalMatrices)) {
+            outSkinningMatrices.clear();
+            return false;
+        }
 
         size_t count = skeleton.GetBoneCount();
         outSkinningMatrices.resize(count);
         for (size_t i = 0; i < count; ++i) {
             outSkinningMatrices[i] = globalMatrices[i] * skeleton.GetBones()[i].InverseBindMatrix;
         }
+        return true;
     }
 
 }

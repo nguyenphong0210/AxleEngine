@@ -11,6 +11,9 @@ namespace Axle::AnimationTests {
     inline bool Near(float a, float b, float epsilon = 0.0001f) {
         return std::isfinite(a) && std::isfinite(b) && std::abs(a - b) <= epsilon;
     }
+    inline bool Near(const glm::vec3& a, const glm::vec3& b, float epsilon = 0.0001f) {
+        return Near(a.x, b.x, epsilon) && Near(a.y, b.y, epsilon) && Near(a.z, b.z, epsilon);
+    }
     inline bool Near(const glm::mat4& a, const glm::mat4& b, float epsilon = 0.0001f) {
         for (int col = 0; col < 4; ++col) for (int row = 0; row < 4; ++row)
             if (!Near(a[col][row], b[col][row], epsilon)) return false;

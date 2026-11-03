@@ -17,6 +17,8 @@ namespace Axle {
             : Translation(translation), Rotation(rotation), Scale(scale) {}
 
         glm::mat4 ToMatrix() const;
+        bool IsValid() const;
+        static bool TryFromMatrix(const glm::mat4& mat, BoneTransform& out);
         static BoneTransform FromMatrix(const glm::mat4& mat);
         static BoneTransform Blend(const BoneTransform& a, const BoneTransform& b, float weight);
     };
@@ -31,19 +33,25 @@ namespace Axle {
         size_t GetBoneCount() const { return Transforms.size(); }
         bool IsEmpty() const { return Transforms.empty(); }
 
-        void InitFromSkeletonBindPose(const Skeleton& skeleton);
+        bool InitFromSkeletonBindPose(const Skeleton& skeleton);
 
         // Blends two poses with factor [0..1]: 0.0 = 100% a, 1.0 = 100% b
-        static void Blend(const AnimationPose& a, const AnimationPose& b, float weight, AnimationPose& outPose);
+        static bool Blend(const AnimationPose& a, const AnimationPose& b, float weight, AnimationPose& outPose);
+
+        // Transient rig binding; the caller owns the rig for the lifetime of a sampled pose.
+        void BindSkeleton(const Skeleton& skeleton) { m_SkeletonBinding = &skeleton; }
+        const Skeleton* GetSkeletonBinding() const { return m_SkeletonBinding; }
 
         // Convert local bone transforms to local 4x4 matrices
         void ToLocalMatrices(std::vector<glm::mat4>& outLocalMatrices) const;
 
         // Compute forward kinematics hierarchical global matrices
-        void ComputeGlobalMatrices(const Skeleton& skeleton, std::vector<glm::mat4>& outGlobalMatrices) const;
+        bool ComputeGlobalMatrices(const Skeleton& skeleton, std::vector<glm::mat4>& outGlobalMatrices) const;
 
         // Compute final skinning palette matrices for GPU upload: Global[i] * InverseBindMatrix[i]
-        void ComputeSkinningMatrices(const Skeleton& skeleton, std::vector<glm::mat4>& outSkinningMatrices) const;
+        bool ComputeSkinningMatrices(const Skeleton& skeleton, std::vector<glm::mat4>& outSkinningMatrices) const;
+    private:
+        const Skeleton* m_SkeletonBinding = nullptr;
     };
 
 }

@@ -3,6 +3,8 @@
 #include <Axle/AnimationClip.hpp>
 #include <Axle/SkeletalMesh.hpp>
 #include <Axle/SkeletalMeshImporter.hpp>
+#include <Axle/AnimationStateMachine.hpp>
+#include <Axle/Animator.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string_view>
 
@@ -257,6 +259,102 @@ static bool TestProceduralBipedImportAndCPUNormalization() {
     return true;
 }
 
+static bool TestAnimatorInstanceIsolationAndReset() {
+    auto skeleton = std::make_shared<Axle::Skeleton>("Rig");
+    Axle::Bone root;
+    root.Name = "Root";
+    root.ParentID = -1;
+    skeleton->AddBone(root);
+    skeleton->ComputeInverseBindMatrices();
+
+    auto clipIdle = std::make_shared<Axle::AnimationClip>("Idle", 1.0f);
+    auto clipWalk = std::make_shared<Axle::AnimationClip>("Walk", 1.0f);
+
+    auto sm = std::make_shared<Axle::AnimationStateMachine>("Locomotion");
+
+    Axle::AnimationState stateIdle;
+    stateIdle.Name = "Idle";
+    stateIdle.Type = Axle::AnimationNodeType::Clip;
+    stateIdle.Clip = clipIdle;
+    stateIdle.Loop = true;
+    sm->AddState(stateIdle);
+
+    Axle::AnimationState stateWalk;
+    stateWalk.Name = "Walk";
+    stateWalk.Type = Axle::AnimationNodeType::Clip;
+    stateWalk.Clip = clipWalk;
+    stateWalk.Loop = true;
+    sm->AddState(stateWalk);
+
+    Axle::AnimationTransition tIdleToWalk;
+    tIdleToWalk.FromState = "Idle";
+    tIdleToWalk.ToState = "Walk";
+    tIdleToWalk.Duration = 0.2f;
+    tIdleToWalk.Rules.push_back({"Speed", Axle::TransitionConditionOperator::Greater, 0.5f});
+    sm->AddTransition(tIdleToWalk);
+
+    Axle::AnimationTransition tWalkToIdle;
+    tWalkToIdle.FromState = "Walk";
+    tWalkToIdle.ToState = "Idle";
+    tWalkToIdle.Duration = 0.2f;
+    tWalkToIdle.Rules.push_back({"Stop", Axle::TransitionConditionOperator::Triggered});
+    sm->AddTransition(tWalkToIdle);
+
+    auto anim1 = std::make_shared<Axle::Animator>(skeleton);
+    anim1->SetStateMachine(sm);
+    anim1->Update(0.0f);
+
+    ANIMATION_CHECK(anim1->GetCurrentStateName() == "Idle", "Anim1 starts in Idle state");
+
+    // Trigger transition to Walk
+    anim1->SetFloat("Speed", 1.0f);
+    anim1->Update(0.01f);
+    ANIMATION_CHECK(anim1->IsTransitioning(), "Anim1 started transition to Walk");
+    anim1->Update(0.3f);
+    ANIMATION_CHECK(anim1->GetCurrentStateName() == "Walk", "Anim1 completed transition to Walk");
+
+    // Deep clone anim1 into anim2
+    auto anim2 = anim1->Clone();
+    ANIMATION_CHECK(anim2 != nullptr, "Anim2 cloned successfully");
+    ANIMATION_CHECK(anim2->GetStateMachine() != anim1->GetStateMachine(), "Anim1 and Anim2 have distinct state machine instances");
+
+    // Check independent cloned state
+    ANIMATION_CHECK(anim2->GetCurrentStateName() == "Walk", "Cloned animator retains active state Walk");
+    ANIMATION_CHECK(!anim2->IsTransitioning(), "Cloned animator is not transitioning");
+
+    // Test parameter isolation: modifying anim2 does not affect anim1
+    anim2->SetFloat("Speed", 0.0f);
+    anim2->SetInt("Stance", 42);
+    anim2->SetBool("Grounded", true);
+    anim2->SetTrigger("Stop");
+
+    ANIMATION_CHECK(Axle::AnimationTests::Near(anim1->GetFloat("Speed"), 1.0f), "Anim1 Speed unchanged by Anim2 modification");
+    ANIMATION_CHECK(Axle::AnimationTests::Near(anim2->GetFloat("Speed"), 0.0f), "Anim2 Speed is 0.0");
+    ANIMATION_CHECK(anim1->GetInt("Stance") == 0, "Anim1 Stance unchanged by Anim2 modification");
+    ANIMATION_CHECK(anim2->GetInt("Stance") == 42, "Anim2 Stance is 42");
+    ANIMATION_CHECK(!anim1->GetBool("Grounded"), "Anim1 Grounded unchanged by Anim2 modification");
+    ANIMATION_CHECK(anim2->GetBool("Grounded"), "Anim2 Grounded is true");
+
+    // Trigger consumption isolation
+    ANIMATION_CHECK(!anim1->CheckAndConsumeTrigger("Stop"), "Anim1 did not receive Anim2 Stop trigger");
+    ANIMATION_CHECK(anim2->CheckAndConsumeTrigger("Stop"), "Anim2 consumes its own Stop trigger");
+    ANIMATION_CHECK(!anim2->CheckAndConsumeTrigger("Stop"), "Anim2 Stop trigger consumed atomically (false on second check)");
+
+    // Test Reset on anim2 vs anim1
+    anim2->Reset();
+    ANIMATION_CHECK(anim2->GetCurrentStateName() == "Idle", "Reset returns anim2 to initial state Idle");
+    ANIMATION_CHECK(anim1->GetCurrentStateName() == "Walk", "Reset on anim2 leaves anim1 in Walk");
+
+    // Test Reset on anim1
+    anim1->SetTrigger("AnyTrigger");
+    anim1->Reset();
+    ANIMATION_CHECK(anim1->GetCurrentStateName() == "Idle", "Reset returns anim1 to initial state Idle");
+    ANIMATION_CHECK(!anim1->IsTransitioning(), "Reset clears anim1 active transition");
+    ANIMATION_CHECK(!anim1->CheckAndConsumeTrigger("AnyTrigger"), "Reset clears transient triggers");
+
+    return true;
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure")
         return Axle::AnimationTests::Check(false, "Intentional harness failure", __FILE__, __LINE__) ? 0 : 1;
@@ -272,6 +370,7 @@ int main(int argc, char** argv) {
     if (!TestCPUSkeletalMeshConstructionWithoutGLContext()) return 1;
     if (!TestVertexInfluencePruningAndMerging()) return 1;
     if (!TestProceduralBipedImportAndCPUNormalization()) return 1;
+    if (!TestAnimatorInstanceIsolationAndReset()) return 1;
     std::cout << "Animation unit tests PASS\n";
     return 0;
 }

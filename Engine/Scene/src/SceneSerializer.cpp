@@ -1923,14 +1923,20 @@ namespace Axle {
                                     tIdleToWalk.FromState = "Idle";
                                     tIdleToWalk.ToState = "Walk";
                                     tIdleToWalk.Duration = 0.2f;
-                                    tIdleToWalk.Condition = [stateMachine]() { return stateMachine->GetFloat("Speed") > 0.1f; };
+                                    tIdleToWalk.Rules.push_back({"Speed", TransitionConditionOperator::Greater, 0.1f});
+                                    tIdleToWalk.InstanceCondition = [](const AnimationStateMachine& sm) {
+                                        return sm.GetFloat("Speed") > 0.1f;
+                                    };
                                     stateMachine->AddTransition(tIdleToWalk);
 
                                     AnimationTransition tWalkToIdle;
                                     tWalkToIdle.FromState = "Walk";
                                     tWalkToIdle.ToState = "Idle";
                                     tWalkToIdle.Duration = 0.2f;
-                                    tWalkToIdle.Condition = [stateMachine]() { return stateMachine->GetFloat("Speed") <= 0.1f; };
+                                    tWalkToIdle.Rules.push_back({"Speed", TransitionConditionOperator::LessOrEqual, 0.1f});
+                                    tWalkToIdle.InstanceCondition = [](const AnimationStateMachine& sm) {
+                                        return sm.GetFloat("Speed") <= 0.1f;
+                                    };
                                     stateMachine->AddTransition(tWalkToIdle);
 
                                     animator->SetStateMachine(stateMachine);

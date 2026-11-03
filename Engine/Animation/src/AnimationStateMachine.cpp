@@ -4,6 +4,33 @@
 
 namespace Axle {
 
+    bool TransitionRule::Evaluate(const AnimationStateMachine& sm) const {
+        switch (Operator) {
+            case TransitionConditionOperator::AlwaysTrue:
+                return true;
+            case TransitionConditionOperator::Greater:
+                return sm.GetFloat(Parameter) > FloatOperand;
+            case TransitionConditionOperator::Less:
+                return sm.GetFloat(Parameter) < FloatOperand;
+            case TransitionConditionOperator::GreaterOrEqual:
+                return sm.GetFloat(Parameter) >= FloatOperand;
+            case TransitionConditionOperator::LessOrEqual:
+                return sm.GetFloat(Parameter) <= FloatOperand;
+            case TransitionConditionOperator::Equal:
+                return std::abs(sm.GetFloat(Parameter) - FloatOperand) < 1e-4f;
+            case TransitionConditionOperator::NotEqual:
+                return std::abs(sm.GetFloat(Parameter) - FloatOperand) >= 1e-4f;
+            case TransitionConditionOperator::IsTrue:
+                return sm.GetBool(Parameter, false) == true;
+            case TransitionConditionOperator::IsFalse:
+                return sm.GetBool(Parameter, false) == false;
+            case TransitionConditionOperator::Triggered:
+                return sm.GetBool(Parameter, false);
+            default:
+                return true;
+        }
+    }
+
     void AnimationState::Sample(float time, float blendParam, const Skeleton& skeleton, AnimationPose& outPose) const {
         if (Type == AnimationNodeType::Clip) {
             if (Clip) {
@@ -33,6 +60,7 @@ namespace Axle {
         bool setInitial = m_States.empty();
         m_States[state.Name] = state;
         if (setInitial) {
+            m_InitialStateName = state.Name;
             m_CurrentStateName = state.Name;
             m_CurrentStateTime = 0.0f;
         }
@@ -77,6 +105,11 @@ namespace Axle {
         return (it != m_FloatParams.end()) ? it->second : defaultVal;
     }
 
+    int32_t AnimationStateMachine::GetInt(const std::string& name, int32_t defaultVal) const {
+        auto it = m_IntParams.find(name);
+        return (it != m_IntParams.end()) ? it->second : defaultVal;
+    }
+
     bool AnimationStateMachine::GetBool(const std::string& name, bool defaultVal) const {
         auto it = m_BoolParams.find(name);
         return (it != m_BoolParams.end()) ? it->second : defaultVal;
@@ -89,6 +122,42 @@ namespace Axle {
             return true;
         }
         return false;
+    }
+
+    void AnimationStateMachine::Reset() {
+        m_CurrentStateName = m_InitialStateName;
+        m_CurrentStateTime = 0.0f;
+        m_IsTransitioning = false;
+        m_TransitionTargetName.clear();
+        m_TransitionElapsed = 0.0f;
+        m_TargetStateTime = 0.0f;
+        m_TriggerParams.clear();
+    }
+
+    std::shared_ptr<AnimationStateMachine> AnimationStateMachine::Clone() const {
+        auto clone = std::make_shared<AnimationStateMachine>(m_Name);
+        clone->m_InitialStateName = m_InitialStateName;
+        clone->m_States = m_States;
+        clone->m_Transitions = m_Transitions;
+
+        // Copy persistent parameters, but clear pending triggers and reset clocks to initial state
+        clone->m_FloatParams = m_FloatParams;
+        clone->m_IntParams = m_IntParams;
+        clone->m_BoolParams = m_BoolParams;
+        clone->m_TriggerParams.clear();
+
+        clone->m_CurrentStateName = m_CurrentStateName;
+        clone->m_CurrentStateTime = m_CurrentStateTime;
+        clone->m_IsTransitioning = m_IsTransitioning;
+        clone->m_TransitionTargetName = m_TransitionTargetName;
+        clone->m_TargetStateTime = m_TargetStateTime;
+        clone->m_TransitionDuration = m_TransitionDuration;
+        clone->m_TransitionElapsed = m_TransitionElapsed;
+
+        clone->m_CurrentPose = m_CurrentPose;
+        clone->m_GlobalMatrices = m_GlobalMatrices;
+        clone->m_SkinningMatrices = m_SkinningMatrices;
+        return clone;
     }
 
     void AnimationStateMachine::CheckTransitions() {
@@ -107,6 +176,22 @@ namespace Axle {
                 continue;
             }
 
+            // Check typed rules
+            bool rulesPassed = true;
+            for (const auto& rule : trans.Rules) {
+                if (!rule.Evaluate(*this)) {
+                    rulesPassed = false;
+                    break;
+                }
+            }
+            if (!rulesPassed) continue;
+
+            // Check instance condition predicate
+            if (trans.InstanceCondition && !trans.InstanceCondition(*this)) {
+                continue;
+            }
+
+            // Legacy condition predicate
             if (trans.Condition && !trans.Condition()) {
                 continue;
             }

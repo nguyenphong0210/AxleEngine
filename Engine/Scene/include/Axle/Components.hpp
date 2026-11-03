@@ -1384,6 +1384,32 @@ namespace Axle {
         explicit AnimatorComponent(const std::shared_ptr<Animator>& animator)
             : AnimatorInstance(animator) {}
 
+        AnimatorComponent(const AnimatorComponent& other)
+            : Playing(other.Playing),
+              PlaybackSpeed(other.PlaybackSpeed),
+              Speed(other.Speed),
+              IsGrounded(other.IsGrounded),
+              VerticalVelocity(other.VerticalVelocity) {
+            if (other.AnimatorInstance) {
+                AnimatorInstance = other.AnimatorInstance->Clone();
+            }
+        }
+
+        AnimatorComponent& operator=(const AnimatorComponent& other) {
+            if (this != &other) {
+                Playing = other.Playing;
+                PlaybackSpeed = other.PlaybackSpeed;
+                Speed = other.Speed;
+                IsGrounded = other.IsGrounded;
+                VerticalVelocity = other.VerticalVelocity;
+                AnimatorInstance = other.AnimatorInstance ? other.AnimatorInstance->Clone() : nullptr;
+            }
+            return *this;
+        }
+
+        AnimatorComponent(AnimatorComponent&&) noexcept = default;
+        AnimatorComponent& operator=(AnimatorComponent&&) noexcept = default;
+
         void SetFloat(const std::string& name, float value) {
             if (name == "Speed") Speed = value;
             if (name == "VerticalVelocity") VerticalVelocity = value;
@@ -1392,11 +1418,32 @@ namespace Axle {
             }
         }
 
+        float GetFloat(const std::string& name, float defaultVal = 0.0f) const {
+            if (name == "Speed") return Speed;
+            if (name == "VerticalVelocity") return VerticalVelocity;
+            return AnimatorInstance ? AnimatorInstance->GetFloat(name, defaultVal) : defaultVal;
+        }
+
+        void SetInt(const std::string& name, int32_t value) {
+            if (AnimatorInstance) {
+                AnimatorInstance->SetInt(name, value);
+            }
+        }
+
+        int32_t GetInt(const std::string& name, int32_t defaultVal = 0) const {
+            return AnimatorInstance ? AnimatorInstance->GetInt(name, defaultVal) : defaultVal;
+        }
+
         void SetBool(const std::string& name, bool value) {
             if (name == "IsGrounded") IsGrounded = value;
             if (AnimatorInstance) {
                 AnimatorInstance->SetBool(name, value);
             }
+        }
+
+        bool GetBool(const std::string& name, bool defaultVal = false) const {
+            if (name == "IsGrounded") return IsGrounded;
+            return AnimatorInstance ? AnimatorInstance->GetBool(name, defaultVal) : defaultVal;
         }
 
         void SetTrigger(const std::string& name) {

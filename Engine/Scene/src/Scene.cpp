@@ -271,11 +271,8 @@ namespace Axle {
         if (entity.HasComponent<AnimatorComponent>()) {
             const auto& srcAc = entity.GetComponent<AnimatorComponent>();
             auto& dstAc = newEntity.AddComponent<AnimatorComponent>(srcAc);
-            if (srcAc.AnimatorInstance && srcAc.AnimatorInstance->GetSkeleton()) {
-                auto newAnim = std::make_shared<Animator>(srcAc.AnimatorInstance->GetSkeleton());
-                newAnim->SetStateMachine(srcAc.AnimatorInstance->GetStateMachine());
-                newAnim->Update(0.0f);
-                dstAc.AnimatorInstance = newAnim;
+            if (srcAc.AnimatorInstance) {
+                dstAc.AnimatorInstance = srcAc.AnimatorInstance->Clone();
             }
         }
         if (entity.HasComponent<CharacterControllerComponent>()) {
@@ -1493,11 +1490,8 @@ namespace Axle {
             if (srcEntity.HasComponent<AnimatorComponent>()) {
                 const auto& srcAc = srcEntity.GetComponent<AnimatorComponent>();
                 auto& dstAc = dstEntity.AddComponent<AnimatorComponent>(srcAc);
-                if (srcAc.AnimatorInstance && srcAc.AnimatorInstance->GetSkeleton()) {
-                    auto newAnim = std::make_shared<Animator>(srcAc.AnimatorInstance->GetSkeleton());
-                    newAnim->SetStateMachine(srcAc.AnimatorInstance->GetStateMachine());
-                    newAnim->Update(0.0f);
-                    dstAc.AnimatorInstance = newAnim;
+                if (srcAc.AnimatorInstance) {
+                    dstAc.AnimatorInstance = srcAc.AnimatorInstance->Clone();
                 }
             }
 

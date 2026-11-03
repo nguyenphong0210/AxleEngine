@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <memory>
 #include <functional>
+#include <cstdint>
 
 namespace Axle {
 
@@ -29,13 +30,40 @@ namespace Axle {
         float GetDuration(float blendParam = 0.0f) const;
     };
 
+    enum class TransitionConditionOperator {
+        AlwaysTrue,
+        Greater,
+        Less,
+        GreaterOrEqual,
+        LessOrEqual,
+        Equal,
+        NotEqual,
+        IsTrue,
+        IsFalse,
+        Triggered
+    };
+
+    class AnimationStateMachine;
+
+    struct TransitionRule {
+        std::string Parameter;
+        TransitionConditionOperator Operator = TransitionConditionOperator::AlwaysTrue;
+        float FloatOperand = 0.0f;
+        int32_t IntOperand = 0;
+        bool BoolOperand = false;
+
+        bool Evaluate(const AnimationStateMachine& sm) const;
+    };
+
     struct AnimationTransition {
         std::string FromState;
         std::string ToState;
         float Duration = 0.2f;       // Crossfade duration in seconds
         bool HasExitTime = false;     // Wait for state playback to finish
         float ExitTime = 1.0f;        // Normalized time [0..1]
-        std::function<bool()> Condition; // Optional condition predicate
+        std::vector<TransitionRule> Rules;
+        std::function<bool()> Condition; // Legacy optional condition predicate
+        std::function<bool(const AnimationStateMachine&)> InstanceCondition; // Instance-aware condition predicate
     };
 
     class AnimationStateMachine {
@@ -53,6 +81,7 @@ namespace Axle {
 
         void SetCurrentState(const std::string& stateName, float transitionDuration = 0.0f);
         const std::string& GetCurrentStateName() const { return m_CurrentStateName; }
+        const std::string& GetInitialStateName() const { return m_InitialStateName; }
 
         bool IsTransitioning() const { return m_IsTransitioning; }
         float GetTransitionProgress() const;
@@ -61,11 +90,20 @@ namespace Axle {
         void SetFloat(const std::string& name, float value) { m_FloatParams[name] = value; }
         float GetFloat(const std::string& name, float defaultVal = 0.0f) const;
 
+        void SetInt(const std::string& name, int32_t value) { m_IntParams[name] = value; }
+        int32_t GetInt(const std::string& name, int32_t defaultVal = 0) const;
+
         void SetBool(const std::string& name, bool value) { m_BoolParams[name] = value; }
         bool GetBool(const std::string& name, bool defaultVal = false) const;
 
         void SetTrigger(const std::string& name) { m_TriggerParams[name] = true; }
         bool CheckAndConsumeTrigger(const std::string& name);
+
+        // Reset state machine to initial state and clear transient triggers
+        void Reset();
+
+        // Deep-clone definition with independent instance state
+        std::shared_ptr<AnimationStateMachine> Clone() const;
 
         // Update animation clock, evaluate transitions and blend poses
         void Update(float dt, const Skeleton& skeleton);
@@ -79,10 +117,12 @@ namespace Axle {
 
     private:
         std::string m_Name;
+        std::string m_InitialStateName;
         std::unordered_map<std::string, AnimationState> m_States;
         std::vector<AnimationTransition> m_Transitions;
 
         std::unordered_map<std::string, float> m_FloatParams;
+        std::unordered_map<std::string, int32_t> m_IntParams;
         std::unordered_map<std::string, bool> m_BoolParams;
         std::unordered_map<std::string, bool> m_TriggerParams;
 

@@ -1,4 +1,6 @@
 #include <Axle/Animator.hpp>
+#include <Axle/SkinningPipeline.hpp>
+#include <Axle/Shader.hpp>
 
 namespace Axle {
 
@@ -30,16 +32,63 @@ namespace Axle {
         }
     }
 
+    float Animator::GetFloat(const std::string& name, float defaultVal) const {
+        return m_StateMachine ? m_StateMachine->GetFloat(name, defaultVal) : defaultVal;
+    }
+
+    void Animator::SetInt(const std::string& name, int32_t value) {
+        if (m_StateMachine) {
+            m_StateMachine->SetInt(name, value);
+        }
+    }
+
+    int32_t Animator::GetInt(const std::string& name, int32_t defaultVal) const {
+        return m_StateMachine ? m_StateMachine->GetInt(name, defaultVal) : defaultVal;
+    }
+
     void Animator::SetBool(const std::string& name, bool value) {
         if (m_StateMachine) {
             m_StateMachine->SetBool(name, value);
         }
     }
 
+    bool Animator::GetBool(const std::string& name, bool defaultVal) const {
+        return m_StateMachine ? m_StateMachine->GetBool(name, defaultVal) : defaultVal;
+    }
+
     void Animator::SetTrigger(const std::string& name) {
         if (m_StateMachine) {
             m_StateMachine->SetTrigger(name);
         }
+    }
+
+    bool Animator::CheckAndConsumeTrigger(const std::string& name) {
+        return m_StateMachine ? m_StateMachine->CheckAndConsumeTrigger(name) : false;
+    }
+
+    const std::string& Animator::GetCurrentStateName() const {
+        static const std::string s_Empty;
+        return m_StateMachine ? m_StateMachine->GetCurrentStateName() : s_Empty;
+    }
+
+    bool Animator::IsTransitioning() const {
+        return m_StateMachine ? m_StateMachine->IsTransitioning() : false;
+    }
+
+    void Animator::Reset() {
+        if (m_StateMachine) {
+            m_StateMachine->Reset();
+        }
+    }
+
+    std::shared_ptr<Animator> Animator::Clone() const {
+        auto clone = std::make_shared<Animator>(m_Skeleton);
+        if (m_StateMachine) {
+            clone->SetStateMachine(m_StateMachine->Clone());
+        }
+        clone->m_FallbackPose = m_FallbackPose;
+        clone->m_FallbackGlobalMatrices = m_FallbackGlobalMatrices;
+        return clone;
     }
 
     void Animator::Update(float dt) {

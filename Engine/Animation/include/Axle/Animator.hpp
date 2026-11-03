@@ -3,11 +3,14 @@
 #include <Axle/AnimationClip.hpp>
 #include <Axle/AnimationPose.hpp>
 #include <Axle/AnimationStateMachine.hpp>
-#include <Axle/SkinningPipeline.hpp>
 #include <memory>
 #include <vector>
+#include <cstdint>
 
 namespace Axle {
+
+    class SkinningPipeline;
+    class Shader;
 
     class Animator {
     public:
@@ -23,8 +26,25 @@ namespace Axle {
 
         // Convenience parameter setters passing through to state machine
         void SetFloat(const std::string& name, float value);
+        float GetFloat(const std::string& name, float defaultVal = 0.0f) const;
+
+        void SetInt(const std::string& name, int32_t value);
+        int32_t GetInt(const std::string& name, int32_t defaultVal = 0) const;
+
         void SetBool(const std::string& name, bool value);
+        bool GetBool(const std::string& name, bool defaultVal = false) const;
+
         void SetTrigger(const std::string& name);
+        bool CheckAndConsumeTrigger(const std::string& name);
+
+        const std::string& GetCurrentStateName() const;
+        bool IsTransitioning() const;
+
+        // Reset state machine to initial state
+        void Reset();
+
+        // Create independent runtime clone
+        std::shared_ptr<Animator> Clone() const;
 
         // Update animation logic, evaluate state transitions and bone palettes
         void Update(float dt);

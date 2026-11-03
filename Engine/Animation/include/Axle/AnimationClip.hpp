@@ -10,7 +10,7 @@
 
 namespace Axle {
 
-    enum class AnimationInterpolation : uint32_t { Step, Linear, CubicSpline };
+    enum class AnimationInterpolation : uint32_t { Step = 0, Linear = 1, CubicSpline = 2, StepNext = 3 };
 
     template<typename T>
     struct Keyframe {

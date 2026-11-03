@@ -104,6 +104,41 @@ bool RunAnimationImporterCorrectionTests() {
         ANIMATION_CHECK(diffX < 0.0011f, (fixtureName + " hold value matches source at query time").c_str());
     }
 
+    // CONSTANT_NEXT retains exact keys as well as the values in open intervals.
+    ANIMATION_CHECK(SkeletalMeshImporter::LoadFBX(fixtures / "ConstantNext.fbx",mesh,rig,clips,&error), "Constant-next source imports");
+    ufbx_load_opts nextOptions{}; nextOptions.target_axes = ufbx_axes_right_handed_y_up; nextOptions.target_unit_meters = 1;
+    nextOptions.inherit_mode_handling = UFBX_INHERIT_MODE_HANDLING_HELPER_NODES; ufbx_error nextError{};
+    std::unique_ptr<ufbx_scene,decltype(&ufbx_free_scene)> nextSource(ufbx_load_file((fixtures / "ConstantNext.fbx").string().c_str(),&nextOptions,&nextError),ufbx_free_scene);
+    ANIMATION_CHECK(nextSource, "Constant-next reference evaluator loads");
+    auto* nextBone = ufbx_find_node(nextSource.get(),"Bone");
+    ANIMATION_CHECK(nextBone, "Constant-next reference bone exists");
+    ANIMATION_CHECK(clips[0]->GetChannels()[0].PositionsInterpolation == AnimationInterpolation::StepNext, "Importer retains next-value interpolation explicitly");
+    AnimationClipDefinition nextDefinition; nextDefinition.Id = "step-next"; nextDefinition.Name = "StepNext";
+    nextDefinition.Duration = clips[0]->GetDuration(); nextDefinition.Channels = clips[0]->GetChannels();
+    AssetDocument nextDocument, parsedNext; AnimationClipDefinition loadedNext;
+    ANIMATION_CHECK(AnimationAssetCodec::EncodeAnimationClip(nextDefinition,nextDocument) &&
+        AssetDSL::ParseSource(AssetDSL::SerializeDocument(nextDocument),parsedNext) &&
+        AnimationAssetCodec::DecodeAnimationClip(parsedNext,loadedNext), "Next-value mode survives real text serialization");
+    AnimationClip reopenedNext("ReopenedNext",nextDefinition.Duration);
+    ANIMATION_CHECK(reopenedNext.ReplaceChannels(loadedNext.Channels,rig.get()), "Reopened next-value clip binds");
+    for (double time : {0.0,0.0001,0.4999,0.5,0.5001,0.9999,1.0}) {
+        const auto expected = ufbx_evaluate_transform(nextSource->anim_stacks[0]->anim,nextBone,time);
+        AnimationPose before,after;
+        ANIMATION_CHECK(clips[0]->SamplePose(float(time),*rig,before,false) && reopenedNext.SamplePose(float(time),*rig,after,false), "Next-value boundary samples before and after reopen");
+        ANIMATION_CHECK(AnimationTests::Near(before.Transforms[0].Translation.x,float(expected.translation.x)) &&
+            AnimationTests::Near(after.Transforms[0].Translation.x,float(expected.translation.x)), "Exact and open-interval source semantics preserved");
+    }
+    AnimationChannel typedNext; typedNext.BoneName = "Bone";
+    typedNext.RotationsInterpolation = typedNext.ScalesInterpolation = AnimationInterpolation::StepNext;
+    const auto halfTurn = glm::angleAxis(glm::radians(180.0f),glm::vec3(0,0,1));
+    typedNext.Rotations = {{0,glm::quat(1,0,0,0)},{0.5f,halfTurn},{1,glm::quat(1,0,0,0)}};
+    typedNext.Scales = {{0,glm::vec3(1)},{0.5f,glm::vec3(2)},{1,glm::vec3(3)}};
+    ANIMATION_CHECK(typedNext.InterpolateScale(0) == glm::vec3(1) && typedNext.InterpolateScale(0.25f) == glm::vec3(2) &&
+        typedNext.InterpolateScale(0.5f) == glm::vec3(2) && typedNext.InterpolateScale(0.75f) == glm::vec3(3), "Next-value scale boundaries match track semantics");
+    ANIMATION_CHECK(FbxCurveBaker::QuaternionAngularDistance(typedNext.InterpolateRotation(0.25f),halfTurn)<0.001f &&
+        FbxCurveBaker::QuaternionAngularDistance(typedNext.InterpolateRotation(0.5f),halfTurn)<0.001f &&
+        FbxCurveBaker::QuaternionAngularDistance(typedNext.InterpolateRotation(0.75f),glm::quat(1,0,0,0))<0.001f, "Next-value quaternion boundaries match track semantics");
+
     // A2: Fast rotation that naive 30 Hz grid would undersample/miss
     ANIMATION_CHECK(SkeletalMeshImporter::LoadFBX(fixtures / "FastRotationSkin.fbx", mesh, rig, clips, &error), "Fast rotation FBX imports");
     ANIMATION_CHECK(clips.size() == 1 && AnimationTests::Near(clips[0]->GetDuration(), 0.1f), "Fast rotation duration 0.1s");

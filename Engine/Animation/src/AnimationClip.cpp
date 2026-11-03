@@ -25,6 +25,7 @@ namespace Axle {
                 [](float value, const auto& key) { return value < key.TimeStamp; });
             const auto& a = *(next-1); const auto& b = *next;
             if (mode == AnimationInterpolation::Step) return a.Value;
+            if (mode == AnimationInterpolation::StepNext) return time == a.TimeStamp ? a.Value : b.Value;
             const float duration = b.TimeStamp - a.TimeStamp;
             const float factor = (time - a.TimeStamp) / duration;
             if (mode == AnimationInterpolation::CubicSpline) return Spline(a, b, factor, duration);
@@ -117,7 +118,7 @@ namespace Axle {
             }
 
             for (const auto mode : {ch.PositionsInterpolation, ch.RotationsInterpolation, ch.ScalesInterpolation})
-                if (static_cast<uint32_t>(mode) > 2) fail("Unknown interpolation mode");
+                if (static_cast<uint32_t>(mode) > uint32_t(AnimationInterpolation::StepNext)) fail("Unknown interpolation mode");
             const auto tangentsValid = [&](const auto& keys, AnimationInterpolation mode) {
                 if (mode != AnimationInterpolation::CubicSpline) return;
                 if (!keys.empty() && keys.size() < 2) fail("Cubic tracks require at least two keys");

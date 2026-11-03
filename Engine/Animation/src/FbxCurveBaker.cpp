@@ -7,6 +7,7 @@
 #include <functional>
 #include <vector>
 #include <string>
+#include <type_traits>
 
 namespace Axle {
 
@@ -23,7 +24,8 @@ namespace {
 
     enum class TrackCurveMode {
         Static,
-        Step,
+        StepPrevious,
+        StepNext,
         Continuous,
         Mixed
     };
@@ -32,6 +34,7 @@ namespace {
                                  double timeBegin, double timeEnd, std::vector<double>& outKeyTimes) {
         if (!anim || !node) return TrackCurveMode::Static;
         bool hasStep = false;
+        bool hasNext = false;
         bool hasContinuous = false;
 
         for (size_t l = 0; l < anim->layers.count; ++l) {
@@ -58,9 +61,10 @@ namespace {
                         if (kfB.time <= timeBegin || kfA.time >= timeEnd) {
                             continue;
                         }
-                        if (kfA.interpolation == UFBX_INTERPOLATION_CONSTANT_PREV ||
-                            kfA.interpolation == UFBX_INTERPOLATION_CONSTANT_NEXT) {
+                        if (kfA.interpolation == UFBX_INTERPOLATION_CONSTANT_PREV) {
                             hasStep = true;
+                        } else if (kfA.interpolation == UFBX_INTERPOLATION_CONSTANT_NEXT) {
+                            hasNext = true;
                         } else {
                             hasContinuous = true;
                         }
@@ -69,8 +73,9 @@ namespace {
             }
         }
 
-        if (hasStep && hasContinuous) return TrackCurveMode::Mixed;
-        if (hasStep && !hasContinuous) return TrackCurveMode::Step;
+        if (int(hasStep) + int(hasNext) + int(hasContinuous) > 1) return TrackCurveMode::Mixed;
+        if (hasNext) return TrackCurveMode::StepNext;
+        if (hasStep && !hasContinuous) return TrackCurveMode::StepPrevious;
         if (!hasStep && hasContinuous) return TrackCurveMode::Continuous;
         return TrackCurveMode::Static;
     }
@@ -200,9 +205,14 @@ bool FbxCurveBaker::BakeChannel(
         return false;
     }
 
-    candidateChannel.PositionsInterpolation = (transMode == TrackCurveMode::Step) ? AnimationInterpolation::Step : AnimationInterpolation::Linear;
-    candidateChannel.RotationsInterpolation = (rotMode == TrackCurveMode::Step) ? AnimationInterpolation::Step : AnimationInterpolation::Linear;
-    candidateChannel.ScalesInterpolation = (scaleMode == TrackCurveMode::Step) ? AnimationInterpolation::Step : AnimationInterpolation::Linear;
+    const auto interpolation = [](TrackCurveMode mode) {
+        if (mode == TrackCurveMode::StepPrevious) return AnimationInterpolation::Step;
+        if (mode == TrackCurveMode::StepNext) return AnimationInterpolation::StepNext;
+        return AnimationInterpolation::Linear;
+    };
+    candidateChannel.PositionsInterpolation = interpolation(transMode);
+    candidateChannel.RotationsInterpolation = interpolation(rotMode);
+    candidateChannel.ScalesInterpolation = interpolation(scaleMode);
 
     auto evalTransform = [&](double localTime) -> TransformSample {
         ufbx_transform xf = ufbx_evaluate_transform(anim, node, timeBegin + localTime);
@@ -210,10 +220,10 @@ bool FbxCurveBaker::BakeChannel(
     };
 
     // Case 1: Pure step track across all active components
-    const bool allStep = (transMode == TrackCurveMode::Step || transMode == TrackCurveMode::Static) &&
-                         (rotMode == TrackCurveMode::Step || rotMode == TrackCurveMode::Static) &&
-                         (scaleMode == TrackCurveMode::Step || scaleMode == TrackCurveMode::Static) &&
-                         (transMode == TrackCurveMode::Step || rotMode == TrackCurveMode::Step || scaleMode == TrackCurveMode::Step);
+    const bool allStep = transMode != TrackCurveMode::Continuous &&
+                         rotMode != TrackCurveMode::Continuous &&
+                         scaleMode != TrackCurveMode::Continuous &&
+                         (transMode != TrackCurveMode::Static || rotMode != TrackCurveMode::Static || scaleMode != TrackCurveMode::Static);
 
     if (allStep) {
         std::vector<double> stepTimes;
@@ -270,8 +280,8 @@ bool FbxCurveBaker::BakeChannel(
                 return false;
             }
             double stA = uniqueStepTimes[i];
-            double stB = uniqueStepTimes[i + 1];
-            double tEval = 0.5 * (stA + stB);
+            // Preserve the value at the exact key; StepNext owns open-interval semantics.
+            double tEval = stA;
             float timeStamp = static_cast<float>(stA);
             auto sample = evalTransform(tEval);
             candidateChannel.Positions.push_back({ timeStamp, sample.Translation });
@@ -307,7 +317,7 @@ bool FbxCurveBaker::BakeChannel(
 
     // Case 2: Continuous track (or static)
     // Inspect source angular variation rate to bound initial seed intervals and avoid Nyquist aliasing.
-    double maxAngularRate = ComputeMaxAngularRateDegPerSec(anim, node, timeBegin, timeEnd);
+    double maxAngularRate = rotMode == TrackCurveMode::Continuous ? ComputeMaxAngularRateDegPerSec(anim, node, timeBegin, timeEnd) : 0.0;
     double gridInterval = 1.0 / 30.0;
     if (maxAngularRate > 0.0) {
         const double maxArcDegrees = 60.0; // Keep SLERP arcs <= 60 deg per interval
@@ -402,13 +412,19 @@ bool FbxCurveBaker::BakeChannel(
             auto trueSample = evalTransform(tProbe);
 
             float uf = static_cast<float>(u);
-            glm::vec3 approxPos = glm::mix(sA.Translation, sB.Translation, uf);
-            glm::vec3 approxScale = glm::mix(sA.Scale, sB.Scale, uf);
-
-            glm::quat qA = glm::normalize(sA.Rotation);
-            glm::quat qB = glm::normalize(sB.Rotation);
-            if (glm::dot(qA, qB) < 0.0f) qB = -qB;
-            glm::quat approxRot = glm::slerp(qA, qB, uf);
+            const auto approximate = [uf](const auto& first, const auto& second, AnimationInterpolation mode) {
+                if (mode == AnimationInterpolation::Step) return first;
+                if (mode == AnimationInterpolation::StepNext) return second;
+                using Value = std::decay_t<decltype(first)>;
+                if constexpr (std::is_same_v<Value,glm::quat>) {
+                    auto a = glm::normalize(first), b = glm::normalize(second);
+                    if (glm::dot(a,b)<0) b = -b;
+                    return glm::slerp(a,b,uf);
+                } else return glm::mix(first,second,uf);
+            };
+            const auto approxPos = approximate(sA.Translation,sB.Translation,candidateChannel.PositionsInterpolation);
+            const auto approxScale = approximate(sA.Scale,sB.Scale,candidateChannel.ScalesInterpolation);
+            const auto approxRot = approximate(sA.Rotation,sB.Rotation,candidateChannel.RotationsInterpolation);
 
             float errPos = glm::length(trueSample.Translation - approxPos);
             float errRot = QuaternionAngularDistance(trueSample.Rotation, approxRot);

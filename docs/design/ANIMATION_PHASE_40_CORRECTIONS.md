@@ -17,6 +17,8 @@ Full Phase 40 rendering/editor acceptance remains separate.
 
 | R4 / R5 | glTF import retains helper ancestors without changing original joint indices, preserves explicit signed bind TRS, evaluates/persists STEP and cubic Hermite tangents, validates source buffers and skin associations, preserves primitive material partitions, and rejects ambiguous multi-skin inputs. Tiny checked-in fixtures cover interior samples, helper/bind basis, signed scales and last-good failures. Release Animation CTests PASS; `build/animation-fix-gltf-build.log`. The basis/interpolation contract follows the [Khronos glTF specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#animations). |
 
+| R1 controller core | Stable controller/state/transition identity and graph metadata survive compilation. Typed legacy rules migrate into serializable conditions; self-contained rig/clip fallbacks retain keyed poses, including cubic data. FileSystem resource resolution validates rig compatibility and fails explicitly for missing motions or unsupported 2D runtime. Referenced mesh loading uses cooked geometry; snapshot helpers preserve rig/mesh data. Permanent keyed-pose and entry/reset tests PASS; `build/animation-fix-controller-build.log`. Scene/assembly integration is tracked separately below. |
+
 Other review findings remain open until a correction row and its evidence are
 added here. The original review documents the pre-fix behavior, not the current
 acceptance result.

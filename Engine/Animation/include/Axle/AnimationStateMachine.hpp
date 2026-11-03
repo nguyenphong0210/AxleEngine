@@ -21,23 +21,17 @@ namespace Axle {
         std::string BlendParameterName = "Speed"; // Used if Type == BlendSpace1D
         bool Loop = true;
         float SpeedMultiplier = 1.0f;
+        AnimationId Id;
+        std::string MotionAssetRef;
+        std::string BlendParameterY;
+        glm::vec2 GraphPosition{0};
+        std::vector<std::string> BlendMotionRefs;
 
         void Sample(float time, float blendParam, const Skeleton& skeleton, AnimationPose& outPose) const;
         float GetDuration(float blendParam = 0.0f) const;
     };
 
-    enum class TransitionConditionOperator {
-        AlwaysTrue,
-        Greater,
-        Less,
-        GreaterOrEqual,
-        LessOrEqual,
-        Equal,
-        NotEqual,
-        IsTrue,
-        IsFalse,
-        Triggered
-    };
+    using TransitionConditionOperator = ConditionOperator;
 
     class AnimationStateMachine;
 
@@ -61,6 +55,7 @@ namespace Axle {
         int32_t Priority = 0;        // Greater priority evaluated first
         std::vector<TransitionRule> Rules;
         std::vector<ConditionDefinition> PureConditions;
+        AnimationId Id;
         std::function<bool()> Condition; // Legacy optional condition predicate
         std::function<bool(const AnimationStateMachine&)> InstanceCondition; // Instance-aware condition predicate
     };
@@ -73,6 +68,11 @@ namespace Axle {
         const std::string& GetName() const { return m_Name; }
         void SetName(const std::string& name) { m_Name = name; }
 
+        void SetResourceRig(std::shared_ptr<Skeleton> rig) { m_ResourceRig = std::move(rig); }
+        const std::shared_ptr<Skeleton>& GetResourceRig() const { return m_ResourceRig; }
+        const AnimationId& GetDefinitionId() const { return m_SourceDefinition ? m_SourceDefinition->Id : m_DefinitionId; }
+        const std::shared_ptr<const AnimatorControllerDefinition>& GetSourceDefinition() const { return m_SourceDefinition; }
+        void SetSourceDefinition(AnimatorControllerDefinition definition) { m_SourceDefinition = std::make_shared<const AnimatorControllerDefinition>(std::move(definition)); }
         void AddState(const AnimationState& state);
         void AddTransition(const AnimationTransition& transition);
 
@@ -134,6 +134,9 @@ namespace Axle {
         std::string ResolveParamId(const std::string& nameOrId) const;
 
     private:
+        std::shared_ptr<Skeleton> m_ResourceRig;
+        AnimationId m_DefinitionId = GenerateAnimationId();
+        std::shared_ptr<const AnimatorControllerDefinition> m_SourceDefinition;
         std::string m_Name;
         std::string m_InitialStateName;
         std::unordered_map<std::string, AnimationState> m_States;

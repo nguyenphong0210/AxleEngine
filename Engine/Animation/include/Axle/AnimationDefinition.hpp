@@ -10,10 +10,12 @@
 #include <unordered_map>
 #include <memory>
 #include <cstdint>
+#include <optional>
 
 namespace Axle {
 
     using AnimationId = std::string;
+    AnimationId GenerateAnimationId();
 
     enum class AnimatorParameterType : uint32_t {
         Float = 0,
@@ -75,6 +77,8 @@ namespace Axle {
         BlendSpace2D = 2
     };
 
+    struct BlendClipDefinition { float Value = 0; std::string ClipRef; };
+
     struct StateDefinition {
         AnimationId Id;
         std::string Name;
@@ -85,26 +89,7 @@ namespace Axle {
         std::string BlendParameterX;
         std::string BlendParameterY;
         glm::vec2 GraphPosition = glm::vec2(0.0f);
-
-        bool Validate(std::vector<std::string>* outErrors = nullptr) const;
-    };
-
-    struct AnimatorControllerDefinition {
-        uint32_t SchemaVersion = 1;
-        AnimationId Id;
-        std::string Name;
-        std::string SkeletonRef;
-        std::string CompatibilitySignature;
-        AnimationId EntryStateId;
-
-        std::vector<ParameterDefinition> Parameters;
-        std::vector<StateDefinition> States;
-        std::vector<TransitionDefinition> Transitions;
-
-        const ParameterDefinition* FindParameter(const AnimationId& id) const;
-        const ParameterDefinition* FindParameterByName(const std::string& name) const;
-        const StateDefinition* FindState(const AnimationId& id) const;
-        const StateDefinition* FindStateByName(const std::string& name) const;
+        std::vector<BlendClipDefinition> BlendPoints;
 
         bool Validate(std::vector<std::string>* outErrors = nullptr) const;
     };
@@ -156,6 +141,31 @@ namespace Axle {
 
         bool Validate(std::vector<std::string>* outErrors = nullptr) const;
     };
+
+    struct InlineAnimationClip { std::string Reference; AnimationClipDefinition Clip; };
+
+    struct AnimatorControllerDefinition {
+        uint32_t SchemaVersion = 1;
+        AnimationId Id;
+        std::string Name;
+        std::string SkeletonRef;
+        std::string CompatibilitySignature;
+        AnimationId EntryStateId;
+
+        std::optional<SkeletonDefinition> SkeletonFallback;
+        std::vector<InlineAnimationClip> InlineClips;
+        std::vector<ParameterDefinition> Parameters;
+        std::vector<StateDefinition> States;
+        std::vector<TransitionDefinition> Transitions;
+
+        const ParameterDefinition* FindParameter(const AnimationId& id) const;
+        const ParameterDefinition* FindParameterByName(const std::string& name) const;
+        const StateDefinition* FindState(const AnimationId& id) const;
+        const StateDefinition* FindStateByName(const std::string& name) const;
+
+        bool Validate(std::vector<std::string>* outErrors = nullptr) const;
+    };
+
 
 }
 

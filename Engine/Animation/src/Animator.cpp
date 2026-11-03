@@ -24,6 +24,7 @@ namespace Axle {
 
     void Animator::SetStateMachine(std::shared_ptr<AnimationStateMachine> stateMachine) {
         m_StateMachine = std::move(stateMachine);
+        if (m_StateMachine && m_Skeleton) { m_StateMachine->SetResourceRig(m_Skeleton); m_StateMachine->Update(0, *m_Skeleton); }
     }
 
     void Animator::SetFloat(const std::string& name, float value) {

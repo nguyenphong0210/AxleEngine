@@ -10,6 +10,8 @@ add_library(AxleAnimation STATIC
     src/GltfSkeletalImporter.cpp
     src/AnimationDefinition.cpp
     src/AnimationAssetCodec.cpp
+    src/AnimationControllerCompiler.cpp
+    src/AnimationResources.cpp
     src/SkeletalGeometryCodec.cpp
 )
 add_library(Axle::Animation ALIAS AxleAnimation)

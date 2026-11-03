@@ -463,7 +463,7 @@ namespace Axle {
         if (str == "Int") return AnimatorParameterType::Int;
         if (str == "Bool") return AnimatorParameterType::Bool;
         if (str == "Trigger") return AnimatorParameterType::Trigger;
-        return AnimatorParameterType::Float;
+        return AnimatorParameterType(255);
     }
 
     static std::string OperatorToString(ConditionOperator op) {
@@ -493,7 +493,7 @@ namespace Axle {
         if (str == "IsTrue") return ConditionOperator::IsTrue;
         if (str == "IsFalse") return ConditionOperator::IsFalse;
         if (str == "Triggered") return ConditionOperator::Triggered;
-        return ConditionOperator::AlwaysTrue;
+        return ConditionOperator(255);
     }
 
     static std::string NodeTypeToString(AnimationNodeType type) {
@@ -509,7 +509,7 @@ namespace Axle {
         if (str == "Clip") return AnimationNodeType::Clip;
         if (str == "BlendSpace1D") return AnimationNodeType::BlendSpace1D;
         if (str == "BlendSpace2D") return AnimationNodeType::BlendSpace2D;
-        return AnimationNodeType::Clip;
+        return AnimationNodeType(255);
     }
 
     bool AnimationAssetCodec::EncodeAnimatorController(const AnimatorControllerDefinition& def, AssetDocument& outDoc) {
@@ -554,6 +554,10 @@ namespace Axle {
             if (!s.BlendParameterX.empty()) sBlock->SetString("blendParameterX", s.BlendParameterX);
             if (!s.BlendParameterY.empty()) sBlock->SetString("blendParameterY", s.BlendParameterY);
             sBlock->SetVec2("graphPosition", s.GraphPosition);
+            for (const auto& point : s.BlendPoints) {
+                auto block = std::make_shared<AssetBlock>(); block->Type = "BlendPoint";
+                block->SetFloat("value", point.Value); block->SetString("clip", point.ClipRef); sBlock->Children.push_back(block);
+            }
             root->Children.push_back(sBlock);
         }
 
@@ -575,15 +579,28 @@ namespace Axle {
                 cBlock->SetString("parameter", c.Parameter);
                 cBlock->SetString("operator", OperatorToString(c.Operator));
                 if (c.Operand.index() == 0) {
+                    cBlock->SetString("operandType", "Float");
                     cBlock->SetFloat("operand", std::get<float>(c.Operand));
                 } else if (c.Operand.index() == 1) {
+                    cBlock->SetString("operandType", "Int");
                     cBlock->SetInt("operand", std::get<int32_t>(c.Operand));
                 } else if (c.Operand.index() == 2) {
+                    cBlock->SetString("operandType", "Bool");
                     cBlock->SetBool("operand", std::get<bool>(c.Operand));
                 }
                 tBlock->Children.push_back(cBlock);
             }
             root->Children.push_back(tBlock);
+        }
+
+        if (def.SkeletonFallback) {
+            AssetDocument nested; if (!EncodeSkeleton(*def.SkeletonFallback, nested)) return false;
+            root->Children.push_back(nested.Root);
+        }
+        for (const auto& clip : def.InlineClips) {
+            AssetDocument nested; if (!EncodeAnimationClip(clip.Clip, nested)) return false;
+            auto block = std::make_shared<AssetBlock>(); block->Type = "InlineClip";
+            block->SetString("reference", clip.Reference); block->Children.push_back(nested.Root); root->Children.push_back(block);
         }
 
         outDoc.Root = root;
@@ -635,7 +652,18 @@ namespace Axle {
                 s.BlendParameterX = child->GetString("blendParameterX");
                 s.BlendParameterY = child->GetString("blendParameterY");
                 s.GraphPosition = child->GetVec2("graphPosition", glm::vec2(0.0f));
+                for (const auto& point : child->Children) if (point->Type == "BlendPoint")
+                    s.BlendPoints.push_back({point->GetFloat("value"), point->GetString("clip")});
                 candidate.States.push_back(s);
+            } else if (child->Type == "Skeleton") {
+                AssetDocument nested; nested.Kind = AssetKind::Skeleton; nested.Root = child;
+                SkeletonDefinition value; if (!DecodeSkeleton(nested, value, outError)) return false;
+                candidate.SkeletonFallback = std::move(value);
+            } else if (child->Type == "InlineClip") {
+                if (child->Children.size() != 1) return false;
+                AssetDocument nested; nested.Kind = AssetKind::AnimationClip; nested.Root = child->Children[0];
+                AnimationClipDefinition value; if (!DecodeAnimationClip(nested, value, outError)) return false;
+                candidate.InlineClips.push_back({child->GetString("reference"), std::move(value)});
             } else if (child->Type == "Transition") {
                 TransitionDefinition t;
                 t.Id = child->GetString("id");
@@ -655,9 +683,9 @@ namespace Axle {
                         if (cChild->HasProperty("operand")) {
                             const auto* prop = cChild->GetProperty("operand");
                             // If raw value is true/false
-                            if (prop->RawValue == "true" || prop->RawValue == "false") {
+                            if (cChild->GetString("operandType") == "Bool" || prop->RawValue == "true" || prop->RawValue == "false") {
                                 c.Operand = prop->AsBool();
-                            } else if (prop->RawValue.find('.') != std::string::npos) {
+                            } else if (cChild->GetString("operandType") == "Float" || prop->RawValue.find('.') != std::string::npos) {
                                 c.Operand = prop->AsFloat();
                             } else {
                                 c.Operand = prop->AsInt();
@@ -710,124 +738,6 @@ namespace Axle {
     // State Machine Compilation & Extraction
     // -------------------------------------------------------------------------
 
-    std::shared_ptr<AnimationStateMachine> AnimationAssetCodec::CompileStateMachineFromDefinition(const AnimatorControllerDefinition& def) {
-        auto sm = std::make_shared<AnimationStateMachine>(def.Name.empty() ? "AnimatorController" : def.Name);
-
-        for (const auto& param : def.Parameters) {
-            sm->DeclareParameter(param);
-        }
-
-        std::unordered_map<AnimationId, std::string> idToName;
-        for (const auto& sDef : def.States) {
-            idToName[sDef.Id] = sDef.Name;
-            AnimationState s;
-            s.Name = sDef.Name;
-            s.Type = sDef.NodeType;
-            s.SpeedMultiplier = sDef.SpeedMultiplier;
-            s.Loop = sDef.Loop;
-            s.BlendParameterName = sDef.BlendParameterX.empty() ? "Speed" : sDef.BlendParameterX;
-            sm->AddState(s);
-        }
-
-        if (!def.EntryStateId.empty()) {
-            auto it = idToName.find(def.EntryStateId);
-            if (it != idToName.end()) {
-                sm->SetEntryState(it->second);
-            }
-        }
-
-        for (const auto& tDef : def.Transitions) {
-            AnimationTransition t;
-            auto itFrom = idToName.find(tDef.FromState);
-            auto itTo = idToName.find(tDef.ToState);
-            t.FromState = (itFrom != idToName.end()) ? itFrom->second : tDef.FromState;
-            t.ToState = (itTo != idToName.end()) ? itTo->second : tDef.ToState;
-            t.Duration = tDef.CrossfadeSeconds;
-            t.HasExitTime = tDef.HasExitTime;
-            t.ExitTime = tDef.ExitPhase;
-            t.ExitPhase = tDef.ExitPhase;
-            t.Priority = tDef.Priority;
-            t.PureConditions = tDef.AllConditions;
-
-            for (const auto& cond : tDef.AllConditions) {
-                TransitionRule rule;
-                rule.Parameter = cond.Parameter;
-                switch (cond.Operator) {
-                    case ConditionOperator::AlwaysTrue: rule.Operator = TransitionConditionOperator::AlwaysTrue; break;
-                    case ConditionOperator::Greater: rule.Operator = TransitionConditionOperator::Greater; break;
-                    case ConditionOperator::Less: rule.Operator = TransitionConditionOperator::Less; break;
-                    case ConditionOperator::GreaterOrEqual: rule.Operator = TransitionConditionOperator::GreaterOrEqual; break;
-                    case ConditionOperator::LessOrEqual: rule.Operator = TransitionConditionOperator::LessOrEqual; break;
-                    case ConditionOperator::Equal: rule.Operator = TransitionConditionOperator::Equal; break;
-                    case ConditionOperator::NotEqual: rule.Operator = TransitionConditionOperator::NotEqual; break;
-                    case ConditionOperator::IsTrue: rule.Operator = TransitionConditionOperator::IsTrue; break;
-                    case ConditionOperator::IsFalse: rule.Operator = TransitionConditionOperator::IsFalse; break;
-                    case ConditionOperator::Triggered: rule.Operator = TransitionConditionOperator::Triggered; break;
-                }
-                if (cond.Operand.index() == 0) {
-                    rule.FloatOperand = std::get<0>(cond.Operand);
-                } else if (cond.Operand.index() == 1) {
-                    rule.IntOperand = std::get<1>(cond.Operand);
-                } else if (cond.Operand.index() == 2) {
-                    rule.BoolOperand = std::get<2>(cond.Operand);
-                }
-                t.Rules.push_back(rule);
-            }
-
-            sm->AddTransition(t);
-        }
-
-        return sm;
-    }
-
-    AnimatorControllerDefinition AnimationAssetCodec::ExtractDefinitionFromStateMachine(const AnimationStateMachine& sm) {
-        AnimatorControllerDefinition def;
-        def.Name = sm.GetName();
-        def.Id = sm.GetName().empty() ? "Controller_Def" : (sm.GetName() + "_Def");
-
-        for (const auto& [id, param] : sm.GetDeclaredParameters()) {
-            def.Parameters.push_back(param);
-        }
-
-        std::unordered_map<std::string, AnimationId> nameToId;
-        for (const auto& [name, state] : sm.GetStates()) {
-            StateDefinition sDef;
-            sDef.Id = "State_" + name;
-            sDef.Name = name;
-            sDef.NodeType = state.Type;
-            sDef.SpeedMultiplier = state.SpeedMultiplier;
-            sDef.Loop = state.Loop;
-            sDef.BlendParameterX = state.BlendParameterName;
-            def.States.push_back(sDef);
-            nameToId[name] = sDef.Id;
-        }
-
-        if (!sm.GetInitialStateName().empty()) {
-            auto it = nameToId.find(sm.GetInitialStateName());
-            if (it != nameToId.end()) {
-                def.EntryStateId = it->second;
-            }
-        }
-
-        int transCounter = 0;
-        for (const auto& trans : sm.GetTransitions()) {
-            TransitionDefinition tDef;
-            tDef.Id = "Trans_" + std::to_string(transCounter++);
-            auto itFrom = nameToId.find(trans.FromState);
-            auto itTo = nameToId.find(trans.ToState);
-            tDef.FromState = (itFrom != nameToId.end()) ? itFrom->second : trans.FromState;
-            tDef.ToState = (itTo != nameToId.end()) ? itTo->second : trans.ToState;
-            tDef.CrossfadeSeconds = trans.Duration;
-            tDef.HasExitTime = trans.HasExitTime;
-            tDef.ExitPhase = trans.ExitPhase;
-            tDef.Priority = trans.Priority;
-            tDef.AllConditions = trans.PureConditions;
-            def.Transitions.push_back(tDef);
-        }
-
-        return def;
-    }
-
     std::string AnimationAssetCodec::EncodeControllerToText(const AnimatorControllerDefinition& def) {
         AssetDocument doc;
         if (!EncodeAnimatorController(def, doc)) return "";
@@ -866,8 +776,9 @@ namespace Axle {
                 if (c >= '0' && c <= '9') return c - '0';
                 if (c >= 'A' && c <= 'F') return c - 'A' + 10;
                 if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-                return 0;
+                return -1;
             };
+            if (parseNibble(high) < 0 || parseNibble(low) < 0) return {};
             unsigned char byte = (parseNibble(high) << 4) | parseNibble(low);
             out.push_back(static_cast<char>(byte));
         }

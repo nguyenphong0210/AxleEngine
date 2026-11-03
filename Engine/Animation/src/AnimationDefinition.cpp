@@ -1,4 +1,5 @@
 #include <Axle/AnimationDefinition.hpp>
+#include <Axle/UUID.hpp>
 #include <cmath>
 #include <sstream>
 #include <iomanip>
@@ -6,6 +7,8 @@
 #include <algorithm>
 
 namespace Axle {
+
+    AnimationId GenerateAnimationId() { return "anim-" + std::to_string(uint64_t(UUID())); }
 
     static bool IsFinite(float v) {
         return !std::isnan(v) && !std::isinf(v);
@@ -213,7 +216,7 @@ namespace Axle {
         if (Name.empty()) {
             ReportError("State Name cannot be empty");
         }
-        if (!IsFinite(SpeedMultiplier) || SpeedMultiplier == 0.0f) {
+        if (!IsFinite(SpeedMultiplier) || SpeedMultiplier < 0.0f) {
             ReportError("SpeedMultiplier must be finite and non-zero");
         }
         if (!IsFinite(GraphPosition)) {
@@ -268,6 +271,12 @@ namespace Axle {
         }
         if (SchemaVersion != 1) {
             ReportError("Unsupported controller schema version");
+        }
+
+        if (SkeletonFallback && !SkeletonFallback->Validate(outErrors)) valid = false;
+        std::unordered_set<std::string> inlineIds;
+        for (const auto& clip : InlineClips) {
+            if (!clip.Clip.Validate(outErrors) || clip.Reference.empty() || !inlineIds.insert(clip.Reference).second) valid = false;
         }
 
         // Validate unique parameter IDs and unique names
@@ -382,7 +391,7 @@ namespace Axle {
         if (Name.empty()) {
             ReportError("Clip Name cannot be empty");
         }
-        if (!IsFinite(Duration) || Duration <= 0.0f) {
+        if (!IsFinite(Duration) || Duration < 0.0f) {
             ReportError("Clip Duration must be positive and finite");
         }
         if (!IsFinite(FrameRate) || FrameRate <= 0.0f) {

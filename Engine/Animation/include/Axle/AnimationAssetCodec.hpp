@@ -43,8 +43,10 @@ namespace Axle {
         static bool LoadAnimatorController(const std::string& filepath, AnimatorControllerDefinition& outDef, std::string* outError = nullptr);
 
         // --- State Machine Compilation & Extraction ---
-        static std::shared_ptr<AnimationStateMachine> CompileStateMachineFromDefinition(const AnimatorControllerDefinition& def);
-        static AnimatorControllerDefinition ExtractDefinitionFromStateMachine(const AnimationStateMachine& sm);
+        static std::shared_ptr<AnimationStateMachine> CompileStateMachineFromDefinition(const AnimatorControllerDefinition& def,
+            std::shared_ptr<Skeleton> skeleton = nullptr, const std::string& ownerPath = "", std::string* diagnostic = nullptr);
+        static AnimatorControllerDefinition ExtractDefinitionFromStateMachine(const AnimationStateMachine& sm,
+            const Skeleton* skeleton = nullptr, std::string* diagnostic = nullptr);
         static std::string EncodeControllerToText(const AnimatorControllerDefinition& def);
         static bool DecodeControllerFromText(const std::string& text, AnimatorControllerDefinition& outDef, std::string* outError = nullptr);
 

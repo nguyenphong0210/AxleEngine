@@ -72,7 +72,9 @@ namespace Axle {
 
     void AnimationStateMachine::AddState(const AnimationState& state) {
         bool setInitial = m_States.empty();
-        m_States[state.Name] = state;
+        auto authored = state;
+        if (authored.Id.empty()) authored.Id = GenerateAnimationId();
+        m_States[state.Name] = std::move(authored);
         if (setInitial) {
             m_InitialStateName = state.Name;
             m_CurrentStateName = state.Name;
@@ -81,7 +83,9 @@ namespace Axle {
     }
 
     void AnimationStateMachine::AddTransition(const AnimationTransition& transition) {
-        m_Transitions.push_back(transition);
+        auto authored = transition;
+        if (authored.Id.empty()) authored.Id = GenerateAnimationId();
+        m_Transitions.push_back(std::move(authored));
     }
 
     const AnimationState* AnimationStateMachine::FindState(const std::string& name) const {
@@ -311,6 +315,8 @@ namespace Axle {
             return nullptr;
         }
         auto clone = std::make_shared<AnimationStateMachine>(m_Name);
+        clone->m_DefinitionId = m_DefinitionId;
+        clone->m_SourceDefinition = m_SourceDefinition;
         clone->m_InitialStateName = m_InitialStateName;
         clone->m_States = m_States;
         clone->m_Transitions = m_Transitions;
@@ -347,7 +353,9 @@ namespace Axle {
         clone->m_TransitionDuration = m_TransitionDuration;
         clone->m_TransitionElapsed = m_TransitionElapsed;
 
+        clone->m_ResourceRig = m_ResourceRig ? std::make_shared<Skeleton>(*m_ResourceRig) : nullptr;
         clone->m_CurrentPose = m_CurrentPose;
+        if (clone->m_ResourceRig) clone->m_CurrentPose.BindSkeleton(*clone->m_ResourceRig);
         clone->m_GlobalMatrices = m_GlobalMatrices;
         clone->m_SkinningMatrices = m_SkinningMatrices;
         return clone;

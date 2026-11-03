@@ -1,20 +1,21 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "EMPTY-EDITOR-UI-CANVAS",
-    "title": "Prevent passive UI Library drawing from creating a canvas",
+    "id": "EDITOR-DEFAULT-SAMPLE",
+    "title": "Open a configured Samples project during Editor development",
     "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Fix UICanvas appearing in a fresh empty Editor project; keep deliberate UI widget authoring available.",
+    "user_scope": "Development Editor launches a default Samples project; explicit projects still override it. Keep empty project mode and isolated Tests/fixtures.",
     "expected_files": [
-      "Engine/UI/src/UIPalettePanel.cpp",
+      "Editor/CMakeLists.txt",
       "Editor/src/Main.cpp",
+      "Editor/src/EditorStartup.hpp",
       "Tests/src/Test_ProjectStartup.cpp",
-      "Tests/CMakeLists.txt"
+      "docs/guides/BUILD_WORKFLOWS.md"
     ],
-    "next_action": "Fix implemented and verified. No new Gemini or Phase 41 package assigned.",
-    "implementation_commit": "b3e82ac"
+    "next_action": "Development default Samples project implemented and verified; no new Gemini or Phase 41 package assigned.",
+    "implementation_commit": "e375143"
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -185,6 +186,28 @@
       "base_commit": "b3e82ac",
       "timestamp_utc": "2026-11-03T15:37:45.944509+00:00",
       "body": "FIXED in b3e82ac. Cause: UIPalettePanel::OnImGuiRender called GetOrCreateCanvasEntity unconditionally, so merely drawing the UI Library added UICanvas on the first UI frame. Creation now occurs only for explicit widget clicks; existing drop/menu authoring paths remain explicit. Passive drawing and deleting a canvas leave empty scenes empty.\n\nCorrection to previous startup evidence: the former --verify-empty-startup checked only OnAttach and skipped the run loop, so it missed first-frame panel mutation. The flag now runs the production application loop for five frames, asserting zero entities/assets after Editor UI drawing on every frame. No generic Application API was changed.\n\nNew ProjectStartupTests coverage renders the real visible panel in a headless ImGui context across five frames, verifies explicit canvas/widget creation and reuse, deletes the canvas and renders five further frames to check it stays deleted.\n\nVerified in this session: Release AxleProjectUnitTests, AxleEditor and AxleAllTests build commands exit 0; ctest --test-dir build -C Release --output-on-failure passes 9/9 (including physical D3D12/Vulkan VFX checks), build/canvas-ctest.log. Native --verify-empty-startup --rhi=dx12/vulkan/opengl each exits 0 with five UI frames and zero entities/assets; logs build/canvas-frames-{dx12,vulkan,opengl}.log. Requested D3D12/Vulkan active backends confirmed, no Error entries found in these startup logs. Neither source assets directory was recreated. Manual mouse interaction and Debug builds were NOT RUN. Existing CRT link warnings remain.\n\nUser agreed to close the running Release Editor; updated Release exe built successfully. Tests/README.md and BUILD_WORKFLOWS.md describe the stronger verification and preserve the historical limits of the initial check. No push. No Gemini implementation assigned; Phase 41 rendering and animation G1 review remain outside this bug fix.\n"
+    },
+    {
+      "id": "CG-20261103T154108246793Z-CODEX-d6e310",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "EDITOR-DEFAULT-SAMPLE",
+      "reply_to": null,
+      "base_commit": "904fe0b94b2663ce71cc5207cb33227db479060b",
+      "timestamp_utc": "2026-11-03T15:41:08.246793+00:00",
+      "body": "IN_PROGRESS from 904fe0b: user now wants a development-default Samples project. Codex will embed a CMake-configured path defaulting to Samples/TestProject/TestProject.axleproj, preserve explicit --project precedence, support --empty-project and keep --verify-empty-startup empty. No nearest-project scanning or sample assets injected into Engine/Editor. Missing development default falls back to untitled. Tests and docs will cover the selection policy. No Gemini source task assigned."
+    },
+    {
+      "id": "CG-20261103T154441111049Z-CODEX-2bcde6",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "EDITOR-DEFAULT-SAMPLE",
+      "reply_to": "CG-20261103T154108246793Z-CODEX-d6e310",
+      "base_commit": "e375143",
+      "timestamp_utc": "2026-11-03T15:44:41.111049+00:00",
+      "body": "DELIVERED e375143: development Editor now opens Samples/TestProject/TestProject.axleproj by default. CMake AXLE_EDITOR_DEFAULT_PROJECT embeds the selected absolute path in EditorStartupConfig.hpp; repository-relative cache values resolve from the source root and an empty value disables the convenience. This is Editor composition only, without Engine project discovery or bundled assets. Explicit --project/positional project wins, then --empty-project, then configured sample if available, then untitled. Missing explicit projects fail rather than opening the sample. CLI cooking still requires explicit --project. --verify-empty-startup suppresses the development default; --verify-startup runs normal project selection for five actual frames.\n\nRelease verification in this session: AxleEditor/AxleProjectUnitTests builds exit 0 (build/sample-build.log, sample-final-build.log). CTest passes 9/9 (build/sample-ctest.log). Actual Editor --verify-startup loads the sample root and all 10 authored entities on dx12/vulkan/opengl, exit 0 each (build/sample-startup-<backend>.log). Additional native DX12 checks pass for --empty-project, explicit override, --verify-empty-startup and starting from the executable directory (build/sample-policy-*.log). CMake generation checked with disabled default and relative sample path, then restored normal default and rebuilt successfully (build/sample-config-*.log). Unit checks cover missing/default/explicit/empty precedence. Local documentation links and source asset isolation pass. No Samples tracked content changed. No claim of gameplay-script execution or renderer parity; the existing NRI optional feature query warning remains.\n\nUpdated README, roadmap, build workflow, test guide and startup diagram. The prior empty-startup delivery remains historical; user deliberately changed development startup behavior in this task. Empty startup and passive UI Library regression coverage remain intact. No push and no new Gemini implementation assignment.\n"
     }
   ],
   "deferred_tasks": [

@@ -20,6 +20,44 @@
 
 namespace Axle {
 
+    namespace {
+        // NRI may return a created wrapper even when committed memory allocation fails.
+        // Exercise that real two-stage failure without exhausting the user's GPU memory.
+        class ScopedVertexAllocationFailure {
+        public:
+            explicit ScopedVertexAllocationFailure(const nri::CoreInterface& core)
+                : m_Core(const_cast<nri::CoreInterface&>(core)) {
+                m_Original = m_Core.CreateCommittedBuffer;
+                s_Active = this;
+                m_Core.CreateCommittedBuffer = CreateCommittedBuffer;
+            }
+            ~ScopedVertexAllocationFailure() {
+                m_Core.CreateCommittedBuffer = m_Original;
+                s_Active = nullptr;
+            }
+            ScopedVertexAllocationFailure(const ScopedVertexAllocationFailure&) = delete;
+            ScopedVertexAllocationFailure& operator=(const ScopedVertexAllocationFailure&) = delete;
+            bool WasInjected() const { return m_Injected; }
+
+        private:
+            static nri::Result NRI_CALL CreateCommittedBuffer(nri::Device& device,
+                nri::MemoryLocation location, float priority, const nri::BufferDesc& desc,
+                nri::Buffer*& buffer) {
+                auto& self = *s_Active;
+                if (!self.m_Injected && (desc.usage & nri::BufferUsageBits::VERTEX)) {
+                    self.m_Injected = true;
+                    auto result = self.m_Core.CreateBuffer(device, desc, buffer);
+                    return result == nri::Result::SUCCESS ? nri::Result::OUT_OF_MEMORY : result;
+                }
+                return self.m_Original(device, location, priority, desc, buffer);
+            }
+            nri::CoreInterface& m_Core;
+            decltype(nri::CoreInterface::CreateCommittedBuffer) m_Original;
+            bool m_Injected = false;
+            static inline ScopedVertexAllocationFailure* s_Active = nullptr;
+        };
+    }
+
     bool ParseVFXBackendOption(const char* envVal, RHI::RHIType& outBackend, std::string& outError) {
         if (!envVal || envVal[0] == '\0') {
             outError = "AXLE_VFX_TEST_BACKEND environment variable not set. Please set to 'D3D12' or 'Vulkan'.";
@@ -143,6 +181,21 @@ namespace Axle {
         if (!check(!device.GetCapabilities().IsSoftwareAdapter,
                    "Physical hardware; software adapters are rejected"))
             return false;
+        {
+            RHIBuffer failedBuffer;
+            bool failedCleanly = false;
+            {
+                ScopedVertexAllocationFailure failure(device.GetNRICore());
+                failedCleanly = !failedBuffer.Init(RHIBufferDesc::Vertex(1024, RHIMemoryLocation::HostUpload)) &&
+                    failure.WasInjected() && !failedBuffer.IsValid() && failedBuffer.GetNative() == nullptr &&
+                    failedBuffer.GetSize() == 0;
+            }
+            if (!check(failedCleanly, "Failed vertex allocation does not publish an unbound NRI buffer"))
+                return false;
+            if (!check(failedBuffer.Init(RHIBufferDesc::Vertex(1024, RHIMemoryLocation::HostUpload)),
+                       "Buffer can recover after a failed allocation"))
+                return false;
+        }
         std::filesystem::path captures;
         const char *captureEnv = std::getenv("AXLE_VFX_CAPTURE_DIR");
         const auto output = captureEnv ? std::filesystem::path(captureEnv)
@@ -295,6 +348,32 @@ namespace Axle {
                    "Reversed disjoint submission preserves descriptors and instance buffers"))
             return false;
         std::reverse(effect.EmitterStacks.begin(), effect.EmitterStacks.end());
+        {
+            auto& growingPool = effect.EmitterStacks[0].System->GetPool();
+            ParticleSpawnData particle;
+            particle.Position = {-0.8f, 0, 0};
+            particle.StartSize = particle.EndSize = 0.9f;
+            particle.StartColor = glm::vec4(1);
+            while (growingPool.GetActiveCount() < 300) {
+                if (growingPool.Spawn(particle) == ParticlePool::INVALID_INDEX) return false;
+            }
+            std::vector<uint8_t> skipped;
+            bool injected = false;
+            {
+                ScopedVertexAllocationFailure failure(device.GetNRICore());
+                skipped = render();
+                injected = failure.WasInjected();
+            }
+            if (!check(injected && sum(skipped, 0, 64, 0) == 0 && sum(skipped, 64, 128, 1) > 1000,
+                       "Failed particle growth skips only that draw and preserves other emitters"))
+                return false;
+            auto recovered = render();
+            if (!check(sum(recovered, 0, 64, 0) > 1000 && sum(recovered, 64, 128, 1) > 1000,
+                       "Particle vertex buffer recovers on the next frame after allocation failure"))
+                return false;
+            growingPool.Reset();
+            growingPool.Spawn(particle);
+        }
         auto &left = effect.EmitterStacks[0];
         left.UseTexture = false;
         auto disabled = render();
@@ -479,6 +558,23 @@ namespace Axle {
             if (!capture(name, before))
                 return false;
         }
+        // New emitters grow every frame; existing tests mostly reused fixed particle counts.
+        auto growing = CreateDefaultParticleEffect("New VFX growth regression");
+        growing.Emitters[0].Config.EmissionRate = 50;
+        growing.Emitters[0].Config.Lifetime = FloatRange(1, 2);
+        growing.Emitters[0].Config.InitialSpeed = FloatRange(0, 0);
+        growing.Emitters[0].Config.Shape.Radius = 0;
+        growing.Emitters[0].Config.StartSize = FloatRange(0.2f, 0.2f);
+        effect.SetEffectDefinition(growing);
+        for (int tick = 0; tick < 180; ++tick) {
+            effect.Update(1.0f / 60.0f);
+            auto pixels = render();
+            if (pixels.size() != resolution * resolution * 4)
+                return false;
+        }
+        if (!check(renderer.GetDrawCallCount() > 0, "New VFX survives continuous particle buffer growth"))
+            return false;
+
         timings.clear();
         for (int frame = 0; frame < 10; ++frame)
             render();
@@ -489,7 +585,8 @@ namespace Axle {
         report << "CPU wall time includes submission and queue synchronization; no GPU timestamp claim.\n";
         report << "PASS: texture binding/order/replacement/disable/fallback, material "
                   "tint/cutout/emission/UVs, multiply/alpha/additive blending, normal maps, camera fades, "
-                  "opaque depth, MSAA, SDR/HDR readback, odd resize, reference save-reopen.\n";
+                  "opaque depth, MSAA, SDR/HDR readback, odd resize, reference save-reopen, "
+                  "continuous particle growth and partial-allocation failure recovery.\n";
         return check(report.good(), "Capture metadata written");
     }
 

@@ -5,8 +5,33 @@
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/ContentBrowserPanel.hpp>
+#include <fstream>
 
 namespace {
+    bool TestContentBrowserCreatesVFXAsset() {
+        Axle::VFXTests::ScopedTempDir tempDir("axle_create_vfx");
+        auto first = Axle::ContentBrowserPanel::CreateNewVFXAsset(tempDir.Path);
+        VFX_TEST_CHECK(!first.empty() && std::filesystem::is_regular_file(first), "Create menu writes a VFX asset");
+        Axle::ParticleEffectDefinition loaded;
+        VFX_TEST_CHECK(Axle::ParticleEffectSerializer::DeserializeFromFile(first.string(), loaded), "Created asset loads through production codec");
+        VFX_TEST_CHECK(loaded.Emitters.size() == 1 && loaded.Emitters[0].Enabled, "Created effect has an enabled emitter");
+        Axle::ParticleEmitterComponent component;
+        VFX_TEST_CHECK(component.LoadFromAsset(first.string()), "Created asset instantiates in a scene component");
+        component.Update(0.1f);
+        VFX_TEST_CHECK(component.System && component.System->GetActiveParticleCount() > 0, "Created effect emits particles");
+        auto second = Axle::ContentBrowserPanel::CreateNewVFXAsset(tempDir.Path);
+        VFX_TEST_CHECK(!second.empty() && second != first, "Repeated Create preserves the existing asset");
+        auto blocker = tempDir.Path / "not-a-directory";
+        { std::ofstream file(blocker); file << "preserve"; }
+        VFX_TEST_CHECK(Axle::ContentBrowserPanel::CreateNewVFXAsset(blocker).empty(), "Failed Create returns no selectable asset");
+        std::vector<Axle::VFXDiagnostic> diagnostics;
+        VFX_TEST_CHECK(!Axle::ParticleEffectSerializer::SerializeToFile((blocker / "blocked.axleasset").string(), loaded, &diagnostics) &&
+                       !diagnostics.empty(), "Invalid asset directory reports failure without requiring C++ exceptions");
+        VFX_TEST_CHECK(std::filesystem::file_size(blocker) == 8, "Failed Create preserves the destination file");
+        return true;
+    }
+
     bool TestBaselineEmitterSerializer() {
         Axle::ParticleEmitterConfig config;
         config.Name = "TestEmitter";
@@ -577,6 +602,8 @@ static bool TestDisabledModuleStateIsAuthored() {
 }
 
 bool RunVFXPersistenceUnitTests() {
+    std::cout << "  - Running TestContentBrowserCreatesVFXAsset ...\n";
+    VFX_TEST_CHECK(TestContentBrowserCreatesVFXAsset(), "TestContentBrowserCreatesVFXAsset failed");
     VFX_TEST_CHECK(TestDisabledModuleStateIsAuthored(), "Disabled module persistence");
     VFX_TEST_CHECK(TestLegacyCodecRetainsCompleteCurves(), "Legacy module codec regression");
     VFX_TEST_CHECK(TestSharedReferenceVersusUniqueStorage(), "Shared/unique storage regression");

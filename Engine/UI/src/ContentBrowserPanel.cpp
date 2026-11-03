@@ -567,7 +567,14 @@ namespace Axle {
     std::filesystem::path ContentBrowserPanel::CreateNewVFXAsset(const std::filesystem::path& parentDir, const std::string& baseName) {
         std::filesystem::path newPath = parentDir / (baseName + ".axleasset");
         int counter = 1;
-        while (std::filesystem::exists(newPath)) {
+        for (;;) {
+            std::error_code error;
+            const bool exists = std::filesystem::exists(newPath, error);
+            if (error) {
+                AXLE_CORE_ERROR("Cannot create VFX asset '{}': {}", newPath.string(), error.message());
+                return {};
+            }
+            if (!exists) break;
             newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
         ParticleEffectDefinition effectDef;
@@ -594,6 +601,8 @@ namespace Axle {
             AssetManager::GetOrCreateMetadata(newPath);
             return newPath;
         }
+        for (const auto& diagnostic : diags)
+            AXLE_CORE_ERROR("Create VFX asset '{}': {}", newPath.string(), diagnostic.Message);
         return {};
     }
 
@@ -860,7 +869,10 @@ namespace Axle {
                 CreateNewTexture(m_CurrentDirectory);
             }
             if (ImGui::MenuItem("VFX Asset (.axleasset)")) {
-                CreateNewVFXAsset(m_CurrentDirectory);
+                auto path = CreateNewVFXAsset(m_CurrentDirectory);
+                SetStatusNotification(path.empty() ? "Could not create VFX asset. See Console."
+                                                  : "Created VFX Asset: " + path.filename().string());
+                if (!path.empty()) RefreshThumbnails();
             }
             if (ImGui::MenuItem("UI Canvas Asset (.axleasset)")) {
                 CreateNewCanvas(m_CurrentDirectory);
@@ -1589,11 +1601,12 @@ namespace Axle {
                     }
                     if (ImGui::MenuItem("VFX Asset (.axleasset)")) {
                         auto p = CreateNewVFXAsset(m_CurrentDirectory);
-                        SetStatusNotification("Created VFX Asset: " + p.filename().string());
-                        if (m_OnSelectAssetCallback) {
-                            m_OnSelectAssetCallback(p);
+                        SetStatusNotification(p.empty() ? "Could not create VFX asset. See Console."
+                                                        : "Created VFX Asset: " + p.filename().string());
+                        if (!p.empty()) {
+                            if (m_OnSelectAssetCallback) m_OnSelectAssetCallback(p);
+                            RefreshThumbnails();
                         }
-                        RefreshThumbnails();
                     }
                     if (ImGui::MenuItem("UI Canvas Asset (.axleasset)")) {
                         auto p = CreateNewCanvas(m_CurrentDirectory);

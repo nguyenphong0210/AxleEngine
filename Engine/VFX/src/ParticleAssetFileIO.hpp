@@ -30,8 +30,13 @@ namespace Axle::Detail {
             if (filePath.empty())
                 return fail("An asset destination path is required.");
             const std::filesystem::path target(filePath);
-            if (target.has_parent_path())
-                std::filesystem::create_directories(target.parent_path());
+            if (target.has_parent_path()) {
+                // Jolt propagates _HAS_EXCEPTIONS=0 to some callers. Filesystem errors
+                // must use error_code; a throwing overload may terminate before this catch.
+                std::error_code error;
+                std::filesystem::create_directories(target.parent_path(), error);
+                if (error) return fail("Cannot create asset directory: " + error.message());
+            }
             static std::atomic<uint64_t> sequence{0};
             temporary = target.string() + ".tmp." +
                         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "." +

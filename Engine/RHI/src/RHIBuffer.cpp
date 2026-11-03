@@ -112,6 +112,9 @@ namespace Axle::RHI {
         nri::Result res = core.CreateCommittedBuffer(*nativeDevice, memLoc, 1.0f, bufDesc, m_Buffer);
         if (res != nri::Result::SUCCESS || !m_Buffer) {
             AXLE_CORE_ERROR("RHIBuffer::Init: CreateCommittedBuffer failed with code {0}!", static_cast<uint32_t>(res));
+            // NRI can create its wrapper before GPU memory allocation fails. Never publish
+            // that unbound wrapper as a valid buffer or reuse it on the following frame.
+            Shutdown();
             return false;
         }
 
@@ -254,6 +257,7 @@ namespace Axle::RHI {
         m_Memory = nullptr;
         m_IsCommitted = false;
         m_MappedData = nullptr;
+        m_Desc = {};
     }
 
     void* RHIBuffer::Map(uint64_t offset, uint64_t size) {

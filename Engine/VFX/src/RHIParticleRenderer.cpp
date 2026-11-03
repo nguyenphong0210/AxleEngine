@@ -80,14 +80,23 @@ namespace Axle {
     }
 
     ParticleDrawResources *RHIParticleRenderer::AcquireDrawResources(uint32_t instanceCount) {
+        if (instanceCount == 0 || instanceCount > MAX_PARTICLES_PER_BATCH) return nullptr;
+
+        // Emitters grow continuously. Reserve geometrically instead of recreating a
+        // committed allocation for every new particle during the first seconds of playback.
+        uint32_t capacity = 256;
+        while (capacity < instanceCount) capacity = std::min(capacity * 2, MAX_PARTICLES_PER_BATCH);
+        const uint64_t bytes = static_cast<uint64_t>(capacity) * sizeof(ParticleInstanceVertex);
         if (m_DrawResourceCursor < m_DrawResources.size()) {
             auto *resource = m_DrawResources[m_DrawResourceCursor++].get();
-            if (resource->Instances.GetSize() < instanceCount * sizeof(ParticleInstanceVertex)) {
-                resource->Instances.Shutdown();
-                if (!resource->Instances.Init(
-                        RHI::RHIBufferDesc::Vertex(instanceCount * sizeof(ParticleInstanceVertex),
-                                                   RHI::RHIMemoryLocation::HostUpload, "ParticleInstances")))
+            if (!resource->Instances.IsValid() ||
+                resource->Instances.GetSize() < static_cast<uint64_t>(instanceCount) * sizeof(ParticleInstanceVertex)) {
+                RHI::RHIBuffer replacement;
+                if (!replacement.Init(RHI::RHIBufferDesc::Vertex(bytes,
+                        RHI::RHIMemoryLocation::HostUpload, "ParticleInstances")))
                     return nullptr;
+                // Keep the previous valid buffer on failure, so the next frame can retry.
+                resource->Instances = std::move(replacement);
             }
             return resource;
         }
@@ -97,7 +106,7 @@ namespace Axle {
         if (!res->Constants.Init(RHI::RHIBufferDesc::Constant(sizeof(RHIParticleConstants), RHI::RHIMemoryLocation::HostUpload, "Particle_CBV_" + suffix))) {
             return nullptr;
         }
-        if (!res->Instances.Init(RHI::RHIBufferDesc::Vertex(instanceCount * sizeof(ParticleInstanceVertex),
+        if (!res->Instances.Init(RHI::RHIBufferDesc::Vertex(bytes,
                                                             RHI::RHIMemoryLocation::HostUpload,
                                                             "Particle_VBO_" + suffix))) {
             return nullptr;
@@ -498,7 +507,9 @@ namespace Axle {
             if (!drawRes) continue;
 
             // 1. Upload to GPU Instance Buffer
-            drawRes->Instances.UpdateData(packet.Instances.data(), packet.InstanceCount * sizeof(ParticleInstanceVertex));
+            if (!drawRes->Instances.UpdateData(packet.Instances.data(),
+                    static_cast<uint64_t>(packet.InstanceCount) * sizeof(ParticleInstanceVertex)))
+                continue;
 
             // 2. Update Constant Buffer Parameters
             RHIParticleConstants drawConstants = m_ActiveConstants;
@@ -523,9 +534,8 @@ namespace Axle {
             drawConstants.MaterialEmission = material ? glm::vec4(material->EmissiveColor, material->EmissiveIntensity) : glm::vec4(0);
             drawConstants.UVTransform = material ? glm::vec4(material->UVScale, material->UVOffset) : glm::vec4(1,1,0,0);
 
-            if (drawRes->Constants.IsValid()) {
-                drawRes->Constants.UpdateData(&drawConstants, sizeof(RHIParticleConstants));
-            }
+            if (!drawRes->Constants.UpdateData(&drawConstants, sizeof(RHIParticleConstants)))
+                continue;
 
             // 3. Update Texture Descriptors in Descriptor Set (Space 1)
             if (drawRes->Pool.IsValid() && drawRes->Set) {

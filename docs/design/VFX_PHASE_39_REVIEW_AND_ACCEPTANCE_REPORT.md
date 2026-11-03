@@ -119,3 +119,62 @@ The original [completion plan](VFX_PHASE_39_COMPLETION_PLAN.md) and
 [implementation guide](VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) remain the
 scope/design references. Use this report and actual source names for current
 implementation/verification status.
+
+
+## Follow-up: Create VFX crash and allocation recovery (2026-11-03)
+
+A user-provided crash log after Content Browser Create VFX records an access
+violation in NRI D3D12 `CommandBufferD3D12::SetVertexBuffers`, reading the native
+resource in `BufferD3D12::GetDeviceAddress`. The new `.axleasset` had already been
+written. This identifies the failing draw path; it does not establish why the
+original native allocation failed, since that driver/allocation diagnostic was
+not captured. Ordinary continuous emission also passed before this correction.
+
+A deterministic fault-injection regression exposed a matching production defect:
+NRI's committed creation can return a wrapper before memory allocation fails.
+`RHIBuffer::Init` returned false but retained the unbound wrapper; `IsValid` then
+returned true. The particle renderer destroyed its old instance buffer before
+growth and subsequently used size alone to decide whether to retry. A following
+frame could bind the retained wrapper with no native resource, matching the
+reported null-resource stack. The new test failed before the correction with
+`Failed vertex allocation does not publish an unbound NRI buffer`.
+
+Corrections:
+
+- Release partially created committed buffers and reset their descriptor on
+  shutdown. A failed allocation exposes neither a usable handle nor stale size.
+- Grow particle capacity geometrically, allocate a replacement transactionally,
+  retain the previous buffer on failure, retry next frame and skip draws whose
+  instance/constant upload failed. Other emitters continue rendering.
+- Both Create VFX menu routes report creation failures; a failed creation cannot
+  select an empty asset or display a successful-create notification.
+- Use nonthrowing filesystem checks/directory creation in these VFX paths. The
+  new invalid-directory CPU fixture initially terminated under the inherited
+  `_HAS_EXCEPTIONS=0` setting; error_code overloads now report the error safely.
+
+Verification:
+
+```powershell
+cmake --build build --config Release --target AxleVFXUnitTests AxleVFXGPUTests AxleEditor AxleTests AxleMaterialUnitTests --parallel 12
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Release build passed; the pre-existing LNK4098 linkage warning remains. All four
+CTest entries passed: MaterialUnitTests, VFXUnitTests, VFXGPU_D3D12 and
+VFXGPU_Vulkan, using the physical RTX 3070 for both GPU entries. Added CPU checks
+create/load/instantiate a real temporary VFX asset, preserve an existing asset
+on repeated Create, and reject invalid destination directories. Added GPU checks
+cover unbound partial-creation cleanup, successful retry, one failed growth draw
+with another emitter still visible, next-frame pixel recovery and 180 continuously
+simulated/rendered frames. Allocation failure is injected through a scoped test
+interface override; ordinary rendering/readback still uses the real device.
+
+Final build/test logs: `build/vfx-create-final-regression-build.log` and
+`build/vfx-create-final-regression-tests.log`; the pre-fix failure is recorded in
+`build/vfx-create-failure-before.log`. Step 102 also passed with
+`AXLE_VFX_TEST_BACKEND=D3D12` and captures outside project assets; its log is
+`build/vfx-create-step102.log`. These are local generated evidence.
+
+The actual right-click menu was **NOT RUN** interactively: the Computer Use native
+pipe was unavailable. The user's created asset and crash log were preserved.
+This follow-up does not close Phase 39's remaining interactive/OpenGL acceptance.

@@ -30,7 +30,7 @@ bool RunAnimationSceneCorrectionTests() {
     SkeletalMeshData data; data.Name = "Triangle"; data.SkeletonRef = rig; data.Vertices.resize(3);
     data.Vertices[1].Position.x = 1; data.Vertices[2].Position.y = 1; data.Indices = {0,1,2};
     for (auto& vertex : data.Vertices) { vertex.BoneIDs[0] = 0; vertex.Weights[0] = 1; }
-    auto& mesh = entity.AddComponent<SkeletalMeshComponent>(); mesh.Mesh = std::make_shared<SkeletalMesh>(data);
+    auto& mesh = entity.AddComponent<SkeletalMeshComponent>(); mesh.Mesh = SkeletalMesh::Create(data);
     mesh.AssetPath = "missing-source.gltf";
     auto machine = std::make_shared<AnimationStateMachine>("Keyed");
     machine->DeclareParameter({"speed-id", "Speed", AnimatorParameterType::Float, 0.0f});

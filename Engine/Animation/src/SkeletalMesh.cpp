@@ -108,25 +108,31 @@ namespace Axle {
     }
 
     std::shared_ptr<SkeletalMesh> SkeletalMesh::Create(SkeletalMeshData meshData, std::string* diagnostic) {
-        int rootIndex = meshData.SkeletonRef ? meshData.SkeletonRef->GetRootBoneIndex() : 0;
-        meshData.Normalize(rootIndex >= 0 ? rootIndex : 0);
-        if (!meshData.Validate(diagnostic)) {
-            return nullptr;
+        if (diagnostic) diagnostic->clear();
+        if (meshData.SkeletonRef) {
+            auto ownedRig = std::make_shared<Skeleton>(*meshData.SkeletonRef);
+            std::vector<std::string> errors;
+            if (!ownedRig->RebuildDerivedData(&errors)) {
+                if (diagnostic) *diagnostic = errors.empty() ? "Invalid skeletal rig" : errors.front();
+                return nullptr;
+            }
+            meshData.SkeletonRef = std::move(ownedRig);
         }
-        return std::make_shared<SkeletalMesh>(std::move(meshData));
+        const int rootIndex = meshData.SkeletonRef ? meshData.SkeletonRef->GetRootBoneIndex() : 0;
+        meshData.Normalize(rootIndex >= 0 ? rootIndex : 0);
+        if (!meshData.Validate(diagnostic)) return nullptr;
+        meshData.BoundsMin = meshData.BoundsMax = meshData.Vertices.front().Position;
+        for (const auto& vertex : meshData.Vertices) {
+            meshData.BoundsMin = glm::min(meshData.BoundsMin, vertex.Position);
+            meshData.BoundsMax = glm::max(meshData.BoundsMax, vertex.Position);
+        }
+        // Only validated, detached CPU data can reach this private constructor.
+        return std::shared_ptr<SkeletalMesh>(new SkeletalMesh(std::move(meshData)));
     }
 
-    SkeletalMesh::SkeletalMesh(SkeletalMeshData meshData)
-        : m_Data(std::move(meshData)) {
-        // Detach retained builder aliases: own an independent immutable skeleton snapshot
-        if (m_Data.SkeletonRef) {
-            m_Data.SkeletonRef = std::make_shared<Skeleton>(*m_Data.SkeletonRef);
-        }
-        int rootIndex = m_Data.SkeletonRef ? m_Data.SkeletonRef->GetRootBoneIndex() : 0;
-        m_Data.Normalize(rootIndex >= 0 ? rootIndex : 0);
-        if (Window::HasActiveContext()) {
-            BuildBuffers();
-        }
+    SkeletalMesh::SkeletalMesh(SkeletalMeshData validatedData)
+        : m_Data(std::move(validatedData)) {
+        // GPU buffers are created lazily by GetVAO under an active GL context.
     }
 
     const std::shared_ptr<VertexArray>& SkeletalMesh::GetVAO() const {

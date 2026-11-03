@@ -848,9 +848,10 @@ bool RunTest_Step36_Phase30_Step1_CoreSkeletalDataStructures() {
     Axle::SkeletalMeshData meshData;
     meshData.Vertices.push_back(v);
     meshData.Indices = { 0, 0, 0 };
-    Axle::SkeletalMesh skeletalMesh(meshData);
+    auto skeletalMesh = Axle::SkeletalMesh::Create(meshData);
+    assert(skeletalMesh);
 
-    const auto& normV = skeletalMesh.GetData().Vertices[0];
+    const auto& normV = skeletalMesh->GetData().Vertices[0];
     float sumWeights = normV.Weights.x + normV.Weights.y + normV.Weights.z + normV.Weights.w;
     assert(std::abs(sumWeights - 1.0f) < 1e-4f);
     std::cout << "  -> PASS: Vertex bone influences pruned to 4 and strictly normalized to 1.0." << std::endl;
@@ -940,8 +941,9 @@ bool RunTest_Step37_Phase30_Step2_GPUSkinningAndShaderPipeline() {
     assert(bipedOk);
     assert(bipedData.Vertices.size() > 0);
 
-    Axle::SkeletalMesh bipedMesh(bipedData);
-    auto vao = bipedMesh.GetVAO();
+    auto bipedMesh = Axle::SkeletalMesh::Create(bipedData);
+    assert(bipedMesh);
+    auto vao = bipedMesh->GetVAO();
     assert(vao != nullptr);
     assert(vao->GetVertexBuffers().size() == 1);
 
@@ -1213,13 +1215,14 @@ bool RunTest_Step38_Phase30_Step3_AnimationPoseEvaluatorAndBlendingTree() {
 
     assert(animator.GetSkinningMatrices().size() == 8);
 
-    Axle::SkeletalMesh bipedMesh(bipedData);
+    auto bipedMesh = Axle::SkeletalMesh::Create(bipedData);
+    assert(bipedMesh);
     Axle::SkinningPipeline skinningPipeline;
     skinningPipeline.Init();
 
     animator.UploadToPipeline(skinningPipeline, *skinningPipeline.GetShader());
-    skinningPipeline.RenderSkinned(*skinningPipeline.GetShader(), bipedMesh.GetVAO(), glm::mat4(1.0f), animator.GetSkinningMatrices());
-    skinningPipeline.RenderSkinned(*skinningPipeline.GetShadowShader(), bipedMesh.GetVAO(), glm::mat4(1.0f), animator.GetSkinningMatrices());
+    skinningPipeline.RenderSkinned(*skinningPipeline.GetShader(), bipedMesh->GetVAO(), glm::mat4(1.0f), animator.GetSkinningMatrices());
+    skinningPipeline.RenderSkinned(*skinningPipeline.GetShadowShader(), bipedMesh->GetVAO(), glm::mat4(1.0f), animator.GetSkinningMatrices());
 
     std::cout << "  -> PASS: Animator controller evaluated poses and dispatched GPU skinning draw call." << std::endl;
 
@@ -1389,7 +1392,7 @@ static std::shared_ptr<Axle::SkeletalMesh> CreateTestBipedMesh(std::shared_ptr<A
     Axle::SkeletalMeshData bipedData;
     std::vector<std::shared_ptr<Axle::AnimationClip>> clips;
     Axle::SkeletalMeshImporter::CreateProceduralBiped(bipedData, outSkeleton, clips);
-    return std::make_shared<Axle::SkeletalMesh>(bipedData);
+    return Axle::SkeletalMesh::Create(bipedData);
 }
 
 bool RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController() {
@@ -1820,7 +1823,7 @@ bool RunTest_Step41_Phase30_Step6_CharacterSandboxPlaygroundAndSceneIntegration(
     std::vector<std::shared_ptr<Axle::AnimationClip>> bipedClips;
     bool bipedOk = Axle::SkeletalMeshImporter::CreateProceduralBiped(bipedData, bipedSkeleton, bipedClips);
     assert(bipedOk);
-    auto bipedMesh = std::make_shared<Axle::SkeletalMesh>(bipedData);
+    auto bipedMesh = Axle::SkeletalMesh::Create(bipedData);
 
     auto& smc = player.GetComponent<Axle::SkeletalMeshComponent>();
     smc.Mesh = bipedMesh;

@@ -105,6 +105,8 @@ static bool TestImmutableSkeletalResourcePublication() {
     static_assert(!std::is_move_constructible_v<SkeletalMesh>, "SkeletalMesh must not be move-constructible");
     static_assert(!std::is_default_constructible_v<SkeletalMesh>, "SkeletalMesh must not be default-constructible");
 
+    static_assert(!std::is_constructible_v<SkeletalMesh, SkeletalMeshData>, "Draft construction must not bypass the validated factory");
+
     // 2. Draft & Builder alias detachment
     auto builderRig = std::make_shared<Skeleton>("BuilderRig");
     Bone rootBone; rootBone.ID = 0; rootBone.Name = "Root"; rootBone.LocalTransform = glm::mat4(1.0f);
@@ -236,13 +238,22 @@ static bool TestImmutableSkeletalResourcePublication() {
     ANIMATION_CHECK(!smc1.ReplaceMesh(badMesh, &badDiag), "ReplaceMesh rejects null/failed publication");
     ANIMATION_CHECK(smc1.Mesh == publishedMesh, "SkeletalMeshComponent retains last good published mesh");
 
-    // R1: Invalid non-null replacement keeps last good mesh
-    auto invalidDraft = draft;
-    invalidDraft.Indices[1] = 99; // Out of range index
-    auto uncheckedInvalidMesh = std::make_shared<SkeletalMesh>(invalidDraft);
+    // Invalid published objects cannot be constructed; invalid drafts fail at publication.
+    auto invalidDraft = publishedMesh->GetData();
+    invalidDraft.Indices[1] = 99;
     std::string replaceDiag;
-    ANIMATION_CHECK(!smc1.ReplaceMesh(uncheckedInvalidMesh, &replaceDiag), "ReplaceMesh rejects invalid non-null mesh");
-    ANIMATION_CHECK(smc1.Mesh == publishedMesh, "SkeletalMeshComponent retains last good mesh on invalid non-null replacement");
+    auto invalidCandidate = SkeletalMesh::Create(invalidDraft, &replaceDiag);
+    ANIMATION_CHECK(!invalidCandidate && !replaceDiag.empty(), "Invalid indices cannot bypass publication");
+    ANIMATION_CHECK(!smc1.ReplaceMesh(invalidCandidate, &replaceDiag) && smc1.Mesh == publishedMesh,
+                    "Failed publication preserves the live component");
+    auto invalidRig = std::make_shared<Skeleton>(*publishedMesh->GetSkeleton());
+    invalidRig->GetBones()[0].ParentID = 0;
+    invalidDraft = publishedMesh->GetData(); invalidDraft.SkeletonRef = invalidRig;
+    ANIMATION_CHECK(!SkeletalMesh::Create(invalidDraft, &replaceDiag), "Malformed rig fails before publication");
+    invalidDraft = publishedMesh->GetData(); invalidDraft.Vertices[0].Normal.x = std::numeric_limits<float>::infinity();
+    ANIMATION_CHECK(!SkeletalMesh::Create(invalidDraft, &replaceDiag), "Nonfinite attributes fail before publication");
+    ANIMATION_CHECK(publishedMesh->GetBoundsMin() == glm::vec3(0) && publishedMesh->GetBoundsMax() == glm::vec3(1,1,0),
+                    "Published bounds describe the validated vertices");
 
     // Destroy builder objects; verify live instance continues to evaluate cleanly
     builderRig.reset();

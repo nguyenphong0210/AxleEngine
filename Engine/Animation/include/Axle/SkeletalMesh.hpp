@@ -41,7 +41,6 @@ namespace Axle {
     class SkeletalMesh {
     public:
         SkeletalMesh() = delete;
-        explicit SkeletalMesh(SkeletalMeshData meshData);
 
         // Non-copyable and non-assignable: published resources cannot be overwritten in place
         SkeletalMesh(const SkeletalMesh&) = delete;
@@ -77,6 +76,7 @@ namespace Axle {
         void BuildBuffers();
 
     private:
+        explicit SkeletalMesh(SkeletalMeshData validatedData);
         SkeletalMeshData m_Data;
         mutable std::shared_ptr<VertexArray> m_VAO;
     };

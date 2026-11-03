@@ -222,10 +222,11 @@ static bool TestCPUSkeletalMeshConstructionWithoutGLContext() {
     data.Vertices = {v0, v1, v2};
     data.Indices = {0, 1, 2};
 
-    Axle::SkeletalMesh mesh(data);
-    ANIMATION_CHECK(mesh.GetVertexCount() == 3, "SkeletalMesh vertex count correct on CPU");
-    ANIMATION_CHECK(mesh.GetIndexCount() == 3, "SkeletalMesh index count correct on CPU");
-    ANIMATION_CHECK(mesh.GetVAO() == nullptr, "VAO is null when constructed without active OpenGL context");
+    auto mesh = Axle::SkeletalMesh::Create(data);
+    ANIMATION_CHECK(mesh, "Validated CPU mesh publishes");
+    ANIMATION_CHECK(mesh->GetVertexCount() == 3, "SkeletalMesh vertex count correct on CPU");
+    ANIMATION_CHECK(mesh->GetIndexCount() == 3, "SkeletalMesh index count correct on CPU");
+    ANIMATION_CHECK(mesh->GetVAO() == nullptr, "VAO is null when constructed without active OpenGL context");
     return true;
 }
 

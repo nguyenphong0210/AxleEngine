@@ -6,11 +6,14 @@
 #include <Axle/AnimationStateMachine.hpp>
 #include <Axle/Animator.hpp>
 #include <Axle/AnimationDefinition.hpp>
+#include <Axle/AnimationAssetCodec.hpp>
 #include <Axle/AssetTypes.hpp>
 #include <Axle/AssetDSL.hpp>
+#include <Axle/FileSystem.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string_view>
 #include <limits>
+#include <filesystem>
 
 static bool TestBaselineSampling() {
     Axle::Skeleton skeleton("Fixture");
@@ -557,6 +560,206 @@ static bool TestAnimationDefinitionsAndValidation() {
     return true;
 }
 
+static bool TestAnimationCodecRoundTripAndAtomicSave() {
+    std::filesystem::path testDir = std::filesystem::current_path() / "test_tmp_anim";
+    std::error_code ec;
+    std::filesystem::create_directories(testDir, ec);
+
+    std::string skelFile = (testDir / "test.skeleton").string();
+    std::string ctrlFile = (testDir / "test.animcontroller").string();
+    std::string clipFile = (testDir / "test.animclip").string();
+
+    // 1. Skeleton Round Trip
+    Axle::SkeletonDefinition skelDef;
+    skelDef.Id = "skel_001";
+    skelDef.Name = "TestRig";
+    Axle::Bone r;
+    r.Name = "Root";
+    r.ParentID = -1;
+    skelDef.Bones.push_back(r);
+    Axle::Bone c;
+    c.Name = "Spine";
+    c.ParentID = 0;
+    c.LocalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0, 1, 0));
+    skelDef.Bones.push_back(c);
+
+    std::string err;
+    ANIMATION_CHECK(Axle::AnimationAssetCodec::SaveSkeleton(skelFile, skelDef, &err), "SaveSkeleton succeeds");
+    Axle::SkeletonDefinition loadedSkel;
+    ANIMATION_CHECK(Axle::AnimationAssetCodec::LoadSkeleton(skelFile, loadedSkel, &err), "LoadSkeleton succeeds");
+    ANIMATION_CHECK(loadedSkel.Id == skelDef.Id, "Skeleton ID matches");
+    ANIMATION_CHECK(loadedSkel.Name == skelDef.Name, "Skeleton Name matches");
+    ANIMATION_CHECK(loadedSkel.Bones.size() == 2, "Loaded skeleton has 2 bones");
+    ANIMATION_CHECK(loadedSkel.Bones[0].Name == "Root", "Bone 0 Name matches");
+    ANIMATION_CHECK(loadedSkel.Bones[1].Name == "Spine", "Bone 1 Name matches");
+    ANIMATION_CHECK(loadedSkel.Bones[1].ParentID == 0, "Bone 1 ParentID matches");
+
+    // 2. AnimatorController Round Trip
+    Axle::AnimatorControllerDefinition ctrlDef;
+    ctrlDef.Id = "ctrl_001";
+    ctrlDef.Name = "PlayerLocomotion";
+    ctrlDef.SkeletonRef = "test.skeleton";
+    ctrlDef.EntryStateId = "st_idle";
+
+    Axle::ParameterDefinition pFloat;
+    pFloat.Id = "p_spd";
+    pFloat.Name = "Speed";
+    pFloat.Type = Axle::AnimatorParameterType::Float;
+    pFloat.Default = 1.5f;
+    ctrlDef.Parameters.push_back(pFloat);
+
+    Axle::ParameterDefinition pInt;
+    pInt.Id = "p_mode";
+    pInt.Name = "Mode";
+    pInt.Type = Axle::AnimatorParameterType::Int;
+    pInt.Default = 3;
+    ctrlDef.Parameters.push_back(pInt);
+
+    Axle::StateDefinition stIdle;
+    stIdle.Id = "st_idle";
+    stIdle.Name = "Idle";
+    stIdle.NodeType = Axle::AnimationNodeType::Clip;
+    stIdle.MotionAssetRef = "idle.animclip";
+    ctrlDef.States.push_back(stIdle);
+
+    Axle::StateDefinition stWalk;
+    stWalk.Id = "st_walk";
+    stWalk.Name = "Walk";
+    stWalk.NodeType = Axle::AnimationNodeType::Clip;
+    stWalk.MotionAssetRef = "walk.animclip";
+    ctrlDef.States.push_back(stWalk);
+
+    Axle::TransitionDefinition tr;
+    tr.Id = "tr_001";
+    tr.FromState = "st_idle";
+    tr.ToState = "st_walk";
+    tr.CrossfadeSeconds = 0.3f;
+    Axle::ConditionDefinition c1;
+    c1.Parameter = "p_spd";
+    c1.Operator = Axle::ConditionOperator::Greater;
+    c1.Operand = 0.5f;
+    tr.AllConditions.push_back(c1);
+    ctrlDef.Transitions.push_back(tr);
+
+    ANIMATION_CHECK(Axle::AnimationAssetCodec::SaveAnimatorController(ctrlFile, ctrlDef, &err), "SaveAnimatorController succeeds");
+    Axle::AnimatorControllerDefinition loadedCtrl;
+    ANIMATION_CHECK(Axle::AnimationAssetCodec::LoadAnimatorController(ctrlFile, loadedCtrl, &err), "LoadAnimatorController succeeds");
+    ANIMATION_CHECK(loadedCtrl.Id == ctrlDef.Id, "Controller Id matches");
+    ANIMATION_CHECK(loadedCtrl.Name == ctrlDef.Name, "Controller Name matches");
+    ANIMATION_CHECK(loadedCtrl.EntryStateId == "st_idle", "Controller EntryState matches");
+    ANIMATION_CHECK(loadedCtrl.Parameters.size() == 2, "Loaded controller has 2 parameters");
+    ANIMATION_CHECK(loadedCtrl.States.size() == 2, "Loaded controller has 2 states");
+    ANIMATION_CHECK(loadedCtrl.Transitions.size() == 1, "Loaded controller has 1 transition");
+    ANIMATION_CHECK(loadedCtrl.Transitions[0].CrossfadeSeconds == 0.3f, "Loaded transition crossfade matches");
+    ANIMATION_CHECK(loadedCtrl.Transitions[0].AllConditions.size() == 1, "Loaded transition condition count matches");
+
+    // 3. AnimationClip Round Trip
+    Axle::AnimationClipDefinition clipDef;
+    clipDef.Id = "clip_001";
+    clipDef.Name = "WalkForward";
+    clipDef.Duration = 1.0f;
+    clipDef.FrameRate = 60.0f;
+    Axle::AnimationChannel ch;
+    ch.BoneName = "Spine";
+    Axle::Keyframe<glm::vec3> pk0{0.0f, glm::vec3(0.0f)};
+    Axle::Keyframe<glm::vec3> pk1{1.0f, glm::vec3(0.0f, 2.0f, 0.0f)};
+    ch.Positions = {pk0, pk1};
+    clipDef.Channels.push_back(ch);
+    Axle::AnimationEventDefinition ev;
+    ev.Id = "ev_step";
+    ev.Name = "StepSound";
+    ev.Time = 0.5f;
+    clipDef.Events.push_back(ev);
+
+    ANIMATION_CHECK(Axle::AnimationAssetCodec::SaveAnimationClip(clipFile, clipDef, &err), "SaveAnimationClip succeeds");
+    Axle::AnimationClipDefinition loadedClip;
+    ANIMATION_CHECK(Axle::AnimationAssetCodec::LoadAnimationClip(clipFile, loadedClip, &err), "LoadAnimationClip succeeds");
+    ANIMATION_CHECK(loadedClip.Id == clipDef.Id, "Clip Id matches");
+    ANIMATION_CHECK(loadedClip.Duration == 1.0f, "Clip duration matches");
+    ANIMATION_CHECK(loadedClip.Channels.size() == 1, "Clip channel count matches");
+    ANIMATION_CHECK(loadedClip.Channels[0].Positions.size() == 2, "Clip channel keyframe count matches");
+    ANIMATION_CHECK(loadedClip.Events.size() == 1, "Clip event count matches");
+
+    // 4. Atomic Save Failure Preserves Old File
+    std::string canaryFile = (testDir / "canary.txt").string();
+    std::string originalGoodContent = "GOOD_ORIGINAL_PAYLOAD";
+    ANIMATION_CHECK(Axle::AnimationAssetCodec::WriteTextFileAtomically(canaryFile, originalGoodContent), "Write initial canary file");
+
+    // Attempt to write atomically with empty path -> failure
+    bool failedSave = Axle::AnimationAssetCodec::WriteTextFileAtomically("", "CORRUPT_PAYLOAD", &err);
+    ANIMATION_CHECK(!failedSave, "Write with empty filepath correctly fails");
+    ANIMATION_CHECK(Axle::FileSystem::ReadTextFile(canaryFile) == originalGoodContent, "Canary file preserved unchanged on failure");
+
+    // Clean up temporary files
+    std::filesystem::remove_all(testDir, ec);
+    return true;
+}
+
+static bool TestCookedGeometryBakeAndTruncatedBinaryRejection() {
+    std::filesystem::path testDir = std::filesystem::current_path() / "test_tmp_geom";
+    std::error_code ec;
+    std::filesystem::create_directories(testDir, ec);
+
+    std::string binFile = (testDir / "mesh.bin").string();
+
+    Axle::SkeletalMeshData meshData;
+    meshData.Name = "TestMesh";
+    Axle::SkeletalVertex v0;
+    v0.Position = {0.0f, 0.0f, 0.0f};
+    v0.Normal = {0.0f, 1.0f, 0.0f};
+    v0.AddBoneData(0, 0.7f);
+    v0.AddBoneData(1, 0.3f);
+    v0.NormalizeWeights(0);
+
+    Axle::SkeletalVertex v1;
+    v1.Position = {1.0f, 0.0f, 0.0f};
+    v1.Normal = {0.0f, 1.0f, 0.0f};
+    v1.AddBoneData(0, 1.0f);
+    v1.NormalizeWeights(0);
+
+    Axle::SkeletalVertex v2;
+    v2.Position = {0.0f, 1.0f, 0.0f};
+    v2.Normal = {0.0f, 1.0f, 0.0f};
+    v2.AddBoneData(1, 1.0f);
+    v2.NormalizeWeights(0);
+
+    meshData.Vertices = {v0, v1, v2};
+    meshData.Indices = {0, 1, 2};
+
+    std::string err;
+    std::string signature = "SIG_SKELETON_XYZ_123";
+    ANIMATION_CHECK(Axle::AnimationAssetCodec::BakeSkeletalMeshGeometry(binFile, meshData, signature, &err), "BakeSkeletalMeshGeometry succeeds");
+
+    Axle::SkeletalMeshData loadedData;
+    std::string loadedSig;
+    ANIMATION_CHECK(Axle::AnimationAssetCodec::LoadSkeletalMeshGeometry(binFile, loadedData, &loadedSig, &err), "LoadSkeletalMeshGeometry succeeds");
+    ANIMATION_CHECK(loadedSig == signature, "Baked geometry signature matches");
+    ANIMATION_CHECK(loadedData.Vertices.size() == 3, "Loaded geometry has 3 vertices");
+    ANIMATION_CHECK(loadedData.Indices.size() == 3, "Loaded geometry has 3 indices");
+    ANIMATION_CHECK(Axle::AnimationTests::Near(loadedData.Vertices[0].Weights[0], 0.7f), "Bone weight 0 preserved");
+    ANIMATION_CHECK(Axle::AnimationTests::Near(loadedData.Vertices[0].Weights[1], 0.3f), "Bone weight 1 preserved");
+
+    // Test truncated binary rejection
+    std::string truncFile = (testDir / "truncated.bin").string();
+    std::vector<uint8_t> validBytes = Axle::FileSystem::ReadBinaryFile(binFile);
+    ANIMATION_CHECK(!validBytes.empty(), "Valid bytes read back");
+
+    // Truncate to 10 bytes (smaller than header)
+    std::vector<uint8_t> smallBytes(validBytes.begin(), validBytes.begin() + 10);
+    Axle::AnimationAssetCodec::WriteBinaryFileAtomically(truncFile, smallBytes.data(), smallBytes.size());
+    Axle::SkeletalMeshData badData;
+    ANIMATION_CHECK(!Axle::AnimationAssetCodec::LoadSkeletalMeshGeometry(truncFile, badData, nullptr, &err), "Truncated header rejected");
+
+    // Truncate halfway through vertex payload
+    std::vector<uint8_t> partialBytes(validBytes.begin(), validBytes.begin() + validBytes.size() - 20);
+    Axle::AnimationAssetCodec::WriteBinaryFileAtomically(truncFile, partialBytes.data(), partialBytes.size());
+    ANIMATION_CHECK(!Axle::AnimationAssetCodec::LoadSkeletalMeshGeometry(truncFile, badData, nullptr, &err), "Truncated vertex payload rejected");
+
+    // Clean up
+    std::filesystem::remove_all(testDir, ec);
+    return true;
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure")
         return Axle::AnimationTests::Check(false, "Intentional harness failure", __FILE__, __LINE__) ? 0 : 1;
@@ -575,6 +778,8 @@ int main(int argc, char** argv) {
     if (!TestAnimatorInstanceIsolationAndReset()) return 1;
     if (!TestAssetDSLAnimationKindsAndTypes()) return 1;
     if (!TestAnimationDefinitionsAndValidation()) return 1;
+    if (!TestAnimationCodecRoundTripAndAtomicSave()) return 1;
+    if (!TestCookedGeometryBakeAndTruncatedBinaryRejection()) return 1;
     std::cout << "Animation unit tests PASS\n";
     return 0;
 }

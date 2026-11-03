@@ -8,6 +8,7 @@ add_library(AxleAnimation STATIC
     src/SkeletalMesh.cpp
     src/SkeletalMeshImporter.cpp
     src/AnimationDefinition.cpp
+    src/AnimationAssetCodec.cpp
 )
 add_library(Axle::Animation ALIAS AxleAnimation)
 

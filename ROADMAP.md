@@ -782,7 +782,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **B2**: Shared complete codecs, atomic saves, validated cooked geometry, FileSystem/VFS loading and last-good reload.
     - [ ] **B3**: Scene and all assembly/editor round trips; referenced/unique controllers, complete fallback, typed defaults and legacy migration.
   - [ ] **C - Typed Animator Runtime**:
-    - [ ] **C1**: Float/Int/Bool/Trigger declarations, typed conditions and script/component accessors.
+    - [x] **C1**: Float/Int/Bool/Trigger declarations, typed conditions and script/component accessors.
     - [ ] **C2**: Deterministic priority/exit-time transitions, atomic trigger consumption, independent crossfade clocks and bounded residual-time advancement.
   - [ ] **D - Locomotion Blend Spaces**:
     - [ ] **D1**: Robust 1D weights and persistent phase continuity when parameters/durations change.

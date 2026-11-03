@@ -3,6 +3,7 @@
 #include <Axle/BlendSpace1D.hpp>
 #include <Axle/AnimationPose.hpp>
 #include <Axle/Skeleton.hpp>
+#include <Axle/AnimationDefinition.hpp>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -11,12 +12,6 @@
 #include <cstdint>
 
 namespace Axle {
-
-    enum class AnimationNodeType {
-        Clip,
-        BlendSpace1D,
-        BlendSpace2D
-    };
 
     struct AnimationState {
         std::string Name;
@@ -62,7 +57,9 @@ namespace Axle {
         float Duration = 0.2f;       // Crossfade duration in seconds
         bool HasExitTime = false;     // Wait for state playback to finish
         float ExitTime = 1.0f;        // Normalized time [0..1]
+        float ExitPhase = 1.0f;
         std::vector<TransitionRule> Rules;
+        std::vector<ConditionDefinition> PureConditions;
         std::function<bool()> Condition; // Legacy optional condition predicate
         std::function<bool(const AnimationStateMachine&)> InstanceCondition; // Instance-aware condition predicate
     };
@@ -88,17 +85,26 @@ namespace Axle {
         float GetTransitionProgress() const;
 
         // Parameters
-        void SetFloat(const std::string& name, float value) { m_FloatParams[name] = value; }
+        void SetFloat(const std::string& name, float value);
         float GetFloat(const std::string& name, float defaultVal = 0.0f) const;
 
-        void SetInt(const std::string& name, int32_t value) { m_IntParams[name] = value; }
+        void SetInt(const std::string& name, int32_t value);
         int32_t GetInt(const std::string& name, int32_t defaultVal = 0) const;
 
-        void SetBool(const std::string& name, bool value) { m_BoolParams[name] = value; }
+        void SetBool(const std::string& name, bool value);
         bool GetBool(const std::string& name, bool defaultVal = false) const;
 
-        void SetTrigger(const std::string& name) { m_TriggerParams[name] = true; }
+        void SetTrigger(const std::string& name);
+        bool PeekTrigger(const std::string& name) const;
         bool CheckAndConsumeTrigger(const std::string& name);
+
+        // Parameter declaration, stable ID lookup and renaming
+        void DeclareParameter(const ParameterDefinition& param);
+        const ParameterDefinition* GetParameterDeclaration(const std::string& nameOrId) const;
+        bool RenameParameter(const std::string& oldName, const std::string& newName);
+        bool ValidateParameterType(const std::string& nameOrId, AnimatorParameterType expectedType) const;
+
+        static bool EvaluateCondition(const ConditionDefinition& cond, const AnimationStateMachine& sm);
 
         // Reset state machine to initial state and clear transient triggers
         void Reset();
@@ -115,12 +121,16 @@ namespace Axle {
 
     private:
         void CheckTransitions();
+        std::string ResolveParamId(const std::string& nameOrId) const;
 
     private:
         std::string m_Name;
         std::string m_InitialStateName;
         std::unordered_map<std::string, AnimationState> m_States;
         std::vector<AnimationTransition> m_Transitions;
+
+        std::unordered_map<AnimationId, ParameterDefinition> m_DeclaredParameters;
+        std::unordered_map<std::string, AnimationId> m_NameToIdMap;
 
         std::unordered_map<std::string, float> m_FloatParams;
         std::unordered_map<std::string, int32_t> m_IntParams;

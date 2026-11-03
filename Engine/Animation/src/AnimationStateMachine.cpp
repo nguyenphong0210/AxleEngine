@@ -100,28 +100,232 @@ namespace Axle {
         return std::clamp(m_TransitionElapsed / m_TransitionDuration, 0.0f, 1.0f);
     }
 
+    void AnimationStateMachine::SetFloat(const std::string& name, float value) {
+        m_FloatParams[name] = value;
+        auto it = m_NameToIdMap.find(name);
+        if (it != m_NameToIdMap.end()) {
+            m_FloatParams[it->second] = value;
+        }
+    }
+
     float AnimationStateMachine::GetFloat(const std::string& name, float defaultVal) const {
         auto it = m_FloatParams.find(name);
-        return (it != m_FloatParams.end()) ? it->second : defaultVal;
+        if (it != m_FloatParams.end()) return it->second;
+        auto itId = m_NameToIdMap.find(name);
+        if (itId != m_NameToIdMap.end()) {
+            auto itVal = m_FloatParams.find(itId->second);
+            if (itVal != m_FloatParams.end()) return itVal->second;
+        }
+        return defaultVal;
+    }
+
+    void AnimationStateMachine::SetInt(const std::string& name, int32_t value) {
+        m_IntParams[name] = value;
+        auto it = m_NameToIdMap.find(name);
+        if (it != m_NameToIdMap.end()) {
+            m_IntParams[it->second] = value;
+        }
     }
 
     int32_t AnimationStateMachine::GetInt(const std::string& name, int32_t defaultVal) const {
         auto it = m_IntParams.find(name);
-        return (it != m_IntParams.end()) ? it->second : defaultVal;
+        if (it != m_IntParams.end()) return it->second;
+        auto itId = m_NameToIdMap.find(name);
+        if (itId != m_NameToIdMap.end()) {
+            auto itVal = m_IntParams.find(itId->second);
+            if (itVal != m_IntParams.end()) return itVal->second;
+        }
+        return defaultVal;
+    }
+
+    void AnimationStateMachine::SetBool(const std::string& name, bool value) {
+        m_BoolParams[name] = value;
+        auto it = m_NameToIdMap.find(name);
+        if (it != m_NameToIdMap.end()) {
+            m_BoolParams[it->second] = value;
+        }
     }
 
     bool AnimationStateMachine::GetBool(const std::string& name, bool defaultVal) const {
         auto it = m_BoolParams.find(name);
-        return (it != m_BoolParams.end()) ? it->second : defaultVal;
+        if (it != m_BoolParams.end()) return it->second;
+        auto itId = m_NameToIdMap.find(name);
+        if (itId != m_NameToIdMap.end()) {
+            auto itVal = m_BoolParams.find(itId->second);
+            if (itVal != m_BoolParams.end()) return itVal->second;
+        }
+        return defaultVal;
+    }
+
+    void AnimationStateMachine::SetTrigger(const std::string& name) {
+        m_TriggerParams[name] = true;
+        auto it = m_NameToIdMap.find(name);
+        if (it != m_NameToIdMap.end()) {
+            m_TriggerParams[it->second] = true;
+        }
+    }
+
+    bool AnimationStateMachine::PeekTrigger(const std::string& name) const {
+        auto it = m_TriggerParams.find(name);
+        if (it != m_TriggerParams.end() && it->second) return true;
+        auto itId = m_NameToIdMap.find(name);
+        if (itId != m_NameToIdMap.end()) {
+            auto itVal = m_TriggerParams.find(itId->second);
+            if (itVal != m_TriggerParams.end() && itVal->second) return true;
+        }
+        return false;
     }
 
     bool AnimationStateMachine::CheckAndConsumeTrigger(const std::string& name) {
+        bool active = false;
         auto it = m_TriggerParams.find(name);
         if (it != m_TriggerParams.end() && it->second) {
-            it->second = false; // consume
-            return true;
+            it->second = false;
+            active = true;
         }
-        return false;
+        auto itId = m_NameToIdMap.find(name);
+        if (itId != m_NameToIdMap.end()) {
+            auto itVal = m_TriggerParams.find(itId->second);
+            if (itVal != m_TriggerParams.end() && itVal->second) {
+                itVal->second = false;
+                active = true;
+            }
+        }
+        return active;
+    }
+
+    void AnimationStateMachine::DeclareParameter(const ParameterDefinition& param) {
+        m_DeclaredParameters[param.Id] = param;
+        if (!param.Name.empty()) {
+            m_NameToIdMap[param.Name] = param.Id;
+        }
+        if (param.Type == AnimatorParameterType::Float && param.Default.index() == 0) {
+            float fv = std::get<float>(param.Default);
+            m_FloatParams[param.Id] = fv;
+            if (!param.Name.empty()) m_FloatParams[param.Name] = fv;
+        } else if (param.Type == AnimatorParameterType::Int && param.Default.index() == 1) {
+            int32_t iv = std::get<int32_t>(param.Default);
+            m_IntParams[param.Id] = iv;
+            if (!param.Name.empty()) m_IntParams[param.Name] = iv;
+        } else if (param.Type == AnimatorParameterType::Bool && param.Default.index() == 2) {
+            bool bv = std::get<bool>(param.Default);
+            m_BoolParams[param.Id] = bv;
+            if (!param.Name.empty()) m_BoolParams[param.Name] = bv;
+        }
+    }
+
+    const ParameterDefinition* AnimationStateMachine::GetParameterDeclaration(const std::string& nameOrId) const {
+        auto it = m_DeclaredParameters.find(nameOrId);
+        if (it != m_DeclaredParameters.end()) return &it->second;
+        auto itId = m_NameToIdMap.find(nameOrId);
+        if (itId != m_NameToIdMap.end()) {
+            auto it2 = m_DeclaredParameters.find(itId->second);
+            if (it2 != m_DeclaredParameters.end()) return &it2->second;
+        }
+        return nullptr;
+    }
+
+    bool AnimationStateMachine::RenameParameter(const std::string& oldName, const std::string& newName) {
+        auto it = m_NameToIdMap.find(oldName);
+        if (it == m_NameToIdMap.end()) return false;
+        AnimationId id = it->second;
+        m_NameToIdMap.erase(it);
+        m_NameToIdMap[newName] = id;
+        auto itP = m_DeclaredParameters.find(id);
+        if (itP != m_DeclaredParameters.end()) {
+            itP->second.Name = newName;
+        }
+        if (m_FloatParams.find(oldName) != m_FloatParams.end()) {
+            m_FloatParams[newName] = m_FloatParams[oldName];
+            m_FloatParams.erase(oldName);
+        }
+        if (m_IntParams.find(oldName) != m_IntParams.end()) {
+            m_IntParams[newName] = m_IntParams[oldName];
+            m_IntParams.erase(oldName);
+        }
+        if (m_BoolParams.find(oldName) != m_BoolParams.end()) {
+            m_BoolParams[newName] = m_BoolParams[oldName];
+            m_BoolParams.erase(oldName);
+        }
+        if (m_TriggerParams.find(oldName) != m_TriggerParams.end()) {
+            m_TriggerParams[newName] = m_TriggerParams[oldName];
+            m_TriggerParams.erase(oldName);
+        }
+        return true;
+    }
+
+    bool AnimationStateMachine::ValidateParameterType(const std::string& nameOrId, AnimatorParameterType expectedType) const {
+        const auto* decl = GetParameterDeclaration(nameOrId);
+        if (!decl) return true;
+        return decl->Type == expectedType;
+    }
+
+    bool AnimationStateMachine::EvaluateCondition(const ConditionDefinition& cond, const AnimationStateMachine& sm) {
+        if (cond.Operator == ConditionOperator::AlwaysTrue) return true;
+
+        std::string paramKey = cond.Parameter;
+        const auto* decl = sm.GetParameterDeclaration(paramKey);
+        AnimatorParameterType pType = AnimatorParameterType::Float;
+        if (decl) {
+            pType = decl->Type;
+        } else {
+            if (cond.Operator == ConditionOperator::IsTrue || cond.Operator == ConditionOperator::IsFalse) {
+                pType = AnimatorParameterType::Bool;
+            } else if (cond.Operator == ConditionOperator::Triggered) {
+                pType = AnimatorParameterType::Trigger;
+            } else if (cond.Operand.index() == 1) {
+                pType = AnimatorParameterType::Int;
+            } else {
+                pType = AnimatorParameterType::Float;
+            }
+        }
+
+        switch (pType) {
+            case AnimatorParameterType::Float: {
+                float val = sm.GetFloat(paramKey);
+                float op = (cond.Operand.index() == 0) ? std::get<float>(cond.Operand) : 0.0f;
+                switch (cond.Operator) {
+                    case ConditionOperator::Greater: return val > op;
+                    case ConditionOperator::Less: return val < op;
+                    case ConditionOperator::GreaterOrEqual: return val >= op;
+                    case ConditionOperator::LessOrEqual: return val <= op;
+                    case ConditionOperator::Equal: return std::abs(val - op) < 1e-4f;
+                    case ConditionOperator::NotEqual: return std::abs(val - op) >= 1e-4f;
+                    default: return true;
+                }
+            }
+            case AnimatorParameterType::Int: {
+                int32_t val = sm.GetInt(paramKey);
+                int32_t op = (cond.Operand.index() == 1) ? std::get<int32_t>(cond.Operand) : 0;
+                switch (cond.Operator) {
+                    case ConditionOperator::Greater: return val > op;
+                    case ConditionOperator::Less: return val < op;
+                    case ConditionOperator::GreaterOrEqual: return val >= op;
+                    case ConditionOperator::LessOrEqual: return val <= op;
+                    case ConditionOperator::Equal: return val == op;
+                    case ConditionOperator::NotEqual: return val != op;
+                    default: return true;
+                }
+            }
+            case AnimatorParameterType::Bool: {
+                bool val = sm.GetBool(paramKey);
+                bool op = (cond.Operand.index() == 2) ? std::get<bool>(cond.Operand) : true;
+                switch (cond.Operator) {
+                    case ConditionOperator::IsTrue: return val == true;
+                    case ConditionOperator::IsFalse: return val == false;
+                    case ConditionOperator::Equal: return val == op;
+                    case ConditionOperator::NotEqual: return val != op;
+                    default: return true;
+                }
+            }
+            case AnimatorParameterType::Trigger: {
+                if (cond.Operator == ConditionOperator::Triggered) {
+                    return sm.PeekTrigger(paramKey);
+                }
+                return true;
+            }
+        }
+        return true;
     }
 
     void AnimationStateMachine::Reset() {
@@ -139,6 +343,9 @@ namespace Axle {
         clone->m_InitialStateName = m_InitialStateName;
         clone->m_States = m_States;
         clone->m_Transitions = m_Transitions;
+
+        clone->m_DeclaredParameters = m_DeclaredParameters;
+        clone->m_NameToIdMap = m_NameToIdMap;
 
         // Copy persistent parameters, but clear pending triggers and reset clocks to initial state
         clone->m_FloatParams = m_FloatParams;
@@ -186,6 +393,20 @@ namespace Axle {
             }
             if (!rulesPassed) continue;
 
+            // Check pure conditions
+            bool pureCondsPassed = true;
+            std::vector<std::string> triggersToConsume;
+            for (const auto& cond : trans.PureConditions) {
+                if (!EvaluateCondition(cond, *this)) {
+                    pureCondsPassed = false;
+                    break;
+                }
+                if (cond.Operator == ConditionOperator::Triggered) {
+                    triggersToConsume.push_back(cond.Parameter);
+                }
+            }
+            if (!pureCondsPassed) continue;
+
             // Check instance condition predicate
             if (trans.InstanceCondition && !trans.InstanceCondition(*this)) {
                 continue;
@@ -196,7 +417,11 @@ namespace Axle {
                 continue;
             }
 
-            // Transition condition satisfied!
+            // Transition condition satisfied! Consume triggers atomically
+            for (const auto& tr : triggersToConsume) {
+                CheckAndConsumeTrigger(tr);
+            }
+
             SetCurrentState(trans.ToState, trans.Duration);
             break;
         }

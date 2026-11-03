@@ -62,8 +62,26 @@ namespace Axle {
         }
     }
 
+    bool Animator::PeekTrigger(const std::string& name) const {
+        return m_StateMachine ? m_StateMachine->PeekTrigger(name) : false;
+    }
+
     bool Animator::CheckAndConsumeTrigger(const std::string& name) {
         return m_StateMachine ? m_StateMachine->CheckAndConsumeTrigger(name) : false;
+    }
+
+    void Animator::DeclareParameter(const ParameterDefinition& param) {
+        if (m_StateMachine) {
+            m_StateMachine->DeclareParameter(param);
+        }
+    }
+
+    const ParameterDefinition* Animator::GetParameterDeclaration(const std::string& nameOrId) const {
+        return m_StateMachine ? m_StateMachine->GetParameterDeclaration(nameOrId) : nullptr;
+    }
+
+    bool Animator::RenameParameter(const std::string& oldName, const std::string& newName) {
+        return m_StateMachine ? m_StateMachine->RenameParameter(oldName, newName) : false;
     }
 
     const std::string& Animator::GetCurrentStateName() const {

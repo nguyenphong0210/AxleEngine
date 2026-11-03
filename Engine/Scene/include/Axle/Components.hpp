@@ -1452,6 +1452,14 @@ namespace Axle {
             }
         }
 
+        bool PeekTrigger(const std::string& name) const {
+            return AnimatorInstance ? AnimatorInstance->PeekTrigger(name) : false;
+        }
+
+        bool CheckAndConsumeTrigger(const std::string& name) {
+            return AnimatorInstance ? AnimatorInstance->CheckAndConsumeTrigger(name) : false;
+        }
+
         void Update(float dt) {
             if (Playing && AnimatorInstance) {
                 AnimatorInstance->Update(dt * PlaybackSpeed);

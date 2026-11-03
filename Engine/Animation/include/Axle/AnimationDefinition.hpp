@@ -2,7 +2,6 @@
 
 #include <Axle/Skeleton.hpp>
 #include <Axle/AnimationClip.hpp>
-#include <Axle/AnimationStateMachine.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <string_view>
@@ -68,6 +67,12 @@ namespace Axle {
         bool Validate(const std::unordered_map<AnimationId, struct StateDefinition>& states,
                       const std::unordered_map<AnimationId, ParameterDefinition>& params,
                       std::vector<std::string>* outErrors = nullptr) const;
+    };
+
+    enum class AnimationNodeType : uint32_t {
+        Clip = 0,
+        BlendSpace1D = 1,
+        BlendSpace2D = 2
     };
 
     struct StateDefinition {

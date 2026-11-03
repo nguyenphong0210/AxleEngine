@@ -35,7 +35,12 @@ namespace Axle {
         bool GetBool(const std::string& name, bool defaultVal = false) const;
 
         void SetTrigger(const std::string& name);
+        bool PeekTrigger(const std::string& name) const;
         bool CheckAndConsumeTrigger(const std::string& name);
+
+        void DeclareParameter(const ParameterDefinition& param);
+        const ParameterDefinition* GetParameterDeclaration(const std::string& nameOrId) const;
+        bool RenameParameter(const std::string& oldName, const std::string& newName);
 
         const std::string& GetCurrentStateName() const;
         bool IsTransitioning() const;

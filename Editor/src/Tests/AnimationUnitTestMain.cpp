@@ -760,6 +760,102 @@ static bool TestCookedGeometryBakeAndTruncatedBinaryRejection() {
     return true;
 }
 
+static bool TestTypedAnimatorParametersAndPureConditionEvaluator() {
+    Axle::AnimationStateMachine sm("TestSM");
+
+    // 1. Trigger Peek without consumption vs CheckAndConsumeTrigger
+    sm.SetTrigger("Jump");
+    ANIMATION_CHECK(sm.PeekTrigger("Jump"), "Trigger Jump peek returns true");
+    ANIMATION_CHECK(sm.PeekTrigger("Jump"), "Second trigger Jump peek still returns true (not consumed)");
+    ANIMATION_CHECK(sm.CheckAndConsumeTrigger("Jump"), "CheckAndConsumeTrigger consumes trigger");
+    ANIMATION_CHECK(!sm.PeekTrigger("Jump"), "PeekTrigger after consume returns false");
+    ANIMATION_CHECK(!sm.CheckAndConsumeTrigger("Jump"), "Second CheckAndConsumeTrigger returns false");
+
+    // 2. Stable-ID rename preserving condition evaluation
+    Axle::ParameterDefinition pSpeed;
+    pSpeed.Id = "param_speed_id";
+    pSpeed.Name = "Speed";
+    pSpeed.Type = Axle::AnimatorParameterType::Float;
+    pSpeed.Default = 0.0f;
+    sm.DeclareParameter(pSpeed);
+
+    sm.SetFloat("Speed", 3.5f);
+    ANIMATION_CHECK(Axle::AnimationTests::Near(sm.GetFloat("param_speed_id"), 3.5f), "SetFloat by Name updates stable ID");
+    ANIMATION_CHECK(Axle::AnimationTests::Near(sm.GetFloat("Speed"), 3.5f), "GetFloat by Name returns 3.5");
+
+    // Rename parameter from "Speed" to "ForwardSpeed"
+    ANIMATION_CHECK(sm.RenameParameter("Speed", "ForwardSpeed"), "RenameParameter succeeds");
+    ANIMATION_CHECK(Axle::AnimationTests::Near(sm.GetFloat("ForwardSpeed"), 3.5f), "GetFloat by new name returns 3.5");
+
+    // Setting by new name updates both
+    sm.SetFloat("ForwardSpeed", 5.0f);
+    ANIMATION_CHECK(Axle::AnimationTests::Near(sm.GetFloat("param_speed_id"), 5.0f), "Stable ID updated via new parameter name");
+
+    // Condition bound to stable ID evaluates correctly regardless of rename!
+    Axle::ConditionDefinition condSpeed;
+    condSpeed.Parameter = "param_speed_id";
+    condSpeed.Operator = Axle::ConditionOperator::Greater;
+    condSpeed.Operand = 4.0f;
+    ANIMATION_CHECK(Axle::AnimationStateMachine::EvaluateCondition(condSpeed, sm), "Condition bound to stable ID evaluates true after rename");
+
+    // 3. Type mismatch validation
+    ANIMATION_CHECK(sm.ValidateParameterType("param_speed_id", Axle::AnimatorParameterType::Float), "Type validation Float matches");
+    ANIMATION_CHECK(!sm.ValidateParameterType("param_speed_id", Axle::AnimatorParameterType::Int), "Type validation Int rejected for Float param");
+    ANIMATION_CHECK(!sm.ValidateParameterType("param_speed_id", Axle::AnimatorParameterType::Bool), "Type validation Bool rejected for Float param");
+
+    // 4. Pure condition evaluation across types
+    Axle::ParameterDefinition pStance;
+    pStance.Id = "param_stance_id";
+    pStance.Name = "Stance";
+    pStance.Type = Axle::AnimatorParameterType::Int;
+    pStance.Default = 1;
+    sm.DeclareParameter(pStance);
+    sm.SetInt("Stance", 2);
+
+    Axle::ConditionDefinition condIntEq;
+    condIntEq.Parameter = "param_stance_id";
+    condIntEq.Operator = Axle::ConditionOperator::Equal;
+    condIntEq.Operand = 2;
+    ANIMATION_CHECK(Axle::AnimationStateMachine::EvaluateCondition(condIntEq, sm), "Int Equal condition evaluates true");
+
+    Axle::ConditionDefinition condIntNeq;
+    condIntNeq.Parameter = "param_stance_id";
+    condIntNeq.Operator = Axle::ConditionOperator::NotEqual;
+    condIntNeq.Operand = 1;
+    ANIMATION_CHECK(Axle::AnimationStateMachine::EvaluateCondition(condIntNeq, sm), "Int NotEqual condition evaluates true");
+
+    Axle::ParameterDefinition pGrounded;
+    pGrounded.Id = "param_grounded_id";
+    pGrounded.Name = "IsGrounded";
+    pGrounded.Type = Axle::AnimatorParameterType::Bool;
+    pGrounded.Default = true;
+    sm.DeclareParameter(pGrounded);
+
+    Axle::ConditionDefinition condBool;
+    condBool.Parameter = "param_grounded_id";
+    condBool.Operator = Axle::ConditionOperator::IsTrue;
+    ANIMATION_CHECK(Axle::AnimationStateMachine::EvaluateCondition(condBool, sm), "Bool IsTrue condition evaluates true");
+    sm.SetBool("IsGrounded", false);
+    ANIMATION_CHECK(!Axle::AnimationStateMachine::EvaluateCondition(condBool, sm), "Bool IsTrue condition evaluates false when grounded false");
+
+    // Trigger condition evaluation
+    Axle::ConditionDefinition condTrig;
+    condTrig.Parameter = "Attack";
+    condTrig.Operator = Axle::ConditionOperator::Triggered;
+    ANIMATION_CHECK(!Axle::AnimationStateMachine::EvaluateCondition(condTrig, sm), "Trigger condition false when not set");
+    sm.SetTrigger("Attack");
+    ANIMATION_CHECK(Axle::AnimationStateMachine::EvaluateCondition(condTrig, sm), "Trigger condition true when set (pure evaluate peeks)");
+    ANIMATION_CHECK(sm.PeekTrigger("Attack"), "Trigger still set after pure evaluateCondition (not consumed)");
+
+    // 5. Legacy Speed/IsGrounded compatibility
+    sm.SetFloat("Speed", 2.2f);
+    ANIMATION_CHECK(Axle::AnimationTests::Near(sm.GetFloat("Speed"), 2.2f), "Legacy Speed get/set compatible");
+    sm.SetBool("IsGrounded", true);
+    ANIMATION_CHECK(sm.GetBool("IsGrounded"), "Legacy IsGrounded get/set compatible");
+
+    return true;
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure")
         return Axle::AnimationTests::Check(false, "Intentional harness failure", __FILE__, __LINE__) ? 0 : 1;
@@ -780,6 +876,7 @@ int main(int argc, char** argv) {
     if (!TestAnimationDefinitionsAndValidation()) return 1;
     if (!TestAnimationCodecRoundTripAndAtomicSave()) return 1;
     if (!TestCookedGeometryBakeAndTruncatedBinaryRejection()) return 1;
+    if (!TestTypedAnimatorParametersAndPureConditionEvaluator()) return 1;
     std::cout << "Animation unit tests PASS\n";
     return 0;
 }

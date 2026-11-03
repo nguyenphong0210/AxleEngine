@@ -159,27 +159,16 @@ namespace Axle {
     }
 
     bool AnimationPose::Blend(const AnimationPose& a, const AnimationPose& b, float weight, AnimationPose& outPose) {
-        if (a.Transforms.size() != b.Transforms.size() || a.Transforms.empty()) {
-            return false;
+        if (a.Transforms.size() != b.Transforms.size() || a.Transforms.empty() ||
+            a.m_SkeletonBinding != b.m_SkeletonBinding || !std::isfinite(weight)) return false;
+        AnimationPose result(a.Transforms.size());
+        result.m_SkeletonBinding = a.m_SkeletonBinding;
+        for (size_t i = 0; i < result.Transforms.size(); ++i) {
+            if (!a.Transforms[i].IsValid() || !b.Transforms[i].IsValid()) return false;
+            result.Transforms[i] = BoneTransform::Blend(a.Transforms[i], b.Transforms[i], weight);
+            if (!result.Transforms[i].IsValid()) return false;
         }
-
-        size_t count = a.Transforms.size();
-        outPose.Transforms.resize(count);
-
-        float factor = std::clamp(weight, 0.0f, 1.0f);
-        if (factor <= 0.0001f) {
-            outPose = a;
-            return true;
-        }
-        if (factor >= 0.9999f) {
-            outPose = b;
-            return true;
-        }
-
-        for (size_t i = 0; i < count; ++i) {
-            outPose.Transforms[i] = BoneTransform::Blend(a.Transforms[i], b.Transforms[i], factor);
-        }
-        outPose.m_SkeletonBinding = a.m_SkeletonBinding ? a.m_SkeletonBinding : b.m_SkeletonBinding;
+        outPose = std::move(result);
         return true;
     }
 
@@ -192,7 +181,7 @@ namespace Axle {
 
     bool AnimationPose::ComputeGlobalMatrices(const Skeleton& skeleton, std::vector<glm::mat4>& outGlobalMatrices) const {
         std::vector<size_t> order;
-        if (!skeleton.BuildEvaluationOrder(order)) {
+        if (Transforms.size() != skeleton.GetBoneCount() || (m_SkeletonBinding && m_SkeletonBinding != &skeleton) || !skeleton.BuildEvaluationOrder(order)) {
             outGlobalMatrices.clear();
             return false;
         }
@@ -202,7 +191,8 @@ namespace Axle {
 
         for (size_t i : order) {
             const Bone& bone = skeleton.GetBones()[i];
-            glm::mat4 localMat = (i < Transforms.size()) ? Transforms[i].ToMatrix() : bone.LocalTransform;
+            if (!Transforms[i].IsValid()) { outGlobalMatrices.clear(); return false; }
+            glm::mat4 localMat = Transforms[i].ToMatrix();
 
             int parentID = bone.ParentID;
             if (parentID >= 0 && parentID < static_cast<int>(count)) {

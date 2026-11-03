@@ -143,7 +143,7 @@ namespace Axle {
 
             for (size_t i = 0; i < ch.Positions.size(); ++i) {
                 float t = ch.Positions[i].TimeStamp;
-                if (!std::isfinite(t) || t < 0.0f) {
+                if (!std::isfinite(t) || t < 0.0f || t > m_Duration + 1e-5f) {
                     fail("Invalid position timestamp at channel " + ch.BoneName);
                 }
                 if (i > 0 && t <= ch.Positions[i - 1].TimeStamp) {
@@ -157,7 +157,7 @@ namespace Axle {
 
             for (size_t i = 0; i < ch.Rotations.size(); ++i) {
                 float t = ch.Rotations[i].TimeStamp;
-                if (!std::isfinite(t) || t < 0.0f) {
+                if (!std::isfinite(t) || t < 0.0f || t > m_Duration + 1e-5f) {
                     fail("Invalid rotation timestamp at channel " + ch.BoneName);
                 }
                 if (i > 0 && t <= ch.Rotations[i - 1].TimeStamp) {
@@ -174,7 +174,7 @@ namespace Axle {
 
             for (size_t i = 0; i < ch.Scales.size(); ++i) {
                 float t = ch.Scales[i].TimeStamp;
-                if (!std::isfinite(t) || t < 0.0f) {
+                if (!std::isfinite(t) || t < 0.0f || t > m_Duration + 1e-5f) {
                     fail("Invalid scale timestamp at channel " + ch.BoneName);
                 }
                 if (i > 0 && t <= ch.Scales[i - 1].TimeStamp) {
@@ -206,8 +206,11 @@ namespace Axle {
 
     bool AnimationClip::ReplaceChannels(std::vector<AnimationChannel> channels, const Skeleton* skeleton,
                                         std::vector<std::string>* errors) {
-        m_Channels = std::move(channels);
-        return RebuildDerivedData(skeleton, errors);
+        auto candidate = *this;
+        candidate.m_Channels = std::move(channels);
+        if (!candidate.RebuildDerivedData(skeleton, errors)) return false;
+        *this = std::move(candidate);
+        return true;
     }
 
     float AnimationClip::WrapTime(float time, bool loop) const {
@@ -221,7 +224,7 @@ namespace Axle {
     }
 
     bool AnimationClip::SamplePose(float time, const Skeleton& skeleton, AnimationPose& outPose, bool loop) const {
-        if (!skeleton.IsValid()) {
+        if (!std::isfinite(time) || !skeleton.IsValid() || !Validate(&skeleton)) {
             return false;
         }
 
@@ -264,7 +267,7 @@ namespace Axle {
 
     bool AnimationClip::ComputeGlobalPose(const Skeleton& skeleton, const std::vector<glm::mat4>& localTransforms, std::vector<glm::mat4>& outGlobalMatrices) {
         std::vector<size_t> order;
-        if (!skeleton.BuildEvaluationOrder(order)) {
+        if (localTransforms.size() != skeleton.GetBoneCount() || !skeleton.BuildEvaluationOrder(order)) {
             outGlobalMatrices.clear();
             return false;
         }

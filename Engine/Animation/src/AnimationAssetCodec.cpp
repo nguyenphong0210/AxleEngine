@@ -94,6 +94,7 @@ namespace Axle {
     // -------------------------------------------------------------------------
 
     bool AnimationAssetCodec::EncodeSkeleton(const SkeletonDefinition& def, AssetDocument& outDoc) {
+        if (!def.Validate()) return false;
         outDoc.Kind = AssetKind::Skeleton;
         auto root = std::make_shared<AssetBlock>();
         root->Type = "Skeleton";
@@ -113,6 +114,10 @@ namespace Axle {
             bBlock->SetVec3("translation", bt.Translation);
             bBlock->SetVec4("rotation", glm::vec4(bt.Rotation.x, bt.Rotation.y, bt.Rotation.z, bt.Rotation.w));
             bBlock->SetVec3("scale", bt.Scale);
+            for (int column = 0; column < 4; ++column) {
+                bBlock->SetVec4("local" + std::to_string(column), bone.LocalTransform[column]);
+                bBlock->SetVec4("inverseBind" + std::to_string(column), bone.InverseBindMatrix[column]);
+            }
 
             root->Children.push_back(bBlock);
         }
@@ -122,16 +127,17 @@ namespace Axle {
     }
 
     bool AnimationAssetCodec::DecodeSkeleton(const AssetDocument& doc, SkeletonDefinition& outDef, std::string* outError) {
+        SkeletonDefinition candidate;
         if (!doc.Root || doc.Root->Type != "Skeleton") {
             if (outError) *outError = "Document root is not of type Skeleton";
             return false;
         }
 
-        outDef.Id = doc.Root->GetString("id");
-        outDef.Name = doc.Root->GetString("name");
-        outDef.SchemaVersion = doc.Root->GetUInt("version", 1);
-        outDef.CompatibilitySignature = doc.Root->GetString("signature");
-        outDef.Bones.clear();
+        candidate.Id = doc.Root->GetString("id");
+        candidate.Name = doc.Root->GetString("name");
+        candidate.SchemaVersion = doc.Root->GetUInt("version", 1);
+        candidate.CompatibilitySignature = doc.Root->GetString("signature");
+        candidate.Bones.clear();
 
         for (const auto& child : doc.Root->Children) {
             if (child->Type == "Bone") {
@@ -143,15 +149,31 @@ namespace Axle {
                 glm::vec3 s = child->GetVec3("scale", glm::vec3(1.0f));
                 BoneTransform bt(t, glm::quat(r.w, r.x, r.y, r.z), s);
                 b.LocalTransform = bt.ToMatrix();
-                outDef.Bones.push_back(b);
+                for (int column = 0; column < 4; ++column) {
+                    const auto key = "inverseBind" + std::to_string(column);
+                    if (!child->HasProperty(key)) {
+                        if (outError) *outError = "Skeleton asset lacks inverse binds; reimport the source rig.";
+                        return false;
+                    }
+                    b.InverseBindMatrix[column] = child->GetVec4(key);
+                    if (child->HasProperty("local" + std::to_string(column)))
+                        b.LocalTransform[column] = child->GetVec4("local" + std::to_string(column));
+                }
+                candidate.Bones.push_back(b);
             }
         }
 
-        if (outDef.CompatibilitySignature.empty()) {
-            outDef.CompatibilitySignature = SkeletonDefinition::ComputeSignature(outDef.Bones);
+        if (candidate.CompatibilitySignature.empty()) {
+            candidate.CompatibilitySignature = SkeletonDefinition::ComputeSignature(candidate.Bones);
         }
 
-        return outDef.Validate(outError ? nullptr : nullptr);
+        std::vector<std::string> errors;
+        if (!candidate.Validate(&errors)) {
+            if (outError) *outError = errors.empty() ? "Invalid animation asset" : errors.front();
+            return false;
+        }
+        outDef = std::move(candidate);
+        return true;
     }
 
     bool AnimationAssetCodec::SaveSkeleton(const std::string& filepath, const SkeletonDefinition& def, std::string* outError) {
@@ -182,6 +204,7 @@ namespace Axle {
     // -------------------------------------------------------------------------
 
     bool AnimationAssetCodec::EncodeSkeletalMesh(const SkeletalMeshDefinition& def, AssetDocument& outDoc) {
+        if (!def.Validate()) return false;
         outDoc.Kind = AssetKind::SkeletalMesh;
         auto root = std::make_shared<AssetBlock>();
         root->Type = "SkeletalMesh";
@@ -198,24 +221,31 @@ namespace Axle {
     }
 
     bool AnimationAssetCodec::DecodeSkeletalMesh(const AssetDocument& doc, SkeletalMeshDefinition& outDef, std::string* outError) {
+        SkeletalMeshDefinition candidate;
         if (!doc.Root || doc.Root->Type != "SkeletalMesh") {
             if (outError) *outError = "Document root is not of type SkeletalMesh";
             return false;
         }
 
-        outDef.Id = doc.Root->GetString("id");
-        outDef.Name = doc.Root->GetString("name");
-        outDef.SchemaVersion = doc.Root->GetUInt("version", 1);
-        outDef.SkeletonRef = doc.Root->GetString("skeletonRef");
-        outDef.GeometryRef = doc.Root->GetString("geometryRef");
-        outDef.SourceImportPath = doc.Root->GetString("sourceImportPath");
+        candidate.Id = doc.Root->GetString("id");
+        candidate.Name = doc.Root->GetString("name");
+        candidate.SchemaVersion = doc.Root->GetUInt("version", 1);
+        candidate.SkeletonRef = doc.Root->GetString("skeletonRef");
+        candidate.GeometryRef = doc.Root->GetString("geometryRef");
+        candidate.SourceImportPath = doc.Root->GetString("sourceImportPath");
 
-        outDef.MaterialSlots.clear();
+        candidate.MaterialSlots.clear();
         if (doc.Root->HasProperty("materialSlots")) {
-            outDef.MaterialSlots = doc.Root->GetProperty("materialSlots")->AsStringArray();
+            candidate.MaterialSlots = doc.Root->GetProperty("materialSlots")->AsStringArray();
         }
 
-        return outDef.Validate(outError ? nullptr : nullptr);
+        std::vector<std::string> errors;
+        if (!candidate.Validate(&errors)) {
+            if (outError) *outError = errors.empty() ? "Invalid animation asset" : errors.front();
+            return false;
+        }
+        outDef = std::move(candidate);
+        return true;
     }
 
     bool AnimationAssetCodec::SaveSkeletalMesh(const std::string& filepath, const SkeletalMeshDefinition& def, std::string* outError) {
@@ -246,6 +276,7 @@ namespace Axle {
     // -------------------------------------------------------------------------
 
     bool AnimationAssetCodec::EncodeAnimationClip(const AnimationClipDefinition& def, AssetDocument& outDoc) {
+        if (!def.Validate()) return false;
         outDoc.Kind = AssetKind::AnimationClip;
         auto root = std::make_shared<AssetBlock>();
         root->Type = "AnimationClip";
@@ -305,21 +336,22 @@ namespace Axle {
     }
 
     bool AnimationAssetCodec::DecodeAnimationClip(const AssetDocument& doc, AnimationClipDefinition& outDef, std::string* outError) {
+        AnimationClipDefinition candidate;
         if (!doc.Root || doc.Root->Type != "AnimationClip") {
             if (outError) *outError = "Document root is not of type AnimationClip";
             return false;
         }
 
-        outDef.Id = doc.Root->GetString("id");
-        outDef.Name = doc.Root->GetString("name");
-        outDef.SchemaVersion = doc.Root->GetUInt("version", 1);
-        outDef.SkeletonRef = doc.Root->GetString("skeletonRef");
-        outDef.CompatibilitySignature = doc.Root->GetString("signature");
-        outDef.Duration = doc.Root->GetFloat("duration", 0.0f);
-        outDef.FrameRate = doc.Root->GetFloat("frameRate", 30.0f);
+        candidate.Id = doc.Root->GetString("id");
+        candidate.Name = doc.Root->GetString("name");
+        candidate.SchemaVersion = doc.Root->GetUInt("version", 1);
+        candidate.SkeletonRef = doc.Root->GetString("skeletonRef");
+        candidate.CompatibilitySignature = doc.Root->GetString("signature");
+        candidate.Duration = doc.Root->GetFloat("duration", 0.0f);
+        candidate.FrameRate = doc.Root->GetFloat("frameRate", 30.0f);
 
-        outDef.Channels.clear();
-        outDef.Events.clear();
+        candidate.Channels.clear();
+        candidate.Events.clear();
 
         for (const auto& child : doc.Root->Children) {
             if (child->Type == "Channel") {
@@ -346,7 +378,7 @@ namespace Axle {
                         ch.Scales.push_back(k);
                     }
                 }
-                outDef.Channels.push_back(ch);
+                candidate.Channels.push_back(ch);
             } else if (child->Type == "Event") {
                 AnimationEventDefinition ev;
                 ev.Id = child->GetString("id");
@@ -355,11 +387,17 @@ namespace Axle {
                 ev.StringParam = child->GetString("stringParam");
                 ev.FloatParam = child->GetFloat("floatParam");
                 ev.IntParam = child->GetInt("intParam");
-                outDef.Events.push_back(ev);
+                candidate.Events.push_back(ev);
             }
         }
 
-        return outDef.Validate(outError ? nullptr : nullptr);
+        std::vector<std::string> errors;
+        if (!candidate.Validate(&errors)) {
+            if (outError) *outError = errors.empty() ? "Invalid animation asset" : errors.front();
+            return false;
+        }
+        outDef = std::move(candidate);
+        return true;
     }
 
     bool AnimationAssetCodec::SaveAnimationClip(const std::string& filepath, const AnimationClipDefinition& def, std::string* outError) {
@@ -454,6 +492,7 @@ namespace Axle {
     }
 
     bool AnimationAssetCodec::EncodeAnimatorController(const AnimatorControllerDefinition& def, AssetDocument& outDoc) {
+        if (!def.Validate()) return false;
         outDoc.Kind = AssetKind::AnimatorController;
         auto root = std::make_shared<AssetBlock>();
         root->Type = "AnimatorController";
@@ -531,21 +570,22 @@ namespace Axle {
     }
 
     bool AnimationAssetCodec::DecodeAnimatorController(const AssetDocument& doc, AnimatorControllerDefinition& outDef, std::string* outError) {
+        AnimatorControllerDefinition candidate;
         if (!doc.Root || doc.Root->Type != "AnimatorController") {
             if (outError) *outError = "Document root is not of type AnimatorController";
             return false;
         }
 
-        outDef.Id = doc.Root->GetString("id");
-        outDef.Name = doc.Root->GetString("name");
-        outDef.SchemaVersion = doc.Root->GetUInt("version", 1);
-        outDef.SkeletonRef = doc.Root->GetString("skeletonRef");
-        outDef.CompatibilitySignature = doc.Root->GetString("signature");
-        outDef.EntryStateId = doc.Root->GetString("entryStateId");
+        candidate.Id = doc.Root->GetString("id");
+        candidate.Name = doc.Root->GetString("name");
+        candidate.SchemaVersion = doc.Root->GetUInt("version", 1);
+        candidate.SkeletonRef = doc.Root->GetString("skeletonRef");
+        candidate.CompatibilitySignature = doc.Root->GetString("signature");
+        candidate.EntryStateId = doc.Root->GetString("entryStateId");
 
-        outDef.Parameters.clear();
-        outDef.States.clear();
-        outDef.Transitions.clear();
+        candidate.Parameters.clear();
+        candidate.States.clear();
+        candidate.Transitions.clear();
 
         for (const auto& child : doc.Root->Children) {
             if (child->Type == "Parameter") {
@@ -562,7 +602,7 @@ namespace Axle {
                 } else {
                     p.Default = false;
                 }
-                outDef.Parameters.push_back(p);
+                candidate.Parameters.push_back(p);
             } else if (child->Type == "State") {
                 StateDefinition s;
                 s.Id = child->GetString("id");
@@ -574,7 +614,7 @@ namespace Axle {
                 s.BlendParameterX = child->GetString("blendParameterX");
                 s.BlendParameterY = child->GetString("blendParameterY");
                 s.GraphPosition = child->GetVec2("graphPosition", glm::vec2(0.0f));
-                outDef.States.push_back(s);
+                candidate.States.push_back(s);
             } else if (child->Type == "Transition") {
                 TransitionDefinition t;
                 t.Id = child->GetString("id");
@@ -605,11 +645,17 @@ namespace Axle {
                         t.AllConditions.push_back(c);
                     }
                 }
-                outDef.Transitions.push_back(t);
+                candidate.Transitions.push_back(t);
             }
         }
 
-        return outDef.Validate(outError ? nullptr : nullptr);
+        std::vector<std::string> errors;
+        if (!candidate.Validate(&errors)) {
+            if (outError) *outError = errors.empty() ? "Invalid animation asset" : errors.front();
+            return false;
+        }
+        outDef = std::move(candidate);
+        return true;
     }
 
     bool AnimationAssetCodec::SaveAnimatorController(const std::string& filepath, const AnimatorControllerDefinition& def, std::string* outError) {

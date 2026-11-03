@@ -266,8 +266,8 @@ namespace Axle {
         if (Name.empty()) {
             ReportError("Controller Name cannot be empty");
         }
-        if (SchemaVersion == 0) {
-            ReportError("SchemaVersion must be >= 1");
+        if (SchemaVersion != 1) {
+            ReportError("Unsupported controller schema version");
         }
 
         // Validate unique parameter IDs and unique names
@@ -375,6 +375,7 @@ namespace Axle {
             if (outErrors) outErrors->push_back("Clip '" + Name + "' (" + Id + "): " + err);
         };
 
+        if (SchemaVersion != 1) ReportError("Unsupported asset schema version");
         if (Id.empty()) {
             ReportError("Clip ID cannot be empty");
         }
@@ -388,43 +389,12 @@ namespace Axle {
             ReportError("Clip FrameRate must be positive and finite");
         }
 
-        for (const auto& channel : Channels) {
-            if (channel.BoneName.empty()) {
-                ReportError("Channel BoneName cannot be empty");
-            }
-            float lastT = -1.0f;
-            for (const auto& k : channel.Positions) {
-                if (!IsFinite(k.TimeStamp) || k.TimeStamp < 0.0f || !IsFinite(k.Value)) {
-                    ReportError("Channel position keyframe contains invalid/non-finite values");
-                }
-                if (k.TimeStamp < lastT) {
-                    ReportError("Channel position keyframes are not in sorted time order");
-                }
-                lastT = k.TimeStamp;
-            }
-
-            lastT = -1.0f;
-            for (const auto& k : channel.Rotations) {
-                if (!IsFinite(k.TimeStamp) || k.TimeStamp < 0.0f || !IsFinite(k.Value)) {
-                    ReportError("Channel rotation keyframe contains invalid/non-finite values");
-                }
-                if (k.TimeStamp < lastT) {
-                    ReportError("Channel rotation keyframes are not in sorted time order");
-                }
-                lastT = k.TimeStamp;
-            }
-
-            lastT = -1.0f;
-            for (const auto& k : channel.Scales) {
-                if (!IsFinite(k.TimeStamp) || k.TimeStamp < 0.0f || !IsFinite(k.Value)) {
-                    ReportError("Channel scale keyframe contains invalid/non-finite values");
-                }
-                if (k.TimeStamp < lastT) {
-                    ReportError("Channel scale keyframes are not in sorted time order");
-                }
-                lastT = k.TimeStamp;
-            }
-        }
+        AnimationClip clip(Name, Duration, FrameRate);
+        for (const auto& channel : Channels) clip.AddChannel(channel);
+        std::vector<std::string> clipErrors;
+        if (!clip.Validate(nullptr, &clipErrors)) for (const auto& error : clipErrors) ReportError(error);
+        std::unordered_set<std::string> eventIds;
+        for (const auto& event : Events) if (!eventIds.insert(event.Id).second) ReportError("Duplicate event ID");
 
         for (const auto& ev : Events) {
             if (!ev.Validate(Duration, outErrors)) {
@@ -453,8 +423,13 @@ namespace Axle {
             hash = FNV1a64(b.Name.data(), b.Name.size(), hash);
             int32_t pid = b.ParentID;
             hash = FNV1a64(&pid, sizeof(pid), hash);
-            // Include bind transform translation, rotation and scale
-            hash = FNV1a64(&b.LocalTransform[3][0], sizeof(float) * 3, hash);
+            // Quantize to the shared text codec's six-decimal precision, including handedness and inverse binds.
+            for (const auto* matrix : {&b.LocalTransform, &b.InverseBindMatrix})
+                for (int column = 0; column < 4; ++column) for (int row = 0; row < 4; ++row) {
+                    const double value = std::clamp(double((*matrix)[column][row]), -1e12, 1e12);
+                    const int64_t quantized = std::isfinite(value) ? int64_t(std::llround(value * 1000000)) : INT64_MIN;
+                    hash = FNV1a64(&quantized, sizeof(quantized), hash);
+                }
         }
         std::stringstream ss;
         ss << std::hex << std::setw(16) << std::setfill('0') << hash;
@@ -468,12 +443,16 @@ namespace Axle {
             if (outErrors) outErrors->push_back("Skeleton '" + Name + "' (" + Id + "): " + err);
         };
 
+        if (SchemaVersion != 1) ReportError("Unsupported asset schema version");
         if (Id.empty()) {
             ReportError("Skeleton ID cannot be empty");
         }
         if (Name.empty()) {
             ReportError("Skeleton Name cannot be empty");
         }
+
+        if (!CompatibilitySignature.empty() && CompatibilitySignature != ComputeSignature(Bones))
+            ReportError("Skeleton compatibility signature does not match its bind data");
 
         std::unordered_set<std::string> boneNames;
         for (size_t i = 0; i < Bones.size(); ++i) {
@@ -517,6 +496,7 @@ namespace Axle {
             if (outErrors) outErrors->push_back("SkeletalMesh '" + Name + "' (" + Id + "): " + err);
         };
 
+        if (SchemaVersion != 1) ReportError("Unsupported asset schema version");
         if (Id.empty()) {
             ReportError("SkeletalMesh ID cannot be empty");
         }

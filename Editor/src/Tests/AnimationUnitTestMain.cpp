@@ -1022,12 +1022,10 @@ static bool TestSceneAndAssemblyAnimationRoundTrip() {
     std::filesystem::create_directories(tempDir);
 
     // 1. Setup authored Skeleton and Controller
-    auto skeleton = std::make_shared<Axle::Skeleton>("B3_Rig");
-    Axle::Bone root;
-    root.Name = "Root";
-    root.ParentID = -1;
-    skeleton->AddBone(root);
-    skeleton->ComputeInverseBindMatrices();
+    Axle::SkeletalMeshData bipedData;
+    std::shared_ptr<Axle::Skeleton> skeleton;
+    std::vector<std::shared_ptr<Axle::AnimationClip>> bipedClips;
+    ANIMATION_CHECK(Axle::SkeletalMeshImporter::CreateProceduralBiped(bipedData, skeleton, bipedClips), "B3 fixture uses the referenced rig");
 
     auto sm = std::make_shared<Axle::AnimationStateMachine>("LocomotionSM");
     Axle::ParameterDefinition speedParam;

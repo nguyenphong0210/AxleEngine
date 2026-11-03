@@ -1,3 +1,4 @@
+#include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/AnimationAssetCodec.hpp>
@@ -54,18 +55,8 @@ namespace Axle {
     }
 
     bool SceneSerializer::Serialize(const std::filesystem::path& filepath) {
-        std::ofstream fout(filepath);
-        if (!fout.is_open()) {
-            AXLE_ERROR("SceneSerializer: Could not open file for writing: '{0}'", filepath.string());
-            return false;
-        }
-
-        std::string serialized = SerializeToString();
-        fout << serialized;
-        fout.close();
-
-        AXLE_INFO("SceneSerializer: Successfully saved scene to '{0}'", filepath.string());
-        return true;
+        const auto serialized = SerializeToString();
+        return !serialized.empty() && AnimationAssetCodec::WriteTextFileAtomically(filepath.string(), serialized);
     }
 
     std::string SceneSerializer::SerializeToString() {
@@ -438,7 +429,10 @@ namespace Axle {
             // SkeletalMeshComponent
             if (entity.HasComponent<SkeletalMeshComponent>()) {
                 auto& smc = entity.GetComponent<SkeletalMeshComponent>();
+                std::string rigFallback, unusedController;
+                if (!CaptureAnimationBinding(&smc, nullptr, rigFallback, unusedController)) { return ""; }
                 ss << "    SkeletalMeshComponent:\n";
+                ss << "      RigFallbackData: " << rigFallback << "\n";
                 ss << "      AssetPath: " << smc.AssetPath << "\n";
                 if (!smc.SkeletonPath.empty()) {
                     ss << "      SkeletonPath: " << smc.SkeletonPath << "\n";
@@ -462,15 +456,9 @@ namespace Axle {
                 ss << "      Speed: " << ac.Speed << "\n";
                 ss << "      IsGrounded: " << (ac.IsGrounded ? "true" : "false") << "\n";
                 ss << "      VerticalVelocity: " << ac.VerticalVelocity << "\n";
-                if (!ac.InlineFallbackData.empty()) {
-                    ss << "      InlineFallbackData: " << ac.InlineFallbackData << "\n";
-                } else if (ac.AnimatorInstance && ac.AnimatorInstance->GetStateMachine()) {
-                    auto def = AnimationAssetCodec::ExtractDefinitionFromStateMachine(*ac.AnimatorInstance->GetStateMachine());
-                    std::string text = AnimationAssetCodec::EncodeControllerToText(def);
-                    if (!text.empty()) {
-                        ss << "      InlineFallbackData: " << AnimationAssetCodec::HexEncode(text) << "\n";
-                    }
-                }
+                std::string unusedRig, controllerFallback;
+                if (!CaptureAnimationBinding(nullptr, &ac, unusedRig, controllerFallback)) { return ""; }
+                ss << "      InlineFallbackData: " << controllerFallback << "\n";
                 for (const auto& [param, val] : ac.FloatOverrides) {
                     ss << "      FloatOverride: " << param << " " << val << "\n";
                 }
@@ -653,7 +641,9 @@ namespace Axle {
             return false;
         }
 
+        m_ResourceOwnerPath = filepath.generic_string();
         bool success = DeserializeFromString(content);
+        m_ResourceOwnerPath.clear();
         if (success) {
             AXLE_INFO("SceneSerializer: Successfully loaded scene from '{0}'", filepath.string());
         }
@@ -1507,6 +1497,8 @@ namespace Axle {
                             smc.AssetPath = Trim(trimmed.substr(10));
                         } else if (trimmed.rfind("SkeletonPath:", 0) == 0) {
                             smc.SkeletonPath = Trim(trimmed.substr(13));
+                        } else if (trimmed.rfind("RigFallbackData:", 0) == 0) {
+                            smc.RigFallbackData = Trim(trimmed.substr(16));
                         } else if (trimmed.rfind("PatternMode:", 0) == 0) {
                             smc.PatternMode = std::stoi(Trim(trimmed.substr(12)));
                         } else if (trimmed.rfind("TileScale:", 0) == 0) {
@@ -1920,143 +1912,14 @@ namespace Axle {
             }
         }
 
-        // 2. Resolve SkeletalMeshComponent and AnimatorComponent
-        auto skeletalView = m_Scene->GetRegistry().view<SkeletalMeshComponent>();
-        for (auto entityID : skeletalView) {
-            auto& smc = skeletalView.get<SkeletalMeshComponent>(entityID);
-            std::shared_ptr<Skeleton> resolvedSkeleton = nullptr;
-
-            if (!smc.Mesh) {
-                bool isProcedural = (smc.AssetPath == "procedural://biped" || smc.AssetPath.empty());
-                bool fileLoaded = false;
-                if (!isProcedural) {
-                    auto fullPath = FileSystem::ResolveAssetPath(smc.AssetPath);
-                    if (FileSystem::Exists(fullPath)) {
-                        SkeletalMeshData meshData;
-                        std::vector<std::shared_ptr<AnimationClip>> clips;
-                        if (SkeletalMeshImporter::Load(fullPath, meshData, resolvedSkeleton, clips)) {
-                            smc.Mesh = std::make_shared<SkeletalMesh>(meshData);
-                            fileLoaded = true;
-                        }
-                    }
-                }
-
-                if (!fileLoaded && isProcedural) {
-                    // Fallback to procedural biped generator
-                    SkeletalMeshData bipedData;
-                    std::vector<std::shared_ptr<AnimationClip>> bipedClips;
-                    if (SkeletalMeshImporter::CreateProceduralBiped(bipedData, resolvedSkeleton, bipedClips)) {
-                        smc.Mesh = std::make_shared<SkeletalMesh>(bipedData);
-                        if (smc.AssetPath.empty()) {
-                            smc.AssetPath = "procedural://biped";
-                        }
-                    }
-                }
-            }
-
-            if (!resolvedSkeleton && !smc.SkeletonPath.empty()) {
-                auto skelPath = FileSystem::ResolveAssetPath(smc.SkeletonPath);
-                if (FileSystem::Exists(skelPath)) {
-                    SkeletonDefinition skelDef;
-                    if (AnimationAssetCodec::LoadSkeleton(skelPath.string(), skelDef)) {
-                        resolvedSkeleton = std::make_shared<Skeleton>(skelDef.Name);
-                        for (const auto& b : skelDef.Bones) {
-                            resolvedSkeleton->AddBone(b);
-                        }
-                    }
-                }
-            }
-
-            if (m_Scene->GetRegistry().all_of<AnimatorComponent>(entityID)) {
-                auto& ac = m_Scene->GetRegistry().get<AnimatorComponent>(entityID);
-                if (!ac.AnimatorInstance) {
-                    std::shared_ptr<AnimationStateMachine> stateMachine = nullptr;
-
-                    // 1. Try external ControllerPath
-                    if (!ac.ControllerPath.empty()) {
-                        auto ctrlPath = FileSystem::ResolveAssetPath(ac.ControllerPath);
-                        if (FileSystem::Exists(ctrlPath)) {
-                            AnimatorControllerDefinition ctrlDef;
-                            if (AnimationAssetCodec::LoadAnimatorController(ctrlPath.string(), ctrlDef)) {
-                                stateMachine = AnimationAssetCodec::CompileStateMachineFromDefinition(ctrlDef);
-                            }
-                        }
-                    }
-
-                    // 2. Try InlineFallbackData
-                    if (!stateMachine && !ac.InlineFallbackData.empty()) {
-                        std::string ctrlText = AnimationAssetCodec::HexDecode(ac.InlineFallbackData);
-                        AnimatorControllerDefinition ctrlDef;
-                        if (AnimationAssetCodec::DecodeControllerFromText(ctrlText, ctrlDef)) {
-                            stateMachine = AnimationAssetCodec::CompileStateMachineFromDefinition(ctrlDef);
-                        }
-                    }
-
-                    // 3. Fallback to procedural biped Idle/Walk if procedural
-                    if (!stateMachine && (smc.AssetPath == "procedural://biped" || smc.AssetPath.empty())) {
-                        SkeletalMeshData bipedData;
-                        std::shared_ptr<Skeleton> bipedSkeleton;
-                        std::vector<std::shared_ptr<AnimationClip>> bipedClips;
-                        if (SkeletalMeshImporter::CreateProceduralBiped(bipedData, bipedSkeleton, bipedClips)) {
-                            if (!resolvedSkeleton) resolvedSkeleton = bipedSkeleton;
-                            stateMachine = std::make_shared<AnimationStateMachine>("LocomotionStateMachine");
-                            if (bipedClips.size() >= 2) {
-                                AnimationState stateIdle;
-                                stateIdle.Name = "Idle";
-                                stateIdle.Type = AnimationNodeType::Clip;
-                                stateIdle.Clip = bipedClips[0];
-                                stateIdle.Loop = true;
-                                stateMachine->AddState(stateIdle);
-
-                                AnimationState stateWalk;
-                                stateWalk.Name = "Walk";
-                                stateWalk.Type = AnimationNodeType::Clip;
-                                stateWalk.Clip = bipedClips[1];
-                                stateWalk.Loop = true;
-                                stateMachine->AddState(stateWalk);
-
-                                AnimationTransition tIdleToWalk;
-                                tIdleToWalk.FromState = "Idle";
-                                tIdleToWalk.ToState = "Walk";
-                                tIdleToWalk.Duration = 0.2f;
-                                tIdleToWalk.Rules.push_back({"Speed", TransitionConditionOperator::Greater, 0.1f});
-                                stateMachine->AddTransition(tIdleToWalk);
-
-                                AnimationTransition tWalkToIdle;
-                                tWalkToIdle.FromState = "Walk";
-                                tWalkToIdle.ToState = "Idle";
-                                tWalkToIdle.Duration = 0.2f;
-                                tWalkToIdle.Rules.push_back({"Speed", TransitionConditionOperator::LessOrEqual, 0.1f});
-                                stateMachine->AddTransition(tWalkToIdle);
-                            }
-                        }
-                    }
-
-                    if (resolvedSkeleton) {
-                        ac.AnimatorInstance = std::make_shared<Animator>(resolvedSkeleton);
-                        if (stateMachine) {
-                            ac.AnimatorInstance->SetStateMachine(stateMachine);
-                        }
-                    }
-                }
-
-                // Apply initial parameter overrides to AnimatorInstance
-                if (ac.AnimatorInstance) {
-                    for (const auto& [p, v] : ac.FloatOverrides) {
-                        ac.AnimatorInstance->SetFloat(p, v);
-                    }
-                    for (const auto& [p, v] : ac.IntOverrides) {
-                        ac.AnimatorInstance->SetInt(p, v);
-                    }
-                    for (const auto& [p, v] : ac.BoolOverrides) {
-                        ac.AnimatorInstance->SetBool(p, v);
-                    }
-                    ac.AnimatorInstance->SetFloat("Speed", ac.Speed);
-                    ac.AnimatorInstance->SetBool("IsGrounded", ac.IsGrounded);
-                    ac.AnimatorInstance->SetFloat("VerticalVelocity", ac.VerticalVelocity);
-                    ac.AnimatorInstance->Update(0.0f);
-                }
-            }
+        // Resolve animator-only entities too; all resource reads go through FileSystem/VFS.
+        auto& animationRegistry = m_Scene->GetRegistry();
+        for (auto entityID : animationRegistry.view<SkeletalMeshComponent>()) {
+            ResolveAnimationBinding(&animationRegistry.get<SkeletalMeshComponent>(entityID),
+                animationRegistry.try_get<AnimatorComponent>(entityID), m_ResourceOwnerPath);
+        }
+        for (auto entityID : animationRegistry.view<AnimatorComponent>(entt::exclude<SkeletalMeshComponent>)) {
+            ResolveAnimationBinding(nullptr, &animationRegistry.get<AnimatorComponent>(entityID), m_ResourceOwnerPath);
         }
 
         // Recreate Physics Bodies in PhysicsScene if active

@@ -41,6 +41,7 @@ namespace Axle {
         Scene* m_Scene = nullptr;
         PhysicsScene* m_PhysicsScene = nullptr;
         SceneSerializerContext m_Context;
+        std::string m_ResourceOwnerPath;
     };
 
 }

@@ -19,6 +19,8 @@ Full Phase 40 rendering/editor acceptance remains separate.
 
 | R1 controller core | Stable controller/state/transition identity and graph metadata survive compilation. Typed legacy rules migrate into serializable conditions; self-contained rig/clip fallbacks retain keyed poses, including cubic data. FileSystem resource resolution validates rig compatibility and fails explicitly for missing motions or unsupported 2D runtime. Referenced mesh loading uses cooked geometry; snapshot helpers preserve rig/mesh data. Permanent keyed-pose and entry/reset tests PASS; `build/animation-fix-controller-build.log`. Scene/assembly integration is tracked separately below. |
 
+| R1 scene/assembly integration | One shared binding adapter resolves cooked and inline resources, honors unique versus referenced controllers, and gives stable-ID overrides precedence. All three scene/assembly writers capture current keyed clips and complete rig/geometry snapshots before atomic file replacement. Regression tests compare actual skinning matrices, exercise assembly document save/reopen, independent clocks, owner-relative cooked dependencies and failed-save preservation. Release Animation CTests PASS; `build/animation-fix-scene-release.log`, `build/animation-fix-scene-ctest.log`. |
+
 Other review findings remain open until a correction row and its evidence are
 added here. The original review documents the pre-fix behavior, not the current
 acceptance result.

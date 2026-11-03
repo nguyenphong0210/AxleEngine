@@ -1355,6 +1355,8 @@ namespace Axle {
         std::shared_ptr<SkeletalMesh> Mesh = nullptr;
         std::string AssetPath;
         std::string SkeletonPath;
+        std::string RigFallbackData;
+        std::string BindingDiagnostic; // Transient; never serialized.
 
         // Visual pattern & material properties matching MeshInstance3D
         int PatternMode = 3; // 3: Solid Color (default for characters)

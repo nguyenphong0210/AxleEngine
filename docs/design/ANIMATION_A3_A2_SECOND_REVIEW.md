@@ -7,6 +7,11 @@ At review start, `NonlinearSkin.fbx` had an uncommitted extra trailing blank lin
 It was preserved. It does not change the fixture's semantics; tests below used
 the current working tree. This review changes documentation only.
 
+**Superseded by verified implementation:** S1-S4 are corrected in the
+[final corrections report](ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md). The
+findings below remain historical evidence for `fbfbf58`; they are not open work
+for the latest Gemini assignment. The current prompt assigns G1 CPU models only.
+
 ## Assessment
 
 The previous delivery made measurable progress. Mesh copy/move assignment is now

@@ -3,12 +3,11 @@
 Date: 2026-11-03. Inspected baseline: `538163b`.
 Status: **implementation handoff; proposed interfaces, not shipped APIs**.
 
-**Current continuation: fix the remaining A3/A2 findings, pass the correction
-gate, then implement G1 CPU document models only and stop for review.** Read the
-[second review](ANIMATION_A3_A2_SECOND_REVIEW.md) and
-[latest scoped prompt](ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt) first. This is the
-only expansion of the previous two-package assignment. The historical broad
-phase instructions below do not authorize renderer, preview or visible UI work.
+**Current continuation: G1 CPU document models only, then stop for review.**
+Read the [verified final foundation corrections](ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md)
+and [current G1-only prompt](ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt) first. Codex has
+already completed the S1-S4 correction gate. Historical broad phase instructions
+below do not authorize renderer, preview, visible UI or other package work.
 
 Read the [completion plan](ANIMATION_PHASE_40_COMPLETION_PLAN.md) first. Its
 A0-K3 IDs, dependency table, scope limits and acceptance gates are canonical.

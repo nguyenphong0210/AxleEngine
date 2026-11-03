@@ -13,6 +13,11 @@ constructor claim below, and constant-next endpoint semantics remain incorrect.
 Read the review and current ROADMAP before treating these delivery claims as
 accepted. The original submission is retained below as historical evidence.
 
+**Latest status:** Codex has now implemented and verified the remaining S1-S4
+fixes. Read [Final Corrections](ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md) for
+current code, acceptance and the G1-only continuation. Older submission/review
+claims below are retained as history for their recorded revisions.
+
 ---
 
 ## 1. Executive Summary

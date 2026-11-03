@@ -776,8 +776,8 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **A - CPU Foundations & Instance Safety**:
     - [x] **A0**: Always-active, device-free `AxleAnimationUnitTests` target and temporary fixtures.
     - [x] **A1**: Validated skeleton topology, partial-channel bind TRS fallback, quaternion/signed-scale handling and derived lookup rebuilding.
-    - [ ] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits. glTF STEP/cubic/helper and FBX geometry/helper/basis regressions PASS; error-bounded FBX curve baking and broader exporter fixtures remain pending.
-    - [ ] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy. Runtime/rig/legacy-motion snapshot isolation is verified; enforce immutable mesh-resource publication before closing this package.
+    - [ ] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits. glTF STEP/cubic/helper and FBX geometry/helper/basis regressions PASS; adaptive FBX curve baking with explicit accuracy/work limits, stepped hold preservation, fast rotation, signed scale and non-zero take start PASS; broader multi-exporter corpus remains an explicit acceptance gap.
+    - [x] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy. Enforced immutable publication (`SkeletalMesh::Create`, read-only span accessors, `const Skeleton` publishing, builder rig detachment, last-good replacement preservation, isolated runtime animators) PASS.
   - [ ] **B - Versioned Assets, Baking & Persistence**:
     - [x] **B1**: Stable definitions/IDs for Skeleton, SkeletalMesh, AnimationClip and AnimatorController; append-only asset classifications.
     - [x] **B2**: Shared complete codecs, atomic saves, validated cooked geometry, FileSystem/VFS loading and last-good reload.

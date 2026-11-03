@@ -161,6 +161,10 @@ cd AxleEngine
 git submodule update --init --recursive
 ```
 
+Default startup creates an empty untitled project. Open existing projects explicitly
+with File -> Open Project or `--project path/to/Game.axleproj`. Test/demo assets
+are isolated under [Tests/Fixtures](Tests/README.md).
+
 Build/export details: [separate Editor, tests and on-demand Runtime workflows](docs/guides/BUILD_WORKFLOWS.md).
 
 ### Build via CMake
@@ -172,7 +176,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 # 2. Build all engine targets in parallel
 cmake --build build --config Release --parallel
 
-# 3. Launch the Axle Editor (WYSIWYG IDE)
+# 3. Launch the Axle Editor into a fresh empty project
 ./build/Editor/Release/AxleEditor.exe
 
 # 4. Export standalone from the Editor when needed.
@@ -184,7 +188,7 @@ cmake --build build --config Release --target AxleAllTests --parallel
 # 6. Run registered tests
 ctest --test-dir build -C Release --output-on-failure
 
-# Optional legacy integration runner: ./build/Editor/Release/AxleTests.exe
+# Optional legacy integration runner: ./build/Tests/Release/AxleTests.exe
 ```
 
 ---

@@ -40,7 +40,7 @@ This is a selected dependency view, not a strict layer assignment. Most modules 
 - Core includes Application, which uses Platform, Renderer and Physics. Its public include paths expose those higher-level headers. Axle::Foundation is currently an alias of AxleCore rather than an independent foundation library.
 - Scene combines entity/component storage, hierarchy, simulation integration, scripts, serialization and rendering. It is not an isolated ECS-only module.
 - UI2D and UI are separate targets in Engine/UI. Scene links UI2D; the editor UI target links Scene. These do not form a target cycle.
-- Runtime links Spline/Terrain, whose public dependencies include editor UI. Runtime also stages Editor/assets and depends on the scripts target defined under Editor. It is therefore not yet independent at build level.
+- Runtime links Spline/Terrain, whose public dependencies include editor UI. Runtime stages engine resources and depends on the production scripts target defined under Editor; project assets come from explicit export. It is therefore not yet independent at build level.
 - Renderer is the OpenGL path. RHI wraps NRI and exposes native types; several higher subsystems retain both rendering paths.
 
 ## Application and simulation lifecycle

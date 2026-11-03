@@ -10,7 +10,7 @@ Start at [the agent index](agents/README.md). Both assistants read and write the
 questions/replies, deliveries and independent review status. Technical guides
 below are references, not standing instructions to implement an entire phase.
 
-Build instructions: [Editor, tests and on-demand standalone export](guides/BUILD_WORKFLOWS.md).
+Build instructions: [empty Editor startup, separate tests and on-demand standalone export](guides/BUILD_WORKFLOWS.md). Test sources and fixture layout: [Tests](../Tests/README.md).
 
 ## Current highest priority: RHI-primary rendering
 

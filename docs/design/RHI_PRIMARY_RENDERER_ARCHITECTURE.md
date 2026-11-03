@@ -48,7 +48,7 @@ identified. Re-inspect the active revision before implementing them.
 | AR-09 | [Runtime](../../Runtime/src/RuntimeLayer.cpp) uses GL rendering; plugin build targets pull Editor UI into Runtime | Shared render service and Runtime-only composition/build |
 | AR-10 | [Assembly preview](../../Engine/UI/src/AssemblyEditorPanel.cpp) and mesh/assembly [thumbnails](../../Engine/UI/src/AssetThumbnailManager.cpp) require GL | Service-driven private views and previews |
 | AR-11 | GL has skeletal/shadow/HDR environment paths; modern scene renderer lacks equivalent complete integration | Separately accepted modern passes and capability reporting |
-| AR-12 | Some [legacy RHI tests](../../Editor/src/Tests/Test_Milestone8_Part2.cpp) place operations in `assert`; physical GPU registration is opt-in | Always-active checks and explicit CPU/GPU/native/product gates |
+| AR-12 | Some [legacy RHI tests](../../Tests/src/Test_Milestone8_Part2.cpp) place operations in `assert`; physical GPU registration is opt-in | Always-active checks and explicit CPU/GPU/native/product gates |
 
 Historical evidence: `5a9662e` fixed Inspector texture retirement, with a
 before-fix descriptor-reuse failure and after-fix RTX 3070/D3D12 pixel checks.

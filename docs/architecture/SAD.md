@@ -176,14 +176,12 @@ Root CMake configures C++20, dependencies, all engine modules, both plugins and 
 
 ```mermaid
 flowchart LR
-    Tests[AxleTests] -->|build order| Editor[AxleEditor]
-    Editor -->|build order| Runtime[AxleRuntime]
-    Runtime -->|build order| Scripts[AxleScripts]
+    Tests[AxleTests] -->|build order| Fixtures[AxleTestResources and AxleTestScripts]
+    Runtime[AxleRuntime] -->|build order| Scripts[AxleScripts]
     Editor -->|build order| Scripts
-    Tests -->|build order| Scripts
 ```
 
-Runtime post-build stages scripts, Editor/assets and engine resources and copies the executable into Editor output. Editor stages assets/resources and Windows x64 DXC DLLs. Tests depend on Editor to stage shared resources. These order constraints are separate from runtime calls and target link dependencies.
+Editor/default builds exclude Runtime and test executables. Runtime is built on demand by standalone export and stages scripts plus engine resources into its own output directory. Editor stages engine resources and Windows x64 DXC DLLs. Tests independently stage fixtures and a fixture script DLL under the build tree. Project assets are not bundled into Editor/Runtime by post-build steps. See [build workflows](../guides/BUILD_WORKFLOWS.md).
 
 Windows DLL/OS paths and DXC staging require platform-specific review before claiming a working Linux distribution. This documentation does not validate a platform build.
 

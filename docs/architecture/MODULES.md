@@ -100,6 +100,6 @@ Source: [Plugins](../../Plugins).
 
 ## Tests and build composition
 
-AxleTests is defined in Editor/CMakeLists.txt. Test.cpp selects test groups implemented in src/Tests/Test_Milestone*.cpp. Its build depends on AxleEditor for resources; the first-party CMake configuration does not currently register CTest tests. No test pass count is asserted by this source review.
+Test targets are defined in Tests/CMakeLists.txt and excluded from the default/Editor build. Tests/src/Test.cpp selects legacy groups; dedicated CPU/build/GPU targets register with CTest. Tests stage their own fixture copies and script DLL without an Editor or Runtime dependency. See [test layout](../../Tests/README.md) and [build workflows](../guides/BUILD_WORKFLOWS.md) for current commands and verification limits.
 
 For proposed optional builds, runtime/editor separation and layering enforcement, see [Target Layered Architecture](TARGET_LAYERED_ARCHITECTURE.md).

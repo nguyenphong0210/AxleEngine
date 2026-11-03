@@ -20,7 +20,7 @@ The recommended approach is to preserve working subsystem behavior while extract
 | Serializer callbacks | Allows caller-installed plugin serialization without making Scene link every plugin | [SceneSerializerContext](../../Engine/Scene/include/Axle/SceneSerializer.hpp) |
 | Separate edit/runtime scenes | Supports restoring authoring state after play | [Scene::Copy](../../Engine/Scene/src/Scene.cpp), [Editor play/stop](../../Editor/src/EditorLayer.cpp) |
 | Separate UI2D/editor UI targets | Existing seam for runtime/tooling isolation | [UI targets](../../Engine/UI/CMakeLists.txt) |
-| Behavioral test sources | Provides regression material for staged refactoring | [Test groups](../../Editor/src/Tests), [runner](../../Editor/src/Test.cpp) |
+| Behavioral test sources | Provides regression material for staged refactoring | [Test groups](../../Tests/src), [runner](../../Tests/src/Test.cpp) |
 
 ## 3. Limitations, impact and priority
 

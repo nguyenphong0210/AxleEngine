@@ -25,6 +25,13 @@ Phase 40 integration follows the dependency map; unrelated new authoring and VFX
 expansion wait behind this track. Historical completed checkboxes are not proof
 of Phase 41 acceptance.
 
+**Build/startup prerequisite delivered (2026-11-03):** Tests and fixtures now live
+under top-level `Tests/`; Editor/default builds exclude Tests and Runtime. Default
+Editor startup uses a fresh empty project, with no bundled sample assets or
+injected scene entities. Explicit project opening and on-demand player builds
+remain available. See [build/startup workflows](docs/guides/BUILD_WORKFLOWS.md).
+This preparation does not mark any Phase 41 rendering package complete.
+
 ### 🛡️ Core Engineering & Contribution Principles
 1. **Language Standard**: All source code, header files, docstrings, architectural documentation, commit messages, and automated tests must be written exclusively in **English**.
 2. **Granular Sub-Step Execution**: Every implementation task must be decomposed into its smallest discrete sub-step. Bulk or monolithic commits combining unrelated sub-steps are strictly forbidden.

@@ -30,7 +30,7 @@ This documentation delivery releases no production code changes.
 | Asset decode/upload | `Engine/Asset/src/AssetSerializer.cpp`, `AssetManager.cpp`, `Engine/Scene/src/MaterialTextureCache.cpp` |
 | View consumers | `Editor/src/EditorLayer.cpp`, `Engine/UI/src/{AssetPreviewPanel,VFXEditorPanel,AssemblyEditorPanel,AssetThumbnailManager,RHIViewportDescriptor,AssetInspector}.cpp` |
 | Runtime/build boundaries | `Runtime/src/{Main,RuntimeLayer}.cpp`, root/module/plugin CMake, `Editor/CMakeLists.txt` |
-| Existing GPU regression | `Editor/src/Tests/Test_VFXRendering.cpp`, `VFXGPUTestMain.cpp`, material rendering tests |
+| Existing GPU regression | `Tests/src/Test_VFXRendering.cpp`, `VFXGPUTestMain.cpp`, material rendering tests |
 | Animation bridge | `Engine/Animation`, `Engine/Scene/src/AnimationSceneBinding.cpp`, Phase 40 F1-F3 contracts |
 
 Brace notation above groups paths; it is not a literal filename or shell command.
@@ -197,7 +197,7 @@ and old submission paths only after their final consumers and tests have moved.
 ## 4. Test layout and commands
 
 P41-00 should introduce isolated render contracts/tests under proposed
-`tests/rendering/` rather than adding every new test to the Editor executable.
+`Tests/rendering/` rather than adding every new test to the Editor executable.
 The following names/options are **proposed; not available at the planning baseline**:
 
 | Proposed target | Coverage |

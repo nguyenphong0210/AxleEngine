@@ -80,7 +80,7 @@ AXLE_REGISTER_SCRIPT(RotateObject);
 
 ### Recipe 3: Writing an Automated Headless Test in `AxleTests.exe`
 
-The test runner is [Editor/src/Test.cpp](../../Editor/src/Test.cpp); test groups are implemented in [Editor/src/Tests](../../Editor/src/Tests) and share TestCommon.hpp. Register new groups in the runner/build definition as required. Test builds currently depend on AxleEditor resource staging.
+The legacy runner is [Tests/src/Test.cpp](../../Tests/src/Test.cpp); test groups live in [Tests/src](../../Tests/src). Register suites in [Tests/CMakeLists.txt](../../Tests/CMakeLists.txt). Test resources are staged independently; Editor builds do not include tests. See the [test layout](../../Tests/README.md) and [build workflows](BUILD_WORKFLOWS.md).
 
 ```cpp
 bool RunTest_MyNewFeature() {

@@ -1,6 +1,6 @@
 # Execution Flows: Current System
 
-Reviewed: 2026-11-01. Diagrams preserve architecture-relevant call order while omitting widget and command-level details. They describe source paths; execution success was not measured.
+Reviewed: 2026-11-01; startup paths updated 2026-11-03. Diagrams preserve architecture-relevant call order while omitting widget and command-level details. They describe source paths; execution success was not measured.
 
 ## 1. Editor startup and backend selection
 
@@ -19,7 +19,7 @@ sequenceDiagram
         Main-->>User: exit code
     else normal editor
         Main->>Switch: ParseCommandLine
-        opt no explicit backend CLI
+        opt explicit project and no backend CLI
             Main->>Config: Deserialize project settings
             Config-->>Main: RHIBackend
         end
@@ -27,6 +27,7 @@ sequenceDiagram
             Main->>Switch: ResolveAndInitialize
             Switch-->>Main: selected API or fallback OpenGL
         end
+        Main->>Main: activate explicit project or create fresh untitled workspace
         Main->>App: construct with GraphicsBackend
         App->>App: init Log, Jobs, Physics, Window
         opt OpenGL selected
@@ -35,12 +36,12 @@ sequenceDiagram
         Main->>App: SetUIContext ImGuiLayer
         App->>UI: Init native window
         Main->>App: PushLayer EditorLayer
-        App->>Layer: OnAttach
+        App->>Layer: OnAttach (explicit start scene or empty scene)
         Main->>App: Run
     end
 ```
 
-Editor Main handles cook/export before normal UI startup. Backend settings come from CLI/project with fallback. UI backend availability and headless device capabilities are different concerns.
+Editor Main handles cook/export before normal UI startup and requires an explicit project for cooking. Default startup has zero entities/assets; it never discovers a nearby sample project. Backend settings come from CLI/project with fallback. UI backend availability and headless device capabilities are different concerns.
 
 Sources: [Editor/src/Main.cpp](../../Editor/src/Main.cpp), [Engine/Core/src/Application.cpp](../../Engine/Core/src/Application.cpp), [Engine/Core/src/LayerStack.cpp](../../Engine/Core/src/LayerStack.cpp).
 
@@ -175,13 +176,13 @@ sequenceDiagram
     RL->>RL: init Audio, scripts, Canvas, PhysicsScene, SceneRenderer
     RL->>FS: try package candidates
     RL->>Proj: load requested or discovered project
-    RL->>RL: resolve startup scene candidates
+    RL->>RL: resolve configured StartScene only
     RL->>Ser: configure script and plugin callbacks
     alt scene found and parsed
         Ser->>Scene: create entities/components
         RL->>RL: rebuild spline/terrain VAOs and colliders
-    else fallback
-        RL->>Scene: create baseline light/sky/camera/floor
+    else no authored start scene
+        RL->>Scene: retain empty scene
     end
     RL->>Scene: OnRuntimeStart
     Main->>App: Run
@@ -190,7 +191,7 @@ sequenceDiagram
     RL->>RL: reset scene/physics/renderer and shutdown scripts/audio
 ```
 
-Runtime uses the default OpenGL application specification. It installs plugin serializer callbacks, rebuilds procedural geometry/colliders or creates a fallback scene. AssetManager::Init is not directly called in the inspected RuntimeLayer startup. SetupPauseMenu is defined but has no call in that file; this diagram does not assume it runs.
+Runtime uses the default OpenGL application specification. It installs plugin serializer callbacks, rebuilds authored procedural geometry/colliders, and retains an empty scene when no configured start scene loads. AssetManager::Init is not directly called in the inspected RuntimeLayer startup. SetupPauseMenu is defined but has no call in that file; this diagram does not assume it runs.
 
 Sources: [Runtime/src/Main.cpp](../../Runtime/src/Main.cpp), [Runtime/src/RuntimeLayer.cpp](../../Runtime/src/RuntimeLayer.cpp).
 

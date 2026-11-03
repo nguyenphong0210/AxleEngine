@@ -10,7 +10,7 @@ Extracted from first-party target_link_libraries calls. Platform conditions/gene
 |---|---|---|---|
 | `AxleEditor` | PRIVATE | `Axle::Core`, `Axle::Platform`, `Axle::RHI`, `Axle::Renderer`, `Axle::Audio`, `Axle::Asset`, `Axle::UI`, `Axle::Physics`, `Axle::Scene`, `Axle::Vehicle`, `Axle::Project`, `Axle::Spline`, `Axle::Terrain`, `Axle::Animation`, `Axle::VFX` | [Editor/CMakeLists.txt](../../Editor/CMakeLists.txt) |
 | `AxleScripts` | PRIVATE | `Axle::Core`, `Axle::Platform`, `Axle::Renderer`, `Axle::Scene`, `Axle::Physics`, `Axle::Vehicle`, `Axle::UI` | [Editor/CMakeLists.txt](../../Editor/CMakeLists.txt) |
-| `AxleTests` | PRIVATE | `Axle::Core`, `Axle::Platform`, `Axle::RHI`, `Axle::Renderer`, `Axle::Audio`, `Axle::Asset`, `Axle::UI`, `Axle::UI2D`, `Axle::Physics`, `Axle::Scene`, `Axle::Vehicle`, `Axle::Project`, `Axle::Spline`, `Axle::Terrain`, `Axle::Animation`, `Axle::VFX` | [Editor/CMakeLists.txt](../../Editor/CMakeLists.txt) |
+| `AxleTests` | PRIVATE | `Axle::Core`, `Axle::Platform`, `Axle::RHI`, `Axle::Renderer`, `Axle::Audio`, `Axle::Asset`, `Axle::UI`, `Axle::UI2D`, `Axle::Physics`, `Axle::Scene`, `Axle::Vehicle`, `Axle::Project`, `Axle::Spline`, `Axle::Terrain`, `Axle::Animation`, `Axle::VFX` | [Tests/CMakeLists.txt](../../Tests/CMakeLists.txt) |
 | `AxleAnimation` | PUBLIC | `Axle::Core`, `Axle::Renderer`, `Axle::Asset` | [Engine/Animation/CMakeLists.txt](../../Engine/Animation/CMakeLists.txt) |
 | `AxleAsset` | PUBLIC | `Axle::Core`, `Axle::Renderer`, `Axle::RHI` | [Engine/Asset/CMakeLists.txt](../../Engine/Asset/CMakeLists.txt) |
 | `AxleAudio` | PUBLIC | `Axle::Core` | [Engine/Audio/CMakeLists.txt](../../Engine/Audio/CMakeLists.txt) |
@@ -145,30 +145,29 @@ add_dependencies does not mean inheritance or a runtime call.
 
 | Target | Build prerequisites | Definition |
 |---|---|---|
-| `AxleEditor` | `AxleScripts`, `AxleRuntime` | [Editor/CMakeLists.txt](../../Editor/CMakeLists.txt) |
-| `AxleTests` | `AxleEditor` | [Editor/CMakeLists.txt](../../Editor/CMakeLists.txt) |
-| `AxleTests` | `AxleScripts` | [Editor/CMakeLists.txt](../../Editor/CMakeLists.txt) |
+| `AxleEditor` | `AxleScripts` | [Editor/CMakeLists.txt](../../Editor/CMakeLists.txt) |
+| `AxleTests` | `AxleTestResources`, `AxleTestScripts` | [Tests/CMakeLists.txt](../../Tests/CMakeLists.txt) |
 | `AxleRuntime` | `AxleScripts` | [Runtime/CMakeLists.txt](../../Runtime/CMakeLists.txt) |
 
 ## 4. Cross-directory includes
 
-Includes are textual, including inactive preprocessor branches. This is not a call graph. Engine/UI combines two targets, so directory-level edges cannot by themselves establish target cycles.
+Includes are textual, including inactive preprocessor branches. This is not a call graph. Engine/UI combines two targets, so directory-level edges cannot by themselves establish target cycles. Counts below retain the 2026-11-01 survey grouping (including tests under Editor at that time); example links follow the new Tests layout. Recompute counts before using them to assess current module isolation.
 
 | Consumer module | Included module | Include occurrences | Example |
 |---|---|---:|---|
-| Editor | Engine/Animation | 8 | [Editor/src/Tests/TestCommon.hpp:53](../../Editor/src/Tests/TestCommon.hpp#L53) → `Axle/Skeleton.hpp` |
+| Editor | Engine/Animation | 8 | [Tests/src/TestCommon.hpp:53](../../Tests/src/TestCommon.hpp#L53) → `Axle/Skeleton.hpp` |
 | Editor | Engine/Asset | 15 | [Editor/src/EditorLayer.cpp:1](../../Editor/src/EditorLayer.cpp#L1) → `Axle/TextureDescriptor.hpp` |
 | Editor | Engine/Audio | 2 | [Editor/src/EditorLayer.cpp:18](../../Editor/src/EditorLayer.cpp#L18) → `Axle/AudioEngine.hpp` |
-| Editor | Engine/Core | 18 | [Editor/assets/scripts/CarController.hpp:7](../../Editor/assets/scripts/CarController.hpp#L7) → `Axle/Log.hpp` |
-| Editor | Engine/Physics | 10 | [Editor/assets/scripts/VehicleChaseCamera.hpp:9](../../Editor/assets/scripts/VehicleChaseCamera.hpp#L9) → `Axle/PhysicsScene.hpp` |
-| Editor | Engine/Platform | 14 | [Editor/assets/scripts/CarController.hpp:5](../../Editor/assets/scripts/CarController.hpp#L5) → `Axle/Input.hpp` |
+| Editor | Engine/Core | 18 | [Tests/Fixtures/Assets/scripts/CarController.hpp:7](../../Tests/Fixtures/Assets/scripts/CarController.hpp#L7) → `Axle/Log.hpp` |
+| Editor | Engine/Physics | 10 | [Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp:9](../../Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp#L9) → `Axle/PhysicsScene.hpp` |
+| Editor | Engine/Platform | 14 | [Tests/Fixtures/Assets/scripts/CarController.hpp:5](../../Tests/Fixtures/Assets/scripts/CarController.hpp#L5) → `Axle/Input.hpp` |
 | Editor | Engine/Project | 5 | [Editor/src/EditorLayer.cpp:15](../../Editor/src/EditorLayer.cpp#L15) → `Axle/Project.hpp` |
 | Editor | Engine/RHI | 30 | [Editor/src/EditorLayer.cpp:30](../../Editor/src/EditorLayer.cpp#L30) → `Axle/RHI/RHIDevice.hpp` |
 | Editor | Engine/Renderer | 21 | [Editor/src/EditorLayer.cpp:5](../../Editor/src/EditorLayer.cpp#L5) → `Axle/RenderCommand.hpp` |
-| Editor | Engine/Scene | 61 | [Editor/assets/scripts/CarController.hpp:2](../../Editor/assets/scripts/CarController.hpp#L2) → `Axle/ScriptableEntity.hpp` |
+| Editor | Engine/Scene | 61 | [Tests/Fixtures/Assets/scripts/CarController.hpp:2](../../Tests/Fixtures/Assets/scripts/CarController.hpp#L2) → `Axle/ScriptableEntity.hpp` |
 | Editor | Engine/UI | 37 | [Editor/src/EditorLayer.cpp:35](../../Editor/src/EditorLayer.cpp#L35) → `Axle/UI/RectTransformGizmo.hpp` |
-| Editor | Engine/VFX | 10 | [Editor/src/Tests/Test_Milestone9.cpp:20](../../Editor/src/Tests/Test_Milestone9.cpp#L20) → `Axle/ParticleEmitterSerializer.hpp` |
-| Editor | Engine/Vehicle | 5 | [Editor/assets/scripts/RacingHUD.hpp:8](../../Editor/assets/scripts/RacingHUD.hpp#L8) → `Axle/Vehicle.hpp` |
+| Editor | Engine/VFX | 10 | [Tests/src/Test_Milestone9.cpp:20](../../Tests/src/Test_Milestone9.cpp#L20) → `Axle/ParticleEmitterSerializer.hpp` |
+| Editor | Engine/Vehicle | 5 | [Tests/Fixtures/Assets/scripts/RacingHUD.hpp:8](../../Tests/Fixtures/Assets/scripts/RacingHUD.hpp#L8) → `Axle/Vehicle.hpp` |
 | Editor | Plugins/Spline | 11 | [Editor/src/EditorLayer.cpp:19](../../Editor/src/EditorLayer.cpp#L19) → `AxleSpline/SplineComponent.hpp` |
 | Editor | Plugins/Terrain | 15 | [Editor/src/EditorLayer.cpp:24](../../Editor/src/EditorLayer.cpp#L24) → `AxleTerrain/TerrainPlugin.hpp` |
 | Engine/Animation | Engine/Core | 4 | [Engine/Animation/include/Axle/AnimationPose.hpp:2](../../Engine/Animation/include/Axle/AnimationPose.hpp#L2) → `Axle/Types.hpp` |

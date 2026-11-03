@@ -1,63 +1,23 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "BUILD-WORKFLOW",
-    "title": "Separate Editor, tests and on-demand Runtime build",
-    "state": "implemented_verified",
+    "id": "TESTS-AND-EMPTY-EDITOR",
+    "title": "Independent Tests tree and empty default Editor project",
+    "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Editor/default build excludes tests and Runtime; standalone export builds Runtime on demand; tests build separately. No Phase 41 renderer implementation.",
+    "user_scope": "Move tests out of Editor; remove Editor/assets and root assets; default Editor opens an empty project, with no implicit sample project/scene. Preserve required test data only under Tests fixtures.",
     "expected_files": [
+      "Tests",
       "Editor/CMakeLists.txt",
-      "Runtime/CMakeLists.txt",
-      "Editor/src/RuntimeBuild.hpp",
-      "Editor/src/RuntimeBuild.cpp",
+      "Editor/src/Main.cpp",
       "Editor/src/EditorLayer.cpp",
-      "Editor/src/EditorLayer.hpp",
-      "Engine/Asset/include/Axle/AssetCooker.hpp",
-      "Engine/Asset/src/AssetCooker.cpp",
-      "docs/guides/DEVELOPMENT.md"
+      "Runtime/CMakeLists.txt",
+      "Engine/Project",
+      "Engine/Core/src/FileSystem.cpp",
+      "docs/guides/BUILD_WORKFLOWS.md"
     ],
-    "implementation_commit": "f73d306",
-    "guide": "docs/guides/BUILD_WORKFLOWS.md",
-    "behavior": "Editor/default build excludes Runtime and all test executables. AxleAllTests builds tests without Editor/Runtime. Editor standalone export builds Runtime on a cancellable worker and packages exact matching output only after success.",
-    "verification": [
-      {
-        "command": "cmake -S . -B build",
-        "exit_code": 0
-      },
-      {
-        "command": "cmake --build build --config Release --parallel 6",
-        "exit_code": 0,
-        "evidence": "build/build-workflow-default.log; Editor built, no Runtime/test project builds"
-      },
-      {
-        "command": "cmake --build build --config Release --target AxleAllTests --parallel 6",
-        "exit_code": 0,
-        "evidence": "build/build-workflow-all-tests.log; no Editor/Runtime project build"
-      },
-      {
-        "command": "AxleBuildWorkflowTests.exe --real-runtime",
-        "exit_code": 0,
-        "evidence": "Actual configured Runtime built through the production helper used by Editor"
-      },
-      {
-        "command": "cmake --build build --config Release --target AxleEditor AxleAllTests --parallel 6",
-        "exit_code": 0,
-        "evidence": "build/build-workflow-final-build.log"
-      },
-      {
-        "command": "ctest --test-dir build -C Release --output-on-failure",
-        "exit_code": 0,
-        "result": "8/8 registered tests PASS, including build process/packaging regressions and enabled D3D12/Vulkan VFX checks"
-      },
-      {
-        "check": "Generated MSBuild transitive dependency closures and default/test build logs",
-        "result": "Editor and ALL exclude Runtime/tests; AxleTests and AxleAllTests exclude Editor/Runtime"
-      }
-    ],
-    "limits": "Native Export button interaction NOT RUN. On-demand Windows player building needs configured CMake/toolchain checkout. Full Editor-free Runtime module isolation and Phase 41 renderer implementation remain outstanding. Existing LNK4098 warnings remain.",
-    "next_action": "Use the new build workflows. Phase 41 P41-00/P41-01 remain next planned candidates, not released by this build task."
+    "next_action": "Scoped tests/startup cleanup completed and verified in 3b6ae6a. Phase 41 renderer packages remain unassigned; Gemini should not start a package from archived prompts."
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -184,6 +144,28 @@
       "base_commit": "f73d306a984018034ad4df568776b24571c08033",
       "timestamp_utc": "2026-11-03T14:51:41.999730+00:00",
       "body": "DELIVERY: f73d306 implements the requested build split. Editor no longer depends on Runtime. Runtime and test executables are EXCLUDE_FROM_ALL; AxleAllTests is an explicit aggregate. Legacy tests stage their own assets/DXC without depending on the Editor executable. Generated transitive MSBuild references and actual build logs confirm the separation.\n\nStandalone export now launches the real configured CMake Runtime target on a background worker. It uses a hidden owned process tree, captured logs and cancellation when Editor detaches. Asset cooking stays on the main thread after build success (avoids GL/context-free assumptions in legacy cooking). Packaging uses the exact current-configuration Runtime output directory and matching scripts DLL; build failure, absent binaries or failed executable copies fail export rather than silently bundling stale files. Runtime no longer stages its exe into the Editor directory.\n\nChecks run this turn: configure exit 0; default Release build exit 0 (Editor, no Runtime/tests); AxleAllTests build exit 0 (no Editor/Runtime); actual Runtime build through production helper --real-runtime exit 0; final Editor+all-tests Release build exit 0; CTest 8/8 PASS, including enabled D3D12/Vulkan hardware VFX checks. New process/packaging tests cover real CMake success/failure with old binaries present, cancellation, paths with spaces, exact directory selection and asset-only export. Fixture executable files are copy/process-test data and never claimed as actual player execution. All fixture source scripts are tracked.\n\nDocs: docs/guides/BUILD_WORKFLOWS.md, root README and docs index. Native Export button clicking NOT RUN; the production builder and cooker were executed through tests. Windows checkout/toolchain required for on-demand builds; shipped Editor SDK deployment is not introduced. This does not complete Phase 41 Editor-free Runtime or renderer packages. Existing runtime-library linker warnings persist. No new Phase 41 implementation scope is released. No push."
+    },
+    {
+      "id": "CG-20261103T150003940650Z-CODEX-21e71a",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "TESTS-AND-EMPTY-EDITOR",
+      "reply_to": null,
+      "base_commit": "f96cdaf7e1ad85c9285f37c3eb7813059444ca8a",
+      "timestamp_utc": "2026-11-03T15:00:03.940650+00:00",
+      "body": "IN_PROGRESS: User requests standalone Tests folder, removal of Editor/assets and root assets, and a truly empty default Editor project. Codex owns the test/fixture relocation, CMake staging, project/filesystem/startup policy and relevant tests/docs. Required old assets will be retained as explicit Tests fixtures, not discovered by Editor. No implicit root project reopening or camera/vehicle entities in NewScene. Gemini: do not edit these files concurrently; no renderer package assigned."
+    },
+    {
+      "id": "CG-20261103T153044453460Z-CODEX-e5fafa",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "TESTS-AND-EMPTY-EDITOR",
+      "reply_to": "CG-20261103T150003940650Z-CODEX-21e71a",
+      "base_commit": "3b6ae6a",
+      "timestamp_utc": "2026-11-03T15:30:44.453460+00:00",
+      "body": "Implemented and locally committed in 3b6ae6a: separate Tests/src and Tests/CMakeLists.txt, fixtures moved from Editor/assets and root assets into Tests/Fixtures, no sample assets staged into Editor/Runtime, no automatic nearby project/scene discovery, no injected camera/light/vehicle in new Editor scenes. Default startup uses a unique empty untitled project; Save As copies authored assets and rejects occupied or recursive destinations. Engine resources remain separate, and shader cache is outside project assets.\n\nVerified in this task (Release):\n- cmake -S . -B build: exit 0.\n- cmake --build build --config Release --target AxleEditor AxleAllTests --parallel 6: exit 0 (build/empty-verification-build.log).\n- ctest --test-dir build -C Release --output-on-failure: exit 0, 9/9, including ProjectStartupTests and physical VFXGPU_D3D12/VFXGPU_Vulkan (build/empty-ctest.log).\n- build/Tests/Release/AxleBuildWorkflowTests.exe --real-runtime: exit 0 through production Editor Runtime build helper (build/empty-runtime-build.log).\n- Actual Editor --verify-empty-startup on dx12/vulkan/opengl: exit 0 each, exact 0 entities/0 assets/no start scene assertion; requested D3D12 and Vulkan active backends confirmed. Logs build/empty-startup-{dx12,vulkan,opengl}.log. This initializes and shuts down the native Editor; it does not run interactive frames.\n- Generated ALL_BUILD/Editor dependency graphs exclude Tests and Runtime. Test targets exclude Editor/Runtime. Editor/assets, root assets and Editor/src/Tests remain absent after tests and startup.\n\nDocs: Tests/README.md and docs/guides/BUILD_WORKFLOWS.md document layout, commands, untitled recovery/save semantics and verification limits. Current architecture/source links updated. Test sources now resolve immutable source fixtures with AXLE_TEST_SOURCE_DIR and write into build/Tests/Work/<config>. Keep fixture gameplay scripts in AxleTestScripts; do not restore demo scripts/assets to production Editor. Existing MSVC APIENTRY/CRT warnings are outside this task. Debug/full legacy interactive suites and manual project-dialog interactions were NOT RUN.\n\nNo push. This is preparatory build/startup isolation, not acceptance or implementation of any Phase 41 rendering package. Gemini has no new source-writing assignment from this delivery; animation G1 independent review remains deferred.\n"
     }
   ],
   "deferred_tasks": [
@@ -343,6 +325,65 @@
       "implementation_release": "None. The user requested documentation and roadmap in this turn.",
       "verification": "44 new local links/anchors checked; 30 unique package sections and roadmap checkboxes agree; dependency graph is acyclic; code fences balanced; changes are documentation only. No renderer builds or runtime/GPU tests run for this documentation delivery.",
       "next_action": "Read/reply in exchange. Begin only the next package/range actually assigned by the user; do not replay old animation prompts."
+    },
+    {
+      "id": "BUILD-WORKFLOW",
+      "title": "Separate Editor, tests and on-demand Runtime build",
+      "state": "implemented_verified",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "user_scope": "Editor/default build excludes tests and Runtime; standalone export builds Runtime on demand; tests build separately. No Phase 41 renderer implementation.",
+      "expected_files": [
+        "Editor/CMakeLists.txt",
+        "Runtime/CMakeLists.txt",
+        "Editor/src/RuntimeBuild.hpp",
+        "Editor/src/RuntimeBuild.cpp",
+        "Editor/src/EditorLayer.cpp",
+        "Editor/src/EditorLayer.hpp",
+        "Engine/Asset/include/Axle/AssetCooker.hpp",
+        "Engine/Asset/src/AssetCooker.cpp",
+        "docs/guides/DEVELOPMENT.md"
+      ],
+      "implementation_commit": "f73d306",
+      "guide": "docs/guides/BUILD_WORKFLOWS.md",
+      "behavior": "Editor/default build excludes Runtime and all test executables. AxleAllTests builds tests without Editor/Runtime. Editor standalone export builds Runtime on a cancellable worker and packages exact matching output only after success.",
+      "verification": [
+        {
+          "command": "cmake -S . -B build",
+          "exit_code": 0
+        },
+        {
+          "command": "cmake --build build --config Release --parallel 6",
+          "exit_code": 0,
+          "evidence": "build/build-workflow-default.log; Editor built, no Runtime/test project builds"
+        },
+        {
+          "command": "cmake --build build --config Release --target AxleAllTests --parallel 6",
+          "exit_code": 0,
+          "evidence": "build/build-workflow-all-tests.log; no Editor/Runtime project build"
+        },
+        {
+          "command": "AxleBuildWorkflowTests.exe --real-runtime",
+          "exit_code": 0,
+          "evidence": "Actual configured Runtime built through the production helper used by Editor"
+        },
+        {
+          "command": "cmake --build build --config Release --target AxleEditor AxleAllTests --parallel 6",
+          "exit_code": 0,
+          "evidence": "build/build-workflow-final-build.log"
+        },
+        {
+          "command": "ctest --test-dir build -C Release --output-on-failure",
+          "exit_code": 0,
+          "result": "8/8 registered tests PASS, including build process/packaging regressions and enabled D3D12/Vulkan VFX checks"
+        },
+        {
+          "check": "Generated MSBuild transitive dependency closures and default/test build logs",
+          "result": "Editor and ALL exclude Runtime/tests; AxleTests and AxleAllTests exclude Editor/Runtime"
+        }
+      ],
+      "limits": "Native Export button interaction NOT RUN. On-demand Windows player building needs configured CMake/toolchain checkout. Full Editor-free Runtime module isolation and Phase 41 renderer implementation remain outstanding. Existing LNK4098 warnings remain.",
+      "next_action": "Use the new build workflows. Phase 41 P41-00/P41-01 remain next planned candidates, not released by this build task."
     }
   ]
 }

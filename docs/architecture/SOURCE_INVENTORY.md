@@ -2,86 +2,90 @@
 
 Reviewed: 2026-11-01. This inventory scans first-party C++ source, shaders and text assets/configuration. Vendored internals, media, binary terrain/mesh payloads, generated build output, caches and documentation prose are excluded from this source table. Existing domain guides were reviewed separately.
 
+Path maintenance (2026-11-03): test sources and sample assets below now point to
+`Tests/src` and `Tests/Fixtures`. The following counts remain the original survey
+snapshot, not a fresh line-count measurement.
+
 **420 text files; 113,222 lines.** Every listed file was read by tooling; manual architectural analysis focuses on build/APIs/ownership/integration paths.
 
 | Source | Lines | Extracted class/struct names |
 |---|---:|---|
-| [assets/scenes/CharacterSandbox.axlescene](../../assets/scenes/CharacterSandbox.axlescene) | 423 | — |
-| [assets/scenes/OffRoadTrack.axlescene](../../assets/scenes/OffRoadTrack.axlescene) | 448 | — |
-| [assets/ui/PauseMenu.axleasset](../../assets/ui/PauseMenu.axleasset) | 89 | — |
-| [assets/ui/RacingHUD.axleasset](../../assets/ui/RacingHUD.axleasset) | 215 | — |
-| [Editor/assets/audio/Collision_Impact.wav.meta](../../Editor/assets/audio/Collision_Impact.wav.meta) | 4 | — |
-| [Editor/assets/audio/Engine_Coast.wav.meta](../../Editor/assets/audio/Engine_Coast.wav.meta) | 4 | — |
-| [Editor/assets/audio/Engine_Power.wav.meta](../../Editor/assets/audio/Engine_Power.wav.meta) | 4 | — |
-| [Editor/assets/audio/Suspension_Thud.wav.meta](../../Editor/assets/audio/Suspension_Thud.wav.meta) | 4 | — |
-| [Editor/assets/audio/Tire_Squeal.wav.meta](../../Editor/assets/audio/Tire_Squeal.wav.meta) | 4 | — |
-| [Editor/assets/materials/BlackRubber.axleasset](../../Editor/assets/materials/BlackRubber.axleasset) | 19 | — |
-| [Editor/assets/materials/BlackRubber.axleasset.meta](../../Editor/assets/materials/BlackRubber.axleasset.meta) | 4 | — |
-| [Editor/assets/materials/GoldMetallic.axleasset](../../Editor/assets/materials/GoldMetallic.axleasset) | 28 | — |
-| [Editor/assets/materials/GoldMetallic.axleasset.meta](../../Editor/assets/materials/GoldMetallic.axleasset.meta) | 4 | — |
-| [Editor/assets/materials/SilverCarPaint.axleasset](../../Editor/assets/materials/SilverCarPaint.axleasset) | 19 | — |
-| [Editor/assets/materials/SilverCarPaint.axleasset.meta](../../Editor/assets/materials/SilverCarPaint.axleasset.meta) | 4 | — |
-| [Editor/assets/models/.cache/SportsCar_Chassis.axlebin.meta](../../Editor/assets/models/.cache/SportsCar_Chassis.axlebin.meta) | 4 | — |
-| [Editor/assets/models/.cache/SportsCar_Wheel.axlebin.meta](../../Editor/assets/models/.cache/SportsCar_Wheel.axlebin.meta) | 4 | — |
-| [Editor/assets/models/sedan-sports.mtl](../../Editor/assets/models/sedan-sports.mtl) | 6 | — |
-| [Editor/assets/models/sedan-sports.mtl.meta](../../Editor/assets/models/sedan-sports.mtl.meta) | 4 | — |
-| [Editor/assets/models/SportsCar_Chassis.axleasset](../../Editor/assets/models/SportsCar_Chassis.axleasset) | 1165 | — |
-| [Editor/assets/models/SportsCar_Chassis.axleasset.meta](../../Editor/assets/models/SportsCar_Chassis.axleasset.meta) | 4 | — |
-| [Editor/assets/models/SportsCar_Chassis.axlemesh](../../Editor/assets/models/SportsCar_Chassis.axlemesh) | 1172 | — |
-| [Editor/assets/models/SportsCar_Chassis.axlemesh.meta](../../Editor/assets/models/SportsCar_Chassis.axlemesh.meta) | 4 | — |
-| [Editor/assets/models/SportsCar_Wheel.axleasset](../../Editor/assets/models/SportsCar_Wheel.axleasset) | 880 | — |
-| [Editor/assets/models/SportsCar_Wheel.axleasset.meta](../../Editor/assets/models/SportsCar_Wheel.axleasset.meta) | 4 | — |
-| [Editor/assets/models/SportsCar_Wheel.axlemesh](../../Editor/assets/models/SportsCar_Wheel.axlemesh) | 887 | — |
-| [Editor/assets/models/SportsCar_Wheel.axlemesh.meta](../../Editor/assets/models/SportsCar_Wheel.axlemesh.meta) | 4 | — |
-| [Editor/assets/models/wheel-racing.mtl](../../Editor/assets/models/wheel-racing.mtl) | 6 | — |
-| [Editor/assets/models/wheel-racing.mtl.meta](../../Editor/assets/models/wheel-racing.mtl.meta) | 4 | — |
-| [Editor/assets/prefabs/SportsCar_Assembly.axle](../../Editor/assets/prefabs/SportsCar_Assembly.axle) | 383 | — |
-| [Editor/assets/prefabs/SportsCar_Assembly.axle.meta](../../Editor/assets/prefabs/SportsCar_Assembly.axle.meta) | 4 | — |
-| [Editor/assets/scenes/CarTest.axlescene](../../Editor/assets/scenes/CarTest.axlescene) | 655 | — |
-| [Editor/assets/scenes/CarTest.axlescene.meta](../../Editor/assets/scenes/CarTest.axlescene.meta) | 4 | — |
-| [Editor/assets/scenes/CharacterSandbox.axlescene](../../Editor/assets/scenes/CharacterSandbox.axlescene) | 423 | — |
-| [Editor/assets/scenes/CharacterSandbox.axlescene.meta](../../Editor/assets/scenes/CharacterSandbox.axlescene.meta) | 4 | — |
-| [Editor/assets/scenes/OffRoadTrack.axlescene](../../Editor/assets/scenes/OffRoadTrack.axlescene) | 448 | — |
-| [Editor/assets/scenes/OffRoadTrack.axlescene.meta](../../Editor/assets/scenes/OffRoadTrack.axlescene.meta) | 4 | — |
-| [Editor/assets/scenes/VehicleSandbox.axlescene](../../Editor/assets/scenes/VehicleSandbox.axlescene) | 807 | — |
-| [Editor/assets/scenes/VehicleSandbox.axlescene.meta](../../Editor/assets/scenes/VehicleSandbox.axlescene.meta) | 4 | — |
-| [Editor/assets/scripts/CarController.hpp](../../Editor/assets/scripts/CarController.hpp) | 196 | CarController |
-| [Editor/assets/scripts/CarController.hpp.meta](../../Editor/assets/scripts/CarController.hpp.meta) | 4 | — |
-| [Editor/assets/scripts/RacingHUD.hpp](../../Editor/assets/scripts/RacingHUD.hpp) | 514 | RacingHUD |
-| [Editor/assets/scripts/RacingHUD.hpp.meta](../../Editor/assets/scripts/RacingHUD.hpp.meta) | 4 | — |
-| [Editor/assets/scripts/RotatorScript.hpp](../../Editor/assets/scripts/RotatorScript.hpp) | 37 | RotatorScript |
-| [Editor/assets/scripts/RotatorScript.hpp.meta](../../Editor/assets/scripts/RotatorScript.hpp.meta) | 4 | — |
-| [Editor/assets/scripts/ThirdPersonCamera.hpp](../../Editor/assets/scripts/ThirdPersonCamera.hpp) | 180 | ThirdPersonCamera |
-| [Editor/assets/scripts/ThirdPersonCamera.hpp.meta](../../Editor/assets/scripts/ThirdPersonCamera.hpp.meta) | 4 | — |
-| [Editor/assets/scripts/ThirdPersonController.hpp](../../Editor/assets/scripts/ThirdPersonController.hpp) | 209 | ThirdPersonController |
-| [Editor/assets/scripts/ThirdPersonController.hpp.meta](../../Editor/assets/scripts/ThirdPersonController.hpp.meta) | 4 | — |
-| [Editor/assets/scripts/VehicleChaseCamera.hpp](../../Editor/assets/scripts/VehicleChaseCamera.hpp) | 655 | VehicleChaseCamera |
-| [Editor/assets/scripts/VehicleChaseCamera.hpp.meta](../../Editor/assets/scripts/VehicleChaseCamera.hpp.meta) | 4 | — |
-| [Editor/assets/terrain/OffRoadTerrain.axleterrain.meta](../../Editor/assets/terrain/OffRoadTerrain.axleterrain.meta) | 4 | — |
-| [Editor/assets/ui/PauseMenu.axleasset](../../Editor/assets/ui/PauseMenu.axleasset) | 89 | — |
-| [Editor/assets/ui/PauseMenu.axleasset.meta](../../Editor/assets/ui/PauseMenu.axleasset.meta) | 4 | — |
-| [Editor/assets/ui/RacingHUD.axleasset](../../Editor/assets/ui/RacingHUD.axleasset) | 215 | — |
-| [Editor/assets/ui/RacingHUD.axleasset.meta](../../Editor/assets/ui/RacingHUD.axleasset.meta) | 4 | — |
+| [Tests/Fixtures/LegacyAssets/scenes/CharacterSandbox.axlescene](../../Tests/Fixtures/LegacyAssets/scenes/CharacterSandbox.axlescene) | 423 | — |
+| [Tests/Fixtures/LegacyAssets/scenes/OffRoadTrack.axlescene](../../Tests/Fixtures/LegacyAssets/scenes/OffRoadTrack.axlescene) | 448 | — |
+| [Tests/Fixtures/LegacyAssets/ui/PauseMenu.axleasset](../../Tests/Fixtures/LegacyAssets/ui/PauseMenu.axleasset) | 89 | — |
+| [Tests/Fixtures/LegacyAssets/ui/RacingHUD.axleasset](../../Tests/Fixtures/LegacyAssets/ui/RacingHUD.axleasset) | 215 | — |
+| [Tests/Fixtures/Assets/audio/Collision_Impact.wav.meta](../../Tests/Fixtures/Assets/audio/Collision_Impact.wav.meta) | 4 | — |
+| [Tests/Fixtures/Assets/audio/Engine_Coast.wav.meta](../../Tests/Fixtures/Assets/audio/Engine_Coast.wav.meta) | 4 | — |
+| [Tests/Fixtures/Assets/audio/Engine_Power.wav.meta](../../Tests/Fixtures/Assets/audio/Engine_Power.wav.meta) | 4 | — |
+| [Tests/Fixtures/Assets/audio/Suspension_Thud.wav.meta](../../Tests/Fixtures/Assets/audio/Suspension_Thud.wav.meta) | 4 | — |
+| [Tests/Fixtures/Assets/audio/Tire_Squeal.wav.meta](../../Tests/Fixtures/Assets/audio/Tire_Squeal.wav.meta) | 4 | — |
+| [Tests/Fixtures/Assets/materials/BlackRubber.axleasset](../../Tests/Fixtures/Assets/materials/BlackRubber.axleasset) | 19 | — |
+| [Tests/Fixtures/Assets/materials/BlackRubber.axleasset.meta](../../Tests/Fixtures/Assets/materials/BlackRubber.axleasset.meta) | 4 | — |
+| [Tests/Fixtures/Assets/materials/GoldMetallic.axleasset](../../Tests/Fixtures/Assets/materials/GoldMetallic.axleasset) | 28 | — |
+| [Tests/Fixtures/Assets/materials/GoldMetallic.axleasset.meta](../../Tests/Fixtures/Assets/materials/GoldMetallic.axleasset.meta) | 4 | — |
+| [Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset](../../Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset) | 19 | — |
+| [Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset.meta](../../Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset.meta) | 4 | — |
+| [Tests/Fixtures/Assets/models/.cache/SportsCar_Chassis.axlebin.meta](../../Tests/Fixtures/Assets/models/.cache/SportsCar_Chassis.axlebin.meta) | 4 | — |
+| [Tests/Fixtures/Assets/models/.cache/SportsCar_Wheel.axlebin.meta](../../Tests/Fixtures/Assets/models/.cache/SportsCar_Wheel.axlebin.meta) | 4 | — |
+| [Tests/Fixtures/Assets/models/sedan-sports.mtl](../../Tests/Fixtures/Assets/models/sedan-sports.mtl) | 6 | — |
+| [Tests/Fixtures/Assets/models/sedan-sports.mtl.meta](../../Tests/Fixtures/Assets/models/sedan-sports.mtl.meta) | 4 | — |
+| [Tests/Fixtures/Assets/models/SportsCar_Chassis.axleasset](../../Tests/Fixtures/Assets/models/SportsCar_Chassis.axleasset) | 1165 | — |
+| [Tests/Fixtures/Assets/models/SportsCar_Chassis.axleasset.meta](../../Tests/Fixtures/Assets/models/SportsCar_Chassis.axleasset.meta) | 4 | — |
+| [Tests/Fixtures/Assets/models/SportsCar_Chassis.axlemesh](../../Tests/Fixtures/Assets/models/SportsCar_Chassis.axlemesh) | 1172 | — |
+| [Tests/Fixtures/Assets/models/SportsCar_Chassis.axlemesh.meta](../../Tests/Fixtures/Assets/models/SportsCar_Chassis.axlemesh.meta) | 4 | — |
+| [Tests/Fixtures/Assets/models/SportsCar_Wheel.axleasset](../../Tests/Fixtures/Assets/models/SportsCar_Wheel.axleasset) | 880 | — |
+| [Tests/Fixtures/Assets/models/SportsCar_Wheel.axleasset.meta](../../Tests/Fixtures/Assets/models/SportsCar_Wheel.axleasset.meta) | 4 | — |
+| [Tests/Fixtures/Assets/models/SportsCar_Wheel.axlemesh](../../Tests/Fixtures/Assets/models/SportsCar_Wheel.axlemesh) | 887 | — |
+| [Tests/Fixtures/Assets/models/SportsCar_Wheel.axlemesh.meta](../../Tests/Fixtures/Assets/models/SportsCar_Wheel.axlemesh.meta) | 4 | — |
+| [Tests/Fixtures/Assets/models/wheel-racing.mtl](../../Tests/Fixtures/Assets/models/wheel-racing.mtl) | 6 | — |
+| [Tests/Fixtures/Assets/models/wheel-racing.mtl.meta](../../Tests/Fixtures/Assets/models/wheel-racing.mtl.meta) | 4 | — |
+| [Tests/Fixtures/Assets/prefabs/SportsCar_Assembly.axle](../../Tests/Fixtures/Assets/prefabs/SportsCar_Assembly.axle) | 383 | — |
+| [Tests/Fixtures/Assets/prefabs/SportsCar_Assembly.axle.meta](../../Tests/Fixtures/Assets/prefabs/SportsCar_Assembly.axle.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scenes/CarTest.axlescene](../../Tests/Fixtures/Assets/scenes/CarTest.axlescene) | 655 | — |
+| [Tests/Fixtures/Assets/scenes/CarTest.axlescene.meta](../../Tests/Fixtures/Assets/scenes/CarTest.axlescene.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scenes/CharacterSandbox.axlescene](../../Tests/Fixtures/Assets/scenes/CharacterSandbox.axlescene) | 423 | — |
+| [Tests/Fixtures/Assets/scenes/CharacterSandbox.axlescene.meta](../../Tests/Fixtures/Assets/scenes/CharacterSandbox.axlescene.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scenes/OffRoadTrack.axlescene](../../Tests/Fixtures/Assets/scenes/OffRoadTrack.axlescene) | 448 | — |
+| [Tests/Fixtures/Assets/scenes/OffRoadTrack.axlescene.meta](../../Tests/Fixtures/Assets/scenes/OffRoadTrack.axlescene.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scenes/VehicleSandbox.axlescene](../../Tests/Fixtures/Assets/scenes/VehicleSandbox.axlescene) | 807 | — |
+| [Tests/Fixtures/Assets/scenes/VehicleSandbox.axlescene.meta](../../Tests/Fixtures/Assets/scenes/VehicleSandbox.axlescene.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scripts/CarController.hpp](../../Tests/Fixtures/Assets/scripts/CarController.hpp) | 196 | CarController |
+| [Tests/Fixtures/Assets/scripts/CarController.hpp.meta](../../Tests/Fixtures/Assets/scripts/CarController.hpp.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scripts/RacingHUD.hpp](../../Tests/Fixtures/Assets/scripts/RacingHUD.hpp) | 514 | RacingHUD |
+| [Tests/Fixtures/Assets/scripts/RacingHUD.hpp.meta](../../Tests/Fixtures/Assets/scripts/RacingHUD.hpp.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scripts/RotatorScript.hpp](../../Tests/Fixtures/Assets/scripts/RotatorScript.hpp) | 37 | RotatorScript |
+| [Tests/Fixtures/Assets/scripts/RotatorScript.hpp.meta](../../Tests/Fixtures/Assets/scripts/RotatorScript.hpp.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp](../../Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp) | 180 | ThirdPersonCamera |
+| [Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp.meta](../../Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp](../../Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp) | 209 | ThirdPersonController |
+| [Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp.meta](../../Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp.meta) | 4 | — |
+| [Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp](../../Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp) | 655 | VehicleChaseCamera |
+| [Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp.meta](../../Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp.meta) | 4 | — |
+| [Tests/Fixtures/Assets/terrain/OffRoadTerrain.axleterrain.meta](../../Tests/Fixtures/Assets/terrain/OffRoadTerrain.axleterrain.meta) | 4 | — |
+| [Tests/Fixtures/Assets/ui/PauseMenu.axleasset](../../Tests/Fixtures/Assets/ui/PauseMenu.axleasset) | 89 | — |
+| [Tests/Fixtures/Assets/ui/PauseMenu.axleasset.meta](../../Tests/Fixtures/Assets/ui/PauseMenu.axleasset.meta) | 4 | — |
+| [Tests/Fixtures/Assets/ui/RacingHUD.axleasset](../../Tests/Fixtures/Assets/ui/RacingHUD.axleasset) | 215 | — |
+| [Tests/Fixtures/Assets/ui/RacingHUD.axleasset.meta](../../Tests/Fixtures/Assets/ui/RacingHUD.axleasset.meta) | 4 | — |
 | [Editor/CMakeLists.txt](../../Editor/CMakeLists.txt) | 153 | — |
 | [Editor/src/EditorLayer.cpp](../../Editor/src/EditorLayer.cpp) | 4029 | — |
 | [Editor/src/EditorLayer.hpp](../../Editor/src/EditorLayer.hpp) | 249 | EditorLayer, InitialBodyState, ModelImportModalData |
 | [Editor/src/Main.cpp](../../Editor/src/Main.cpp) | 250 | — |
 | [Editor/src/Scripts/ScriptsModule.cpp](../../Editor/src/Scripts/ScriptsModule.cpp) | 58 | — |
-| [Editor/src/Test.cpp](../../Editor/src/Test.cpp) | 446 | — |
-| [Editor/src/Tests/Test_Milestone1.cpp](../../Editor/src/Tests/Test_Milestone1.cpp) | 247 | — |
-| [Editor/src/Tests/Test_Milestone10.cpp](../../Editor/src/Tests/Test_Milestone10.cpp) | 907 | MockTransparentItem |
-| [Editor/src/Tests/Test_Milestone2.cpp](../../Editor/src/Tests/Test_Milestone2.cpp) | 433 | — |
-| [Editor/src/Tests/Test_Milestone3.cpp](../../Editor/src/Tests/Test_Milestone3.cpp) | 878 | TestComponentItem, ReflectionDemoScript |
-| [Editor/src/Tests/Test_Milestone4.cpp](../../Editor/src/Tests/Test_Milestone4.cpp) | 1055 | — |
-| [Editor/src/Tests/Test_Milestone5.cpp](../../Editor/src/Tests/Test_Milestone5.cpp) | 1015 | WheelDef |
-| [Editor/src/Tests/Test_Milestone6.cpp](../../Editor/src/Tests/Test_Milestone6.cpp) | 1918 | — |
-| [Editor/src/Tests/Test_Milestone7.cpp](../../Editor/src/Tests/Test_Milestone7.cpp) | 1972 | WheelDef |
-| [Editor/src/Tests/Test_Milestone8_Part1.cpp](../../Editor/src/Tests/Test_Milestone8_Part1.cpp) | 1507 | — |
-| [Editor/src/Tests/Test_Milestone8_Part2.cpp](../../Editor/src/Tests/Test_Milestone8_Part2.cpp) | 3828 | Resolution, VSInput, VSOutput, PSInput, PushConstants, VSOut, VSInput, VSOutput, VSOutput, VSInput, VSOutput, Particle, VSOut, TestData, Vertex3D, CameraUniforms, ObjectUniforms, Vertex2D, RenderMeshTag, VSOut |
-| [Editor/src/Tests/Test_Milestone8_Part3.cpp](../../Editor/src/Tests/Test_Milestone8_Part3.cpp) | 4765 | ResizingStep |
-| [Editor/src/Tests/Test_Milestone8_Part4.cpp](../../Editor/src/Tests/Test_Milestone8_Part4.cpp) | 2865 | — |
-| [Editor/src/Tests/Test_Milestone9.cpp](../../Editor/src/Tests/Test_Milestone9.cpp) | 1301 | — |
-| [Editor/src/Tests/TestCommon.hpp](../../Editor/src/Tests/TestCommon.hpp) | 349 | ScopedGLContext, CarPlayerScript |
+| [Tests/src/Test.cpp](../../Tests/src/Test.cpp) | 446 | — |
+| [Tests/src/Test_Milestone1.cpp](../../Tests/src/Test_Milestone1.cpp) | 247 | — |
+| [Tests/src/Test_Milestone10.cpp](../../Tests/src/Test_Milestone10.cpp) | 907 | MockTransparentItem |
+| [Tests/src/Test_Milestone2.cpp](../../Tests/src/Test_Milestone2.cpp) | 433 | — |
+| [Tests/src/Test_Milestone3.cpp](../../Tests/src/Test_Milestone3.cpp) | 878 | TestComponentItem, ReflectionDemoScript |
+| [Tests/src/Test_Milestone4.cpp](../../Tests/src/Test_Milestone4.cpp) | 1055 | — |
+| [Tests/src/Test_Milestone5.cpp](../../Tests/src/Test_Milestone5.cpp) | 1015 | WheelDef |
+| [Tests/src/Test_Milestone6.cpp](../../Tests/src/Test_Milestone6.cpp) | 1918 | — |
+| [Tests/src/Test_Milestone7.cpp](../../Tests/src/Test_Milestone7.cpp) | 1972 | WheelDef |
+| [Tests/src/Test_Milestone8_Part1.cpp](../../Tests/src/Test_Milestone8_Part1.cpp) | 1507 | — |
+| [Tests/src/Test_Milestone8_Part2.cpp](../../Tests/src/Test_Milestone8_Part2.cpp) | 3828 | Resolution, VSInput, VSOutput, PSInput, PushConstants, VSOut, VSInput, VSOutput, VSOutput, VSInput, VSOutput, Particle, VSOut, TestData, Vertex3D, CameraUniforms, ObjectUniforms, Vertex2D, RenderMeshTag, VSOut |
+| [Tests/src/Test_Milestone8_Part3.cpp](../../Tests/src/Test_Milestone8_Part3.cpp) | 4765 | ResizingStep |
+| [Tests/src/Test_Milestone8_Part4.cpp](../../Tests/src/Test_Milestone8_Part4.cpp) | 2865 | — |
+| [Tests/src/Test_Milestone9.cpp](../../Tests/src/Test_Milestone9.cpp) | 1301 | — |
+| [Tests/src/TestCommon.hpp](../../Tests/src/TestCommon.hpp) | 349 | ScopedGLContext, CarPlayerScript |
 | [Engine/Animation/CMakeLists.txt](../../Engine/Animation/CMakeLists.txt) | 25 | — |
 | [Engine/Animation/include/Axle/AnimationClip.hpp](../../Engine/Animation/include/Axle/AnimationClip.hpp) | 78 | Keyframe, AnimationChannel, AnimationClip |
 | [Engine/Animation/include/Axle/AnimationPose.hpp](../../Engine/Animation/include/Axle/AnimationPose.hpp) | 49 | BoneTransform, AnimationPose |
@@ -425,4 +429,4 @@ Reviewed: 2026-11-01. This inventory scans first-party C++ source, shaders and t
 | [build.sh](../../build.sh) | 101 | — |
 | [.gitignore](../../.gitignore) | 90 | — |
 | [.gitmodules](../../.gitmodules) | 28 | — |
-| [AxleEditor.axleproj](../../AxleEditor.axleproj) | 6 | — |
+| [Tests/Fixtures/LegacyProject.axleproj](../../Tests/Fixtures/LegacyProject.axleproj) | 6 | — |

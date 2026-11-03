@@ -6,43 +6,43 @@ This is a lexical declaration index, not a compiler AST. It includes nested/loca
 
 | Name | Declared base | Source |
 |---|---|---|
-| `CarController` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/CarController.hpp:11](../../Editor/assets/scripts/CarController.hpp#L11) |
-| `RacingHUD` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/RacingHUD.hpp:16](../../Editor/assets/scripts/RacingHUD.hpp#L16) |
-| `RotatorScript` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/RotatorScript.hpp:8](../../Editor/assets/scripts/RotatorScript.hpp#L8) |
-| `ThirdPersonCamera` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/ThirdPersonCamera.hpp:14](../../Editor/assets/scripts/ThirdPersonCamera.hpp#L14) |
-| `ThirdPersonController` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/ThirdPersonController.hpp:13](../../Editor/assets/scripts/ThirdPersonController.hpp#L13) |
-| `VehicleChaseCamera` | `public Axle::ScriptableEntity` | [Editor/assets/scripts/VehicleChaseCamera.hpp:23](../../Editor/assets/scripts/VehicleChaseCamera.hpp#L23) |
+| `CarController` | `public Axle::ScriptableEntity` | [Tests/Fixtures/Assets/scripts/CarController.hpp:11](../../Tests/Fixtures/Assets/scripts/CarController.hpp#L11) |
+| `RacingHUD` | `public Axle::ScriptableEntity` | [Tests/Fixtures/Assets/scripts/RacingHUD.hpp:16](../../Tests/Fixtures/Assets/scripts/RacingHUD.hpp#L16) |
+| `RotatorScript` | `public Axle::ScriptableEntity` | [Tests/Fixtures/Assets/scripts/RotatorScript.hpp:8](../../Tests/Fixtures/Assets/scripts/RotatorScript.hpp#L8) |
+| `ThirdPersonCamera` | `public Axle::ScriptableEntity` | [Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp:14](../../Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp#L14) |
+| `ThirdPersonController` | `public Axle::ScriptableEntity` | [Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp:13](../../Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp#L13) |
+| `VehicleChaseCamera` | `public Axle::ScriptableEntity` | [Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp:23](../../Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp#L23) |
 | `EditorLayer` | `public Axle::Layer` | [Editor/src/EditorLayer.hpp:40](../../Editor/src/EditorLayer.hpp#L40) |
 | `InitialBodyState` | `—` | [Editor/src/EditorLayer.hpp:203](../../Editor/src/EditorLayer.hpp#L203) |
 | `ModelImportModalData` | `—` | [Editor/src/EditorLayer.hpp:210](../../Editor/src/EditorLayer.hpp#L210) |
-| `MockTransparentItem` | `—` | [Editor/src/Tests/Test_Milestone10.cpp:333](../../Editor/src/Tests/Test_Milestone10.cpp#L333) |
-| `TestComponentItem` | `—` | [Editor/src/Tests/Test_Milestone3.cpp:394](../../Editor/src/Tests/Test_Milestone3.cpp#L394) |
-| `ReflectionDemoScript` | `public Axle::ScriptableEntity` | [Editor/src/Tests/Test_Milestone3.cpp:592](../../Editor/src/Tests/Test_Milestone3.cpp#L592) |
-| `WheelDef` | `—` | [Editor/src/Tests/Test_Milestone5.cpp:780](../../Editor/src/Tests/Test_Milestone5.cpp#L780) |
-| `WheelDef` | `—` | [Editor/src/Tests/Test_Milestone7.cpp:507](../../Editor/src/Tests/Test_Milestone7.cpp#L507) |
-| `Resolution` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:323](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L323) |
-| `VSInput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:522](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L522) |
-| `VSOutput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:528](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L528) |
-| `PSInput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:592](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L592) |
-| `PushConstants` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:694](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L694) |
-| `VSOut` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:699](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L699) |
-| `VSInput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:805](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L805) |
-| `VSOutput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:808](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L808) |
-| `VSOutput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:878](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L878) |
-| `VSInput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:932](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L932) |
-| `VSOutput` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:942](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L942) |
-| `Particle` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1057](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1057) |
-| `VSOut` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1267](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1267) |
-| `TestData` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1805](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1805) |
-| `Vertex3D` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1846](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1846) |
-| `CameraUniforms` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1964](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1964) |
-| `ObjectUniforms` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:1972](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L1972) |
-| `Vertex2D` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:2002](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L2002) |
-| `RenderMeshTag` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:2283](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L2283) |
-| `VSOut` | `—` | [Editor/src/Tests/Test_Milestone8_Part2.cpp:3572](../../Editor/src/Tests/Test_Milestone8_Part2.cpp#L3572) |
-| `ResizingStep` | `—` | [Editor/src/Tests/Test_Milestone8_Part3.cpp:2441](../../Editor/src/Tests/Test_Milestone8_Part3.cpp#L2441) |
-| `ScopedGLContext` | `—` | [Editor/src/Tests/TestCommon.hpp:159](../../Editor/src/Tests/TestCommon.hpp#L159) |
-| `CarPlayerScript` | `public Axle::ScriptableEntity` | [Editor/src/Tests/TestCommon.hpp:188](../../Editor/src/Tests/TestCommon.hpp#L188) |
+| `MockTransparentItem` | `—` | [Tests/src/Test_Milestone10.cpp:333](../../Tests/src/Test_Milestone10.cpp#L333) |
+| `TestComponentItem` | `—` | [Tests/src/Test_Milestone3.cpp:394](../../Tests/src/Test_Milestone3.cpp#L394) |
+| `ReflectionDemoScript` | `public Axle::ScriptableEntity` | [Tests/src/Test_Milestone3.cpp:592](../../Tests/src/Test_Milestone3.cpp#L592) |
+| `WheelDef` | `—` | [Tests/src/Test_Milestone5.cpp:780](../../Tests/src/Test_Milestone5.cpp#L780) |
+| `WheelDef` | `—` | [Tests/src/Test_Milestone7.cpp:507](../../Tests/src/Test_Milestone7.cpp#L507) |
+| `Resolution` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:323](../../Tests/src/Test_Milestone8_Part2.cpp#L323) |
+| `VSInput` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:522](../../Tests/src/Test_Milestone8_Part2.cpp#L522) |
+| `VSOutput` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:528](../../Tests/src/Test_Milestone8_Part2.cpp#L528) |
+| `PSInput` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:592](../../Tests/src/Test_Milestone8_Part2.cpp#L592) |
+| `PushConstants` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:694](../../Tests/src/Test_Milestone8_Part2.cpp#L694) |
+| `VSOut` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:699](../../Tests/src/Test_Milestone8_Part2.cpp#L699) |
+| `VSInput` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:805](../../Tests/src/Test_Milestone8_Part2.cpp#L805) |
+| `VSOutput` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:808](../../Tests/src/Test_Milestone8_Part2.cpp#L808) |
+| `VSOutput` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:878](../../Tests/src/Test_Milestone8_Part2.cpp#L878) |
+| `VSInput` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:932](../../Tests/src/Test_Milestone8_Part2.cpp#L932) |
+| `VSOutput` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:942](../../Tests/src/Test_Milestone8_Part2.cpp#L942) |
+| `Particle` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:1057](../../Tests/src/Test_Milestone8_Part2.cpp#L1057) |
+| `VSOut` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:1267](../../Tests/src/Test_Milestone8_Part2.cpp#L1267) |
+| `TestData` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:1805](../../Tests/src/Test_Milestone8_Part2.cpp#L1805) |
+| `Vertex3D` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:1846](../../Tests/src/Test_Milestone8_Part2.cpp#L1846) |
+| `CameraUniforms` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:1964](../../Tests/src/Test_Milestone8_Part2.cpp#L1964) |
+| `ObjectUniforms` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:1972](../../Tests/src/Test_Milestone8_Part2.cpp#L1972) |
+| `Vertex2D` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:2002](../../Tests/src/Test_Milestone8_Part2.cpp#L2002) |
+| `RenderMeshTag` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:2283](../../Tests/src/Test_Milestone8_Part2.cpp#L2283) |
+| `VSOut` | `—` | [Tests/src/Test_Milestone8_Part2.cpp:3572](../../Tests/src/Test_Milestone8_Part2.cpp#L3572) |
+| `ResizingStep` | `—` | [Tests/src/Test_Milestone8_Part3.cpp:2441](../../Tests/src/Test_Milestone8_Part3.cpp#L2441) |
+| `ScopedGLContext` | `—` | [Tests/src/TestCommon.hpp:159](../../Tests/src/TestCommon.hpp#L159) |
+| `CarPlayerScript` | `public Axle::ScriptableEntity` | [Tests/src/TestCommon.hpp:188](../../Tests/src/TestCommon.hpp#L188) |
 | `Keyframe` | `—` | [Engine/Animation/include/Axle/AnimationClip.hpp:14](../../Engine/Animation/include/Axle/AnimationClip.hpp#L14) |
 | `AnimationChannel` | `—` | [Engine/Animation/include/Axle/AnimationClip.hpp:19](../../Engine/Animation/include/Axle/AnimationClip.hpp#L19) |
 | `AnimationClip` | `—` | [Engine/Animation/include/Axle/AnimationClip.hpp:34](../../Engine/Animation/include/Axle/AnimationClip.hpp#L34) |

@@ -88,8 +88,8 @@ commits are regression baselines, not substitutes for these package contracts.
 - Convert side-effecting assertions in the touched legacy RHI tests; do not
   mechanically rewrite every unrelated test. Preserve VFX/material regressions.
 - Prepare separate opt-in hardware/windowed/product targets and failure exits.
-- Files: root/Editor CMake, `Editor/src/Tests/Test_Milestone8_Part2.cpp`, proposed
-  `tests/rendering/` harness. Completion: new harness and failure probe both behave
+- Files: root/Editor CMake, `Tests/src/Test_Milestone8_Part2.cpp`, proposed
+  `Tests/rendering/` harness. Completion: new harness and failure probe both behave
   correctly in Debug/Release; baseline is evidence, not a full acceptance claim.
 
 ### P41-01 — Backend readiness and fallback equivalence

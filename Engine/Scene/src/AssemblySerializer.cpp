@@ -1,4 +1,7 @@
 #include <Axle/AssemblySerializer.hpp>
+#include <Axle/AnimationAssetCodec.hpp>
+#include <Axle/SkeletalMeshImporter.hpp>
+#include <Axle/Skeleton.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/AssetSerializer.hpp>
@@ -366,6 +369,53 @@ namespace Axle {
                 fout << "      HandBrakeTorque: " << wc.HandBrakeTorque << "\n";
                 fout << "      AutoSyncMesh: " << (wc.AutoSyncMesh ? "true" : "false") << "\n";
             }
+
+            // SkeletalMeshComponent
+            if (entity.HasComponent<SkeletalMeshComponent>()) {
+                const auto& smc = entity.GetComponent<SkeletalMeshComponent>();
+                fout << "    SkeletalMeshComponent:\n";
+                fout << "      AssetPath: " << smc.AssetPath << "\n";
+                if (!smc.SkeletonPath.empty()) {
+                    fout << "      SkeletonPath: " << smc.SkeletonPath << "\n";
+                }
+                fout << "      PatternMode: " << smc.PatternMode << "\n";
+                fout << "      TileScale: " << smc.TileScale << "\n";
+                fout << "      Color1: [ " << smc.Color1.r << " , " << smc.Color1.g << " , " << smc.Color1.b << " , " << smc.Color1.a << " ]\n";
+                fout << "      Color2: [ " << smc.Color2.r << " , " << smc.Color2.g << " , " << smc.Color2.b << " , " << smc.Color2.a << " ]\n";
+                fout << "      CastShadows: " << (smc.CastShadows ? "true" : "false") << "\n";
+                fout << "      Visible: " << (smc.Visible ? "true" : "false") << "\n";
+            }
+
+            // AnimatorComponent
+            if (entity.HasComponent<AnimatorComponent>()) {
+                const auto& ac = entity.GetComponent<AnimatorComponent>();
+                fout << "    AnimatorComponent:\n";
+                fout << "      ControllerPath: " << ac.ControllerPath << "\n";
+                fout << "      IsUnique: " << (ac.IsUnique ? "true" : "false") << "\n";
+                fout << "      Playing: " << (ac.Playing ? "true" : "false") << "\n";
+                fout << "      PlaybackSpeed: " << ac.PlaybackSpeed << "\n";
+                fout << "      Speed: " << ac.Speed << "\n";
+                fout << "      IsGrounded: " << (ac.IsGrounded ? "true" : "false") << "\n";
+                fout << "      VerticalVelocity: " << ac.VerticalVelocity << "\n";
+                if (!ac.InlineFallbackData.empty()) {
+                    fout << "      InlineFallbackData: " << ac.InlineFallbackData << "\n";
+                } else if (ac.AnimatorInstance && ac.AnimatorInstance->GetStateMachine()) {
+                    auto def = AnimationAssetCodec::ExtractDefinitionFromStateMachine(*ac.AnimatorInstance->GetStateMachine());
+                    std::string textDef = AnimationAssetCodec::EncodeControllerToText(def);
+                    if (!textDef.empty()) {
+                        fout << "      InlineFallbackData: " << AnimationAssetCodec::HexEncode(textDef) << "\n";
+                    }
+                }
+                for (const auto& [param, val] : ac.FloatOverrides) {
+                    fout << "      FloatOverride: " << param << " " << val << "\n";
+                }
+                for (const auto& [param, val] : ac.IntOverrides) {
+                    fout << "      IntOverride: " << param << " " << val << "\n";
+                }
+                for (const auto& [param, val] : ac.BoolOverrides) {
+                    fout << "      BoolOverride: " << param << " " << (val ? "true" : "false") << "\n";
+                }
+            }
         }
 
         fout.close();
@@ -423,6 +473,12 @@ namespace Axle {
         bool HasWheel = false;
         WheelComponent Wheel;
 
+        bool HasSkeletalMesh = false;
+        SkeletalMeshComponent SkeletalMesh;
+
+        bool HasAnimator = false;
+        AnimatorComponent Animator;
+
         bool HasHierarchy = false;
         u64 ParentOldUUID = 0;
         std::vector<u64> ChildrenOldUUIDs;
@@ -445,6 +501,8 @@ namespace Axle {
         SpotLight,
         Vehicle,
         Wheel,
+        SkeletalMesh,
+        Animator,
         Hierarchy,
         HierarchyChildren
     };
@@ -502,6 +560,8 @@ namespace Axle {
             if (trimmed == "SpotLightComponent:") { currentSection = AsmSection::SpotLight; current.HasSpotLight = true; continue; }
             if (trimmed == "VehicleComponent:" || trimmed == "VehicleComponent: true") { currentSection = AsmSection::Vehicle; current.HasVehicle = true; continue; }
             if (trimmed == "WheelComponent:" || trimmed == "VehicleWheel3D:") { currentSection = AsmSection::Wheel; current.HasWheel = true; continue; }
+            if (trimmed == "SkeletalMeshComponent:") { currentSection = AsmSection::SkeletalMesh; current.HasSkeletalMesh = true; continue; }
+            if (trimmed == "AnimatorComponent:") { currentSection = AsmSection::Animator; current.HasAnimator = true; continue; }
             if (trimmed == "HierarchyComponent:") { currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
 
             switch (currentSection) {
@@ -848,6 +908,77 @@ namespace Axle {
                     }
                     break;
                 }
+                case AsmSection::SkeletalMesh: {
+                    if (trimmed.rfind("AssetPath:", 0) == 0) {
+                        current.SkeletalMesh.AssetPath = Trim(trimmed.substr(10));
+                    } else if (trimmed.rfind("SkeletonPath:", 0) == 0) {
+                        current.SkeletalMesh.SkeletonPath = Trim(trimmed.substr(13));
+                    } else if (trimmed.rfind("PatternMode:", 0) == 0) {
+                        current.SkeletalMesh.PatternMode = std::stoi(Trim(trimmed.substr(12)));
+                    } else if (trimmed.rfind("TileScale:", 0) == 0) {
+                        current.SkeletalMesh.TileScale = std::stof(Trim(trimmed.substr(10)));
+                    } else if (trimmed.rfind("Color1:", 0) == 0) {
+                        float r = 1, g = 1, b = 1, a = 1;
+                        sscanf(trimmed.c_str(), "Color1: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
+                        current.SkeletalMesh.Color1 = glm::vec4(r, g, b, a);
+                    } else if (trimmed.rfind("Color2:", 0) == 0) {
+                        float r = 0, g = 0, b = 0, a = 1;
+                        sscanf(trimmed.c_str(), "Color2: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
+                        current.SkeletalMesh.Color2 = glm::vec4(r, g, b, a);
+                    } else if (trimmed.rfind("CastShadows:", 0) == 0) {
+                        current.SkeletalMesh.CastShadows = (Trim(trimmed.substr(12)) == "true");
+                    } else if (trimmed.rfind("Visible:", 0) == 0) {
+                        current.SkeletalMesh.Visible = (Trim(trimmed.substr(8)) == "true");
+                    }
+                    break;
+                }
+                case AsmSection::Animator: {
+                    if (trimmed.rfind("ControllerPath:", 0) == 0) {
+                        current.Animator.ControllerPath = Trim(trimmed.substr(15));
+                    } else if (trimmed.rfind("IsUnique:", 0) == 0) {
+                        current.Animator.IsUnique = (Trim(trimmed.substr(9)) == "true");
+                    } else if (trimmed.rfind("InlineFallbackData:", 0) == 0) {
+                        current.Animator.InlineFallbackData = Trim(trimmed.substr(19));
+                    } else if (trimmed.rfind("Playing:", 0) == 0) {
+                        current.Animator.Playing = (Trim(trimmed.substr(8)) == "true");
+                    } else if (trimmed.rfind("PlaybackSpeed:", 0) == 0) {
+                        current.Animator.PlaybackSpeed = std::stof(Trim(trimmed.substr(14)));
+                    } else if (trimmed.rfind("Speed:", 0) == 0) {
+                        current.Animator.Speed = std::stof(Trim(trimmed.substr(6)));
+                        current.Animator.FloatOverrides["Speed"] = current.Animator.Speed;
+                    } else if (trimmed.rfind("IsGrounded:", 0) == 0) {
+                        current.Animator.IsGrounded = (Trim(trimmed.substr(11)) == "true");
+                        current.Animator.BoolOverrides["IsGrounded"] = current.Animator.IsGrounded;
+                    } else if (trimmed.rfind("VerticalVelocity:", 0) == 0) {
+                        current.Animator.VerticalVelocity = std::stof(Trim(trimmed.substr(17)));
+                        current.Animator.FloatOverrides["VerticalVelocity"] = current.Animator.VerticalVelocity;
+                    } else if (trimmed.rfind("FloatOverride:", 0) == 0) {
+                        std::string rest = Trim(trimmed.substr(14));
+                        auto sp = rest.find(' ');
+                        if (sp != std::string::npos) {
+                            std::string pName = rest.substr(0, sp);
+                            float pVal = std::stof(Trim(rest.substr(sp + 1)));
+                            current.Animator.FloatOverrides[pName] = pVal;
+                        }
+                    } else if (trimmed.rfind("IntOverride:", 0) == 0) {
+                        std::string rest = Trim(trimmed.substr(12));
+                        auto sp = rest.find(' ');
+                        if (sp != std::string::npos) {
+                            std::string pName = rest.substr(0, sp);
+                            int32_t pVal = std::stoi(Trim(rest.substr(sp + 1)));
+                            current.Animator.IntOverrides[pName] = pVal;
+                        }
+                    } else if (trimmed.rfind("BoolOverride:", 0) == 0) {
+                        std::string rest = Trim(trimmed.substr(13));
+                        auto sp = rest.find(' ');
+                        if (sp != std::string::npos) {
+                            std::string pName = rest.substr(0, sp);
+                            bool pVal = (Trim(rest.substr(sp + 1)) == "true");
+                            current.Animator.BoolOverrides[pName] = pVal;
+                        }
+                    }
+                    break;
+                }
                 case AsmSection::Hierarchy: {
                     if (trimmed.rfind("Parent:", 0) == 0) {
                         try {
@@ -1045,6 +1176,150 @@ namespace Axle {
             // WheelComponent
             if (raw.HasWheel) {
                 entity.AddComponent<WheelComponent>(raw.Wheel);
+            }
+
+            // SkeletalMeshComponent
+            if (raw.HasSkeletalMesh) {
+                entity.AddComponent<SkeletalMeshComponent>(raw.SkeletalMesh);
+            }
+
+            // AnimatorComponent
+            if (raw.HasAnimator) {
+                entity.AddComponent<AnimatorComponent>(raw.Animator);
+            }
+        }
+
+        // Post-resolution of SkeletalMeshComponent and AnimatorComponent
+        auto skeletalView = targetScene->GetRegistry().view<SkeletalMeshComponent>();
+        for (auto entityID : skeletalView) {
+            auto& smc = skeletalView.get<SkeletalMeshComponent>(entityID);
+            std::shared_ptr<Skeleton> resolvedSkeleton = nullptr;
+
+            if (!smc.Mesh) {
+                bool isProcedural = (smc.AssetPath == "procedural://biped" || smc.AssetPath.empty());
+                bool fileLoaded = false;
+                if (!isProcedural) {
+                    auto fullPath = FileSystem::ResolveAssetPath(smc.AssetPath);
+                    if (FileSystem::Exists(fullPath)) {
+                        SkeletalMeshData meshData;
+                        std::vector<std::shared_ptr<AnimationClip>> clips;
+                        if (SkeletalMeshImporter::Load(fullPath, meshData, resolvedSkeleton, clips)) {
+                            smc.Mesh = std::make_shared<SkeletalMesh>(meshData);
+                            fileLoaded = true;
+                        }
+                    }
+                }
+
+                if (!fileLoaded && isProcedural) {
+                    SkeletalMeshData bipedData;
+                    std::vector<std::shared_ptr<AnimationClip>> bipedClips;
+                    if (SkeletalMeshImporter::CreateProceduralBiped(bipedData, resolvedSkeleton, bipedClips)) {
+                        smc.Mesh = std::make_shared<SkeletalMesh>(bipedData);
+                        if (smc.AssetPath.empty()) {
+                            smc.AssetPath = "procedural://biped";
+                        }
+                    }
+                }
+            }
+
+            if (!resolvedSkeleton && !smc.SkeletonPath.empty()) {
+                auto skelPath = FileSystem::ResolveAssetPath(smc.SkeletonPath);
+                if (FileSystem::Exists(skelPath)) {
+                    SkeletonDefinition skelDef;
+                    if (AnimationAssetCodec::LoadSkeleton(skelPath.string(), skelDef)) {
+                        resolvedSkeleton = std::make_shared<Skeleton>(skelDef.Name);
+                        for (const auto& b : skelDef.Bones) {
+                            resolvedSkeleton->AddBone(b);
+                        }
+                    }
+                }
+            }
+
+            if (targetScene->GetRegistry().all_of<AnimatorComponent>(entityID)) {
+                auto& ac = targetScene->GetRegistry().get<AnimatorComponent>(entityID);
+                if (!ac.AnimatorInstance) {
+                    std::shared_ptr<AnimationStateMachine> stateMachine = nullptr;
+
+                    if (!ac.ControllerPath.empty()) {
+                        auto ctrlPath = FileSystem::ResolveAssetPath(ac.ControllerPath);
+                        if (FileSystem::Exists(ctrlPath)) {
+                            AnimatorControllerDefinition ctrlDef;
+                            if (AnimationAssetCodec::LoadAnimatorController(ctrlPath.string(), ctrlDef)) {
+                                stateMachine = AnimationAssetCodec::CompileStateMachineFromDefinition(ctrlDef);
+                            }
+                        }
+                    }
+
+                    if (!stateMachine && !ac.InlineFallbackData.empty()) {
+                        std::string ctrlText = AnimationAssetCodec::HexDecode(ac.InlineFallbackData);
+                        AnimatorControllerDefinition ctrlDef;
+                        if (AnimationAssetCodec::DecodeControllerFromText(ctrlText, ctrlDef)) {
+                            stateMachine = AnimationAssetCodec::CompileStateMachineFromDefinition(ctrlDef);
+                        }
+                    }
+
+                    if (!stateMachine && (smc.AssetPath == "procedural://biped" || smc.AssetPath.empty())) {
+                        SkeletalMeshData bipedData;
+                        std::shared_ptr<Skeleton> bipedSkeleton;
+                        std::vector<std::shared_ptr<AnimationClip>> bipedClips;
+                        if (SkeletalMeshImporter::CreateProceduralBiped(bipedData, bipedSkeleton, bipedClips)) {
+                            if (!resolvedSkeleton) resolvedSkeleton = bipedSkeleton;
+                            stateMachine = std::make_shared<AnimationStateMachine>("LocomotionStateMachine");
+                            if (bipedClips.size() >= 2) {
+                                AnimationState stateIdle;
+                                stateIdle.Name = "Idle";
+                                stateIdle.Type = AnimationNodeType::Clip;
+                                stateIdle.Clip = bipedClips[0];
+                                stateIdle.Loop = true;
+                                stateMachine->AddState(stateIdle);
+
+                                AnimationState stateWalk;
+                                stateWalk.Name = "Walk";
+                                stateWalk.Type = AnimationNodeType::Clip;
+                                stateWalk.Clip = bipedClips[1];
+                                stateWalk.Loop = true;
+                                stateMachine->AddState(stateWalk);
+
+                                AnimationTransition tIdleToWalk;
+                                tIdleToWalk.FromState = "Idle";
+                                tIdleToWalk.ToState = "Walk";
+                                tIdleToWalk.Duration = 0.2f;
+                                tIdleToWalk.Rules.push_back({"Speed", TransitionConditionOperator::Greater, 0.1f});
+                                stateMachine->AddTransition(tIdleToWalk);
+
+                                AnimationTransition tWalkToIdle;
+                                tWalkToIdle.FromState = "Walk";
+                                tWalkToIdle.ToState = "Idle";
+                                tWalkToIdle.Duration = 0.2f;
+                                tWalkToIdle.Rules.push_back({"Speed", TransitionConditionOperator::LessOrEqual, 0.1f});
+                                stateMachine->AddTransition(tWalkToIdle);
+                            }
+                        }
+                    }
+
+                    if (resolvedSkeleton) {
+                        ac.AnimatorInstance = std::make_shared<Animator>(resolvedSkeleton);
+                        if (stateMachine) {
+                            ac.AnimatorInstance->SetStateMachine(stateMachine);
+                        }
+                    }
+                }
+
+                if (ac.AnimatorInstance) {
+                    for (const auto& [p, v] : ac.FloatOverrides) {
+                        ac.AnimatorInstance->SetFloat(p, v);
+                    }
+                    for (const auto& [p, v] : ac.IntOverrides) {
+                        ac.AnimatorInstance->SetInt(p, v);
+                    }
+                    for (const auto& [p, v] : ac.BoolOverrides) {
+                        ac.AnimatorInstance->SetBool(p, v);
+                    }
+                    ac.AnimatorInstance->SetFloat("Speed", ac.Speed);
+                    ac.AnimatorInstance->SetBool("IsGrounded", ac.IsGrounded);
+                    ac.AnimatorInstance->SetFloat("VerticalVelocity", ac.VerticalVelocity);
+                    ac.AnimatorInstance->Update(0.0f);
+                }
             }
         }
 
@@ -1251,6 +1526,10 @@ namespace Axle {
             node.RigidBody = raw.RigidBody;
             node.HasMaterial = raw.HasMaterial;
             node.Material = raw.Material;
+            node.HasSkeletalMesh = raw.HasSkeletalMesh;
+            node.SkeletalMesh = raw.SkeletalMesh;
+            node.HasAnimator = raw.HasAnimator;
+            node.Animator = raw.Animator;
             nodeMap[raw.OldUUID] = node;
         }
 
@@ -1315,6 +1594,49 @@ namespace Axle {
             out << "      LinearDamping: " << node.RigidBody.LinearDamping << "\n";
             out << "      AngularDamping: " << node.RigidBody.AngularDamping << "\n";
             out << "      GravityFactor: " << node.RigidBody.GravityFactor << "\n";
+        }
+
+        if (node.HasSkeletalMesh) {
+            out << "    SkeletalMeshComponent:\n";
+            out << "      AssetPath: " << node.SkeletalMesh.AssetPath << "\n";
+            if (!node.SkeletalMesh.SkeletonPath.empty()) {
+                out << "      SkeletonPath: " << node.SkeletalMesh.SkeletonPath << "\n";
+            }
+            out << "      PatternMode: " << node.SkeletalMesh.PatternMode << "\n";
+            out << "      TileScale: " << node.SkeletalMesh.TileScale << "\n";
+            out << "      Color1: [ " << node.SkeletalMesh.Color1.r << " , " << node.SkeletalMesh.Color1.g << " , " << node.SkeletalMesh.Color1.b << " , " << node.SkeletalMesh.Color1.a << " ]\n";
+            out << "      Color2: [ " << node.SkeletalMesh.Color2.r << " , " << node.SkeletalMesh.Color2.g << " , " << node.SkeletalMesh.Color2.b << " , " << node.SkeletalMesh.Color2.a << " ]\n";
+            out << "      CastShadows: " << (node.SkeletalMesh.CastShadows ? "true" : "false") << "\n";
+            out << "      Visible: " << (node.SkeletalMesh.Visible ? "true" : "false") << "\n";
+        }
+
+        if (node.HasAnimator) {
+            out << "    AnimatorComponent:\n";
+            out << "      ControllerPath: " << node.Animator.ControllerPath << "\n";
+            out << "      IsUnique: " << (node.Animator.IsUnique ? "true" : "false") << "\n";
+            out << "      Playing: " << (node.Animator.Playing ? "true" : "false") << "\n";
+            out << "      PlaybackSpeed: " << node.Animator.PlaybackSpeed << "\n";
+            out << "      Speed: " << node.Animator.Speed << "\n";
+            out << "      IsGrounded: " << (node.Animator.IsGrounded ? "true" : "false") << "\n";
+            out << "      VerticalVelocity: " << node.Animator.VerticalVelocity << "\n";
+            if (!node.Animator.InlineFallbackData.empty()) {
+                out << "      InlineFallbackData: " << node.Animator.InlineFallbackData << "\n";
+            } else if (node.Animator.AnimatorInstance && node.Animator.AnimatorInstance->GetStateMachine()) {
+                auto def = AnimationAssetCodec::ExtractDefinitionFromStateMachine(*node.Animator.AnimatorInstance->GetStateMachine());
+                std::string textDef = AnimationAssetCodec::EncodeControllerToText(def);
+                if (!textDef.empty()) {
+                    out << "      InlineFallbackData: " << AnimationAssetCodec::HexEncode(textDef) << "\n";
+                }
+            }
+            for (const auto& [param, val] : node.Animator.FloatOverrides) {
+                out << "      FloatOverride: " << param << " " << val << "\n";
+            }
+            for (const auto& [param, val] : node.Animator.IntOverrides) {
+                out << "      IntOverride: " << param << " " << val << "\n";
+            }
+            for (const auto& [param, val] : node.Animator.BoolOverrides) {
+                out << "      BoolOverride: " << param << " " << (val ? "true" : "false") << "\n";
+            }
         }
 
         out << "    HierarchyComponent:\n";

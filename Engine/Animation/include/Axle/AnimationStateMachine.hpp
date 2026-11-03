@@ -82,6 +82,13 @@ namespace Axle {
         const std::string& GetCurrentStateName() const { return m_CurrentStateName; }
         const std::string& GetInitialStateName() const { return m_InitialStateName; }
 
+        const std::unordered_map<std::string, AnimationState>& GetStates() const { return m_States; }
+        const std::vector<AnimationTransition>& GetTransitions() const { return m_Transitions; }
+        const std::unordered_map<AnimationId, ParameterDefinition>& GetDeclaredParameters() const { return m_DeclaredParameters; }
+        const std::unordered_map<std::string, float>& GetFloatParameters() const { return m_FloatParams; }
+        const std::unordered_map<std::string, int32_t>& GetIntParameters() const { return m_IntParams; }
+        const std::unordered_map<std::string, bool>& GetBoolParameters() const { return m_BoolParams; }
+
         bool IsTransitioning() const { return m_IsTransitioning; }
         float GetTransitionProgress() const;
 

@@ -1,4 +1,5 @@
 #include <Axle/AnimationAssetCodec.hpp>
+#include <Axle/AnimationStateMachine.hpp>
 #include <Axle/FileSystem.hpp>
 #include <atomic>
 #include <chrono>
@@ -782,6 +783,174 @@ namespace Axle {
 
         outData.Normalize();
         return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // State Machine Compilation & Extraction
+    // -------------------------------------------------------------------------
+
+    std::shared_ptr<AnimationStateMachine> AnimationAssetCodec::CompileStateMachineFromDefinition(const AnimatorControllerDefinition& def) {
+        auto sm = std::make_shared<AnimationStateMachine>(def.Name.empty() ? "AnimatorController" : def.Name);
+
+        for (const auto& param : def.Parameters) {
+            sm->DeclareParameter(param);
+        }
+
+        std::unordered_map<AnimationId, std::string> idToName;
+        for (const auto& sDef : def.States) {
+            idToName[sDef.Id] = sDef.Name;
+            AnimationState s;
+            s.Name = sDef.Name;
+            s.Type = sDef.NodeType;
+            s.SpeedMultiplier = sDef.SpeedMultiplier;
+            s.Loop = sDef.Loop;
+            s.BlendParameterName = sDef.BlendParameterX.empty() ? "Speed" : sDef.BlendParameterX;
+            sm->AddState(s);
+        }
+
+        if (!def.EntryStateId.empty()) {
+            auto it = idToName.find(def.EntryStateId);
+            if (it != idToName.end()) {
+                sm->SetCurrentState(it->second, 0.0f);
+            }
+        }
+
+        for (const auto& tDef : def.Transitions) {
+            AnimationTransition t;
+            auto itFrom = idToName.find(tDef.FromState);
+            auto itTo = idToName.find(tDef.ToState);
+            t.FromState = (itFrom != idToName.end()) ? itFrom->second : tDef.FromState;
+            t.ToState = (itTo != idToName.end()) ? itTo->second : tDef.ToState;
+            t.Duration = tDef.CrossfadeSeconds;
+            t.HasExitTime = tDef.HasExitTime;
+            t.ExitTime = tDef.ExitPhase;
+            t.ExitPhase = tDef.ExitPhase;
+            t.Priority = tDef.Priority;
+            t.PureConditions = tDef.AllConditions;
+
+            for (const auto& cond : tDef.AllConditions) {
+                TransitionRule rule;
+                rule.Parameter = cond.Parameter;
+                switch (cond.Operator) {
+                    case ConditionOperator::AlwaysTrue: rule.Operator = TransitionConditionOperator::AlwaysTrue; break;
+                    case ConditionOperator::Greater: rule.Operator = TransitionConditionOperator::Greater; break;
+                    case ConditionOperator::Less: rule.Operator = TransitionConditionOperator::Less; break;
+                    case ConditionOperator::GreaterOrEqual: rule.Operator = TransitionConditionOperator::GreaterOrEqual; break;
+                    case ConditionOperator::LessOrEqual: rule.Operator = TransitionConditionOperator::LessOrEqual; break;
+                    case ConditionOperator::Equal: rule.Operator = TransitionConditionOperator::Equal; break;
+                    case ConditionOperator::NotEqual: rule.Operator = TransitionConditionOperator::NotEqual; break;
+                    case ConditionOperator::IsTrue: rule.Operator = TransitionConditionOperator::IsTrue; break;
+                    case ConditionOperator::IsFalse: rule.Operator = TransitionConditionOperator::IsFalse; break;
+                    case ConditionOperator::Triggered: rule.Operator = TransitionConditionOperator::Triggered; break;
+                }
+                if (cond.Operand.index() == 0) {
+                    rule.FloatOperand = std::get<0>(cond.Operand);
+                } else if (cond.Operand.index() == 1) {
+                    rule.IntOperand = std::get<1>(cond.Operand);
+                } else if (cond.Operand.index() == 2) {
+                    rule.BoolOperand = std::get<2>(cond.Operand);
+                }
+                t.Rules.push_back(rule);
+            }
+
+            sm->AddTransition(t);
+        }
+
+        return sm;
+    }
+
+    AnimatorControllerDefinition AnimationAssetCodec::ExtractDefinitionFromStateMachine(const AnimationStateMachine& sm) {
+        AnimatorControllerDefinition def;
+        def.Name = sm.GetName();
+        def.Id = sm.GetName().empty() ? "Controller_Def" : (sm.GetName() + "_Def");
+
+        for (const auto& [id, param] : sm.GetDeclaredParameters()) {
+            def.Parameters.push_back(param);
+        }
+
+        std::unordered_map<std::string, AnimationId> nameToId;
+        for (const auto& [name, state] : sm.GetStates()) {
+            StateDefinition sDef;
+            sDef.Id = "State_" + name;
+            sDef.Name = name;
+            sDef.NodeType = state.Type;
+            sDef.SpeedMultiplier = state.SpeedMultiplier;
+            sDef.Loop = state.Loop;
+            sDef.BlendParameterX = state.BlendParameterName;
+            def.States.push_back(sDef);
+            nameToId[name] = sDef.Id;
+        }
+
+        if (!sm.GetInitialStateName().empty()) {
+            auto it = nameToId.find(sm.GetInitialStateName());
+            if (it != nameToId.end()) {
+                def.EntryStateId = it->second;
+            }
+        }
+
+        int transCounter = 0;
+        for (const auto& trans : sm.GetTransitions()) {
+            TransitionDefinition tDef;
+            tDef.Id = "Trans_" + std::to_string(transCounter++);
+            auto itFrom = nameToId.find(trans.FromState);
+            auto itTo = nameToId.find(trans.ToState);
+            tDef.FromState = (itFrom != nameToId.end()) ? itFrom->second : trans.FromState;
+            tDef.ToState = (itTo != nameToId.end()) ? itTo->second : trans.ToState;
+            tDef.CrossfadeSeconds = trans.Duration;
+            tDef.HasExitTime = trans.HasExitTime;
+            tDef.ExitPhase = trans.ExitPhase;
+            tDef.Priority = trans.Priority;
+            tDef.AllConditions = trans.PureConditions;
+            def.Transitions.push_back(tDef);
+        }
+
+        return def;
+    }
+
+    std::string AnimationAssetCodec::EncodeControllerToText(const AnimatorControllerDefinition& def) {
+        AssetDocument doc;
+        if (!EncodeAnimatorController(def, doc)) return "";
+        return AssetDSL::SerializeDocument(doc);
+    }
+
+    bool AnimationAssetCodec::DecodeControllerFromText(const std::string& text, AnimatorControllerDefinition& outDef, std::string* outError) {
+        if (text.empty()) {
+            if (outError) *outError = "Empty controller text";
+            return false;
+        }
+        AssetDocument doc;
+        if (!AssetDSL::ParseSource(text, doc, outError)) return false;
+        return DecodeAnimatorController(doc, outDef, outError);
+    }
+
+    std::string AnimationAssetCodec::HexEncode(const std::string& input) {
+        static const char hexChars[] = "0123456789ABCDEF";
+        std::string out;
+        out.reserve(input.size() * 2);
+        for (unsigned char c : input) {
+            out.push_back(hexChars[(c >> 4) & 0x0F]);
+            out.push_back(hexChars[c & 0x0F]);
+        }
+        return out;
+    }
+
+    std::string AnimationAssetCodec::HexDecode(const std::string& hex) {
+        std::string out;
+        if (hex.size() % 2 != 0) return out;
+        out.reserve(hex.size() / 2);
+        for (size_t i = 0; i < hex.size(); i += 2) {
+            char high = hex[i];
+            char low = hex[i + 1];
+            auto parseNibble = [](char c) -> int {
+                if (c >= '0' && c <= '9') return c - '0';
+                if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                return 0;
+            };
+            unsigned char byte = (parseNibble(high) << 4) | parseNibble(low);
+            out.push_back(static_cast<char>(byte));
+        }
+        return out;
     }
 
 }

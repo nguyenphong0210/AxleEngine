@@ -780,7 +780,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **B - Versioned Assets, Baking & Persistence**:
     - [x] **B1**: Stable definitions/IDs for Skeleton, SkeletalMesh, AnimationClip and AnimatorController; append-only asset classifications.
     - [x] **B2**: Shared complete codecs, atomic saves, validated cooked geometry, FileSystem/VFS loading and last-good reload.
-    - [ ] **B3**: Scene and all assembly/editor round trips; referenced/unique controllers, complete fallback, typed defaults and legacy migration.
+    - [x] **B3**: Scene and all assembly/editor round trips; referenced/unique controllers, complete fallback, typed defaults and legacy migration.
   - [ ] **C - Typed Animator Runtime**:
     - [x] **C1**: Float/Int/Bool/Trigger declarations, typed conditions and script/component accessors.
     - [x] **C2**: Deterministic priority/exit-time transitions, atomic trigger consumption, independent crossfade clocks and bounded residual-time advancement.

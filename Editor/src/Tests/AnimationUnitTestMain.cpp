@@ -10,6 +10,11 @@
 #include <Axle/AssetTypes.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/Components.hpp>
+#include <Axle/SceneSerializer.hpp>
+#include <Axle/AssemblySerializer.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string_view>
 #include <limits>
@@ -1012,6 +1017,197 @@ static bool TestDeterministicTransitionsAndCrossfades() {
     return true;
 }
 
+static bool TestSceneAndAssemblyAnimationRoundTrip() {
+    auto tempDir = std::filesystem::temp_directory_path() / ("axle_anim_b3_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(tempDir);
+
+    // 1. Setup authored Skeleton and Controller
+    auto skeleton = std::make_shared<Axle::Skeleton>("B3_Rig");
+    Axle::Bone root;
+    root.Name = "Root";
+    root.ParentID = -1;
+    skeleton->AddBone(root);
+    skeleton->ComputeInverseBindMatrices();
+
+    auto sm = std::make_shared<Axle::AnimationStateMachine>("LocomotionSM");
+    Axle::ParameterDefinition speedParam;
+    speedParam.Id = "Param_Speed";
+    speedParam.Name = "Speed";
+    speedParam.Type = Axle::AnimatorParameterType::Float;
+    speedParam.Default = 0.0f;
+    sm->DeclareParameter(speedParam);
+
+    Axle::ParameterDefinition jumpParam;
+    jumpParam.Id = "Param_Jump";
+    jumpParam.Name = "JumpCount";
+    jumpParam.Type = Axle::AnimatorParameterType::Int;
+    jumpParam.Default = 0;
+    sm->DeclareParameter(jumpParam);
+
+    Axle::ParameterDefinition groundedParam;
+    groundedParam.Id = "Param_Grounded";
+    groundedParam.Name = "IsGrounded";
+    groundedParam.Type = Axle::AnimatorParameterType::Bool;
+    groundedParam.Default = true;
+    sm->DeclareParameter(groundedParam);
+
+    auto clip1 = std::make_shared<Axle::AnimationClip>("ClipIdle", 1.0f);
+    auto clip2 = std::make_shared<Axle::AnimationClip>("ClipWalk", 1.0f);
+
+    Axle::AnimationState stIdle;
+    stIdle.Name = "Idle";
+    stIdle.Clip = clip1;
+    sm->AddState(stIdle);
+
+    Axle::AnimationState stWalk;
+    stWalk.Name = "Walk";
+    stWalk.Clip = clip2;
+    sm->AddState(stWalk);
+
+    Axle::AnimationTransition trans;
+    trans.FromState = "Idle";
+    trans.ToState = "Walk";
+    trans.Duration = 0.2f;
+    trans.Rules.push_back({"Speed", Axle::TransitionConditionOperator::Greater, 0.5f});
+    sm->AddTransition(trans);
+
+    auto animator = std::make_shared<Axle::Animator>(skeleton);
+    animator->SetStateMachine(sm);
+
+    // 2. Scene round-trip test
+    auto sceneA = std::make_shared<Axle::Scene>();
+    auto entityA = sceneA->CreateEntity("AnimatedEntity");
+    auto& smcA = entityA.AddComponent<Axle::SkeletalMeshComponent>();
+    smcA.AssetPath = "procedural://biped";
+    smcA.PatternMode = 2;
+    smcA.TileScale = 3.5f;
+
+    auto& acA = entityA.AddComponent<Axle::AnimatorComponent>();
+    acA.AnimatorInstance = animator;
+    acA.Playing = true;
+    acA.PlaybackSpeed = 1.25f;
+    acA.SetFloat("Speed", 2.5f);
+    acA.SetInt("JumpCount", 7);
+    acA.SetBool("IsGrounded", false);
+
+    std::filesystem::path scenePath = tempDir / "TestScene.axle";
+    Axle::SceneSerializer serializer(sceneA.get());
+    bool savedScene = serializer.Serialize(scenePath);
+    ANIMATION_CHECK(savedScene, "Scene serialized successfully with skeletal components");
+
+    // Deserialize scene into fresh Scene instance
+    auto sceneB = std::make_shared<Axle::Scene>();
+    Axle::SceneSerializer deserializer(sceneB.get());
+    bool loadedScene = deserializer.Deserialize(scenePath);
+    ANIMATION_CHECK(loadedScene, "Scene deserialized successfully");
+
+    // Verify deserialized components
+    auto viewB = sceneB->GetRegistry().view<Axle::SkeletalMeshComponent, Axle::AnimatorComponent>();
+    size_t countB = 0;
+    for (auto ent : viewB) {
+        countB++;
+        auto& smcB = viewB.get<Axle::SkeletalMeshComponent>(ent);
+        auto& acB = viewB.get<Axle::AnimatorComponent>(ent);
+
+        ANIMATION_CHECK(smcB.AssetPath == "procedural://biped", "SkeletalMesh AssetPath preserved");
+        ANIMATION_CHECK(smcB.PatternMode == 2, "SkeletalMesh PatternMode preserved");
+        ANIMATION_CHECK(std::abs(smcB.TileScale - 3.5f) < 1e-4f, "SkeletalMesh TileScale preserved");
+
+        ANIMATION_CHECK(acB.Playing == true, "Animator Playing state preserved");
+        ANIMATION_CHECK(std::abs(acB.PlaybackSpeed - 1.25f) < 1e-4f, "Animator PlaybackSpeed preserved");
+        ANIMATION_CHECK(acB.AnimatorInstance != nullptr, "AnimatorInstance reconstructed from inline fallback");
+        ANIMATION_CHECK(acB.GetFloat("Speed") == 2.5f, "Float parameter override restored");
+        ANIMATION_CHECK(acB.GetInt("JumpCount") == 7, "Int parameter override restored");
+        ANIMATION_CHECK(acB.GetBool("IsGrounded") == false, "Bool parameter override restored");
+    }
+    ANIMATION_CHECK(countB == 1, "Exactly one animated entity in deserialized scene");
+
+    // 3. Fallback preserves values when external file missing
+    auto sceneC = std::make_shared<Axle::Scene>();
+    auto entityC = sceneC->CreateEntity("MissingFileEntity");
+    auto& smcC = entityC.AddComponent<Axle::SkeletalMeshComponent>();
+    smcC.AssetPath = "procedural://biped";
+    auto& acC = entityC.AddComponent<Axle::AnimatorComponent>();
+    acC.ControllerPath = "nonexistent/missing_controller.axleasset";
+    // Embed inline fallback
+    auto def = Axle::AnimationAssetCodec::ExtractDefinitionFromStateMachine(*sm);
+    std::string textDef = Axle::AnimationAssetCodec::EncodeControllerToText(def);
+    acC.InlineFallbackData = Axle::AnimationAssetCodec::HexEncode(textDef);
+    acC.SetFloat("Speed", 4.0f);
+
+    std::filesystem::path sceneMissingPath = tempDir / "SceneMissing.axle";
+    Axle::SceneSerializer serC(sceneC.get());
+    serC.Serialize(sceneMissingPath);
+
+    auto sceneD = std::make_shared<Axle::Scene>();
+    Axle::SceneSerializer deserD(sceneD.get());
+    bool loadedMissing = deserD.Deserialize(sceneMissingPath);
+    ANIMATION_CHECK(loadedMissing, "Scene deserialized when external controller is missing");
+    auto viewD = sceneD->GetRegistry().view<Axle::AnimatorComponent>();
+    for (auto ent : viewD) {
+        auto& acD = viewD.get<Axle::AnimatorComponent>(ent);
+        ANIMATION_CHECK(acD.AnimatorInstance != nullptr, "AnimatorInstance successfully created from fallback definition");
+        ANIMATION_CHECK(acD.GetFloat("Speed") == 4.0f, "Parameter override preserved with missing external file");
+    }
+
+    // 4. Two scene instances deserialize independent runtime states
+    auto sceneDouble = std::make_shared<Axle::Scene>();
+    Axle::SceneSerializer deserDouble(sceneDouble.get());
+    deserDouble.Deserialize(scenePath);
+
+    auto viewOrig = sceneDouble->GetRegistry().view<Axle::AnimatorComponent>();
+    Axle::Entity firstEntity;
+    for (auto ent : viewOrig) {
+        firstEntity = { ent, sceneDouble.get() };
+        break;
+    }
+    Axle::Entity secondEntity = sceneDouble->DuplicateEntity(firstEntity);
+
+    auto& ac1 = firstEntity.GetComponent<Axle::AnimatorComponent>();
+    auto& ac2 = secondEntity.GetComponent<Axle::AnimatorComponent>();
+
+    ANIMATION_CHECK(ac1.AnimatorInstance != ac2.AnimatorInstance, "Distinct AnimatorInstance pointers across instances");
+    ANIMATION_CHECK(ac1.AnimatorInstance->GetStateMachine() != ac2.AnimatorInstance->GetStateMachine(), "Distinct state machine instances");
+
+    // Advance instance 1, mutate parameter
+    ac1.SetFloat("Speed", 99.0f);
+    ac1.Update(0.1f);
+
+    ANIMATION_CHECK(ac1.GetFloat("Speed") == 99.0f, "Instance 1 parameter mutated");
+    ANIMATION_CHECK(ac2.GetFloat("Speed") == 2.5f, "Instance 2 parameter completely isolated from instance 1");
+
+    // 5. Assembly serialization, LoadAssemblyData, and SaveAssemblyData round trip
+    std::filesystem::path asmPath = tempDir / "TestAssembly.axle";
+    bool savedAsm = Axle::AssemblySerializer::Serialize(asmPath, firstEntity);
+    ANIMATION_CHECK(savedAsm, "AssemblySerializer serialized entity with skeletal components");
+
+    Axle::AssemblyData asmData = Axle::AssemblySerializer::LoadAssemblyData(asmPath);
+    ANIMATION_CHECK(asmData.IsValid, "LoadAssemblyData loaded valid assembly data");
+    ANIMATION_CHECK(asmData.RootNode.HasSkeletalMesh, "AssemblyNode contains HasSkeletalMesh");
+    ANIMATION_CHECK(asmData.RootNode.HasAnimator, "AssemblyNode contains HasAnimator");
+    ANIMATION_CHECK(asmData.RootNode.Animator.GetFloat("Speed") == 99.0f, "AssemblyNode preserved Animator parameter override");
+
+    // Save assembly data back out
+    std::filesystem::path asmSavedPath = tempDir / "TestAssemblyResaved.axle";
+    bool resavedAsm = Axle::AssemblySerializer::SaveAssemblyData(asmSavedPath, asmData);
+    ANIMATION_CHECK(resavedAsm, "SaveAssemblyData wrote assembly data cleanly");
+
+    // Deserialize resaved assembly into target scene
+    auto sceneAsm = std::make_shared<Axle::Scene>();
+    Axle::Entity spawnedAsm = Axle::AssemblySerializer::Deserialize(asmSavedPath, sceneAsm.get());
+    ANIMATION_CHECK((bool)spawnedAsm, "Spawned entity from assembly is valid");
+    ANIMATION_CHECK(spawnedAsm.HasComponent<Axle::SkeletalMeshComponent>(), "Spawned assembly entity has SkeletalMeshComponent");
+    ANIMATION_CHECK(spawnedAsm.HasComponent<Axle::AnimatorComponent>(), "Spawned assembly entity has AnimatorComponent");
+    auto& acSpawned = spawnedAsm.GetComponent<Axle::AnimatorComponent>();
+    ANIMATION_CHECK(acSpawned.AnimatorInstance != nullptr, "Spawned assembly entity has active AnimatorInstance");
+
+    // Clean up temporary files
+    std::error_code ec;
+    std::filesystem::remove_all(tempDir, ec);
+
+    return true;
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure")
         return Axle::AnimationTests::Check(false, "Intentional harness failure", __FILE__, __LINE__) ? 0 : 1;
@@ -1034,6 +1230,7 @@ int main(int argc, char** argv) {
     if (!TestCookedGeometryBakeAndTruncatedBinaryRejection()) return 1;
     if (!TestTypedAnimatorParametersAndPureConditionEvaluator()) return 1;
     if (!TestDeterministicTransitionsAndCrossfades()) return 1;
+    if (!TestSceneAndAssemblyAnimationRoundTrip()) return 1;
     std::cout << "Animation unit tests PASS\n";
     return 0;
 }

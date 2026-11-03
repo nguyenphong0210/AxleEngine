@@ -1354,6 +1354,7 @@ namespace Axle {
     struct SkeletalMeshComponent {
         std::shared_ptr<SkeletalMesh> Mesh = nullptr;
         std::string AssetPath;
+        std::string SkeletonPath;
 
         // Visual pattern & material properties matching MeshInstance3D
         int PatternMode = 3; // 3: Solid Color (default for characters)
@@ -1364,12 +1365,17 @@ namespace Axle {
         bool Visible = true;
 
         SkeletalMeshComponent() = default;
-        explicit SkeletalMeshComponent(const std::shared_ptr<SkeletalMesh>& mesh, const std::string& assetPath = "")
-            : Mesh(mesh), AssetPath(assetPath) {}
+        explicit SkeletalMeshComponent(const std::shared_ptr<SkeletalMesh>& mesh, const std::string& assetPath = "", const std::string& skeletonPath = "")
+            : Mesh(mesh), AssetPath(assetPath), SkeletonPath(skeletonPath) {}
     };
 
     struct AnimatorComponent {
         std::shared_ptr<Animator> AnimatorInstance = nullptr;
+
+        // Authored asset references and configuration
+        std::string ControllerPath;
+        bool IsUnique = false;
+        std::string InlineFallbackData;
 
         // Animation playback state
         bool Playing = true;
@@ -1380,16 +1386,27 @@ namespace Axle {
         bool IsGrounded = true;
         float VerticalVelocity = 0.0f;
 
+        // Typed initial parameter overrides
+        std::unordered_map<std::string, float> FloatOverrides;
+        std::unordered_map<std::string, int32_t> IntOverrides;
+        std::unordered_map<std::string, bool> BoolOverrides;
+
         AnimatorComponent() = default;
         explicit AnimatorComponent(const std::shared_ptr<Animator>& animator)
             : AnimatorInstance(animator) {}
 
         AnimatorComponent(const AnimatorComponent& other)
-            : Playing(other.Playing),
+            : ControllerPath(other.ControllerPath),
+              IsUnique(other.IsUnique),
+              InlineFallbackData(other.InlineFallbackData),
+              Playing(other.Playing),
               PlaybackSpeed(other.PlaybackSpeed),
               Speed(other.Speed),
               IsGrounded(other.IsGrounded),
-              VerticalVelocity(other.VerticalVelocity) {
+              VerticalVelocity(other.VerticalVelocity),
+              FloatOverrides(other.FloatOverrides),
+              IntOverrides(other.IntOverrides),
+              BoolOverrides(other.BoolOverrides) {
             if (other.AnimatorInstance) {
                 AnimatorInstance = other.AnimatorInstance->Clone();
             }
@@ -1397,11 +1414,17 @@ namespace Axle {
 
         AnimatorComponent& operator=(const AnimatorComponent& other) {
             if (this != &other) {
+                ControllerPath = other.ControllerPath;
+                IsUnique = other.IsUnique;
+                InlineFallbackData = other.InlineFallbackData;
                 Playing = other.Playing;
                 PlaybackSpeed = other.PlaybackSpeed;
                 Speed = other.Speed;
                 IsGrounded = other.IsGrounded;
                 VerticalVelocity = other.VerticalVelocity;
+                FloatOverrides = other.FloatOverrides;
+                IntOverrides = other.IntOverrides;
+                BoolOverrides = other.BoolOverrides;
                 AnimatorInstance = other.AnimatorInstance ? other.AnimatorInstance->Clone() : nullptr;
             }
             return *this;
@@ -1413,6 +1436,7 @@ namespace Axle {
         void SetFloat(const std::string& name, float value) {
             if (name == "Speed") Speed = value;
             if (name == "VerticalVelocity") VerticalVelocity = value;
+            FloatOverrides[name] = value;
             if (AnimatorInstance) {
                 AnimatorInstance->SetFloat(name, value);
             }
@@ -1425,6 +1449,7 @@ namespace Axle {
         }
 
         void SetInt(const std::string& name, int32_t value) {
+            IntOverrides[name] = value;
             if (AnimatorInstance) {
                 AnimatorInstance->SetInt(name, value);
             }
@@ -1436,6 +1461,7 @@ namespace Axle {
 
         void SetBool(const std::string& name, bool value) {
             if (name == "IsGrounded") IsGrounded = value;
+            BoolOverrides[name] = value;
             if (AnimatorInstance) {
                 AnimatorInstance->SetBool(name, value);
             }

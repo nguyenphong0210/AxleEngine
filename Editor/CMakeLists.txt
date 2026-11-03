@@ -242,7 +242,7 @@ endif()
 # Animation foundations run without application/window/graphics initialization.
 add_executable(AxleAnimationUnitTests src/Tests/AnimationUnitTestMain.cpp)
 target_include_directories(AxleAnimationUnitTests PRIVATE src/Tests)
-target_link_libraries(AxleAnimationUnitTests PRIVATE Axle::Animation)
+target_link_libraries(AxleAnimationUnitTests PRIVATE Axle::Animation Axle::Scene)
 if(MSVC)
     target_compile_options(AxleAnimationUnitTests PRIVATE /bigobj /FS)
 endif()

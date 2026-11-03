@@ -25,6 +25,10 @@ namespace Axle {
         RigidBody3D RigidBody;
         bool HasMaterial = false;
         MaterialComponent Material;
+        bool HasSkeletalMesh = false;
+        SkeletalMeshComponent SkeletalMesh;
+        bool HasAnimator = false;
+        AnimatorComponent Animator;
         std::vector<AssemblyNode> Children;
     };
 

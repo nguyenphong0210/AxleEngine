@@ -9,6 +9,8 @@
 
 namespace Axle {
 
+    class AnimationStateMachine;
+
     class AnimationAssetCodec {
     public:
         // --- Atomic File IO Utilities ---
@@ -38,6 +40,16 @@ namespace Axle {
         static bool DecodeAnimatorController(const AssetDocument& doc, AnimatorControllerDefinition& outDef, std::string* outError = nullptr);
         static bool SaveAnimatorController(const std::string& filepath, const AnimatorControllerDefinition& def, std::string* outError = nullptr);
         static bool LoadAnimatorController(const std::string& filepath, AnimatorControllerDefinition& outDef, std::string* outError = nullptr);
+
+        // --- State Machine Compilation & Extraction ---
+        static std::shared_ptr<AnimationStateMachine> CompileStateMachineFromDefinition(const AnimatorControllerDefinition& def);
+        static AnimatorControllerDefinition ExtractDefinitionFromStateMachine(const AnimationStateMachine& sm);
+        static std::string EncodeControllerToText(const AnimatorControllerDefinition& def);
+        static bool DecodeControllerFromText(const std::string& text, AnimatorControllerDefinition& outDef, std::string* outError = nullptr);
+
+        // --- Hex String Utilities ---
+        static std::string HexEncode(const std::string& input);
+        static std::string HexDecode(const std::string& hex);
 
         // --- Binary Cooked Geometry Baking & Loading ---
         static bool BakeSkeletalMeshGeometry(const std::string& binaryPath, const SkeletalMeshData& data, const std::string& skeletonSignature, std::string* outError = nullptr);

@@ -11,6 +11,14 @@
 
 namespace Axle {
 
+    /// Tolerances and subdivision limits for baking FBX animation curves.
+    ///
+    /// Continuous accuracy guarantee:
+    /// Initial seed interval is constrained by source Euler rotation rates (<= 60 deg rotation
+    /// per seed interval) to eliminate rotational Nyquist aliasing. Interior validation probes
+    /// (InteriorValidationProbes) verify continuous transform agreement within the declared
+    /// tolerances. If a curve exceeds tolerance and cannot be refined (due to MaxRecursionDepth
+    /// or MinIntervalSeconds), baking fails with an explicit diagnostic.
     struct FbxBakeTolerances {
         float TranslationTolerance = 1e-3f;       // In meters (1 mm)
         float RotationTolerance = 1e-3f;          // In radians (~0.057 degrees)
@@ -46,7 +54,9 @@ namespace Axle {
             std::string* outError = nullptr
         );
 
-        // Bake a single channel for a node over [timeBegin, timeEnd] relative to stack start
+        /// Bake a single channel for a node over [timeBegin, timeEnd] relative to stack start.
+        /// Transactional: on failure (e.g. mixed interpolation, budget exhaustion, or tolerance
+        /// violation), outChannel, remainingKeyBudget, and outStats remain completely untouched.
         static bool BakeChannel(
             const ufbx_anim* anim,
             const ufbx_node* node,

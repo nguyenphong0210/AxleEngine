@@ -769,11 +769,11 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **G4 - Acceptance**: Physical DX12/Vulkan rendering/stress evidence, failure/lifetime checks, fallback verification, native UI authoring and measured performance reports.
 
 - [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/Scene`, `Engine/UI`, `Editor`, `Runtime`)**
-  - **Status (2026-11-03): source audit and detailed implementation handoff prepared; no implementation or new animation test result claimed.** Existing runtime classes are foundations; the RHI skinning/editor/asset workflow remains to be completed. Phase 38.3/39 manual acceptance remains separately open.
+  - **Status (2026-11-03): foundation implementation started; A0 CPU harness passes in Release, including an expected-failure check.** Runtime foundation progress and evidence: [Foundation Report](docs/design/ANIMATION_PHASE_40_FOUNDATION_REPORT.md). The RHI skinning/editor/asset workflow remains to be completed. Phase 38.3/39 manual acceptance remains separately open.
   - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test instructions and Gemini prompt**: [Gemini Implementation Guide](docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
   - **Execution**: 28 separately committed packages. First deliver A0-A3, B1/B2, C1/C2, B3, F1/F2 and G1/G2 as an executable import -> persist -> independent animator -> RHI preview slice; then complete authoring and acceptance. Package dependencies in the plan take precedence over the display order below.
   - [ ] **A - CPU Foundations & Instance Safety**:
-    - [ ] **A0**: Always-active, device-free `AxleAnimationUnitTests` target and temporary fixtures.
+    - [x] **A0**: Always-active, device-free `AxleAnimationUnitTests` target and temporary fixtures.
     - [ ] **A1**: Validated skeleton topology, partial-channel bind TRS fallback, quaternion/signed-scale handling and derived lookup rebuilding.
     - [ ] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits.
     - [ ] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy.

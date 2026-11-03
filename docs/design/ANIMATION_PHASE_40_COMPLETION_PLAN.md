@@ -1,7 +1,9 @@
 # Phase 40: Skeletal Animation Studio Completion Plan
 
 Date: 2026-11-03. Source baseline: `538163b`.
-Status: **planned; no Phase 40 implementation or new test result is established by this document**.
+Status: **foundation implementation in progress**. Actual completed packages and
+verification are recorded in the [foundation report](ANIMATION_PHASE_40_FOUNDATION_REPORT.md);
+unchecked packages below remain implementation/acceptance requirements.
 
 Parent: [ROADMAP.md](../../ROADMAP.md). Implementation contracts and the Gemini
 assignment: [coding guide](ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).

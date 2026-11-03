@@ -769,21 +769,21 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **G4 - Acceptance**: Physical DX12/Vulkan rendering/stress evidence, failure/lifetime checks, fallback verification, native UI authoring and measured performance reports.
 
 - [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/Scene`, `Engine/UI`, `Editor`, `Runtime`)**
-  - **Status (2026-11-03): foundation implementation started; A0 CPU harness passes in Release, including an expected-failure check.** Runtime foundation progress and evidence: [Foundation Report](docs/design/ANIMATION_PHASE_40_FOUNDATION_REPORT.md). The RHI skinning/editor/asset workflow remains to be completed. Phase 38.3/39 manual acceptance remains separately open.
+  - **Status (2026-11-03): A0 and eight foundation packages were delivered; corrective review at `a6efa8c` reproduced 13 regressions despite passing existing CPU tests and an Editor/Runtime build.** A0 is verified; A1/A2/A3/B1/B2/B3/C1/C2 acceptance is reopened. Findings, evidence and correction order: [Gemini Foundation Review](docs/design/ANIMATION_PHASE_40_GEMINI_REVIEW.md). Implementation notes: [Foundation Report](docs/design/ANIMATION_PHASE_40_FOUNDATION_REPORT.md). RHI/editor/packaged animation acceptance remains pending; Phase 38.3/39 manual checks remain separately open.
   - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test instructions and Gemini prompt**: [Gemini Implementation Guide](docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
   - **Execution**: 28 separately committed packages. First deliver A0-A3, B1/B2, C1/C2, B3, F1/F2 and G1/G2 as an executable import -> persist -> independent animator -> RHI preview slice; then complete authoring and acceptance. Package dependencies in the plan take precedence over the display order below.
   - [ ] **A - CPU Foundations & Instance Safety**:
     - [x] **A0**: Always-active, device-free `AxleAnimationUnitTests` target and temporary fixtures.
-    - [x] **A1**: Validated skeleton topology, partial-channel bind TRS fallback, quaternion/signed-scale handling and derived lookup rebuilding.
-    - [x] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits.
-    - [x] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy.
+    - [ ] **A1**: Validated skeleton topology, partial-channel bind TRS fallback, quaternion/signed-scale handling and derived lookup rebuilding.
+    - [ ] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits.
+    - [ ] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy.
   - [ ] **B - Versioned Assets, Baking & Persistence**:
-    - [x] **B1**: Stable definitions/IDs for Skeleton, SkeletalMesh, AnimationClip and AnimatorController; append-only asset classifications.
-    - [x] **B2**: Shared complete codecs, atomic saves, validated cooked geometry, FileSystem/VFS loading and last-good reload.
-    - [x] **B3**: Scene and all assembly/editor round trips; referenced/unique controllers, complete fallback, typed defaults and legacy migration.
+    - [ ] **B1**: Stable definitions/IDs for Skeleton, SkeletalMesh, AnimationClip and AnimatorController; append-only asset classifications.
+    - [ ] **B2**: Shared complete codecs, atomic saves, validated cooked geometry, FileSystem/VFS loading and last-good reload.
+    - [ ] **B3**: Scene and all assembly/editor round trips; referenced/unique controllers, complete fallback, typed defaults and legacy migration.
   - [ ] **C - Typed Animator Runtime**:
-    - [x] **C1**: Float/Int/Bool/Trigger declarations, typed conditions and script/component accessors.
-    - [x] **C2**: Deterministic priority/exit-time transitions, atomic trigger consumption, independent crossfade clocks and bounded residual-time advancement.
+    - [ ] **C1**: Float/Int/Bool/Trigger declarations, typed conditions and script/component accessors.
+    - [ ] **C2**: Deterministic priority/exit-time transitions, atomic trigger consumption, independent crossfade clocks and bounded residual-time advancement.
   - [ ] **D - Locomotion Blend Spaces**:
     - [ ] **D1**: Robust 1D weights and persistent phase continuity when parameters/durations change.
     - [ ] **D2**: Deterministic 2D triangulation/barycentric/hull behavior, degenerate cases and normalized N-way local TRS blending.

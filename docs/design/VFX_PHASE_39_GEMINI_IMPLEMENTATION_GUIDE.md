@@ -1,5 +1,11 @@
 # Phase 39: VFX Editor Coding Guide for Gemini
 
+> **Technical reference, not an active assignment.** Read the
+> [shared working protocol](../agents/WORKING_PROTOCOL.md) and
+> [current task/messages](../agents/CODEX_GEMINI_EXCHANGE.json) first. Only a
+> current released scope authorizes implementation. Historical examples and
+> broad phase instructions below must not restart completed work.
+
 Date: 2026-11-02. Planning baseline: `45aeaee`.
 Status: **implementation handoff; proposed interfaces and algorithms**.
 
@@ -16,7 +22,8 @@ preview; suggested class names below are not a second set of production APIs.
 
 ## 1. Assignment and execution limits
 
-Implement the scoped Phase 39 editor/runtime work and meaningful CPU unit tests,
+For an explicitly released VFX package, implement the relevant editor/runtime
+work and meaningful CPU unit tests,
 including renderer code and real GPU test entry points. The assigned Gemini
 environment can code and run CPU unit tests; physical GPU and interactive editor
 acceptance must be performed elsewhere. Lack of GPU access is not a reason to
@@ -881,15 +888,6 @@ Deliver:
 
 Suggested assignment to paste into Gemini:
 
-> Implement the remaining AxleEngine Phase 39 work using this coding guide and
-> VFX_PHASE_39_COMPLETION_PLAN.md. Inspect the current repository and user changes
-> first. Start with the CPU test target, A1, the minimal B1 value-definition
-> boundary needed for A2, then A2/A3, and continue in the documented dependency
-> order. Adapt the proposed APIs to existing code without changing their ownership,
-> persistence or verification contracts. You can implement code, run CPU unit
-> tests and create local atomic commits. Implement the actual renderer/UI wiring
-> and prepare registered physical GPU integration tests, but record GPU execution
-> and interactive UI acceptance as NOT RUN in this environment. Preserve material,
-> vehicle and character VFX behavior. Verify each available sub-step, report actual
-> failures/limits and keep Phase 39 open for external acceptance. Do not push or
-> begin Phase 40. Produce the required delivery list from section 18.
+Current entry point: [agent collaboration](../agents/README.md). Read and reply
+in the shared exchange; implement only the package released there.
+The [original full-scope prompt](../agents/archive/VFX_PHASE_39_ORIGINAL_PROMPT.txt) is retained as history, not a task to run.

@@ -2,6 +2,14 @@
 
 Documentation is organized by purpose. Current implementation, usage instructions and future proposals are kept separate. Start with the architecture overview if you are new to the engine.
 
+## Codex/Gemini collaboration
+
+Start at [the agent index](agents/README.md). Both assistants read and write the
+[shared exchange](agents/CODEX_GEMINI_EXCHANGE.json), using the same
+[working protocol](agents/WORKING_PROTOCOL.md). It records current scope,
+questions/replies, deliveries and independent review status. Technical guides
+below are references, not standing instructions to implement an entire phase.
+
 ## Architecture and assessment
 
 | Document | Use it to |
@@ -35,9 +43,9 @@ Declaration and file inventories are available through the architecture index. T
 - [Asset format reference](reference/ASSET_FORMAT.md): `.axleasset` syntax, consumer boundaries, metadata and package distinctions.
 - [Editor tooling roadmap](design/EDITOR_TOOLING_ROADMAP.md): future material, VFX, UI and animation authoring work, with acceptance criteria.
 - [Phase 39 VFX editor completion plan](design/VFX_PHASE_39_COMPLETION_PLAN.md): audited gaps, implementation order, atomic work packages and CPU/GPU/UI acceptance for the reopened VFX phase.
-- [Phase 39 Gemini coding guide](design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md): proposed C++ interfaces, integration algorithms, concrete test fixtures and a copyable code/CPU-test assignment.
+- [Phase 39 Gemini coding guide](design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md): reference C++ interfaces, algorithms and fixtures; active scope is in the shared exchange.
 - [Phase 40 animation completion plan](design/ANIMATION_PHASE_40_COMPLETION_PLAN.md): source audit, 28 atomic packages, dependencies, supported scope and CPU/GPU/UI/Runtime acceptance.
-- [Phase 40 Gemini coding guide](design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md): proposed types, sampling/transition/blend/event algorithms, RHI and document integration, fixtures and a copyable assignment.
+- [Phase 40 Gemini coding guide](design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md): reference types, algorithms and integration contracts; active scope is in the shared exchange.
 - [Project roadmap](../ROADMAP.md): development history and milestones. Milestone completion claims do not substitute for current source or test evidence.
 
 ## Maintenance rules

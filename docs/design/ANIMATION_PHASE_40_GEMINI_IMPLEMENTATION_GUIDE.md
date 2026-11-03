@@ -1,13 +1,13 @@
 # Phase 40: Animation Coding Guide for Gemini
 
-Date: 2026-11-03. Inspected baseline: `538163b`.
-Status: **implementation handoff; proposed interfaces, not shipped APIs**.
+> **Technical reference, not an active assignment.** Read the
+> [shared working protocol](../agents/WORKING_PROTOCOL.md) and
+> [current task/messages](../agents/CODEX_GEMINI_EXCHANGE.json) first. Only a
+> current released scope authorizes implementation. Historical examples and
+> broad phase instructions below must not restart completed work.
 
-**Current continuation: G1 CPU document models only, then stop for review.**
-Read the [verified final foundation corrections](ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md)
-and [current G1-only prompt](ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt) first. Codex has
-already completed the S1-S4 correction gate. Historical broad phase instructions
-below do not authorize renderer, preview, visible UI or other package work.
+Date: 2026-11-03. Inspected baseline: `538163b`.
+Status: **technical reference; proposed interfaces are not shipped APIs**.
 
 Read the [completion plan](ANIMATION_PHASE_40_COMPLETION_PLAN.md) first. Its
 A0-K3 IDs, dependency table, scope limits and acceptance gates are canonical.
@@ -17,8 +17,9 @@ exist. Do not start a parallel animation engine beside the existing one.
 
 ## 1. Assignment and working rules
 
-Implement Phase 40 production code and meaningful CPU tests, one coherent package
-per local commit. Gemini's environment can code and execute CPU unit tests;
+For an explicitly released package, implement its production code and meaningful
+CPU tests in coherent local commits. The full phase contents are reference scope
+only; read the shared exchange for the actual assignment. Gemini's environment can code and execute CPU unit tests;
 physical GPU and interactive UI verification are external responsibilities.
 Implement those real integration test entry points even when you cannot run them.
 
@@ -750,29 +751,6 @@ reason and the final supported behavior rather than weakening tests to match a b
 
 ## 15. Copyable Gemini assignment
 
-```text
-Implement AxleEngine Phase 40 from the current checkout.
-
-Read first:
-1. docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md
-2. docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md
-3. docs/guides/DEVELOPMENT.md and the actual source/CMake files linked by the guide.
-
-Inspect git status/HEAD and preserve user changes. Start with A0, then A1/A2/A3
-and follow the dependency table/waves. Reuse the existing Animation types and
-RHISkinnedVertex3D. Deliver the first executable slice through G2 before expanding
-all authoring controls. Use a separate local commit for each package (split a
-package further when needed), include meaningful production-path CPU tests and
-update ANIMATION_PHASE_40_IMPLEMENTATION_STATUS.md after each package. Do not push.
-
-Your available environment can code and run CPU unit tests. Implement the real
-renderer/UI/runtime and physical GPU harness, build what is available, and report
-unavailable physical GPU/UI/standalone verification as NOT RUN. Do not replace
-rendering with a mock, equate passing CPU tests with visual acceptance, modify user
-scenes as fixtures, or mark Phase 38.3/39/40 complete without their own evidence.
-
-Keep working through the scoped packages. At each wave report package IDs,
-commit hashes, exact commands/results, deviations and remaining external checks.
-Do not ask for approval for routine reversible implementation choices already
-covered by these documents; follow the stated data/ownership/time contracts.
-```
+Current entry point: [agent collaboration](../agents/README.md). Read and reply
+in the shared exchange; implement only the package released there.
+The [original full-scope prompt](../agents/archive/ANIMATION_PHASE_40_ORIGINAL_PROMPT.txt) is retained as history, not a task to run.

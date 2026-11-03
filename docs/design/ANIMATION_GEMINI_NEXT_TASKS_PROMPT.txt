@@ -1,22 +1,9 @@
-Continue AxleEngine from the current checkout. This is a scoped continuation, NOT an instruction to implement all of Phase 40.
+SUPERSEDED ENTRY POINT -- NO IMPLEMENTATION TASK IS RELEASED BY THIS FILE.
 
-Read these files before editing:
-1. docs/design/ANIMATION_PHASE_40_GEMINI_CONTINUATION_HANDOFF.md
-2. docs/design/ANIMATION_PHASE_40_CORRECTIONS.md
-3. ROADMAP.md, Phase 40 section
+Read GEMINI.md, then docs/agents/WORKING_PROTOCOL.md and docs/agents/CODEX_GEMINI_EXCHANGE.json.
+Run: python scripts/agent_exchange.py inbox --agent Gemini
+Reply directly in the exchange as Gemini, referencing the incoming message ID.
+G1 has been delivered and awaits independent review. Do not replay the old task or start G2.
+The user prefers D1 then D2 after review and a concrete scoped handoff.
 
-The corrected code baseline is 30d1e91. Inspect current HEAD and git status first and preserve newer user work. The 13 correction commits listed in the handoff are already implemented; do not recreate them or restore the pre-review versions. Use the old completion plan and coding guide only as supporting references for the two tasks below; their wider phase scope does not apply to this assignment.
-
-Implement exactly these two remaining packages, in this order:
-
-1. A3: enforce immutable publication of shared skeletal mesh AND nested rig data. Keep mutable import/edit drafts separate; detach retained builder aliases, publish validated snapshots, preserve last-good replacements, and retain independent animator state across entity duplication and Scene::Copy. Outer const pointers alone are insufficient. Keep existing scene/assembly/VFS and legacy adapters functional. Do not build a new general resource manager or Editor UI.
-
-2. A2: replace the fixed 30 Hz FBX baking assumption with a documented accuracy/work-limit contract for the supported curves. Preserve STEP discontinuities, source/helper transforms, signed scales and quaternion behavior. Compare real clip samples with ufbx at off-grid times. Reject unsupported or over-budget cases explicitly and preserve prior outputs. Do not claim a continuous error bound from a few probes, increase frame rate as a substitute, or invent exporter coverage. Keep any unmet acceptance criteria open.
-
-Follow the detailed implementation flow and CPU acceptance tests in the handoff. Reuse current production APIs, C++20, FileSystem/VFS and existing modules. No hardcoded effect/character demos, placeholder success, identity-bind substitutions, weakened assertions or duplicated test-only evaluators. Code, comments, docs and commit messages must be in English.
-
-Your role is implementation and CPU unit tests. Run the available AxleAnimationUnitTests build and both Animation CTest cases. Record exact commands and exit codes; unavailable build/GPU/native UI checks are NOT RUN. Prior Codex GPU results are baseline evidence, not your new test results.
-
-Create one coherent local commit per package, including relevant tests/docs. A small final documentation commit may record both implementation hashes. Do not push. Write docs/design/ANIMATION_FOUNDATION_A3_A2_GEMINI_DELIVERY.md with commit hashes, changed files, ownership and baking contracts, tolerances, fixture provenance, actual results and remaining gaps. Update only the A2/A3 roadmap acceptance justified by those results.
-
-STOP after A3, A2 and the delivery report. Do not continue into blend spaces/events, RHI rendering, Animation Editor/graph UI, application pre-cook, GPU harnesses, another phase or the rest of Phase 40. Leave Phase 38.3/39 manual checks and full Phase 40 completion open, then return both package commit hashes, any final report commit hash, and a concise delivery summary for review.
+Historical original: docs/agents/archive/ANIMATION_GEMINI_NEXT_TASKS_PROMPT.txt

@@ -15,6 +15,8 @@ Engineered with a **Data-Oriented Design (DOD)** philosophy, AxleEngine blends t
 
 Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Physics Sandboxes, Mechanical Simulators, or Racing Games**, AxleEngine provides a clean, robust, and extensible architectural foundation.
 
+Agent collaboration: [shared Codex/Gemini workflow](docs/agents/README.md).
+
 ---
 
 ## 🌟 Key Architectural Highlights

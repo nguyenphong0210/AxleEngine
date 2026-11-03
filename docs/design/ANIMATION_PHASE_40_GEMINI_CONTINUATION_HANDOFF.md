@@ -1,5 +1,8 @@
 # Animation foundation: scoped Gemini continuation
 
+> **Historical handoff, completed/superseded.** It is not current task authority.
+> Start at [agent collaboration](../agents/README.md) and the shared exchange.
+
 Date: 2026-11-03. Reviewed code baseline: `30d1e91`.
 Assignment: **two work packages only: remaining A3, then remaining A2.**
 Stop after these packages and their report. Do not implement the rest of Phase 40.

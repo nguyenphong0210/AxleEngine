@@ -1,5 +1,11 @@
 # Phase 38.3 Material System: Implementation Handoff for Gemini
 
+> **Technical reference, not an active assignment.** Read the
+> [shared working protocol](../agents/WORKING_PROTOCOL.md) and
+> [current task/messages](../agents/CODEX_GEMINI_EXCHANGE.json) first. Only a
+> current released scope authorizes implementation. Historical examples and
+> broad phase instructions below must not restart completed work.
+
 Date: 2026-11-02
 
 Repository inspected: AxleEngine
@@ -13,7 +19,8 @@ checks supersede the original NOT RUN status in this planning document.
 
 ## 1. Assignment and execution limits
 
-Complete the remaining **implementation and CPU unit-test work** for Phase 38.3.
+When a material package is explicitly released in the shared exchange, use the
+relevant **implementation and CPU unit-test contracts** below for that package.
 The intended result is a reliable material authoring pipeline with the automotive
 features already listed in `ROADMAP.md`. This assignment does not promise complete
 feature parity with every Godot material feature.
@@ -1093,15 +1100,6 @@ commit or justify omitting persistence and legacy-compatibility tests.
 
 ## 16. Ready-to-use prompt for Gemini
 
-> Implement the remaining AxleEngine Phase 38.3 work according to this document.
-> Begin by inspecting the current branch and the listed files. Work through
-> packages A-G in order, splitting each package into the stated atomic commits.
-> Use section 15 as the reference implementation blueprint: adapt its proposed
-> interfaces to the repository, while preserving its ownership, validation and
-> unit-test contracts. Start with the smallest complete vertical slice.
-> You are authorized to edit code, add deterministic fixtures, run CPU unit tests
-> and create local commits. You have no GPU/UI acceptance capability: separate
-> CPU-testable binding/packing/cache decisions from runtime resource operations,
-> prepare the real integration checks, and label them NOT RUN. Preserve existing
-> user changes and material behavior. Do not push or mark the phase complete until
-> its external runtime acceptance has actually been performed.
+Current entry point: [agent collaboration](../agents/README.md). Read and reply
+in the shared exchange; implement only the package released there.
+The [original full-scope prompt](../agents/archive/MATERIAL_PHASE_38_3_ORIGINAL_PROMPT.txt) is retained as history, not a task to run.

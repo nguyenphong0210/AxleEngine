@@ -1376,6 +1376,10 @@ namespace Axle {
                 if (diagnostic) *diagnostic = "Cannot replace with null or invalid skeletal mesh";
                 return false;
             }
+            if (!newMesh->Validate(diagnostic)) {
+                if (diagnostic && diagnostic->empty()) *diagnostic = "Skeletal mesh validation failed";
+                return false;
+            }
             Mesh = newMesh;
             BindingDiagnostic.clear();
             return true;

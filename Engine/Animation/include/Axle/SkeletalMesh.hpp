@@ -40,11 +40,19 @@ namespace Axle {
 
     class SkeletalMesh {
     public:
-        SkeletalMesh() = default;
+        SkeletalMesh() = delete;
         explicit SkeletalMesh(SkeletalMeshData meshData);
+
+        // Non-copyable and non-assignable: published resources cannot be overwritten in place
+        SkeletalMesh(const SkeletalMesh&) = delete;
+        SkeletalMesh& operator=(const SkeletalMesh&) = delete;
+        SkeletalMesh(SkeletalMesh&&) = delete;
+        SkeletalMesh& operator=(SkeletalMesh&&) = delete;
 
         // Factory function: validates draft and publishes an immutable snapshot, returning nullptr on failure
         static std::shared_ptr<SkeletalMesh> Create(SkeletalMeshData meshData, std::string* diagnostic = nullptr);
+
+        bool Validate(std::string* diagnostic = nullptr) const { return m_Data.Validate(diagnostic); }
 
         // Read-only access to published geometry data
         const SkeletalMeshData& GetData() const { return m_Data; }

@@ -99,6 +99,11 @@ static bool TestImmutableSkeletalResourcePublication() {
         "Non-const SkeletalMesh::GetSkeleton() must still return shared_ptr<const Skeleton>");
     static_assert(std::is_same_v<decltype(std::declval<SkeletalMeshData>().SkeletonRef), std::shared_ptr<const Skeleton>>,
         "SkeletalMeshData::SkeletonRef must hold const Skeleton to prevent leaking mutable rig");
+    static_assert(!std::is_copy_assignable_v<SkeletalMesh>, "SkeletalMesh must not be copy-assignable");
+    static_assert(!std::is_move_assignable_v<SkeletalMesh>, "SkeletalMesh must not be move-assignable");
+    static_assert(!std::is_copy_constructible_v<SkeletalMesh>, "SkeletalMesh must not be copy-constructible");
+    static_assert(!std::is_move_constructible_v<SkeletalMesh>, "SkeletalMesh must not be move-constructible");
+    static_assert(!std::is_default_constructible_v<SkeletalMesh>, "SkeletalMesh must not be default-constructible");
 
     // 2. Draft & Builder alias detachment
     auto builderRig = std::make_shared<Skeleton>("BuilderRig");
@@ -230,6 +235,14 @@ static bool TestImmutableSkeletalResourcePublication() {
     ANIMATION_CHECK(!badMesh && !badDiag.empty(), "Invalid draft fails publication with diagnostic");
     ANIMATION_CHECK(!smc1.ReplaceMesh(badMesh, &badDiag), "ReplaceMesh rejects null/failed publication");
     ANIMATION_CHECK(smc1.Mesh == publishedMesh, "SkeletalMeshComponent retains last good published mesh");
+
+    // R1: Invalid non-null replacement keeps last good mesh
+    auto invalidDraft = draft;
+    invalidDraft.Indices[1] = 99; // Out of range index
+    auto uncheckedInvalidMesh = std::make_shared<SkeletalMesh>(invalidDraft);
+    std::string replaceDiag;
+    ANIMATION_CHECK(!smc1.ReplaceMesh(uncheckedInvalidMesh, &replaceDiag), "ReplaceMesh rejects invalid non-null mesh");
+    ANIMATION_CHECK(smc1.Mesh == publishedMesh, "SkeletalMeshComponent retains last good mesh on invalid non-null replacement");
 
     // Destroy builder objects; verify live instance continues to evaluate cleanly
     builderRig.reset();

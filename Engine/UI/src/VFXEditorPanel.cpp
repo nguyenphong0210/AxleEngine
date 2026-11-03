@@ -1719,13 +1719,15 @@ namespace Axle {
                     RenderPreview3D(avail.x, avail.y);
                 }
 
+                auto* draw = ImGui::GetWindowDrawList();
+                const ImVec2 end(origin.x + avail.x, origin.y + avail.y);
                 if (rhiTexID != 0) {
                     glm::vec2 uv0 = m_RHIViewport->GetUV0();
                     glm::vec2 uv1 = m_RHIViewport->GetUV1();
-                    ImGui::Image((ImTextureID)(intptr_t)rhiTexID, avail, ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
+                    draw->AddImage((ImTextureID)(intptr_t)rhiTexID, origin, end, ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
                 } else if (m_Framebuffer && m_Framebuffer->GetColorAttachmentRendererID() != 0) {
                     ImTextureID texID = (ImTextureID)(intptr_t)m_Framebuffer->GetColorAttachmentRendererID();
-                    ImGui::Image(texID, avail, ImVec2(0, 1), ImVec2(1, 0));
+                    draw->AddImage(texID, origin, end, ImVec2(0, 1), ImVec2(1, 0));
                 } else {
                     ImVec2 p0 = ImGui::GetCursorScreenPos();
                     ImVec2 p1 = ImVec2(p0.x + avail.x, p0.y + avail.y);
@@ -1737,16 +1739,23 @@ namespace Axle {
                     ImVec2 txtSize = ImGui::CalcTextSize(txt);
                     ImVec2 txtPos = ImVec2(p0.x + (avail.x - txtSize.x) * 0.5f, p0.y + 12.0f);
                     drawList->AddText(txtPos, IM_COL32(100, 200, 255, 255), txt);
-                    ImGui::InvisibleButton("Preview", avail);
                 }
 
+                // Own preview drags so ImGui does not treat the image as window background.
+                // Use the same input surface for both renderers and the unavailable fallback.
+                ImGui::InvisibleButton("##PreviewInput", avail, ImGuiButtonFlags_MouseButtonLeft
+                    | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
                 m_ViewportHovered = ImGui::IsItemHovered();
                 m_ViewportFocused = ImGui::IsItemFocused();
+                if (ImGui::IsItemActivated()) {
+                    for (int button = 0; button < 3; ++button) {
+                        if (ImGui::IsMouseClicked(button)) { m_PreviewDragButton = button; break; }
+                    }
+                }
+                if (!ImGui::IsItemActive()) m_PreviewDragButton = -1;
 
                 auto& io = ImGui::GetIO();
                 if (m_ViewportHovered) {
-                    for (int button = 0; button < 3; ++button)
-                        if (ImGui::IsMouseClicked(button)) m_PreviewDragButton = button;
                     if (io.MouseWheel != 0) m_CameraDistance = glm::clamp(m_CameraDistance * std::pow(0.9f, io.MouseWheel), 0.1f, 500.0f);
                     if (ImGui::IsKeyPressed(ImGuiKey_F) && !io.WantTextInput) FramePreview();
                 }
@@ -1762,7 +1771,6 @@ namespace Axle {
                         m_CameraTarget += (-glm::vec3(inverseView[0]) * io.MouseDelta.x + glm::vec3(inverseView[1]) * io.MouseDelta.y) * unitsPerPixel;
                     }
                 }
-                auto* draw = ImGui::GetWindowDrawList();
                 if (m_ShowBounds) {
                     glm::vec3 minimum, maximum;
                     if (GetPreviewBounds(minimum, maximum)) {

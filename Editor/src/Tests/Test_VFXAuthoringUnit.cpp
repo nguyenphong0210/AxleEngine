@@ -215,6 +215,78 @@ namespace {
         return true;
     }
 
+    bool TestPreviewMouseCaptureWithoutGPU() {
+        auto* previous = ImGui::GetCurrentContext();
+        auto* context = ImGui::CreateContext();
+        struct Cleanup { ImGuiContext* Context; ImGuiContext* Previous;
+            ~Cleanup() { ImGui::DestroyContext(Context); ImGui::SetCurrentContext(Previous); }
+        } cleanup{context, previous};
+        auto& io = ImGui::GetIO();
+        io.IniFilename = nullptr; io.LogFilename = nullptr;
+        io.DisplaySize = ImVec2(1600, 1000);
+        io.ConfigWindowsMoveFromTitleBarOnly = false; // Exercise background-drag behavior.
+        io.ConfigInputTrickleEventQueue = false;
+        unsigned char* pixels; int width, height;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+        io.Fonts->SetTexID((ImTextureID)1);
+        Axle::VFXEditorPanel panel;
+        panel.SetOpen(true);
+        const auto frame = [&] {
+            io.DeltaTime = 1.0f / 60.0f;
+            ImGui::NewFrame();
+            ImGui::SetNextWindowPos(ImVec2(60, 60), ImGuiCond_Once);
+            ImGui::SetNextWindowSize(ImVec2(1280, 780), ImGuiCond_Once);
+            panel.OnImGuiRender();
+            ImGui::Render();
+        };
+        frame();
+        frame();
+        auto* editor = ImGui::FindWindowByName("VFX Editor");
+        ImGuiWindow* preview = nullptr;
+        for (auto* window : context->Windows)
+            if (std::strstr(window->Name, "VFX_Viewport_Child")) preview = window;
+        VFX_TEST_CHECK(editor && preview && preview->Active, "Preview is visible in the real Editor layout");
+        const auto origin = editor->Pos;
+        const ImVec2 inside((preview->InnerRect.Min.x + preview->InnerRect.Max.x) * 0.5f,
+                            (preview->InnerRect.Min.y + preview->InnerRect.Max.y) * 0.5f);
+        for (int button = 0; button < 3; ++button) {
+            io.AddMousePosEvent(inside.x, inside.y);
+            frame();
+            io.AddMouseButtonEvent(button, true);
+            frame();
+            const auto inputId = context->ActiveId;
+            VFX_TEST_CHECK(inputId != 0 && context->ActiveIdWindow == preview
+                           && inputId != preview->MoveId && inputId != editor->MoveId
+                           && context->MovingWindow == nullptr,
+                           "Orbit and pan buttons belong to preview, never window movement");
+            io.AddMousePosEvent(inside.x + 40, inside.y + 30);
+            frame();
+            VFX_TEST_CHECK(editor->Pos.x == origin.x && editor->Pos.y == origin.y,
+                           "Dragging inside preview does not move Editor");
+            io.AddMousePosEvent(1500, 950);
+            frame();
+            VFX_TEST_CHECK(context->ActiveId == inputId && context->MovingWindow == nullptr,
+                           "Preview owns a drag until release even outside its rectangle");
+            VFX_TEST_CHECK(editor->Pos.x == origin.x && editor->Pos.y == origin.y,
+                           "Dragging out of preview does not move Editor");
+            io.AddMouseButtonEvent(button, false);
+            frame();
+            VFX_TEST_CHECK(context->ActiveId != inputId, "Releasing outside ends preview capture");
+        }
+        io.AddMousePosEvent(origin.x + 180, origin.y + 10);
+        frame();
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+        frame();
+        io.AddMousePosEvent(origin.x + 220, origin.y + 40);
+        frame();
+        VFX_TEST_CHECK(editor->Pos.x != origin.x || editor->Pos.y != origin.y,
+                       "Editor can still be moved by dragging its title bar");
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+        frame();
+        VFX_TEST_CHECK(context->ErrorCountCurrentFrame == 0, "Preview interaction preserves ImGui invariants");
+        return true;
+    }
+
     bool TestEditorLayoutWithoutGPU() {
         using namespace Axle;
         auto* previous = ImGui::GetCurrentContext();
@@ -278,5 +350,6 @@ namespace {
 
 bool RunVFXAuthoringUnitTests() {
     return TestModulePersistenceAndHistory() && TestModuleSimulation() && TestDisabledEmissionDoesNotCatchUp()
-        && TestAuthoringCommandsAndGraph() && TestSceneAuthoringAndBounds() && TestEditorLayoutWithoutGPU();
+        && TestAuthoringCommandsAndGraph() && TestSceneAuthoringAndBounds()
+        && TestPreviewMouseCaptureWithoutGPU() && TestEditorLayoutWithoutGPU();
 }

@@ -15,6 +15,8 @@ add_library(AxleAnimation STATIC
     src/AnimationControllerCompiler.cpp
     src/AnimationResources.cpp
     src/SkeletalGeometryCodec.cpp
+    src/AnimationEditorDocument.cpp
+    src/AnimatorEditorDocument.cpp
 )
 add_library(Axle::Animation ALIAS AxleAnimation)
 

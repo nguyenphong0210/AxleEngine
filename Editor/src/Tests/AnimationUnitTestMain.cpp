@@ -1208,12 +1208,14 @@ static bool TestSceneAndAssemblyAnimationRoundTrip() {
 }
 
 bool RunAnimationCorrectionTests();
+bool RunAnimationDocumentUnitTests();
 
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure")
         return Axle::AnimationTests::Check(false, "Intentional harness failure", __FILE__, __LINE__) ? 0 : 1;
     std::cout << "Animation unit tests: device-free CPU evaluation\n";
     if (!RunAnimationCorrectionTests()) return 1;
+    if (!RunAnimationDocumentUnitTests()) return 1;
     if (!TestBaselineSampling()) return 1;
     if (!TestChildBeforeParentTopologicalOrder()) return 1;
     if (!TestMultiRootSkeleton()) return 1;

@@ -1,6 +1,8 @@
 # Phase 39 follow-up review and acceptance
 
 Date: 2026-11-02. Reviewed Gemini baseline: `1de558c` (27 commits after the handoff).
+Authoring follow-up: 2026-11-03; see the neutral workspace delivery below and the
+[authoring guide](VFX_EDITOR_AUTHORING_GUIDE.md).
 Status: corrective implementation and automated/physical backend verification complete; interactive UI/OpenGL acceptance remains open.
 
 The original commit subjects covered A1-J4, but several production paths still
@@ -233,3 +235,63 @@ Result: Release build and all four CTest entries PASS on the physical RTX 3070
 `AXLE_VFX_TEST_BACKEND=D3D12`; see `build/thumbnail-retirement-step102.log`.
 The existing LNK4098 link warning remains. The thumbnail ImGui readback and heap
 bounds checks execute as part of the D3D12 GPU fixture.
+
+## Neutral modular authoring delivery (2026-11-03)
+
+The user selected **empty effect, manually add the first emitter**. That policy
+now applies to panel New, Content Browser Create, saved effect definitions and
+inline/referenced scene components. Explicitly empty components do not synthesize
+a primary stack when initialized or copied. Default legacy component construction
+continues to support existing callers. Add uses neutral settings and Duplicate
+is an explicit operation. Fire/Smoke/Sparks/Dust/Exhaust authoring buttons and
+effect-specific gradient shortcuts have been removed; gameplay factories and
+acceptance reference assets remain available for explicit use.
+
+| Change | Production behavior and coverage |
+| --- | --- |
+| Module state | Independent Emission, Shape, Size, Speed, Color, Alpha, Rotation, Forces, Texture Sheet and Sub Emitters flags reach the actual simulation, shared codec and document history. Noise/Collision reuse their existing enable flags. Missing flags in old assets preserve prior behavior. Disabled values are retained. |
+| Initial color | Start Color is an independent white-default multiplier. Disabled Color over Lifetime uses Start Color alone; enabled color multiplies by the gradient. Both normal and inherited spawning, updates and file formats consume the property. |
+| Generic module workflow | Search/filter, independent foldouts/toggles, type-matched reset/copy/paste, complete initial rotation/forces/burst/collision/sheet controls. Renderer binding resets/pastes consistently. Reset/paste restart preview; graph-invalid paste is rejected. |
+| Document commands | Structural commands finish a property transaction first. Display/runtime names stay consistent without replacing live systems on each rename keystroke. Stable row IDs and row-wide context actions support duplicate names. |
+| Event authoring | Add Link requires an existing authored child. Target selection/paste reject missing/self/cyclic references before publication; the former hardcoded Sparks fallback is gone. |
+| Workspace | Resizable wide columns, compact tabs, wrapping transport, editable manual Emit count, configurable background/grid/live bounds, transformed billboard framing and two-axis camera pan. Preview settings remain transient. |
+| Open/save/close | Project effect search, editable project-derived destination, reachable root-level dialogs even with Effect hidden, failed-save diagnostics and guarded dirty close. Tests render wide/narrow ImGui frames with all module bodies open and require zero ImGui errors. |
+| Scene transfer | Public/tested creation and Apply paths validate complete definitions and honor chosen placement and authored autoplay. Clean saved effects create references; edited/unsaved effects and explicit Apply use inline data. Preview/scene systems remain independent. |
+
+The eighth CPU suite, `Test_VFXAuthoringUnit.cpp`, covers these paths alongside
+existing persistence/playback/graph/render-planning suites. It checks dormant
+scene instances with Play on Awake disabled and their subsequent explicit Play.
+Temporary test files are isolated from the project's authored assets.
+
+The D3D12 GPU fixture now constructs the **actual VFXEditorPanel**, initializes
+its production viewport/private scene, renders full workspace ImGui draw data
+into an RHI target and reads back its viewport. Empty -> neutral red emitter ->
+empty changes visible red-pixel coverage as expected. Region coverage is used
+instead of a single center pixel because the reference grid crosses the emitter's
+origin. The fixture writes `build/vfx-captures/d3d12/vfx-editor-workspace.ppm`;
+its full workspace capture was visually inspected. Vulkan continues to run the
+physical particle renderer/asset/scene acceptance fixture. Native VFX window
+mouse/keyboard interaction and a separate OpenGL session remain **NOT RUN**.
+
+Verification commands:
+
+```powershell
+cmake --build build --config Release --target AxleVFXUnitTests AxleVFXGPUTests AxleEditor AxleTests --parallel 12
+ctest --test-dir build -C Release --output-on-failure
+$env:AXLE_VFX_TEST_BACKEND = 'D3D12'
+& build/Editor/Release/AxleTests.exe --step102
+```
+
+Evidence logs: `build/vfx-authoring-verified-build.log`,
+`build/vfx-authoring-verified-tests.log` and
+`build/vfx-authoring-verified-step102.log`. Release Editor/Runtime/test builds,
+all four CTest entries and Step 102 pass on the physical RTX 3070. Existing
+LNK4098 and APIENTRY redefinition warnings are not introduced by this delivery.
+A transient Runtime post-build asset-directory copy failure was resolved by
+retrying the directory copy and rebuilding; the final full build passes.
+
+The [authoring guide](VFX_EDITOR_AUTHORING_GUIDE.md) records supported operations
+and the remaining capability backlog. Trails/ribbons, mesh-particle output,
+rate-over-distance/prewarm/richer axis controls and GPU graph simulation are not
+claimed by these changes. Phase 39 remains open for J4 interactive/OpenGL checks;
+this is not a claim of complete Unity feature parity.

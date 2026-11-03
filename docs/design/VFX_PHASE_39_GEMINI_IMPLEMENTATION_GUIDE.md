@@ -332,8 +332,10 @@ Missing assets retain their authored paths and produce resource diagnostics;
 they are different from malformed effect data. Reject nonfinite/invalid ranges,
 unknown enum values in v2 and unsupported future schema versions. Define limits
 for input sizes, counts, empty effects and graph edges before allocating pools.
-Make runtime/editor policies for empty effects consistent; an editor New command
-can start with one default emitter without making every empty asset valid.
+The accepted authoring policy is an empty effect: New and Content Browser Create
+contain zero emitters, and the user adds a neutral emitter explicitly. Empty
+assets and inline scenes are valid; runtime initialization must not synthesize
+a primary emitter for an explicitly empty definition. See VFX_EDITOR_AUTHORING_GUIDE.md.
 
 Legacy APIs cannot silently truncate a v2 effect to its first emitter. Keep v1
 helpers for v1 callers, introduce full-effect APIs, migrate actual consumers and

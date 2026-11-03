@@ -671,7 +671,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
       - [ ] Verify camera/lights stay fixed during the intended preview object rotation.
 
 - [ ] **Phase 39: Visual Particle & VFX Studio - End-to-End Editor Completion (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Editor`)**
-  - **Status (2026-11-02): Gemini's A1-J4 delivery received a corrective integration review. CPU tests and physical DX12/Vulkan rendering checks PASS on NVIDIA GeForce RTX 3070. Interactive editor acceptance and a separate OpenGL regression session remain pending; Phase 39 stays OPEN. Phase 40 planning and its scoped Gemini implementation handoff are tracked separately; they do not close these remaining checks.**
+  - **Status (2026-11-03): Gemini's A1-J4 delivery received a corrective integration review and a neutral modular authoring upgrade. CPU tests and physical DX12/Vulkan rendering checks PASS on NVIDIA GeForce RTX 3070. Interactive editor acceptance and a separate OpenGL regression session remain pending; Phase 39 stays OPEN. Phase 40 planning and its scoped Gemini implementation handoff are tracked separately; they do not close these remaining checks.**
   - **Current evidence**: [Review and Acceptance Report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md). Commit subjects and historical checklist marks alone are not acceptance evidence.
   - **Scope/design**: [Completion Plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md) and [Gemini Implementation Guide](docs/design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md). Proposed type names in the guide are blueprints; use actual source names below.
   - [x] **A - Selection, Ownership & Lifecycle (code/automated coverage)**:
@@ -708,10 +708,19 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [x] **I1**: OBJ triangle-area CDF sampling, runtime mesh-path binding and defined missing/degenerate geometry fallback.
     - [x] **I2**: Authored floor/planes/boxes and their controls, actual Jolt service binding with hit normals, and world-space collision resolution for local particles.
   - [ ] **J - Layered Acceptance**:
-    - [x] **J1**: Seven always-active CPU suites in `AxleVFXUnitTests`; temporary fixtures never overwrite project VFX assets.
+    - [x] **J1**: Eight always-active CPU suites in `AxleVFXUnitTests`; temporary fixtures never overwrite project VFX assets.
     - [x] **J2**: `AxleVFXGPUTests` executes real offscreen rendering/readback on physical DX12 and Vulkan with fallback disabled. CTest registration is opt-in through `AXLE_ENABLE_VFX_GPU_TESTS=ON`; Step 102 propagates GPU failures.
     - [x] **J3**: Checked-in Campfire, CollisionSparks and VehicleBackfire effects load, render and reproduce their seeded pixels through production save/reopen adapters on both backends.
     - [ ] **J4**: Complete interactive editor acceptance and record a separate OpenGL regression result. Automated readbacks do not substitute for these checks.
+  - [x] **K - Neutral Modular Authoring (2026-11-03; automated coverage)**:
+    - [x] New/Content Browser effects start empty; Add uses a neutral emitter, Duplicate is explicit, and deleting the last emitter remains valid through asset/scene round trips.
+    - [x] Independent persisted Emission/Shape/Size/Speed/Color/Alpha/Rotation/Forces/Sub Emitters/Texture Sheet switches affect actual simulation. Old assets retain legacy behavior; inactive settings survive serialization/history. Start Color is independent of the lifetime gradient.
+    - [x] Searchable module groups, enabled-only filter, type-matched Reset/Copy/Paste, generic gradient actions and controls for initial rotation, acceleration, burst scheduling, minimum bounce speed and complete flipbook settings.
+    - [x] Stable row identities/context actions, graph-safe authored target selection, property-versus-structural undo boundaries, project effect search and tab-independent unsaved dialogs.
+    - [x] Resizable wide columns and compact tabs; editable Emit count, background/grid/live-bounds settings, conservative transformed framing and two-axis camera pan.
+    - [x] Tested scene instance placement, clean saved references versus inline working copies, validated explicit Apply and independent simulation ownership.
+    - [x] CPU ImGui wide/narrow layout and hidden-Effect-tab dirty-dialog checks; actual D3D12 panel/preview readbacks and an exported workspace capture. Native input and OpenGL acceptance remain in J4.
+    - **Usage and remaining capability backlog**: [VFX Editor Authoring Guide](docs/design/VFX_EDITOR_AUTHORING_GUIDE.md). This delivery does not claim full Unity Particle System or VFX Graph parity.
   - **Verified commands/evidence**:
     - [x] Build `AxleVFXUnitTests`, `AxleVFXGPUTests`, `AxleTests` and `AxleMaterialUnitTests` in Release; dependencies build `AxleEditor` and `AxleRuntime`.
     - [x] `ctest --test-dir build -C Release --output-on-failure`: Material CPU, VFX CPU, VFX GPU D3D12 and VFX GPU Vulkan pass.

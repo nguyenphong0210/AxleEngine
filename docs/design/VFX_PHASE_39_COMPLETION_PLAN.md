@@ -1,7 +1,13 @@
 # Phase 39: VFX Editor Completion Plan
 
 Status: **corrective implementation delivered; interactive editor/OpenGL acceptance remains open**.
-Reviewed: 2026-11-02.
+Reviewed: 2026-11-03.
+
+The subsequent neutral modular authoring delivery is documented in the
+[VFX Editor Authoring Guide](VFX_EDITOR_AUTHORING_GUIDE.md): new effects start
+empty, optional modules have persisted runtime enable states, and the workspace
+has adaptive layout and explicit preview/scene workflows. This supersedes any
+earlier default-emitter/preset assumptions in historical implementation notes.
 
 This plan replaces the earlier interpretation that a three-column panel and
 passing Step 102 establish a completed VFX editor. Existing simulation and UI

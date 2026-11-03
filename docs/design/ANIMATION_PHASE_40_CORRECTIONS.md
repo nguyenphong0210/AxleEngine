@@ -23,6 +23,8 @@ Full Phase 40 rendering/editor acceptance remains separate.
 
 | A2 FBX hardening | Separate CPU importer preserves helper ancestors and cluster indices, triangulates face corners with source normals/UV seams and material partitions, selects the strongest four influences and validates before publication. Canonical bind-basis conversion compensates inverse binds and transforms positions/normals/winding together. Missing, ambiguous, oversized or unsupported skin contracts fail with diagnostics and retain previous outputs. Two authored FBX fixtures verify keyed poses and reflected source axes. Release Animation CTests PASS; `build/animation-fix-fbx-build.log`, `build/animation-fix-fbx-ctest.log`. FBX curves use an explicit bounded 30 Hz linear TRS resampling policy; adaptive/error-bounded curve baking and a broader exporter corpus remain pending, so A2 acceptance is not closed by these fixtures alone. |
 
+| R3 component integration | Component accessors now read the animator's canonical slots, persist one override per declared ID, synchronize conventional caches when called by ID, reject wrong-type/nonfinite writes, and expose authored values before binding. Old aliases load deterministically with ID precedence. Opaque-clone diagnostics prevent silently saving a lost controller. Permanent component/save/reopen tests PASS; `build/animation-fix-component-build.log`, `build/animation-fix-component-ctest.log`. |
+
 Other review findings remain open until a correction row and its evidence are
 added here. The original review documents the pre-fix behavior, not the current
 acceptance result.

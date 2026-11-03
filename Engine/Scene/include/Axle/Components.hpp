@@ -29,6 +29,7 @@
 #include <vector>
 #include <memory>
 #include <algorithm>
+#include <cmath>
 #include <Axle/RHI/RHIMaterial.hpp>
 
 namespace Axle {
@@ -1438,42 +1439,54 @@ namespace Axle {
         AnimatorComponent& operator=(AnimatorComponent&&) noexcept = default;
 
         void SetFloat(const std::string& name, float value) {
-            if (name == "Speed") Speed = value;
-            if (name == "VerticalVelocity") VerticalVelocity = value;
-            FloatOverrides[name] = value;
-            if (AnimatorInstance) {
-                AnimatorInstance->SetFloat(name, value);
-            }
+            const auto* parameter = AnimatorInstance ? AnimatorInstance->GetParameterDeclaration(name) : nullptr;
+            if (!std::isfinite(value) || (parameter && parameter->Type != AnimatorParameterType::Float)) return;
+            const auto& displayName = parameter ? parameter->Name : name;
+            if (displayName == "Speed") Speed = value;
+            if (displayName == "VerticalVelocity") VerticalVelocity = value;
+            if (parameter) FloatOverrides.erase(parameter->Name);
+            FloatOverrides[parameter ? parameter->Id : name] = value;
+            if (AnimatorInstance) AnimatorInstance->SetFloat(name, value);
         }
 
         float GetFloat(const std::string& name, float defaultVal = 0.0f) const {
+            if (AnimatorInstance) return AnimatorInstance->GetFloat(name, defaultVal);
+            const auto it = FloatOverrides.find(name);
+            if (it != FloatOverrides.end()) return it->second;
             if (name == "Speed") return Speed;
             if (name == "VerticalVelocity") return VerticalVelocity;
-            return AnimatorInstance ? AnimatorInstance->GetFloat(name, defaultVal) : defaultVal;
+            return defaultVal;
         }
 
         void SetInt(const std::string& name, int32_t value) {
-            IntOverrides[name] = value;
-            if (AnimatorInstance) {
-                AnimatorInstance->SetInt(name, value);
-            }
+            const auto* parameter = AnimatorInstance ? AnimatorInstance->GetParameterDeclaration(name) : nullptr;
+            if (parameter && parameter->Type != AnimatorParameterType::Int) return;
+            if (parameter) IntOverrides.erase(parameter->Name);
+            IntOverrides[parameter ? parameter->Id : name] = value;
+            if (AnimatorInstance) AnimatorInstance->SetInt(name, value);
         }
 
         int32_t GetInt(const std::string& name, int32_t defaultVal = 0) const {
-            return AnimatorInstance ? AnimatorInstance->GetInt(name, defaultVal) : defaultVal;
+            if (AnimatorInstance) return AnimatorInstance->GetInt(name, defaultVal);
+            const auto it = IntOverrides.find(name);
+            return it != IntOverrides.end() ? it->second : defaultVal;
         }
 
         void SetBool(const std::string& name, bool value) {
-            if (name == "IsGrounded") IsGrounded = value;
-            BoolOverrides[name] = value;
-            if (AnimatorInstance) {
-                AnimatorInstance->SetBool(name, value);
-            }
+            const auto* parameter = AnimatorInstance ? AnimatorInstance->GetParameterDeclaration(name) : nullptr;
+            if (parameter && parameter->Type != AnimatorParameterType::Bool) return;
+            if ((parameter ? parameter->Name : name) == "IsGrounded") IsGrounded = value;
+            if (parameter) BoolOverrides.erase(parameter->Name);
+            BoolOverrides[parameter ? parameter->Id : name] = value;
+            if (AnimatorInstance) AnimatorInstance->SetBool(name, value);
         }
 
         bool GetBool(const std::string& name, bool defaultVal = false) const {
+            if (AnimatorInstance) return AnimatorInstance->GetBool(name, defaultVal);
+            const auto it = BoolOverrides.find(name);
+            if (it != BoolOverrides.end()) return it->second;
             if (name == "IsGrounded") return IsGrounded;
-            return AnimatorInstance ? AnimatorInstance->GetBool(name, defaultVal) : defaultVal;
+            return defaultVal;
         }
 
         void SetTrigger(const std::string& name) {

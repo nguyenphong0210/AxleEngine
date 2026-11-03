@@ -39,6 +39,15 @@ bool RunAnimationSceneCorrectionTests() {
     auto& component = entity.AddComponent<AnimatorComponent>(); component.AnimatorInstance = std::make_shared<Animator>(rig);
     component.AnimatorInstance->SetStateMachine(machine); component.FloatOverrides["speed-id"] = 0.25f;
     component.ControllerPath = "missing-controller.axleasset";
+    component.SetFloat("speed-id",0.3f);
+    ANIMATION_CHECK(component.GetFloat("Speed") == 0.3f && component.Speed == 0.3f, "Component stable-ID writes update name reads and conventional cache");
+    component.SetBool("speed-id",false);
+    ANIMATION_CHECK(component.BoolOverrides.empty(), "Wrong-type component writes never enter serialized overrides");
+    component.FloatOverrides["Speed"] = 0.75f;
+    component.FloatOverrides["speed-id"] = 0.25f;
+    component.Speed = 0;
+    AnimatorComponent unbound; unbound.SetInt("Count",7);
+    ANIMATION_CHECK(unbound.GetInt("Count") == 7, "Unbound authored typed overrides remain readable");
     SceneSerializer serializer(scene.get());
     const auto path = scratch.Path / "scene.axle";
     ANIMATION_CHECK(serializer.Serialize(path), "Custom keyed mesh/controller saves without source files");

@@ -3,6 +3,7 @@
 #include <Axle/AnimationAssetCodec.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/SkeletalMeshImporter.hpp>
+#include <type_traits>
 
 namespace Axle {
 bool CaptureAnimationBinding(const SkeletalMeshComponent* mesh, const AnimatorComponent* animator,
@@ -19,6 +20,10 @@ bool CaptureAnimationBinding(const SkeletalMeshComponent* mesh, const AnimatorCo
         }
     }
     if (animator) {
+        if (!animator->AnimatorInstance && !animator->BindingDiagnostic.empty()) {
+            if (diagnostic) *diagnostic = animator->BindingDiagnostic;
+            return false;
+        }
         // Runtime authoring edits supersede any older serialized snapshot.
         if (animator->AnimatorInstance && animator->AnimatorInstance->GetStateMachine()) {
             auto definition = AnimationAssetCodec::ExtractDefinitionFromStateMachine(
@@ -84,10 +89,26 @@ bool ResolveAnimationBinding(SkeletalMeshComponent* mesh, AnimatorComponent* com
         animator.SetFloat("Speed", ac.Speed);
         animator.SetBool("IsGrounded", ac.IsGrounded);
         animator.SetFloat("VerticalVelocity", ac.VerticalVelocity);
-        // Stable-ID overrides have precedence over legacy conventional names.
-        for (const auto& [p,v] : ac.FloatOverrides) animator.SetFloat(p,v);
-        for (const auto& [p,v] : ac.IntOverrides) animator.SetInt(p,v);
-        for (const auto& [p,v] : ac.BoolOverrides) animator.SetBool(p,v);
+        // Canonicalize old name-keyed overrides first, then let explicit IDs win.
+        const auto apply = [&](const auto& values, AnimatorParameterType type, auto setter) {
+            for (const auto& [key,value] : values) {
+                const auto* declaration = animator.GetParameterDeclaration(key);
+                if (declaration && declaration->Type != type) {
+                    ac.BindingDiagnostic = "Wrong parameter override type: " + key; return false;
+                }
+                if constexpr (std::is_same_v<std::decay_t<decltype(value)>,float>)
+                    if (!std::isfinite(value)) { ac.BindingDiagnostic = "Nonfinite parameter override: " + key; return false; }
+            }
+            for (int stableId = 0; stableId < 2; ++stableId) for (const auto& [key,value] : values) {
+                const auto* declaration = animator.GetParameterDeclaration(key);
+                if (bool(declaration && declaration->Id == key) == bool(stableId)) (ac.*setter)(key,value);
+            }
+            return true;
+        };
+        const auto floats = ac.FloatOverrides; const auto ints = ac.IntOverrides; const auto bools = ac.BoolOverrides;
+        if (!apply(floats,AnimatorParameterType::Float,&AnimatorComponent::SetFloat) ||
+            !apply(ints,AnimatorParameterType::Int,&AnimatorComponent::SetInt) ||
+            !apply(bools,AnimatorParameterType::Bool,&AnimatorComponent::SetBool)) return false;
         animator.Update(0);
     }
     return success;

@@ -72,6 +72,41 @@ namespace Axle {
         }
     }
 
+    bool SkeletalMeshData::Validate(std::string* diagnostic) const {
+        auto fail = [&](const char* text) { if (diagnostic) *diagnostic = text; return false; };
+        if (Vertices.empty() || Vertices.size() > 10000000 || Indices.empty() || Indices.size() > 30000000 || Indices.size() % 3)
+            return fail("Invalid geometry vertex/triangle counts");
+        if (SkeletonRef && (!SkeletonRef->IsValid() || SkeletonRef->GetBoneCount() > 128)) return fail("Invalid or oversized rig");
+        for (auto index : Indices) if (index >= Vertices.size()) return fail("Geometry index exceeds vertex count");
+        const size_t bones = SkeletonRef ? SkeletonRef->GetBoneCount() : 128;
+        for (const auto& vertex : Vertices) {
+            for (int axis = 0; axis < 3; ++axis)
+                if (!std::isfinite(vertex.Position[axis]) || !std::isfinite(vertex.Normal[axis])) return fail("Nonfinite vertex attributes");
+            if (!std::isfinite(vertex.TexCoords.x) || !std::isfinite(vertex.TexCoords.y) || glm::length(vertex.Normal) < 1e-6f)
+                return fail("Invalid UVs or zero normal");
+            float sum = 0;
+            for (int i = 0; i < 4; ++i) {
+                const auto id = vertex.BoneIDs[i]; const float weight = vertex.Weights[i];
+                if (!std::isfinite(weight) || weight < 0 || id < -1 || (id == -1 && weight != 0) || (id >= 0 && size_t(id) >= bones))
+                    return fail("Invalid vertex joint or weight");
+                for (int j = 0; j < i; ++j) if (weight > 0 && vertex.Weights[j] > 0 && id == vertex.BoneIDs[j]) return fail("Duplicate vertex joint influence");
+                sum += weight;
+            }
+            if (std::abs(sum - 1) > 1e-4f) return fail("Vertex weights are not normalized");
+        }
+        if (!Submeshes.empty()) {
+            uint64_t cursor = 0;
+            for (const auto& range : Submeshes) {
+                if (range.FirstIndex != cursor || range.IndexCount == 0 || range.IndexCount % 3 ||
+                    uint64_t(range.FirstIndex) + range.IndexCount > Indices.size() || range.MaterialSlot >= MaterialSlots.size())
+                    return fail("Invalid submesh partition or material slot");
+                cursor += range.IndexCount;
+            }
+            if (cursor != Indices.size()) return fail("Submeshes do not cover geometry");
+        }
+        return true;
+    }
+
     SkeletalMesh::SkeletalMesh(SkeletalMeshData meshData)
         : m_Data(std::move(meshData)) {
         m_Data.Normalize(m_Data.SkeletonRef ? m_Data.SkeletonRef->GetRootBoneIndex() : 0);

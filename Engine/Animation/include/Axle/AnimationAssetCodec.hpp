@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <span>
 
 namespace Axle {
 
@@ -50,6 +51,12 @@ namespace Axle {
         // --- Hex String Utilities ---
         static std::string HexEncode(const std::string& input);
         static std::string HexDecode(const std::string& hex);
+
+        static bool EncodeGeometry(const SkeletalMeshData& data, const std::string& signature,
+                                   std::vector<uint8_t>& bytes, std::string* diagnostic = nullptr);
+        static bool DecodeGeometry(std::span<const uint8_t> bytes, SkeletalMeshData& data,
+                                   std::string* signature = nullptr, std::string* diagnostic = nullptr,
+                                   const std::string& expectedSignature = "");
 
         // --- Binary Cooked Geometry Baking & Loading ---
         static bool BakeSkeletalMeshGeometry(const std::string& binaryPath, const SkeletalMeshData& data, const std::string& skeletonSignature, std::string* outError = nullptr);

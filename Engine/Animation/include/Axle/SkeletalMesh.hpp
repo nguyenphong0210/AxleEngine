@@ -20,11 +20,19 @@ namespace Axle {
         void NormalizeWeights(int rootBoneIndex = 0);
     };
 
+    struct SkeletalSubmesh {
+        uint32_t FirstIndex = 0, IndexCount = 0, MaterialSlot = 0;
+    };
+
     struct SkeletalMeshData {
         std::string Name;
         std::vector<SkeletalVertex> Vertices;
         std::vector<u32> Indices;
         std::shared_ptr<Skeleton> SkeletonRef;
+        std::vector<SkeletalSubmesh> Submeshes;
+        std::vector<std::string> MaterialSlots;
+        glm::vec3 BoundsMin{0}, BoundsMax{0};
+        bool Validate(std::string* diagnostic = nullptr) const;
 
         void Normalize(int rootBoneIndex = 0);
     };

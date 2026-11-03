@@ -13,6 +13,8 @@ Full Phase 40 rendering/editor acceptance remains separate.
 
 | R2 / rig validation | Skeleton text now preserves local matrices and inverse binds; missing binds require reimport rather than silent identity fallback. All decoders publish only validated candidates. Compatibility signatures include the complete bind basis. Pose mixing rejects incompatible rigs/nonfinite values; failed channel edits retain last-good data. Release Animation CTests PASS; `build/animation-fix-bind-codecs-build.log`. |
 
+| R8 | A validated, explicit little-endian v2 geometry codec retains submesh/material partitions and bounds; v1 remains readable. Both bake/load reject malformed indices, joints, weights, attributes, counts and bounds; decode accepts an expected rig signature and retains last-good output. Permanent valid-sized-corruption and metadata tests PASS; `build/animation-fix-geometry-build.log`. |
+
 Other review findings remain open until a correction row and its evidence are
 added here. The original review documents the pre-fix behavior, not the current
 acceptance result.

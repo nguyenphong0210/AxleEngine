@@ -45,4 +45,30 @@ static bool TestLosslessBindAndInvalidOutputs() {
     return true;
 }
 
-bool RunAnimationAssetCorrectionTests() { return TestLosslessBindAndInvalidOutputs(); }
+static bool TestGeometryValidation() {
+    using namespace Axle;
+    SkeletalMeshData data; data.Name = "Triangle";
+    data.Vertices.resize(3); data.Vertices[1].Position.x = 1; data.Vertices[2].Position.y = 1;
+    for (auto& vertex : data.Vertices) { vertex.BoneIDs[0] = 0; vertex.Weights[0] = 1; }
+    data.Indices = {0, 1, 2}; data.MaterialSlots = {"paint"}; data.Submeshes = {{0, 3, 0}};
+    std::vector<uint8_t> bytes; std::string error, signature;
+    ANIMATION_CHECK(AnimationAssetCodec::EncodeGeometry(data, "rig", bytes, &error), "Encode explicit geometry layout");
+    SkeletalMeshData output;
+    ANIMATION_CHECK(AnimationAssetCodec::DecodeGeometry(bytes, output, &signature, &error, "rig"), "Decode validated geometry");
+    ANIMATION_CHECK(output.Submeshes.size() == 1 && output.MaterialSlots[0] == "paint", "Submesh and material identity round trip");
+    ANIMATION_CHECK(!AnimationAssetCodec::DecodeGeometry(bytes, output, nullptr, &error, "another-rig"), "Mismatched skeleton signature rejected");
+    auto corrupted = bytes;
+    const size_t indexOffset = 8 + 4 + 3 + 4 + data.Name.size() + 16 + 24 + data.Vertices.size() * 64;
+    corrupted[indexOffset + 4] = 9;
+    ANIMATION_CHECK(!AnimationAssetCodec::DecodeGeometry(corrupted, output, nullptr, &error), "Valid-sized payload with out-of-range index rejected");
+    ANIMATION_CHECK(output.Indices == data.Indices && output.Name == data.Name, "Failed payload retains last good output");
+    corrupted = bytes; corrupted.pop_back();
+    ANIMATION_CHECK(!AnimationAssetCodec::DecodeGeometry(corrupted, output), "Truncated metadata rejected");
+    data.Indices[1] = 9;
+    ANIMATION_CHECK(!AnimationAssetCodec::EncodeGeometry(data, "rig", bytes), "Invalid geometry rejected before baking");
+    data.Indices[1] = 1; data.Vertices[0].Position.x = std::numeric_limits<float>::quiet_NaN();
+    ANIMATION_CHECK(!AnimationAssetCodec::EncodeGeometry(data, "rig", bytes), "Nonfinite geometry rejected before baking");
+    return true;
+}
+
+bool RunAnimationAssetCorrectionTests() { return TestLosslessBindAndInvalidOutputs() && TestGeometryValidation(); }

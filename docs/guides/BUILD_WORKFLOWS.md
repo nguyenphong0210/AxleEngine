@@ -35,7 +35,7 @@ An explicit project's configured start scene still opens. A missing asset folder
 stays associated with that project; it never falls back to another project.
 The CLI cooker likewise requires an explicit `--project` argument.
 
-For an automated initialization/shutdown check (no interactive frame loop):
+For an automated five-frame startup check (real update/UI/render loop):
 
 ```powershell
 ./build/Editor/Release/AxleEditor.exe --verify-empty-startup --rhi=dx12
@@ -134,3 +134,19 @@ Local evidence is in ignored `build/empty-verification-build.log`,
 `build/empty-startup-{dx12,vulkan,opengl}.log`. Debug builds, full legacy interactive
 suites and manual project-dialog interaction were not run for this change.
 Existing MSVC `APIENTRY` macro and CRT link warnings remain outside this change.
+
+### Follow-up: passive UI Library creation fixed (2026-11-03)
+
+The initial initialization-only check missed UI Library's unconditional
+`GetOrCreateCanvasEntity()` during drawing: the first UI frame added a `UICanvas`
+to an otherwise empty scene. Canvas creation now happens only in explicit widget
+creation/drop actions. The panel's passive drawing/searching does not modify the
+scene; deleting a canvas does not cause it to reappear.
+
+`ProjectStartupTests` now renders the real panel in a headless ImGui context across
+multiple frames and checks explicit widget creation and post-deletion behavior.
+`--verify-empty-startup` now runs the real application loop for five UI frames and
+checks emptiness after the Editor's UI each frame. The updated Release Editor
+passed this check on D3D12, Vulkan and OpenGL (exit 0, 0 entities/0 assets), with
+logs in `build/canvas-frames-{dx12,vulkan,opengl}.log`. The initial checks above
+remain historical initialization evidence. Manual UI interaction was not tested.

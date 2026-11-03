@@ -30,6 +30,9 @@ interactive `AxleTests.exe` remains separately invoked and is not registered as
 a full unattended CTest suite.
 
 `ProjectStartupTests` checks fresh untitled projects, authoritative missing asset
-roots, Save As asset preservation and explicit project opening. Native Editor
-initialization can be checked separately with `--verify-empty-startup`; this does
-not certify rendered frames or UI interaction.
+roots, Save As asset preservation and explicit project opening. A headless ImGui
+regression renders the visible UI Library across multiple frames, checks that a
+deleted canvas stays deleted, and verifies explicit canvas/widget creation. Native Editor
+startup can be checked separately with `--verify-empty-startup`; it runs five
+real update/UI frames and checks for unintended scene/asset creation after each
+UI frame. It does not certify manual UI interaction or visual rendering quality.

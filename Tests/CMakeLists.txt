@@ -174,7 +174,7 @@ set_tests_properties(AnimationHarnessFailure PROPERTIES WILL_FAIL TRUE)
 
 add_executable(AxleProjectUnitTests EXCLUDE_FROM_ALL src/Test_ProjectStartup.cpp)
 target_include_directories(AxleProjectUnitTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src")
-target_link_libraries(AxleProjectUnitTests PRIVATE Axle::Project Axle::Scene)
+target_link_libraries(AxleProjectUnitTests PRIVATE Axle::Project Axle::Scene Axle::UI)
 add_test(NAME ProjectStartupTests COMMAND $<TARGET_FILE:AxleProjectUnitTests>)
 
 # Explicit developer/test build. Neither this target nor its executables are in ALL.

@@ -3,6 +3,8 @@
 #include <Axle/Scene.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/UUID.hpp>
+#include <Axle/UIPalettePanel.hpp>
+#include <imgui.h>
 #include <fstream>
 #include <iostream>
 
@@ -46,6 +48,36 @@ int main() {
     CHECK(loaded && loaded->GetConfig().StartScene.empty(), "Only an explicit project is loaded");
     Axle::Scene emptyScene;
     CHECK(emptyScene.GetRegistry().view<Axle::TagComponent>().empty(), "An empty authored scene has no injected camera, light or vehicle");
+    // Drawing the actual authoring panel is passive, including after canvas deletion.
+    auto* context = ImGui::CreateContext();
+    auto& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.DisplaySize = ImVec2(800, 600);
+    io.DeltaTime = 1.0f / 60.0f;
+    unsigned char* pixels = nullptr;
+    int width = 0, height = 0;
+    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+    io.Fonts->SetTexID((ImTextureID)1);
+    Axle::UIPalettePanel palette;
+    palette.SetContext(&emptyScene);
+    auto drawLibrary = [&] {
+        ImGui::NewFrame();
+        palette.OnImGuiRender();
+        ImGui::Render();
+    };
+    for (int frame = 0; frame < 5; ++frame) drawLibrary();
+    CHECK(emptyScene.GetRegistry().view<Axle::TagComponent>().empty(), "Visible UI Library cannot auto-create entities");
+    auto canvas = Axle::UIPalettePanel::GetOrCreateCanvasEntity(&emptyScene);
+    CHECK(canvas && canvas.HasComponent<Axle::UICanvasComponent>(), "Explicit UI authoring still creates a canvas");
+    const auto document = canvas.GetComponent<Axle::UICanvasComponent>().Document;
+    CHECK(Axle::UIPalettePanel::SpawnWidget(document.get(), Axle::UIWidgetType::Button), "Explicit widget creation still works");
+    drawLibrary();
+    CHECK(emptyScene.GetRegistry().view<Axle::TagComponent>().size() == 1, "Drawing an authored canvas adds no entities");
+    CHECK(Axle::UIPalettePanel::GetOrCreateCanvasEntity(&emptyScene) == canvas, "Explicit authoring reuses the existing canvas");
+    emptyScene.DestroyEntity(canvas);
+    for (int frame = 0; frame < 5; ++frame) drawLibrary();
+    CHECK(emptyScene.GetRegistry().view<Axle::TagComponent>().empty(), "Deleted UI canvas stays deleted while library is visible");
+    ImGui::DestroyContext(context);
     Project::SetActive(nullptr);
     Axle::FileSystem::SetAssetDirectory(workspace / "assets");
     std::filesystem::current_path(workspace);

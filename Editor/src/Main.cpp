@@ -232,12 +232,26 @@ int main(int argc, char** argv) {
             for (int i = 1; i < argc; ++i)
                 if (std::string(argv[i]) == "--verify-empty-startup") verifyEmptyStartup = true;
             if (verifyEmptyStartup) {
-                if (!requestedProject.empty() || editorLayer->GetSceneEntityCount() != 0 ||
-                    !startupProject->GetConfig().StartScene.empty() ||
-                    !std::filesystem::is_empty(Axle::Project::GetAssetDirectory()))
-                    throw std::runtime_error("Editor empty startup verification failed");
-                AXLE_INFO("Editor empty startup verification: PASS (0 entities, 0 assets, no start scene)");
-            } else app->Run();
+                // Check after the Editor's UI each frame: panels may mutate the scene.
+                struct EmptyStartupVerifier final : Axle::Layer {
+                    std::shared_ptr<EditorLayer> Editor;
+                    unsigned Frames = 0;
+                    explicit EmptyStartupVerifier(std::shared_ptr<EditorLayer> editor) : Editor(std::move(editor)) {}
+                    void OnImGuiRender() override {
+                        if (Editor->GetSceneEntityCount() != 0 ||
+                            !Axle::Project::GetActive()->GetConfig().StartScene.empty() ||
+                            !std::filesystem::is_empty(Axle::Project::GetAssetDirectory()))
+                            throw std::runtime_error("Editor empty startup verification failed after UI frame");
+                        if (++Frames == 5) {
+                            AXLE_INFO("Editor empty startup verification: PASS (0 entities, 0 assets, no start scene; 5 UI frames)");
+                            Axle::Application::Get().Close();
+                        }
+                    }
+                };
+                if (!requestedProject.empty()) throw std::runtime_error("Empty startup verification requires an untitled project");
+                app->PushLayer(std::make_shared<EmptyStartupVerifier>(editorLayer));
+            }
+            app->Run();
             AXLE_INFO("Main: Application run loop completed, now destroying app object...");
         }
 

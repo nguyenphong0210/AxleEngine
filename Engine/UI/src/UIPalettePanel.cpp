@@ -326,13 +326,6 @@ namespace Axle {
         std::string lastCategory = "";
         bool categoryOpen = true;
 
-        // Resolve active target canvas entity
-        Entity activeCanvasEntity = GetOrCreateCanvasEntity(m_Scene);
-        UIDocument* targetDoc = nullptr;
-        if (activeCanvasEntity && activeCanvasEntity.HasComponent<UICanvasComponent>()) {
-            targetDoc = activeCanvasEntity.GetComponent<UICanvasComponent>().Document.get();
-        }
-
         for (const auto& widget : widgets) {
             if (!m_Filter.PassFilter(widget.Name.c_str()) && !m_Filter.PassFilter(widget.Category.c_str())) {
                 continue;
@@ -405,8 +398,12 @@ namespace Axle {
             }
 
             // Click to spawn directly into target canvas
-            if (clicked && targetDoc) {
-                SpawnWidget(targetDoc, widget.Type);
+            if (clicked) {
+                // Drawing/searching the library must never mutate the scene.
+                Entity canvas = GetOrCreateCanvasEntity(m_Scene);
+                if (canvas && canvas.HasComponent<UICanvasComponent>()) {
+                    SpawnWidget(canvas.GetComponent<UICanvasComponent>().Document.get(), widget.Type);
+                }
             }
 
             if (ImGui::IsItemHovered()) {

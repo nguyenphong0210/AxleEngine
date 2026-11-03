@@ -20,6 +20,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <algorithm>
+#include <limits>
 
 namespace Axle {
 
@@ -50,6 +51,8 @@ namespace Axle {
     VFXEditorPanel::VFXEditorPanel() {
         m_Config = ParticleEmitterConfig::CreateNeutral();
         SyncStacksFromDocument();
+        const auto path = (FileSystem::GetAssetDirectory() / "VFX" / "NewEffect.axleasset").string();
+        strncpy_s(m_FilePath, path.c_str(), sizeof(m_FilePath) - 1);
 
         if (Window::HasActiveContext()) {
             FramebufferSpecification spec;
@@ -162,6 +165,7 @@ namespace Axle {
     }
 
     void VFXEditorPanel::NewDocument(const std::string& name) {
+        FinishEmitterEdit();
         if (m_Document.IsDirty() && !m_DiscardApproved) {
             m_PendingAction = 1;
             m_PendingPath = name;
@@ -173,6 +177,7 @@ namespace Axle {
         SyncStacksFromDocument();
     }
     bool VFXEditorPanel::OpenDocument(const std::string& filePath) {
+        FinishEmitterEdit();
         if (m_Document.IsDirty() && !m_DiscardApproved) {
             m_PendingAction = 2;
             m_PendingPath = filePath;
@@ -205,24 +210,160 @@ namespace Axle {
     void VFXEditorPanel::SelectEmitterStack(size_t index) {
         if (index >= m_EmitterStacks.size())
             return;
-        SyncCurrentStackConfig();
+        FinishEmitterEdit();
         m_SelectedStackIndex = index;
         m_Config = m_EmitterStacks[index].Config;
         m_Document.SelectEmitter(m_EmitterStacks[index].Id);
     }
     void VFXEditorPanel::AddEmitterStack(const std::string& name, const ParticleEmitterConfig& config) {
-        SyncCurrentStackConfig();
+        FinishEmitterEdit();
         m_Document.AddEmitter(name, config);
         SyncStacksFromDocument();
     }
     void VFXEditorPanel::RemoveEmitterStack(size_t index) {
         if (index >= m_EmitterStacks.size())
             return;
-        SyncCurrentStackConfig();
+        FinishEmitterEdit();
         m_Diagnostics.clear();
         if (m_Document.RemoveEmitter(m_EmitterStacks[index].Id, m_Diagnostics))
             SyncStacksFromDocument();
     }
+    void VFXEditorPanel::FinishEmitterEdit() {
+        SyncCurrentStackConfig();
+        m_Document.CommitTransaction("Edit Emitter Modules");
+    }
+
+    bool VFXEditorPanel::DuplicateEmitterStack(size_t index) {
+        if (index >= m_EmitterStacks.size()) return false;
+        FinishEmitterEdit();
+        if (m_Document.DuplicateEmitter(m_EmitterStacks[index].Id).empty()) return false;
+        SyncStacksFromDocument();
+        return true;
+    }
+
+    bool VFXEditorPanel::ReorderEmitterStack(size_t from, size_t to) {
+        FinishEmitterEdit();
+        if (!m_Document.ReorderEmitter(from, to)) return false;
+        SyncStacksFromDocument();
+        return true;
+    }
+
+    bool VFXEditorPanel::SetSubEmitterTarget(size_t linkIndex, const std::string& targetId) {
+        auto* stack = GetCurrentEmitterStack();
+        if (!stack || linkIndex > m_Config.SubEmitters.size()) return false;
+        auto candidate = m_Config;
+        if (linkIndex == candidate.SubEmitters.size())
+            candidate.SubEmitters.emplace_back(SubEmitterTrigger::Collision, targetId, 1, 1.0f);
+        else candidate.SubEmitters[linkIndex].TargetEmitterName = targetId;
+        auto effect = m_Document.GetDefinition();
+        auto* emitter = effect.FindEmitter(stack->Id);
+        if (!emitter) return false;
+        emitter->Config = candidate;
+        std::vector<std::string> errors;
+        m_Diagnostics.clear();
+        if (!effect.HasEmitter(targetId) || !ValidateSubEmitterGraph(effect, errors)) {
+            for (const auto& error : errors)
+                m_Diagnostics.push_back({VFXDiagnosticSeverity::Error, "INVALID_SUB_EMITTER", stack->Id, error});
+            if (m_Diagnostics.empty()) m_Diagnostics.push_back({VFXDiagnosticSeverity::Error,
+                "INVALID_SUB_EMITTER", stack->Id, "Choose an existing emitter in this effect."});
+            return false;
+        }
+        m_Config = std::move(candidate);
+        SyncCurrentStackConfig();
+        return true;
+    }
+
+    bool VFXEditorPanel::ApplyToSelectedEntity() {
+        if (!m_SelectedEntity || !m_SelectedEntity.HasComponent<ParticleEmitterComponent>()) return false;
+        FinishEmitterEdit();
+        std::vector<std::string> errors;
+        if (!ValidateParticleEffectDefinition(m_Document.GetDefinition(), errors)) {
+            m_Diagnostics.clear();
+            for (const auto& error : errors) m_Diagnostics.push_back({VFXDiagnosticSeverity::Error, "INVALID_EFFECT", "", error});
+            return false;
+        }
+        auto& component = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
+        component.SetEffectDefinition(m_Document.GetDefinition());
+        component.AssetPath.clear();
+        return true;
+    }
+
+    Entity VFXEditorPanel::CreateSceneInstance(const glm::vec3& position) {
+        if (!m_Scene || !std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) return {};
+        FinishEmitterEdit();
+        std::vector<std::string> errors;
+        if (!ValidateParticleEffectDefinition(m_Document.GetDefinition(), errors)) {
+            m_Diagnostics.clear();
+            for (const auto& error : errors) m_Diagnostics.push_back({VFXDiagnosticSeverity::Error, "INVALID_EFFECT", "", error});
+            return {};
+        }
+        auto entity = m_Scene->CreateEntity(m_Document.GetDefinition().Name);
+        entity.GetComponent<TransformComponent>().Translation = position;
+        auto& component = entity.AddComponent<ParticleEmitterComponent>();
+        component.SetEffectDefinition(m_Document.GetDefinition());
+        if (!m_Document.IsDirty()) component.AssetPath = m_Document.GetFilePath();
+        m_SelectedEntity = entity;
+        return entity;
+    }
+
+    bool VFXEditorPanel::GetPreviewBounds(glm::vec3& minimum, glm::vec3& maximum) const {
+        minimum = glm::vec3(std::numeric_limits<float>::max());
+        maximum = glm::vec3(std::numeric_limits<float>::lowest());
+        bool found = false;
+        for (const auto& stack : m_EmitterStacks) {
+            if (!stack.Visible || !stack.Enabled) continue;
+            const auto transform = stack.GetWorldTransform();
+            const auto* system = stack.System.get();
+            if (!system || system->GetActiveParticleCount() == 0) {
+                minimum = glm::min(minimum, transform.Translation - glm::vec3(0.1f));
+                maximum = glm::max(maximum, transform.Translation + glm::vec3(0.1f));
+                found = true;
+                continue;
+            }
+            const auto& pool = system->GetPool();
+            for (uint32_t i = 0; i < pool.GetActiveCount(); ++i) {
+                auto position = pool.GetPositions()[i];
+                auto velocity = pool.GetVelocities()[i];
+                float radius = std::abs(pool.GetSizes()[i]) * 0.5f;
+                if (stack.Config.SimulationSpace == ParticleSimulationSpace::Local) {
+                    position = transform.Translation + transform.Rotation * (position * transform.Scale);
+                    radius *= std::max({transform.Scale.x, transform.Scale.y, transform.Scale.z});
+                    velocity = transform.Rotation * (velocity * transform.Scale);
+                }
+                const float stretch = stack.Config.Orientation == ParticleOrientation::VelocityAligned
+                                          ? std::max(1.0f, glm::length(velocity) * 0.25f) : 1.0f;
+                radius *= std::sqrt(1 + stretch * stretch); // Conservative rotated quad, including velocity stretch.
+                if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(radius)) continue;
+                minimum = glm::min(minimum, position - glm::vec3(radius));
+                maximum = glm::max(maximum, position + glm::vec3(radius));
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    void VFXEditorPanel::FramePreview() {
+        glm::vec3 minimum, maximum;
+        if (!GetPreviewBounds(minimum, maximum)) {
+            m_CameraTarget = glm::vec3(0);
+            m_CameraDistance = 5;
+            return;
+        }
+        m_CameraTarget = (minimum + maximum) * 0.5f;
+        const float aspect = float(m_ViewportWidth) / float(std::max(1u, m_ViewportHeight));
+        const float halfFov = std::atan(std::tan(glm::radians(27.5f)) * std::min(1.0f, aspect));
+        m_CameraDistance = std::clamp(glm::length(maximum - minimum) * 0.6f / std::sin(halfFov), 0.5f, 500.0f);
+    }
+
+    PerspectiveCamera VFXEditorPanel::CreatePreviewCamera(float width, float height) const {
+        PerspectiveCamera camera(55.0f, std::max(1.0f, width) / std::max(1.0f, height), 0.1f, 1000.0f);
+        const float yaw = glm::radians(m_CameraYaw), pitch = glm::radians(m_CameraPitch);
+        const glm::vec3 position = m_CameraTarget + m_CameraDistance * glm::vec3(
+            std::cos(pitch) * std::sin(yaw), std::sin(pitch), std::cos(pitch) * std::cos(yaw));
+        camera.SetViewMatrix(glm::lookAt(position, m_CameraTarget, glm::vec3(0, 1, 0)), position);
+        return camera;
+    }
+
     bool VFXEditorPanel::Undo() {
         SyncCurrentStackConfig();
         m_Document.CommitTransaction("Edit Emitter Modules");
@@ -458,26 +599,13 @@ namespace Axle {
 
         m_Framebuffer->Bind();
         glViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
-        glClearColor(0.08f, 0.09f, 0.12f, 1.0f);
+        glClearColor(m_PreviewBackground.r, m_PreviewBackground.g, m_PreviewBackground.b, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        float aspect = static_cast<float>(m_ViewportWidth) / static_cast<float>(m_ViewportHeight);
-        PerspectiveCamera camera(55.0f, aspect, 0.1f, 1000.0f);
-
-        float yawRad = glm::radians(m_CameraYaw);
-        float pitchRad = glm::radians(m_CameraPitch);
-        glm::vec3 camPos;
-        camPos.x = m_CameraTarget.x + m_CameraDistance * std::cos(pitchRad) * std::sin(yawRad);
-        camPos.y = m_CameraTarget.y + m_CameraDistance * std::sin(pitchRad);
-        camPos.z = m_CameraTarget.z + m_CameraDistance * std::cos(pitchRad) * std::cos(yawRad);
-
-        glm::mat4 view = glm::lookAt(camPos, m_CameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-        camera.SetViewMatrix(view, camPos);
-
-        glm::mat4 viewProj = camera.GetViewProjectionMatrix();
+        auto camera = CreatePreviewCamera(width, height);
 
         // 1. Draw ground grid & reference axes
-        DrawGrid(viewProj);
+        DrawGrid(camera.GetViewProjectionMatrix());
 
         // 2. Render all visible emitter stacks
         if (m_ParticleRenderer) {
@@ -563,77 +691,67 @@ namespace Axle {
             m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
         }
 
-        float aspect = static_cast<float>(m_ViewportWidth) / static_cast<float>(m_ViewportHeight);
-        PerspectiveCamera camera(55.0f, aspect, 0.1f, 1000.0f);
-
-        float yawRad = glm::radians(m_CameraYaw);
-        float pitchRad = glm::radians(m_CameraPitch);
-        glm::vec3 camPos;
-        camPos.x = m_CameraTarget.x + m_CameraDistance * std::cos(pitchRad) * std::sin(yawRad);
-        camPos.y = m_CameraTarget.y + m_CameraDistance * std::sin(pitchRad);
-        camPos.z = m_CameraTarget.z + m_CameraDistance * std::cos(pitchRad) * std::cos(yawRad);
-
-        glm::mat4 view = glm::lookAt(camPos, m_CameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-        camera.SetViewMatrix(view, camPos);
+        auto camera = CreatePreviewCamera(width, height);
 
         SceneRenderSettings settings;
         settings.EnableShadows = false;
         settings.EnableSkybox = false;
         settings.EnableStudioLightLobes = false;
-        settings.ClearColor = glm::vec4(0.07f, 0.08f, 0.10f, 1.0f);
+        settings.ClearColor = m_PreviewBackground;
         m_RHISceneRenderer->RenderScene(m_PreviewScene, camera, m_RHIViewport->GetColorTexture(),
                                         m_RHIViewport->GetDepthTexture(), settings);
     }
 
-    void VFXEditorPanel::DrawEmitterStackColumn(float width, float height) {
-        ImGui::BeginChild("VFX_EmitterStack_Column", ImVec2(width, height), true);
-        {
-            std::string docTitle = m_Document.GetDefinition().Name;
-            if (m_Document.IsDirty()) docTitle += " *";
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", docTitle.c_str());
-
-            if (ImGui::Button("New", ImVec2(38, 20))) {
-                NewDocument();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Save", ImVec2(40, 20))) {
-                if (m_Document.GetFilePath().empty()) {
-                    m_FileAction = 2;
-                    ImGui::OpenPopup("Effect File");
-                } else
-                    SaveDocument();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Undo", ImVec2(40, 20))) {
-                Undo();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Redo", ImVec2(40, 20))) {
-                Redo();
-            }
-
-            if (ImGui::Button("Open...")) {
-                m_FileAction = 1;
-                ImGui::OpenPopup("Effect File");
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Save As...")) {
-                m_FileAction = 2;
+    void VFXEditorPanel::DrawDocumentDialogs() {
+            if (m_RequestFileDialog) {
+                m_RequestFileDialog = false;
+                m_EffectSearch[0] = 0;
+                m_EffectFiles.clear();
+                std::error_code error;
+                const auto root = FileSystem::GetAssetDirectory();
+                for (std::filesystem::recursive_directory_iterator it(root, std::filesystem::directory_options::skip_permission_denied, error), end;
+                     !error && it != end; it.increment(error)) {
+                    if (!it->is_regular_file(error)) continue;
+                    const auto path = it->path();
+                    const auto extension = path.extension().string();
+                    if (extension == ".axle_vfx" || (extension == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::ParticleEmitter))
+                        m_EffectFiles.push_back(path);
+                }
+                std::sort(m_EffectFiles.begin(), m_EffectFiles.end());
+                if (!m_Document.GetFilePath().empty()) strncpy_s(m_FilePath, m_Document.GetFilePath().c_str(), sizeof(m_FilePath) - 1);
                 ImGui::OpenPopup("Effect File");
             }
             if (ImGui::BeginPopup("Effect File")) {
+                ImGui::SetNextItemWidth(440);
                 ImGui::InputText("Asset path", m_FilePath, sizeof(m_FilePath));
+                if (m_FileAction == 1) {
+                    ImGui::SetNextItemWidth(440);
+                    ImGui::InputTextWithHint("##EffectSearch", "Search project effects...", m_EffectSearch, sizeof(m_EffectSearch));
+                    ImGuiTextFilter filter(m_EffectSearch);
+                    ImGui::BeginChild("Project Effects", ImVec2(440, 220), true);
+                    for (const auto& path : m_EffectFiles) {
+                        std::error_code error;
+                        const auto relative = std::filesystem::relative(path, FileSystem::GetAssetDirectory(), error);
+                        const auto label = error ? path.generic_string() : relative.generic_string();
+                        if (filter.PassFilter(label.c_str()) && ImGui::Selectable(label.c_str()))
+                            strncpy_s(m_FilePath, path.string().c_str(), sizeof(m_FilePath) - 1);
+                    }
+                    if (m_EffectFiles.empty()) ImGui::TextDisabled("No particle effect assets in this project.");
+                    ImGui::EndChild();
+                }
                 if (ImGui::Button(m_FileAction == 1 ? "Open" : "Save As")) {
                     bool ok = m_FileAction == 1 ? OpenDocument(m_FilePath) : SaveDocumentAs(m_FilePath);
                     if (ok || m_PendingAction)
                         ImGui::CloseCurrentPopup();
                 }
+                for (const auto& diagnostic : m_Diagnostics) ImGui::TextWrapped("%s", diagnostic.Message.c_str());
                 ImGui::EndPopup();
             }
             if (m_PendingAction)
                 ImGui::OpenPopup("Unsaved Effect");
             if (ImGui::BeginPopupModal("Unsaved Effect", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
                 ImGui::TextUnformatted("Save or discard the current effect before continuing.");
+                ImGui::SetNextItemWidth(440);
                 ImGui::InputText("Save path", m_FilePath, sizeof(m_FilePath));
                 auto proceed = [&]() {
                     const auto action = m_PendingAction;
@@ -666,7 +784,46 @@ namespace Axle {
                     m_PendingAction = 0;
                     ImGui::CloseCurrentPopup();
                 }
+                for (const auto& diagnostic : m_Diagnostics) ImGui::TextWrapped("%s", diagnostic.Message.c_str());
                 ImGui::EndPopup();
+            }
+    }
+
+    void VFXEditorPanel::DrawEmitterStackColumn(float width, float height) {
+        ImGui::BeginChild("VFX_EmitterStack_Column", ImVec2(width, height), true);
+        {
+            std::string docTitle = m_Document.GetDefinition().Name;
+            if (m_Document.IsDirty()) docTitle += " *";
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", docTitle.c_str());
+
+            if (ImGui::Button("New", ImVec2(38, 20))) {
+                NewDocument();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Save", ImVec2(40, 20))) {
+                if (m_Document.GetFilePath().empty()) {
+                    m_FileAction = 2;
+                    m_RequestFileDialog = true;
+                } else
+                    SaveDocument();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Undo", ImVec2(40, 20))) {
+                Undo();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Redo", ImVec2(40, 20))) {
+                Redo();
+            }
+
+            if (ImGui::Button("Open...")) {
+                m_FileAction = 1;
+                m_RequestFileDialog = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Save As...")) {
+                m_FileAction = 2;
+                m_RequestFileDialog = true;
             }
             for (const auto &diag : m_Diagnostics)
                 ImGui::TextWrapped("%s", diag.Message.c_str());
@@ -694,8 +851,8 @@ namespace Axle {
             ImGui::Spacing();
 
             for (size_t i = 0; i < m_EmitterStacks.size(); ++i) {
-                ImGui::PushID(static_cast<int>(i));
-
+                ImGui::PushID(m_EmitterStacks[i].Id.c_str());
+                ImGui::BeginGroup();
                 bool isSelected = (i == m_SelectedStackIndex);
                 if (isSelected) {
                     ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.45f, 0.7f, 0.8f));
@@ -727,20 +884,18 @@ namespace Axle {
                     m_EmitterStacks[i].Visible = !vis;
                 }
 
+                ImGui::EndGroup();
+
                 // Right click context menu on row
-                if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::BeginPopupContextItem("Emitter Actions")) {
                     if (ImGui::MenuItem("Duplicate Emitter")) {
-                        SyncCurrentStackConfig();
-                        m_Document.DuplicateEmitter(m_EmitterStacks[i].Id);
-                        SyncStacksFromDocument();
+                        DuplicateEmitterStack(i);
                     }
                     if (ImGui::MenuItem("Move Up", nullptr, false, i > 0)) {
-                        m_Document.ReorderEmitter(i, i - 1);
-                        SyncStacksFromDocument();
+                        ReorderEmitterStack(i, i - 1);
                     }
                     if (ImGui::MenuItem("Move Down", nullptr, false, i + 1 < m_EmitterStacks.size())) {
-                        m_Document.ReorderEmitter(i, i + 1);
-                        SyncStacksFromDocument();
+                        ReorderEmitterStack(i, i + 1);
                     }
                     if (ImGui::MenuItem("Solo Preview"))
                         for (size_t j = 0; j < m_EmitterStacks.size(); ++j)
@@ -777,79 +932,61 @@ namespace Axle {
     }
 
     void VFXEditorPanel::DrawTransportBar() {
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 4));
-        if (ImGui::Button(m_IsPlaying ? "Pause" : "Play", ImVec2(65, 26))) {
+        const auto next = [](float width) {
+            if (ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + width <
+                ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x) ImGui::SameLine();
+        };
+        if (ImGui::Button(m_IsPlaying ? "Pause" : "Play")) {
             if (m_IsPlaying) PausePreview(); else PlayPreview();
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Stop", ImVec2(55, 26))) {
-            StopPreview();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Reset", ImVec2(55, 26))) {
-            ResetPreview();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Step", ImVec2(50, 26))) {
-            PausePreview();
-            Step();
+        next(45);
+        if (ImGui::Button("Stop")) StopPreview();
+        next(50);
+        if (ImGui::Button("Restart")) ResetPreview();
+        next(45);
+        if (ImGui::Button("Step")) {
+            PausePreview(); Step();
             m_PlaybackScrubberTime = static_cast<float>(m_Clock.Tick * m_Clock.StepSeconds);
         }
-        ImGui::SameLine();
-        ImGui::PushItemWidth(70.0f);
-        ImGui::SliderFloat("##Speed", &m_Clock.PlaybackSpeed, 0.1f, 3.0f, "%.1fx");
-        ImGui::PopItemWidth();
-
-        ImGui::SameLine();
-        ImGui::TextDisabled("|");
-        ImGui::SameLine();
-
-        if (ImGui::Button("Burst 20", ImVec2(75, 26))) {
-            TriggerBurst(20);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Burst 100", ImVec2(80, 26))) {
-            TriggerBurst(100);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Burst 500", ImVec2(80, 26))) {
-            TriggerBurst(500);
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("|");
-        ImGui::SameLine();
-
-        if (ImGui::Checkbox("Loop Emitters", &m_IsLooping))
-            ResetPreview();
-        ImGui::SameLine();
-        ImGui::Checkbox("Ground Grid", &m_ShowGroundGrid);
-        ImGui::SameLine();
-        if (ImGui::Button("Reset Camera", ImVec2(95, 26))) {
-            m_CameraDistance = 5.0f;
-            m_CameraPitch = 20.0f;
-            m_CameraYaw = 45.0f;
-            m_CameraTarget = glm::vec3(0.0f, 1.0f, 0.0f);
-        }
-
-        // Timeline scrubber
-        ImGui::SameLine();
-        ImGui::PushItemWidth(140.0f);
-        float maxDuration = m_Config.Duration > 0.0f ? m_Config.Duration : 5.0f;
-        for (const auto& s : m_EmitterStacks) {
-            if (s.Config.Duration > maxDuration) maxDuration = s.Config.Duration;
-        }
-        float scrubber = m_PlaybackScrubberTime;
-        if (ImGui::SliderFloat("##Scrubber", &scrubber, 0.0f, maxDuration, "%.2fs")) {
-            SeekTo(scrubber);
-        }
-        ImGui::PopItemWidth();
-
-        if (m_IsSeeking) {
+        next(100);
+        ImGui::SetNextItemWidth(80);
+        ImGui::SliderFloat("##Speed", &m_Clock.PlaybackSpeed, 0.1f, 3, "%.1fx");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Preview playback speed");
+        next(100);
+        ImGui::SetNextItemWidth(90);
+        ImGui::InputInt("##BurstCount", &m_PreviewBurstCount);
+        m_PreviewBurstCount = std::clamp(m_PreviewBurstCount, 1, 20000);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Manual preview burst count; this does not edit Emission");
+        next(45);
+        ImGui::BeginDisabled(m_EmitterStacks.empty());
+        if (ImGui::Button("Emit")) TriggerBurst(static_cast<uint32_t>(m_PreviewBurstCount));
+        ImGui::EndDisabled();
+        next(120);
+        if (ImGui::Button("Preview Settings")) ImGui::OpenPopup("Preview Settings");
+        if (ImGui::BeginPopup("Preview Settings")) {
+            if (ImGui::Checkbox("Allow authored looping", &m_IsLooping)) ResetPreview();
+            ImGui::Checkbox("Ground grid", &m_ShowGroundGrid);
+            ImGui::Checkbox("Live bounds", &m_ShowBounds);
+            ImGui::ColorEdit3("Background", glm::value_ptr(m_PreviewBackground));
+            if (ImGui::Button("Frame Effect")) FramePreview();
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "(Seeking...)");
+            if (ImGui::Button("Reset Camera")) {
+                m_CameraDistance = 5; m_CameraPitch = 20; m_CameraYaw = 45;
+                m_CameraTarget = glm::vec3(0);
+            }
+            ImGui::TextDisabled("Preview settings do not modify the asset.");
+            ImGui::EndPopup();
         }
-
-        ImGui::PopStyleVar();
+        float duration = 1;
+        uint32_t count = 0;
+        for (const auto& stack : m_EmitterStacks) {
+            duration = std::max(duration, stack.Config.Duration);
+            if (stack.System) count += stack.System->GetActiveParticleCount();
+        }
+        ImGui::SetNextItemWidth(-1);
+        float time = m_PlaybackScrubberTime;
+        if (ImGui::SliderFloat("##Timeline", &time, 0, duration, "%.2f s")) SeekTo(time);
+        ImGui::TextDisabled("%u particles | %.2f s%s", count, m_PlaybackScrubberTime, m_IsSeeking ? " | Seeking..." : "");
     }
 
     bool VFXEditorPanel::BeginModule(ParticleModule module) {
@@ -865,14 +1002,34 @@ namespace Axle {
         }
         const bool open = ImGui::CollapsingHeader(name, module == ParticleModule::Main ? ImGuiTreeNodeFlags_DefaultOpen : 0);
         if (ImGui::BeginPopupContextItem("Module Actions")) {
-            if (ImGui::MenuItem("Reset Module")) ResetParticleModule(m_Config, module);
+            if (ImGui::MenuItem("Reset Module")) {
+                ResetParticleModule(m_Config, module);
+                if (module == ParticleModule::Renderer) if (auto* stack = GetCurrentEmitterStack()) stack->MaterialPath.clear();
+                SyncCurrentStackConfig();
+                ResetPreview();
+            }
             if (ImGui::MenuItem("Copy Module")) {
                 m_ModuleClipboard = m_Config;
+                if (module == ParticleModule::Renderer) if (auto* stack = GetCurrentEmitterStack()) m_ModuleClipboard.MaterialPath = stack->MaterialPath;
                 m_CopiedModule = module;
                 m_HasModuleClipboard = true;
             }
-            if (ImGui::MenuItem("Paste Module", nullptr, false, m_HasModuleClipboard && m_CopiedModule == module))
-                CopyParticleModule(m_Config, m_ModuleClipboard, module);
+            if (ImGui::MenuItem("Paste Module", nullptr, false, m_HasModuleClipboard && m_CopiedModule == module)) {
+                auto candidate = m_Config;
+                CopyParticleModule(candidate, m_ModuleClipboard, module);
+                auto effect = m_Document.GetDefinition();
+                if (auto* stack = GetCurrentEmitterStack()) if (auto* emitter = effect.FindEmitter(stack->Id)) emitter->Config = candidate;
+                std::vector<std::string> errors;
+                if (ValidateSubEmitterGraph(effect, errors)) {
+                    m_Config = std::move(candidate);
+                    if (module == ParticleModule::Renderer) if (auto* stack = GetCurrentEmitterStack()) stack->MaterialPath = m_Config.MaterialPath;
+                    SyncCurrentStackConfig();
+                    ResetPreview();
+                } else {
+                    m_Diagnostics.clear();
+                    for (const auto& error : errors) m_Diagnostics.push_back({VFXDiagnosticSeverity::Error, "INVALID_MODULE_PASTE", "", error});
+                }
+            }
             ImGui::EndPopup();
         }
         if (!open) { ImGui::PopID(); return false; }
@@ -900,8 +1057,18 @@ namespace Axle {
                 char nameBuf[128]{};
                 strncpy_s(nameBuf, stack->Name.c_str(), sizeof(nameBuf) - 1);
                 if (ImGui::InputText("Emitter Name", nameBuf, sizeof(nameBuf))) {
-                    stack->Name = nameBuf;
-                    m_Config.Name = nameBuf;
+                    SyncCurrentStackConfig();
+                    m_Document.RenameEmitter(stack->Id, nameBuf);
+                    // Preserve live systems and migrate any legacy name-based links before the rename.
+                    for (auto& source : m_EmitterStacks) {
+                        const auto* definition = m_Document.GetDefinition().FindEmitter(source.Id);
+                        if (!definition) continue;
+                        source.Name = definition->Name;
+                        source.Config.Name = definition->Config.Name;
+                        source.Config.SubEmitters = definition->Config.SubEmitters;
+                        if (source.System) source.System->SetConfig(source.Config);
+                    }
+                    m_Config = GetCurrentEmitterStack()->Config;
                 }
             }
 
@@ -930,17 +1097,7 @@ namespace Axle {
 
             ImGui::DragFloatRange2("Start Size", &m_Config.StartSize.Min, &m_Config.StartSize.Max, 0.02f, 0.001f, 100);
             ImGui::DragFloatRange2("Start Rotation (rad)", &m_Config.StartRotation.Min, &m_Config.StartRotation.Max, 0.02f, -100, 100);
-            if (!m_Config.Modules.Color) {
-                auto& gradient = m_Config.ColorOverLifetime;
-                glm::vec4 color = gradient.Evaluate(0);
-                if (ImGui::ColorEdit4("Start Color", glm::value_ptr(color))) {
-                    if (gradient.ColorKeys.empty()) gradient.AddColorKey(0, glm::vec3(color));
-                    else gradient.ColorKeys.front().Color = glm::vec3(color);
-                    if (gradient.AlphaKeys.empty()) gradient.AddAlphaKey(0, color.a);
-                    else gradient.AlphaKeys.front().Alpha = color.a;
-                    gradient.StartColor = color;
-                }
-            }
+            ImGui::ColorEdit4("Start Color", glm::value_ptr(m_Config.StartColor));
             ImGui::DragFloat("Gravity Modifier", &m_Config.GravityModifier, 0.05f, -10.0f, 10.0f, "%.2fx");
             ImGui::SliderFloat("Air Drag Damping", &m_Config.Drag, 0.0f, 1.0f, "%.2f");
             EndModule();
@@ -1348,17 +1505,17 @@ namespace Axle {
     void VFXEditorPanel::DrawSubEmittersModule() {
         if (BeginModule(ParticleModule::SubEmitters)) {
             ImGui::TextDisabled("Spawn child particle systems on particle events:");
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 70.0f);
-            if (ImGui::SmallButton("+ Add Sub")) {
-                std::string defaultTarget = "Sparks";
+            if (ImGui::Button("Add Link...")) ImGui::OpenPopup("Choose Child Emitter");
+            if (ImGui::BeginPopup("Choose Child Emitter")) {
+                bool hasCandidate = false;
                 for (size_t i = 0; i < m_EmitterStacks.size(); ++i) {
-                    if (i != m_SelectedStackIndex) {
-                        defaultTarget = m_EmitterStacks[i].Id;
-                        break;
-                    }
+                    if (i == m_SelectedStackIndex) continue;
+                    hasCandidate = true;
+                    if (ImGui::Selectable((m_EmitterStacks[i].Name + "##" + m_EmitterStacks[i].Id).c_str()))
+                        SetSubEmitterTarget(m_Config.SubEmitters.size(), m_EmitterStacks[i].Id);
                 }
-                m_Config.SubEmitters.emplace_back(SubEmitterTrigger::Collision, defaultTarget, 10, 1.0f);
-                SyncCurrentStackConfig();
+                if (!hasCandidate) ImGui::TextDisabled("Add another emitter first.");
+                ImGui::EndPopup();
             }
 
             for (size_t s = 0; s < m_Config.SubEmitters.size(); ++s) {
@@ -1374,15 +1531,24 @@ namespace Axle {
                 }
 
                 // Target Emitter Selection Combo
-                std::string currentTarget = sub.TargetEmitterName;
-                if (ImGui::BeginCombo("Target Emitter", currentTarget.empty() ? "<Select Target>" : currentTarget.c_str())) {
+                const std::string currentTarget = sub.TargetEmitterName;
+                const auto* target = m_Document.GetDefinition().FindEmitter(currentTarget);
+                if (ImGui::BeginCombo("Target Emitter", target ? target->Name.c_str() : "<Missing Target>")) {
                     for (size_t i = 0; i < m_EmitterStacks.size(); ++i) {
                         if (i == m_SelectedStackIndex) continue; // Exclude self
                         const auto& targetName = m_EmitterStacks[i].Name;
                         bool isSelected = (currentTarget == m_EmitterStacks[i].Id);
-                        if (ImGui::Selectable(targetName.c_str(), isSelected)) {
-                            sub.TargetEmitterName = m_EmitterStacks[i].Id;
-                            SyncCurrentStackConfig();
+                        if (ImGui::Selectable((targetName + "##" + m_EmitterStacks[i].Id).c_str(), isSelected)) {
+                            // Keep the reference to this vector element valid until the rest of the row is drawn.
+                            auto candidate = m_Document.GetDefinition();
+                            candidate.FindEmitter(GetCurrentEmitterStack()->Id)->Config = m_Config;
+                            candidate.FindEmitter(GetCurrentEmitterStack()->Id)->Config.SubEmitters[s].TargetEmitterName = m_EmitterStacks[i].Id;
+                            std::vector<std::string> errors;
+                            if (ValidateSubEmitterGraph(candidate, errors)) sub.TargetEmitterName = m_EmitterStacks[i].Id;
+                            else {
+                                m_Diagnostics.clear();
+                                for (const auto& error : errors) m_Diagnostics.push_back({VFXDiagnosticSeverity::Error, "INVALID_SUB_EMITTER", "", error});
+                            }
                         }
                         if (isSelected) {
                             ImGui::SetItemDefaultFocus();
@@ -1491,31 +1657,11 @@ namespace Axle {
                     pec.AssetPath.clear();
                 }
             }
-            if (ImGui::Button("Apply Stacks to Selected Entity", ImVec2(-1.0f, 30.0f))) {
-                auto& pec = m_SelectedEntity.GetComponent<ParticleEmitterComponent>();
-                SyncCurrentStackConfig();
-                pec.SetEffectDefinition(m_Document.GetDefinition());
-                pec.AssetPath.clear(); // Applying a working copy explicitly creates an inline instance.
-                if (pec.Active) {
-                    pec.Play();
-                }
-            }
+            if (ImGui::Button("Apply Working Copy", ImVec2(-1, 28))) ApplyToSelectedEntity();
         }
-
         if (m_Scene) {
-            if (ImGui::Button("Create New VFX Entity in Scene", ImVec2(-1.0f, 28.0f))) {
-                SyncCurrentStackConfig();
-                std::string entName = m_EmitterStacks.empty() ? "VFX_Emitter" : m_EmitterStacks[0].Name;
-                Entity newEnt = m_Scene->CreateEntity(entName);
-                newEnt.AddComponent<TransformComponent>(glm::vec3(0.0f, 1.0f, 0.0f));
-                auto primaryConfig = m_EmitterStacks.empty() ? m_Config : m_EmitterStacks[0].Config;
-                auto& pec = newEnt.AddComponent<ParticleEmitterComponent>(primaryConfig);
-                pec.SetEffectDefinition(m_Document.GetDefinition());
-                if (!m_Document.IsDirty())
-                    pec.AssetPath = m_Document.GetFilePath();
-                pec.Play();
-                SetSelectedEntity(newEnt);
-            }
+            ImGui::DragFloat3("Scene Position", glm::value_ptr(m_SpawnPosition), 0.1f);
+            if (ImGui::Button("Create Scene Instance", ImVec2(-1, 28))) CreateSceneInstance(m_SpawnPosition);
         }
     }
 
@@ -1525,6 +1671,7 @@ namespace Axle {
             if (m_EmitterStacks.empty()) {
                 ImGui::TextWrapped("This effect has no emitters. Add an emitter to start authoring.");
                 if (ImGui::Button("Add Emitter", ImVec2(-1, 28))) AddEmitterStack("Emitter");
+                DrawSceneActions();
                 ImGui::EndChild();
                 return;
             }
@@ -1550,37 +1697,12 @@ namespace Axle {
         ImGui::EndChild();
     }
 
-    void VFXEditorPanel::OnImGuiRender(bool* p_open) {
-        if (p_open) m_IsOpen = *p_open;
-        if (!m_IsOpen) return;
-        m_DiscardApproved = false;
-
-        ImGui::SetNextWindowSize(ImVec2(1200, 760), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("Visual Particle & VFX Studio (Unity Shuriken)", &m_IsOpen, ImGuiWindowFlags_NoScrollbar)) {
-            // Top Transport Bar
-            DrawTransportBar();
-            ImGui::Separator();
-
-            // 3-Column Layout:
-            // Column 1 (Left): Emitter Stack Manager (~200px)
-            // Column 2 (Middle): 3D Viewport (~50% of remainder)
-            // Column 3 (Right): Shuriken Modules Inspector
-            float totalWidth = ImGui::GetContentRegionAvail().x;
-            float totalHeight = ImGui::GetContentRegionAvail().y;
-
-            float stackWidth = 210.0f;
-            float remainderWidth = totalWidth - stackWidth - 12.0f;
-            float viewportWidth = remainderWidth * 0.50f;
-            float inspectorWidth = remainderWidth - viewportWidth - 8.0f;
-
-            // --- 1. LEFT COLUMN: EMITTER STACKS ---
-            DrawEmitterStackColumn(stackWidth, totalHeight);
-            ImGui::SameLine();
-
-            // --- 2. MIDDLE COLUMN: 3D PREVIEW VIEWPORT ---
-            ImGui::BeginChild("VFX_Viewport_Child", ImVec2(viewportWidth, totalHeight), true, ImGuiWindowFlags_NoScrollbar);
+    void VFXEditorPanel::DrawPreviewViewport(float width, float height) {
+            ImGui::BeginChild("VFX_Viewport_Child", ImVec2(width, height), true, ImGuiWindowFlags_NoScrollbar);
             {
                 ImVec2 avail = ImGui::GetContentRegionAvail();
+                avail.x = std::max(1.0f, avail.x); avail.y = std::max(1.0f, avail.y);
+                const ImVec2 origin = ImGui::GetCursorScreenPos();
 
                 uint64_t rhiTexID = 0;
                 if (m_RHIViewport && m_RHIViewport->IsValid()) {
@@ -1615,56 +1737,115 @@ namespace Axle {
                     ImVec2 txtSize = ImGui::CalcTextSize(txt);
                     ImVec2 txtPos = ImVec2(p0.x + (avail.x - txtSize.x) * 0.5f, p0.y + 12.0f);
                     drawList->AddText(txtPos, IM_COL32(100, 200, 255, 255), txt);
-                    ImGui::Dummy(avail);
+                    ImGui::InvisibleButton("Preview", avail);
                 }
 
                 m_ViewportHovered = ImGui::IsItemHovered();
                 m_ViewportFocused = ImGui::IsItemFocused();
 
-                // Interactive Orbit Camera
+                auto& io = ImGui::GetIO();
                 if (m_ViewportHovered) {
-                    ImGuiIO& io = ImGui::GetIO();
-                    if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                    for (int button = 0; button < 3; ++button)
+                        if (ImGui::IsMouseClicked(button)) m_PreviewDragButton = button;
+                    if (io.MouseWheel != 0) m_CameraDistance = glm::clamp(m_CameraDistance * std::pow(0.9f, io.MouseWheel), 0.1f, 500.0f);
+                    if (ImGui::IsKeyPressed(ImGuiKey_F) && !io.WantTextInput) FramePreview();
+                }
+                if (m_PreviewDragButton >= 0) {
+                    if (!ImGui::IsMouseDown(m_PreviewDragButton)) m_PreviewDragButton = -1;
+                    else if (m_PreviewDragButton == ImGuiMouseButton_Left) {
                         m_CameraYaw += io.MouseDelta.x * 0.5f;
-                        m_CameraPitch -= io.MouseDelta.y * 0.5f;
-                        m_CameraPitch = glm::clamp(m_CameraPitch, -89.0f, 89.0f);
-                    }
-                    if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
-                        float panSpeed = 0.005f * m_CameraDistance;
-                        m_CameraTarget.y += io.MouseDelta.y * panSpeed;
-                    }
-                    if (io.MouseWheel != 0.0f) {
-                        m_CameraDistance = glm::clamp(m_CameraDistance - io.MouseWheel * 0.5f, 0.5f, 80.0f);
+                        m_CameraPitch = glm::clamp(m_CameraPitch - io.MouseDelta.y * 0.5f, -89.0f, 89.0f);
+                    } else {
+                        const auto camera = CreatePreviewCamera(avail.x, avail.y);
+                        const auto inverseView = glm::inverse(camera.GetViewMatrix());
+                        const float unitsPerPixel = 2 * m_CameraDistance * std::tan(glm::radians(27.5f)) / avail.y;
+                        m_CameraTarget += (-glm::vec3(inverseView[0]) * io.MouseDelta.x + glm::vec3(inverseView[1]) * io.MouseDelta.y) * unitsPerPixel;
                     }
                 }
-
-                // Overlay Telemetry
-                ImGui::SetCursorPos(ImVec2(12, 12));
-                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.65f));
-                ImGui::BeginChild("TelemetryOverlay", ImVec2(240, 115), true);
-                uint32_t activeStackP = (m_SelectedStackIndex < m_EmitterStacks.size() && m_EmitterStacks[m_SelectedStackIndex].System) 
-                                        ? m_EmitterStacks[m_SelectedStackIndex].System->GetActiveParticleCount() : 0;
-                uint32_t poolCap = (m_SelectedStackIndex < m_EmitterStacks.size() && m_EmitterStacks[m_SelectedStackIndex].System)
-                                   ? m_EmitterStacks[m_SelectedStackIndex].System->GetPool().GetCapacity() : 0;
-                uint32_t collisions = (m_SelectedStackIndex < m_EmitterStacks.size() && m_EmitterStacks[m_SelectedStackIndex].System)
-                                      ? m_EmitterStacks[m_SelectedStackIndex].System->GetCollisionCount() : 0;
-                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "Live VFX Telemetry:");
-                ImGui::Text("Active Emitter: %s", (m_SelectedStackIndex < m_EmitterStacks.size()) ? m_EmitterStacks[m_SelectedStackIndex].Name.c_str() : "None");
-                ImGui::Text("Particles: %u / %u", activeStackP, poolCap);
-                ImGui::Text("Collisions Bounced: %u", collisions);
-                ImGui::Text("Sim Time: %.2f s", m_PlaybackScrubberTime);
-                ImGui::EndChild();
-                ImGui::PopStyleColor();
+                auto* draw = ImGui::GetWindowDrawList();
+                if (m_ShowBounds) {
+                    glm::vec3 minimum, maximum;
+                    if (GetPreviewBounds(minimum, maximum)) {
+                        const auto matrix = CreatePreviewCamera(avail.x, avail.y).GetViewProjectionMatrix();
+                        glm::vec4 corners[8];
+                        for (int i = 0; i < 8; ++i) corners[i] = matrix * glm::vec4(
+                            (i & 1) ? maximum.x : minimum.x, (i & 2) ? maximum.y : minimum.y,
+                            (i & 4) ? maximum.z : minimum.z, 1);
+                        const auto project = [&](const glm::vec4& point) {
+                            return ImVec2(origin.x + (point.x / point.w + 1) * avail.x * 0.5f,
+                                          origin.y + (1 - point.y / point.w) * avail.y * 0.5f);
+                        };
+                        for (int i = 0; i < 8; ++i) for (int bit = 1; bit <= 4; bit *= 2) {
+                            const int j = i ^ bit;
+                            if (i < j && corners[i].w > 0.01f && corners[j].w > 0.01f)
+                                draw->AddLine(project(corners[i]), project(corners[j]), IM_COL32(100, 205, 240, 220));
+                        }
+                    }
+                }
+                draw->AddText(ImVec2(origin.x + 8, origin.y + avail.y - ImGui::GetTextLineHeight() - 6),
+                              IM_COL32(180, 185, 190, 220), "LMB orbit | RMB/MMB pan | Wheel zoom | F frame");
             }
             ImGui::EndChild();
+    }
 
-            ImGui::SameLine();
+    void VFXEditorPanel::OnImGuiRender(bool* p_open) {
+        if (p_open && !*p_open && m_IsOpen) {
+            FinishEmitterEdit();
+            if (m_Document.IsDirty()) { *p_open = true; m_PendingAction = 3; }
+        }
+        if (p_open) m_IsOpen = *p_open;
+        if (!m_IsOpen) return;
+        m_DiscardApproved = false;
 
-            // --- 3. RIGHT COLUMN: SHURIKEN MODULES INSPECTOR ---
-            DrawShurikenInspector(inspectorWidth, totalHeight);
+        m_ViewportHovered = false;
+        ImGui::SetNextWindowSize(ImVec2(1280, 780), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSizeConstraints(ImVec2(420, 360), ImVec2(FLT_MAX, FLT_MAX));
+        if (ImGui::Begin("VFX Editor", &m_IsOpen, ImGuiWindowFlags_NoScrollbar)) {
+            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+                const auto& io = ImGui::GetIO();
+                if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
+                    if (m_Document.GetFilePath().empty() || io.KeyShift) {
+                        m_FileAction = 2; m_RequestFileDialog = true;
+                    } else SaveDocument();
+                }
+                if (io.KeyCtrl && !io.WantTextInput) {
+                    if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) { if (io.KeyShift) Redo(); else Undo(); }
+                    if (ImGui::IsKeyPressed(ImGuiKey_Y, false)) Redo();
+                    if (ImGui::IsKeyPressed(ImGuiKey_N, false)) NewDocument();
+                }
+            }
+            DrawTransportBar();
+            ImGui::Separator();
+            const float width = ImGui::GetContentRegionAvail().x;
+            const float height = std::max(1.0f, ImGui::GetContentRegionAvail().y);
+            if (width >= 1050) {
+                if (ImGui::BeginTable("VFX Workspace", 3, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
+                    ImGui::TableSetupColumn("Effect", ImGuiTableColumnFlags_WidthFixed, 240);
+                    ImGui::TableSetupColumn("Preview", ImGuiTableColumnFlags_WidthStretch, 1);
+                    ImGui::TableSetupColumn("Modules", ImGuiTableColumnFlags_WidthStretch, 1);
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0); DrawEmitterStackColumn(0, height);
+                    ImGui::TableSetColumnIndex(1); DrawPreviewViewport(0, height);
+                    ImGui::TableSetColumnIndex(2); DrawShurikenInspector(0, height);
+                    ImGui::EndTable();
+                }
+            } else if (ImGui::BeginTabBar("VFX Workspace Tabs")) {
+                if (ImGui::BeginTabItem("Effect")) {
+                    DrawEmitterStackColumn(0, std::max(1.0f, ImGui::GetContentRegionAvail().y)); ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Preview")) {
+                    DrawPreviewViewport(0, std::max(1.0f, ImGui::GetContentRegionAvail().y)); ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Modules")) {
+                    DrawShurikenInspector(0, std::max(1.0f, ImGui::GetContentRegionAvail().y)); ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
+            }
+            DrawDocumentDialogs();
         }
         ImGui::End();
 
+        if (!m_IsOpen) { FinishEmitterEdit(); m_PreviewDragButton = -1; }
         if (!m_IsOpen && m_Document.IsDirty() && !m_DiscardApproved && m_PendingAction != 3) {
             m_IsOpen = true;
             m_PendingAction = 3;

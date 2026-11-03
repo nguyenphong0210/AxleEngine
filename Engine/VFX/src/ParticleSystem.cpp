@@ -174,8 +174,8 @@ namespace Axle {
                 data.EndSize *= scale;
             }
 
-            glm::vec4 authoredStartCol = m_Config.ColorOverLifetime.Evaluate(0.0f);
-            glm::vec4 authoredEndCol = m_Config.ColorOverLifetime.Evaluate(1.0f);
+            glm::vec4 authoredStartCol = m_Config.StartColor * (m_Config.Modules.Color ? m_Config.ColorOverLifetime.Evaluate(0.0f) : glm::vec4(1));
+            glm::vec4 authoredEndCol = m_Config.StartColor * (m_Config.Modules.Color ? m_Config.ColorOverLifetime.Evaluate(1.0f) : glm::vec4(1));
             if (inheritColor) {
                 data.StartColor = authoredStartCol * inheritedColor;
                 data.EndColor = authoredEndCol * inheritedColor;
@@ -221,8 +221,8 @@ namespace Axle {
             data.StartSize *= scale;
             data.EndSize *= scale;
         }
-        data.StartColor = m_Config.ColorOverLifetime.Evaluate(0.0f);
-        data.EndColor = m_Config.ColorOverLifetime.Evaluate(1.0f);
+        data.StartColor = m_Config.StartColor * (m_Config.Modules.Color ? m_Config.ColorOverLifetime.Evaluate(0.0f) : glm::vec4(1));
+        data.EndColor = m_Config.StartColor * (m_Config.Modules.Color ? m_Config.ColorOverLifetime.Evaluate(1.0f) : glm::vec4(1));
         data.StartRotation = m_Config.StartRotation.Sample(m_RNG);
         data.AngularVelocity = m_Config.AngularVelocity.Sample(m_RNG);
         data.Lifetime = m_Config.Lifetime.Sample(m_RNG);
@@ -503,7 +503,7 @@ namespace Axle {
             float curveSize = m_Config.SizeOverLifetime.Evaluate(t);
             sizes[i] = m_Config.Modules.Size ? glm::mix(startSizes[i], endSizes[i], t) * curveSize : startSizes[i];
 
-            colors[i] = m_Config.ColorOverLifetime.Evaluate(m_Config.Modules.Color ? t : 0.0f) * m_Pool.GetColorMultipliers()[i];
+            colors[i] = m_Config.StartColor * (m_Config.Modules.Color ? m_Config.ColorOverLifetime.Evaluate(t) : glm::vec4(1)) * m_Pool.GetColorMultipliers()[i];
             if (m_Config.Modules.Alpha) colors[i].a *= m_Config.AlphaOverLifetime.Evaluate(t);
 
             // Flipbook UV frame interpolation & sub-frame blending

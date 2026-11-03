@@ -174,6 +174,7 @@ namespace Axle {
         writeCurve("SpeedCurve", config.SpeedOverLifetime);
         writeCurve("AlphaCurve", config.AlphaOverLifetime);
 
+        block.SetVec4("particleStartColor", config.StartColor);
         block.SetVec4("startColor", config.ColorOverLifetime.StartColor);
         block.SetVec4("endColor", config.ColorOverLifetime.EndColor);
 
@@ -304,6 +305,7 @@ namespace Axle {
     bool ParticleEffectSerializer::ReadEmitterConfig(const AssetBlock& block,
                                                      ParticleEmitterConfig& outConfig,
                                                      std::vector<VFXDiagnostic>* outDiagnostics) {
+        outConfig.StartColor = block.GetVec4("particleStartColor", glm::vec4(1));
         outConfig.Name = block.GetString("name", outConfig.Name);
         outConfig.Modules.Emission = block.GetBool("moduleEmission", true);
         outConfig.Modules.Shape = block.GetBool("moduleShape", true);

@@ -77,6 +77,8 @@ namespace Axle {
         FloatCurve SpeedOverLifetime = FloatCurve(1.0f, 1.0f);
         FloatCurve AlphaOverLifetime = FloatCurve(1.0f, 1.0f);
 
+        glm::vec4 StartColor{1.0f};
+
         // Color & Multi-Key Alpha Gradient
         ColorGradient ColorOverLifetime = { glm::vec4(1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.0f) };
 

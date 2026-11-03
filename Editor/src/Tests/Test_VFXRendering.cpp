@@ -10,6 +10,7 @@
 #include <Axle/AssetManager.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/ImGuiLayer.hpp>
+#include <Axle/VFXEditorPanel.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <imgui.h>
 #include <cstring>
@@ -301,6 +302,88 @@ namespace Axle {
             if (!check(full && ui.GetAllocatedDescriptorCount() == 1024,
                        "ImGui descriptor exhaustion returns no handle instead of writing outside its heap")) return false;
             for (auto handle : registrations) ui.UnregisterTextureDescriptor(handle);
+            // Exercise the production authoring panel and its own scene/viewport, not a duplicate renderer.
+            ImGui::GetIO().IniFilename = nullptr;
+            ImGui::GetIO().DisplaySize = ImVec2(1280, 780);
+            VFXEditorPanel panel;
+            panel.SetOpen(true);
+            panel.InitRHI(&ui);
+            panel.FramePreview();
+            auto readTexture = [&](RHITexture& texture) {
+                const auto w = texture.GetWidth(), h = texture.GetHeight();
+                const auto layout = GetVFXReadbackLayout(w, h, false);
+                RHIBuffer buffer;
+                RHIBufferDesc desc;
+                desc.Size = layout.SlicePitch;
+                desc.MemoryLocation = RHIMemoryLocation::HostReadback;
+                RHICommandBuffer command;
+                if (!buffer.Init(desc) || !command.Init() || !command.Begin()) return std::vector<uint8_t>{};
+                command.TransitionTexture(texture.GetNative(), RHIResourceLayout::ShaderResource, RHIResourceLayout::CopySource);
+                nri::TextureDataLayoutDesc data{};
+                data.rowPitch = layout.RowPitch; data.slicePitch = layout.SlicePitch;
+                nri::TextureRegionDesc region{};
+                region.width = w; region.height = h; region.depth = 1;
+                device.GetNRICore().CmdReadbackTextureToBuffer(*command.GetNative(), *buffer.GetNative(), data, *texture.GetNative(), region);
+                command.TransitionTexture(texture.GetNative(), RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
+                if (!command.End() || !command.Submit()) return std::vector<uint8_t>{};
+                device.WaitIdle();
+                auto* mapped = static_cast<const uint8_t*>(buffer.Map());
+                if (!mapped) return std::vector<uint8_t>{};
+                std::vector<uint8_t> pixels(w * h * 4);
+                for (uint32_t y = 0; y < h; ++y) std::memcpy(pixels.data() + y * w * 4, mapped + y * layout.RowPitch, w * 4);
+                buffer.Unmap();
+                return pixels;
+            };
+            std::array<size_t, 3> previewRed{};
+            for (int frame = 0; frame < 3; ++frame) {
+                if (frame == 1) {
+                    panel.AddEmitterStack("Authored Emitter");
+                    auto config = ParticleEmitterConfig::CreateNeutral();
+                    config.EmissionRate = 0; config.InitialSpeed = {0, 0}; config.StartSize = {2, 2};
+                    config.StartColor = {1, 0, 0, 1};
+                    panel.SetEmitterConfig(config);
+                    panel.TriggerBurst(1);
+                } else if (frame == 2) panel.RemoveEmitterStack(0);
+                ui.Begin();
+                ImGui::SetNextWindowPos(ImVec2(0, 0));
+                ImGui::SetNextWindowSize(ImVec2(1280, 780));
+                panel.OnImGuiRender();
+                ImGui::Render();
+                RHITexture canvas;
+                RHICommandBuffer command;
+                if (!canvas.Init(RHITextureDesc::RenderTarget2D(1280, 780)) || !command.Init() || !command.Begin()) return false;
+                command.TransitionTexture(canvas.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+                nri::AttachmentDesc attachment{};
+                attachment.descriptor = canvas.GetRTV(); attachment.loadOp = nri::LoadOp::CLEAR; attachment.storeOp = nri::StoreOp::STORE;
+                nri::RenderingDesc rendering{};
+                rendering.colors = &attachment; rendering.colorNum = 1;
+                command.BeginRendering(rendering);
+                ui.Render(&command);
+                command.EndRendering();
+                command.TransitionTexture(canvas.GetNative(), RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
+                if (!command.End() || !command.Submit()) return false;
+                device.WaitIdle();
+                auto* viewport = panel.GetRHIViewport();
+                if (!check(viewport && viewport->IsValid(), "Authoring panel creates a valid production RHI viewport")) return false;
+                const auto pixels = readTexture(*viewport->GetColorTexture());
+                const auto w = viewport->GetColorTexture()->GetWidth(), h = viewport->GetColorTexture()->GetHeight();
+                if (!check(!pixels.empty(), "Authoring panel preview readback")) return false;
+                // Grid geometry can cover the exact center; measure a visible region instead.
+                for (size_t pixel = 0; pixel < pixels.size(); pixel += 4)
+                    if (pixels[pixel] > 180 && pixels[pixel + 1] < 80 && pixels[pixel + 2] < 80) ++previewRed[frame];
+                if (frame == 1) {
+                    const auto image = readTexture(canvas);
+                    if (!check(!image.empty(), "Full editor workspace renders through real ImGui D3D12 backend")) return false;
+                    std::ofstream output(captures / "vfx-editor-workspace.ppm", std::ios::binary);
+                    output << "P6\n1280 780\n255\n";
+                    for (size_t pixel = 0; pixel < image.size(); pixel += 4) output.write(reinterpret_cast<const char*>(image.data() + pixel), 3);
+                    if (!check(bool(output), "Authoring workspace capture written")) return false;
+                }
+                ui.End();
+            }
+            if (!check(previewRed[1] > previewRed[0] + 500 && previewRed[1] > previewRed[2] + 500,
+                       "Authoring empty -> neutral emitter -> empty changes real preview pixels without phantom emitters")) return false;
+
         }
         RHISceneRenderer renderer;
         if (!check(renderer.Init(device, false), "Production scene/particle renderer initialization"))

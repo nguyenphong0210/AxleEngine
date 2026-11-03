@@ -440,6 +440,7 @@ namespace Axle {
                 target.InitialSpeed = source.InitialSpeed;
                 target.GravityModifier = source.GravityModifier;
                 target.Drag = source.Drag;
+                target.StartColor = source.StartColor;
                 target.StartSize = source.StartSize;
                 target.StartRotation = source.StartRotation;
                 target.SimulationSpace = source.SimulationSpace;

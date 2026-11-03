@@ -85,6 +85,13 @@ namespace Axle {
         void NewDocument(const std::string& name = "NewEffect");
         bool OpenDocument(const std::string& filePath);
         bool SaveDocument();
+        bool DuplicateEmitterStack(size_t index);
+        bool ReorderEmitterStack(size_t from, size_t to);
+        bool SetSubEmitterTarget(size_t linkIndex, const std::string& targetId);
+        bool ApplyToSelectedEntity();
+        Entity CreateSceneInstance(const glm::vec3& position = glm::vec3(0));
+        bool GetPreviewBounds(glm::vec3& minimum, glm::vec3& maximum) const;
+        void FramePreview();
         bool Undo();
         bool Redo();
         bool SaveDocumentAs(const std::string& filePath);
@@ -108,12 +115,16 @@ namespace Axle {
         void RenderPreviewRHI(float width, float height);
         void DrawGrid(const glm::mat4& viewProj, float radius = 5.0f);
         
-        // 3-Column Unity Shuriken Layout
+        // Adaptive emitter, preview and module workspace
         void DrawEmitterStackColumn(float width, float height);
         void DrawTransportBar();
+        void DrawDocumentDialogs();
+        void DrawPreviewViewport(float width, float height);
+        PerspectiveCamera CreatePreviewCamera(float width, float height) const;
+        void FinishEmitterEdit();
         void DrawShurikenInspector(float width, float height);
 
-        // Modular Shuriken Group Accordions
+        // Searchable module inspector
         bool BeginModule(ParticleModule module);
         void EndModule();
         char m_ModuleSearch[128]{};
@@ -154,13 +165,19 @@ namespace Axle {
         bool m_IsLooping = true;
         bool m_ShowGroundGrid = true;
         bool m_ShowBounds = false;
+        int m_PreviewBurstCount = 1;
+        glm::vec4 m_PreviewBackground{0.07f, 0.08f, 0.10f, 1};
+        glm::vec3 m_SpawnPosition{0};
         float m_PlaybackScrubberTime = 0.0f;
         VFXPreviewClock m_Clock;
         std::vector<VFXDiagnostic> m_Diagnostics;
         int m_PendingAction = 0, m_FileAction = 0;
+        bool m_RequestFileDialog = false;
+        char m_EffectSearch[128]{};
+        std::vector<std::filesystem::path> m_EffectFiles;
         bool m_DiscardApproved = false;
         std::string m_PendingPath;
-        char m_FilePath[512] = "assets/VFX/NewEffect.axle_vfx";
+        char m_FilePath[512]{};
         bool m_IsSeeking = false;
         uint64_t m_TargetSeekTick = 0;
 
@@ -173,6 +190,7 @@ namespace Axle {
         glm::vec3 m_CameraTarget = glm::vec3(0.0f, 1.0f, 0.0f);
         bool m_ViewportHovered = false;
         bool m_ViewportFocused = false;
+        int m_PreviewDragButton = -1;
 
         // Scene linkage
         Scene* m_Scene = nullptr;

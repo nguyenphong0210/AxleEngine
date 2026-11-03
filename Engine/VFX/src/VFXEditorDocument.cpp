@@ -76,7 +76,7 @@ namespace Axle {
             return false;
         }
 
-        if (!ParticleEffectSerializer::SerializeToFile(newPath, m_Definition)) {
+        if (!ParticleEffectSerializer::SerializeToFile(newPath, m_Definition, &diagnostics)) {
             diagnostics.push_back(VFXDiagnostic{
                 VFXDiagnosticSeverity::Error,
                 "ERR_VFX_WRITE_FAILED",
@@ -138,6 +138,7 @@ namespace Axle {
         do { emitter.Id = GenerateUniqueEmitterId(); } while (m_Definition.HasEmitter(emitter.Id));
         emitter.Name = name;
         emitter.Config = cfg;
+        emitter.Config.Name = name;
         emitter.Enabled = true;
 
         std::string newId = emitter.Id;
@@ -158,6 +159,7 @@ namespace Axle {
         EmitterDefinition dup = *src;
         do { dup.Id = GenerateUniqueEmitterId(); } while (m_Definition.HasEmitter(dup.Id));
         dup.Name = src->Name + " (Copy)";
+        dup.Config.Name = dup.Name;
 
         std::string newId = dup.Id;
         m_Definition.Emitters.push_back(std::move(dup));
@@ -212,6 +214,7 @@ namespace Axle {
             for (auto& link : source.Config.SubEmitters)
                 if (link.TargetEmitterName == emitter->Name) link.TargetEmitterName = id;
         emitter->Name = newName;
+        emitter->Config.Name = newName;
         RecordChange("Rename Emitter", before, beforeSelection);
         return true;
     }

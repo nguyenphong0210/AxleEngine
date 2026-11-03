@@ -138,6 +138,7 @@ namespace Axle {
                         static_cast<unsigned>(config.Orientation) <= 2 &&
                         static_cast<unsigned>(config.Shape.Type) <= 7,
                     "enum value");
+            require(finite(config.StartColor) && config.StartColor.a >= 0 && config.StartColor.a <= 1, "start color");
             require(finite(config.ConstantAcceleration) && finite(config.Wind) &&
                         finite(config.Shape.Direction) && finite(config.Shape.BoxExtents),
                     "vector");

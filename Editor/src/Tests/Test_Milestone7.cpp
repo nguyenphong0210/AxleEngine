@@ -903,6 +903,7 @@ bool RunTest_Step36_Phase30_Step1_CoreSkeletalDataStructures() {
 // STEP 37: PHASE 30 - STEP 2: GPU VERTEX SKINNING & SHADER PIPELINE
 // =============================================================================
 bool RunTest_Step37_Phase30_Step2_GPUSkinningAndShaderPipeline() {
+    ScopedGLContext graphicsContext; // These legacy steps exercise GL buffers/shaders.
     std::cout << "\n========================================================" << std::endl;
     std::cout << "  STEP 37: PHASE 30 - STEP 2 GPU VERTEX SKINNING PIPELINE" << std::endl;
     std::cout << "========================================================" << std::endl;
@@ -1003,6 +1004,7 @@ bool RunTest_Step37_Phase30_Step2_GPUSkinningAndShaderPipeline() {
 // STEP 38: PHASE 30 - STEP 3: ANIMATION POSE EVALUATOR & BLENDING TREE
 // =============================================================================
 bool RunTest_Step38_Phase30_Step3_AnimationPoseEvaluatorAndBlendingTree() {
+    ScopedGLContext graphicsContext; // These legacy steps exercise GL buffers/shaders.
     std::cout << "\n========================================================" << std::endl;
     std::cout << "  STEP 38: PHASE 30 - STEP 3 POSE EVALUATOR & BLEND TREE" << std::endl;
     std::cout << "========================================================" << std::endl;
@@ -1391,6 +1393,7 @@ static std::shared_ptr<Axle::SkeletalMesh> CreateTestBipedMesh(std::shared_ptr<A
 }
 
 bool RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController() {
+    ScopedGLContext graphicsContext; // These legacy steps exercise GL buffers/shaders.
     std::cout << "\n========================================================" << std::endl;
     std::cout << "  STEP 40: PHASE 30 - STEP 5 ECS INTEGRATION & CONTROLLER  " << std::endl;
     std::cout << "========================================================" << std::endl;
@@ -1737,6 +1740,7 @@ bool RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController
 // TEST STEP 41: Phase 30 Step 6 - Character Sandbox Playground & Scene Integration
 // =============================================================================
 bool RunTest_Step41_Phase30_Step6_CharacterSandboxPlaygroundAndSceneIntegration() {
+    ScopedGLContext graphicsContext; // These legacy steps exercise GL buffers/shaders.
     std::cout << "\n========================================================" << std::endl;
     std::cout << "  STEP 41: PHASE 30 - STEP 6 CHARACTER SANDBOX PLAYGROUND " << std::endl;
     std::cout << "========================================================" << std::endl;

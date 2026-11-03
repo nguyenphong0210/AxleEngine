@@ -856,6 +856,162 @@ static bool TestTypedAnimatorParametersAndPureConditionEvaluator() {
     return true;
 }
 
+static bool TestDeterministicTransitionsAndCrossfades() {
+    auto skeleton = std::make_shared<Axle::Skeleton>("Rig");
+    Axle::Bone root;
+    root.Name = "Root";
+    root.ParentID = -1;
+    skeleton->AddBone(root);
+    skeleton->ComputeInverseBindMatrices();
+
+    auto clip1s = std::make_shared<Axle::AnimationClip>("Clip1s", 1.0f);
+    auto clip2s = std::make_shared<Axle::AnimationClip>("Clip2s", 2.0f);
+
+    // 1. Priority Selection and Atomic Trigger Consumption
+    Axle::AnimationStateMachine sm("PrioritySM");
+
+    Axle::AnimationState stateA;
+    stateA.Name = "StateA";
+    stateA.Type = Axle::AnimationNodeType::Clip;
+    stateA.Clip = clip1s;
+    sm.AddState(stateA);
+
+    Axle::AnimationState stateLow;
+    stateLow.Name = "StateLow";
+    stateLow.Type = Axle::AnimationNodeType::Clip;
+    stateLow.Clip = clip1s;
+    sm.AddState(stateLow);
+
+    Axle::AnimationState stateHigh;
+    stateHigh.Name = "StateHigh";
+    stateHigh.Type = Axle::AnimationNodeType::Clip;
+    stateHigh.Clip = clip1s;
+    sm.AddState(stateHigh);
+
+    // Transition Low: Priority = 0, requires Trigger "Action"
+    Axle::AnimationTransition tLow;
+    tLow.FromState = "StateA";
+    tLow.ToState = "StateLow";
+    tLow.Priority = 0;
+    tLow.Duration = 0.1f;
+    tLow.Rules.push_back({"Action", Axle::TransitionConditionOperator::Triggered});
+    sm.AddTransition(tLow);
+
+    // Transition High: Priority = 10, requires "Check" > 5.0f AND Trigger "Action"
+    Axle::AnimationTransition tHigh;
+    tHigh.FromState = "StateA";
+    tHigh.ToState = "StateHigh";
+    tHigh.Priority = 10;
+    tHigh.Duration = 0.1f;
+    tHigh.Rules.push_back({"Check", Axle::TransitionConditionOperator::Greater, 5.0f});
+    tHigh.Rules.push_back({"Action", Axle::TransitionConditionOperator::Triggered});
+    sm.AddTransition(tHigh);
+
+    // Case 1A: Check = 2.0f (tHigh condition fails). Action trigger set.
+    sm.SetFloat("Check", 2.0f);
+    sm.SetTrigger("Action");
+    sm.Update(0.01f, *skeleton);
+    // tHigh failed -> tLow was selected!
+    ANIMATION_CHECK(sm.IsTransitioning(), "Transition active");
+    ANIMATION_CHECK(sm.GetCurrentStateName() == "StateA", "Still transitioning from StateA");
+    sm.Update(0.15f, *skeleton);
+    ANIMATION_CHECK(sm.GetCurrentStateName() == "StateLow", "StateLow selected when tHigh condition not met");
+    ANIMATION_CHECK(!sm.PeekTrigger("Action"), "Action trigger consumed atomically by winning transition");
+
+    // Case 1B: Reset to StateA. Check = 8.0f (both tHigh and tLow conditions met!).
+    // tHigh (Priority 10) MUST win over tLow (Priority 0).
+    sm.Reset();
+    ANIMATION_CHECK(sm.GetCurrentStateName() == "StateA", "Reset returns to StateA");
+    sm.SetFloat("Check", 8.0f);
+    sm.SetTrigger("Action");
+    sm.Update(0.01f, *skeleton);
+    sm.Update(0.15f, *skeleton);
+    ANIMATION_CHECK(sm.GetCurrentStateName() == "StateHigh", "Deterministic priority: StateHigh (Priority 10) won over StateLow (Priority 0)");
+
+    // 2. Zero-duration transition and residual dt carry-over
+    Axle::AnimationStateMachine smZero("ZeroDurationSM");
+    Axle::AnimationState zA;
+    zA.Name = "ZA";
+    zA.Type = Axle::AnimationNodeType::Clip;
+    zA.Clip = clip1s;
+    smZero.AddState(zA);
+
+    Axle::AnimationState zB;
+    zB.Name = "ZB";
+    zB.Type = Axle::AnimationNodeType::Clip;
+    zB.Clip = clip2s;
+    zB.SpeedMultiplier = 1.0f;
+    smZero.AddState(zB);
+
+    Axle::AnimationTransition tZero;
+    tZero.FromState = "ZA";
+    tZero.ToState = "ZB";
+    tZero.Duration = 0.0f; // Zero duration!
+    tZero.Rules.push_back({"Go", Axle::TransitionConditionOperator::Triggered});
+    smZero.AddTransition(tZero);
+
+    smZero.SetTrigger("Go");
+    // Update with dt = 0.4f
+    smZero.Update(0.4f, *skeleton);
+    ANIMATION_CHECK(smZero.GetCurrentStateName() == "ZB", "Zero-duration transition completes immediately in same frame");
+    ANIMATION_CHECK(!smZero.IsTransitioning(), "Not transitioning after zero-duration switch");
+
+    // 3. Exit-time boundary crossing
+    Axle::AnimationStateMachine smExit("ExitSM");
+    Axle::AnimationState eA;
+    eA.Name = "EA";
+    eA.Type = Axle::AnimationNodeType::Clip;
+    eA.Clip = clip1s; // 1 second duration
+    eA.Loop = false;
+    smExit.AddState(eA);
+
+    Axle::AnimationState eB;
+    eB.Name = "EB";
+    eB.Type = Axle::AnimationNodeType::Clip;
+    eB.Clip = clip1s;
+    smExit.AddState(eB);
+
+    Axle::AnimationTransition tExit;
+    tExit.FromState = "EA";
+    tExit.ToState = "EB";
+    tExit.HasExitTime = true;
+    tExit.ExitTime = 0.7f;
+    tExit.Duration = 0.2f;
+    smExit.AddTransition(tExit);
+
+    // At t=0.3s (normalizedTime 0.3 < 0.7): transition should NOT trigger
+    smExit.Update(0.3f, *skeleton);
+    ANIMATION_CHECK(smExit.GetCurrentStateName() == "EA" && !smExit.IsTransitioning(), "Exit-time gate prevents transition before 0.7");
+
+    // Advance to t=0.8s: transition triggers!
+    smExit.Update(0.5f, *skeleton);
+    ANIMATION_CHECK(smExit.IsTransitioning(), "Exit-time gate crossed: transition active");
+    smExit.Update(0.15f, *skeleton);
+    ANIMATION_CHECK(smExit.GetCurrentStateName() == "EB", "Transitioned to EB after exit time crossing");
+
+    // 4. Large dt crossfade completion without overflow
+    smExit.Reset();
+    smExit.Update(0.0f, *skeleton);
+    ANIMATION_CHECK(smExit.GetCurrentStateName() == "EA", "Reset back to EA");
+    // Advance with large dt = 5.0f
+    smExit.Update(5.0f, *skeleton);
+    ANIMATION_CHECK(smExit.GetCurrentStateName() == "EB", "Large dt cleanly completes transition and advances target state");
+    ANIMATION_CHECK(!smExit.IsTransitioning(), "Not transitioning after large dt completion");
+
+    // 5. dt=0 does not consume triggers or advance
+    smExit.Reset();
+    smExit.SetTrigger("Dummy");
+    smExit.Update(0.0f, *skeleton);
+    ANIMATION_CHECK(smExit.PeekTrigger("Dummy"), "dt=0 does not consume triggers");
+    ANIMATION_CHECK(smExit.GetCurrentStateName() == "EA", "dt=0 does not change state");
+
+    // Negative dt rejected
+    smExit.Update(-1.0f, *skeleton);
+    ANIMATION_CHECK(smExit.GetCurrentStateName() == "EA", "Negative dt rejected");
+
+    return true;
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure")
         return Axle::AnimationTests::Check(false, "Intentional harness failure", __FILE__, __LINE__) ? 0 : 1;
@@ -877,6 +1033,7 @@ int main(int argc, char** argv) {
     if (!TestAnimationCodecRoundTripAndAtomicSave()) return 1;
     if (!TestCookedGeometryBakeAndTruncatedBinaryRejection()) return 1;
     if (!TestTypedAnimatorParametersAndPureConditionEvaluator()) return 1;
+    if (!TestDeterministicTransitionsAndCrossfades()) return 1;
     std::cout << "Animation unit tests PASS\n";
     return 0;
 }

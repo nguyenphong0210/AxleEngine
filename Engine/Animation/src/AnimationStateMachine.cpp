@@ -5,6 +5,20 @@
 namespace Axle {
 
     bool TransitionRule::Evaluate(const AnimationStateMachine& sm) const {
+        const auto* decl = sm.GetParameterDeclaration(Parameter);
+        if (decl && decl->Type == AnimatorParameterType::Int) {
+            int32_t val = sm.GetInt(Parameter);
+            switch (Operator) {
+                case TransitionConditionOperator::AlwaysTrue: return true;
+                case TransitionConditionOperator::Greater: return val > IntOperand;
+                case TransitionConditionOperator::Less: return val < IntOperand;
+                case TransitionConditionOperator::GreaterOrEqual: return val >= IntOperand;
+                case TransitionConditionOperator::LessOrEqual: return val <= IntOperand;
+                case TransitionConditionOperator::Equal: return val == IntOperand;
+                case TransitionConditionOperator::NotEqual: return val != IntOperand;
+                default: break;
+            }
+        }
         switch (Operator) {
             case TransitionConditionOperator::AlwaysTrue:
                 return true;
@@ -25,7 +39,7 @@ namespace Axle {
             case TransitionConditionOperator::IsFalse:
                 return sm.GetBool(Parameter, false) == false;
             case TransitionConditionOperator::Triggered:
-                return sm.GetBool(Parameter, false);
+                return sm.PeekTrigger(Parameter);
             default:
                 return true;
         }
@@ -367,35 +381,65 @@ namespace Axle {
         return clone;
     }
 
-    void AnimationStateMachine::CheckTransitions() {
-        if (m_IsTransitioning) return; // Don't interrupt active transition
+    bool AnimationStateMachine::CheckTransitions() {
+        if (m_IsTransitioning) return false; // Don't interrupt active transition
         const auto* curState = FindState(m_CurrentStateName);
-        if (!curState) return;
+        if (!curState) return false;
 
         float blendParam = GetFloat(curState->BlendParameterName, 0.0f);
         float duration = curState->GetDuration(blendParam);
         float normalizedTime = (duration > 1e-4f) ? (m_CurrentStateTime / duration) : 0.0f;
 
-        for (const auto& trans : m_Transitions) {
-            if (trans.FromState != m_CurrentStateName) continue;
+        // Gather candidate transitions matching FromState
+        struct Candidate {
+            size_t Index;
+            const AnimationTransition* Trans;
+        };
+        std::vector<Candidate> candidates;
+        for (size_t i = 0; i < m_Transitions.size(); ++i) {
+            if (m_Transitions[i].FromState == m_CurrentStateName) {
+                candidates.push_back({ i, &m_Transitions[i] });
+            }
+        }
 
-            if (trans.HasExitTime && normalizedTime < trans.ExitTime) {
-                continue;
+        // Sort candidates deterministically: greater Priority first, preserving authored order
+        std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
+            return a.Trans->Priority > b.Trans->Priority;
+        });
+
+        for (const auto& cand : candidates) {
+            const auto& trans = *cand.Trans;
+
+            float exitThreshold = trans.ExitPhase < 0.9999f ? trans.ExitPhase : trans.ExitTime;
+            if (trans.HasExitTime) {
+                if (curState->Loop) {
+                    float phaseInCycle = normalizedTime - std::floor(normalizedTime);
+                    if (normalizedTime < exitThreshold && phaseInCycle < exitThreshold) {
+                        continue;
+                    }
+                } else {
+                    if (normalizedTime < exitThreshold) {
+                        continue;
+                    }
+                }
             }
 
             // Check typed rules
             bool rulesPassed = true;
+            std::vector<std::string> triggersToConsume;
             for (const auto& rule : trans.Rules) {
                 if (!rule.Evaluate(*this)) {
                     rulesPassed = false;
                     break;
+                }
+                if (rule.Operator == TransitionConditionOperator::Triggered) {
+                    triggersToConsume.push_back(rule.Parameter);
                 }
             }
             if (!rulesPassed) continue;
 
             // Check pure conditions
             bool pureCondsPassed = true;
-            std::vector<std::string> triggersToConsume;
             for (const auto& cond : trans.PureConditions) {
                 if (!EvaluateCondition(cond, *this)) {
                     pureCondsPassed = false;
@@ -417,14 +461,16 @@ namespace Axle {
                 continue;
             }
 
-            // Transition condition satisfied! Consume triggers atomically
+            // Transition condition satisfied! Consume triggers atomically for selected candidate
             for (const auto& tr : triggersToConsume) {
                 CheckAndConsumeTrigger(tr);
             }
 
             SetCurrentState(trans.ToState, trans.Duration);
-            break;
+            return true;
         }
+
+        return false;
     }
 
     void AnimationStateMachine::Update(float dt, const Skeleton& skeleton) {
@@ -435,45 +481,170 @@ namespace Axle {
             return;
         }
 
-        CheckTransitions();
+        // Validate dt: reject negative or non-finite dt
+        if (std::isnan(dt) || std::isinf(dt) || dt < 0.0f) {
+            return;
+        }
 
-        const auto* curState = FindState(m_CurrentStateName);
-        if (!curState) return;
+        if (dt == 0.0f) {
+            // dt=0 evaluates pose without advancing clocks, transitions, or consuming triggers
+            const auto* curState = FindState(m_CurrentStateName);
+            if (curState) {
+                float curParam = GetFloat(curState->BlendParameterName, 0.0f);
+                if (m_IsTransitioning) {
+                    const auto* targetState = FindState(m_TransitionTargetName);
+                    if (targetState) {
+                        float alpha = GetTransitionProgress();
+                        AnimationPose poseSource(skeleton.GetBoneCount());
+                        AnimationPose poseTarget(skeleton.GetBoneCount());
+                        curState->Sample(m_CurrentStateTime, curParam, skeleton, poseSource);
+                        float targetParam = GetFloat(targetState->BlendParameterName, 0.0f);
+                        targetState->Sample(m_TargetStateTime, targetParam, skeleton, poseTarget);
+                        AnimationPose::Blend(poseSource, poseTarget, alpha, m_CurrentPose);
+                    } else {
+                        curState->Sample(m_CurrentStateTime, curParam, skeleton, m_CurrentPose);
+                    }
+                } else {
+                    curState->Sample(m_CurrentStateTime, curParam, skeleton, m_CurrentPose);
+                }
+            }
+            m_CurrentPose.ComputeGlobalMatrices(skeleton, m_GlobalMatrices);
+            m_CurrentPose.ComputeSkinningMatrices(skeleton, m_SkinningMatrices);
+            return;
+        }
 
-        float curSpeed = curState->SpeedMultiplier;
-        m_CurrentStateTime += dt * curSpeed;
+        float remainingDt = dt;
+        int hops = 0;
+        constexpr int MAX_HOPS = 16;
 
-        float curParam = GetFloat(curState->BlendParameterName, 0.0f);
+        while (hops < MAX_HOPS) {
+            hops++;
 
-        if (m_IsTransitioning) {
-            const auto* targetState = FindState(m_TransitionTargetName);
-            if (targetState) {
-                m_TargetStateTime += dt * targetState->SpeedMultiplier;
-                m_TransitionElapsed += dt;
+            if (!m_IsTransitioning) {
+                bool triggered = CheckTransitions();
+                if (triggered && m_TransitionDuration <= 1e-4f) {
+                    // Zero-duration transition completed immediately
+                    m_CurrentStateName = m_TransitionTargetName;
+                    m_CurrentStateTime = 0.0f;
+                    m_IsTransitioning = false;
+                    m_TransitionTargetName.clear();
+                    m_TargetStateTime = 0.0f;
+                    m_TransitionElapsed = 0.0f;
+                    continue; // Advance residual dt in the new state!
+                }
+            }
 
-                float alpha = GetTransitionProgress();
+            if (remainingDt <= 1e-6f) {
+                break;
+            }
 
-                AnimationPose poseSource(skeleton.GetBoneCount());
-                AnimationPose poseTarget(skeleton.GetBoneCount());
+            const auto* curState = FindState(m_CurrentStateName);
+            if (!curState) break;
+            float curSpeed = std::max(0.0f, curState->SpeedMultiplier);
 
-                curState->Sample(m_CurrentStateTime, curParam, skeleton, poseSource);
+            if (m_IsTransitioning) {
+                const auto* targetState = FindState(m_TransitionTargetName);
+                float targetSpeed = targetState ? std::max(0.0f, targetState->SpeedMultiplier) : 1.0f;
 
-                float targetParam = GetFloat(targetState->BlendParameterName, 0.0f);
-                targetState->Sample(m_TargetStateTime, targetParam, skeleton, poseTarget);
+                float timeToFadeEnd = m_TransitionDuration - m_TransitionElapsed;
+                float stepDt = std::min(remainingDt, timeToFadeEnd);
 
-                AnimationPose::Blend(poseSource, poseTarget, alpha, m_CurrentPose);
+                m_CurrentStateTime += stepDt * curSpeed;
+                m_TargetStateTime += stepDt * targetSpeed;
+                m_TransitionElapsed += stepDt;
+                remainingDt -= stepDt;
 
                 if (m_TransitionElapsed >= m_TransitionDuration) {
                     m_CurrentStateName = m_TransitionTargetName;
                     m_CurrentStateTime = m_TargetStateTime;
                     m_IsTransitioning = false;
+                    m_TransitionTargetName.clear();
+                    m_TargetStateTime = 0.0f;
+                    m_TransitionElapsed = 0.0f;
                 }
             } else {
-                m_IsTransitioning = false;
+                // Find earliest exit gate among candidate transitions whose conditions are met
+                float minDtToGate = std::numeric_limits<float>::infinity();
+
+                for (const auto& trans : m_Transitions) {
+                    if (trans.FromState != m_CurrentStateName) continue;
+                    if (!trans.HasExitTime) continue;
+
+                    bool rulesPassed = true;
+                    for (const auto& rule : trans.Rules) {
+                        if (!rule.Evaluate(*this)) {
+                            rulesPassed = false;
+                            break;
+                        }
+                    }
+                    if (!rulesPassed) continue;
+
+                    bool pureCondsPassed = true;
+                    for (const auto& cond : trans.PureConditions) {
+                        if (!EvaluateCondition(cond, *this)) {
+                            pureCondsPassed = false;
+                            break;
+                        }
+                    }
+                    if (!pureCondsPassed) continue;
+
+                    if (trans.InstanceCondition && !trans.InstanceCondition(*this)) continue;
+                    if (trans.Condition && !trans.Condition()) continue;
+
+                    float exitThreshold = trans.ExitPhase < 0.9999f ? trans.ExitPhase : trans.ExitTime;
+                    exitThreshold = std::clamp(exitThreshold, 0.0f, 1.0f);
+
+                    float blendParam = GetFloat(curState->BlendParameterName, 0.0f);
+                    float duration = curState->GetDuration(blendParam);
+                    if (duration <= 1e-4f || curSpeed <= 1e-6f) continue;
+
+                    float curNorm = m_CurrentStateTime / duration;
+                    if (curState->Loop) {
+                        float curPhase = curNorm - std::floor(curNorm);
+                        if (curPhase < exitThreshold) {
+                            float dtGate = (exitThreshold - curPhase) * duration / curSpeed;
+                            if (dtGate < minDtToGate) minDtToGate = dtGate;
+                        } else if (exitThreshold > 1e-4f) {
+                            float dtGate = (1.0f - curPhase + exitThreshold) * duration / curSpeed;
+                            if (dtGate < minDtToGate) minDtToGate = dtGate;
+                        }
+                    } else {
+                        if (curNorm < exitThreshold) {
+                            float dtGate = (exitThreshold - curNorm) * duration / curSpeed;
+                            if (dtGate < minDtToGate) minDtToGate = dtGate;
+                        }
+                    }
+                }
+
+                float stepDt = remainingDt;
+                if (minDtToGate < remainingDt && minDtToGate > 1e-6f) {
+                    stepDt = minDtToGate;
+                }
+                m_CurrentStateTime += stepDt * curSpeed;
+                remainingDt -= stepDt;
+            }
+        }
+
+        // Sample resulting pose and compute palettes
+        const auto* curState = FindState(m_CurrentStateName);
+        if (curState) {
+            float curParam = GetFloat(curState->BlendParameterName, 0.0f);
+            if (m_IsTransitioning) {
+                const auto* targetState = FindState(m_TransitionTargetName);
+                if (targetState) {
+                    float alpha = GetTransitionProgress();
+                    AnimationPose poseSource(skeleton.GetBoneCount());
+                    AnimationPose poseTarget(skeleton.GetBoneCount());
+                    curState->Sample(m_CurrentStateTime, curParam, skeleton, poseSource);
+                    float targetParam = GetFloat(targetState->BlendParameterName, 0.0f);
+                    targetState->Sample(m_TargetStateTime, targetParam, skeleton, poseTarget);
+                    AnimationPose::Blend(poseSource, poseTarget, alpha, m_CurrentPose);
+                } else {
+                    curState->Sample(m_CurrentStateTime, curParam, skeleton, m_CurrentPose);
+                }
+            } else {
                 curState->Sample(m_CurrentStateTime, curParam, skeleton, m_CurrentPose);
             }
-        } else {
-            curState->Sample(m_CurrentStateTime, curParam, skeleton, m_CurrentPose);
         }
 
         m_CurrentPose.ComputeGlobalMatrices(skeleton, m_GlobalMatrices);

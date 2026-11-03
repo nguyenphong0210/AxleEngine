@@ -58,6 +58,7 @@ namespace Axle {
         bool HasExitTime = false;     // Wait for state playback to finish
         float ExitTime = 1.0f;        // Normalized time [0..1]
         float ExitPhase = 1.0f;
+        int32_t Priority = 0;        // Greater priority evaluated first
         std::vector<TransitionRule> Rules;
         std::vector<ConditionDefinition> PureConditions;
         std::function<bool()> Condition; // Legacy optional condition predicate
@@ -120,7 +121,7 @@ namespace Axle {
         const std::vector<glm::mat4>& GetSkinningMatrices() const { return m_SkinningMatrices; }
 
     private:
-        void CheckTransitions();
+        bool CheckTransitions();
         std::string ResolveParamId(const std::string& nameOrId) const;
 
     private:

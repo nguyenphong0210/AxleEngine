@@ -27,7 +27,22 @@ namespace Axle {
         void Sample(glm::vec3& outOffset, glm::vec3& outDir, std::mt19937& rng) const;
     };
 
+    // Missing flags in older assets preserve the original simulation behavior.
+    struct ParticleModuleState {
+        bool Emission = true;
+        bool Shape = true;
+        bool Size = true;
+        bool Speed = true;
+        bool Color = true;
+        bool Alpha = true;
+        bool Rotation = true;
+        bool Forces = true;
+        bool TextureSheet = true;
+        bool SubEmitters = true;
+    };
+
     struct ParticleEmitterConfig {
+        ParticleModuleState Modules;
         std::string Name = "DefaultEmitter";
 
         // Emission rate & burst

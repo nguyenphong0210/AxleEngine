@@ -7,7 +7,7 @@
 
 namespace Axle {
 
-    class AssetBlock;
+    struct AssetBlock;
 
     enum class VFXDiagnosticSeverity {
         Info,

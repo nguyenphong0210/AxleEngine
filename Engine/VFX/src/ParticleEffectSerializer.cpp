@@ -99,6 +99,17 @@ namespace Axle {
 
     void ParticleEffectSerializer::WriteEmitterConfig(AssetBlock& block, const ParticleEmitterConfig& config) {
         block.SetString("name", config.Name);
+        block.SetBool("moduleEmission", config.Modules.Emission);
+        block.SetBool("moduleShape", config.Modules.Shape);
+        block.SetBool("moduleSize", config.Modules.Size);
+        block.SetBool("moduleSpeed", config.Modules.Speed);
+        block.SetBool("moduleColor", config.Modules.Color);
+        block.SetBool("moduleAlpha", config.Modules.Alpha);
+        block.SetBool("moduleRotation", config.Modules.Rotation);
+        block.SetBool("moduleForces", config.Modules.Forces);
+        block.SetBool("moduleTextureSheet", config.Modules.TextureSheet);
+        block.SetBool("moduleSubEmitters", config.Modules.SubEmitters);
+
         block.SetUInt("maxParticles", config.MaxParticles);
         block.SetFloat("emissionRate", config.EmissionRate);
         block.SetFloat("duration", config.Duration);
@@ -294,6 +305,17 @@ namespace Axle {
                                                      ParticleEmitterConfig& outConfig,
                                                      std::vector<VFXDiagnostic>* outDiagnostics) {
         outConfig.Name = block.GetString("name", outConfig.Name);
+        outConfig.Modules.Emission = block.GetBool("moduleEmission", true);
+        outConfig.Modules.Shape = block.GetBool("moduleShape", true);
+        outConfig.Modules.Size = block.GetBool("moduleSize", true);
+        outConfig.Modules.Speed = block.GetBool("moduleSpeed", true);
+        outConfig.Modules.Color = block.GetBool("moduleColor", true);
+        outConfig.Modules.Alpha = block.GetBool("moduleAlpha", true);
+        outConfig.Modules.Rotation = block.GetBool("moduleRotation", true);
+        outConfig.Modules.Forces = block.GetBool("moduleForces", true);
+        outConfig.Modules.TextureSheet = block.GetBool("moduleTextureSheet", true);
+        outConfig.Modules.SubEmitters = block.GetBool("moduleSubEmitters", true);
+
         outConfig.MaxParticles = block.GetUInt("maxParticles", outConfig.MaxParticles);
         outConfig.EmissionRate = block.GetFloat("emissionRate", outConfig.EmissionRate);
         outConfig.Duration = block.GetFloat("duration", outConfig.Duration);

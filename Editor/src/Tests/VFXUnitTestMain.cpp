@@ -3,6 +3,8 @@
 #include <vector>
 #include <string>
 
+bool RunVFXAuthoringUnitTests();
+
 // Test suite forward declarations
 bool RunVFXDefinitionUnitTests();
 bool RunVFXPersistenceUnitTests();
@@ -28,6 +30,7 @@ int main(int argc, char** argv) {
     };
 
     std::vector<TestCase> testSuites = {
+        { "VFX Modular Authoring", RunVFXAuthoringUnitTests },
         { "VFX Effect Definition & Structure",  RunVFXDefinitionUnitTests },
         { "VFX Persistence & Legacy Migration", RunVFXPersistenceUnitTests },
         { "VFX Document Model & Commands",      RunVFXDocumentUnitTests },

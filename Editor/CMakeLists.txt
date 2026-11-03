@@ -188,6 +188,7 @@ add_test(NAME MaterialUnitTests COMMAND $<TARGET_FILE:AxleMaterialUnitTests>)
 # Dedicated CPU-Only VFX Unit Test Target (Phase 39)
 add_executable(AxleVFXUnitTests
     src/Tests/VFXUnitTestMain.cpp
+    src/Tests/Test_VFXAuthoringUnit.cpp
     src/Tests/Test_VFXDefinitionUnit.cpp
     src/Tests/Test_VFXPersistenceUnit.cpp
     src/Tests/Test_VFXDocumentUnit.cpp

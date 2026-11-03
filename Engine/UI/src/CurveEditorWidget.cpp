@@ -241,54 +241,23 @@ namespace Axle {
         ImGui::Text("%s", label);
         ImGui::SameLine();
 
-        // Presets
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 2));
-        if (ImGui::SmallButton("Flame")) {
-            gradient.SetFlamePreset();
-            state.SelectedColorKey = -1;
-            state.SelectedAlphaKey = -1;
-            modified = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Smoke")) {
-            gradient.SetSmokePreset();
-            state.SelectedColorKey = -1;
-            state.SelectedAlphaKey = -1;
-            modified = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Sparks")) {
-            gradient.SetSparksPreset();
-            state.SelectedColorKey = -1;
-            state.SelectedAlphaKey = -1;
-            modified = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Rainbow")) {
-            gradient.ColorKeys = {
-                { 0.0f, glm::vec3(1.0f, 0.0f, 0.0f) },
-                { 0.2f, glm::vec3(1.0f, 0.7f, 0.0f) },
-                { 0.4f, glm::vec3(0.0f, 1.0f, 0.0f) },
-                { 0.6f, glm::vec3(0.0f, 0.7f, 1.0f) },
-                { 0.8f, glm::vec3(0.5f, 0.0f, 1.0f) },
-                { 1.0f, glm::vec3(1.0f, 0.0f, 0.5f) }
-            };
-            gradient.AlphaKeys = { { 0.0f, 1.0f }, { 1.0f, 1.0f } };
-            gradient.StartColor = glm::vec4(gradient.ColorKeys.front().Color, 1.0f);
-            gradient.EndColor = glm::vec4(gradient.ColorKeys.back().Color, 1.0f);
-            state.SelectedColorKey = -1;
-            state.SelectedAlphaKey = -1;
+        if (ImGui::SmallButton("Reverse")) {
+            for (auto& key : gradient.ColorKeys) key.Time = 1.0f - key.Time;
+            for (auto& key : gradient.AlphaKeys) key.Time = 1.0f - key.Time;
+            std::reverse(gradient.ColorKeys.begin(), gradient.ColorKeys.end());
+            std::reverse(gradient.AlphaKeys.begin(), gradient.AlphaKeys.end());
+            std::swap(gradient.StartColor, gradient.EndColor);
+            state.SelectedColorKey = state.SelectedAlphaKey = -1;
             modified = true;
         }
         ImGui::SameLine();
         if (ImGui::SmallButton("Reset")) {
-            gradient.SetSimple(glm::vec4(1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.0f));
-            state.SelectedColorKey = -1;
-            state.SelectedAlphaKey = -1;
+            gradient.SetSimple(glm::vec4(1), glm::vec4(1));
+            state.SelectedColorKey = state.SelectedAlphaKey = -1;
             modified = true;
         }
-        ImGui::PopStyleVar(2);
+        ImGui::PopStyleVar();
 
         float width = ImGui::GetContentRegionAvail().x;
         if (width < 50.0f) width = 50.0f;

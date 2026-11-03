@@ -1,4 +1,5 @@
 #include <Axle/ParticleEmitter.hpp>
+#include <Axle/ParticleModules.hpp>
 #include <Axle/ParticleMeshSampler.hpp>
 #include <cmath>
 
@@ -190,6 +191,15 @@ namespace Axle {
         cfg.ColorOverLifetime = ColorGradient(glm::vec4(1), glm::vec4(1));
         cfg.NearFadeEnabled = false;
         cfg.SoftnessDistance = 0;
+        cfg.Modules.Shape = false;
+        cfg.Modules.Size = false;
+        cfg.Modules.Speed = false;
+        cfg.Modules.Color = false;
+        cfg.Modules.Alpha = false;
+        cfg.Modules.Rotation = false;
+        cfg.Modules.Forces = false;
+        cfg.Modules.TextureSheet = false;
+        cfg.Modules.SubEmitters = false;
         return cfg;
     }
 
@@ -380,4 +390,139 @@ namespace Axle {
         return cfg;
     }
 
+
+    const char* GetParticleModuleName(ParticleModule module) {
+        switch (module) {
+            case ParticleModule::Main: return "Main";
+            case ParticleModule::Emission: return "Emission";
+            case ParticleModule::Shape: return "Shape";
+            case ParticleModule::Size: return "Size over Lifetime";
+            case ParticleModule::Speed: return "Speed over Lifetime";
+            case ParticleModule::Color: return "Color over Lifetime";
+            case ParticleModule::Alpha: return "Alpha over Lifetime";
+            case ParticleModule::Rotation: return "Rotation over Lifetime";
+            case ParticleModule::Forces: return "Forces";
+            case ParticleModule::Noise: return "Noise";
+            case ParticleModule::Collision: return "Collision";
+            case ParticleModule::SubEmitters: return "Sub Emitters";
+            case ParticleModule::TextureSheet: return "Texture Sheet Animation";
+            case ParticleModule::Renderer: return "Renderer";
+        }
+        return "Unknown Module";
+    }
+
+    bool* GetParticleModuleToggle(ParticleEmitterConfig& config, ParticleModule module) {
+        switch (module) {
+            case ParticleModule::Emission: return &config.Modules.Emission;
+            case ParticleModule::Shape: return &config.Modules.Shape;
+            case ParticleModule::Size: return &config.Modules.Size;
+            case ParticleModule::Speed: return &config.Modules.Speed;
+            case ParticleModule::Color: return &config.Modules.Color;
+            case ParticleModule::Alpha: return &config.Modules.Alpha;
+            case ParticleModule::Rotation: return &config.Modules.Rotation;
+            case ParticleModule::Forces: return &config.Modules.Forces;
+            case ParticleModule::Noise: return &config.CurlNoise.Enabled;
+            case ParticleModule::Collision: return &config.Collision.Enabled;
+            case ParticleModule::SubEmitters: return &config.Modules.SubEmitters;
+            case ParticleModule::TextureSheet: return &config.Modules.TextureSheet;
+            default: return nullptr;
+        }
+    }
+
+    void CopyParticleModule(ParticleEmitterConfig& target, const ParticleEmitterConfig& source, ParticleModule module) {
+        switch (module) {
+            case ParticleModule::Main:
+                target.MaxParticles = source.MaxParticles;
+                target.Duration = source.Duration;
+                target.Looping = source.Looping;
+                target.PlayOnAwake = source.PlayOnAwake;
+                target.Lifetime = source.Lifetime;
+                target.InitialSpeed = source.InitialSpeed;
+                target.GravityModifier = source.GravityModifier;
+                target.Drag = source.Drag;
+                target.StartSize = source.StartSize;
+                target.StartRotation = source.StartRotation;
+                target.SimulationSpace = source.SimulationSpace;
+                break;
+            case ParticleModule::Emission:
+                target.EmissionRate = source.EmissionRate;
+                target.BurstCount = source.BurstCount;
+                target.BurstInterval = source.BurstInterval;
+                target.Bursts = source.Bursts;
+                target.Modules.Emission = source.Modules.Emission;
+                break;
+            case ParticleModule::Shape:
+                target.Shape = source.Shape;
+                target.Modules.Shape = source.Modules.Shape;
+                break;
+            case ParticleModule::Size:
+                target.EndSize = source.EndSize;
+                target.SizeOverLifetime = source.SizeOverLifetime;
+                target.Modules.Size = source.Modules.Size;
+                break;
+            case ParticleModule::Speed:
+                target.SpeedOverLifetime = source.SpeedOverLifetime;
+                target.Modules.Speed = source.Modules.Speed;
+                break;
+            case ParticleModule::Color:
+                target.ColorOverLifetime = source.ColorOverLifetime;
+                target.Modules.Color = source.Modules.Color;
+                break;
+            case ParticleModule::Alpha:
+                target.AlphaOverLifetime = source.AlphaOverLifetime;
+                target.Modules.Alpha = source.Modules.Alpha;
+                break;
+            case ParticleModule::Rotation:
+                target.AngularVelocity = source.AngularVelocity;
+                target.Modules.Rotation = source.Modules.Rotation;
+                break;
+            case ParticleModule::Forces:
+                target.ConstantAcceleration = source.ConstantAcceleration;
+                target.Wind = source.Wind;
+                target.WindInfluence = source.WindInfluence;
+                target.Buoyancy = source.Buoyancy;
+                target.ForceFields = source.ForceFields;
+                target.Modules.Forces = source.Modules.Forces;
+                break;
+            case ParticleModule::Noise:
+                target.CurlNoise = source.CurlNoise;
+                break;
+            case ParticleModule::Collision:
+                target.Collision = source.Collision;
+                break;
+            case ParticleModule::SubEmitters:
+                target.SubEmitters = source.SubEmitters;
+                target.Modules.SubEmitters = source.Modules.SubEmitters;
+                break;
+            case ParticleModule::TextureSheet:
+                target.TextureRows = source.TextureRows;
+                target.TextureCols = source.TextureCols;
+                target.TotalFrames = source.TotalFrames;
+                target.AnimationCycles = source.AnimationCycles;
+                target.SubFrameBlending = source.SubFrameBlending;
+                target.Modules.TextureSheet = source.Modules.TextureSheet;
+                break;
+            case ParticleModule::Renderer:
+                target.MaterialPath = source.MaterialPath;
+                target.MaterialAsset = source.MaterialAsset;
+                target.LightingEnabled = source.LightingEnabled;
+                target.WrapLighting = source.WrapLighting;
+                target.ScatteringFactor = source.ScatteringFactor;
+                target.NormalMapStrength = source.NormalMapStrength;
+                target.NearFadeEnabled = source.NearFadeEnabled;
+                target.NearFadeStart = source.NearFadeStart;
+                target.NearFadeEnd = source.NearFadeEnd;
+                target.FarFadeEnabled = source.FarFadeEnabled;
+                target.FarFadeStart = source.FarFadeStart;
+                target.FarFadeEnd = source.FarFadeEnd;
+                target.SoftnessDistance = source.SoftnessDistance;
+                target.BlendMode = source.BlendMode;
+                target.Orientation = source.Orientation;
+                break;
+        }
+    }
+
+    void ResetParticleModule(ParticleEmitterConfig& target, ParticleModule module) {
+        CopyParticleModule(target, ParticleEmitterConfig::CreateNeutral(), module);
+    }
 }

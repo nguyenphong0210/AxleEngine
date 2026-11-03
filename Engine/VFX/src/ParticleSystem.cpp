@@ -117,6 +117,7 @@ namespace Axle {
     }
 
     void ParticleSystem::DispatchSubEmitters(SubEmitterTrigger trigger, const glm::vec3& pos, const glm::vec3& vel, const glm::vec4& color) {
+        if (!m_Config.Modules.SubEmitters) return;
         for (const auto& sub : m_Config.SubEmitters) {
             if (sub.Trigger == trigger) {
                 if (sub.Probability >= 1.0f || VFXRandom::Float(m_RNG, 0.0f, 1.0f) < sub.Probability) {
@@ -149,7 +150,7 @@ namespace Axle {
         for (uint32_t i = 0; i < count; ++i) {
             glm::vec3 offset(0.0f);
             glm::vec3 dir(0.0f, 1.0f, 0.0f);
-            m_Config.Shape.Sample(offset, dir, m_RNG);
+            if (m_Config.Modules.Shape) m_Config.Shape.Sample(offset, dir, m_RNG);
 
             ParticleSpawnData data;
             const bool local = m_Config.SimulationSpace == ParticleSimulationSpace::Local;
@@ -200,7 +201,7 @@ namespace Axle {
     void ParticleSystem::SpawnParticle(const glm::vec3& emitterWorldPos, const glm::quat& emitterWorldRot) {
         glm::vec3 offset(0.0f);
         glm::vec3 dir(0.0f, 1.0f, 0.0f);
-        m_Config.Shape.Sample(offset, dir, m_RNG);
+        if (m_Config.Modules.Shape) m_Config.Shape.Sample(offset, dir, m_RNG);
 
         ParticleSpawnData data;
         if (m_Config.SimulationSpace == ParticleSimulationSpace::World) {
@@ -227,7 +228,7 @@ namespace Axle {
         data.Lifetime = m_Config.Lifetime.Sample(m_RNG);
 
         float lightingFlag = m_Config.LightingEnabled ? 1.0f : 0.0f;
-        if (m_Config.TotalFrames > 1 && m_Config.TextureCols > 0 && m_Config.TextureRows > 0) {
+        if (m_Config.Modules.TextureSheet && m_Config.TotalFrames > 1 && m_Config.TextureCols > 0 && m_Config.TextureRows > 0) {
             float scaleU = 1.0f / static_cast<float>(m_Config.TextureCols);
             float scaleV = 1.0f / static_cast<float>(m_Config.TextureRows);
             data.UVOffsetScale = glm::vec4(0.0f, 0.0f, scaleU, scaleV);
@@ -256,6 +257,7 @@ namespace Axle {
         if (m_IsEmitting)
             m_EmitterTime += dt; // Draining particles does not consume a not-yet-started emission window.
 
+        if (!m_Config.Modules.Emission) m_SpawnAccumulator = 0;
         bool isEmittingWindow = m_IsEmitting;
         bool looped = false;
         if (m_Config.Duration > 0.0f) {
@@ -281,7 +283,7 @@ namespace Axle {
                        runtime.NextTriggerTime <= windowEnd && burstEventsLeft > 0) {
                     --burstEventsLeft;
                     uint32_t count = burst.SampleCount(m_RNG);
-                    if (count > 0 && (burst.Probability >= 1.0f || VFXRandom::Float(m_RNG, 0.0f, 1.0f) <= burst.Probability)) {
+                    if (m_Config.Modules.Emission && count > 0 && (burst.Probability >= 1.0f || VFXRandom::Float(m_RNG, 0.0f, 1.0f) <= burst.Probability)) {
                         EmitBurst(count, emitterWorldPos, emitterWorldRot, m_WorldScale);
                     }
                     runtime.CompletedCycles++;
@@ -297,7 +299,7 @@ namespace Axle {
 
         if (isEmittingWindow) {
             // Continuous particle spawning
-            if (m_Config.EmissionRate > 0.0f) {
+            if (m_Config.Modules.Emission && m_Config.EmissionRate > 0.0f) {
                 float activeDt = dt;
                 if (!m_Config.Looping && m_Config.Duration > 0.0f && m_EmitterTime > m_Config.Duration) {
                     activeDt = std::max(0.0f, m_Config.Duration - prevEmitterTime);
@@ -321,7 +323,8 @@ namespace Axle {
                 unsigned budget = 64;
                 while (m_BurstTimer >= m_Config.BurstInterval && budget--) {
                     m_BurstTimer -= m_Config.BurstInterval;
-                    EmitBurst(m_Config.BurstCount, emitterWorldPos, emitterWorldRot, m_WorldScale);
+                    if (m_Config.Modules.Emission)
+                        EmitBurst(m_Config.BurstCount, emitterWorldPos, emitterWorldRot, m_WorldScale);
                 }
                 m_BurstTimer = std::fmod(m_BurstTimer, m_Config.BurstInterval);
             }
@@ -362,8 +365,8 @@ namespace Axle {
         auto& uvSubFrames = m_Pool.GetUVSubFrames();
 
         glm::vec3 gravityAccel = glm::vec3(0.0f, -9.81f, 0.0f) * m_Config.GravityModifier;
-        glm::vec3 baseAccel = m_Config.ConstantAcceleration + gravityAccel;
-        if (m_Config.Buoyancy != 0.0f) {
+        glm::vec3 baseAccel = gravityAccel + (m_Config.Modules.Forces ? m_Config.ConstantAcceleration : glm::vec3(0));
+        if (m_Config.Modules.Forces && m_Config.Buoyancy != 0.0f) {
             baseAccel.y += m_Config.Buoyancy;
         }
 
@@ -383,13 +386,13 @@ namespace Axle {
             glm::vec3 particleAccel = baseAccel;
 
             // Environmental Wind drag force
-            if (glm::length(m_Config.Wind) > 1e-5f) {
+            if (m_Config.Modules.Forces && glm::length(m_Config.Wind) > 1e-5f) {
                 glm::vec3 relWind = m_Config.Wind - velocities[i];
                 particleAccel += relWind * m_Config.WindInfluence;
             }
 
             // Force Fields (Wind, Buoyancy, Attractor, Vortex)
-            for (const auto& field : m_Config.ForceFields) {
+            if (m_Config.Modules.Forces) for (const auto& field : m_Config.ForceFields) {
                 particleAccel += field.Evaluate(positions[i], velocities[i], m_TotalSimulationTime);
             }
 
@@ -403,7 +406,7 @@ namespace Axle {
             velocities[i] += particleAccel * dt;
 
             // Speed over Lifetime curve modulation
-            float speedCurveScale = m_Config.SpeedOverLifetime.Evaluate(t);
+            float speedCurveScale = m_Config.Modules.Speed ? m_Config.SpeedOverLifetime.Evaluate(t) : 1.0f;
             glm::vec3 currentVel = velocities[i] * speedCurveScale;
 
             glm::vec3 prevPos = positions[i];
@@ -494,18 +497,18 @@ namespace Axle {
             }
 
             positions[i] = nextPos;
-            rotations[i] += angVels[i] * dt;
+            if (m_Config.Modules.Rotation) rotations[i] += angVels[i] * dt;
 
             // Size & Color curves evaluation
             float curveSize = m_Config.SizeOverLifetime.Evaluate(t);
-            sizes[i] = glm::mix(startSizes[i], endSizes[i], t) * curveSize;
+            sizes[i] = m_Config.Modules.Size ? glm::mix(startSizes[i], endSizes[i], t) * curveSize : startSizes[i];
 
-            colors[i] = m_Config.ColorOverLifetime.Evaluate(t) * m_Pool.GetColorMultipliers()[i];
-            colors[i].a *= m_Config.AlphaOverLifetime.Evaluate(t);
+            colors[i] = m_Config.ColorOverLifetime.Evaluate(m_Config.Modules.Color ? t : 0.0f) * m_Pool.GetColorMultipliers()[i];
+            if (m_Config.Modules.Alpha) colors[i].a *= m_Config.AlphaOverLifetime.Evaluate(t);
 
             // Flipbook UV frame interpolation & sub-frame blending
             float lightingFlag = m_Config.LightingEnabled ? 1.0f : 0.0f;
-            if (m_Config.TotalFrames > 1 && m_Config.TextureCols > 0 && m_Config.TextureRows > 0) {
+            if (m_Config.Modules.TextureSheet && m_Config.TotalFrames > 1 && m_Config.TextureCols > 0 && m_Config.TextureRows > 0) {
                 float cycleProgress = std::fmod(t * m_Config.AnimationCycles, 1.0f);
                 float continuousFrame = cycleProgress * static_cast<float>(m_Config.TotalFrames);
                 uint32_t frameA = static_cast<uint32_t>(continuousFrame);
@@ -529,6 +532,7 @@ namespace Axle {
                     uvSubFrames[i] = glm::vec4(0.0f, 0.0f, 0.0f, lightingFlag);
                 }
             } else {
+                uvOffsets[i] = glm::vec4(0, 0, 1, 1);
                 uvSubFrames[i] = glm::vec4(0.0f, 0.0f, 0.0f, lightingFlag);
             }
 

@@ -852,8 +852,41 @@ namespace Axle {
         ImGui::PopStyleVar();
     }
 
+    bool VFXEditorPanel::BeginModule(ParticleModule module) {
+        const char* name = GetParticleModuleName(module);
+        bool* enabled = GetParticleModuleToggle(m_Config, module);
+        ImGuiTextFilter filter(m_ModuleSearch);
+        if (!filter.PassFilter(name) || (m_EnabledModulesOnly && enabled && !*enabled)) return false;
+        ImGui::PushID(static_cast<int>(module));
+        if (enabled) {
+            ImGui::Checkbox("##Enabled", enabled);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enable this module without losing its authored values");
+            ImGui::SameLine();
+        }
+        const bool open = ImGui::CollapsingHeader(name, module == ParticleModule::Main ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+        if (ImGui::BeginPopupContextItem("Module Actions")) {
+            if (ImGui::MenuItem("Reset Module")) ResetParticleModule(m_Config, module);
+            if (ImGui::MenuItem("Copy Module")) {
+                m_ModuleClipboard = m_Config;
+                m_CopiedModule = module;
+                m_HasModuleClipboard = true;
+            }
+            if (ImGui::MenuItem("Paste Module", nullptr, false, m_HasModuleClipboard && m_CopiedModule == module))
+                CopyParticleModule(m_Config, m_ModuleClipboard, module);
+            ImGui::EndPopup();
+        }
+        if (!open) { ImGui::PopID(); return false; }
+        ImGui::BeginDisabled(enabled && !*enabled);
+        return true;
+    }
+
+    void VFXEditorPanel::EndModule() {
+        ImGui::EndDisabled();
+        ImGui::PopID();
+    }
+
     void VFXEditorPanel::DrawMainModule() {
-        if (ImGui::CollapsingHeader("📦 Main Module", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (BeginModule(ParticleModule::Main)) {
             if (auto *stack = GetCurrentEmitterStack()) {
                 ImGui::Checkbox("Trigger Only", &stack->TriggerOnly);
                 ImGui::DragFloat3("Emitter Offset", glm::value_ptr(stack->LocalTransform.Translation), 0.01f);
@@ -863,13 +896,11 @@ namespace Axle {
                 ImGui::DragFloat3("Emitter Scale", glm::value_ptr(stack->LocalTransform.Scale), 0.01f, 0.001f,
                                   100.0f);
             }
-            char nameBuf[128];
-            strncpy_s(nameBuf, m_Config.Name.c_str(), sizeof(nameBuf));
-            if (ImGui::InputText("Emitter Name", nameBuf, sizeof(nameBuf))) {
-                SyncCurrentStackConfig();
-                if (auto *stack = GetCurrentEmitterStack()) {
-                    m_Document.RenameEmitter(stack->Id, nameBuf);
-                    SyncStacksFromDocument();
+            if (auto* stack = GetCurrentEmitterStack()) {
+                char nameBuf[128]{};
+                strncpy_s(nameBuf, stack->Name.c_str(), sizeof(nameBuf) - 1);
+                if (ImGui::InputText("Emitter Name", nameBuf, sizeof(nameBuf))) {
+                    stack->Name = nameBuf;
                     m_Config.Name = nameBuf;
                 }
             }
@@ -897,20 +928,37 @@ namespace Axle {
             ImGui::DragFloatRange2("Start Lifetime", &m_Config.Lifetime.Min, &m_Config.Lifetime.Max, 0.05f, 0.05f, 30.0f, "Min: %.2f", "Max: %.2f");
             ImGui::DragFloatRange2("Start Speed", &m_Config.InitialSpeed.Min, &m_Config.InitialSpeed.Max, 0.1f, 0.0f, 100.0f, "Min: %.1f", "Max: %.1f");
 
+            ImGui::DragFloatRange2("Start Size", &m_Config.StartSize.Min, &m_Config.StartSize.Max, 0.02f, 0.001f, 100);
+            ImGui::DragFloatRange2("Start Rotation (rad)", &m_Config.StartRotation.Min, &m_Config.StartRotation.Max, 0.02f, -100, 100);
+            if (!m_Config.Modules.Color) {
+                auto& gradient = m_Config.ColorOverLifetime;
+                glm::vec4 color = gradient.Evaluate(0);
+                if (ImGui::ColorEdit4("Start Color", glm::value_ptr(color))) {
+                    if (gradient.ColorKeys.empty()) gradient.AddColorKey(0, glm::vec3(color));
+                    else gradient.ColorKeys.front().Color = glm::vec3(color);
+                    if (gradient.AlphaKeys.empty()) gradient.AddAlphaKey(0, color.a);
+                    else gradient.AlphaKeys.front().Alpha = color.a;
+                    gradient.StartColor = color;
+                }
+            }
             ImGui::DragFloat("Gravity Modifier", &m_Config.GravityModifier, 0.05f, -10.0f, 10.0f, "%.2fx");
             ImGui::SliderFloat("Air Drag Damping", &m_Config.Drag, 0.0f, 1.0f, "%.2f");
+            EndModule();
         }
     }
 
     void VFXEditorPanel::DrawEmissionAndBurstsModule() {
-        if (ImGui::CollapsingHeader("💥 Emission & Bursts", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (BeginModule(ParticleModule::Emission)) {
             ImGui::DragFloat("Rate over Time (P/sec)", &m_Config.EmissionRate, 1.0f, 0.0f, 2000.0f, "%.1f");
 
+            int periodicCount = static_cast<int>(m_Config.BurstCount);
+            if (ImGui::DragInt("Periodic Count", &periodicCount, 1, 0, 20000)) m_Config.BurstCount = std::max(0, periodicCount);
+            ImGui::DragFloat("Periodic Interval", &m_Config.BurstInterval, 0.01f, 0, 100);
             ImGui::Spacing();
             ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), "Bursts (One-shot & Periodic):");
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 70.0f);
             if (ImGui::SmallButton("+ Add Burst")) {
-                m_Config.Bursts.emplace_back(0.0f, 30, 50, 1, 0.0f, 1.0f);
+                m_Config.Bursts.emplace_back(0.0f, 1, 1, 1, 0.0f, 1.0f);
                 SyncCurrentStackConfig();
             }
 
@@ -941,11 +989,12 @@ namespace Axle {
                 }
                 ImGui::PopID();
             }
+            EndModule();
         }
     }
 
     void VFXEditorPanel::DrawShapeControls() {
-        if (ImGui::CollapsingHeader("📐 Shape Module", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (BeginModule(ParticleModule::Shape)) {
             const char* shapeTypes[] = { "Point", "Sphere", "Hemisphere", "Box", "Cone", "Line", "Circle", "MeshSurface" };
             int currentShape = static_cast<int>(m_Config.Shape.Type);
             if (ImGui::Combo("Shape Type", &currentShape, shapeTypes, IM_ARRAYSIZE(shapeTypes))) {
@@ -996,37 +1045,31 @@ namespace Axle {
                 default:
                     break;
             }
+            EndModule();
         }
     }
 
     void VFXEditorPanel::DrawCurvesControls() {
-        if (ImGui::CollapsingHeader("📈 Size & Velocity over Lifetime", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::DragFloatRange2("Start Size Range", &m_Config.StartSize.Min, &m_Config.StartSize.Max, 0.02f, 0.01f, 20.0f, "Min: %.2f", "Max: %.2f");
-            ImGui::DragFloatRange2("End Size Range", &m_Config.EndSize.Min, &m_Config.EndSize.Max, 0.02f, 0.01f, 20.0f, "Min: %.2f", "Max: %.2f");
-
-            // Interactive Bezier Curve Editors
-            if (CurveEditorWidget::DrawCurveEditor("Size over Lifetime Curve", m_Config.SizeOverLifetime, 75.0f)) {
-                SyncCurrentStackConfig();
-            }
-
-            ImGui::Spacing();
-            if (CurveEditorWidget::DrawCurveEditor("Speed over Lifetime Curve", m_Config.SpeedOverLifetime, 75.0f)) {
-                SyncCurrentStackConfig();
-            }
-
-            ImGui::Spacing();
-            ImGui::DragFloatRange2("Angular Velocity (rad/s)", &m_Config.AngularVelocity.Min, &m_Config.AngularVelocity.Max, 0.1f, -20.0f, 20.0f, "Min: %.2f", "Max: %.2f");
+        if (BeginModule(ParticleModule::Size)) {
+            ImGui::DragFloatRange2("End Size", &m_Config.EndSize.Min, &m_Config.EndSize.Max, 0.02f, 0.001f, 100);
+            CurveEditorWidget::DrawCurveEditor("Size Curve", m_Config.SizeOverLifetime, 90);
+            EndModule();
         }
-
-        if (ImGui::CollapsingHeader("🎨 Color & Alpha over Lifetime", ImGuiTreeNodeFlags_DefaultOpen)) {
-            if (CurveEditorWidget::DrawGradientEditor("Color Gradient Ramp", m_Config.ColorOverLifetime, 26.0f)) {
-                SyncCurrentStackConfig();
-            }
-
-            ImGui::Spacing();
-            if (CurveEditorWidget::DrawCurveEditor("Alpha over Lifetime Curve", m_Config.AlphaOverLifetime, 70.0f)) {
-                SyncCurrentStackConfig();
-            }
+        if (BeginModule(ParticleModule::Speed)) {
+            CurveEditorWidget::DrawCurveEditor("Speed Multiplier", m_Config.SpeedOverLifetime, 90);
+            EndModule();
+        }
+        if (BeginModule(ParticleModule::Color)) {
+            CurveEditorWidget::DrawGradientEditor("Color Gradient", m_Config.ColorOverLifetime, 26);
+            EndModule();
+        }
+        if (BeginModule(ParticleModule::Alpha)) {
+            CurveEditorWidget::DrawCurveEditor("Alpha Multiplier", m_Config.AlphaOverLifetime, 90);
+            EndModule();
+        }
+        if (BeginModule(ParticleModule::Rotation)) {
+            ImGui::DragFloatRange2("Angular Velocity (rad/s)", &m_Config.AngularVelocity.Min, &m_Config.AngularVelocity.Max, 0.1f, -100, 100);
+            EndModule();
         }
     }
 
@@ -1105,7 +1148,7 @@ namespace Axle {
     }
 
     void VFXEditorPanel::DrawTextureFlipbookControls() {
-        if (ImGui::CollapsingHeader("🖼️ Texture & Flipbook Animation")) {
+        if (ImGuiTextFilter(m_ModuleSearch).PassFilter("Textures") && ImGui::CollapsingHeader("Textures")) {
             auto* currentStack = GetCurrentEmitterStack();
             if (currentStack) {
                 ImGui::TextUnformatted("Albedo Texture");
@@ -1123,6 +1166,8 @@ namespace Axle {
                 ImGui::Separator();
             }
 
+        }
+        if (BeginModule(ParticleModule::TextureSheet)) {
             int rows = static_cast<int>(m_Config.TextureRows);
             int cols = static_cast<int>(m_Config.TextureCols);
             if (ImGui::DragInt("Flipbook Rows (N)", &rows, 1, 1, 16)) {
@@ -1135,16 +1180,19 @@ namespace Axle {
                 m_Config.TotalFrames = m_Config.TextureRows * m_Config.TextureCols;
                 SyncCurrentStackConfig();
             }
+            int frames = static_cast<int>(m_Config.TotalFrames);
+            if (ImGui::DragInt("Frame Count", &frames, 1, 1, int(m_Config.TextureRows * m_Config.TextureCols)))
+                m_Config.TotalFrames = std::clamp(frames, 1, int(m_Config.TextureRows * m_Config.TextureCols));
+            ImGui::DragFloat("Animation Cycles", &m_Config.AnimationCycles, 0.05f, 0.001f, 100);
             if (ImGui::Checkbox("Sub-Frame Smooth Blending", &m_Config.SubFrameBlending)) {
                 SyncCurrentStackConfig();
             }
+            EndModule();
         }
     }
 
     void VFXEditorPanel::DrawDynamicsAndForceFields() {
-        if (ImGui::CollapsingHeader("🌪️ Physics, Noise & Collisions")) {
-            ImGui::TextColored(ImVec4(0.45f, 0.95f, 0.55f, 1.0f), "Curl Noise Turbulence:");
-            ImGui::Checkbox("Enable Curl Noise", &m_Config.CurlNoise.Enabled);
+        if (BeginModule(ParticleModule::Noise)) {
             if (m_Config.CurlNoise.Enabled) {
                 ImGui::DragFloat("Curl Frequency", &m_Config.CurlNoise.Frequency, 0.05f, 0.05f, 10.0f, "%.2f");
                 ImGui::DragFloat("Curl Strength", &m_Config.CurlNoise.Strength, 0.1f, 0.0f, 20.0f, "%.2f m/s²");
@@ -1157,9 +1205,9 @@ namespace Axle {
                 }
             }
 
-            ImGui::Spacing();
-            ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.35f, 1.0f), "Ground / Surface Collisions:");
-            ImGui::Checkbox("Enable Collisions", &m_Config.Collision.Enabled);
+            EndModule();
+        }
+        if (BeginModule(ParticleModule::Collision)) {
             if (m_Config.Collision.Enabled) {
                 const char* collisionModes[] = { "Planes & Boxes", "Floor Plane", "Scene Physics" };
                 int currentMode = static_cast<int>(m_Config.Collision.CollisionMode);
@@ -1191,6 +1239,7 @@ namespace Axle {
                 if (ImGui::DragFloat("Collision Radius Margin", &m_Config.Collision.ParticleRadius, 0.01f, 0.001f, 1.0f, "%.3f m")) {
                     SyncCurrentStackConfig();
                 }
+                ImGui::DragFloat("Minimum Bounce Speed", &m_Config.Collision.MinBounceSpeed, 0.01f, 0, 100);
                 if (ImGui::Checkbox("Kill on Collision (Global)", &m_Config.Collision.KillOnCollision)) {
                     SyncCurrentStackConfig();
                 }
@@ -1251,7 +1300,10 @@ namespace Axle {
                     }
                 }
             }
-            ImGui::TextColored(ImVec4(0.75f, 0.75f, 1.0f, 1.0f), "Environmental Forces:");
+            EndModule();
+        }
+        if (BeginModule(ParticleModule::Forces)) {
+            ImGui::DragFloat3("Constant Acceleration", glm::value_ptr(m_Config.ConstantAcceleration), 0.1f);
             ImGui::DragFloat3("Directional Wind", glm::value_ptr(m_Config.Wind), 0.1f, -50.0f, 50.0f, "%.1f m/s");
             ImGui::DragFloat("Thermal Buoyancy", &m_Config.Buoyancy, 0.1f, -20.0f, 20.0f, "%.1f m/s²");
             ImGui::SliderFloat("Wind Influence", &m_Config.WindInfluence, 0, 1);
@@ -1289,11 +1341,12 @@ namespace Axle {
                     break;
                 }
             }
+            EndModule();
         }
     }
 
     void VFXEditorPanel::DrawSubEmittersModule() {
-        if (ImGui::CollapsingHeader("🧬 Sub-Emitters Module")) {
+        if (BeginModule(ParticleModule::SubEmitters)) {
             ImGui::TextDisabled("Spawn child particle systems on particle events:");
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 70.0f);
             if (ImGui::SmallButton("+ Add Sub")) {
@@ -1380,18 +1433,19 @@ namespace Axle {
                 }
                 ImGui::PopID();
             }
+            EndModule();
         }
     }
 
     void VFXEditorPanel::DrawShadingAndBillboarding() {
-        if (ImGui::CollapsingHeader("💡 Renderer & Shading Pipeline")) {
+        if (BeginModule(ParticleModule::Renderer)) {
             const char* orientations[] = { "Spherical (Camera-Facing)", "Cylindrical (Axial-Y)", "Velocity-Aligned (Stretched)" };
             int currentOrient = static_cast<int>(m_Config.Orientation);
             if (ImGui::Combo("Orientation Mode", &currentOrient, orientations, IM_ARRAYSIZE(orientations))) {
                 m_Config.Orientation = static_cast<ParticleOrientation>(currentOrient);
             }
 
-            const char* blendModes[] = { "Additive (Fire, Sparks)", "Alpha Blending (Smoke, Dust)", "Multiply", "Cutout (Alpha Tested)" };
+            const char* blendModes[] = { "Additive", "Alpha Blend", "Multiply", "Cutout (Alpha Tested)" };
             int currentBlend = static_cast<int>(m_Config.BlendMode);
             if (ImGui::Combo("Blend Mode", &currentBlend, blendModes, IM_ARRAYSIZE(blendModes))) {
                 m_Config.BlendMode = static_cast<ParticleBlendMode>(currentBlend);
@@ -1421,6 +1475,7 @@ namespace Axle {
                 for (const auto &diagnostic : settings.Diagnostics)
                     ImGui::TextWrapped("%s", diagnostic.Message.c_str());
             }
+            EndModule();
         }
     }
 
@@ -1473,6 +1528,9 @@ namespace Axle {
                 ImGui::EndChild();
                 return;
             }
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputTextWithHint("##ModuleSearch", "Search modules...", m_ModuleSearch, sizeof(m_ModuleSearch));
+            ImGui::Checkbox("Enabled modules only", &m_EnabledModulesOnly);
             m_Document.BeginTransaction();
             ImGui::PushID(GetCurrentEmitterStack() ? GetCurrentEmitterStack()->Id.c_str() : "NoEmitter");
             DrawMainModule();

@@ -2,6 +2,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/ParticleEmitter.hpp>
 #include <Axle/ParticleSystem.hpp>
+#include <Axle/ParticleModules.hpp>
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/VFXEditorDocument.hpp>
 #include <Axle/MaterialInspectorControls.hpp>
@@ -113,6 +114,13 @@ namespace Axle {
         void DrawShurikenInspector(float width, float height);
 
         // Modular Shuriken Group Accordions
+        bool BeginModule(ParticleModule module);
+        void EndModule();
+        char m_ModuleSearch[128]{};
+        bool m_EnabledModulesOnly = false;
+        bool m_HasModuleClipboard = false;
+        ParticleModule m_CopiedModule = ParticleModule::Main;
+        ParticleEmitterConfig m_ModuleClipboard;
         void DrawMainModule();
         void DrawEmissionAndBurstsModule();
         void DrawShapeControls();

@@ -185,9 +185,7 @@ namespace Axle {
     }
 
     ImGuiLayer::~ImGuiLayer() {
-        if (m_Initialized) {
-            Shutdown();
-        }
+        Shutdown();
     }
 
     void ImGuiLayer::Init(GLFWwindow* window) {
@@ -318,7 +316,7 @@ namespace Axle {
         // Create SRV Descriptor Heap for ImGui textures & viewports
         D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
         heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        heapDesc.NumDescriptors = 1024;
+        heapDesc.NumDescriptors = D3D12DescriptorCapacity;
         heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         heapDesc.NodeMask = 0;
 
@@ -623,6 +621,7 @@ namespace Axle {
     }
 
     void ImGuiLayer::Shutdown() {
+        FlushDeferredReleases();
         if (!m_Initialized) return;
 
         switch (m_BackendType) {
@@ -783,7 +782,10 @@ namespace Axle {
     }
 
     void ImGuiLayer::End() {
-        if (!m_Initialized || ImGui::GetIO().BackendRendererUserData == nullptr) return;
+        if (!m_Initialized || ImGui::GetIO().BackendRendererUserData == nullptr) {
+            FlushDeferredReleases();
+            return;
+        }
 
         UpdateWindowSnapping();
         ImGui::Render();
@@ -991,6 +993,22 @@ namespace Axle {
             }
         }
 #endif
+        FlushDeferredReleases();
+    }
+
+    void ImGuiLayer::DeferRelease(std::function<void()> release) {
+        if (release) m_DeferredReleases.push_back(std::move(release));
+    }
+
+    void ImGuiLayer::FlushDeferredReleases() {
+        if (m_DeferredReleases.empty()) return;
+        // A wait before UI submission would not protect draw lists still being built.
+        // Retire after submission, and only synchronize frames that actually retire resources.
+        auto& device = RHI::RHIDevice::Get();
+        if (m_BackendType != ImGuiBackendType::OpenGL && device.IsInitialized()) device.WaitIdle();
+        auto releases = std::move(m_DeferredReleases);
+        m_DeferredReleases.clear();
+        for (auto& release : releases) release();
     }
 
     void ImGuiLayer::Render(RHI::RHICommandBuffer* cmdBuffer) {
@@ -1037,6 +1055,7 @@ namespace Axle {
             D3D12_CPU_DESCRIPTOR_HANDLE outCpu = {};
             D3D12_GPU_DESCRIPTOR_HANDLE outGpu = {};
             AllocateD3D12Descriptor(&outCpu, &outGpu);
+            if (!outCpu.ptr || !outGpu.ptr) return 0;
 
             D3D12_CPU_DESCRIPTOR_HANDLE srcCpu = {};
             srcCpu.ptr = cpuHandlePtr;
@@ -1079,18 +1098,24 @@ namespace Axle {
 
     void ImGuiLayer::AllocateD3D12Descriptor(void* outCpuHandle, void* outGpuHandle) {
 #if defined(AXLE_HAS_D3D12)
-        if (!m_D3D12SrvHeap || !outCpuHandle || !outGpuHandle) return;
+        if (!outCpuHandle || !outGpuHandle) return;
+        auto* outCpu = static_cast<D3D12_CPU_DESCRIPTOR_HANDLE*>(outCpuHandle);
+        auto* outGpu = static_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(outGpuHandle);
+        *outCpu = {};
+        *outGpu = {};
+        if (!m_D3D12SrvHeap) return;
 
         uint32_t index = 0;
         if (!m_FreeDescriptorIndices.empty()) {
             index = m_FreeDescriptorIndices.back();
             m_FreeDescriptorIndices.pop_back();
         } else {
+            if (m_AllocatedDescriptorCount >= D3D12DescriptorCapacity) {
+                AXLE_CORE_ERROR("ImGui texture descriptor heap is full; skipping texture registration.");
+                return;
+            }
             index = m_AllocatedDescriptorCount++;
         }
-
-        auto* outCpu = static_cast<D3D12_CPU_DESCRIPTOR_HANDLE*>(outCpuHandle);
-        auto* outGpu = static_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(outGpuHandle);
 
         D3D12_CPU_DESCRIPTOR_HANDLE cpuStart = m_D3D12SrvHeap->GetCPUDescriptorHandleForHeapStart();
         D3D12_GPU_DESCRIPTOR_HANDLE gpuStart = m_D3D12SrvHeap->GetGPUDescriptorHandleForHeapStart();

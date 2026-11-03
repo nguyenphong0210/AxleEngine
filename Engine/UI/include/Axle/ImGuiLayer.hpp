@@ -3,6 +3,7 @@
 #include <Axle/ApplicationUI.hpp>
 #include <Axle/Window.hpp>
 #include <vector>
+#include <functional>
 
 struct GLFWwindow;
 struct IDXGISwapChain3;
@@ -69,6 +70,10 @@ namespace Axle {
         uint64_t RegisterTextureDescriptor(uint64_t cpuHandlePtr);
         void UnregisterTextureDescriptor(uint64_t gpuHandlePtr);
 
+        // Retain textures/descriptors referenced by this frame's draw lists until
+        // End has submitted all UI draws and the GPU has finished using them.
+        void DeferRelease(std::function<void()> release);
+
         // Force Vulkan SwapChain rebuild on next frame (e.g. on window resize / restoration)
         void RebuildVulkanSwapChain() { m_VulkanSwapChainRebuild = true; }
 
@@ -87,13 +92,16 @@ namespace Axle {
 
         void AllocateD3D12Descriptor(void* outCpuHandle, void* outGpuHandle);
         void FreeD3D12Descriptor(void* cpuHandle, void* gpuHandle);
+        void FlushDeferredReleases();
 
     private:
         ImGuiBackendType m_BackendType = ImGuiBackendType::OpenGL;
         bool m_Initialized = false;
         GLFWwindow* m_Window = nullptr;
+        std::vector<std::function<void()>> m_DeferredReleases;
 
         // D3D12 Descriptor Heap
+        static constexpr uint32_t D3D12DescriptorCapacity = 1024;
         ID3D12DescriptorHeap* m_D3D12SrvHeap = nullptr;
         uint32_t m_D3D12DescriptorSize = 0;
         uint32_t m_AllocatedDescriptorCount = 0;

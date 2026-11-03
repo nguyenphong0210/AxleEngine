@@ -178,3 +178,58 @@ Final build/test logs: `build/vfx-create-final-regression-build.log` and
 The actual right-click menu was **NOT RUN** interactively: the Computer Use native
 pipe was unavailable. The user's created asset and crash log were preserved.
 This follow-up does not close Phase 39's remaining interactive/OpenGL acceptance.
+
+
+## Follow-up: device removal and thumbnail retirement (2026-11-03)
+
+The later-supplied 09:24 log reports `D3D12MA::CreateResource3` returning
+`0x887A0005`, which is `DXGI_ERROR_DEVICE_REMOVED`, not an out-of-memory code
+([Microsoft DXGI reference](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/dxgi-error)).
+Consequently the buffer-allocation error is downstream of a lost DX12 device;
+the previous correction prevents the subsequent invalid-buffer CPU access but
+cannot recover a removed device or establish what originally removed it.
+
+Source inspection exposed a separate concrete lifetime defect in the Create path:
+Content Browser builds thumbnail images into the current ImGui draw lists, then
+Create -> RefreshThumbnails -> Clear immediately destroys their textures and
+recycles their descriptors before those draw lists are submitted. Individual
+thumbnail invalidation had the same problem. A new test failed on the original
+code because a new green thumbnail received the descriptor still referenced by
+the queued red image. This invalid lifetime is a plausible GPU-fault source in
+the reported workflow; the historical device-removal event was not deliberately
+reproduced because doing so could reset the user's GPU/other applications.
+
+The corrected cache removes entries immediately but transfers texture ownership
+and descriptor release into ImGuiLayer's retirement queue. End drains it only
+after UI submission and GPU completion; Shutdown drains it before destroying the
+backend. Synchronization is required only on frames with pending retirements.
+OpenGL deletion is similarly ordered after UI draws. External D3D12 texture
+registration now rejects heap exhaustion instead of copying beyond 1024 slots.
+
+The physical D3D12 test initializes the actual ImGui backend without a native
+window, queues a red image, clears the production cache and registers green.
+It verifies distinct handles, submits real ImGui draw data into an offscreen
+RHI target and reads back red pixels. The next frame invalidates green and
+verifies its queued pixels stay green. Heap exhaustion is checked separately.
+This tests the production resource/draw path, not just a callback or draw count.
+Vulkan still runs the particle renderer regressions; this new native ImGui pixel
+fixture is D3D12-only. Actual context-menu mouse input and OpenGL remain NOT RUN.
+
+Verification commands:
+
+```powershell
+cmake --build build --config Release --target AxleVFXGPUTests AxleVFXUnitTests AxleTests --parallel 12
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Logs: `build/thumbnail-retirement-before.log` captures the pre-fix failure;
+`build/thumbnail-retirement-final-build.log` and
+`build/thumbnail-retirement-final-tests.log` record final verification. The test
+build also rebuilds the Editor/Runtime dependencies. No automatic DX12 device
+recreation or general device-loss recovery is claimed by this change.
+
+Result: Release build and all four CTest entries PASS on the physical RTX 3070
+(Material CPU, VFX CPU, particle D3D12 and Vulkan). Step 102 also PASS with
+`AXLE_VFX_TEST_BACKEND=D3D12`; see `build/thumbnail-retirement-step102.log`.
+The existing LNK4098 link warning remains. The thumbnail ImGui readback and heap
+bounds checks execute as part of the D3D12 GPU fixture.

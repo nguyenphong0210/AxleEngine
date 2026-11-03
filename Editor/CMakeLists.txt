@@ -223,7 +223,7 @@ add_test(NAME VFXUnitTests COMMAND $<TARGET_FILE:AxleVFXUnitTests>)
 # Opt-in physical GPU verification. CPU-only environments never silently substitute a mock.
 add_executable(AxleVFXGPUTests src/Tests/VFXGPUTestMain.cpp src/Tests/Test_VFXRendering.cpp)
 target_include_directories(AxleVFXGPUTests PRIVATE src/Tests)
-target_link_libraries(AxleVFXGPUTests PRIVATE Axle::Scene Axle::VFX Axle::Asset)
+target_link_libraries(AxleVFXGPUTests PRIVATE Axle::Scene Axle::VFX Axle::Asset Axle::UI)
 target_compile_definitions(AxleVFXGPUTests PRIVATE AXLE_VFX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 if(WIN32)
     add_custom_command(TARGET AxleVFXGPUTests POST_BUILD

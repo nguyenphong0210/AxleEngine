@@ -9,6 +9,9 @@
 #include <Axle/Entity.hpp>
 #include <Axle/AssetManager.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/ImGuiLayer.hpp>
+#include <Axle/AssetThumbnailManager.hpp>
+#include <imgui.h>
 #include <cstring>
 #include <chrono>
 #include <array>
@@ -223,6 +226,82 @@ namespace Axle {
         auto red = writeTexture("red.tga", {255, 0, 0, 255});
         auto green = writeTexture("green.tga", {0, 255, 0, 255});
         auto translucent = writeTexture("translucent.tga", {255, 0, 0, 64});
+        if (targetBackend == RHIType::Direct3D12) {
+            ImGuiLayer ui(ImGuiBackendType::Direct3D12);
+            ui.Init(nullptr);
+            AssetThumbnailManager thumbnails;
+            thumbnails.SetImGuiLayer(&ui);
+            ImGui::GetIO().DisplaySize = ImVec2(128, 128);
+            ImGui::GetIO().DeltaTime = 1.0f / 60.0f;
+            ui.Begin();
+            auto oldHandle = thumbnails.GetOrCreateThumbnail(red);
+            if (!check(oldHandle != 0, "Real D3D12 ImGui thumbnail registration")) return false;
+            ImGui::GetForegroundDrawList()->AddImage((ImTextureID)oldHandle, ImVec2(0,0), ImVec2(128,128));
+            // Right-click Create calls RefreshThumbnails after the images above are queued.
+            thumbnails.Clear();
+            auto replacement = thumbnails.GetOrCreateThumbnail(green);
+            if (!check(replacement != 0 && replacement != oldHandle,
+                       "Create refresh cannot recycle a thumbnail descriptor still in the current draw list"))
+                return false;
+            auto drawQueuedThumbnail = [&](uint32_t expectedChannel) {
+                ImGui::Render();
+                RHITexture guiColor;
+                RHIBuffer guiReadback;
+                RHICommandBuffer guiCommand;
+                RHIBufferDesc rbDesc;
+                rbDesc.Size = 128 * 128 * 4;
+                rbDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
+                if (!guiColor.Init(RHITextureDesc::RenderTarget2D(128, 128)) ||
+                    !guiReadback.Init(rbDesc) || !guiCommand.Init() || !guiCommand.Begin()) return false;
+                guiCommand.TransitionTexture(guiColor.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+                nri::AttachmentDesc attachment{};
+                attachment.descriptor = guiColor.GetRTV();
+                attachment.loadOp = nri::LoadOp::CLEAR;
+                attachment.storeOp = nri::StoreOp::STORE;
+                nri::RenderingDesc rendering{};
+                rendering.colors = &attachment;
+                rendering.colorNum = 1;
+                guiCommand.BeginRendering(rendering);
+                ui.Render(&guiCommand);
+                guiCommand.EndRendering();
+                guiCommand.TransitionTexture(guiColor.GetNative(), RHIResourceLayout::ColorAttachment, RHIResourceLayout::CopySource);
+                nri::TextureDataLayoutDesc data{};
+                data.rowPitch = 128 * 4;
+                data.slicePitch = rbDesc.Size;
+                nri::TextureRegionDesc region{};
+                region.width = region.height = 128;
+                region.depth = 1;
+                device.GetNRICore().CmdReadbackTextureToBuffer(*guiCommand.GetNative(), *guiReadback.GetNative(), data, *guiColor.GetNative(), region);
+                if (!guiCommand.End() || !guiCommand.Submit()) return false;
+                device.WaitIdle();
+                auto* pixel = static_cast<const uint8_t*>(guiReadback.Map());
+                if (!pixel) return false;
+                const auto center = (64 * 128 + 64) * 4;
+                bool visible = pixel[center + expectedChannel] > 200 && pixel[center + (1 - expectedChannel)] < 20;
+                guiReadback.Unmap();
+                ui.End(); // The normal UI submission boundary finally retires old resources.
+                return visible;
+            };
+            if (!check(drawQueuedThumbnail(0), "Cleared thumbnail still renders original red pixels through ImGui on D3D12")) return false;
+            ui.Begin();
+            ImGui::GetForegroundDrawList()->AddImage((ImTextureID)replacement, ImVec2(0,0), ImVec2(128,128));
+            thumbnails.InvalidateThumbnail(green);
+            auto nextHandle = thumbnails.GetOrCreateThumbnail(red);
+            if (!check(nextHandle != 0 && nextHandle != replacement && drawQueuedThumbnail(1),
+                       "Single-thumbnail invalidation preserves queued green pixels until UI submission")) return false;
+            RHITexture descriptorFixture;
+            if (!descriptorFixture.Init(RHITextureDesc::RenderTarget2D(1, 1))) return false;
+            std::vector<uint64_t> registrations;
+            bool full = false;
+            for (int i = 0; i < 1025; ++i) {
+                auto handle = ui.RegisterTextureDescriptor(descriptorFixture.GetNativeSRVHandle());
+                if (!handle) { full = true; break; }
+                registrations.push_back(handle);
+            }
+            if (!check(full && ui.GetAllocatedDescriptorCount() == 1024,
+                       "ImGui descriptor exhaustion returns no handle instead of writing outside its heap")) return false;
+            for (auto handle : registrations) ui.UnregisterTextureDescriptor(handle);
+        }
         RHISceneRenderer renderer;
         if (!check(renderer.Init(device, false), "Production scene/particle renderer initialization"))
             return false;

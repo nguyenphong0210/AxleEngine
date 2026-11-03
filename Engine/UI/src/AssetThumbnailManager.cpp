@@ -137,17 +137,30 @@ namespace Axle {
 
     void AssetThumbnailManager::InvalidateThumbnail(const std::filesystem::path& path) {
         std::string key = path.lexically_normal().string();
-        auto it = m_ThumbnailCache.find(key);
-        if (it != m_ThumbnailCache.end()) {
-            uint64_t id = it->second;
-            if (id != 0 && m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) {
-                m_ImGuiLayer->UnregisterTextureDescriptor(id);
+        std::vector<uint64_t> handles;
+        std::vector<std::shared_ptr<RHI::RHITexture>> textures;
+        std::vector<std::shared_ptr<Texture2D>> loaded;
+        std::vector<u32> generated;
+        if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end()) {
+            handles.push_back(it->second);
+            if (auto id = std::find(m_GeneratedTextures.begin(), m_GeneratedTextures.end(), it->second);
+                id != m_GeneratedTextures.end()) {
+                generated.push_back(*id);
+                m_GeneratedTextures.erase(id);
             }
             m_ThumbnailCache.erase(it);
         }
-        m_RHIThumbnails.erase(key);
+        if (auto it = m_RHIThumbnails.find(key); it != m_RHIThumbnails.end()) {
+            textures.push_back(std::move(it->second));
+            m_RHIThumbnails.erase(it);
+        }
+        if (auto it = m_LoadedTextures.find(key); it != m_LoadedTextures.end()) {
+            loaded.push_back(std::move(it->second));
+            m_LoadedTextures.erase(it);
+        }
         m_ThumbnailDimensions.erase(key);
         m_MetaCache.erase(key);
+        RetireTextures(std::move(handles), std::move(textures), std::move(loaded), std::move(generated));
     }
 
     void AssetThumbnailManager::Invalidate(const std::filesystem::path& path) {
@@ -170,20 +183,31 @@ namespace Axle {
         m_Shader = std::make_unique<Shader>(s_ThumbnailVertSrc, s_ThumbnailFragSrc);
     }
 
+    void AssetThumbnailManager::RetireTextures(std::vector<uint64_t> handles,
+            std::vector<std::shared_ptr<RHI::RHITexture>> textures,
+            std::vector<std::shared_ptr<Texture2D>> loaded, std::vector<u32> generated) {
+        if (handles.empty() && textures.empty() && loaded.empty() && generated.empty()) return;
+        auto release = [layer = m_ImGuiLayer, handles = std::move(handles), textures = std::move(textures),
+                        loaded = std::move(loaded), generated = std::move(generated)]() {
+            if (layer && layer->GetBackendType() != ImGuiBackendType::OpenGL) {
+                for (auto id : handles) if (id) layer->UnregisterTextureDescriptor(id);
+            } else if (Window::HasActiveContext()) {
+                for (auto id : generated) if (id) glDeleteTextures(1, &id);
+            }
+            // Captured shared owners keep textures alive along with their descriptors.
+        };
+        if (m_ImGuiLayer) m_ImGuiLayer->DeferRelease(std::move(release));
+        else release();
+    }
+
     void AssetThumbnailManager::Clear() {
-        if (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) {
-            for (const auto& [key, id] : m_ThumbnailCache) {
-                if (id != 0) {
-                    m_ImGuiLayer->UnregisterTextureDescriptor(id);
-                }
-            }
-        } else if (Window::HasActiveContext()) {
-            for (u32 texID : m_GeneratedTextures) {
-                if (texID != 0) {
-                    glDeleteTextures(1, &texID);
-                }
-            }
-        }
+        std::vector<uint64_t> handles;
+        std::vector<std::shared_ptr<RHI::RHITexture>> textures;
+        std::vector<std::shared_ptr<Texture2D>> loaded;
+        for (const auto& entry : m_ThumbnailCache) if (entry.second) handles.push_back(entry.second);
+        for (auto& entry : m_RHIThumbnails) textures.push_back(std::move(entry.second));
+        for (auto& entry : m_LoadedTextures) loaded.push_back(std::move(entry.second));
+        RetireTextures(std::move(handles), std::move(textures), std::move(loaded), std::move(m_GeneratedTextures));
         m_GeneratedTextures.clear();
         m_ThumbnailCache.clear();
         m_ThumbnailDimensions.clear();

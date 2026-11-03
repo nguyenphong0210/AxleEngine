@@ -51,7 +51,7 @@ namespace Axle {
         // Retrieve cached metadata (if already loaded/generated)
         const AssetCachedMeta* GetCachedMeta(const std::filesystem::path& path) const;
 
-        // Clear all thumbnail textures and caches
+        // Clear caches now; retire GPU textures after the current UI submission.
         void Clear();
 
         // Invalidate and remove a specific thumbnail from cache so it re-renders
@@ -64,6 +64,10 @@ namespace Axle {
 
     private:
         void InitRenderer();
+        void RetireTextures(std::vector<uint64_t> handles,
+                            std::vector<std::shared_ptr<RHI::RHITexture>> textures,
+                            std::vector<std::shared_ptr<Texture2D>> loaded,
+                            std::vector<u32> generated);
         bool RenderThumbnail(const std::filesystem::path& path, u32& outTexID, AssetCachedMeta& outMeta);
         bool RenderMaterialThumbnail(const std::filesystem::path& path, std::vector<uint8_t>& outPixels, uint32_t& outWidth, uint32_t& outHeight);
 

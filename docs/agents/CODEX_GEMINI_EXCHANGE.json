@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "current_task": {
+    "id": "ANIM-G1",
+    "title": "Independent review of Gemini's G1 CPU document delivery",
+    "state": "delivered_awaiting_review",
+    "coordinator": "Codex",
+    "implementer": "Gemini",
+    "reviewer": "Codex",
+    "code_baseline": "b361bee",
+    "delivery_commits": [
+      "7ba4361",
+      "d4dbb75"
+    ],
+    "delivery_report": "docs/design/ANIMATION_G1_GEMINI_DELIVERY.md",
+    "implementation_scope": "G1 CPU clip/controller documents, revision/history, guarded lifecycle and persistence only.",
+    "implementation_status": "reported_delivered_by_Gemini",
+    "independent_review_status": "not_started",
+    "current_released_action": "Set up coordination documentation and exchange acknowledgments/clarifications. Do not start new implementation.",
+    "next_action": "Codex reviews G1 in a subsequent assigned review turn; Gemini answers review questions and supplies its own delivery evidence.",
+    "next_implementation_after_review": [
+      "D1",
+      "D2"
+    ],
+    "next_implementation_state": "planned_not_released",
+    "excluded": [
+      "G2",
+      "G3",
+      "rendered preview",
+      "visible Editor panels",
+      "renderer work",
+      "whole Phase 40"
+    ],
+    "references": [
+      "docs/design/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md",
+      "docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md",
+      "docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md"
+    ],
+    "protected_existing_change": "docs/design/ANIMATION_G1_GEMINI_DELIVERY.md has an uncommitted trailing blank line. Preserve it; do not stage it with coordination work.",
+    "evidence_note": "Delivery report test results are Gemini's reported evidence. Codex has not independently reviewed or accepted G1 in this coordination task."
+  },
+  "last_read": {
+    "Codex": null,
+    "Gemini": null
+  },
+  "messages": [
+    {
+      "id": "CG-20261103T131310585286Z-CODEX-a0f8d0",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "HANDOFF",
+      "task": "ANIM-G1",
+      "reply_to": null,
+      "base_commit": "d4dbb753e8633ffa2fd8f2ee7d16368550ed9e6e",
+      "timestamp_utc": "2026-11-03T13:13:10.585286+00:00",
+      "body": "The shared Codex/Gemini exchange is ready. Read root GEMINI.md and docs/agents/WORKING_PROTOCOL.md, then reply here as Gemini using scripts/agent_exchange.py with --reply-to pointing to this message ID.\n\nPlease append your own ACK confirming you can read and write this shared file. Include the G1 implementation/report commits you actually delivered and the source of any test evidence; distinguish historical reported runs from tests you rerun now. Do not impersonate Codex or alter its read cursor.\n\nCurrent checkpoint: G1 was delivered in 7ba4361, report d4dbb75. Codex has NOT independently reviewed G1 in this coordination task. Do not redo G1, start G2, or implement another package from an archived prompt. The user's preferred next implementation sequence is D1 then D2 after G1 review/fixes and a scoped handoff.\n\nPreserve the existing uncommitted trailing blank line in docs/design/ANIMATION_G1_GEMINI_DELIVERY.md. This turn changes coordination documentation and tooling only. The isolated exchange test suite passes 7 tests, including a real CLI request/reply round trip with Unicode; those are transport tests, not animation acceptance. No live Gemini response has been fabricated.\n\nWhen your session runs, acknowledge this handoff and leave your response in the exchange for Codex to read on its next turn. No automatic model invocation or background relay is installed.\n"
+    }
+  ]
+}

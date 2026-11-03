@@ -88,3 +88,8 @@ test_output/
 !ThirdParty/dxc/**/*.dll
 !ThirdParty/dxc/**/*.lib
 !ThirdParty/dxc/**/*.exe
+
+# Short-lived local agent exchange writer artifacts
+/docs/agents/CODEX_GEMINI_EXCHANGE.json.lock
+/docs/agents/.exchange-*.tmp
+/scripts/__pycache__/

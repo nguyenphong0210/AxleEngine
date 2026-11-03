@@ -1,4 +1,5 @@
 #include <Axle/SkeletalMeshImporter.hpp>
+#include <Axle/FbxCurveBaker.hpp>
 #include <ufbx.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -128,29 +129,12 @@ bool SkeletalMeshImporter::LoadFBX(const std::filesystem::path& path, SkeletalMe
     }
     if (!data.Validate(diagnostic)) return false;
     std::vector<std::shared_ptr<AnimationClip>> clips;
-    // FBX curves are explicitly resampled into the runtime's linear TRS contract.
-    // Bound both source duration and total sampled keys before allocating.
-    size_t remainingKeys = 3000000;
+    FbxBakeTolerances bakeTolerances;
     for (auto stack : source->anim_stacks) {
-        const double duration = stack->time_end-stack->time_begin;
-        if (!std::isfinite(duration) || duration<=0 || duration>3600) return fail("Invalid or excessive FBX animation duration");
-        const size_t frames = size_t(std::ceil(duration*30));
-        const size_t keys = (frames+1)*nodes.size()*3;
-        if (keys>remainingKeys) return fail("FBX sampled key budget exceeded"); remainingKeys-=keys;
-        auto clip = std::make_shared<AnimationClip>(std::string(stack->name.data,stack->name.length),float(duration),30.0f);
-        std::vector<AnimationChannel> channels;
-        for (size_t i=0;i<nodes.size();++i) {
-            AnimationChannel channel; channel.BoneName = rig->GetBones()[i].Name; channel.BoneIndex = int(i);
-            for (size_t f=0;f<=frames;++f) {
-                const float time = f==frames ? float(duration) : float(double(f)*duration/frames);
-                auto transform = ufbx_evaluate_transform(stack->anim,nodes[i],stack->time_begin+time);
-                channel.Positions.push_back({time,Vector(transform.translation)});
-                channel.Rotations.push_back({time,Rotation(transform.rotation)});
-                channel.Scales.push_back({time,Vector(transform.scale)});
-            }
-            channels.push_back(std::move(channel));
-        }
-        if (!clip->ReplaceChannels(std::move(channels),rig.get(),&errors)) return fail(errors.empty() ? "Invalid FBX animation keys" : errors.front());
+        std::string bakeError;
+        FbxBakeStats bakeStats;
+        auto clip = FbxCurveBaker::BakeAnimStack(stack, nodes, *rig, bakeTolerances, &bakeStats, &bakeError);
+        if (!clip) return fail(bakeError.empty() ? "Failed to bake FBX animation stack" : bakeError);
         clips.push_back(std::move(clip));
     }
     outMesh = std::move(data); outRig = std::move(rig); outClips = std::move(clips); return true;

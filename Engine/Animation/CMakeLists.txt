@@ -9,6 +9,7 @@ add_library(AxleAnimation STATIC
     src/SkeletalMeshImporter.cpp
     src/GltfSkeletalImporter.cpp
     src/FbxSkeletalImporter.cpp
+    src/FbxCurveBaker.cpp
     src/AnimationDefinition.cpp
     src/AnimationAssetCodec.cpp
     src/AnimationControllerCompiler.cpp

@@ -797,7 +797,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [ ] **F3**: Animated silhouette entity picking, safe draw/resource lifetimes and preserved legacy OpenGL skin/shadow paths.
     - **Boundary**: the inspected RHI renderer has no full shadow-map pass; general RHI shadow implementation is separate work. Do not claim animated RHI shadows from shader compilation alone.
   - [ ] **G - Bottom Animation Dock & Dopesheet**:
-    - [ ] **G1**: Device-free clip/controller documents, saved revision/dirty state, transactional Undo/Redo and guarded open/save/close.
+    - [x] **G1**: Device-free clip/controller documents, saved revision/dirty state, transactional Undo/Redo and guarded open/save/close.
     - [ ] **G2**: Private rendered preview; Play/Pause/Stop/Step/Loop, 24/30/60 FPS display/snap, speed and clip seek; preserve saved docking layouts.
     - [ ] **G3**: Bone TRS/quaternion tracks, diamonds/box selection/drag/copy/paste/delete, value editing and undoable event markers.
   - [ ] **H - Skeleton Viewport Authoring**:

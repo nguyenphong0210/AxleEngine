@@ -115,15 +115,12 @@ described in the [Phase 39 acceptance report](VFX_PHASE_39_REVIEW_AND_ACCEPTANCE
 OBJ sampling and the MSAA soft-depth fallback retain their documented limits.
 There is no GPU graph editor or general-purpose shader graph here.
 
-Further feature work needs separate schema/runtime/rendering/UI acceptance:
-
-1. Trails/ribbons and mesh-particle output, including materials, bounds and sorting.
-2. Rate over distance, start delay, prewarm and richer per-axis velocity/size/rotation
-   or random-between-curves authoring.
-3. Distance culling, simulation budgets and a dedicated particle performance view.
-4. GPU simulation/graph authoring, if required by measured effects and platform budgets.
-
-These are future capabilities, not disabled placeholder controls in this editor.
+Deferred capabilities are now tracked as **Phase 39.1** (CPU particle modules,
+trails/mesh output, renderer/gameplay integration and performance) and **Phase 39.2**
+(GPU simulation and visual graph) in [ROADMAP.md](../../ROADMAP.md).
+See the [VFX Unity Feature Backlog](VFX_UNITY_FEATURE_BACKLOG.md) for individual
+packages, existing-versus-missing scope, priority, dependencies and acceptance.
+All expansion items are planned, not implemented or exposed as placeholder controls.
 
 ## Verification
 

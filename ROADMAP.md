@@ -739,6 +739,35 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [ ] Visually review the reference effects with intended art textures; automated fallback captures do not establish artistic quality.
     - [ ] Record OpenGL regression evidence separately. Read the report for MSAA soft-depth fallback, OBJ import and particle-material subset limits.
 
+- [ ] **Phase 39.1: Particle Module & Rendering Expansion toward Unity-style Authoring (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Engine/RHI`, `Editor`, `Runtime`)**
+  - **Status (2026-11-03): deferred feature backlog only; no implementation claimed.** Extend the current neutral modular editor. Phase 39 interactive/OpenGL acceptance remains separately open; Phase 40 animation scope and numbering are unchanged.
+  - **Detailed packages, current-versus-missing scope, dependencies and acceptance**: [VFX Unity Feature Backlog](docs/design/VFX_UNITY_FEATURE_BACKLOG.md). Official comparison references are linked there.
+  - **Priority/order**: D1 performance baseline -> A0 -> A1/A2 -> A3/A4 -> B1/B2 -> expanded D1 budgets -> B3/C1-C5/D2 as their dependencies become available. E verification accompanies every package. Use a separate implementation/test commit per package.
+  - [ ] **A0 - Shared Parameter Modes (P1)**: Constant/two-constant/curve/two-curve and color/gradient modes; deterministic sampling, validation and migration of existing ranges/curves.
+  - [ ] **A1 - Emission & Initialization (P1)**: Rate over distance with interpolated moving-emitter spawning, start delay, bounded prewarm and explicit teleport/reset behavior.
+  - [ ] **A2 - Main Lifecycle & Spaces (P1)**: Simulation speed/time source, custom simulation transform, scaling modes, stop actions and optional ring-buffer policies; defined pause/drain/culling behavior.
+  - [ ] **A3 - Advanced Motion (P1)**: Per-axis velocity/force over lifetime, orbital/radial motion, velocity limits/damping, emitter-motion inheritance and lifetime by emitter speed. Preserve existing sub-emitter velocity inheritance.
+  - [ ] **A4 - Appearance Modes (P1)**: 3D start size/rotation, per-axis lifetime controls, color/size/rotation by speed and explicit composition with existing gradients/curves.
+  - [ ] **B1 - Trails & Ribbons (P1)**: Stable particle handles, bounded history, width/color curves, lifetime/death behavior, UV modes, sorting and safe GPU resource ownership.
+  - [ ] **B2 - Mesh Particle Output (P1)**: Instanced mesh/submesh/material selection, 3D orientation/scale, correct bounds and sorting in preview/scene; separate from existing mesh-surface emission.
+  - [ ] **B3 - Renderer Extensions (P2)**: Billboard alignment/pivot/stretch controls, sort modes/bias and screen-size limits; lighting/shadows only where the actual RHI supports them.
+  - [ ] **C1 - Custom Data & Particle Shaders (P2)**: Authored attributes, explicit vertex/instance streams, versioned CPU/GPU layouts and a validated particle-compatible shader contract.
+  - [ ] **C2 - Collision, Triggers & Callbacks (P2)**: Extend existing physics with filters/quality modes and trigger volumes; bounded typed gameplay events with safe entity/service lifetime handling.
+  - [ ] **C3 - Particle Lights (P2)**: Light assignment and color/range/intensity modulation with per-effect/global budgets and stable light selection.
+  - [ ] **C4 - Shape, Noise & External Forces (P2)**: Richer shape distribution/masks/mesh sources, per-axis noise/remapping and shared scene force volumes. Skinned-mesh emission depends on Phase 40 pose/skinning support.
+  - [ ] **C5 - Sheet & Sub-Emitter Extensions (P2)**: FPS/speed/lifetime animation, row/sprite/start-frame modes, additional event/inheritance options and bounded graph-safe routing.
+  - [ ] **D1 - Performance & Pooling (P1 baseline, P2 expansion)**: Profiler evidence, bounds/culling policies, LOD/quality tiers, particle/event/trail/light budgets and reusable effect instances.
+  - [ ] **D2 - Authoring & Runtime Integration (P2)**: Exposed per-instance parameters/overrides, multiselection/reusable module settings and sequencing/animation-event integration when the required APIs exist.
+  - [ ] **E - Acceptance per Package**: Complete schema/migration -> inspector/history -> simulation -> rendering -> scene/packaged Runtime paths; CPU tests, real DX12/Vulkan captures and native UI checks. Track OpenGL and MSAA soft-depth support explicitly.
+
+- [ ] **Phase 39.2: GPU Particle Simulation & Visual Effect Graph (`Engine/VFX`, `Engine/RHI`, `Engine/UI`, `Editor`, `Runtime`)**
+  - **Status (2026-11-03): deferred expansion, separate from CPU Particle System parity.** Start after profiling and a compute/platform feasibility decision; Phase 39.1 does not require a node editor. Details: [VFX Unity Feature Backlog](docs/design/VFX_UNITY_FEATURE_BACKLOG.md).
+  - [ ] **G0 - Feasibility**: Target workloads, compute/indirect capabilities, typed data/bounds/event contracts, supported backends and CPU fallback/unsupported behavior.
+  - [ ] **G1 - GPU Runtime**: Spawn/update/compaction, bounded allocation, resource barriers/lifetimes, sorting, indirect rendering and safe resizing/teardown.
+  - [ ] **G2 - Graph Model & Compiler**: Stable typed nodes/ports, spawn/initialize/update/output contexts, persisted parameters, validation, diagnostics and last-good execution.
+  - [ ] **G3 - Graph Editor & Integration**: Node search/connections, undo/redo, reusable subgraphs, instance overrides/events, preview, save/reopen and packaged Runtime.
+  - [ ] **G4 - Acceptance**: Physical DX12/Vulkan rendering/stress evidence, failure/lifetime checks, fallback verification, native UI authoring and measured performance reports.
+
 - [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/Scene`, `Engine/UI`, `Editor`, `Runtime`)**
   - **Status (2026-11-03): source audit and detailed implementation handoff prepared; no implementation or new animation test result claimed.** Existing runtime classes are foundations; the RHI skinning/editor/asset workflow remains to be completed. Phase 38.3/39 manual acceptance remains separately open.
   - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test instructions and Gemini prompt**: [Gemini Implementation Guide](docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).

@@ -271,6 +271,7 @@ bool RunAnimationImporterCorrectionTests();
 bool RunAnimationControllerCorrectionTests();
 bool RunAnimationSceneCorrectionTests();
 bool RunAnimationPackageCorrectionTests();
+bool RunAnimationBakeValidationTests();
 
 bool RunAnimationCorrectionTests() {
     return TestCanonicalParameters() &&
@@ -280,5 +281,5 @@ bool RunAnimationCorrectionTests() {
            RunAnimationImporterCorrectionTests() &&
            RunAnimationControllerCorrectionTests() &&
            RunAnimationSceneCorrectionTests() &&
-           RunAnimationPackageCorrectionTests();
+           RunAnimationPackageCorrectionTests() && RunAnimationBakeValidationTests();
 }

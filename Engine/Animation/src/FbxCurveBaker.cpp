@@ -9,6 +9,7 @@
 #include <string>
 #include <type_traits>
 #include <map>
+#include <limits>
 
 namespace Axle {
 
@@ -28,17 +29,34 @@ namespace {
         StepPrevious,
         StepNext,
         Continuous,
-        Mixed
+        Mixed,
+        Invalid
+    };
+
+    struct BakeWorkBudget {
+        size_t Remaining;
+        bool Failed = false;
+        bool Consume(size_t amount,std::string* error) {
+            if (Failed) return false;
+            if (amount>Remaining) {
+                Failed=true;
+                if (error) *error="FBX source evaluation/work budget exceeded";
+                return false;
+            }
+            Remaining-=amount; return true;
+        }
     };
 
     TrackCurveMode InspectCurves(const ufbx_anim* anim, const ufbx_node* node, const char* propName,
-                                 double timeBegin, double timeEnd, std::vector<double>& outKeyTimes) {
+                                 double timeBegin, double timeEnd, std::vector<double>& outKeyTimes, BakeWorkBudget& work, std::string* error) {
         if (!anim || !node) return TrackCurveMode::Static;
+        if (work.Failed) return TrackCurveMode::Invalid;
         bool hasStep = false;
         bool hasNext = false;
         bool hasContinuous = false;
 
         for (size_t l = 0; l < anim->layers.count; ++l) {
+            if (!work.Consume(1,error)) return TrackCurveMode::Invalid;
             const ufbx_anim_layer* layer = anim->layers[l];
             if (!layer) continue;
             const ufbx_anim_prop* prop = ufbx_find_anim_prop(layer, &node->element, propName);
@@ -47,6 +65,7 @@ namespace {
             for (int c = 0; c < 3; ++c) {
                 const ufbx_anim_curve* curve = prop->anim_value->curves[c];
                 if (!curve) continue;
+                if (!work.Consume(curve->keyframes.count,error)) return TrackCurveMode::Invalid;
                 for (size_t k = 0; k < curve->keyframes.count; ++k) {
                     const auto& kf = curve->keyframes[k];
                     if (kf.time >= timeBegin && kf.time <= timeEnd) {
@@ -81,11 +100,12 @@ namespace {
         return TrackCurveMode::Static;
     }
 
-        double ComputeMaxAngularRateDegPerSec(const ufbx_anim* anim, const ufbx_node* node,
-                                         double timeBegin, double timeEnd) {
+    double ComputeMaxAngularRateDegPerSec(const ufbx_anim* anim, const ufbx_node* node,
+                                         double timeBegin, double timeEnd, BakeWorkBudget& work, std::string* error) {
         if (!anim || !node) return 0.0;
         double maxRate = 0.0;
         for (size_t l = 0; l < anim->layers.count; ++l) {
+            if (!work.Consume(1,error)) return 0;
             const ufbx_anim_layer* layer = anim->layers[l];
             if (!layer) continue;
             const ufbx_anim_prop* prop = ufbx_find_anim_prop(layer, &node->element, UFBX_Lcl_Rotation);
@@ -95,6 +115,7 @@ namespace {
             for (int c = 0; c < 3; ++c) {
                 const ufbx_anim_curve* curve = prop->anim_value->curves[c];
                 if (!curve) continue;
+                if (!work.Consume(curve->keyframes.count,error)) return 0;
 
                 double channelMaxRate = 0.0;
                 if (curve->keyframes.count >= 2) {
@@ -132,23 +153,28 @@ namespace {
 
 } // namespace
 
-float FbxCurveBaker::QuaternionAngularDistance(const glm::quat& q1, const glm::quat& q2) {
-    float len1 = glm::length(q1);
-    float len2 = glm::length(q2);
-    if (len1 < 1e-6f || len2 < 1e-6f) return 3.14159265f;
-
-    glm::quat n1 = q1 / len1;
-    glm::quat n2 = q2 / len2;
-
-    // Both q and -q represent the exact same 3D orientation.
-    // Taking the absolute value of the dot product correctly measures
-    // the geodesic distance on the 3-sphere modulo sign inversion.
-    float dotVal = std::abs(glm::dot(n1, n2));
-    if (dotVal >= 1.0f) return 0.0f;
-    return 2.0f * std::acos(dotVal);
+bool FbxBakeTolerances::Validate(std::string* diagnostic) const {
+    if (diagnostic) diagnostic->clear();
+    auto fail=[&](const char* text) { if (diagnostic) *diagnostic=text; return false; };
+    for (float value : {TranslationTolerance,RotationTolerance,ScaleTolerance,MinIntervalSeconds})
+        if (!std::isfinite(value) || value<=0) return fail("FBX bake tolerances and intervals must be positive and finite");
+    if (MinIntervalSeconds>3600) return fail("FBX minimum interval exceeds the supported clip duration");
+    if (InteriorValidationProbes<1 || InteriorValidationProbes>64 || MaxRecursionDepth>24)
+        return fail("FBX bake probe/depth limits exceed supported bounds");
+    if (MaxTotalKeysPerStack<3 || MaxTotalKeysPerStack>3000000 || MaxWorkUnitsPerStack<1 || MaxWorkUnitsPerStack>8000000)
+        return fail("FBX bake key/work limits exceed supported bounds");
+    return true;
 }
 
-bool FbxCurveBaker::BakeChannel(
+float FbxCurveBaker::QuaternionAngularDistance(const glm::quat& q1,const glm::quat& q2) {
+    const glm::dquat first(q1),second(q2);
+    const double a=glm::length(first), b=glm::length(second);
+    if (!std::isfinite(a) || !std::isfinite(b) || a<1e-6 || b<1e-6) return std::numeric_limits<float>::infinity();
+    const double dot=std::clamp(std::abs(glm::dot(first/a,second/b)),0.0,1.0);
+    return float(2*std::acos(dot));
+}
+
+static bool BakeChannelImpl(
     const ufbx_anim* anim,
     const ufbx_node* node,
     double timeBegin,
@@ -159,7 +185,8 @@ bool FbxCurveBaker::BakeChannel(
     const FbxBakeTolerances& tolerances,
     size_t& remainingKeyBudget,
     FbxBakeStats* outStats,
-    std::string* outError
+    std::string* outError,
+    BakeWorkBudget& work
 ) {
     if (outError) outError->clear();
     if (!anim || !node) {
@@ -167,14 +194,10 @@ bool FbxCurveBaker::BakeChannel(
         return false;
     }
 
-    if (tolerances.TranslationTolerance <= 0.0f ||
-        tolerances.RotationTolerance <= 0.0f ||
-        tolerances.ScaleTolerance <= 0.0f) {
-        if (outError) *outError = "Invalid non-positive bake tolerance";
-        return false;
-    }
-    if (tolerances.MinIntervalSeconds <= 0.0f) {
-        if (outError) *outError = "Invalid non-positive MinIntervalSeconds";
+    if (!tolerances.Validate(outError)) return false;
+    if (!std::isfinite(timeBegin) || !std::isfinite(timeEnd) || boneName.empty() || boneIndex<0 || boneIndex>=128 ||
+        remainingKeyBudget>tolerances.MaxTotalKeysPerStack) {
+        if (outError) *outError="Invalid FBX channel binding, time range or key budget";
         return false;
     }
 
@@ -192,11 +215,20 @@ bool FbxCurveBaker::BakeChannel(
     size_t localBudget = remainingKeyBudget;
     FbxBakeStats localStats = outStats ? *outStats : FbxBakeStats{};
 
+    const auto counterLimit=std::numeric_limits<size_t>::max();
+    if (localStats.PositionKeys>counterLimit-localBudget || localStats.RotationKeys>counterLimit-localBudget ||
+        localStats.ScaleKeys>counterLimit-localBudget || localStats.SubdivisionsPerformed>counterLimit-tolerances.MaxWorkUnitsPerStack) {
+        if (outError) *outError="FBX statistics counters would overflow";
+        return false;
+    }
+
     // Inspect curves for Translation, Rotation, and Scaling
     std::vector<double> transTimes, rotTimes, scaleTimes;
-    TrackCurveMode transMode = InspectCurves(anim, node, UFBX_Lcl_Translation, timeBegin, timeEnd, transTimes);
-    TrackCurveMode rotMode = InspectCurves(anim, node, UFBX_Lcl_Rotation, timeBegin, timeEnd, rotTimes);
-    TrackCurveMode scaleMode = InspectCurves(anim, node, UFBX_Lcl_Scaling, timeBegin, timeEnd, scaleTimes);
+    TrackCurveMode transMode = InspectCurves(anim, node, UFBX_Lcl_Translation, timeBegin, timeEnd, transTimes, work, outError);
+    TrackCurveMode rotMode = InspectCurves(anim, node, UFBX_Lcl_Rotation, timeBegin, timeEnd, rotTimes, work, outError);
+    TrackCurveMode scaleMode = InspectCurves(anim, node, UFBX_Lcl_Scaling, timeBegin, timeEnd, scaleTimes, work, outError);
+
+    if (work.Failed) return false;
 
     // Reject mixed interpolation within any single transform component
     if (transMode == TrackCurveMode::Mixed || rotMode == TrackCurveMode::Mixed || scaleMode == TrackCurveMode::Mixed) {
@@ -216,8 +248,14 @@ bool FbxCurveBaker::BakeChannel(
     candidateChannel.ScalesInterpolation = interpolation(scaleMode);
 
     auto evalTransform = [&](double localTime) -> TransformSample {
-        ufbx_transform xf = ufbx_evaluate_transform(anim, node, timeBegin + localTime);
-        return { localTime, ToVec3(xf.translation), ToQuat(xf.rotation), ToVec3(xf.scale) };
+        if (!work.Consume(1,outError)) return {};
+        const auto xf=ufbx_evaluate_transform(anim,node,timeBegin+localTime);
+        TransformSample sample{localTime,ToVec3(xf.translation),ToQuat(xf.rotation),ToVec3(xf.scale)};
+        if (!BoneTransform(sample.Translation,sample.Rotation,sample.Scale).IsValid()) {
+            work.Failed=true;
+            if (outError) *outError="FBX source evaluates to a nonfinite or singular transform";
+        }
+        return sample;
     };
 
     // Authored boundaries are mandatory. Distinct source times must remain distinct in runtime floats.
@@ -247,26 +285,6 @@ bool FbxCurveBaker::BakeChannel(
     if (allStep) {
         const auto& uniqueStepTimes = sourceTimes;
 
-        if (uniqueStepTimes.size() == 1) {
-            if (localBudget < 3) {
-                if (outError) *outError = "FBX sampled key budget exceeded";
-                return false;
-            }
-            auto sample = evalTransform(0.0);
-            candidateChannel.Positions.push_back({ 0.0f, sample.Translation });
-            candidateChannel.Rotations.push_back({ 0.0f, sample.Rotation });
-            candidateChannel.Scales.push_back({ 0.0f, sample.Scale });
-            localBudget -= 3;
-            localStats.PositionKeys++;
-            localStats.RotationKeys++;
-            localStats.ScaleKeys++;
-
-            outChannel = std::move(candidateChannel);
-            remainingKeyBudget = localBudget;
-            if (outStats) *outStats = localStats;
-            return true;
-        }
-
         for (size_t i = 0; i < uniqueStepTimes.size() - 1; ++i) {
             if (localBudget < 3) {
                 if (outError) *outError = "FBX sampled key budget exceeded";
@@ -277,6 +295,7 @@ bool FbxCurveBaker::BakeChannel(
             double tEval = stA;
             float timeStamp = static_cast<float>(stA);
             auto sample = evalTransform(tEval);
+            if (work.Failed) return false;
             candidateChannel.Positions.push_back({ timeStamp, sample.Translation });
             candidateChannel.Rotations.push_back({ timeStamp, sample.Rotation });
             candidateChannel.Scales.push_back({ timeStamp, sample.Scale });
@@ -294,6 +313,7 @@ bool FbxCurveBaker::BakeChannel(
         double stEnd = uniqueStepTimes.back();
         float timeStamp = static_cast<float>(stEnd);
         auto sampleEnd = evalTransform(stEnd);
+        if (work.Failed) return false;
         candidateChannel.Positions.push_back({ timeStamp, sampleEnd.Translation });
         candidateChannel.Rotations.push_back({ timeStamp, sampleEnd.Rotation });
         candidateChannel.Scales.push_back({ timeStamp, sampleEnd.Scale });
@@ -310,7 +330,12 @@ bool FbxCurveBaker::BakeChannel(
 
     // Case 2: Continuous track (or static)
     // Inspect source angular variation rate to bound initial seed intervals and avoid Nyquist aliasing.
-    double maxAngularRate = rotMode == TrackCurveMode::Continuous ? ComputeMaxAngularRateDegPerSec(anim, node, timeBegin, timeEnd) : 0.0;
+    double maxAngularRate = rotMode == TrackCurveMode::Continuous ? ComputeMaxAngularRateDegPerSec(anim, node, timeBegin, timeEnd, work, outError) : 0.0;
+    if (work.Failed) return false;
+    if (!std::isfinite(maxAngularRate)) {
+        if (outError) *outError="FBX rotational variation exceeds the supported numeric range";
+        return false;
+    }
     double gridInterval = 1.0 / 30.0;
     if (maxAngularRate > 0.0) {
         const double maxArcDegrees = 60.0; // Keep SLERP arcs <= 60 deg per interval
@@ -330,11 +355,12 @@ bool FbxCurveBaker::BakeChannel(
     std::map<float,double> seeds;
     for (double time : sourceTimes) seeds.emplace(float(time),time);
 
-    const size_t gridSteps = static_cast<size_t>(std::ceil(duration / gridInterval));
-    if (gridSteps * 3 > localBudget) {
-        if (outError) *outError = "FBX sampled key budget exceeded by initial seed grid";
+    const double requiredIntervals=std::ceil(duration/gridInterval);
+    if (!std::isfinite(requiredIntervals) || requiredIntervals<1 || requiredIntervals>=double(localBudget/3)) {
+        if (outError) *outError="FBX sampled key budget exceeded by initial seed grid";
         return false;
     }
+    const size_t gridSteps=size_t(requiredIntervals);
     for (size_t g = 0; g <= gridSteps; ++g) {
         const double time = std::min(duration,double(g)*gridInterval);
         seeds.try_emplace(float(time),time);
@@ -382,6 +408,7 @@ bool FbxCurveBaker::BakeChannel(
             double u = static_cast<double>(p) / static_cast<double>(numProbes + 1);
             double tProbe = sA.LocalTime + u * interval;
             auto trueSample = evalTransform(tProbe);
+            if (work.Failed) return false;
 
             float uf = static_cast<float>(u);
             const auto approximate = [uf](const auto& first, const auto& second, AnimationInterpolation mode) {
@@ -399,7 +426,7 @@ bool FbxCurveBaker::BakeChannel(
             const auto approxRot = approximate(sA.Rotation,sB.Rotation,candidateChannel.RotationsInterpolation);
 
             float errPos = glm::length(trueSample.Translation - approxPos);
-            float errRot = QuaternionAngularDistance(trueSample.Rotation, approxRot);
+            float errRot = FbxCurveBaker::QuaternionAngularDistance(trueSample.Rotation, approxRot);
             float errScale = glm::length(trueSample.Scale - approxScale);
 
             maxErrPos = std::max(maxErrPos, errPos);
@@ -407,15 +434,15 @@ bool FbxCurveBaker::BakeChannel(
             maxErrScale = std::max(maxErrScale, errScale);
         }
 
-        localStats.MaxPositionError = std::max(localStats.MaxPositionError, maxErrPos);
-        localStats.MaxRotationError = std::max(localStats.MaxRotationError, maxErrRot);
-        localStats.MaxScaleError = std::max(localStats.MaxScaleError, maxErrScale);
-
         const bool meetsTolerance = (maxErrPos <= tolerances.TranslationTolerance) &&
                                     (maxErrRot <= tolerances.RotationTolerance) &&
                                     (maxErrScale <= tolerances.ScaleTolerance);
 
         if (meetsTolerance) {
+            localStats.MaxPositionError = std::max(localStats.MaxPositionError, maxErrPos);
+            localStats.MaxRotationError = std::max(localStats.MaxRotationError, maxErrRot);
+            localStats.MaxScaleError = std::max(localStats.MaxScaleError, maxErrScale);
+
             return true;
         }
 
@@ -443,6 +470,7 @@ bool FbxCurveBaker::BakeChannel(
             return false;
         }
         auto sMid = evalTransform(tMid);
+        if (work.Failed) return false;
 
         if (!subdivide(sA, sMid, depth + 1)) return false;
         if (!emitSample(sMid)) return false;
@@ -453,12 +481,14 @@ bool FbxCurveBaker::BakeChannel(
 
     // Emit initial sample
     auto s0 = evalTransform(uniqueSeeds[0]);
+    if (work.Failed) return false;
     if (!emitSample(s0)) return false;
 
     // Subdivide and emit each seed interval
     for (size_t i = 0; i < uniqueSeeds.size() - 1; ++i) {
         auto sA = evalTransform(uniqueSeeds[i]);
         auto sB = evalTransform(uniqueSeeds[i + 1]);
+        if (work.Failed) return false;
         if (!subdivide(sA, sB, 0)) return false;
         if (!emitSample(sB)) return false;
     }
@@ -467,6 +497,13 @@ bool FbxCurveBaker::BakeChannel(
     remainingKeyBudget = localBudget;
     if (outStats) *outStats = localStats;
     return true;
+}
+
+bool FbxCurveBaker::BakeChannel(const ufbx_anim* anim,const ufbx_node* node,double begin,double end,
+    const std::string& boneName,int boneIndex,AnimationChannel& channel,const FbxBakeTolerances& tolerances,
+    size_t& remainingKeys,FbxBakeStats* stats,std::string* error) {
+    BakeWorkBudget work{tolerances.MaxWorkUnitsPerStack};
+    return BakeChannelImpl(anim,node,begin,end,boneName,boneIndex,channel,tolerances,remainingKeys,stats,error,work);
 }
 
 std::shared_ptr<AnimationClip> FbxCurveBaker::BakeAnimStack(
@@ -489,6 +526,13 @@ std::shared_ptr<AnimationClip> FbxCurveBaker::BakeAnimStack(
         return nullptr;
     }
 
+    if (!tolerances.Validate(outError)) return nullptr;
+    if (!rig.IsValid() || rig.GetBoneCount()>128 || nodes.empty() || nodes.size()>rig.GetBoneCount()) {
+        if (outError) *outError="Invalid FBX node-to-rig binding";
+        return nullptr;
+    }
+    BakeWorkBudget work{tolerances.MaxWorkUnitsPerStack};
+    FbxBakeStats stats=outStats ? *outStats : FbxBakeStats{};
     size_t remainingBudget = tolerances.MaxTotalKeysPerStack;
     auto clip = std::make_shared<AnimationClip>(
         std::string(stack->name.data, stack->name.length),
@@ -505,9 +549,9 @@ std::shared_ptr<AnimationClip> FbxCurveBaker::BakeAnimStack(
         int boneIndex = static_cast<int>(i);
 
         AnimationChannel channel;
-        if (!BakeChannel(stack->anim, node, stack->time_begin, stack->time_end,
+        if (!BakeChannelImpl(stack->anim, node, stack->time_begin, stack->time_end,
                          boneName, boneIndex, channel, tolerances,
-                         remainingBudget, outStats, outError)) {
+                         remainingBudget, &stats, outError, work)) {
             return nullptr;
         }
         channels.push_back(std::move(channel));
@@ -521,6 +565,7 @@ std::shared_ptr<AnimationClip> FbxCurveBaker::BakeAnimStack(
         return nullptr;
     }
 
+    if (outStats) *outStats=stats;
     return clip;
 }
 

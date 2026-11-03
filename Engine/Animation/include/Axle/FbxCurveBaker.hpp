@@ -13,20 +13,19 @@ namespace Axle {
 
     /// Tolerances and subdivision limits for baking FBX animation curves.
     ///
-    /// Continuous accuracy guarantee:
-    /// Initial seed interval is constrained by source Euler rotation rates (<= 60 deg rotation
-    /// per seed interval) to eliminate rotational Nyquist aliasing. Interior validation probes
-    /// (InteriorValidationProbes) verify continuous transform agreement within the declared
-    /// tolerances. If a curve exceeds tolerance and cannot be refined (due to MaxRecursionDepth
-    /// or MinIntervalSeconds), baking fails with an explicit diagnostic.
+    /// Accuracy is measured at deterministic interior probes after source-aware rotation seeding.
+    /// This is not a universal continuous error proof for arbitrary weighted curves/layer blends.
+    /// Unsupported precision, invalid transforms and exhausted limits fail before publication.
     struct FbxBakeTolerances {
         float TranslationTolerance = 1e-3f;       // In meters (1 mm)
         float RotationTolerance = 1e-3f;          // In radians (~0.057 degrees)
-        float ScaleTolerance = 1e-3f;             // Relative scale factor
+        float ScaleTolerance = 1e-3f;             // Absolute local scale-vector error
         uint32_t MaxRecursionDepth = 12;          // Max refinement levels (up to 4096 subdivisions)
         float MinIntervalSeconds = 1e-4f;         // 0.1 ms minimum subdivision interval
         size_t MaxTotalKeysPerStack = 1000000;    // Work budget cap per animation stack
+        size_t MaxWorkUnitsPerStack = 2000000;     // Curve/layer inspection and transform evaluations
         uint32_t InteriorValidationProbes = 5;    // Number of off-grid validation checks per segment
+        bool Validate(std::string* diagnostic = nullptr) const;
     };
 
     struct FbxBakeStats {

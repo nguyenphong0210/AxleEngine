@@ -8,7 +8,7 @@
 
 namespace Axle {
 std::shared_ptr<AnimationStateMachine> AnimationAssetCodec::CompileStateMachineFromDefinition(
-    const AnimatorControllerDefinition& definition, std::shared_ptr<Skeleton> rig,
+    const AnimatorControllerDefinition& definition, std::shared_ptr<const Skeleton> rig,
     const std::string& ownerPath, std::string* diagnostic) {
     auto fail = [&](const std::string& text) { if (diagnostic) *diagnostic = text; return std::shared_ptr<AnimationStateMachine>{}; };
     if (diagnostic) diagnostic->clear();

@@ -12,6 +12,6 @@ namespace Axle {
     std::shared_ptr<SkeletalMesh> LoadAnimationMesh(const std::string& reference, const std::string& fallback = "",
                                                  const std::string& ownerPath = "", std::string* diagnostic = nullptr);
     std::shared_ptr<Animator> LoadAnimationAnimator(const std::string& reference, const std::string& fallback,
-                                                 bool unique, std::shared_ptr<Skeleton> rig,
+                                                 bool unique, std::shared_ptr<const Skeleton> rig,
                                                  const std::string& ownerPath = "", std::string* diagnostic = nullptr);
 }

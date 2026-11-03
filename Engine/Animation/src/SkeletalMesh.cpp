@@ -107,9 +107,23 @@ namespace Axle {
         return true;
     }
 
+    std::shared_ptr<SkeletalMesh> SkeletalMesh::Create(SkeletalMeshData meshData, std::string* diagnostic) {
+        int rootIndex = meshData.SkeletonRef ? meshData.SkeletonRef->GetRootBoneIndex() : 0;
+        meshData.Normalize(rootIndex >= 0 ? rootIndex : 0);
+        if (!meshData.Validate(diagnostic)) {
+            return nullptr;
+        }
+        return std::make_shared<SkeletalMesh>(std::move(meshData));
+    }
+
     SkeletalMesh::SkeletalMesh(SkeletalMeshData meshData)
         : m_Data(std::move(meshData)) {
-        m_Data.Normalize(m_Data.SkeletonRef ? m_Data.SkeletonRef->GetRootBoneIndex() : 0);
+        // Detach retained builder aliases: own an independent immutable skeleton snapshot
+        if (m_Data.SkeletonRef) {
+            m_Data.SkeletonRef = std::make_shared<Skeleton>(*m_Data.SkeletonRef);
+        }
+        int rootIndex = m_Data.SkeletonRef ? m_Data.SkeletonRef->GetRootBoneIndex() : 0;
+        m_Data.Normalize(rootIndex >= 0 ? rootIndex : 0);
         if (Window::HasActiveContext()) {
             BuildBuffers();
         }
@@ -126,8 +140,7 @@ namespace Axle {
         if (m_Data.Vertices.empty() || m_Data.Indices.empty()) return;
         if (!Window::HasActiveContext()) return;
 
-        m_Data.Normalize(m_Data.SkeletonRef ? m_Data.SkeletonRef->GetRootBoneIndex() : 0);
-
+        // Note: m_Data is already normalized at publication; GPU buffer upload never mutates CPU geometry
         m_VAO = std::make_shared<VertexArray>();
 
         BufferLayout layout = {

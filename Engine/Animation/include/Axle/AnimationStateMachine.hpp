@@ -68,8 +68,8 @@ namespace Axle {
         const std::string& GetName() const { return m_Name; }
         void SetName(const std::string& name) { m_Name = name; }
 
-        void SetResourceRig(std::shared_ptr<Skeleton> rig) { m_ResourceRig = std::move(rig); }
-        const std::shared_ptr<Skeleton>& GetResourceRig() const { return m_ResourceRig; }
+        void SetResourceRig(std::shared_ptr<const Skeleton> rig) { m_ResourceRig = std::move(rig); }
+        const std::shared_ptr<const Skeleton>& GetResourceRig() const { return m_ResourceRig; }
         const AnimationId& GetDefinitionId() const { return m_SourceDefinition ? m_SourceDefinition->Id : m_DefinitionId; }
         const std::shared_ptr<const AnimatorControllerDefinition>& GetSourceDefinition() const { return m_SourceDefinition; }
         void SetSourceDefinition(AnimatorControllerDefinition definition) { m_SourceDefinition = std::make_shared<const AnimatorControllerDefinition>(std::move(definition)); }
@@ -134,7 +134,7 @@ namespace Axle {
         std::string ResolveParamId(const std::string& nameOrId) const;
 
     private:
-        std::shared_ptr<Skeleton> m_ResourceRig;
+        std::shared_ptr<const Skeleton> m_ResourceRig;
         AnimationId m_DefinitionId = GenerateAnimationId();
         std::shared_ptr<const AnimatorControllerDefinition> m_SourceDefinition;
         std::string m_Name;

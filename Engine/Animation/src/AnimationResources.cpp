@@ -48,15 +48,15 @@ std::shared_ptr<SkeletalMesh> DecodeAnimationRigSnapshot(const std::string& text
     const auto bytes = std::span(reinterpret_cast<const uint8_t*>(binary.data()), binary.size());
     SkeletalMeshData geometry;
     if (!AnimationAssetCodec::DecodeGeometry(bytes, geometry, nullptr, diagnostic, SkeletonDefinition::ComputeSignature(definition.Bones))) return nullptr;
-    geometry.SkeletonRef = rig; if (!geometry.Validate(diagnostic)) return nullptr;
-    return std::make_shared<SkeletalMesh>(std::move(geometry));
+    geometry.SkeletonRef = rig;
+    return SkeletalMesh::Create(std::move(geometry), diagnostic);
 }
 std::shared_ptr<SkeletalMesh> LoadAnimationMesh(const std::string& reference, const std::string& fallback,
                                               const std::string& owner, std::string* diagnostic) {
     const auto path = ResolveAnimationReference(reference, owner);
     if (reference == "procedural://biped") {
         SkeletalMeshData geometry; std::shared_ptr<Skeleton> rig; std::vector<std::shared_ptr<AnimationClip>> clips;
-        if (SkeletalMeshImporter::CreateProceduralBiped(geometry, rig, clips)) return std::make_shared<SkeletalMesh>(std::move(geometry));
+        if (SkeletalMeshImporter::CreateProceduralBiped(geometry, rig, clips)) return SkeletalMesh::Create(std::move(geometry), diagnostic);
     } else if (!path.empty() && FileSystem::Exists(path)) {
         if (std::filesystem::path(path).extension() == ".axleasset") {
             SkeletalMeshDefinition definition;
@@ -69,19 +69,18 @@ std::shared_ptr<SkeletalMesh> LoadAnimationMesh(const std::string& reference, co
             if (!AnimationAssetCodec::DecodeGeometry(bytes, geometry, nullptr, diagnostic, SkeletonDefinition::ComputeSignature(skeleton.Bones))) return nullptr;
             geometry.SkeletonRef = rig;
             if (!definition.MaterialSlots.empty()) geometry.MaterialSlots = definition.MaterialSlots;
-            if (!geometry.Validate(diagnostic)) return nullptr;
-            return std::make_shared<SkeletalMesh>(std::move(geometry));
+            return SkeletalMesh::Create(std::move(geometry), diagnostic);
         }
         SkeletalMeshData geometry; std::shared_ptr<Skeleton> rig; std::vector<std::shared_ptr<AnimationClip>> clips;
-        if (!SkeletalMeshImporter::Load(path, geometry, rig, clips, diagnostic) || !geometry.Validate(diagnostic)) return nullptr;
-        return std::make_shared<SkeletalMesh>(std::move(geometry));
+        if (!SkeletalMeshImporter::Load(path, geometry, rig, clips, diagnostic)) return nullptr;
+        return SkeletalMesh::Create(std::move(geometry), diagnostic);
     }
     if (!fallback.empty()) return DecodeAnimationRigSnapshot(fallback, diagnostic);
     if (diagnostic) *diagnostic = "Missing skeletal mesh: " + reference;
     return nullptr;
 }
 std::shared_ptr<Animator> LoadAnimationAnimator(const std::string& reference, const std::string& fallback,
-                                              bool unique, std::shared_ptr<Skeleton> rig,
+                                              bool unique, std::shared_ptr<const Skeleton> rig,
                                               const std::string& owner, std::string* diagnostic) {
     AnimatorControllerDefinition definition;
     auto definitionOwner = owner;

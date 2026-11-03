@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <span>
 
 namespace Axle {
 
@@ -28,7 +29,7 @@ namespace Axle {
         std::string Name;
         std::vector<SkeletalVertex> Vertices;
         std::vector<u32> Indices;
-        std::shared_ptr<Skeleton> SkeletonRef;
+        std::shared_ptr<const Skeleton> SkeletonRef;
         std::vector<SkeletalSubmesh> Submeshes;
         std::vector<std::string> MaterialSlots;
         glm::vec3 BoundsMin{0}, BoundsMax{0};
@@ -42,9 +43,24 @@ namespace Axle {
         SkeletalMesh() = default;
         explicit SkeletalMesh(SkeletalMeshData meshData);
 
+        // Factory function: validates draft and publishes an immutable snapshot, returning nullptr on failure
+        static std::shared_ptr<SkeletalMesh> Create(SkeletalMeshData meshData, std::string* diagnostic = nullptr);
+
+        // Read-only access to published geometry data
         const SkeletalMeshData& GetData() const { return m_Data; }
-        SkeletalMeshData& GetData() { return m_Data; }
-        const std::shared_ptr<Skeleton>& GetSkeleton() const { return m_Data.SkeletonRef; }
+
+        // Explicit read-only view accessors
+        std::span<const SkeletalVertex> GetVertices() const { return m_Data.Vertices; }
+        std::span<const u32> GetIndices() const { return m_Data.Indices; }
+        std::span<const SkeletalSubmesh> GetSubmeshes() const { return m_Data.Submeshes; }
+        std::span<const std::string> GetMaterialSlots() const { return m_Data.MaterialSlots; }
+        const glm::vec3& GetBoundsMin() const { return m_Data.BoundsMin; }
+        const glm::vec3& GetBoundsMax() const { return m_Data.BoundsMax; }
+
+        // Read-only rig accessor: does NOT leak a mutable Skeleton
+        std::shared_ptr<const Skeleton> GetSkeleton() const { return m_Data.SkeletonRef; }
+        size_t GetBoneCount() const { return m_Data.SkeletonRef ? m_Data.SkeletonRef->GetBoneCount() : 0; }
+
         const std::shared_ptr<VertexArray>& GetVAO() const;
 
         u32 GetIndexCount() const { return static_cast<u32>(m_Data.Indices.size()); }

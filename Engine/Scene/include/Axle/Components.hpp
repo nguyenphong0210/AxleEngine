@@ -1370,6 +1370,16 @@ namespace Axle {
         SkeletalMeshComponent() = default;
         explicit SkeletalMeshComponent(const std::shared_ptr<SkeletalMesh>& mesh, const std::string& assetPath = "", const std::string& skeletonPath = "")
             : Mesh(mesh), AssetPath(assetPath), SkeletonPath(skeletonPath) {}
+
+        bool ReplaceMesh(const std::shared_ptr<SkeletalMesh>& newMesh, std::string* diagnostic = nullptr) {
+            if (!newMesh) {
+                if (diagnostic) *diagnostic = "Cannot replace with null or invalid skeletal mesh";
+                return false;
+            }
+            Mesh = newMesh;
+            BindingDiagnostic.clear();
+            return true;
+        }
     };
 
     struct AnimatorComponent {

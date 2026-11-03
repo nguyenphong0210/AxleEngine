@@ -41,7 +41,7 @@ bool CaptureAnimationBinding(const SkeletalMeshComponent* mesh, const AnimatorCo
 }
 
 bool ResolveAnimationBinding(SkeletalMeshComponent* mesh, AnimatorComponent* component, const std::string& owner) {
-    std::shared_ptr<Skeleton> rig;
+    std::shared_ptr<const Skeleton> rig;
     bool success = true;
     if (mesh) {
         mesh->BindingDiagnostic.clear();
@@ -75,7 +75,7 @@ bool ResolveAnimationBinding(SkeletalMeshComponent* mesh, AnimatorComponent* com
                     transition.Rules.push_back({"Speed", i ? ConditionOperator::LessOrEqual : ConditionOperator::Greater, 0.1f});
                     machine->AddTransition(transition);
                 }
-                ac.AnimatorInstance = std::make_shared<Animator>(rig ? rig : legacyRig);
+                ac.AnimatorInstance = std::make_shared<Animator>(rig ? rig : std::shared_ptr<const Skeleton>(legacyRig));
                 ac.AnimatorInstance->SetStateMachine(machine);
             }
         } else if (!ac.ControllerPath.empty() || !ac.InlineFallbackData.empty()) {

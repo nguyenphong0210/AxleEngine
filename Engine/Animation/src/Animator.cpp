@@ -4,8 +4,8 @@
 
 namespace Axle {
 
-    Animator::Animator(std::shared_ptr<Skeleton> skeleton)
-        : m_Skeleton(std::move(skeleton)) {
+    Animator::Animator(std::shared_ptr<const Skeleton> skeleton)
+        : m_Skeleton(skeleton ? std::make_shared<Skeleton>(*skeleton) : nullptr) {
         if (m_Skeleton) {
             m_FallbackPose.InitFromSkeletonBindPose(*m_Skeleton);
             m_FallbackPose.ComputeGlobalMatrices(*m_Skeleton, m_FallbackGlobalMatrices);
@@ -13,8 +13,8 @@ namespace Axle {
         }
     }
 
-    void Animator::SetSkeleton(std::shared_ptr<Skeleton> skeleton) {
-        m_Skeleton = std::move(skeleton);
+    void Animator::SetSkeleton(std::shared_ptr<const Skeleton> skeleton) {
+        m_Skeleton = skeleton ? std::make_shared<Skeleton>(*skeleton) : nullptr;
         if (m_Skeleton) {
             m_FallbackPose.InitFromSkeletonBindPose(*m_Skeleton);
             m_FallbackPose.ComputeGlobalMatrices(*m_Skeleton, m_FallbackGlobalMatrices);

@@ -44,7 +44,7 @@ namespace Axle {
 
         // --- State Machine Compilation & Extraction ---
         static std::shared_ptr<AnimationStateMachine> CompileStateMachineFromDefinition(const AnimatorControllerDefinition& def,
-            std::shared_ptr<Skeleton> skeleton = nullptr, const std::string& ownerPath = "", std::string* diagnostic = nullptr);
+            std::shared_ptr<const Skeleton> skeleton = nullptr, const std::string& ownerPath = "", std::string* diagnostic = nullptr);
         static AnimatorControllerDefinition ExtractDefinitionFromStateMachine(const AnimationStateMachine& sm,
             const Skeleton* skeleton = nullptr, std::string* diagnostic = nullptr);
         static std::string EncodeControllerToText(const AnimatorControllerDefinition& def);

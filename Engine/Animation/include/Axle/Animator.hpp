@@ -15,9 +15,9 @@ namespace Axle {
     class Animator {
     public:
         Animator() = default;
-        explicit Animator(std::shared_ptr<Skeleton> skeleton);
+        explicit Animator(std::shared_ptr<const Skeleton> skeleton);
 
-        void SetSkeleton(std::shared_ptr<Skeleton> skeleton);
+        void SetSkeleton(std::shared_ptr<const Skeleton> skeleton);
         const std::shared_ptr<Skeleton>& GetSkeleton() const { return m_Skeleton; }
 
         void SetStateMachine(std::shared_ptr<AnimationStateMachine> stateMachine);

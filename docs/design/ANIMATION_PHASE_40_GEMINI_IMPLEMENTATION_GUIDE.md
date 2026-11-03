@@ -3,6 +3,12 @@
 Date: 2026-11-03. Inspected baseline: `538163b`.
 Status: **implementation handoff; proposed interfaces, not shipped APIs**.
 
+**Current continuation is limited to A3, then A2.** Read the
+[scoped handoff](ANIMATION_PHASE_40_GEMINI_CONTINUATION_HANDOFF.md) and
+[copy/paste prompt](ANIMATION_GEMINI_NEXT_TASKS_PROMPT.txt) first. They supersede
+the broad assignment below for this continuation. Stop after those two packages;
+do not interpret this historical full-phase guide as permission to start later work.
+
 Read the [completion plan](ANIMATION_PHASE_40_COMPLETION_PLAN.md) first. Its
 A0-K3 IDs, dependency table, scope limits and acceptance gates are canonical.
 This guide supplies code structure, algorithms, integration flows and fixtures.

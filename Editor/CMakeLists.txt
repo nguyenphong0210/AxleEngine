@@ -240,7 +240,7 @@ if(AXLE_ENABLE_VFX_GPU_TESTS)
 endif()
 
 # Animation foundations run without application/window/graphics initialization.
-add_executable(AxleAnimationUnitTests src/Tests/AnimationUnitTestMain.cpp)
+add_executable(AxleAnimationUnitTests src/Tests/AnimationUnitTestMain.cpp src/Tests/Test_AnimationCorrections.cpp)
 target_include_directories(AxleAnimationUnitTests PRIVATE src/Tests)
 target_link_libraries(AxleAnimationUnitTests PRIVATE Axle::Animation Axle::Scene)
 if(MSVC)

@@ -61,7 +61,8 @@ namespace Axle {
                 break;
             }
             case AnimatorParameterType::Trigger: {
-                // Triggers do not hold persistent default values; bool variant acceptable
+                if (!std::holds_alternative<bool>(Default) || std::get<bool>(Default))
+                    ReportError("Trigger defaults must be false; pending triggers are runtime-only");
                 break;
             }
             default:
@@ -125,6 +126,8 @@ namespace Axle {
                 break;
             }
             case AnimatorParameterType::Bool: {
+                if ((Operator == ConditionOperator::Equal || Operator == ConditionOperator::NotEqual) && !std::holds_alternative<bool>(Operand))
+                    ReportError("Boolean equality requires a bool operand");
                 if (Operator != ConditionOperator::IsTrue &&
                     Operator != ConditionOperator::IsFalse &&
                     Operator != ConditionOperator::Equal &&

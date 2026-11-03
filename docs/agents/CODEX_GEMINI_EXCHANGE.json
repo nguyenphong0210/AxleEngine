@@ -1,21 +1,18 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "EDITOR-DEFAULT-SAMPLE",
-    "title": "Open a configured Samples project during Editor development",
+    "id": "BUILD-WARNING-CLEANUP",
+    "title": "Fix reported Animation float conversion and preview APIENTRY redefinition warnings",
     "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Development Editor launches a default Samples project; explicit projects still override it. Keep empty project mode and isolated Tests/fixtures.",
+    "user_scope": "Fix warnings in the supplied build log; scope is GltfSkeletalImporter and AssetPreviewPanel include ordering.",
     "expected_files": [
-      "Editor/CMakeLists.txt",
-      "Editor/src/Main.cpp",
-      "Editor/src/EditorStartup.hpp",
-      "Tests/src/Test_ProjectStartup.cpp",
-      "docs/guides/BUILD_WORKFLOWS.md"
+      "Engine/Animation/src/GltfSkeletalImporter.cpp",
+      "Engine/UI/src/AssetPreviewPanel.cpp"
     ],
-    "next_action": "Development default Samples project implemented and verified; no new Gemini or Phase 41 package assigned.",
-    "implementation_commit": "e375143"
+    "next_action": "Reported production warnings fixed and verified; no new Gemini or Phase 41 package assigned.",
+    "implementation_commit": "9374d7b"
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -208,6 +205,28 @@
       "base_commit": "e375143",
       "timestamp_utc": "2026-11-03T15:44:41.111049+00:00",
       "body": "DELIVERED e375143: development Editor now opens Samples/TestProject/TestProject.axleproj by default. CMake AXLE_EDITOR_DEFAULT_PROJECT embeds the selected absolute path in EditorStartupConfig.hpp; repository-relative cache values resolve from the source root and an empty value disables the convenience. This is Editor composition only, without Engine project discovery or bundled assets. Explicit --project/positional project wins, then --empty-project, then configured sample if available, then untitled. Missing explicit projects fail rather than opening the sample. CLI cooking still requires explicit --project. --verify-empty-startup suppresses the development default; --verify-startup runs normal project selection for five actual frames.\n\nRelease verification in this session: AxleEditor/AxleProjectUnitTests builds exit 0 (build/sample-build.log, sample-final-build.log). CTest passes 9/9 (build/sample-ctest.log). Actual Editor --verify-startup loads the sample root and all 10 authored entities on dx12/vulkan/opengl, exit 0 each (build/sample-startup-<backend>.log). Additional native DX12 checks pass for --empty-project, explicit override, --verify-empty-startup and starting from the executable directory (build/sample-policy-*.log). CMake generation checked with disabled default and relative sample path, then restored normal default and rebuilt successfully (build/sample-config-*.log). Unit checks cover missing/default/explicit/empty precedence. Local documentation links and source asset isolation pass. No Samples tracked content changed. No claim of gameplay-script execution or renderer parity; the existing NRI optional feature query warning remains.\n\nUpdated README, roadmap, build workflow, test guide and startup diagram. The prior empty-startup delivery remains historical; user deliberately changed development startup behavior in this task. Empty startup and passive UI Library regression coverage remain intact. No push and no new Gemini implementation assignment.\n"
+    },
+    {
+      "id": "CG-20261103T155527983935Z-CODEX-4fc9dc",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "BUILD-WARNING-CLEANUP",
+      "reply_to": null,
+      "base_commit": "5e86b5db3940ef4f4ed1d41e397965806585ea02",
+      "timestamp_utc": "2026-11-03T15:55:27.983935+00:00",
+      "body": "IN_PROGRESS from 5e86b5d. User explicitly authorizes fixing the supplied warnings: MSVC C4244 at GltfSkeletalImporter.cpp:142 (integer zero forwarded to float duration) and C4005 in AssetPreviewPanel.cpp (GLAD precedes Windows SDK APIENTRY definition). Codex owns these two source files; will use 0.0f and include Win32 SDK before GLAD without disabling diagnostics or changing ThirdParty headers. Existing animation tests plus an Editor Release build will verify. No new Gemini work assigned."
+    },
+    {
+      "id": "CG-20261103T155704442034Z-CODEX-6c323f",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "BUILD-WARNING-CLEANUP",
+      "reply_to": "CG-20261103T155527983935Z-CODEX-4fc9dc",
+      "base_commit": "9374d7b",
+      "timestamp_utc": "2026-11-03T15:57:04.442034+00:00",
+      "body": "DELIVERED 9374d7b. Fixed the two production warnings supplied by the user: GltfSkeletalImporter constructs AnimationClip with 0.0f rather than integer zero (C4244); AssetPreviewPanel includes the Windows SDK with its existing NOMINMAX/WIN32_LEAN_AND_MEAN guards before GLAD/transitive engine headers, so GLAD reuses the SDK APIENTRY definition (C4005). No diagnostic suppression, ThirdParty edits, new tests or behavioral changes.\n\nVerification in this session: cmake --build build --config Release --target AxleEditor AxleAnimationUnitTests --parallel 6 exits 0 (build/warning-cleanup-build.log). Both modified production sources were recompiled; the Editor portion contains neither C4244 nor C4005. Existing independent integer-duration fixture warnings occur when rebuilding animation test sources, and existing CRT LNK4098 warnings remain outside this supplied-log scope.\nctest --test-dir build -C Release -R ^Animation(UnitTests|HarnessFailure)$ --output-on-failure exits 0, 2/2 pass (build/warning-cleanup-tests.log). Real Editor --verify-empty-startup --rhi=opengl exits 0 after five UI frames (build/warning-cleanup-opengl.log). git diff whitespace check passes. No push. No new Gemini implementation or Phase 41 work assigned.\n"
     }
   ],
   "deferred_tasks": [

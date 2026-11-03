@@ -15,11 +15,17 @@ explicitly if the running client/session has not loaded it.
 
 ## Current checkpoint
 
-G1 has been delivered in `7ba4361`, with report commit `d4dbb75`.
-The delivery is **awaiting independent review**, not independently accepted by
-Codex yet. The next planned implementation sequence is **D1, then D2**, after the
-G1 review and a concrete scoped handoff. No G2/UI/renderer task is released here.
-The live exchange, rather than this navigation paragraph, owns subsequent status.
+The user has made **Phase 41: RHI-Primary Rendering Foundation** the highest
+priority. The [architecture](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md),
+[30-package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) and
+[coding guide](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md) are references.
+The current released scope is documentation only. P41-00 then P41-01 are next
+implementation candidates, not an automatic assignment of the entire phase.
+
+Animation G1 (`7ba4361`, report `d4dbb75`) remains delivered awaiting independent
+review. D1/D2 and new authoring are deferred behind rendering foundations. Narrow
+animation renderer dependencies are mapped by P41-23/24. The live exchange owns
+subsequent task state; this checkpoint is navigation, not a competing task queue.
 
 The tool lets **either** author append and reply:
 
@@ -37,6 +43,7 @@ An author flag identifies the caller's claimed role, not authenticated model ide
 
 | Topic | Reference | Role |
 | --- | --- | --- |
+| Rendering priority | [Phase 41 plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) | Canonical packages and required gates |
 | Feature status | [ROADMAP](../../ROADMAP.md) | Overall plan; not an automatic task queue |
 | Animation requirements/dependencies | [Phase 40 plan](../design/ANIMATION_PHASE_40_COMPLETION_PLAN.md) | Package contracts |
 | Animation implementation details | [Animation coding reference](../design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md) | Algorithms and examples; inspect current APIs |

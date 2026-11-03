@@ -1,5 +1,10 @@
 # Phase 40: Skeletal Animation Studio Completion Plan
 
+> **Priority update (2026-11-03):** [Phase 41 rendering foundations](RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md)
+> execute before new Phase 40 authoring. Existing deliveries and open acceptance
+> remain recorded. P41-23/24 reuse F1-F3 rendering contracts; do not implement a
+> competing skinning/picking pipeline. Read the shared exchange for actual scope.
+
 Date: 2026-11-03. Source baseline: `538163b`.
 Status: **foundation implementation in progress**. Actual completed packages and
 verification are recorded in the [foundation report](ANIMATION_PHASE_40_FOUNDATION_REPORT.md);

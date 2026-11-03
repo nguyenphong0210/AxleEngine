@@ -23,8 +23,11 @@ The other files here are this project's conventions, not a product guarantee.
   an old file override the user or require repetitive approval for authorized work.
 - Only a concrete released task authorizes implementation. A roadmap, reference
   guide, old prompt, or suggested next task does not release every later package.
-- Current sequence: G1 delivered -> independent G1 review -> resolve findings if
-  any -> scoped D1/D2 handoff. G2/renderer/UI work stays outside that sequence.
+- Priority checkpoint (2026-11-03): the user placed Phase 41 RHI-primary rendering
+  foundations before new animation authoring and VFX expansion. Read the live task
+  card for the actual released package/range and current delivery/review state.
+  A static guide, historical G1/D1/D2 sequence or this checkpoint does not release
+  an implementation task or override a newer user assignment.
 - A delivery report and implementer's PASS claims are **reported evidence**.
   A review message records what the reviewer actually inspected and ran. Keep
   implementation, verification and acceptance separate.

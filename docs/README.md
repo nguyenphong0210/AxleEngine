@@ -10,6 +10,15 @@ Start at [the agent index](agents/README.md). Both assistants read and write the
 questions/replies, deliveries and independent review status. Technical guides
 below are references, not standing instructions to implement an entire phase.
 
+## Current highest priority: RHI-primary rendering
+
+Phase 41 executes before new animation authoring and VFX expansion. All documents
+below describe proposed work; implementation/acceptance is not claimed.
+
+- [Target architecture](design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md): responsibilities, resource/frame contracts, fallback and migration boundaries.
+- [Implementation plan](design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md): 30 packages, dependencies, gates, source scope and acceptance matrix.
+- [Coding guide](design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md): algorithms, proposed APIs, test design and scoped handoff template for either agent.
+
 ## Architecture and assessment
 
 | Document | Use it to |

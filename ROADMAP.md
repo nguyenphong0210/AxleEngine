@@ -6,16 +6,30 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 ## 📊 Roadmap Overview & Executive Summary
 
-* **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Phase Status**: Phases 1-37 and the Phase 38/38.1/38.2 foundations are recorded below. **Phase 38.3 remains open for its outstanding acceptance checks. Phase 39 corrective implementation passes CPU and physical DX12/Vulkan checks; interactive UI and OpenGL regression remain open. Phase 40 has an audited implementation plan and Gemini handoff; implementation has not started.**
+* **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (RHI-primary D3D12/Vulkan migration, OpenGL 4.5 compatibility), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
+* **Phase Status**: Earlier milestones record historical deliveries. Phase 38.3 and Phase 39 retain outstanding acceptance checks. Phase 40 has delivered CPU foundations and Gemini G1 awaiting independent review. **Phase 41: RHI-Primary Rendering Foundation is now the highest-priority planned work; implementation has not started.**
 * **Automated Test Verification**: Record evidence per suite/backend. VFX CPU (7 suites), physical DX12/Vulkan VFX readbacks, Step 102 with physical DX12, and material Step 106 on both backends pass. Interactive VFX UI/OpenGL checks and separately tracked material manual checks remain pending. See the [VFX review and acceptance report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
-* **Upcoming Focus**: **Phase 39 Interactive UI Acceptance & OpenGL Regression** (CPU and physical DX12/Vulkan checks pass), alongside the prepared **Phase 40: Skeletal Animation Studio** implementation handoff. Remaining Phase 38.3 manual acceptance is tracked separately for the user. See the [VFX completion plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md), [Phase 40 plan](docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md) and [material acceptance report](docs/design/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md).
+* **Upcoming Focus / execution priority #1**: **Phase 41: RHI-Primary Rendering Foundation**, before new Phase 40 authoring or VFX expansion. Read the [architecture](docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md), [30-package execution plan](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md), and [implementation guide](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md). Existing material/VFX acceptance obligations remain open. Phase numbering does not determine execution order.
+
+## Highest-priority execution track: Phase 41
+
+The user has prioritized RHI as the primary renderer and OpenGL as compatibility
+fallback. Significant internal replacement is permitted where the contracts below
+require it. Preserve authored assets and a runnable migration path. This update
+creates a plan; it does not claim implementation or release the whole backlog.
+
+**First implementation candidates:** P41-00 (baseline/harness), then P41-01
+(backend readiness and fallback equivalence). Actual assignments are recorded in
+[the shared exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json). Rendering-related
+Phase 40 integration follows the dependency map; unrelated new authoring and VFX
+expansion wait behind this track. Historical completed checkboxes are not proof
+of Phase 41 acceptance.
 
 ### 🛡️ Core Engineering & Contribution Principles
 1. **Language Standard**: All source code, header files, docstrings, architectural documentation, commit messages, and automated tests must be written exclusively in **English**.
 2. **Granular Sub-Step Execution**: Every implementation task must be decomposed into its smallest discrete sub-step. Bulk or monolithic commits combining unrelated sub-steps are strictly forbidden.
-3. **Mandatory Test Verification**: Every single sub-step must be compiled cleanly with zero errors/warnings and verified using the automated test suite (`AxleTests.exe`) prior to committing.
-4. **Sequential Commit Pipeline**: Each verified sub-step must receive its own atomic Git commit and be pushed sequentially to `origin/main` until the phase is 100% complete.
+3. **Mandatory Test Verification**: Rebuild changed code targets and run checks appropriate to the behavior. Record exact configuration/backend/exit codes and distinguish CPU, GPU, native UI and standalone evidence. Record existing warnings separately; do not introduce unexplained new warnings or claim unavailable checks passed. Documentation-only changes require document/link consistency checks.
+4. **Sequential Commit Pipeline**: Commit each verified coherent sub-step locally with explicit staging. Preserve unrelated changes. Push only when the user explicitly requests it; an unchecked phase is not authorization to push or implement every package.
 
 ---
 
@@ -771,7 +785,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 - [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/Scene`, `Engine/UI`, `Editor`, `Runtime`)**
   - **Status (2026-11-03): A3 publication enforcement and A2 FBX baking review corrections complete.** A3's enforced immutable mesh-resource publication, non-assignability, and validated non-null replacement (R1/R2) are verified. A2's technical baking gaps (rotational Nyquist aliasing R3, transactional output R8, close STEP boundary loss R4, constant-next holds R5, terminal linear key exclusion R6, unskipped budget & nonlinear adaptive refinement R7) are resolved with permanent registered CPU tests. Release/Debug builds, unit tests, and both Animation CTests PASS. A2 remains open for expanded multi-exporter corpus verification. Animation RHI pixels, native authoring UI and standalone packaged playback are pending; Phase 38.3/39 manual checks remain separately open.
   - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test reference**: [Gemini Implementation Guide](docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
-  - **Current coordination**: G1 was delivered in `7ba4361`/`d4dbb75` and awaits independent review. Use the [shared exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json) and [protocol](docs/agents/WORKING_PROTOCOL.md) for both agents' replies; old prompts are historical. After G1 review/fixes, the user prefers **D1 then D2**. No new implementation package is released by this roadmap.
+  - **Current coordination**: G1 was delivered in `7ba4361`/`d4dbb75` and awaits independent review. **Phase 41 rendering foundations now take priority; D1/D2 and new authoring work are deferred.** P41-23/24 reuse the relevant Phase 40 F1-F3 contracts and evidence rather than creating a parallel renderer. Use the [shared exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json); no new implementation is released by this roadmap.
   - **Execution**: 28 separately committed packages. First deliver A0-A3, B1/B2, C1/C2, B3, F1/F2 and G1/G2 as an executable import -> persist -> independent animator -> RHI preview slice; then complete authoring and acceptance. Package dependencies in the plan take precedence over the display order below.
   - [ ] **A - CPU Foundations & Instance Safety**:
     - [x] **A0**: Always-active, device-free `AxleAnimationUnitTests` target and temporary fixtures.
@@ -818,3 +832,48 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - **Gemini delivery rule**: code and CPU tests per package/local commit; implement actual renderer/UI/runtime checks, record unavailable physical GPU/UI checks as NOT RUN, and keep acceptance open until externally verified.
 
 ---
+
+---
+
+### Milestone 11: RHI-Primary Rendering Foundation (highest execution priority)
+
+- [ ] **Phase 41: Shared Rendering Architecture, GPU Safety & Product Integration**
+  - **Status (2026-11-03): planning only; highest-priority implementation backlog.** Execute ahead of new Phase 40 authoring and VFX feature expansion. Preserve Phase 38.3/39 acceptance and delivered Phase 40 CPU work.
+  - **Design**: [RHI-Primary Architecture](docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md). **Packages/dependencies/acceptance**: [Implementation Plan](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md). **Coding workflow**: [Implementation Guide](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md).
+  - **G0 - Safety and visible primitives**:
+    - [ ] **P41-00**: Always-active Debug/Release render harness, failure probe and honest backend baseline.
+    - [ ] **P41-01**: Backend selection/readiness, explicit and automatic GL fallback equivalence, checked complete startup.
+    - [ ] **P41-02**: Transactional GPU creation/replacement, descriptor validation and partial-allocation cleanup.
+    - [ ] **P41-03**: Structured GPU errors, stopped submissions on device loss and bounded teardown.
+    - [ ] **P41-04**: Canonical backend-independent primitive creation, resolution and scene/assembly persistence.
+  - **G1 - Frame/resource foundation**:
+    - [ ] **P41-05**: Resource handles, device epochs, generation ownership and shared GPU assets.
+    - [ ] **P41-06**: Recording/submission leases and fence-safe retirement across all consumers.
+    - [ ] **P41-07**: First-use/subresource tracking and commit of states only after successful submission.
+    - [ ] **P41-08**: Frame contexts, bounded arenas and completion-safe allocator reuse.
+    - [ ] **P41-09**: One presentation owner, native UI recording bridge, surface/VSync/minimize handling.
+    - [ ] **P41-10**: Transactional per-view targets, resize/format changes and leased GUI textures.
+    - [ ] **P41-11**: Context-free decode, central upload and device-aware resource caching.
+  - **G2 - Common scene rendering**:
+    - [ ] **P41-12**: Immutable RenderWorld, world-space scene extraction and shared mesh/material resolution.
+    - [ ] **P41-13**: RenderService, sequential declared-usage graph and main Editor viewport integration.
+    - [ ] **P41-14**: OpenGL compatibility adapter using the common data/service contract.
+  - **G3 - All rendering consumers**:
+    - [ ] **P41-15**: Private asset/material service views with preserved authoring and controls.
+    - [ ] **P41-16**: Private VFX service views with preserved deterministic simulation/input/document behavior.
+    - [ ] **P41-17**: Multi-backend Assembly Editor preview using actual hierarchy and resources.
+    - [ ] **P41-18**: Bounded mesh/assembly thumbnail jobs and safe cache invalidation.
+    - [ ] **P41-19**: Standalone Runtime backend/service/present integration and cooked startup.
+    - [ ] **P41-20**: Shared shader/material/color/depth contracts and honest renderer capabilities.
+  - **G4 - Functional parity**:
+    - [ ] **P41-21**: Modern directional shadow/cascade passes and receiver/cutout pixel evidence.
+    - [ ] **P41-22**: Authored HDR environment loading, sky rendering and real IBL integration.
+    - [ ] **P41-23**: Reviewed animation CPU integration, GPU skinning and animated shadows; cross-map Phase 40 F1/F2.
+    - [ ] **P41-24**: Geometry/pose/material-consistent picking and stale-readback rejection; cross-map Phase 40 F3.
+    - [ ] **P41-25**: Correct Edit/Play/Pause physics debug and isolated overlays.
+  - **G5 - Production cutover**:
+    - [ ] **P41-26**: Real module/ownership boundaries and Runtime build with Editor/UI dependencies disabled.
+    - [ ] **P41-27**: Measured frame/upload performance and safe removal of per-view queue-idle waits.
+    - [ ] **P41-28**: CPU, physical D3D12/Vulkan, GL, native UI and standalone failure/stress acceptance matrix.
+    - [ ] **P41-29**: Accepted modern defaults, removal of obsolete active paths and maintained GL fallback.
+  - **Completion gate**: Every required acceptance row has real evidence. Proposed APIs/targets and historical tests do not establish Phase 41 completion. No live backend switching, GPU VFX graph or ray tracing is required.

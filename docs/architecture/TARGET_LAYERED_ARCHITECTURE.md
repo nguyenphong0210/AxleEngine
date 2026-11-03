@@ -2,6 +2,12 @@
 
 Status: **TO-BE — design proposal, not implemented**. Current targets and dependencies are described in [SAD](SAD.md) and [Dependency Map](DEPENDENCY_MAP.md).
 
+**Rendering execution priority (2026-11-03):** The detailed
+[RHI-primary rendering architecture](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md)
+and [Phase 41 package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md)
+specialize this proposal for the user's current highest priority. They define
+incremental implementation gates; this broader module proposal remains unimplemented.
+
 ## 1. Objectives and rules
 
 Allow products to select engine capabilities without pulling in the editor or every gameplay toolkit. Each module should have a coherent responsibility, explicit public API, dependency policy and lifetime owner.

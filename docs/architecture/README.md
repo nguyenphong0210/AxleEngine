@@ -27,6 +27,11 @@ Diagrams use Mermaid and require a Markdown viewer with Mermaid support. A depen
 
 The class diagrams emphasize relationships that matter to architecture. The class index covers additional declarations, including local test types and sample scripts. No single diagram attempts to display every engine type.
 
+The current highest-priority execution proposal is
+[Phase 41: RHI-primary rendering](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md),
+with its [detailed package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md).
+It is a target design, not a change to the as-is survey below.
+
 ## Scope
 
 The survey covers first-party engine, editor, runtime, plugins, samples, shaders and text asset/configuration files. Third-party libraries are considered through their integration points, CMake targets and APIs used by the engine. Generated build output, cache binaries, media and the implementation of every vendored library are outside the class analysis.

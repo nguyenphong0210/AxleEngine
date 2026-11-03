@@ -1,49 +1,37 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "INSPECTOR-TEXTURE-LIFETIME",
-    "title": "Fix GPU resource lifetime when selecting texture images",
-    "state": "fixed_verified_d3d12",
+    "id": "P41-PLANNING",
+    "title": "Plan the highest-priority RHI-primary rendering architecture migration",
+    "state": "documentation_delivered",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Investigate texture-click device removal and fix the demonstrated Inspector resource/descriptor lifetime bug.",
+    "user_scope": "Create detailed architecture and execution documentation and prioritize it ahead of feature expansion. No production implementation is assigned in this turn.",
     "expected_files": [
-      "Engine/UI/src/AssetInspector.cpp",
-      "Editor/src/Tests/Test_VFXRendering.cpp"
+      "ROADMAP.md",
+      "docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md",
+      "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md",
+      "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md",
+      "docs/README.md",
+      "docs/agents/README.md",
+      "docs/agents/WORKING_PROTOCOL.md",
+      "docs/architecture/TARGET_LAYERED_ARCHITECTURE.md",
+      "docs/architecture/README.md"
     ],
-    "animation_continuation": "No animation package is assigned. G1 review remains deferred.",
-    "implementation_commit": "5a9662e",
-    "finding": "ClearTexturePreview immediately destroyed textures and recycled UI descriptors during selection changes even when queued or in-flight UI draws still referenced them.",
-    "verification": [
-      {
-        "command": "cmake --build build --config Release --target AxleVFXGPUTests --parallel 6",
-        "exit_code": 0,
-        "stage": "Regression built before production fix"
-      },
-      {
-        "command": "AXLE_VFX_TEST_BACKEND=D3D12 build/Editor/Release/AxleVFXGPUTests.exe",
-        "exit_code": 1,
-        "stage": "Before fix: expected failure on descriptor recycling prior to submission",
-        "log": "build/inspector-texture-before.log"
-      },
-      {
-        "command": "cmake --build build --config Release --target AxleVFXGPUTests AxleEditor AxleVFXUnitTests --parallel 6",
-        "exit_code": 0
-      },
-      {
-        "command": "AXLE_VFX_TEST_BACKEND=D3D12 build/Editor/Release/AxleVFXGPUTests.exe",
-        "exit_code": 0,
-        "stage": "After fix: real RTX 3070 D3D12 readback, four Inspector lifecycle actions plus existing GPU suite",
-        "log": "build/inspector-texture-after.log"
-      },
-      {
-        "command": "ctest --test-dir build -C Release -R '^VFXUnitTests$' --output-on-failure",
-        "exit_code": 0,
-        "result": "1/1 registered VFX CPU test passed"
-      }
+    "next_implementation_candidate": [
+      "P41-00",
+      "P41-01"
     ],
-    "limits": "Native interactive click sequence and Vulkan/OpenGL GPU execution NOT RUN this turn. The original first device-removal error was not available in a persisted log; the regression detects premature reuse before GPU submission.",
-    "next_action": "Rebuilt Release Editor is ready for user retry. No further implementation task is released; animation G1 review remains deferred."
+    "animation_continuation": "G1 remains delivered awaiting independent review. D1/D2 and new authoring work are deferred behind Phase 41 rendering foundations; narrowly mapped animation renderer prerequisites are tracked by the new plan.",
+    "documentation_commit": "5250df6",
+    "architecture": "docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md",
+    "execution_plan": "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md",
+    "coding_guide": "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md",
+    "priority": "Highest: Phase 41 precedes new Phase 40 authoring and VFX expansion.",
+    "implementation_status": "NOT STARTED for P41-00..29",
+    "implementation_release": "None. The user requested documentation and roadmap in this turn.",
+    "verification": "44 new local links/anchors checked; 30 unique package sections and roadmap checkboxes agree; dependency graph is acyclic; code fences balanced; changes are documentation only. No renderer builds or runtime/GPU tests run for this documentation delivery.",
+    "next_action": "Read/reply in exchange. Begin only the next package/range actually assigned by the user; do not replay old animation prompts."
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -126,6 +114,28 @@
       "base_commit": "5a9662e1aec009697de9cd822878da1c0e9e8bed",
       "timestamp_utc": "2026-11-03T13:47:25.385147+00:00",
       "body": "DELIVERY: 5a9662e fixes texture preview retirement in AssetInspector.cpp. User confirmed failures occur when switching between texture images. ClearTexturePreview now moves texture owners and their registered descriptor into ImGuiLayer::DeferRelease; selection/context changes can no longer destroy or recycle them ahead of queued/current/in-flight UI draws. The existing retirement boundary submits UI then waits for GPU completion before releasing. RHI previews also publish descriptors only after successful upload.\n\nA permanent hardware regression in Test_VFXRendering.cpp uses the actual SceneHierarchyPanel selection/drawing APIs. It obtains the real preview image descriptor from its draw commands, retires via selection change / clear selection / context detach / panel destruction, verifies that another registration cannot recycle the pending descriptor, then renders the original image through ImGui and reads its correct red/green pixels back from D3D12.\n\nEvidence this turn: the new regression built against the old source fails deterministically at the premature descriptor recycling check (exit 1, build/inspector-texture-before.log); it stops before unsafe GPU sampling. After the production fix, Release build of AxleVFXGPUTests, AxleEditor and AxleVFXUnitTests exits 0. The full D3D12 hardware harness on NVIDIA GeForce RTX 3070 exits 0, all four lifecycle pixel checks pass, no NRI Error appears, and shutdown completes (build/inspector-texture-after.log). Release VFX CTest passes 1/1 (exit 0). Existing runtime-library linker warnings remain.\n\nLimits: native interactive mouse clicks and Vulkan/OpenGL execution NOT RUN. No persisted original pre-shutdown error log was available; do not claim the user's original first device-removal event was directly reproduced. The invalid lifetime was independently reproduced and corrected. The Release executable has been updated. Preserve untracked Editor/assets/materials/New_ParticleEmitter.axleasset. No new Gemini implementation or animation package is released."
+    },
+    {
+      "id": "CG-20261103T141933785498Z-CODEX-4ba002",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "P41-PLANNING",
+      "reply_to": null,
+      "base_commit": "492e6d1549336f8f2c0a89eb0ce0f15a398647f2",
+      "timestamp_utc": "2026-11-03T14:19:33.785498+00:00",
+      "body": "IN_PROGRESS: User makes RHI-primary rendering architecture the highest priority and requests detailed documentation/roadmap. Codex is writing Phase 41 architecture, dependency-ordered package plan, and implementation guide; updating roadmap and coordination indexes. This turn authorizes documentation only. Gemini: do not start Phase 40 D1/D2/G2 or implement the whole new plan. The next candidate is P41-00 then P41-01 after an explicit scoped implementation assignment. Preserve all existing code and delivery history."
+    },
+    {
+      "id": "CG-20261103T143256108702Z-CODEX-68f230",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "P41-PLANNING",
+      "reply_to": "CG-20261103T141933785498Z-CODEX-4ba002",
+      "base_commit": "5250df6f3bc91e6f406abe142eb790412c433b2f",
+      "timestamp_utc": "2026-11-03T14:32:56.108702+00:00",
+      "body": "DELIVERY: Core architecture/plan/guide committed as 5250df6. The user makes RHI-primary rendering the highest priority and permits replacing unsuitable internals. Phase 41 is scheduled BEFORE new Phase 40 authoring and VFX expansion; numbering preserves existing references.\n\nRead docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md, RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md and RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md. The plan has 30 packages P41-00..29 and six gates: safety/primitives; frame/resource foundation; common rendering; all consumers; functional parity; production cutover. Each package specifies dependencies, behavior/source scope and verification. Modern D3D12/Vulkan are primary, GL is a maintained compatibility adapter. Lifetime covers recorded and submitted work; native UI is a bridge under one frame/present owner. Runtime without Editor dependencies and real backend/windowed acceptance are required.\n\nThe roadmap/docs index/protocol now reflect this priority, and stale animation redirects no longer suggest D1/D2 as immediately next. G1 remains delivered awaiting independent review; D1/D2 are deferred. P41-23/24 reuse Phase 40 F1-F3 contracts rather than starting a competing animation renderer.\n\nValidation: 44 new relative links/anchors, balanced fences, 30 unique package sections matching unchecked roadmap items, acyclic dependencies and documentation-only scope PASS. No production files changed, no engine build/GPU test run this turn. Proposed API/target/option names are explicitly not shipped. Historical test claims are separated from Phase 41 acceptance, whose rows remain NOT RUN.\n\nGemini: acknowledge/read this priority when your session runs. No production implementation is released by this planning task. P41-00 then P41-01 are next candidates, not authorization to execute all 30 packages. Use the latest user assignment and write your own status/delivery. No push."
     }
   ],
   "deferred_tasks": [
@@ -207,6 +217,51 @@
       "native_ui_verification": "NOT RUN. Headless test exercises the actual panel fallback and shared input surface; no physical texture rendering/native mouse test was run.",
       "release_executable": "Rebuilt successfully after the user closed Editor: build/Editor/Release/AxleEditor.exe.",
       "next_action": "Release executable is ready for user verification. Native UI/GPU verification remains NOT RUN. Animation G1 remains awaiting a separately assigned review."
+    },
+    {
+      "id": "INSPECTOR-TEXTURE-LIFETIME",
+      "title": "Fix GPU resource lifetime when selecting texture images",
+      "state": "fixed_verified_d3d12",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "user_scope": "Investigate texture-click device removal and fix the demonstrated Inspector resource/descriptor lifetime bug.",
+      "expected_files": [
+        "Engine/UI/src/AssetInspector.cpp",
+        "Editor/src/Tests/Test_VFXRendering.cpp"
+      ],
+      "animation_continuation": "No animation package is assigned. G1 review remains deferred.",
+      "implementation_commit": "5a9662e",
+      "finding": "ClearTexturePreview immediately destroyed textures and recycled UI descriptors during selection changes even when queued or in-flight UI draws still referenced them.",
+      "verification": [
+        {
+          "command": "cmake --build build --config Release --target AxleVFXGPUTests --parallel 6",
+          "exit_code": 0,
+          "stage": "Regression built before production fix"
+        },
+        {
+          "command": "AXLE_VFX_TEST_BACKEND=D3D12 build/Editor/Release/AxleVFXGPUTests.exe",
+          "exit_code": 1,
+          "stage": "Before fix: expected failure on descriptor recycling prior to submission",
+          "log": "build/inspector-texture-before.log"
+        },
+        {
+          "command": "cmake --build build --config Release --target AxleVFXGPUTests AxleEditor AxleVFXUnitTests --parallel 6",
+          "exit_code": 0
+        },
+        {
+          "command": "AXLE_VFX_TEST_BACKEND=D3D12 build/Editor/Release/AxleVFXGPUTests.exe",
+          "exit_code": 0,
+          "stage": "After fix: real RTX 3070 D3D12 readback, four Inspector lifecycle actions plus existing GPU suite",
+          "log": "build/inspector-texture-after.log"
+        },
+        {
+          "command": "ctest --test-dir build -C Release -R '^VFXUnitTests$' --output-on-failure",
+          "exit_code": 0,
+          "result": "1/1 registered VFX CPU test passed"
+        }
+      ],
+      "limits": "Native interactive click sequence and Vulkan/OpenGL GPU execution NOT RUN this turn. The original first device-removal error was not available in a persisted log; the regression detects premature reuse before GPU submission.",
+      "next_action": "Rebuilt Release Editor is ready for user retry. No further implementation task is released; animation G1 review remains deferred."
     }
   ]
 }

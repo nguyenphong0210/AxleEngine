@@ -154,7 +154,7 @@ namespace Axle {
             "Engine/Resources/Shaders",
             "Resources/Shaders",
             "shaders",
-            "Editor/assets/shaders",
+            (FileSystem::GetAssetDirectory() / "shaders").string(),
             "assets/shaders"
         };
 

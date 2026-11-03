@@ -26,14 +26,11 @@ target_link_libraries(AxleRuntime PRIVATE
 
 add_dependencies(AxleRuntime AxleScripts)
 
-# Synchronize assets, resources, and scripts DLL to runtime binary output directory
+# Stage engine resources and scripts only; project assets are supplied by export
 add_custom_command(TARGET AxleRuntime POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     $<TARGET_FILE:AxleScripts>
     $<TARGET_FILE_DIR:AxleRuntime>/$<TARGET_FILE_NAME:AxleScripts>
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/Editor/assets
-    $<TARGET_FILE_DIR:AxleRuntime>/assets
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/Engine/Resources
     $<TARGET_FILE_DIR:AxleRuntime>/Resources

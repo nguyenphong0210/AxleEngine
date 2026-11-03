@@ -8,7 +8,7 @@ namespace Axle {
 
     struct ProjectConfig {
         std::string Name = "Untitled";
-        std::filesystem::path StartScene = "scenes/Playground.axlescene";
+        std::filesystem::path StartScene;
         std::filesystem::path AssetDirectory = "assets";
         std::string RHIBackend = "Direct3D12"; // "Direct3D12", "Vulkan", "OpenGL"
     };
@@ -30,7 +30,8 @@ namespace Axle {
         static std::shared_ptr<Project> GetActive() { return s_ActiveProject; }
         static void SetActive(std::shared_ptr<Project> project);
 
-        static std::shared_ptr<Project> New();
+        static std::shared_ptr<Project> New(const std::filesystem::path& directory = {});
+        static std::shared_ptr<Project> CreateUntitled();
         static std::shared_ptr<Project> Load(const std::filesystem::path& path);
         static bool SaveActive(const std::filesystem::path& path);
 

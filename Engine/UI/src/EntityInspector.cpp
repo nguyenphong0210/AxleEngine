@@ -53,11 +53,7 @@ namespace Axle {
     static std::vector<std::string> DiscoverAxleUIAssets() {
         std::vector<std::string> result;
         const std::vector<std::filesystem::path> searchDirs = {
-            FileSystem::GetAssetDirectory(),
-            std::filesystem::path("assets"),
-            std::filesystem::path("Editor/assets"),
-            std::filesystem::path("assets/ui"),
-            std::filesystem::path("Editor/assets/ui")
+            FileSystem::GetAssetDirectory()
         };
         std::unordered_set<std::string> seen;
         for (const auto& dir : searchDirs) {

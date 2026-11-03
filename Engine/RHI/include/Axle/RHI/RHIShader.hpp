@@ -216,7 +216,7 @@ namespace Axle::RHI {
         // Compile shader targeting the currently active RHI backend (D3D12 -> DXIL, Vulkan -> SPIR-V)
         RHIShaderCompileResult CompileForActiveBackend(const RHIShaderCompileDesc& desc);
 
-        // Default shader cache directory (e.g. "assets/cache/shaders")
+        // Default shader cache directory (outside project/source assets)
         const std::filesystem::path& GetDefaultCacheDirectory() const { return m_DefaultCacheDirectory; }
         void SetDefaultCacheDirectory(const std::filesystem::path& dir) { m_DefaultCacheDirectory = dir; }
 
@@ -277,7 +277,7 @@ namespace Axle::RHI {
 
     private:
         bool m_Initialized = false;
-        std::filesystem::path m_DefaultCacheDirectory = "assets/cache/shaders";
+        std::filesystem::path m_DefaultCacheDirectory = std::filesystem::temp_directory_path() / "AxleEngine" / "ShaderCache";
         void* m_DxcDll = nullptr;
         void* m_DxilDll = nullptr;
         void* m_DxcUtils = nullptr;          // IDxcUtils*

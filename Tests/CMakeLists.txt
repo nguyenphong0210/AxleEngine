@@ -1,0 +1,203 @@
+# Dedicated Test Executable for Automated Verifications
+add_executable(AxleTests EXCLUDE_FROM_ALL
+    src/Test.cpp
+    src/Test_Milestone1.cpp
+    src/Test_Milestone2.cpp
+    src/Test_Milestone3.cpp
+    src/Test_Milestone4.cpp
+    src/Test_Milestone5.cpp
+    src/Test_Milestone6.cpp
+    src/Test_Milestone7.cpp
+    src/Test_Milestone8_Part1.cpp
+    src/Test_Milestone8_Part2.cpp
+    src/Test_Milestone8_Part3.cpp
+    src/Test_Milestone8_Part4.cpp
+    src/Test_Milestone9.cpp
+    src/Test_Milestone10.cpp
+    src/Test_MaterialRendering.cpp
+    src/Test_MaterialMeshImport.cpp
+    src/Test_MaterialAcceptance.cpp
+    src/Test_VFXRendering.cpp
+)
+
+if (MSVC)
+    target_compile_options(AxleTests PRIVATE /bigobj /FS)
+endif()
+
+# Tests own their writable workspace; fixture source data is never an Editor asset root.
+set(AXLE_TEST_WORKSPACE "${CMAKE_CURRENT_BINARY_DIR}/Work/$<CONFIG>")
+add_custom_target(AxleTestResources
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${AXLE_TEST_WORKSPACE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/Assets" "${AXLE_TEST_WORKSPACE}/assets"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Engine/Resources" "${AXLE_TEST_WORKSPACE}/Resources"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll" "${AXLE_TEST_WORKSPACE}/dxcompiler.dll"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll" "${AXLE_TEST_WORKSPACE}/dxil.dll"
+    VERBATIM)
+
+# Demo scripts belong to fixture tests, not the production Editor/Runtime module.
+file(GLOB AXLE_FIXTURE_SCRIPT_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/Assets/scripts/*.hpp")
+set(AXLE_FIXTURE_INCLUDES "// Generated test-fixture script includes\n")
+foreach(script IN LISTS AXLE_FIXTURE_SCRIPT_HEADERS)
+    string(APPEND AXLE_FIXTURE_INCLUDES "#include \"${script}\"\n")
+endforeach()
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/AutoScripts.inc" CONTENT "${AXLE_FIXTURE_INCLUDES}")
+add_library(AxleTestScripts SHARED EXCLUDE_FROM_ALL "${CMAKE_SOURCE_DIR}/Editor/src/Scripts/ScriptsModule.cpp")
+set_target_properties(AxleTestScripts PROPERTIES OUTPUT_NAME AxleScripts)
+target_include_directories(AxleTestScripts PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" Fixtures/Assets/scripts)
+target_compile_definitions(AxleTestScripts PRIVATE AXLE_SCRIPTS_DLL AXLE_SCRIPT_BUILD_DLL)
+target_link_libraries(AxleTestScripts PRIVATE Axle::Scene Axle::UI)
+add_dependencies(AxleTestScripts AxleTestResources)
+add_custom_command(TARGET AxleTestScripts POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:AxleTestScripts>" "${AXLE_TEST_WORKSPACE}/$<TARGET_FILE_NAME:AxleTestScripts>"
+    VERBATIM)
+add_dependencies(AxleTests AxleTestResources AxleTestScripts)
+
+target_include_directories(AxleTests PRIVATE
+    src
+    Fixtures/Assets/scripts
+)
+
+target_link_libraries(AxleTests PRIVATE
+    Axle::Core
+    Axle::Platform
+    Axle::RHI
+    Axle::Renderer
+    Axle::Audio
+    Axle::Asset
+    Axle::UI
+    Axle::UI2D
+    Axle::Physics
+    Axle::Scene
+    Axle::Vehicle
+    Axle::Project
+    Axle::Spline
+    Axle::Terrain
+    Axle::Animation
+    Axle::VFX
+)
+
+
+
+# Dedicated CPU-Only Material Unit Test Target (Phase 38.3)
+add_executable(AxleMaterialUnitTests EXCLUDE_FROM_ALL
+    src/MaterialUnitTestMain.cpp
+    src/Test_MaterialSerializationUnit.cpp
+    src/Test_MaterialTextureSelectionUnit.cpp
+    src/Test_MaterialBindingPlanUnit.cpp
+    src/Test_MaterialProgramCacheUnit.cpp
+    src/Test_ShaderDragDropUnit.cpp
+    src/Test_MaterialAcceptance.cpp
+)
+
+target_include_directories(AxleMaterialUnitTests PRIVATE
+    src
+)
+
+target_link_libraries(AxleMaterialUnitTests PRIVATE
+    Axle::Core
+    Axle::Platform
+    Axle::Renderer
+    Axle::Scene
+)
+
+if (MSVC)
+    target_compile_options(AxleMaterialUnitTests PRIVATE /bigobj /FS)
+endif()
+
+add_test(NAME MaterialUnitTests COMMAND $<TARGET_FILE:AxleMaterialUnitTests>)
+
+# Dedicated CPU-Only VFX Unit Test Target (Phase 39)
+add_executable(AxleVFXUnitTests EXCLUDE_FROM_ALL
+    src/VFXUnitTestMain.cpp
+    src/Test_VFXAuthoringUnit.cpp
+    src/Test_VFXDefinitionUnit.cpp
+    src/Test_VFXPersistenceUnit.cpp
+    src/Test_VFXDocumentUnit.cpp
+    src/Test_VFXPreviewIsolationUnit.cpp
+    src/Test_VFXPlaybackUnit.cpp
+    src/Test_VFXRenderPlanUnit.cpp
+    src/Test_VFXEventsAndMeshUnit.cpp
+)
+
+target_include_directories(AxleVFXUnitTests PRIVATE
+    src
+)
+
+target_link_libraries(AxleVFXUnitTests PRIVATE
+    Axle::Core
+    Axle::Platform
+    Axle::Renderer
+    Axle::Asset
+    Axle::VFX
+    Axle::Scene
+    Axle::UI
+)
+
+if (MSVC)
+    target_compile_options(AxleVFXUnitTests PRIVATE /bigobj /FS)
+endif()
+
+add_test(NAME VFXUnitTests COMMAND $<TARGET_FILE:AxleVFXUnitTests>)
+
+
+
+# Opt-in physical GPU verification. CPU-only environments never silently substitute a mock.
+add_executable(AxleVFXGPUTests EXCLUDE_FROM_ALL src/VFXGPUTestMain.cpp src/Test_VFXRendering.cpp)
+target_include_directories(AxleVFXGPUTests PRIVATE src)
+target_link_libraries(AxleVFXGPUTests PRIVATE Axle::Scene Axle::VFX Axle::Asset Axle::UI)
+target_compile_definitions(AxleVFXGPUTests PRIVATE AXLE_VFX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+if(WIN32)
+    add_custom_command(TARGET AxleVFXGPUTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll $<TARGET_FILE_DIR:AxleVFXGPUTests>/dxcompiler.dll
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll $<TARGET_FILE_DIR:AxleVFXGPUTests>/dxil.dll)
+endif()
+option(AXLE_ENABLE_VFX_GPU_TESTS "Register physical DX12/Vulkan VFX readback tests" OFF)
+if(AXLE_ENABLE_VFX_GPU_TESTS)
+    foreach(backend D3D12 Vulkan)
+        add_test(NAME VFXGPU_${backend} COMMAND $<TARGET_FILE:AxleVFXGPUTests>)
+        set_tests_properties(VFXGPU_${backend} PROPERTIES ENVIRONMENT "AXLE_VFX_TEST_BACKEND=${backend}" LABELS "gpu;vfx" RUN_SERIAL TRUE)
+    endforeach()
+endif()
+
+# Animation foundations run without application/window/graphics initialization.
+add_executable(AxleAnimationUnitTests EXCLUDE_FROM_ALL src/AnimationUnitTestMain.cpp src/Test_AnimationCorrections.cpp src/Test_AnimationAssetCorrections.cpp src/Test_AnimationImporterCorrections.cpp src/Test_AnimationControllerCorrections.cpp src/Test_AnimationSceneCorrections.cpp src/Test_AnimationPackageCorrections.cpp src/Test_AnimationBakeValidation.cpp src/Test_AnimationDocumentUnit.cpp)
+target_include_directories(AxleAnimationUnitTests PRIVATE src)
+target_compile_definitions(AxleAnimationUnitTests PRIVATE AXLE_ANIMATION_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(AxleAnimationUnitTests PRIVATE Axle::Animation Axle::Scene)
+if(MSVC)
+    target_compile_options(AxleAnimationUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME AnimationUnitTests COMMAND $<TARGET_FILE:AxleAnimationUnitTests>)
+add_test(NAME AnimationHarnessFailure COMMAND $<TARGET_FILE:AxleAnimationUnitTests> --self-test-failure)
+set_tests_properties(AnimationUnitTests AnimationHarnessFailure PROPERTIES LABELS "animation;cpu")
+set_tests_properties(AnimationHarnessFailure PROPERTIES WILL_FAIL TRUE)
+
+add_executable(AxleProjectUnitTests EXCLUDE_FROM_ALL src/Test_ProjectStartup.cpp)
+target_include_directories(AxleProjectUnitTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src")
+target_link_libraries(AxleProjectUnitTests PRIVATE Axle::Project Axle::Scene)
+add_test(NAME ProjectStartupTests COMMAND $<TARGET_FILE:AxleProjectUnitTests>)
+
+# Explicit developer/test build. Neither this target nor its executables are in ALL.
+set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests)
+if(WIN32)
+    add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
+    target_include_directories(AxleBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/Editor/generated/$<CONFIG>")
+    target_link_libraries(AxleBuildWorkflowTests PRIVATE Axle::Asset)
+    list(APPEND AXLE_TEST_TARGETS AxleBuildWorkflowTests)
+    add_test(NAME BuildWorkflowFixtureConfigure COMMAND "${CMAKE_COMMAND}"
+        -S "${CMAKE_CURRENT_SOURCE_DIR}/src/BuildWorkflowFixture"
+        -B "${CMAKE_CURRENT_BINARY_DIR}/Build Workflow Fixture")
+    set_tests_properties(BuildWorkflowFixtureConfigure PROPERTIES FIXTURES_SETUP BuildWorkflow)
+    add_test(NAME BuildWorkflowTests COMMAND $<TARGET_FILE:AxleBuildWorkflowTests>
+        "${CMAKE_COMMAND}" "${CMAKE_CURRENT_BINARY_DIR}/Build Workflow Fixture" "$<CONFIG>")
+    set_tests_properties(BuildWorkflowTests PROPERTIES FIXTURES_REQUIRED BuildWorkflow RUN_SERIAL TRUE TIMEOUT 30)
+endif()
+add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS})
+
+foreach(testTarget IN LISTS AXLE_TEST_TARGETS)
+    target_include_directories(${testTarget} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(${testTarget} PRIVATE
+        AXLE_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        AXLE_TEST_WORKSPACE_DIR="${AXLE_TEST_WORKSPACE}")
+    add_dependencies(${testTarget} AxleTestResources)
+endforeach()

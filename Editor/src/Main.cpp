@@ -1,3 +1,4 @@
+#include "EditorStartup.hpp"
 #include <Axle/Application.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/ImGuiLayer.hpp>
@@ -120,6 +121,19 @@ int main(int argc, char** argv) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
 
+    // Project opening is explicit. A nearby legacy config is never an implicit startup project.
+    std::filesystem::path requestedProject;
+    for (int i = 1; i < argc; ++i) {
+        std::string argument = argv[i];
+        if (argument == "--project" && i + 1 < argc) requestedProject = argv[++i];
+        else if (argument.rfind("--project=", 0) == 0) requestedProject = argument.substr(10);
+        else {
+            const std::filesystem::path candidate(argument);
+            if (candidate.extension() == ".axleproj" || candidate.extension() == ".axleproject")
+                requestedProject = candidate;
+        }
+    }
+
     // Headless CLI Cooker / Exporter
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -130,8 +144,12 @@ int main(int argc, char** argv) {
                 outDir = argv[++i];
             }
             Axle::CookSettings settings;
-            settings.ProjectPath = "AxleEditor.axleproj";
-            settings.AssetDirectory = "Editor/assets";
+            if (requestedProject.empty() || !Axle::Project::Load(requestedProject)) {
+                AXLE_ERROR("CLI export requires an explicit valid --project path.");
+                return 1;
+            }
+            settings.ProjectPath = requestedProject;
+            settings.AssetDirectory = Axle::Project::GetAssetDirectory();
             settings.OutputDirectory = outDir;
             settings.BakeMeshesToBinary = true;
             settings.IncludeShaders = true;
@@ -153,17 +171,7 @@ int main(int argc, char** argv) {
 
     // If no explicit CLI backend was provided, inspect Project configuration
     if (rhiConfig.RawArgument.empty()) {
-        std::filesystem::path projPath = "AxleEditor.axleproj";
-        if (!std::filesystem::exists(projPath)) {
-            projPath = "Project.axleproj";
-        }
-        for (int i = 1; i < argc; ++i) {
-            std::filesystem::path p = argv[i];
-            if (p.extension() == ".axleproj" || p.extension() == ".axleproject") {
-                projPath = p;
-                break;
-            }
-        }
+        const auto& projPath = requestedProject;
         if (std::filesystem::exists(projPath)) {
             auto tempProj = Axle::Project::New();
             Axle::ProjectSerializer serializer(tempProj);
@@ -211,10 +219,25 @@ int main(int argc, char** argv) {
         };
 
         {
+            auto startupProject = Axle::OpenEditorStartupProject(requestedProject);
+            if (!startupProject) {
+                AXLE_ERROR("Could not open the explicitly requested project.");
+                return 1;
+            }
             auto app = std::make_unique<Axle::Application>(spec);
             app->SetUIContext(std::make_unique<Axle::ImGuiLayer>(Axle::ToImGuiBackend(activeAPI)));
-            app->PushLayer(std::make_shared<EditorLayer>());
-            app->Run();
+            auto editorLayer = std::make_shared<EditorLayer>(requestedProject);
+            app->PushLayer(editorLayer);
+            bool verifyEmptyStartup = false;
+            for (int i = 1; i < argc; ++i)
+                if (std::string(argv[i]) == "--verify-empty-startup") verifyEmptyStartup = true;
+            if (verifyEmptyStartup) {
+                if (!requestedProject.empty() || editorLayer->GetSceneEntityCount() != 0 ||
+                    !startupProject->GetConfig().StartScene.empty() ||
+                    !std::filesystem::is_empty(Axle::Project::GetAssetDirectory()))
+                    throw std::runtime_error("Editor empty startup verification failed");
+                AXLE_INFO("Editor empty startup verification: PASS (0 entities, 0 assets, no start scene)");
+            } else app->Run();
             AXLE_INFO("Main: Application run loop completed, now destroying app object...");
         }
 

@@ -74,4 +74,5 @@ add_subdirectory(Plugins/Terrain)
 add_subdirectory(Editor)
 
 # Load Axle Standalone Runtime (Game Player)
-add_subdirectory(Runtime)
+add_subdirectory(Runtime)# Explicit test targets and immutable fixtures live outside the Editor product.
+add_subdirectory(Tests)

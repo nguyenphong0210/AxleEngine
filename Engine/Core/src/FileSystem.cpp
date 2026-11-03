@@ -38,43 +38,9 @@ namespace Axle {
     }
 
     const std::filesystem::path& FileSystem::GetAssetDirectory() {
-        if (!s_AssetDirectory.empty() && std::filesystem::exists(s_AssetDirectory)) {
-            return s_AssetDirectory;
-        }
-
-        // Auto-detection strategy:
-        // 1. Check "Editor/assets" or "Sandbox/assets" relative to current working directory
-        if (std::filesystem::exists("Editor/assets")) {
-            s_AssetDirectory = std::filesystem::absolute("Editor/assets");
-            return s_AssetDirectory;
-        }
-        if (std::filesystem::exists("Sandbox/assets")) {
-            s_AssetDirectory = std::filesystem::absolute("Sandbox/assets");
-            return s_AssetDirectory;
-        }
-
-        // 2. Check relative paths from build output folder (e.g., build/Editor/Release)
-        if (std::filesystem::exists("../../Editor/assets")) {
-            s_AssetDirectory = std::filesystem::canonical("../../Editor/assets");
-            return s_AssetDirectory;
-        }
-        if (std::filesystem::exists("../../../Editor/assets")) {
-            s_AssetDirectory = std::filesystem::canonical("../../../Editor/assets");
-            return s_AssetDirectory;
-        }
-        if (std::filesystem::exists("../../Sandbox/assets")) {
-            s_AssetDirectory = std::filesystem::canonical("../../Sandbox/assets");
-            return s_AssetDirectory;
-        }
-
-        // 3. Check "assets" in current working directory (typical when running standalone distribution)
-        if (std::filesystem::exists("assets")) {
-            s_AssetDirectory = std::filesystem::absolute("assets");
-            return s_AssetDirectory;
-        }
-
-        // Fallback default
-        s_AssetDirectory = "Editor/assets";
+        // An explicit project root remains authoritative even before its directory exists.
+        // Never discover another project's sample assets by walking the engine checkout.
+        if (s_AssetDirectory.empty()) s_AssetDirectory = std::filesystem::absolute("assets");
         return s_AssetDirectory;
     }
 

@@ -49,9 +49,12 @@ public:
         Pause = 2
     };
 
-    EditorLayer();
+    explicit EditorLayer(const std::filesystem::path& startupProject = {});
     ~EditorLayer() override = default;
 
+    size_t GetSceneEntityCount() const {
+        return m_Scene ? m_Scene->GetRegistry().view<Axle::TagComponent>().size() : 0;
+    }
     void OnAttach() override;
     void OnDetach() override;
     void OnUpdate(Axle::Timestep ts) override;

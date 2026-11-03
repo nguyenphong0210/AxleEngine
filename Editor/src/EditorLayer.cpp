@@ -55,8 +55,8 @@
 #include <algorithm>
 #include <functional>
 
-EditorLayer::EditorLayer()
-    : Layer("EditorLayer") {
+EditorLayer::EditorLayer(const std::filesystem::path& startupProject)
+    : Layer("EditorLayer"), m_CurrentProjectPath(startupProject) {
 }
 
 void EditorLayer::OnAttach() {
@@ -117,27 +117,7 @@ void EditorLayer::OnAttach() {
         m_ConeMesh = Axle::PrimitiveMesh::CreateCone(32);
         m_PlaneMesh = Axle::PrimitiveMesh::CreatePlane();
 
-        // 4.1 Asset Pipeline Validation: Load SportsCar_Body.axlemesh
-        auto carAxlePath = Axle::FileSystem::ResolveAssetPath("models/SportsCar_Body.axlemesh");
-        if (std::filesystem::exists(carAxlePath)) {
-            auto loaded = Axle::AssetSerializer::LoadMesh(carAxlePath);
-            if (loaded.Success) {
-                AXLE_INFO("Asset Pipeline: Loaded '{0}' [Cache: {1}] ({2} vertices, {3} indices)", 
-                    carAxlePath.filename().string(), 
-                    loaded.LoadedFromCache ? "HIT" : "MISS (Auto-baked cache)",
-                    loaded.SourceData.Vertices.size(), loaded.SourceData.Indices.size());
-            }
-        }
 
-        // 4.2 Texture Mapping Pipeline Validation (Phase 11: Sub-step 2.1)
-        auto testTexPath = Axle::FileSystem::ResolveAssetPath("textures/Prototype_Grid.png");
-        if (std::filesystem::exists(testTexPath)) {
-            auto testTex = Axle::Texture2D::Create(testTexPath.string());
-            if (testTex && testTex->IsLoaded()) {
-                AXLE_INFO("Texture Pipeline: Verified stb_image loader with '{0}' ({1}x{2}, ID: {3})",
-                    testTexPath.filename().string(), testTex->GetWidth(), testTex->GetHeight(), testTex->GetRendererID());
-            }
-        }
     }
     // 5. Offscreen Viewport Target (Framebuffer for OpenGL, RHIViewportDescriptor for D3D12/Vulkan)
     m_ViewportWidth = window.GetWidth();
@@ -460,53 +440,9 @@ void EditorLayer::OnAttach() {
         }
     });
 
-    // Initialize Project Configuration System (AxleEditor.axleproj)
-    std::filesystem::path projFile;
-    std::vector<std::filesystem::path> searchCandidates = {
-        "AxleEditor.axleproj",
-        "AxleSandbox.axleproj",
-        "../../AxleEditor.axleproj",
-        "../../../AxleEditor.axleproj",
-        "../AxleEditor.axleproj"
-    };
-
-    auto assetDir = Axle::FileSystem::GetAssetDirectory();
-    if (std::filesystem::exists(assetDir)) {
-        searchCandidates.push_back(assetDir.parent_path() / "AxleEditor.axleproj");
-        searchCandidates.push_back(assetDir.parent_path().parent_path() / "AxleEditor.axleproj");
-    }
-
-    for (const auto& candidate : searchCandidates) {
-        if (std::filesystem::exists(candidate)) {
-            projFile = std::filesystem::canonical(candidate);
-            break;
-        }
-    }
-
-    if (!projFile.empty() && std::filesystem::exists(projFile)) {
-        OpenProject(projFile);
-    } else {
-        auto project = Axle::Project::New();
-        project->GetConfig().Name = "Axle Project";
-        if (std::filesystem::exists(assetDir)) {
-            std::error_code ec;
-            auto rel = std::filesystem::relative(assetDir, std::filesystem::current_path(), ec);
-            if (!ec && !rel.empty()) {
-                project->GetConfig().AssetDirectory = rel;
-            } else {
-                project->GetConfig().AssetDirectory = assetDir;
-            }
-        } else {
-            project->GetConfig().AssetDirectory = "assets";
-        }
-        project->GetConfig().StartScene = "";
-        Axle::Project::SetActive(project);
-        std::filesystem::path defaultProjPath = "AxleEditor.axleproj";
-        Axle::Project::SaveActive(defaultProjPath);
-        m_CurrentProjectPath = std::filesystem::absolute(defaultProjPath);
-        m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
-        NewScene();
-    }
+    // Default startup is an unsaved, empty project; reopening is always explicit.
+    if (!m_CurrentProjectPath.empty()) OpenProject(m_CurrentProjectPath);
+    else NewScene();
 
     UpdateWindowTitle();
 
@@ -883,10 +819,7 @@ void EditorLayer::OpenInVisualStudio() {
 }
 
 void EditorLayer::OpenScriptsDirectory() {
-    std::filesystem::path scriptsDir = std::filesystem::current_path() / "Editor" / "assets" / "scripts";
-    if (!std::filesystem::exists(scriptsDir)) {
-        scriptsDir = std::filesystem::current_path() / "Editor" / "src" / "Scripts";
-    }
+    std::filesystem::path scriptsDir = Axle::Project::GetAssetDirectory() / "scripts";
     if (!std::filesystem::exists(scriptsDir)) {
         std::filesystem::create_directories(scriptsDir);
     }
@@ -913,24 +846,6 @@ void EditorLayer::NewScene() {
     }
     m_Scene->Clear();
     m_CurrentScenePath.clear();
-
-    // Create default Directional Sun Light (Unity / Godot style default scene)
-    auto sunEntity = m_Scene->CreateEntity("Directional Light");
-    auto& tc = sunEntity.AddComponent<Axle::TransformComponent>();
-    tc.Translation = glm::vec3(0.0f, 10.0f, 0.0f);
-    tc.Rotation = glm::quat(glm::vec3(glm::radians(50.0f), glm::radians(-30.0f), 0.0f));
-    sunEntity.AddComponent<Axle::DirectionalLightComponent>();
-
-    auto skyEntity = m_Scene->CreateEntity("Skybox Environment");
-    skyEntity.AddComponent<Axle::SkyboxComponent>();
-
-    // Create default Main Camera (Unity / Unreal style default scene)
-    auto cameraEntity = m_Scene->CreateEntity("Main Camera");
-    auto& camTc = cameraEntity.AddComponent<Axle::TransformComponent>();
-    camTc.Translation = glm::vec3(0.0f, 6.0f, 18.0f);
-    camTc.Rotation = glm::quat(glm::vec3(glm::radians(-12.0f), 0.0f, 0.0f));
-    cameraEntity.AddComponent<Axle::CameraComponent>(45.0f, 0.1f, 1000.0f, true);
-    cameraEntity.AddComponent<Axle::NativeScriptComponent>("VehicleChaseCamera");
 
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
     m_UIPalettePanel.SetContext(m_Scene.get());
@@ -986,36 +901,6 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
 
     if (serializer.Deserialize(targetPath)) {
         m_CurrentScenePath = targetPath;
-
-        // Ensure loaded scene has a Directional Sun Light and Skybox
-        Axle::DirectionalLightComponent sceneSunLight;
-        if (!m_Scene->GetPrimaryDirectionalLight(sceneSunLight)) {
-            auto sunEntity = m_Scene->CreateEntity("Sun Light");
-            sunEntity.AddComponent<Axle::TransformComponent>(glm::vec3(0.0f, 25.0f, 0.0f));
-            sunEntity.AddComponent<Axle::DirectionalLightComponent>();
-            sunEntity.AddComponent<Axle::SkyboxComponent>();
-        } else {
-            Axle::SkyboxComponent sceneSkybox;
-            if (!m_Scene->GetPrimarySkybox(sceneSkybox)) {
-                auto sunView = m_Scene->GetRegistry().view<Axle::DirectionalLightComponent>();
-                for (auto e : sunView) {
-                    Axle::Entity sunEnt{ e, m_Scene.get() };
-                    sunEnt.AddComponent<Axle::SkyboxComponent>();
-                    break;
-                }
-            }
-        }
-
-        // Ensure loaded scene has a Primary Camera
-        if (!m_Scene->GetPrimaryCameraEntity()) {
-            auto camEntity = m_Scene->CreateEntity("Main Camera");
-            auto& camTc = camEntity.AddComponent<Axle::TransformComponent>();
-            camTc.Translation = glm::vec3(0.0f, 6.0f, 18.0f);
-            camTc.Rotation = glm::quat(glm::vec3(glm::radians(-12.0f), 0.0f, 0.0f));
-            camEntity.AddComponent<Axle::CameraComponent>(45.0f, 0.1f, 1000.0f, true);
-            camEntity.AddComponent<Axle::NativeScriptComponent>("VehicleChaseCamera");
-            AXLE_INFO("Editor: Auto-instantiated 'Main Camera' with VehicleChaseCamera for loaded scene");
-        }
 
         // Cache initial dynamic states for ResetSimulation()
         auto rbView = m_Scene->GetRegistry().view<Axle::RigidBody3D, Axle::TransformComponent>();
@@ -1200,19 +1085,23 @@ void EditorLayer::NewProject() {
     std::filesystem::create_directories(assetDir / "textures");
     std::filesystem::create_directories(assetDir / "shaders");
 
-    auto project = Axle::Project::New();
+    auto project = Axle::Project::New(projectDir);
     project->GetConfig().Name = target.stem().string();
     project->GetConfig().AssetDirectory = "assets";
-    project->GetConfig().StartScene = "scenes/Untitled.axlescene";
+    project->GetConfig().StartScene.clear();
 
+    const auto previousProject = Axle::Project::GetActive();
     Axle::Project::SetActive(project);
-    Axle::Project::SaveActive(target);
+    if (!Axle::Project::SaveActive(target)) {
+        Axle::Project::SetActive(previousProject);
+        return;
+    }
     m_CurrentProjectPath = target;
 
     // Create new scene in project's scenes directory
     NewScene();
-    SaveScene(assetDir / "scenes/Untitled.axlescene");
 
+    Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
     m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
     m_CompileNotificationMessage = "Created project: " + project->GetConfig().Name;
     m_CompileNotificationTimer = 4.0f;
@@ -1237,6 +1126,7 @@ void EditorLayer::OpenProject(const std::filesystem::path& filepath) {
     auto project = Axle::Project::Load(target);
     if (project) {
         m_CurrentProjectPath = target;
+        Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
         m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
 
         // Load project's StartScene if specified
@@ -1281,11 +1171,26 @@ void EditorLayer::SaveProjectAs() {
         if (target.extension() != ".axleproj") {
             target += ".axleproj";
         }
-        m_CurrentProjectPath = target;
-        if (Axle::Project::GetActive()) {
-            Axle::Project::GetActive()->GetConfig().Name = target.stem().string();
+        const auto project = Axle::Project::GetActive();
+        if (!project) return;
+        const auto previousName = project->GetConfig().Name;
+        const auto previousAssets = Axle::Project::GetAssetDirectory();
+        project->GetConfig().Name = target.stem().string();
+        if (!Axle::Project::SaveActive(target)) {
+            project->GetConfig().Name = previousName;
+            return;
         }
-        SaveProject();
+        m_CurrentProjectPath = target;
+        if (!m_CurrentScenePath.empty()) {
+            const auto relativeScene = m_CurrentScenePath.lexically_relative(previousAssets);
+            if (!relativeScene.empty() && *relativeScene.begin() != "..") {
+                m_CurrentScenePath = Axle::Project::GetAssetDirectory() / relativeScene;
+            }
+        }
+        Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
+        m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
+        m_CompileNotificationMessage = "Saved project: " + project->GetConfig().Name;
+        m_CompileNotificationTimer = 3.5f;
         UpdateWindowTitle();
     }
 }

@@ -37,15 +37,6 @@ namespace Axle {
         if (m_Cone) m_MeshCache["Cone"] = m_Cone;
         if (m_Plane) m_MeshCache["Plane"] = m_Plane;
 
-        // Pre-cache chassis and wheel if assets exist
-        auto chassis = GetOrCreateMesh("SportsCar_Chassis.axlemesh");
-        if (chassis) m_MeshCache["SportsCar_Chassis"] = chassis;
-
-        auto wheel = GetOrCreateMesh("SportsCar_Wheel.axlemesh");
-        if (wheel) m_MeshCache["SportsCar_Wheel"] = wheel;
-
-        GetProceduralTerrain();
-
         m_Initialized = true;
         return true;
     }

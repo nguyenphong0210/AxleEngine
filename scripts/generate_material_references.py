@@ -1,7 +1,7 @@
 from pathlib import Path
 import math,struct
 
-root=Path('Editor/assets/materials/reference')
+root=Path('Tests/Fixtures/Assets/materials/reference')
 textures=root/'textures'
 textures.mkdir(parents=True,exist_ok=True)
 def tga(name,pixel,size=64):
@@ -56,4 +56,4 @@ entity(12,'Reference_KeyLight',(0,0,0))
 lines.extend(['    DirectionalLightComponent:','      Color: [ 1 , 0.97 , 0.92 ]','      Intensity: 1.2','      AmbientIntensity: 0.25','      Azimuth: 35','      Elevation: 50','      CastShadows: false'])
 entity(13,'Reference_FillLight',(-4,3,3))
 lines.extend(['    PointLightComponent:','      Color: [ 0.7 , 0.8 , 1 ]','      Intensity: 80','      Radius: 15'])
-Path('Editor/assets/scenes/MaterialReference.axlescene').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+Path('Tests/Fixtures/Assets/scenes/MaterialReference.axlescene').write_text('\n'.join(lines)+'\n',encoding='utf-8')

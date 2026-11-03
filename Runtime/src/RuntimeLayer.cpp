@@ -99,49 +99,9 @@ namespace Axle {
 
         // Step B: Locate start scene
         std::filesystem::path startScenePath;
-        if (project) {
+        if (project && !project->GetConfig().StartScene.empty()) {
             startScenePath = Project::GetAssetFileSystemPath(project->GetConfig().StartScene);
-            if (startScenePath.empty() || !FileSystem::Exists(startScenePath)) {
-                if (FileSystem::Exists(project->GetConfig().StartScene)) {
-                    startScenePath = project->GetConfig().StartScene;
-                }
-            }
         }
-
-        if (startScenePath.empty() || !FileSystem::Exists(startScenePath)) {
-            std::vector<std::filesystem::path> candidateScenes = {
-                "scenes/CarTest.axlescene",
-                "scenes/VehicleSandbox.axlescene",
-                "scenes/SampleScene.axlescene",
-                FileSystem::ResolveAssetPath("scenes/CarTest.axlescene"),
-                FileSystem::ResolveAssetPath("scenes/VehicleSandbox.axlescene"),
-                FileSystem::ResolveAssetPath("scenes/SampleScene.axlescene"),
-                "assets/scenes/CarTest.axlescene",
-                "assets/scenes/VehicleSandbox.axlescene",
-                "assets/scenes/SampleScene.axlescene"
-            };
-
-            for (const auto& cand : candidateScenes) {
-                if (FileSystem::Exists(cand)) {
-                    startScenePath = cand;
-                    break;
-                }
-            }
-
-            // Fallback: search directory for first .axlescene file
-            if (startScenePath.empty() || !FileSystem::Exists(startScenePath)) {
-                auto scenesDir = FileSystem::ResolveAssetPath("scenes");
-                if (std::filesystem::exists(scenesDir)) {
-                    for (const auto& entry : std::filesystem::directory_iterator(scenesDir)) {
-                        if (entry.path().extension() == ".axlescene") {
-                            startScenePath = entry.path();
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
         m_Scene = std::make_shared<Scene>();
 
         // Step C: Deserialize scene if found
@@ -214,33 +174,9 @@ namespace Axle {
             }
         }
 
-        // Step D: Default fallback scene if no file could be loaded
         if (!sceneLoaded) {
-            AXLE_WARN("Runtime: No startup scene found. Generating baseline simulation scene.");
+            AXLE_INFO("Runtime: No authored startup scene loaded; keeping an empty scene.");
             Application::Get().GetWindow().SetTitle("Axle Game - Standalone Player");
-
-            auto sunEntity = m_Scene->CreateEntity("Directional Light");
-            auto& tc = sunEntity.AddComponent<TransformComponent>();
-            tc.Translation = glm::vec3(0.0f, 10.0f, 0.0f);
-            tc.Rotation = glm::quat(glm::vec3(glm::radians(50.0f), glm::radians(-30.0f), 0.0f));
-            sunEntity.AddComponent<DirectionalLightComponent>();
-
-            auto skyEntity = m_Scene->CreateEntity("Skybox Environment");
-            skyEntity.AddComponent<SkyboxComponent>();
-
-            auto camEntity = m_Scene->CreateEntity("Main Camera");
-            auto& camTc = camEntity.AddComponent<TransformComponent>();
-            camTc.Translation = glm::vec3(0.0f, 6.0f, 18.0f);
-            camTc.Rotation = glm::quat(glm::vec3(glm::radians(-12.0f), 0.0f, 0.0f));
-            camEntity.AddComponent<CameraComponent>(45.0f, 0.1f, 1000.0f, true);
-            camEntity.AddComponent<NativeScriptComponent>("VehicleChaseCamera");
-
-            // Static Ground Floor
-            auto floorEntity = m_Scene->CreateEntity("Ground Floor");
-            auto& floorTc = floorEntity.AddComponent<TransformComponent>(glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(100.0f, 1.0f, 100.0f));
-            floorEntity.AddComponent<MeshInstance3D>(PrimitiveMesh::CreatePlane(), "", 0, 8.0f, glm::vec4(0.3f, 0.32f, 0.35f, 1.0f), glm::vec4(0.2f, 0.22f, 0.25f, 1.0f));
-            floorEntity.AddComponent<RigidBody3D>(BodyID{}, BodyMotionType::Static);
-            floorEntity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, glm::vec3(50.0f, 0.5f, 50.0f));
         }
 
         // Step E: Start simulation runtime
@@ -340,24 +276,6 @@ namespace Axle {
             AXLE_INFO("Runtime: Quit requested via UI button");
             Application::Get().Close();
         });
-
-        // Ensure PauseMenu entity exists
-        bool hasPauseEntity = false;
-        auto view = m_Scene->GetRegistry().view<TagComponent, UICanvasComponent>();
-        for (auto e : view) {
-            const auto& tag = view.get<TagComponent>(e);
-            if (tag.Tag == "PauseMenu_UI") {
-                hasPauseEntity = true;
-                break;
-            }
-        }
-
-        if (!hasPauseEntity) {
-            auto pauseEntity = m_Scene->CreateEntity("PauseMenu_UI");
-            auto& uic = pauseEntity.AddComponent<UICanvasComponent>("Editor/assets/ui/PauseMenu.axleui");
-            uic.SortOrder = 100;
-            uic.Visible = true;
-        }
     }
 
     void RuntimeLayer::RenderUI() {

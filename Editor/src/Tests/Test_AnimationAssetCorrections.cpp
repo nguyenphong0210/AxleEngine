@@ -78,4 +78,31 @@ static bool TestGeometryValidation() {
     return true;
 }
 
-bool RunAnimationAssetCorrectionTests() { return TestLosslessBindAndInvalidOutputs() && TestGeometryValidation(); }
+static bool TestExactFloatAssetRoundTrip() {
+    using namespace Axle;
+    const float adjacent = std::nextafter(0.5f,1.0f);
+    AnimationClipDefinition definition; definition.Id="precise-clip"; definition.Name="Precise"; definition.Duration=1;
+    AnimationChannel channel; channel.BoneName="Root"; channel.PositionsInterpolation=AnimationInterpolation::StepNext;
+    channel.Positions={{0,glm::vec3(0.12345679f)},{0.5f,glm::vec3(5.1234567f)},{adjacent,glm::vec3(8.1234567f)}};
+    definition.Channels={channel};
+    AssetDocument document,parsed; AnimationClipDefinition loaded;
+    ANIMATION_CHECK(AnimationAssetCodec::EncodeAnimationClip(definition,document) &&
+        AssetDSL::ParseSource(AssetDSL::SerializeDocument(document),parsed) && AnimationAssetCodec::DecodeAnimationClip(parsed,loaded),
+        "Adjacent float timestamps survive actual asset text parsing");
+    ANIMATION_CHECK(loaded.Channels[0].Positions[1].TimeStamp==0.5f && loaded.Channels[0].Positions[2].TimeStamp==adjacent &&
+        loaded.Channels[0].Positions[0].Value==channel.Positions[0].Value && loaded.Channels[0].Positions[2].Value==channel.Positions[2].Value,
+        "Animation values retain round-trip float precision");
+    SkeletonDefinition skeleton; skeleton.Id="precise-rig"; skeleton.Name="PreciseRig";
+    Bone bone; bone.Name="Root"; bone.LocalTransform=glm::translate(glm::mat4(1),glm::vec3(5.1234567f,-2.3456789f,0));
+    bone.InverseBindMatrix=glm::inverse(bone.LocalTransform); skeleton.Bones={bone};
+    skeleton.CompatibilitySignature=SkeletonDefinition::ComputeSignature(skeleton.Bones);
+    SkeletonDefinition reopened;
+    ANIMATION_CHECK(AnimationAssetCodec::EncodeSkeleton(skeleton,document) &&
+        AssetDSL::ParseSource(AssetDSL::SerializeDocument(document),parsed) && AnimationAssetCodec::DecodeSkeleton(parsed,reopened),
+        "Noninteger bind matrices preserve their compatibility signature through text");
+    ANIMATION_CHECK(reopened.Bones[0].LocalTransform==bone.LocalTransform && reopened.Bones[0].InverseBindMatrix==bone.InverseBindMatrix,
+        "Bind matrices retain actual float values");
+    return true;
+}
+
+bool RunAnimationAssetCorrectionTests() { return TestLosslessBindAndInvalidOutputs() && TestGeometryValidation() && TestExactFloatAssetRoundTrip(); }

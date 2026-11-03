@@ -8,6 +8,7 @@
 #include <vector>
 #include <string>
 #include <type_traits>
+#include <map>
 
 namespace Axle {
 
@@ -219,6 +220,24 @@ bool FbxCurveBaker::BakeChannel(
         return { localTime, ToVec3(xf.translation), ToQuat(xf.rotation), ToVec3(xf.scale) };
     };
 
+    // Authored boundaries are mandatory. Distinct source times must remain distinct in runtime floats.
+    std::vector<double> sourceTimes{0.0,duration};
+    for (const auto* times : {&transTimes,&rotTimes,&scaleTimes})
+        for (double time : *times) sourceTimes.push_back(time-timeBegin);
+    std::sort(sourceTimes.begin(),sourceTimes.end());
+    sourceTimes.erase(std::unique(sourceTimes.begin(),sourceTimes.end()),sourceTimes.end());
+    for (size_t i=0;i<sourceTimes.size();++i) {
+        const float time = float(sourceTimes[i]);
+        if (!std::isfinite(time) || (i && time<=float(sourceTimes[i-1]))) {
+            if (outError) *outError = "Distinct FBX source timestamps collapse at runtime float precision";
+            return false;
+        }
+    }
+    if (sourceTimes.size()>localBudget/3) {
+        if (outError) *outError = "FBX sampled key budget exceeded by source boundaries";
+        return false;
+    }
+
     // Case 1: Pure step track across all active components
     const bool allStep = transMode != TrackCurveMode::Continuous &&
                          rotMode != TrackCurveMode::Continuous &&
@@ -226,33 +245,7 @@ bool FbxCurveBaker::BakeChannel(
                          (transMode != TrackCurveMode::Static || rotMode != TrackCurveMode::Static || scaleMode != TrackCurveMode::Static);
 
     if (allStep) {
-        std::vector<double> stepTimes;
-        stepTimes.push_back(0.0);
-        auto collectStep = [&](const std::vector<double>& src) {
-            for (double t : src) {
-                if (t >= timeBegin && t <= timeEnd) {
-                    stepTimes.push_back(t - timeBegin);
-                }
-            }
-        };
-        collectStep(transTimes);
-        collectStep(rotTimes);
-        collectStep(scaleTimes);
-
-        std::sort(stepTimes.begin(), stepTimes.end());
-        std::vector<double> uniqueStepTimes;
-        for (double st : stepTimes) {
-            float tf = static_cast<float>(st);
-            if (uniqueStepTimes.empty() || tf > static_cast<float>(uniqueStepTimes.back())) {
-                uniqueStepTimes.push_back(st);
-            }
-        }
-        if (uniqueStepTimes.empty()) {
-            uniqueStepTimes.push_back(0.0);
-        }
-        if (static_cast<float>(duration) > static_cast<float>(uniqueStepTimes.back())) {
-            uniqueStepTimes.push_back(duration);
-        }
+        const auto& uniqueStepTimes = sourceTimes;
 
         if (uniqueStepTimes.size() == 1) {
             if (localBudget < 3) {
@@ -333,21 +326,9 @@ bool FbxCurveBaker::BakeChannel(
         gridInterval = std::min(gridInterval, dtRot);
     }
 
-    // Gather seed timestamps: start, end, source key times, and initial uniform grid bounded by Nyquist rate
-    std::vector<double> seeds;
-    seeds.push_back(0.0);
-    seeds.push_back(duration);
-
-    auto addKeys = [&](const std::vector<double>& times) {
-        for (double t : times) {
-            if (t >= timeBegin && t <= timeEnd) {
-                seeds.push_back(t - timeBegin);
-            }
-        }
-    };
-    addKeys(transTimes);
-    addKeys(rotTimes);
-    addKeys(scaleTimes);
+    // A grid may share a float with a mandatory source key; retain the source's exact evaluation time.
+    std::map<float,double> seeds;
+    for (double time : sourceTimes) seeds.emplace(float(time),time);
 
     const size_t gridSteps = static_cast<size_t>(std::ceil(duration / gridInterval));
     if (gridSteps * 3 > localBudget) {
@@ -355,26 +336,16 @@ bool FbxCurveBaker::BakeChannel(
         return false;
     }
     for (size_t g = 0; g <= gridSteps; ++g) {
-        double gt = std::min(duration, static_cast<double>(g) * gridInterval);
-        seeds.push_back(gt);
+        const double time = std::min(duration,double(g)*gridInterval);
+        seeds.try_emplace(float(time),time);
     }
-
-    std::sort(seeds.begin(), seeds.end());
+    if (seeds.size()>localBudget/3) {
+        if (outError) *outError = "FBX sampled key budget exceeded by seed timestamps";
+        return false;
+    }
     std::vector<double> uniqueSeeds;
-    for (double s : seeds) {
-        if (uniqueSeeds.empty() || (s - uniqueSeeds.back()) >= tolerances.MinIntervalSeconds) {
-            uniqueSeeds.push_back(s);
-        } else if (!uniqueSeeds.empty() && std::abs(s - duration) < 1e-6) {
-            uniqueSeeds.back() = duration;
-        }
-    }
-    if (uniqueSeeds.back() < duration) {
-        if ((duration - uniqueSeeds.back()) >= tolerances.MinIntervalSeconds) {
-            uniqueSeeds.push_back(duration);
-        } else {
-            uniqueSeeds.back() = duration;
-        }
-    }
+    uniqueSeeds.reserve(seeds.size());
+    for (const auto& [time,sourceTime] : seeds) uniqueSeeds.push_back(sourceTime);
 
     auto emitSample = [&](const TransformSample& s) -> bool {
         float timeStamp = static_cast<float>(s.LocalTime);
@@ -383,7 +354,8 @@ bool FbxCurveBaker::BakeChannel(
             return false;
         }
         if (!candidateChannel.Positions.empty() && timeStamp <= candidateChannel.Positions.back().TimeStamp) {
-            return true; // Skip redundant / non-increasing time stamp
+            if (outError) *outError = "FBX refined timestamps collapse at runtime float precision";
+            return false;
         }
         candidateChannel.Positions.push_back({ timeStamp, s.Translation });
         candidateChannel.Rotations.push_back({ timeStamp, s.Rotation });
@@ -466,6 +438,10 @@ bool FbxCurveBaker::BakeChannel(
         localStats.SubdivisionsPerformed++;
 
         double tMid = 0.5 * (sA.LocalTime + sB.LocalTime);
+        if (!(float(tMid)>float(sA.LocalTime) && float(tMid)<float(sB.LocalTime))) {
+            if (outError) *outError = "FBX refinement exceeds runtime timestamp precision";
+            return false;
+        }
         auto sMid = evalTransform(tMid);
 
         if (!subdivide(sA, sMid, depth + 1)) return false;

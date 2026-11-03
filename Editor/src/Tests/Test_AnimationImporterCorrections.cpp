@@ -294,6 +294,13 @@ bool RunAnimationImporterCorrectionTests() {
         ANIMATION_CHECK(tightErr.find("cannot be refined within limit") != std::string::npos, "Diagnostic identifies precision limit failure");
     }
 
+    for (const auto* fixture : {"CollapsedSteps.fbx","CollapsedContinuous.fbx"}) {
+        const auto oldRig = rig; const auto oldClip = clips[0]; const auto oldIndices = mesh.Indices;
+        ANIMATION_CHECK(!SkeletalMeshImporter::LoadFBX(fixtures/fixture,mesh,rig,clips,&error) && error.find("precision")!=std::string::npos,
+                        "Float-collapsed source boundaries are rejected with a precision diagnostic");
+        ANIMATION_CHECK(rig==oldRig && clips[0]==oldClip && mesh.Indices==oldIndices, "Precision failure preserves the previous imported resources");
+    }
+
     // A2: Quaternion angular distance handles antipodal equivalence
     glm::quat qA(1, 0, 0, 0);
     glm::quat qNegA(-1, 0, 0, 0);

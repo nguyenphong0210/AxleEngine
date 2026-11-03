@@ -8,6 +8,8 @@
 #include <sstream>
 #include <cstring>
 #include <limits>
+#include <iomanip>
+#include <locale>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -20,6 +22,25 @@
 #endif
 
 namespace Axle {
+
+    namespace {
+        void SetNumericText(AssetBlock& block,const std::string& key,std::string text) {
+            for (auto& property : block.Properties) if (property.Key==key) { property.RawValue=std::move(text); return; }
+            block.Properties.push_back({key,std::move(text)});
+        }
+        void SetPreciseNumber(AssetBlock& block,const std::string& key,float value) {
+            std::ostringstream stream; stream.imbue(std::locale::classic());
+            stream << std::setprecision(std::numeric_limits<float>::max_digits10) << value;
+            SetNumericText(block,key,stream.str());
+        }
+        template<glm::length_t N,glm::qualifier Q>
+        void SetPreciseNumber(AssetBlock& block,const std::string& key,const glm::vec<N,float,Q>& value) {
+            std::ostringstream stream; stream.imbue(std::locale::classic());
+            stream << std::setprecision(std::numeric_limits<float>::max_digits10) << '[';
+            for (glm::length_t i=0;i<N;++i) { if (i) stream << ", "; stream << value[i]; }
+            stream << ']'; SetNumericText(block,key,stream.str());
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Atomic File IO Utilities
@@ -112,12 +133,12 @@ namespace Axle {
             BoneTransform bt;
             bone.GetBindTransform(bt);
             bBlock->SetBool("explicitBindTRS", bone.HasExplicitBindTRS);
-            bBlock->SetVec3("translation", bt.Translation);
-            bBlock->SetVec4("rotation", glm::vec4(bt.Rotation.x, bt.Rotation.y, bt.Rotation.z, bt.Rotation.w));
-            bBlock->SetVec3("scale", bt.Scale);
+            SetPreciseNumber(*bBlock, "translation", bt.Translation);
+            SetPreciseNumber(*bBlock, "rotation", glm::vec4(bt.Rotation.x, bt.Rotation.y, bt.Rotation.z, bt.Rotation.w));
+            SetPreciseNumber(*bBlock, "scale", bt.Scale);
             for (int column = 0; column < 4; ++column) {
-                bBlock->SetVec4("local" + std::to_string(column), bone.LocalTransform[column]);
-                bBlock->SetVec4("inverseBind" + std::to_string(column), bone.InverseBindMatrix[column]);
+                SetPreciseNumber(*bBlock, "local" + std::to_string(column), bone.LocalTransform[column]);
+                SetPreciseNumber(*bBlock, "inverseBind" + std::to_string(column), bone.InverseBindMatrix[column]);
             }
 
             root->Children.push_back(bBlock);
@@ -288,8 +309,8 @@ namespace Axle {
         root->SetUInt("version", def.SchemaVersion);
         root->SetString("skeletonRef", def.SkeletonRef);
         root->SetString("signature", def.CompatibilitySignature);
-        root->SetFloat("duration", def.Duration);
-        root->SetFloat("frameRate", def.FrameRate);
+        SetPreciseNumber(*root, "duration", def.Duration);
+        SetPreciseNumber(*root, "frameRate", def.FrameRate);
 
         for (const auto& ch : def.Channels) {
             auto chBlock = std::make_shared<AssetBlock>();
@@ -303,28 +324,28 @@ namespace Axle {
             for (const auto& k : ch.Positions) {
                 auto kBlock = std::make_shared<AssetBlock>();
                 kBlock->Type = "PosKey";
-                kBlock->SetFloat("time", k.TimeStamp);
-                kBlock->SetVec4("inTangent", k.InTangent);
-                kBlock->SetVec4("outTangent", k.OutTangent);
-                kBlock->SetVec3("val", k.Value);
+                SetPreciseNumber(*kBlock, "time", k.TimeStamp);
+                SetPreciseNumber(*kBlock, "inTangent", k.InTangent);
+                SetPreciseNumber(*kBlock, "outTangent", k.OutTangent);
+                SetPreciseNumber(*kBlock, "val", k.Value);
                 chBlock->Children.push_back(kBlock);
             }
             for (const auto& k : ch.Rotations) {
                 auto kBlock = std::make_shared<AssetBlock>();
                 kBlock->Type = "RotKey";
-                kBlock->SetFloat("time", k.TimeStamp);
-                kBlock->SetVec4("inTangent", k.InTangent);
-                kBlock->SetVec4("outTangent", k.OutTangent);
-                kBlock->SetVec4("val", glm::vec4(k.Value.x, k.Value.y, k.Value.z, k.Value.w));
+                SetPreciseNumber(*kBlock, "time", k.TimeStamp);
+                SetPreciseNumber(*kBlock, "inTangent", k.InTangent);
+                SetPreciseNumber(*kBlock, "outTangent", k.OutTangent);
+                SetPreciseNumber(*kBlock, "val", glm::vec4(k.Value.x, k.Value.y, k.Value.z, k.Value.w));
                 chBlock->Children.push_back(kBlock);
             }
             for (const auto& k : ch.Scales) {
                 auto kBlock = std::make_shared<AssetBlock>();
                 kBlock->Type = "ScaleKey";
-                kBlock->SetFloat("time", k.TimeStamp);
-                kBlock->SetVec4("inTangent", k.InTangent);
-                kBlock->SetVec4("outTangent", k.OutTangent);
-                kBlock->SetVec3("val", k.Value);
+                SetPreciseNumber(*kBlock, "time", k.TimeStamp);
+                SetPreciseNumber(*kBlock, "inTangent", k.InTangent);
+                SetPreciseNumber(*kBlock, "outTangent", k.OutTangent);
+                SetPreciseNumber(*kBlock, "val", k.Value);
                 chBlock->Children.push_back(kBlock);
             }
 
@@ -336,9 +357,9 @@ namespace Axle {
             evBlock->Type = "Event";
             evBlock->SetString("id", ev.Id);
             evBlock->SetString("name", ev.Name);
-            evBlock->SetFloat("time", ev.Time);
+            SetPreciseNumber(*evBlock, "time", ev.Time);
             if (!ev.StringParam.empty()) evBlock->SetString("stringParam", ev.StringParam);
-            if (ev.FloatParam != 0.0f) evBlock->SetFloat("floatParam", ev.FloatParam);
+            if (ev.FloatParam != 0.0f) SetPreciseNumber(*evBlock, "floatParam", ev.FloatParam);
             if (ev.IntParam != 0) evBlock->SetInt("intParam", ev.IntParam);
             root->Children.push_back(evBlock);
         }
@@ -532,7 +553,7 @@ namespace Axle {
             pBlock->SetString("name", p.Name);
             pBlock->SetString("type", ParamTypeToString(p.Type));
             if (p.Type == AnimatorParameterType::Float && p.Default.index() == 0) {
-                pBlock->SetFloat("default", std::get<float>(p.Default));
+                SetPreciseNumber(*pBlock, "default", std::get<float>(p.Default));
             } else if (p.Type == AnimatorParameterType::Int && p.Default.index() == 1) {
                 pBlock->SetInt("default", std::get<int32_t>(p.Default));
             } else if (p.Type == AnimatorParameterType::Bool && p.Default.index() == 2) {
@@ -549,14 +570,14 @@ namespace Axle {
             sBlock->SetString("name", s.Name);
             sBlock->SetString("nodeType", NodeTypeToString(s.NodeType));
             sBlock->SetString("motionRef", s.MotionAssetRef);
-            sBlock->SetFloat("speedMultiplier", s.SpeedMultiplier);
+            SetPreciseNumber(*sBlock, "speedMultiplier", s.SpeedMultiplier);
             sBlock->SetBool("loop", s.Loop);
             if (!s.BlendParameterX.empty()) sBlock->SetString("blendParameterX", s.BlendParameterX);
             if (!s.BlendParameterY.empty()) sBlock->SetString("blendParameterY", s.BlendParameterY);
-            sBlock->SetVec2("graphPosition", s.GraphPosition);
+            SetPreciseNumber(*sBlock, "graphPosition", s.GraphPosition);
             for (const auto& point : s.BlendPoints) {
                 auto block = std::make_shared<AssetBlock>(); block->Type = "BlendPoint";
-                block->SetFloat("value", point.Value); block->SetString("clip", point.ClipRef); sBlock->Children.push_back(block);
+                SetPreciseNumber(*block, "value", point.Value); block->SetString("clip", point.ClipRef); sBlock->Children.push_back(block);
             }
             root->Children.push_back(sBlock);
         }
@@ -568,9 +589,9 @@ namespace Axle {
             tBlock->SetString("id", t.Id);
             tBlock->SetString("fromState", t.FromState);
             tBlock->SetString("toState", t.ToState);
-            tBlock->SetFloat("crossfadeSeconds", t.CrossfadeSeconds);
+            SetPreciseNumber(*tBlock, "crossfadeSeconds", t.CrossfadeSeconds);
             tBlock->SetBool("hasExitTime", t.HasExitTime);
-            tBlock->SetFloat("exitPhase", t.ExitPhase);
+            SetPreciseNumber(*tBlock, "exitPhase", t.ExitPhase);
             tBlock->SetInt("priority", t.Priority);
 
             for (const auto& c : t.AllConditions) {
@@ -580,7 +601,7 @@ namespace Axle {
                 cBlock->SetString("operator", OperatorToString(c.Operator));
                 if (c.Operand.index() == 0) {
                     cBlock->SetString("operandType", "Float");
-                    cBlock->SetFloat("operand", std::get<float>(c.Operand));
+                    SetPreciseNumber(*cBlock, "operand", std::get<float>(c.Operand));
                 } else if (c.Operand.index() == 1) {
                     cBlock->SetString("operandType", "Int");
                     cBlock->SetInt("operand", std::get<int32_t>(c.Operand));

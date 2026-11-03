@@ -21,6 +21,8 @@ Full Phase 40 rendering/editor acceptance remains separate.
 
 | R1 scene/assembly integration | One shared binding adapter resolves cooked and inline resources, honors unique versus referenced controllers, and gives stable-ID overrides precedence. All three scene/assembly writers capture current keyed clips and complete rig/geometry snapshots before atomic file replacement. Regression tests compare actual skinning matrices, exercise assembly document save/reopen, independent clocks, owner-relative cooked dependencies and failed-save preservation. Release Animation CTests PASS; `build/animation-fix-scene-release.log`, `build/animation-fix-scene-ctest.log`. |
 
+| A2 FBX hardening | Separate CPU importer preserves helper ancestors and cluster indices, triangulates face corners with source normals/UV seams and material partitions, selects the strongest four influences and validates before publication. Canonical bind-basis conversion compensates inverse binds and transforms positions/normals/winding together. Missing, ambiguous, oversized or unsupported skin contracts fail with diagnostics and retain previous outputs. Two authored FBX fixtures verify keyed poses and reflected source axes. Release Animation CTests PASS; `build/animation-fix-fbx-build.log`, `build/animation-fix-fbx-ctest.log`. FBX curves use an explicit bounded 30 Hz linear TRS resampling policy; adaptive/error-bounded curve baking and a broader exporter corpus remain pending, so A2 acceptance is not closed by these fixtures alone. |
+
 Other review findings remain open until a correction row and its evidence are
 added here. The original review documents the pre-fix behavior, not the current
 acceptance result.

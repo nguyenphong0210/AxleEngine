@@ -20,7 +20,8 @@ namespace Axle {
         static bool LoadFBX(const std::filesystem::path& path,
                             SkeletalMeshData& outMesh,
                             std::shared_ptr<Skeleton>& outSkeleton,
-                            std::vector<std::shared_ptr<AnimationClip>>& outClips);
+                            std::vector<std::shared_ptr<AnimationClip>>& outClips,
+                            std::string* diagnostic = nullptr);
 
         // Native glTF 2.0 / GLB loading via embedded cgltf
         static bool LoadGLTF(const std::filesystem::path& path,

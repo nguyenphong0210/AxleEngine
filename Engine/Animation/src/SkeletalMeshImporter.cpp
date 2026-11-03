@@ -3,22 +3,11 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <ufbx.h>
-#include <cgltf.h>
 #include <iostream>
 #include <cmath>
 #include <unordered_map>
 
 namespace Axle {
-
-    static glm::mat4 UfbxToGlmMat4(const ufbx_matrix& u) {
-        glm::mat4 m(1.0f);
-        m[0] = glm::vec4(static_cast<float>(u.cols[0].x), static_cast<float>(u.cols[0].y), static_cast<float>(u.cols[0].z), 0.0f);
-        m[1] = glm::vec4(static_cast<float>(u.cols[1].x), static_cast<float>(u.cols[1].y), static_cast<float>(u.cols[1].z), 0.0f);
-        m[2] = glm::vec4(static_cast<float>(u.cols[2].x), static_cast<float>(u.cols[2].y), static_cast<float>(u.cols[2].z), 0.0f);
-        m[3] = glm::vec4(static_cast<float>(u.cols[3].x), static_cast<float>(u.cols[3].y), static_cast<float>(u.cols[3].z), 1.0f);
-        return m;
-    }
 
     bool SkeletalMeshImporter::Load(const std::filesystem::path& path,
                                     SkeletalMeshData& outMesh,
@@ -28,7 +17,7 @@ namespace Axle {
         for (char& c : ext) c = static_cast<char>(std::tolower(c));
 
         if (ext == ".fbx") {
-            return LoadFBX(path, outMesh, outSkeleton, outClips);
+            return LoadFBX(path, outMesh, outSkeleton, outClips, diagnostic);
         } else if (ext == ".gltf" || ext == ".glb") {
             return LoadGLTF(path, outMesh, outSkeleton, outClips, diagnostic);
         }
@@ -36,185 +25,6 @@ namespace Axle {
         if (diagnostic) *diagnostic = "Unsupported skeletal source format";
         AXLE_CORE_ERROR("[SkeletalMeshImporter] Unsupported asset format: {}", path.string());
         return false;
-    }
-
-    bool SkeletalMeshImporter::LoadFBX(const std::filesystem::path& path,
-                                       SkeletalMeshData& outMesh,
-                                       std::shared_ptr<Skeleton>& outSkeleton,
-                                       std::vector<std::shared_ptr<AnimationClip>>& outClips) {
-        outMesh.Vertices.clear();
-        outMesh.Indices.clear();
-        outMesh.SkeletonRef.reset();
-        outSkeleton.reset();
-        outClips.clear();
-
-        ufbx_load_opts opts{};
-        opts.target_axes = ufbx_axes_right_handed_y_up;
-        opts.target_unit_meters = 1.0f;
-        ufbx_error error;
-        ufbx_scene* scene = ufbx_load_file(path.string().c_str(), &opts, &error);
-        if (!scene) {
-            AXLE_CORE_ERROR("[SkeletalMeshImporter] Failed to load FBX '{}': {}", path.string(), error.description.data);
-            return false;
-        }
-
-        outSkeleton = std::make_shared<Skeleton>(path.stem().string());
-
-        // Find primary mesh and skin deformer
-        ufbx_mesh* targetMesh = nullptr;
-        ufbx_skin_deformer* skin = nullptr;
-
-        for (size_t m = 0; m < scene->meshes.count; ++m) {
-            ufbx_mesh* msh = scene->meshes.data[m];
-            if (msh->skin_deformers.count > 0) {
-                targetMesh = msh;
-                skin = msh->skin_deformers.data[0];
-                break;
-            }
-        }
-
-        if (!targetMesh && scene->meshes.count > 0) {
-            targetMesh = scene->meshes.data[0];
-        }
-
-        if (!targetMesh) {
-            AXLE_CORE_WARN("[SkeletalMeshImporter] No meshes found in FBX: {}", path.string());
-            ufbx_free_scene(scene);
-            return false;
-        }
-
-        // Map ufbx nodes to skeleton bone indices
-        std::unordered_map<const ufbx_node*, int> nodeToBoneIndex;
-
-        if (skin) {
-            for (size_t c = 0; c < skin->clusters.count; ++c) {
-                ufbx_skin_cluster* cluster = skin->clusters.data[c];
-                ufbx_node* boneNode = cluster->bone_node;
-
-                Bone bone;
-                bone.Name = boneNode ? boneNode->name.data : ("Bone_" + std::to_string(c));
-                bone.InverseBindMatrix = UfbxToGlmMat4(cluster->geometry_to_bone);
-                if (boneNode) {
-                    bone.LocalTransform = UfbxToGlmMat4(boneNode->node_to_parent);
-                }
-
-                int boneIdx = outSkeleton->AddBone(bone);
-                if (boneNode) {
-                    nodeToBoneIndex[boneNode] = boneIdx;
-                }
-            }
-
-            // Resolve parent hierarchy
-            for (size_t c = 0; c < skin->clusters.count; ++c) {
-                ufbx_skin_cluster* cluster = skin->clusters.data[c];
-                ufbx_node* boneNode = cluster->bone_node;
-                if (!boneNode) continue;
-
-                int currentBoneIdx = nodeToBoneIndex[boneNode];
-                if (boneNode->parent && nodeToBoneIndex.find(boneNode->parent) != nodeToBoneIndex.end()) {
-                    int parentIdx = nodeToBoneIndex[boneNode->parent];
-                    outSkeleton->GetBones()[currentBoneIdx].ParentID = parentIdx;
-                    outSkeleton->GetBones()[parentIdx].Children.push_back(currentBoneIdx);
-                }
-            }
-        }
-
-        if (!outSkeleton->IsValid()) {
-            Bone rootBone;
-            rootBone.Name = "Root";
-            rootBone.LocalTransform = glm::mat4(1.0f);
-            rootBone.InverseBindMatrix = glm::mat4(1.0f);
-            outSkeleton->AddBone(rootBone);
-        }
-
-        // Extract vertex data and faces
-        outMesh.Name = targetMesh->name.data;
-        outMesh.SkeletonRef = outSkeleton;
-
-        size_t numVerts = targetMesh->vertices.count;
-        outMesh.Vertices.resize(numVerts);
-
-        for (size_t v = 0; v < numVerts; ++v) {
-            outMesh.Vertices[v].Position = glm::vec3(
-                static_cast<float>(targetMesh->vertices.data[v].x),
-                static_cast<float>(targetMesh->vertices.data[v].y),
-                static_cast<float>(targetMesh->vertices.data[v].z)
-            );
-        }
-
-        // Extract bone weights per vertex if available
-        if (skin) {
-            for (size_t c = 0; c < skin->clusters.count; ++c) {
-                ufbx_skin_cluster* cluster = skin->clusters.data[c];
-                int boneID = static_cast<int>(c);
-                for (size_t w = 0; w < cluster->vertices.count; ++w) {
-                    uint32_t vIdx = cluster->vertices.data[w];
-                    float weight = static_cast<float>(cluster->weights.data[w]);
-                    if (vIdx < outMesh.Vertices.size()) {
-                        outMesh.Vertices[vIdx].AddBoneData(boneID, weight);
-                    }
-                }
-            }
-        }
-
-        // Extract triangles and normal/UV attributes from faces
-        for (size_t f = 0; f < targetMesh->faces.count; ++f) {
-            ufbx_face face = targetMesh->faces.data[f];
-            if (face.num_indices < 3) continue;
-
-            for (size_t fi = 1; fi + 1 < face.num_indices; ++fi) {
-                uint32_t i0 = targetMesh->vertex_indices.data[face.index_begin];
-                uint32_t i1 = targetMesh->vertex_indices.data[face.index_begin + fi];
-                uint32_t i2 = targetMesh->vertex_indices.data[face.index_begin + fi + 1];
-
-                outMesh.Indices.push_back(i0);
-                outMesh.Indices.push_back(i1);
-                outMesh.Indices.push_back(i2);
-            }
-        }
-
-        // Extract animation clips
-        for (size_t s = 0; s < scene->anim_stacks.count; ++s) {
-            ufbx_anim_stack* stack = scene->anim_stacks.data[s];
-            float duration = static_cast<float>(stack->time_end - stack->time_begin);
-            if (duration <= 0.0f) duration = 1.0f;
-
-            auto clip = std::make_shared<AnimationClip>(stack->name.data, duration, 30.0f);
-
-            float fps = 30.0f;
-            int totalFrames = static_cast<int>(std::ceil(duration * fps));
-            if (totalFrames < 1) totalFrames = 1;
-
-            for (const auto& [node, boneIdx] : nodeToBoneIndex) {
-                AnimationChannel channel;
-                channel.BoneName = outSkeleton->GetBones()[boneIdx].Name;
-                channel.BoneIndex = boneIdx;
-
-                for (int f = 0; f <= totalFrames; ++f) {
-                    float t = static_cast<float>(f) / fps;
-                    double evalTime = stack->time_begin + t;
-                    ufbx_transform xf = ufbx_evaluate_transform(stack->anim, node, evalTime);
-
-                    channel.Positions.push_back({ t, glm::vec3(xf.translation.x, xf.translation.y, xf.translation.z) });
-                    channel.Rotations.push_back({ t, glm::quat(xf.rotation.w, xf.rotation.x, xf.rotation.y, xf.rotation.z) });
-                    channel.Scales.push_back({ t, glm::vec3(xf.scale.x, xf.scale.y, xf.scale.z) });
-                }
-                clip->AddChannel(channel);
-            }
-
-            outClips.push_back(clip);
-        }
-
-        outSkeleton->RebuildDerivedData();
-        outMesh.Normalize(outSkeleton->GetRootBoneIndex());
-        for (auto& clip : outClips) {
-            clip->RebuildDerivedData(outSkeleton.get());
-        }
-
-        ufbx_free_scene(scene);
-        AXLE_CORE_INFO("[SkeletalMeshImporter] Loaded FBX '{}': {} verts, {} indices, {} bones, {} clips",
-                 path.filename().string(), outMesh.Vertices.size(), outMesh.Indices.size(), outSkeleton->GetBoneCount(), outClips.size());
-        return true;
     }
 
     bool SkeletalMeshImporter::CreateProceduralBiped(SkeletalMeshData& outMesh,

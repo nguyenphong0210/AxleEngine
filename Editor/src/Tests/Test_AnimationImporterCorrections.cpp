@@ -38,5 +38,26 @@ bool RunAnimationImporterCorrectionTests() {
     ANIMATION_CHECK(!SkeletalMeshImporter::LoadGLTF(fixtures / "MultipleSkins.gltf", mesh, rig, clips, &error) && !error.empty(), "Multi-skin source requires explicit selection");
     ANIMATION_CHECK(rig == previousRig && mesh.Vertices.size() == previousCount, "Failed import preserves previous resource");
     ANIMATION_CHECK(!SkeletalMeshImporter::LoadGLTF(fixtures / "Malformed.gltf", mesh, rig, clips, &error), "Malformed source is rejected before reading invalid accessors");
+    if (!SkeletalMeshImporter::LoadFBX(fixtures / "HelperSkin.fbx", mesh, rig, clips, &error)) {
+        std::cerr << "FBX fixture: " << error << '\n'; return false;
+    }
+    ANIMATION_CHECK(mesh.Validate() && mesh.Vertices.size() == 6 && mesh.Indices.size() == 6, "FBX corner attributes survive split vertices");
+    ANIMATION_CHECK(mesh.Vertices[0].TexCoords == glm::vec2(0,0) && mesh.Vertices[3].TexCoords == glm::vec2(0.5f,0.5f), "FBX UV seam preserved at the shared control point");
+    ANIMATION_CHECK(mesh.Vertices[0].Normal == glm::vec3(0,0,1), "FBX source normals retained");
+    ANIMATION_CHECK(rig->GetBoneCount() >= 2 && rig->GetBones()[0].ParentID >= 0, "FBX helper ancestors retained without changing cluster indices");
+    std::vector<glm::mat4> bind;
+    rig->ComputeBindPoseGlobalTransforms(bind);
+    ANIMATION_CHECK(AnimationTests::Near(bind[0][3].x,5) && AnimationTests::Near(bind[0]*rig->GetBones()[0].InverseBindMatrix,glm::mat4(1)), "FBX helper/cluster inverse binds share one basis");
+    ANIMATION_CHECK(clips.size() == 1, "FBX source animation retained");
+    AnimationPose fbxPose; std::vector<glm::mat4> globals;
+    ANIMATION_CHECK(clips[0]->SamplePose(0.5f,*rig,fbxPose,false) && fbxPose.ComputeGlobalMatrices(*rig,globals), "FBX keyed helper hierarchy evaluates");
+    ANIMATION_CHECK(AnimationTests::Near(globals[0][3].x,6), "FBX evaluated motion includes helper transform");
+    const auto lastFbxRig = rig; const auto lastFbxVertices = mesh.Vertices.size();
+    ANIMATION_CHECK(!SkeletalMeshImporter::LoadFBX(fixtures / "missing.fbx", mesh, rig, clips, &error) && !error.empty(), "Missing FBX returns diagnostics");
+    ANIMATION_CHECK(rig == lastFbxRig && mesh.Vertices.size() == lastFbxVertices, "Failed FBX import keeps last good resource");
+    ANIMATION_CHECK(SkeletalMeshImporter::LoadFBX(fixtures / "ConvertedSkin.fbx", mesh, rig, clips, &error), "Reflected FBX source basis imports");
+    rig->ComputeBindPoseGlobalTransforms(bind);
+    ANIMATION_CHECK(AnimationTests::Near(bind[0]*rig->GetBones()[0].InverseBindMatrix,glm::mat4(1)), "FBX canonical mesh basis compensates inverse binds");
+    ANIMATION_CHECK(AnimationTests::Near(mesh.Vertices[0].Position.z,-1) && mesh.Vertices[0].Normal.z == -1 && mesh.Vertices[1].Position == glm::vec3(1,1,0), "Reflected FBX converts positions, normals and winding together");
     return true;
 }

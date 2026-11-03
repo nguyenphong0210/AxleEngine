@@ -14,7 +14,8 @@ namespace Axle {
 
     enum class AnimationNodeType {
         Clip,
-        BlendSpace1D
+        BlendSpace1D,
+        BlendSpace2D
     };
 
     struct AnimationState {

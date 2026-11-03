@@ -42,6 +42,10 @@ namespace Axle {
         if (str == "Texture") return AssetKind::Texture;
         if (str == "Terrain") return AssetKind::Terrain;
         if (str == "PhysicsMaterial") return AssetKind::PhysicsMaterial;
+        if (str == "Skeleton") return AssetKind::Skeleton;
+        if (str == "SkeletalMesh") return AssetKind::SkeletalMesh;
+        if (str == "AnimationClip") return AssetKind::AnimationClip;
+        if (str == "AnimatorController") return AssetKind::AnimatorController;
         return AssetKind::Unknown;
     }
 
@@ -54,6 +58,10 @@ namespace Axle {
             case AssetKind::Texture: return "Texture";
             case AssetKind::Terrain: return "Terrain";
             case AssetKind::PhysicsMaterial: return "PhysicsMaterial";
+            case AssetKind::Skeleton: return "Skeleton";
+            case AssetKind::SkeletalMesh: return "SkeletalMesh";
+            case AssetKind::AnimationClip: return "AnimationClip";
+            case AssetKind::AnimatorController: return "AnimatorController";
             case AssetKind::Unknown:
             default:
                 return "Unknown";

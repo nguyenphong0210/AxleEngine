@@ -18,7 +18,11 @@ namespace Axle {
         Mesh,
         Texture,
         Terrain,
-        PhysicsMaterial
+        PhysicsMaterial,
+        Skeleton,
+        SkeletalMesh,
+        AnimationClip,
+        AnimatorController
     };
 
     struct AssetProperty {

@@ -5,8 +5,12 @@
 #include <Axle/SkeletalMeshImporter.hpp>
 #include <Axle/AnimationStateMachine.hpp>
 #include <Axle/Animator.hpp>
+#include <Axle/AnimationDefinition.hpp>
+#include <Axle/AssetTypes.hpp>
+#include <Axle/AssetDSL.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string_view>
+#include <limits>
 
 static bool TestBaselineSampling() {
     Axle::Skeleton skeleton("Fixture");
@@ -355,6 +359,204 @@ static bool TestAnimatorInstanceIsolationAndReset() {
     return true;
 }
 
+static bool TestAssetDSLAnimationKindsAndTypes() {
+    // AssetKind round-trips
+    ANIMATION_CHECK(Axle::AssetDSL::StringToAssetKind("Skeleton") == Axle::AssetKind::Skeleton, "StringToAssetKind Skeleton");
+    ANIMATION_CHECK(Axle::AssetDSL::StringToAssetKind("SkeletalMesh") == Axle::AssetKind::SkeletalMesh, "StringToAssetKind SkeletalMesh");
+    ANIMATION_CHECK(Axle::AssetDSL::StringToAssetKind("AnimationClip") == Axle::AssetKind::AnimationClip, "StringToAssetKind AnimationClip");
+    ANIMATION_CHECK(Axle::AssetDSL::StringToAssetKind("AnimatorController") == Axle::AssetKind::AnimatorController, "StringToAssetKind AnimatorController");
+
+    ANIMATION_CHECK(Axle::AssetDSL::AssetKindToString(Axle::AssetKind::Skeleton) == "Skeleton", "AssetKindToString Skeleton");
+    ANIMATION_CHECK(Axle::AssetDSL::AssetKindToString(Axle::AssetKind::SkeletalMesh) == "SkeletalMesh", "AssetKindToString SkeletalMesh");
+    ANIMATION_CHECK(Axle::AssetDSL::AssetKindToString(Axle::AssetKind::AnimationClip) == "AnimationClip", "AssetKindToString AnimationClip");
+    ANIMATION_CHECK(Axle::AssetDSL::AssetKindToString(Axle::AssetKind::AnimatorController) == "AnimatorController", "AssetKindToString AnimatorController");
+
+    // AssetType round-trips
+    ANIMATION_CHECK(Axle::AssetTypeFromString("Skeleton") == Axle::AssetType::Skeleton, "AssetTypeFromString Skeleton");
+    ANIMATION_CHECK(Axle::AssetTypeFromString("SkeletalMesh") == Axle::AssetType::SkeletalMesh, "AssetTypeFromString SkeletalMesh");
+    ANIMATION_CHECK(Axle::AssetTypeFromString("AnimationClip") == Axle::AssetType::AnimationClip, "AssetTypeFromString AnimationClip");
+    ANIMATION_CHECK(Axle::AssetTypeFromString("AnimatorController") == Axle::AssetType::AnimatorController, "AssetTypeFromString AnimatorController");
+
+    ANIMATION_CHECK(std::string(Axle::AssetTypeToString(Axle::AssetType::Skeleton)) == "Skeleton", "AssetTypeToString Skeleton");
+    ANIMATION_CHECK(std::string(Axle::AssetTypeToString(Axle::AssetType::SkeletalMesh)) == "SkeletalMesh", "AssetTypeToString SkeletalMesh");
+    ANIMATION_CHECK(std::string(Axle::AssetTypeToString(Axle::AssetType::AnimationClip)) == "AnimationClip", "AssetTypeToString AnimationClip");
+    ANIMATION_CHECK(std::string(Axle::AssetTypeToString(Axle::AssetType::AnimatorController)) == "AnimatorController", "AssetTypeToString AnimatorController");
+
+    // Extension resolution
+    ANIMATION_CHECK(Axle::GetAssetTypeFromPath("hero.skeleton") == Axle::AssetType::Skeleton, "Ext .skeleton resolves");
+    ANIMATION_CHECK(Axle::GetAssetTypeFromPath("hero.skelmesh") == Axle::AssetType::SkeletalMesh, "Ext .skelmesh resolves");
+    ANIMATION_CHECK(Axle::GetAssetTypeFromPath("walk.animclip") == Axle::AssetType::AnimationClip, "Ext .animclip resolves");
+    ANIMATION_CHECK(Axle::GetAssetTypeFromPath("hero.animcontroller") == Axle::AssetType::AnimatorController, "Ext .animcontroller resolves");
+
+    return true;
+}
+
+static bool TestAnimationDefinitionsAndValidation() {
+    // 1. Valid Controller
+    Axle::AnimatorControllerDefinition controller;
+    controller.Id = "ctrl_locomotion";
+    controller.Name = "LocomotionController";
+    controller.SkeletonRef = "Assets/Characters/Biped.skeleton";
+
+    Axle::ParameterDefinition pSpeed;
+    pSpeed.Id = "param_speed";
+    pSpeed.Name = "Speed";
+    pSpeed.Type = Axle::AnimatorParameterType::Float;
+    pSpeed.Default = 0.0f;
+    controller.Parameters.push_back(pSpeed);
+
+    Axle::ParameterDefinition pGrounded;
+    pGrounded.Id = "param_grounded";
+    pGrounded.Name = "IsGrounded";
+    pGrounded.Type = Axle::AnimatorParameterType::Bool;
+    pGrounded.Default = true;
+    controller.Parameters.push_back(pGrounded);
+
+    Axle::StateDefinition sIdle;
+    sIdle.Id = "state_idle";
+    sIdle.Name = "Idle";
+    sIdle.NodeType = Axle::AnimationNodeType::Clip;
+    sIdle.MotionAssetRef = "Assets/Anims/Idle.animclip";
+    controller.States.push_back(sIdle);
+
+    Axle::StateDefinition sWalk;
+    sWalk.Id = "state_walk";
+    sWalk.Name = "Walk";
+    sWalk.NodeType = Axle::AnimationNodeType::Clip;
+    sWalk.MotionAssetRef = "Assets/Anims/Walk.animclip";
+    controller.States.push_back(sWalk);
+
+    controller.EntryStateId = "state_idle";
+
+    Axle::TransitionDefinition t1;
+    t1.Id = "trans_idle_to_walk";
+    t1.FromState = "state_idle";
+    t1.ToState = "state_walk";
+    t1.CrossfadeSeconds = 0.25f;
+
+    Axle::ConditionDefinition c1;
+    c1.Parameter = "param_speed";
+    c1.Operator = Axle::ConditionOperator::Greater;
+    c1.Operand = 0.1f;
+    t1.AllConditions.push_back(c1);
+    controller.Transitions.push_back(t1);
+
+    std::vector<std::string> errors;
+    ANIMATION_CHECK(controller.Validate(&errors), "Valid controller passes validation");
+    ANIMATION_CHECK(errors.empty(), "No errors on valid controller");
+
+    // 2. Similar names remain distinct
+    Axle::StateDefinition sWalkSprint;
+    sWalkSprint.Id = "state_walk_sprint";
+    sWalkSprint.Name = "Walk_Sprint"; // Similar prefix to "Walk", but distinct
+    controller.States.push_back(sWalkSprint);
+    ANIMATION_CHECK(controller.Validate(&errors), "Two states with similar names remain distinct and valid");
+    controller.States.pop_back();
+
+    // 3. Duplicate parameter ID rejected
+    auto badController = controller;
+    Axle::ParameterDefinition pDupId;
+    pDupId.Id = "param_speed"; // duplicate
+    pDupId.Name = "Speed2";
+    pDupId.Type = Axle::AnimatorParameterType::Float;
+    pDupId.Default = 1.0f;
+    badController.Parameters.push_back(pDupId);
+    errors.clear();
+    ANIMATION_CHECK(!badController.Validate(&errors), "Duplicate parameter ID rejected");
+
+    // 4. Duplicate state Name rejected
+    badController = controller;
+    Axle::StateDefinition sDupName;
+    sDupName.Id = "state_another_walk";
+    sDupName.Name = "Walk"; // duplicate name
+    badController.States.push_back(sDupName);
+    errors.clear();
+    ANIMATION_CHECK(!badController.Validate(&errors), "Duplicate state name rejected");
+
+    // 5. Incompatible parameter default (Float holding bool)
+    badController = controller;
+    badController.Parameters[0].Default = true; // Float holding bool!
+    errors.clear();
+    ANIMATION_CHECK(!badController.Validate(&errors), "Float holding bool variant rejected");
+
+    // 6. Non-finite float parameter default rejected
+    badController = controller;
+    badController.Parameters[0].Default = std::numeric_limits<float>::quiet_NaN();
+    errors.clear();
+    ANIMATION_CHECK(!badController.Validate(&errors), "NaN float parameter default rejected");
+
+    // 7. Dangling transition link (missing state)
+    badController = controller;
+    badController.Transitions[0].ToState = "state_nonexistent";
+    errors.clear();
+    ANIMATION_CHECK(!badController.Validate(&errors), "Dangling transition ToState rejected");
+
+    // 8. Missing EntryStateId rejected
+    badController = controller;
+    badController.EntryStateId = "";
+    errors.clear();
+    ANIMATION_CHECK(!badController.Validate(&errors), "Missing EntryStateId rejected");
+
+    // 9. Negative crossfade rejected
+    badController = controller;
+    badController.Transitions[0].CrossfadeSeconds = -0.5f;
+    errors.clear();
+    ANIMATION_CHECK(!badController.Validate(&errors), "Negative crossfade rejected");
+
+    // 10. Operator incompatible with parameter type (Bool with Greater operator)
+    badController = controller;
+    badController.Transitions[0].AllConditions[0].Parameter = "param_grounded";
+    badController.Transitions[0].AllConditions[0].Operator = Axle::ConditionOperator::Greater;
+    errors.clear();
+    ANIMATION_CHECK(!badController.Validate(&errors), "Incompatible operator for Bool parameter rejected");
+
+    // 11. Clip Definition validation
+    Axle::AnimationClipDefinition clip;
+    clip.Id = "clip_run";
+    clip.Name = "Run";
+    clip.Duration = 1.2f;
+    clip.FrameRate = 30.0f;
+
+    Axle::AnimationEventDefinition ev;
+    ev.Id = "ev_footstep";
+    ev.Name = "Footstep";
+    ev.Time = 0.3f;
+    clip.Events.push_back(ev);
+
+    errors.clear();
+    ANIMATION_CHECK(clip.Validate(&errors), "Valid AnimationClipDefinition passes");
+
+    clip.Duration = -1.0f;
+    errors.clear();
+    ANIMATION_CHECK(!clip.Validate(&errors), "Negative clip duration rejected");
+    clip.Duration = 1.2f;
+
+    clip.Events[0].Time = 2.0f; // Exceeds duration (1.2f)
+    errors.clear();
+    ANIMATION_CHECK(!clip.Validate(&errors), "Event time exceeding clip duration rejected");
+
+    // 12. Skeleton Definition and signature
+    Axle::SkeletonDefinition skelDef;
+    skelDef.Id = "skel_hero";
+    skelDef.Name = "HeroSkeleton";
+    Axle::Bone bRoot;
+    bRoot.Name = "Root";
+    bRoot.ParentID = -1;
+    skelDef.Bones.push_back(bRoot);
+    Axle::Bone bSpine;
+    bSpine.Name = "Spine";
+    bSpine.ParentID = 0;
+    skelDef.Bones.push_back(bSpine);
+
+    errors.clear();
+    ANIMATION_CHECK(skelDef.Validate(&errors), "Valid SkeletonDefinition passes");
+    std::string sig1 = Axle::SkeletonDefinition::ComputeSignature(skelDef.Bones);
+    std::string sig2 = Axle::SkeletonDefinition::ComputeSignature(skelDef.Bones);
+    ANIMATION_CHECK(!sig1.empty() && sig1 == sig2, "Skeleton signature is deterministic");
+
+    return true;
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure")
         return Axle::AnimationTests::Check(false, "Intentional harness failure", __FILE__, __LINE__) ? 0 : 1;
@@ -371,6 +573,8 @@ int main(int argc, char** argv) {
     if (!TestVertexInfluencePruningAndMerging()) return 1;
     if (!TestProceduralBipedImportAndCPUNormalization()) return 1;
     if (!TestAnimatorInstanceIsolationAndReset()) return 1;
+    if (!TestAssetDSLAnimationKindsAndTypes()) return 1;
+    if (!TestAnimationDefinitionsAndValidation()) return 1;
     std::cout << "Animation unit tests PASS\n";
     return 0;
 }

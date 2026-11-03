@@ -21,7 +21,11 @@ namespace Axle {
         Font,
         ParticleEmitter,
         Canvas,
-        Terrain
+        Terrain,
+        Skeleton,
+        SkeletalMesh,
+        AnimationClip,
+        AnimatorController
     };
 
     inline const char* AssetTypeToString(AssetType type) {
@@ -38,6 +42,10 @@ namespace Axle {
             case AssetType::ParticleEmitter: return "ParticleEmitter";
             case AssetType::Canvas:          return "Canvas";
             case AssetType::Terrain:         return "Terrain";
+            case AssetType::Skeleton:        return "Skeleton";
+            case AssetType::SkeletalMesh:    return "SkeletalMesh";
+            case AssetType::AnimationClip:   return "AnimationClip";
+            case AssetType::AnimatorController: return "AnimatorController";
             case AssetType::None:
             default:                         return "None";
         }
@@ -56,6 +64,10 @@ namespace Axle {
         if (typeStr == "ParticleEmitter" || typeStr == "VFX")    return AssetType::ParticleEmitter;
         if (typeStr == "Canvas" || typeStr == "UI")              return AssetType::Canvas;
         if (typeStr == "Terrain")                                return AssetType::Terrain;
+        if (typeStr == "Skeleton")                               return AssetType::Skeleton;
+        if (typeStr == "SkeletalMesh")                           return AssetType::SkeletalMesh;
+        if (typeStr == "AnimationClip" || typeStr == "Animation") return AssetType::AnimationClip;
+        if (typeStr == "AnimatorController" || typeStr == "Animator") return AssetType::AnimatorController;
         return AssetType::None;
     }
 
@@ -74,6 +86,10 @@ namespace Axle {
                 case AssetKind::Mesh:            return AssetType::Mesh;
                 case AssetKind::Terrain:         return AssetType::Terrain;
                 case AssetKind::PhysicsMaterial: return AssetType::PhysicsMaterial;
+                case AssetKind::Skeleton:        return AssetType::Skeleton;
+                case AssetKind::SkeletalMesh:    return AssetType::SkeletalMesh;
+                case AssetKind::AnimationClip:   return AssetType::AnimationClip;
+                case AssetKind::AnimatorController: return AssetType::AnimatorController;
                 default:                         return AssetType::Material;
             }
         }
@@ -85,6 +101,10 @@ namespace Axle {
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") return AssetType::Texture;
         if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") return AssetType::Audio;
         if (ext == ".ttf" || ext == ".otf") return AssetType::Font;
+        if (ext == ".skeleton") return AssetType::Skeleton;
+        if (ext == ".skelmesh" || ext == ".skeletalmesh") return AssetType::SkeletalMesh;
+        if (ext == ".animclip" || ext == ".clip") return AssetType::AnimationClip;
+        if (ext == ".animcontroller" || ext == ".controller") return AssetType::AnimatorController;
 
         return AssetType::None;
     }

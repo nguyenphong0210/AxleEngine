@@ -76,6 +76,34 @@ bool RunAnimationImporterCorrectionTests() {
     ANIMATION_CHECK(clips[0]->SamplePose(0.75f, *rig, stepPose, false) && AnimationTests::Near(stepPose.Transforms[0].Translation.x, 5.0f), "Hold interior off-grid after step");
     ANIMATION_CHECK(clips[0]->SamplePose(1.0f, *rig, stepPose, false) && AnimationTests::Near(stepPose.Transforms[0].Translation.x, 8.0f), "Hold clip end value");
 
+    // R4-R6: Close steps, CONSTANT_NEXT holds, and final key linear interpolation regressions
+    for (const auto& [fixtureName, queryTime] : {
+        std::pair<std::string, double>{"CloseSteps.fbx", 0.5001},
+        std::pair<std::string, double>{"ConstantNext.fbx", 0.25},
+        std::pair<std::string, double>{"FinalKeyLinear.fbx", 0.25}
+    }) {
+        SkeletalMeshData stepData; std::shared_ptr<Skeleton> stepRig;
+        std::vector<std::shared_ptr<AnimationClip>> stepClips; std::string stepErr;
+        const auto fixturePath = fixtures / fixtureName;
+        ANIMATION_CHECK(SkeletalMeshImporter::LoadFBX(fixturePath, stepData, stepRig, stepClips, &stepErr),
+                        (fixtureName + " imports successfully: " + stepErr).c_str());
+        ANIMATION_CHECK(stepClips.size() == 1, (fixtureName + " has 1 clip").c_str());
+        ufbx_load_opts opts{}; opts.target_axes = ufbx_axes_right_handed_y_up; opts.target_unit_meters = 1;
+        opts.inherit_mode_handling = UFBX_INHERIT_MODE_HANDLING_HELPER_NODES; ufbx_error uErr{};
+        std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)> sc(
+            ufbx_load_file(fixturePath.string().c_str(), &opts, &uErr), ufbx_free_scene);
+        ANIMATION_CHECK(sc && sc->anim_stacks.count > 0, (fixtureName + " scene loaded by ufbx").c_str());
+        auto* boneNode = ufbx_find_node(sc.get(), "Bone");
+        ANIMATION_CHECK(boneNode != nullptr, (fixtureName + " has Bone node").c_str());
+        const auto expected = ufbx_evaluate_transform(sc->anim_stacks[0]->anim, boneNode,
+                                                     sc->anim_stacks[0]->time_begin + queryTime);
+        AnimationPose pose;
+        ANIMATION_CHECK(stepClips[0]->SamplePose(static_cast<float>(queryTime), *stepRig, pose, false),
+                        (fixtureName + " sampled at query time").c_str());
+        float diffX = std::abs(static_cast<float>(expected.translation.x) - pose.Transforms[0].Translation.x);
+        ANIMATION_CHECK(diffX < 0.0011f, (fixtureName + " hold value matches source at query time").c_str());
+    }
+
     // A2: Fast rotation that naive 30 Hz grid would undersample/miss
     ANIMATION_CHECK(SkeletalMeshImporter::LoadFBX(fixtures / "FastRotationSkin.fbx", mesh, rig, clips, &error), "Fast rotation FBX imports");
     ANIMATION_CHECK(clips.size() == 1 && AnimationTests::Near(clips[0]->GetDuration(), 0.1f), "Fast rotation duration 0.1s");

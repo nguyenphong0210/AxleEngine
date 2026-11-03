@@ -28,7 +28,8 @@ namespace {
         Mixed
     };
 
-    TrackCurveMode InspectCurves(const ufbx_anim* anim, const ufbx_node* node, const char* propName, std::vector<double>& outKeyTimes) {
+    TrackCurveMode InspectCurves(const ufbx_anim* anim, const ufbx_node* node, const char* propName,
+                                 double timeBegin, double timeEnd, std::vector<double>& outKeyTimes) {
         if (!anim || !node) return TrackCurveMode::Static;
         bool hasStep = false;
         bool hasContinuous = false;
@@ -44,12 +45,25 @@ namespace {
                 if (!curve) continue;
                 for (size_t k = 0; k < curve->keyframes.count; ++k) {
                     const auto& kf = curve->keyframes[k];
-                    outKeyTimes.push_back(kf.time);
-                    if (kf.interpolation == UFBX_INTERPOLATION_CONSTANT_PREV ||
-                        kf.interpolation == UFBX_INTERPOLATION_CONSTANT_NEXT) {
-                        hasStep = true;
-                    } else {
-                        hasContinuous = true;
+                    if (kf.time >= timeBegin && kf.time <= timeEnd) {
+                        outKeyTimes.push_back(kf.time);
+                    }
+                }
+                // Only spans [k, k+1] inside the curve contribute to interpolation.
+                // The terminal key (k == count - 1) has no outgoing interval inside the curve.
+                if (curve->keyframes.count >= 2) {
+                    for (size_t k = 0; k < curve->keyframes.count - 1; ++k) {
+                        const auto& kfA = curve->keyframes[k];
+                        const auto& kfB = curve->keyframes[k + 1];
+                        if (kfB.time <= timeBegin || kfA.time >= timeEnd) {
+                            continue;
+                        }
+                        if (kfA.interpolation == UFBX_INTERPOLATION_CONSTANT_PREV ||
+                            kfA.interpolation == UFBX_INTERPOLATION_CONSTANT_NEXT) {
+                            hasStep = true;
+                        } else {
+                            hasContinuous = true;
+                        }
                     }
                 }
             }
@@ -119,9 +133,9 @@ bool FbxCurveBaker::BakeChannel(
 
     // Inspect curves for Translation, Rotation, and Scaling
     std::vector<double> transTimes, rotTimes, scaleTimes;
-    TrackCurveMode transMode = InspectCurves(anim, node, UFBX_Lcl_Translation, transTimes);
-    TrackCurveMode rotMode = InspectCurves(anim, node, UFBX_Lcl_Rotation, rotTimes);
-    TrackCurveMode scaleMode = InspectCurves(anim, node, UFBX_Lcl_Scaling, scaleTimes);
+    TrackCurveMode transMode = InspectCurves(anim, node, UFBX_Lcl_Translation, timeBegin, timeEnd, transTimes);
+    TrackCurveMode rotMode = InspectCurves(anim, node, UFBX_Lcl_Rotation, timeBegin, timeEnd, rotTimes);
+    TrackCurveMode scaleMode = InspectCurves(anim, node, UFBX_Lcl_Scaling, timeBegin, timeEnd, scaleTimes);
 
     // Reject mixed interpolation within any single transform component
     if (transMode == TrackCurveMode::Mixed || rotMode == TrackCurveMode::Mixed || scaleMode == TrackCurveMode::Mixed) {
@@ -163,18 +177,46 @@ bool FbxCurveBaker::BakeChannel(
         std::sort(stepTimes.begin(), stepTimes.end());
         std::vector<double> uniqueStepTimes;
         for (double st : stepTimes) {
-            if (uniqueStepTimes.empty() || (st - uniqueStepTimes.back()) >= tolerances.MinIntervalSeconds) {
+            float tf = static_cast<float>(st);
+            if (uniqueStepTimes.empty() || tf > static_cast<float>(uniqueStepTimes.back())) {
                 uniqueStepTimes.push_back(st);
             }
         }
+        if (uniqueStepTimes.empty()) {
+            uniqueStepTimes.push_back(0.0);
+        }
+        if (static_cast<float>(duration) > static_cast<float>(uniqueStepTimes.back())) {
+            uniqueStepTimes.push_back(duration);
+        }
 
-        for (double st : uniqueStepTimes) {
+        if (uniqueStepTimes.size() == 1) {
             if (remainingKeyBudget < 3) {
                 if (outError) *outError = "FBX sampled key budget exceeded";
                 return false;
             }
-            float timeStamp = static_cast<float>(st);
-            auto sample = evalTransform(st);
+            auto sample = evalTransform(0.0);
+            outChannel.Positions.push_back({ 0.0f, sample.Translation });
+            outChannel.Rotations.push_back({ 0.0f, sample.Rotation });
+            outChannel.Scales.push_back({ 0.0f, sample.Scale });
+            remainingKeyBudget -= 3;
+            if (outStats) {
+                outStats->PositionKeys++;
+                outStats->RotationKeys++;
+                outStats->ScaleKeys++;
+            }
+            return true;
+        }
+
+        for (size_t i = 0; i < uniqueStepTimes.size() - 1; ++i) {
+            if (remainingKeyBudget < 3) {
+                if (outError) *outError = "FBX sampled key budget exceeded";
+                return false;
+            }
+            double stA = uniqueStepTimes[i];
+            double stB = uniqueStepTimes[i + 1];
+            double tEval = 0.5 * (stA + stB);
+            float timeStamp = static_cast<float>(stA);
+            auto sample = evalTransform(tEval);
             outChannel.Positions.push_back({ timeStamp, sample.Translation });
             outChannel.Rotations.push_back({ timeStamp, sample.Rotation });
             outChannel.Scales.push_back({ timeStamp, sample.Scale });
@@ -184,6 +226,24 @@ bool FbxCurveBaker::BakeChannel(
                 outStats->RotationKeys++;
                 outStats->ScaleKeys++;
             }
+        }
+
+        // Final key at duration boundary
+        if (remainingKeyBudget < 3) {
+            if (outError) *outError = "FBX sampled key budget exceeded";
+            return false;
+        }
+        double stEnd = uniqueStepTimes.back();
+        float timeStamp = static_cast<float>(stEnd);
+        auto sampleEnd = evalTransform(stEnd);
+        outChannel.Positions.push_back({ timeStamp, sampleEnd.Translation });
+        outChannel.Rotations.push_back({ timeStamp, sampleEnd.Rotation });
+        outChannel.Scales.push_back({ timeStamp, sampleEnd.Scale });
+        remainingKeyBudget -= 3;
+        if (outStats) {
+            outStats->PositionKeys++;
+            outStats->RotationKeys++;
+            outStats->ScaleKeys++;
         }
         return true;
     }

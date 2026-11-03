@@ -31,14 +31,20 @@
 namespace Axle {
 
     void SceneHierarchyPanel::ClearTexturePreview() {
-        if (m_TexturePreviewImGuiID != 0) {
-            if (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) {
-                m_ImGuiLayer->UnregisterTextureDescriptor(m_TexturePreviewImGuiID);
-            }
-            m_TexturePreviewImGuiID = 0;
+        if (m_TexturePreviewImGuiID || m_RHITexturePreview || m_GLTexturePreview) {
+            // Selection may change while this frame's draw lists still reference the old image.
+            // Keep both the descriptor and texture alive until UI submission and GPU completion.
+            auto release = [layer = m_ImGuiLayer, handle = m_TexturePreviewImGuiID,
+                            rhiTexture = std::move(m_RHITexturePreview),
+                            glTexture = std::move(m_GLTexturePreview)] {
+                if (handle && layer && layer->GetBackendType() != ImGuiBackendType::OpenGL)
+                    layer->UnregisterTextureDescriptor(handle);
+                // The captured shared owners are released with the retired callback.
+            };
+            if (m_ImGuiLayer) m_ImGuiLayer->DeferRelease(std::move(release));
+            else release();
         }
-        m_RHITexturePreview.reset();
-        m_GLTexturePreview.reset();
+        m_TexturePreviewImGuiID = 0;
         m_LoadedTexturePath.clear();
         m_LoadedTextureWidth = 0;
         m_LoadedTextureHeight = 0;
@@ -86,6 +92,7 @@ namespace Axle {
                 if (m_RHITexturePreview->Init(desc)) {
                     const auto& helper = rhiDevice.GetNRIHelper();
                     nri::Queue* queue = rhiDevice.GetGraphicsQueue();
+                    nri::Result uploadResult = nri::Result::FAILURE;
                     if (queue && helper.UploadData) {
                         nri::TextureSubresourceUploadDesc subres = {};
                         subres.slices = pixels;
@@ -101,12 +108,16 @@ namespace Axle {
                         upDesc.after.stages = nri::StageBits::ALL;
                         upDesc.planes = nri::PlaneBits::ALL;
 
-                        helper.UploadData(*queue, &upDesc, 1, nullptr, 0);
+                        uploadResult = helper.UploadData(*queue, &upDesc, 1, nullptr, 0);
                     }
 
-                    uint64_t nativeHandle = m_RHITexturePreview->GetNativeSRVHandle();
-                    if (nativeHandle != 0 && m_ImGuiLayer) {
-                        m_TexturePreviewImGuiID = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                    if (uploadResult == nri::Result::SUCCESS) {
+                        uint64_t nativeHandle = m_RHITexturePreview->GetNativeSRVHandle();
+                        if (nativeHandle != 0 && m_ImGuiLayer)
+                            m_TexturePreviewImGuiID = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                    } else {
+                        AXLE_CORE_WARN("SceneHierarchyPanel: Texture preview upload failed for '{0}' (result {1})",
+                                       absPath.string(), static_cast<int>(uploadResult));
                     }
                 }
             }

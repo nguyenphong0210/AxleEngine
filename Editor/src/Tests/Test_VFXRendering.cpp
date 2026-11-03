@@ -12,7 +12,9 @@
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
+#include <Axle/SceneHierarchyPanel.hpp>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <cstring>
 #include <chrono>
 #include <array>
@@ -246,13 +248,16 @@ namespace Axle {
                 return false;
             auto drawQueuedThumbnail = [&](uint32_t expectedChannel) {
                 ImGui::Render();
+                const auto size = ImGui::GetDrawData()->DisplaySize;
+                const uint32_t width = static_cast<uint32_t>(size.x), height = static_cast<uint32_t>(size.y);
+                const auto layout = GetVFXReadbackLayout(width, height, false);
                 RHITexture guiColor;
                 RHIBuffer guiReadback;
                 RHICommandBuffer guiCommand;
                 RHIBufferDesc rbDesc;
-                rbDesc.Size = 128 * 128 * 4;
+                rbDesc.Size = layout.SlicePitch;
                 rbDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
-                if (!guiColor.Init(RHITextureDesc::RenderTarget2D(128, 128)) ||
+                if (!guiColor.Init(RHITextureDesc::RenderTarget2D(width, height)) ||
                     !guiReadback.Init(rbDesc) || !guiCommand.Init() || !guiCommand.Begin()) return false;
                 guiCommand.TransitionTexture(guiColor.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
                 nri::AttachmentDesc attachment{};
@@ -267,17 +272,17 @@ namespace Axle {
                 guiCommand.EndRendering();
                 guiCommand.TransitionTexture(guiColor.GetNative(), RHIResourceLayout::ColorAttachment, RHIResourceLayout::CopySource);
                 nri::TextureDataLayoutDesc data{};
-                data.rowPitch = 128 * 4;
+                data.rowPitch = layout.RowPitch;
                 data.slicePitch = rbDesc.Size;
                 nri::TextureRegionDesc region{};
-                region.width = region.height = 128;
+                region.width = width; region.height = height;
                 region.depth = 1;
                 device.GetNRICore().CmdReadbackTextureToBuffer(*guiCommand.GetNative(), *guiReadback.GetNative(), data, *guiColor.GetNative(), region);
                 if (!guiCommand.End() || !guiCommand.Submit()) return false;
                 device.WaitIdle();
                 auto* pixel = static_cast<const uint8_t*>(guiReadback.Map());
                 if (!pixel) return false;
-                const auto center = (64 * 128 + 64) * 4;
+                const auto center = (height / 2) * layout.RowPitch + (width / 2) * 4;
                 bool visible = pixel[center + expectedChannel] > 200 && pixel[center + (1 - expectedChannel)] < 20;
                 guiReadback.Unmap();
                 ui.End(); // The normal UI submission boundary finally retires old resources.
@@ -290,6 +295,55 @@ namespace Axle {
             auto nextHandle = thumbnails.GetOrCreateThumbnail(red);
             if (!check(nextHandle != 0 && nextHandle != replacement && drawQueuedThumbnail(1),
                        "Single-thumbnail invalidation preserves queued green pixels until UI submission")) return false;
+            // Selecting another texture can happen after Inspector has queued the old image.
+            // Exercise the real Inspector; probe for descriptor reuse BEFORE submitting the GPU work.
+            // A broken lifetime therefore fails deterministically without sampling a freed resource.
+            ImGui::GetIO().IniFilename = nullptr;
+            ImGui::GetIO().DisplaySize = ImVec2(1280, 780);
+            {
+                auto scene = std::make_shared<Scene>();
+                auto inspector = std::make_unique<SceneHierarchyPanel>(scene.get());
+                inspector->SetImGuiLayer(&ui);
+                const auto drawInspector = [&] {
+                    bool hierarchyOpen = false, propertiesOpen = true;
+                    ImGui::SetNextWindowPos(ImVec2(0, 0));
+                    ImGui::SetNextWindowSize(ImVec2(500, 700));
+                    inspector->OnImGuiRender(&hierarchyOpen, &propertiesOpen);
+                };
+                for (int action = 0; action < 4; ++action) {
+                    const auto& path = (action % 2 == 0) ? red : green;
+                    inspector->SetContext(scene.get());
+                    inspector->SetSelectedAsset(path);
+                    ui.Begin(); drawInspector(); ui.End(); // Warm up the new child layout.
+                    ui.Begin(); drawInspector();
+                    ImTextureID image = 0;
+                    const auto font = ImGui::GetIO().Fonts->TexRef.GetTexID();
+                    for (auto* window : ImGui::GetCurrentContext()->Windows) {
+                        if (!window->Active || !std::strstr(window->Name, "TexturePreviewViewport")) continue;
+                        for (const auto& command : window->DrawList->CmdBuffer)
+                            if (command.ElemCount && command.GetTexID() && command.GetTexID() != font)
+                                image = command.GetTexID();
+                    }
+                    if (!check(image != 0, "Real Inspector queues the selected texture image")) return false;
+                    ImGui::GetForegroundDrawList()->AddImage(image, ImVec2(0, 0), ImGui::GetIO().DisplaySize);
+                    if (action == 0) inspector->SetSelectedAsset(green);
+                    else if (action == 1) inspector->ClearSelectedAsset();
+                    else if (action == 2) inspector->SetContext(nullptr);
+                    else inspector.reset();
+                    RHITexture probe;
+                    if (!probe.Init(RHITextureDesc::RenderTarget2D(1, 1))) return false;
+                    const auto probeHandle = ui.RegisterTextureDescriptor(probe.GetNativeSRVHandle());
+                    if (!check(probeHandle != 0 && probeHandle != image,
+                               "Selection, clear, context detach and destruction retain queued Inspector descriptors")) {
+                        if (probeHandle) ui.UnregisterTextureDescriptor(probeHandle);
+                        ImGui::EndFrame();
+                        return false;
+                    }
+                    if (!check(drawQueuedThumbnail(action % 2),
+                               "Retired Inspector texture still renders its original GPU pixels")) return false;
+                    ui.UnregisterTextureDescriptor(probeHandle);
+                }
+            }
             RHITexture descriptorFixture;
             if (!descriptorFixture.Init(RHITextureDesc::RenderTarget2D(1, 1))) return false;
             std::vector<uint64_t> registrations;

@@ -12,12 +12,35 @@ executables. Editor still builds its required engine libraries and `AxleScripts`
 for gameplay/hot reload. It does not build `AxleRuntime` or any test executable.
 Regenerate the CMake project after updating from an older revision.
 
-## Empty Editor startup and explicit projects
+## Development sample, empty startup and explicit projects
 
-Launching `build/Editor/Release/AxleEditor.exe` without a project opens a fresh
-untitled workspace with **zero scene entities and zero project assets**. It does
-not search for `AxleEditor.axleproj`, reopen a sample scene, or scan old staged
-`assets` folders. Engine shaders, icons and fonts remain in `Engine/Resources`.
+Development builds open `Samples/TestProject/TestProject.axleproj` when launched
+without an explicit project. This loads the sample's authored `scenes/Test.axlescene`;
+it does not inject sample entities into every scene. The CMake cache entry
+`AXLE_EDITOR_DEFAULT_PROJECT` embeds an absolute startup project path in Editor
+only. Relative configured paths resolve from the repository root; runtime working
+directory does not select a project. Engine resources remain in `Engine/Resources`.
+
+Startup priority is: explicit `--project`/positional project, then `--empty-project`,
+then the configured development sample, then a fresh untitled project if the
+sample is disabled or missing. An invalid explicit project fails instead of
+opening another project. The Editor never scans nearby legacy configs or staged
+`assets` folders. Cooking/export CLI still requires an explicit `--project`.
+
+```powershell
+# Open the configured development sample (the default after building).
+./build/Editor/Release/AxleEditor.exe
+# Open a fresh project with zero entities and zero project assets.
+./build/Editor/Release/AxleEditor.exe --empty-project
+# Change the build's default project.
+cmake -S . -B build -DAXLE_EDITOR_DEFAULT_PROJECT=D:/Projects/MyGame/MyGame.axleproj
+# Disable the development convenience, including for distributed Editor builds.
+cmake -S . -B build '-DAXLE_EDITOR_DEFAULT_PROJECT:FILEPATH='
+```
+
+Rebuild Editor after changing the cache entry. The sample remains a real project
+in `Samples`; edits/save operations affect that project. No sample content is
+copied into Editor or Engine, and Runtime/test builds retain their separate paths.
 
 The untitled asset root is unique under `%TEMP%/AxleEngine/UntitledProjects`.
 Use **Save Project As** to preserve authored assets in the chosen project folder.
@@ -31,14 +54,16 @@ Open an existing project through **Open Project** or explicitly on launch:
 ./build/Editor/Release/AxleEditor.exe --project D:/Projects/MyGame/MyGame.axleproj
 ```
 
-An explicit project's configured start scene still opens. A missing asset folder
+The selected project's configured start scene opens. A missing asset folder
 stays associated with that project; it never falls back to another project.
 The CLI cooker likewise requires an explicit `--project` argument.
 
-For an automated five-frame startup check (real update/UI/render loop):
+For automated five-frame startup checks (real update/UI/render loop):
 
 ```powershell
 ./build/Editor/Release/AxleEditor.exe --verify-empty-startup --rhi=dx12
+# Check normal project selection without forcing an empty project.
+./build/Editor/Release/AxleEditor.exe --verify-startup --rhi=dx12
 ```
 
 ## Tests, explicitly
@@ -150,3 +175,21 @@ checks emptiness after the Editor's UI each frame. The updated Release Editor
 passed this check on D3D12, Vulkan and OpenGL (exit 0, 0 entities/0 assets), with
 logs in `build/canvas-frames-{dx12,vulkan,opengl}.log`. The initial checks above
 remain historical initialization evidence. Manual UI interaction was not tested.
+
+### Follow-up: configured development sample (2026-11-03)
+
+`AXLE_EDITOR_DEFAULT_PROJECT` now selects `Samples/TestProject/TestProject.axleproj`
+by default, as requested for development. Explicit project selection still wins;
+empty/missing/disabled defaults preserve untitled startup. CPU tests cover these
+precedence cases, including a missing explicit project failing rather than falling
+back to the sample.
+
+Release Editor and project tests built successfully; CTest passed 9/9. The real
+Editor ran five frames with the sample on D3D12, Vulkan and OpenGL, each reporting
+its sample root and the 10 entities authored in `Test.axlescene`. Additional native
+D3D12 runs passed for explicit override, `--empty-project`, the empty-startup
+assertion and launch from the executable directory. CMake generation was checked
+with the default disabled and with a repository-relative sample path, then the
+normal sample configuration was restored and rebuilt. Logs are in ignored
+`build/sample-*.log`. These checks verify project selection and startup, not
+rendering parity or gameplay-script execution. No sample content was changed.

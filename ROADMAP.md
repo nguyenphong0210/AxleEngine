@@ -26,9 +26,10 @@ expansion wait behind this track. Historical completed checkboxes are not proof
 of Phase 41 acceptance.
 
 **Build/startup prerequisite delivered (2026-11-03):** Tests and fixtures now live
-under top-level `Tests/`; Editor/default builds exclude Tests and Runtime. Default
-Editor startup uses a fresh empty project, with no bundled sample assets or
-injected scene entities. Explicit project opening and on-demand player builds
+under top-level `Tests/`; Editor/default builds exclude Tests and Runtime. Development
+Editor startup now selects the configured `Samples/TestProject` project;
+`--empty-project` preserves fresh empty startup. Samples are not bundled into
+Editor and scene entities are never injected automatically. Explicit project opening and on-demand player builds
 remain available. See [build/startup workflows](docs/guides/BUILD_WORKFLOWS.md).
 This preparation does not mark any Phase 41 rendering package complete.
 

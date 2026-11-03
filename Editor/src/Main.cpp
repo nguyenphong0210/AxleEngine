@@ -1,4 +1,5 @@
 #include "EditorStartup.hpp"
+#include "EditorStartupConfig.hpp"
 #include <Axle/Application.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/ImGuiLayer.hpp>
@@ -121,11 +122,17 @@ int main(int argc, char** argv) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
 
-    // Project opening is explicit. A nearby legacy config is never an implicit startup project.
+    // Explicit projects override the build-configured development sample.
     std::filesystem::path requestedProject;
+    bool emptyProject = false;
+    bool verifyEmptyStartup = false;
+    bool verifyStartup = false;
     for (int i = 1; i < argc; ++i) {
         std::string argument = argv[i];
-        if (argument == "--project" && i + 1 < argc) requestedProject = argv[++i];
+        if (argument == "--empty-project") emptyProject = true;
+        else if (argument == "--verify-empty-startup") verifyEmptyStartup = true;
+        else if (argument == "--verify-startup") verifyStartup = true;
+        else if (argument == "--project" && i + 1 < argc) requestedProject = argv[++i];
         else if (argument.rfind("--project=", 0) == 0) requestedProject = argument.substr(10);
         else {
             const std::filesystem::path candidate(argument);
@@ -166,12 +173,18 @@ int main(int argc, char** argv) {
             }
         }
     }
+    const auto startupPath = Axle::ResolveEditorStartupProject(
+        requestedProject, AXLE_EDITOR_DEFAULT_PROJECT, emptyProject || verifyEmptyStartup);
+    if (requestedProject.empty() && startupPath.empty() && !emptyProject && !verifyEmptyStartup &&
+        std::string(AXLE_EDITOR_DEFAULT_PROJECT).size() != 0)
+        AXLE_WARN("Configured development project is unavailable; opening an empty project: {0}", AXLE_EDITOR_DEFAULT_PROJECT);
+
     // Parse RHI Switcher command line flags (--rhi=dx12, --rhi=vulkan, --rhi=opengl)
     Axle::RHI::RHIBackendConfig rhiConfig = Axle::RHI::RHISwitcher::ParseCommandLine(argc, argv);
 
     // If no explicit CLI backend was provided, inspect Project configuration
     if (rhiConfig.RawArgument.empty()) {
-        const auto& projPath = requestedProject;
+        const auto& projPath = startupPath;
         if (std::filesystem::exists(projPath)) {
             auto tempProj = Axle::Project::New();
             Axle::ProjectSerializer serializer(tempProj);
@@ -219,37 +232,43 @@ int main(int argc, char** argv) {
         };
 
         {
-            auto startupProject = Axle::OpenEditorStartupProject(requestedProject);
+            auto startupProject = Axle::OpenEditorStartupProject(startupPath);
             if (!startupProject) {
-                AXLE_ERROR("Could not open the explicitly requested project.");
+                AXLE_ERROR("Could not open the selected startup project.");
                 return 1;
             }
             auto app = std::make_unique<Axle::Application>(spec);
             app->SetUIContext(std::make_unique<Axle::ImGuiLayer>(Axle::ToImGuiBackend(activeAPI)));
-            auto editorLayer = std::make_shared<EditorLayer>(requestedProject);
+            auto editorLayer = std::make_shared<EditorLayer>(startupPath);
             app->PushLayer(editorLayer);
-            bool verifyEmptyStartup = false;
-            for (int i = 1; i < argc; ++i)
-                if (std::string(argv[i]) == "--verify-empty-startup") verifyEmptyStartup = true;
-            if (verifyEmptyStartup) {
+            if (verifyEmptyStartup || verifyStartup) {
                 // Check after the Editor's UI each frame: panels may mutate the scene.
-                struct EmptyStartupVerifier final : Axle::Layer {
+                struct StartupVerifier final : Axle::Layer {
                     std::shared_ptr<EditorLayer> Editor;
                     unsigned Frames = 0;
-                    explicit EmptyStartupVerifier(std::shared_ptr<EditorLayer> editor) : Editor(std::move(editor)) {}
+                    bool RequireEmpty;
+                    std::filesystem::path ExpectedProjectDirectory = Axle::Project::GetProjectDirectory();
+                    StartupVerifier(std::shared_ptr<EditorLayer> editor, bool requireEmpty)
+                        : Editor(std::move(editor)), RequireEmpty(requireEmpty) {}
                     void OnImGuiRender() override {
-                        if (Editor->GetSceneEntityCount() != 0 ||
+                        if (Axle::Project::GetProjectDirectory() != ExpectedProjectDirectory)
+                            throw std::runtime_error("Editor startup project changed unexpectedly");
+                        if (RequireEmpty && (Editor->GetSceneEntityCount() != 0 ||
                             !Axle::Project::GetActive()->GetConfig().StartScene.empty() ||
-                            !std::filesystem::is_empty(Axle::Project::GetAssetDirectory()))
+                            !std::filesystem::is_empty(Axle::Project::GetAssetDirectory())))
                             throw std::runtime_error("Editor empty startup verification failed after UI frame");
                         if (++Frames == 5) {
-                            AXLE_INFO("Editor empty startup verification: PASS (0 entities, 0 assets, no start scene; 5 UI frames)");
+                            if (RequireEmpty)
+                                AXLE_INFO("Editor empty startup verification: PASS (0 entities, 0 assets, no start scene; 5 UI frames)");
+                            else
+                                AXLE_INFO("Editor startup verification: PASS (project '{0}', {1} entities; 5 UI frames)",
+                                    ExpectedProjectDirectory.string(), Editor->GetSceneEntityCount());
                             Axle::Application::Get().Close();
                         }
                     }
                 };
-                if (!requestedProject.empty()) throw std::runtime_error("Empty startup verification requires an untitled project");
-                app->PushLayer(std::make_shared<EmptyStartupVerifier>(editorLayer));
+                if (verifyEmptyStartup && !requestedProject.empty()) throw std::runtime_error("Empty startup verification requires an untitled project");
+                app->PushLayer(std::make_shared<StartupVerifier>(editorLayer, verifyEmptyStartup));
             }
             app->Run();
             AXLE_INFO("Main: Application run loop completed, now destroying app object...");

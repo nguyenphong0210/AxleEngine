@@ -97,3 +97,15 @@ add_dependencies(AxleEditor AxleScripts)
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/RuntimeBuildConfig.hpp"
     CONTENT "#pragma once\n#define AXLE_RUNTIME_CMAKE R\"axle(${CMAKE_COMMAND})axle\"\n#define AXLE_RUNTIME_BUILD_DIRECTORY R\"axle(${CMAKE_BINARY_DIR})axle\"\n#define AXLE_RUNTIME_EXECUTABLE_DIRECTORY R\"axle($<TARGET_FILE_DIR:AxleRuntime>)axle\"\n#define AXLE_RUNTIME_CONFIGURATION \"$<CONFIG>\"\n")
 target_include_directories(AxleEditor PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
+
+# Development convenience only. Clear this cache entry for a distributed Editor.
+set(AXLE_EDITOR_DEFAULT_PROJECT "${CMAKE_SOURCE_DIR}/Samples/TestProject/TestProject.axleproj"
+    CACHE FILEPATH "Project opened by Editor when no explicit project is supplied (empty disables)")
+set(AXLE_EDITOR_DEFAULT_PROJECT_PATH "")
+if(AXLE_EDITOR_DEFAULT_PROJECT)
+    get_filename_component(AXLE_EDITOR_DEFAULT_PROJECT_PATH "${AXLE_EDITOR_DEFAULT_PROJECT}"
+        ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+    file(TO_CMAKE_PATH "${AXLE_EDITOR_DEFAULT_PROJECT_PATH}" AXLE_EDITOR_DEFAULT_PROJECT_PATH)
+endif()
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/EditorStartupConfig.hpp"
+    CONTENT "#pragma once\n#define AXLE_EDITOR_DEFAULT_PROJECT R\"axle(${AXLE_EDITOR_DEFAULT_PROJECT_PATH})axle\"\n")

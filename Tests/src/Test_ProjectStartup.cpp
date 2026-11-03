@@ -18,6 +18,16 @@ int main() {
     std::filesystem::create_directories(source);
     std::ofstream(source / "AxleEditor.axleproj") << "Project:\n  Name: Must not auto-open\n  StartScene: scenes/Sample.axlescene\n  AssetDirectory: unrelated-assets\n";
     std::filesystem::current_path(source);
+    const auto defaultProject = source / "AxleEditor.axleproj";
+    CHECK(Axle::ResolveEditorStartupProject({}, defaultProject) == defaultProject, "Available configured development project is selected");
+    CHECK(Axle::ResolveEditorStartupProject({}, defaultProject, true).empty(), "Empty-project mode suppresses development sample");
+    CHECK(Axle::ResolveEditorStartupProject({}, source / "missing.axleproj").empty(), "Missing development default falls back to empty");
+    CHECK(Axle::ResolveEditorStartupProject({}, source).empty(), "A directory cannot be a startup project");
+    const auto explicitProject = source / "explicit.axleproj";
+    CHECK(Axle::ResolveEditorStartupProject(explicitProject, defaultProject) == explicitProject, "Explicit project takes priority over development default");
+    CHECK(Axle::ResolveEditorStartupProject(explicitProject, defaultProject, true) == explicitProject, "Explicit project also takes priority over empty-project convenience flag");
+    CHECK(!Axle::OpenEditorStartupProject(explicitProject), "Missing explicit project fails rather than selecting the sample");
+    CHECK(Axle::ResolveEditorStartupProject({}, {}).empty(), "Disabling the default keeps startup empty without nearby discovery");
     auto project = Axle::OpenEditorStartupProject();
     CHECK(project && project->GetConfig().StartScene.empty(), "Default startup has no sample start scene");
     const auto firstRoot = Project::GetProjectDirectory();

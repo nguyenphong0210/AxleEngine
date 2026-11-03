@@ -29,7 +29,8 @@ Physical GPU registration requires `-DAXLE_ENABLE_VFX_GPU_TESTS=ON`. Legacy
 interactive `AxleTests.exe` remains separately invoked and is not registered as
 a full unattended CTest suite.
 
-`ProjectStartupTests` checks fresh untitled projects, authoritative missing asset
+`ProjectStartupTests` checks explicit/development/empty startup selection, fresh
+untitled projects, authoritative missing asset
 roots, Save As asset preservation and explicit project opening. A headless ImGui
 regression renders the visible UI Library across multiple frames, checks that a
 deleted canvas stays deleted, and verifies explicit canvas/widget creation. Native Editor

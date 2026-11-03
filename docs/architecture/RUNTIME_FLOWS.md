@@ -19,7 +19,7 @@ sequenceDiagram
         Main-->>User: exit code
     else normal editor
         Main->>Switch: ParseCommandLine
-        opt explicit project and no backend CLI
+        opt selected project and no backend CLI
             Main->>Config: Deserialize project settings
             Config-->>Main: RHIBackend
         end
@@ -27,7 +27,7 @@ sequenceDiagram
             Main->>Switch: ResolveAndInitialize
             Switch-->>Main: selected API or fallback OpenGL
         end
-        Main->>Main: activate explicit project or create fresh untitled workspace
+        Main->>Main: activate explicit/configured development project or create untitled workspace
         Main->>App: construct with GraphicsBackend
         App->>App: init Log, Jobs, Physics, Window
         opt OpenGL selected
@@ -36,12 +36,12 @@ sequenceDiagram
         Main->>App: SetUIContext ImGuiLayer
         App->>UI: Init native window
         Main->>App: PushLayer EditorLayer
-        App->>Layer: OnAttach (explicit start scene or empty scene)
+        App->>Layer: OnAttach (selected start scene or empty scene)
         Main->>App: Run
     end
 ```
 
-Editor Main handles cook/export before normal UI startup and requires an explicit project for cooking. Default startup has zero entities/assets; it never discovers a nearby sample project. Backend settings come from CLI/project with fallback. UI backend availability and headless device capabilities are different concerns.
+Editor Main handles cook/export before normal UI startup and requires an explicit project for cooking. Development startup selects the build-configured Samples project unless overridden by an explicit project or `--empty-project`. Empty mode has zero entities/assets; nearby project discovery is disabled. Backend settings come from CLI/project with fallback. UI backend availability and headless device capabilities are different concerns.
 
 Sources: [Editor/src/Main.cpp](../../Editor/src/Main.cpp), [Engine/Core/src/Application.cpp](../../Engine/Core/src/Application.cpp), [Engine/Core/src/LayerStack.cpp](../../Engine/Core/src/LayerStack.cpp).
 

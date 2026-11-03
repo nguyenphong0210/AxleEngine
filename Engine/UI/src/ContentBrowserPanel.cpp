@@ -579,23 +579,6 @@ namespace Axle {
         }
         ParticleEffectDefinition effectDef;
         effectDef.Name = newPath.stem().string();
-        EmitterDefinition emitter;
-        emitter.Id = "emitter-1";
-        emitter.Name = "Flame Base";
-        emitter.Enabled = true;
-        emitter.Config.Name = newPath.stem().string();
-        emitter.Config.MaxParticles = 1000;
-        emitter.Config.EmissionRate = 50.0f;
-        emitter.Config.Lifetime = FloatRange(1.0f, 2.0f);
-        emitter.Config.InitialSpeed = FloatRange(2.0f, 5.0f);
-        emitter.Config.Shape.Type = ParticleEmitterShapeType::Cone;
-        emitter.Config.Shape.ConeAngle = 0.52359877f;
-        emitter.Config.Shape.Radius = 0.5f;
-        emitter.Config.ColorOverLifetime.StartColor = glm::vec4(1.0f, 0.6f, 0.2f, 1.0f);
-        emitter.Config.ColorOverLifetime.EndColor = glm::vec4(0.2f, 0.05f, 0.0f, 0.0f);
-        emitter.Config.BlendMode = ParticleBlendMode::Additive;
-        effectDef.Emitters.push_back(std::move(emitter));
-
         std::vector<VFXDiagnostic> diags;
         if (ParticleEffectSerializer::SerializeToFile(newPath.string(), effectDef, &diags)) {
             AssetManager::GetOrCreateMetadata(newPath);

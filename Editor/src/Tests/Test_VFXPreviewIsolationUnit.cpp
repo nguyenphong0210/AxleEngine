@@ -207,6 +207,8 @@ namespace {
 
 static bool TestPanelDocumentIntegration() {
     Axle::VFXEditorPanel panel;
+    VFX_TEST_CHECK(panel.GetEmitterStackCount() == 0 && panel.GetPreviewSystem() == nullptr, "Panel starts empty");
+    panel.AddEmitterStack("First");
     auto first = panel.GetDocument().GetDefinition().Emitters[0].Id;
     auto firstConfig = panel.GetConfig();
     Axle::ParticleEmitterConfig second;
@@ -249,6 +251,7 @@ static bool TestPanelDocumentIntegration() {
 
 static bool TestPausedSeekAndLoopBoundary() {
     Axle::VFXEditorPanel direct, seek;
+    direct.AddEmitterStack("Fixture");
     auto cfg = direct.GetConfig();
     cfg.Duration = 1.0f;
     cfg.Looping = true;

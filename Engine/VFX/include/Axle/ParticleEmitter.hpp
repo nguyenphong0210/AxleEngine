@@ -114,6 +114,9 @@ namespace Axle {
         // Particle Physics Collisions
         ParticleCollisionConfig Collision;
 
+        // Neutral authoring defaults, independent of optional gameplay presets.
+        static ParticleEmitterConfig CreateNeutral();
+
         // Factory Presets for common automotive & character gameplay VFX
         static ParticleEmitterConfig CreateSmoke(const glm::vec3& color = glm::vec3(0.8f));
         static ParticleEmitterConfig CreateFire();

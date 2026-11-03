@@ -1576,6 +1576,7 @@ namespace Axle {
     }
 
     struct ParticleEmitterComponent {
+        bool HasExplicitDefinition = false; // Preserves a deliberately empty authored stack.
         ParticleEmitterConfig Config;
         std::shared_ptr<ParticleSystem> System = nullptr;
         std::string AssetPath;
@@ -1610,7 +1611,7 @@ namespace Axle {
 
         // Deep copy: instantiates independent runtime systems for each stack and syncs primary alias
         ParticleEmitterComponent(const ParticleEmitterComponent &other)
-            : Config(other.Config), AssetPath(other.AssetPath), EffectName(other.EffectName),
+            : HasExplicitDefinition(other.HasExplicitDefinition), Config(other.Config), AssetPath(other.AssetPath), EffectName(other.EffectName),
               EffectSeed(other.EffectSeed), TextureAsset(other.TextureAsset), TexturePath(other.TexturePath),
               Texture(other.Texture), NormalMapAsset(other.NormalMapAsset),
               NormalMapPath(other.NormalMapPath), NormalMap(other.NormalMap), Active(other.Active),
@@ -1621,6 +1622,7 @@ namespace Axle {
 
         ParticleEmitterComponent& operator=(const ParticleEmitterComponent& other) {
             if (this != &other) {
+                HasExplicitDefinition = other.HasExplicitDefinition;
                 Config = other.Config;
                 AssetPath = other.AssetPath;
                 EffectName = other.EffectName;
@@ -1646,6 +1648,10 @@ namespace Axle {
         ParticleEmitterComponent& operator=(ParticleEmitterComponent&&) noexcept = default;
 
         void Initialize() {
+            if (HasExplicitDefinition && EmitterStacks.empty()) {
+                SyncPrimary();
+                return;
+            }
             Config.SimulationSpace = SimulationSpace;
             if (EmitterStacks.empty()) {
                 ParticleEmitterStack primary("Base Emitter", Config);
@@ -1675,6 +1681,12 @@ namespace Axle {
                 TexturePath = EmitterStacks[0].TexturePath;
                 NormalMapPath = EmitterStacks[0].NormalMapPath;
                 SimulationSpace = Config.SimulationSpace;
+            } else {
+                System.reset();
+                Texture.reset();
+                NormalMap.reset();
+                TexturePath.clear();
+                NormalMapPath.clear();
             }
         }
 
@@ -1788,6 +1800,7 @@ namespace Axle {
         }
 
         void SetEffectDefinition(const ParticleEffectDefinition& effect) {
+            HasExplicitDefinition = true;
             EffectName = effect.Name;
             EffectSeed = effect.Seed;
             EmitterStacks.clear();

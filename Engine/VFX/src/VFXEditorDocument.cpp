@@ -11,13 +11,7 @@ namespace Axle {
         m_Definition = ParticleEffectDefinition();
         m_Definition.Name = effectName;
 
-        EmitterDefinition baseEmitter;
-        baseEmitter.Id = GenerateUniqueEmitterId();
-        baseEmitter.Name = "Base Emitter";
-        baseEmitter.Enabled = true;
-        m_Definition.Emitters.push_back(std::move(baseEmitter));
-
-        m_SelectedEmitterId = m_Definition.Emitters[0].Id;
+        m_SelectedEmitterId.clear();
         m_FilePath.clear();
         m_IsDirty = false;
         m_CurrentRevision = 0;
@@ -174,16 +168,6 @@ namespace Axle {
     }
 
     bool VFXEditorDocument::RemoveEmitter(const std::string& id, std::vector<VFXDiagnostic>& diagnostics) {
-        if (m_Definition.Emitters.size() <= 1) {
-            diagnostics.push_back(VFXDiagnostic{
-                VFXDiagnosticSeverity::Warning,
-                "WARN_VFX_REMOVE_LAST",
-                id,
-                "Cannot remove the only emitter in the effect."
-            });
-            return false;
-        }
-
         auto it = std::find_if(m_Definition.Emitters.begin(), m_Definition.Emitters.end(),
                                [&](const EmitterDefinition& e) { return e.Id == id; });
         if (it == m_Definition.Emitters.end()) return false;

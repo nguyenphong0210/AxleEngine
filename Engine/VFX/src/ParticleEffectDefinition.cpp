@@ -73,10 +73,6 @@ namespace Axle {
             outErrors.push_back("Unsupported schema version: " + std::to_string(definition.SchemaVersion));
         }
 
-        if (definition.Emitters.empty()) {
-            outErrors.push_back("Effect definition contains zero emitters. At least one emitter is required.");
-        }
-
         if (definition.Emitters.size() > 256)
             outErrors.push_back("Effect exceeds the 256-emitter authoring limit.");
         uint64_t poolCapacity = 0;
@@ -323,7 +319,7 @@ namespace Axle {
         baseEmitter.Enabled = true;
         baseEmitter.TriggerOnly = false;
         baseEmitter.LocalTransform = EmitterTransform{};
-        baseEmitter.Config = ParticleEmitterConfig::CreateFire();
+        baseEmitter.Config = ParticleEmitterConfig::CreateNeutral();
         baseEmitter.Config.Name = baseEmitter.Name;
         baseEmitter.Resources = EmitterResources{};
 

@@ -94,7 +94,7 @@ namespace Axle {
         size_t GetEmitterStackCount() const { return m_EmitterStacks.size(); }
         size_t GetSelectedStackIndex() const { return m_SelectedStackIndex; }
         ParticleEmitterStack* GetCurrentEmitterStack();
-        void AddEmitterStack(const std::string& name, const ParticleEmitterConfig& config = {});
+        void AddEmitterStack(const std::string& name, const ParticleEmitterConfig& config = ParticleEmitterConfig::CreateNeutral());
         void RemoveEmitterStack(size_t index);
         void SelectEmitterStack(size_t index);
 
@@ -113,7 +113,6 @@ namespace Axle {
         void DrawShurikenInspector(float width, float height);
 
         // Modular Shuriken Group Accordions
-        void DrawPresetSelector();
         void DrawMainModule();
         void DrawEmissionAndBurstsModule();
         void DrawShapeControls();

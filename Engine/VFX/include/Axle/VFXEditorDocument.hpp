@@ -48,7 +48,7 @@ namespace Axle {
         EmitterDefinition* FindEmitterById(const std::string& id);
         const EmitterDefinition* FindEmitterById(const std::string& id) const;
 
-        std::string AddEmitter(const std::string& name = "New Emitter", const ParticleEmitterConfig& cfg = {});
+        std::string AddEmitter(const std::string& name = "New Emitter", const ParticleEmitterConfig& cfg = ParticleEmitterConfig::CreateNeutral());
         std::string DuplicateEmitter(const std::string& id);
         bool RemoveEmitter(const std::string& id, std::vector<VFXDiagnostic>& diagnostics);
         bool RenameEmitter(const std::string& id, const std::string& newName);

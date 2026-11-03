@@ -16,13 +16,14 @@ namespace {
     bool TestBaselineDocumentContract() {
         Axle::VFXEditorDocument doc;
         VFX_TEST_CHECK(!doc.GetDefinition().Name.empty(), "Document initialized with default effect name");
-        VFX_TEST_CHECK(doc.GetDefinition().Emitters.size() == 1, "Document initialized with exactly one default emitter");
+        VFX_TEST_CHECK(doc.GetDefinition().Emitters.empty() && doc.GetSelectedEmitter() == nullptr, "New document is empty without a hidden emitter");
         VFX_TEST_CHECK(!doc.IsDirty(), "New document is clean");
         return true;
     }
 
     bool TestDocumentAddDuplicateRemoveEmitter() {
         Axle::VFXEditorDocument doc;
+        doc.LoadDefinition(Axle::CreateDefaultParticleEffect("Fixture"));
         std::vector<Axle::VFXDiagnostic> diags;
 
         std::string e2Id = doc.AddEmitter("Sparks");
@@ -39,12 +40,13 @@ namespace {
         VFX_TEST_CHECK(removed, "Successfully removed duplicated emitter");
         VFX_TEST_CHECK(doc.GetDefinition().Emitters.size() == 2, "Document has 2 emitters after removal");
 
-        // Attempting to remove until 0 must fail and diagnose
+        // Explicitly removing the final emitter yields an empty authored effect
         doc.RemoveEmitter(e2Id, diags);
         VFX_TEST_CHECK(doc.GetDefinition().Emitters.size() == 1, "Only 1 emitter left");
         bool removeLast = doc.RemoveEmitter(doc.GetDefinition().Emitters[0].Id, diags);
-        VFX_TEST_CHECK(!removeLast, "Cannot remove the only emitter");
-        VFX_TEST_CHECK(doc.GetDefinition().Emitters.size() == 1, "Emitter count stays at 1");
+        VFX_TEST_CHECK(removeLast, "Last emitter can be removed");
+        VFX_TEST_CHECK(doc.GetDefinition().Emitters.empty() && doc.GetSelectedEmitter() == nullptr, "Empty effect clears selection");
+        VFX_TEST_CHECK(doc.Undo() && doc.GetDefinition().Emitters.size() == 1, "Undo restores last emitter");
 
         return true;
     }
@@ -88,6 +90,7 @@ namespace {
 
     bool TestDocumentFailedSavePreservesState() {
         Axle::VFXEditorDocument doc;
+        doc.LoadDefinition(Axle::CreateDefaultParticleEffect("Fixture"));
         std::vector<Axle::VFXDiagnostic> diags;
 
         doc.AddEmitter("Debris");
@@ -104,6 +107,7 @@ namespace {
 
     bool TestDocumentReorderAndRename() {
         Axle::VFXEditorDocument doc;
+        doc.LoadDefinition(Axle::CreateDefaultParticleEffect("Fixture"));
         std::string e1 = doc.GetDefinition().Emitters[0].Id;
         std::string e2 = doc.AddEmitter("Second");
         std::string e3 = doc.AddEmitter("Third");

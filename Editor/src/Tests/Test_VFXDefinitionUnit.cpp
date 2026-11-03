@@ -63,10 +63,10 @@ namespace {
         VFX_TEST_CHECK(!Axle::ValidateParticleEffectDefinition(dupDef, errors), "Duplicate IDs must fail validation");
         VFX_TEST_CHECK(!errors.empty(), "Duplicate ID error reported");
 
-        // 3. Zero emitters failure
+        // 3. Empty authored effects are valid
         Axle::ParticleEffectDefinition emptyDef;
         emptyDef.Emitters.clear();
-        VFX_TEST_CHECK(!Axle::ValidateParticleEffectDefinition(emptyDef, errors), "Empty effect must fail validation");
+        VFX_TEST_CHECK(Axle::ValidateParticleEffectDefinition(emptyDef, errors), "Empty authored effect must be valid");
 
         // 4. Invalid transform quaternion
         Axle::ParticleEffectDefinition badRotDef = campfire;

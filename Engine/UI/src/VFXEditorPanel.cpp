@@ -48,18 +48,8 @@ namespace Axle {
     )";
 
     VFXEditorPanel::VFXEditorPanel() {
-        // Initialize default emitter preset: Fire
-        m_Config = ParticleEmitterConfig::CreateFire();
-        m_Config.MaxParticles = 1000;
-
-        ParticleEmitterStack baseStack("Fire Base", m_Config);
-        baseStack.Initialize();
-        m_EmitterStacks.push_back(std::move(baseStack));
-        m_SelectedStackIndex = 0;
-        ParticleEffectDefinition initial;
-        initial.Name = "Fire";
-        initial.Emitters.push_back(m_EmitterStacks.front().GetDefinition());
-        m_Document.LoadDefinition(initial);
+        m_Config = ParticleEmitterConfig::CreateNeutral();
+        SyncStacksFromDocument();
 
         if (Window::HasActiveContext()) {
             FramebufferSpecification spec;
@@ -158,8 +148,8 @@ namespace Axle {
                 m_SelectedStackIndex = m_EmitterStacks.size();
             m_EmitterStacks.emplace_back(emitter);
         }
-        if (!m_EmitterStacks.empty())
-            m_Config = m_EmitterStacks[m_SelectedStackIndex].Config;
+        m_Config = m_EmitterStacks.empty() ? ParticleEmitterConfig::CreateNeutral()
+                                          : m_EmitterStacks[m_SelectedStackIndex].Config;
         ResetPreview();
     }
 
@@ -697,7 +687,7 @@ namespace Axle {
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
             if (ImGui::Button("+", ImVec2(22.0f, 20.0f))) {
                 std::string newName = "Emitter " + std::to_string(m_EmitterStacks.size() + 1);
-                AddEmitterStack(newName, m_Config);
+                AddEmitterStack(newName, ParticleEmitterConfig::CreateNeutral());
             }
 
             ImGui::Separator();
@@ -758,7 +748,7 @@ namespace Axle {
                     if (ImGui::MenuItem("Show All"))
                         for (auto &stack : m_EmitterStacks)
                             stack.Visible = true;
-                    if (m_EmitterStacks.size() > 1 && ImGui::MenuItem("Delete Emitter")) {
+                    if (ImGui::MenuItem("Delete Emitter")) {
                         RemoveEmitterStack(i);
                         ImGui::EndPopup();
                         ImGui::PopID();
@@ -860,33 +850,6 @@ namespace Axle {
         }
 
         ImGui::PopStyleVar();
-    }
-
-    void VFXEditorPanel::DrawPresetSelector() {
-        if (ImGui::CollapsingHeader("⚡ VFX Presets (Quick Setup)", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::TextDisabled("Load built-in physical particle presets:");
-            ImGui::Spacing();
-
-            auto PresetBtn = [&](const char* label, const ParticleEmitterConfig& cfg) {
-                if (ImGui::Button(label, ImVec2(ImGui::GetContentRegionAvail().x * 0.48f, 26.0f))) {
-                    m_Config = cfg;
-                    SyncCurrentStackConfig();
-                    ResetPreview();
-                }
-            };
-
-            PresetBtn("🔥 Fire (Campfire / Torch)", ParticleEmitterConfig::CreateFire());
-            ImGui::SameLine();
-            PresetBtn("💨 Smoke (Volumetric Plume)", ParticleEmitterConfig::CreateSmoke());
-
-            PresetBtn("✨ Sparks (Bouncing Embers)", ParticleEmitterConfig::CreateSparks());
-            ImGui::SameLine();
-            PresetBtn("🚗 Tire Burnout (Dense Smoke)", ParticleEmitterConfig::CreateTireBurnout());
-
-            PresetBtn("🏜️ Dirt Rooster (Mud / Gravel)", ParticleEmitterConfig::CreateDustTrail());
-            ImGui::SameLine();
-            PresetBtn("💥 Exhaust Backfire (Pop & Spark)", ParticleEmitterConfig::CreateExhaustBackfire());
-        }
     }
 
     void VFXEditorPanel::DrawMainModule() {
@@ -1504,9 +1467,14 @@ namespace Axle {
     void VFXEditorPanel::DrawShurikenInspector(float width, float height) {
         ImGui::BeginChild("VFX_Shuriken_Inspector", ImVec2(width, height), true);
         {
+            if (m_EmitterStacks.empty()) {
+                ImGui::TextWrapped("This effect has no emitters. Add an emitter to start authoring.");
+                if (ImGui::Button("Add Emitter", ImVec2(-1, 28))) AddEmitterStack("Emitter");
+                ImGui::EndChild();
+                return;
+            }
             m_Document.BeginTransaction();
             ImGui::PushID(GetCurrentEmitterStack() ? GetCurrentEmitterStack()->Id.c_str() : "NoEmitter");
-            DrawPresetSelector();
             DrawMainModule();
             DrawEmissionAndBurstsModule();
             DrawShapeControls();

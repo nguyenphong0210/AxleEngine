@@ -174,6 +174,25 @@ namespace Axle {
         }
     }
 
+    ParticleEmitterConfig ParticleEmitterConfig::CreateNeutral() {
+        ParticleEmitterConfig cfg;
+        cfg.Name = "Emitter";
+        cfg.MaxParticles = 1000;
+        cfg.EmissionRate = 10;
+        cfg.Lifetime = {5, 5};
+        cfg.InitialSpeed = {1, 1};
+        cfg.StartSize = cfg.EndSize = {0.1f, 0.1f};
+        cfg.StartRotation = cfg.AngularVelocity = {0, 0};
+        cfg.Drag = 0;
+        cfg.SizeOverLifetime.SetConstant(1);
+        cfg.SpeedOverLifetime.SetConstant(1);
+        cfg.AlphaOverLifetime.SetConstant(1);
+        cfg.ColorOverLifetime = ColorGradient(glm::vec4(1), glm::vec4(1));
+        cfg.NearFadeEnabled = false;
+        cfg.SoftnessDistance = 0;
+        return cfg;
+    }
+
     ParticleEmitterConfig ParticleEmitterConfig::CreateSmoke(const glm::vec3& color) {
         ParticleEmitterConfig cfg;
         cfg.Name = "SmokeEmitter";

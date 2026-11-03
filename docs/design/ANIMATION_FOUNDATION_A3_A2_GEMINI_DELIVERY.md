@@ -5,6 +5,12 @@ Branch: `main`
 Baseline Commit: `0b83135` (`docs(animation): scope Gemini continuation to A3 and A2 foundation work`)  
 Implementation Scope: **Package A3** and **Package A2** strictly, as specified in `docs/design/ANIMATION_GEMINI_NEXT_TASKS_PROMPT.txt` and `docs/design/ANIMATION_PHASE_40_GEMINI_CONTINUATION_HANDOFF.md`.
 
+**Subsequent review at `c13b21a`: acceptance reopened.** The
+[A3/A2 review](ANIMATION_A3_A2_GEMINI_REVIEW.md) reproduced eight failing
+expectations despite a passing build and supplied CPU suite. A3 publication and
+A2 baking/budget coverage require corrections. The delivery claims below record
+the original submission; they do not supersede that review or current ROADMAP.
+
 ---
 
 ## 1. Executive Summary

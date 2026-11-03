@@ -1,0 +1,28 @@
+Fix only the A3/A2 review findings in AxleEngine. Do not start any other Phase 40 package.
+
+First inspect git status and current HEAD. Reviewed delivery is c13b21a (3fabd5e, 0463c3e plus its report). Preserve all unrelated/newer work.
+
+Read:
+1. docs/design/ANIMATION_A3_A2_GEMINI_REVIEW.md -- eight reproduced failing expectations and exact source references.
+2. docs/design/ANIMATION_PHASE_40_GEMINI_CONTINUATION_HANDOFF.md -- original two-package scope and acceptance.
+3. docs/design/ANIMATION_FOUNDATION_A3_A2_GEMINI_DELIVERY.md and the A2/A3 roadmap entries -- historical claims that must be corrected based on actual evidence.
+
+The review confirms the current Release build and two Animation CTests pass. A supplementary production-API probe still fails eight checks. Do not infer correctness from the existing green tests or weaken the failing expectations.
+
+Work in this order with a coherent local commit and relevant permanent CPU tests for each correction:
+
+1. R1/R2: enforce validated resource construction and genuine immutable publication. Public constructors/default construction currently bypass the factory; ReplaceMesh accepts an invalid non-null object; implicit object assignment can overwrite a mesh shared by other entities. Close the actual API holes and migrate supported callers. Preserve the old resource on failed replacement and keep nested builder aliases detached. Test malformed non-null resources and object-level mutation, not only nullptr replacement or read-only accessors.
+
+2. R4-R6: preserve all distinct representable source STEP boundaries; do not coalesce them using the adaptive minimum interval. Implement or explicitly reject CONSTANT_NEXT semantics rather than changing them to CONSTANT_PREV. Ignore irrelevant terminal interpolation when classifying actual take intervals. Add the exact close-step, constant-next and terminal-linear regressions in the review, with ufbx reference evaluation.
+
+3. R3/R8: fix rotational aliasing and the accuracy contract. The reviewed 0-to-2160-degree Z rotation over 1/30 second passes all existing probes yet has pi radians error at 1/360 second. Use justified source-aware bounds/variation handling for supported curves or reject unsupported cases; extra fixed probes/frame rate alone are insufficient. State explicitly whether guarantees are continuous or only measured on a validation grid. BakeChannel must preserve last-good caller output on failure, including mixed interpolation and exhausted limits. Validate configuration and bound actual work as appropriate.
+
+4. R7: remove silent test skips. The current budget/refinement block matches only 2 of 3 rig nodes and never enters its assertions. Make mapping prerequisites fail explicitly and exercise real over-budget/refinement failures. Test an actual nonlinear source against off-grid ufbx samples; the linear fast-rotation peak fixture alone does not establish adaptive accuracy. Do not claim exporter coverage that does not exist.
+
+Local ignored probe artifacts are documented in the review and may be inspected if present. Promote the behaviors into checked-in, always-active tests; do not make the production suite depend on ignored review files or source-text grep.
+
+Run the available AxleAnimationUnitTests build and both Animation CTests after relevant changes. Record exact commands and exit codes. Missing compiler/GPU/native UI checks are NOT RUN. No GPU/UI implementation is requested.
+
+Update the delivery report and only the A2/A3 acceptance supported by actual results. A3 is reopened; A2 has technical baking gaps as well as exporter-corpus gaps. Keep full Phase 40 and Phase 38.3/39 manual checks open. English code/comments/docs/commits. Local commits only, no push.
+
+STOP after these review corrections and a delivery summary with commit hashes, actual tests and remaining limitations. Do not proceed into blend spaces, events, renderer, Animation Editor UI, cooking integration or another phase.

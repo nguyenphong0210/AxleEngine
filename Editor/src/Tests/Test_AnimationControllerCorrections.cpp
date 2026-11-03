@@ -44,5 +44,12 @@ bool RunAnimationControllerCorrectionTests() {
     ANIMATION_CHECK(!AnimationAssetCodec::CompileStateMachineFromDefinition(changed, rig, "", &diagnostic) && !diagnostic.empty(), "Missing motion fails with diagnostics rather than bind-pose success");
     changed = definition; changed.CompatibilitySignature = "wrong-rig";
     ANIMATION_CHECK(!AnimationAssetCodec::CompileStateMachineFromDefinition(changed, rig, "", &diagnostic), "Incompatible controller rig rejected");
+    auto collision = definition;
+    collision.Parameters.push_back({"other-id","speed",AnimatorParameterType::Float,0.0f});
+    ANIMATION_CHECK(!collision.Validate() && !AnimationAssetCodec::CompileStateMachineFromDefinition(collision,rig), "Controller publication rejects name/ID alias collisions");
+    auto invalidExit = definition; invalidExit.Transitions[0].HasExitTime = true; invalidExit.Transitions[0].ExitPhase = 2;
+    ANIMATION_CHECK(!invalidExit.Validate(), "Unreachable loop exit phases reject before compilation");
+    auto invalidNode = definition; invalidNode.States[0].NodeType = static_cast<AnimationNodeType>(99);
+    ANIMATION_CHECK(!invalidNode.Validate(), "Unknown motion node rejects before publication");
     return true;
 }

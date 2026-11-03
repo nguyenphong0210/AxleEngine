@@ -25,6 +25,8 @@ Full Phase 40 rendering/editor acceptance remains separate.
 
 | R3 component integration | Component accessors now read the animator's canonical slots, persist one override per declared ID, synchronize conventional caches when called by ID, reject wrong-type/nonfinite writes, and expose authored values before binding. Old aliases load deterministically with ID precedence. Opaque-clone diagnostics prevent silently saving a lost controller. Permanent component/save/reopen tests PASS; `build/animation-fix-component-build.log`, `build/animation-fix-component-ctest.log`. |
 
+| Validation/ownership boundary | Explicit bind TRS cannot hide nonfinite matrices; compatibility includes signed fallback components. Controller publication rejects name/ID namespace collisions, unknown node types and unreachable exit phases. A standalone machine snapshot owns its sampled rig even when it was originally updated with a borrowed rig. Permanent boundary/lifetime tests PASS in the final Release suite. |
+
 Other review findings remain open until a correction row and its evidence are
 added here. The original review documents the pre-fix behavior, not the current
 acceptance result.

@@ -339,7 +339,7 @@ namespace Axle {
         clone->m_DeclaredParameters = m_DeclaredParameters;
         clone->m_NameToIdMap = m_NameToIdMap;
 
-        // Copy persistent parameters, but clear pending triggers and reset clocks to initial state
+        // Snapshot clocks and persistent values; pending triggers never cross instance boundaries.
         clone->m_FloatParams = m_FloatParams;
         clone->m_IntParams = m_IntParams;
         clone->m_BoolParams = m_BoolParams;
@@ -353,7 +353,8 @@ namespace Axle {
         clone->m_TransitionDuration = m_TransitionDuration;
         clone->m_TransitionElapsed = m_TransitionElapsed;
 
-        clone->m_ResourceRig = m_ResourceRig ? std::make_shared<Skeleton>(*m_ResourceRig) : nullptr;
+        const auto* sourceRig = m_ResourceRig ? m_ResourceRig.get() : m_CurrentPose.GetSkeletonBinding();
+        clone->m_ResourceRig = sourceRig ? std::make_shared<Skeleton>(*sourceRig) : nullptr;
         clone->m_CurrentPose = m_CurrentPose;
         if (clone->m_ResourceRig) clone->m_CurrentPose.BindSkeleton(*clone->m_ResourceRig);
         clone->m_GlobalMatrices = m_GlobalMatrices;

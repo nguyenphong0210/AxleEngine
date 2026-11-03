@@ -42,6 +42,13 @@ static bool TestLosslessBindAndInvalidOutputs() {
     ANIMATION_CHECK(clip.ReplaceChannels({valid}, &first), "Publish valid channels");
     auto invalid = valid; invalid.Positions[1].TimeStamp = 0;
     ANIMATION_CHECK(!clip.ReplaceChannels({invalid}, &first) && clip.GetChannels()[0].Positions[1].TimeStamp == 1, "Rejected edit keeps previous channels");
+    Bone explicitBone; explicitBone.Name = "Explicit"; explicitBone.HasExplicitBindTRS = true;
+    explicitBone.LocalTransform[0][0] = std::numeric_limits<float>::quiet_NaN();
+    Skeleton invalidRig("Invalid"); invalidRig.AddBone(explicitBone);
+    ANIMATION_CHECK(!invalidRig.IsValid(), "Explicit TRS cannot mask nonfinite local matrices");
+    explicitBone.LocalTransform = glm::mat4(1);
+    auto equivalent = explicitBone; equivalent.BindScale = glm::vec3(-1,-1,1); equivalent.BindRotation = glm::quat(0,0,0,1);
+    ANIMATION_CHECK(SkeletonDefinition::ComputeSignature({explicitBone}) != SkeletonDefinition::ComputeSignature({equivalent}), "Signed partial-channel fallback participates in compatibility");
     return true;
 }
 

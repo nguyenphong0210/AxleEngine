@@ -183,8 +183,8 @@ namespace Axle {
             ReportError("CrossfadeSeconds must be non-negative and finite");
         }
 
-        if (HasExitTime && (!IsFinite(ExitPhase) || ExitPhase < 0.0f)) {
-            ReportError("ExitPhase must be non-negative and finite");
+        if (HasExitTime && (!IsFinite(ExitPhase) || ExitPhase < 0.0f || ExitPhase > 1.0f)) {
+            ReportError("ExitPhase must be finite and within [0,1]");
         }
 
         for (const auto& cond : AllConditions) {
@@ -221,6 +221,14 @@ namespace Axle {
         }
         if (!IsFinite(GraphPosition)) {
             ReportError("GraphPosition coordinates must be finite");
+        }
+
+        if (NodeType != AnimationNodeType::Clip && NodeType != AnimationNodeType::BlendSpace1D && NodeType != AnimationNodeType::BlendSpace2D)
+            ReportError("Unknown motion node type");
+        std::unordered_set<float> sampleValues;
+        for (const auto& point : BlendPoints) {
+            if (!IsFinite(point.Value) || point.ClipRef.empty() || !sampleValues.insert(point.Value).second)
+                ReportError("Invalid or duplicate blend sample");
         }
 
         return valid;
@@ -298,6 +306,12 @@ namespace Axle {
             if (!param.Validate(outErrors)) {
                 valid = false;
             }
+        }
+
+        for (const auto& parameter : Parameters) {
+            auto alias = paramMap.find(parameter.Name);
+            if (alias != paramMap.end() && alias->first != parameter.Id)
+                ReportError("Parameter name collides with another parameter ID: " + parameter.Name);
         }
 
         // Validate unique state IDs and unique names
@@ -432,13 +446,20 @@ namespace Axle {
             hash = FNV1a64(b.Name.data(), b.Name.size(), hash);
             int32_t pid = b.ParentID;
             hash = FNV1a64(&pid, sizeof(pid), hash);
-            // Quantize to the shared text codec's six-decimal precision, including handedness and inverse binds.
-            for (const auto* matrix : {&b.LocalTransform, &b.InverseBindMatrix})
-                for (int column = 0; column < 4; ++column) for (int row = 0; row < 4; ++row) {
-                    const double value = std::clamp(double((*matrix)[column][row]), -1e12, 1e12);
-                    const int64_t quantized = std::isfinite(value) ? int64_t(std::llround(value * 1000000)) : INT64_MIN;
-                    hash = FNV1a64(&quantized, sizeof(quantized), hash);
-                }
+            // Quantize matrices and effective bind TRS to the text codec precision.
+            // Equivalent matrices can have different signed TRS fallback components.
+            const auto append = [&](double value) {
+                const int64_t quantized = std::isfinite(value) ? int64_t(std::llround(std::clamp(value,-1e12,1e12)*1000000)) : INT64_MIN;
+                hash = FNV1a64(&quantized,sizeof(quantized),hash);
+            };
+            for (const auto* matrix : {&b.LocalTransform,&b.InverseBindMatrix})
+                for (int column=0;column<4;++column) for (int row=0;row<4;++row) append((*matrix)[column][row]);
+            append(b.HasExplicitBindTRS ? 1 : 0);
+            if (b.HasExplicitBindTRS) {
+                for (int axis=0;axis<3;++axis) append(b.BindTranslation[axis]);
+                for (int axis=0;axis<3;++axis) append(b.BindScale[axis]);
+                for (int axis=0;axis<4;++axis) append(b.BindRotation[axis]);
+            }
         }
         std::stringstream ss;
         ss << std::hex << std::setw(16) << std::setfill('0') << hash;

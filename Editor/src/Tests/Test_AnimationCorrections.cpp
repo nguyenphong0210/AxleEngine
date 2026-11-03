@@ -71,6 +71,13 @@ static bool TestLoopGatesEntryAndClone() {
     ANIMATION_CHECK(snapshot && error.empty(), "Typed-rule snapshots remain cloneable");
     snapshot->FindState("Idle")->Clip->SetDuration(3);
     ANIMATION_CHECK(divided.FindState("Idle")->Clip->GetDuration() == 1, "Mutable legacy resources are isolated in clones");
+    std::shared_ptr<AnimationStateMachine> standalone;
+    {
+        auto temporaryRig = std::make_shared<Skeleton>("Temporary"); Bone bone; bone.Name = "Root"; temporaryRig->AddBone(bone);
+        auto temporaryMachine = make(); temporaryMachine.Update(0.25f,*temporaryRig);
+        standalone = temporaryMachine.Clone(&error);
+    }
+    ANIMATION_CHECK(standalone && standalone->GetResourceRig() && standalone->GetCurrentPose().GetSkeletonBinding() == standalone->GetResourceRig().get(), "Standalone runtime clone owns its sampled rig after source destruction");
     return true;
 }
 

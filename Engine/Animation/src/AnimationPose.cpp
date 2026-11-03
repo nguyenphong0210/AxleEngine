@@ -6,6 +6,8 @@
 namespace Axle {
 
     bool Bone::GetBindTransform(BoneTransform& out) const {
+        for (int c = 0; c < 4; ++c) for (int r = 0; r < 4; ++r)
+            if (!std::isfinite(LocalTransform[c][r])) return false;
         if (!HasExplicitBindTRS) return BoneTransform::TryFromMatrix(LocalTransform, out);
         BoneTransform candidate(BindTranslation, BindRotation, BindScale);
         if (!candidate.IsValid()) return false;

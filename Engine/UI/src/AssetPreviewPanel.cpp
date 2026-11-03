@@ -23,6 +23,17 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
+#include <array>
+#include <vector>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 #include <functional>
 
 namespace Axle {
@@ -144,27 +155,97 @@ namespace Axle {
         }
     }
 
-    uint64_t AssetPreviewPanel::GetOrCreateIconTexture(const std::string& iconFilename) {
-        bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
-        auto FindIconPath = [](const std::string& filename) -> std::filesystem::path {
-            std::vector<std::filesystem::path> searchDirs = {
-                std::filesystem::path("Engine/Resources/Icons"),
-                std::filesystem::path("../Engine/Resources/Icons"),
-                std::filesystem::path("../../Engine/Resources/Icons"),
-                std::filesystem::path("../../../Engine/Resources/Icons"),
-                std::filesystem::current_path() / "Engine" / "Resources" / "Icons",
-                std::filesystem::current_path().parent_path() / "Engine" / "Resources" / "Icons",
-                std::filesystem::current_path().parent_path().parent_path() / "Engine" / "Resources" / "Icons",
-                std::filesystem::current_path().parent_path().parent_path().parent_path() / "Engine" / "Resources" / "Icons",
-                std::filesystem::path("D:/WorkSpace/AxleEngine/Engine/Resources/Icons")
-            };
-            for (const auto& dir : searchDirs) {
-                auto candidate = dir / filename;
-                if (std::filesystem::exists(candidate)) {
-                    return candidate;
-                }
+    namespace {
+        struct IconMip {
+            int Width, Height;
+            std::vector<unsigned char> Pixels;
+        };
+
+        std::vector<IconMip> BuildIconMips(const unsigned char *pixels, int width, int height) {
+            // Integrate source coverage instead of sampling a few texels when 128px icons
+            // are displayed at 18px. Keep RGB unassociated: ImGui uses straight-alpha blending.
+            std::array<uint64_t, 3> colorSum{};
+            uint64_t alphaSum = 0;
+            for (size_t i = 0; i < static_cast<size_t>(width) * height; ++i) {
+                const auto *pixel = pixels + i * 4;
+                alphaSum += pixel[3];
+                for (int c = 0; c < 3; ++c)
+                    colorSum[c] += uint64_t(pixel[c]) * pixel[3];
             }
+            std::array<unsigned char, 3> transparentColor{};
+            for (int c = 0; c < 3; ++c)
+                transparentColor[c] = alphaSum ? static_cast<unsigned char>(colorSum[c] / alphaSum) : 255;
+
+            std::vector<IconMip> mips;
+            for (int w = width, h = height;; w = std::max(1, w / 2), h = std::max(1, h / 2)) {
+                IconMip mip{w, h, std::vector<unsigned char>(static_cast<size_t>(w) * h * 4)};
+                for (int y = 0; y < h; ++y)
+                    for (int x = 0; x < w; ++x) {
+                        const int x0 = x * width / w, x1 = (x + 1) * width / w;
+                        const int y0 = y * height / h, y1 = (y + 1) * height / h;
+                        std::array<uint64_t, 3> rgb{};
+                        uint64_t alpha = 0;
+                        for (int sy = y0; sy < y1; ++sy)
+                            for (int sx = x0; sx < x1; ++sx) {
+                                const auto *pixel = pixels + (static_cast<size_t>(sy) * width + sx) * 4;
+                                alpha += pixel[3];
+                                for (int c = 0; c < 3; ++c)
+                                    rgb[c] += uint64_t(pixel[c]) * pixel[3];
+                            }
+                        auto *pixel = mip.Pixels.data() + (static_cast<size_t>(y) * w + x) * 4;
+                        const auto count = static_cast<uint64_t>(x1 - x0) * (y1 - y0);
+                        pixel[3] = static_cast<unsigned char>((alpha + count / 2) / count);
+                        for (int c = 0; c < 3; ++c)
+                            pixel[c] =
+                                alpha ? static_cast<unsigned char>((rgb[c] + alpha / 2) / alpha) : transparentColor[c];
+                    }
+                mips.push_back(std::move(mip));
+                if (w == 1 && h == 1)
+                    break;
+            }
+            return mips;
+        }
+    } // namespace
+
+    uint64_t AssetPreviewPanel::GetOrCreateIconTexture(const std::string &iconFilename) {
+        bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
+        auto FindIconPath = [](const std::string &filename) -> std::filesystem::path {
+            // Resolve both source-tree resources and the Resources directory shipped with the editor.
+            auto path = FileSystem::ResolveAssetPath(std::filesystem::path("Icons") / filename);
+            if (std::filesystem::is_regular_file(path))
+                return path;
+#ifdef _WIN32
+            wchar_t executable[32768]{};
+            const auto length = GetModuleFileNameW(nullptr, executable, 32768);
+            if (length && length < 32768) {
+                path = std::filesystem::path(executable).parent_path() / "Resources" / "Icons" / filename;
+                if (std::filesystem::is_regular_file(path))
+                    return path;
+            }
+#endif
             return {};
+        };
+        auto CacheRegion = [&](const unsigned char *pixels, int width, int height) {
+            int left = width, top = height, right = -1, bottom = -1;
+            for (int y = 0; y < height; ++y)
+                for (int x = 0; x < width; ++x) {
+                    if (pixels[(static_cast<size_t>(y) * width + x) * 4 + 3] <= 16)
+                        continue;
+                    left = std::min(left, x);
+                    top = std::min(top, y);
+                    right = std::max(right, x);
+                    bottom = std::max(bottom, y);
+                }
+            if (right < left || bottom < top)
+                return;
+            // Keep one transparent texel around the glyph for linear filtering.
+            left = std::max(left - 1, 0);
+            top = std::max(top - 1, 0);
+            right = std::min(right + 2, width);
+            bottom = std::min(bottom + 2, height);
+            m_IconRegions[iconFilename] = {glm::vec2(left, top) / glm::vec2(width, height),
+                                           glm::vec2(right, bottom) / glm::vec2(width, height),
+                                           glm::vec2(right - left, bottom - top)};
         };
 
         if (isRHI) {
@@ -174,48 +255,63 @@ namespace Axle {
             }
 
             std::filesystem::path iconPath = FindIconPath(iconFilename);
-            if (iconPath.empty()) return 0;
+            if (iconPath.empty())
+                return 0;
 
             int width = 0, height = 0, channels = 0;
             stbi_set_flip_vertically_on_load_thread(false);
-            stbi_uc* pixels = stbi_load(iconPath.string().c_str(), &width, &height, &channels, 4);
-            if (!pixels) return 0;
+            stbi_uc *pixels = stbi_load(iconPath.string().c_str(), &width, &height, &channels, 4);
+            if (!pixels)
+                return 0;
+            CacheRegion(pixels, width, height);
+            auto mips = BuildIconMips(pixels, width, height);
 
-            auto& rhiDevice = RHI::RHIDevice::Get();
+            auto &rhiDevice = RHI::RHIDevice::Get();
             if (!rhiDevice.IsInitialized()) {
                 stbi_image_free(pixels);
                 return 0;
             }
 
             auto rhiTex = std::make_shared<RHI::RHITexture>();
-            auto desc = RHI::RHITextureDesc::RenderTarget2D((uint32_t)width, (uint32_t)height, RHI::RHITextureFormat::RGBA8_UNORM, "Icon_" + iconFilename);
+            auto desc = RHI::RHITextureDesc::RenderTarget2D((uint32_t)width, (uint32_t)height,
+                                                            RHI::RHITextureFormat::RGBA8_UNORM, "Icon_" + iconFilename);
             desc.Usage = RHI::RHITextureUsage::ShaderResource;
+            desc.MipLevels = static_cast<uint32_t>(mips.size());
             if (rhiTex->Init(desc)) {
-                const auto& helper = rhiDevice.GetNRIHelper();
-                nri::Queue* queue = rhiDevice.GetGraphicsQueue();
+                const auto &helper = rhiDevice.GetNRIHelper();
+                nri::Queue *queue = rhiDevice.GetGraphicsQueue();
                 if (queue && helper.UploadData) {
-                    nri::TextureSubresourceUploadDesc subres = {};
-                    subres.slices = pixels;
-                    subres.sliceNum = 1;
-                    subres.rowPitch = (uint32_t)width * 4;
-                    subres.slicePitch = (uint32_t)width * (uint32_t)height * 4;
+                    std::vector<nri::TextureSubresourceUploadDesc> subresources(mips.size());
+                    for (size_t i = 0; i < mips.size(); ++i) {
+                        auto &subresource = subresources[i];
+                        subresource.slices = mips[i].Pixels.data();
+                        subresource.sliceNum = 1;
+                        subresource.rowPitch = static_cast<uint32_t>(mips[i].Width) * 4;
+                        subresource.slicePitch = subresource.rowPitch * mips[i].Height;
+                    }
 
                     nri::TextureUploadDesc upDesc = {};
-                    upDesc.subresources = &subres;
+                    upDesc.subresources = subresources.data();
                     upDesc.texture = rhiTex->GetNative();
                     upDesc.after.access = nri::AccessBits::SHADER_RESOURCE;
                     upDesc.after.layout = nri::Layout::SHADER_RESOURCE;
                     upDesc.after.stages = nri::StageBits::ALL;
                     upDesc.planes = nri::PlaneBits::ALL;
 
-                    helper.UploadData(*queue, &upDesc, 1, nullptr, 0);
+                    if (helper.UploadData(*queue, &upDesc, 1, nullptr, 0) != nri::Result::SUCCESS) {
+                        stbi_image_free(pixels);
+                        return 0;
+                    }
+                } else {
+                    stbi_image_free(pixels);
+                    return 0;
                 }
 
                 uint64_t nativeHandle = rhiTex->GetNativeSRVHandle();
                 if (nativeHandle != 0 && m_ImGuiLayer) {
                     uint64_t gpuHandle = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
                     if (gpuHandle != 0) {
-                        m_IconCache[iconFilename] = { rhiTex, gpuHandle };
+                        m_IconCache[iconFilename] = {rhiTex, gpuHandle};
                         stbi_image_free(pixels);
                         return gpuHandle;
                     }
@@ -230,9 +326,35 @@ namespace Axle {
             }
 
             std::filesystem::path iconPath = FindIconPath(iconFilename);
-            if (iconPath.empty()) return 0;
-            auto tex = Texture2D::Create(iconPath.string());
+            if (iconPath.empty())
+                return 0;
+            int width = 0, height = 0, channels = 0;
+            stbi_set_flip_vertically_on_load_thread(false);
+            auto *pixels = stbi_load(iconPath.string().c_str(), &width, &height, &channels, 4);
+            if (!pixels)
+                return 0;
+            CacheRegion(pixels, width, height);
+            auto mips = BuildIconMips(pixels, width, height);
+            stbi_image_free(pixels);
+
+            TextureSpecification specification;
+            specification.Width = width;
+            specification.Height = height;
+            specification.FlipVertically = false;  // UI icons use top-left UVs on every backend.
+            specification.GenerateMipmaps = false; // Upload the same alpha-aware chain as RHI.
+            specification.WrapS = specification.WrapT = TextureWrap::ClampToEdge;
+            auto tex = Texture2D::Create(specification, mips.front().Pixels.data());
             if (tex && tex->IsLoaded()) {
+                GLint previousTexture = 0;
+                glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+                glBindTexture(GL_TEXTURE_2D, tex->GetRendererID());
+                for (size_t i = 1; i < mips.size(); ++i) {
+                    glTexImage2D(GL_TEXTURE_2D, static_cast<GLint>(i), GL_RGBA8, mips[i].Width, mips[i].Height, 0,
+                                 GL_RGBA, GL_UNSIGNED_BYTE, mips[i].Pixels.data());
+                }
+                glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+                glTextureParameteri(tex->GetRendererID(), GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                glTextureParameteri(tex->GetRendererID(), GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(mips.size() - 1));
                 m_GLIconCache[iconFilename] = tex;
                 return tex->GetRendererID();
             }
@@ -242,7 +364,7 @@ namespace Axle {
 
     void AssetPreviewPanel::FreeIconTextures() {
         if (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) {
-            for (auto& [name, pair] : m_IconCache) {
+            for (auto &[name, pair] : m_IconCache) {
                 if (pair.second != 0) {
                     m_ImGuiLayer->UnregisterTextureDescriptor(pair.second);
                 }
@@ -250,6 +372,7 @@ namespace Axle {
         }
         m_IconCache.clear();
         m_GLIconCache.clear();
+        m_IconRegions.clear();
     }
 
     void AssetPreviewPanel::UpdatePreviewLighting() {

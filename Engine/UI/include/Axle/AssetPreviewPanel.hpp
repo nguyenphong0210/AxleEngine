@@ -30,6 +30,11 @@ namespace Axle {
         Custom = 4
     };
 
+    struct IconTextureRegion {
+        glm::vec2 UV0{0.0f}, UV1{1.0f};
+        glm::vec2 ContentSize{1.0f};
+    };
+
     class AssetPreviewPanel {
     public:
         AssetPreviewPanel();
@@ -62,6 +67,10 @@ namespace Axle {
 
         // UI Icon Texture Cache
         uint64_t GetOrCreateIconTexture(const std::string& iconFilename);
+        IconTextureRegion GetIconRegion(const std::string& filename) const {
+            auto found = m_IconRegions.find(filename);
+            return found != m_IconRegions.end() ? found->second : IconTextureRegion{};
+        }
 
     private:
         void RenderPreview3D(float width, float height);
@@ -138,6 +147,7 @@ namespace Axle {
 
         // UI Icon Texture Cache
         void FreeIconTextures();
+        std::unordered_map<std::string, IconTextureRegion> m_IconRegions;
         std::unordered_map<std::string, std::pair<std::shared_ptr<RHI::RHITexture>, uint64_t>> m_IconCache;
         std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_GLIconCache;
     };

@@ -1,3 +1,4 @@
+#include <cmath>
 #include <Axle/TextureDescriptor.hpp>
 #include "EditorLayer.hpp"
 #include <Axle/Application.hpp>
@@ -1738,31 +1739,45 @@ void EditorLayer::RenderToolbar() {
             ImVec2 center((bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f);
             uint64_t tex = iconFile ? m_AssetPreviewPanel.GetOrCreateIconTexture(iconFile) : 0;
             if (tex != 0) {
-                ImVec2 iMin(center.x - iconSize * 0.5f, center.y - iconSize * 0.5f);
-                ImVec2 iMax(center.x + iconSize * 0.5f, center.y + iconSize * 0.5f);
-                dl->AddImage((ImTextureID)(intptr_t)tex, iMin, iMax, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), col);
+                const auto region = m_AssetPreviewPanel.GetIconRegion(iconFile);
+                const float scale = iconSize / std::max(region.ContentSize.x, region.ContentSize.y);
+                const ImVec2 glyphSize(region.ContentSize.x * scale, region.ContentSize.y * scale);
+                ImVec2 iMin(std::floor(center.x - glyphSize.x * 0.5f + 0.5f),
+                            std::floor(center.y - glyphSize.y * 0.5f + 0.5f));
+                ImVec2 iMax(iMin.x + glyphSize.x, iMin.y + glyphSize.y);
+                dl->AddImage((ImTextureID)(intptr_t)tex, iMin, iMax, ImVec2(region.UV0.x, region.UV0.y),
+                             ImVec2(region.UV1.x, region.UV1.y), col);
             } else if (drawFallback) {
                 drawFallback(dl, center, iconSize, col);
             }
         };
 
         // Helper lambda for segmented tool icon buttons (no gap between buttons)
-        auto DrawSegmentIconButton = [this, &DrawButtonIcon](const char* id, const char* iconFile, const char* tooltip, bool active, ImVec2 size, int cornerFlags,
-                                                             void(*drawIcon)(ImDrawList*, ImVec2, float, ImU32)) -> bool {
+        auto DrawSegmentIconButton = [this, &DrawButtonIcon](const char *id, const char *iconFile, const char *tooltip,
+                                                             bool active, ImVec2 size, int cornerFlags,
+                                                             void (*drawIcon)(ImDrawList *, ImVec2, float, ImU32),
+                                                             bool enabled = true) -> bool {
             ImDrawFlags roundFlags = ImDrawFlags_RoundNone;
-            if (cornerFlags == 1) roundFlags = ImDrawFlags_RoundLeft;
-            else if (cornerFlags == 2) roundFlags = ImDrawFlags_RoundRight;
-            else if (cornerFlags == 3) roundFlags = ImDrawFlags_RoundAll;
+            if (cornerFlags == 1)
+                roundFlags = ImDrawFlags_RoundLeft;
+            else if (cornerFlags == 2)
+                roundFlags = ImDrawFlags_RoundRight;
+            else if (cornerFlags == 3)
+                roundFlags = ImDrawFlags_RoundAll;
 
             ImVec2 pMin = ImGui::GetCursorScreenPos();
             ImVec2 pMax = ImVec2(pMin.x + size.x, pMin.y + size.y);
+            ImGui::BeginDisabled(!enabled);
             bool clicked = ImGui::InvisibleButton(id, size);
+            ImGui::EndDisabled();
             bool hovered = ImGui::IsItemHovered();
             bool held = ImGui::IsItemActive();
 
-            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImDrawList *dl = ImGui::GetWindowDrawList();
             ImU32 bgCol;
-            if (active) {
+            if (!enabled) {
+                bgCol = IM_COL32(46, 46, 46, 255);
+            } else if (active) {
                 bgCol = held ? IM_COL32(36, 82, 138, 255) : (hovered ? IM_COL32(56, 112, 178, 255) : IM_COL32(46, 97, 158, 255));
             } else {
                 bgCol = held ? IM_COL32(42, 42, 42, 255) : (hovered ? IM_COL32(68, 68, 68, 255) : IM_COL32(54, 54, 54, 255));
@@ -1773,9 +1788,12 @@ void EditorLayer::RenderToolbar() {
 
             // Icon: PNG texture with vector fallback
             ImU32 iconCol = active ? IM_COL32(255, 255, 255, 255) : (hovered ? IM_COL32(245, 248, 255, 255) : IM_COL32(205, 210, 220, 240));
+            // Gray PNGs already encode the disabled color; avoid multiplying by another dark tint.
+            if (!enabled)
+                iconCol = IM_COL32(255, 255, 255, 210);
             DrawButtonIcon(dl, pMin, pMax, iconFile, drawIcon, 18.0f, iconCol);
 
-            if (hovered && tooltip) {
+            if ((hovered || ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) && tooltip) {
                 ImGui::SetTooltip("%s", tooltip);
             }
             return clicked;
@@ -1937,91 +1955,33 @@ void EditorLayer::RenderToolbar() {
 
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f)); // Contiguous pill!
 
-        // Play / Stop Button (Left part of pill)
-        const ImVec2 playBtnSize(48.0f, 26.0f);
-        if (m_SceneState == SceneState::Play) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.38f, 0.62f, 1.0f)); // Active Unity Blue #2E619E
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.44f, 0.70f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.32f, 0.54f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
-            if (ImGui::Button("##StopBtn", playBtnSize)) {
+        const bool playing = m_SceneState == SceneState::Play;
+        const bool paused = m_SceneState == SceneState::Pause;
+        if (DrawSegmentIconButton("##PlayStop", playing ? "icon_stop.png" : "icon_play.png",
+                                  playing ? "Stop Simulation (F5 / F7)" : "Play Simulation (F5)", playing,
+                                  ImVec2(48, 26), 1,
+                                  playing ? Axle::UIIcons::DrawStopIcon : Axle::UIIcons::DrawPlayIcon)) {
+            if (playing)
                 OnSceneStop();
-            }
-            ImVec2 bMin = ImGui::GetItemRectMin();
-            ImVec2 bMax = ImGui::GetItemRectMax();
-            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_stop.png", Axle::UIIcons::DrawStopIcon, 18.0f, IM_COL32(255, 255, 255, 255));
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor(3);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop Simulation (F5 / F7)");
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.27f, 0.27f, 0.27f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.38f, 0.62f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
-            if (ImGui::Button("##PlayBtn", playBtnSize)) {
+            else
                 OnScenePlay();
-            }
-            ImVec2 bMin = ImGui::GetItemRectMin();
-            ImVec2 bMax = ImGui::GetItemRectMax();
-            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_play.png", Axle::UIIcons::DrawPlayIcon, 18.0f, IM_COL32(235, 240, 250, 255));
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor(3);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play Simulation (F5)");
         }
-
-        // Pause Button (Middle part of pill)
         ImGui::SameLine();
-        const ImVec2 pauseBtnSize(44.0f, 26.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
-        if (m_SceneState == SceneState::Play) {
-            if (ImGui::Button("##PauseBtn", pauseBtnSize)) {
+        if (DrawSegmentIconButton("##PauseResume",
+                                  m_SceneState == SceneState::Edit ? "icon_pause_gray.png" : "icon_pause.png",
+                                  paused ? "Resume Simulation (F6)" : "Pause Simulation (F6)", paused, ImVec2(44, 26),
+                                  0, Axle::UIIcons::DrawPauseIcon, playing || paused)) {
+            if (paused)
+                OnScenePlay();
+            else
                 OnScenePause();
-            }
-            ImVec2 bMin = ImGui::GetItemRectMin();
-            ImVec2 bMax = ImGui::GetItemRectMax();
-            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_pause.png", Axle::UIIcons::DrawPauseIcon, 18.0f, IM_COL32(235, 240, 250, 255));
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pause Simulation (F6)");
-        } else if (m_SceneState == SceneState::Pause) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.70f, 0.45f, 0.12f, 1.0f)); // Warm Amber
-            if (ImGui::Button("##ResumeBtn", pauseBtnSize)) {
-                OnScenePlay();
-            }
-            ImVec2 bMin = ImGui::GetItemRectMin();
-            ImVec2 bMax = ImGui::GetItemRectMax();
-            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_pause.png", Axle::UIIcons::DrawPauseIcon, 18.0f, IM_COL32(255, 235, 140, 255));
-            ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Resume Simulation (F6)");
-        } else {
-            ImGui::BeginDisabled(true);
-            ImGui::Button("##DisabledPauseBtn", pauseBtnSize);
-            ImVec2 bMin = ImGui::GetItemRectMin();
-            ImVec2 bMax = ImGui::GetItemRectMax();
-            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_pause_gray.png", Axle::UIIcons::DrawPauseIcon, 18.0f, IM_COL32(120, 125, 135, 255));
-            ImGui::EndDisabled();
         }
-        ImGui::PopStyleVar();
-
-        // Step Button (Right part of pill)
         ImGui::SameLine();
-        const ImVec2 stepBtnSize(44.0f, 26.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.5f);
-        if (m_SceneState == SceneState::Pause) {
-            if (ImGui::Button("##StepBtn", stepBtnSize)) {
-                m_StepSingleFrame = true;
-            }
-            ImVec2 bMin = ImGui::GetItemRectMin();
-            ImVec2 bMax = ImGui::GetItemRectMax();
-            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_step.png", Axle::UIIcons::DrawStepIcon, 18.0f, IM_COL32(235, 240, 250, 255));
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Step 1 Frame (O)");
-        } else {
-            ImGui::BeginDisabled(true);
-            ImGui::Button("##DisabledStepBtn", stepBtnSize);
-            ImVec2 bMin = ImGui::GetItemRectMin();
-            ImVec2 bMax = ImGui::GetItemRectMax();
-            DrawButtonIcon(ImGui::GetWindowDrawList(), bMin, bMax, "icon_step_gray.png", Axle::UIIcons::DrawStepIcon, 18.0f, IM_COL32(120, 125, 135, 255));
-            ImGui::EndDisabled();
+        if (DrawSegmentIconButton("##StepFrame", paused ? "icon_step.png" : "icon_step_gray.png",
+                                  "Step 1 Frame (O) - pause the simulation first", false, ImVec2(44, 26), 2,
+                                  Axle::UIIcons::DrawStepIcon, paused)) {
+            m_StepSingleFrame = true;
         }
-        ImGui::PopStyleVar();
 
         ImGui::PopStyleVar(); // Restore ItemSpacing
 

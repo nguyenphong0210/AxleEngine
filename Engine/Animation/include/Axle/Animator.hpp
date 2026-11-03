@@ -49,7 +49,7 @@ namespace Axle {
         void Reset();
 
         // Create independent runtime clone
-        std::shared_ptr<Animator> Clone() const;
+        std::shared_ptr<Animator> Clone(std::string* diagnostic = nullptr) const;
 
         // Update animation logic, evaluate state transitions and bone palettes
         void Update(float dt);

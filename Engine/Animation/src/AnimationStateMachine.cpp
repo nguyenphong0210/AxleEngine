@@ -92,14 +92,23 @@ namespace Axle {
         return nullptr;
     }
 
+    bool AnimationStateMachine::SetEntryState(const std::string& name) {
+        if (!FindState(name)) return false;
+        m_InitialStateName = name;
+        Reset();
+        return true;
+    }
+
     void AnimationStateMachine::SetCurrentState(const std::string& stateName, float transitionDuration) {
-        if (m_CurrentStateName == stateName && !m_IsTransitioning) return;
+        if (!std::isfinite(transitionDuration) || transitionDuration < 0) return;
         if (m_States.find(stateName) == m_States.end()) return;
 
         if (transitionDuration <= 0.0f || m_CurrentStateName.empty()) {
             m_CurrentStateName = stateName;
             m_CurrentStateTime = 0.0f;
             m_IsTransitioning = false;
+            m_TransitionTargetName.clear();
+            m_TransitionDuration = m_TransitionElapsed = m_TargetStateTime = 0;
         } else {
             m_IsTransitioning = true;
             m_TransitionTargetName = stateName;
@@ -295,11 +304,31 @@ namespace Axle {
         m_TriggerParams.clear();
     }
 
-    std::shared_ptr<AnimationStateMachine> AnimationStateMachine::Clone() const {
+    std::shared_ptr<AnimationStateMachine> AnimationStateMachine::Clone(std::string* diagnostic) const {
+        if (diagnostic) diagnostic->clear();
+        for (const auto& transition : m_Transitions) if (transition.Condition || transition.InstanceCondition) {
+            if (diagnostic) *diagnostic = "Cannot clone opaque transition predicates; use typed rules or rebuild the predicate for the new owner.";
+            return nullptr;
+        }
         auto clone = std::make_shared<AnimationStateMachine>(m_Name);
         clone->m_InitialStateName = m_InitialStateName;
         clone->m_States = m_States;
         clone->m_Transitions = m_Transitions;
+        std::unordered_map<const AnimationClip*, std::shared_ptr<AnimationClip>> clips;
+        auto copyClip = [&](const std::shared_ptr<AnimationClip>& source) {
+            if (!source) return std::shared_ptr<AnimationClip>{};
+            auto& copy = clips[source.get()];
+            if (!copy) copy = std::make_shared<AnimationClip>(*source);
+            return copy;
+        };
+        for (auto& [name, state] : clone->m_States) {
+            state.Clip = copyClip(state.Clip);
+            if (state.BlendSpace) {
+                auto blend = std::make_shared<BlendSpace1D>(state.BlendSpace->GetName());
+                for (const auto& point : state.BlendSpace->GetPoints()) blend->AddPoint(point.Value, copyClip(point.Clip));
+                state.BlendSpace = std::move(blend);
+            }
+        }
 
         clone->m_DeclaredParameters = m_DeclaredParameters;
         clone->m_NameToIdMap = m_NameToIdMap;
@@ -354,17 +383,14 @@ namespace Axle {
             const auto& trans = *cand.Trans;
 
             float exitThreshold = trans.ExitPhase < 0.9999f ? trans.ExitPhase : trans.ExitTime;
+            if (!FindState(trans.ToState) || !std::isfinite(trans.Duration) || trans.Duration < 0) continue;
             if (trans.HasExitTime) {
+                if (!std::isfinite(exitThreshold) || exitThreshold < 0 || exitThreshold > 1) continue;
                 if (curState->Loop) {
-                    float phaseInCycle = normalizedTime - std::floor(normalizedTime);
-                    if (normalizedTime < exitThreshold && phaseInCycle < exitThreshold) {
-                        continue;
-                    }
-                } else {
-                    if (normalizedTime < exitThreshold) {
-                        continue;
-                    }
-                }
+                    // A loop gate is an instant in each cycle, not a permanently open interval.
+                    const double nearestCycle = std::round(double(normalizedTime) - exitThreshold);
+                    if (nearestCycle < 0 || std::abs(double(normalizedTime) - (nearestCycle + exitThreshold)) > 1e-5) continue;
+                } else if (normalizedTime + 1e-5f < exitThreshold) continue;
             }
 
             // Check typed rules
@@ -465,16 +491,7 @@ namespace Axle {
 
             if (!m_IsTransitioning) {
                 bool triggered = CheckTransitions();
-                if (triggered && m_TransitionDuration <= 1e-4f) {
-                    // Zero-duration transition completed immediately
-                    m_CurrentStateName = m_TransitionTargetName;
-                    m_CurrentStateTime = 0.0f;
-                    m_IsTransitioning = false;
-                    m_TransitionTargetName.clear();
-                    m_TargetStateTime = 0.0f;
-                    m_TransitionElapsed = 0.0f;
-                    continue; // Advance residual dt in the new state!
-                }
+                if (triggered && !m_IsTransitioning) continue; // Instant transition; retain residual time.
             }
 
             if (remainingDt <= 1e-6f) {
@@ -560,11 +577,23 @@ namespace Axle {
                 }
 
                 float stepDt = remainingDt;
-                if (minDtToGate < remainingDt && minDtToGate > 1e-6f) {
+                if (minDtToGate <= remainingDt && minDtToGate > 1e-6f) {
                     stepDt = minDtToGate;
                 }
                 m_CurrentStateTime += stepDt * curSpeed;
                 remainingDt -= stepDt;
+            }
+        }
+
+        if (remainingDt > 0) {
+            if (const auto* state = FindState(m_CurrentStateName)) m_CurrentStateTime += remainingDt * std::max(0.0f, state->SpeedMultiplier);
+            if (m_IsTransitioning) {
+                if (const auto* state = FindState(m_TransitionTargetName)) m_TargetStateTime += remainingDt * std::max(0.0f, state->SpeedMultiplier);
+                m_TransitionElapsed += remainingDt;
+                if (m_TransitionElapsed >= m_TransitionDuration) {
+                    m_CurrentStateName = m_TransitionTargetName; m_CurrentStateTime = m_TargetStateTime;
+                    m_IsTransitioning = false; m_TransitionTargetName.clear();
+                }
             }
         }
 

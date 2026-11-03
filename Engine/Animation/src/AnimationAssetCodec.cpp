@@ -811,7 +811,7 @@ namespace Axle {
         if (!def.EntryStateId.empty()) {
             auto it = idToName.find(def.EntryStateId);
             if (it != idToName.end()) {
-                sm->SetCurrentState(it->second, 0.0f);
+                sm->SetEntryState(it->second);
             }
         }
 

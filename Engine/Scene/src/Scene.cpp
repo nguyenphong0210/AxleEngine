@@ -271,9 +271,7 @@ namespace Axle {
         if (entity.HasComponent<AnimatorComponent>()) {
             const auto& srcAc = entity.GetComponent<AnimatorComponent>();
             auto& dstAc = newEntity.AddComponent<AnimatorComponent>(srcAc);
-            if (srcAc.AnimatorInstance) {
-                dstAc.AnimatorInstance = srcAc.AnimatorInstance->Clone();
-            }
+            if (dstAc.AnimatorInstance) { dstAc.AnimatorInstance->Reset(); dstAc.AnimatorInstance->Update(0); }
         }
         if (entity.HasComponent<CharacterControllerComponent>()) {
             auto cccCopy = entity.GetComponent<CharacterControllerComponent>();
@@ -1490,9 +1488,7 @@ namespace Axle {
             if (srcEntity.HasComponent<AnimatorComponent>()) {
                 const auto& srcAc = srcEntity.GetComponent<AnimatorComponent>();
                 auto& dstAc = dstEntity.AddComponent<AnimatorComponent>(srcAc);
-                if (srcAc.AnimatorInstance) {
-                    dstAc.AnimatorInstance = srcAc.AnimatorInstance->Clone();
-                }
+                if (dstAc.AnimatorInstance) { dstAc.AnimatorInstance->Reset(); dstAc.AnimatorInstance->Update(0); }
             }
 
             // CharacterControllerComponent

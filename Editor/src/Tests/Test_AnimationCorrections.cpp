@@ -1,6 +1,7 @@
 #include "AnimationTestHarness.hpp"
 #include <Axle/AnimationStateMachine.hpp>
 #include <limits>
+#include <Axle/Animator.hpp>
 
 static bool TestCanonicalParameters() {
     using namespace Axle;
@@ -32,4 +33,45 @@ static bool TestCanonicalParameters() {
     return true;
 }
 
-bool RunAnimationCorrectionTests() { return TestCanonicalParameters(); }
+static bool TestLoopGatesEntryAndClone() {
+    using namespace Axle;
+    Skeleton rig("Rig"); Bone root; root.Name = "Root"; rig.AddBone(root);
+    auto make = [] {
+        AnimationStateMachine sm;
+        for (const auto* name : {"Idle", "Walk"}) {
+            AnimationState state; state.Name = name; state.Clip = std::make_shared<AnimationClip>(name, 1);
+            sm.AddState(state);
+        }
+        AnimationTransition transition; transition.FromState = "Idle"; transition.ToState = "Walk";
+        transition.Duration = 0.1f; transition.HasExitTime = true; transition.ExitPhase = transition.ExitTime = 0.5f;
+        TransitionRule rule; rule.Parameter = "Go"; rule.Operator = TransitionConditionOperator::IsTrue;
+        transition.Rules.push_back(rule); sm.AddTransition(transition);
+        return sm;
+    };
+    auto direct = make(), divided = make();
+    direct.Update(1.2f, rig); divided.Update(1.2f, rig);
+    direct.SetBool("Go", true); divided.SetBool("Go", true);
+    direct.Update(0.1f, rig);
+    ANIMATION_CHECK(!direct.IsTransitioning() && direct.GetCurrentStateName() == "Idle", "Late loop condition waits for its cycle gate");
+    direct.Update(0.5f, rig);
+    for (int i = 0; i < 6; ++i) divided.Update(0.1f, rig);
+    ANIMATION_CHECK(direct.GetCurrentStateName() == "Walk" && divided.GetCurrentStateName() == "Walk", "Both frame subdivisions cross the gate");
+    ANIMATION_CHECK(AnimationTests::Near(direct.GetCurrentStateTime(), divided.GetCurrentStateTime()), "Crossfade residual time is frame independent");
+    ANIMATION_CHECK(direct.SetEntryState("Walk"), "Explicit authored entry accepted");
+    direct.SetCurrentState("Idle"); direct.Reset();
+    ANIMATION_CHECK(direct.GetCurrentStateName() == "Walk", "Reset uses explicit entry");
+    AnimationTransition opaque; opaque.FromState = "Idle"; opaque.ToState = "Walk";
+    auto owner = std::make_shared<AnimationStateMachine>(make());
+    std::weak_ptr<AnimationStateMachine> weak = owner;
+    opaque.Condition = [weak] { return weak.lock()->GetBool("Go"); };
+    owner->AddTransition(opaque);
+    std::string error;
+    ANIMATION_CHECK(!owner->Clone(&error) && !error.empty(), "Unsafe closure cloning is explicitly rejected");
+    auto snapshot = divided.Clone(&error);
+    ANIMATION_CHECK(snapshot && error.empty(), "Typed-rule snapshots remain cloneable");
+    snapshot->FindState("Idle")->Clip->SetDuration(3);
+    ANIMATION_CHECK(divided.FindState("Idle")->Clip->GetDuration() == 1, "Mutable legacy resources are isolated in clones");
+    return true;
+}
+
+bool RunAnimationCorrectionTests() { return TestCanonicalParameters() && TestLoopGatesEntryAndClone(); }

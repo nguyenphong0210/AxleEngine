@@ -78,6 +78,8 @@ namespace Axle {
 
         const AnimationState* FindState(const std::string& name) const;
 
+        bool SetEntryState(const std::string& stateName);
+        float GetCurrentStateTime() const { return m_CurrentStateTime; }
         void SetCurrentState(const std::string& stateName, float transitionDuration = 0.0f);
         const std::string& GetCurrentStateName() const { return m_CurrentStateName; }
         const std::string& GetInitialStateName() const { return m_InitialStateName; }
@@ -118,7 +120,7 @@ namespace Axle {
         void Reset();
 
         // Deep-clone definition with independent instance state
-        std::shared_ptr<AnimationStateMachine> Clone() const;
+        std::shared_ptr<AnimationStateMachine> Clone(std::string* diagnostic = nullptr) const;
 
         // Update animation clock, evaluate transitions and blend poses
         void Update(float dt, const Skeleton& skeleton);

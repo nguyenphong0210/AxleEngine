@@ -1373,6 +1373,7 @@ namespace Axle {
         std::shared_ptr<Animator> AnimatorInstance = nullptr;
 
         // Authored asset references and configuration
+        std::string BindingDiagnostic; // Transient resource/clone failure; not authored data.
         std::string ControllerPath;
         bool IsUnique = false;
         std::string InlineFallbackData;
@@ -1408,7 +1409,7 @@ namespace Axle {
               IntOverrides(other.IntOverrides),
               BoolOverrides(other.BoolOverrides) {
             if (other.AnimatorInstance) {
-                AnimatorInstance = other.AnimatorInstance->Clone();
+                AnimatorInstance = other.AnimatorInstance->Clone(&BindingDiagnostic);
             }
         }
 
@@ -1425,7 +1426,8 @@ namespace Axle {
                 FloatOverrides = other.FloatOverrides;
                 IntOverrides = other.IntOverrides;
                 BoolOverrides = other.BoolOverrides;
-                AnimatorInstance = other.AnimatorInstance ? other.AnimatorInstance->Clone() : nullptr;
+                BindingDiagnostic.clear();
+                AnimatorInstance = other.AnimatorInstance ? other.AnimatorInstance->Clone(&BindingDiagnostic) : nullptr;
             }
             return *this;
         }

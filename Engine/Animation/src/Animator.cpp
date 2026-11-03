@@ -99,13 +99,15 @@ namespace Axle {
         }
     }
 
-    std::shared_ptr<Animator> Animator::Clone() const {
-        auto clone = std::make_shared<Animator>(m_Skeleton);
+    std::shared_ptr<Animator> Animator::Clone(std::string* diagnostic) const {
+        auto clone = std::make_shared<Animator>(m_Skeleton ? std::make_shared<Skeleton>(*m_Skeleton) : nullptr);
         if (m_StateMachine) {
-            clone->SetStateMachine(m_StateMachine->Clone());
+            auto stateMachine = m_StateMachine->Clone(diagnostic);
+            if (!stateMachine) return nullptr;
+            clone->SetStateMachine(std::move(stateMachine));
+            if (clone->m_Skeleton) clone->Update(0);
         }
-        clone->m_FallbackPose = m_FallbackPose;
-        clone->m_FallbackGlobalMatrices = m_FallbackGlobalMatrices;
+        if (diagnostic) diagnostic->clear();
         return clone;
     }
 

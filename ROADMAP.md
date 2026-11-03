@@ -7,9 +7,9 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (OpenGL 4.5 Core), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Phase Status**: Phases 1-37 and the Phase 38/38.1/38.2 foundations are recorded below. **Phase 38.3 remains open for its outstanding acceptance checks. Phase 39 corrective implementation passes CPU and physical DX12/Vulkan checks; interactive UI and OpenGL regression remain open. Phase 40 is not started.**
+* **Phase Status**: Phases 1-37 and the Phase 38/38.1/38.2 foundations are recorded below. **Phase 38.3 remains open for its outstanding acceptance checks. Phase 39 corrective implementation passes CPU and physical DX12/Vulkan checks; interactive UI and OpenGL regression remain open. Phase 40 has an audited implementation plan and Gemini handoff; implementation has not started.**
 * **Automated Test Verification**: Record evidence per suite/backend. VFX CPU (7 suites), physical DX12/Vulkan VFX readbacks, Step 102 with physical DX12, and material Step 106 on both backends pass. Interactive VFX UI/OpenGL checks and separately tracked material manual checks remain pending. See the [VFX review and acceptance report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
-* **Upcoming Focus**: **Phase 39 Interactive UI Acceptance & OpenGL Regression** (CPU and physical DX12/Vulkan checks pass), followed by **Phase 40: Skeletal Animation Studio**. Remaining Phase 38.3 manual acceptance is tracked separately for the user. See the [VFX completion plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md) and [material acceptance report](docs/design/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md).
+* **Upcoming Focus**: **Phase 39 Interactive UI Acceptance & OpenGL Regression** (CPU and physical DX12/Vulkan checks pass), alongside the prepared **Phase 40: Skeletal Animation Studio** implementation handoff. Remaining Phase 38.3 manual acceptance is tracked separately for the user. See the [VFX completion plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md), [Phase 40 plan](docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md) and [material acceptance report](docs/design/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md).
 
 ### 🛡️ Core Engineering & Contribution Principles
 1. **Language Standard**: All source code, header files, docstrings, architectural documentation, commit messages, and automated tests must be written exclusively in **English**.
@@ -671,7 +671,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
       - [ ] Verify camera/lights stay fixed during the intended preview object rotation.
 
 - [ ] **Phase 39: Visual Particle & VFX Studio - End-to-End Editor Completion (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Editor`)**
-  - **Status (2026-11-02): Gemini's A1-J4 delivery received a corrective integration review. CPU tests and physical DX12/Vulkan rendering checks PASS on NVIDIA GeForce RTX 3070. Interactive editor acceptance and a separate OpenGL regression session remain pending; Phase 39 stays OPEN. Do not begin Phase 40.**
+  - **Status (2026-11-02): Gemini's A1-J4 delivery received a corrective integration review. CPU tests and physical DX12/Vulkan rendering checks PASS on NVIDIA GeForce RTX 3070. Interactive editor acceptance and a separate OpenGL regression session remain pending; Phase 39 stays OPEN. Phase 40 planning and its scoped Gemini implementation handoff are tracked separately; they do not close these remaining checks.**
   - **Current evidence**: [Review and Acceptance Report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md). Commit subjects and historical checklist marks alone are not acceptance evidence.
   - **Scope/design**: [Completion Plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md) and [Gemini Implementation Guide](docs/design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md). Proposed type names in the guide are blueprints; use actual source names below.
   - [x] **A - Selection, Ownership & Lifecycle (code/automated coverage)**:
@@ -730,24 +730,52 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
     - [ ] Visually review the reference effects with intended art textures; automated fallback captures do not establish artistic quality.
     - [ ] Record OpenGL regression evidence separately. Read the report for MSAA soft-depth fallback, OBJ import and particle-material subset limits.
 
-- [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Renderer`, `Engine/UI`, `Editor`)**
-  - [ ] **Step 1 - Bottom Dock Dopesheet & Timeline Panel (`Engine/UI`, `Engine/Animation`)**:
-    - [ ] Dedicated Animation Timeline panel docked at the bottom sharing space with Console and Content Browser.
-    - [ ] Playback controls: Play, Pause, Step, Loop, FPS selector (24, 30, 60), speed scaling (0.1x - 2.0x).
-    - [ ] Expandable bone tracks for Translation (X,Y,Z), Rotation (Quaternion), Scale (X,Y,Z).
-    - [ ] Keyframe diamonds on timeline with box selection, drag, copy, paste, delete.
-  - [ ] **Step 2 - 3D Skeleton Wireframe Visualizer (`Engine/Renderer`, `Editor`)**:
-    - [ ] Render 3D wireframe octahedron bones and joint spheres in Viewport when rigged entity is selected.
-    - [ ] Bidirectional selection: clicking a bone in Viewport highlights its track in the Dopesheet.
-  - [ ] **Step 3 - Visual Animator State Machine Graph (`Engine/Animation`, `Engine/UI`)**:
-    - [ ] Visual node graph editor with State Cards (`Idle`, `Walk`, `Run`, `Jump`).
-    - [ ] Directed transition arrows with configurable cross-fade duration and `Has Exit Time`.
-    - [ ] Parameters panel: Float (`Speed`), Int (`Weapon`), Bool (`IsGrounded`), Trigger (`Jump`).
-    - [ ] Condition rules: e.g. `Speed Greater 0.1` -> transition from `Idle` to `Walk`.
-  - [ ] **Step 4 - Locomotion Blend Trees & Animation Event Triggers (`Engine/Animation`)**:
-    - [ ] 1D and 2D Blend Trees: smooth velocity blending without foot sliding.
-    - [ ] Keyframe event markers triggering C++ script callbacks (`PlayFootstep`, `SpawnSlashVFX`, `EnableHitbox`).
-  - [ ] **Step 5 - Automated Verification Suite Step 103 (`AxleTests.exe --step103`)**:
-    - [ ] Step 103 tests verifying: State Machine transitions, cross-fade weight blending, 1D/2D blend trees, and animation events.
+- [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/Scene`, `Engine/UI`, `Editor`, `Runtime`)**
+  - **Status (2026-11-03): source audit and detailed implementation handoff prepared; no implementation or new animation test result claimed.** Existing runtime classes are foundations; the RHI skinning/editor/asset workflow remains to be completed. Phase 38.3/39 manual acceptance remains separately open.
+  - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test instructions and Gemini prompt**: [Gemini Implementation Guide](docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
+  - **Execution**: 28 separately committed packages. First deliver A0-A3, B1/B2, C1/C2, B3, F1/F2 and G1/G2 as an executable import -> persist -> independent animator -> RHI preview slice; then complete authoring and acceptance. Package dependencies in the plan take precedence over the display order below.
+  - [ ] **A - CPU Foundations & Instance Safety**:
+    - [ ] **A0**: Always-active, device-free `AxleAnimationUnitTests` target and temporary fixtures.
+    - [ ] **A1**: Validated skeleton topology, partial-channel bind TRS fallback, quaternion/signed-scale handling and derived lookup rebuilding.
+    - [ ] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits.
+    - [ ] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy.
+  - [ ] **B - Versioned Assets, Baking & Persistence**:
+    - [ ] **B1**: Stable definitions/IDs for Skeleton, SkeletalMesh, AnimationClip and AnimatorController; append-only asset classifications.
+    - [ ] **B2**: Shared complete codecs, atomic saves, validated cooked geometry, FileSystem/VFS loading and last-good reload.
+    - [ ] **B3**: Scene and all assembly/editor round trips; referenced/unique controllers, complete fallback, typed defaults and legacy migration.
+  - [ ] **C - Typed Animator Runtime**:
+    - [ ] **C1**: Float/Int/Bool/Trigger declarations, typed conditions and script/component accessors.
+    - [ ] **C2**: Deterministic priority/exit-time transitions, atomic trigger consumption, independent crossfade clocks and bounded residual-time advancement.
+  - [ ] **D - Locomotion Blend Spaces**:
+    - [ ] **D1**: Robust 1D weights and persistent phase continuity when parameters/durations change.
+    - [ ] **D2**: Deterministic 2D triangulation/barycentric/hull behavior, degenerate cases and normalized N-way local TRS blending.
+  - [ ] **E - Animation Event Markers & Runtime Delivery**:
+    - [ ] **E1**: Persisted typed markers and bounded forward interval/loop/crossfade/blend-leaf event collection; seek suppresses gameplay events.
+    - [ ] **E2**: Queued C++ ScriptableEntity dispatch with scene/entity/DLL lifetime checks; private preview is log-only.
+  - [ ] **F - DX12/Vulkan Skeletal Rendering**:
+    - [ ] **F1**: Reuse `RHISkinnedVertex3D` and upload immutable skeletal mesh/submesh data with validated weights and animated bounds.
+    - [ ] **F2**: Per-draw palette CBVs and a skinned standard-PBR vertex variant in scene/private preview, including color/depth/HDR/MSAA.
+    - [ ] **F3**: Animated silhouette entity picking, safe draw/resource lifetimes and preserved legacy OpenGL skin/shadow paths.
+    - **Boundary**: the inspected RHI renderer has no full shadow-map pass; general RHI shadow implementation is separate work. Do not claim animated RHI shadows from shader compilation alone.
+  - [ ] **G - Bottom Animation Dock & Dopesheet**:
+    - [ ] **G1**: Device-free clip/controller documents, saved revision/dirty state, transactional Undo/Redo and guarded open/save/close.
+    - [ ] **G2**: Private rendered preview; Play/Pause/Stop/Step/Loop, 24/30/60 FPS display/snap, speed and clip seek; preserve saved docking layouts.
+    - [ ] **G3**: Bone TRS/quaternion tracks, diamonds/box selection/drag/copy/paste/delete, value editing and undoable event markers.
+  - [ ] **H - Skeleton Viewport Authoring**:
+    - [ ] **H1**: Current-pose octahedron/joint overlays through active render adapters.
+    - [ ] **H2**: Bone picking and shared track/hierarchy selection, with camera/gizmo/text/modal input priority.
+  - [ ] **I - Visual Animator Graph**:
+    - [ ] **I1**: State/entry/transition graph and typed parameter inspector; stable IDs, editable layout, history and read-only live telemetry.
+    - [ ] **I2**: 1D/2D point authoring, compatible resource search/drag/drop and real controller preview.
+  - [ ] **J - Editor/Runtime Integration**:
+    - [ ] **J1**: Content Browser import/create/open, editable clip copies, Entity Inspector assignment, Apply/Make Unique/reload and safe scene detach.
+    - [ ] **J2**: Generic pre-cook integration, complete packaged dependencies and standalone runtime loading without source-media/editor services.
+  - [ ] **K - Layered Acceptance & Documentation**:
+    - [ ] **K1**: Consolidated CPU suites, retained legacy Steps 36-41 and actual Step 103 registration/failure propagation in `Editor/src/Test.cpp`.
+    - [ ] **K2**: Real offscreen `AxleAnimationGPUTests`, strict physical DX12/Vulkan opt-in CTests and deterministic reference scenes/captures.
+    - [ ] **K3**: Supported-workflow guide and evidence report; complete interactive UI, packaged Runtime and separate OpenGL checks before closing the phase.
+  - **Scope**: single-layer controllers, Clip/1D/2D motions, in-place locomotion, four influences and a validated 128-joint GPU cap. Root motion, retargeting, foot IK, layers/masks/additive poses and arbitrary custom vertex shaders are not parity claims for this phase. Phase matching alone does not guarantee no foot sliding.
+  - **Historical Step mapping**: original Step 1 -> G, Step 2 -> H, Step 3 -> C/I, Step 4 -> D/E, Step 5 -> K. Step 103 remains the integration entry point; the separate CPU executable is required for Gemini's environment.
+  - **Gemini delivery rule**: code and CPU tests per package/local commit; implement actual renderer/UI/runtime checks, record unavailable physical GPU/UI checks as NOT RUN, and keep acceptance open until externally verified.
 
 ---

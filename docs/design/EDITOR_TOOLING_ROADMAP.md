@@ -1,6 +1,6 @@
 # Editor Tooling Improvement Roadmap
 
-Status: **proposed work**, reviewed 2026-11-01; Phase 39 VFX sequencing updated 2026-11-02. This consolidates durable ideas from older visual-editor and parity specifications. It is not a list of implemented capabilities or a fixed phase schedule.
+Status: **proposed work**, reviewed 2026-11-01; Phase 39 VFX sequencing updated 2026-11-02; Phase 40 animation handoff updated 2026-11-03. This consolidates durable ideas from older visual-editor and parity specifications. It is not a list of implemented capabilities or a fixed phase schedule.
 
 Current material/UI behavior is documented in the [material guide](../guides/MATERIALS_AND_SHADERS.md) and [UI guide](../guides/UI.md). Address dependency and lifecycle issues in the [architecture assessment](../architecture/ASSESSMENT.md) alongside feature development.
 
@@ -52,15 +52,30 @@ Acceptance: two independent entities drive two canvases without cross-talk; resi
 
 ## 5. Animation authoring
 
-Runtime skeleton/clip/pose/state-machine types are foundations for tooling, not evidence of a completed animation editor. Candidate tools include:
+Runtime skeleton/clip/pose/state-machine types are foundations, not a completed
+animation editor. Follow the [Phase 40 completion plan](ANIMATION_PHASE_40_COMPLETION_PLAN.md)
+for the audited source gaps, A0-K3 packages and dependencies. The
+[Gemini coding guide](ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md) specifies
+ownership, asset formats, timing/conditions, 1D/2D blending, event delivery,
+RHI skinning, dopesheet/graph commands and concrete CPU/GPU/UI fixtures.
 
-- Timeline/dopesheet with transport, frame/time scrub, bone channels and keyframe edit commands.
-- Skeleton viewport overlay with joint/bone selection synchronized with the timeline.
-- State/transition graph with parameter and crossfade inspection.
-- Blend-space authoring, with 1D support verified before proposing 2D workflows as implemented.
-- Animation event markers with explicit script callback timing and persistence.
+First fix partial bind-pose sampling, topology and shared mutable animator state;
+then complete durable assets and the missing DX12/Vulkan skeletal draw path before
+building the timeline and graph workflow. The first reviewable slice is import ->
+save/load -> independent two-state animator -> private RHI preview and scene.
+Finish authoring, event/script integration, assembly and packaged Runtime paths
+with separate implementation and external acceptance evidence.
 
-Acceptance: an authored clip/state-machine asset survives save/load; timeline, bone selection and runtime evaluation agree; undo/redo works; playback and events have defined timing semantics. Do not document 2D blend spaces/events as completed merely because they appear in a roadmap.
+Scope: single-layer Clip/1D/2D controllers, local TRS key editing, skeleton selection
+and typed event markers. Root motion, foot IK, retargeting, layers/masks and full
+commercial-engine parity are excluded. The baseline RHI renderer has no complete
+shadow-map pass; record that renderer limitation rather than claiming skeletal RHI
+shadow support. Phase 38.3/39 manual acceptance remains separately open.
+
+Acceptance: authored clip/controller assets survive save/load and scene/assembly/
+package reuse; timeline, bone selection and runtime poses agree; independent
+instances, history, event timing and physical backend pixels have meaningful checks.
+Passing CPU tests does not establish interactive or GPU acceptance.
 
 ## 6. Sequencing and verification
 

@@ -161,6 +161,8 @@ cd AxleEngine
 git submodule update --init --recursive
 ```
 
+Build/export details: [separate Editor, tests and on-demand Runtime workflows](docs/guides/BUILD_WORKFLOWS.md).
+
 ### Build via CMake
 
 ```bash
@@ -173,11 +175,16 @@ cmake --build build --config Release --parallel
 # 3. Launch the Axle Editor (WYSIWYG IDE)
 ./build/Editor/Release/AxleEditor.exe
 
-# 4. Launch Standalone Game Player (Optional)
-./build/Runtime/Release/AxleRuntime.exe
+# 4. Export standalone from the Editor when needed.
+# Export Standalone Game builds Runtime on demand; it is not part of this build.
 
-# 5. Run the Automated Headless Test Suite (42 Verified Suites)
-./build/Editor/Release/AxleTests.exe
+# 5. Build tests explicitly (Editor builds exclude Runtime and tests)
+cmake --build build --config Release --target AxleAllTests --parallel
+
+# 6. Run registered tests
+ctest --test-dir build -C Release --output-on-failure
+
+# Optional legacy integration runner: ./build/Editor/Release/AxleTests.exe
 ```
 
 ---

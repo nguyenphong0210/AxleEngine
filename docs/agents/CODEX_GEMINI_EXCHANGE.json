@@ -1,37 +1,63 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "P41-PLANNING",
-    "title": "Plan the highest-priority RHI-primary rendering architecture migration",
-    "state": "documentation_delivered",
+    "id": "BUILD-WORKFLOW",
+    "title": "Separate Editor, tests and on-demand Runtime build",
+    "state": "implemented_verified",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Create detailed architecture and execution documentation and prioritize it ahead of feature expansion. No production implementation is assigned in this turn.",
+    "user_scope": "Editor/default build excludes tests and Runtime; standalone export builds Runtime on demand; tests build separately. No Phase 41 renderer implementation.",
     "expected_files": [
-      "ROADMAP.md",
-      "docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md",
-      "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md",
-      "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md",
-      "docs/README.md",
-      "docs/agents/README.md",
-      "docs/agents/WORKING_PROTOCOL.md",
-      "docs/architecture/TARGET_LAYERED_ARCHITECTURE.md",
-      "docs/architecture/README.md"
+      "Editor/CMakeLists.txt",
+      "Runtime/CMakeLists.txt",
+      "Editor/src/RuntimeBuild.hpp",
+      "Editor/src/RuntimeBuild.cpp",
+      "Editor/src/EditorLayer.cpp",
+      "Editor/src/EditorLayer.hpp",
+      "Engine/Asset/include/Axle/AssetCooker.hpp",
+      "Engine/Asset/src/AssetCooker.cpp",
+      "docs/guides/DEVELOPMENT.md"
     ],
-    "next_implementation_candidate": [
-      "P41-00",
-      "P41-01"
+    "implementation_commit": "f73d306",
+    "guide": "docs/guides/BUILD_WORKFLOWS.md",
+    "behavior": "Editor/default build excludes Runtime and all test executables. AxleAllTests builds tests without Editor/Runtime. Editor standalone export builds Runtime on a cancellable worker and packages exact matching output only after success.",
+    "verification": [
+      {
+        "command": "cmake -S . -B build",
+        "exit_code": 0
+      },
+      {
+        "command": "cmake --build build --config Release --parallel 6",
+        "exit_code": 0,
+        "evidence": "build/build-workflow-default.log; Editor built, no Runtime/test project builds"
+      },
+      {
+        "command": "cmake --build build --config Release --target AxleAllTests --parallel 6",
+        "exit_code": 0,
+        "evidence": "build/build-workflow-all-tests.log; no Editor/Runtime project build"
+      },
+      {
+        "command": "AxleBuildWorkflowTests.exe --real-runtime",
+        "exit_code": 0,
+        "evidence": "Actual configured Runtime built through the production helper used by Editor"
+      },
+      {
+        "command": "cmake --build build --config Release --target AxleEditor AxleAllTests --parallel 6",
+        "exit_code": 0,
+        "evidence": "build/build-workflow-final-build.log"
+      },
+      {
+        "command": "ctest --test-dir build -C Release --output-on-failure",
+        "exit_code": 0,
+        "result": "8/8 registered tests PASS, including build process/packaging regressions and enabled D3D12/Vulkan VFX checks"
+      },
+      {
+        "check": "Generated MSBuild transitive dependency closures and default/test build logs",
+        "result": "Editor and ALL exclude Runtime/tests; AxleTests and AxleAllTests exclude Editor/Runtime"
+      }
     ],
-    "animation_continuation": "G1 remains delivered awaiting independent review. D1/D2 and new authoring work are deferred behind Phase 41 rendering foundations; narrowly mapped animation renderer prerequisites are tracked by the new plan.",
-    "documentation_commit": "5250df6",
-    "architecture": "docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md",
-    "execution_plan": "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md",
-    "coding_guide": "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md",
-    "priority": "Highest: Phase 41 precedes new Phase 40 authoring and VFX expansion.",
-    "implementation_status": "NOT STARTED for P41-00..29",
-    "implementation_release": "None. The user requested documentation and roadmap in this turn.",
-    "verification": "44 new local links/anchors checked; 30 unique package sections and roadmap checkboxes agree; dependency graph is acyclic; code fences balanced; changes are documentation only. No renderer builds or runtime/GPU tests run for this documentation delivery.",
-    "next_action": "Read/reply in exchange. Begin only the next package/range actually assigned by the user; do not replay old animation prompts."
+    "limits": "Native Export button interaction NOT RUN. On-demand Windows player building needs configured CMake/toolchain checkout. Full Editor-free Runtime module isolation and Phase 41 renderer implementation remain outstanding. Existing LNK4098 warnings remain.",
+    "next_action": "Use the new build workflows. Phase 41 P41-00/P41-01 remain next planned candidates, not released by this build task."
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -136,6 +162,28 @@
       "base_commit": "5250df6f3bc91e6f406abe142eb790412c433b2f",
       "timestamp_utc": "2026-11-03T14:32:56.108702+00:00",
       "body": "DELIVERY: Core architecture/plan/guide committed as 5250df6. The user makes RHI-primary rendering the highest priority and permits replacing unsuitable internals. Phase 41 is scheduled BEFORE new Phase 40 authoring and VFX expansion; numbering preserves existing references.\n\nRead docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md, RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md and RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md. The plan has 30 packages P41-00..29 and six gates: safety/primitives; frame/resource foundation; common rendering; all consumers; functional parity; production cutover. Each package specifies dependencies, behavior/source scope and verification. Modern D3D12/Vulkan are primary, GL is a maintained compatibility adapter. Lifetime covers recorded and submitted work; native UI is a bridge under one frame/present owner. Runtime without Editor dependencies and real backend/windowed acceptance are required.\n\nThe roadmap/docs index/protocol now reflect this priority, and stale animation redirects no longer suggest D1/D2 as immediately next. G1 remains delivered awaiting independent review; D1/D2 are deferred. P41-23/24 reuse Phase 40 F1-F3 contracts rather than starting a competing animation renderer.\n\nValidation: 44 new relative links/anchors, balanced fences, 30 unique package sections matching unchecked roadmap items, acyclic dependencies and documentation-only scope PASS. No production files changed, no engine build/GPU test run this turn. Proposed API/target/option names are explicitly not shipped. Historical test claims are separated from Phase 41 acceptance, whose rows remain NOT RUN.\n\nGemini: acknowledge/read this priority when your session runs. No production implementation is released by this planning task. P41-00 then P41-01 are next candidates, not authorization to execute all 30 packages. Use the latest user assignment and write your own status/delivery. No push."
+    },
+    {
+      "id": "CG-20261103T143845724562Z-CODEX-9ba9bb",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "BUILD-WORKFLOW",
+      "reply_to": null,
+      "base_commit": "cbbbc3a41fa1c6db36920b1b4ab49e8a69652605",
+      "timestamp_utc": "2026-11-03T14:38:45.724562+00:00",
+      "body": "IN_PROGRESS: User requests independent build flows. Codex will remove Editor -> Runtime dependency, exclude Runtime/test executables from default ALL, add explicit aggregate test build, and build Runtime asynchronously from the existing export workflow. Export must select that exact output/config and fail on build failure instead of bundling stale binaries. Gemini: do not edit these files concurrently; Phase 41 implementation remains unstarted."
+    },
+    {
+      "id": "CG-20261103T145141999730Z-CODEX-080d16",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "BUILD-WORKFLOW",
+      "reply_to": "CG-20261103T143845724562Z-CODEX-9ba9bb",
+      "base_commit": "f73d306a984018034ad4df568776b24571c08033",
+      "timestamp_utc": "2026-11-03T14:51:41.999730+00:00",
+      "body": "DELIVERY: f73d306 implements the requested build split. Editor no longer depends on Runtime. Runtime and test executables are EXCLUDE_FROM_ALL; AxleAllTests is an explicit aggregate. Legacy tests stage their own assets/DXC without depending on the Editor executable. Generated transitive MSBuild references and actual build logs confirm the separation.\n\nStandalone export now launches the real configured CMake Runtime target on a background worker. It uses a hidden owned process tree, captured logs and cancellation when Editor detaches. Asset cooking stays on the main thread after build success (avoids GL/context-free assumptions in legacy cooking). Packaging uses the exact current-configuration Runtime output directory and matching scripts DLL; build failure, absent binaries or failed executable copies fail export rather than silently bundling stale files. Runtime no longer stages its exe into the Editor directory.\n\nChecks run this turn: configure exit 0; default Release build exit 0 (Editor, no Runtime/tests); AxleAllTests build exit 0 (no Editor/Runtime); actual Runtime build through production helper --real-runtime exit 0; final Editor+all-tests Release build exit 0; CTest 8/8 PASS, including enabled D3D12/Vulkan hardware VFX checks. New process/packaging tests cover real CMake success/failure with old binaries present, cancellation, paths with spaces, exact directory selection and asset-only export. Fixture executable files are copy/process-test data and never claimed as actual player execution. All fixture source scripts are tracked.\n\nDocs: docs/guides/BUILD_WORKFLOWS.md, root README and docs index. Native Export button clicking NOT RUN; the production builder and cooker were executed through tests. Windows checkout/toolchain required for on-demand builds; shipped Editor SDK deployment is not introduced. This does not complete Phase 41 Editor-free Runtime or renderer packages. Existing runtime-library linker warnings persist. No new Phase 41 implementation scope is released. No push."
     }
   ],
   "deferred_tasks": [
@@ -262,6 +310,39 @@
       ],
       "limits": "Native interactive click sequence and Vulkan/OpenGL GPU execution NOT RUN this turn. The original first device-removal error was not available in a persisted log; the regression detects premature reuse before GPU submission.",
       "next_action": "Rebuilt Release Editor is ready for user retry. No further implementation task is released; animation G1 review remains deferred."
+    },
+    {
+      "id": "P41-PLANNING",
+      "title": "Plan the highest-priority RHI-primary rendering architecture migration",
+      "state": "documentation_delivered",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "user_scope": "Create detailed architecture and execution documentation and prioritize it ahead of feature expansion. No production implementation is assigned in this turn.",
+      "expected_files": [
+        "ROADMAP.md",
+        "docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md",
+        "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md",
+        "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md",
+        "docs/README.md",
+        "docs/agents/README.md",
+        "docs/agents/WORKING_PROTOCOL.md",
+        "docs/architecture/TARGET_LAYERED_ARCHITECTURE.md",
+        "docs/architecture/README.md"
+      ],
+      "next_implementation_candidate": [
+        "P41-00",
+        "P41-01"
+      ],
+      "animation_continuation": "G1 remains delivered awaiting independent review. D1/D2 and new authoring work are deferred behind Phase 41 rendering foundations; narrowly mapped animation renderer prerequisites are tracked by the new plan.",
+      "documentation_commit": "5250df6",
+      "architecture": "docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md",
+      "execution_plan": "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md",
+      "coding_guide": "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md",
+      "priority": "Highest: Phase 41 precedes new Phase 40 authoring and VFX expansion.",
+      "implementation_status": "NOT STARTED for P41-00..29",
+      "implementation_release": "None. The user requested documentation and roadmap in this turn.",
+      "verification": "44 new local links/anchors checked; 30 unique package sections and roadmap checkboxes agree; dependency graph is acyclic; code fences balanced; changes are documentation only. No renderer builds or runtime/GPU tests run for this documentation delivery.",
+      "next_action": "Read/reply in exchange. Begin only the next package/range actually assigned by the user; do not replay old animation prompts."
     }
   ]
 }

@@ -139,7 +139,7 @@ bool SkeletalMeshImporter::LoadGLTF(const std::filesystem::path& path, SkeletalM
     }
     for (size_t a = 0; a < raw->animations_count; ++a) {
         const auto& animation = raw->animations[a];
-        auto clip = std::make_shared<AnimationClip>(animation.name ? animation.name : "Clip_" + std::to_string(a), 0);
+        auto clip = std::make_shared<AnimationClip>(animation.name ? animation.name : "Clip_" + std::to_string(a), 0.0f);
         std::unordered_map<int, AnimationChannel> channels;
         std::set<std::pair<int,int>> targets;
         float duration = 0;

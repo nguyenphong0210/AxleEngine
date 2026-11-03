@@ -1,3 +1,12 @@
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
@@ -25,15 +34,6 @@
 #include <algorithm>
 #include <array>
 #include <vector>
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#endif
 #include <functional>
 
 namespace Axle {

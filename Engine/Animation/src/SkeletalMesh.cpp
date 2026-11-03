@@ -1,11 +1,21 @@
 #include <Axle/SkeletalMesh.hpp>
 #include <Axle/Buffer.hpp>
+#include <Axle/Window.hpp>
 #include <algorithm>
+#include <cmath>
 
 namespace Axle {
 
     void SkeletalVertex::AddBoneData(int boneID, float weight) {
-        if (weight <= 1e-6f || boneID < 0) return;
+        if (weight <= 1e-6f || boneID < 0 || !std::isfinite(weight)) return;
+
+        // Merge repeated joint influences
+        for (int i = 0; i < 4; ++i) {
+            if (BoneIDs[i] == boneID) {
+                Weights[i] += weight;
+                return;
+            }
+        }
 
         // Try to insert into first empty slot
         for (int i = 0; i < 4; ++i) {
@@ -32,25 +42,56 @@ namespace Axle {
         }
     }
 
+    void SkeletalVertex::NormalizeWeights(int rootBoneIndex) {
+        float sum = 0.0f;
+        for (int i = 0; i < 4; ++i) {
+            if (BoneIDs[i] >= 0 && std::isfinite(Weights[i]) && Weights[i] > 0.0f) {
+                sum += Weights[i];
+            } else {
+                BoneIDs[i] = -1;
+                Weights[i] = 0.0f;
+            }
+        }
+
+        if (sum > 1e-6f) {
+            for (int i = 0; i < 4; ++i) {
+                if (BoneIDs[i] >= 0) {
+                    Weights[i] /= sum;
+                }
+            }
+        } else {
+            // Truly unweighted vertex: fallback to root bone with weight 1.0
+            BoneIDs = glm::ivec4(rootBoneIndex >= 0 ? rootBoneIndex : 0, -1, -1, -1);
+            Weights = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+        }
+    }
+
+    void SkeletalMeshData::Normalize(int rootBoneIndex) {
+        for (auto& v : Vertices) {
+            v.NormalizeWeights(rootBoneIndex);
+        }
+    }
+
     SkeletalMesh::SkeletalMesh(SkeletalMeshData meshData)
         : m_Data(std::move(meshData)) {
-        BuildBuffers();
+        m_Data.Normalize(m_Data.SkeletonRef ? m_Data.SkeletonRef->GetRootBoneIndex() : 0);
+        if (Window::HasActiveContext()) {
+            BuildBuffers();
+        }
+    }
+
+    const std::shared_ptr<VertexArray>& SkeletalMesh::GetVAO() const {
+        if (!m_VAO && Window::HasActiveContext()) {
+            const_cast<SkeletalMesh*>(this)->BuildBuffers();
+        }
+        return m_VAO;
     }
 
     void SkeletalMesh::BuildBuffers() {
         if (m_Data.Vertices.empty() || m_Data.Indices.empty()) return;
+        if (!Window::HasActiveContext()) return;
 
-        // Normalize weights across all 4 components for each vertex
-        for (auto& v : m_Data.Vertices) {
-            float total = v.Weights.x + v.Weights.y + v.Weights.z + v.Weights.w;
-            if (total > 1e-6f) {
-                v.Weights /= total;
-            } else {
-                // Default fallback: bind to root bone with weight 1.0
-                v.BoneIDs = glm::ivec4(0, -1, -1, -1);
-                v.Weights = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
-            }
-        }
+        m_Data.Normalize(m_Data.SkeletonRef ? m_Data.SkeletonRef->GetRootBoneIndex() : 0);
 
         m_VAO = std::make_shared<VertexArray>();
 

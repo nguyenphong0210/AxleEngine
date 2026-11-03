@@ -17,6 +17,7 @@ namespace Axle {
         glm::vec4 Weights{ 0.0f };
 
         void AddBoneData(int boneID, float weight);
+        void NormalizeWeights(int rootBoneIndex = 0);
     };
 
     struct SkeletalMeshData {
@@ -24,6 +25,8 @@ namespace Axle {
         std::vector<SkeletalVertex> Vertices;
         std::vector<u32> Indices;
         std::shared_ptr<Skeleton> SkeletonRef;
+
+        void Normalize(int rootBoneIndex = 0);
     };
 
     class SkeletalMesh {
@@ -34,7 +37,7 @@ namespace Axle {
         const SkeletalMeshData& GetData() const { return m_Data; }
         SkeletalMeshData& GetData() { return m_Data; }
         const std::shared_ptr<Skeleton>& GetSkeleton() const { return m_Data.SkeletonRef; }
-        const std::shared_ptr<VertexArray>& GetVAO() const { return m_VAO; }
+        const std::shared_ptr<VertexArray>& GetVAO() const;
 
         u32 GetIndexCount() const { return static_cast<u32>(m_Data.Indices.size()); }
         u32 GetVertexCount() const { return static_cast<u32>(m_Data.Vertices.size()); }
@@ -43,7 +46,7 @@ namespace Axle {
 
     private:
         SkeletalMeshData m_Data;
-        std::shared_ptr<VertexArray> m_VAO;
+        mutable std::shared_ptr<VertexArray> m_VAO;
     };
 
 }

@@ -775,7 +775,7 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
   - [ ] **A - CPU Foundations & Instance Safety**:
     - [x] **A0**: Always-active, device-free `AxleAnimationUnitTests` target and temporary fixtures.
     - [x] **A1**: Validated skeleton topology, partial-channel bind TRS fallback, quaternion/signed-scale handling and derived lookup rebuilding.
-    - [ ] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits.
+    - [x] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits.
     - [ ] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy.
   - [ ] **B - Versioned Assets, Baking & Persistence**:
     - [ ] **B1**: Stable definitions/IDs for Skeleton, SkeletalMesh, AnimationClip and AnimatorController; append-only asset classifications.

@@ -1,6 +1,8 @@
 #include "AnimationTestHarness.hpp"
 #include <Axle/Skeleton.hpp>
 #include <Axle/AnimationClip.hpp>
+#include <Axle/SkeletalMesh.hpp>
+#include <Axle/SkeletalMeshImporter.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string_view>
 
@@ -191,6 +193,70 @@ static bool TestPoseValidationAndBlendMismatchedRejection() {
     return true;
 }
 
+static bool TestCPUSkeletalMeshConstructionWithoutGLContext() {
+    Axle::SkeletalMeshData data;
+    data.Name = "CPUMesh";
+    Axle::SkeletalVertex v0;
+    v0.Position = {0.0f, 0.0f, 0.0f};
+    v0.Normal = {0.0f, 1.0f, 0.0f};
+    Axle::SkeletalVertex v1;
+    v1.Position = {1.0f, 0.0f, 0.0f};
+    v1.Normal = {0.0f, 1.0f, 0.0f};
+    Axle::SkeletalVertex v2;
+    v2.Position = {0.0f, 1.0f, 0.0f};
+    v2.Normal = {0.0f, 1.0f, 0.0f};
+    data.Vertices = {v0, v1, v2};
+    data.Indices = {0, 1, 2};
+
+    Axle::SkeletalMesh mesh(data);
+    ANIMATION_CHECK(mesh.GetVertexCount() == 3, "SkeletalMesh vertex count correct on CPU");
+    ANIMATION_CHECK(mesh.GetIndexCount() == 3, "SkeletalMesh index count correct on CPU");
+    ANIMATION_CHECK(mesh.GetVAO() == nullptr, "VAO is null when constructed without active OpenGL context");
+    return true;
+}
+
+static bool TestVertexInfluencePruningAndMerging() {
+    Axle::SkeletalVertex v;
+    v.AddBoneData(0, 0.2f);
+    v.AddBoneData(0, 0.3f);
+    ANIMATION_CHECK(v.BoneIDs[0] == 0, "Bone ID 0 stored");
+    ANIMATION_CHECK(Axle::AnimationTests::Near(v.Weights[0], 0.5f), "Repeated bone influences merged");
+
+    v.AddBoneData(1, 0.1f);
+    v.AddBoneData(2, 0.4f);
+    v.AddBoneData(3, 0.05f);
+    // Add bone 4 with weight 0.8 -> replaces smallest (0.05)
+    v.AddBoneData(4, 0.8f);
+
+    v.NormalizeWeights(0);
+    float sum = v.Weights.x + v.Weights.y + v.Weights.z + v.Weights.w;
+    ANIMATION_CHECK(Axle::AnimationTests::Near(sum, 1.0f), "Weights strictly normalized to 1.0");
+
+    Axle::SkeletalVertex unweighted;
+    unweighted.NormalizeWeights(2);
+    ANIMATION_CHECK(unweighted.BoneIDs[0] == 2, "Unweighted vertex falls back to root bone");
+    ANIMATION_CHECK(Axle::AnimationTests::Near(unweighted.Weights[0], 1.0f), "Unweighted vertex gets weight 1.0");
+    return true;
+}
+
+static bool TestProceduralBipedImportAndCPUNormalization() {
+    Axle::SkeletalMeshData meshData;
+    std::shared_ptr<Axle::Skeleton> skeleton;
+    std::vector<std::shared_ptr<Axle::AnimationClip>> clips;
+    bool ok = Axle::SkeletalMeshImporter::CreateProceduralBiped(meshData, skeleton, clips);
+    ANIMATION_CHECK(ok, "CreateProceduralBiped succeeds on CPU");
+    ANIMATION_CHECK(skeleton != nullptr && skeleton->IsValid(), "Procedural biped skeleton valid");
+    ANIMATION_CHECK(!meshData.Vertices.empty(), "Procedural biped mesh has vertices");
+    ANIMATION_CHECK(!meshData.Indices.empty(), "Procedural biped mesh has indices");
+    ANIMATION_CHECK(clips.size() >= 2, "Procedural biped has at least 2 animation clips");
+
+    for (const auto& v : meshData.Vertices) {
+        float sum = v.Weights.x + v.Weights.y + v.Weights.z + v.Weights.w;
+        ANIMATION_CHECK(Axle::AnimationTests::Near(sum, 1.0f), "All imported vertices have normalized influences");
+    }
+    return true;
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure")
         return Axle::AnimationTests::Check(false, "Intentional harness failure", __FILE__, __LINE__) ? 0 : 1;
@@ -203,6 +269,9 @@ int main(int argc, char** argv) {
     if (!TestAntipodalQuaternionInterpolation()) return 1;
     if (!TestSignedScaleDecomposition()) return 1;
     if (!TestPoseValidationAndBlendMismatchedRejection()) return 1;
+    if (!TestCPUSkeletalMeshConstructionWithoutGLContext()) return 1;
+    if (!TestVertexInfluencePruningAndMerging()) return 1;
+    if (!TestProceduralBipedImportAndCPUNormalization()) return 1;
     std::cout << "Animation unit tests PASS\n";
     return 0;
 }

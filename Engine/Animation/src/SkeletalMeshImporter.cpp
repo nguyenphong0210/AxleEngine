@@ -41,6 +41,12 @@ namespace Axle {
                                        SkeletalMeshData& outMesh,
                                        std::shared_ptr<Skeleton>& outSkeleton,
                                        std::vector<std::shared_ptr<AnimationClip>>& outClips) {
+        outMesh.Vertices.clear();
+        outMesh.Indices.clear();
+        outMesh.SkeletonRef.reset();
+        outSkeleton.reset();
+        outClips.clear();
+
         ufbx_load_opts opts{};
         opts.target_axes = ufbx_axes_right_handed_y_up;
         opts.target_unit_meters = 1.0f;
@@ -198,6 +204,12 @@ namespace Axle {
             outClips.push_back(clip);
         }
 
+        outSkeleton->RebuildDerivedData();
+        outMesh.Normalize(outSkeleton->GetRootBoneIndex());
+        for (auto& clip : outClips) {
+            clip->RebuildDerivedData(outSkeleton.get());
+        }
+
         ufbx_free_scene(scene);
         AXLE_CORE_INFO("[SkeletalMeshImporter] Loaded FBX '{}': {} verts, {} indices, {} bones, {} clips",
                  path.filename().string(), outMesh.Vertices.size(), outMesh.Indices.size(), outSkeleton->GetBoneCount(), outClips.size());
@@ -208,6 +220,12 @@ namespace Axle {
                                         SkeletalMeshData& outMesh,
                                         std::shared_ptr<Skeleton>& outSkeleton,
                                         std::vector<std::shared_ptr<AnimationClip>>& outClips) {
+        outMesh.Vertices.clear();
+        outMesh.Indices.clear();
+        outMesh.SkeletonRef.reset();
+        outSkeleton.reset();
+        outClips.clear();
+
         cgltf_options options{};
         cgltf_data* data = nullptr;
         cgltf_result result = cgltf_parse_file(&options, path.string().c_str(), &data);
@@ -227,7 +245,19 @@ namespace Axle {
         std::unordered_map<const cgltf_node*, int> nodeToBoneMap;
 
         if (data->skins_count > 0) {
-            cgltf_skin* skin = &data->skins[0];
+            // Find skin used by a mesh node if possible
+            cgltf_skin* selectedSkin = nullptr;
+            for (size_t n = 0; n < data->nodes_count; ++n) {
+                if (data->nodes[n].skin && data->nodes[n].mesh) {
+                    selectedSkin = data->nodes[n].skin;
+                    break;
+                }
+            }
+            if (!selectedSkin) {
+                selectedSkin = &data->skins[0];
+            }
+
+            cgltf_skin* skin = selectedSkin;
             std::vector<glm::mat4> invBind(skin->joints_count, glm::mat4(1.0f));
 
             if (skin->inverse_bind_matrices) {
@@ -252,21 +282,41 @@ namespace Axle {
                 nodeToBoneMap[joint] = idx;
             }
 
+            // Resolve parent hierarchy including intermediary non-joint nodes
             for (size_t j = 0; j < skin->joints_count; ++j) {
                 cgltf_node* joint = skin->joints[j];
                 int currentIdx = nodeToBoneMap[joint];
-                if (joint->parent && nodeToBoneMap.find(joint->parent) != nodeToBoneMap.end()) {
-                    int parentIdx = nodeToBoneMap[joint->parent];
-                    outSkeleton->GetBones()[currentIdx].ParentID = parentIdx;
-                    outSkeleton->GetBones()[parentIdx].Children.push_back(currentIdx);
+                cgltf_node* p = joint->parent;
+                glm::mat4 accumParentTransform(1.0f);
+                int resolvedParentIdx = -1;
+                while (p) {
+                    auto it = nodeToBoneMap.find(p);
+                    if (it != nodeToBoneMap.end()) {
+                        resolvedParentIdx = it->second;
+                        break;
+                    }
+                    cgltf_float pMat[16];
+                    cgltf_node_transform_local(p, pMat);
+                    accumParentTransform = glm::make_mat4(pMat) * accumParentTransform;
+                    p = p->parent;
+                }
+
+                if (resolvedParentIdx >= 0) {
+                    outSkeleton->GetBones()[currentIdx].ParentID = resolvedParentIdx;
+                    outSkeleton->GetBones()[currentIdx].LocalTransform = accumParentTransform * outSkeleton->GetBones()[currentIdx].LocalTransform;
+                    outSkeleton->GetBones()[resolvedParentIdx].Children.push_back(currentIdx);
                 }
             }
         }
 
+        outSkeleton->RebuildDerivedData();
         if (!outSkeleton->IsValid()) {
             Bone root;
             root.Name = "Root";
+            root.LocalTransform = glm::mat4(1.0f);
+            root.InverseBindMatrix = glm::mat4(1.0f);
             outSkeleton->AddBone(root);
+            outSkeleton->RebuildDerivedData();
         }
 
         outMesh.Name = path.stem().string();
@@ -322,6 +372,29 @@ namespace Axle {
                         u32 idx = static_cast<u32>(cgltf_accessor_read_index(prim->indices, i));
                         outMesh.Indices.push_back(vertexOffset + idx);
                     }
+                } else {
+                    for (size_t i = 0; i < posAcc->count; ++i) {
+                        outMesh.Indices.push_back(vertexOffset + static_cast<u32>(i));
+                    }
+                }
+
+                // If normals were missing, generate flat normals from triangle positions
+                if (!normAcc && outMesh.Indices.size() >= 3) {
+                    for (size_t i = 0; i + 2 < outMesh.Indices.size(); i += 3) {
+                        u32 i0 = outMesh.Indices[i];
+                        u32 i1 = outMesh.Indices[i + 1];
+                        u32 i2 = outMesh.Indices[i + 2];
+                        glm::vec3 p0 = outMesh.Vertices[i0].Position;
+                        glm::vec3 p1 = outMesh.Vertices[i1].Position;
+                        glm::vec3 p2 = outMesh.Vertices[i2].Position;
+                        glm::vec3 n = glm::cross(p1 - p0, p2 - p0);
+                        float len = glm::length(n);
+                        if (len > 1e-6f) n /= len;
+                        else n = glm::vec3(0, 1, 0);
+                        outMesh.Vertices[i0].Normal = n;
+                        outMesh.Vertices[i1].Normal = n;
+                        outMesh.Vertices[i2].Normal = n;
+                    }
                 }
             }
         }
@@ -361,22 +434,29 @@ namespace Axle {
                 cgltf_animation_sampler* s = ch->sampler;
                 if (!s || !s->input || !s->output) continue;
 
+                bool isCubic = (s->interpolation == cgltf_interpolation_type_cubic_spline);
+                size_t strideMultiplier = isCubic ? 3 : 1;
+                size_t valueOffset = isCubic ? 1 : 0;
+
                 size_t keyCount = s->input->count;
                 for (size_t k = 0; k < keyCount; ++k) {
                     cgltf_float timeVal = 0.0f;
                     cgltf_accessor_read_float(s->input, k, &timeVal, 1);
+                    size_t outIndex = k * strideMultiplier + valueOffset;
 
                     if (ch->target_path == cgltf_animation_path_type_translation) {
                         cgltf_float vec[3];
-                        cgltf_accessor_read_float(s->output, k, vec, 3);
+                        cgltf_accessor_read_float(s->output, outIndex, vec, 3);
                         channelPtr->Positions.push_back({ timeVal, glm::vec3(vec[0], vec[1], vec[2]) });
                     } else if (ch->target_path == cgltf_animation_path_type_rotation) {
                         cgltf_float quat[4];
-                        cgltf_accessor_read_float(s->output, k, quat, 4);
-                        channelPtr->Rotations.push_back({ timeVal, glm::quat(quat[3], quat[0], quat[1], quat[2]) });
+                        cgltf_accessor_read_float(s->output, outIndex, quat, 4);
+                        glm::quat q(quat[3], quat[0], quat[1], quat[2]);
+                        if (glm::dot(q, q) > 1e-6f) q = glm::normalize(q);
+                        channelPtr->Rotations.push_back({ timeVal, q });
                     } else if (ch->target_path == cgltf_animation_path_type_scale) {
                         cgltf_float scl[3];
-                        cgltf_accessor_read_float(s->output, k, scl, 3);
+                        cgltf_accessor_read_float(s->output, outIndex, scl, 3);
                         channelPtr->Scales.push_back({ timeVal, glm::vec3(scl[0], scl[1], scl[2]) });
                     }
                 }
@@ -386,6 +466,12 @@ namespace Axle {
         }
 
         cgltf_free(data);
+
+        outMesh.Normalize(outSkeleton->GetRootBoneIndex());
+        for (auto& clip : outClips) {
+            clip->RebuildDerivedData(outSkeleton.get());
+        }
+
         AXLE_CORE_INFO("[SkeletalMeshImporter] Loaded glTF '{}': {} verts, {} indices, {} bones, {} clips",
                  path.filename().string(), outMesh.Vertices.size(), outMesh.Indices.size(), outSkeleton->GetBoneCount(), outClips.size());
         return true;

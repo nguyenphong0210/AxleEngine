@@ -1,4 +1,5 @@
 #include <cmath>
+#include <chrono>
 #include <Axle/TextureDescriptor.hpp>
 #include "EditorLayer.hpp"
 #include <Axle/Application.hpp>
@@ -528,6 +529,8 @@ void EditorLayer::UnlockCursor() {
 }
 
 void EditorLayer::OnDetach() {
+    if (m_RuntimeBuildCancel) m_RuntimeBuildCancel->store(true);
+    if (m_RuntimeBuildFuture.valid()) m_RuntimeBuildFuture.wait();
     AXLE_INFO("EditorLayer::OnDetach -> [1/14] UnlockCursor");
     UnlockCursor();
 
@@ -3690,7 +3693,46 @@ void EditorLayer::RenderImportModal() {
     }
 }
 
+void EditorLayer::FinishExportGame(const Axle::CookSettings& settings) {
+    auto res = Axle::AssetCooker::CookProject(settings);
+    m_ExportStatusSuccess = res.Success;
+    if (res.Success) {
+        m_ExportLastOutputDir = res.PackagePath.parent_path().string();
+        std::string extraBundle;
+        if (res.RuntimeCopied && res.ScriptsCopied) {
+            extraBundle = " + AxleRuntime.exe & AxleScripts.dll";
+        } else if (res.RuntimeCopied) {
+            extraBundle = " + AxleRuntime.exe";
+        }
+        m_ExportStatusMessage = "Succeeded! Created " + res.PackagePath.filename().string() + " (" +
+            std::to_string(res.TotalAssetsCooked) + " assets, " +
+            std::to_string(res.PackageSizeBytes / 1024) + " KB)" + extraBundle +
+            "\nOutput Folder: " + m_ExportLastOutputDir;
+        AXLE_INFO("Export Game: {0}", m_ExportStatusMessage);
+    } else {
+        m_ExportLastOutputDir.clear();
+        m_ExportStatusMessage = "Failed: " + res.ErrorMessage;
+        AXLE_ERROR("Export Game: {0}", m_ExportStatusMessage);
+    }
+}
+
 void EditorLayer::RenderExportGameModal() {
+    if (m_RuntimeBuildFuture.valid() && m_RuntimeBuildFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        try {
+            const auto result = m_RuntimeBuildFuture.get();
+            if (result.Success) FinishExportGame(m_PendingExportSettings);
+            else {
+                m_ExportStatusSuccess = false;
+                m_ExportStatusMessage = result.Error;
+                if (!result.LogPath.empty()) m_ExportStatusMessage += "\nBuild log: " + result.LogPath.string();
+            }
+        } catch (const std::exception& error) {
+            m_ExportStatusSuccess = false;
+            m_ExportStatusMessage = "Runtime build failed: " + std::string(error.what());
+        }
+        m_RuntimeBuildCancel.reset();
+    }
+    const bool buildBusy = m_RuntimeBuildFuture.valid();
     if (m_ShowExportGameModal) {
         ImGui::OpenPopup("Export Standalone Game##Modal");
     }
@@ -3700,12 +3742,13 @@ void EditorLayer::RenderExportGameModal() {
     ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
 
     bool modalOpen = m_ShowExportGameModal;
-    if (ImGui::BeginPopupModal("Export Standalone Game##Modal", &modalOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal("Export Standalone Game##Modal", buildBusy ? nullptr : &modalOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Package Active Project into Standalone Distribution (.axlepak)");
-        ImGui::TextDisabled("Compiles assets, generates Data.axlepak, and bundles AxleRuntime.exe.");
+        ImGui::TextDisabled("Builds the standalone player on demand, then cooks and bundles the game.");
         ImGui::Separator();
         ImGui::Spacing();
 
+        ImGui::BeginDisabled(buildBusy);
         ImGui::TextUnformatted("Export Destination Directory:");
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
         ImGui::InputText("##ExportDir", m_ExportDirectoryBuffer, sizeof(m_ExportDirectoryBuffer));
@@ -3720,13 +3763,16 @@ void EditorLayer::RenderExportGameModal() {
         ImGui::Spacing();
         ImGui::Checkbox("Pre-compile text meshes into binary .axlebin", &m_ExportBakeMeshes);
         ImGui::Checkbox("Bundle Engine Shaders (PBR & Atmospheric Skybox)", &m_ExportIncludeShaders);
-        ImGui::Checkbox("Bundle Standalone Executables (AxleRuntime.exe & AxleScripts.dll)", &m_ExportCopyExecutables);
+        ImGui::Checkbox("Build and bundle standalone player", &m_ExportCopyExecutables);
+        ImGui::EndDisabled();
 
         if (!m_ExportStatusMessage.empty()) {
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-            if (m_ExportStatusSuccess) {
+            if (buildBusy) {
+                ImGui::TextWrapped("%s", m_ExportStatusMessage.c_str());
+            } else if (m_ExportStatusSuccess) {
                 ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "%s", m_ExportStatusMessage.c_str());
             } else {
                 ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", m_ExportStatusMessage.c_str());
@@ -3737,6 +3783,7 @@ void EditorLayer::RenderExportGameModal() {
         ImGui::Separator();
         ImGui::Spacing();
 
+        ImGui::BeginDisabled(buildBusy);
         if (ImGui::Button("Export & Cook Game", ImVec2(180.0f, 32.0f))) {
             Axle::CookSettings settings;
             if (auto proj = Axle::Project::GetActive()) {
@@ -3750,25 +3797,22 @@ void EditorLayer::RenderExportGameModal() {
             settings.IncludeShaders = m_ExportIncludeShaders;
             settings.CopyExecutables = m_ExportCopyExecutables;
 
-            auto res = Axle::AssetCooker::CookProject(settings);
-            m_ExportStatusSuccess = res.Success;
-            if (res.Success) {
-                m_ExportLastOutputDir = res.PackagePath.parent_path().string();
-                std::string extraBundle;
-                if (res.RuntimeCopied && res.ScriptsCopied) {
-                    extraBundle = " + AxleRuntime.exe & AxleScripts.dll";
-                } else if (res.RuntimeCopied) {
-                    extraBundle = " + AxleRuntime.exe";
+            m_ExportStatusSuccess = false;
+            m_ExportLastOutputDir.clear();
+            if (settings.CopyExecutables) {
+                const auto request = Axle::GetRuntimeBuildRequest();
+                settings.ExecutableDirectory = request.ExecutableDirectory;
+                m_PendingExportSettings = settings;
+                m_RuntimeBuildCancel = std::make_shared<std::atomic_bool>(false);
+                try {
+                    m_RuntimeBuildFuture = std::async(std::launch::async,
+                        [request, cancel = m_RuntimeBuildCancel] { return Axle::BuildRuntime(request, *cancel); });
+                    m_ExportStatusMessage = "Building standalone player... Export starts after the build succeeds.";
+                } catch (const std::exception& error) {
+                    m_ExportStatusMessage = "Could not start Runtime build: " + std::string(error.what());
                 }
-                m_ExportStatusMessage = "Succeeded! Created " + res.PackagePath.filename().string() + " (" +
-                    std::to_string(res.TotalAssetsCooked) + " assets, " +
-                    std::to_string(res.PackageSizeBytes / 1024) + " KB)" + extraBundle +
-                    "\nOutput Folder: " + m_ExportLastOutputDir;
-                AXLE_INFO("Export Game: {0}", m_ExportStatusMessage);
             } else {
-                m_ExportLastOutputDir.clear();
-                m_ExportStatusMessage = "Failed: " + res.ErrorMessage;
-                AXLE_ERROR("Export Game: {0}", m_ExportStatusMessage);
+                FinishExportGame(settings);
             }
         }
 
@@ -3782,12 +3826,15 @@ void EditorLayer::RenderExportGameModal() {
         }
 
         ImGui::SameLine();
+        ImGui::BeginDisabled(m_RuntimeBuildFuture.valid());
         if (ImGui::Button("Close", ImVec2(100.0f, 32.0f))) {
             m_ShowExportGameModal = false;
             m_ExportStatusMessage.clear();
             ImGui::CloseCurrentPopup();
         }
 
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
         ImGui::EndPopup();
     } else {
         m_ShowExportGameModal = false;

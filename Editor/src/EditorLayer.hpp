@@ -33,6 +33,10 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <memory>
+#include <future>
+#include <atomic>
+#include <Axle/AssetCooker.hpp>
+#include "RuntimeBuild.hpp"
 #include <unordered_map>
 #include <vector>
 #include <filesystem>
@@ -238,6 +242,10 @@ private:
     std::string m_ExportLastOutputDir;
 
     void RenderExportGameModal();
+    void FinishExportGame(const Axle::CookSettings& settings);
+    std::future<Axle::RuntimeBuildResult> m_RuntimeBuildFuture;
+    std::shared_ptr<std::atomic_bool> m_RuntimeBuildCancel;
+    Axle::CookSettings m_PendingExportSettings;
 
     // Project Settings & Graphics RHI Switching (Phase 33 Step 6)
     bool m_ShowProjectSettingsModal = false;

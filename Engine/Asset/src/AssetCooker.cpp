@@ -99,6 +99,24 @@ namespace Axle {
         CookResult result;
         result.Success = false;
 
+        const auto resolveExecutable = [&](const char* name) {
+            if (!settings.ExecutableDirectory.empty()) {
+                auto path = settings.ExecutableDirectory / name;
+                std::error_code error;
+                return std::filesystem::is_regular_file(path, error) ? path : std::filesystem::path{};
+            }
+            return FindExecutable(name);
+        };
+        std::filesystem::path runtimeExe, scriptsDll;
+        if (settings.CopyExecutables) {
+            runtimeExe = resolveExecutable("AxleRuntime.exe");
+            scriptsDll = resolveExecutable("AxleScripts.dll");
+            if (runtimeExe.empty() || scriptsDll.empty()) {
+                result.ErrorMessage = "Standalone player or scripts module is missing. Build Runtime before exporting executables.";
+                return result;
+            }
+        }
+
         std::filesystem::path outputDir = settings.OutputDirectory;
         if (outputDir.empty()) {
             outputDir = "Export";
@@ -267,7 +285,6 @@ namespace Axle {
 
         // 5. Copy Standalone Executables & DLLs
         if (settings.CopyExecutables) {
-            auto runtimeExe = FindExecutable("AxleRuntime.exe");
             if (!runtimeExe.empty()) {
                 auto targetExe = outputDir / "AxleRuntime.exe";
                 std::filesystem::copy_file(runtimeExe, targetExe, std::filesystem::copy_options::overwrite_existing, ec);
@@ -275,13 +292,14 @@ namespace Axle {
                     result.RuntimeCopied = true;
                     AXLE_INFO("AssetCooker: Bundled standalone player '{0}' (from '{1}')", targetExe.string(), runtimeExe.string());
                 } else {
-                    AXLE_ERROR("AssetCooker: Failed to copy AxleRuntime.exe to '{0}': {1}", targetExe.string(), ec.message());
+                    result.Success = false;
+                    result.ErrorMessage = "Failed to copy standalone player: " + ec.message();
+                    return result;
                 }
             } else {
                 AXLE_WARN("AssetCooker: AxleRuntime.exe not found in search paths. Standalone player was not copied.");
             }
 
-            auto scriptsDll = FindExecutable("AxleScripts.dll");
             if (!scriptsDll.empty()) {
                 auto targetDll = outputDir / "AxleScripts.dll";
                 std::filesystem::copy_file(scriptsDll, targetDll, std::filesystem::copy_options::overwrite_existing, ec);
@@ -289,7 +307,9 @@ namespace Axle {
                     result.ScriptsCopied = true;
                     AXLE_INFO("AssetCooker: Bundled scripts module '{0}' (from '{1}')", targetDll.string(), scriptsDll.string());
                 } else {
-                    AXLE_ERROR("AssetCooker: Failed to copy AxleScripts.dll to '{0}': {1}", targetDll.string(), ec.message());
+                    result.Success = false;
+                    result.ErrorMessage = "Failed to copy scripts module: " + ec.message();
+                    return result;
                 }
             } else {
                 AXLE_WARN("AssetCooker: AxleScripts.dll not found in search paths.");

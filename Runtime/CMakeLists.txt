@@ -1,4 +1,4 @@
-add_executable(AxleRuntime
+add_executable(AxleRuntime EXCLUDE_FROM_ALL
     src/Main.cpp
     src/RuntimeLayer.cpp
 )
@@ -37,7 +37,4 @@ add_custom_command(TARGET AxleRuntime POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/Engine/Resources
     $<TARGET_FILE_DIR:AxleRuntime>/Resources
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    $<TARGET_FILE:AxleRuntime>
-    $<TARGET_FILE_DIR:AxleEditor>/$<TARGET_FILE_NAME:AxleRuntime>
 )

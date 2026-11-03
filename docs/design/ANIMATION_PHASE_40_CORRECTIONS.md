@@ -27,6 +27,8 @@ Full Phase 40 rendering/editor acceptance remains separate.
 
 | Validation/ownership boundary | Explicit bind TRS cannot hide nonfinite matrices; compatibility includes signed fallback components. Controller publication rejects name/ID namespace collisions, unknown node types and unreachable exit phases. A standalone machine snapshot owns its sampled rig even when it was originally updated with a borrowed rig. Permanent boundary/lifetime tests PASS in the final Release suite. |
 
+| B2 packaged resource regression | A real `.axpak` fixture contains separate cooked mesh, binary geometry, rig, clip and controller dependencies. It resolves owner-relative virtual paths with no loose equivalent or inline fallback, verifies keyed skinning, and keeps playing after unmount. Temporary fixture cleanup checks the resolved directory stays under its named temp root. Release Animation CTests PASS in `build/animation-fix-final-ctest.log`. This validates resource loading; automated application pre-cook and standalone Runtime playback remain J2/K3 work. |
+
 Other review findings remain open until a correction row and its evidence are
 added here. The original review documents the pre-fix behavior, not the current
 acceptance result.

@@ -9,10 +9,16 @@
 
 namespace {
 struct Scratch {
-    std::filesystem::path Path = std::filesystem::temp_directory_path() /
+    const std::filesystem::path Root = std::filesystem::weakly_canonical(std::filesystem::temp_directory_path());
+    const std::filesystem::path Path = Root /
         ("axle_animation_binding_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     Scratch() { std::filesystem::create_directories(Path); }
-    ~Scratch() { std::error_code error; std::filesystem::remove_all(Path, error); }
+    ~Scratch() {
+        std::error_code error;
+        const auto resolved = std::filesystem::weakly_canonical(Path,error);
+        if (!error && resolved.parent_path() == Root && resolved.filename().string().starts_with("axle_animation_binding_"))
+            std::filesystem::remove_all(resolved,error);
+    }
 };
 }
 

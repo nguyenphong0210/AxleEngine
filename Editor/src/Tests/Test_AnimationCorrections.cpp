@@ -85,5 +85,6 @@ bool RunAnimationAssetCorrectionTests();
 bool RunAnimationImporterCorrectionTests();
 bool RunAnimationControllerCorrectionTests();
 bool RunAnimationSceneCorrectionTests();
+bool RunAnimationPackageCorrectionTests();
 
-bool RunAnimationCorrectionTests() { return TestCanonicalParameters() && TestLoopGatesEntryAndClone() && RunAnimationAssetCorrectionTests() && RunAnimationImporterCorrectionTests() && RunAnimationControllerCorrectionTests() && RunAnimationSceneCorrectionTests(); }
+bool RunAnimationCorrectionTests() { return TestCanonicalParameters() && TestLoopGatesEntryAndClone() && RunAnimationAssetCorrectionTests() && RunAnimationImporterCorrectionTests() && RunAnimationControllerCorrectionTests() && RunAnimationSceneCorrectionTests() && RunAnimationPackageCorrectionTests(); }

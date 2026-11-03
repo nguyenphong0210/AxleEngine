@@ -5,6 +5,14 @@ Branch: `main`
 Reviewed Baseline Commit: `c13b21a` (`docs(animation): deliver A3 immutable publication and A2 adaptive curve baking report`) followed by reviewer commit `2e4f7c8` (`docs(animation): review A3 A2 delivery and reopen scoped acceptance`)  
 Scope: **Package A3 (Publication & Rig Isolation)** and **Package A2 (FBX Curve Baking & Accuracy Limits)** review corrections strictly, addressing all eight findings (R1–R8) in `docs/design/ANIMATION_A3_A2_GEMINI_REVIEW.md`.
 
+**Subsequent review at `fbfbf58`: acceptance is reopened.** The
+[second review](ANIMATION_A3_A2_SECOND_REVIEW.md) reproduced six failing
+expectations in four remaining areas while the supplied CPU suite passed. In
+particular, the draft constructor remains public, contrary to the private-
+constructor claim below, and constant-next endpoint semantics remain incorrect.
+Read the review and current ROADMAP before treating these delivery claims as
+accepted. The original submission is retained below as historical evidence.
+
 ---
 
 ## 1. Executive Summary

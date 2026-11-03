@@ -3,11 +3,12 @@
 Date: 2026-11-03. Inspected baseline: `538163b`.
 Status: **implementation handoff; proposed interfaces, not shipped APIs**.
 
-**Current continuation is limited to A3, then A2.** Read the
-[scoped handoff](ANIMATION_PHASE_40_GEMINI_CONTINUATION_HANDOFF.md) and
-[copy/paste prompt](ANIMATION_GEMINI_NEXT_TASKS_PROMPT.txt) first. They supersede
-the broad assignment below for this continuation. Stop after those two packages;
-do not interpret this historical full-phase guide as permission to start later work.
+**Current continuation: fix the remaining A3/A2 findings, pass the correction
+gate, then implement G1 CPU document models only and stop for review.** Read the
+[second review](ANIMATION_A3_A2_SECOND_REVIEW.md) and
+[latest scoped prompt](ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt) first. This is the
+only expansion of the previous two-package assignment. The historical broad
+phase instructions below do not authorize renderer, preview or visible UI work.
 
 Read the [completion plan](ANIMATION_PHASE_40_COMPLETION_PLAN.md) first. Its
 A0-K3 IDs, dependency table, scope limits and acceptance gates are canonical.

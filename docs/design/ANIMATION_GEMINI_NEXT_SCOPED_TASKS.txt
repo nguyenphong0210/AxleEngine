@@ -1,0 +1,62 @@
+Implement the following bounded continuation in AxleEngine. This is not an assignment to finish Phase 40.
+
+Read first:
+- docs/design/ANIMATION_A3_A2_SECOND_REVIEW.md (reviewed code HEAD fbfbf58).
+- ROADMAP.md, Phase 40 only.
+- docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md, package dependencies and G1.
+- docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md, document-model contract.
+
+This prompt supersedes the older stop-after-A3/A2 assignment ONLY to permit the specific G1 CPU document work below after the correction gate passes. It does not authorize later packages. Inspect git status/current HEAD first. Preserve unrelated work, including any uncommitted NonlinearSkin.fbx change. Current source headers and this review take precedence over previous delivery claims.
+
+STAGE A -- REQUIRED CORRECTION GATE
+
+A1. Close the remaining publication bypass (S1).
+- SkeletalMesh(SkeletalMeshData) is still public and unvalidated although the delivery report claims it is private. Invalid indices can reach a directly initialized SkeletalMeshComponent.
+- Enforce validated construction on all supported publication paths. Prefer a private constructor/factory with no unchecked public bypass. Migrate every legitimate caller and keep legacy rendering tests compatible. Preserve immutable nested rigs, detached builder aliases, non-assignability and last-good replacement.
+- Test the actual public construction boundary and invalid indices/rig data. Do not add another test that passes only a nullptr. Do not reintroduce a public invalid object merely to exercise ReplaceMesh.
+- Suggested commit: fix(animation): close remaining skeletal publication bypasses
+
+A2. Finish exact FBX semantics and configuration validation (S2-S4).
+- CONSTANT_NEXT currently passes at the interval midpoint but gives X=5 instead of 2 at t=0, and X=8 instead of 5 at t=0.5. Compare against ufbx at exact keys, both interval sides and clip endpoints. Correctly represent the source semantics, or explicitly diagnose/reject unsupported constant-next tracks before publication. Never hide the error by moving keys by epsilon or weakening the expected source values.
+- Reject distinct source timestamps that collapse into one float instead of silently merging them. The review's collapsed STEP ticks are {0,23093079000,23093079200} with values {2,5,8}. Keep true duplicate detection separate from precision loss; audit continuous seeds and emit paths too.
+- Reject NaN/infinite and out-of-range tolerances/intervals before touching outputs. MinIntervalSeconds=NaN currently returns success and one endpoint key. Add finite/range checks and bounded, overflow-safe probe/depth/work settings. Test failed operations leave channel, budget and stats unchanged.
+- Retain the previous eight regression behaviors, including the known spin, representable close STEP, terminal-key classification, unconditional budget checks and nonlinear off-grid comparisons. Do not disable a test because its old assertion exposes a real bug; change tests only to reflect an explicit, documented supported/unsupported contract.
+- Qualify the accuracy contract honestly: finite probe checks are not by themselves a continuous mathematical error bound. Document supported source policies and remaining limits. Do not claim arbitrary ufbx curve/layer coverage without evidence.
+- Suggested commit: fix(animation): preserve exact FBX boundaries and validate bake options
+
+Run the available AxleAnimationUnitTests build and both registered Animation CTests. Correct delivery and A2/A3 status based on actual evidence. If Stage A still fails, continue fixing Stage A or report the precise unresolved issue; DO NOT proceed to G1 and do not claim the gate passed.
+
+STAGE B -- G1 ONLY: DEVICE-FREE ANIMATION DOCUMENT MODELS
+
+Once Stage A passes, implement the model/persistence/history portion of G1, with meaningful CPU tests. No Editor window or rendered preview is requested.
+
+1. Reuse AnimationClipDefinition, AnimatorControllerDefinition, AnimationAssetCodec and FileSystem/VFS. Create clip and controller document models in an appropriate existing CPU authoring location/target (suggested names: AnimationEditorDocument and AnimatorEditorDocument). Model code must not use ImGui, Window, Scene, renderer/device services or a VFX document as its data authority. Follow existing module dependencies; avoid a general framework rewrite.
+
+2. A document owns a working value definition, file path, stable selection, unique current revision token and saved revision token. Imported/shared resources and scene simulation do not own or reset the document. Never expose uncontrolled mutable references that bypass history/validation. Edits must retain IDs, unknown-to-UI authored values and the existing complete resource references/fallbacks.
+
+3. Implement transactional edits: Begin -> update validated working candidate -> Commit once, or Cancel restoring content, selection and revision. Invalid edits and semantic no-ops add no history and do not change dirty state. Support Undo/Redo with bounded command count AND a documented memory budget for nested snapshots. Reject/handle oversized commands explicitly. Do not identify dirty state by stack depth: Save -> edit -> Undo -> branch at the same depth must get a new unique revision. Undo back to the saved revision is clean; Redo away is dirty. Saving does not silently erase useful history.
+
+4. New/Open/Close/Reload must guard dirty data through a concrete pending operation and Save/Discard/Cancel response. Implement the pure state/API contract; do not display dialogs. Failed reads, wrong asset kinds, malformed files, validation errors or failed saves preserve the current document, path, history, selection and saved marker. A failed save must not execute the pending destructive operation. Stale responses must not discard newer edits. SaveAs changes path and marks the exact saved revision only after successful atomic file replacement.
+
+5. Use stable authored IDs for controller state/parameter/transition selection, and stable bone/track identity for clip document selection. Reordering must not redirect selection to another vector element. Removing a selected item clears or deterministically repairs selection; history restores before/after selection. Do not implement G3 keyframe widgets or invent a full key-ID/schema migration in G1. Build only the selection/edit model needed for these tests.
+
+6. Add permanent always-active tests through the existing device-free Animation test target (or a justified equally device-free authoring target):
+   - Clip/controller Open -> valid edit -> SaveAs -> actual file parse/reopen preserves authored data and IDs.
+   - Source-definition and document-copy isolation; two documents do not share mutable draft state.
+   - Save/edit/Undo/Redo and branch-at-same-depth revision identity.
+   - No-op, invalid edit, transaction cancel and one-history-entry commit.
+   - Deterministic history limits and oversized edit behavior.
+   - Guarded New/Open/Close/Reload: Save/Discard/Cancel, invalid target, stale response and failed-save preservation.
+   - Selection survives reorder and repairs delete, including Undo/Redo restoration.
+   - Actual malformed/missing/VFS/wrong-kind inputs and atomic save failure preserve last-good state; tests must not mirror a test-only implementation.
+   - No window, device, shader compilation, scene update or hardcoded demo rig/effect is needed.
+
+Suggested commit: feat(animation-editor): add transactional animation documents
+
+DELIVERY AND HARD STOP
+
+- C++20; English code/comments/docs/commit messages. Local commits only; no push. Keep each coherent correction and G1 separate, with its relevant tests. A final small report commit is allowed.
+- Run only available relevant CPU/build checks. Record exact commands and exit codes; unavailable SDK/compiler/GPU/UI checks are NOT RUN. Do not reuse Codex's historical physical GPU results as your new evidence. Never weaken assertions, skip prerequisites silently or fake native UI/GPU success.
+- Write docs/design/ANIMATION_FOUNDATION_AND_G1_GEMINI_DELIVERY.md with baseline/commit hashes, changed files, corrected source semantics, document APIs/ownership/history/lifecycle rules, actual tests and remaining limitations. Correct prior report claims instead of calling factory-only publication or continuous accuracy proved when they are not.
+- Update only A3/A2 correction status and G1 CPU model acceptance justified by your results. Keep A2's unverified exporter/accuracy criteria, full Phase 40 and Phase 38.3/39 manual checks open.
+- STOP after Stage A and this G1 CPU document model. No G2 preview/transport, visible panels, dopesheet, graph UI, renderer, blend spaces/events, application cooking, GPU harness or another phase. Return commit hashes and the delivery report path for review.

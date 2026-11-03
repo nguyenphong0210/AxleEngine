@@ -10,16 +10,22 @@
 
 namespace Axle {
 
+    enum class AnimationInterpolation : uint32_t { Step, Linear, CubicSpline };
+
     template<typename T>
     struct Keyframe {
         float TimeStamp = 0.0f; // In seconds
         T Value{};
+        glm::vec4 InTangent{0}, OutTangent{0}; // xyz vectors, xyzw quaternion derivatives
     };
 
     struct AnimationChannel {
         std::string BoneName;
         int BoneIndex = -1; // Cached index in Skeleton
 
+        AnimationInterpolation PositionsInterpolation = AnimationInterpolation::Linear;
+        AnimationInterpolation RotationsInterpolation = AnimationInterpolation::Linear;
+        AnimationInterpolation ScalesInterpolation = AnimationInterpolation::Linear;
         std::vector<Keyframe<glm::vec3>> Positions;
         std::vector<Keyframe<glm::quat>> Rotations;
         std::vector<Keyframe<glm::vec3>> Scales;

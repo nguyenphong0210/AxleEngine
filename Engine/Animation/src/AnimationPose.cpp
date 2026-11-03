@@ -5,6 +5,18 @@
 
 namespace Axle {
 
+    bool Bone::GetBindTransform(BoneTransform& out) const {
+        if (!HasExplicitBindTRS) return BoneTransform::TryFromMatrix(LocalTransform, out);
+        BoneTransform candidate(BindTranslation, BindRotation, BindScale);
+        if (!candidate.IsValid()) return false;
+        candidate.Rotation = glm::normalize(candidate.Rotation);
+        const auto matrix = candidate.ToMatrix();
+        for (int c = 0; c < 4; ++c) for (int r = 0; r < 4; ++r)
+            if (std::abs(matrix[c][r] - LocalTransform[c][r]) > 1e-4f * std::max(1.0f, std::abs(LocalTransform[c][r]))) return false;
+        out = candidate;
+        return true;
+    }
+
     glm::mat4 BoneTransform::ToMatrix() const {
         glm::mat4 t = glm::translate(glm::mat4(1.0f), Translation);
         glm::mat4 r = glm::mat4_cast(Rotation);
@@ -150,7 +162,7 @@ namespace Axle {
         size_t count = skeleton.GetBoneCount();
         Transforms.resize(count);
         for (size_t i = 0; i < count; ++i) {
-            if (!BoneTransform::TryFromMatrix(skeleton.GetBones()[i].LocalTransform, Transforms[i])) {
+            if (!skeleton.GetBones()[i].GetBindTransform(Transforms[i])) {
                 Transforms[i] = BoneTransform::FromMatrix(skeleton.GetBones()[i].LocalTransform);
             }
         }

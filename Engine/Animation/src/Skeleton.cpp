@@ -66,7 +66,7 @@ namespace Axle {
             const auto& bone = m_Bones[i];
             if (bone.Name.empty() || !names.insert(bone.Name).second) fail("Empty or duplicate bone name at index " + std::to_string(i));
             BoneTransform local;
-            if (!BoneTransform::TryFromMatrix(bone.LocalTransform, local)) fail("Unsupported local bind TRS: " + bone.Name);
+            if (!bone.GetBindTransform(local)) fail("Unsupported local bind TRS: " + bone.Name);
             bool finite = true;
             for (int c = 0; c < 4; ++c) for (int r = 0; r < 4; ++r)
                 finite &= std::isfinite(bone.InverseBindMatrix[c][r]);

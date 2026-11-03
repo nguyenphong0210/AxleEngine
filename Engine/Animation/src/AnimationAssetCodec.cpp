@@ -110,7 +110,8 @@ namespace Axle {
             bBlock->SetInt("parentId", bone.ParentID);
 
             BoneTransform bt;
-            BoneTransform::TryFromMatrix(bone.LocalTransform, bt);
+            bone.GetBindTransform(bt);
+            bBlock->SetBool("explicitBindTRS", bone.HasExplicitBindTRS);
             bBlock->SetVec3("translation", bt.Translation);
             bBlock->SetVec4("rotation", glm::vec4(bt.Rotation.x, bt.Rotation.y, bt.Rotation.z, bt.Rotation.w));
             bBlock->SetVec3("scale", bt.Scale);
@@ -148,6 +149,8 @@ namespace Axle {
                 glm::vec4 r = child->GetVec4("rotation", glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
                 glm::vec3 s = child->GetVec3("scale", glm::vec3(1.0f));
                 BoneTransform bt(t, glm::quat(r.w, r.x, r.y, r.z), s);
+                b.HasExplicitBindTRS = child->GetBool("explicitBindTRS", false);
+                b.BindTranslation = t; b.BindRotation = bt.Rotation; b.BindScale = s;
                 b.LocalTransform = bt.ToMatrix();
                 for (int column = 0; column < 4; ++column) {
                     const auto key = "inverseBind" + std::to_string(column);
@@ -293,11 +296,16 @@ namespace Axle {
             chBlock->Type = "Channel";
             chBlock->SetString("boneName", ch.BoneName);
             chBlock->SetInt("boneIndex", ch.BoneIndex);
+            chBlock->SetUInt("positionInterpolation", uint32_t(ch.PositionsInterpolation));
+            chBlock->SetUInt("rotationInterpolation", uint32_t(ch.RotationsInterpolation));
+            chBlock->SetUInt("scaleInterpolation", uint32_t(ch.ScalesInterpolation));
 
             for (const auto& k : ch.Positions) {
                 auto kBlock = std::make_shared<AssetBlock>();
                 kBlock->Type = "PosKey";
                 kBlock->SetFloat("time", k.TimeStamp);
+                kBlock->SetVec4("inTangent", k.InTangent);
+                kBlock->SetVec4("outTangent", k.OutTangent);
                 kBlock->SetVec3("val", k.Value);
                 chBlock->Children.push_back(kBlock);
             }
@@ -305,6 +313,8 @@ namespace Axle {
                 auto kBlock = std::make_shared<AssetBlock>();
                 kBlock->Type = "RotKey";
                 kBlock->SetFloat("time", k.TimeStamp);
+                kBlock->SetVec4("inTangent", k.InTangent);
+                kBlock->SetVec4("outTangent", k.OutTangent);
                 kBlock->SetVec4("val", glm::vec4(k.Value.x, k.Value.y, k.Value.z, k.Value.w));
                 chBlock->Children.push_back(kBlock);
             }
@@ -312,6 +322,8 @@ namespace Axle {
                 auto kBlock = std::make_shared<AssetBlock>();
                 kBlock->Type = "ScaleKey";
                 kBlock->SetFloat("time", k.TimeStamp);
+                kBlock->SetVec4("inTangent", k.InTangent);
+                kBlock->SetVec4("outTangent", k.OutTangent);
                 kBlock->SetVec3("val", k.Value);
                 chBlock->Children.push_back(kBlock);
             }
@@ -358,22 +370,31 @@ namespace Axle {
                 AnimationChannel ch;
                 ch.BoneName = child->GetString("boneName");
                 ch.BoneIndex = child->GetInt("boneIndex", -1);
+                ch.PositionsInterpolation = AnimationInterpolation(child->GetUInt("positionInterpolation", 1));
+                ch.RotationsInterpolation = AnimationInterpolation(child->GetUInt("rotationInterpolation", 1));
+                ch.ScalesInterpolation = AnimationInterpolation(child->GetUInt("scaleInterpolation", 1));
 
                 for (const auto& kChild : child->Children) {
                     if (kChild->Type == "PosKey") {
                         Keyframe<glm::vec3> k;
                         k.TimeStamp = kChild->GetFloat("time");
+                        k.InTangent = kChild->GetVec4("inTangent", glm::vec4(0));
+                        k.OutTangent = kChild->GetVec4("outTangent", glm::vec4(0));
                         k.Value = kChild->GetVec3("val");
                         ch.Positions.push_back(k);
                     } else if (kChild->Type == "RotKey") {
                         Keyframe<glm::quat> k;
                         k.TimeStamp = kChild->GetFloat("time");
+                        k.InTangent = kChild->GetVec4("inTangent", glm::vec4(0));
+                        k.OutTangent = kChild->GetVec4("outTangent", glm::vec4(0));
                         glm::vec4 r = kChild->GetVec4("val");
                         k.Value = glm::quat(r.w, r.x, r.y, r.z);
                         ch.Rotations.push_back(k);
                     } else if (kChild->Type == "ScaleKey") {
                         Keyframe<glm::vec3> k;
                         k.TimeStamp = kChild->GetFloat("time");
+                        k.InTangent = kChild->GetVec4("inTangent", glm::vec4(0));
+                        k.OutTangent = kChild->GetVec4("outTangent", glm::vec4(0));
                         k.Value = kChild->GetVec3("val", glm::vec3(1.0f));
                         ch.Scales.push_back(k);
                     }

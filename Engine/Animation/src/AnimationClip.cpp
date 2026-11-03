@@ -3,69 +3,47 @@
 #include <cmath>
 #include <algorithm>
 #include <unordered_set>
+#include <type_traits>
 
 namespace Axle {
 
+    namespace {
+        template<class T> T Spline(const Keyframe<T>& a, const Keyframe<T>& b, float t, float duration) {
+            const auto vector = [](const glm::vec4& v) {
+                if constexpr (std::is_same_v<T, glm::quat>) return glm::quat(v.w, v.x, v.y, v.z);
+                else return glm::vec3(v);
+            };
+            const float t2 = t*t, t3 = t2*t;
+            return a.Value * (2*t3-3*t2+1) + vector(a.OutTangent) * (duration*(t3-2*t2+t)) +
+                   b.Value * (-2*t3+3*t2) + vector(b.InTangent) * (duration*(t3-t2));
+        }
+        template<class T> T Interpolate(const std::vector<Keyframe<T>>& keys, AnimationInterpolation mode, float time, T fallback) {
+            if (keys.empty()) return fallback;
+            if (keys.size() == 1 || time <= keys.front().TimeStamp) return keys.front().Value;
+            if (time >= keys.back().TimeStamp) return keys.back().Value;
+            const auto next = std::upper_bound(keys.begin(), keys.end(), time,
+                [](float value, const auto& key) { return value < key.TimeStamp; });
+            const auto& a = *(next-1); const auto& b = *next;
+            if (mode == AnimationInterpolation::Step) return a.Value;
+            const float duration = b.TimeStamp - a.TimeStamp;
+            const float factor = (time - a.TimeStamp) / duration;
+            if (mode == AnimationInterpolation::CubicSpline) return Spline(a, b, factor, duration);
+            if constexpr (std::is_same_v<T, glm::quat>) {
+                auto first = glm::normalize(a.Value), second = glm::normalize(b.Value);
+                if (glm::dot(first, second) < 0) second = -second;
+                return glm::slerp(first, second, factor);
+            } else return glm::mix(a.Value, b.Value, factor);
+        }
+    }
     glm::vec3 AnimationChannel::InterpolatePosition(float time) const {
-        if (Positions.empty()) return glm::vec3(0.0f);
-        if (Positions.size() == 1 || time <= Positions.front().TimeStamp) {
-            return Positions.front().Value;
-        }
-        if (time >= Positions.back().TimeStamp) {
-            return Positions.back().Value;
-        }
-
-        for (size_t i = 0; i < Positions.size() - 1; ++i) {
-            if (time < Positions[i + 1].TimeStamp) {
-                float dt = Positions[i + 1].TimeStamp - Positions[i].TimeStamp;
-                float factor = (dt > 1e-6f) ? (time - Positions[i].TimeStamp) / dt : 0.0f;
-                return glm::mix(Positions[i].Value, Positions[i + 1].Value, factor);
-            }
-        }
-        return Positions.back().Value;
+        return Interpolate(Positions, PositionsInterpolation, time, glm::vec3(0));
     }
-
-    glm::quat AnimationChannel::InterpolateRotation(float time) const {
-        if (Rotations.empty()) return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-        if (Rotations.size() == 1 || time <= Rotations.front().TimeStamp) {
-            return glm::normalize(Rotations.front().Value);
-        }
-        if (time >= Rotations.back().TimeStamp) {
-            return glm::normalize(Rotations.back().Value);
-        }
-
-        for (size_t i = 0; i < Rotations.size() - 1; ++i) {
-            if (time < Rotations[i + 1].TimeStamp) {
-                float dt = Rotations[i + 1].TimeStamp - Rotations[i].TimeStamp;
-                float factor = (dt > 1e-6f) ? (time - Rotations[i].TimeStamp) / dt : 0.0f;
-                glm::quat q0 = glm::normalize(Rotations[i].Value);
-                glm::quat q1 = glm::normalize(Rotations[i + 1].Value);
-                if (glm::dot(q0, q1) < 0.0f) {
-                    q1 = -q1;
-                }
-                return glm::normalize(glm::slerp(q0, q1, factor));
-            }
-        }
-        return glm::normalize(Rotations.back().Value);
-    }
-
     glm::vec3 AnimationChannel::InterpolateScale(float time) const {
-        if (Scales.empty()) return glm::vec3(1.0f);
-        if (Scales.size() == 1 || time <= Scales.front().TimeStamp) {
-            return Scales.front().Value;
-        }
-        if (time >= Scales.back().TimeStamp) {
-            return Scales.back().Value;
-        }
-
-        for (size_t i = 0; i < Scales.size() - 1; ++i) {
-            if (time < Scales[i + 1].TimeStamp) {
-                float dt = Scales[i + 1].TimeStamp - Scales[i].TimeStamp;
-                float factor = (dt > 1e-6f) ? (time - Scales[i].TimeStamp) / dt : 0.0f;
-                return glm::mix(Scales[i].Value, Scales[i + 1].Value, factor);
-            }
-        }
-        return Scales.back().Value;
+        return Interpolate(Scales, ScalesInterpolation, time, glm::vec3(1));
+    }
+    glm::quat AnimationChannel::InterpolateRotation(float time) const {
+        const auto value = Interpolate(Rotations, RotationsInterpolation, time, glm::quat(1,0,0,0));
+        return glm::dot(value, value) > 1e-12f ? glm::normalize(value) : glm::quat(0,0,0,0);
     }
 
     BoneTransform AnimationChannel::EvaluateBoneTransform(float time, const BoneTransform& bind) const {
@@ -98,10 +76,7 @@ namespace Axle {
     }
 
     const AnimationChannel* AnimationClip::FindChannel(const std::string& boneName) const {
-        auto it = m_BoneChannelMap.find(boneName);
-        if (it != m_BoneChannelMap.end()) {
-            return &m_Channels[it->second];
-        }
+        for (const auto& channel : m_Channels) if (channel.BoneName == boneName) return &channel;
         return nullptr;
     }
 
@@ -140,6 +115,16 @@ namespace Axle {
             if (skeleton && skeleton->FindBoneIndex(ch.BoneName) == -1) {
                 fail("Channel references bone not found in skeleton: " + ch.BoneName);
             }
+
+            for (const auto mode : {ch.PositionsInterpolation, ch.RotationsInterpolation, ch.ScalesInterpolation})
+                if (static_cast<uint32_t>(mode) > 2) fail("Unknown interpolation mode");
+            const auto tangentsValid = [&](const auto& keys, AnimationInterpolation mode) {
+                if (mode != AnimationInterpolation::CubicSpline) return;
+                if (!keys.empty() && keys.size() < 2) fail("Cubic tracks require at least two keys");
+                for (const auto& key : keys) for (int axis = 0; axis < 4; ++axis)
+                    if (!std::isfinite(key.InTangent[axis]) || !std::isfinite(key.OutTangent[axis])) fail("Nonfinite cubic tangent");
+            };
+            tangentsValid(ch.Positions, ch.PositionsInterpolation); tangentsValid(ch.Rotations, ch.RotationsInterpolation); tangentsValid(ch.Scales, ch.ScalesInterpolation);
 
             for (size_t i = 0; i < ch.Positions.size(); ++i) {
                 float t = ch.Positions[i].TimeStamp;
@@ -229,14 +214,14 @@ namespace Axle {
         }
 
         size_t boneCount = skeleton.GetBoneCount();
-        outPose.Resize(boneCount);
+        AnimationPose result(boneCount);
 
         float animTime = WrapTime(time, loop);
 
         for (size_t i = 0; i < boneCount; ++i) {
             const Bone& bone = skeleton.GetBones()[i];
             BoneTransform bind;
-            if (!BoneTransform::TryFromMatrix(bone.LocalTransform, bind)) {
+            if (!bone.GetBindTransform(bind)) {
                 bind = BoneTransform::FromMatrix(bone.LocalTransform);
             }
 
@@ -246,12 +231,14 @@ namespace Axle {
             }
 
             if (channel) {
-                outPose.Transforms[i] = channel->EvaluateBoneTransform(animTime, bind);
+                result.Transforms[i] = channel->EvaluateBoneTransform(animTime, bind);
             } else {
-                outPose.Transforms[i] = bind;
+                result.Transforms[i] = bind;
             }
         }
-        outPose.BindSkeleton(skeleton);
+        for (const auto& transform : result.Transforms) if (!transform.IsValid()) return false;
+        result.BindSkeleton(skeleton);
+        outPose = std::move(result);
         return true;
     }
 

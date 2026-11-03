@@ -75,5 +75,6 @@ static bool TestLoopGatesEntryAndClone() {
 }
 
 bool RunAnimationAssetCorrectionTests();
+bool RunAnimationImporterCorrectionTests();
 
-bool RunAnimationCorrectionTests() { return TestCanonicalParameters() && TestLoopGatesEntryAndClone() && RunAnimationAssetCorrectionTests(); }
+bool RunAnimationCorrectionTests() { return TestCanonicalParameters() && TestLoopGatesEntryAndClone() && RunAnimationAssetCorrectionTests() && RunAnimationImporterCorrectionTests(); }

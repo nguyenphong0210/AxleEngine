@@ -240,8 +240,9 @@ if(AXLE_ENABLE_VFX_GPU_TESTS)
 endif()
 
 # Animation foundations run without application/window/graphics initialization.
-add_executable(AxleAnimationUnitTests src/Tests/AnimationUnitTestMain.cpp src/Tests/Test_AnimationCorrections.cpp src/Tests/Test_AnimationAssetCorrections.cpp)
+add_executable(AxleAnimationUnitTests src/Tests/AnimationUnitTestMain.cpp src/Tests/Test_AnimationCorrections.cpp src/Tests/Test_AnimationAssetCorrections.cpp src/Tests/Test_AnimationImporterCorrections.cpp)
 target_include_directories(AxleAnimationUnitTests PRIVATE src/Tests)
+target_compile_definitions(AxleAnimationUnitTests PRIVATE AXLE_ANIMATION_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(AxleAnimationUnitTests PRIVATE Axle::Animation Axle::Scene)
 if(MSVC)
     target_compile_options(AxleAnimationUnitTests PRIVATE /bigobj /FS)

@@ -15,6 +15,8 @@ Full Phase 40 rendering/editor acceptance remains separate.
 
 | R8 | A validated, explicit little-endian v2 geometry codec retains submesh/material partitions and bounds; v1 remains readable. Both bake/load reject malformed indices, joints, weights, attributes, counts and bounds; decode accepts an expected rig signature and retains last-good output. Permanent valid-sized-corruption and metadata tests PASS; `build/animation-fix-geometry-build.log`. |
 
+| R4 / R5 | glTF import retains helper ancestors without changing original joint indices, preserves explicit signed bind TRS, evaluates/persists STEP and cubic Hermite tangents, validates source buffers and skin associations, preserves primitive material partitions, and rejects ambiguous multi-skin inputs. Tiny checked-in fixtures cover interior samples, helper/bind basis, signed scales and last-good failures. Release Animation CTests PASS; `build/animation-fix-gltf-build.log`. The basis/interpolation contract follows the [Khronos glTF specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#animations). |
+
 Other review findings remain open until a correction row and its evidence are
 added here. The original review documents the pre-fix behavior, not the current
 acceptance result.

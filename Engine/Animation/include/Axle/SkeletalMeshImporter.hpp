@@ -13,7 +13,8 @@ namespace Axle {
         static bool Load(const std::filesystem::path& path,
                          SkeletalMeshData& outMesh,
                          std::shared_ptr<Skeleton>& outSkeleton,
-                         std::vector<std::shared_ptr<AnimationClip>>& outClips);
+                         std::vector<std::shared_ptr<AnimationClip>>& outClips,
+                         std::string* diagnostic = nullptr);
 
         // Native FBX loading via embedded ufbx
         static bool LoadFBX(const std::filesystem::path& path,
@@ -25,7 +26,8 @@ namespace Axle {
         static bool LoadGLTF(const std::filesystem::path& path,
                              SkeletalMeshData& outMesh,
                              std::shared_ptr<Skeleton>& outSkeleton,
-                             std::vector<std::shared_ptr<AnimationClip>>& outClips);
+                             std::vector<std::shared_ptr<AnimationClip>>& outClips,
+                             std::string* diagnostic = nullptr);
 
         // Procedural animated humanoid biped rig generator (for automated tests, CI, and fallback)
         static bool CreateProceduralBiped(SkeletalMeshData& outMesh,

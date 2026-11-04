@@ -713,13 +713,6 @@ namespace Axle {
             }
         });
 
-        // Legacy Component Data (Preserved during retirement)
-        DrawComponent<LegacyComponentsHolder>("Legacy Component Data (Retired)", entity, [&](LegacyComponentsHolder& holder) {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Preserved Legacy Components (Read-Only):");
-            for (const auto& comp : holder.Components) {
-                ImGui::BulletText("%s (%zu parameters)", comp.TypeName.c_str(), comp.Lines.size());
-            }
-        }, /*canRemove=*/ false);
 
         // Directional Light Component
         DrawComponent<DirectionalLightComponent>("Directional Sun Light", entity, [&](DirectionalLightComponent& dlc) {

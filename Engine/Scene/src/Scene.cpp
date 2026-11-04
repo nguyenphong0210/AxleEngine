@@ -146,10 +146,6 @@ namespace Axle {
             newEntity.AddComponent<AssemblyComponent>(entity.GetComponent<AssemblyComponent>());
         }
 
-        // Copy LegacyComponentsHolder
-        if (entity.HasComponent<LegacyComponentsHolder>()) {
-            newEntity.AddComponent<LegacyComponentsHolder>(entity.GetComponent<LegacyComponentsHolder>());
-        }
 
         // Copy AudioListenerComponent
         if (entity.HasComponent<AudioListenerComponent>()) {
@@ -181,14 +177,7 @@ namespace Axle {
         if (entity.HasComponent<CollisionShape3D>()) {
             newEntity.AddComponent<CollisionShape3D>(entity.GetComponent<CollisionShape3D>());
         }
-        const bool hasLegacyVehicle = entity.HasComponent<LegacyComponentsHolder>()
-            && entity.GetComponent<LegacyComponentsHolder>().HasLegacyVehicleData();
-        if (hasLegacyVehicle && entity.HasComponent<RigidBody3D>()) {
-            auto rb = entity.GetComponent<RigidBody3D>();
-            rb.RuntimeBodyID = BodyID();
-            newEntity.AddComponent<RigidBody3D>(rb);
-        }
-        if (physicsScene && entity.HasComponent<RigidBody3D>() && !hasLegacyVehicle) {
+        if (physicsScene && entity.HasComponent<RigidBody3D>()) {
             const auto& srcRb = entity.GetComponent<RigidBody3D>();
             if (entity.HasComponent<CollisionShape3D>()) {
                 const auto& shape = entity.GetComponent<CollisionShape3D>();
@@ -1098,10 +1087,6 @@ namespace Axle {
                 dstNsc.DestroyScript = srcNsc.DestroyScript;
             }
 
-            // LegacyComponentsHolder
-            if (srcEntity.HasComponent<LegacyComponentsHolder>()) {
-                dstEntity.AddComponent<LegacyComponentsHolder>(srcEntity.GetComponent<LegacyComponentsHolder>());
-            }
 
             // AudioListenerComponent
             if (srcEntity.HasComponent<AudioListenerComponent>()) {

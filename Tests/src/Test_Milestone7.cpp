@@ -486,11 +486,6 @@ bool RunTest_Step35_SceneWithSplineAndTerrain() {
     carCol.HalfExtent = glm::vec3(0.9f, 0.4f, 2.1f);
     carCol.Friction = 0.2f;
 
-    auto& holder = carEntity.AddComponent<Axle::LegacyComponentsHolder>();
-    holder.Components.push_back({ "VehicleComponent", { "ChassisMass: 1500.0", "MaxEngineTorque: 900.0", "MaxRPM: 7500.0", "FourWheelDrive: true" } });
-    holder.Components.push_back({ "VehicleAudioComponent", { "Enabled: true" } });
-    holder.Components.push_back({ "VehicleVFXComponent", { "Enabled: true", "SurfaceType: Gravel" } });
-
     carEntity.AddComponent<Axle::NativeScriptComponent>("CarController");
 
     // Children of Car: 4 Wheels
@@ -513,9 +508,6 @@ bool RunTest_Step35_SceneWithSplineAndTerrain() {
         auto& wtc = wheelEnt.GetComponent<Axle::TransformComponent>();
         wtc.Translation = wdef.Offset;
         wheelEnt.SetParent(carEntity, false);
-
-        auto& wheelHolder = wheelEnt.AddComponent<Axle::LegacyComponentsHolder>();
-        wheelHolder.Components.push_back({ "WheelComponent", { "Radius: 0.35", "Width: 0.25" } });
 
         auto& wmc = wheelEnt.AddComponent<Axle::MeshInstance3D>();
         wmc.AssetPath = "assets/models/SportsCar_Wheel.axlemesh";
@@ -635,21 +627,16 @@ bool RunTest_Step35_SceneWithSplineAndTerrain() {
                       << lsc.Curve.GetTotalLength() << "m, ClosedLoop=" << (lsc.Curve.IsLoop() ? "true" : "false") << std::endl;
         }
 
-        if (ent.HasComponent<Axle::LegacyComponentsHolder>()) {
-            const auto& lh = ent.GetComponent<Axle::LegacyComponentsHolder>();
-            for (const auto& c : lh.Components) {
-                if (c.TypeName == "VehicleComponent") {
-                    foundCar = true;
-                    assert(ent.HasComponent<Axle::RigidBody3D>());
-                    assert(ent.GetComponent<Axle::RigidBody3D>().IsDynamic);
-                    assert(ent.HasComponent<Axle::NativeScriptComponent>());
-                    assert(ent.GetComponent<Axle::NativeScriptComponent>().ScriptName == "CarController");
-                    std::cout << "  -> Verified Car Entity with preserved legacy VehicleComponent." << std::endl;
-                }
-                if (c.TypeName == "WheelComponent") {
-                    wheelCount++;
-                }
-            }
+        if (tag == "Car") {
+            foundCar = true;
+            assert(ent.HasComponent<Axle::RigidBody3D>());
+            assert(ent.GetComponent<Axle::RigidBody3D>().IsDynamic);
+            assert(ent.HasComponent<Axle::NativeScriptComponent>());
+            assert(ent.GetComponent<Axle::NativeScriptComponent>().ScriptName == "CarController");
+            std::cout << "  -> Verified Car Entity (clean decoupled)." << std::endl;
+        }
+        if (tag.rfind("Wheel_", 0) == 0) {
+            wheelCount++;
         }
 
         if (tag == "Main Camera") {

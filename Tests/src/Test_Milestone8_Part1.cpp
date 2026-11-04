@@ -1089,21 +1089,7 @@ bool RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters() {
         auto& pec = emitterEnt.AddComponent<Axle::ParticleEmitterComponent>(fireCfg);
         pec.SetSimulationSpace(Axle::ParticleSimulationSpace::World);
 
-        // 2. Entity with Legacy VehicleVFXComponent
-        Axle::Entity carEnt = srcScene->CreateEntity("SportsCar");
-        auto& holder = carEnt.AddComponent<Axle::LegacyComponentsHolder>();
-        holder.Components.push_back({
-            "VehicleVFXComponent",
-            {
-                "BurnoutSlipThreshold: 0.280000",
-                "SkidSlipThreshold: 0.220000",
-                "MinSpeedForRoosterTail: 5.500000",
-                "BackfireMinRPM: 5400.000000",
-                "SurfaceType: Gravel"
-            }
-        });
-
-        // 3. Entity with CharacterVFXComponent
+        // 2. Entity with CharacterVFXComponent
         Axle::Entity playerEnt = srcScene->CreateEntity("HeroPlayer");
         Axle::CharacterVFXConfig cVFXCfg;
         cVFXCfg.StrideLength = 1.55f;
@@ -1119,8 +1105,6 @@ bool RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters() {
         assert(yaml.find("ParticleEmitterComponent:") != std::string::npos);
         assert(yaml.find("CustomFire") != std::string::npos);
         assert(yaml.find("ShapeConeAngle: 0.45") != std::string::npos);
-        assert(yaml.find("VehicleVFXComponent:") != std::string::npos);
-        assert(yaml.find("BurnoutSlipThreshold: 0.28") != std::string::npos);
         assert(yaml.find("CharacterVFXComponent:") != std::string::npos);
         assert(yaml.find("StrideLength: 1.55") != std::string::npos);
 
@@ -1143,13 +1127,7 @@ bool RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters() {
         assert(std::abs(dstPec.Config.Collision.Restitution - 0.65f) < 0.01f);
         assert(dstPec.System != nullptr);
 
-        // Verify Entity 2: SportsCar
-        Axle::Entity dstCar = dstScene->GetEntityByUUID(carEnt.GetComponent<Axle::IDComponent>().ID);
-        assert(dstCar);
-        assert(dstCar.HasComponent<Axle::LegacyComponentsHolder>());
-        assert(dstCar.GetComponent<Axle::LegacyComponentsHolder>().HasLegacyVehicleData());
-
-        // Verify Entity 3: HeroPlayer
+        // Verify Entity 2: HeroPlayer
         Axle::Entity dstPlayer = dstScene->GetEntityByUUID(playerEnt.GetComponent<Axle::IDComponent>().ID);
         assert(dstPlayer);
         assert(dstPlayer.HasComponent<Axle::CharacterVFXComponent>());
@@ -1158,7 +1136,7 @@ bool RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters() {
         assert(std::abs(dstCVFX.Config.HeavyLandingThreshold - 8.0f) < 0.01f);
 
         std::cout << "  -> YAML payload length: " << yaml.length() << " bytes." << std::endl;
-        std::cout << "  -> Deserialized ParticleEmitter, VehicleVFX, and CharacterVFX with 100% parameter fidelity." << std::endl;
+        std::cout << "  -> Deserialized ParticleEmitter and CharacterVFX with 100% parameter fidelity." << std::endl;
         std::cout << "  -> PASS: Scene serialization and deserialization roundtrip verified." << std::endl;
     }
 
@@ -1360,23 +1338,6 @@ bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
         bool loaded = serializer.Deserialize("assets/scenes/OffRoadTrack.axlescene");
         assert(loaded);
 
-        // Find Car entity
-        bool foundCarWithVFX = false;
-        auto legView = scene->GetRegistry().view<Axle::LegacyComponentsHolder>();
-        for (auto eID : legView) {
-            Axle::Entity e{ eID, scene.get() };
-            if (e.GetName() == "Car") {
-                const auto& holder = e.GetComponent<Axle::LegacyComponentsHolder>();
-                for (const auto& c : holder.Components) {
-                    if (c.TypeName == "VehicleVFXComponent") {
-                        foundCarWithVFX = true;
-                        break;
-                    }
-                }
-            }
-        }
-        assert(foundCarWithVFX);
-
         // Find TrackTorch_VFX entity
         bool foundTorch = false;
         auto pecView = scene->GetRegistry().view<Axle::ParticleEmitterComponent>();
@@ -1393,7 +1354,7 @@ bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
         }
         assert(foundTorch);
 
-        std::cout << "  -> Successfully verified Car (VehicleVFXComponent) and TrackTorch_VFX in OffRoadTrack scene." << std::endl;
+        std::cout << "  -> Successfully verified TrackTorch_VFX in OffRoadTrack scene." << std::endl;
         std::cout << "  -> PASS: OffRoadTrack scene VFX integration verified." << std::endl;
     }
 

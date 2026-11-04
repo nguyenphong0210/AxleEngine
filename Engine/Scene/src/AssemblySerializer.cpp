@@ -1,4 +1,3 @@
-#include "LegacyComponentIO.hpp"
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/AnimationAssetCodec.hpp>
@@ -308,13 +307,6 @@ namespace Axle {
                 fout << "      OuterConeAngle: " << slc.OuterConeAngle << "\n";
             }
 
-            // LegacyComponentsHolder (Preserve retired components verbatim)
-            if (entity.HasComponent<LegacyComponentsHolder>()) {
-                const auto& holder = entity.GetComponent<LegacyComponentsHolder>();
-                for (const auto& comp : holder.Components) {
-                    Detail::WriteLegacyComponent(fout, comp);
-                }
-            }
 
             // SkeletalMeshComponent
             if (entity.HasComponent<SkeletalMeshComponent>()) {
@@ -409,7 +401,6 @@ namespace Axle {
         SpotLightComponent SpotLight;
 
 
-        std::vector<LegacyComponentPayload> LegacyComponents;
 
         bool HasSkeletalMesh = false;
         SkeletalMeshComponent SkeletalMesh;
@@ -436,7 +427,6 @@ namespace Axle {
         AudioSource,
         PointLight,
         SpotLight,
-        LegacyComponent,
         SkeletalMesh,
         Animator,
         Hierarchy,
@@ -452,16 +442,6 @@ namespace Axle {
 
         while (std::getline(stream, line)) {
             if (!line.empty() && line.back() == '\r') line.pop_back();
-            if (currentSection == AsmSection::LegacyComponent) {
-                if (Detail::AppendLegacyLine(line, current.LegacyComponents.back())) continue;
-                currentSection = AsmSection::None;
-            }
-            LegacyComponentPayload payload;
-            if (inEntity && Detail::BeginLegacyComponent(line, payload)) {
-                current.LegacyComponents.push_back(std::move(payload));
-                currentSection = AsmSection::LegacyComponent;
-                continue;
-            }
             std::string trimmed = Trim(line);
             if (trimmed.empty() || trimmed[0] == '#') continue;
 
@@ -1007,10 +987,6 @@ namespace Axle {
                 entity.AddComponent<SpotLightComponent>(raw.SpotLight);
             }
 
-            // LegacyComponentsHolder (Preserve retired components veratim)
-            if (!raw.LegacyComponents.empty()) {
-                entity.AddComponent<LegacyComponentsHolder>().Components = raw.LegacyComponents;
-            }
 
             // SkeletalMeshComponent
             if (raw.HasSkeletalMesh) {
@@ -1054,8 +1030,6 @@ namespace Axle {
                 const auto& raw = rawEntities[i];
                 Entity entity = oldToEntity[raw.OldUUID];
 
-                if (entity.HasComponent<LegacyComponentsHolder>()
-                    && entity.GetComponent<LegacyComponentsHolder>().HasLegacyVehicleData()) continue;
                 if (entity.HasComponent<RigidBody3D>() && entity.HasComponent<CollisionShape3D>()) {
                     auto& rb = entity.GetComponent<RigidBody3D>();
                     auto& cs = entity.GetComponent<CollisionShape3D>();
@@ -1239,7 +1213,6 @@ namespace Axle {
             node.SkeletalMesh = raw.SkeletalMesh;
             node.HasAnimator = raw.HasAnimator;
             node.Animator = raw.Animator;
-            node.LegacyComponents = raw.LegacyComponents;
             nodeMap[raw.OldUUID] = node;
         }
 
@@ -1312,9 +1285,6 @@ namespace Axle {
             out << "      GravityFactor: " << node.RigidBody.GravityFactor << "\n";
         }
 
-        for (const auto& payload : node.LegacyComponents) {
-            Detail::WriteLegacyComponent(out, payload);
-        }
 
         if (node.HasSkeletalMesh) {
             std::string rigFallback, unusedController;

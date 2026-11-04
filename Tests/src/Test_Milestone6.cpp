@@ -1069,94 +1069,50 @@ bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
     std::cout << "[31.9] [RETIRED] VehicleAudio granular synthesizer and physics telemetry integration retired under VEHICLE-RETIREMENT." << std::endl;
     std::cout << "  -> Granular engine synthesis, slip acoustics and suspension thud retired from Engine core." << std::endl;
 
-    // 10. Legacy VehicleAudioComponent Data Preservation Roundtrip
-    std::cout << "[31.10] Verifying Legacy VehicleAudioComponent data preservation roundtrip in SceneSerializer and AssemblySerializer..." << std::endl;
-    auto vehicleScene = std::make_shared<Axle::Scene>();
-    auto carEntity = vehicleScene->CreateEntity("SportsCarChassis");
-    carEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(10.0f, 1.0f, 20.0f);
+    // 10. General AudioSourceComponent Serialization Roundtrip
+    std::cout << "[31.10] Verifying AudioSourceComponent roundtrip in SceneSerializer and AssemblySerializer..." << std::endl;
+    {
+        auto audioScene = std::make_shared<Axle::Scene>();
+        auto soundEntity = audioScene->CreateEntity("SpatialAudioSource");
+        soundEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(10.0f, 1.0f, 20.0f);
+        auto& asc = soundEntity.AddComponent<Axle::AudioSourceComponent>();
+        asc.AssetPath = wavPath.string();
+        asc.Volume = 0.85f;
+        asc.Pitch = 1.2f;
+        asc.Spatialized = true;
 
-    auto& holder = carEntity.AddComponent<Axle::LegacyComponentsHolder>();
-    holder.Components.push_back({
-        "VehicleAudioComponent",
-        {
-            "Enabled: true",
-            std::string("EnginePowerClipPath: ") + wavPath.string(),
-            std::string("EngineCoastClipPath: ") + wavPath.string(),
-            "MinEnginePitch: 0.550000",
-            "MaxEnginePitch: 2.650000",
-            "EngineMasterVolume: 0.850000",
-            "SlipThreshold: 0.250000",
-            "TireSquealMasterVolume: 0.650000",
-            "SuspensionThudThreshold: 2.100000",
-            "CollisionDecelThreshold: 22.000000",
-            "Spatialized: true",
-            "MinDistance: 3.000000",
-            "MaxDistance: 90.000000"
+        // Test Scene Serialization Roundtrip (.axlescene)
+        std::filesystem::path audioScenePath = testDir / "AudioScene.axlescene";
+        Axle::SceneSerializer sceneSerializer(audioScene.get());
+        sceneSerializer.Serialize(audioScenePath);
+
+        auto loadedAudioScene = std::make_shared<Axle::Scene>();
+        Axle::SceneSerializer loadedSerializer(loadedAudioScene.get());
+        if (!loadedSerializer.Deserialize(audioScenePath)) {
+            std::cerr << "FAIL: Failed to deserialize AudioScene.axlescene!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
         }
-    });
 
-    // Test Scene Serialization Roundtrip (.axlescene)
-    std::filesystem::path carScenePath = testDir / "CarAudioScene.axlescene";
-    Axle::SceneSerializer sceneSerializer(vehicleScene.get());
-    sceneSerializer.Serialize(carScenePath);
-
-    auto loadedVehicleScene = std::make_shared<Axle::Scene>();
-    Axle::SceneSerializer loadedSerializer(loadedVehicleScene.get());
-    if (!loadedSerializer.Deserialize(carScenePath)) {
-        std::cerr << "FAIL: Failed to deserialize CarAudioScene.axlescene!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    bool foundLegacyAudio = false;
-    auto carView = loadedVehicleScene->GetRegistry().view<Axle::TagComponent>();
-    for (auto entID : carView) {
-        Axle::Entity e{ entID, loadedVehicleScene.get() };
-        if (e.HasComponent<Axle::LegacyComponentsHolder>()) {
-            const auto& lh = e.GetComponent<Axle::LegacyComponentsHolder>();
-            for (const auto& c : lh.Components) {
-                if (c.TypeName == "VehicleAudioComponent") {
-                    foundLegacyAudio = true;
+        bool foundAudioSource = false;
+        auto tagView = loadedAudioScene->GetRegistry().view<Axle::TagComponent>();
+        for (auto entID : tagView) {
+            Axle::Entity e{ entID, loadedAudioScene.get() };
+            if (e.HasComponent<Axle::AudioSourceComponent>()) {
+                const auto& loadedAsc = e.GetComponent<Axle::AudioSourceComponent>();
+                if (loadedAsc.AssetPath == wavPath.string()) {
+                    foundAudioSource = true;
                     break;
                 }
             }
         }
-    }
-    if (!foundLegacyAudio) {
-        std::cerr << "FAIL: VehicleAudioComponent legacy payload not preserved in deserialized scene!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: SceneSerializer preserved VehicleAudioComponent legacy payload verbatim." << std::endl;
-
-    // Test Assembly Prefab Roundtrip (.axle)
-    std::filesystem::path carAsmPath = testDir / "SportsCarChassis.axle";
-    if (!Axle::AssemblySerializer::Serialize(carAsmPath, carEntity, nullptr)) {
-        std::cerr << "FAIL: AssemblySerializer failed to export SportsCarChassis assembly!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    auto asmCarScene = std::make_shared<Axle::Scene>();
-    Axle::Entity instantiatedCar = Axle::AssemblySerializer::Deserialize(carAsmPath, asmCarScene.get(), nullptr);
-    if (!instantiatedCar || !instantiatedCar.HasComponent<Axle::LegacyComponentsHolder>()) {
-        std::cerr << "FAIL: AssemblySerializer failed to preserve LegacyComponentsHolder!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    bool foundAsmLegacy = false;
-    for (const auto& c : instantiatedCar.GetComponent<Axle::LegacyComponentsHolder>().Components) {
-        if (c.TypeName == "VehicleAudioComponent") {
-            foundAsmLegacy = true;
-            break;
+        if (!foundAudioSource) {
+            std::cerr << "FAIL: AudioSourceComponent not preserved in deserialized scene!" << std::endl;
+            std::filesystem::remove_all(testDir, ec);
+            return false;
         }
+        std::cout << "  -> PASS: SceneSerializer preserved AudioSourceComponent cleanly." << std::endl;
     }
-    if (!foundAsmLegacy) {
-        std::cerr << "FAIL: AssemblySerializer failed to restore VehicleAudioComponent legacy payload!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: AssemblySerializer roundtrip preserved VehicleAudioComponent legacy payload." << std::endl;
 
     // 11. Subsystem Shutdown
     std::cout << "[31.11] Verifying AudioEngine shutdown..." << std::endl;

@@ -1,4 +1,3 @@
-#include "LegacyComponentIO.hpp"
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/SceneSerializer.hpp>
@@ -196,13 +195,6 @@ namespace Axle {
                 ss << "      ScriptName: " << nsc.ScriptName << "\n";
             }
 
-            // LegacyComponentsHolder (Preserve retired components verbatim)
-            if (entity.HasComponent<LegacyComponentsHolder>()) {
-                const auto& holder = entity.GetComponent<LegacyComponentsHolder>();
-                for (const auto& comp : holder.Components) {
-                    Detail::WriteLegacyComponent(ss, comp);
-                }
-            }
 
             // DirectionalLightComponent
             if (entity.HasComponent<DirectionalLightComponent>()) {
@@ -615,7 +607,6 @@ namespace Axle {
             Camera,
             AudioListener,
             AudioSource,
-            LegacyComponent,
             SkeletalMesh,
             Animator,
             CharacterController,
@@ -640,21 +631,6 @@ namespace Axle {
 
         while (std::getline(stream, line)) {
             if (!line.empty() && line.back() == '\r') line.pop_back();
-            if (currentSection == ComponentSection::LegacyComponent) {
-                auto& payload = currentEntity.GetComponent<LegacyComponentsHolder>().Components.back();
-                if (Detail::AppendLegacyLine(line, payload)) continue;
-                currentSection = ComponentSection::None;
-            }
-            LegacyComponentPayload payload;
-            if (currentEntity && Detail::BeginLegacyComponent(line, payload)) {
-                flushCustomSection();
-                if (!currentEntity.HasComponent<LegacyComponentsHolder>()) {
-                    currentEntity.AddComponent<LegacyComponentsHolder>();
-                }
-                currentEntity.GetComponent<LegacyComponentsHolder>().Components.push_back(std::move(payload));
-                currentSection = ComponentSection::LegacyComponent;
-                continue;
-            }
             std::string trimmed = Trim(line);
             if (trimmed.empty() || trimmed[0] == '#') continue;
 
@@ -1704,15 +1680,8 @@ namespace Axle {
                 auto& rb = rbView.get<RigidBody3D>(entityID);
                 auto& tc = rbView.get<TransformComponent>(entityID);
 
-                bool isLegacyChassis = false;
-                if (m_Scene->GetRegistry().all_of<LegacyComponentsHolder>(entityID)) {
-                    const auto& holder = m_Scene->GetRegistry().get<LegacyComponentsHolder>(entityID);
-                    if (holder.HasLegacyVehicleData()) {
-                        isLegacyChassis = true;
-                    }
-                }
-                if (isLegacyChassis || m_Scene->GetRegistry().all_of<CharacterControllerComponent>(entityID)) {
-                    continue; // Skip static body creation; handled by Legacy chassis or CharacterController
+                if (m_Scene->GetRegistry().all_of<CharacterControllerComponent>(entityID)) {
+                    continue; // Skip static body creation; handled by CharacterController
                 }
 
                 // Retrieve or initialize CollisionShape3D

@@ -905,29 +905,6 @@ namespace Axle {
         }
     };
 
-    struct LegacyComponentPayload {
-        std::string TypeName;
-        std::vector<std::string> Lines;
-        // Loaded blocks retain their header and raw lines; constructed blocks use relative lines.
-        std::string RawHeader;
-    };
-
-    struct LegacyComponentsHolder {
-        std::vector<LegacyComponentPayload> Components;
-
-        bool HasLegacyVehicleData() const {
-            for (const auto& comp : Components) {
-                if (comp.TypeName == "VehicleComponent" ||
-                    comp.TypeName == "WheelComponent" ||
-                    comp.TypeName == "VehicleWheel3D" ||
-                    comp.TypeName == "VehicleAudioComponent" ||
-                    comp.TypeName == "VehicleVFXComponent") {
-                    return true;
-                }
-            }
-            return false;
-        }
-    };
 
 
 

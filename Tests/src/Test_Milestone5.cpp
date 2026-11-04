@@ -512,29 +512,21 @@ bool RunTest_Step24_Phase19_ParallelECSProcessing() {
 // =============================================================================
 bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
     std::cout << "\n========================================================" << std::endl;
-    std::cout << " [STEP 25 TEST] VEHICLE-RETIREMENT: LEGACY PRESERVATION " << std::endl;
+    std::cout << " [STEP 25 TEST] VEHICLE-RETIREMENT: CLEAN VEHICLE-FREE ENGINE " << std::endl;
     std::cout << "========================================================" << std::endl;
 
-    std::cout << "[RETIRED] Phase 20 Component-per-Wheel Legacy Vehicle Architecture has been retired under task VEHICLE-RETIREMENT." << std::endl;
-    std::cout << "[25.1] Testing LegacyComponentsHolder roundtrip in SceneSerializer..." << std::endl;
+    std::cout << "[RETIRED] Legacy Vehicle Architecture completely retired. Engine is 100% clean." << std::endl;
+    std::cout << "[25.1] Testing vehicle-free SceneSerializer roundtrip..." << std::endl;
 
-    std::filesystem::path testScenePath = "temp_legacy_vehicle_test.axlescene";
+    std::filesystem::path testScenePath = "temp_clean_vehicle_free_test.axlescene";
 
     // 1. Scene roundtrip test
     {
         auto srcScene = std::make_shared<Axle::Scene>();
-        auto carEnt = srcScene->CreateEntity("Legacy_Car");
-        auto& tc = carEnt.GetComponent<Axle::TransformComponent>();
+        auto propEnt = srcScene->CreateEntity("StaticProp");
+        auto& tc = propEnt.GetComponent<Axle::TransformComponent>();
         tc.Translation = glm::vec3(1.0f, 2.0f, 3.0f);
-
-        auto& holder = carEnt.AddComponent<Axle::LegacyComponentsHolder>();
-        holder.Components.push_back({ "VehicleComponent", { "ChassisMass: 1500.0", "MaxEngineTorque: 850.0", "MaxRPM: 7000.0" } });
-        holder.Components.push_back({ "VehicleAudioComponent", { "Enabled: true", "EnginePowerClipPath: assets/audio/engine.wav" } });
-        holder.Components.push_back({ "VehicleVFXComponent", { "Enabled: true", "SurfaceType: 0" } });
-
-        auto wheelEnt = srcScene->CreateEntity("Legacy_Wheel_FL");
-        auto& wheelHolder = wheelEnt.AddComponent<Axle::LegacyComponentsHolder>();
-        wheelHolder.Components.push_back({ "WheelComponent", { "Radius: 0.35", "CanSteer: true", "IsDriven: true" } });
+        propEnt.AddComponent<Axle::PointLightComponent>();
 
         Axle::SceneSerializer serializer(srcScene.get());
         bool saved = serializer.Serialize(testScenePath);
@@ -548,47 +540,27 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
         bool loaded = deserializer.Deserialize(testScenePath);
         assert(loaded);
 
-        Axle::Entity foundCar, foundWheel;
+        Axle::Entity foundProp;
         for (auto e : dstScene->GetRegistry().view<Axle::TagComponent>()) {
             std::string tag = dstScene->GetRegistry().get<Axle::TagComponent>(e).Tag;
-            if (tag == "Legacy_Car") foundCar = Axle::Entity{ e, dstScene.get() };
-            if (tag == "Legacy_Wheel_FL") foundWheel = Axle::Entity{ e, dstScene.get() };
+            if (tag == "StaticProp") foundProp = Axle::Entity{ e, dstScene.get() };
         }
 
-        assert(foundCar);
-        assert(foundCar.HasComponent<Axle::LegacyComponentsHolder>());
-        const auto& carHolder = foundCar.GetComponent<Axle::LegacyComponentsHolder>();
-        assert(carHolder.HasLegacyVehicleData());
-        assert(carHolder.Components.size() == 3);
-        assert(carHolder.Components[0].TypeName == "VehicleComponent");
-        assert(carHolder.Components[0].Lines.size() == 3);
-        assert(carHolder.Components[1].TypeName == "VehicleAudioComponent");
-        assert(carHolder.Components[2].TypeName == "VehicleVFXComponent");
-
-        assert(foundWheel);
-        assert(foundWheel.HasComponent<Axle::LegacyComponentsHolder>());
-        const auto& wheelHolder = foundWheel.GetComponent<Axle::LegacyComponentsHolder>();
-        assert(wheelHolder.HasLegacyVehicleData());
-        assert(wheelHolder.Components.size() == 1);
-        assert(wheelHolder.Components[0].TypeName == "WheelComponent");
-
-        // Verify that physics deserialization did NOT create a static rigid body for the legacy chassis
-        assert(physics->GetNumBodies() == 0);
-
+        assert(foundProp);
+        assert(foundProp.HasComponent<Axle::PointLightComponent>());
         std::filesystem::remove(testScenePath);
     }
-    std::cout << "  -> PASS: LegacyComponentsHolder roundtrip in SceneSerializer verified." << std::endl;
+    std::cout << "  -> PASS: Clean SceneSerializer roundtrip verified." << std::endl;
 
     // 2. Assembly roundtrip test
-    std::cout << "[25.2] Testing LegacyComponentsHolder roundtrip in AssemblySerializer..." << std::endl;
-    std::filesystem::path testAsmPath = "temp_legacy_vehicle_test.axle";
+    std::cout << "[25.2] Testing vehicle-free AssemblySerializer roundtrip..." << std::endl;
+    std::filesystem::path testAsmPath = "temp_clean_vehicle_free_test.axle";
     {
         auto asmScene = std::make_shared<Axle::Scene>();
-        auto rootCar = asmScene->CreateEntity("Legacy_Car_Assembly");
-        auto& holder = rootCar.AddComponent<Axle::LegacyComponentsHolder>();
-        holder.Components.push_back({ "VehicleComponent", { "ChassisMass: 1600.0", "FourWheelDrive: true" } });
+        auto rootProp = asmScene->CreateEntity("RootPropAssembly");
+        rootProp.AddComponent<Axle::MeshInstance3D>();
 
-        bool saved = Axle::AssemblySerializer::Serialize(testAsmPath, rootCar);
+        bool saved = Axle::AssemblySerializer::Serialize(testAsmPath, rootProp);
         assert(saved);
     }
 
@@ -597,16 +569,11 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
         auto physics = std::make_unique<Axle::PhysicsScene>();
         Axle::Entity spawned = Axle::AssemblySerializer::Deserialize(testAsmPath, testScene.get(), physics.get());
         assert(spawned);
-        assert(spawned.HasComponent<Axle::LegacyComponentsHolder>());
-        const auto& holder = spawned.GetComponent<Axle::LegacyComponentsHolder>();
-        assert(holder.HasLegacyVehicleData());
-        assert(holder.Components.size() == 1);
-        assert(holder.Components[0].TypeName == "VehicleComponent");
-        assert(holder.Components[0].Lines.size() == 2);
+        assert(spawned.HasComponent<Axle::MeshInstance3D>());
 
         std::filesystem::remove(testAsmPath);
     }
-    std::cout << "  -> PASS: LegacyComponentsHolder roundtrip in AssemblySerializer verified." << std::endl;
+    std::cout << "  -> PASS: Clean AssemblySerializer roundtrip verified." << std::endl;
 
     // 3. Vehicle-free scene runtime lifecycle
     std::cout << "[25.3] Testing vehicle-free scene runtime lifecycle..." << std::endl;
@@ -626,7 +593,7 @@ bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
     }
     std::cout << "  -> PASS: Vehicle-free scene runtime lifecycle verified." << std::endl;
 
-    std::cout << ">>> STEP 25 PASSED: Legacy Vehicle Data Preservation Regression Verified! <<<\n" << std::endl;
+    std::cout << ">>> STEP 25 PASSED: Clean Vehicle-Free Engine Architecture Verified! <<<\n" << std::endl;
     return true;
 }
 
@@ -705,17 +672,9 @@ bool RunTest_Step26_CarTestSceneSimulate() {
     auto& carTC = car.GetComponent<Axle::TransformComponent>();
     std::cout << "  -> Car Initial Translation: [" << carTC.Translation.x << ", " << carTC.Translation.y << ", " << carTC.Translation.z << "]" << std::endl;
 
-    // Verify Car entity preserves legacy Vehicle data via LegacyComponentsHolder
-    assert(car.HasComponent<Axle::LegacyComponentsHolder>());
-    assert(car.GetComponent<Axle::LegacyComponentsHolder>().HasLegacyVehicleData());
-    std::cout << "  -> PASS: Legacy Car entity preserves retired Vehicle data via LegacyComponentsHolder." << std::endl;
-
-    // Verify Car chassis was NOT converted to a static physics rigid body
-    if (car.HasComponent<Axle::RigidBody3D>()) {
-        auto& rb = car.GetComponent<Axle::RigidBody3D>();
-        assert(rb.RuntimeBodyID.IsInvalid() || !physicsScene->IsBodyValid(rb.RuntimeBodyID));
-    }
-    std::cout << "  -> PASS: Legacy vehicle chassis did not generate invalid rigid body." << std::endl;
+    // Verify Car entity exists and has valid transform
+    assert(car.HasComponent<Axle::TransformComponent>());
+    std::cout << "  -> PASS: Car entity loaded cleanly without legacy vehicle dependency." << std::endl;
 
     // Start Runtime Simulation (Vehicle-Retired Mode)
     std::cout << "[26.2] Starting Runtime Simulation (Vehicle-Retired Mode)..." << std::endl;

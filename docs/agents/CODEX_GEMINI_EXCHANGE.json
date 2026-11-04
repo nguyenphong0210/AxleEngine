@@ -1,18 +1,30 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "BUILD-WARNING-CLEANUP",
-    "title": "Fix reported Animation float conversion and preview APIENTRY redefinition warnings",
+    "id": "PLUGIN-MODULARITY-DESIGN",
+    "title": "Plan DLL Editor plugins, static Runtime selection and complete Vehicle extraction",
     "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Fix warnings in the supplied build log; scope is GltfSkeletalImporter and AssetPreviewPanel include ordering.",
+    "user_scope": "Latest user instruction: documentation and detailed planning first. Design Editor DLL plugins, Runtime static modules selected per project, a new Plugins window and engine/project plugin support. Do not implement production code in this task. User clarification: removing the old Vehicle implementation and rebuilding it from scratch is acceptable. Plan a fresh Jolt-backed Vehicle plugin; legacy Vehicle API/runtime compatibility is not a release requirement. This does not authorize code deletion during the documentation-only turn or unrelated asset deletion.",
     "expected_files": [
-      "Engine/Animation/src/GltfSkeletalImporter.cpp",
-      "Engine/UI/src/AssetPreviewPanel.cpp"
+      "docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md",
+      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
+      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md",
+      "ROADMAP.md",
+      "docs/README.md",
+      "docs/architecture/README.md",
+      "docs/architecture/TARGET_LAYERED_ARCHITECTURE.md",
+      "docs/agents/README.md"
     ],
-    "next_action": "Reported production warnings fixed and verified; no new Gemini or Phase 41 package assigned.",
-    "implementation_commit": "9374d7b"
+    "next_action": "Documentation delivered. Await an explicit implementation package/range; no production deletion or plugin implementation is released by this planning request.",
+    "documentation_commit": "d9e33e6",
+    "design_references": [
+      "docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md",
+      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
+      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md"
+    ],
+    "verification": "147 local links, 2 JSON examples, 26 package contracts and 52 dependency edges verified; documentation-only scope and whitespace pass. No C++/DLL/physics/GPU/UI/player execution."
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -227,6 +239,39 @@
       "base_commit": "9374d7b",
       "timestamp_utc": "2026-11-03T15:57:04.442034+00:00",
       "body": "DELIVERED 9374d7b. Fixed the two production warnings supplied by the user: GltfSkeletalImporter constructs AnimationClip with 0.0f rather than integer zero (C4244); AssetPreviewPanel includes the Windows SDK with its existing NOMINMAX/WIN32_LEAN_AND_MEAN guards before GLAD/transitive engine headers, so GLAD reuses the SDK APIENTRY definition (C4005). No diagnostic suppression, ThirdParty edits, new tests or behavioral changes.\n\nVerification in this session: cmake --build build --config Release --target AxleEditor AxleAnimationUnitTests --parallel 6 exits 0 (build/warning-cleanup-build.log). Both modified production sources were recompiled; the Editor portion contains neither C4244 nor C4005. Existing independent integer-duration fixture warnings occur when rebuilding animation test sources, and existing CRT LNK4098 warnings remain outside this supplied-log scope.\nctest --test-dir build -C Release -R ^Animation(UnitTests|HarnessFailure)$ --output-on-failure exits 0, 2/2 pass (build/warning-cleanup-tests.log). Real Editor --verify-empty-startup --rhi=opengl exits 0 after five UI frames (build/warning-cleanup-opengl.log). git diff whitespace check passes. No push. No new Gemini implementation or Phase 41 work assigned.\n"
+    },
+    {
+      "id": "CG-20261104T023854653283Z-CODEX-7fe3ab",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "PLUGIN-MODULARITY-DESIGN",
+      "reply_to": null,
+      "base_commit": "3190ab205ace417b81172c0fa92f92e64b5b46f4",
+      "timestamp_utc": "2026-11-04T02:38:54.653283+00:00",
+      "body": "IN_PROGRESS from 3190ab205ace417b81172c0fa92f92e64b5b46f4. Latest user instruction explicitly pauses implementation and requests detailed plans/documents first. Codex owns the three new PLUGIN_SYSTEM design documents and navigation/roadmap/target-architecture links listed on the task card. Design decisions: DLL modules in Editor, static Runtime modules selected per project, a new Plugins window, common engine/project plugin API, complete Vehicle extraction and Spline/Terrain runtime/editor separation. Audit must cover shared Engine state across DLLs, EnTT 3.14.0 storage lifetime, enkiTS jobs, scripts, missing-component preservation and exact build artifacts. No production/CMake/test implementation is authorized by this planning turn. Historical rendering/animation obligations remain open; no new relative implementation priority is inferred. No Gemini work is assigned."
+    },
+    {
+      "id": "CG-20261104T024210241071Z-CODEX-0cc433",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "PLUGIN-MODULARITY-DESIGN",
+      "reply_to": "CG-20261104T023854653283Z-CODEX-7fe3ab",
+      "base_commit": "3190ab205ace417b81172c0fa92f92e64b5b46f4",
+      "timestamp_utc": "2026-11-04T02:42:10.241071+00:00",
+      "body": "User clarification to planning scope: replacing old Vehicle from scratch is acceptable. Plan new Jolt-backed Vehicle modules against the common plugin API, retire old Vehicle code after generic plugin gates pass, and do not require a legacy Vehicle API shim or exact historical driving parity. Preserve authored files and unknown component data; any optional migration is explicit. Latest documentation-only instruction still applies: no production deletion, source edits or feature implementation now."
+    },
+    {
+      "id": "CG-20261104T025435337030Z-CODEX-34f262",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "PLUGIN-MODULARITY-DESIGN",
+      "reply_to": "CG-20261104T024210241071Z-CODEX-0cc433",
+      "base_commit": "d9e33e6",
+      "timestamp_utc": "2026-11-04T02:54:35.337030+00:00",
+      "body": "DELIVERED documentation commit d9e33e6 (docs(plugins): plan DLL editor modules and static runtime selection).\n\nThree canonical English design references:\n- docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md: source-grounded current audit; Engine/project discovery; strict manifests; explicit/derived selection; new Plugins window; Editor DLL/shared-host ABI; EnTT 3.14.0 storage and enkiTS lifetime; scene/assembly raw data; clean Jolt Vehicle rewrite; Spline/Terrain/scripts split; static registration and exact export.\n- docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md: 26 PLG-00..25 packages, six gates, explicit prerequisites/file scopes/evidence/exit criteria, acceptance matrix and deferred scope.\n- docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md: proposed registration/SDK/loader contracts, algorithms, clone/remap, restart/recovery, build receipts, process ownership and real native fixtures.\nRoadmap, documentation/architecture/agent indexes and layered target proposal link the design. No relative PLG/P41 implementation priority is inferred.\n\nLatest user clarification incorporated: old Vehicle code/API/handling may be replaced rather than preserved; generic plugin and native host gates precede retirement. Existing authored files must not be silently lost, new Vehicle uses distinct schema IDs, and automatic conversion/hot plugin unload remain deferred. Planning does not delete production code.\n\nVerification this session: python build/verify-plugin-design.py exit 0, log build/plugin-design-verification.log: 147 local links across 8 documents valid; 2 JSON examples valid; 26 package contracts and 52 dependency edges consistent/acyclic; roadmap ranges and documentation-only scope consistent; UTF-8 and code fences valid. python scripts/agent_exchange.py validate exit 0. git diff --check and git diff --cached --check exit 0 before the documentation commit. Source baseline 3190ab205ace417b81172c0fa92f92e64b5b46f4.\n\nLimits: no C++ compilation, native DLL loading, physics simulation, GPU, native Plugins UI or player/export test run or success is claimed. Engine/Editor/Runtime/Plugins/Tests and authored assets remain unchanged. Every PLG implementation package remains unstarted and unreleased in this documentation turn. No Gemini task assigned; existing rendering/animation obligations remain open. No push."
     }
   ],
   "deferred_tasks": [
@@ -445,6 +490,20 @@
       ],
       "limits": "Native Export button interaction NOT RUN. On-demand Windows player building needs configured CMake/toolchain checkout. Full Editor-free Runtime module isolation and Phase 41 renderer implementation remain outstanding. Existing LNK4098 warnings remain.",
       "next_action": "Use the new build workflows. Phase 41 P41-00/P41-01 remain next planned candidates, not released by this build task."
+    },
+    {
+      "id": "BUILD-WARNING-CLEANUP",
+      "title": "Fix reported Animation float conversion and preview APIENTRY redefinition warnings",
+      "state": "completed",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "user_scope": "Fix warnings in the supplied build log; scope is GltfSkeletalImporter and AssetPreviewPanel include ordering.",
+      "expected_files": [
+        "Engine/Animation/src/GltfSkeletalImporter.cpp",
+        "Engine/UI/src/AssetPreviewPanel.cpp"
+      ],
+      "next_action": "Reported production warnings fixed and verified; no new Gemini or Phase 41 package assigned.",
+      "implementation_commit": "9374d7b"
     }
   ]
 }

@@ -15,7 +15,14 @@ explicitly if the running client/session has not loaded it.
 
 ## Current checkpoint
 
-**Latest user scope (2026-11-04): detailed EnTT/enkiTS refactor planning only.**
+**Latest user scope (2026-11-04): combined architecture-first planning only.**
+Start with the [master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) and
+[NRI contract](../design/NRI_INTEGRATION_CONTRACT.md). The master preserves P41/EJ/PLG
+IDs and coordinates Phase 41 rendering, Phase 42 ECS/jobs and Phase 43 plugins/Vehicle
+with six AF packages. Clean architecture now precedes feature expansion; older
+relative-priority statements are historical. No implementation is released.
+
+**ECS/jobs checkpoint:**
 Read the [integration review](../architecture/ENTT_ENKITS_REVIEW.md) for actual
 findings and evidence, then the
 [18-package refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) for proposed
@@ -31,15 +38,15 @@ The selected direction is Editor DLL modules, project-selected static Runtime,
 a new Plugins window and support for project-local plugins. A fresh Vehicle
 replacement may retire the old implementation when implementation is assigned;
 this planning turn does not authorize deleting code or assets. No PLG package or
-Gemini implementation is released by these documents. No new relative priority
-between plugin implementation and rendering is inferred. Consult the live task card.
+Gemini implementation is released by these documents. The master now supplies
+cross-track order; consult the live task card for an actual released package/range.
 
-The user has made **Phase 41: RHI-Primary Rendering Foundation** the highest
-priority. The [architecture](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md),
+**Phase 41: RHI-Primary Rendering Foundation** is the rendering workstream. Its
+current ordering is in the master. The [architecture](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md),
 [30-package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) and
 [coding guide](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md) are references.
-The Phase 41 request released documentation only. P41-00 then P41-01 are next
-implementation candidates, not an automatic assignment of the entire phase.
+The Phase 41 request released documentation only. P41-00 then P41-01 are rendering
+candidates subject to the master's earlier safety/Core gates, not a whole-phase assignment.
 
 Animation G1 (`7ba4361`, report `d4dbb75`) remains delivered awaiting independent
 review. D1/D2 and new authoring are deferred behind rendering foundations. Narrow
@@ -62,6 +69,8 @@ An author flag identifies the caller's claimed role, not authenticated model ide
 
 | Topic | Reference | Role |
 | --- | --- | --- |
+| Architecture-first coordination | [Master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | Current waves, external prerequisite graph and bounded architecture exit |
+| Native render integration | [NRI contract](../design/NRI_INTEGRATION_CONTRACT.md) | Source-pinned vendor/service/lifetime rules mapped to P41 |
 | Rendering priority | [Phase 41 plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) | Canonical packages and required gates |
 | ECS/jobs current findings | [Integration review](../architecture/ENTT_ENKITS_REVIEW.md) | Reproduced faults, source-confirmed risks and verification limits |
 | ECS/jobs refactor | [Refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 unreleased packages and ownership/timing acceptance |

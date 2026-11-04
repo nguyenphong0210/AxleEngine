@@ -3,8 +3,11 @@
 Date: 2026-11-03 (Asia/Saigon). Inspected source baseline: `492e6d1`.
 Status: **proposed target architecture; not an implementation or acceptance claim**.
 
-The user has made this migration the highest development priority and permits
-replacing unsuitable architecture. Preserve authored projects through explicit
+The [Architecture Foundation master plan](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
+now coordinates this Phase 41 workstream with Phase 42 ECS/jobs and Phase 43
+plugins/Vehicle. The latest priority is clean architecture before feature expansion;
+read its external prerequisites and the [NRI contract](NRI_INTEGRATION_CONTRACT.md).
+Unsuitable architecture may be replaced. Preserve authored projects through explicit
 compatibility/migration contracts. This planning turn does not release production
 implementation. Read the [execution plan](RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md),
 [coding guide](RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md), and

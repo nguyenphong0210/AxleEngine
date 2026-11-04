@@ -11,11 +11,15 @@ No production fixes, Vehicle deletion, plugin implementation or vendor upgrade
 are performed by this document. The [exchange](../agents/CODEX_GEMINI_EXCHANGE.json)
 owns the next actual assignment.
 
-This is a bounded correctness/refactor track, not a newly numbered engine phase.
+This is the **Phase 42 ECS/jobs workstream**, retaining all EJ identifiers under
+the [Architecture Foundation master plan](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md).
+That later coordinator formalizes phase navigation and cross-track prerequisites;
+clean architecture now precedes feature expansion. Phase numbers do not require
+finishing every rendering feature before a thread/lifetime safety prerequisite.
 Its accepted results become prerequisites at the relevant
 [plugin gates](PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) and
-[rendering seams](RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md). No new global
-ordering between all rendering and plugin packages is inferred.
+[rendering seams](RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md). This domain plan's
+internal dependencies do not replace the master's additional cross-track edges.
 
 ## 1. Outcomes and limits
 

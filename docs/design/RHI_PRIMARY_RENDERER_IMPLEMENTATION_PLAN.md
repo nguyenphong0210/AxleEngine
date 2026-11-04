@@ -1,7 +1,7 @@
 # Phase 41: RHI-Primary Renderer Implementation Plan
 
 Date: 2026-11-03 (Asia/Saigon). Planning baseline: `492e6d1`.
-Status: **highest-priority implementation backlog; no package implemented by this document**.
+Status: **Phase 41 rendering workstream; architecture-first; no package implemented by this document**.
 
 Read the [architecture contract](RHI_PRIMARY_RENDERER_ARCHITECTURE.md) and
 [implementation guide](RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md).
@@ -11,7 +11,20 @@ release all packages to an agent. The current user request is documentation only
 
 ## Priority and execution policy
 
-Phase 41 executes ahead of new Phase 40 authoring and Phase 39.1/39.2 expansion.
+**Updated coordinator (2026-11-04):** The
+[master plan](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) owns cross-track order and
+additional prerequisites; the [NRI contract](NRI_INTEGRATION_CONTRACT.md) specifies
+the pinned integration. P41-00..20/25/26 are the rendering architecture-first scope.
+P41-21..24 and complete P41-27..29 remain deferred feature/full-phase acceptance
+work. They are not removed or marked complete. Architecture evidence may feed
+later measurement/acceptance without closing an unmet package.
+
+P41-19 explicitly includes actual shipping Canvas GPU submission using the common
+resource/frame services; layout generation or DrawCalls statistics alone do not
+establish Runtime UI rendering. P41-26 verifies/reconciles AF/PLG boundaries rather
+than separately reimplementing Core extraction, plugin splitting or static composition.
+
+Rendering foundation work executes ahead of new Phase 40 authoring and Phase 39.1/39.2 expansion.
 Its number preserves existing roadmap/package references; numbering is not
 execution priority. Existing material/VFX acceptance obligations and submitted
 animation work remain recorded, not silently completed or discarded.

@@ -20,6 +20,8 @@ Start with the [overview](OVERVIEW.md), [module reference](MODULES.md) and [curr
 | [Verification and limitations](VERIFICATION.md) | Evidence, survey method, documentation checks and unverified behavior |
 | [EnTT/enkiTS integration review](ENTT_ENKITS_REVIEW.md) | 2026-11-04 focused audit, native fault reproductions, concurrency/lifetime findings and limits |
 | [EnTT/enkiTS refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 proposed correctness/refactor packages, threading/lifetime/clock contracts and acceptance matrix |
+| [Architecture Foundation master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | Current architecture-first sequence and combined AF/P41/EJ/PLG prerequisites |
+| [NRI integration contract](../design/NRI_INTEGRATION_CONTRACT.md) | Pinned native API boundary, readiness, lifetime, frame/present and real Runtime UI rules |
 
 For a shorter introduction, read [Architecture Overview](OVERVIEW.md). [Subsystems](MODULES.md) provides a quick module reference. Existing domain guides remain useful for individual workflows; this architecture set is the reference for current dependency boundaries and cross-subsystem behavior.
 
@@ -35,7 +37,8 @@ optional-toolkit proposal: Editor DLL modules, selected static Runtime modules,
 project plugin authoring and a fresh Vehicle replacement. They are documentation
 only; the current source survey is not a claim that this architecture exists.
 
-The previously established highest-priority rendering execution proposal is
+The [master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) now coordinates
+architecture before feature expansion. Its rendering workstream is
 [Phase 41: RHI-primary rendering](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md),
 with its [detailed package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md).
 It is a target design, not a change to the as-is survey below.

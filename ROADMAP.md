@@ -7,19 +7,43 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 ## 📊 Roadmap Overview & Executive Summary
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (RHI-primary D3D12/Vulkan migration, OpenGL 4.5 compatibility), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Phase Status**: Earlier milestones record historical deliveries. Phase 38.3 and Phase 39 retain outstanding acceptance checks. Phase 40 has delivered CPU foundations and Gemini G1 awaiting independent review. **Phase 41: RHI-Primary Rendering Foundation is now the highest-priority planned work; implementation has not started.**
+* **Phase Status**: Earlier milestones record historical deliveries. Phase 38.3 and Phase 39 retain outstanding acceptance checks. Phase 40 has delivered CPU foundations and Gemini G1 awaiting independent review. **Architecture Foundation is the highest-priority program: Phase 41 NRI/rendering, Phase 42 EnTT/enkiTS and Phase 43 plugins/Vehicle are coordinated before feature expansion; implementation remains unstarted.**
 * **Automated Test Verification**: Record evidence per suite/backend. VFX CPU (7 suites), physical DX12/Vulkan VFX readbacks, Step 102 with physical DX12, and material Step 106 on both backends pass. Interactive VFX UI/OpenGL checks and separately tracked material manual checks remain pending. See the [VFX review and acceptance report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
-* **Upcoming Focus / execution priority #1**: **Phase 41: RHI-Primary Rendering Foundation**, before new Phase 40 authoring or VFX expansion. Read the [architecture](docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md), [30-package execution plan](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md), and [implementation guide](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md). Existing material/VFX acceptance obligations remain open. Phase numbering does not determine execution order.
+* **Upcoming Focus / execution priority #1**: **Architecture Foundation**, using the [master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) and [NRI contract](docs/design/NRI_INTEGRATION_CONTRACT.md). Preserve P41/EJ/PLG package IDs, follow shared safety/data prerequisites, and defer advanced rendering/authoring features as specified. Existing material/VFX/animation acceptance obligations remain open. Phase numbering does not determine execution order.
 
-## Highest-priority execution track: Phase 41
+## Architecture Foundation: current highest priority
+
+**2026-11-04:** The user wants a clean architecture before other feature expansion.
+The [master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) combines NRI,
+EnTT/enkiTS and complete Vehicle/plugin extraction. Six AF packages fill identity,
+Core/ownership, scene/asset data boundaries and enforcement gaps. Domain package
+contracts remain canonical; the master's cross-track edges and waves govern order.
+
+- [ ] **W0:** Baseline/fault harnesses and stable asset identity.
+- [ ] **W1:** P1 threading/task/reload repairs and Core/composition ownership.
+- [ ] **W2:** Correct ECS mutation/transforms and clean scene/asset data boundaries.
+- [ ] **W3:** Shared simulation plus NRI resource/frame/device foundation.
+- [ ] **W4:** Shared rendering consumers, physical UI submission and debug.
+- [ ] **W5:** DLL host/SDK, Plugins window and project plugin build/restart.
+- [ ] **W6:** Fresh Jolt Vehicle, old-code retirement, Spline/Terrain and scripts.
+- [ ] **W7:** Selected static Runtime/export and final product boundaries.
+- [ ] **W8:** Current native/product evidence and architecture enforcement.
+
+The architecture exit covers 73 packages. Seven deferred P41 feature/full-phase
+packages remain in W9; architecture acceptance does not close the entire rendering
+phase. No implementation is claimed or assigned by this documentation update.
+
+### Phase 41: NRI/RHI rendering workstream
 
 The user has prioritized RHI as the primary renderer and OpenGL as compatibility
 fallback. Significant internal replacement is permitted where the contracts below
 require it. Preserve authored assets and a runnable migration path. This update
 creates a plan; it does not claim implementation or release the whole backlog.
 
-**First implementation candidates:** P41-00 (baseline/harness), then P41-01
-(backend readiness and fallback equivalence). Actual assignments are recorded in
+**Rendering-specific candidates:** P41-00 (baseline/harness), then P41-01
+(backend readiness and fallback equivalence), subject to earlier master safety/Core
+gates. The first overall candidates are AF-00/EJ-00 and then EJ-01..03.
+Actual assignments are recorded in
 [the shared exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json). Rendering-related
 Phase 40 integration follows the dependency map; unrelated new authoring and VFX
 expansion wait behind this track. Historical completed checkboxes are not proof
@@ -33,7 +57,7 @@ Editor and scene entities are never injected automatically. Explicit project ope
 remain available. See [build/startup workflows](docs/guides/BUILD_WORKFLOWS.md).
 This preparation does not mark any Phase 41 rendering package complete.
 
-## ECS/jobs hardening track: detailed refactor planning
+## Phase 42: EnTT/enkiTS normalization and shared simulation
 
 **2026-11-04:** The [EnTT/enkiTS review](docs/architecture/ENTT_ENKITS_REVIEW.md)
 records three P1 and two P2 integration findings, including four native fault
@@ -49,10 +73,10 @@ keeps EnTT/enkiTS/Jolt and defines 18 packages:
 
 **Status: documentation only; no finding is fixed or implementation released.**
 This is a correctness prerequisite at the affected native plugin/rendering seams,
-not an assigned new phase number or a blanket reorder of all existing backlogs.
-Use the plan's crosswalk and the live exchange for actual scoped assignments.
+coordinated as Phase 42 by the master rather than a standalone sequence after
+every rendering feature. Use the master and live exchange for actual scoped assignments.
 
-## Plugin architecture track: design requested, implementation not released
+## Phase 43: Plugin system and complete Vehicle replacement
 
 **2026-11-04:** The user selected DLL plugins for Editor and static plugin modules
 for shipped Runtime, with project-level selection in a new Plugins window and
@@ -72,9 +96,9 @@ Read the [architecture](docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md),
 - [ ] **G4 / PLG-19..23:** Spline/Terrain separation, script dependencies, selected static Runtime and snapshot-bound export.
 - [ ] **G5 / PLG-24..25:** Actual DLL/UI/physics/player acceptance, link exclusions and maintained authoring/build documentation.
 
-All boxes remain open. Existing Phase 41 priority over new animation/VFX expansion
-and previous acceptance obligations remain recorded. This planning request does
-not decide a new relative implementation order between PLG and P41. The
+All boxes remain open. Earlier material/VFX/animation acceptance obligations remain
+recorded. The master now coordinates Phase 41/42/43 prerequisites and defers
+advanced features until the architecture exit. The
 [exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json) owns the next released scope.
 
 ### 🛡️ Core Engineering & Contribution Principles
@@ -887,10 +911,10 @@ not decide a new relative implementation order between PLG and P41. The
 
 ---
 
-### Milestone 11: RHI-Primary Rendering Foundation (highest execution priority)
+### Milestone 11: RHI-Primary Rendering Foundation (coordinated architecture-first)
 
 - [ ] **Phase 41: Shared Rendering Architecture, GPU Safety & Product Integration**
-  - **Status (2026-11-03): planning only; highest-priority implementation backlog.** Execute ahead of new Phase 40 authoring and VFX feature expansion. Preserve Phase 38.3/39 acceptance and delivered Phase 40 CPU work.
+  - **Status (updated 2026-11-04): planning only; Phase 41 rendering workstream in Architecture Foundation.** P41-00..20/25/26 follow master prerequisites; P41-21..24 and complete P41-27..29 remain deferred feature/full-phase work. Preserve Phase 38.3/39 acceptance and delivered Phase 40 CPU work.
   - **Design**: [RHI-Primary Architecture](docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md). **Packages/dependencies/acceptance**: [Implementation Plan](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md). **Coding workflow**: [Implementation Guide](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md).
   - **G0 - Safety and visible primitives**:
     - [ ] **P41-00**: Always-active Debug/Release render harness, failure probe and honest backend baseline.

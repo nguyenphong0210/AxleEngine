@@ -13,7 +13,10 @@ Read with the [implementation plan](PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) and
 [implementation guide](PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md). The
 [exchange](../agents/CODEX_GEMINI_EXCHANGE.json) owns live assignments. Existing
 Phase 41 rendering and animation acceptance work remains open. This proposal does
-not assign their implementation or establish a new relative backlog priority.
+not assign their implementation. The subsequent
+[master plan](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) now coordinates architecture-first
+execution and labels this **Phase 43**, retaining the PLG package identifiers.
+Its cross-track order supersedes the earlier no-relative-priority planning checkpoint.
 
 ## 1. Product contract
 

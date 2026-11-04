@@ -11,6 +11,13 @@ direction. A fresh Vehicle implementation may replace the old one. See the
 test design. The [exchange](../agents/CODEX_GEMINI_EXCHANGE.json) determines actual
 assignments; this checklist does not release the entire backlog.
 
+**Architecture-first coordinator (2026-11-04):** This is the Phase 43 plugin/Vehicle
+workstream in the [master plan](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md). Its wave
+table and external prerequisite edges supplement this plan's internal graph.
+Retain all PLG identifiers. Use the [NRI contract](NRI_INTEGRATION_CONTRACT.md)
+for shared GPU/device/frame ownership; plugins must not create another renderer
+or link private Engine/NRI device state. No production implementation is released.
+
 The subsequent [EnTT/enkiTS review](../architecture/ENTT_ENKITS_REVIEW.md) found
 existing concurrency/lifetime faults. The
 [ECS/jobs refactor plan](ENTT_ENKITS_REFACTOR_PLAN.md) defines the hardening results

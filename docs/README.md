@@ -12,7 +12,21 @@ below are references, not standing instructions to implement an entire phase.
 
 Build instructions: [empty Editor startup, separate tests and on-demand standalone export](guides/BUILD_WORKFLOWS.md). Test sources and fixture layout: [Tests](../Tests/README.md).
 
-## Latest design request: EnTT/enkiTS refactor
+## Current priority: Architecture Foundation before feature expansion
+
+The [master plan](design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) combines the
+three workstreams into one dependency-checked architecture-first sequence:
+**Phase 41 NRI/rendering**, **Phase 42 EnTT/enkiTS** and **Phase 43 plugins/Vehicle**.
+Six AF packages cover identity, Core/composition, scene/asset boundaries and
+enforcement. Existing P41/EJ/PLG IDs remain stable. The architecture exit covers
+73 packages; seven advanced rendering/full-phase packages remain open afterwards.
+
+Read the [NRI integration contract](design/NRI_INTEGRATION_CONTRACT.md) for the
+pinned vendor boundary, real device/queue readiness, resource/frame ownership and
+shipping UI submission. All documents are proposals; no production refactor or
+Vehicle deletion is performed by this planning task.
+
+## ECS/jobs domain plan
 
 The 2026-11-04 [integration review](architecture/ENTT_ENKITS_REVIEW.md) identified
 thread-delivery, script/DLL lifetime, Jolt/enki completion, EnTT iteration and
@@ -21,8 +35,8 @@ Editor/Runtime scheduling issues. The
 ownership/clock contracts, permanent tests and acceptance gates. It retains the
 libraries and supplies shared foundations for plugin/rendering work.
 
-This is documentation only. No finding is marked fixed by the plan, no new phase
-number is assigned and no production refactor is released.
+This is documentation only. No finding is marked fixed by the plan and no
+production refactor is released. The master supplies phase labels and global order.
 
 ## Project-selected plugin design
 
@@ -35,13 +49,15 @@ No code has been deleted or implemented by this design task.
 - [Plugin implementation plan](design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md): 26 gated packages, dependencies, file scopes and acceptance matrix.
 - [Plugin implementation guide](design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md): proposed schemas, algorithms, lifecycle/build contracts and real-fixture strategy.
 
-This request does not close or release Phase 41 packages, change the existing
-rendering-versus-feature-expansion priority, or assign another agent. The live
-exchange records the next actual implementation assignment.
+This request does not close/release packages or assign another agent. The master
+now coordinates rendering/ECS/plugin prerequisites before feature expansion; the
+live exchange records the next actual implementation assignment.
 
-## Rendering execution priority: RHI-primary rendering
+## Phase 41 rendering workstream: RHI-primary rendering
 
-Phase 41 executes before new animation authoring and VFX expansion. All documents
+Rendering foundations execute before new animation authoring and VFX expansion,
+subject to master safety/Core prerequisites. Advanced feature scope is deferred
+as identified in the master. All documents
 below describe proposed work; implementation/acceptance is not claimed.
 
 - [Target architecture](design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md): responsibilities, resource/frame contracts, fallback and migration boundaries.

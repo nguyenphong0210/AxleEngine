@@ -21,9 +21,15 @@ The other files here are this project's conventions, not a product guarantee.
 
 - Latest user instructions define scope. Record them in the task card; never let
   an old file override the user or require repetitive approval for authorized work.
+- Priority checkpoint (2026-11-04): the user now wants clean architecture before
+  other feature expansion. The [Architecture Foundation master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
+  coordinates Phase 41 NRI/rendering, Phase 42 EJ and Phase 43 PLG/Vehicle, with
+  shared AF prerequisites and deferred advanced rendering features. Older relative
+  priority statements are historical. The current request releases planning only;
+  no package is implemented or assigned by reading a plan.
 - Only a concrete released task authorizes implementation. A roadmap, reference
   guide, old prompt, or suggested next task does not release every later package.
-- Priority checkpoint (2026-11-03): the user placed Phase 41 RHI-primary rendering
+- Historical checkpoint (2026-11-03): the user placed Phase 41 RHI-primary rendering
   foundations before new animation authoring and VFX expansion. Read the live task
   card for the actual released package/range and current delivery/review state.
   A static guide, historical G1/D1/D2 sequence or this checkpoint does not release

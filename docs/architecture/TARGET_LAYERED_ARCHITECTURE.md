@@ -2,10 +2,17 @@
 
 Status: **TO-BE — design proposal, not implemented**. Current targets and dependencies are described in [SAD](SAD.md) and [Dependency Map](DEPENDENCY_MAP.md).
 
-**Rendering execution priority (2026-11-03):** The detailed
+**Architecture-first coordinator (2026-11-04):** The
+[master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) now orders shared
+AF foundations, Phase 41 NRI, Phase 42 EJ and Phase 43 plugins/Vehicle. It adds
+explicit prerequisites and architecture exit criteria before feature expansion;
+the [NRI contract](../design/NRI_INTEGRATION_CONTRACT.md) fixes the vendor boundary.
+These are plans, not production changes or implementation assignments.
+
+**Rendering specialization (2026-11-03):** The detailed
 [RHI-primary rendering architecture](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md)
 and [Phase 41 package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md)
-specialize this proposal for the user's current highest priority. They define
+specialize this proposal for the rendering workstream. They define
 incremental implementation gates; this broader module proposal remains unimplemented.
 
 **Plugin design specialization (2026-11-04):** The

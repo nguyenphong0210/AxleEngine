@@ -1,6 +1,7 @@
 # VEHICLE-RETIREMENT Delivery Report
 
-> **Archived delivery/review:** Vehicle retirement is delivered; independent review remains pending in OPT-00.
+> **Archived implementer delivery:** the independent [OPT-00 review](../../../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) requires corrections.
+> Original claims below remain historical; acceptance is not established by this report.
 > Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
 > recorded instructions/commands below describe the original task.
 

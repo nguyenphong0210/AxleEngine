@@ -43,7 +43,7 @@ must not be marked complete merely because their documents moved here.
 | [Animation foundation: scoped Gemini continuation](reports/ANIMATION_PHASE_40_GEMINI_CONTINUATION_HANDOFF.md) | Historical evidence/handoff; consult the report for exact acceptance limits |
 | [Phase 40 Gemini foundation review](reports/ANIMATION_PHASE_40_GEMINI_REVIEW.md) | Historical evidence/handoff; consult the report for exact acceptance limits |
 | [Material Phase 38.3 acceptance report](reports/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md) | Historical evidence/handoff; consult the report for exact acceptance limits |
-| [VEHICLE-RETIREMENT Delivery Report](reports/VEHICLE_RETIREMENT_DELIVERY.md) | Delivered; independent review pending (OPT-00) |
+| [VEHICLE-RETIREMENT Delivery Report](reports/VEHICLE_RETIREMENT_DELIVERY.md) | Delivered; [OPT-00 review](../../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) requires corrections |
 | [Phase 39 follow-up review and acceptance](reports/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md) | Historical evidence/handoff; consult the report for exact acceptance limits |
 
 ## Relocation and historical paths

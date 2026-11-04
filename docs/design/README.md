@@ -29,4 +29,6 @@ redundant redirect files were removed.
 
 Archive placement does not mean every old phase is accepted or complete. In
 particular, [Vehicle retirement](../archive/design/reports/VEHICLE_RETIREMENT_DELIVERY.md)
-is delivered with independent review pending. Use the roadmap for current status.
+is delivered with corrections required by the
+[independent review](../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md). Use the roadmap
+for current status.

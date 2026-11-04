@@ -7,8 +7,9 @@ single execution/progress checklist: OPT-00..10 cleans up the architecture;
 OPT-11 and later work are deferred. Historical Phase 41/42/43 names identify
 technical domains, not execution order.
 
-Current checkpoint: old built-in Vehicle removal is delivered; independent
-acceptance remains pending. No new plugin, EJ or NRI implementation is claimed
+Current checkpoint: old built-in Vehicle removal is delivered; the independent
+[OPT-00 review](reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) requires corrections
+before acceptance. No new plugin, EJ or NRI implementation is claimed
 by this documentation reorganization.
 
 | Read next | Use it for |

@@ -3,7 +3,7 @@
 > **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
 > technical contract, not a separate phase queue. Old Phase/G labels and
 > source-audit baselines are retained for traceability. Early Vehicle retirement
-> is delivered; independent review and new plugin implementation remain open.
+> is delivered; acceptance and new plugin implementation remain open.
 
 Date: **2026-11-04**. Status: **proposed algorithms and interfaces; not implemented**.
 The current assignment is documentation only. Source baseline and selected product
@@ -22,7 +22,7 @@ DLL component lifetime boundary in PLG-05..09. The first plugin fixture is delib
 unrelated to vehicles: it creates a component with real heap-backed state, displays
 it in an Inspector and updates it through the common scene scheduler.
 
-The old `Engine/Vehicle` was retired early in `fa74981`; review is pending.
+The old `Engine/Vehicle` was retired early in `fa74981`; OPT-00 requires corrections.
 Do not restore it, change every library to `SHARED`, or recreate product-specific
 vehicle branches in a DLL. A clean Vehicle rewrite follows the common system;
 PLG-17 verifies retirement/cutover against the new generic contracts.

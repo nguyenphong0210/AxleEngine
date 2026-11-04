@@ -3,7 +3,7 @@
 > **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
 > technical contract, not a separate phase queue. Old Phase/G labels and
 > source-audit baselines are retained for traceability. Early Vehicle retirement
-> is delivered; independent review and new plugin implementation remain open.
+> is delivered; acceptance and new plugin implementation remain open.
 
 Date: 2026-11-03 (Asia/Saigon). Source baseline: `492e6d1`.
 Status: **coding blueprint; proposed APIs, not shipped interfaces**.

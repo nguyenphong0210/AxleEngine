@@ -25,8 +25,9 @@ The other files here are this project's conventions, not a product guarantee.
   [docs/ROADMAP.md](../ROADMAP.md) owns the single sequential OPT-00..11 queue and
   progress. The [master contract](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
   owns AF/cross-plan dependencies; P41/EJ/PLG are stable domain identifiers.
-  Old Vehicle retirement was delivered early, with independent review pending.
-  Current documentation cleanup releases no production package.
+  Old Vehicle retirement was delivered early; the independent
+  [OPT-00 review](../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) requires corrections.
+  Plans and review reports do not release subsequent production packages.
 - Only a concrete released task authorizes implementation. A roadmap, reference
   guide, old prompt, or suggested next task does not release every later package.
 - Historical checkpoint (2026-11-03): the user placed Phase 41 RHI-primary rendering

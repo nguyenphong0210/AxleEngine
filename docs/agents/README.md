@@ -21,10 +21,11 @@ explicitly if the running client/session has not loaded it.
 Historical Phase 41/42/43 and G labels are domain references, not execution order.
 The live exchange determines the current assignment; no plan releases production work.
 
-Vehicle retirement `fa74981` is delivered; independent review remains pending.
-Codex's `7869fce` is an initial source-inspection acknowledgement only. Do not
-mark the legacy data path, full delivery or new Vehicle plugin accepted from it.
-OPT-00 reviews retirement; OPT-01 establishes baselines before OPT-02 threading work.
+Vehicle retirement `fa74981` is delivered. The independent
+[OPT-00 review](../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) is complete with
+CHANGES_REQUIRED (VR-R1..R3); current native results supersede the limited
+`7869fce` inspection. Keep OPT-00 open for corrections/re-verification; no
+OPT-01 or new Vehicle/plugin package is released by this review.
 
 Design documents for deferred feature expansion and historical reports/prompts
 are outside `docs/design`; consult the archive index only when needed. Retained

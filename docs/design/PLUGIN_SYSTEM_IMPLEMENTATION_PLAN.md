@@ -3,10 +3,10 @@
 > **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
 > technical contract, not a separate phase queue. Old Phase/G labels and
 > source-audit baselines are retained for traceability. Early Vehicle retirement
-> is delivered; independent review and new plugin implementation remain open.
+> is delivered; acceptance and new plugin implementation remain open.
 
 Date: **2026-11-04**. Baseline: **3190ab205ace417b81172c0fa92f92e64b5b46f4**.
-Status: **plugin contracts; PLG-00..25 remain open; early Vehicle retirement delivered separately, review pending**.
+Status: **plugin contracts; PLG-00..25 remain open; early Vehicle retirement delivered separately; OPT-00 requires corrections**.
 
 The user requests detailed plans before code. DLL modules in Editor, static
 Runtime modules, project-level selection and a new Plugins window are the selected
@@ -333,8 +333,8 @@ The diagram groups work for orientation; the table is the exact dependency set.
 
 ### PLG-17 - Verify early retirement and close plugin cutover gaps
 
-- Old built-in Vehicle retirement was delivered early in `fa74981`; independent
-  review remains pending in OPT-00. Do not restore the module or repeat deletion.
+- Old built-in Vehicle retirement was delivered early in `fa74981`; OPT-00
+  review requires corrections before acceptance. Do not restore the module or repeat deletion.
 - Recheck the absent target, built-in component/lifecycle/query/UI wiring against
   the new plugin and generic codec contracts. Replace temporary vehicle-specific
   legacy handling only when generic unknown-data/body-readiness protection passes.

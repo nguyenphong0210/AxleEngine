@@ -10,10 +10,13 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Current position: OPT-00, Vehicle retirement review pending.** Gemini delivered
-`fa74981` and reported successful builds/tests. Codex's `7869fce` records only an
-initial source inspection, not independent acceptance. Subsequent sample cleanup
-`cc184cf` is a separate change. No AF/EJ/P41/PLG package is closed by this roadmap.
+**Current position: OPT-00, review complete; CHANGES_REQUIRED.** The independent
+[review](reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) verified fresh builds, CTest
+7/7 and native startup, but found legacy prefab data loss, ghost physics bodies
+and payload-fidelity gaps (4/11 focused cases pass). The full integration runner
+also stops on a separate VFX Step 47 assertion. Keep OPT-00 open until corrections
+and re-verification. Later sample cleanup `cc184cf` remains separate. No
+AF/EJ/P41/PLG package is closed by this review.
 
 The first implementation unit after OPT-00 is **AF-00 + EJ-00**, followed by the
 remaining OPT-01 packages in their listed order. OPT-02 starts after OPT-01 exits.
@@ -75,7 +78,10 @@ checkpoint outside that count. Package count is not a time estimate.
 
 **Exit:** A review report distinguishes source checks, newly run tests, Gemini-reported evidence and NOT RUN checks. Resolve findings before closing this phase.
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** [Independent review and findings](reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md),
+[machine-readable results](reviews/OPT_00_VEHICLE_RETIREMENT_RESULTS.json), and
+[reproduction fixture](../Tests/Review/VehicleRetirement/README.md).
+VR-R1/R2 are P1; VR-R3 is P2. Status: **CHANGES_REQUIRED**, checkbox remains open.
 
 ### OPT-01 - Establish a reproducible baseline
 

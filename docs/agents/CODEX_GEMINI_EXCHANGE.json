@@ -1,30 +1,31 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "PLUGIN-MODULARITY-DESIGN",
-    "title": "Plan DLL Editor plugins, static Runtime selection and complete Vehicle extraction",
+    "id": "ENTT-ENKITS-REVIEW",
+    "title": "Review current EnTT/enkiTS integration and lifetime/concurrency correctness",
     "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Latest user instruction: documentation and detailed planning first. Design Editor DLL plugins, Runtime static modules selected per project, a new Plugins window and engine/project plugin support. Do not implement production code in this task. User clarification: removing the old Vehicle implementation and rebuilding it from scratch is acceptable. Plan a fresh Jolt-backed Vehicle plugin; legacy Vehicle API/runtime compatibility is not a release requirement. This does not authorize code deletion during the documentation-only turn or unrelated asset deletion.",
+    "user_scope": "Review current EnTT and enkiTS architecture for concrete problems. Audit and evidence only; no production fixes or plugin implementation. Use temporary probes outside tracked source where useful.",
     "expected_files": [
-      "docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md",
-      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
-      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md",
-      "ROADMAP.md",
-      "docs/README.md",
-      "docs/architecture/README.md",
-      "docs/architecture/TARGET_LAYERED_ARCHITECTURE.md",
-      "docs/agents/README.md"
+      "docs/architecture/ENTT_ENKITS_REVIEW.md",
+      "docs/architecture/README.md"
     ],
-    "next_action": "Documentation delivered. Await an explicit implementation package/range; no production deletion or plugin implementation is released by this planning request.",
-    "documentation_commit": "d9e33e6",
-    "design_references": [
-      "docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md",
-      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
-      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md"
-    ],
-    "verification": "147 local links, 2 JSON examples, 26 package contracts and 52 dependency edges verified; documentation-only scope and whitespace pass. No C++/DLL/physics/GPU/UI/player execution."
+    "next_action": "Review delivered. Await explicit scoped fix instruction; no plugin/Vehicle implementation or unrelated phase released.",
+    "review_commit": "4aff5ea",
+    "report": "docs/architecture/ENTT_ENKITS_REVIEW.md",
+    "findings": {
+      "P1": [
+        "ECSJ-01",
+        "ECSJ-02",
+        "ECSJ-03"
+      ],
+      "P2": [
+        "ECSJ-04",
+        "ECSJ-05"
+      ]
+    },
+    "verification": "Newly compiled Release native probes reproduce four offending behaviors plus one successful drain control. Product scheduling source-inspected. No production fixes or full UI/GPU/player/sanitizer run."
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -272,6 +273,28 @@
       "base_commit": "d9e33e6",
       "timestamp_utc": "2026-11-04T02:54:35.337030+00:00",
       "body": "DELIVERED documentation commit d9e33e6 (docs(plugins): plan DLL editor modules and static runtime selection).\n\nThree canonical English design references:\n- docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md: source-grounded current audit; Engine/project discovery; strict manifests; explicit/derived selection; new Plugins window; Editor DLL/shared-host ABI; EnTT 3.14.0 storage and enkiTS lifetime; scene/assembly raw data; clean Jolt Vehicle rewrite; Spline/Terrain/scripts split; static registration and exact export.\n- docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md: 26 PLG-00..25 packages, six gates, explicit prerequisites/file scopes/evidence/exit criteria, acceptance matrix and deferred scope.\n- docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md: proposed registration/SDK/loader contracts, algorithms, clone/remap, restart/recovery, build receipts, process ownership and real native fixtures.\nRoadmap, documentation/architecture/agent indexes and layered target proposal link the design. No relative PLG/P41 implementation priority is inferred.\n\nLatest user clarification incorporated: old Vehicle code/API/handling may be replaced rather than preserved; generic plugin and native host gates precede retirement. Existing authored files must not be silently lost, new Vehicle uses distinct schema IDs, and automatic conversion/hot plugin unload remain deferred. Planning does not delete production code.\n\nVerification this session: python build/verify-plugin-design.py exit 0, log build/plugin-design-verification.log: 147 local links across 8 documents valid; 2 JSON examples valid; 26 package contracts and 52 dependency edges consistent/acyclic; roadmap ranges and documentation-only scope consistent; UTF-8 and code fences valid. python scripts/agent_exchange.py validate exit 0. git diff --check and git diff --cached --check exit 0 before the documentation commit. Source baseline 3190ab205ace417b81172c0fa92f92e64b5b46f4.\n\nLimits: no C++ compilation, native DLL loading, physics simulation, GPU, native Plugins UI or player/export test run or success is claimed. Engine/Editor/Runtime/Plugins/Tests and authored assets remain unchanged. Every PLG implementation package remains unstarted and unreleased in this documentation turn. No Gemini task assigned; existing rendering/animation obligations remain open. No push."
+    },
+    {
+      "id": "CG-20261104T033136489637Z-CODEX-253301",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "ENTT-ENKITS-REVIEW",
+      "reply_to": null,
+      "base_commit": "08a20ae2affefac8babef7ac2d2ff2401997252b",
+      "timestamp_utc": "2026-11-04T03:31:36.489637+00:00",
+      "body": "IN_PROGRESS from 08a20ae2affefac8babef7ac2d2ff2401997252b. User requests an architecture review of the existing EnTT/enkiTS integration. Codex will inspect JobSystem/ParallelECS/Jolt bridge/Scene and actual callers, compare local vendor contracts, run focused temporary native probes where possible, and write docs/architecture/ENTT_ENKITS_REVIEW.md plus an index link. No production fixes, Vehicle deletion or plugin implementation. No Gemini work assigned."
+    },
+    {
+      "id": "CG-20261104T034059268683Z-CODEX-1d3d2d",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "ENTT-ENKITS-REVIEW",
+      "reply_to": "CG-20261104T033136489637Z-CODEX-253301",
+      "base_commit": "4aff5ea",
+      "timestamp_utc": "2026-11-04T03:40:59.268683+00:00",
+      "body": "REVIEW DELIVERED in 4aff5ea: docs/architecture/ENTT_ENKITS_REVIEW.md and architecture index link. Baseline 08a20ae2affefac8babef7ac2d2ff2401997252b. No production fixes.\n\nFindings:\n- ECSJ-01 P1: CompileAsync invokes completion on its std::thread (ScriptCompiler.cpp:141-145); EditorLayer.cpp:776-802 calls Reload and mutates scene/script/DLL/UI state there. OnDetach does not join this compiler before scene/reload teardown. Native callback-thread reproduction plus source-traced actual caller; no concurrent Editor crash induced.\n- ECSJ-02 P1: JobSystem.cpp:90-98 maps NO_THREAD_NUM to zero; DispatchToMainThread:190 executes an external thread callback inline. Native result: enki index 4294967295, wrapper index 0, callbackOnMain=0.\n- ECSJ-03 P1: JobSystemEnkiTS destructor/slot lifetime is based on Jolt/internal ExecuteRange completion rather than actual enki completion. Native Init(1) + Jolt barrier + bridge destruction hangs after job body completes (five-second timeout). Identical control with explicit enki drain exits zero. Multi-thread task-storage UAF/reuse windows are source-confirmed, not reproduced crashes; global WaitForAll control is not a production fix recommendation.\n- ECSJ-04 P2: ParallelECS.hpp:33-60 raw leading-storage iteration skips contains only for single components, so in_place_delete tombstones reach callbacks. Native sequential=1, parallel=2, invalidCallbacks=1. Latent generic-helper issue; inspected built-in components do not currently opt into that policy.\n- ECSJ-05 P2: EditorLayer.cpp:1520-1566 calls runtime scripts/readback before physics; RuntimeLayer.cpp:219-223 does the opposite. Pause/speed semantics differ. Source-confirmed; no gameplay parity run claimed.\n\nNative probes compiled current JobSystem.cpp/Log.cpp/JobSystemEnkiTS.cpp/PhysicsEngine.cpp/ScriptCompiler.cpp and production ParallelECS header with matching Release x64 definitions, linking existing matching vendored libraries. CMake configure/build exit 0 (VS2022, MSVC19.44, Windows SDK10.0.22621). Five isolated modes: external-thread exit1, stable-storage exit1, script-callback exit1 (fault observations); bridge-one-thread timeout (owned child killed); bridge-drained exit0 control. The script fixture is a successful isolated CMake target to prove callback threading, not a gameplay DLL build. Machine-local sources/CMake/runner/results/logs: build/ecs-review-probe/. Four fault behaviors reproduced, one control, product ordering inspected only.\n\nVerification: 39 local report/index links, five finding sections and five result records checked; code fences/UTF-8/exchange schema/whitespace valid. No Engine/Editor/Runtime/Plugins/Tests/ThirdParty tracked source changes. No full milestone suite, sanitizers, physical GPU, interactive reload, multi-thread bridge reuse stress or packaged parity run. No performance claims. No plugin or Vehicle implementation started, no Gemini assignment and no push. Recommended fixes are review advice, not newly released source work."
     }
   ],
   "deferred_tasks": [
@@ -504,6 +527,32 @@
       ],
       "next_action": "Reported production warnings fixed and verified; no new Gemini or Phase 41 package assigned.",
       "implementation_commit": "9374d7b"
+    },
+    {
+      "id": "PLUGIN-MODULARITY-DESIGN",
+      "title": "Plan DLL Editor plugins, static Runtime selection and complete Vehicle extraction",
+      "state": "completed",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "user_scope": "Latest user instruction: documentation and detailed planning first. Design Editor DLL plugins, Runtime static modules selected per project, a new Plugins window and engine/project plugin support. Do not implement production code in this task. User clarification: removing the old Vehicle implementation and rebuilding it from scratch is acceptable. Plan a fresh Jolt-backed Vehicle plugin; legacy Vehicle API/runtime compatibility is not a release requirement. This does not authorize code deletion during the documentation-only turn or unrelated asset deletion.",
+      "expected_files": [
+        "docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md",
+        "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
+        "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md",
+        "ROADMAP.md",
+        "docs/README.md",
+        "docs/architecture/README.md",
+        "docs/architecture/TARGET_LAYERED_ARCHITECTURE.md",
+        "docs/agents/README.md"
+      ],
+      "next_action": "Documentation delivered. Await an explicit implementation package/range; no production deletion or plugin implementation is released by this planning request.",
+      "documentation_commit": "d9e33e6",
+      "design_references": [
+        "docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md",
+        "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
+        "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md"
+      ],
+      "verification": "147 local links, 2 JSON examples, 26 package contracts and 52 dependency edges verified; documentation-only scope and whitespace pass. No C++/DLL/physics/GPU/UI/player execution."
     }
   ]
 }

@@ -19,6 +19,7 @@ Start with the [overview](OVERVIEW.md), [module reference](MODULES.md) and [curr
 | [Proposed layered architecture](TARGET_LAYERED_ARCHITECTURE.md) | Future boundaries, dependency rules and incremental migration criteria |
 | [Verification and limitations](VERIFICATION.md) | Evidence, survey method, documentation checks and unverified behavior |
 | [EnTT/enkiTS integration review](ENTT_ENKITS_REVIEW.md) | 2026-11-04 focused audit, native fault reproductions, concurrency/lifetime findings and limits |
+| [EnTT/enkiTS refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 proposed correctness/refactor packages, threading/lifetime/clock contracts and acceptance matrix |
 
 For a shorter introduction, read [Architecture Overview](OVERVIEW.md). [Subsystems](MODULES.md) provides a quick module reference. Existing domain guides remain useful for individual workflows; this architecture set is the reference for current dependency boundaries and cross-subsystem behavior.
 

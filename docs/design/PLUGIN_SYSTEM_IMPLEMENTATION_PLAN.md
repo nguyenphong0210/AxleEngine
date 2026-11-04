@@ -11,6 +11,17 @@ direction. A fresh Vehicle implementation may replace the old one. See the
 test design. The [exchange](../agents/CODEX_GEMINI_EXCHANGE.json) determines actual
 assignments; this checklist does not release the entire backlog.
 
+The subsequent [EnTT/enkiTS review](../architecture/ENTT_ENKITS_REVIEW.md) found
+existing concurrency/lifetime faults. The
+[ECS/jobs refactor plan](ENTT_ENKITS_REFACTOR_PLAN.md) defines the hardening results
+that this plan must reuse: owner-thread completion/reload before host/restart
+cutover, actual enki completion before new Vehicle physics, and accepted mutation/
+simulation phases before scene-system integration. Its crosswalk identifies exact
+consumer gates. Metadata-only PLG work need not wait for every refactor package;
+native execution must pass its relevant prerequisites. Do not create competing
+JobSystem, main-thread queues, script ABI rules or simulation clocks here.
+All prerequisites are proposed until their own current evidence is accepted.
+
 ## 1. Execution rules
 
 - Assign a concrete package or bounded range; record base commit, expected files

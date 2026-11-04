@@ -33,6 +33,25 @@ Editor and scene entities are never injected automatically. Explicit project ope
 remain available. See [build/startup workflows](docs/guides/BUILD_WORKFLOWS.md).
 This preparation does not mark any Phase 41 rendering package complete.
 
+## ECS/jobs hardening track: detailed refactor planning
+
+**2026-11-04:** The [EnTT/enkiTS review](docs/architecture/ENTT_ENKITS_REVIEW.md)
+records three P1 and two P2 integration findings, including four native fault
+reproductions. The [refactor plan](docs/design/ENTT_ENKITS_REFACTOR_PLAN.md)
+keeps EnTT/enkiTS/Jolt and defines 18 packages:
+
+- [ ] **G0 / EJ-00:** Permanent Debug/Release fault fixtures and baseline.
+- [ ] **G1 / EJ-01..04:** Thread identity, deferred main-thread completion, compiler handoff and safe script reload/teardown.
+- [ ] **G2 / EJ-05..07:** Stable Jolt submission lifetime, single-thread progress and coherent shutdown.
+- [ ] **G3 / EJ-08..10:** Correct view iteration, scene-aware mutations and transform ownership.
+- [ ] **G4 / EJ-11..14:** Shared phases, fixed clock/input rules and Editor/Runtime cutover.
+- [ ] **G5 / EJ-15..17:** Stress/parity evidence, plugin/rendering seam agreement and documentation.
+
+**Status: documentation only; no finding is fixed or implementation released.**
+This is a correctness prerequisite at the affected native plugin/rendering seams,
+not an assigned new phase number or a blanket reorder of all existing backlogs.
+Use the plan's crosswalk and the live exchange for actual scoped assignments.
+
 ## Plugin architecture track: design requested, implementation not released
 
 **2026-11-04:** The user selected DLL plugins for Editor and static plugin modules

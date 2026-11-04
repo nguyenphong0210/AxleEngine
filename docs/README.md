@@ -12,7 +12,19 @@ below are references, not standing instructions to implement an entire phase.
 
 Build instructions: [empty Editor startup, separate tests and on-demand standalone export](guides/BUILD_WORKFLOWS.md). Test sources and fixture layout: [Tests](../Tests/README.md).
 
-## Latest design request: project-selected plugins
+## Latest design request: EnTT/enkiTS refactor
+
+The 2026-11-04 [integration review](architecture/ENTT_ENKITS_REVIEW.md) identified
+thread-delivery, script/DLL lifetime, Jolt/enki completion, EnTT iteration and
+Editor/Runtime scheduling issues. The
+[detailed refactor plan](design/ENTT_ENKITS_REFACTOR_PLAN.md) defines 18 packages,
+ownership/clock contracts, permanent tests and acceptance gates. It retains the
+libraries and supplies shared foundations for plugin/rendering work.
+
+This is documentation only. No finding is marked fixed by the plan, no new phase
+number is assigned and no production refactor is released.
+
+## Project-selected plugin design
 
 The 2026-11-04 request is **documentation first**, not implementation. The selected
 direction is Editor DLL modules, static Runtime modules selected per project, a new

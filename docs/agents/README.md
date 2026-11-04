@@ -15,7 +15,15 @@ explicitly if the running client/session has not loaded it.
 
 ## Current checkpoint
 
-**Latest user scope (2026-11-04): plugin planning/documentation only.** Read the
+**Latest user scope (2026-11-04): detailed EnTT/enkiTS refactor planning only.**
+Read the [integration review](../architecture/ENTT_ENKITS_REVIEW.md) for actual
+findings and evidence, then the
+[18-package refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) for proposed
+threading, completion, ECS mutation and shared simulation contracts. Current code
+is not fixed by these documents. No EJ/PLG/P41 implementation or other-agent task
+is released by the planning request; consult the live exchange for assignments.
+
+**Plugin design checkpoint:** Read the
 [plugin architecture](../design/PLUGIN_SYSTEM_ARCHITECTURE.md),
 [26-package plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) and
 [implementation guide](../design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md).
@@ -55,6 +63,8 @@ An author flag identifies the caller's claimed role, not authenticated model ide
 | Topic | Reference | Role |
 | --- | --- | --- |
 | Rendering priority | [Phase 41 plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) | Canonical packages and required gates |
+| ECS/jobs current findings | [Integration review](../architecture/ENTT_ENKITS_REVIEW.md) | Reproduced faults, source-confirmed risks and verification limits |
+| ECS/jobs refactor | [Refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 unreleased packages and ownership/timing acceptance |
 | Plugin product/ABI design | [Plugin architecture](../design/PLUGIN_SYSTEM_ARCHITECTURE.md) | Proposed DLL/static products, UX, lifetime and fresh Vehicle scope |
 | Plugin execution | [Plugin plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | 26 unreleased packages and acceptance gates |
 | Plugin implementation details | [Plugin coding reference](../design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Proposed algorithms, SDK contracts and real-fixture strategy |

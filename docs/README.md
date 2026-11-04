@@ -12,7 +12,22 @@ below are references, not standing instructions to implement an entire phase.
 
 Build instructions: [empty Editor startup, separate tests and on-demand standalone export](guides/BUILD_WORKFLOWS.md). Test sources and fixture layout: [Tests](../Tests/README.md).
 
-## Current highest priority: RHI-primary rendering
+## Latest design request: project-selected plugins
+
+The 2026-11-04 request is **documentation first**, not implementation. The selected
+direction is Editor DLL modules, static Runtime modules selected per project, a new
+Plugins window, Engine/project plugin support and a fresh Vehicle replacement.
+No code has been deleted or implemented by this design task.
+
+- [Plugin architecture](design/PLUGIN_SYSTEM_ARCHITECTURE.md): source audit, selection/UX, shared-host ABI, EnTT/enkiTS ownership, fresh Vehicle scope and exact export.
+- [Plugin implementation plan](design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md): 26 gated packages, dependencies, file scopes and acceptance matrix.
+- [Plugin implementation guide](design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md): proposed schemas, algorithms, lifecycle/build contracts and real-fixture strategy.
+
+This request does not close or release Phase 41 packages, change the existing
+rendering-versus-feature-expansion priority, or assign another agent. The live
+exchange records the next actual implementation assignment.
+
+## Rendering execution priority: RHI-primary rendering
 
 Phase 41 executes before new animation authoring and VFX expansion. All documents
 below describe proposed work; implementation/acceptance is not claimed.

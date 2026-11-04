@@ -27,7 +27,13 @@ Diagrams use Mermaid and require a Markdown viewer with Mermaid support. A depen
 
 The class diagrams emphasize relationships that matter to architecture. The class index covers additional declarations, including local test types and sample scripts. No single diagram attempts to display every engine type.
 
-The current highest-priority execution proposal is
+The 2026-11-04 [plugin design](../design/PLUGIN_SYSTEM_ARCHITECTURE.md) and
+[26-package plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) specialize the
+optional-toolkit proposal: Editor DLL modules, selected static Runtime modules,
+project plugin authoring and a fresh Vehicle replacement. They are documentation
+only; the current source survey is not a claim that this architecture exists.
+
+The previously established highest-priority rendering execution proposal is
 [Phase 41: RHI-primary rendering](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md),
 with its [detailed package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md).
 It is a target design, not a change to the as-is survey below.

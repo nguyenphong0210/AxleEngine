@@ -15,11 +15,22 @@ explicitly if the running client/session has not loaded it.
 
 ## Current checkpoint
 
+**Latest user scope (2026-11-04): plugin planning/documentation only.** Read the
+[plugin architecture](../design/PLUGIN_SYSTEM_ARCHITECTURE.md),
+[26-package plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) and
+[implementation guide](../design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md).
+The selected direction is Editor DLL modules, project-selected static Runtime,
+a new Plugins window and support for project-local plugins. A fresh Vehicle
+replacement may retire the old implementation when implementation is assigned;
+this planning turn does not authorize deleting code or assets. No PLG package or
+Gemini implementation is released by these documents. No new relative priority
+between plugin implementation and rendering is inferred. Consult the live task card.
+
 The user has made **Phase 41: RHI-Primary Rendering Foundation** the highest
 priority. The [architecture](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md),
 [30-package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) and
 [coding guide](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md) are references.
-The current released scope is documentation only. P41-00 then P41-01 are next
+The Phase 41 request released documentation only. P41-00 then P41-01 are next
 implementation candidates, not an automatic assignment of the entire phase.
 
 Animation G1 (`7ba4361`, report `d4dbb75`) remains delivered awaiting independent
@@ -44,6 +55,9 @@ An author flag identifies the caller's claimed role, not authenticated model ide
 | Topic | Reference | Role |
 | --- | --- | --- |
 | Rendering priority | [Phase 41 plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) | Canonical packages and required gates |
+| Plugin product/ABI design | [Plugin architecture](../design/PLUGIN_SYSTEM_ARCHITECTURE.md) | Proposed DLL/static products, UX, lifetime and fresh Vehicle scope |
+| Plugin execution | [Plugin plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | 26 unreleased packages and acceptance gates |
+| Plugin implementation details | [Plugin coding reference](../design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Proposed algorithms, SDK contracts and real-fixture strategy |
 | Feature status | [ROADMAP](../../ROADMAP.md) | Overall plan; not an automatic task queue |
 | Animation requirements/dependencies | [Phase 40 plan](../design/ANIMATION_PHASE_40_COMPLETION_PLAN.md) | Package contracts |
 | Animation implementation details | [Animation coding reference](../design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md) | Algorithms and examples; inspect current APIs |

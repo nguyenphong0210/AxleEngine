@@ -33,6 +33,31 @@ Editor and scene entities are never injected automatically. Explicit project ope
 remain available. See [build/startup workflows](docs/guides/BUILD_WORKFLOWS.md).
 This preparation does not mark any Phase 41 rendering package complete.
 
+## Plugin architecture track: design requested, implementation not released
+
+**2026-11-04:** The user selected DLL plugins for Editor and static plugin modules
+for shipped Runtime, with project-level selection in a new Plugins window and
+support for plugins under both Engine and project roots. Replacing Vehicle from
+scratch is acceptable; preserving its old C++ API and exact handling is not a gate.
+The latest instruction is to write detailed plans first: **no source deletion or
+plugin implementation is claimed or released by this update**.
+
+Read the [architecture](docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md),
+[26-package plan](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) and
+[implementation guide](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md).
+
+- [ ] **G0 / PLG-00..04:** Baseline, manifest discovery, dependency resolution, project selection and exact build plans.
+- [ ] **G1 / PLG-05..09:** Shared Engine/Editor host ownership, native DLL loading, EnTT storage lifetime, scene codecs and scheduling.
+- [ ] **G2 / PLG-10..13:** Plugins window, per-project build/restart/recovery and a real external project plugin.
+- [ ] **G3 / PLG-14..18:** Fresh Jolt Vehicle data/simulation/tools, old built-in retirement and scoped audio/VFX integrations.
+- [ ] **G4 / PLG-19..23:** Spline/Terrain separation, script dependencies, selected static Runtime and snapshot-bound export.
+- [ ] **G5 / PLG-24..25:** Actual DLL/UI/physics/player acceptance, link exclusions and maintained authoring/build documentation.
+
+All boxes remain open. Existing Phase 41 priority over new animation/VFX expansion
+and previous acceptance obligations remain recorded. This planning request does
+not decide a new relative implementation order between PLG and P41. The
+[exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json) owns the next released scope.
+
 ### 🛡️ Core Engineering & Contribution Principles
 1. **Language Standard**: All source code, header files, docstrings, architectural documentation, commit messages, and automated tests must be written exclusively in **English**.
 2. **Granular Sub-Step Execution**: Every implementation task must be decomposed into its smallest discrete sub-step. Bulk or monolithic commits combining unrelated sub-steps are strictly forbidden.

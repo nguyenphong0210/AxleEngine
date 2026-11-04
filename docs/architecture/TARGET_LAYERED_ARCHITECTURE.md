@@ -8,6 +8,16 @@ and [Phase 41 package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.m
 specialize this proposal for the user's current highest priority. They define
 incremental implementation gates; this broader module proposal remains unimplemented.
 
+**Plugin design specialization (2026-11-04):** The
+[plugin architecture](../design/PLUGIN_SYSTEM_ARCHITECTURE.md),
+[implementation plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) and
+[implementation guide](../design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) define
+the selected DLL-in-Editor/static-in-Runtime direction, Engine/project discovery,
+Plugins window, shared-host lifetime and fresh Vehicle replacement. Their
+project resolution/module policy supersedes the illustrative per-feature CMake
+switches below for plugin selection. These remain proposals; the current user
+request is documentation first, with no Vehicle deletion or implementation yet.
+
 ## 1. Objectives and rules
 
 Allow products to select engine capabilities without pulling in the editor or every gameplay toolkit. Each module should have a coherent responsibility, explicit public API, dependency policy and lifetime owner.

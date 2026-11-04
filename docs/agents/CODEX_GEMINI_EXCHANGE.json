@@ -1,24 +1,37 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "ENTT-ENKITS-REFACTOR-PLAN",
-    "title": "Detailed ECS/jobs/threading and shared simulation refactor plan",
+    "id": "ARCHITECTURE-FOUNDATION-MASTER-PLAN",
+    "title": "Coordinate NRI, EnTT/enkiTS and Vehicle/plugin architecture-first refactor",
     "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Write a detailed refactor plan based on ECSJ-01..05 and the current integration. Documentation only; do not fix production code or start plugin/Vehicle implementation.",
+    "user_scope": "Latest user priority: clean architecture before other feature expansion. Write a combined detailed plan for NRI/RHI, EnTT/enkiTS standardization and complete Vehicle/plugin extraction. Documentation only, retaining Editor DLL/static Runtime and permission for a fresh Jolt Vehicle rewrite.",
     "expected_files": [
+      "docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md",
+      "docs/design/NRI_INTEGRATION_CONTRACT.md",
+      "docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md",
+      "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md",
       "docs/design/ENTT_ENKITS_REFACTOR_PLAN.md",
+      "docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md",
+      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
+      "ROADMAP.md",
       "docs/README.md",
       "docs/architecture/README.md",
+      "docs/architecture/TARGET_LAYERED_ARCHITECTURE.md",
       "docs/agents/README.md",
-      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
-      "ROADMAP.md"
+      "docs/agents/WORKING_PROTOCOL.md"
     ],
-    "next_action": "Detailed refactor plan delivered. Await explicit implementation scope; suggested EJ-00..03 is not an assignment. No source refactor, Vehicle deletion or plugin implementation released.",
-    "documentation_commit": "7c13e62",
-    "plan": "docs/design/ENTT_ENKITS_REFACTOR_PLAN.md",
-    "verification": "127 local links; 18 package contracts; 35 acyclic edges; five findings mapped; 29 acceptance IDs; 26 PLG packages retained. Documentation-only checks pass; no production code/test execution or fixes."
+    "next_action": "Combined architecture-first plans delivered. Await an explicit implementation package/range; AF-00/EJ-00 then EJ-01..03 are proposed first units only. No production implementation or other-agent work released.",
+    "documentation_commit": "9b2dff7",
+    "master_plan": "docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md",
+    "nri_contract": "docs/design/NRI_INTEGRATION_CONTRACT.md",
+    "phase_map": {
+      "41": "NRI/rendering (P41)",
+      "42": "EnTT/enkiTS normalization (EJ)",
+      "43": "Plugins/project composition and fresh Vehicle (PLG)"
+    },
+    "verification": "13 Markdown documents, 246 local links, 80 packages, 250 acyclic/wave-valid edges (44 cross-plan), 73 architecture/7 deferred split and 12 NRI rules verified. Documentation only; no source fixes or native/GPU/player execution."
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -310,6 +323,28 @@
       "base_commit": "7c13e62",
       "timestamp_utc": "2026-11-04T04:12:01.936964+00:00",
       "body": "DELIVERED documentation commit 7c13e62 (docs(architecture): plan ECS and jobs correctness refactor). Canonical plan: docs/design/ENTT_ENKITS_REFACTOR_PLAN.md. Baseline 84ad556678693c33039703801ea013d2d2686913.\n\nThe plan retains EnTT/enkiTS/Jolt and defines 18 EJ-00..17 packages across six gates: permanent fault harness; owner-thread identity/deferred completion/compiler/reload; independent stable Jolt submission records/actual completion/forward progress/shutdown; EnTT view and Scene mutation/transform ownership; shared frame/fixed/late simulation and Editor/Runtime cutover; stress/parity/seam acceptance and maintained documentation. All five ECSJ findings map to packages and acceptance IDs.\n\nDetailed contracts include safe producer admission/epochs, always-deferred owner-scoped queue (including callable destructor DLL leases), immutable compiler requests and pending result lifecycle, candidate DLL staging with realistic rollback limits, separate Jolt job-slot versus enki task lifetime, a required proof gate for Jolt waits/reentrancy, valid-ID parallel iteration, scene-aware structural commands and completed transform revisions. Proposed fixed-step policy is explicitly design-only: 60Hz, eight-tick frame cap, 0.25s wall admission, validated speed, pause/full step/input edge behavior. Frame OnUpdate remains distinct from OnFixedUpdate/OnLateUpdate; virtual additions require script ABI versioning/rebuild and rejection of old DLLs.\n\nRoadmap/docs/architecture/agent navigation and the plugin plan now reference the hardening prerequisites. Native PLG consumers reuse EJ contracts; metadata-only work need not wait for the entire track. No phase number is assigned, no blanket rendering/plugin reprioritization and no implementation release are inferred.\n\nDocumentation verification this session: inline Python checks exit 0: 127 local links across six documents; 18 sequential package contracts; 35 prior-only dependency edges, acyclic; all five findings mapped; 29 unique acceptance IDs; roadmap gate ranges consistent; all 26 PLG package headings retained; UTF-8/fences valid and no tracked Engine/Editor/Runtime/Plugins/Tests/ThirdParty source changes. Log: build/ecs-refactor-plan-verification.log. python scripts/agent_exchange.py validate exit 0; git diff --check and staged whitespace check exit 0.\n\nLimits: this turn ran no C++ compilation, native probes, DLL loading, physics, GPU, interactive UI, sanitizer or player tests. Review reproductions remain historical evidence; no current fault is marked fixed. No Vehicle deletion, native plugin/renderer implementation, Gemini task or push. Next implementation needs an explicit package/range; suggested first range EJ-00..03 is advice only."
+    },
+    {
+      "id": "CG-20261104T074451284165Z-CODEX-2649f3",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "ARCHITECTURE-FOUNDATION-MASTER-PLAN",
+      "reply_to": null,
+      "base_commit": "cb200d373550b6dd4f7e12d483a161012d863a27",
+      "timestamp_utc": "2026-11-04T07:44:51.284165+00:00",
+      "body": "IN_PROGRESS from cb200d373550b6dd4f7e12d483a161012d863a27. User now prioritizes clean architecture before other feature expansion and asks for one plan covering NRI, EnTT/enkiTS and Vehicle extraction. Codex owns the master/NRI contract documents and existing-plan/roadmap/protocol/navigation synchronization on the task card. Preserve P41/EJ/PLG IDs, separate foundational cutover from advanced rendering features, and validate cross-plan prerequisites to prevent cycles/duplicate services. NRI local pin inspected: 6998e3fbbaed1b132f386a9d49743a2481003487, NRI_VERSION 190. Planning only: no production fixes/deletion/vendor upgrades, no Gemini implementation assigned, no push."
+    },
+    {
+      "id": "CG-20261104T075616405312Z-CODEX-3aec22",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "ARCHITECTURE-FOUNDATION-MASTER-PLAN",
+      "reply_to": "CG-20261104T074451284165Z-CODEX-2649f3",
+      "base_commit": "9b2dff7",
+      "timestamp_utc": "2026-11-04T07:56:16.405312+00:00",
+      "body": "DELIVERED documentation commit 9b2dff7: docs(architecture): coordinate NRI ECS and plugin foundation plans. Source baseline cb200d373550b6dd4f7e12d483a161012d863a27.\n\nNew canonical coordinator: docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md. New vendor/service contract: docs/design/NRI_INTEGRATION_CONTRACT.md. Synchronized domain plans, roadmap, protocol and navigation to the latest architecture-before-feature-expansion instruction. Formal documentation labels: Phase 41 P41 rendering/NRI, Phase 42 EJ ECS/jobs, Phase 43 PLG plugins/Vehicle. Preserve all existing package IDs and internal contracts. The master adds AF-00..05 for baseline/enforcement, stable authored identity/atomic saves, Core/Application ownership, SceneData boundaries and CPU asset/tool boundaries. One implementation owner per queue/clock/cache/frame/loader; no duplicate framework.\n\nScope: 30 P41 + 18 EJ + 26 PLG + 6 AF = 80 packages. Waves W0..W8 define a 73-package architecture exit. P41-21..24 and complete P41-27..29 remain seven deferred feature/full-phase packages in W9; no false full rendering acceptance/default rollout. Cross-track prerequisites prevent DLL activation before thread/lifetime safety and fresh Vehicle before accepted simulation/resource/debug consumers. Vehicle remains a clean Jolt-backed replacement, with old code retired only after a runnable new plugin and passive unknown-data preservation. DLL Editor/static selected Runtime and the new Plugins window remain fixed product decisions.\n\nNRI contract has 12 rules mapped to existing P41 work, not new implementation packages: pin, native boundary, required interfaces/queue, GL fallback readiness, transactional generations, CPU-recorded and GPU-submitted leases, submission-aware states, single frame/present owner, immutable extraction, real shipping Canvas GPU output, shader/artifact identity and failure/shutdown. Local vendor pin 6998e3fbbaed1b132f386a9d49743a2481003487, public NRI_VERSION190/date9October2026; no vendor modification. Inspected local NRI sources and official upstream README only as reference; no vendor benchmark claim.\n\nVerification executed: python build/verify-architecture-master.py exit0, log build/architecture-master-verification.log; 13 Markdown documents, 246 local links, UTF-8/fences valid; all 80 packages covered once by execution waves; 250 combined edges including 44 cross-plan edges are acyclic and respect wave order; six AF package contracts and 12 NRI rules valid; 73/7 split matches exact deferred IDs. Machine-local graph/order artifact build/architecture-master-topological-order.json. Vendor revision/API match; no Engine/Editor/Runtime/Plugins/Tests/ThirdParty/root-CMake source diff. Exchange validation and unstaged/staged whitespace checks exit0.\n\nLimits: this turn ran no new C++/DLL/Jolt/GPU/native UI/player/sanitizer tests or performance benchmark. Existing review reproductions remain historical, not fixed. No Vehicle deletion, vendor upgrade, package implementation, Gemini assignment or push. First proposed implementation unit is AF-00/EJ-00 then EJ-01..03, only if explicitly assigned."
     }
   ],
   "deferred_tasks": [
@@ -595,6 +630,26 @@
         ]
       },
       "verification": "Newly compiled Release native probes reproduce four offending behaviors plus one successful drain control. Product scheduling source-inspected. No production fixes or full UI/GPU/player/sanitizer run."
+    },
+    {
+      "id": "ENTT-ENKITS-REFACTOR-PLAN",
+      "title": "Detailed ECS/jobs/threading and shared simulation refactor plan",
+      "state": "completed",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "user_scope": "Write a detailed refactor plan based on ECSJ-01..05 and the current integration. Documentation only; do not fix production code or start plugin/Vehicle implementation.",
+      "expected_files": [
+        "docs/design/ENTT_ENKITS_REFACTOR_PLAN.md",
+        "docs/README.md",
+        "docs/architecture/README.md",
+        "docs/agents/README.md",
+        "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
+        "ROADMAP.md"
+      ],
+      "next_action": "Detailed refactor plan delivered. Await explicit implementation scope; suggested EJ-00..03 is not an assignment. No source refactor, Vehicle deletion or plugin implementation released.",
+      "documentation_commit": "7c13e62",
+      "plan": "docs/design/ENTT_ENKITS_REFACTOR_PLAN.md",
+      "verification": "127 local links; 18 package contracts; 35 acyclic edges; five findings mapped; 29 acceptance IDs; 26 PLG packages retained. Documentation-only checks pass; no production code/test execution or fixes."
     }
   ]
 }

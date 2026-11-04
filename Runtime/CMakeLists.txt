@@ -14,7 +14,6 @@ target_link_libraries(AxleRuntime PRIVATE
     Axle::Audio
     Axle::Asset
     Axle::Physics
-    Axle::Vehicle
     Axle::Scene
     Axle::Project
     Axle::UI2D

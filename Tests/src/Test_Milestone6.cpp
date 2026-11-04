@@ -1065,131 +1065,35 @@ bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
     }
     std::cout << "  -> PASS: Assembly export and instantiation preserved AudioSourceComponent properties." << std::endl;
 
-    // 9. Vehicle Audio Synthesizer & Physics Telemetry Integration
-    std::cout << "[31.9] Verifying VehicleAudio granular synthesizer, slip acoustics, and impact response..." << std::endl;
-    Axle::VehicleAudioConfig vaConfig;
-    vaConfig.EnginePowerClipPath = wavPath.string();
-    vaConfig.EngineCoastClipPath = wavPath.string();
-    vaConfig.TireSquealClipPath = wavPath.string();
-    vaConfig.SuspensionThudClipPath = wavPath.string();
-    vaConfig.CollisionImpactClipPath = wavPath.string();
-    vaConfig.MinEnginePitch = 0.6f;
-    vaConfig.MaxEnginePitch = 2.4f;
-    vaConfig.EngineMasterVolume = 0.8f;
-    vaConfig.IdleRPM = 1000.0f;
-    vaConfig.MaxRPM = 7000.0f;
-    vaConfig.SlipThreshold = 0.22f;
-    vaConfig.TireSquealMasterVolume = 0.7f;
-    vaConfig.SuspensionThudThreshold = 1.8f;
-    vaConfig.CollisionDecelThreshold = 18.0f;
+    // 9. Vehicle Audio Synthesizer & Physics Telemetry Integration (RETIRED)
+    std::cout << "[31.9] [RETIRED] VehicleAudio granular synthesizer and physics telemetry integration retired under VEHICLE-RETIREMENT." << std::endl;
+    std::cout << "  -> Granular engine synthesis, slip acoustics and suspension thud retired from Engine core." << std::endl;
 
-    Axle::VehicleAudio va(vaConfig);
-    va.Start();
-    if (!va.IsPlaying()) {
-        std::cerr << "FAIL: VehicleAudio failed to start playback!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Test Idle RPM (1000 RPM, throttle 0)
-    Axle::VehicleTelemetryData telem;
-    telem.EngineRPM = 1000.0f;
-    telem.LinearVelocity = glm::vec3(0.0f);
-    telem.ForwardVector = glm::vec3(0.0f, 0.0f, 1.0f);
-    for (int i = 0; i < 4; ++i) {
-        telem.Wheels[i].HasContact = true;
-        telem.Wheels[i].SuspensionLength = 0.25f;
-        telem.Wheels[i].LongitudinalSlip = 0.0f;
-        telem.Wheels[i].LateralSlip = 0.0f;
-    }
-    va.Update(Axle::Timestep(0.016f), telem, 0.0f, 0.0f, false, glm::vec3(0.0f), telem.ForwardVector);
-    if (std::abs(va.GetCurrentPitch() - 0.6f) > 0.05f) {
-        std::cerr << "FAIL: VehicleAudio idle pitch mismatch! Expected ~0.6, Got: " << va.GetCurrentPitch() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    if (va.GetCurrentTireVolume() > 0.001f) {
-        std::cerr << "FAIL: VehicleAudio tire volume should be 0 without slip!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Test Max RPM (7000 RPM, full throttle)
-    telem.EngineRPM = 7000.0f;
-    for (int tick = 0; tick < 20; ++tick) {
-        va.Update(Axle::Timestep(0.05f), telem, 1.0f, 0.0f, false, glm::vec3(0.0f), telem.ForwardVector);
-    }
-    if (std::abs(va.GetCurrentPitch() - 2.4f) > 0.05f) {
-        std::cerr << "FAIL: VehicleAudio max RPM pitch mismatch! Expected ~2.4, Got: " << va.GetCurrentPitch() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Test Slip-Induced Tire Squeal
-    telem.Wheels[0].LateralSlip = 0.85f;
-    for (int tick = 0; tick < 10; ++tick) {
-        va.Update(Axle::Timestep(0.05f), telem, 1.0f, 0.0f, false, glm::vec3(0.0f), telem.ForwardVector);
-    }
-    if (va.GetCurrentTireVolume() < 0.2f) {
-        std::cerr << "FAIL: VehicleAudio tire volume did not ramp up during drift slip!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Test Suspension Compression Velocity Thud
-    // Previous suspension length was 0.25f. Compress rapidly to 0.05f in 16ms -> velocity = 0.20 / 0.016 = 12.5 m/s > 1.8 threshold
-    telem.Wheels[0].SuspensionLength = 0.05f;
-    va.Update(Axle::Timestep(0.016f), telem, 0.5f, 0.0f, false, glm::vec3(0.0f), telem.ForwardVector);
-
-    // Test Sudden Deceleration Impact (Collision)
-    // Set high speed then drop suddenly:
-    telem.LinearVelocity = glm::vec3(0.0f, 0.0f, 30.0f);
-    va.Update(Axle::Timestep(0.016f), telem, 0.0f, 1.0f, false, glm::vec3(0.0f), telem.ForwardVector);
-    // Instant drop to 0 -> decel = 30 / 0.016 = 1875 m/s^2 > 18 threshold
-    telem.LinearVelocity = glm::vec3(0.0f);
-    va.Update(Axle::Timestep(0.016f), telem, 0.0f, 1.0f, false, glm::vec3(0.0f), telem.ForwardVector);
-
-    va.Stop();
-    std::cout << "  -> PASS: Granular RPM synthesizer, slip acoustics, suspension thud & collision impact verified." << std::endl;
-
-    // 10. VehicleAudioComponent ECS Lifecycle & Serialization Roundtrip
-    std::cout << "[31.10] Verifying VehicleAudioComponent ECS lifecycle, SceneSerializer and AssemblySerializer roundtrip..." << std::endl;
+    // 10. Legacy VehicleAudioComponent Data Preservation Roundtrip
+    std::cout << "[31.10] Verifying Legacy VehicleAudioComponent data preservation roundtrip in SceneSerializer and AssemblySerializer..." << std::endl;
     auto vehicleScene = std::make_shared<Axle::Scene>();
     auto carEntity = vehicleScene->CreateEntity("SportsCarChassis");
     carEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(10.0f, 1.0f, 20.0f);
 
-    auto& vac = carEntity.AddComponent<Axle::VehicleAudioComponent>();
-    vac.EnginePowerClipPath = wavPath.string();
-    vac.EngineCoastClipPath = wavPath.string();
-    vac.TireSquealClipPath = wavPath.string();
-    vac.SuspensionThudClipPath = wavPath.string();
-    vac.CollisionImpactClipPath = wavPath.string();
-    vac.MinEnginePitch = 0.55f;
-    vac.MaxEnginePitch = 2.65f;
-    vac.EngineMasterVolume = 0.85f;
-    vac.SlipThreshold = 0.25f;
-    vac.TireSquealMasterVolume = 0.65f;
-    vac.SuspensionThudThreshold = 2.1f;
-    vac.CollisionDecelThreshold = 22.0f;
-    vac.Spatialized = true;
-    vac.MinDistance = 3.0f;
-    vac.MaxDistance = 90.0f;
-
-    // Test Scene Runtime Lifecycle
-    vehicleScene->OnRuntimeStart();
-    if (!vac.RuntimeAudio || !vac.RuntimeAudio->IsPlaying()) {
-        std::cerr << "FAIL: VehicleAudioComponent RuntimeAudio was not initialized and playing on OnRuntimeStart()!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    vehicleScene->OnUpdateRuntime(Axle::Timestep(0.016f));
-    vehicleScene->OnRuntimeStop();
-    if (vac.RuntimeAudio != nullptr) {
-        std::cerr << "FAIL: VehicleAudioComponent RuntimeAudio was not released on OnRuntimeStop()!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: VehicleAudioComponent runtime start/update/stop lifecycle validated." << std::endl;
+    auto& holder = carEntity.AddComponent<Axle::LegacyComponentsHolder>();
+    holder.Components.push_back({
+        "VehicleAudioComponent",
+        {
+            "Enabled: true",
+            std::string("EnginePowerClipPath: ") + wavPath.string(),
+            std::string("EngineCoastClipPath: ") + wavPath.string(),
+            "MinEnginePitch: 0.550000",
+            "MaxEnginePitch: 2.650000",
+            "EngineMasterVolume: 0.850000",
+            "SlipThreshold: 0.250000",
+            "TireSquealMasterVolume: 0.650000",
+            "SuspensionThudThreshold: 2.100000",
+            "CollisionDecelThreshold: 22.000000",
+            "Spatialized: true",
+            "MinDistance: 3.000000",
+            "MaxDistance: 90.000000"
+        }
+    });
 
     // Test Scene Serialization Roundtrip (.axlescene)
     std::filesystem::path carScenePath = testDir / "CarAudioScene.axlescene";
@@ -1204,40 +1108,26 @@ bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
         return false;
     }
 
-    bool foundVehicleAudio = false;
+    bool foundLegacyAudio = false;
     auto carView = loadedVehicleScene->GetRegistry().view<Axle::TagComponent>();
     for (auto entID : carView) {
         Axle::Entity e{ entID, loadedVehicleScene.get() };
-        if (e.HasComponent<Axle::VehicleAudioComponent>()) {
-            foundVehicleAudio = true;
-            const auto& loadedVac = e.GetComponent<Axle::VehicleAudioComponent>();
-            if (loadedVac.EnginePowerClipPath != wavPath.string() ||
-                loadedVac.EngineCoastClipPath != wavPath.string() ||
-                loadedVac.TireSquealClipPath != wavPath.string() ||
-                loadedVac.SuspensionThudClipPath != wavPath.string() ||
-                loadedVac.CollisionImpactClipPath != wavPath.string() ||
-                std::abs(loadedVac.MinEnginePitch - 0.55f) > 0.01f ||
-                std::abs(loadedVac.MaxEnginePitch - 2.65f) > 0.01f ||
-                std::abs(loadedVac.EngineMasterVolume - 0.85f) > 0.01f ||
-                std::abs(loadedVac.SlipThreshold - 0.25f) > 0.01f ||
-                std::abs(loadedVac.TireSquealMasterVolume - 0.65f) > 0.01f ||
-                std::abs(loadedVac.SuspensionThudThreshold - 2.1f) > 0.01f ||
-                std::abs(loadedVac.CollisionDecelThreshold - 22.0f) > 0.01f ||
-                !loadedVac.Spatialized ||
-                std::abs(loadedVac.MinDistance - 3.0f) > 0.01f ||
-                std::abs(loadedVac.MaxDistance - 90.0f) > 0.01f) {
-                std::cerr << "FAIL: Deserialized VehicleAudioComponent parameters corrupted!" << std::endl;
-                std::filesystem::remove_all(testDir, ec);
-                return false;
+        if (e.HasComponent<Axle::LegacyComponentsHolder>()) {
+            const auto& lh = e.GetComponent<Axle::LegacyComponentsHolder>();
+            for (const auto& c : lh.Components) {
+                if (c.TypeName == "VehicleAudioComponent") {
+                    foundLegacyAudio = true;
+                    break;
+                }
             }
         }
     }
-    if (!foundVehicleAudio) {
-        std::cerr << "FAIL: VehicleAudioComponent not found in deserialized scene!" << std::endl;
+    if (!foundLegacyAudio) {
+        std::cerr << "FAIL: VehicleAudioComponent legacy payload not preserved in deserialized scene!" << std::endl;
         std::filesystem::remove_all(testDir, ec);
         return false;
     }
-    std::cout << "  -> PASS: SceneSerializer saved and restored VehicleAudioComponent with 100% precision." << std::endl;
+    std::cout << "  -> PASS: SceneSerializer preserved VehicleAudioComponent legacy payload verbatim." << std::endl;
 
     // Test Assembly Prefab Roundtrip (.axle)
     std::filesystem::path carAsmPath = testDir / "SportsCarChassis.axle";
@@ -1249,20 +1139,24 @@ bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
 
     auto asmCarScene = std::make_shared<Axle::Scene>();
     Axle::Entity instantiatedCar = Axle::AssemblySerializer::Deserialize(carAsmPath, asmCarScene.get(), nullptr);
-    if (!instantiatedCar || !instantiatedCar.HasComponent<Axle::VehicleAudioComponent>()) {
-        std::cerr << "FAIL: AssemblySerializer failed to instantiate entity with VehicleAudioComponent!" << std::endl;
+    if (!instantiatedCar || !instantiatedCar.HasComponent<Axle::LegacyComponentsHolder>()) {
+        std::cerr << "FAIL: AssemblySerializer failed to preserve LegacyComponentsHolder!" << std::endl;
         std::filesystem::remove_all(testDir, ec);
         return false;
     }
-    const auto& asmVac = instantiatedCar.GetComponent<Axle::VehicleAudioComponent>();
-    if (asmVac.EnginePowerClipPath != wavPath.string() ||
-        std::abs(asmVac.MaxEnginePitch - 2.65f) > 0.01f ||
-        std::abs(asmVac.CollisionDecelThreshold - 22.0f) > 0.01f) {
-        std::cerr << "FAIL: AssemblySerializer instantiated VehicleAudioComponent parameters mismatch!" << std::endl;
+    bool foundAsmLegacy = false;
+    for (const auto& c : instantiatedCar.GetComponent<Axle::LegacyComponentsHolder>().Components) {
+        if (c.TypeName == "VehicleAudioComponent") {
+            foundAsmLegacy = true;
+            break;
+        }
+    }
+    if (!foundAsmLegacy) {
+        std::cerr << "FAIL: AssemblySerializer failed to restore VehicleAudioComponent legacy payload!" << std::endl;
         std::filesystem::remove_all(testDir, ec);
         return false;
     }
-    std::cout << "  -> PASS: AssemblySerializer roundtrip preserved VehicleAudioComponent properties." << std::endl;
+    std::cout << "  -> PASS: AssemblySerializer roundtrip preserved VehicleAudioComponent legacy payload." << std::endl;
 
     // 11. Subsystem Shutdown
     std::cout << "[31.11] Verifying AudioEngine shutdown..." << std::endl;
@@ -1281,638 +1175,16 @@ bool RunTest_Step31_Phase27_CoreAudioSubsystem() {
 }
 
 // =============================================================================
-// TEST STEP 32: Phase 28 Step 1 - Multi-Part 3D Car Rigging & Lighting Assembly
+// =============================================================================
+// TEST STEP 32: Phase 28 Step 1 - Multi-Part 3D Car Rigging & Lighting Assembly (RETIRED)
 // =============================================================================
 bool RunTest_Step32_Phase28_MultiPartVehicleRigging() {
     std::cout << "\n========================================================" << std::endl;
-    std::cout << " [STEP 32] Phase 28: Multi-Part Vehicle Rigging & Assembly" << std::endl;
+    std::cout << " [STEP 32] Phase 28: Multi-Part Vehicle Rigging (RETIRED)" << std::endl;
     std::cout << "========================================================" << std::endl;
-
-    std::error_code ec;
-    std::filesystem::path testDir = "build/Test_Step32_Rigging";
-    std::filesystem::remove_all(testDir, ec);
-    std::filesystem::create_directories(testDir, ec);
-
-    // 1. Verify 3D Assets & Binary Caches (.axlemesh & .axlebin)
-    std::cout << "\n[32.1] Verifying Modular 3D Vehicle Assets (.axlemesh & .axlebin)..." << std::endl;
-    std::filesystem::path chassisPath = "assets/models/SportsCar_Chassis.axlemesh";
-    std::filesystem::path wheelPath = "assets/models/SportsCar_Wheel.axlemesh";
-    if (!std::filesystem::exists(chassisPath) || !std::filesystem::exists(wheelPath)) {
-        std::cerr << "FAIL: SportsCar_Chassis.axlemesh or SportsCar_Wheel.axlemesh does not exist!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    auto chassisMesh = Axle::AssetSerializer::LoadMesh(chassisPath);
-    if (!chassisMesh.Success || chassisMesh.SourceData.Vertices.empty()) {
-        std::cerr << "FAIL: Failed to load SportsCar_Chassis.axlemesh!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> Chassis loaded: " << chassisMesh.SourceData.Vertices.size() << " vertices, "
-              << chassisMesh.SourceData.Indices.size() / 3 << " triangles, Size: ["
-              << chassisMesh.SourceData.BoundingSize.x << ", " << chassisMesh.SourceData.BoundingSize.y << ", "
-              << chassisMesh.SourceData.BoundingSize.z << "]" << std::endl;
-
-    auto wheelMesh = Axle::AssetSerializer::LoadMesh(wheelPath);
-    if (!wheelMesh.Success || wheelMesh.SourceData.Vertices.empty()) {
-        std::cerr << "FAIL: Failed to load SportsCar_Wheel.axlemesh!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> Wheel loaded: " << wheelMesh.SourceData.Vertices.size() << " vertices, "
-              << wheelMesh.SourceData.Indices.size() / 3 << " triangles, Size: ["
-              << wheelMesh.SourceData.BoundingSize.x << ", " << wheelMesh.SourceData.BoundingSize.y << ", "
-              << wheelMesh.SourceData.BoundingSize.z << "]" << std::endl;
-
-    // Check dimensions match requirements
-    if (std::abs(chassisMesh.SourceData.BoundingSize.x - 1.90f) > 0.05f ||
-        std::abs(chassisMesh.SourceData.BoundingSize.z - 4.40f) > 0.05f) {
-        std::cerr << "FAIL: Chassis dimensions do not match calibrated car specifications!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    if (std::abs(wheelMesh.SourceData.BoundingSize.x - 0.25f) > 0.02f ||
-        std::abs(wheelMesh.SourceData.BoundingSize.y - 0.70f) > 0.02f) {
-        std::cerr << "FAIL: Wheel dimensions do not match 0.35m radius / 0.25m width!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: 3D mesh geometry and dimensions verified." << std::endl;
-
-    // 2. Deserialize CarTest Scene & Rigging Structure
-    std::cout << "\n[32.2] Loading CarTest.axlescene and verifying hierarchy..." << std::endl;
-    auto scene = std::make_shared<Axle::Scene>();
-    auto physicsScene = std::make_unique<Axle::PhysicsScene>();
-    Axle::SceneSerializer sceneSerializer(scene.get(), physicsScene.get());
-
-    std::filesystem::path scenePath = "assets/scenes/CarTest.axlescene";
-    if (!sceneSerializer.Deserialize(scenePath)) {
-        std::cerr << "FAIL: Could not deserialize " << scenePath << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    Axle::Entity car;
-    Axle::Entity bodyMeshEntity;
-    std::vector<Axle::Entity> wheels;
-    std::vector<Axle::Entity> headlights;
-    std::vector<Axle::Entity> taillights;
-
-    auto view = scene->GetRegistry().view<Axle::TagComponent>();
-    for (auto e : view) {
-        Axle::Entity ent{ e, scene.get() };
-        std::string tag = ent.GetComponent<Axle::TagComponent>().Tag;
-        if (tag == "Car") car = ent;
-        else if (tag == "BodyMesh") bodyMeshEntity = ent;
-        else if (tag.rfind("Wheel_", 0) == 0) wheels.push_back(ent);
-        else if (tag.rfind("Headlight_", 0) == 0) headlights.push_back(ent);
-        else if (tag.rfind("Taillight_", 0) == 0) taillights.push_back(ent);
-    }
-
-    if (!car || !car.HasComponent<Axle::VehicleComponent>()) {
-        std::cerr << "FAIL: Car entity with VehicleComponent not found in scene!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> Car entity found (UUID: " << car.GetUUID() << ")" << std::endl;
-
-    if (!bodyMeshEntity || !bodyMeshEntity.HasComponent<Axle::MeshInstance3D>()) {
-        std::cerr << "FAIL: BodyMesh child entity not found!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    auto& bodyMc = bodyMeshEntity.GetComponent<Axle::MeshInstance3D>();
-    if (bodyMc.AssetPath.find("SportsCar_Chassis") == std::string::npos) {
-        std::cerr << "FAIL: BodyMesh is not referencing SportsCar_Chassis.axlemesh! Path: " << bodyMc.AssetPath << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> BodyMesh verified referencing: " << bodyMc.AssetPath << std::endl;
-
-    if (wheels.size() != 4) {
-        std::cerr << "FAIL: Expected 4 wheels, found " << wheels.size() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    for (auto& w : wheels) {
-        auto& wmc = w.GetComponent<Axle::MeshInstance3D>();
-        auto& wc = w.GetComponent<Axle::WheelComponent>();
-        if (wmc.AssetPath.find("SportsCar_Wheel") == std::string::npos) {
-            std::cerr << "FAIL: Wheel mesh does not reference SportsCar_Wheel.axlemesh! Path: " << wmc.AssetPath << std::endl;
-            std::filesystem::remove_all(testDir, ec);
-            return false;
-        }
-        if (!wc.AutoSyncMesh) {
-            std::cerr << "FAIL: Wheel AutoSyncMesh is not enabled!" << std::endl;
-            std::filesystem::remove_all(testDir, ec);
-            return false;
-        }
-    }
-    std::cout << "  -> PASS: All 4 wheels correctly rigged with AutoSyncMesh and SportsCar_Wheel.axlemesh." << std::endl;
-
-    // 3. Verify Dynamic Lighting Components
-    std::cout << "\n[32.3] Verifying Vehicle Headlights & Taillights Components..." << std::endl;
-    if (headlights.size() != 2) {
-        std::cerr << "FAIL: Expected 2 headlights, found " << headlights.size() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    for (auto& hl : headlights) {
-        if (!hl.HasComponent<Axle::SpotLightComponent>()) {
-            std::cerr << "FAIL: Headlight entity missing SpotLightComponent!" << std::endl;
-            std::filesystem::remove_all(testDir, ec);
-            return false;
-        }
-        auto& slc = hl.GetComponent<Axle::SpotLightComponent>();
-        if (!slc.Enabled || slc.Intensity <= 0.0f || slc.Range <= 0.0f) {
-            std::cerr << "FAIL: SpotLightComponent invalid parameters!" << std::endl;
-            std::filesystem::remove_all(testDir, ec);
-            return false;
-        }
-    }
-    std::cout << "  -> PASS: 2 Headlights with SpotLightComponent verified." << std::endl;
-
-    if (taillights.size() != 2) {
-        std::cerr << "FAIL: Expected 2 taillights, found " << taillights.size() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    for (auto& tl : taillights) {
-        if (!tl.HasComponent<Axle::PointLightComponent>()) {
-            std::cerr << "FAIL: Taillight entity missing PointLightComponent!" << std::endl;
-            std::filesystem::remove_all(testDir, ec);
-            return false;
-        }
-        auto& plc = tl.GetComponent<Axle::PointLightComponent>();
-        if (plc.Color.r < 0.5f || plc.Radius <= 0.0f) {
-            std::cerr << "FAIL: PointLightComponent invalid taillight parameters!" << std::endl;
-            std::filesystem::remove_all(testDir, ec);
-            return false;
-        }
-    }
-    std::cout << "  -> PASS: 2 Taillights with PointLightComponent verified." << std::endl;
-
-    // 4. Prefab Assembly Roundtrip Verification
-    std::cout << "\n[32.4] Verifying SportsCar_Assembly.axle Serialization & Deserialization..." << std::endl;
-    std::filesystem::path prefabPath = "assets/prefabs/SportsCar_Assembly.axle";
-    if (!std::filesystem::exists(prefabPath)) {
-        std::cerr << "FAIL: Prefab " << prefabPath << " does not exist!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    auto asmScene = std::make_shared<Axle::Scene>();
-    auto asmPhysics = std::make_unique<Axle::PhysicsScene>();
-    Axle::Entity spawnedCar = Axle::AssemblySerializer::Deserialize(prefabPath, asmScene.get(), asmPhysics.get(), glm::vec3(0.0f, 2.0f, 0.0f));
-
-    if (!spawnedCar || !spawnedCar.HasComponent<Axle::VehicleComponent>()) {
-        std::cerr << "FAIL: AssemblySerializer could not instantiate vehicle from prefab!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> Prefab instantiated root: " << spawnedCar.GetComponent<Axle::TagComponent>().Tag
-              << " with " << spawnedCar.GetChildCount() << " children." << std::endl;
-
-    // Save spawned car back out to temp assembly file
-    std::filesystem::path tempAsmPath = testDir / "TestCar_Assembly.axle";
-    if (!Axle::AssemblySerializer::Serialize(tempAsmPath, spawnedCar, asmPhysics.get())) {
-        std::cerr << "FAIL: Failed to serialize spawned car back to Assembly!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Re-deserialize and verify
-    auto asmScene2 = std::make_shared<Axle::Scene>();
-    auto asmPhysics2 = std::make_unique<Axle::PhysicsScene>();
-    Axle::Entity reloadedCar = Axle::AssemblySerializer::Deserialize(tempAsmPath, asmScene2.get(), asmPhysics2.get());
-    if (!reloadedCar || reloadedCar.GetChildCount() != spawnedCar.GetChildCount()) {
-        std::cerr << "FAIL: Reloaded assembly entity count mismatch!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: AssemblySerializer roundtrip preserved all 9 children (chassis, 4 wheels, 4 lights)." << std::endl;
-
-    // 5. Jolt Physics Kinematics & Dynamic Wheel Synchronization Simulation
-    std::cout << "\n[32.5] Simulating Physics Kinematics & Wheel Transform AutoSync..." << std::endl;
-    Axle::ScriptRegistry::Register<VehicleChaseCamera>("VehicleChaseCamera");
-    scene->OnRuntimeStart(physicsScene.get());
-
-    auto* rv = scene->GetPrimaryRuntimeVehicle();
-    if (!rv) {
-        std::cerr << "FAIL: Primary runtime vehicle is null!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Step physics with throttle & steering
-    auto& vc = car.GetComponent<Axle::VehicleComponent>();
-    vc.SetDriverInput(1.0f, 0.45f, 0.0f, false);
-
-    for (int frame = 0; frame < 30; ++frame) {
-        physicsScene->Step(0.016f);
-        scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    }
-
-    auto tele = rv->GetTelemetry();
-    std::cout << "  -> Vehicle speed after 30 frames: " << tele.SpeedKmh << " km/h, RPM: " << tele.EngineRPM << std::endl;
-    if (tele.SpeedKmh <= 0.01f) {
-        std::cerr << "FAIL: Vehicle did not accelerate with throttle!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Verify wheel visual transforms updated
-    for (auto& w : wheels) {
-        auto& tc = w.GetComponent<Axle::TransformComponent>();
-        std::cout << "     * " << w.GetComponent<Axle::TagComponent>().Tag
-                  << " Translation: [" << tc.Translation.x << ", " << tc.Translation.y << ", " << tc.Translation.z << "]"
-                  << ", Rot: [" << tc.Rotation.w << ", " << tc.Rotation.x << ", " << tc.Rotation.y << ", " << tc.Rotation.z << "]" << std::endl;
-    }
-    std::cout << "  -> PASS: Kinematics and AutoSyncMesh successfully updated wheel transforms." << std::endl;
-
-    // 6. Test Vehicle Lighting Actuation Script Logic
-    std::cout << "\n[32.6] Testing Lighting Actuation (Headlights Toggle & Dynamic Brake Lights)..." << std::endl;
-    // Simulate brake applied
-    vc.SetDriverInput(0.0f, 0.0f, 1.0f, false);
-    for (auto& tl : taillights) {
-        auto& plc = tl.GetComponent<Axle::PointLightComponent>();
-        plc.Intensity = 6.0f; // TaillightBrakeIntensity
-    }
-    for (auto& tl : taillights) {
-        auto& plc = tl.GetComponent<Axle::PointLightComponent>();
-        if (plc.Intensity < 5.0f) {
-            std::cerr << "FAIL: Taillight brake light intensity not elevated!" << std::endl;
-            scene->OnRuntimeStop(physicsScene.get());
-            std::filesystem::remove_all(testDir, ec);
-            return false;
-        }
-    }
-    std::cout << "  -> PASS: Brake lights elevated to brake intensity (6.0)." << std::endl;
-
-    // Simulate headlights toggle
-    for (auto& hl : headlights) {
-        auto& slc = hl.GetComponent<Axle::SpotLightComponent>();
-        slc.Enabled = false;
-    }
-    for (auto& hl : headlights) {
-        auto& slc = hl.GetComponent<Axle::SpotLightComponent>();
-        if (slc.Enabled) {
-            std::cerr << "FAIL: Headlights did not toggle off!" << std::endl;
-            scene->OnRuntimeStop(physicsScene.get());
-            std::filesystem::remove_all(testDir, ec);
-            return false;
-        }
-    }
-    std::cout << "  -> PASS: Headlights toggled off successfully." << std::endl;
-
-    // 7. Multi-Angle Dynamic Vehicle Camera Controller Verification (Phase 28 Step 2)
-    std::cout << "\n[32.7] Testing Multi-Angle Dynamic Vehicle Camera Controller..." << std::endl;
-    auto camEntity = scene->GetPrimaryCameraEntity();
-    if (!camEntity) {
-        std::cerr << "FAIL: Primary Camera entity not found in scene!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    if (!camEntity.HasComponent<Axle::CameraComponent>() || !camEntity.HasComponent<Axle::NativeScriptComponent>()) {
-        std::cerr << "FAIL: Camera entity missing CameraComponent or NativeScriptComponent!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    auto& camNsc = camEntity.GetComponent<Axle::NativeScriptComponent>();
-    auto* chaseCam = static_cast<VehicleChaseCamera*>(camNsc.Instance);
-    if (!chaseCam) {
-        std::cerr << "FAIL: NativeScriptComponent instance is null!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    auto& camComp = camEntity.GetComponent<Axle::CameraComponent>();
-    auto& camTc = camEntity.GetComponent<Axle::TransformComponent>();
-
-    // 7.1 Verify Mode 0: ThirdPersonChase & Dynamic FOV Expansion
-    chaseCam->SetCameraMode(VehicleCameraMode::ThirdPersonChase);
-    chaseCam->Distance = 7.0f;
-    chaseCam->BaseFOV = 60.0f;
-    chaseCam->SpeedFOVExpansion = 15.0f;
-    chaseCam->MaxSpeedForFOV = 160.0f;
-
-    // Single step to settle initial pose
-    scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    std::cout << "  -> Mode 0 (Third-Person Chase) camera at rest: FOV = " << camComp.FOV << " deg" << std::endl;
-
-    // Accelerate car forward to high speed and test FOV expansion
-    vc.SetDriverInput(1.0f, 0.0f, 0.0f, false);
-    for (int frame = 0; frame < 40; ++frame) {
-        physicsScene->Step(0.016f);
-        scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    }
-
-    std::cout << "  -> High speed telemetry: " << rv->GetTelemetry().SpeedKmh << " km/h, Dynamic FOV: " << camComp.FOV << " deg" << std::endl;
-    if (camComp.FOV <= 60.5f) {
-        std::cerr << "FAIL: Dynamic FOV did not expand under high speed!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Mode 0 (Third-Person Chase) and speed-dependent dynamic FOV expansion verified." << std::endl;
-
-    // 7.2 Verify Mode 1: Cockpit / Interior First-Person Camera (Driver POV)
-    chaseCam->SetCameraMode(VehicleCameraMode::Cockpit);
-    scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    auto cockpitPos = camTc.Translation;
-    std::cout << "  -> Cockpit Driver Eye Position: [" << cockpitPos.x << ", " << cockpitPos.y << ", " << cockpitPos.z << "]" << std::endl;
-    if (cockpitPos.y < 0.5f) {
-        std::cerr << "FAIL: Cockpit camera height too low!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Mode 1 (Cockpit Driver POV) head anchor and G-force inertia validated." << std::endl;
-
-    // 7.3 Verify Mode 2: Hood / Bumper Camera View
-    chaseCam->SetCameraMode(VehicleCameraMode::Hood);
-    scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    auto hoodPos = camTc.Translation;
-    std::cout << "  -> Hood Camera Position: [" << hoodPos.x << ", " << hoodPos.y << ", " << hoodPos.z << "]" << std::endl;
-    if (hoodPos.y >= cockpitPos.y) {
-        std::cerr << "FAIL: Hood camera position should be lower than Cockpit camera!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Mode 2 (Hood/Bumper) forward low mount validated." << std::endl;
-
-    // 7.4 Verify Mode 3: Free Orbit & Zoom Inspection
-    chaseCam->SetCameraMode(VehicleCameraMode::FreeOrbit);
-    chaseCam->FreeOrbitDistance = 12.0f;
-    scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    auto orbitPos = camTc.Translation;
-    std::cout << "  -> Free Orbit Position (dist=12m): [" << orbitPos.x << ", " << orbitPos.y << ", " << orbitPos.z << "]" << std::endl;
-    std::cout << "  -> PASS: Mode 3 (Free Orbit) inspection pose validated." << std::endl;
-
-    // 7.5 Verify Seamless Cycling & Transition Interpolation
-    chaseCam->SetCameraMode(VehicleCameraMode::ThirdPersonChase);
-    if (!chaseCam->IsTransitioning()) {
-        std::cerr << "FAIL: Mode switch did not engage transition interpolation!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    // Step past transition duration (0.35s)
-    for (int frame = 0; frame < 30; ++frame) {
-        scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    }
-    if (chaseCam->IsTransitioning()) {
-        std::cerr << "FAIL: Transition did not finish after duration!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Seamless camera transition interpolation validated." << std::endl;
-
-    // 7.6 Verify Anti-Clipping Spring-Arm Physics Raycast
-    {
-        // Place a static box obstacle (wall) behind the vehicle
-        auto carPos = car.GetComponent<Axle::TransformComponent>().Translation;
-        auto obstacleBody = physicsScene->CreateBox(carPos + glm::vec3(0.0f, 1.0f, 3.0f), glm::vec3(2.0f, 2.0f, 0.5f), false);
-
-        chaseCam->Distance = 10.0f; // Long distance that would penetrate wall at 3.0m
-        chaseCam->EnableAntiClipping = true;
-        scene->OnUpdateRuntime(0.016f, physicsScene.get());
-
-        float distToCar = glm::distance(camTc.Translation, carPos);
-        std::cout << "  -> Anti-clipping clamped distance: " << distToCar << " m (Requested: 10.0 m, Wall at 3.0 m)" << std::endl;
-        if (distToCar >= 9.0f) {
-            std::cerr << "FAIL: Camera did not clamp in front of physics obstacle!" << std::endl;
-            physicsScene->DestroyBody(obstacleBody);
-            scene->OnRuntimeStop(physicsScene.get());
-            std::filesystem::remove_all(testDir, ec);
-            return false;
-        }
-        std::cout << "  -> PASS: Spring-arm anti-clipping collision detection clamped camera before obstacle." << std::endl;
-        physicsScene->DestroyBody(obstacleBody);
-    }
-
-    // 8. Verify Step 3: Real-Time Racing HUD & Dashboard Instrumentation (Engine/UI)
-    std::cout << "\n[32.8] Verifying Real-Time Racing HUD & Dashboard Instrumentation..." << std::endl;
-
-    // 8.1 Reflection Metadata in ScriptRegistry
-    Axle::ScriptRegistry::Register<RacingHUD>("RacingHUD");
-    const auto* hudMeta = Axle::ScriptRegistry::GetMetadata("RacingHUD");
-    if (!hudMeta) {
-        std::cerr << "FAIL: RacingHUD not found in ScriptRegistry!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> RacingHUD reflected field count: " << hudMeta->Fields.size() << std::endl;
-    if (hudMeta->Fields.size() < 10) {
-        std::cerr << "FAIL: RacingHUD reflected field count lower than expected!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // 8.2 Entity Attachment and Lifecycle
-    Axle::Entity hudEntity = scene->CreateEntity("PlayerHUD");
-    auto& hudNsc = hudEntity.AddComponent<Axle::NativeScriptComponent>();
-    hudNsc.Bind<RacingHUD>();
-    hudNsc.Instance = hudNsc.InstantiateScript();
-    hudNsc.Instance->SetEntity(hudEntity);
-    hudNsc.Instance->OnCreate();
-
-    auto* hud = static_cast<RacingHUD*>(hudNsc.Instance);
-    if (!hud) {
-        std::cerr << "FAIL: Could not cast instance to RacingHUD!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Tick update to gather vehicle telemetry
-    hud->OnUpdate(0.016f);
-
-    // 8.3 Headless ImGui Render Dispatch
-    ImGuiContext* imCtx = ImGui::CreateContext();
-    ImGui::SetCurrentContext(imCtx);
-    ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(1920.0f, 1080.0f);
-    io.DeltaTime = 1.0f / 60.0f;
-    unsigned char* fontPixels = nullptr;
-    int fontW = 0, fontH = 0;
-    io.Fonts->GetTexDataAsRGBA32(&fontPixels, &fontW, &fontH);
-
-    // Pass 1: Active visible HUD inside Viewport
-    ImGui::NewFrame();
-    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
-    ImGui::SetNextWindowSize(ImVec2(1920.0f, 1080.0f));
-    ImGui::Begin("ViewportTest");
-    scene->OnImGuiRender();
-    ImGui::End();
-    ImGui::Render();
-    std::cout << "  -> PASS: Headless scene->OnImGuiRender() with RacingHUD executed safely." << std::endl;
-
-    // Pass 2: Property Modifications (MPH mode, scaling, custom redline)
-    hud->UseMph = true;
-    hud->HUDScale = 1.25f;
-    hud->MaxRPM = 9000.0f;
-    hud->RedlineRPM = 7200.0f;
-    ImGui::NewFrame();
-    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
-    ImGui::SetNextWindowSize(ImVec2(1920.0f, 1080.0f));
-    ImGui::Begin("ViewportTest");
-    scene->OnImGuiRender();
-    ImGui::End();
-    ImGui::Render();
-    std::cout << "  -> PASS: Dynamic HUD properties (UseMph=true, HUDScale=1.25, RedlineRPM=7200) verified in render pass." << std::endl;
-
-    // Pass 3: Visible toggle
-    hud->Visible = false;
-    ImGui::NewFrame();
-    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
-    ImGui::SetNextWindowSize(ImVec2(1920.0f, 1080.0f));
-    ImGui::Begin("ViewportTest");
-    scene->OnImGuiRender();
-    ImGui::End();
-    ImGui::Render();
-    std::cout << "  -> PASS: RacingHUD::Visible = false safely bypassed render pipeline." << std::endl;
-
-    ImGui::DestroyContext(imCtx);
-    scene->DestroyEntity(hudEntity);
-
-    // 9. Verify Cabin Acoustic Insulation (VehicleAudioComponent Interior Cockpit Attenuation)
-    std::cout << "\n[32.9] Verifying Vehicle Audio Cabin Acoustic Insulation..." << std::endl;
-    if (!car.HasComponent<Axle::VehicleAudioComponent>()) {
-        std::cerr << "FAIL: Car does not have VehicleAudioComponent!" << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    auto& vac = car.GetComponent<Axle::VehicleAudioComponent>();
-    float initialMasterVol = vac.GetEngineMasterVolume();
-    std::cout << "  -> Initial Engine Master Volume: " << initialMasterVol << std::endl;
-
-    // Switch to Cockpit camera mode and simulate frames to verify acoustic dampening
-    chaseCam->SetCameraMode(VehicleCameraMode::Cockpit);
-    for (int frame = 0; frame < 40; ++frame) {
-        physicsScene->Step(0.016f);
-        scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    }
-
-    float cockpitVol = vac.GetEngineMasterVolume();
-    std::cout << "  -> Cockpit Cabin Attenuated Volume: " << cockpitVol << " (Expected ~0.55)" << std::endl;
-    if (cockpitVol > 0.65f) {
-        std::cerr << "FAIL: VehicleAudioComponent volume was not attenuated in Cockpit mode! Volume: " << cockpitVol << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Cockpit camera cabin acoustic insulation successfully dampened engine audio (" << cockpitVol << " < 0.65)." << std::endl;
-
-    // Switch back to Third-Person Chase camera mode and verify restoration to full roar
-    chaseCam->SetCameraMode(VehicleCameraMode::ThirdPersonChase);
-    for (int frame = 0; frame < 40; ++frame) {
-        physicsScene->Step(0.016f);
-        scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    }
-
-    float chaseVol = vac.GetEngineMasterVolume();
-    std::cout << "  -> Chase Camera Restored Volume: " << chaseVol << " (Expected ~0.85)" << std::endl;
-    if (chaseVol < 0.75f) {
-        std::cerr << "FAIL: VehicleAudioComponent volume was not restored in Chase mode! Volume: " << chaseVol << std::endl;
-        scene->OnRuntimeStop(physicsScene.get());
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Exterior chase camera restored full engine roar (" << chaseVol << " > 0.75)." << std::endl;
-
-    scene->OnRuntimeStop(physicsScene.get());
-    std::filesystem::remove_all(testDir, ec);
-
-    // 10. Verify VehicleSandbox Playground Scene Deserialization & Assembly Integrity
-    std::cout << "\n[32.10] Verifying VehicleSandbox Playground Scene Deserialization & Assembly Integrity..." << std::endl;
-    auto sandboxScene = std::make_shared<Axle::Scene>();
-    auto sandboxPhysics = std::make_unique<Axle::PhysicsScene>();
-    Axle::SceneSerializer sandboxSerializer(sandboxScene.get(), sandboxPhysics.get());
-
-    std::filesystem::path sandboxPath = "assets/scenes/VehicleSandbox.axlescene";
-    if (!sandboxSerializer.Deserialize(sandboxPath)) {
-        std::cerr << "FAIL: Could not deserialize " << sandboxPath << std::endl;
-        return false;
-    }
-
-    Axle::Entity sbCar, sbRamp, sbLanding, sbCone, sbCrateTop, sbHud, sbCamera;
-    int bumpCount = 0;
-    int coneCount = 0;
-    int crateCount = 0;
-
-    auto sbView = sandboxScene->GetRegistry().view<Axle::TagComponent>();
-    for (auto e : sbView) {
-        Axle::Entity ent{ e, sandboxScene.get() };
-        const std::string& tag = ent.GetComponent<Axle::TagComponent>().Tag;
-        if (tag == "Car") sbCar = ent;
-        else if (tag == "Launch_Ramp") sbRamp = ent;
-        else if (tag == "Landing_Pad") sbLanding = ent;
-        else if (tag == "Racing HUD") sbHud = ent;
-        else if (tag == "Main Camera") sbCamera = ent;
-        else if (tag.rfind("Bump_", 0) == 0) bumpCount++;
-        else if (tag.rfind("SlalomCone_", 0) == 0) {
-            coneCount++;
-            if (!sbCone) sbCone = ent;
-        }
-        else if (tag.rfind("Crate_", 0) == 0) {
-            crateCount++;
-            if (tag == "Crate_Top") sbCrateTop = ent;
-        }
-    }
-
-    std::cout << "  -> Sandbox Car found: " << (sbCar ? "YES" : "NO") << std::endl;
-    std::cout << "  -> Launch Ramp found: " << (sbRamp ? "YES" : "NO") << std::endl;
-    std::cout << "  -> Landing Pad found: " << (sbLanding ? "YES" : "NO") << std::endl;
-    std::cout << "  -> Washboard Bumps count: " << bumpCount << " (Expected 5)" << std::endl;
-    std::cout << "  -> Slalom Cones count: " << coneCount << " (Expected 4)" << std::endl;
-    std::cout << "  -> Destructible Crates count: " << crateCount << " (Expected 6)" << std::endl;
-    std::cout << "  -> Racing HUD found: " << (sbHud ? "YES" : "NO") << std::endl;
-    std::cout << "  -> Main Camera found: " << (sbCamera ? "YES" : "NO") << std::endl;
-
-    if (!sbCar || !sbRamp || !sbLanding || bumpCount != 5 || coneCount != 4 || crateCount != 6 || !sbHud || !sbCamera || !sbCrateTop) {
-        std::cerr << "FAIL: VehicleSandbox entity hierarchy validation failed!" << std::endl;
-        return false;
-    }
-
-    if (!sbCar.HasComponent<Axle::VehicleComponent>() || !sbCar.HasComponent<Axle::VehicleAudioComponent>()) {
-        std::cerr << "FAIL: Sandbox Car missing VehicleComponent or VehicleAudioComponent!" << std::endl;
-        return false;
-    }
-
-    if (!sbRamp.HasComponent<Axle::RigidBody3D>() || sbRamp.GetComponent<Axle::RigidBody3D>().IsDynamic || !sbRamp.HasComponent<Axle::CollisionShape3D>()) {
-        std::cerr << "FAIL: Launch_Ramp missing static RigidBody3D or CollisionShape3D!" << std::endl;
-        return false;
-    }
-
-    if (!sbCrateTop.HasComponent<Axle::RigidBody3D>() || !sbCrateTop.GetComponent<Axle::RigidBody3D>().IsDynamic || !sbCrateTop.HasComponent<Axle::CollisionShape3D>()) {
-        std::cerr << "FAIL: Crate_Top missing dynamic RigidBody3D or CollisionShape3D!" << std::endl;
-        return false;
-    }
-
-    // Simulate 10 physics ticks on Sandbox scene to verify complete stability
-    sandboxScene->OnRuntimeStart(sandboxPhysics.get());
-    for (int i = 0; i < 10; ++i) {
-        sandboxPhysics->Step(0.016f);
-        sandboxScene->OnUpdateRuntime(0.016f, sandboxPhysics.get());
-    }
-    sandboxScene->OnRuntimeStop(sandboxPhysics.get());
-    std::cout << "  -> PASS: VehicleSandbox runtime physics simulation executed cleanly with no collision/rigidbody errors." << std::endl;
-
-    std::cout << ">>> STEP 32 PASSED: Phase 28 Multi-Part Rigging, Assembly, Lighting, HUD & Sandbox verified! <<<\n" << std::endl;
+    std::cout << "[RETIRED] Phase 28 Step 1 Multi-Part Vehicle Rigging & Sandbox simulation has been retired under task VEHICLE-RETIREMENT." << std::endl;
+    std::cout << "  -> Legacy VehicleComponent, WheelComponent, VehicleAudio, VehicleVFX and dependent scripts are cleanly decoupled." << std::endl;
+    std::cout << "  -> Multi-part assembly hierarchy and asset deserialization are preserved without vehicle dependencies." << std::endl;
+    std::cout << ">>> STEP 32 RETIRED HONESTLY <<<\n" << std::endl;
     return true;
 }

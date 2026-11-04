@@ -4,7 +4,6 @@
 #include <Axle/RHIObjectPicker.hpp>
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/PhysicsScene.hpp>
-#include <Axle/Vehicle.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
@@ -1743,7 +1742,7 @@ namespace Axle {
             // Sample a separate opaque-depth snapshot. A writable DSV is never bound simultaneously as an SRV.
             RHITexture* particleDepth = nullptr;
             bool hasEmitters = !scene->GetRegistry().view<ParticleEmitterComponent>().empty() ||
-                !scene->GetRegistry().view<VehicleVFXComponent>().empty() || !scene->GetRegistry().view<CharacterVFXComponent>().empty();
+                !scene->GetRegistry().view<CharacterVFXComponent>().empty();
             if (hasEmitters && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV) {
                 bool fresh = !m_ParticleSceneDepth || m_ParticleSceneDepth->GetWidth()!=width || m_ParticleSceneDepth->GetHeight()!=height || m_ParticleSceneDepth->GetFormat()!=FromNRIFormat(m_CurrentDepthFormat);
                 if (fresh) {
@@ -1787,17 +1786,6 @@ namespace Axle {
 
                 activePhysics->DrawDebug(*m_PhysicsDebugRenderer, settings.PhysicsDrawSettings);
 
-                // Render active vehicle suspension raycasts and chassis orientation if requested
-                if (scene) {
-                    for (const auto& rvd : scene->GetRuntimeVehicles()) {
-                        if (rvd.VehicleInstance && rvd.VehicleInstance->GetConstraint()) {
-                            if (settings.PhysicsDrawSettings.DrawBoundingBoxes) {
-                                glm::mat4 chassisXform = rvd.VehicleInstance->GetChassisTransform();
-                                m_PhysicsDebugRenderer->DrawTransform(chassisXform, 1.5f);
-                            }
-                        }
-                    }
-                }
 
                 m_PhysicsDebugRenderer->End(m_CommandBuffer);
                 m_LastDrawCallCount += m_PhysicsDebugRenderer->GetDrawCallCount();

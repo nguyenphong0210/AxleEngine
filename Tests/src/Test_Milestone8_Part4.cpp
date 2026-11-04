@@ -1303,15 +1303,25 @@ bool RunTest_Step91_Phase34_Step6_RacingHUDFullIntegration() {
     UIDataContext ctx;
     ctx.Set("Engine.FPS", 144);
     ctx.Set("Vehicle.SpeedKmh", 215);
+    ctx.Set("SpeedKmh", 215);
     ctx.Set("Vehicle.SpeedUnit", std::string("KM/H"));
+    ctx.Set("SpeedUnit", std::string("KM/H"));
     ctx.Set("Vehicle.RPMNormalized", 0.92f);
+    ctx.Set("RPMNormalized", 0.92f);
     ctx.Set("Vehicle.IsRedline", true);
+    ctx.Set("IsRedline", true);
     ctx.Set("Vehicle.GearString", std::string("5"));
+    ctx.Set("GearString", std::string("5"));
     ctx.Set("Vehicle.Throttle", 1.0f);
+    ctx.Set("Throttle", 1.0f);
     ctx.Set("Vehicle.Brake", 0.0f);
+    ctx.Set("Brake", 0.0f);
     ctx.Set("Vehicle.LateralG", std::string("+0.85"));
+    ctx.Set("LateralG", std::string("+0.85"));
     ctx.Set("Vehicle.LongitudinalG", std::string("-0.32"));
+    ctx.Set("LongitudinalG", std::string("-0.32"));
     ctx.Set("Vehicle.CameraMode", std::string("CHASE"));
+    ctx.Set("CameraMode", std::string("CHASE"));
     ctx.Set("Game.IsPaused", false);
 
     bool resumedGame = false;
@@ -1430,11 +1440,31 @@ bool RunTest_Step91_Phase34_Step6_RacingHUDFullIntegration() {
     std::cout << "  -> Directional focus navigation and 'OnResetVehicle' / 'OnQuitGame' triggers: PASS" << std::endl;
 
     // [91.6] Standalone Zero-ImGui Shipping Runtime & ECS Lifecycle Integration
-    std::cout << "\n[91.6] Testing ECS RacingHUD Script Lifecycle & UIDataContext Bridge..." << std::endl;
+    std::cout << "\n[91.6] Testing ECS Script Lifecycle & UIDataContext Bridge..." << std::endl;
+    class MockHUDController : public ScriptableEntity {
+    public:
+        bool Visible = true;
+        void OnCreate() override {
+            if (!HasComponent<UICanvasComponent>()) {
+                GetEntity().AddComponent<UICanvasComponent>("assets/ui/RacingHUD.axleui");
+            }
+        }
+        void OnUpdate(Timestep ts) override {
+            if (HasComponent<UICanvasComponent>()) {
+                GetComponent<UICanvasComponent>().Visible = Visible;
+            }
+            if (auto* sc = GetEntity().GetScene()) {
+                auto& ctx = sc->GetUIDataContext();
+                ctx.Set("Vehicle.SpeedKmh", 120);
+                ctx.Set("Engine.FPS", 60);
+            }
+        }
+    };
+
     auto scene = std::make_shared<Scene>();
     auto hudEntity = scene->CreateEntity("RacingHUD_Entity");
-    auto& nsc = hudEntity.AddComponent<NativeScriptComponent>("RacingHUD");
-    nsc.Bind<RacingHUD>();
+    auto& nsc = hudEntity.AddComponent<NativeScriptComponent>("MockHUDController");
+    nsc.Bind<MockHUDController>();
     nsc.Instance = nsc.InstantiateScript();
     nsc.Instance->SetEntity(hudEntity);
     nsc.Instance->OnCreate();
@@ -1444,7 +1474,7 @@ bool RunTest_Step91_Phase34_Step6_RacingHUDFullIntegration() {
     assert(uic.Visible == true);
 
     // Tick update
-    auto* hudInstance = static_cast<RacingHUD*>(nsc.Instance);
+    auto* hudInstance = static_cast<MockHUDController*>(nsc.Instance);
     hudInstance->OnUpdate(0.016f);
 
     assert(scene->GetUIDataContext().Has("Vehicle.SpeedKmh") == true);

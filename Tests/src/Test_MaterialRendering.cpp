@@ -37,20 +37,27 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     auto green = writeTGA("green.tga", {0,255,0,255});
     auto black = writeTGA("black.tga", {0,0,0,255});
     auto normal = writeTGA("normal.tga", {210,128,210,255});
-    auto& device = RHIDevice::Get();
-    RHIType backend;
-    std::string backendError;
-    if (!ParseMaterialBackendOption(std::getenv("AXLE_MATERIAL_TEST_BACKEND"),backend,backendError)) {
-        std::cerr << backendError << std::endl;
-        return false;
-    }
-    if (!device.IsInitialized()) {
-        RHIDeviceDesc desc;
-        desc.PreferredBackend = backend;
-        desc.AllowFallback = false;
-        desc.Headless = true;
-        if (!check(device.Init(desc), "Headless device on requested backend")) return false;
-    }
+    auto& device = RHIDevice::Get();
+    RHIType backend;
+    std::string backendError;
+    const char* envBackend = std::getenv("AXLE_MATERIAL_TEST_BACKEND");
+    if (!ParseMaterialBackendOption(envBackend, backend, backendError)) {
+        std::cerr << backendError << std::endl;
+        return false;
+    }
+    if ((!envBackend || *envBackend == '\0') && device.IsInitialized()) {
+        backend = device.GetBackend();
+    }
+    if (device.IsInitialized() && device.GetBackend() != backend) {
+        device.Shutdown();
+    }
+    if (!device.IsInitialized()) {
+        RHIDeviceDesc desc;
+        desc.PreferredBackend = backend;
+        desc.AllowFallback = false;
+        desc.Headless = true;
+        if (!check(device.Init(desc), "Headless device on requested backend")) return false;
+    }
     if (!check(device.GetBackend()==backend,"Active backend matches explicit material test request")) return false;
     struct RegistryCleanup {
         ~RegistryCleanup() { RHIMeshRegistry::Get().Shutdown(); RHIMaterial::ReleaseDefaultTextures(); }

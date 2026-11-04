@@ -3,7 +3,6 @@
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/ScriptRegistry.hpp>
-#include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
@@ -17,10 +16,8 @@
 #include <Axle/AudioEngine.hpp>
 #include <Axle/AudioSource.hpp>
 #include <Axle/AudioClip.hpp>
-#include <Axle/VehicleAudio.hpp>
 #include <Axle/ParticleEmitter.hpp>
 #include <Axle/ParticleSystem.hpp>
-#include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
 #include <Axle/UI/UIParser.hpp>
 #include <Axle/UIVectorIcons.hpp>
@@ -193,7 +190,7 @@ namespace Axle {
                 if (ImGui::Selectable("Untagged")) {}
                 if (ImGui::Selectable("MainCamera")) {}
                 if (ImGui::Selectable("Player")) {}
-                if (ImGui::Selectable("Vehicle")) {}
+                if (ImGui::Selectable("Prop")) {}
                 if (ImGui::Selectable("FinishLine")) {}
                 ImGui::EndCombo();
             }
@@ -716,200 +713,13 @@ namespace Axle {
             }
         });
 
-        // Vehicle Component (Phase 20.2: Vehicle Inspector Tuning & Quick-Setup Presets)
-        DrawComponent<VehicleComponent>("Vehicle Dynamics", entity, [&](VehicleComponent& vc) {
-            // Section 1: Dedicated Live Simulation Telemetry Cards (Active during Play mode)
-            Vehicle* runtimeVehicle = m_Scene ? m_Scene->GetRuntimeVehicle(entity) : nullptr;
-            bool isSimulating = (runtimeVehicle != nullptr) || vc.HasActivePhysics();
-
-            if (isSimulating) {
-                VehicleTelemetryData telemetry;
-                if (runtimeVehicle) {
-                    telemetry = runtimeVehicle->GetTelemetry();
-                } else {
-                    telemetry.SpeedKmh = vc.GetSpeedKmh();
-                    telemetry.SpeedMps = vc.GetSpeedMps();
-                    telemetry.EngineRPM = vc.GetRPM();
-                    telemetry.CurrentGear = vc.GetCurrentGear();
-                }
-
-                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.2f, 0.75f, 0.5f, 0.8f));
-                ImGui::BeginChild("##VehicleTelemetryCard", ImVec2(0.0f, 0.0f), true, ImGuiWindowFlags_NoScrollbar);
-                
-                ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.55f, 1.0f), "● SIMULATION ACTIVE");
-                ImGui::SameLine();
-                ImGui::TextDisabled("| Live Vehicle Telemetry");
-                ImGui::Separator();
-
-                // 1. Digital Speedometer & Tachometer Card
-                float speedKmh = telemetry.SpeedKmh;
-                ImVec4 speedColor = (speedKmh > 160.0f) ? ImVec4(1.0f, 0.35f, 0.35f, 1.0f)
-                                  : (speedKmh > 90.0f)  ? ImVec4(1.0f, 0.85f, 0.35f, 1.0f)
-                                                        : ImVec4(0.35f, 0.95f, 0.75f, 1.0f);
-                ImGui::TextColored(speedColor, "SPEED: %.1f km/h", speedKmh);
-                ImGui::SameLine();
-                ImGui::TextDisabled("(%.1f m/s)", telemetry.SpeedMps);
-
-                float speedFraction = std::clamp(speedKmh / 240.0f, 0.0f, 1.0f);
-                char speedBuf[64];
-                snprintf(speedBuf, sizeof(speedBuf), "%.0f / 240 km/h", speedKmh);
-                ImGui::ProgressBar(speedFraction, ImVec2(-1.0f, 18.0f), speedBuf);
-
-                // Tachometer & Automatic Transmission
-                float rpm = telemetry.EngineRPM;
-                float maxRpm = (vc.MaxRPM > 0.0f) ? vc.MaxRPM : 7500.0f;
-                float rpmFraction = std::clamp(rpm / maxRpm, 0.0f, 1.0f);
-                ImVec4 rpmColor = (rpmFraction > 0.85f) ? ImVec4(1.0f, 0.25f, 0.25f, 1.0f) : ImVec4(0.4f, 0.8f, 1.0f, 1.0f);
-
-                int gear = telemetry.CurrentGear;
-                const char* gearStr = (gear == -1) ? "R (Reverse)" : (gear == 0) ? "N (Neutral)" : "D";
-                if (gear > 0) {
-                    ImGui::TextColored(rpmColor, "TACHOMETER: %.0f RPM | GEAR: %s %d", rpm, gearStr, gear);
-                } else {
-                    ImGui::TextColored(rpmColor, "TACHOMETER: %.0f RPM | GEAR: %s", rpm, gearStr);
-                }
-
-                char rpmBuf[64];
-                snprintf(rpmBuf, sizeof(rpmBuf), "%.0f / %.0f RPM", rpm, maxRpm);
-                ImGui::ProgressBar(rpmFraction, ImVec2(-1.0f, 18.0f), rpmBuf);
-
-                // 2. Driver Input Card (ECS Real-time Feed)
-                ImGui::Spacing();
-                ImGui::TextDisabled("Driver Inputs (ECS):");
-                ImGui::Columns(3, "##DriverInputsCols", false);
-                ImGui::Text("Throttle: %.0f%%", vc.Throttle * 100.0f);
-                ImGui::ProgressBar(std::clamp(vc.Throttle, 0.0f, 1.0f), ImVec2(-1.0f, 12.0f), "");
-                ImGui::NextColumn();
-                ImGui::Text("Steering: %+.0f%%", vc.Steering * 100.0f);
-                ImGui::ProgressBar(std::clamp((vc.Steering + 1.0f) * 0.5f, 0.0f, 1.0f), ImVec2(-1.0f, 12.0f), "");
-                ImGui::NextColumn();
-                ImGui::Text("Brake: %.0f%%", vc.Brake * 100.0f);
-                ImGui::ProgressBar(std::clamp(vc.Brake, 0.0f, 1.0f), ImVec2(-1.0f, 12.0f), "");
-                ImGui::Columns(1);
-
-                if (vc.Handbrake) {
-                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "[P] HANDBRAKE ENGAGED");
-                }
-
-                // 3. Per-Wheel Suspension & Ground Contact Readouts
-                ImGui::Spacing();
-                if (ImGui::TreeNodeEx("Wheel Telemetry & Suspension Readouts", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    u32 wheelCount = runtimeVehicle ? runtimeVehicle->GetWheelCount() : 0;
-                    if (wheelCount > 0) {
-                        for (u32 w = 0; w < wheelCount; ++w) {
-                            const auto& wheel = (w < 4) ? telemetry.Wheels[w] : runtimeVehicle->GetTelemetry().Wheels[0];
-                            bool grounded = wheel.HasContact;
-                            ImVec4 contactColor = grounded ? ImVec4(0.35f, 0.95f, 0.45f, 1.0f) : ImVec4(0.95f, 0.7f, 0.2f, 1.0f);
-
-                            ImGui::Text("Wheel [%u]:", w);
-                            ImGui::SameLine();
-                            ImGui::TextColored(contactColor, "[%s]", grounded ? "GROUND" : "AIR");
-                            ImGui::SameLine();
-                            ImGui::Text("Travel: %.3fm | Steer: %+.1f° | Slip: (%.2f, %.2f)",
-                                wheel.SuspensionLength,
-                                glm::degrees(wheel.SteerAngle),
-                                wheel.LongitudinalSlip,
-                                wheel.LateralSlip);
-                        }
-                    } else {
-                        // Scan child entities with WheelComponent
-                        int childIdx = 0;
-                        for (auto child : entity.GetChildren()) {
-                            if (child && child.HasComponent<WheelComponent>()) {
-                                const auto& wc = child.GetComponent<WheelComponent>();
-                                bool grounded = wc.IsGrounded;
-                                ImVec4 contactColor = grounded ? ImVec4(0.35f, 0.95f, 0.45f, 1.0f) : ImVec4(0.95f, 0.7f, 0.2f, 1.0f);
-                                ImGui::Text("Wheel [%d] '%s':", childIdx++, child.GetName().c_str());
-                                ImGui::SameLine();
-                                ImGui::TextColored(contactColor, "[%s]", grounded ? "GROUND" : "AIR");
-                                ImGui::SameLine();
-                                ImGui::Text("Travel: %.3fm | AngVel: %.1f rad/s", wc.SuspensionLength, wc.AngularVelocity);
-                            }
-                        }
-                    }
-                    ImGui::TreePop();
-                }
-
-                ImGui::EndChild();
-                ImGui::PopStyleColor();
-                ImGui::Separator();
-            } else {
-                ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "Status: Edit Mode (Press F5 to Simulate)");
-                ImGui::Separator();
+        // Legacy Component Data (Preserved during retirement)
+        DrawComponent<LegacyComponentsHolder>("Legacy Component Data (Retired)", entity, [&](LegacyComponentsHolder& holder) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Preserved Legacy Components (Read-Only):");
+            for (const auto& comp : holder.Components) {
+                ImGui::BulletText("%s (%zu parameters)", comp.TypeName.c_str(), comp.Lines.size());
             }
-
-            // Section 2: Chassis & Powertrain Tuning Sliders
-            ImGui::TextDisabled("Chassis Weight & Distribution:");
-            if (ImGui::DragFloat("Chassis Mass (kg)", &vc.ChassisMass, 10.0f, 100.0f, 25000.0f, "%.0f")) {
-                if (entity.HasComponent<RigidBody3D>()) {
-                    entity.GetComponent<RigidBody3D>().Mass = vc.ChassisMass;
-                }
-            }
-            ImGui::DragFloat3("Center of Mass Offset", &vc.CenterOfMassOffset.x, 0.01f, -5.0f, 5.0f, "%.2f");
-            ImGui::DragFloat("Anti-Roll Bar (N/m)", &vc.AntiRollBarStiffness, 25.0f, 0.0f, 10000.0f, "%.0f");
-
-            // Driver Input Monitor (ECS Data Buffer)
-            ImGui::Spacing();
-            ImGui::TextDisabled("Driver Inputs (ECS State):");
-            ImGui::Text("Throttle: %+.2f | Steer: %+.2f | Brake: %.2f | Handbrake: %s",
-                vc.Throttle, vc.Steering, vc.Brake, vc.Handbrake ? "ENGAGED" : "OFF");
-
-            ImGui::Spacing();
-            ImGui::TextDisabled("Powertrain & Torque:");
-            ImGui::DragFloat("Max Engine Torque (N.m)", &vc.MaxEngineTorque, 20.0f, 100.0f, 15000.0f, "%.0f");
-            ImGui::DragFloat("Max RPM", &vc.MaxRPM, 50.0f, 2000.0f, 12000.0f, "%.0f");
-            ImGui::DragFloat("Idle RPM", &vc.MinRPM, 50.0f, 500.0f, 3000.0f, "%.0f");
-            ImGui::DragFloat("Max Brake Torque (N.m)", &vc.MaxBrakeTorque, 50.0f, 500.0f, 30000.0f, "%.0f");
-            ImGui::DragFloat("Max Handbrake Torque (N.m)", &vc.MaxHandBrakeTorque, 50.0f, 500.0f, 30000.0f, "%.0f");
-            ImGui::Checkbox("All-Wheel Drive (AWD)", &vc.FourWheelDrive);
-        }, /*canRemove=*/ true);
-
-        // Wheel Component (VehicleWheel3D)
-        DrawComponent<WheelComponent>("Vehicle Wheel (VehicleWheel3D)", entity, [&](WheelComponent& wc) {
-            ImGui::Checkbox("Auto-Sync Visual Mesh", &wc.AutoSyncMesh);
-            ImGui::DragFloat("Radius (m)", &wc.Radius, 0.01f, 0.05f, 2.0f, "%.2f");
-            ImGui::DragFloat("Width (m)", &wc.Width, 0.01f, 0.05f, 2.0f, "%.2f");
-            ImGui::Separator();
-            ImGui::TextDisabled("Suspension:");
-            ImGui::DragFloat("Min Compression (m)", &wc.SuspensionMinLength, 0.01f, 0.02f, 1.0f, "%.2f");
-            ImGui::DragFloat("Max Extension (m)", &wc.SuspensionMaxLength, 0.01f, 0.05f, 2.0f, "%.2f");
-            ImGui::DragFloat("Spring Frequency (Hz)", &wc.SpringFrequency, 0.1f, 0.5f, 10.0f, "%.1f");
-            ImGui::DragFloat("Spring Damping", &wc.SpringDamping, 0.05f, 0.0f, 2.0f, "%.2f");
-            ImGui::Separator();
-            ImGui::TextDisabled("Steering & Powertrain:");
-            ImGui::Checkbox("Steerable (Steering Input)", &wc.CanSteer);
-            if (wc.CanSteer) {
-                ImGui::DragFloat("Max Steer Angle (deg)", &wc.MaxSteerAngle, 0.5f, 5.0f, 60.0f, "%.1f");
-            }
-            ImGui::Checkbox("Driven (Engine Traction)", &wc.IsDriven);
-            ImGui::DragFloat("Brake Torque (N.m)", &wc.BrakeTorque, 50.0f, 0.0f, 20000.0f, "%.0f");
-            ImGui::Checkbox("Handbrake", &wc.HasHandbrake);
-            if (wc.HasHandbrake && wc.HandBrakeTorque == 0.0f) {
-                wc.HandBrakeTorque = 6000.0f;
-            } else if (!wc.HasHandbrake) {
-                wc.HandBrakeTorque = 0.0f;
-            }
-
-            if (wc.IsGrounded || wc.SuspensionLength > 0.0f || std::abs(wc.AngularVelocity) > 0.01f) {
-                ImGui::Separator();
-                ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.55f, 1.0f), "Live Wheel Telemetry:");
-                ImVec4 contactCol = wc.IsGrounded ? ImVec4(0.2f, 0.9f, 0.4f, 1.0f) : ImVec4(0.95f, 0.7f, 0.2f, 1.0f);
-                ImGui::TextColored(contactCol, "Contact: %s", wc.IsGrounded ? "GROUNDED" : "IN AIR");
-                ImGui::SameLine();
-                ImGui::Text("| Travel: %.3f m", wc.SuspensionLength);
-
-                float maxLen = std::max(wc.SuspensionMaxLength, 0.01f);
-                float compFraction = std::clamp(wc.SuspensionLength / maxLen, 0.0f, 1.0f);
-                char compBuf[32];
-                snprintf(compBuf, sizeof(compBuf), "%.1f %%", compFraction * 100.0f);
-                ImGui::ProgressBar(compFraction, ImVec2(-1.0f, 14.0f), compBuf);
-
-                ImGui::Text("Angular Vel: %.1f rad/s (%.0f RPM)", wc.AngularVelocity, (wc.AngularVelocity * 60.0f) / (2.0f * 3.14159f));
-                ImGui::Text("Slip: Long=%.2f, Lat=%.2f | Angle=%.1f°", wc.LongitudinalSlip, wc.LateralSlip, wc.SlipAngle);
-            }
-        }, /*canRemove=*/ true);
-
-
+        }, /*canRemove=*/ false);
 
         // Directional Light Component
         DrawComponent<DirectionalLightComponent>("Directional Sun Light", entity, [&](DirectionalLightComponent& dlc) {
@@ -1555,82 +1365,6 @@ namespace Axle {
             }
         }, /*canRemove=*/ true);
 
-        // Vehicle Audio Component
-        DrawComponent<VehicleAudioComponent>("Vehicle Audio Synthesizer", entity, [&](VehicleAudioComponent& vac) {
-            ImGui::Checkbox("Synthesizer Enabled", &vac.Enabled);
-
-            auto DrawAudioClipSlot = [&](const char* label, std::string& path, const char* hint) {
-                ImGui::PushID(label);
-                ImGui::Text("%s:", label);
-                std::string disp = path.empty() ? std::string("(None - ") + hint + ")" : std::filesystem::path(path).filename().string();
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.28f, 0.85f));
-                ImGui::Button(disp.c_str(), ImVec2(-32.0f, 24.0f));
-                ImGui::PopStyleColor();
-
-                if (ImGui::BeginDragDropTarget()) {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                        const char* pathStr = static_cast<const char*>(payload->Data);
-                        std::filesystem::path p(pathStr);
-                        std::string ext = p.extension().string();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return (char)std::tolower(c); });
-                        if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") {
-                            path = p.string();
-                        }
-                    }
-                    ImGui::EndDragDropTarget();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("X", ImVec2(24.0f, 24.0f))) {
-                    path.clear();
-                }
-                ImGui::PopID();
-            };
-
-            if (ImGui::CollapsingHeader("Audio Clips", ImGuiTreeNodeFlags_DefaultOpen)) {
-                DrawAudioClipSlot("Engine Power Clip", vac.EnginePowerClipPath, "Throttle roar .wav/.mp3");
-                DrawAudioClipSlot("Engine Coast Clip", vac.EngineCoastClipPath, "Off-throttle overrun");
-                DrawAudioClipSlot("Tire Squeal Clip", vac.TireSquealClipPath, "Burnout/drift screech");
-                DrawAudioClipSlot("Suspension Thud Clip", vac.SuspensionThudClipPath, "Hard landing thud");
-                DrawAudioClipSlot("Collision Impact Clip", vac.CollisionImpactClipPath, "Metal crash impulse");
-            }
-
-            if (ImGui::CollapsingHeader("Engine RPM Synthesizer", ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::SliderFloat("Master Engine Volume", &vac.EngineMasterVolume, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("Min Pitch (Idle)", &vac.MinEnginePitch, 0.1f, 1.5f, "%.2fx");
-                ImGui::SliderFloat("Max Pitch (Redline)", &vac.MaxEnginePitch, 1.5f, 4.0f, "%.2fx");
-                ImGui::SliderFloat("Throttle Smoothing", &vac.ThrottleSmoothing, 1.0f, 20.0f, "%.1f");
-            }
-
-            if (ImGui::CollapsingHeader("Tire Slip Acoustics")) {
-                ImGui::SliderFloat("Tire Squeal Volume", &vac.TireSquealMasterVolume, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("Slip Threshold", &vac.SlipThreshold, 0.05f, 0.8f, "%.2f");
-                ImGui::SliderFloat("Squeal Fade Speed", &vac.TireSquealFadeSpeed, 2.0f, 30.0f, "%.1f");
-            }
-
-            if (ImGui::CollapsingHeader("Suspension & Collision Impacts")) {
-                ImGui::SliderFloat("Suspension Volume", &vac.SuspensionMasterVolume, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("Suspension Velocity Threshold", &vac.SuspensionThudThreshold, 0.5f, 5.0f, "%.2f m/s");
-                ImGui::SliderFloat("Collision Impact Volume", &vac.CollisionMasterVolume, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("Collision Decel Threshold", &vac.CollisionDecelThreshold, 5.0f, 50.0f, "%.1f m/s²");
-            }
-
-            if (ImGui::CollapsingHeader("3D Spatial Settings")) {
-                ImGui::Checkbox("Spatialized", &vac.Spatialized);
-                ImGui::DragFloat("Min Distance", &vac.MinDistance, 0.2f, 0.5f, 50.0f, "%.1f m");
-                ImGui::DragFloat("Max Distance", &vac.MaxDistance, 1.0f, 10.0f, 500.0f, "%.1f m");
-            }
-
-            // Live Runtime Synthesizer Telemetry Monitor
-            if (vac.RuntimeAudio && vac.RuntimeAudio->IsPlaying()) {
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::TextColored(ImVec4(0.25f, 0.85f, 0.45f, 1.0f), "Live Audio Telemetry:");
-                ImGui::Text("Engine Pitch: %.2fx", vac.RuntimeAudio->GetCurrentPitch());
-                ImGui::Text("Engine Volume: %.2f", vac.RuntimeAudio->GetCurrentEngineVolume());
-                ImGui::Text("Tire Squeal Volume: %.2f", vac.RuntimeAudio->GetCurrentTireVolume());
-            }
-        }, /*canRemove=*/ true);
-
         // Particle Emitter Component (VFX)
         DrawComponent<ParticleEmitterComponent>(
             "Particle Emitter (VFX)", entity,
@@ -1903,42 +1637,6 @@ namespace Axle {
                 }
             },
             /*canRemove=*/true);
-
-        // Vehicle VFX Component
-        DrawComponent<VehicleVFXComponent>("Vehicle Visual Effects (VFX)", entity, [&](VehicleVFXComponent& vvfx) {
-            ImGui::Checkbox("VFX Enabled", &vvfx.Enabled);
-
-            const char* surfaceNames[] = { "Asphalt", "Dirt", "Gravel", "Mud", "Grass", "Sand" };
-            int currentSurface = static_cast<int>(vvfx.Config.SurfaceType);
-            if (ImGui::Combo("Ground Surface Type", &currentSurface, surfaceNames, IM_ARRAYSIZE(surfaceNames))) {
-                vvfx.Config.SurfaceType = static_cast<SurfaceVFXType>(currentSurface);
-                if (vvfx.RuntimeVFX) vvfx.RuntimeVFX->SetSurfaceType(vvfx.Config.SurfaceType);
-            }
-
-            ImGui::SliderFloat("Burnout Slip Threshold", &vvfx.Config.BurnoutSlipThreshold, 0.05f, 0.8f, "%.2f");
-            ImGui::SliderFloat("Skid Slip Threshold", &vvfx.Config.SkidSlipThreshold, 0.05f, 0.8f, "%.2f");
-            ImGui::SliderFloat("Min Speed for Rooster Tail", &vvfx.Config.MinSpeedForRoosterTail, 0.0f, 20.0f, "%.1f m/s");
-            ImGui::SliderFloat("Backfire Min RPM", &vvfx.Config.BackfireMinRPM, 3000.0f, 9000.0f, "%.0f RPM");
-
-            // Live Runtime Telemetry
-            if (vvfx.RuntimeVFX) {
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "Live Vehicle VFX Telemetry:");
-                uint32_t burnoutTotal = 0;
-                uint32_t roosterTotal = 0;
-                for (int i = 0; i < 4; ++i) {
-                    if (vvfx.RuntimeVFX->GetWheelSmokeSystem(i)) burnoutTotal += vvfx.RuntimeVFX->GetWheelSmokeSystem(i)->GetActiveParticleCount();
-                    if (vvfx.RuntimeVFX->GetWheelRoosterSystem(i)) roosterTotal += vvfx.RuntimeVFX->GetWheelRoosterSystem(i)->GetActiveParticleCount();
-                }
-                uint32_t flames = vvfx.RuntimeVFX->GetExhaustFlameSystem() ? vvfx.RuntimeVFX->GetExhaustFlameSystem()->GetActiveParticleCount() : 0;
-                uint32_t sparks = vvfx.RuntimeVFX->GetExhaustSparkSystem() ? vvfx.RuntimeVFX->GetExhaustSparkSystem()->GetActiveParticleCount() : 0;
-
-                ImGui::Text("Tire Burnout Smoke: %u particles", burnoutTotal);
-                ImGui::Text("Rooster Tails: %u particles", roosterTotal);
-                ImGui::Text("Backfire Flames: %u | Sparks: %u", flames, sparks);
-            }
-        }, /*canRemove=*/ true);
 
         // Character VFX Component
         DrawComponent<CharacterVFXComponent>("Character Visual Effects (VFX)", entity, [&](CharacterVFXComponent& cvfx) {
@@ -2224,7 +1922,7 @@ namespace Axle {
             [&]() { entity.AddComponent<PointLightComponent>(); }
         });
         items.push_back({
-            "Rendering", "SpotLightComponent", "Directional cone spot light source (e.g. vehicle headlights)",
+            "Rendering", "SpotLightComponent", "Directional cone spot light source",
             entity.HasComponent<SpotLightComponent>(), true,
             [&]() { entity.AddComponent<SpotLightComponent>(); }
         });
@@ -2308,28 +2006,6 @@ namespace Axle {
                 }
             }
         });
-        items.push_back({
-            "Physics", "VehicleComponent", "Raycast/physics vehicle simulation controller",
-            entity.HasComponent<VehicleComponent>(), true,
-            [&]() {
-                entity.AddComponent<VehicleComponent>();
-                if (!entity.HasComponent<CollisionShape3D>()) {
-                    glm::vec3 halfExtent{ 0.9f, 0.25f, 2.0f };
-                    if (entity.HasComponent<TransformComponent>()) {
-                        halfExtent = glm::max(entity.GetComponent<TransformComponent>().Scale * 0.5f, glm::vec3(0.2f));
-                    }
-                    entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, halfExtent);
-                }
-                if (!entity.HasComponent<RigidBody3D>()) {
-                    entity.AddComponent<RigidBody3D>();
-                }
-            }
-        });
-        items.push_back({
-            "Physics", "VehicleWheel3D", "Raycast wheel dynamics controller for vehicle chassis",
-            entity.HasComponent<WheelComponent>(), true,
-            [&]() { entity.AddComponent<WheelComponent>(); }
-        });
 
         // --- SCRIPTS CATEGORY ---
         items.push_back({
@@ -2375,11 +2051,6 @@ namespace Axle {
             [&]() { entity.AddComponent<AudioListenerComponent>(true); }
         });
         items.push_back({
-            "Audio/VFX", "VehicleAudioComponent", "Granular engine RPM synthesizer, slip acoustics & impact thuds",
-            entity.HasComponent<VehicleAudioComponent>(), true,
-            [&]() { entity.AddComponent<VehicleAudioComponent>(); }
-        });
-        items.push_back({
             "Audio/VFX", "ParticleEmitterComponent", "GPU-instanced particle emitter (Smoke, Fire, Sparks, Dust, Flipbooks)",
             entity.HasComponent<ParticleEmitterComponent>(), true,
             [&]() {
@@ -2387,11 +2058,6 @@ namespace Axle {
                 pec.Initialize();
                 pec.Play();
             }
-        });
-        items.push_back({
-            "Audio/VFX", "VehicleVFXComponent", "Gameplay VFX: Tire burnout smoke, off-road rooster tails & exhaust backfire",
-            entity.HasComponent<VehicleVFXComponent>(), true,
-            [&]() { entity.AddComponent<VehicleVFXComponent>(); }
         });
         items.push_back({
             "Audio/VFX", "CharacterVFXComponent", "Gameplay VFX: Ground footstep dust puffs & landing shockwave ripples",

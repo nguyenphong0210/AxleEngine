@@ -6,7 +6,6 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/Texture2D.hpp>
 #include <Axle/Log.hpp>
-#include <Axle/Vehicle.hpp>
 #include <Axle/ParticleRenderer.hpp>
 
 #include <algorithm>

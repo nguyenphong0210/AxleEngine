@@ -1326,6 +1326,9 @@ bool RunTest_Step106_MaterialPipeline() {
     auto& compiler = RHI::RHIShaderCompiler::Get();
     if (!check(compiler.Init(), "DXC initialization")) return false;
     auto shaderPath = std::filesystem::path("Engine/Resources/Shaders/ForwardPBR.hlsl");
+    if (!std::filesystem::exists(shaderPath)) {
+        shaderPath = std::filesystem::path("Resources/Shaders/ForwardPBR.hlsl");
+    }
     for (auto format : {RHI::RHIShaderFormat::DXIL, RHI::RHIShaderFormat::SPIRV}) {
         for (auto stage : {RHI::RHIShaderStage::Vertex, RHI::RHIShaderStage::Fragment}) {
             RHI::RHIShaderCompileDesc desc;

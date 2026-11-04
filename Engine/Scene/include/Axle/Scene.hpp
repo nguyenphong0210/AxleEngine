@@ -16,7 +16,6 @@
 namespace Axle {
 
     class Entity;
-    class Vehicle;
     class SkinningPipeline;
     class ParticleRenderer;
     class RHIParticleRenderer;
@@ -24,11 +23,6 @@ namespace Axle {
     struct DirectionalLightComponent;
     struct SkyboxComponent;
 
-    struct RuntimeVehicleData {
-        entt::entity ChassisEntityID = entt::null;
-        std::unique_ptr<Vehicle> VehicleInstance;
-        std::vector<entt::entity> WheelEntityIDs;
-    };
 
     class Scene {
     public:
@@ -102,17 +96,12 @@ namespace Axle {
         void RenderParticles(RHIParticleRenderer& particleRenderer, const PerspectiveCamera& camera,
                              RHI::RHICommandBuffer& cmd, class MaterialTextureCache* textures = nullptr);
 
-        // Simulation runtime lifecycle & dynamic vehicle assembly (Phase 20.3 Stage 2)
+        // Simulation runtime lifecycle
         void OnRuntimeStart(PhysicsScene* physicsScene = nullptr);
         void OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene = nullptr);
         void OnImGuiRender();
         void OnRuntimeStop(PhysicsScene* physicsScene = nullptr);
 
-        // Dynamic vehicle query API
-        Vehicle* GetRuntimeVehicle(entt::entity chassisEntityID) const;
-        Vehicle* GetRuntimeVehicle(Entity chassisEntity) const;
-        Vehicle* GetPrimaryRuntimeVehicle() const;
-        const std::vector<RuntimeVehicleData>& GetRuntimeVehicles() const { return m_RuntimeVehicles; }
         PhysicsScene* GetPhysicsScene() const { return m_RuntimePhysicsScene; }
 
         // Hot Reload Lifecycle & Field State Preservation
@@ -129,7 +118,6 @@ namespace Axle {
         void UpdateEntityTransformRecursive(entt::entity entity, const glm::mat4& parentWorld);
 
         entt::registry m_Registry;
-        std::vector<RuntimeVehicleData> m_RuntimeVehicles;
         PhysicsScene* m_RuntimePhysicsScene = nullptr;
         UIDataContext m_UIDataContext;
 

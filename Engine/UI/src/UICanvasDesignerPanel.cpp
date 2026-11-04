@@ -22,26 +22,6 @@ namespace Axle {
 
     void UICanvasDesignerPanel::SyncMockContext() {
         m_MockContext.Set("Engine.FPS", 144);
-        m_MockContext.Set("Vehicle.SpeedKmh", m_MockSpeed);
-        m_MockContext.Set("Vehicle.SpeedUnit", std::string("KM/H"));
-        m_MockContext.Set("Vehicle.RPMNormalized", m_MockRPM);
-
-        const bool redline = m_MockIsRedline || (m_MockRPM >= 0.85f);
-        m_MockContext.Set("Vehicle.IsRedline", redline);
-
-        const char* gears[] = { "R", "N", "1", "2", "3", "4", "5", "6" };
-        std::string gearStr = gears[std::clamp(m_MockGearIndex, 0, 7)];
-        m_MockContext.Set("Vehicle.GearString", gearStr);
-
-        m_MockContext.Set("Vehicle.Throttle", m_MockThrottle);
-        m_MockContext.Set("Vehicle.Brake", m_MockBrake);
-
-        char latBuf[32], longBuf[32];
-        std::snprintf(latBuf, sizeof(latBuf), "%+.2f", m_MockLatG);
-        std::snprintf(longBuf, sizeof(longBuf), "%+.2f", m_MockLongG);
-        m_MockContext.Set("Vehicle.LateralG", std::string(latBuf));
-        m_MockContext.Set("Vehicle.LongitudinalG", std::string(longBuf));
-        m_MockContext.Set("Vehicle.CameraMode", std::string("CHASE"));
         m_MockContext.Set("Game.IsPaused", false);
     }
 
@@ -182,35 +162,7 @@ namespace Axle {
 
             ImGui::Separator();
 
-            // 2. Mock Vehicle Telemetry Simulator Strip
-            ImGui::TextDisabled("LIVE SIMULATION CONTROLS (MOCK TELEMETRY):");
-            ImGui::PushItemWidth(110.0f);
-            bool valueChanged = false;
-
-            if (ImGui::SliderInt("Speed##Mock", &m_MockSpeed, 0, 360, "%d KM/H")) valueChanged = true;
-            ImGui::SameLine();
-            if (ImGui::SliderFloat("RPM##Mock", &m_MockRPM, 0.0f, 1.0f, "%.2f")) valueChanged = true;
-            ImGui::SameLine();
-            const char* gearLabels[] = { "R", "N", "1", "2", "3", "4", "5", "6" };
-            if (ImGui::Combo("Gear##Mock", &m_MockGearIndex, gearLabels, IM_ARRAYSIZE(gearLabels))) valueChanged = true;
-            ImGui::SameLine();
-            if (ImGui::SliderFloat("THR##Mock", &m_MockThrottle, 0.0f, 1.0f, "%.2f")) valueChanged = true;
-            ImGui::SameLine();
-            if (ImGui::SliderFloat("BRK##Mock", &m_MockBrake, 0.0f, 1.0f, "%.2f")) valueChanged = true;
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Redline##Mock", &m_MockIsRedline)) valueChanged = true;
-            ImGui::SameLine();
-            if (ImGui::SliderFloat("Lat G##Mock", &m_MockLatG, -2.0f, 2.0f, "%+.2f")) valueChanged = true;
-
-            ImGui::PopItemWidth();
-
-            if (valueChanged) {
-                SyncMockContext();
-            }
-
-            ImGui::Separator();
-
-            // 3. Dual Split Workspace: Left = Live Canvas Preview, Right = Source Code Editor
+            // 2. Dual Split Workspace: Left = Live Canvas Preview, Right = Source Code Editor
             float availW = ImGui::GetContentRegionAvail().x;
             float availH = ImGui::GetContentRegionAvail().y;
             float previewW = std::max(360.0f, availW * 0.58f);

@@ -2,7 +2,6 @@
 #include <Axle/Layer.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
-#include <Axle/Vehicle.hpp>
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PerspectiveCamera.hpp>

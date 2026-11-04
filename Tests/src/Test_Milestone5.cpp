@@ -507,353 +507,126 @@ bool RunTest_Step24_Phase19_ParallelECSProcessing() {
 }
 
 // =============================================================================
-// TEST STEP 25: Phase 20 Component-per-Wheel N-Wheeled Vehicle Architecture
+// =============================================================================
+// TEST STEP 25: Phase 20 Legacy Vehicle Data Preservation Regression Test
 // =============================================================================
 bool RunTest_Step25_Phase20_ComponentPerWheelVehicle() {
     std::cout << "\n========================================================" << std::endl;
-    std::cout << " [STEP 25 TEST] PHASE 20: COMPONENT-PER-WHEEL VEHICLE   " << std::endl;
+    std::cout << " [STEP 25 TEST] VEHICLE-RETIREMENT: LEGACY PRESERVATION " << std::endl;
     std::cout << "========================================================" << std::endl;
 
-    // -------------------------------------------------------------------------
-    // [25.1] WheelComponent & VehicleWheel3D serialization roundtrip
-    // -------------------------------------------------------------------------
-    std::cout << "[25.1] Testing WheelComponent serialization and deserialization..." << std::endl;
-    std::filesystem::path testScenePath = "temp_wheel_component_test.axlescene";
+    std::cout << "[RETIRED] Phase 20 Component-per-Wheel Legacy Vehicle Architecture has been retired under task VEHICLE-RETIREMENT." << std::endl;
+    std::cout << "[25.1] Testing LegacyComponentsHolder roundtrip in SceneSerializer..." << std::endl;
 
+    std::filesystem::path testScenePath = "temp_legacy_vehicle_test.axlescene";
+
+    // 1. Scene roundtrip test
     {
         auto srcScene = std::make_shared<Axle::Scene>();
-        auto wheelEnt = srcScene->CreateEntity("CustomWheel_FrontLeft");
-        auto& tc = wheelEnt.GetComponent<Axle::TransformComponent>();
-        tc.Translation = glm::vec3(0.95f, -0.15f, 1.4f);
+        auto carEnt = srcScene->CreateEntity("Legacy_Car");
+        auto& tc = carEnt.GetComponent<Axle::TransformComponent>();
+        tc.Translation = glm::vec3(1.0f, 2.0f, 3.0f);
 
-        auto& wc = wheelEnt.AddComponent<Axle::WheelComponent>();
-        wc.Radius = 0.42f;
-        wc.Width = 0.28f;
-        wc.SuspensionMinLength = 0.18f;
-        wc.SuspensionMaxLength = 0.48f;
-        wc.SpringFrequency = 3.5f;
-        wc.SpringDamping = 0.65f;
-        wc.CanSteer = true;
-        wc.MaxSteerAngle = 38.0f;
-        wc.IsDriven = true;
-        wc.HasHandbrake = false;
-        wc.BrakeTorque = 4200.0f;
-        wc.HandBrakeTorque = 0.0f;
-        wc.AutoSyncMesh = false;
+        auto& holder = carEnt.AddComponent<Axle::LegacyComponentsHolder>();
+        holder.Components.push_back({ "VehicleComponent", { "ChassisMass: 1500.0", "MaxEngineTorque: 850.0", "MaxRPM: 7000.0" } });
+        holder.Components.push_back({ "VehicleAudioComponent", { "Enabled: true", "EnginePowerClipPath: assets/audio/engine.wav" } });
+        holder.Components.push_back({ "VehicleVFXComponent", { "Enabled: true", "SurfaceType: 0" } });
+
+        auto wheelEnt = srcScene->CreateEntity("Legacy_Wheel_FL");
+        auto& wheelHolder = wheelEnt.AddComponent<Axle::LegacyComponentsHolder>();
+        wheelHolder.Components.push_back({ "WheelComponent", { "Radius: 0.35", "CanSteer: true", "IsDriven: true" } });
 
         Axle::SceneSerializer serializer(srcScene.get());
-        bool serSuccess = serializer.Serialize(testScenePath);
-        assert(serSuccess);
-        assert(std::filesystem::exists(testScenePath));
-    }
-
-    // Verify deserialization
-    {
-        auto dstScene = std::make_shared<Axle::Scene>();
-        Axle::SceneSerializer deserializer(dstScene.get());
-        bool deserSuccess = deserializer.Deserialize(testScenePath);
-        assert(deserSuccess);
-
-        auto view = dstScene->GetRegistry().view<Axle::WheelComponent, Axle::TagComponent>();
-        assert(view.size_hint() == 1);
-
-        for (auto entityID : view) {
-            const auto& tag = view.get<Axle::TagComponent>(entityID).Tag;
-            const auto& wc = view.get<Axle::WheelComponent>(entityID);
-            assert(tag == "CustomWheel_FrontLeft");
-            assert(std::abs(wc.Radius - 0.42f) < 0.001f);
-            assert(std::abs(wc.Width - 0.28f) < 0.001f);
-            assert(std::abs(wc.SuspensionMinLength - 0.18f) < 0.001f);
-            assert(std::abs(wc.SuspensionMaxLength - 0.48f) < 0.001f);
-            assert(std::abs(wc.SpringFrequency - 3.5f) < 0.001f);
-            assert(std::abs(wc.SpringDamping - 0.65f) < 0.001f);
-            assert(wc.CanSteer == true);
-            assert(std::abs(wc.MaxSteerAngle - 38.0f) < 0.001f);
-            assert(wc.IsDriven == true);
-            assert(wc.HasHandbrake == false);
-            assert(std::abs(wc.BrakeTorque - 4200.0f) < 0.001f);
-            assert(wc.AutoSyncMesh == false);
-        }
-        std::error_code ec;
-        std::filesystem::remove(testScenePath, ec);
-    }
-    std::cout << "  -> PASS: WheelComponent successfully serialized and deserialized with all tuning properties." << std::endl;
-
-    // -------------------------------------------------------------------------
-    // [25.2] VehicleComponent tuning parameters serialization roundtrip (Phase 20.2)
-    // -------------------------------------------------------------------------
-    std::cout << "\n[25.2] Testing VehicleComponent tuning serialization and deserialization..." << std::endl;
-    std::filesystem::path vehicleScenePath = "temp_vehicle_component_test.axlescene";
-
-    {
-        auto srcScene = std::make_shared<Axle::Scene>();
-        auto carEnt = srcScene->CreateEntity("CustomTunedChassis");
-        auto& vc = carEnt.AddComponent<Axle::VehicleComponent>();
-        vc.ChassisMass = 1850.0f;
-        vc.MaxEngineTorque = 950.0f;
-        vc.MaxRPM = 7500.0f;
-        vc.MinRPM = 1100.0f;
-        vc.MaxBrakeTorque = 3500.0f;
-        vc.MaxHandBrakeTorque = 7000.0f;
-        vc.AntiRollBarStiffness = 1800.0f;
-        vc.FourWheelDrive = true;
-        vc.CenterOfMassOffset = glm::vec3(0.0f, -0.2f, 0.1f);
-
-        Axle::SceneSerializer serializer(srcScene.get());
-        bool serSuccess = serializer.Serialize(vehicleScenePath);
-        assert(serSuccess);
+        bool saved = serializer.Serialize(testScenePath);
+        assert(saved);
     }
 
     {
         auto dstScene = std::make_shared<Axle::Scene>();
-        Axle::SceneSerializer deserializer(dstScene.get());
-        bool deserSuccess = deserializer.Deserialize(vehicleScenePath);
-        assert(deserSuccess);
+        auto physics = std::make_unique<Axle::PhysicsScene>();
+        Axle::SceneSerializer deserializer(dstScene.get(), physics.get());
+        bool loaded = deserializer.Deserialize(testScenePath);
+        assert(loaded);
 
-        auto view = dstScene->GetRegistry().view<Axle::VehicleComponent, Axle::TagComponent>();
-        assert(view.size_hint() == 1);
-
-        for (auto entityID : view) {
-            const auto& tag = view.get<Axle::TagComponent>(entityID).Tag;
-            const auto& vc = view.get<Axle::VehicleComponent>(entityID);
-            assert(tag == "CustomTunedChassis");
-            assert(std::abs(vc.ChassisMass - 1850.0f) < 0.001f);
-            assert(std::abs(vc.MaxEngineTorque - 950.0f) < 0.001f);
-            assert(std::abs(vc.MaxRPM - 7500.0f) < 0.001f);
-            assert(std::abs(vc.MinRPM - 1100.0f) < 0.001f);
-            assert(std::abs(vc.MaxBrakeTorque - 3500.0f) < 0.001f);
-            assert(std::abs(vc.MaxHandBrakeTorque - 7000.0f) < 0.001f);
-            assert(std::abs(vc.AntiRollBarStiffness - 1800.0f) < 0.001f);
-            assert(vc.FourWheelDrive == true);
-            assert(glm::distance(vc.CenterOfMassOffset, glm::vec3(0.0f, -0.2f, 0.1f)) < 0.001f);
+        Axle::Entity foundCar, foundWheel;
+        for (auto e : dstScene->GetRegistry().view<Axle::TagComponent>()) {
+            std::string tag = dstScene->GetRegistry().get<Axle::TagComponent>(e).Tag;
+            if (tag == "Legacy_Car") foundCar = Axle::Entity{ e, dstScene.get() };
+            if (tag == "Legacy_Wheel_FL") foundWheel = Axle::Entity{ e, dstScene.get() };
         }
-        std::error_code ec;
-        std::filesystem::remove(vehicleScenePath, ec);
-    }
-    std::cout << "  -> PASS: VehicleComponent tuning properties serialized and deserialized accurately." << std::endl;
 
-    // -------------------------------------------------------------------------
-    // [25.3] 6x6 N-Wheeled Vehicle Physics Simulation
-    // -------------------------------------------------------------------------
-    std::cout << "\n[25.3] Testing 6-wheeled (6x6) heavy truck physics simulation..." << std::endl;
+        assert(foundCar);
+        assert(foundCar.HasComponent<Axle::LegacyComponentsHolder>());
+        const auto& carHolder = foundCar.GetComponent<Axle::LegacyComponentsHolder>();
+        assert(carHolder.HasLegacyVehicleData());
+        assert(carHolder.Components.size() == 3);
+        assert(carHolder.Components[0].TypeName == "VehicleComponent");
+        assert(carHolder.Components[0].Lines.size() == 3);
+        assert(carHolder.Components[1].TypeName == "VehicleAudioComponent");
+        assert(carHolder.Components[2].TypeName == "VehicleVFXComponent");
+
+        assert(foundWheel);
+        assert(foundWheel.HasComponent<Axle::LegacyComponentsHolder>());
+        const auto& wheelHolder = foundWheel.GetComponent<Axle::LegacyComponentsHolder>();
+        assert(wheelHolder.HasLegacyVehicleData());
+        assert(wheelHolder.Components.size() == 1);
+        assert(wheelHolder.Components[0].TypeName == "WheelComponent");
+
+        // Verify that physics deserialization did NOT create a static rigid body for the legacy chassis
+        assert(physics->GetNumBodies() == 0);
+
+        std::filesystem::remove(testScenePath);
+    }
+    std::cout << "  -> PASS: LegacyComponentsHolder roundtrip in SceneSerializer verified." << std::endl;
+
+    // 2. Assembly roundtrip test
+    std::cout << "[25.2] Testing LegacyComponentsHolder roundtrip in AssemblySerializer..." << std::endl;
+    std::filesystem::path testAsmPath = "temp_legacy_vehicle_test.axle";
     {
-        Axle::PhysicsScene physicsScene;
+        auto asmScene = std::make_shared<Axle::Scene>();
+        auto rootCar = asmScene->CreateEntity("Legacy_Car_Assembly");
+        auto& holder = rootCar.AddComponent<Axle::LegacyComponentsHolder>();
+        holder.Components.push_back({ "VehicleComponent", { "ChassisMass: 1600.0", "FourWheelDrive: true" } });
 
-        Axle::VehicleConfig config;
-        config.InitialPosition = glm::vec3(0.0f, 1.5f, 0.0f);
-        config.ChassisHalfExtent = glm::vec3(1.2f, 0.4f, 3.0f);
-        config.ChassisMass = 5000.0f;
-
-        // Configure 6 wheels (Front pair, Middle pair, Rear pair)
-        const float xOffset = 1.25f;
-        const float yOffset = -0.2f;
-
-        // Front pair (steerable + driven)
-        Axle::WheelConfig wFL;
-        wFL.Position = glm::vec3(xOffset, yOffset, 2.2f);
-        wFL.CanSteer = true;
-        wFL.IsDriven = true;
-        config.CustomWheels.push_back(wFL);
-
-        Axle::WheelConfig wFR;
-        wFR.Position = glm::vec3(-xOffset, yOffset, 2.2f);
-        wFR.CanSteer = true;
-        wFR.IsDriven = true;
-        config.CustomWheels.push_back(wFR);
-
-        // Middle pair (driven)
-        Axle::WheelConfig wML;
-        wML.Position = glm::vec3(xOffset, yOffset, 0.0f);
-        wML.CanSteer = false;
-        wML.IsDriven = true;
-        config.CustomWheels.push_back(wML);
-
-        Axle::WheelConfig wMR;
-        wMR.Position = glm::vec3(-xOffset, yOffset, 0.0f);
-        wMR.CanSteer = false;
-        wMR.IsDriven = true;
-        config.CustomWheels.push_back(wMR);
-
-        // Rear pair (driven + handbrake)
-        Axle::WheelConfig wRL;
-        wRL.Position = glm::vec3(xOffset, yOffset, -2.2f);
-        wRL.CanSteer = false;
-        wRL.IsDriven = true;
-        wRL.MaxHandBrakeTorque = 8000.0f;
-        config.CustomWheels.push_back(wRL);
-
-        Axle::WheelConfig wRR;
-        wRR.Position = glm::vec3(-xOffset, yOffset, -2.2f);
-        wRR.CanSteer = false;
-        wRR.IsDriven = true;
-        wRR.MaxHandBrakeTorque = 8000.0f;
-        config.CustomWheels.push_back(wRR);
-
-        Axle::Vehicle truck(physicsScene, config);
-
-        assert(truck.GetConstraint() != nullptr);
-        assert(truck.GetConstraint()->GetWheels().size() == 6);
-        std::cout << "  -> PASS: 6-wheeled vehicle constraint created with 6 active wheels in Jolt Physics." << std::endl;
-
-        // Verify GetWheelTransform for all 6 wheels
-        for (Axle::u32 i = 0; i < 6; ++i) {
-            glm::mat4 wMat = truck.GetWheelTransform(i);
-            glm::vec3 pos = glm::vec3(wMat[3]);
-            assert(!std::isnan(pos.x) && !std::isnan(pos.y) && !std::isnan(pos.z));
-        }
-        std::cout << "  -> PASS: All 6 wheel transforms queried successfully without bounds violation." << std::endl;
-
-        // Simulate 30 physics steps with full throttle
-        truck.SetDriverInput(1.0f, 0.0f, 0.0f, 0.0f);
-        for (int step = 0; step < 30; ++step) {
-            physicsScene.Step(1.0f / 60.0f);
-        }
-
-        // Verify truck position and state
-        glm::vec3 finalPos = truck.GetPosition();
-        assert(!std::isnan(finalPos.x) && !std::isnan(finalPos.y) && !std::isnan(finalPos.z));
-        std::cout << "  -> Final truck position after 30 simulation steps: ["
-                  << finalPos.x << ", " << finalPos.y << ", " << finalPos.z << "]" << std::endl;
-        std::cout << "  -> PASS: Dynamic powertrain differential and anti-roll bars simulated stably." << std::endl;
+        bool saved = Axle::AssemblySerializer::Serialize(testAsmPath, rootCar);
+        assert(saved);
     }
 
-    // -------------------------------------------------------------------------
-    // [25.4] Pure ECS VehicleComponent & WheelComponent API & Input Buffer (Phase 20.3 Stage 1)
-    // -------------------------------------------------------------------------
-    std::cout << "\n[25.4] Testing Pure ECS VehicleComponent & WheelComponent APIs..." << std::endl;
     {
-        Axle::VehicleComponent vc;
-        assert(!vc.HasActivePhysics());
-        assert(vc.Throttle == 0.0f && vc.Steering == 0.0f && vc.Brake == 0.0f && !vc.Handbrake);
+        auto testScene = std::make_shared<Axle::Scene>();
+        auto physics = std::make_unique<Axle::PhysicsScene>();
+        Axle::Entity spawned = Axle::AssemblySerializer::Deserialize(testAsmPath, testScene.get(), physics.get());
+        assert(spawned);
+        assert(spawned.HasComponent<Axle::LegacyComponentsHolder>());
+        const auto& holder = spawned.GetComponent<Axle::LegacyComponentsHolder>();
+        assert(holder.HasLegacyVehicleData());
+        assert(holder.Components.size() == 1);
+        assert(holder.Components[0].TypeName == "VehicleComponent");
+        assert(holder.Components[0].Lines.size() == 2);
 
-        // Test SetDriverInput with standard ranges
-        vc.SetDriverInput(0.85f, -0.4f, 0.2f, true);
-        assert(std::abs(vc.Throttle - 0.85f) < 0.001f);
-        assert(std::abs(vc.Steering - -0.4f) < 0.001f);
-        assert(std::abs(vc.Brake - 0.2f) < 0.001f);
-        assert(vc.Handbrake == true);
-
-        // Test clamping behavior
-        vc.SetDriverInput(3.0f, -4.5f, 2.0f, false);
-        assert(vc.Throttle == 1.0f);
-        assert(vc.Steering == -1.0f);
-        assert(vc.Brake == 1.0f);
-        assert(!vc.Handbrake);
-
-        // Test telemetry state queries
-        vc.CurrentSpeedKmh = 105.4f;
-        vc.CurrentSpeedMps = 29.27f;
-        vc.CurrentRPM = 5400.0f;
-        vc.CurrentGear = 4;
-        assert(std::abs(vc.GetSpeedKmh() - 105.4f) < 0.001f);
-        assert(std::abs(vc.GetSpeedMps() - 29.27f) < 0.001f);
-        assert(std::abs(vc.GetRPM() - 5400.0f) < 0.001f);
-        assert(vc.GetCurrentGear() == 4);
-
-        // Test WheelComponent telemetry defaults
-        Axle::WheelComponent wc;
-        assert(wc.AutoSyncMesh == true);
-        assert(wc.IsGrounded == false);
-        assert(wc.SuspensionLength == 0.0f);
-        assert(wc.AngularVelocity == 0.0f);
-        std::cout << "  -> PASS: VehicleComponent and WheelComponent pure ECS input & telemetry interfaces validated." << std::endl;
+        std::filesystem::remove(testAsmPath);
     }
+    std::cout << "  -> PASS: LegacyComponentsHolder roundtrip in AssemblySerializer verified." << std::endl;
 
-    // -------------------------------------------------------------------------
-    // [25.5] Scene Dynamic Assembly (VehicleUpdateColliders) & Lifecycle
-    // -------------------------------------------------------------------------
-    std::cout << "\n[25.5] Testing Scene Dynamic Assembly (VehicleUpdateColliders) & Lifecycle..." << std::endl;
+    // 3. Vehicle-free scene runtime lifecycle
+    std::cout << "[25.3] Testing vehicle-free scene runtime lifecycle..." << std::endl;
     {
         auto scene = std::make_shared<Axle::Scene>();
+        auto physics = std::make_unique<Axle::PhysicsScene>();
+        auto ground = scene->CreateEntity("Ground");
+        ground.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, glm::vec3(50.0f, 1.0f, 50.0f));
+        ground.AddComponent<Axle::RigidBody3D>(physics->CreateBox(glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(50.0f, 1.0f, 50.0f), false), false);
 
-        // 1. Create chassis entity
-        auto chassis = scene->CreateEntity("CarChassis");
-        auto& rbc = chassis.AddComponent<Axle::RigidBody3D>();
-        rbc.MotionType = Axle::BodyMotionType::Dynamic;
-        rbc.Mass = 1400.0f;
-        auto& bc = chassis.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, glm::vec3(0.9f, 0.4f, 1.8f));
-        auto& vc = chassis.AddComponent<Axle::VehicleComponent>();
-        vc.ChassisMass = 1400.0f;
-        vc.MaxEngineTorque = 600.0f;
-
-        // 2. Create 4 child wheel entities with WheelComponent
-        struct WheelDef {
-            std::string Name;
-            glm::vec3 Offset;
-            bool Steer;
-            bool Driven;
-            float MaxSteer;
-        };
-
-        std::vector<WheelDef> wheelDefs = {
-            { "Wheel_FL", glm::vec3( 0.85f, -0.2f,  1.2f), true,  false, 32.0f },
-            { "Wheel_FR", glm::vec3(-0.85f, -0.2f,  1.2f), true,  false, 32.0f },
-            { "Wheel_RL", glm::vec3( 0.85f, -0.2f, -1.2f), false, true,   0.0f },
-            { "Wheel_RR", glm::vec3(-0.85f, -0.2f, -1.2f), false, true,   0.0f }
-        };
-
-        std::vector<Axle::Entity> wheelEntities;
-        for (const auto& wd : wheelDefs) {
-            auto wEnt = scene->CreateEntity(wd.Name);
-            wEnt.SetParent(chassis, false);
-            auto& wt = wEnt.GetComponent<Axle::TransformComponent>();
-            wt.Translation = wd.Offset;
-
-            auto& wc = wEnt.AddComponent<Axle::WheelComponent>();
-            wc.Radius = 0.34f;
-            wc.Width = 0.22f;
-            wc.CanSteer = wd.Steer;
-            wc.IsDriven = wd.Driven;
-            wc.MaxSteerAngle = wd.MaxSteer;
-            wc.AutoSyncMesh = true;
-
-            wheelEntities.push_back(wEnt);
+        scene->OnRuntimeStart(physics.get());
+        for (int i = 0; i < 10; ++i) {
+            physics->Step(0.016f);
+            scene->OnUpdateRuntime(0.016f, physics.get());
         }
-
-        assert(chassis.GetChildCount() == 4);
-
-        // 3. Start Runtime with PhysicsScene
-        Axle::PhysicsScene physicsScene;
-        scene->OnRuntimeStart(&physicsScene);
-
-        // Verify dynamic assembly
-        assert(scene->GetRuntimeVehicles().size() == 1);
-        auto* runtimeVehicle = scene->GetPrimaryRuntimeVehicle();
-        assert(runtimeVehicle != nullptr);
-        assert(chassis.GetComponent<Axle::VehicleComponent>().HasActivePhysics());
-        assert(runtimeVehicle->GetWheelCount() == 4);
-        std::cout << "  -> PASS: Scene::OnRuntimeStart successfully dynamically assembled vehicle with 4 child wheels." << std::endl;
-
-        // 4. Test driver input via ECS VehicleComponent and update loop
-        vc.SetDriverInput(1.0f, 0.25f, 0.0f, false);
-        for (int step = 0; step < 15; ++step) {
-            physicsScene.Step(0.016f);
-            scene->OnUpdateRuntime(0.016f, &physicsScene);
-        }
-
-        // Verify telemetry synchronization into ECS components
-        const auto& updatedVc = chassis.GetComponent<Axle::VehicleComponent>();
-        assert(updatedVc.HasActivePhysics());
-        std::cout << "  -> Simulated vehicle speed: " << updatedVc.GetSpeedKmh() << " km/h, RPM: " << updatedVc.GetRPM() << std::endl;
-
-        // Verify child wheel transform updates & telemetry
-        for (size_t i = 0; i < wheelEntities.size(); ++i) {
-            auto w = wheelEntities[i];
-            const auto& wt = w.GetComponent<Axle::TransformComponent>();
-            assert(wt.Scale.x > 0.0f && wt.Scale.y > 0.0f && wt.Scale.z > 0.0f);
-            assert(!std::isnan(wt.Translation.x) && !std::isnan(wt.Translation.y) && !std::isnan(wt.Translation.z));
-        }
-        std::cout << "  -> PASS: Wheel local transforms and telemetry synchronized accurately." << std::endl;
-
-        // 5. Stop Runtime & verify clean teardown
-        scene->OnRuntimeStop(&physicsScene);
-        assert(scene->GetRuntimeVehicles().empty());
-        assert(scene->GetPrimaryRuntimeVehicle() == nullptr);
-        assert(!chassis.GetComponent<Axle::VehicleComponent>().HasActivePhysics());
-        std::cout << "  -> PASS: Scene::OnRuntimeStop safely destroyed runtime vehicle without memory or state leaks." << std::endl;
+        scene->OnRuntimeStop(physics.get());
     }
+    std::cout << "  -> PASS: Vehicle-free scene runtime lifecycle verified." << std::endl;
 
-    std::cout << ">>> STEP 25 PASSED: Phase 20 Component-per-Wheel Vehicle Architecture verified! <<<\n" << std::endl;
+    std::cout << ">>> STEP 25 PASSED: Legacy Vehicle Data Preservation Regression Verified! <<<\n" << std::endl;
     return true;
 }
 
@@ -924,92 +697,38 @@ bool RunTest_Step26_CarTestSceneSimulate() {
         }
     }
 
-    // Check Car entity
+// Check Car entity
     if (!car) {
         std::cerr << "FAIL: Entity 'Car' not found!" << std::endl;
         return false;
     }
     auto& carTC = car.GetComponent<Axle::TransformComponent>();
     std::cout << "  -> Car Initial Translation: [" << carTC.Translation.x << ", " << carTC.Translation.y << ", " << carTC.Translation.z << "]" << std::endl;
-    std::cout << "  -> Car Child Count: " << car.GetChildCount() << std::endl;
-    for (auto child : car.GetChildren()) {
-        std::string tag = child.HasComponent<Axle::TagComponent>() ? child.GetComponent<Axle::TagComponent>().Tag : "Unknown";
-        auto& tc = child.GetComponent<Axle::TransformComponent>();
-        std::cout << "     * Child: " << tag << " Pos: [" << tc.Translation.x << ", " << tc.Translation.y << ", " << tc.Translation.z << "]";
-        if (child.HasComponent<Axle::WheelComponent>()) {
-            auto& wc = child.GetComponent<Axle::WheelComponent>();
-            std::cout << " [Radius: " << wc.Radius << ", Steer: " << wc.CanSteer << ", Driven: " << wc.IsDriven << "]";
-        }
-        std::cout << std::endl;
-    }
 
-    // Start Runtime
-    std::cout << "[26.2] Starting Runtime Simulation..." << std::endl;
+    // Verify Car entity preserves legacy Vehicle data via LegacyComponentsHolder
+    assert(car.HasComponent<Axle::LegacyComponentsHolder>());
+    assert(car.GetComponent<Axle::LegacyComponentsHolder>().HasLegacyVehicleData());
+    std::cout << "  -> PASS: Legacy Car entity preserves retired Vehicle data via LegacyComponentsHolder." << std::endl;
+
+    // Verify Car chassis was NOT converted to a static physics rigid body
+    if (car.HasComponent<Axle::RigidBody3D>()) {
+        auto& rb = car.GetComponent<Axle::RigidBody3D>();
+        assert(rb.RuntimeBodyID.IsInvalid() || !physicsScene->IsBodyValid(rb.RuntimeBodyID));
+    }
+    std::cout << "  -> PASS: Legacy vehicle chassis did not generate invalid rigid body." << std::endl;
+
+    // Start Runtime Simulation (Vehicle-Retired Mode)
+    std::cout << "[26.2] Starting Runtime Simulation (Vehicle-Retired Mode)..." << std::endl;
     scene->OnRuntimeStart(physicsScene.get());
 
-    auto* rv = scene->GetPrimaryRuntimeVehicle();
-    if (!rv) {
-        std::cerr << "FAIL: Primary runtime vehicle is null!" << std::endl;
-        return false;
-    }
-    std::cout << "  -> PASS: Runtime vehicle created with " << rv->GetWheelCount() << " wheels." << std::endl;
-    std::cout << "  -> Initial vehicle pos: [" << rv->GetPosition().x << ", " << rv->GetPosition().y << ", " << rv->GetPosition().z << "]" << std::endl;
-
-    // Simulate 120 steps (2 seconds) under gravity with 0 throttle
-    std::cout << "[26.3] Stepping 60 frames (1 second) with 0 throttle (settling under gravity)..." << std::endl;
     for (int step = 0; step < 60; ++step) {
         physicsScene->Step(0.016f);
         scene->OnUpdateRuntime(0.016f, physicsScene.get());
     }
-
-    auto tele0 = rv->GetTelemetry();
-    std::cout << "  -> After 60 steps (settled): Pos: [" << tele0.Position.x << ", " << tele0.Position.y << ", " << tele0.Position.z 
-              << "] Speed: " << tele0.SpeedKmh << " km/h, Gear: " << tele0.CurrentGear << std::endl;
-    for (int i = 0; i < 4; ++i) {
-        std::cout << "     * Wheel " << i << ": Contact: " << (tele0.Wheels[i].HasContact ? "YES" : "NO")
-                  << ", SuspLength: " << tele0.Wheels[i].SuspensionLength 
-                  << ", WorldMat Y: " << tele0.Wheels[i].WorldTransform[3][1] << std::endl;
-    }
-
-    // Simulate 60 steps (1 second) with 100% throttle
-    std::cout << "[26.4] Applying 100% Throttle for 60 frames (1 second)..." << std::endl;
-    auto& vc = car.GetComponent<Axle::VehicleComponent>();
-    vc.SetDriverInput(1.0f, 0.0f, 0.0f, false);
-
-    for (int step = 0; step < 60; ++step) {
-        physicsScene->Step(0.016f);
-        scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    }
-
-    auto tele1 = rv->GetTelemetry();
-    std::cout << "  -> After 60 steps with throttle: Pos: [" << tele1.Position.x << ", " << tele1.Position.y << ", " << tele1.Position.z 
-              << "] Speed: " << tele1.SpeedKmh << " km/h, RPM: " << tele1.EngineRPM << ", Gear: " << tele1.CurrentGear << std::endl;
-    for (int i = 0; i < 4; ++i) {
-        std::cout << "     * Wheel " << i << ": Contact: " << (tele1.Wheels[i].HasContact ? "YES" : "NO")
-                  << ", AngularVel: " << tele1.Wheels[i].AngularVelocity << std::endl;
-    }
-
-    // Stop car first
-    vc.SetDriverInput(0.0f, 0.0f, 1.0f, false);
-    for (int step = 0; step < 60; ++step) {
-        physicsScene->Step(0.016f);
-        scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    }
-
-    // Apply Reverse Throttle for 60 frames (1 second)
-    std::cout << "[26.5] Applying -100% Throttle (Reverse) for 60 frames (1 second)..." << std::endl;
-    vc.SetDriverInput(-1.0f, 0.0f, 0.0f, false);
-    for (int step = 0; step < 60; ++step) {
-        physicsScene->Step(0.016f);
-        scene->OnUpdateRuntime(0.016f, physicsScene.get());
-    }
-
-    auto teleRev = rv->GetTelemetry();
-    std::cout << "  -> After 60 steps in reverse: Pos: [" << teleRev.Position.x << ", " << teleRev.Position.y << ", " << teleRev.Position.z 
-              << "] Speed: " << teleRev.SpeedKmh << " km/h, ForwardSpeed: " << vc.GetForwardSpeedKmh() 
-              << " km/h, RPM: " << teleRev.EngineRPM << ", Gear: " << teleRev.CurrentGear << std::endl;
 
     scene->OnRuntimeStop(physicsScene.get());
+    std::cout << "  -> PASS: Legacy scene simulated cleanly without errors." << std::endl;
+
     std::cout << ">>> STEP 26 DIAGNOSTIC COMPLETE <<<\n" << std::endl;
     return true;
 }

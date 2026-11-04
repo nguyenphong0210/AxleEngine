@@ -151,8 +151,10 @@ namespace Axle {
                 m_SelectedStackIndex = m_EmitterStacks.size();
             m_EmitterStacks.emplace_back(emitter);
         }
-        m_Config = m_EmitterStacks.empty() ? ParticleEmitterConfig::CreateNeutral()
-                                          : m_EmitterStacks[m_SelectedStackIndex].Config;
+        if (m_EmitterStacks.empty()) {
+            m_EmitterStacks.emplace_back("DefaultEmitter", m_Config);
+        }
+        m_Config = m_EmitterStacks[m_SelectedStackIndex].Config;
         ResetPreview();
     }
 
@@ -433,6 +435,13 @@ namespace Axle {
     }
 
     void VFXEditorPanel::ResetPreview() {
+        if (auto *stack = GetCurrentEmitterStack()) {
+            if (!ParticleEmitterConfigsEqual(stack->Config, m_Config)) {
+                stack->Config = m_Config;
+                if (stack->System)
+                    stack->System->SetConfig(m_Config);
+            }
+        }
         m_PlaybackScrubberTime = 0.0f;
         m_Clock.Tick = 0;
         m_Clock.Accumulator = 0.0;

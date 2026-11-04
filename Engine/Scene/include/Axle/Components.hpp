@@ -8,7 +8,6 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/AudioSource.hpp>
 #include <Axle/AudioListener.hpp>
-#include <Axle/VehicleAudio.hpp>
 #include <Axle/SkeletalMesh.hpp>
 #include <Axle/Animator.hpp>
 #include <Axle/CharacterController.hpp>
@@ -17,7 +16,6 @@
 #include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/ParticleEffectSerializer.hpp>
 #include <Axle/ParticleMeshSampler.hpp>
-#include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
 #include <Axle/UI/UIDocument.hpp>
 
@@ -907,95 +905,28 @@ namespace Axle {
         }
     };
 
-    class Vehicle;
+    struct LegacyComponentPayload {
+        std::string TypeName;
+        std::vector<std::string> Lines;
+    };
 
-    // Modern Unity ECS-style Vehicle Root Component (VehicleControlAuthoring equivalent)
-    struct VehicleComponent {
-        Vehicle* VehicleInstance = nullptr;
+    struct LegacyComponentsHolder {
+        std::vector<LegacyComponentPayload> Components;
 
-        // Driver Input Buffer (Pure ECS Data)
-        float Throttle = 0.0f;              // -1.0 (Reverse) to +1.0 (Forward)
-        float Steering = 0.0f;              // -1.0 (Full Left) to +1.0 (Full Right)
-        float Brake = 0.0f;                 // 0.0 (None) to 1.0 (Full Brake)
-        bool Handbrake = false;             // Handbrake state
-
-        // Chassis & Powertrain Tuning (Phase 20.2 & 20.3)
-        float ChassisMass = 1500.0f;        // Chassis mass in kg
-        float MaxEngineTorque = 800.0f;     // Engine peak torque in N.m
-        float MaxRPM = 7000.0f;             // Redline RPM
-        float MinRPM = 1000.0f;             // Idle RPM
-        float MaxBrakeTorque = 3000.0f;     // Service brake torque in N.m
-        float MaxHandBrakeTorque = 6000.0f; // Handbrake torque in N.m
-        float AntiRollBarStiffness = 1000.0f; // Anti-roll bar stiffness (N/m)
-
-        // Default suspension settings for child wheel spawning
-        float DefaultSuspensionFrequency = 2.0f; // Spring frequency (Hz)
-        float DefaultSuspensionDamping = 0.5f;   // Suspension damping ratio (0..1)
-        bool FourWheelDrive = true;              // AWD vs RWD
-        glm::vec3 CenterOfMassOffset{ 0.0f, 0.0f, 0.0f }; // Center of mass offset relative to geometric pivot
-
-        // Live Telemetry (Updated per-frame by Scene runtime physics sync)
-        float CurrentSpeedKmh = 0.0f;       // Vehicle linear speed in km/h
-        float CurrentSpeedMps = 0.0f;       // Vehicle linear speed in m/s
-        float ForwardSpeedKmh = 0.0f;       // Signed longitudinal forward speed in km/h (+forward, -reverse)
-        float CurrentRPM = 0.0f;            // Engine rotational speed in RPM
-        int CurrentGear = 1;                // Active transmission gear
-
-        VehicleComponent() = default;
-        VehicleComponent(Vehicle* vehicle)
-            : VehicleInstance(vehicle) {}
-
-        // Clean C++ API for Scripts and Controllers
-        void SetDriverInput(float throttle, float steering, float brake, bool handbrake = false) {
-            Throttle = std::clamp(throttle, -1.0f, 1.0f);
-            Steering = std::clamp(steering, -1.0f, 1.0f);
-            Brake = std::clamp(brake, 0.0f, 1.0f);
-            Handbrake = handbrake;
+        bool HasLegacyVehicleData() const {
+            for (const auto& comp : Components) {
+                if (comp.TypeName == "VehicleComponent" ||
+                    comp.TypeName == "WheelComponent" ||
+                    comp.TypeName == "VehicleWheel3D" ||
+                    comp.TypeName == "VehicleAudioComponent" ||
+                    comp.TypeName == "VehicleVFXComponent") {
+                    return true;
+                }
+            }
+            return false;
         }
-
-        float GetSpeedKmh() const { return CurrentSpeedKmh; }
-        float GetSpeedMps() const { return CurrentSpeedMps; }
-        float GetForwardSpeedKmh() const { return ForwardSpeedKmh; }
-        float GetRPM() const { return CurrentRPM; }
-        int GetCurrentGear() const { return CurrentGear; }
-        bool HasActivePhysics() const { return VehicleInstance != nullptr; }
     };
 
-    // Modern Unity ECS-style Wheel Component (ControllableWheelAuthoring / VehicleWheel3D equivalent)
-    struct WheelComponent {
-        // Physical Geometry
-        float Radius = 0.35f;               // Wheel tire radius (m)
-        float Width = 0.25f;                // Wheel tire width (m)
-
-        // Suspension Dynamics
-        float SuspensionMinLength = 0.15f;  // Maximum suspension compression limit (m)
-        float SuspensionMaxLength = 0.45f;  // Maximum suspension extension limit (m)
-        float SpringFrequency = 2.0f;       // Spring oscillation frequency (Hz)
-        float SpringDamping = 0.5f;         // Suspension damping ratio (0..1)
-
-        // Steering & Powertrain Control Flags
-        bool CanSteer = false;              // Steerable wheel (responds to steering input)
-        float MaxSteerAngle = 32.0f;        // Peak steering angle (degrees)
-        bool IsDriven = true;               // Driven wheel (receives powertrain engine torque)
-        bool HasHandbrake = false;          // Locked by handbrake input
-        float BrakeTorque = 3000.0f;        // Service brake torque (N.m)
-        float HandBrakeTorque = 0.0f;       // Handbrake torque (N.m)
-
-        // Mesh & Transform Automation
-        bool AutoSyncMesh = true;           // Automatically sync Entity TransformComponent to physical wheel pose
-
-        // Live Dynamic Telemetry (Updated per-frame by Scene runtime physics sync)
-        bool IsGrounded = false;            // Ground contact flag
-        float SuspensionLength = 0.0f;      // Current suspension travel length (m)
-        float AngularVelocity = 0.0f;       // Wheel spin angular velocity (rad/s)
-        float SteerAngle = 0.0f;            // Current dynamic steering angle (rad)
-        float SlipAngle = 0.0f;             // Tire slip angle (degrees)
-        float LateralSlip = 0.0f;           // Sideways tire slip velocity
-        float LongitudinalSlip = 0.0f;      // Forward/rearward tire slip ratio
-
-        WheelComponent() = default;
-    };
-    using VehicleWheel3D = WheelComponent; // Godot-style decoupled wheel alias
 
 
     struct DirectionalLightComponent {
@@ -1262,95 +1193,6 @@ namespace Axle {
         }
     };
 
-    struct VehicleAudioComponent {
-        bool Enabled = true;
-
-        // Granular Engine RPM Synthesizer
-        std::string EnginePowerClipPath;
-        std::string EngineCoastClipPath;
-        float MinEnginePitch = 0.6f;
-        float MaxEnginePitch = 2.4f;
-        float EngineMasterVolume = 0.8f;
-        float ThrottleSmoothing = 6.0f;
-
-        // Tire Squeal & Slip Acoustics
-        std::string TireSquealClipPath;
-        float SlipThreshold = 0.22f;
-        float TireSquealMasterVolume = 0.7f;
-        float TireSquealFadeSpeed = 10.0f;
-
-        // Suspension Travel Thuds
-        std::string SuspensionThudClipPath;
-        float SuspensionThudThreshold = 1.8f;
-        float SuspensionMasterVolume = 0.6f;
-
-        // Collision Impact System
-        std::string CollisionImpactClipPath;
-        float CollisionDecelThreshold = 18.0f;
-        float CollisionMasterVolume = 0.9f;
-
-        // 3D Spatial Audio
-        bool Spatialized = true;
-        float MinDistance = 2.0f;
-        float MaxDistance = 80.0f;
-
-        // Runtime audio synthesizer (excluded from scene file serialization)
-        std::shared_ptr<VehicleAudio> RuntimeAudio;
-
-        VehicleAudioComponent() = default;
-
-        void InitRuntime(float idleRPM = 1000.0f, float maxRPM = 7000.0f) {
-            VehicleAudioConfig config;
-            config.EnginePowerClipPath = EnginePowerClipPath;
-            config.EngineCoastClipPath = EngineCoastClipPath;
-            config.MinEnginePitch = MinEnginePitch;
-            config.MaxEnginePitch = MaxEnginePitch;
-            config.EngineMasterVolume = EngineMasterVolume;
-            config.ThrottleSmoothing = ThrottleSmoothing;
-            config.IdleRPM = idleRPM;
-            config.MaxRPM = maxRPM;
-
-            config.TireSquealClipPath = TireSquealClipPath;
-            config.SlipThreshold = SlipThreshold;
-            config.TireSquealMasterVolume = TireSquealMasterVolume;
-            config.TireSquealFadeSpeed = TireSquealFadeSpeed;
-
-            config.SuspensionThudClipPath = SuspensionThudClipPath;
-            config.SuspensionThudThreshold = SuspensionThudThreshold;
-            config.SuspensionMasterVolume = SuspensionMasterVolume;
-
-            config.CollisionImpactClipPath = CollisionImpactClipPath;
-            config.CollisionDecelThreshold = CollisionDecelThreshold;
-            config.CollisionMasterVolume = CollisionMasterVolume;
-
-            config.Spatialized = Spatialized;
-            config.MinDistance = MinDistance;
-            config.MaxDistance = MaxDistance;
-
-            RuntimeAudio = std::make_shared<VehicleAudio>(config);
-            if (Enabled) {
-                RuntimeAudio->Start();
-            }
-        }
-
-        void StopRuntime() {
-            if (RuntimeAudio) {
-                RuntimeAudio->Stop();
-                RuntimeAudio.reset();
-            }
-        }
-
-        void SetEngineMasterVolume(float vol) {
-            EngineMasterVolume = vol;
-            if (RuntimeAudio) {
-                RuntimeAudio->SetEngineMasterVolume(vol);
-            }
-        }
-
-        float GetEngineMasterVolume() const {
-            return EngineMasterVolume;
-        }
-    };
 
     struct SkeletalMeshComponent {
         std::shared_ptr<SkeletalMesh> Mesh = nullptr;
@@ -1766,13 +1608,16 @@ namespace Axle {
             }
             Config.SimulationSpace = SimulationSpace;
             if (EmitterStacks.empty()) {
-                ParticleEmitterStack primary("Base Emitter", Config);
+                ParticleEmitterStack primary(Config.Name.empty() ? "Base Emitter" : Config.Name, Config);
                 primary.TexturePath = TexturePath;
                 primary.NormalMapPath = NormalMapPath;
                 primary.Visible = Visible;
                 primary.Enabled = Active;
                 EmitterStacks.push_back(std::move(primary));
             } else {
+                if (!Config.Name.empty()) {
+                    EmitterStacks[0].Name = Config.Name;
+                }
                 EmitterStacks[0].Config = Config;
                 EmitterStacks[0].TexturePath = TexturePath;
             }
@@ -1789,6 +1634,9 @@ namespace Axle {
         void SyncPrimary() {
             if (!EmitterStacks.empty()) {
                 Config = EmitterStacks[0].Config;
+                if (!EmitterStacks[0].Name.empty()) {
+                    Config.Name = EmitterStacks[0].Name;
+                }
                 System = EmitterStacks[0].System;
                 TexturePath = EmitterStacks[0].TexturePath;
                 NormalMapPath = EmitterStacks[0].NormalMapPath;
@@ -1970,36 +1818,6 @@ namespace Axle {
         }
     };
 
-    struct VehicleVFXComponent {
-        bool Enabled = true;
-        VehicleVFXConfig Config;
-        std::shared_ptr<VehicleVFX> RuntimeVFX = nullptr;
-
-        VehicleVFXComponent() = default;
-        explicit VehicleVFXComponent(const VehicleVFXConfig& config)
-            : Config(config) {}
-
-        void InitRuntime() {
-            RuntimeVFX = std::make_shared<VehicleVFX>(Config);
-        }
-
-        void StopRuntime() {
-            RuntimeVFX.reset();
-        }
-
-        void Update(Timestep ts,
-                    const VehicleTelemetryData& telemetry,
-                    float throttle,
-                    float brake,
-                    bool handbrake,
-                    const glm::vec3& worldPos,
-                    const glm::vec3& forwardDir,
-                    const glm::quat& worldRot) {
-            if (Enabled && RuntimeVFX) {
-                RuntimeVFX->Update(ts, telemetry, throttle, brake, handbrake, worldPos, forwardDir, worldRot);
-            }
-        }
-    };
 
     struct CharacterVFXComponent {
         bool Enabled = true;

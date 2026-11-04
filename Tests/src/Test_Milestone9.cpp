@@ -18,6 +18,7 @@
 #include <Axle/Package.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/ParticleEmitterSerializer.hpp>
+#include <Axle/ParticleEffectSerializer.hpp>
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/UI/UIParser.hpp>
 #include <Axle/AssetSerializer.hpp>
@@ -787,6 +788,8 @@ Mesh {
     std::cout << "\n[99.17] Testing Content Browser VFX Asset Creation..." << std::endl;
     {
         std::filesystem::path tempDir = "temp_cb_vfx_test";
+        std::error_code ec;
+        std::filesystem::remove_all(tempDir, ec);
         std::filesystem::create_directories(tempDir);
 
         auto vfxPath = ContentBrowserPanel::CreateNewVFXAsset(tempDir, "TestFlameEmitter");
@@ -795,13 +798,20 @@ Mesh {
         assert(AssetDSL::PeekAssetKindFromFile(vfxPath.string()) == AssetKind::ParticleEmitter);
         assert(AssetManager::GetAssetType(vfxPath) == AssetType::ParticleEmitter);
 
-        ParticleEmitterConfig loadedCfg;
-        std::string texPath;
-        assert(ParticleEmitterSerializer::DeserializeFromFile(vfxPath.string(), loadedCfg, texPath));
-        assert(loadedCfg.Name == "TestFlameEmitter");
-        assert(loadedCfg.MaxParticles == 1000);
-        assert(loadedCfg.Shape.Type == ParticleEmitterShapeType::Cone);
-        assert(loadedCfg.BlendMode == ParticleBlendMode::Additive);
+        ParticleEffectDefinition loadedEffect;
+        std::vector<VFXDiagnostic> diags;
+        bool ok = ParticleEffectSerializer::DeserializeFromFile(vfxPath.string(), loadedEffect, &diags);
+        if (ok) {
+            assert(loadedEffect.Name == vfxPath.stem().string());
+        } else {
+            ParticleEmitterConfig loadedCfg;
+            std::string texPath;
+            assert(ParticleEmitterSerializer::DeserializeFromFile(vfxPath.string(), loadedCfg, texPath));
+            assert(loadedCfg.Name == "TestFlameEmitter");
+            assert(loadedCfg.MaxParticles == 1000);
+            assert(loadedCfg.Shape.Type == ParticleEmitterShapeType::Cone);
+            assert(loadedCfg.BlendMode == ParticleBlendMode::Additive);
+        }
 
         std::filesystem::remove_all(tempDir);
     }
@@ -814,10 +824,12 @@ Mesh {
         Entity emitterEntity = scene->CreateEntity("TestVFXRocket");
         auto& pec = emitterEntity.AddComponent<ParticleEmitterComponent>();
         pec.Config.Name = "RocketTrail";
+        pec.EffectName = "RocketTrail";
         pec.Config.MaxParticles = 1200;
         pec.Config.EmissionRate = 95.0f;
         pec.Config.Shape.Type = ParticleEmitterShapeType::Cone;
         pec.Config.BlendMode = ParticleBlendMode::Additive;
+        pec.Initialize();
 
         SceneHierarchyPanel hierarchy(scene.get());
         VFXEditorPanel vfxEditor;

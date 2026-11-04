@@ -99,8 +99,15 @@ every rendering feature. Use the master and live exchange for actual scoped assi
 for shipped Runtime, with project-level selection in a new Plugins window and
 support for plugins under both Engine and project roots. Replacing Vehicle from
 scratch is acceptable; preserving its old C++ API and exact handling is not a gate.
-The latest instruction is to write detailed plans first: **no source deletion or
-plugin implementation is claimed or released by this update**.
+
+Under task **VEHICLE-RETIREMENT**, the legacy built-in Vehicle architecture
+(Engine/Vehicle, CMake target AxleVehicle, VehicleComponent, WheelComponent,
+and built-in scene ownership / update loops / UI inspector / presets) was retired early
+from the core engine without waiting for the new Vehicle plugin to be ready.
+Legacy scene and assembly data is preserved verbatim via LegacyComponentsHolder
+with physics rigid body synthesis prevented for unsupported legacy vehicles.
+Future plugin framework packages and the replacement Jolt Vehicle plugin
+(PLG-00..25, specifically PLG-14..18) remain open and will be implemented in subsequent packages.
 
 Read the [architecture](docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md),
 [26-package plan](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) and

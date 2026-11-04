@@ -283,32 +283,6 @@ namespace Axle {
                 fout << "      DopplerFactor: " << asc.DopplerFactor << "\n";
             }
 
-            // VehicleAudioComponent
-            if (entity.HasComponent<VehicleAudioComponent>()) {
-                auto& vac = entity.GetComponent<VehicleAudioComponent>();
-                fout << "    VehicleAudioComponent:\n";
-                fout << "      Enabled: " << (vac.Enabled ? "true" : "false") << "\n";
-                fout << "      EnginePowerClipPath: " << vac.EnginePowerClipPath << "\n";
-                fout << "      EngineCoastClipPath: " << vac.EngineCoastClipPath << "\n";
-                fout << "      MinEnginePitch: " << vac.MinEnginePitch << "\n";
-                fout << "      MaxEnginePitch: " << vac.MaxEnginePitch << "\n";
-                fout << "      EngineMasterVolume: " << vac.EngineMasterVolume << "\n";
-                fout << "      ThrottleSmoothing: " << vac.ThrottleSmoothing << "\n";
-                fout << "      TireSquealClipPath: " << vac.TireSquealClipPath << "\n";
-                fout << "      SlipThreshold: " << vac.SlipThreshold << "\n";
-                fout << "      TireSquealMasterVolume: " << vac.TireSquealMasterVolume << "\n";
-                fout << "      TireSquealFadeSpeed: " << vac.TireSquealFadeSpeed << "\n";
-                fout << "      SuspensionThudClipPath: " << vac.SuspensionThudClipPath << "\n";
-                fout << "      SuspensionThudThreshold: " << vac.SuspensionThudThreshold << "\n";
-                fout << "      SuspensionMasterVolume: " << vac.SuspensionMasterVolume << "\n";
-                fout << "      CollisionImpactClipPath: " << vac.CollisionImpactClipPath << "\n";
-                fout << "      CollisionDecelThreshold: " << vac.CollisionDecelThreshold << "\n";
-                fout << "      CollisionMasterVolume: " << vac.CollisionMasterVolume << "\n";
-                fout << "      Spatialized: " << (vac.Spatialized ? "true" : "false") << "\n";
-                fout << "      MinDistance: " << vac.MinDistance << "\n";
-                fout << "      MaxDistance: " << vac.MaxDistance << "\n";
-            }
-
             // PointLightComponent
             if (entity.HasComponent<PointLightComponent>()) {
                 auto& plc = entity.GetComponent<PointLightComponent>();
@@ -331,40 +305,15 @@ namespace Axle {
                 fout << "      OuterConeAngle: " << slc.OuterConeAngle << "\n";
             }
 
-            // VehicleComponent
-            if (entity.HasComponent<VehicleComponent>()) {
-                const auto& vc = entity.GetComponent<VehicleComponent>();
-                fout << "    VehicleComponent:\n";
-                fout << "      ChassisMass: " << vc.ChassisMass << "\n";
-                fout << "      MaxEngineTorque: " << vc.MaxEngineTorque << "\n";
-                fout << "      MaxRPM: " << vc.MaxRPM << "\n";
-                fout << "      MinRPM: " << vc.MinRPM << "\n";
-                fout << "      MaxBrakeTorque: " << vc.MaxBrakeTorque << "\n";
-                fout << "      MaxHandBrakeTorque: " << vc.MaxHandBrakeTorque << "\n";
-                fout << "      AntiRollBarStiffness: " << vc.AntiRollBarStiffness << "\n";
-                fout << "      DefaultSuspensionFrequency: " << vc.DefaultSuspensionFrequency << "\n";
-                fout << "      DefaultSuspensionDamping: " << vc.DefaultSuspensionDamping << "\n";
-                fout << "      FourWheelDrive: " << (vc.FourWheelDrive ? "true" : "false") << "\n";
-                fout << "      CenterOfMassOffset: [ " << vc.CenterOfMassOffset.x << " , " << vc.CenterOfMassOffset.y << " , " << vc.CenterOfMassOffset.z << " ]\n";
-            }
-
-            // WheelComponent
-            if (entity.HasComponent<WheelComponent>()) {
-                const auto& wc = entity.GetComponent<WheelComponent>();
-                fout << "    WheelComponent:\n";
-                fout << "      Radius: " << wc.Radius << "\n";
-                fout << "      Width: " << wc.Width << "\n";
-                fout << "      SuspensionMinLength: " << wc.SuspensionMinLength << "\n";
-                fout << "      SuspensionMaxLength: " << wc.SuspensionMaxLength << "\n";
-                fout << "      SpringFrequency: " << wc.SpringFrequency << "\n";
-                fout << "      SpringDamping: " << wc.SpringDamping << "\n";
-                fout << "      CanSteer: " << (wc.CanSteer ? "true" : "false") << "\n";
-                fout << "      MaxSteerAngle: " << wc.MaxSteerAngle << "\n";
-                fout << "      IsDriven: " << (wc.IsDriven ? "true" : "false") << "\n";
-                fout << "      HasHandbrake: " << (wc.HasHandbrake ? "true" : "false") << "\n";
-                fout << "      BrakeTorque: " << wc.BrakeTorque << "\n";
-                fout << "      HandBrakeTorque: " << wc.HandBrakeTorque << "\n";
-                fout << "      AutoSyncMesh: " << (wc.AutoSyncMesh ? "true" : "false") << "\n";
+            // LegacyComponentsHolder (Preserve retired components verbatim)
+            if (entity.HasComponent<LegacyComponentsHolder>()) {
+                const auto& holder = entity.GetComponent<LegacyComponentsHolder>();
+                for (const auto& comp : holder.Components) {
+                    fout << "    " << comp.TypeName << ":\n";
+                    for (const auto& l : comp.Lines) {
+                        fout << "      " << l << "\n";
+                    }
+                }
             }
 
             // SkeletalMeshComponent
@@ -452,8 +401,6 @@ namespace Axle {
         bool HasAudioSource = false;
         AudioSourceComponent AudioSource;
 
-        bool HasVehicleAudio = false;
-        VehicleAudioComponent VehicleAudio;
 
         bool HasPointLight = false;
         PointLightComponent PointLight;
@@ -461,11 +408,8 @@ namespace Axle {
         bool HasSpotLight = false;
         SpotLightComponent SpotLight;
 
-        bool HasVehicle = false;
-        VehicleComponent Vehicle;
 
-        bool HasWheel = false;
-        WheelComponent Wheel;
+        std::vector<LegacyComponentPayload> LegacyComponents;
 
         bool HasSkeletalMesh = false;
         SkeletalMeshComponent SkeletalMesh;
@@ -490,11 +434,9 @@ namespace Axle {
         Camera,
         AudioListener,
         AudioSource,
-        VehicleAudio,
         PointLight,
         SpotLight,
-        Vehicle,
-        Wheel,
+        LegacyComponent,
         SkeletalMesh,
         Animator,
         Hierarchy,
@@ -549,11 +491,12 @@ namespace Axle {
             if (trimmed == "CameraComponent:") { currentSection = AsmSection::Camera; current.HasCamera = true; continue; }
             if (trimmed == "AudioListenerComponent:") { currentSection = AsmSection::AudioListener; current.HasAudioListener = true; continue; }
             if (trimmed == "AudioSourceComponent:") { currentSection = AsmSection::AudioSource; current.HasAudioSource = true; continue; }
-            if (trimmed == "VehicleAudioComponent:") { currentSection = AsmSection::VehicleAudio; current.HasVehicleAudio = true; continue; }
+            if (trimmed == "VehicleAudioComponent:") { currentSection = AsmSection::LegacyComponent; current.LegacyComponents.push_back({ "VehicleAudioComponent", {} }); continue; }
             if (trimmed == "PointLightComponent:") { currentSection = AsmSection::PointLight; current.HasPointLight = true; continue; }
             if (trimmed == "SpotLightComponent:") { currentSection = AsmSection::SpotLight; current.HasSpotLight = true; continue; }
-            if (trimmed == "VehicleComponent:" || trimmed == "VehicleComponent: true") { currentSection = AsmSection::Vehicle; current.HasVehicle = true; continue; }
-            if (trimmed == "WheelComponent:" || trimmed == "VehicleWheel3D:") { currentSection = AsmSection::Wheel; current.HasWheel = true; continue; }
+            if (trimmed == "VehicleComponent:" || trimmed == "VehicleComponent: true") { currentSection = AsmSection::LegacyComponent; current.LegacyComponents.push_back({ "VehicleComponent", {} }); continue; }
+            if (trimmed == "WheelComponent:" || trimmed == "VehicleWheel3D:") { currentSection = AsmSection::LegacyComponent; current.LegacyComponents.push_back({ "WheelComponent", {} }); continue; }
+            if (trimmed == "VehicleVFXComponent:") { currentSection = AsmSection::LegacyComponent; current.LegacyComponents.push_back({ "VehicleVFXComponent", {} }); continue; }
             if (trimmed == "SkeletalMeshComponent:") { currentSection = AsmSection::SkeletalMesh; current.HasSkeletalMesh = true; continue; }
             if (trimmed == "AnimatorComponent:") { currentSection = AsmSection::Animator; current.HasAnimator = true; continue; }
             if (trimmed == "HierarchyComponent:") { currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
@@ -768,50 +711,6 @@ namespace Axle {
                     }
                     break;
                 }
-                case AsmSection::VehicleAudio: {
-                    if (trimmed.rfind("Enabled:", 0) == 0) {
-                        current.VehicleAudio.Enabled = (Trim(trimmed.substr(8)) == "true");
-                    } else if (trimmed.rfind("EnginePowerClipPath:", 0) == 0) {
-                        current.VehicleAudio.EnginePowerClipPath = Trim(trimmed.substr(20));
-                    } else if (trimmed.rfind("EngineCoastClipPath:", 0) == 0) {
-                        current.VehicleAudio.EngineCoastClipPath = Trim(trimmed.substr(20));
-                    } else if (trimmed.rfind("MinEnginePitch:", 0) == 0) {
-                        try { current.VehicleAudio.MinEnginePitch = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
-                    } else if (trimmed.rfind("MaxEnginePitch:", 0) == 0) {
-                        try { current.VehicleAudio.MaxEnginePitch = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
-                    } else if (trimmed.rfind("EngineMasterVolume:", 0) == 0) {
-                        try { current.VehicleAudio.EngineMasterVolume = std::stof(Trim(trimmed.substr(19))); } catch (...) {}
-                    } else if (trimmed.rfind("ThrottleSmoothing:", 0) == 0) {
-                        try { current.VehicleAudio.ThrottleSmoothing = std::stof(Trim(trimmed.substr(18))); } catch (...) {}
-                    } else if (trimmed.rfind("TireSquealClipPath:", 0) == 0) {
-                        current.VehicleAudio.TireSquealClipPath = Trim(trimmed.substr(19));
-                    } else if (trimmed.rfind("SlipThreshold:", 0) == 0) {
-                        try { current.VehicleAudio.SlipThreshold = std::stof(Trim(trimmed.substr(14))); } catch (...) {}
-                    } else if (trimmed.rfind("TireSquealMasterVolume:", 0) == 0) {
-                        try { current.VehicleAudio.TireSquealMasterVolume = std::stof(Trim(trimmed.substr(23))); } catch (...) {}
-                    } else if (trimmed.rfind("TireSquealFadeSpeed:", 0) == 0) {
-                        try { current.VehicleAudio.TireSquealFadeSpeed = std::stof(Trim(trimmed.substr(20))); } catch (...) {}
-                    } else if (trimmed.rfind("SuspensionThudClipPath:", 0) == 0) {
-                        current.VehicleAudio.SuspensionThudClipPath = Trim(trimmed.substr(23));
-                    } else if (trimmed.rfind("SuspensionThudThreshold:", 0) == 0) {
-                        try { current.VehicleAudio.SuspensionThudThreshold = std::stof(Trim(trimmed.substr(24))); } catch (...) {}
-                    } else if (trimmed.rfind("SuspensionMasterVolume:", 0) == 0) {
-                        try { current.VehicleAudio.SuspensionMasterVolume = std::stof(Trim(trimmed.substr(23))); } catch (...) {}
-                    } else if (trimmed.rfind("CollisionImpactClipPath:", 0) == 0) {
-                        current.VehicleAudio.CollisionImpactClipPath = Trim(trimmed.substr(24));
-                    } else if (trimmed.rfind("CollisionDecelThreshold:", 0) == 0) {
-                        try { current.VehicleAudio.CollisionDecelThreshold = std::stof(Trim(trimmed.substr(24))); } catch (...) {}
-                    } else if (trimmed.rfind("CollisionMasterVolume:", 0) == 0) {
-                        try { current.VehicleAudio.CollisionMasterVolume = std::stof(Trim(trimmed.substr(22))); } catch (...) {}
-                    } else if (trimmed.rfind("Spatialized:", 0) == 0) {
-                        current.VehicleAudio.Spatialized = (Trim(trimmed.substr(12)) == "true");
-                    } else if (trimmed.rfind("MinDistance:", 0) == 0) {
-                        try { current.VehicleAudio.MinDistance = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
-                    } else if (trimmed.rfind("MaxDistance:", 0) == 0) {
-                        try { current.VehicleAudio.MaxDistance = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
-                    }
-                    break;
-                }
                 case AsmSection::PointLight: {
                     if (trimmed.rfind("Color:", 0) == 0) {
                         float r = 1, g = 1, b = 1;
@@ -844,61 +743,9 @@ namespace Axle {
                     }
                     break;
                 }
-                case AsmSection::Vehicle: {
-                    if (trimmed.rfind("ChassisMass:", 0) == 0) {
-                        try { current.Vehicle.ChassisMass = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
-                    } else if (trimmed.rfind("MaxEngineTorque:", 0) == 0) {
-                        try { current.Vehicle.MaxEngineTorque = std::stof(Trim(trimmed.substr(16))); } catch (...) {}
-                    } else if (trimmed.rfind("MaxRPM:", 0) == 0) {
-                        try { current.Vehicle.MaxRPM = std::stof(Trim(trimmed.substr(7))); } catch (...) {}
-                    } else if (trimmed.rfind("MinRPM:", 0) == 0) {
-                        try { current.Vehicle.MinRPM = std::stof(Trim(trimmed.substr(7))); } catch (...) {}
-                    } else if (trimmed.rfind("MaxBrakeTorque:", 0) == 0) {
-                        try { current.Vehicle.MaxBrakeTorque = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
-                    } else if (trimmed.rfind("MaxHandBrakeTorque:", 0) == 0) {
-                        try { current.Vehicle.MaxHandBrakeTorque = std::stof(Trim(trimmed.substr(19))); } catch (...) {}
-                    } else if (trimmed.rfind("AntiRollBarStiffness:", 0) == 0) {
-                        try { current.Vehicle.AntiRollBarStiffness = std::stof(Trim(trimmed.substr(21))); } catch (...) {}
-                    } else if (trimmed.rfind("DefaultSuspensionFrequency:", 0) == 0) {
-                        try { current.Vehicle.DefaultSuspensionFrequency = std::stof(Trim(trimmed.substr(27))); } catch (...) {}
-                    } else if (trimmed.rfind("DefaultSuspensionDamping:", 0) == 0) {
-                        try { current.Vehicle.DefaultSuspensionDamping = std::stof(Trim(trimmed.substr(25))); } catch (...) {}
-                    } else if (trimmed.rfind("FourWheelDrive:", 0) == 0) {
-                        current.Vehicle.FourWheelDrive = (Trim(trimmed.substr(15)) == "true");
-                    } else if (trimmed.rfind("CenterOfMassOffset:", 0) == 0) {
-                        float x = 0, y = 0, z = 0;
-                        sscanf(trimmed.c_str(), "CenterOfMassOffset: [ %f , %f , %f ]", &x, &y, &z);
-                        current.Vehicle.CenterOfMassOffset = glm::vec3(x, y, z);
-                    }
-                    break;
-                }
-                case AsmSection::Wheel: {
-                    if (trimmed.rfind("Radius:", 0) == 0) {
-                        try { current.Wheel.Radius = std::stof(Trim(trimmed.substr(7))); } catch (...) {}
-                    } else if (trimmed.rfind("Width:", 0) == 0) {
-                        try { current.Wheel.Width = std::stof(Trim(trimmed.substr(6))); } catch (...) {}
-                    } else if (trimmed.rfind("SuspensionMinLength:", 0) == 0) {
-                        try { current.Wheel.SuspensionMinLength = std::stof(Trim(trimmed.substr(20))); } catch (...) {}
-                    } else if (trimmed.rfind("SuspensionMaxLength:", 0) == 0) {
-                        try { current.Wheel.SuspensionMaxLength = std::stof(Trim(trimmed.substr(20))); } catch (...) {}
-                    } else if (trimmed.rfind("SpringFrequency:", 0) == 0) {
-                        try { current.Wheel.SpringFrequency = std::stof(Trim(trimmed.substr(16))); } catch (...) {}
-                    } else if (trimmed.rfind("SpringDamping:", 0) == 0) {
-                        try { current.Wheel.SpringDamping = std::stof(Trim(trimmed.substr(14))); } catch (...) {}
-                    } else if (trimmed.rfind("CanSteer:", 0) == 0) {
-                        current.Wheel.CanSteer = (Trim(trimmed.substr(9)) == "true");
-                    } else if (trimmed.rfind("MaxSteerAngle:", 0) == 0) {
-                        try { current.Wheel.MaxSteerAngle = std::stof(Trim(trimmed.substr(14))); } catch (...) {}
-                    } else if (trimmed.rfind("IsDriven:", 0) == 0) {
-                        current.Wheel.IsDriven = (Trim(trimmed.substr(9)) == "true");
-                    } else if (trimmed.rfind("HasHandbrake:", 0) == 0) {
-                        current.Wheel.HasHandbrake = (Trim(trimmed.substr(13)) == "true");
-                    } else if (trimmed.rfind("BrakeTorque:", 0) == 0) {
-                        try { current.Wheel.BrakeTorque = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
-                    } else if (trimmed.rfind("HandBrakeTorque:", 0) == 0) {
-                        try { current.Wheel.HandBrakeTorque = std::stof(Trim(trimmed.substr(16))); } catch (...) {}
-                    } else if (trimmed.rfind("AutoSyncMesh:", 0) == 0) {
-                        current.Wheel.AutoSyncMesh = (Trim(trimmed.substr(13)) == "true");
+                case AsmSection::LegacyComponent: {
+                    if (!current.LegacyComponents.empty()) {
+                        current.LegacyComponents.back().Lines.push_back(trimmed);
                     }
                     break;
                 }
@@ -1149,11 +996,6 @@ namespace Axle {
                 entity.AddComponent<AudioSourceComponent>(raw.AudioSource);
             }
 
-            // VehicleAudioComponent
-            if (raw.HasVehicleAudio) {
-                entity.AddComponent<VehicleAudioComponent>(raw.VehicleAudio);
-            }
-
             // PointLightComponent
             if (raw.HasPointLight) {
                 entity.AddComponent<PointLightComponent>(raw.PointLight);
@@ -1164,14 +1006,9 @@ namespace Axle {
                 entity.AddComponent<SpotLightComponent>(raw.SpotLight);
             }
 
-            // VehicleComponent
-            if (raw.HasVehicle) {
-                entity.AddComponent<VehicleComponent>(raw.Vehicle);
-            }
-
-            // WheelComponent
-            if (raw.HasWheel) {
-                entity.AddComponent<WheelComponent>(raw.Wheel);
+            // LegacyComponentsHolder (Preserve retired components veratim)
+            if (!raw.LegacyComponents.empty()) {
+                entity.AddComponent<LegacyComponentsHolder>().Components = raw.LegacyComponents;
             }
 
             // SkeletalMeshComponent

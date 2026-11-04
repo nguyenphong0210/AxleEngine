@@ -26,8 +26,6 @@ namespace Axle::RHI {
         constexpr float SunsetSunrise     = 1000.0f;   // Sunset / golden hour (~400 - 1000 Lux)
         constexpr float DeepTwilight      = 10.0f;     // Civil twilight (~10 - 50 Lux)
         constexpr float FullMoon          = 0.25f;     // Full moon night (~0.1 - 0.25 Lux)
-        constexpr float VehicleHeadlight  = 3500.0f;   // Automotive LED / Xenon headlight (~3000 - 4500 Lux)
-        constexpr float VehicleBrakeLight = 400.0f;    // Automotive tail / brake light (~300 - 500 Lux)
         constexpr float StreetLamp        = 150.0f;    // Municipal sodium street light (~100 - 250 Lux)
     }
 
@@ -71,24 +69,6 @@ namespace Axle::RHI {
         float Falloff = 1.0f; // Falloff exponent (1.0 = physical inverse-square with smooth windowing)
         float MinRadius = 0.05f; // Radius smoothing to avoid singularity at distance 0
 
-        static RHIPointLight VehicleBrakeLight(const glm::vec3& pos) {
-            RHIPointLight l;
-            l.Position = pos;
-            l.Radius = 10.0f;
-            l.Color = glm::vec3(1.0f, 0.05f, 0.02f); // Deep brake red
-            l.Intensity = PhysicalIlluminance::VehicleBrakeLight;
-            return l;
-        }
-
-        static RHIPointLight VehicleReverseLight(const glm::vec3& pos) {
-            RHIPointLight l;
-            l.Position = pos;
-            l.Radius = 8.0f;
-            l.Color = glm::vec3(0.95f, 0.98f, 1.0f); // Bright white-blue
-            l.Intensity = 300.0f;
-            return l;
-        }
-
         static RHIPointLight EnvironmentLamp(const glm::vec3& pos, const glm::vec3& color = glm::vec3(1.0f, 0.75f, 0.4f), float radius = 20.0f) {
             RHIPointLight l;
             l.Position = pos;
@@ -112,41 +92,6 @@ namespace Axle::RHI {
         float GetCosInnerCone() const { return std::cos(glm::radians(InnerConeAngle)); }
         float GetCosOuterCone() const { return std::cos(glm::radians(OuterConeAngle)); }
 
-        static RHISpotLight VehicleHeadlightHighBeam(const glm::vec3& pos, const glm::vec3& dir = glm::vec3(0.0f, 0.0f, -1.0f)) {
-            RHISpotLight l;
-            l.Position = pos;
-            l.Direction = glm::normalize(dir);
-            l.Range = 85.0f;
-            l.InnerConeAngle = 14.0f;
-            l.OuterConeAngle = 26.0f;
-            l.Intensity = PhysicalIlluminance::VehicleHeadlight * 1.5f;
-            l.Color = glm::vec3(0.92f, 0.96f, 1.0f); // Xenon cool white
-            return l;
-        }
-
-        static RHISpotLight VehicleHeadlightLowBeam(const glm::vec3& pos, const glm::vec3& dir = glm::vec3(0.0f, -0.05f, -1.0f)) {
-            RHISpotLight l;
-            l.Position = pos;
-            l.Direction = glm::normalize(dir);
-            l.Range = 40.0f;
-            l.InnerConeAngle = 20.0f;
-            l.OuterConeAngle = 42.0f;
-            l.Intensity = PhysicalIlluminance::VehicleHeadlight;
-            l.Color = glm::vec3(1.0f, 0.95f, 0.88f); // Warm halogen / LED
-            return l;
-        }
-
-        static RHISpotLight VehicleFogLight(const glm::vec3& pos, const glm::vec3& dir = glm::vec3(0.0f, -0.1f, -1.0f)) {
-            RHISpotLight l;
-            l.Position = pos;
-            l.Direction = glm::normalize(dir);
-            l.Range = 25.0f;
-            l.InnerConeAngle = 28.0f;
-            l.OuterConeAngle = 55.0f;
-            l.Intensity = 1800.0f;
-            l.Color = glm::vec3(1.0f, 0.78f, 0.15f); // Amber yellow fog
-            return l;
-        }
     };
 
     // -------------------------------------------------------------------------

@@ -21,7 +21,6 @@
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/ParallelECS.hpp>
 #include <Axle/ScriptableEntity.hpp>
-#include <Axle/Vehicle.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/Package.hpp>
@@ -30,8 +29,6 @@
 #include <Axle/Cubemap.hpp>
 #include <Axle/Skybox.hpp>
 #include <Axle/AudioEngine.hpp>
-#include "../Fixtures/Assets/scripts/VehicleChaseCamera.hpp"
-#include "../Fixtures/Assets/scripts/RacingHUD.hpp"
 #include "../Fixtures/Assets/scripts/ThirdPersonController.hpp"
 #include "../Fixtures/Assets/scripts/ThirdPersonCamera.hpp"
 #include <glm/gtc/quaternion.hpp>
@@ -69,7 +66,6 @@
 #include <Axle/CurlNoise.hpp>
 #include <Axle/ParticleCollision.hpp>
 #include <Axle/ParticleForceField.hpp>
-#include <Axle/VehicleVFX.hpp>
 #include <Axle/CharacterVFX.hpp>
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/RHI/RHICommon.hpp>

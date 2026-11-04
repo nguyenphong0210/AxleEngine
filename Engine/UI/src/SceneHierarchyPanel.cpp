@@ -4,7 +4,6 @@
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/ScriptRegistry.hpp>
-#include <Axle/Vehicle.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
@@ -19,7 +18,6 @@
 #include <Axle/AudioEngine.hpp>
 #include <Axle/AudioSource.hpp>
 #include <Axle/AudioClip.hpp>
-#include <Axle/VehicleAudio.hpp>
 #include <Axle/UIVectorIcons.hpp>
 #include <Axle/UI/UINode.hpp>
 #include <Axle/UI/UIDocument.hpp>

@@ -18,7 +18,6 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::UI
     Axle::Physics
     Axle::Scene
-    Axle::Vehicle
     Axle::Project
     Axle::Spline
     Axle::Terrain
@@ -74,7 +73,6 @@ target_link_libraries(AxleScripts PRIVATE
     Axle::Renderer
     Axle::Scene
     Axle::Physics
-    Axle::Vehicle
     Axle::UI
 )
 

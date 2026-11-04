@@ -77,7 +77,6 @@ target_link_libraries(AxleUI
         Axle::Asset
         Axle::Physics
         Axle::Scene
-        Axle::Vehicle
         Axle::Audio
         Axle::VFX
         Axle::RHI

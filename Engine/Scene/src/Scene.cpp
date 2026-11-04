@@ -6,7 +6,6 @@
 #include <Axle/RenderCommand.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/ParallelECS.hpp>
-#include <Axle/Vehicle.hpp>
 #include <Axle/SkinningPipeline.hpp>
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
@@ -53,7 +52,6 @@ namespace Axle {
                 nsc.Instance = nullptr;
             }
         }
-        m_RuntimeVehicles.clear();
         m_RuntimePhysicsScene = nullptr;
         m_Registry.clear();
     }
@@ -148,14 +146,9 @@ namespace Axle {
             newEntity.AddComponent<AssemblyComponent>(entity.GetComponent<AssemblyComponent>());
         }
 
-        // Copy VehicleComponent
-        if (entity.HasComponent<VehicleComponent>()) {
-            newEntity.AddComponent<VehicleComponent>(entity.GetComponent<VehicleComponent>());
-        }
-
-        // Copy WheelComponent
-        if (entity.HasComponent<WheelComponent>()) {
-            newEntity.AddComponent<WheelComponent>(entity.GetComponent<WheelComponent>());
+        // Copy LegacyComponentsHolder
+        if (entity.HasComponent<LegacyComponentsHolder>()) {
+            newEntity.AddComponent<LegacyComponentsHolder>(entity.GetComponent<LegacyComponentsHolder>());
         }
 
         // Copy AudioListenerComponent
@@ -183,31 +176,6 @@ namespace Axle {
             dstAsc.DopplerFactor = srcAsc.DopplerFactor;
         }
 
-        // Copy VehicleAudioComponent
-        if (entity.HasComponent<VehicleAudioComponent>()) {
-            const auto& srcVac = entity.GetComponent<VehicleAudioComponent>();
-            auto& dstVac = newEntity.AddComponent<VehicleAudioComponent>();
-            dstVac.Enabled = srcVac.Enabled;
-            dstVac.EnginePowerClipPath = srcVac.EnginePowerClipPath;
-            dstVac.EngineCoastClipPath = srcVac.EngineCoastClipPath;
-            dstVac.MinEnginePitch = srcVac.MinEnginePitch;
-            dstVac.MaxEnginePitch = srcVac.MaxEnginePitch;
-            dstVac.EngineMasterVolume = srcVac.EngineMasterVolume;
-            dstVac.ThrottleSmoothing = srcVac.ThrottleSmoothing;
-            dstVac.TireSquealClipPath = srcVac.TireSquealClipPath;
-            dstVac.SlipThreshold = srcVac.SlipThreshold;
-            dstVac.TireSquealMasterVolume = srcVac.TireSquealMasterVolume;
-            dstVac.TireSquealFadeSpeed = srcVac.TireSquealFadeSpeed;
-            dstVac.SuspensionThudClipPath = srcVac.SuspensionThudClipPath;
-            dstVac.SuspensionThudThreshold = srcVac.SuspensionThudThreshold;
-            dstVac.SuspensionMasterVolume = srcVac.SuspensionMasterVolume;
-            dstVac.CollisionImpactClipPath = srcVac.CollisionImpactClipPath;
-            dstVac.CollisionDecelThreshold = srcVac.CollisionDecelThreshold;
-            dstVac.CollisionMasterVolume = srcVac.CollisionMasterVolume;
-            dstVac.Spatialized = srcVac.Spatialized;
-            dstVac.MinDistance = srcVac.MinDistance;
-            dstVac.MaxDistance = srcVac.MaxDistance;
-        }
 
         // Copy CollisionShape3D and create new body in PhysicsScene
         if (entity.HasComponent<CollisionShape3D>()) {
@@ -282,11 +250,6 @@ namespace Axle {
             auto pecCopy = entity.GetComponent<ParticleEmitterComponent>();
             pecCopy.Initialize();
             newEntity.AddComponent<ParticleEmitterComponent>(pecCopy);
-        }
-        if (entity.HasComponent<VehicleVFXComponent>()) {
-            auto vvfxCopy = entity.GetComponent<VehicleVFXComponent>();
-            vvfxCopy.RuntimeVFX.reset();
-            newEntity.AddComponent<VehicleVFXComponent>(vvfxCopy);
         }
         if (entity.HasComponent<CharacterVFXComponent>()) {
             auto cvfxCopy = entity.GetComponent<CharacterVFXComponent>();
@@ -475,8 +438,8 @@ namespace Axle {
         if (physicsScene) {
             auto physicsView = m_Registry.view<RigidBody3D, TransformComponent>();
             for (auto entity : physicsView) {
-                if (m_Registry.all_of<VehicleComponent>(entity) || m_Registry.all_of<CharacterControllerComponent>(entity)) {
-                    continue; // Skip vehicle chassis and character controller; transform is managed by their respective controllers
+                if (m_Registry.all_of<CharacterControllerComponent>(entity)) {
+                    continue; // Skip character controller; transform is managed by its controller
                 }
                 const auto& rb = m_Registry.get<RigidBody3D>(entity);
                 if (rb.MotionType == BodyMotionType::Static) {
@@ -607,7 +570,7 @@ namespace Axle {
         }
         shader.SetInt("u_NumPointLights", numPointLights);
 
-        // 5. Upload dynamic Spot Lights (Vehicle Headlights)
+        // 5. Upload dynamic Spot Lights
         auto spotLightView = m_Registry.view<SpotLightComponent, TransformComponent>();
         int numSpotLights = 0;
         for (auto entity : spotLightView) {
@@ -746,26 +709,6 @@ namespace Axle {
         }
     }
 
-    Vehicle* Scene::GetRuntimeVehicle(entt::entity chassisEntityID) const {
-        for (const auto& rv : m_RuntimeVehicles) {
-            if (rv.ChassisEntityID == chassisEntityID) {
-                return rv.VehicleInstance.get();
-            }
-        }
-        return nullptr;
-    }
-
-    Vehicle* Scene::GetRuntimeVehicle(Entity chassisEntity) const {
-        return GetRuntimeVehicle(static_cast<entt::entity>(chassisEntity));
-    }
-
-    Vehicle* Scene::GetPrimaryRuntimeVehicle() const {
-        if (!m_RuntimeVehicles.empty()) {
-            return m_RuntimeVehicles[0].VehicleInstance.get();
-        }
-        return nullptr;
-    }
-
     void Scene::OnRuntimeStart(PhysicsScene* physicsScene) {
         m_RuntimePhysicsScene = physicsScene;
 
@@ -785,141 +728,6 @@ namespace Axle {
             }
         }
 
-        // 2. Dynamic Vehicle Assembly & Jolt Physics Instantiation (Unity ECS com.unity.vehicles model)
-        if (physicsScene) {
-            m_RuntimeVehicles.clear();
-            auto vehicleView = m_Registry.view<VehicleComponent>();
-
-            for (auto entityID : vehicleView) {
-                Entity chassisEntity{ entityID, this };
-                if (!chassisEntity.HasComponent<TransformComponent>()) continue;
-
-                auto& chassisTC = chassisEntity.GetComponent<TransformComponent>();
-                auto& vc = chassisEntity.GetComponent<VehicleComponent>();
-
-                VehicleConfig config;
-                config.InitialPosition = chassisTC.Translation;
-                config.InitialRotation = chassisTC.Rotation;
-                config.ChassisMass = vc.ChassisMass;
-                config.MaxEngineTorque = vc.MaxEngineTorque;
-                config.MaxRPM = vc.MaxRPM;
-                config.MinRPM = vc.MinRPM;
-                config.MaxBrakeTorque = vc.MaxBrakeTorque;
-                config.MaxHandBrakeTorque = vc.MaxHandBrakeTorque;
-                config.FourWheelDrive = vc.FourWheelDrive;
-                config.CenterOfMassOffset = vc.CenterOfMassOffset;
-
-                if (chassisEntity.HasComponent<CollisionShape3D>()) {
-                    const auto& cs = chassisEntity.GetComponent<CollisionShape3D>();
-                    if (cs.ShapeType == CollisionShapeType::Box) {
-                        config.ChassisHalfExtent = cs.HalfExtent;
-                    } else {
-                        config.ChassisHalfExtent = glm::max(chassisTC.Scale * 0.5f, glm::vec3(0.1f));
-                    }
-                } else {
-                    config.ChassisHalfExtent = glm::max(chassisTC.Scale * 0.5f, glm::vec3(0.1f));
-                }
-
-                if (chassisEntity.HasComponent<RigidBody3D>()) {
-                    const auto& rb = chassisEntity.GetComponent<RigidBody3D>();
-                    if (rb.Mass > 0.0f) {
-                        config.ChassisMass = rb.Mass;
-                    }
-                }
-
-                // Dynamic Wheel Discovery (VehicleUpdateColliders equivalent):
-                // Strategy A: Direct child entities holding WheelComponent
-                std::vector<entt::entity> wheelEntityIDs;
-                for (auto child : chassisEntity.GetChildren()) {
-                    if (child && child.HasComponent<WheelComponent>()) {
-                        wheelEntityIDs.push_back(static_cast<entt::entity>(child));
-                    }
-                }
-
-                // Strategy B: Fallback search across registry if no direct children
-                if (wheelEntityIDs.empty()) {
-                    auto wheelView = m_Registry.view<WheelComponent>();
-                    for (auto wID : wheelView) {
-                        wheelEntityIDs.push_back(wID);
-                    }
-                }
-
-                // Build CustomWheels
-                if (!wheelEntityIDs.empty()) {
-                    config.CustomWheels.reserve(wheelEntityIDs.size());
-                    for (auto wID : wheelEntityIDs) {
-                        Entity wEnt{ wID, this };
-                        WheelConfig wc;
-                        if (wEnt.HasComponent<WheelComponent>()) {
-                            const auto& comp = wEnt.GetComponent<WheelComponent>();
-                            wc.Radius = comp.Radius;
-                            wc.Width = comp.Width;
-                            wc.SuspensionMinLength = comp.SuspensionMinLength;
-                            wc.SuspensionMaxLength = comp.SuspensionMaxLength;
-                            wc.SpringFrequency = comp.SpringFrequency;
-                            wc.SpringDamping = comp.SpringDamping;
-                            wc.CanSteer = comp.CanSteer;
-                            wc.MaxSteerAngleDegrees = comp.MaxSteerAngle;
-                            wc.IsDriven = comp.IsDriven;
-                            wc.MaxBrakeTorque = comp.BrakeTorque;
-                            wc.MaxHandBrakeTorque = comp.HasHandbrake ? comp.HandBrakeTorque : 0.0f;
-                        }
-
-                        if (wEnt.HasComponent<TransformComponent>()) {
-                            const auto& wtc = wEnt.GetComponent<TransformComponent>();
-                            if (wEnt.GetParent() == chassisEntity) {
-                                wc.Position = wtc.Translation;
-                            } else {
-                                glm::vec3 worldPos = glm::vec3(wEnt.GetWorldTransform()[3]);
-                                wc.Position = glm::inverse(chassisTC.Rotation) * (worldPos - chassisTC.Translation);
-                            }
-                        }
-
-                        // Ensure wheel visual mesh uses local coordinate mapping so roll rotation is visible
-                        if (wEnt.HasComponent<MeshInstance3D>()) {
-                            auto& mc = wEnt.GetComponent<MeshInstance3D>();
-                            if (mc.PatternMode == 0) {
-                                mc.PatternMode = 1;
-                                if (mc.TileScale <= 1.0f) mc.TileScale = 4.0f;
-                            }
-                        }
-
-                        config.CustomWheels.push_back(wc);
-                    }
-                }
-
-                // Destroy pre-existing chassis body in PhysicsScene to avoid duplicate overlapping rigid bodies
-                if (chassisEntity.HasComponent<RigidBody3D>()) {
-                    auto& rb = chassisEntity.GetComponent<RigidBody3D>();
-                    if (!rb.RuntimeBodyID.IsInvalid() && physicsScene->IsBodyValid(rb.RuntimeBodyID)) {
-                        physicsScene->DestroyBody(rb.RuntimeBodyID);
-                        rb.RuntimeBodyID = {};
-                    }
-                }
-
-                auto vehicleInstance = std::make_unique<Vehicle>(*physicsScene, config);
-                vehicleInstance->Reset(chassisTC.Translation, chassisTC.Rotation);
-
-                vc.VehicleInstance = vehicleInstance.get();
-
-                if (chassisEntity.HasComponent<RigidBody3D>()) {
-                    chassisEntity.GetComponent<RigidBody3D>().RuntimeBodyID = vehicleInstance->GetChassisBodyID();
-                } else {
-                    chassisEntity.AddComponent<RigidBody3D>(vehicleInstance->GetChassisBodyID(), true);
-                }
-
-                if (!chassisEntity.HasComponent<CollisionShape3D>()) {
-                    chassisEntity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, config.ChassisHalfExtent, 0.5f, 0.0f);
-                }
-
-                RuntimeVehicleData rvData;
-                rvData.ChassisEntityID = entityID;
-                rvData.VehicleInstance = std::move(vehicleInstance);
-                rvData.WheelEntityIDs = std::move(wheelEntityIDs);
-                m_RuntimeVehicles.push_back(std::move(rvData));
-            }
-        }
-
         // 3. Audio Source Initialization & PlayOnAwake
         auto audioSourceView = m_Registry.view<AudioSourceComponent>();
         for (auto entityID : audioSourceView) {
@@ -932,20 +740,6 @@ namespace Axle {
             }
         }
 
-        // 4. Vehicle Audio Synthesizer Initialization
-        auto vehicleAudioView = m_Registry.view<VehicleAudioComponent>();
-        for (auto entityID : vehicleAudioView) {
-            auto& vac = vehicleAudioView.get<VehicleAudioComponent>(entityID);
-            float minRPM = 1000.0f;
-            float maxRPM = 7000.0f;
-            if (m_Registry.all_of<VehicleComponent>(entityID)) {
-                const auto& vc = m_Registry.get<VehicleComponent>(entityID);
-                minRPM = vc.MinRPM;
-                maxRPM = vc.MaxRPM;
-            }
-            vac.InitRuntime(minRPM, maxRPM);
-        }
-
         // 5. Kinematic Character Controller Initialization
         if (physicsScene) {
             auto ccView = m_Registry.view<CharacterControllerComponent, TransformComponent>();
@@ -954,13 +748,6 @@ namespace Axle {
                 const auto& tc = ccView.get<TransformComponent>(entityID);
                 ccc.InitRuntime(*physicsScene, tc.Translation, tc.Rotation);
             }
-        }
-
-        // 6. Vehicle VFX Subsystem Initialization
-        auto vehicleVFXView = m_Registry.view<VehicleVFXComponent>();
-        for (auto entityID : vehicleVFXView) {
-            auto& vvfx = vehicleVFXView.get<VehicleVFXComponent>(entityID);
-            vvfx.InitRuntime();
         }
 
         // 7. Character VFX Subsystem Initialization
@@ -999,95 +786,6 @@ namespace Axle {
 
             if (nsc.Instance) {
                 nsc.Instance->OnUpdate(ts);
-            }
-        }
-
-        // 2. Real-time Cache-Friendly Vehicle Physics & Wheel Pose Synchronization
-        for (auto& rv : m_RuntimeVehicles) {
-            if (!rv.VehicleInstance || rv.ChassisEntityID == entt::null || !m_Registry.valid(rv.ChassisEntityID)) {
-                continue;
-            }
-
-            Entity chassisEntity{ rv.ChassisEntityID, this };
-            if (!chassisEntity.HasComponent<VehicleComponent>() || !chassisEntity.HasComponent<TransformComponent>()) {
-                continue;
-            }
-
-            auto& vc = chassisEntity.GetComponent<VehicleComponent>();
-            auto& chassisTC = chassisEntity.GetComponent<TransformComponent>();
-
-            // Dispatch ECS driver inputs to physics vehicle controller
-            rv.VehicleInstance->SetDriverInput(vc.Throttle, vc.Steering, vc.Brake, vc.Handbrake ? 1.0f : 0.0f);
-
-            // Sync chassis TransformComponent with vehicle physics body
-            chassisTC.Translation = rv.VehicleInstance->GetPosition();
-            if (pScene) {
-                chassisTC.Rotation = pScene->GetBodyRotation(rv.VehicleInstance->GetChassisBodyID());
-            }
-
-            // Sync vehicle telemetry to VehicleComponent buffer
-            auto telemetry = rv.VehicleInstance->GetTelemetry();
-            vc.CurrentSpeedKmh = telemetry.SpeedKmh;
-            vc.CurrentSpeedMps = telemetry.SpeedMps;
-            vc.CurrentRPM = telemetry.EngineRPM;
-            vc.CurrentGear = telemetry.CurrentGear;
-            vc.ForwardSpeedKmh = glm::dot(telemetry.LinearVelocity, telemetry.ForwardVector) * 3.6f;
-
-            // Sync child wheel entities (Transforms & Telemetry)
-            for (size_t i = 0; i < rv.WheelEntityIDs.size(); ++i) {
-                entt::entity wID = rv.WheelEntityIDs[i];
-                if (wID == entt::null || !m_Registry.valid(wID)) continue;
-
-                Entity wEnt{ wID, this };
-                const glm::mat4 wheelMat = rv.VehicleInstance->GetWheelTransform(static_cast<u32>(i));
-
-                if (wEnt.HasComponent<TransformComponent>()) {
-                    auto& wtc = wEnt.GetComponent<TransformComponent>();
-                    bool autoSync = true;
-                    if (wEnt.HasComponent<WheelComponent>()) {
-                        autoSync = wEnt.GetComponent<WheelComponent>().AutoSyncMesh;
-                    }
-
-                    if (autoSync) {
-                        if (wEnt.GetParent() == chassisEntity) {
-                            glm::mat4 chassisWorld = rv.VehicleInstance->GetChassisTransform();
-                            glm::mat4 localWheelMat = glm::inverse(chassisWorld) * wheelMat;
-                            wtc.Translation = glm::vec3(localWheelMat[3]);
-                            wtc.Rotation = glm::quat_cast(localWheelMat);
-                        } else {
-                            wtc.Translation = glm::vec3(wheelMat[3]);
-                            wtc.Rotation = glm::quat_cast(wheelMat);
-                        }
-                    }
-                }
-
-                if (wEnt.HasComponent<WheelComponent>() && i < 4) {
-                    auto& wc = wEnt.GetComponent<WheelComponent>();
-                    const auto& wData = telemetry.Wheels[i];
-                    wc.IsGrounded = wData.HasContact;
-                    wc.SuspensionLength = wData.SuspensionLength;
-                    wc.AngularVelocity = wData.AngularVelocity;
-                    wc.SteerAngle = wData.SteerAngle;
-                    wc.SlipAngle = glm::degrees(wData.SteerAngle);
-                    wc.LateralSlip = wData.LateralSlip;
-                    wc.LongitudinalSlip = wData.LongitudinalSlip;
-                }
-            }
-
-            // Synchronize vehicle audio acoustics
-            if (chassisEntity.HasComponent<VehicleAudioComponent>()) {
-                auto& vac = chassisEntity.GetComponent<VehicleAudioComponent>();
-                if (vac.Enabled && vac.RuntimeAudio) {
-                    vac.RuntimeAudio->Update(ts, telemetry, vc.Throttle, vc.Brake, vc.Handbrake, chassisTC.Translation, telemetry.ForwardVector);
-                }
-            }
-
-            // Synchronize vehicle gameplay visual effects (burnout, rooster tails, backfire)
-            if (chassisEntity.HasComponent<VehicleVFXComponent>()) {
-                auto& vvfx = chassisEntity.GetComponent<VehicleVFXComponent>();
-                if (vvfx.Enabled && vvfx.RuntimeVFX) {
-                    vvfx.RuntimeVFX->Update(ts, telemetry, vc.Throttle, vc.Brake, vc.Handbrake, chassisTC.Translation, telemetry.ForwardVector, chassisTC.Rotation);
-                }
             }
         }
 
@@ -1213,20 +911,6 @@ namespace Axle {
     }
 
     void Scene::OnRuntimeStop(PhysicsScene* physicsScene) {
-        // Reset and clear runtime vehicles cleanly
-        for (auto& rv : m_RuntimeVehicles) {
-            if (rv.ChassisEntityID != entt::null && m_Registry.valid(rv.ChassisEntityID)) {
-                Entity chassisEntity{ rv.ChassisEntityID, this };
-                if (chassisEntity.HasComponent<VehicleComponent>()) {
-                    auto& vc = chassisEntity.GetComponent<VehicleComponent>();
-                    vc.VehicleInstance = nullptr;
-                    vc.Throttle = vc.Steering = vc.Brake = 0.0f;
-                    vc.Handbrake = false;
-                    vc.CurrentSpeedKmh = vc.CurrentSpeedMps = vc.CurrentRPM = 0.0f;
-                }
-            }
-        }
-        m_RuntimeVehicles.clear();
         m_RuntimePhysicsScene = nullptr;
 
         // Stop all Character Controller instances
@@ -1244,19 +928,8 @@ namespace Axle {
             asc.Source = nullptr;
         }
 
-        // Stop all vehicle audio synthesizers on simulation exit
-        auto vehicleAudioView = m_Registry.view<VehicleAudioComponent>();
-        for (auto entityID : vehicleAudioView) {
-            auto& vac = vehicleAudioView.get<VehicleAudioComponent>(entityID);
-            vac.StopRuntime();
-        }
 
-        // Stop all Vehicle & Character VFX instances
-        auto vvfxStopView = m_Registry.view<VehicleVFXComponent>();
-        for (auto entityID : vvfxStopView) {
-            auto& vvfx = vvfxStopView.get<VehicleVFXComponent>(entityID);
-            vvfx.StopRuntime();
-        }
+        // Stop all Character VFX instances
 
         auto cvfxStopView = m_Registry.view<CharacterVFXComponent>();
         for (auto entityID : cvfxStopView) {
@@ -1418,14 +1091,9 @@ namespace Axle {
                 dstNsc.DestroyScript = srcNsc.DestroyScript;
             }
 
-            // VehicleComponent
-            if (srcEntity.HasComponent<VehicleComponent>()) {
-                dstEntity.AddComponent<VehicleComponent>(srcEntity.GetComponent<VehicleComponent>());
-            }
-
-            // WheelComponent
-            if (srcEntity.HasComponent<WheelComponent>()) {
-                dstEntity.AddComponent<WheelComponent>(srcEntity.GetComponent<WheelComponent>());
+            // LegacyComponentsHolder
+            if (srcEntity.HasComponent<LegacyComponentsHolder>()) {
+                dstEntity.AddComponent<LegacyComponentsHolder>(srcEntity.GetComponent<LegacyComponentsHolder>());
             }
 
             // AudioListenerComponent
@@ -1453,31 +1121,6 @@ namespace Axle {
                 dstAsc.DopplerFactor = srcAsc.DopplerFactor;
             }
 
-            // VehicleAudioComponent
-            if (srcEntity.HasComponent<VehicleAudioComponent>()) {
-                const auto& srcVac = srcEntity.GetComponent<VehicleAudioComponent>();
-                auto& dstVac = dstEntity.AddComponent<VehicleAudioComponent>();
-                dstVac.Enabled = srcVac.Enabled;
-                dstVac.EnginePowerClipPath = srcVac.EnginePowerClipPath;
-                dstVac.EngineCoastClipPath = srcVac.EngineCoastClipPath;
-                dstVac.MinEnginePitch = srcVac.MinEnginePitch;
-                dstVac.MaxEnginePitch = srcVac.MaxEnginePitch;
-                dstVac.EngineMasterVolume = srcVac.EngineMasterVolume;
-                dstVac.ThrottleSmoothing = srcVac.ThrottleSmoothing;
-                dstVac.TireSquealClipPath = srcVac.TireSquealClipPath;
-                dstVac.SlipThreshold = srcVac.SlipThreshold;
-                dstVac.TireSquealMasterVolume = srcVac.TireSquealMasterVolume;
-                dstVac.TireSquealFadeSpeed = srcVac.TireSquealFadeSpeed;
-                dstVac.SuspensionThudClipPath = srcVac.SuspensionThudClipPath;
-                dstVac.SuspensionThudThreshold = srcVac.SuspensionThudThreshold;
-                dstVac.SuspensionMasterVolume = srcVac.SuspensionMasterVolume;
-                dstVac.CollisionImpactClipPath = srcVac.CollisionImpactClipPath;
-                dstVac.CollisionDecelThreshold = srcVac.CollisionDecelThreshold;
-                dstVac.CollisionMasterVolume = srcVac.CollisionMasterVolume;
-                dstVac.Spatialized = srcVac.Spatialized;
-                dstVac.MinDistance = srcVac.MinDistance;
-                dstVac.MaxDistance = srcVac.MaxDistance;
-            }
 
             // SkeletalMeshComponent
             if (srcEntity.HasComponent<SkeletalMeshComponent>()) {
@@ -1505,12 +1148,6 @@ namespace Axle {
                 dstEntity.AddComponent<ParticleEmitterComponent>(pecCopy);
             }
 
-            // VehicleVFXComponent
-            if (srcEntity.HasComponent<VehicleVFXComponent>()) {
-                auto vvfxCopy = srcEntity.GetComponent<VehicleVFXComponent>();
-                vvfxCopy.RuntimeVFX.reset();
-                dstEntity.AddComponent<VehicleVFXComponent>(vvfxCopy);
-            }
 
             // CharacterVFXComponent
             if (srcEntity.HasComponent<CharacterVFXComponent>()) {
@@ -1584,16 +1221,6 @@ namespace Axle {
             if (hasParticles) break;
         }
         if (!hasParticles) {
-            auto vvfxView = m_Registry.view<VehicleVFXComponent>();
-            for (auto entityID : vvfxView) {
-                auto& vvfx = vvfxView.get<VehicleVFXComponent>(entityID);
-                if (vvfx.Enabled && vvfx.RuntimeVFX && vvfx.RuntimeVFX->GetTotalActiveParticles() > 0) {
-                    hasParticles = true;
-                    break;
-                }
-            }
-        }
-        if (!hasParticles) {
             auto cvfxView = m_Registry.view<CharacterVFXComponent>();
             for (auto entityID : cvfxView) {
                 auto& cvfx = cvfxView.get<CharacterVFXComponent>(entityID);
@@ -1621,33 +1248,7 @@ namespace Axle {
             }
         }
 
-        // 2. Render Vehicle VFX particle systems
-        auto vvfxView = m_Registry.view<VehicleVFXComponent>();
-        for (auto entityID : vvfxView) {
-            auto& vvfx = vvfxView.get<VehicleVFXComponent>(entityID);
-            if (!vvfx.Enabled || !vvfx.RuntimeVFX) continue;
-
-            for (uint32_t i = 0; i < 4; ++i) {
-                auto smoke = vvfx.RuntimeVFX->GetWheelSmokeSystem(i);
-                if (smoke && smoke->GetActiveParticleCount() > 0) {
-                    particleRenderer.Render(*smoke, nullptr, nullptr, 0.5f);
-                }
-                auto rooster = vvfx.RuntimeVFX->GetWheelRoosterSystem(i);
-                if (rooster && rooster->GetActiveParticleCount() > 0) {
-                    particleRenderer.Render(*rooster, nullptr, nullptr, 0.5f);
-                }
-            }
-            auto flame = vvfx.RuntimeVFX->GetExhaustFlameSystem();
-            if (flame && flame->GetActiveParticleCount() > 0) {
-                particleRenderer.Render(*flame, nullptr, nullptr, 0.5f);
-            }
-            auto sparks = vvfx.RuntimeVFX->GetExhaustSparkSystem();
-            if (sparks && sparks->GetActiveParticleCount() > 0) {
-                particleRenderer.Render(*sparks, nullptr, nullptr, 0.5f);
-            }
-        }
-
-        // 3. Render Character VFX particle systems
+        // 2. Render Character VFX particle systems
         auto cvfxView = m_Registry.view<CharacterVFXComponent>();
         for (auto entityID : cvfxView) {
             auto& cvfx = cvfxView.get<CharacterVFXComponent>(entityID);
@@ -1681,16 +1282,6 @@ namespace Axle {
                 }
             }
             if (hasParticles) break;
-        }
-        if (!hasParticles) {
-            auto vvfxView = m_Registry.view<VehicleVFXComponent>();
-            for (auto entityID : vvfxView) {
-                auto& vvfx = vvfxView.get<VehicleVFXComponent>(entityID);
-                if (vvfx.Enabled && vvfx.RuntimeVFX && vvfx.RuntimeVFX->GetTotalActiveParticles() > 0) {
-                    hasParticles = true;
-                    break;
-                }
-            }
         }
         if (!hasParticles) {
             auto cvfxView = m_Registry.view<CharacterVFXComponent>();
@@ -1732,33 +1323,7 @@ namespace Axle {
             }
         }
 
-        // 2. Render Vehicle VFX particle systems (Wheel smoke, drift dust, exhaust flames & sparks)
-        auto vvfxView = m_Registry.view<VehicleVFXComponent>();
-        for (auto entityID : vvfxView) {
-            auto& vvfx = vvfxView.get<VehicleVFXComponent>(entityID);
-            if (!vvfx.Enabled || !vvfx.RuntimeVFX) continue;
-
-            for (uint32_t i = 0; i < 4; ++i) {
-                auto smoke = vvfx.RuntimeVFX->GetWheelSmokeSystem(i);
-                if (smoke && smoke->GetActiveParticleCount() > 0) {
-                    particleRenderer.Render(cmd, *smoke, nullptr, nullptr, 0.5f);
-                }
-                auto rooster = vvfx.RuntimeVFX->GetWheelRoosterSystem(i);
-                if (rooster && rooster->GetActiveParticleCount() > 0) {
-                    particleRenderer.Render(cmd, *rooster, nullptr, nullptr, 0.5f);
-                }
-            }
-            auto flame = vvfx.RuntimeVFX->GetExhaustFlameSystem();
-            if (flame && flame->GetActiveParticleCount() > 0) {
-                particleRenderer.Render(cmd, *flame, nullptr, nullptr, 0.5f);
-            }
-            auto sparks = vvfx.RuntimeVFX->GetExhaustSparkSystem();
-            if (sparks && sparks->GetActiveParticleCount() > 0) {
-                particleRenderer.Render(cmd, *sparks, nullptr, nullptr, 0.5f);
-            }
-        }
-
-        // 3. Render Character VFX particle systems (Footstep dust, landing shockwaves)
+        // 2. Render Character VFX particle systems (Footstep dust, landing shockwaves)
         auto cvfxView = m_Registry.view<CharacterVFXComponent>();
         for (auto entityID : cvfxView) {
             auto& cvfx = cvfxView.get<CharacterVFXComponent>(entityID);

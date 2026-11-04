@@ -36,6 +36,7 @@ add_custom_target(AxleTestResources
 
 # Demo scripts belong to fixture tests, not the production Editor/Runtime module.
 file(GLOB AXLE_FIXTURE_SCRIPT_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/Assets/scripts/*.hpp")
+list(FILTER AXLE_FIXTURE_SCRIPT_HEADERS EXCLUDE REGEX "CarController|RacingHUD|VehicleChaseCamera")
 set(AXLE_FIXTURE_INCLUDES "// Generated test-fixture script includes\n")
 foreach(script IN LISTS AXLE_FIXTURE_SCRIPT_HEADERS)
     string(APPEND AXLE_FIXTURE_INCLUDES "#include \"${script}\"\n")
@@ -68,7 +69,6 @@ target_link_libraries(AxleTests PRIVATE
     Axle::UI2D
     Axle::Physics
     Axle::Scene
-    Axle::Vehicle
     Axle::Project
     Axle::Spline
     Axle::Terrain

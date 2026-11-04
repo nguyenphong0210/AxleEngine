@@ -431,11 +431,6 @@ bool RunTest_Step11_Phase16_CategorizedComponentPopup() {
             ent.HasComponent<Axle::CollisionShape3D>(), true,
             [ent]() mutable { ent.AddComponent<Axle::CollisionShape3D>(Axle::CollisionShapeType::Box, glm::vec3(0.5f)); }
         });
-        items.push_back({
-            "Physics", "VehicleComponent", "Vehicle physics simulation controller",
-            ent.HasComponent<Axle::VehicleComponent>(), true,
-            [ent]() mutable { ent.AddComponent<Axle::VehicleComponent>(); }
-        });
 
         // Scripts
         items.push_back({

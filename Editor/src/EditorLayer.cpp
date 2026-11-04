@@ -16,7 +16,6 @@
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/Log.hpp>
-#include <Axle/Vehicle.hpp>
 #include <Axle/AudioEngine.hpp>
 #include <AxleSpline/SplineComponent.hpp>
 #include <AxleSpline/SplineEditor.hpp>
@@ -1276,19 +1275,6 @@ void EditorLayer::ResetSimulation() {
         }
     }
 
-    // Reset any active runtime vehicles in the scene
-    if (m_Scene) {
-        for (const auto& rv : m_Scene->GetRuntimeVehicles()) {
-            if (rv.VehicleInstance && m_Scene->GetRegistry().valid(rv.ChassisEntityID)) {
-                Axle::Entity chassis{ rv.ChassisEntityID, m_Scene.get() };
-                if (chassis.HasComponent<Axle::TransformComponent>()) {
-                    auto& tc = chassis.GetComponent<Axle::TransformComponent>();
-                    rv.VehicleInstance->Reset(tc.Translation, tc.Rotation);
-                    rv.VehicleInstance->SetDriverInput(0.0f, 0.0f, 0.0f, 0.0f);
-                }
-            }
-        }
-    }
 }
 
 void EditorLayer::OnUpdate(Axle::Timestep ts) {
@@ -1517,7 +1503,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_F11KeyWasPressed = false;
     }
 
-    // C++ Native Scripting Runtime Execution & Vehicle Simulation (Phase 20.3)
+    // C++ Native Scripting Runtime Execution
     if (m_SceneState == SceneState::Play) {
         m_Scene->OnUpdateRuntime(ts, m_PhysicsScene.get());
     } else if (m_Scene) {
@@ -1563,7 +1549,6 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_StepSingleFrame = false;
     }
 
-    // Note: Vehicle chassis and wheel transforms are automatically synchronized inside m_Scene->OnUpdateRuntime() (Phase 20.3 Stage 2)
 
     // ----------------------------------------------------
     // Active Camera Selection: Game View (Primary Camera) vs Editor Camera (Phase 20.4)
@@ -2712,12 +2697,7 @@ void EditorLayer::OnImGuiRender() {
                 }
 
                 // Real-time synchronization with Jolt Physics bodies
-                if (selectedEntity.HasComponent<Axle::VehicleComponent>()) {
-                    auto* rv = m_Scene ? m_Scene->GetRuntimeVehicle(selectedEntity) : nullptr;
-                    if (rv) {
-                        rv->Reset(tc.Translation, tc.Rotation);
-                    }
-                } else if (selectedEntity.HasComponent<Axle::RigidBody3D>() && m_PhysicsScene) {
+                if (selectedEntity.HasComponent<Axle::RigidBody3D>() && m_PhysicsScene) {
                     auto& rb = selectedEntity.GetComponent<Axle::RigidBody3D>();
                     if (!rb.RuntimeBodyID.IsInvalid() && m_PhysicsScene->IsBodyValid(rb.RuntimeBodyID)) {
                         bool isDynamic = (m_PhysicsScene->GetBodyInterface().GetMotionType(rb.RuntimeBodyID) == JPH::EMotionType::Dynamic);
@@ -2832,24 +2812,6 @@ void EditorLayer::OnImGuiRender() {
                             ? "[3D Audio]" 
                             : ("[Audio: " + std::filesystem::path(asc.AssetPath).filename().string() + "]");
                         drawList->AddText(ImVec2(centerScreen.x + 10.0f, centerScreen.y - 7.0f), IM_COL32(255, 255, 255, 230), label.c_str());
-                    }
-                }
-            } else if (selectedEntity.HasComponent<Axle::VehicleAudioComponent>()) {
-                const auto& vac = selectedEntity.GetComponent<Axle::VehicleAudioComponent>();
-                if (vac.Spatialized) {
-                    glm::mat4 worldMat = m_Scene->GetWorldTransform(selectedEntity);
-                    glm::vec3 center = glm::vec3(worldMat[3]);
-
-                    // Min Distance sphere (Neon Green)
-                    Draw3DAudioRadius(center, vac.MinDistance, IM_COL32(75, 235, 120, 210), 1.6f);
-                    // Max Distance sphere (Orange)
-                    Draw3DAudioRadius(center, vac.MaxDistance, IM_COL32(255, 140, 45, 160), 1.2f);
-
-                    ImVec2 centerScreen;
-                    if (ProjectWorldToScreen(center, centerScreen)) {
-                        drawList->AddCircleFilled(centerScreen, 5.0f, IM_COL32(75, 235, 120, 255));
-                        drawList->AddCircle(centerScreen, 7.0f, IM_COL32(255, 255, 255, 200), 12, 1.2f);
-                        drawList->AddText(ImVec2(centerScreen.x + 10.0f, centerScreen.y - 7.0f), IM_COL32(255, 255, 255, 230), "[Vehicle Audio Synthesizer]");
                     }
                 }
             }
@@ -3065,33 +3027,10 @@ void EditorLayer::OnImGuiRender() {
         bool renderedCanvasUI = false;
         auto& uiCtx = m_Scene->GetUIDataContext();
 
-        // In Edit Mode, inject live mock vehicle telemetry so gauges & readouts are active and visible
+        // In Edit Mode, inject live mock runtime metrics
         if (m_SceneState == SceneState::Edit) {
             uiCtx.Set("Engine.FPS", 60);
 
-            // Relative / scoped keys
-            uiCtx.Set("SpeedKmh", 145);
-            uiCtx.Set("SpeedUnit", std::string("KM/H"));
-            uiCtx.Set("RPMNormalized", 0.68f);
-            uiCtx.Set("IsRedline", false);
-            uiCtx.Set("GearString", std::string("4"));
-            uiCtx.Set("Throttle", 0.85f);
-            uiCtx.Set("Brake", 0.0f);
-            uiCtx.Set("LateralG", std::string("+0.42"));
-            uiCtx.Set("LongitudinalG", std::string("+0.15"));
-            uiCtx.Set("CameraMode", std::string("CHASE"));
-
-            // Legacy prefixed keys
-            uiCtx.Set("Vehicle.SpeedKmh", 145);
-            uiCtx.Set("Vehicle.SpeedUnit", std::string("KM/H"));
-            uiCtx.Set("Vehicle.RPMNormalized", 0.68f);
-            uiCtx.Set("Vehicle.IsRedline", false);
-            uiCtx.Set("Vehicle.GearString", std::string("4"));
-            uiCtx.Set("Vehicle.Throttle", 0.85f);
-            uiCtx.Set("Vehicle.Brake", 0.0f);
-            uiCtx.Set("Vehicle.LateralG", std::string("+0.42"));
-            uiCtx.Set("Vehicle.LongitudinalG", std::string("+0.15"));
-            uiCtx.Set("Vehicle.CameraMode", std::string("CHASE"));
         }
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -3149,20 +3088,6 @@ void EditorLayer::OnImGuiRender() {
             }
         }
 
-        // Fallback minimal telemetry badge only if no declarative UICanvasComponent is active
-        if (!renderedCanvasUI) {
-            if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
-                const auto vTele = pv->GetTelemetry();
-                char speedStr[64];
-                snprintf(speedStr, sizeof(speedStr), "%.1f KM/H | GEAR %d", vTele.SpeedKmh, vTele.CurrentGear);
-                float hudW = 160.0f;
-                ImVec2 hudPos = ImVec2(viewportMin.x + viewportBounds.x - hudW - 16.0f, viewportMin.y + 14.0f);
-                drawList->AddRectFilled(hudPos, ImVec2(hudPos.x + hudW, hudPos.y + 26.0f), IM_COL32(20, 20, 20, 190), 4.0f);
-                drawList->AddRect(hudPos, ImVec2(hudPos.x + hudW, hudPos.y + 26.0f), IM_COL32(60, 60, 60, 220), 4.0f);
-                ImVec2 textSize = ImGui::CalcTextSize(speedStr);
-                drawList->AddText(ImVec2(hudPos.x + (hudW - textSize.x) * 0.5f, hudPos.y + 5.0f), IM_COL32(0, 225, 175, 255), speedStr);
-            }
-        }
     }
 
     // Dispatch General-Purpose ScriptableEntity::OnImGuiRender() for Active Simulation Scripts (Unity OnGUI / UE HUD style)
@@ -3237,24 +3162,9 @@ void EditorLayer::OnImGuiRender() {
             .DrawVelocity = m_PhysicsDrawSettings.DrawVelocity,
             .DrawCenterOfMass = m_PhysicsDrawSettings.DrawCenterOfMass,
             .DebugLineCount = m_PhysicsDebugRenderer ? m_PhysicsDebugRenderer->GetLineCount() : 0,
-            .HasVehicle = false,
             .IsChaseCamera = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay)
         };
 
-        if (m_Scene) {
-            if (auto* pv = m_Scene->GetPrimaryRuntimeVehicle()) {
-                telemetry.HasVehicle = true;
-                const auto vTele = pv->GetTelemetry();
-                telemetry.VehicleSpeedKmh = vTele.SpeedKmh;
-                telemetry.VehicleRPM = vTele.EngineRPM;
-                Axle::u32 wheelCount = pv->GetWheelCount();
-                Axle::u32 maxWheels = wheelCount < 4u ? wheelCount : 4u;
-                for (Axle::u32 i = 0; i < maxWheels; ++i) {
-                    telemetry.WheelContacts[i] = vTele.Wheels[i].HasContact;
-                    telemetry.WheelSuspension[i] = vTele.Wheels[i].SuspensionLength;
-                }
-            }
-        }
 
         m_DebugPanel.OnImGuiRender(telemetry, &m_ShowTelemetry);
 

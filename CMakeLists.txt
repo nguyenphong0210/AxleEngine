@@ -63,7 +63,6 @@ add_subdirectory(Engine/VFX)
 add_subdirectory(Engine/Project)
 add_subdirectory(Engine/UI)
 add_subdirectory(Engine/Physics)
-add_subdirectory(Engine/Vehicle)
 add_subdirectory(Engine/Scene)
 
 # Load Engine Plugins

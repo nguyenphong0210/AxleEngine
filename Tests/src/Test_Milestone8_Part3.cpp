@@ -1,4 +1,4 @@
-﻿#include "TestCommon.hpp"
+#include "TestCommon.hpp"
 
 // =============================================================================
 // TEST STEP 67: Phase 33 Step 1 - Core Geometry, Mesh VRAM Sub-Allocation
@@ -259,10 +259,16 @@ bool RunTest_Step68_Phase33_Step1_TransformStreamingAndRHISceneRenderer() {
     assert(plane != nullptr && plane->IsValid());
 
     auto chassis = meshRegistry.GetMesh("SportsCar_Chassis");
+    if (!chassis) chassis = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Chassis.axlemesh");
+    if (!chassis) chassis = meshRegistry.GetOrCreateMesh("SportsCar_Chassis.axlemesh");
+    if (chassis) meshRegistry.RegisterMesh("SportsCar_Chassis", chassis);
     assert(chassis != nullptr && chassis->IsValid());
     assert(chassis->GetVertexCount() > 0);
 
     auto wheel = meshRegistry.GetMesh("SportsCar_Wheel");
+    if (!wheel) wheel = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Wheel.axlemesh");
+    if (!wheel) wheel = meshRegistry.GetOrCreateMesh("SportsCar_Wheel.axlemesh");
+    if (wheel) meshRegistry.RegisterMesh("SportsCar_Wheel", wheel);
     assert(wheel != nullptr && wheel->IsValid());
     assert(wheel->GetVertexCount() > 0);
 
@@ -1376,19 +1382,6 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
             return false;
         }
 
-        // Test Automotive Presets
-        auto brakeLight = RHIPointLight::VehicleBrakeLight(glm::vec3(0.0f, 0.8f, -2.2f));
-        if (brakeLight.Color.r < 0.9f || brakeLight.Color.g > 0.1f || brakeLight.Intensity != PhysicalIlluminance::VehicleBrakeLight) {
-            std::cerr << "FAIL: VehicleBrakeLight preset must be deep red with 400 Lux!" << std::endl;
-            return false;
-        }
-
-        auto reverseLight = RHIPointLight::VehicleReverseLight(glm::vec3(0.0f, 0.8f, -2.2f));
-        if (reverseLight.Color.b < 0.9f || reverseLight.Radius != 8.0f) {
-            std::cerr << "FAIL: VehicleReverseLight preset must be cool white with 8m radius!" << std::endl;
-            return false;
-        }
-
         auto streetLamp = RHIPointLight::EnvironmentLamp(glm::vec3(10.0f, 6.0f, 0.0f));
         if (streetLamp.Radius != 20.0f || streetLamp.Color.b > 0.5f) {
             std::cerr << "FAIL: EnvironmentLamp preset must be warm sodium tint!" << std::endl;
@@ -1398,7 +1391,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
         std::cout << "  -> 16 Point Lights capacity verified (slots 0..15 populated)." << std::endl;
         std::cout << "  -> Evaluated smooth windowed inverse-square attenuation (1m: " << attenAt1m 
                   << ", 10m: " << attenAt10m << ", 19m: " << attenAt19m << ", 20m: " << attenAt20m << ")." << std::endl;
-        std::cout << "  -> Verified automotive presets: VehicleBrakeLight, VehicleReverseLight, EnvironmentLamp." << std::endl;
+        std::cout << "  -> Verified lighting preset: EnvironmentLamp." << std::endl;
         std::cout << "  -> PASS: 16 Point Lights & Inverse-Square Falloff validated.\n" << std::endl;
     }
 
@@ -1463,29 +1456,10 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
             return false;
         }
 
-        // Test Automotive Headlight Presets
-        auto highBeam = RHISpotLight::VehicleHeadlightHighBeam(glm::vec3(-0.8f, 0.7f, 2.0f));
-        if (highBeam.Range != 85.0f || highBeam.InnerConeAngle != 14.0f || highBeam.OuterConeAngle != 26.0f) {
-            std::cerr << "FAIL: VehicleHeadlightHighBeam preset parameters invalid!" << std::endl;
-            return false;
-        }
-
-        auto lowBeam = RHISpotLight::VehicleHeadlightLowBeam(glm::vec3(-0.8f, 0.7f, 2.0f));
-        if (lowBeam.Range != 40.0f || lowBeam.InnerConeAngle != 20.0f || lowBeam.OuterConeAngle != 42.0f) {
-            std::cerr << "FAIL: VehicleHeadlightLowBeam preset parameters invalid!" << std::endl;
-            return false;
-        }
-
-        auto fogLight = RHISpotLight::VehicleFogLight(glm::vec3(-0.8f, 0.4f, 2.0f));
-        if (fogLight.Color.b > 0.3f || fogLight.InnerConeAngle != 28.0f || fogLight.OuterConeAngle != 55.0f) {
-            std::cerr << "FAIL: VehicleFogLight preset must have amber tint and wide cutoff!" << std::endl;
-            return false;
-        }
-
         std::cout << "  -> 16 Spot Lights capacity verified (slots 0..15 populated)." << std::endl;
         std::cout << "  -> Spot cone attenuation verified (0 deg: " << attenOnAxis << ", 10 deg: " << attenInsideInner 
                   << ", 22.5 deg: " << attenMidway << ", 30 deg: " << attenAtOuter << ", 35 deg: " << attenOutside << ")." << std::endl;
-        std::cout << "  -> Verified automotive presets: VehicleHeadlightHighBeam, VehicleHeadlightLowBeam, VehicleFogLight." << std::endl;
+        std::cout << "  -> Verified 16 Spot Light capacity." << std::endl;
         std::cout << "  -> PASS: 16 Spot Lights & Cone Cutoff Angles validated.\n" << std::endl;
     }
 
@@ -1538,7 +1512,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
 
         // Test AddPointLight up to 16
         for (uint32_t i = 0; i < 16; ++i) {
-            RHIPointLight pl = RHIPointLight::VehicleBrakeLight(glm::vec3(0.0f, 1.0f, static_cast<float>(i)));
+            RHIPointLight pl{}; pl.Position = glm::vec3(0.0f, 1.0f, static_cast<float>(i)); pl.Color = glm::vec3(1.0f, 0.2f, 0.1f); pl.Intensity = 400.0f; pl.Radius = 10.0f;
             bool ok = lightBuffer.AddPointLight(pl);
             if (!ok) {
                 std::cerr << "FAIL: Adding point light " << i << " failed!" << std::endl;
@@ -1558,7 +1532,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
 
         // Test AddSpotLight up to 16
         for (uint32_t i = 0; i < 16; ++i) {
-            RHISpotLight sl = RHISpotLight::VehicleHeadlightHighBeam(glm::vec3(0.0f, 1.0f, static_cast<float>(i)));
+            RHISpotLight sl{}; sl.Position = glm::vec3(0.0f, 1.0f, static_cast<float>(i)); sl.Direction = glm::vec3(0.0f, 0.0f, -1.0f); sl.Intensity = 5000.0f; sl.Range = 80.0f;
             bool ok = lightBuffer.AddSpotLight(sl);
             if (!ok) {
                 std::cerr << "FAIL: Adding spot light " << i << " failed!" << std::endl;
@@ -1570,7 +1544,8 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
             return false;
         }
         // 17th spot light should fail gracefully
-        RHISpotLight extraSpot = RHISpotLight::VehicleFogLight(glm::vec3(0.0f));
+        RHISpotLight extraSpot{};
+        extraSpot.Position = glm::vec3(0.0f);
         if (lightBuffer.AddSpotLight(extraSpot)) {
             std::cerr << "FAIL: Adding 17th spot light should be rejected by capacity limit!" << std::endl;
             return false;
@@ -1649,7 +1624,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
             auto brakeL = scene->CreateEntity("Car_BrakeLight_L");
             auto& plc = brakeL.AddComponent<Axle::PointLightComponent>();
             plc.Color = glm::vec3(1.0f, 0.05f, 0.02f);
-            plc.Intensity = PhysicalIlluminance::VehicleBrakeLight;
+            plc.Intensity = 400.0f;
             plc.Radius = 10.0f;
             auto& tc = brakeL.GetComponent<Axle::TransformComponent>();
             tc.Translation = glm::vec3(-0.7f, 0.8f, -2.2f);
@@ -1658,7 +1633,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
             auto brakeR = scene->CreateEntity("Car_BrakeLight_R");
             auto& plc = brakeR.AddComponent<Axle::PointLightComponent>();
             plc.Color = glm::vec3(1.0f, 0.05f, 0.02f);
-            plc.Intensity = PhysicalIlluminance::VehicleBrakeLight;
+            plc.Intensity = 400.0f;
             plc.Radius = 10.0f;
             auto& tc = brakeR.GetComponent<Axle::TransformComponent>();
             tc.Translation = glm::vec3(0.7f, 0.8f, -2.2f);
@@ -1687,7 +1662,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
             auto headL = scene->CreateEntity("Car_Headlight_L");
             auto& slc = headL.AddComponent<Axle::SpotLightComponent>();
             slc.Color = glm::vec3(0.92f, 0.96f, 1.0f);
-            slc.Intensity = PhysicalIlluminance::VehicleHeadlight * 1.5f;
+            slc.Intensity = 5250.0f;
             slc.Range = 85.0f;
             slc.InnerConeAngle = 14.0f;
             slc.OuterConeAngle = 26.0f;
@@ -1698,7 +1673,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
             auto headR = scene->CreateEntity("Car_Headlight_R");
             auto& slc = headR.AddComponent<Axle::SpotLightComponent>();
             slc.Color = glm::vec3(0.92f, 0.96f, 1.0f);
-            slc.Intensity = PhysicalIlluminance::VehicleHeadlight * 1.5f;
+            slc.Intensity = 5250.0f;
             slc.Range = 85.0f;
             slc.InnerConeAngle = 14.0f;
             slc.OuterConeAngle = 26.0f;
@@ -3277,9 +3252,15 @@ bool RunTest_Step79_GPUParticleVFXPass() {
     // [79.1] HLSL 2021 Shader Compilation (Particle.hlsl -> DXIL)
     std::cout << "\n[79.1] Testing Particle.hlsl Dual-Stage (VS + PS) Shader Compilation..." << std::endl;
     {
-        std::filesystem::path shaderPath = "Engine/Resources/Shaders/Particle.hlsl";
+        std::filesystem::path shaderPath = "Resources/Shaders/Particle.hlsl";
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "Engine/Resources/Shaders/Particle.hlsl";
+        }
         if (!std::filesystem::exists(shaderPath)) {
             shaderPath = "../Engine/Resources/Shaders/Particle.hlsl";
+        }
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "../../../../Engine/Resources/Shaders/Particle.hlsl";
         }
         assert(std::filesystem::exists(shaderPath));
 
@@ -3353,7 +3334,8 @@ bool RunTest_Step79_GPUParticleVFXPass() {
         assert(offsetof(Axle::RHIParticleConstants, Flags2) == 336);
         assert(offsetof(Axle::RHIParticleConstants, PointLightPositions) == 352);
         assert(offsetof(Axle::RHIParticleConstants, PointLightColors) == 416);
-        assert(offsetof(Axle::RHIParticleConstants, Reserved) == 480);
+        assert(offsetof(Axle::RHIParticleConstants, CutoutAndMaterial) == 480);
+        assert(offsetof(Axle::RHIParticleConstants, Reserved) == 544);
 
         // Verify ParticleInstanceVertex structure
         static_assert(sizeof(Axle::ParticleInstanceVertex) == 84, "ParticleInstanceVertex must be exactly 84 bytes!");
@@ -3551,21 +3533,11 @@ bool RunTest_Step79_GPUParticleVFXPass() {
         pec.System->EmitBurst(60, glm::vec3(0.0f, 0.5f, 0.0f));
         assert(pec.System->GetActiveParticleCount() >= 60);
 
-        // 2. VehicleVFXComponent (Burnout smoke & exhaust backfire)
-        auto carEnt = scene->CreateEntity("DriftCar_VFX");
-        auto& vvfxComp = carEnt.AddComponent<Axle::VehicleVFXComponent>();
-        vvfxComp.InitRuntime();
-        assert(vvfxComp.RuntimeVFX != nullptr);
-
-        Axle::VehicleTelemetryData telemetry;
-        telemetry.ForwardVector = glm::vec3(0.0f, 0.0f, 1.0f);
-        for (int i = 0; i < 4; ++i) {
-            telemetry.Wheels[i].HasContact = true;
-            telemetry.Wheels[i].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(i * 1.5f, 0.35f, 0.0f));
-            telemetry.Wheels[i].LongitudinalSlip = 0.65f; // triggers tire smoke
-        }
-        vvfxComp.RuntimeVFX->Update(Axle::Timestep(0.1f), telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        assert(vvfxComp.RuntimeVFX->GetWheelSmokeSystem(0)->GetActiveParticleCount() > 0);
+        // 2. Additional ParticleEmitterComponent (Burnout smoke burst)
+        auto smokeEnt = scene->CreateEntity("Smoke_VFX");
+        auto& pecSmoke = smokeEnt.AddComponent<Axle::ParticleEmitterComponent>(Axle::ParticleEmitterConfig::CreateTireBurnout());
+        pecSmoke.System->EmitBurst(40, glm::vec3(1.0f, 0.35f, 0.0f));
+        assert(pecSmoke.System->GetActiveParticleCount() >= 40);
 
         // 3. CharacterVFXComponent (Footstep dust & landing shockwave)
         auto playerEnt = scene->CreateEntity("Player_VFX");
@@ -3623,7 +3595,7 @@ bool RunTest_Step79_GPUParticleVFXPass() {
         for (int frame = 0; frame < 5; ++frame) {
             pec.System->EmitBurst(10, glm::vec3(0.0f, 0.5f, 0.0f));
             pec.System->Update(0.016f);
-            vvfxComp.RuntimeVFX->Update(Axle::Timestep(0.016f), telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+            pecSmoke.System->Update(0.016f);
             sceneRenderer.RenderScene(scene, sceneCamera, &viewportColor, &viewportDepth, settingsParticles);
         }
         std::cout << "  -> Subtest D: 5 dynamic simulation frames stress tested with streaming uploads without leaks or stalls." << std::endl;
@@ -3657,12 +3629,18 @@ bool RunTest_Step80_RHIPhysicsDebugLinePipeline() {
     // [80.1] HLSL 2021 Shader Compilation (PhysicsWireframe.hlsl -> DXIL)
     std::cout << "\n[80.1] Testing PhysicsWireframe.hlsl Line-Topology Shader Compilation..." << std::endl;
     {
-        std::filesystem::path shaderPath = "Engine/Resources/Shaders/PhysicsWireframe.hlsl";
+        std::filesystem::path shaderPath = "Resources/Shaders/PhysicsWireframe.hlsl";
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "Engine/Resources/Shaders/PhysicsWireframe.hlsl";
+        }
         if (!std::filesystem::exists(shaderPath)) {
             shaderPath = "../Engine/Resources/Shaders/PhysicsWireframe.hlsl";
         }
         if (!std::filesystem::exists(shaderPath)) {
             shaderPath = "../../Engine/Resources/Shaders/PhysicsWireframe.hlsl";
+        }
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "../../../../Engine/Resources/Shaders/PhysicsWireframe.hlsl";
         }
         assert(std::filesystem::exists(shaderPath));
 
@@ -4602,6 +4580,9 @@ bool RunTest_Step84_TripleBackendSwitchingAndVisualParity() {
     std::cout << "\n[84.2] Testing ProjectConfig & ProjectSerializer RHIBackend Persistence..." << std::endl;
     {
         std::filesystem::path tempProjPath = "build/TempTestProject.axleproj";
+        if (tempProjPath.has_parent_path()) {
+            std::filesystem::create_directories(tempProjPath.parent_path());
+        }
 
         // Test 1: Serialize with Vulkan backend
         auto proj1 = Project::New();

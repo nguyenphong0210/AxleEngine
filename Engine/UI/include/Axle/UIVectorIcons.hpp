@@ -247,30 +247,6 @@ namespace Axle::UIIcons {
         dl->PathStroke(col, 0, 1.4f);
     }
 
-    inline void DrawVehicleIcon(ImDrawList* dl, ImVec2 pos, float size) {
-        ImU32 bodyCol = IM_COL32(235, 85, 85, 255);
-        // Chassis Lower
-        ImVec2 cMin(pos.x + size * 0.08f, pos.y + size * 0.50f);
-        ImVec2 cMax(pos.x + size * 0.92f, pos.y + size * 0.78f);
-        dl->AddRectFilled(cMin, cMax, bodyCol, 1.5f);
-        // Cabin / Roof
-        ImVec2 r0(pos.x + size * 0.28f, cMin.y);
-        ImVec2 r1(pos.x + size * 0.42f, pos.y + size * 0.25f);
-        ImVec2 r2(pos.x + size * 0.70f, pos.y + size * 0.25f);
-        ImVec2 r3(pos.x + size * 0.82f, cMin.y);
-        dl->AddQuadFilled(r0, r1, r2, r3, bodyCol);
-        // Wheels
-        ImU32 wheelCol = IM_COL32(40, 40, 45, 255);
-        ImU32 rimCol = IM_COL32(200, 210, 225, 255);
-        ImVec2 w1(pos.x + size * 0.28f, pos.y + size * 0.80f);
-        ImVec2 w2(pos.x + size * 0.72f, pos.y + size * 0.80f);
-        float wRadius = size * 0.16f;
-        dl->AddCircleFilled(w1, wRadius, wheelCol);
-        dl->AddCircleFilled(w2, wRadius, wheelCol);
-        dl->AddCircleFilled(w1, wRadius * 0.45f, rimCol);
-        dl->AddCircleFilled(w2, wRadius * 0.45f, rimCol);
-    }
-
     inline void DrawUIIcon(ImDrawList* dl, ImVec2 pos, float size) {
         ImU32 col = IM_COL32(75, 165, 245, 255);
         // Outer Rectangle
@@ -363,9 +339,7 @@ namespace Axle::UIIcons {
             return;
         }
 
-        if (entity.HasComponent<VehicleComponent>()) {
-            DrawVehicleIcon(dl, pos, size);
-        } else if (entity.HasComponent<CameraComponent>()) {
+        if (entity.HasComponent<CameraComponent>()) {
             DrawCameraIcon(dl, pos, size);
         } else if (entity.HasComponent<DirectionalLightComponent>() || entity.HasComponent<PointLightComponent>() || entity.HasComponent<SpotLightComponent>()) {
             DrawLightIcon(dl, pos, size);
@@ -400,8 +374,6 @@ namespace Axle::UIIcons {
             DrawMeshIcon(dl, pos, size);
         } else if (name.find("Audio") != std::string::npos) {
             DrawAudioIcon(dl, pos, size);
-        } else if (name.find("Vehicle") != std::string::npos) {
-            DrawVehicleIcon(dl, pos, size);
         } else if (name.find("UI") != std::string::npos || name.find("Canvas") != std::string::npos || name.find("RectTransform") != std::string::npos) {
             DrawUIIcon(dl, pos, size);
         } else if (name.find("Particle") != std::string::npos || name.find("VFX") != std::string::npos) {

@@ -249,6 +249,7 @@ bool RunTest_Step42_Phase31_Step1_CoreVFXArchitectureAndParticlePool() {
         cfg.Lifetime = Axle::FloatRange(2.0f, 2.0f);
         cfg.StartSize = Axle::FloatRange(1.0f, 1.0f);
         cfg.EndSize = Axle::FloatRange(5.0f, 5.0f);
+        cfg.SizeOverLifetime = Axle::FloatCurve(1.0f, 1.0f);
         cfg.ColorOverLifetime = Axle::ColorGradient(
             glm::vec4(1.0f, 0.8f, 0.2f, 1.0f),
             glm::vec4(0.0f, 0.0f, 0.0f, 0.0f)
@@ -986,128 +987,14 @@ bool RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters() {
         std::cout << "  -> PASS: ParticleEmitterComponent ECS lifecycle and simulation space verified." << std::endl;
     }
 
-    // [46.2] Vehicle Gameplay VFX: Tire Burnout Smoke & Lateral Skid Debris
-    std::cout << "\n[46.2] Testing Vehicle Gameplay VFX: Tire Burnout Smoke & Skid Debris..." << std::endl;
-    {
-        Axle::VehicleVFX vfx;
-        Axle::VehicleTelemetryData telemetry;
-        telemetry.SpeedMps = 10.0f;
-        telemetry.SpeedKmh = 36.0f;
-        telemetry.EngineRPM = 3000.0f;
-        telemetry.ForwardVector = glm::vec3(0.0f, 0.0f, 1.0f);
+    // [46.2] Vehicle Gameplay VFX (RETIRED)
+    std::cout << "\n[46.2] [RETIRED] Vehicle Gameplay VFX (Tire burnout & skid debris) retired under VEHICLE-RETIREMENT." << std::endl;
 
-        for (int i = 0; i < 4; ++i) {
-            telemetry.Wheels[i].HasContact = true;
-            telemetry.Wheels[i].LongitudinalSlip = 0.05f;
-            telemetry.Wheels[i].LateralSlip = 0.02f;
-            telemetry.Wheels[i].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(i * 1.5f, 0.35f, 0.0f));
-        }
+    // [46.3] Vehicle Gameplay VFX (RETIRED)
+    std::cout << "\n[46.3] [RETIRED] Vehicle Off-Road Surface Rooster Tails retired under VEHICLE-RETIREMENT." << std::endl;
 
-        // Test normal driving (below slip threshold): no burnout smoke
-        Axle::Timestep ts(0.05f);
-        vfx.Update(ts, telemetry, 0.5f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        assert(!vfx.IsWheelSkidding(0));
-        assert(!vfx.IsWheelSkidding(1));
-
-        // Test Burnout Trigger: Wheel 0 longitudinal slip = 0.70f (> 0.30 threshold)
-        telemetry.Wheels[0].LongitudinalSlip = 0.70f;
-        vfx.Update(ts, telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        assert(vfx.IsWheelSkidding(0));
-        assert(vfx.GetWheelSmokeSystem(0)->GetActiveParticleCount() > 0);
-
-        // Test Lateral Drift / Skid Trigger: Wheel 1 lateral slip = 0.50f (> 0.25 threshold)
-        telemetry.Wheels[1].LateralSlip = 0.50f;
-        vfx.Update(ts, telemetry, 0.8f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        assert(vfx.IsWheelSkidding(1));
-        assert(vfx.GetWheelSmokeSystem(1)->GetActiveParticleCount() > 0);
-
-        // Return slip below threshold: stops emitting
-        telemetry.Wheels[0].LongitudinalSlip = 0.05f;
-        telemetry.Wheels[1].LateralSlip = 0.02f;
-        vfx.Update(ts, telemetry, 0.2f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        assert(!vfx.IsWheelSkidding(0));
-        assert(!vfx.IsWheelSkidding(1));
-
-        std::cout << "  -> Wheel 0 burnout smoke active: " << vfx.GetWheelSmokeSystem(0)->GetActiveParticleCount() << " particles." << std::endl;
-        std::cout << "  -> Wheel 1 drift skid smoke active: " << vfx.GetWheelSmokeSystem(1)->GetActiveParticleCount() << " particles." << std::endl;
-        std::cout << "  -> PASS: Dynamic tire burnout and lateral skid smoke hooks verified." << std::endl;
-    }
-
-    // [46.3] Vehicle Gameplay VFX: Off-Road Surface Rooster Tails
-    std::cout << "\n[46.3] Testing Vehicle Gameplay VFX: Off-Road Dirt Rooster Tails..." << std::endl;
-    {
-        Axle::VehicleVFX vfx;
-        vfx.SetSurfaceType(Axle::SurfaceVFXType::Dirt);
-        assert(vfx.GetSurfaceType() == Axle::SurfaceVFXType::Dirt);
-
-        Axle::VehicleTelemetryData telemetry;
-        telemetry.ForwardVector = glm::vec3(0.0f, 0.0f, 1.0f);
-        for (int i = 0; i < 4; ++i) {
-            telemetry.Wheels[i].HasContact = true;
-            telemetry.Wheels[i].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(i * 1.5f, 0.35f, 0.0f));
-        }
-
-        Axle::Timestep ts(0.05f);
-
-        // Low speed (< 4.0 m/s threshold): no rooster tail
-        telemetry.SpeedMps = 2.0f;
-        vfx.Update(ts, telemetry, 0.3f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        assert(!vfx.IsRoosterTailing(0));
-
-        // High speed on Dirt (16.0 m/s): dynamic rooster tail kicks up
-        telemetry.SpeedMps = 16.0f;
-        vfx.Update(ts, telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        assert(vfx.IsRoosterTailing(0));
-        assert(vfx.GetWheelRoosterSystem(0)->GetActiveParticleCount() > 0);
-
-        // Switch to Asphalt: rooster tails disabled
-        vfx.SetSurfaceType(Axle::SurfaceVFXType::Asphalt);
-        vfx.Update(ts, telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        assert(!vfx.IsRoosterTailing(0));
-
-        // Test Gravel & Mud surfaces
-        vfx.SetSurfaceType(Axle::SurfaceVFXType::Gravel);
-        assert(vfx.GetSurfaceType() == Axle::SurfaceVFXType::Gravel);
-        vfx.SetSurfaceType(Axle::SurfaceVFXType::Mud);
-        assert(vfx.GetSurfaceType() == Axle::SurfaceVFXType::Mud);
-
-        std::cout << "  -> Dirt rooster tail active: " << vfx.GetWheelRoosterSystem(0)->GetActiveParticleCount() << " particles (Suppressed on Asphalt)." << std::endl;
-        std::cout << "  -> PASS: Surface-aware dynamic rooster tail system verified." << std::endl;
-    }
-
-    // [46.4] Vehicle Gameplay VFX: High-RPM Exhaust Backfire Flames & Popping Sparks
-    std::cout << "\n[46.4] Testing Vehicle Gameplay VFX: High-RPM Exhaust Backfire Flames & Sparks..." << std::endl;
-    {
-        Axle::VehicleVFX vfx;
-        Axle::VehicleTelemetryData telemetry;
-        telemetry.ForwardVector = glm::vec3(0.0f, 0.0f, 1.0f);
-        telemetry.SpeedMps = 25.0f;
-        Axle::Timestep ts(0.05f);
-
-        // Phase 1: High RPM acceleration (6500 RPM, full throttle) -> No backfire during acceleration
-        telemetry.EngineRPM = 6500.0f;
-        vfx.Update(ts, telemetry, 1.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-        assert(vfx.GetBackfireCount() == 0);
-        assert(!vfx.IsBackfireActive());
-
-        // Phase 2: Driver suddenly lifts off throttle (Throttle: 1.0 -> 0.0 while RPM remains 6400)
-        telemetry.EngineRPM = 6400.0f;
-        vfx.Update(ts, telemetry, 0.0f, 0.0f, false, glm::vec3(0.0f), telemetry.ForwardVector, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-
-        assert(vfx.GetBackfireCount() == 1);
-        assert(vfx.IsBackfireActive());
-        assert(vfx.GetExhaustFlameSystem()->GetActiveParticleCount() > 0);
-        assert(vfx.GetExhaustSparkSystem()->GetActiveParticleCount() > 0);
-
-        // Test manual backfire trigger
-        vfx.TriggerManualBackfire(15, 25);
-        assert(vfx.GetBackfireCount() == 2);
-
-        std::cout << "  -> Backfire count: " << vfx.GetBackfireCount() << " (Flames: "
-                  << vfx.GetExhaustFlameSystem()->GetActiveParticleCount() << ", Sparks: "
-                  << vfx.GetExhaustSparkSystem()->GetActiveParticleCount() << ")" << std::endl;
-        std::cout << "  -> PASS: High-RPM throttle lift-off exhaust backfire flames and sparks verified." << std::endl;
-    }
+    // [46.4] Vehicle Gameplay VFX (RETIRED)
+    std::cout << "\n[46.4] [RETIRED] Vehicle High-RPM Exhaust Backfire Flames & Sparks retired under VEHICLE-RETIREMENT." << std::endl;
 
     // [46.5] Character Gameplay VFX: Ground Footstep Dust Puffs
     std::cout << "\n[46.5] Testing Character Gameplay VFX: Ground Footstep Dust Puffs..." << std::endl;
@@ -1202,15 +1089,19 @@ bool RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters() {
         auto& pec = emitterEnt.AddComponent<Axle::ParticleEmitterComponent>(fireCfg);
         pec.SetSimulationSpace(Axle::ParticleSimulationSpace::World);
 
-        // 2. Entity with VehicleVFXComponent
+        // 2. Entity with Legacy VehicleVFXComponent
         Axle::Entity carEnt = srcScene->CreateEntity("SportsCar");
-        Axle::VehicleVFXConfig vVFXCfg;
-        vVFXCfg.BurnoutSlipThreshold = 0.28f;
-        vVFXCfg.SkidSlipThreshold = 0.22f;
-        vVFXCfg.MinSpeedForRoosterTail = 5.5f;
-        vVFXCfg.BackfireMinRPM = 5400.0f;
-        vVFXCfg.SurfaceType = Axle::SurfaceVFXType::Gravel;
-        carEnt.AddComponent<Axle::VehicleVFXComponent>(vVFXCfg);
+        auto& holder = carEnt.AddComponent<Axle::LegacyComponentsHolder>();
+        holder.Components.push_back({
+            "VehicleVFXComponent",
+            {
+                "BurnoutSlipThreshold: 0.280000",
+                "SkidSlipThreshold: 0.220000",
+                "MinSpeedForRoosterTail: 5.500000",
+                "BackfireMinRPM: 5400.000000",
+                "SurfaceType: Gravel"
+            }
+        });
 
         // 3. Entity with CharacterVFXComponent
         Axle::Entity playerEnt = srcScene->CreateEntity("HeroPlayer");
@@ -1255,11 +1146,8 @@ bool RunTest_Step46_Phase31_Step5_ECSIntegrationAndGameplayEventVFXEmitters() {
         // Verify Entity 2: SportsCar
         Axle::Entity dstCar = dstScene->GetEntityByUUID(carEnt.GetComponent<Axle::IDComponent>().ID);
         assert(dstCar);
-        assert(dstCar.HasComponent<Axle::VehicleVFXComponent>());
-        auto& dstVVFX = dstCar.GetComponent<Axle::VehicleVFXComponent>();
-        assert(std::abs(dstVVFX.Config.BurnoutSlipThreshold - 0.28f) < 0.01f);
-        assert(std::abs(dstVVFX.Config.BackfireMinRPM - 5400.0f) < 0.01f);
-        assert(dstVVFX.Config.SurfaceType == Axle::SurfaceVFXType::Gravel);
+        assert(dstCar.HasComponent<Axle::LegacyComponentsHolder>());
+        assert(dstCar.GetComponent<Axle::LegacyComponentsHolder>().HasLegacyVehicleData());
 
         // Verify Entity 3: HeroPlayer
         Axle::Entity dstPlayer = dstScene->GetEntityByUUID(playerEnt.GetComponent<Axle::IDComponent>().ID);
@@ -1468,16 +1356,17 @@ bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
 
         // Find Car entity
         bool foundCarWithVFX = false;
-        auto vfxView = scene->GetRegistry().view<Axle::VehicleVFXComponent>();
-        for (auto eID : vfxView) {
+        auto legView = scene->GetRegistry().view<Axle::LegacyComponentsHolder>();
+        for (auto eID : legView) {
             Axle::Entity e{ eID, scene.get() };
             if (e.GetName() == "Car") {
-                foundCarWithVFX = true;
-                const auto& vvfx = e.GetComponent<Axle::VehicleVFXComponent>();
-                assert(vvfx.Enabled == true);
-                assert(vvfx.Config.SurfaceType == Axle::SurfaceVFXType::Gravel);
-                assert(vvfx.Config.BurnoutSlipThreshold == 0.25f);
-                assert(vvfx.Config.BackfireMinRPM == 5200.0f);
+                const auto& holder = e.GetComponent<Axle::LegacyComponentsHolder>();
+                for (const auto& c : holder.Components) {
+                    if (c.TypeName == "VehicleVFXComponent") {
+                        foundCarWithVFX = true;
+                        break;
+                    }
+                }
             }
         }
         assert(foundCarWithVFX);

@@ -261,17 +261,6 @@ namespace Axle {
             AXLE_INFO("Runtime: Game resumed via UI button");
         });
 
-        uiCtx.RegisterAction("OnResetVehicle", [this]() {
-            if (m_Scene) {
-                auto vehicle = m_Scene->GetPrimaryRuntimeVehicle();
-                if (vehicle) {
-                    vehicle->Reset(glm::vec3(0.0f, 1.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
-                }
-            }
-            m_IsPaused = false;
-            AXLE_INFO("Runtime: Vehicle reset via UI button");
-        });
-
         uiCtx.RegisterAction("OnQuitGame", []() {
             AXLE_INFO("Runtime: Quit requested via UI button");
             Application::Get().Close();

@@ -334,7 +334,9 @@ namespace Axle::RHI {
         std::vector<std::string> nriIncludes = {
             "ThirdParty/NRI/Include",
             "../ThirdParty/NRI/Include",
-            "../../ThirdParty/NRI/Include"
+            "../../ThirdParty/NRI/Include",
+            "../../../ThirdParty/NRI/Include",
+            "../../../../ThirdParty/NRI/Include"
         };
         for (const auto& nriInc : nriIncludes) {
             if (std::filesystem::exists(nriInc)) {
@@ -554,6 +556,8 @@ namespace Axle::RHI {
         searchDirs.push_back("ThirdParty/NRI/Include");
         searchDirs.push_back("../ThirdParty/NRI/Include");
         searchDirs.push_back("../../ThirdParty/NRI/Include");
+        searchDirs.push_back("../../../ThirdParty/NRI/Include");
+        searchDirs.push_back("../../../../ThirdParty/NRI/Include");
 
         std::string line;
         while (std::getline(file, line)) {

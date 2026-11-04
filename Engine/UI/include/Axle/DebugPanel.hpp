@@ -30,13 +30,6 @@ namespace Axle {
         bool DrawCenterOfMass = false;
         u32 DebugLineCount = 0;
 
-        // Vehicle dynamics telemetry
-        bool HasVehicle = false;
-        f32 VehicleSpeedKmh = 0.0f;
-        f32 VehicleRPM = 0.0f;
-        i32 VehicleGear = 0;
-        bool WheelContacts[4]{ false, false, false, false };
-        f32 WheelSuspension[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
         bool IsChaseCamera = false;
     };
 

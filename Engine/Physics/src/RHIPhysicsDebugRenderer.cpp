@@ -90,12 +90,18 @@ namespace Axle {
     }
 
     bool RHIPhysicsDebugRenderer::CompileShaders(RHI::RHIDevice& device) {
-        std::filesystem::path shaderPath = "Engine/Resources/Shaders/PhysicsWireframe.hlsl";
+        std::filesystem::path shaderPath = "Resources/Shaders/PhysicsWireframe.hlsl";
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "Engine/Resources/Shaders/PhysicsWireframe.hlsl";
+        }
         if (!std::filesystem::exists(shaderPath)) {
             shaderPath = "../Engine/Resources/Shaders/PhysicsWireframe.hlsl";
         }
         if (!std::filesystem::exists(shaderPath)) {
             shaderPath = "../../Engine/Resources/Shaders/PhysicsWireframe.hlsl";
+        }
+        if (!std::filesystem::exists(shaderPath)) {
+            shaderPath = "../../../../Engine/Resources/Shaders/PhysicsWireframe.hlsl";
         }
         if (!std::filesystem::exists(shaderPath)) {
             AXLE_CORE_ERROR("RHIPhysicsDebugRenderer: Shader not found at '{0}'", shaderPath.string());

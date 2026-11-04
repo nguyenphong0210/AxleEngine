@@ -58,8 +58,6 @@ namespace Axle {
             ImGui::BulletText("View Navigation: Hold RMB + WASD to fly (Shift: Speed up)");
             ImGui::BulletText("Transform Gizmo: W (Move), E (Rotate), R (Scale)");
             ImGui::BulletText("Physics Wireframe: F1 toggle");
-            ImGui::BulletText("Vehicle Controls: WASD / Arrows (Space: Handbrake)");
-            ImGui::BulletText("Reset Vehicle: [R] Key");
         }
 
         ImGui::End();

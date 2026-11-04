@@ -1,31 +1,24 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "ENTT-ENKITS-REVIEW",
-    "title": "Review current EnTT/enkiTS integration and lifetime/concurrency correctness",
+    "id": "ENTT-ENKITS-REFACTOR-PLAN",
+    "title": "Detailed ECS/jobs/threading and shared simulation refactor plan",
     "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Review current EnTT and enkiTS architecture for concrete problems. Audit and evidence only; no production fixes or plugin implementation. Use temporary probes outside tracked source where useful.",
+    "user_scope": "Write a detailed refactor plan based on ECSJ-01..05 and the current integration. Documentation only; do not fix production code or start plugin/Vehicle implementation.",
     "expected_files": [
-      "docs/architecture/ENTT_ENKITS_REVIEW.md",
-      "docs/architecture/README.md"
+      "docs/design/ENTT_ENKITS_REFACTOR_PLAN.md",
+      "docs/README.md",
+      "docs/architecture/README.md",
+      "docs/agents/README.md",
+      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
+      "ROADMAP.md"
     ],
-    "next_action": "Review delivered. Await explicit scoped fix instruction; no plugin/Vehicle implementation or unrelated phase released.",
-    "review_commit": "4aff5ea",
-    "report": "docs/architecture/ENTT_ENKITS_REVIEW.md",
-    "findings": {
-      "P1": [
-        "ECSJ-01",
-        "ECSJ-02",
-        "ECSJ-03"
-      ],
-      "P2": [
-        "ECSJ-04",
-        "ECSJ-05"
-      ]
-    },
-    "verification": "Newly compiled Release native probes reproduce four offending behaviors plus one successful drain control. Product scheduling source-inspected. No production fixes or full UI/GPU/player/sanitizer run."
+    "next_action": "Detailed refactor plan delivered. Await explicit implementation scope; suggested EJ-00..03 is not an assignment. No source refactor, Vehicle deletion or plugin implementation released.",
+    "documentation_commit": "7c13e62",
+    "plan": "docs/design/ENTT_ENKITS_REFACTOR_PLAN.md",
+    "verification": "127 local links; 18 package contracts; 35 acyclic edges; five findings mapped; 29 acceptance IDs; 26 PLG packages retained. Documentation-only checks pass; no production code/test execution or fixes."
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -295,6 +288,28 @@
       "base_commit": "4aff5ea",
       "timestamp_utc": "2026-11-04T03:40:59.268683+00:00",
       "body": "REVIEW DELIVERED in 4aff5ea: docs/architecture/ENTT_ENKITS_REVIEW.md and architecture index link. Baseline 08a20ae2affefac8babef7ac2d2ff2401997252b. No production fixes.\n\nFindings:\n- ECSJ-01 P1: CompileAsync invokes completion on its std::thread (ScriptCompiler.cpp:141-145); EditorLayer.cpp:776-802 calls Reload and mutates scene/script/DLL/UI state there. OnDetach does not join this compiler before scene/reload teardown. Native callback-thread reproduction plus source-traced actual caller; no concurrent Editor crash induced.\n- ECSJ-02 P1: JobSystem.cpp:90-98 maps NO_THREAD_NUM to zero; DispatchToMainThread:190 executes an external thread callback inline. Native result: enki index 4294967295, wrapper index 0, callbackOnMain=0.\n- ECSJ-03 P1: JobSystemEnkiTS destructor/slot lifetime is based on Jolt/internal ExecuteRange completion rather than actual enki completion. Native Init(1) + Jolt barrier + bridge destruction hangs after job body completes (five-second timeout). Identical control with explicit enki drain exits zero. Multi-thread task-storage UAF/reuse windows are source-confirmed, not reproduced crashes; global WaitForAll control is not a production fix recommendation.\n- ECSJ-04 P2: ParallelECS.hpp:33-60 raw leading-storage iteration skips contains only for single components, so in_place_delete tombstones reach callbacks. Native sequential=1, parallel=2, invalidCallbacks=1. Latent generic-helper issue; inspected built-in components do not currently opt into that policy.\n- ECSJ-05 P2: EditorLayer.cpp:1520-1566 calls runtime scripts/readback before physics; RuntimeLayer.cpp:219-223 does the opposite. Pause/speed semantics differ. Source-confirmed; no gameplay parity run claimed.\n\nNative probes compiled current JobSystem.cpp/Log.cpp/JobSystemEnkiTS.cpp/PhysicsEngine.cpp/ScriptCompiler.cpp and production ParallelECS header with matching Release x64 definitions, linking existing matching vendored libraries. CMake configure/build exit 0 (VS2022, MSVC19.44, Windows SDK10.0.22621). Five isolated modes: external-thread exit1, stable-storage exit1, script-callback exit1 (fault observations); bridge-one-thread timeout (owned child killed); bridge-drained exit0 control. The script fixture is a successful isolated CMake target to prove callback threading, not a gameplay DLL build. Machine-local sources/CMake/runner/results/logs: build/ecs-review-probe/. Four fault behaviors reproduced, one control, product ordering inspected only.\n\nVerification: 39 local report/index links, five finding sections and five result records checked; code fences/UTF-8/exchange schema/whitespace valid. No Engine/Editor/Runtime/Plugins/Tests/ThirdParty tracked source changes. No full milestone suite, sanitizers, physical GPU, interactive reload, multi-thread bridge reuse stress or packaged parity run. No performance claims. No plugin or Vehicle implementation started, no Gemini assignment and no push. Recommended fixes are review advice, not newly released source work."
+    },
+    {
+      "id": "CG-20261104T040305733316Z-CODEX-503cc7",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "ENTT-ENKITS-REFACTOR-PLAN",
+      "reply_to": null,
+      "base_commit": "84ad556678693c33039703801ea013d2d2686913",
+      "timestamp_utc": "2026-11-04T04:03:05.733316+00:00",
+      "body": "IN_PROGRESS from 84ad556678693c33039703801ea013d2d2686913. User requests a detailed refactor plan following the EnTT/enkiTS review. Codex will write docs/design/ENTT_ENKITS_REFACTOR_PLAN.md and navigation/roadmap/plugin-plan prerequisite links. Plan thread identity and safe completion, script reload ownership, Jolt/enki actual completion, EnTT iteration/mutation, shared fixed simulation and permanent evidence. Scope is documentation only: no production fixes, Vehicle removal or new implementation/agent assignment. Historical review evidence remains unchanged."
+    },
+    {
+      "id": "CG-20261104T041201936964Z-CODEX-dd5227",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "ENTT-ENKITS-REFACTOR-PLAN",
+      "reply_to": "CG-20261104T040305733316Z-CODEX-503cc7",
+      "base_commit": "7c13e62",
+      "timestamp_utc": "2026-11-04T04:12:01.936964+00:00",
+      "body": "DELIVERED documentation commit 7c13e62 (docs(architecture): plan ECS and jobs correctness refactor). Canonical plan: docs/design/ENTT_ENKITS_REFACTOR_PLAN.md. Baseline 84ad556678693c33039703801ea013d2d2686913.\n\nThe plan retains EnTT/enkiTS/Jolt and defines 18 EJ-00..17 packages across six gates: permanent fault harness; owner-thread identity/deferred completion/compiler/reload; independent stable Jolt submission records/actual completion/forward progress/shutdown; EnTT view and Scene mutation/transform ownership; shared frame/fixed/late simulation and Editor/Runtime cutover; stress/parity/seam acceptance and maintained documentation. All five ECSJ findings map to packages and acceptance IDs.\n\nDetailed contracts include safe producer admission/epochs, always-deferred owner-scoped queue (including callable destructor DLL leases), immutable compiler requests and pending result lifecycle, candidate DLL staging with realistic rollback limits, separate Jolt job-slot versus enki task lifetime, a required proof gate for Jolt waits/reentrancy, valid-ID parallel iteration, scene-aware structural commands and completed transform revisions. Proposed fixed-step policy is explicitly design-only: 60Hz, eight-tick frame cap, 0.25s wall admission, validated speed, pause/full step/input edge behavior. Frame OnUpdate remains distinct from OnFixedUpdate/OnLateUpdate; virtual additions require script ABI versioning/rebuild and rejection of old DLLs.\n\nRoadmap/docs/architecture/agent navigation and the plugin plan now reference the hardening prerequisites. Native PLG consumers reuse EJ contracts; metadata-only work need not wait for the entire track. No phase number is assigned, no blanket rendering/plugin reprioritization and no implementation release are inferred.\n\nDocumentation verification this session: inline Python checks exit 0: 127 local links across six documents; 18 sequential package contracts; 35 prior-only dependency edges, acyclic; all five findings mapped; 29 unique acceptance IDs; roadmap gate ranges consistent; all 26 PLG package headings retained; UTF-8/fences valid and no tracked Engine/Editor/Runtime/Plugins/Tests/ThirdParty source changes. Log: build/ecs-refactor-plan-verification.log. python scripts/agent_exchange.py validate exit 0; git diff --check and staged whitespace check exit 0.\n\nLimits: this turn ran no C++ compilation, native probes, DLL loading, physics, GPU, interactive UI, sanitizer or player tests. Review reproductions remain historical evidence; no current fault is marked fixed. No Vehicle deletion, native plugin/renderer implementation, Gemini task or push. Next implementation needs an explicit package/range; suggested first range EJ-00..03 is advice only."
     }
   ],
   "deferred_tasks": [
@@ -553,6 +568,33 @@
         "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md"
       ],
       "verification": "147 local links, 2 JSON examples, 26 package contracts and 52 dependency edges verified; documentation-only scope and whitespace pass. No C++/DLL/physics/GPU/UI/player execution."
+    },
+    {
+      "id": "ENTT-ENKITS-REVIEW",
+      "title": "Review current EnTT/enkiTS integration and lifetime/concurrency correctness",
+      "state": "completed",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "user_scope": "Review current EnTT and enkiTS architecture for concrete problems. Audit and evidence only; no production fixes or plugin implementation. Use temporary probes outside tracked source where useful.",
+      "expected_files": [
+        "docs/architecture/ENTT_ENKITS_REVIEW.md",
+        "docs/architecture/README.md"
+      ],
+      "next_action": "Review delivered. Await explicit scoped fix instruction; no plugin/Vehicle implementation or unrelated phase released.",
+      "review_commit": "4aff5ea",
+      "report": "docs/architecture/ENTT_ENKITS_REVIEW.md",
+      "findings": {
+        "P1": [
+          "ECSJ-01",
+          "ECSJ-02",
+          "ECSJ-03"
+        ],
+        "P2": [
+          "ECSJ-04",
+          "ECSJ-05"
+        ]
+      },
+      "verification": "Newly compiled Release native probes reproduce four offending behaviors plus one successful drain control. Product scheduling source-inspected. No production fixes or full UI/GPU/player/sanitizer run."
     }
   ]
 }

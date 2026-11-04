@@ -1,37 +1,18 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "ARCHITECTURE-FOUNDATION-MASTER-PLAN",
-    "title": "Coordinate NRI, EnTT/enkiTS and Vehicle/plugin architecture-first refactor",
+    "id": "ARCHITECTURE-ROADMAP-UPDATE",
+    "title": "Add complete AF/EJ/PLG package tracking to Roadmap",
     "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "user_scope": "Latest user priority: clean architecture before other feature expansion. Write a combined detailed plan for NRI/RHI, EnTT/enkiTS standardization and complete Vehicle/plugin extraction. Documentation only, retaining Editor DLL/static Runtime and permission for a fresh Jolt Vehicle rewrite.",
+    "user_scope": "Update ROADMAP.md with the agreed combined NRI, EnTT/enkiTS and Vehicle/plugin architecture plan. Documentation only.",
     "expected_files": [
-      "docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md",
-      "docs/design/NRI_INTEGRATION_CONTRACT.md",
-      "docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md",
-      "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md",
-      "docs/design/ENTT_ENKITS_REFACTOR_PLAN.md",
-      "docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md",
-      "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
-      "ROADMAP.md",
-      "docs/README.md",
-      "docs/architecture/README.md",
-      "docs/architecture/TARGET_LAYERED_ARCHITECTURE.md",
-      "docs/agents/README.md",
-      "docs/agents/WORKING_PROTOCOL.md"
+      "ROADMAP.md"
     ],
-    "next_action": "Combined architecture-first plans delivered. Await an explicit implementation package/range; AF-00/EJ-00 then EJ-01..03 are proposed first units only. No production implementation or other-agent work released.",
-    "documentation_commit": "9b2dff7",
-    "master_plan": "docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md",
-    "nri_contract": "docs/design/NRI_INTEGRATION_CONTRACT.md",
-    "phase_map": {
-      "41": "NRI/rendering (P41)",
-      "42": "EnTT/enkiTS normalization (EJ)",
-      "43": "Plugins/project composition and fresh Vehicle (PLG)"
-    },
-    "verification": "13 Markdown documents, 246 local links, 80 packages, 250 acyclic/wave-valid edges (44 cross-plan), 73 architecture/7 deferred split and 12 NRI rules verified. Documentation only; no source fixes or native/GPU/player execution."
+    "next_action": "Roadmap updated and locally committed. Await explicit implementation scope; no package is released by the roadmap update.",
+    "documentation_commit": "e283bae",
+    "verification": "80 unique open AF/P41/EJ/PLG package checkboxes match canonical plans; 43 local links, UTF-8/fences/milestone coverage and whitespace/exchange schema pass. Documentation only."
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -345,6 +326,28 @@
       "base_commit": "9b2dff7",
       "timestamp_utc": "2026-11-04T07:56:16.405312+00:00",
       "body": "DELIVERED documentation commit 9b2dff7: docs(architecture): coordinate NRI ECS and plugin foundation plans. Source baseline cb200d373550b6dd4f7e12d483a161012d863a27.\n\nNew canonical coordinator: docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md. New vendor/service contract: docs/design/NRI_INTEGRATION_CONTRACT.md. Synchronized domain plans, roadmap, protocol and navigation to the latest architecture-before-feature-expansion instruction. Formal documentation labels: Phase 41 P41 rendering/NRI, Phase 42 EJ ECS/jobs, Phase 43 PLG plugins/Vehicle. Preserve all existing package IDs and internal contracts. The master adds AF-00..05 for baseline/enforcement, stable authored identity/atomic saves, Core/Application ownership, SceneData boundaries and CPU asset/tool boundaries. One implementation owner per queue/clock/cache/frame/loader; no duplicate framework.\n\nScope: 30 P41 + 18 EJ + 26 PLG + 6 AF = 80 packages. Waves W0..W8 define a 73-package architecture exit. P41-21..24 and complete P41-27..29 remain seven deferred feature/full-phase packages in W9; no false full rendering acceptance/default rollout. Cross-track prerequisites prevent DLL activation before thread/lifetime safety and fresh Vehicle before accepted simulation/resource/debug consumers. Vehicle remains a clean Jolt-backed replacement, with old code retired only after a runnable new plugin and passive unknown-data preservation. DLL Editor/static selected Runtime and the new Plugins window remain fixed product decisions.\n\nNRI contract has 12 rules mapped to existing P41 work, not new implementation packages: pin, native boundary, required interfaces/queue, GL fallback readiness, transactional generations, CPU-recorded and GPU-submitted leases, submission-aware states, single frame/present owner, immutable extraction, real shipping Canvas GPU output, shader/artifact identity and failure/shutdown. Local vendor pin 6998e3fbbaed1b132f386a9d49743a2481003487, public NRI_VERSION190/date9October2026; no vendor modification. Inspected local NRI sources and official upstream README only as reference; no vendor benchmark claim.\n\nVerification executed: python build/verify-architecture-master.py exit0, log build/architecture-master-verification.log; 13 Markdown documents, 246 local links, UTF-8/fences valid; all 80 packages covered once by execution waves; 250 combined edges including 44 cross-plan edges are acyclic and respect wave order; six AF package contracts and 12 NRI rules valid; 73/7 split matches exact deferred IDs. Machine-local graph/order artifact build/architecture-master-topological-order.json. Vendor revision/API match; no Engine/Editor/Runtime/Plugins/Tests/ThirdParty/root-CMake source diff. Exchange validation and unstaged/staged whitespace checks exit0.\n\nLimits: this turn ran no new C++/DLL/Jolt/GPU/native UI/player/sanitizer tests or performance benchmark. Existing review reproductions remain historical, not fixed. No Vehicle deletion, vendor upgrade, package implementation, Gemini assignment or push. First proposed implementation unit is AF-00/EJ-00 then EJ-01..03, only if explicitly assigned."
+    },
+    {
+      "id": "CG-20261104T080735954256Z-CODEX-27c79e",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "ARCHITECTURE-ROADMAP-UPDATE",
+      "reply_to": "CG-20261104T075616405312Z-CODEX-3aec22",
+      "base_commit": "6e21389e03019637e34e42c39c9fd5f28641c240",
+      "timestamp_utc": "2026-11-04T08:07:35.954256+00:00",
+      "body": "IN_PROGRESS from 6e21389e03019637e34e42c39c9fd5f28641c240. User explicitly requests Roadmap update. Top-level architecture summary already exists; Codex will make Roadmap complete as a tracker: AF package checklist, phase table/first candidates, milestone overview and individual EJ/PLG checkboxes matching canonical plans. ROADMAP.md only plus exchange; all implementation boxes stay open. No production/Vehicle/vendor work or Gemini assignment."
+    },
+    {
+      "id": "CG-20261104T080945918709Z-CODEX-0a0a90",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "ARCHITECTURE-ROADMAP-UPDATE",
+      "reply_to": "CG-20261104T080735954256Z-CODEX-27c79e",
+      "base_commit": "e283bae",
+      "timestamp_utc": "2026-11-04T08:09:45.918709+00:00",
+      "body": "DELIVERED ROADMAP.md update in e283bae (docs(roadmap): track all architecture foundation phase packages). Added phase/contract/status table and explicit first candidates; milestone overview now includes 11/12/13; shared AF checklist plus full Phase42 EJ and Phase43 PLG package checklists complement existing P41 tracking. P41-19 explicitly includes actual Canvas GPU submission. All 80 implementation package boxes remain open; canonical master/domain contracts and 73 architecture/7 deferred split remain unchanged.\n\nFinal verification: python build/verify-roadmap-architecture.py exit0, log build/roadmap-architecture-verification.log. 80 unique open package checkboxes match AF6/P4130/EJ18/PLG26; 43 local links valid; fences/UTF-8 and milestone11/12/13 verified; no production/vendor/test/CMake changes from baseline 6e21389. Exchange schema and git whitespace checks pass. An initial separator-sensitive heading matcher failed; corrected to package-ID/whitespace matching and reran final verification successfully. This was checker matching, not a changed package definition.\n\nOnly ROADMAP.md plus Codex coordination state changed. No C++/native/GPU/player tests, implementation, Vehicle deletion, vendor upgrade, Gemini assignment or push. User request was roadmap publication in the repository, not implementation release."
     }
   ],
   "deferred_tasks": [
@@ -650,6 +653,39 @@
       "documentation_commit": "7c13e62",
       "plan": "docs/design/ENTT_ENKITS_REFACTOR_PLAN.md",
       "verification": "127 local links; 18 package contracts; 35 acyclic edges; five findings mapped; 29 acceptance IDs; 26 PLG packages retained. Documentation-only checks pass; no production code/test execution or fixes."
+    },
+    {
+      "id": "ARCHITECTURE-FOUNDATION-MASTER-PLAN",
+      "title": "Coordinate NRI, EnTT/enkiTS and Vehicle/plugin architecture-first refactor",
+      "state": "completed",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "user_scope": "Latest user priority: clean architecture before other feature expansion. Write a combined detailed plan for NRI/RHI, EnTT/enkiTS standardization and complete Vehicle/plugin extraction. Documentation only, retaining Editor DLL/static Runtime and permission for a fresh Jolt Vehicle rewrite.",
+      "expected_files": [
+        "docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md",
+        "docs/design/NRI_INTEGRATION_CONTRACT.md",
+        "docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md",
+        "docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md",
+        "docs/design/ENTT_ENKITS_REFACTOR_PLAN.md",
+        "docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md",
+        "docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md",
+        "ROADMAP.md",
+        "docs/README.md",
+        "docs/architecture/README.md",
+        "docs/architecture/TARGET_LAYERED_ARCHITECTURE.md",
+        "docs/agents/README.md",
+        "docs/agents/WORKING_PROTOCOL.md"
+      ],
+      "next_action": "Combined architecture-first plans delivered. Await an explicit implementation package/range; AF-00/EJ-00 then EJ-01..03 are proposed first units only. No production implementation or other-agent work released.",
+      "documentation_commit": "9b2dff7",
+      "master_plan": "docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md",
+      "nri_contract": "docs/design/NRI_INTEGRATION_CONTRACT.md",
+      "phase_map": {
+        "41": "NRI/rendering (P41)",
+        "42": "EnTT/enkiTS normalization (EJ)",
+        "43": "Plugins/project composition and fresh Vehicle (PLG)"
+      },
+      "verification": "13 Markdown documents, 246 local links, 80 packages, 250 acyclic/wave-valid edges (44 cross-plan), 73 architecture/7 deferred split and 12 NRI rules verified. Documentation only; no source fixes or native/GPU/player execution."
     }
   ]
 }

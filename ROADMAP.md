@@ -19,6 +19,17 @@ EnTT/enkiTS and complete Vehicle/plugin extraction. Six AF packages fill identit
 Core/ownership, scene/asset data boundaries and enforcement gaps. Domain package
 contracts remain canonical; the master's cross-track edges and waves govern order.
 
+| Track | Packages | Detailed contract | Current status |
+| --- | --- | --- | --- |
+| Shared architecture foundations | AF-00..05 | [Master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | Planned; 6 packages |
+| Phase 41: NRI/RHI rendering | P41-00..29 | [Rendering plan](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md), [NRI contract](docs/design/NRI_INTEGRATION_CONTRACT.md) | Planned; 23 architecture packages and 7 deferred feature/full-phase packages |
+| Phase 42: EnTT/enkiTS | EJ-00..17 | [ECS/jobs refactor plan](docs/design/ENTT_ENKITS_REFACTOR_PLAN.md) | Planned; 18 packages |
+| Phase 43: Plugins and Vehicle | PLG-00..25 | [Plugin/Vehicle plan](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | Planned; 26 packages |
+
+Track individual package checkboxes in the detailed sections below. Group/wave
+checkboxes close only when their constituent packages and required evidence pass;
+none is complete merely because its planning document exists.
+
 - [ ] **W0:** Baseline/fault harnesses and stable asset identity.
 - [ ] **W1:** P1 threading/task/reload repairs and Core/composition ownership.
 - [ ] **W2:** Correct ECS mutation/transforms and clean scene/asset data boundaries.
@@ -32,6 +43,12 @@ contracts remain canonical; the master's cross-track edges and waves govern orde
 The architecture exit covers 73 packages. Seven deferred P41 feature/full-phase
 packages remain in W9; architecture acceptance does not close the entire rendering
 phase. No implementation is claimed or assigned by this documentation update.
+
+**Proposed first unit:** AF-00 + EJ-00 (baseline and permanent fault fixtures),
+then EJ-01..03 (thread identity, deferred main-thread delivery and compiler handoff).
+AF-01 must pass before identity-sensitive asset/module relocation or export changes.
+EJ-04..07 close remaining P1 reload/bridge/shutdown hazards. An actual source task
+still needs a concrete assignment in the exchange.
 
 ### Phase 41: NRI/RHI rendering workstream
 
@@ -125,6 +142,9 @@ advanced features until the architecture exit. The
 │ [x] MILESTONE 8: Visual Effects, Modern RHI & In-Game UI Subsystem (Phases 31 - 34)   │
 │ [x] MILESTONE 9: Vulkan 1.3 Backend, Unified .axleasset & Raw Media (Phases 35 - 37)  │
 │ [ ] MILESTONE 10: Visual Tooling Ecosystem: Material, VFX & Animation (Phases 38 - 40)│
+│ [ ] MILESTONE 11: NRI/RHI Rendering Architecture (Phase 41)                             │
+│ [ ] MILESTONE 12: EnTT/enkiTS Normalization & Shared Simulation (Phase 42)               │
+│ [ ] MILESTONE 13: Plugin System & Complete Vehicle Replacement (Phase 43)                │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -911,6 +931,24 @@ advanced features until the architecture exit. The
 
 ---
 
+### Shared Architecture Foundation prerequisites (AF packages)
+
+These packages cut across Phases 41/42/43 and are not another feature phase.
+Use the [master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) for
+their file scope, evidence, exit criteria and combined dependency graph.
+
+- [ ] **AF-00:** Shared baseline, permanent failure harnesses, target/include inventory and architecture-check scaffolding.
+- [ ] **AF-01:** Stable source-controlled asset UUID/metadata policy, rename/move/reference checks and atomic persistence.
+- [ ] **AF-02:** Extract Application/bootstrap from Core and establish explicit service/context ownership.
+- [ ] **AF-03:** Separate SceneData from concrete runtime/render/physics/toolkit bridges, preserving one authoritative registry.
+- [ ] **AF-04:** Separate CPU asset registry/format/import/cook contracts from GPU resource/cache ownership.
+- [ ] **AF-05:** Enforce dependency/product boundaries and accept the combined architecture using current native/product evidence.
+
+**Exit:** stable authored identity; independently testable Core/Scene/asset data;
+safe thread/task/DLL/GPU lifetime; shared simulation/render services; project-selected
+static Runtime and usable Engine/project plugins. Full advanced rendering parity
+remains separately tracked in the deferred P41 packages.
+
 ### Milestone 11: RHI-Primary Rendering Foundation (coordinated architecture-first)
 
 - [ ] **Phase 41: Shared Rendering Architecture, GPU Safety & Product Integration**
@@ -939,7 +977,7 @@ advanced features until the architecture exit. The
     - [ ] **P41-16**: Private VFX service views with preserved deterministic simulation/input/document behavior.
     - [ ] **P41-17**: Multi-backend Assembly Editor preview using actual hierarchy and resources.
     - [ ] **P41-18**: Bounded mesh/assembly thumbnail jobs and safe cache invalidation.
-    - [ ] **P41-19**: Standalone Runtime backend/service/present integration and cooked startup.
+    - [ ] **P41-19**: Standalone Runtime backend/service/present integration, actual Canvas GPU submission and cooked startup.
     - [ ] **P41-20**: Shared shader/material/color/depth contracts and honest renderer capabilities.
   - **G4 - Functional parity**:
     - [ ] **P41-21**: Modern directional shadow/cascade passes and receiver/cutout pixel evidence.
@@ -953,3 +991,73 @@ advanced features until the architecture exit. The
     - [ ] **P41-28**: CPU, physical D3D12/Vulkan, GL, native UI and standalone failure/stress acceptance matrix.
     - [ ] **P41-29**: Accepted modern defaults, removal of obsolete active paths and maintained GL fallback.
   - **Completion gate**: Every required acceptance row has real evidence. Proposed APIs/targets and historical tests do not establish Phase 41 completion. No live backend switching, GPU VFX graph or ray tracing is required.
+
+### Milestone 12: EnTT/enkiTS Normalization and Shared Simulation
+
+- [ ] **Phase 42: ECS/Jobs Correctness, Ownership and Product Timing**
+  - **Status (2026-11-04): planned; no implementation started.** Repair the three P1 and two P2 findings in the [integration review](docs/architecture/ENTT_ENKITS_REVIEW.md); keep EnTT, enkiTS and Jolt.
+  - **Packages/contracts/acceptance:** [Refactor plan](docs/design/ENTT_ENKITS_REFACTOR_PLAN.md). **Cross-track execution:** [Master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md). Phase numbering does not postpone safety fixes until every rendering feature is complete.
+  - **G0 - Permanent baseline**:
+    - [ ] **EJ-00:** Always-active Debug/Release fault regressions, owned watchdogs and a deliberate harness failure probe.
+  - **G1 - Thread ownership and script completion**:
+    - [ ] **EJ-01:** Correct main/worker/external thread identity, scheduler admission and lifecycle epochs.
+    - [ ] **EJ-02:** Always-deferred owner-scoped main-thread queue with bounded pumping and stale-operation rejection.
+    - [ ] **EJ-03:** Immutable compiler requests/results, safe process cancellation and owner-thread delivery.
+    - [ ] **EJ-04:** Candidate DLL validation, safe script reload barriers, module leases and compile/detach cleanup.
+  - **G2 - Jolt/enki task lifetime**:
+    - [ ] **EJ-05:** Stable submission records independent of Jolt job slots, retained task storage and safe reclamation.
+    - [ ] **EJ-06:** Bridge-owned waits, one-thread forward progress and proven physics reentrancy behavior.
+    - [ ] **EJ-07:** Owning async handles and coherent producer/job/scene/module/scheduler shutdown ordering.
+  - **G3 - ECS mutation and transform boundaries**:
+    - [ ] **EJ-08:** Valid serial/parallel view equivalence across packed/stable storage and unique entity batches.
+    - [ ] **EJ-09:** Scene-aware structural commands, scene/entity generation checks and mutation barriers.
+    - [ ] **EJ-10:** Explicit transform write/read phases, completed cache revisions and validated disjoint subtree jobs.
+  - **G4 - Shared simulation and product cutover**:
+    - [ ] **EJ-11:** Shared runtime phases, frame/fixed/late script callbacks, script ABI versioning and caller migration.
+    - [ ] **EJ-12:** Fixed clock, bounded catch-up, input-edge consumption and explicit pause/step/speed semantics.
+    - [ ] **EJ-13:** Editor Play/Pause/Step/Stop uses the shared driver while private previews retain independent clocks.
+    - [ ] **EJ-14:** Runtime uses the same driver; remove reversed or duplicate script/physics update paths.
+  - **G5 - Acceptance and maintenance**:
+    - [ ] **EJ-15:** Native stress/failure and Editor/Runtime timing-parity evidence, with honest sanitizer/environment limits.
+    - [ ] **EJ-16:** Agree and verify shared plugin/RHI ownership, mutation, task and simulation seams.
+    - [ ] **EJ-17:** Update implemented guides/evidence and retire obsolete transition adapters.
+  - **Completion gate:** Current regressions close ECSJ-01..05, one-thread bridge disposal progresses, no worker mutates Scene/UI, and actual products share accepted timing. Historical fault probes and written plans do not count as fixes.
+
+### Milestone 13: Plugin System and Complete Vehicle Replacement
+
+- [ ] **Phase 43: Engine/Project Plugins, DLL Editor and Selected Static Runtime**
+  - **Status (2026-11-04): planned; no implementation started.** Engine and project plugins use one mechanism. Editor loads selected DLL modules; shipped Runtime statically links the resolved Runtime modules and scripts. A fresh Jolt Vehicle implementation is allowed.
+  - **Design:** [Plugin architecture](docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md). **Packages/acceptance:** [Plugin plan](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md). **SDK/lifecycle examples:** [Implementation guide](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md). **Shared prerequisites:** [Master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md).
+  - **G0 - Discovery and project selection**:
+    - [ ] **PLG-00:** Baseline and legacy Vehicle/Spline/Terrain feature/test/sample retirement inventory.
+    - [ ] **PLG-01:** Metadata-only Engine/project discovery, strict manifests, stable IDs and path validation.
+    - [ ] **PLG-02:** Deterministic dependency/module resolution with visible reasons and invalid-graph rejection.
+    - [ ] **PLG-03:** Versioned project selection, explicit-empty versus legacy policy and atomic persistence.
+    - [ ] **PLG-04:** Selected-only product plans, SDK/toolchain fingerprints and exact artifact receipts.
+  - **G1 - Shared native hosts and scene lifecycle**:
+    - [ ] **PLG-05:** Runtime/Editor shared host DLLs, reviewed exports and one Engine/vendor service state.
+    - [ ] **PLG-06:** Validated native loader handshake, scoped registration and transactional startup/rollback.
+    - [ ] **PLG-07:** Per-scene component/system extensions, clone/remap and DLL-backed storage lifetime.
+    - [ ] **PLG-08:** Scene/assembly codecs, passive unknown-data preservation and required-plugin diagnostics.
+    - [ ] **PLG-09:** Register plugin systems/render/debug contributions into accepted EJ/P41 services.
+  - **G2 - Plugins window and author workflow**:
+    - [ ] **PLG-10:** Dockable Plugins window, menu/settings entry, filters, dependency reasons and Desired/Active states.
+    - [ ] **PLG-11:** Cancellable project DLL builds, immutable requests, staged outputs and persistent logs.
+    - [ ] **PLG-12:** Apply/build/restart, complete dirty-document guards, startup recovery and safe owner teardown.
+    - [ ] **PLG-13:** Source template and real external project plugin adding a component/system/Inspector without Engine edits.
+  - **G3 - Fresh Vehicle and old-code retirement**:
+    - [ ] **PLG-14:** New VehicleRuntime/VehicleEditor modules, validated authored data and distinct component schemas/codecs.
+    - [ ] **PLG-15:** Four-wheel Jolt controls, suspension/contact, wheel/chassis synchronization, telemetry, reset and teardown.
+    - [ ] **PLG-16:** Vehicle authoring/setup/Inspector/debug tools and actual Editor Play fixture through generic APIs.
+    - [ ] **PLG-17:** Retire Engine/Vehicle, built-in components/serializers/queries and hardcoded product/render/UI branches.
+    - [ ] **PLG-18:** Scoped telemetry-driven Vehicle audio/VFX integrations, resource retirement and explicit feature accounting.
+  - **G4 - Remaining plugins and shipping composition**:
+    - [ ] **PLG-19:** Split Spline Runtime/Editor modules and remove direct product-specific setup.
+    - [ ] **PLG-20:** Split Terrain Runtime/Editor modules with correct Spline dependencies and retained authored data.
+    - [ ] **PLG-21:** Project-declared script dependencies, shared-host Editor scripts and statically registered shipping scripts.
+    - [ ] **PLG-22:** Editor-disabled selected static Runtime with explicit registration and proven code/link exclusions.
+    - [ ] **PLG-23:** Snapshot-bound build/cook/export, selected plugin content and matching player/package receipt.
+  - **G5 - Native/product acceptance**:
+    - [ ] **PLG-24:** Actual DLL/UI/physics/GPU/player selection matrix, unknown-data recovery and artifact exclusion evidence.
+    - [ ] **PLG-25:** Supported-workflow documentation, breaking-change ledger and final implementation handoff.
+  - **Completion gate:** An unselected plugin is not configured/built/loaded; selecting a source plugin builds its DLL and restarts safely; exported Runtime contains only selected Runtime modules. Fresh Vehicle works through generic APIs; old authored data is retained passively and legacy API/handling parity is not claimed. Live plugin hot-unload and automatic legacy Vehicle conversion remain deferred.

@@ -29,6 +29,7 @@ namespace Axle {
         SkeletalMeshComponent SkeletalMesh;
         bool HasAnimator = false;
         AnimatorComponent Animator;
+        std::vector<LegacyComponentPayload> LegacyComponents;
         std::vector<AssemblyNode> Children;
     };
 

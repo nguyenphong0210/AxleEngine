@@ -181,7 +181,14 @@ namespace Axle {
         if (entity.HasComponent<CollisionShape3D>()) {
             newEntity.AddComponent<CollisionShape3D>(entity.GetComponent<CollisionShape3D>());
         }
-        if (physicsScene && entity.HasComponent<RigidBody3D>()) {
+        const bool hasLegacyVehicle = entity.HasComponent<LegacyComponentsHolder>()
+            && entity.GetComponent<LegacyComponentsHolder>().HasLegacyVehicleData();
+        if (hasLegacyVehicle && entity.HasComponent<RigidBody3D>()) {
+            auto rb = entity.GetComponent<RigidBody3D>();
+            rb.RuntimeBodyID = BodyID();
+            newEntity.AddComponent<RigidBody3D>(rb);
+        }
+        if (physicsScene && entity.HasComponent<RigidBody3D>() && !hasLegacyVehicle) {
             const auto& srcRb = entity.GetComponent<RigidBody3D>();
             if (entity.HasComponent<CollisionShape3D>()) {
                 const auto& shape = entity.GetComponent<CollisionShape3D>();

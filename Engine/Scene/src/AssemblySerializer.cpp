@@ -1,3 +1,4 @@
+#include "LegacyComponentIO.hpp"
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/AnimationAssetCodec.hpp>
@@ -16,6 +17,8 @@
 #include <algorithm>
 #include <unordered_map>
 #include <queue>
+#include <unordered_set>
+#include <functional>
 
 namespace Axle {
 
@@ -309,10 +312,7 @@ namespace Axle {
             if (entity.HasComponent<LegacyComponentsHolder>()) {
                 const auto& holder = entity.GetComponent<LegacyComponentsHolder>();
                 for (const auto& comp : holder.Components) {
-                    fout << "    " << comp.TypeName << ":\n";
-                    for (const auto& l : comp.Lines) {
-                        fout << "      " << l << "\n";
-                    }
+                    Detail::WriteLegacyComponent(fout, comp);
                 }
             }
 
@@ -451,6 +451,17 @@ namespace Axle {
         AsmSection currentSection = AsmSection::None;
 
         while (std::getline(stream, line)) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (currentSection == AsmSection::LegacyComponent) {
+                if (Detail::AppendLegacyLine(line, current.LegacyComponents.back())) continue;
+                currentSection = AsmSection::None;
+            }
+            LegacyComponentPayload payload;
+            if (inEntity && Detail::BeginLegacyComponent(line, payload)) {
+                current.LegacyComponents.push_back(std::move(payload));
+                currentSection = AsmSection::LegacyComponent;
+                continue;
+            }
             std::string trimmed = Trim(line);
             if (trimmed.empty() || trimmed[0] == '#') continue;
 
@@ -491,12 +502,8 @@ namespace Axle {
             if (trimmed == "CameraComponent:") { currentSection = AsmSection::Camera; current.HasCamera = true; continue; }
             if (trimmed == "AudioListenerComponent:") { currentSection = AsmSection::AudioListener; current.HasAudioListener = true; continue; }
             if (trimmed == "AudioSourceComponent:") { currentSection = AsmSection::AudioSource; current.HasAudioSource = true; continue; }
-            if (trimmed == "VehicleAudioComponent:") { currentSection = AsmSection::LegacyComponent; current.LegacyComponents.push_back({ "VehicleAudioComponent", {} }); continue; }
             if (trimmed == "PointLightComponent:") { currentSection = AsmSection::PointLight; current.HasPointLight = true; continue; }
             if (trimmed == "SpotLightComponent:") { currentSection = AsmSection::SpotLight; current.HasSpotLight = true; continue; }
-            if (trimmed == "VehicleComponent:" || trimmed == "VehicleComponent: true") { currentSection = AsmSection::LegacyComponent; current.LegacyComponents.push_back({ "VehicleComponent", {} }); continue; }
-            if (trimmed == "WheelComponent:" || trimmed == "VehicleWheel3D:") { currentSection = AsmSection::LegacyComponent; current.LegacyComponents.push_back({ "WheelComponent", {} }); continue; }
-            if (trimmed == "VehicleVFXComponent:") { currentSection = AsmSection::LegacyComponent; current.LegacyComponents.push_back({ "VehicleVFXComponent", {} }); continue; }
             if (trimmed == "SkeletalMeshComponent:") { currentSection = AsmSection::SkeletalMesh; current.HasSkeletalMesh = true; continue; }
             if (trimmed == "AnimatorComponent:") { currentSection = AsmSection::Animator; current.HasAnimator = true; continue; }
             if (trimmed == "HierarchyComponent:") { currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
@@ -740,12 +747,6 @@ namespace Axle {
                         try { current.SpotLight.InnerConeAngle = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
                     } else if (trimmed.rfind("OuterConeAngle:", 0) == 0) {
                         try { current.SpotLight.OuterConeAngle = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
-                    }
-                    break;
-                }
-                case AsmSection::LegacyComponent: {
-                    if (!current.LegacyComponents.empty()) {
-                        current.LegacyComponents.back().Lines.push_back(trimmed);
                     }
                     break;
                 }
@@ -1053,6 +1054,8 @@ namespace Axle {
                 const auto& raw = rawEntities[i];
                 Entity entity = oldToEntity[raw.OldUUID];
 
+                if (entity.HasComponent<LegacyComponentsHolder>()
+                    && entity.GetComponent<LegacyComponentsHolder>().HasLegacyVehicleData()) continue;
                 if (entity.HasComponent<RigidBody3D>() && entity.HasComponent<CollisionShape3D>()) {
                     auto& rb = entity.GetComponent<RigidBody3D>();
                     auto& cs = entity.GetComponent<CollisionShape3D>();
@@ -1236,20 +1239,27 @@ namespace Axle {
             node.SkeletalMesh = raw.SkeletalMesh;
             node.HasAnimator = raw.HasAnimator;
             node.Animator = raw.Animator;
+            node.LegacyComponents = raw.LegacyComponents;
             nodeMap[raw.OldUUID] = node;
         }
 
-        // Link hierarchy
-        u64 rootNodeUUID = (rootUUID != 0) ? rootUUID : rawEntities[0].OldUUID;
-        for (const auto& raw : rawEntities) {
-            for (u64 childUUID : raw.ChildrenOldUUIDs) {
-                if (nodeMap.find(childUUID) != nodeMap.end()) {
-                    nodeMap[raw.OldUUID].Children.push_back(nodeMap[childUUID]);
-                }
+        // Build complete subtrees before copying them into their parent, independent of file order.
+        std::unordered_map<u64, const RawAssemblyEntity*> rawMap;
+        for (const auto& raw : rawEntities) rawMap[raw.OldUUID] = &raw;
+        std::unordered_set<u64> path;
+        std::function<bool(u64, AssemblyNode&)> buildNode = [&](u64 id, AssemblyNode& node) {
+            if (!nodeMap.contains(id) || !path.insert(id).second) return false;
+            node = nodeMap.at(id);
+            for (u64 child : rawMap.at(id)->ChildrenOldUUIDs) {
+                AssemblyNode subtree;
+                if (!buildNode(child, subtree)) return false;
+                node.Children.push_back(std::move(subtree));
             }
-        }
-
-        data.RootNode = nodeMap[rootNodeUUID];
+            path.erase(id);
+            return true;
+        };
+        const u64 rootNodeUUID = (rootUUID != 0) ? rootUUID : rawEntities[0].OldUUID;
+        if (!buildNode(rootNodeUUID, data.RootNode)) data.IsValid = false;
         return data;
     }
 
@@ -1300,6 +1310,10 @@ namespace Axle {
             out << "      LinearDamping: " << node.RigidBody.LinearDamping << "\n";
             out << "      AngularDamping: " << node.RigidBody.AngularDamping << "\n";
             out << "      GravityFactor: " << node.RigidBody.GravityFactor << "\n";
+        }
+
+        for (const auto& payload : node.LegacyComponents) {
+            Detail::WriteLegacyComponent(out, payload);
         }
 
         if (node.HasSkeletalMesh) {

@@ -1209,6 +1209,8 @@ bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
         panel.SetOpen(true);
         assert(panel.IsOpen());
 
+        assert(panel.GetEmitterStackCount() == 0 && panel.GetPreviewSystem() == nullptr);
+        panel.AddEmitterStack("DefaultEmitter", Axle::ParticleEmitterConfig::CreateNeutral());
         assert(panel.GetPreviewSystem() != nullptr);
         assert(panel.GetPreviewSystem()->GetActiveParticleCount() == 0);
         assert(panel.GetConfig().MaxParticles == 1000);
@@ -1221,6 +1223,7 @@ bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
     std::cout << "\n[47.2] Testing Preset Switching & Live Curve Tweaking..." << std::endl;
     {
         Axle::VFXEditorPanel panel;
+        panel.AddEmitterStack("DefaultEmitter", Axle::ParticleEmitterConfig::CreateNeutral());
 
         // Switch to Sparks preset
         panel.SetEmitterConfig(Axle::ParticleEmitterConfig::CreateSparks());
@@ -1233,6 +1236,7 @@ bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
         panel.GetConfig().EndSize = { 0.05f, 0.10f };
         panel.GetConfig().ColorOverLifetime.StartColor = glm::vec4(1.0f, 0.85f, 0.25f, 1.0f);
         panel.GetConfig().ColorOverLifetime.EndColor = glm::vec4(0.85f, 0.15f, 0.0f, 0.0f);
+        panel.SetEmitterConfig(panel.GetConfig());
         panel.ResetPreview();
 
         assert(panel.GetPreviewSystem()->GetConfig().StartSize.Min == 0.12f);
@@ -1253,6 +1257,7 @@ bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
     {
         Axle::VFXEditorPanel panel;
         panel.SetOpen(true);
+        panel.AddEmitterStack("DefaultEmitter", Axle::ParticleEmitterConfig::CreateNeutral());
         panel.PlayPreview();
 
         // Emit instant bursts
@@ -1281,6 +1286,7 @@ bool RunTest_Step47_Phase31_Step6_VFXEditorPanelAndFinalVFXIntegration() {
     std::cout << "\n[47.4] Testing Isolated Viewport Rendering & GPU Instancing Preview Dispatch..." << std::endl;
     {
         Axle::VFXEditorPanel panel;
+        panel.AddEmitterStack("DefaultEmitter", Axle::ParticleEmitterConfig::CreateNeutral());
         panel.PlayPreview();
         panel.TriggerBurst(120);
 

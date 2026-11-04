@@ -50,17 +50,17 @@ current architecture acceptance or instructions to resume feature work.
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ [x] MILESTONE 1: Foundations, Physics & Vehicle Prototype (Phases 1 - 4)               │
 │ [x] MILESTONE 2: Simulation Lifecycle & Viewport Gizmos (Phases 5 - 7)                 │
-│ [x] MILESTONE 3: Assets, Scene Serialization & Scripting Reflection (Phases 8 - 13)   │
+│ [x] MILESTONE 3: Assets, Scene Serialization & Scripting Reflection (Phases 8 - 13)    │
 │ [x] MILESTONE 4: Scene Graph, Hot-Reloading & Multithreaded Jobs (Phases 14 - 19)      │
 │ [x] MILESTONE 5: Component-Driven Architecture & Standalone Runtime (Phases 20 - 23)   │
 │ [x] MILESTONE 6: AAA PBR Lighting, Soft Shadows, IBL & Audio (Phases 24 - 28)          │
 │ [x] MILESTONE 7: Large-Scale Terrain, Splines & Character Systems (Phases 29 - 30)     │
-│ [x] MILESTONE 8: Visual Effects, Modern RHI & In-Game UI Subsystem (Phases 31 - 34)   │
-│ [x] MILESTONE 9: Vulkan 1.3 Backend, Unified .axleasset & Raw Media (Phases 35 - 37)  │
-│ [ ] MILESTONE 10: Visual Tooling Ecosystem: Material, VFX & Animation (Phases 38 - 40)│
-│ [ ] MILESTONE 11: NRI/RHI Rendering Architecture (Phase 41)                             │
-│ [ ] MILESTONE 12: EnTT/enkiTS Normalization & Shared Simulation (Phase 42)               │
-│ [ ] MILESTONE 13: Plugin System & Complete Vehicle Replacement (Phase 43)                │
+│ [x] MILESTONE 8: Visual Effects, Modern RHI & In-Game UI Subsystem (Phases 31 - 34)    │
+│ [x] MILESTONE 9: Vulkan 1.3 Backend, Unified .axleasset & Raw Media (Phases 35 - 37)   │
+│ [ ] MILESTONE 10: Visual Tooling Ecosystem: Material, VFX & Animation (Phases 38 - 40) │
+│ [ ] MILESTONE 11: NRI/RHI Rendering Architecture (Phase 41)                            │
+│ [ ] MILESTONE 12: EnTT/enkiTS Normalization & Shared Simulation (Phase 42)             │
+│ [ ] MILESTONE 13: Plugin System & Complete Vehicle Replacement (Phase 43)              │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 

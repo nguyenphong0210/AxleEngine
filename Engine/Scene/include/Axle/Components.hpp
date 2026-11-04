@@ -908,6 +908,8 @@ namespace Axle {
     struct LegacyComponentPayload {
         std::string TypeName;
         std::vector<std::string> Lines;
+        // Loaded blocks retain their header and raw lines; constructed blocks use relative lines.
+        std::string RawHeader;
     };
 
     struct LegacyComponentsHolder {

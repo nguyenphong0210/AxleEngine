@@ -1,3 +1,4 @@
+#include "LegacyComponentIO.hpp"
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/SceneSerializer.hpp>
@@ -199,10 +200,7 @@ namespace Axle {
             if (entity.HasComponent<LegacyComponentsHolder>()) {
                 const auto& holder = entity.GetComponent<LegacyComponentsHolder>();
                 for (const auto& comp : holder.Components) {
-                    ss << "    " << comp.TypeName << ":\n";
-                    for (const auto& l : comp.Lines) {
-                        ss << "      " << l << "\n";
-                    }
+                    Detail::WriteLegacyComponent(ss, comp);
                 }
             }
 
@@ -641,6 +639,22 @@ namespace Axle {
         };
 
         while (std::getline(stream, line)) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (currentSection == ComponentSection::LegacyComponent) {
+                auto& payload = currentEntity.GetComponent<LegacyComponentsHolder>().Components.back();
+                if (Detail::AppendLegacyLine(line, payload)) continue;
+                currentSection = ComponentSection::None;
+            }
+            LegacyComponentPayload payload;
+            if (currentEntity && Detail::BeginLegacyComponent(line, payload)) {
+                flushCustomSection();
+                if (!currentEntity.HasComponent<LegacyComponentsHolder>()) {
+                    currentEntity.AddComponent<LegacyComponentsHolder>();
+                }
+                currentEntity.GetComponent<LegacyComponentsHolder>().Components.push_back(std::move(payload));
+                currentSection = ComponentSection::LegacyComponent;
+                continue;
+            }
             std::string trimmed = Trim(line);
             if (trimmed.empty() || trimmed[0] == '#') continue;
 
@@ -716,16 +730,6 @@ namespace Axle {
                 if (!currentEntity.HasComponent<AudioSourceComponent>()) {
                     currentEntity.AddComponent<AudioSourceComponent>();
                 }
-            } else if (trimmed == "VehicleAudioComponent:" || trimmed == "WheelComponent:" || trimmed == "VehicleWheel3D:" || trimmed == "VehicleComponent:" || trimmed == "VehicleComponent: true") {
-                flushCustomSection();
-                currentSection = ComponentSection::LegacyComponent;
-                if (!currentEntity.HasComponent<LegacyComponentsHolder>()) {
-                    currentEntity.AddComponent<LegacyComponentsHolder>();
-                }
-                std::string typeName = "VehicleComponent";
-                if (trimmed.rfind("Wheel", 0) == 0 || trimmed.rfind("VehicleWheel", 0) == 0) typeName = "WheelComponent";
-                else if (trimmed.rfind("VehicleAudio", 0) == 0) typeName = "VehicleAudioComponent";
-                currentEntity.GetComponent<LegacyComponentsHolder>().Components.push_back({ typeName, {} });
             } else if (trimmed == "SkeletalMeshComponent:") {
                 flushCustomSection();
                 currentSection = ComponentSection::SkeletalMesh;
@@ -751,13 +755,6 @@ namespace Axle {
                 if (!currentEntity.HasComponent<ParticleEmitterComponent>()) {
                     currentEntity.AddComponent<ParticleEmitterComponent>();
                 }
-            } else if (trimmed == "VehicleVFXComponent:") {
-                flushCustomSection();
-                currentSection = ComponentSection::LegacyComponent;
-                if (!currentEntity.HasComponent<LegacyComponentsHolder>()) {
-                    currentEntity.AddComponent<LegacyComponentsHolder>();
-                }
-                currentEntity.GetComponent<LegacyComponentsHolder>().Components.push_back({ "VehicleVFXComponent", {} });
             } else if (trimmed == "CharacterVFXComponent:") {
                 flushCustomSection();
                 currentSection = ComponentSection::CharacterVFX;
@@ -1247,15 +1244,6 @@ namespace Axle {
                         } else if (trimmed.rfind("DepthWrite:", 0) == 0) {
                             std::string val = Trim(trimmed.substr(11));
                             mat.DepthWrite = (val == "true" || val == "1");
-                        }
-                        break;
-                    }
-                    case ComponentSection::LegacyComponent: {
-                        if (currentEntity.HasComponent<LegacyComponentsHolder>()) {
-                            auto& holder = currentEntity.GetComponent<LegacyComponentsHolder>();
-                            if (!holder.Components.empty()) {
-                                holder.Components.back().Lines.push_back(trimmed);
-                            }
                         }
                         break;
                     }

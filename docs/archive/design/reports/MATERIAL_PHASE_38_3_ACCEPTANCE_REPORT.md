@@ -1,5 +1,9 @@
 # Material Phase 38.3 acceptance report
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 Date: 2026-11-02. Platform: Windows, MSVC 2022, CMake Release, DXC.
 GPU: NVIDIA GeForce RTX 3070. Backend requests are strict: no silent fallback.
 Verified code revision: `ce71ca0` (fixes starting at `8373b2e`).
@@ -46,7 +50,7 @@ material compiler failures. No new compiler warning was observed in these fixes.
 
 ## Captures and timings
 
-See [reference scene instructions](MATERIAL_REFERENCE_SCENE.md) for capture commands.
+See [reference scene instructions](../deferred/MATERIAL_REFERENCE_SCENE.md) for capture commands.
 Outputs are ignored build artifacts, not project assets:
 
 - `build/material-captures/dx12/capture_reference_{sdr,hdr}_direct3d12_1024x640.ppm`

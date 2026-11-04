@@ -23,6 +23,7 @@ Extracted broad assignments, moved out of the technical guides:
 - [VFX original prompt](VFX_PHASE_39_ORIGINAL_PROMPT.txt).
 - [Animation original prompt](ANIMATION_PHASE_40_ORIGINAL_PROMPT.txt).
 
-Technical guide chapters and commit-specific reviews/reports remain at their
-original paths so citations stay valid. Only scope/entry guidance was centralized;
-this refactor does not revalidate old production APIs or old acceptance claims.
+Deferred guide chapters and commit-specific reports now live in the
+[design archive](../../archive/design/README.md); maintained links were updated.
+Original prompt copies above remain unchanged. Relocation does not revalidate
+old APIs or acceptance claims.

@@ -1,5 +1,10 @@
 # Class Relationships: Current System
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Reviewed: 2026-11-01. These diagrams show key relationships rather than every extracted type; see the [class index](CLASS_INDEX.md) for the wider declaration inventory.
 
 ## Notation
@@ -181,7 +186,7 @@ classDiagram
 
 Vehicle observes PhysicsScene and holds Jolt references. VehicleAudio/VFX consume telemetry; Vehicle does not directly own them. The RHI debug renderer also privately inherits an initialization helper omitted from this overview.
 
-Sources: [Engine/Physics/include/Axle/PhysicsScene.hpp](../../Engine/Physics/include/Axle/PhysicsScene.hpp), [Engine/Physics/include/Axle/JobSystemEnkiTS.hpp](../../Engine/Physics/include/Axle/JobSystemEnkiTS.hpp), [Engine/Vehicle/include/Axle/Vehicle.hpp](../../Engine/Vehicle/include/Axle/Vehicle.hpp).
+Sources: [Engine/Physics/include/Axle/PhysicsScene.hpp](../../Engine/Physics/include/Axle/PhysicsScene.hpp), [Engine/Physics/include/Axle/JobSystemEnkiTS.hpp](../../Engine/Physics/include/Axle/JobSystemEnkiTS.hpp), `Engine/Vehicle/include/Axle/Vehicle.hpp` (historical path; unavailable in this checkout).
 
 ## 6. Parallel OpenGL and RHI rendering
 

@@ -1,5 +1,10 @@
 # Current Architecture Assessment and Improvement Plan
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Reviewed: **2026-11-01**. Scope: first-party C++/CMake architecture and its integration paths. This is a source-based engineering assessment, not a performance benchmark or a claim of reproduced runtime failures.
 
 ## 1. Overall assessment
@@ -95,4 +100,4 @@ No baseline timing, FPS, memory or binary-size benchmark was collected by this r
 
 ## 7. Next design decisions
 
-Agree on [target layering](TARGET_LAYERED_ARCHITECTURE.md), the first extraction boundary, stable asset identity policy and simulation/reload ownership contracts before starting a broad refactor. Detailed feature authoring proposals live in the [editor tooling roadmap](../design/EDITOR_TOOLING_ROADMAP.md); feature expansion should not silently recreate dependencies removed during modularization.
+Agree on [target layering](TARGET_LAYERED_ARCHITECTURE.md), the first extraction boundary, stable asset identity policy and simulation/reload ownership contracts before starting a broad refactor. Detailed feature authoring proposals live in the [editor tooling roadmap](../archive/design/deferred/EDITOR_TOOLING_ROADMAP.md); feature expansion should not silently recreate dependencies removed during modularization.

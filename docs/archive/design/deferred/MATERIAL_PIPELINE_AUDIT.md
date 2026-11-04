@@ -1,5 +1,9 @@
 # Material pipeline audit (Phase 38.3)
 
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
 This is the implementation baseline for Phase 38.3, not a claim of visual parity
 with Godot. A property is complete only when editing, saving, reloading, GPU
 binding, and visible shading agree in the preview and scene.
@@ -172,7 +176,7 @@ The following fixes now have real DX12 and Vulkan GPU coverage:
   Capture/report write failures fail the test. Timings compare baseline,
   detail-normal and detail-normal-plus-refraction configurations.
 
-See [the acceptance report](MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md) for commands,
+See [the acceptance report](../reports/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md) for commands,
 hardware, output paths, timing results and the remaining interactive UI checks.
 CPU suites use temporary filesystem fixtures without initializing a GPU/window.
 These results establish the Phase 38.3 rendering paths on the tested hardware,

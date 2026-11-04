@@ -1,5 +1,9 @@
 # Animation foundation: final corrective implementation
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 Date: 2026-11-03. Starting code/document baseline: `3f9da1d`.
 Follow-up to [the second review](ANIMATION_A3_A2_SECOND_REVIEW.md).
 
@@ -58,7 +62,7 @@ acceptance and full Phase 40 completion remain separately OPEN.
 
 ## Gemini continuation
 
-[The current scoped prompt](ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt) assigns **G1
+[The current scoped prompt](../../../agents/archive/ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt) assigns **G1
 CPU document models only**. The correction gate has already been completed by
 Codex. Gemini should implement revision/history, guarded lifecycle and persistence
 with CPU tests, commit that work, and stop for review. No renderer, visible panel,

@@ -21,12 +21,12 @@ The other files here are this project's conventions, not a product guarantee.
 
 - Latest user instructions define scope. Record them in the task card; never let
   an old file override the user or require repetitive approval for authorized work.
-- Priority checkpoint (2026-11-04): the user now wants clean architecture before
-  other feature expansion. The [Architecture Foundation master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
-  coordinates Phase 41 NRI/rendering, Phase 42 EJ and Phase 43 PLG/Vehicle, with
-  shared AF prerequisites and deferred advanced rendering features. Older relative
-  priority statements are historical. The current request releases planning only;
-  no package is implemented or assigned by reading a plan.
+- Priority checkpoint (2026-11-04): clean architecture before feature expansion.
+  [docs/ROADMAP.md](../ROADMAP.md) owns the single sequential OPT-00..11 queue and
+  progress. The [master contract](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
+  owns AF/cross-plan dependencies; P41/EJ/PLG are stable domain identifiers.
+  Old Vehicle retirement was delivered early, with independent review pending.
+  Current documentation cleanup releases no production package.
 - Only a concrete released task authorizes implementation. A roadmap, reference
   guide, old prompt, or suggested next task does not release every later package.
 - Historical checkpoint (2026-11-03): the user placed Phase 41 RHI-primary rendering

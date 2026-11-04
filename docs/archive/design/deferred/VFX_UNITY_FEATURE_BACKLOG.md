@@ -1,13 +1,17 @@
 # VFX feature expansion backlog
 
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
 Updated: 2026-11-03. Status: **planned; no implementation claimed**.
 
 This is the deferred feature backlog requested after the neutral VFX Editor
 delivery. The parent checklists are Phase 39.1 and Phase 39.2 in
-[ROADMAP.md](../../ROADMAP.md). Existing behavior is described in the
+[ROADMAP.md](../../../../ROADMAP.md). Existing behavior is described in the
 [authoring guide](VFX_EDITOR_AUTHORING_GUIDE.md); Phase 39 interactive/OpenGL
 acceptance remains tracked independently in its
-[acceptance report](VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
+[acceptance report](../reports/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
 
 Feature categories were checked against Unity's official
 [Particle System modules](https://docs.unity.com/en-us/engine/6000.0/manual/visual-effects/particle-systems/particle-system-modules)

@@ -1,6 +1,6 @@
 # Materials and HLSL Shader Authoring
 
-Status: current workflow and boundaries, reviewed **2026-11-01**. Source locations are linked below; future authoring proposals are kept in the [tooling roadmap](../design/EDITOR_TOOLING_ROADMAP.md).
+Status: current workflow and boundaries, reviewed **2026-11-01**. Source locations are linked below; future authoring proposals are kept in the [tooling roadmap](../archive/design/deferred/EDITOR_TOOLING_ROADMAP.md).
 
 ## 1. Resource model
 
@@ -12,7 +12,7 @@ Sources: [Material](../../Engine/Renderer/include/Axle/Material.hpp), [RHIMateri
 
 ## 2. Descriptor editing
 
-The [SilverCarPaint descriptor](../../Editor/assets/materials/SilverCarPaint.axleasset) shows a compact material definition:
+The [SilverCarPaint descriptor](../../Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset) shows a compact material definition:
 
 ```text
 Material {

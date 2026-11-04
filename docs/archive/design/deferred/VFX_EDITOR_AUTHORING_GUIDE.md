@@ -1,5 +1,9 @@
 # VFX Editor authoring guide
 
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
 Updated: 2026-11-03. This guide describes the implemented authoring workflow.
 The editor is inspired by modular particle editors; it does not claim complete
 Unity Particle System or VFX Graph feature parity.
@@ -111,13 +115,13 @@ round-trip through the shared codec, inline scenes and referenced assets.
 
 This remains a CPU particle simulation with billboard output. Mesh Surface is
 an emission shape, not a mesh-particle renderer. Material support is the subset
-described in the [Phase 39 acceptance report](VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
+described in the [Phase 39 acceptance report](../reports/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
 OBJ sampling and the MSAA soft-depth fallback retain their documented limits.
 There is no GPU graph editor or general-purpose shader graph here.
 
 Deferred capabilities are now tracked as **Phase 39.1** (CPU particle modules,
 trails/mesh output, renderer/gameplay integration and performance) and **Phase 39.2**
-(GPU simulation and visual graph) in [ROADMAP.md](../../ROADMAP.md).
+(GPU simulation and visual graph) in [ROADMAP.md](../../../../ROADMAP.md).
 See the [VFX Unity Feature Backlog](VFX_UNITY_FEATURE_BACKLOG.md) for individual
 packages, existing-versus-missing scope, priority, dependencies and acceptance.
 All expansion items are planned, not implemented or exposed as placeholder controls.

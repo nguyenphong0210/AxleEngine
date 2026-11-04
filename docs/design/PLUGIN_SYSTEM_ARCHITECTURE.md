@@ -1,5 +1,10 @@
 # Project-selected Plugin Architecture
 
+> **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
+> technical contract, not a separate phase queue. Old Phase/G labels and
+> source-audit baselines are retained for traceability. Early Vehicle retirement
+> is delivered; independent review and new plugin implementation remain open.
+
 Date: **2026-11-04**. Source baseline: **3190ab205ace417b81172c0fa92f92e64b5b46f4**.
 Status: **design only; no plugin infrastructure or Vehicle replacement implemented**.
 
@@ -46,14 +51,16 @@ The first supported binary configuration is Windows x64 with the repository's
 configured MSVC toolchain. Other platforms require their own loader, ABI and
 product acceptance; a portable manifest is not evidence of portable binaries.
 
-## 2. Source audit: present behavior versus required changes
+## 2. Source audit at the original planning baseline
 
-These are inspected source facts, not results from compiling or running the engine.
+These are historical source observations at the recorded baseline, not current
+build/test results. Vehicle ownership/target/UI rows predate the early retirement
+in `fa74981`; OPT-00 reviews that delivery and PLG-17 verifies the final cutover.
 
-| Current source | Observed behavior | Required change |
+| Source at audited baseline | Observed then | Target change |
 | --- | --- | --- |
 | [Root CMake](../../CMakeLists.txt) | Unconditionally adds Vehicle, Spline, Terrain, Editor and Runtime directories | Product-specific configuration and resolved module selection |
-| [Vehicle target](../../Engine/Vehicle/CMakeLists.txt) | Static library contains simulation, audio and VFX | Retire it after a fresh plugin has passed its gates |
+| `Engine/Vehicle/CMakeLists.txt` (retired source path) | Static library contained simulation, audio and VFX | Retirement delivered early; verify data protection and new plugin cutover |
 | [Core](../../Engine/Core/CMakeLists.txt), [Application](../../Engine/Core/src/Application.cpp) | Static Core includes application composition and uses concrete platform/render/physics services | Establish a valid shared-host boundary before loading DLLs |
 | [Scene interface](../../Engine/Scene/include/Axle/Scene.hpp), [implementation](../../Engine/Scene/src/Scene.cpp) | Owns vehicle instances and exposes vehicle queries; creates, updates, copies and renders vehicle state | Generic scene extensions and plugin-owned systems |
 | [Components](../../Engine/Scene/include/Axle/Components.hpp) | Vehicle, wheel, audio and VFX component declarations are in the common header | New Vehicle components live in the plugin |
@@ -320,7 +327,7 @@ an SDK. Plugins import shared host services, not static copies. Header-only type
 must have identical layouts/configuration. Editor module code uses the host ImGui
 context and implementation; it must not compile another ImGui or backend.
 
-Vehicle currently calls Jolt directly. The first Vehicle design keeps Jolt as the
+The retired Vehicle implementation called Jolt directly. The new design keeps Jolt as the
 physics backend and uses one shared Jolt implementation in the Editor dependency
 graph, with matching `JPH_SHARED_LIBRARY`/import settings and host initialization.
 The vendored Jolt build has shared-library support; scope its build options rather
@@ -456,10 +463,10 @@ interpreted as compatible. Old files remain intact and can be opened passively.
 Optional migration must be an explicit previewable command, preserve original
 assets and report unmapped fields; it is outside the minimum completion gate.
 
-After generic hooks and a new runnable fixture work, retire old `Engine/Vehicle`,
-its unconditional CMake target, built-in Vehicle components/serializer branches,
-Scene vehicle queries, Inspector/debug/render branches and hardcoded product UI
-bindings. Inventory legacy tests and samples first. Preserve relevant physics
+The old `Engine/Vehicle` and built-in target/components/lifecycle/UI wiring
+were retired early in `fa74981`, before plugin implementation. OPT-00 reviews
+that delivery; PLG-17 later verifies the cutover against the new plugin and
+generic unknown-data contracts. Do not restore the old module. Preserve relevant physics
 regressions, replace Vehicle-specific assertions with new public API fixtures and
 classify incompatible historical samples; never disable a failing suite merely to
 declare the rewrite complete. Audio/VFX feature losses remain explicitly listed

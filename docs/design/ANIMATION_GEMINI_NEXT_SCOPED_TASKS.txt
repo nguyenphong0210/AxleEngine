@@ -1,8 +1,0 @@
-SUPERSEDED ENTRY POINT -- NO IMPLEMENTATION TASK IS RELEASED BY THIS FILE.
-
-Read GEMINI.md, then docs/agents/WORKING_PROTOCOL.md and docs/agents/CODEX_GEMINI_EXCHANGE.json.
-Run: python scripts/agent_exchange.py inbox --agent Gemini
-Reply directly in the exchange as Gemini, referencing the incoming message ID.
-The shared task card records current priority, delivery/review state and released scope.
-Phase 41 rendering foundations now take priority; do not replay the historical animation assignment.
-Historical original: docs/agents/archive/ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt

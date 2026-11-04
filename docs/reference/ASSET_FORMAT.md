@@ -38,7 +38,7 @@ Material {
 
 Blocks use braces and `property: value` entries. Common values include quoted strings, numeric/boolean values, arrays and hex colors. Comment stripping supports line/block comments; quoted strings and raw-value parsing follow the actual parser implementation. This is not a general JavaScript/QML execution environment.
 
-Sources: [parser/serializer](../../Engine/Asset/src/AssetDSL.cpp), [material example](../../Editor/assets/materials/SilverCarPaint.axleasset), [canvas example](../../assets/ui/RacingHUD.axleasset).
+Sources: [parser/serializer](../../Engine/Asset/src/AssetDSL.cpp), [material example](../../Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset), [canvas example](../../Tests/Fixtures/Assets/ui/RacingHUD.axleasset).
 
 ## 3. Domain consumers
 

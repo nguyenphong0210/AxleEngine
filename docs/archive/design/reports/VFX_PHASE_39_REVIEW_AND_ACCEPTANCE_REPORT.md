@@ -1,8 +1,12 @@
 # Phase 39 follow-up review and acceptance
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 Date: 2026-11-02. Reviewed Gemini baseline: `1de558c` (27 commits after the handoff).
 Authoring follow-up: 2026-11-03; see the neutral workspace delivery below and the
-[authoring guide](VFX_EDITOR_AUTHORING_GUIDE.md).
+[authoring guide](../deferred/VFX_EDITOR_AUTHORING_GUIDE.md).
 Status: corrective implementation and automated/physical backend verification complete; interactive UI/OpenGL acceptance remains open.
 
 The original commit subjects covered A1-J4, but several production paths still
@@ -117,8 +121,8 @@ Code commits after the Gemini baseline:
   imply a global live hot-reload service for all running instances. Applying a
   working copy is explicit and produces an inline entity definition.
 
-The original [completion plan](VFX_PHASE_39_COMPLETION_PLAN.md) and
-[implementation guide](VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) remain the
+The original [completion plan](../deferred/VFX_PHASE_39_COMPLETION_PLAN.md) and
+[implementation guide](../deferred/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) remain the
 scope/design references. Use this report and actual source names for current
 implementation/verification status.
 
@@ -290,7 +294,7 @@ LNK4098 and APIENTRY redefinition warnings are not introduced by this delivery.
 A transient Runtime post-build asset-directory copy failure was resolved by
 retrying the directory copy and rebuilding; the final full build passes.
 
-The [authoring guide](VFX_EDITOR_AUTHORING_GUIDE.md) records supported operations
+The [authoring guide](../deferred/VFX_EDITOR_AUTHORING_GUIDE.md) records supported operations
 and the remaining capability backlog. Trails/ribbons, mesh-particle output,
 rate-over-distance/prewarm/richer axis controls and GPU graph simulation are not
 claimed by these changes. Phase 39 remains open for J4 interactive/OpenGL checks;

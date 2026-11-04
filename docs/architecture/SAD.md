@@ -1,5 +1,10 @@
 # Software Architecture Document: Current System
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Status: **AS-IS**, reviewed 2026-11-01. Proposed changes are documented separately in [Target Layered Architecture](TARGET_LAYERED_ARCHITECTURE.md).
 
 ## 1. Purpose and system context

@@ -8,122 +8,31 @@ Welcome to the **AxleEngine Development Roadmap**. This document tracks the comp
 
 * **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (RHI-primary D3D12/Vulkan migration, OpenGL 4.5 compatibility), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
 * **Phase Status**: Earlier milestones record historical deliveries. Phase 38.3 and Phase 39 retain outstanding acceptance checks. Phase 40 has delivered CPU foundations and Gemini G1 awaiting independent review. **Architecture Foundation is the highest-priority program: Phase 41 NRI/rendering, Phase 42 EnTT/enkiTS and Phase 43 plugins/Vehicle are coordinated before feature expansion; implementation remains unstarted.**
-* **Automated Test Verification**: Record evidence per suite/backend. VFX CPU (7 suites), physical DX12/Vulkan VFX readbacks, Step 102 with physical DX12, and material Step 106 on both backends pass. Interactive VFX UI/OpenGL checks and separately tracked material manual checks remain pending. See the [VFX review and acceptance report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
+* **Automated Test Verification**: Record evidence per suite/backend. VFX CPU (7 suites), physical DX12/Vulkan VFX readbacks, Step 102 with physical DX12, and material Step 106 on both backends pass. Interactive VFX UI/OpenGL checks and separately tracked material manual checks remain pending. See the [VFX review and acceptance report](docs/archive/design/reports/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
 * **Upcoming Focus / execution priority #1**: **Architecture Foundation**, using the [master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) and [NRI contract](docs/design/NRI_INTEGRATION_CONTRACT.md). Preserve P41/EJ/PLG package IDs, follow shared safety/data prerequisites, and defer advanced rendering/authoring features as specified. Existing material/VFX/animation acceptance obligations remain open. Phase numbering does not determine execution order.
 
-## Architecture Foundation: current highest priority
+## Current architecture work: follow one roadmap
 
-**2026-11-04:** The user wants a clean architecture before other feature expansion.
-The [master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) combines NRI,
-EnTT/enkiTS and complete Vehicle/plugin extraction. Six AF packages fill identity,
-Core/ownership, scene/asset data boundaries and enforcement gaps. Domain package
-contracts remain canonical; the master's cross-track edges and waves govern order.
+**[Architecture Optimization Roadmap](docs/ROADMAP.md)** is the sole execution
+order and package progress checklist for this cleanup. It runs OPT-00..10 in
+sequence; OPT-11 and feature expansion follow later. Start with OPT-00, independent
+review of the delivered Vehicle retirement, then OPT-01 baseline work.
 
-| Track | Packages | Detailed contract | Current status |
-| --- | --- | --- | --- |
-| Shared architecture foundations | AF-00..05 | [Master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | Planned; 6 packages |
-| Phase 41: NRI/RHI rendering | P41-00..29 | [Rendering plan](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md), [NRI contract](docs/design/NRI_INTEGRATION_CONTRACT.md) | Planned; 23 architecture packages and 7 deferred feature/full-phase packages |
-| Phase 42: EnTT/enkiTS | EJ-00..17 | [ECS/jobs refactor plan](docs/design/ENTT_ENKITS_REFACTOR_PLAN.md) | Planned; 18 packages |
-| Phase 43: Plugins and Vehicle | PLG-00..25 | [Plugin/Vehicle plan](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | Planned; 26 packages |
+Historical **Phase 41 / P41**, **Phase 42 / EJ** and **Phase 43 / PLG** remain
+stable domain identifiers. Their numerical order is not the execution order.
+Detailed contracts and cross-plan dependencies remain in the
+[master contract](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) and the
+[design catalog](docs/design/README.md). Do not maintain a second package checklist here.
 
-Track individual package checkboxes in the detailed sections below. Group/wave
-checkboxes close only when their constituent packages and required evidence pass;
-none is complete merely because its planning document exists.
+**Vehicle status:** `fa74981` delivered retirement of the built-in module before
+the new plugin. Gemini reports successful builds/tests; Codex has inspected source
+only. Legacy preservation/physics correctness and the complete delivery remain
+pending independent review. PLG-17 is retained for final retirement/cutover
+verification; neither retirement nor a report closes the new plugin packages.
 
-- [ ] **W0:** Baseline/fault harnesses and stable asset identity.
-- [ ] **W1:** P1 threading/task/reload repairs and Core/composition ownership.
-- [ ] **W2:** Correct ECS mutation/transforms and clean scene/asset data boundaries.
-- [ ] **W3:** Shared simulation plus NRI resource/frame/device foundation.
-- [ ] **W4:** Shared rendering consumers, physical UI submission and debug.
-- [ ] **W5:** DLL host/SDK, Plugins window and project plugin build/restart.
-- [ ] **W6:** Fresh Jolt Vehicle, old-code retirement, Spline/Terrain and scripts.
-- [ ] **W7:** Selected static Runtime/export and final product boundaries.
-- [ ] **W8:** Current native/product evidence and architecture enforcement.
-
-The architecture exit covers 73 packages. Seven deferred P41 feature/full-phase
-packages remain in W9; architecture acceptance does not close the entire rendering
-phase. No implementation is claimed or assigned by this documentation update.
-
-**Proposed first unit:** AF-00 + EJ-00 (baseline and permanent fault fixtures),
-then EJ-01..03 (thread identity, deferred main-thread delivery and compiler handoff).
-AF-01 must pass before identity-sensitive asset/module relocation or export changes.
-EJ-04..07 close remaining P1 reload/bridge/shutdown hazards. An actual source task
-still needs a concrete assignment in the exchange.
-
-### Phase 41: NRI/RHI rendering workstream
-
-The user has prioritized RHI as the primary renderer and OpenGL as compatibility
-fallback. Significant internal replacement is permitted where the contracts below
-require it. Preserve authored assets and a runnable migration path. This update
-creates a plan; it does not claim implementation or release the whole backlog.
-
-**Rendering-specific candidates:** P41-00 (baseline/harness), then P41-01
-(backend readiness and fallback equivalence), subject to earlier master safety/Core
-gates. The first overall candidates are AF-00/EJ-00 and then EJ-01..03.
-Actual assignments are recorded in
-[the shared exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json). Rendering-related
-Phase 40 integration follows the dependency map; unrelated new authoring and VFX
-expansion wait behind this track. Historical completed checkboxes are not proof
-of Phase 41 acceptance.
-
-**Build/startup prerequisite delivered (2026-11-03):** Tests and fixtures now live
-under top-level `Tests/`; Editor/default builds exclude Tests and Runtime. Development
-Editor startup now selects the configured `Samples/TestProject` project;
-`--empty-project` preserves fresh empty startup. Samples are not bundled into
-Editor and scene entities are never injected automatically. Explicit project opening and on-demand player builds
-remain available. See [build/startup workflows](docs/guides/BUILD_WORKFLOWS.md).
-This preparation does not mark any Phase 41 rendering package complete.
-
-## Phase 42: EnTT/enkiTS normalization and shared simulation
-
-**2026-11-04:** The [EnTT/enkiTS review](docs/architecture/ENTT_ENKITS_REVIEW.md)
-records three P1 and two P2 integration findings, including four native fault
-reproductions. The [refactor plan](docs/design/ENTT_ENKITS_REFACTOR_PLAN.md)
-keeps EnTT/enkiTS/Jolt and defines 18 packages:
-
-- [ ] **G0 / EJ-00:** Permanent Debug/Release fault fixtures and baseline.
-- [ ] **G1 / EJ-01..04:** Thread identity, deferred main-thread completion, compiler handoff and safe script reload/teardown.
-- [ ] **G2 / EJ-05..07:** Stable Jolt submission lifetime, single-thread progress and coherent shutdown.
-- [ ] **G3 / EJ-08..10:** Correct view iteration, scene-aware mutations and transform ownership.
-- [ ] **G4 / EJ-11..14:** Shared phases, fixed clock/input rules and Editor/Runtime cutover.
-- [ ] **G5 / EJ-15..17:** Stress/parity evidence, plugin/rendering seam agreement and documentation.
-
-**Status: documentation only; no finding is fixed or implementation released.**
-This is a correctness prerequisite at the affected native plugin/rendering seams,
-coordinated as Phase 42 by the master rather than a standalone sequence after
-every rendering feature. Use the master and live exchange for actual scoped assignments.
-
-## Phase 43: Plugin system and complete Vehicle replacement
-
-**2026-11-04:** The user selected DLL plugins for Editor and static plugin modules
-for shipped Runtime, with project-level selection in a new Plugins window and
-support for plugins under both Engine and project roots. Replacing Vehicle from
-scratch is acceptable; preserving its old C++ API and exact handling is not a gate.
-
-Under task **VEHICLE-RETIREMENT**, the legacy built-in Vehicle architecture
-(Engine/Vehicle, CMake target AxleVehicle, VehicleComponent, WheelComponent,
-and built-in scene ownership / update loops / UI inspector / presets) was retired early
-from the core engine without waiting for the new Vehicle plugin to be ready.
-Legacy scene and assembly data is preserved verbatim via LegacyComponentsHolder
-with physics rigid body synthesis prevented for unsupported legacy vehicles.
-Future plugin framework packages and the replacement Jolt Vehicle plugin
-(PLG-00..25, specifically PLG-14..18) remain open and will be implemented in subsequent packages.
-
-Read the [architecture](docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md),
-[26-package plan](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) and
-[implementation guide](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md).
-
-- [ ] **G0 / PLG-00..04:** Baseline, manifest discovery, dependency resolution, project selection and exact build plans.
-- [ ] **G1 / PLG-05..09:** Shared Engine/Editor host ownership, native DLL loading, EnTT storage lifetime, scene codecs and scheduling.
-- [ ] **G2 / PLG-10..13:** Plugins window, per-project build/restart/recovery and a real external project plugin.
-- [ ] **G3 / PLG-14..18:** Fresh Jolt Vehicle data/simulation/tools, old built-in retirement and scoped audio/VFX integrations.
-- [ ] **G4 / PLG-19..23:** Spline/Terrain separation, script dependencies, selected static Runtime and snapshot-bound export.
-- [ ] **G5 / PLG-24..25:** Actual DLL/UI/physics/player acceptance, link exclusions and maintained authoring/build documentation.
-
-All boxes remain open. Earlier material/VFX/animation acceptance obligations remain
-recorded. The master now coordinates Phase 41/42/43 prerequisites and defers
-advanced features until the architecture exit. The
-[exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json) owns the next released scope.
+The milestones below preserve development history, original feature groupings
+and unresolved material/VFX/animation obligations. Old completion claims are not
+current architecture acceptance or instructions to resume feature work.
 
 ### 🛡️ Core Engineering & Contribution Principles
 1. **Language Standard**: All source code, header files, docstrings, architectural documentation, commit messages, and automated tests must be written exclusively in **English**.
@@ -723,9 +632,9 @@ advanced features until the architecture exit. The
     - [x] Step 105 tests verifying: DXC reflection parser, packed ORM texture sampling, Clearcoat push constants, and error jump navigation.
 
 - [ ] **Phase 38.3: Material Pipeline Completion, Godot-style Inspector & Automotive Materials (`Engine/Scene`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/UI`, `Editor`)**
-  - **Execution Order**: Complete existing material behavior first, reorganize authoring second, then add automotive extensions. DX12/Vulkan GPU acceptance now passes on RTX 3070; the remaining interactive editor checklist keeps the phase open. See [acceptance report](docs/design/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md).
+  - **Execution Order**: Complete existing material behavior first, reorganize authoring second, then add automotive extensions. DX12/Vulkan GPU acceptance now passes on RTX 3070; the remaining interactive editor checklist keeps the phase open. See [acceptance report](docs/archive/design/reports/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md).
   - [x] **Step 1 - Complete Existing Inspector -> Asset -> Renderer -> Shader Paths**:
-    - [x] Audit every existing material property across the asset inspector, entity inspector, material component, `.axleasset` serialization, renderer bindings, and shader consumption; record missing or ineffective connections. See [Material Pipeline Audit](docs/design/MATERIAL_PIPELINE_AUDIT.md).
+    - [x] Audit every existing material property across the asset inspector, entity inspector, material component, `.axleasset` serialization, renderer bindings, and shader consumption; record missing or ineffective connections. See [Material Pipeline Audit](docs/archive/design/deferred/MATERIAL_PIPELINE_AUDIT.md).
     - [x] Complete both save/load and live updates for Albedo, Normal Strength, Metallic, Roughness, AO Strength, Emission, Separate Maps / Packed ORM, independent UV X/Y tiling, and UV offset.
       - [x] Preserve inspector asset and inline scene material values on save/reload, including HDR color, alpha, map paths and enable states, ORM, coat, anisotropy, and shader flags (Step 106).
     - [x] Verify Surface Type, Alpha Cutoff, Cull Mode, Depth Write, Specular Highlights, Environment Reflections, and Render Queue affect the intended shader or pipeline state, including transparent draw ordering.
@@ -789,8 +698,8 @@ advanced features until the architecture exit. The
 
 - [ ] **Phase 39: Visual Particle & VFX Studio - End-to-End Editor Completion (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Editor`)**
   - **Status (2026-11-03): Gemini's A1-J4 delivery received a corrective integration review and a neutral modular authoring upgrade. CPU tests and physical DX12/Vulkan rendering checks PASS on NVIDIA GeForce RTX 3070. Interactive editor acceptance and a separate OpenGL regression session remain pending; Phase 39 stays OPEN. Phase 40 planning and its scoped Gemini implementation handoff are tracked separately; they do not close these remaining checks.**
-  - **Current evidence**: [Review and Acceptance Report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md). Commit subjects and historical checklist marks alone are not acceptance evidence.
-  - **Scope/design**: [Completion Plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md) and [Gemini Implementation Guide](docs/design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md). Proposed type names in the guide are blueprints; use actual source names below.
+  - **Current evidence**: [Review and Acceptance Report](docs/archive/design/reports/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md). Commit subjects and historical checklist marks alone are not acceptance evidence.
+  - **Scope/design**: [Completion Plan](docs/archive/design/deferred/VFX_PHASE_39_COMPLETION_PLAN.md) and [Gemini Implementation Guide](docs/archive/design/deferred/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md). Proposed type names in the guide are blueprints; use actual source names below.
   - [x] **A - Selection, Ownership & Lifecycle (code/automated coverage)**:
     - [x] **A1**: Idempotent selection and safe scene detach; preserve dirty work and opened asset documents across unrelated selection changes.
     - [x] **A2**: Independent panel-owned preview systems; a private scene renders them through the active RHI without advancing user scene simulation.
@@ -837,7 +746,7 @@ advanced features until the architecture exit. The
     - [x] Resizable wide columns and compact tabs; editable Emit count, background/grid/live-bounds settings, conservative transformed framing and two-axis camera pan.
     - [x] Tested scene instance placement, clean saved references versus inline working copies, validated explicit Apply and independent simulation ownership.
     - [x] CPU ImGui wide/narrow layout and hidden-Effect-tab dirty-dialog checks; actual D3D12 panel/preview readbacks and an exported workspace capture. Native input and OpenGL acceptance remain in J4.
-    - **Usage and remaining capability backlog**: [VFX Editor Authoring Guide](docs/design/VFX_EDITOR_AUTHORING_GUIDE.md). This delivery does not claim full Unity Particle System or VFX Graph parity.
+    - **Usage and remaining capability backlog**: [VFX Editor Authoring Guide](docs/archive/design/deferred/VFX_EDITOR_AUTHORING_GUIDE.md). This delivery does not claim full Unity Particle System or VFX Graph parity.
   - **Verified commands/evidence**:
     - [x] Build `AxleVFXUnitTests`, `AxleVFXGPUTests`, `AxleTests` and `AxleMaterialUnitTests` in Release; dependencies build `AxleEditor` and `AxleRuntime`.
     - [x] `ctest --test-dir build -C Release --output-on-failure`: Material CPU, VFX CPU, VFX GPU D3D12 and VFX GPU Vulkan pass.
@@ -858,7 +767,7 @@ advanced features until the architecture exit. The
 
 - [ ] **Phase 39.1: Particle Module & Rendering Expansion toward Unity-style Authoring (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Engine/RHI`, `Editor`, `Runtime`)**
   - **Status (2026-11-03): deferred feature backlog only; no implementation claimed.** Extend the current neutral modular editor. Phase 39 interactive/OpenGL acceptance remains separately open; Phase 40 animation scope and numbering are unchanged.
-  - **Detailed packages, current-versus-missing scope, dependencies and acceptance**: [VFX Unity Feature Backlog](docs/design/VFX_UNITY_FEATURE_BACKLOG.md). Official comparison references are linked there.
+  - **Detailed packages, current-versus-missing scope, dependencies and acceptance**: [VFX Unity Feature Backlog](docs/archive/design/deferred/VFX_UNITY_FEATURE_BACKLOG.md). Official comparison references are linked there.
   - **Priority/order**: D1 performance baseline -> A0 -> A1/A2 -> A3/A4 -> B1/B2 -> expanded D1 budgets -> B3/C1-C5/D2 as their dependencies become available. E verification accompanies every package. Use a separate implementation/test commit per package.
   - [ ] **A0 - Shared Parameter Modes (P1)**: Constant/two-constant/curve/two-curve and color/gradient modes; deterministic sampling, validation and migration of existing ranges/curves.
   - [ ] **A1 - Emission & Initialization (P1)**: Rate over distance with interpolated moving-emitter spawning, start delay, bounded prewarm and explicit teleport/reset behavior.
@@ -878,7 +787,7 @@ advanced features until the architecture exit. The
   - [ ] **E - Acceptance per Package**: Complete schema/migration -> inspector/history -> simulation -> rendering -> scene/packaged Runtime paths; CPU tests, real DX12/Vulkan captures and native UI checks. Track OpenGL and MSAA soft-depth support explicitly.
 
 - [ ] **Phase 39.2: GPU Particle Simulation & Visual Effect Graph (`Engine/VFX`, `Engine/RHI`, `Engine/UI`, `Editor`, `Runtime`)**
-  - **Status (2026-11-03): deferred expansion, separate from CPU Particle System parity.** Start after profiling and a compute/platform feasibility decision; Phase 39.1 does not require a node editor. Details: [VFX Unity Feature Backlog](docs/design/VFX_UNITY_FEATURE_BACKLOG.md).
+  - **Status (2026-11-03): deferred expansion, separate from CPU Particle System parity.** Start after profiling and a compute/platform feasibility decision; Phase 39.1 does not require a node editor. Details: [VFX Unity Feature Backlog](docs/archive/design/deferred/VFX_UNITY_FEATURE_BACKLOG.md).
   - [ ] **G0 - Feasibility**: Target workloads, compute/indirect capabilities, typed data/bounds/event contracts, supported backends and CPU fallback/unsupported behavior.
   - [ ] **G1 - GPU Runtime**: Spawn/update/compaction, bounded allocation, resource barriers/lifetimes, sorting, indirect rendering and safe resizing/teardown.
   - [ ] **G2 - Graph Model & Compiler**: Stable typed nodes/ports, spawn/initialize/update/output contexts, persisted parameters, validation, diagnostics and last-good execution.
@@ -887,14 +796,14 @@ advanced features until the architecture exit. The
 
 - [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/Scene`, `Engine/UI`, `Editor`, `Runtime`)**
   - **Status (2026-11-03): A3 publication enforcement and A2 FBX baking review corrections complete.** A3's enforced immutable mesh-resource publication, non-assignability, and validated non-null replacement (R1/R2) are verified. A2's technical baking gaps (rotational Nyquist aliasing R3, transactional output R8, close STEP boundary loss R4, constant-next holds R5, terminal linear key exclusion R6, unskipped budget & nonlinear adaptive refinement R7) are resolved with permanent registered CPU tests. Release/Debug builds, unit tests, and both Animation CTests PASS. A2 remains open for expanded multi-exporter corpus verification. Animation RHI pixels, native authoring UI and standalone packaged playback are pending; Phase 38.3/39 manual checks remain separately open.
-  - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test reference**: [Gemini Implementation Guide](docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
+  - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/archive/design/deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test reference**: [Gemini Implementation Guide](docs/archive/design/deferred/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
   - **Current coordination**: G1 was delivered in `7ba4361`/`d4dbb75` and awaits independent review. **Phase 41 rendering foundations now take priority; D1/D2 and new authoring work are deferred.** P41-23/24 reuse the relevant Phase 40 F1-F3 contracts and evidence rather than creating a parallel renderer. Use the [shared exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json); no new implementation is released by this roadmap.
   - **Execution**: 28 separately committed packages. First deliver A0-A3, B1/B2, C1/C2, B3, F1/F2 and G1/G2 as an executable import -> persist -> independent animator -> RHI preview slice; then complete authoring and acceptance. Package dependencies in the plan take precedence over the display order below.
   - [ ] **A - CPU Foundations & Instance Safety**:
     - [x] **A0**: Always-active, device-free `AxleAnimationUnitTests` target and temporary fixtures.
     - [x] **A1**: Validated skeleton topology, partial-channel bind TRS fallback, quaternion/signed-scale handling and derived lookup rebuilding.
-    - [ ] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits. Reviewed S1-S4 defects are corrected: exact constant-next keys/open intervals, float-collision rejection, round-trip asset precision and finite/work-bounded transactional baking are verified. Broader weighted/layered/extrapolated source behavior, accuracy guarantees and multi-exporter corpus remain open. [Final Corrections](docs/design/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md).
-    - [x] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy. Private validated factory-only mesh construction, owned immutable rig/geometry snapshots, derived bounds, non-assignability, last-good replacement and migrated legacy callers verified by CPU and integration checks. [Final Corrections](docs/design/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md).
+    - [ ] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits. Reviewed S1-S4 defects are corrected: exact constant-next keys/open intervals, float-collision rejection, round-trip asset precision and finite/work-bounded transactional baking are verified. Broader weighted/layered/extrapolated source behavior, accuracy guarantees and multi-exporter corpus remain open. [Final Corrections](docs/archive/design/reports/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md).
+    - [x] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy. Private validated factory-only mesh construction, owned immutable rig/geometry snapshots, derived bounds, non-assignability, last-good replacement and migrated legacy callers verified by CPU and integration checks. [Final Corrections](docs/archive/design/reports/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md).
   - [ ] **B - Versioned Assets, Baking & Persistence**:
     - [x] **B1**: Stable definitions/IDs for Skeleton, SkeletalMesh, AnimationClip and AnimatorController; append-only asset classifications.
     - [x] **B2**: Shared complete codecs, atomic saves, validated cooked geometry, FileSystem/VFS loading and last-good reload.
@@ -914,7 +823,7 @@ advanced features until the architecture exit. The
     - [ ] **F3**: Animated silhouette entity picking, safe draw/resource lifetimes and preserved legacy OpenGL skin/shadow paths.
     - **Boundary**: the inspected RHI renderer has no full shadow-map pass; general RHI shadow implementation is separate work. Do not claim animated RHI shadows from shader compilation alone.
   - [ ] **G - Bottom Animation Dock & Dopesheet**:
-    - [x] **G1**: Device-free clip/controller documents, saved revision/dirty state, transactional Undo/Redo and guarded open/save/close. Gemini reports implementation/test completion; independent Codex review is pending. [Delivery](docs/design/ANIMATION_G1_GEMINI_DELIVERY.md), [exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json).
+    - [x] **G1**: Device-free clip/controller documents, saved revision/dirty state, transactional Undo/Redo and guarded open/save/close. Gemini reports implementation/test completion; independent Codex review is pending. [Delivery](docs/archive/design/reports/ANIMATION_G1_GEMINI_DELIVERY.md), [exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json).
     - [ ] **G2**: Private rendered preview; Play/Pause/Stop/Step/Loop, 24/30/60 FPS display/snap, speed and clip seek; preserve saved docking layouts.
     - [ ] **G3**: Bone TRS/quaternion tracks, diamonds/box selection/drag/copy/paste/delete, value editing and undoable event markers.
   - [ ] **H - Skeleton Viewport Authoring**:
@@ -940,131 +849,27 @@ advanced features until the architecture exit. The
 
 ### Shared Architecture Foundation prerequisites (AF packages)
 
-These packages cut across Phases 41/42/43 and are not another feature phase.
-Use the [master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) for
-their file scope, evidence, exit criteria and combined dependency graph.
-
-- [ ] **AF-00:** Shared baseline, permanent failure harnesses, target/include inventory and architecture-check scaffolding.
-- [ ] **AF-01:** Stable source-controlled asset UUID/metadata policy, rename/move/reference checks and atomic persistence.
-- [ ] **AF-02:** Extract Application/bootstrap from Core and establish explicit service/context ownership.
-- [ ] **AF-03:** Separate SceneData from concrete runtime/render/physics/toolkit bridges, preserving one authoritative registry.
-- [ ] **AF-04:** Separate CPU asset registry/format/import/cook contracts from GPU resource/cache ownership.
-- [ ] **AF-05:** Enforce dependency/product boundaries and accept the combined architecture using current native/product evidence.
-
-**Exit:** stable authored identity; independently testable Core/Scene/asset data;
-safe thread/task/DLL/GPU lifetime; shared simulation/render services; project-selected
-static Runtime and usable Engine/project plugins. Full advanced rendering parity
-remains separately tracked in the deferred P41 packages.
+AF package definitions and dependency edges: [master contract](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md).
+Current order and progress: [optimization roadmap](docs/ROADMAP.md).
 
 ### Milestone 11: RHI-Primary Rendering Foundation (coordinated architecture-first)
 
-- [ ] **Phase 41: Shared Rendering Architecture, GPU Safety & Product Integration**
-  - **Status (updated 2026-11-04): planning only; Phase 41 rendering workstream in Architecture Foundation.** P41-00..20/25/26 follow master prerequisites; P41-21..24 and complete P41-27..29 remain deferred feature/full-phase work. Preserve Phase 38.3/39 acceptance and delivered Phase 40 CPU work.
-  - **Design**: [RHI-Primary Architecture](docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md). **Packages/dependencies/acceptance**: [Implementation Plan](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md). **Coding workflow**: [Implementation Guide](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md).
-  - **G0 - Safety and visible primitives**:
-    - [ ] **P41-00**: Always-active Debug/Release render harness, failure probe and honest backend baseline.
-    - [ ] **P41-01**: Backend selection/readiness, explicit and automatic GL fallback equivalence, checked complete startup.
-    - [ ] **P41-02**: Transactional GPU creation/replacement, descriptor validation and partial-allocation cleanup.
-    - [ ] **P41-03**: Structured GPU errors, stopped submissions on device loss and bounded teardown.
-    - [ ] **P41-04**: Canonical backend-independent primitive creation, resolution and scene/assembly persistence.
-  - **G1 - Frame/resource foundation**:
-    - [ ] **P41-05**: Resource handles, device epochs, generation ownership and shared GPU assets.
-    - [ ] **P41-06**: Recording/submission leases and fence-safe retirement across all consumers.
-    - [ ] **P41-07**: First-use/subresource tracking and commit of states only after successful submission.
-    - [ ] **P41-08**: Frame contexts, bounded arenas and completion-safe allocator reuse.
-    - [ ] **P41-09**: One presentation owner, native UI recording bridge, surface/VSync/minimize handling.
-    - [ ] **P41-10**: Transactional per-view targets, resize/format changes and leased GUI textures.
-    - [ ] **P41-11**: Context-free decode, central upload and device-aware resource caching.
-  - **G2 - Common scene rendering**:
-    - [ ] **P41-12**: Immutable RenderWorld, world-space scene extraction and shared mesh/material resolution.
-    - [ ] **P41-13**: RenderService, sequential declared-usage graph and main Editor viewport integration.
-    - [ ] **P41-14**: OpenGL compatibility adapter using the common data/service contract.
-  - **G3 - All rendering consumers**:
-    - [ ] **P41-15**: Private asset/material service views with preserved authoring and controls.
-    - [ ] **P41-16**: Private VFX service views with preserved deterministic simulation/input/document behavior.
-    - [ ] **P41-17**: Multi-backend Assembly Editor preview using actual hierarchy and resources.
-    - [ ] **P41-18**: Bounded mesh/assembly thumbnail jobs and safe cache invalidation.
-    - [ ] **P41-19**: Standalone Runtime backend/service/present integration, actual Canvas GPU submission and cooked startup.
-    - [ ] **P41-20**: Shared shader/material/color/depth contracts and honest renderer capabilities.
-  - **G4 - Functional parity**:
-    - [ ] **P41-21**: Modern directional shadow/cascade passes and receiver/cutout pixel evidence.
-    - [ ] **P41-22**: Authored HDR environment loading, sky rendering and real IBL integration.
-    - [ ] **P41-23**: Reviewed animation CPU integration, GPU skinning and animated shadows; cross-map Phase 40 F1/F2.
-    - [ ] **P41-24**: Geometry/pose/material-consistent picking and stale-readback rejection; cross-map Phase 40 F3.
-    - [ ] **P41-25**: Correct Edit/Play/Pause physics debug and isolated overlays.
-  - **G5 - Production cutover**:
-    - [ ] **P41-26**: Real module/ownership boundaries and Runtime build with Editor/UI dependencies disabled.
-    - [ ] **P41-27**: Measured frame/upload performance and safe removal of per-view queue-idle waits.
-    - [ ] **P41-28**: CPU, physical D3D12/Vulkan, GL, native UI and standalone failure/stress acceptance matrix.
-    - [ ] **P41-29**: Accepted modern defaults, removal of obsolete active paths and maintained GL fallback.
-  - **Completion gate**: Every required acceptance row has real evidence. Proposed APIs/targets and historical tests do not establish Phase 41 completion. No live backend switching, GPU VFX graph or ray tracing is required.
+Historical domain **Phase 41 / P41-00..29**: baseline in OPT-01, NRI foundation in
+OPT-04, shared consumers in OPT-05, final product boundaries in OPT-09, deferred
+features/full rollout in OPT-11. [Detailed contracts](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md).
+All package checkboxes now live in [one roadmap](docs/ROADMAP.md).
 
 ### Milestone 12: EnTT/enkiTS Normalization and Shared Simulation
 
-- [ ] **Phase 42: ECS/Jobs Correctness, Ownership and Product Timing**
-  - **Status (2026-11-04): planned; no implementation started.** Repair the three P1 and two P2 findings in the [integration review](docs/architecture/ENTT_ENKITS_REVIEW.md); keep EnTT, enkiTS and Jolt.
-  - **Packages/contracts/acceptance:** [Refactor plan](docs/design/ENTT_ENKITS_REFACTOR_PLAN.md). **Cross-track execution:** [Master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md). Phase numbering does not postpone safety fixes until every rendering feature is complete.
-  - **G0 - Permanent baseline**:
-    - [ ] **EJ-00:** Always-active Debug/Release fault regressions, owned watchdogs and a deliberate harness failure probe.
-  - **G1 - Thread ownership and script completion**:
-    - [ ] **EJ-01:** Correct main/worker/external thread identity, scheduler admission and lifecycle epochs.
-    - [ ] **EJ-02:** Always-deferred owner-scoped main-thread queue with bounded pumping and stale-operation rejection.
-    - [ ] **EJ-03:** Immutable compiler requests/results, safe process cancellation and owner-thread delivery.
-    - [ ] **EJ-04:** Candidate DLL validation, safe script reload barriers, module leases and compile/detach cleanup.
-  - **G2 - Jolt/enki task lifetime**:
-    - [ ] **EJ-05:** Stable submission records independent of Jolt job slots, retained task storage and safe reclamation.
-    - [ ] **EJ-06:** Bridge-owned waits, one-thread forward progress and proven physics reentrancy behavior.
-    - [ ] **EJ-07:** Owning async handles and coherent producer/job/scene/module/scheduler shutdown ordering.
-  - **G3 - ECS mutation and transform boundaries**:
-    - [ ] **EJ-08:** Valid serial/parallel view equivalence across packed/stable storage and unique entity batches.
-    - [ ] **EJ-09:** Scene-aware structural commands, scene/entity generation checks and mutation barriers.
-    - [ ] **EJ-10:** Explicit transform write/read phases, completed cache revisions and validated disjoint subtree jobs.
-  - **G4 - Shared simulation and product cutover**:
-    - [ ] **EJ-11:** Shared runtime phases, frame/fixed/late script callbacks, script ABI versioning and caller migration.
-    - [ ] **EJ-12:** Fixed clock, bounded catch-up, input-edge consumption and explicit pause/step/speed semantics.
-    - [ ] **EJ-13:** Editor Play/Pause/Step/Stop uses the shared driver while private previews retain independent clocks.
-    - [ ] **EJ-14:** Runtime uses the same driver; remove reversed or duplicate script/physics update paths.
-  - **G5 - Acceptance and maintenance**:
-    - [ ] **EJ-15:** Native stress/failure and Editor/Runtime timing-parity evidence, with honest sanitizer/environment limits.
-    - [ ] **EJ-16:** Agree and verify shared plugin/RHI ownership, mutation, task and simulation seams.
-    - [ ] **EJ-17:** Update implemented guides/evidence and retire obsolete transition adapters.
-  - **Completion gate:** Current regressions close ECSJ-01..05, one-thread bridge disposal progresses, no worker mutates Scene/UI, and actual products share accepted timing. Historical fault probes and written plans do not count as fixes.
+Historical domain **Phase 42 / EJ-00..17**: baseline in OPT-01, P1 repairs in OPT-02,
+ECS/simulation integration in OPT-03 and final evidence in OPT-10.
+[Detailed contracts](docs/design/ENTT_ENKITS_REFACTOR_PLAN.md).
 
 ### Milestone 13: Plugin System and Complete Vehicle Replacement
 
-- [ ] **Phase 43: Engine/Project Plugins, DLL Editor and Selected Static Runtime**
-  - **Status (2026-11-04): planned; no implementation started.** Engine and project plugins use one mechanism. Editor loads selected DLL modules; shipped Runtime statically links the resolved Runtime modules and scripts. A fresh Jolt Vehicle implementation is allowed.
-  - **Design:** [Plugin architecture](docs/design/PLUGIN_SYSTEM_ARCHITECTURE.md). **Packages/acceptance:** [Plugin plan](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md). **SDK/lifecycle examples:** [Implementation guide](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md). **Shared prerequisites:** [Master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md).
-  - **G0 - Discovery and project selection**:
-    - [ ] **PLG-00:** Baseline and legacy Vehicle/Spline/Terrain feature/test/sample retirement inventory.
-    - [ ] **PLG-01:** Metadata-only Engine/project discovery, strict manifests, stable IDs and path validation.
-    - [ ] **PLG-02:** Deterministic dependency/module resolution with visible reasons and invalid-graph rejection.
-    - [ ] **PLG-03:** Versioned project selection, explicit-empty versus legacy policy and atomic persistence.
-    - [ ] **PLG-04:** Selected-only product plans, SDK/toolchain fingerprints and exact artifact receipts.
-  - **G1 - Shared native hosts and scene lifecycle**:
-    - [ ] **PLG-05:** Runtime/Editor shared host DLLs, reviewed exports and one Engine/vendor service state.
-    - [ ] **PLG-06:** Validated native loader handshake, scoped registration and transactional startup/rollback.
-    - [ ] **PLG-07:** Per-scene component/system extensions, clone/remap and DLL-backed storage lifetime.
-    - [ ] **PLG-08:** Scene/assembly codecs, passive unknown-data preservation and required-plugin diagnostics.
-    - [ ] **PLG-09:** Register plugin systems/render/debug contributions into accepted EJ/P41 services.
-  - **G2 - Plugins window and author workflow**:
-    - [ ] **PLG-10:** Dockable Plugins window, menu/settings entry, filters, dependency reasons and Desired/Active states.
-    - [ ] **PLG-11:** Cancellable project DLL builds, immutable requests, staged outputs and persistent logs.
-    - [ ] **PLG-12:** Apply/build/restart, complete dirty-document guards, startup recovery and safe owner teardown.
-    - [ ] **PLG-13:** Source template and real external project plugin adding a component/system/Inspector without Engine edits.
-  - **G3 - Fresh Vehicle and old-code retirement**:
-    - [ ] **PLG-14:** New VehicleRuntime/VehicleEditor modules, validated authored data and distinct component schemas/codecs.
-    - [ ] **PLG-15:** Four-wheel Jolt controls, suspension/contact, wheel/chassis synchronization, telemetry, reset and teardown.
-    - [ ] **PLG-16:** Vehicle authoring/setup/Inspector/debug tools and actual Editor Play fixture through generic APIs.
-    - [ ] **PLG-17:** Retire Engine/Vehicle, built-in components/serializers/queries and hardcoded product/render/UI branches.
-    - [ ] **PLG-18:** Scoped telemetry-driven Vehicle audio/VFX integrations, resource retirement and explicit feature accounting.
-  - **G4 - Remaining plugins and shipping composition**:
-    - [ ] **PLG-19:** Split Spline Runtime/Editor modules and remove direct product-specific setup.
-    - [ ] **PLG-20:** Split Terrain Runtime/Editor modules with correct Spline dependencies and retained authored data.
-    - [ ] **PLG-21:** Project-declared script dependencies, shared-host Editor scripts and statically registered shipping scripts.
-    - [ ] **PLG-22:** Editor-disabled selected static Runtime with explicit registration and proven code/link exclusions.
-    - [ ] **PLG-23:** Snapshot-bound build/cook/export, selected plugin content and matching player/package receipt.
-  - **G5 - Native/product acceptance**:
-    - [ ] **PLG-24:** Actual DLL/UI/physics/GPU/player selection matrix, unknown-data recovery and artifact exclusion evidence.
-    - [ ] **PLG-25:** Supported-workflow documentation, breaking-change ledger and final implementation handoff.
-  - **Completion gate:** An unselected plugin is not configured/built/loaded; selecting a source plugin builds its DLL and restarts safely; exported Runtime contains only selected Runtime modules. Fresh Vehicle works through generic APIs; old authored data is retained passively and legacy API/handling parity is not claimed. Live plugin hot-unload and automatic legacy Vehicle conversion remain deferred.
+Historical domain **Phase 43 / PLG-00..25**: baseline in OPT-01, SDK/Plugins window
+in OPT-06, fresh Vehicle in OPT-07, existing optional system conversion in OPT-08,
+selected static Runtime/export in OPT-09 and final evidence in OPT-10.
+[Detailed contracts](docs/design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md).
+Old Vehicle retirement was delivered early; independent review is pending and
+new plugin implementation remains open. [Delivery report](docs/archive/design/reports/VEHICLE_RETIREMENT_DELIVERY.md).

@@ -1,10 +1,14 @@
 # Phase 40 foundation implementation
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 Updated: 2026-11-03. Status: **in progress; full Phase 40 is not complete**.
 
 This report tracks the foundation work requested after the planning handoff.
-The [completion plan](ANIMATION_PHASE_40_COMPLETION_PLAN.md) remains the scope
-reference; [ROADMAP.md](../../ROADMAP.md) records package status. No new animation
+The [completion plan](../deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md) remains the scope
+reference; [ROADMAP.md](../../../../ROADMAP.md) records package status. No new animation
 panel, RHI skinning, importer parity or packaged-animation acceptance is claimed
 by a passing CPU foundation test.
 

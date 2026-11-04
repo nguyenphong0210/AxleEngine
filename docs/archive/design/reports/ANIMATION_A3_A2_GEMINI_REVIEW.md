@@ -1,5 +1,9 @@
 # Review: Gemini A3/A2 continuation
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 Date: 2026-11-03. Reviewed HEAD: `c13b21a`.
 Range: `0b83135..c13b21a`, with a clean working tree at review start.
 

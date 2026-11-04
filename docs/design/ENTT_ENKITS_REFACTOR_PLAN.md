@@ -1,5 +1,10 @@
 # EnTT/enkiTS Refactor Plan
 
+> **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
+> technical contract, not a separate phase queue. Old Phase/G labels and
+> source-audit baselines are retained for traceability. Early Vehicle retirement
+> is delivered; independent review and new plugin implementation remain open.
+
 Date: **2026-11-04**. Source baseline:
 **84ad556678693c33039703801ea013d2d2686913**.
 Status: **design only; EJ-00..17 are unimplemented and unreleased**.
@@ -40,8 +45,9 @@ The completed refactor must provide:
 Do not replace the ECS, create a second task pool, build an automatic task graph
 from arbitrary component accesses, rewrite the renderer, remove old Vehicle,
 implement a plugin loader or add networking determinism as part of this track.
-The new Vehicle remains separate PLG work. Existing Vehicle/Character/audio/VFX/
-animation behavior is preserved through explicit phase adapters until that work.
+The new Vehicle remains separate PLG work. Old built-in Vehicle was retired
+early in `fa74981`; its legacy data protection is reviewed separately. Preserve
+existing Character/audio/VFX/animation behavior through explicit phase adapters.
 
 ## 2. Findings to work mapping
 
@@ -752,9 +758,9 @@ When P41 or PLG already supplies an accepted equivalent, adapt/reuse it and reco
 the evidence instead of implementing a competing API. Keep overlapping source
 ownership in the exchange; no implicit whole-phase release or parallel writer.
 
-Suggested first implementation range, **only when assigned**: EJ-00..03 for
-reproducible tests, thread identity, deferred queue and compiler delivery. Then
-EJ-04..07 close the remaining P1 lifetime hazards before broad ECS/simulation changes.
+Follow the [optimization roadmap](../ROADMAP.md): EJ-00 establishes permanent
+fixtures in OPT-01; EJ-01..07 then close the P1 thread/compiler/reload/bridge
+hazards in OPT-02 before broad ECS/simulation changes in OPT-03.
 Do not combine every P1 repair and fixed-step behavior change into one commit.
 
 ## 13. Migration and stop conditions

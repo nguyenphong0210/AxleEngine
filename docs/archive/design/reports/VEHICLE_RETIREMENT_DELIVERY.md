@@ -1,5 +1,9 @@
 # VEHICLE-RETIREMENT Delivery Report
 
+> **Archived delivery/review:** Vehicle retirement is delivered; independent review remains pending in OPT-00.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 ## 1. Executive Summary
 
 - **Task**: `VEHICLE-RETIREMENT`

@@ -1,5 +1,10 @@
 # AxleEngine Architecture Overview
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Reviewed: **2026-11-01**. AxleEngine is organized into subsystem libraries and application targets. It has a modular foundation, but its current implementation does **not** yet enforce a strictly layered dependency graph.
 
 The complete [architecture and design documentation](README.md) separates current behavior from the proposed layered architecture:

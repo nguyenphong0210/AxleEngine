@@ -1,5 +1,9 @@
 # Phase 40 foundation corrections
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 Date: 2026-11-03. Follow-up to the
 [review](ANIMATION_PHASE_40_GEMINI_REVIEW.md) of `a6efa8c`.
 Each row records an implementation commit with permanent production-API tests.

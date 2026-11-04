@@ -31,7 +31,7 @@ Built-in types share [Components.hpp](../../Engine/Scene/include/Axle/Components
 | Graphics | MeshInstance3D, MaterialComponent, CameraComponent, light and skybox components |
 | Physics | RigidBody3D, CollisionShape3D, CharacterControllerComponent |
 | Scripts/audio | NativeScriptComponent, AudioSourceComponent, AudioListenerComponent |
-| Vehicles | VehicleComponent, WheelComponent, VehicleAudioComponent, VehicleVFXComponent |
+| Legacy extension data | LegacyComponentsHolder (passive retired component payloads; not Vehicle simulation) |
 | Animation | SkeletalMeshComponent, AnimatorComponent |
 | VFX | ParticleEmitterComponent, ParticleEmitterStack, CharacterVFXComponent |
 | UI/assemblies | UICanvasComponent, AssemblyComponent |

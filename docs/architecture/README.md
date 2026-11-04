@@ -4,6 +4,9 @@ Reviewed: **2026-11-01**. This documentation describes the working tree inspecte
 
 ## Reading order
 
+For current work order, start with the [optimization roadmap](../ROADMAP.md).
+The source survey below is dated 2026-11-01, predating Vehicle retirement and
+other later changes; it is not a freshly verified current module inventory.
 Start with the [overview](OVERVIEW.md), [module reference](MODULES.md) and [current assessment](ASSESSMENT.md) when reviewing the engine before reading the detailed design.
 
 | Document | Purpose |
@@ -20,7 +23,7 @@ Start with the [overview](OVERVIEW.md), [module reference](MODULES.md) and [curr
 | [Verification and limitations](VERIFICATION.md) | Evidence, survey method, documentation checks and unverified behavior |
 | [EnTT/enkiTS integration review](ENTT_ENKITS_REVIEW.md) | 2026-11-04 focused audit, native fault reproductions, concurrency/lifetime findings and limits |
 | [EnTT/enkiTS refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 proposed correctness/refactor packages, threading/lifetime/clock contracts and acceptance matrix |
-| [Architecture Foundation master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | Current architecture-first sequence and combined AF/P41/EJ/PLG prerequisites |
+| [Architecture Foundation master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | AF contracts and combined prerequisites; execution order is in docs/ROADMAP.md |
 | [NRI integration contract](../design/NRI_INTEGRATION_CONTRACT.md) | Pinned native API boundary, readiness, lifetime, frame/present and real Runtime UI rules |
 
 For a shorter introduction, read [Architecture Overview](OVERVIEW.md). [Subsystems](MODULES.md) provides a quick module reference. Existing domain guides remain useful for individual workflows; this architecture set is the reference for current dependency boundaries and cross-subsystem behavior.
@@ -37,8 +40,8 @@ optional-toolkit proposal: Editor DLL modules, selected static Runtime modules,
 project plugin authoring and a fresh Vehicle replacement. They are documentation
 only; the current source survey is not a claim that this architecture exists.
 
-The [master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) now coordinates
-architecture before feature expansion. Its rendering workstream is
+The [optimization roadmap](../ROADMAP.md) orders architecture work before
+feature expansion. The master retains dependency contracts. Its rendering domain is
 [Phase 41: RHI-primary rendering](../design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md),
 with its [detailed package plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md).
 It is a target design, not a change to the as-is survey below.
@@ -51,4 +54,4 @@ All selected text files were scanned completely by tooling. Manual interpretatio
 
 Repository-relative links make the documentation portable between checkouts. Source line anchors are navigation aids and may move as the code changes. The proposed module names and build options in the target architecture are design suggestions, not newly implemented targets.
 
-For feature workflows and format references, return to the [documentation hub](../README.md). Future editor feature proposals are in the [tooling roadmap](../design/EDITOR_TOOLING_ROADMAP.md).
+For feature workflows and format references, return to the [documentation hub](../README.md). Future editor feature proposals are in the [tooling roadmap](../archive/design/deferred/EDITOR_TOOLING_ROADMAP.md).

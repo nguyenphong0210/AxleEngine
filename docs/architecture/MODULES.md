@@ -1,5 +1,10 @@
 # Subsystems and Module Reference
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Reviewed: 2026-11-01. This quick reference describes current responsibilities and important boundaries. See [SAD](SAD.md), [SDD](SDD.md), [class diagrams](CLASS_RELATIONSHIPS.md) and the [complete dependency map](DEPENDENCY_MAP.md).
 
 ## 1. Engine/Core
@@ -60,7 +65,7 @@ Source: [Engine/UI](../../Engine/UI).
 
 Vehicle wraps Jolt chassis/wheel constraints and exposes telemetry. VehicleAudio and VehicleVFX independently consume telemetry. Scene currently links this toolkit unconditionally.
 
-Source: [Engine/Vehicle](../../Engine/Vehicle).
+Source: `Engine/Vehicle` (historical path; unavailable in this checkout).
 
 ## 11. Editor Application
 

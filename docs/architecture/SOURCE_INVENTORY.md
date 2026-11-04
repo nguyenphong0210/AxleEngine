@@ -1,5 +1,10 @@
 # Source Inventory
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Reviewed: 2026-11-01. This inventory scans first-party C++ source, shaders and text assets/configuration. Vendored internals, media, binary terrain/mesh payloads, generated build output, caches and documentation prose are excluded from this source table. Existing domain guides were reviewed separately.
 
 Path maintenance (2026-11-03): test sources and sample assets below now point to
@@ -14,58 +19,58 @@ snapshot, not a fresh line-count measurement.
 | [Tests/Fixtures/LegacyAssets/scenes/OffRoadTrack.axlescene](../../Tests/Fixtures/LegacyAssets/scenes/OffRoadTrack.axlescene) | 448 | — |
 | [Tests/Fixtures/LegacyAssets/ui/PauseMenu.axleasset](../../Tests/Fixtures/LegacyAssets/ui/PauseMenu.axleasset) | 89 | — |
 | [Tests/Fixtures/LegacyAssets/ui/RacingHUD.axleasset](../../Tests/Fixtures/LegacyAssets/ui/RacingHUD.axleasset) | 215 | — |
-| [Tests/Fixtures/Assets/audio/Collision_Impact.wav.meta](../../Tests/Fixtures/Assets/audio/Collision_Impact.wav.meta) | 4 | — |
-| [Tests/Fixtures/Assets/audio/Engine_Coast.wav.meta](../../Tests/Fixtures/Assets/audio/Engine_Coast.wav.meta) | 4 | — |
-| [Tests/Fixtures/Assets/audio/Engine_Power.wav.meta](../../Tests/Fixtures/Assets/audio/Engine_Power.wav.meta) | 4 | — |
-| [Tests/Fixtures/Assets/audio/Suspension_Thud.wav.meta](../../Tests/Fixtures/Assets/audio/Suspension_Thud.wav.meta) | 4 | — |
-| [Tests/Fixtures/Assets/audio/Tire_Squeal.wav.meta](../../Tests/Fixtures/Assets/audio/Tire_Squeal.wav.meta) | 4 | — |
+| `Tests/Fixtures/Assets/audio/Collision_Impact.wav.meta` (historical path; unavailable in this checkout) | 4 | — |
+| `Tests/Fixtures/Assets/audio/Engine_Coast.wav.meta` (historical path; unavailable in this checkout) | 4 | — |
+| `Tests/Fixtures/Assets/audio/Engine_Power.wav.meta` (historical path; unavailable in this checkout) | 4 | — |
+| `Tests/Fixtures/Assets/audio/Suspension_Thud.wav.meta` (historical path; unavailable in this checkout) | 4 | — |
+| `Tests/Fixtures/Assets/audio/Tire_Squeal.wav.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/materials/BlackRubber.axleasset](../../Tests/Fixtures/Assets/materials/BlackRubber.axleasset) | 19 | — |
-| [Tests/Fixtures/Assets/materials/BlackRubber.axleasset.meta](../../Tests/Fixtures/Assets/materials/BlackRubber.axleasset.meta) | 4 | — |
+| `Tests/Fixtures/Assets/materials/BlackRubber.axleasset.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/materials/GoldMetallic.axleasset](../../Tests/Fixtures/Assets/materials/GoldMetallic.axleasset) | 28 | — |
-| [Tests/Fixtures/Assets/materials/GoldMetallic.axleasset.meta](../../Tests/Fixtures/Assets/materials/GoldMetallic.axleasset.meta) | 4 | — |
+| `Tests/Fixtures/Assets/materials/GoldMetallic.axleasset.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset](../../Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset) | 19 | — |
-| [Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset.meta](../../Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset.meta) | 4 | — |
-| [Tests/Fixtures/Assets/models/.cache/SportsCar_Chassis.axlebin.meta](../../Tests/Fixtures/Assets/models/.cache/SportsCar_Chassis.axlebin.meta) | 4 | — |
-| [Tests/Fixtures/Assets/models/.cache/SportsCar_Wheel.axlebin.meta](../../Tests/Fixtures/Assets/models/.cache/SportsCar_Wheel.axlebin.meta) | 4 | — |
+| `Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset.meta` (historical path; unavailable in this checkout) | 4 | — |
+| `Tests/Fixtures/Assets/models/.cache/SportsCar_Chassis.axlebin.meta` (historical path; unavailable in this checkout) | 4 | — |
+| `Tests/Fixtures/Assets/models/.cache/SportsCar_Wheel.axlebin.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/models/sedan-sports.mtl](../../Tests/Fixtures/Assets/models/sedan-sports.mtl) | 6 | — |
-| [Tests/Fixtures/Assets/models/sedan-sports.mtl.meta](../../Tests/Fixtures/Assets/models/sedan-sports.mtl.meta) | 4 | — |
+| `Tests/Fixtures/Assets/models/sedan-sports.mtl.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/models/SportsCar_Chassis.axleasset](../../Tests/Fixtures/Assets/models/SportsCar_Chassis.axleasset) | 1165 | — |
-| [Tests/Fixtures/Assets/models/SportsCar_Chassis.axleasset.meta](../../Tests/Fixtures/Assets/models/SportsCar_Chassis.axleasset.meta) | 4 | — |
+| `Tests/Fixtures/Assets/models/SportsCar_Chassis.axleasset.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/models/SportsCar_Chassis.axlemesh](../../Tests/Fixtures/Assets/models/SportsCar_Chassis.axlemesh) | 1172 | — |
-| [Tests/Fixtures/Assets/models/SportsCar_Chassis.axlemesh.meta](../../Tests/Fixtures/Assets/models/SportsCar_Chassis.axlemesh.meta) | 4 | — |
+| `Tests/Fixtures/Assets/models/SportsCar_Chassis.axlemesh.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/models/SportsCar_Wheel.axleasset](../../Tests/Fixtures/Assets/models/SportsCar_Wheel.axleasset) | 880 | — |
-| [Tests/Fixtures/Assets/models/SportsCar_Wheel.axleasset.meta](../../Tests/Fixtures/Assets/models/SportsCar_Wheel.axleasset.meta) | 4 | — |
+| `Tests/Fixtures/Assets/models/SportsCar_Wheel.axleasset.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/models/SportsCar_Wheel.axlemesh](../../Tests/Fixtures/Assets/models/SportsCar_Wheel.axlemesh) | 887 | — |
-| [Tests/Fixtures/Assets/models/SportsCar_Wheel.axlemesh.meta](../../Tests/Fixtures/Assets/models/SportsCar_Wheel.axlemesh.meta) | 4 | — |
+| `Tests/Fixtures/Assets/models/SportsCar_Wheel.axlemesh.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/models/wheel-racing.mtl](../../Tests/Fixtures/Assets/models/wheel-racing.mtl) | 6 | — |
-| [Tests/Fixtures/Assets/models/wheel-racing.mtl.meta](../../Tests/Fixtures/Assets/models/wheel-racing.mtl.meta) | 4 | — |
+| `Tests/Fixtures/Assets/models/wheel-racing.mtl.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/prefabs/SportsCar_Assembly.axle](../../Tests/Fixtures/Assets/prefabs/SportsCar_Assembly.axle) | 383 | — |
-| [Tests/Fixtures/Assets/prefabs/SportsCar_Assembly.axle.meta](../../Tests/Fixtures/Assets/prefabs/SportsCar_Assembly.axle.meta) | 4 | — |
+| `Tests/Fixtures/Assets/prefabs/SportsCar_Assembly.axle.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scenes/CarTest.axlescene](../../Tests/Fixtures/Assets/scenes/CarTest.axlescene) | 655 | — |
-| [Tests/Fixtures/Assets/scenes/CarTest.axlescene.meta](../../Tests/Fixtures/Assets/scenes/CarTest.axlescene.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scenes/CarTest.axlescene.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scenes/CharacterSandbox.axlescene](../../Tests/Fixtures/Assets/scenes/CharacterSandbox.axlescene) | 423 | — |
-| [Tests/Fixtures/Assets/scenes/CharacterSandbox.axlescene.meta](../../Tests/Fixtures/Assets/scenes/CharacterSandbox.axlescene.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scenes/CharacterSandbox.axlescene.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scenes/OffRoadTrack.axlescene](../../Tests/Fixtures/Assets/scenes/OffRoadTrack.axlescene) | 448 | — |
-| [Tests/Fixtures/Assets/scenes/OffRoadTrack.axlescene.meta](../../Tests/Fixtures/Assets/scenes/OffRoadTrack.axlescene.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scenes/OffRoadTrack.axlescene.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scenes/VehicleSandbox.axlescene](../../Tests/Fixtures/Assets/scenes/VehicleSandbox.axlescene) | 807 | — |
-| [Tests/Fixtures/Assets/scenes/VehicleSandbox.axlescene.meta](../../Tests/Fixtures/Assets/scenes/VehicleSandbox.axlescene.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scenes/VehicleSandbox.axlescene.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scripts/CarController.hpp](../../Tests/Fixtures/Assets/scripts/CarController.hpp) | 196 | CarController |
-| [Tests/Fixtures/Assets/scripts/CarController.hpp.meta](../../Tests/Fixtures/Assets/scripts/CarController.hpp.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scripts/CarController.hpp.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scripts/RacingHUD.hpp](../../Tests/Fixtures/Assets/scripts/RacingHUD.hpp) | 514 | RacingHUD |
-| [Tests/Fixtures/Assets/scripts/RacingHUD.hpp.meta](../../Tests/Fixtures/Assets/scripts/RacingHUD.hpp.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scripts/RacingHUD.hpp.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scripts/RotatorScript.hpp](../../Tests/Fixtures/Assets/scripts/RotatorScript.hpp) | 37 | RotatorScript |
-| [Tests/Fixtures/Assets/scripts/RotatorScript.hpp.meta](../../Tests/Fixtures/Assets/scripts/RotatorScript.hpp.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scripts/RotatorScript.hpp.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp](../../Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp) | 180 | ThirdPersonCamera |
-| [Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp.meta](../../Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scripts/ThirdPersonCamera.hpp.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp](../../Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp) | 209 | ThirdPersonController |
-| [Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp.meta](../../Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scripts/ThirdPersonController.hpp.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp](../../Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp) | 655 | VehicleChaseCamera |
-| [Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp.meta](../../Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp.meta) | 4 | — |
-| [Tests/Fixtures/Assets/terrain/OffRoadTerrain.axleterrain.meta](../../Tests/Fixtures/Assets/terrain/OffRoadTerrain.axleterrain.meta) | 4 | — |
+| `Tests/Fixtures/Assets/scripts/VehicleChaseCamera.hpp.meta` (historical path; unavailable in this checkout) | 4 | — |
+| `Tests/Fixtures/Assets/terrain/OffRoadTerrain.axleterrain.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/ui/PauseMenu.axleasset](../../Tests/Fixtures/Assets/ui/PauseMenu.axleasset) | 89 | — |
-| [Tests/Fixtures/Assets/ui/PauseMenu.axleasset.meta](../../Tests/Fixtures/Assets/ui/PauseMenu.axleasset.meta) | 4 | — |
+| `Tests/Fixtures/Assets/ui/PauseMenu.axleasset.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Tests/Fixtures/Assets/ui/RacingHUD.axleasset](../../Tests/Fixtures/Assets/ui/RacingHUD.axleasset) | 215 | — |
-| [Tests/Fixtures/Assets/ui/RacingHUD.axleasset.meta](../../Tests/Fixtures/Assets/ui/RacingHUD.axleasset.meta) | 4 | — |
+| `Tests/Fixtures/Assets/ui/RacingHUD.axleasset.meta` (historical path; unavailable in this checkout) | 4 | — |
 | [Editor/CMakeLists.txt](../../Editor/CMakeLists.txt) | 153 | — |
 | [Editor/src/EditorLayer.cpp](../../Editor/src/EditorLayer.cpp) | 4029 | — |
 | [Editor/src/EditorLayer.hpp](../../Editor/src/EditorLayer.hpp) | 249 | EditorLayer, InitialBodyState, ModelImportModalData |
@@ -350,15 +355,15 @@ snapshot, not a fresh line-count measurement.
 | [Engine/UI/src/UICanvasImGuiRenderer.cpp](../../Engine/UI/src/UICanvasImGuiRenderer.cpp) | 221 | — |
 | [Engine/UI/src/UIPalettePanel.cpp](../../Engine/UI/src/UIPalettePanel.cpp) | 428 | — |
 | [Engine/UI/src/VFXEditorPanel.cpp](../../Engine/UI/src/VFXEditorPanel.cpp) | 932 | — |
-| [Engine/Vehicle/CMakeLists.txt](../../Engine/Vehicle/CMakeLists.txt) | 22 | — |
-| [Engine/Vehicle/include/Axle/Vehicle.hpp](../../Engine/Vehicle/include/Axle/Vehicle.hpp) | 56 | Vehicle |
-| [Engine/Vehicle/include/Axle/VehicleAudio.hpp](../../Engine/Vehicle/include/Axle/VehicleAudio.hpp) | 99 | VehicleAudioConfig, VehicleAudio |
-| [Engine/Vehicle/include/Axle/VehicleConfig.hpp](../../Engine/Vehicle/include/Axle/VehicleConfig.hpp) | 68 | WheelConfig, VehicleConfig |
-| [Engine/Vehicle/include/Axle/VehicleTelemetry.hpp](../../Engine/Vehicle/include/Axle/VehicleTelemetry.hpp) | 28 | WheelTelemetryData, VehicleTelemetryData |
-| [Engine/Vehicle/include/Axle/VehicleVFX.hpp](../../Engine/Vehicle/include/Axle/VehicleVFX.hpp) | 133 | VehicleVFXConfig, VehicleVFX |
-| [Engine/Vehicle/src/Vehicle.cpp](../../Engine/Vehicle/src/Vehicle.cpp) | 305 | — |
-| [Engine/Vehicle/src/VehicleAudio.cpp](../../Engine/Vehicle/src/VehicleAudio.cpp) | 254 | — |
-| [Engine/Vehicle/src/VehicleVFX.cpp](../../Engine/Vehicle/src/VehicleVFX.cpp) | 291 | — |
+| `Engine/Vehicle/CMakeLists.txt` (historical path; unavailable in this checkout) | 22 | — |
+| `Engine/Vehicle/include/Axle/Vehicle.hpp` (historical path; unavailable in this checkout) | 56 | Vehicle |
+| `Engine/Vehicle/include/Axle/VehicleAudio.hpp` (historical path; unavailable in this checkout) | 99 | VehicleAudioConfig, VehicleAudio |
+| `Engine/Vehicle/include/Axle/VehicleConfig.hpp` (historical path; unavailable in this checkout) | 68 | WheelConfig, VehicleConfig |
+| `Engine/Vehicle/include/Axle/VehicleTelemetry.hpp` (historical path; unavailable in this checkout) | 28 | WheelTelemetryData, VehicleTelemetryData |
+| `Engine/Vehicle/include/Axle/VehicleVFX.hpp` (historical path; unavailable in this checkout) | 133 | VehicleVFXConfig, VehicleVFX |
+| `Engine/Vehicle/src/Vehicle.cpp` (historical path; unavailable in this checkout) | 305 | — |
+| `Engine/Vehicle/src/VehicleAudio.cpp` (historical path; unavailable in this checkout) | 254 | — |
+| `Engine/Vehicle/src/VehicleVFX.cpp` (historical path; unavailable in this checkout) | 291 | — |
 | [Engine/VFX/CMakeLists.txt](../../Engine/VFX/CMakeLists.txt) | 27 | — |
 | [Engine/VFX/include/Axle/CurlNoise.hpp](../../Engine/VFX/include/Axle/CurlNoise.hpp) | 50 | CurlNoiseConfig, CurlNoise |
 | [Engine/VFX/include/Axle/ParticleCollision.hpp](../../Engine/VFX/include/Axle/ParticleCollision.hpp) | 93 | ParticleCollisionPlane, ParticleCollisionBox, ParticleCollisionConfig, ParticleCollisionSolver |
@@ -414,16 +419,16 @@ snapshot, not a fresh line-count measurement.
 | [Runtime/src/Main.cpp](../../Runtime/src/Main.cpp) | 122 | — |
 | [Runtime/src/RuntimeLayer.cpp](../../Runtime/src/RuntimeLayer.cpp) | 472 | CanvasItem |
 | [Runtime/src/RuntimeLayer.hpp](../../Runtime/src/RuntimeLayer.hpp) | 55 | RuntimeLayer |
-| [Samples/TestProject/assets/materials/BlackRubber.axleasset](../../Samples/TestProject/assets/materials/BlackRubber.axleasset) | 19 | — |
-| [Samples/TestProject/assets/materials/GoldMetallic.axleasset](../../Samples/TestProject/assets/materials/GoldMetallic.axleasset) | 19 | — |
-| [Samples/TestProject/assets/materials/SilverCarPaint.axleasset](../../Samples/TestProject/assets/materials/SilverCarPaint.axleasset) | 19 | — |
-| [Samples/TestProject/assets/models/SportsCar_Chassis.axlemesh](../../Samples/TestProject/assets/models/SportsCar_Chassis.axlemesh) | 1172 | — |
-| [Samples/TestProject/assets/models/SportsCar_Wheel.axlemesh](../../Samples/TestProject/assets/models/SportsCar_Wheel.axlemesh) | 887 | — |
-| [Samples/TestProject/assets/prefabs/SportsCar_Assembly.axle](../../Samples/TestProject/assets/prefabs/SportsCar_Assembly.axle) | 383 | — |
+| `Samples/TestProject/assets/materials/BlackRubber.axleasset` (historical path; unavailable in this checkout) | 19 | — |
+| `Samples/TestProject/assets/materials/GoldMetallic.axleasset` (historical path; unavailable in this checkout) | 19 | — |
+| `Samples/TestProject/assets/materials/SilverCarPaint.axleasset` (historical path; unavailable in this checkout) | 19 | — |
+| `Samples/TestProject/assets/models/SportsCar_Chassis.axlemesh` (historical path; unavailable in this checkout) | 1172 | — |
+| `Samples/TestProject/assets/models/SportsCar_Wheel.axlemesh` (historical path; unavailable in this checkout) | 887 | — |
+| `Samples/TestProject/assets/prefabs/SportsCar_Assembly.axle` (historical path; unavailable in this checkout) | 383 | — |
 | [Samples/TestProject/assets/scenes/Test.axlescene](../../Samples/TestProject/assets/scenes/Test.axlescene) | 360 | — |
-| [Samples/TestProject/assets/scripts/CarController.hpp](../../Samples/TestProject/assets/scripts/CarController.hpp) | 196 | CarController |
-| [Samples/TestProject/assets/scripts/RacingHUD.hpp](../../Samples/TestProject/assets/scripts/RacingHUD.hpp) | 514 | RacingHUD |
-| [Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp](../../Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp) | 655 | VehicleChaseCamera |
+| `Samples/TestProject/assets/scripts/CarController.hpp` (historical path; unavailable in this checkout) | 196 | CarController |
+| `Samples/TestProject/assets/scripts/RacingHUD.hpp` (historical path; unavailable in this checkout) | 514 | RacingHUD |
+| `Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp` (historical path; unavailable in this checkout) | 655 | VehicleChaseCamera |
 | [Samples/TestProject/TestProject.axleproj](../../Samples/TestProject/TestProject.axleproj) | 5 | — |
 | [CMakeLists.txt](../../CMakeLists.txt) | 75 | — |
 | [build.sh](../../build.sh) | 101 | — |

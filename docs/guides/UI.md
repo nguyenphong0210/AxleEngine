@@ -19,7 +19,7 @@ UIDocument owns nodes in a unique_ptr arena. Parent/children, root, ID map and b
 
 ## 2. Canvas assets
 
-Use a Canvas-root `.axleasset` descriptor for new UI assets. Legacy `.axleui` paths remain in some loading/fallback code. See the [asset format reference](../reference/ASSET_FORMAT.md) and the maintained [RacingHUD asset](../../assets/ui/RacingHUD.axleasset) for syntax.
+Use a Canvas-root `.axleasset` descriptor for new UI assets. Legacy `.axleui` paths remain in some loading/fallback code. See the [asset format reference](../reference/ASSET_FORMAT.md) and the maintained [RacingHUD asset](../../Tests/Fixtures/Assets/ui/RacingHUD.axleasset) for syntax.
 
 ```text
 Canvas {
@@ -75,4 +75,4 @@ Key implementations: [inspector](../../Engine/UI/src/EntityInspector.cpp), [desi
 
 Canvas2D currently retains vertices/indices and statistics. EndCanvas updates draw-call statistics but does not submit GPU work. Runtime::RenderUI ends at that call. Actual runtime presentation needs an explicit upload, binding, draw and resource-lifecycle implementation; ImGui editor preview is a separate path.
 
-Future work includes a UI render backend, consistent input/layout ordering, well-defined datasource lifetime/isolation and tests with multiple canvases/entities. See the [architecture assessment](../architecture/ASSESSMENT.md) and [tooling roadmap](../design/EDITOR_TOOLING_ROADMAP.md).
+Future work includes a UI render backend, consistent input/layout ordering, well-defined datasource lifetime/isolation and tests with multiple canvases/entities. See the [architecture assessment](../architecture/ASSESSMENT.md) and [tooling roadmap](../archive/design/deferred/EDITOR_TOOLING_ROADMAP.md).

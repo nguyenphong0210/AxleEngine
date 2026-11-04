@@ -1,5 +1,10 @@
 # Plugin System Implementation Guide
 
+> **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
+> technical contract, not a separate phase queue. Old Phase/G labels and
+> source-audit baselines are retained for traceability. Early Vehicle retirement
+> is delivered; independent review and new plugin implementation remain open.
+
 Date: **2026-11-04**. Status: **proposed algorithms and interfaces; not implemented**.
 The current assignment is documentation only. Source baseline and selected product
 behavior are in the [architecture](PLUGIN_SYSTEM_ARCHITECTURE.md); package order
@@ -17,9 +22,10 @@ DLL component lifetime boundary in PLG-05..09. The first plugin fixture is delib
 unrelated to vehicles: it creates a component with real heap-backed state, displays
 it in an Inspector and updates it through the common scene scheduler.
 
-Do not start by deleting `Engine/Vehicle`, changing all libraries to `SHARED`,
-copying `EditorLayer.cpp` vehicle branches into a DLL, or adding `#ifdef VEHICLE`
-around every caller. A clean Vehicle rewrite follows after the common system works.
+The old `Engine/Vehicle` was retired early in `fa74981`; review is pending.
+Do not restore it, change every library to `SHARED`, or recreate product-specific
+vehicle branches in a DLL. A clean Vehicle rewrite follows the common system;
+PLG-17 verifies retirement/cutover against the new generic contracts.
 
 ## 2. Minimum model and authoritative owners
 

@@ -1,5 +1,9 @@
 # Animation A3/A2: second review and bounded continuation
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 Date: 2026-11-03. Reviewed HEAD: `fbfbf58`.
 Range: `2e4f7c8..fbfbf58` (four implementation/test commits and one report).
 
@@ -146,7 +150,7 @@ suite and may be absent in another checkout.
 
 ## Next assignment
 
-Use [the new scoped prompt](ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt).
+Use [the new scoped prompt](../../../agents/archive/ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt).
 
 1. Fix S1-S4, preserve the previous regressions, correct acceptance/evidence, and
    run the available CPU checks. This is a mandatory gate.

@@ -1,5 +1,10 @@
 # Verification, Evidence and Limitations
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Review date: **2026-11-01**. Source revision inspected: `c58a650` (working tree, not an immutable filesystem snapshot).
 
 ## 1. Survey coverage

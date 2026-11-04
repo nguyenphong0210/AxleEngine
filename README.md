@@ -107,12 +107,16 @@ For in-depth guides, API references, and architectural walk-throughs, start with
 
 ## 🗺️ Project Milestones & Roadmap
 
-AxleEngine has undergone extensive architectural development and rigorous quality assurance:
-* **Completed Milestones**: **Phase 1 through Phase 31** are 100% complete, battle-tested, and fully verified.
-* **Automated Test Suite**: **47 Comprehensive Headless Test Suites** (`AxleTests.exe`) validating all engine subsystems in CI/CD with a **100% pass rate**.
-* **Upcoming Focus**: **Phase 32: Modern RHI Abstraction & Cross-Platform Engine (NVIDIA NRI — Vulkan 1.3 & Direct3D 12)** and **Phase 33: Multi-Backend 3D Viewport Scene Renderer & PBR Forward+ Pipeline**.
+Current work follows the **[Architecture Optimization Roadmap](docs/ROADMAP.md)**:
+verify Vehicle retirement, establish baselines, repair threading/ECS and module
+boundaries, normalize NRI/render services, then deliver project-selected plugins
+and Runtime export. Advanced feature expansion follows architecture acceptance.
 
-👉 **For the complete phase-by-phase development history, detailed feature checklists, and upcoming roadmap, see [ROADMAP.md](ROADMAP.md).**
+The [active design index](docs/design/README.md) contains the current technical
+contracts. Deferred feature plans and dated reports are in the
+[design archive](docs/archive/design/README.md). The original
+[product roadmap](ROADMAP.md) retains development history; historical completion
+and test claims do not substitute for current independent verification.
 
 ---
 

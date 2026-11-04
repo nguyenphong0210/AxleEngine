@@ -1,5 +1,10 @@
 # Phase 41: RHI-Primary Renderer Implementation Plan
 
+> **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
+> technical contract, not a separate phase queue. Old Phase/G labels and
+> source-audit baselines are retained for traceability. Early Vehicle retirement
+> is delivered; independent review and new plugin implementation remain open.
+
 Date: 2026-11-03 (Asia/Saigon). Planning baseline: `492e6d1`.
 Status: **Phase 41 rendering workstream; architecture-first; no package implemented by this document**.
 
@@ -25,8 +30,8 @@ establish Runtime UI rendering. P41-26 verifies/reconciles AF/PLG boundaries rat
 than separately reimplementing Core extraction, plugin splitting or static composition.
 
 Rendering foundation work executes ahead of new Phase 40 authoring and Phase 39.1/39.2 expansion.
-Its number preserves existing roadmap/package references; numbering is not
-execution priority. Existing material/VFX acceptance obligations and submitted
+Its historical number preserves package references; OPT order in the
+[optimization roadmap](../ROADMAP.md) is the execution priority. Existing material/VFX acceptance obligations and submitted
 animation work remain recorded, not silently completed or discarded.
 
 Phase 40 G1 remains delivered awaiting independent review. D1/D2 are deferred.

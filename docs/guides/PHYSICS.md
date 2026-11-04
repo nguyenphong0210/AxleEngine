@@ -45,11 +45,16 @@ PhysicsScene::Step is separate from Scene::OnUpdateRuntime. Editor currently upd
 
 This affects input, telemetry, characters, animation and VFX. See [current sequences](../architecture/RUNTIME_FLOWS.md#4-different-editor-and-runtime-update-order) before changing scheduling. Fixed-step and consistent pause/time-scale behavior are proposed improvements, not descriptions of one shared current scheduler.
 
-## 5. Character and vehicle integration
+## 5. Character integration and retired Vehicle
 
-CharacterController wraps Jolt CharacterVirtual. Its component supplies movement/jump data and synchronizes transforms/animation parameters. Vehicle wraps chassis/wheel constraints and exposes input, reset and telemetry. VehicleAudio/VehicleVFX are independent adapters updated through Scene.
+CharacterController wraps Jolt CharacterVirtual. Its component supplies movement/jump data and synchronizes transforms/animation parameters.
 
-Consult [VehicleConfig](../../Engine/Vehicle/include/Axle/VehicleConfig.hpp) and [Vehicle.cpp](../../Engine/Vehicle/src/Vehicle.cpp) for units and constraint settings. Spring frequency and damping ratio are not spring/damping constants without the relevant mass/unit conversion.
+The built-in Vehicle module and components were retired in `fa74981`. Legacy
+component payloads are passive compatibility data; no current Vehicle simulation
+is provided. The replacement is planned as a complete plugin in
+[OPT-07](../ROADMAP.md#opt-07---write-vehicle-as-a-complete-plugin). Delivery
+claims about legacy preservation/body suppression await independent review.
+Existing general physics and CharacterController remain separate from that rewrite.
 
 ## 6. Debug rendering and boundaries
 

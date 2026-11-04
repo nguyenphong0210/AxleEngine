@@ -1,5 +1,9 @@
 # Phase 40 G1 Delivery Report: Device-Free Animation Document Models
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 **Date**: 2026-11-03  
 **Author**: Gemini Assistant  
 **Task Scope**: Phase 40 G1 ONLY (Device-Free Animation Clip and Animator Controller Document Models, Transactional History, Guarded Lifecycle, and Relocation Policy).  

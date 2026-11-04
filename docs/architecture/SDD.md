@@ -1,5 +1,10 @@
 # Software Design Description: Current System
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Status: **AS-IS**, reviewed 2026-11-01. See [class diagrams](CLASS_RELATIONSHIPS.md), [execution flows](RUNTIME_FLOWS.md) and the [class index](CLASS_INDEX.md).
 
 ## 1. Ownership conventions
@@ -70,7 +75,7 @@ PhysicsScene::Step is called by the application layer, outside OnUpdateRuntime. 
 
 ## 6. Physics and vehicles
 
-Sources: [Physics headers](../../Engine/Physics/include/Axle), [Vehicle headers](../../Engine/Vehicle/include/Axle).
+Sources: [Physics headers](../../Engine/Physics/include/Axle), `Vehicle headers` (historical path; unavailable in this checkout).
 
 | Type | Design role |
 |---|---|

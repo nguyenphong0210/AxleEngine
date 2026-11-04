@@ -1,7 +1,11 @@
 # Animation foundation: scoped Gemini continuation
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 > **Historical handoff, completed/superseded.** It is not current task authority.
-> Start at [agent collaboration](../agents/README.md) and the shared exchange.
+> Start at [agent collaboration](../../../agents/README.md) and the shared exchange.
 
 Date: 2026-11-03. Reviewed code baseline: `30d1e91`.
 Assignment: **two work packages only: remaining A3, then remaining A2.**
@@ -11,9 +15,9 @@ Stop after these packages and their report. Do not implement the rest of Phase 4
 
 1. Inspect current HEAD and `git status`; preserve any newer user changes.
 2. Read [Foundation Corrections](ANIMATION_PHASE_40_CORRECTIONS.md).
-3. Read the Phase 40 section in [ROADMAP.md](../../ROADMAP.md).
-4. Consult the original [completion plan](ANIMATION_PHASE_40_COMPLETION_PLAN.md)
-   and [coding guide](ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md) for the
+3. Read the Phase 40 section in [ROADMAP.md](../../../../ROADMAP.md).
+4. Consult the original [completion plan](../deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md)
+   and [coding guide](../deferred/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md) for the
    two assigned packages only. Their full-phase instructions do not expand this
    assignment. Actual current headers take precedence over illustrative APIs.
 

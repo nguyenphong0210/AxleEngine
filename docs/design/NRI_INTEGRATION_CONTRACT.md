@@ -1,5 +1,10 @@
 # NRI Integration and Normalization Contract
 
+> **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
+> technical contract, not a separate phase queue. Old Phase/G labels and
+> source-audit baselines are retained for traceability. Early Vehicle retirement
+> is delivered; independent review and new plugin implementation remain open.
+
 Date: **2026-11-04**. Engine planning baseline:
 **cb200d373550b6dd4f7e12d483a161012d863a27**.
 Status: **design only; no native integration change or vendor upgrade implemented**.
@@ -340,8 +345,9 @@ triangle or one preview rendered successfully.
 
 ## 15. First implementation checkpoints and planning limits
 
-After the master safety/Core prerequisites, begin with P41-00/01 evidence and
-device readiness, then P41-02/03 transactional creation/error behavior. Build one
+Follow the [optimization roadmap](../ROADMAP.md): P41-00 captures the baseline
+in OPT-01; P41-01 begins device readiness in OPT-04 after the safety/Core/data
+phases, followed by P41-02/03 transactional creation/error behavior. Build one
 real primitive/resource fixture before migrating every consumer. Preserve old
 working paths until their common-service replacement and lifetime evidence exist.
 

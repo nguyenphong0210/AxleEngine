@@ -1,5 +1,10 @@
 # C++ Class and Struct Index
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 This is a lexical declaration index, not a compiler AST. It includes nested/local/test types and duplicate names in samples. It does not resolve namespaces, aliases, templates or conditional compilation completely. See [class diagrams](CLASS_RELATIONSHIPS.md) for manually interpreted ownership and integration relationships.
 
 **445 declaration locations.**
@@ -382,15 +387,15 @@ This is a lexical declaration index, not a compiler AST. It includes nested/loca
 | `VulkanDispatchTable` | `—` | [Engine/UI/src/ImGuiLayer.cpp:47](../../Engine/UI/src/ImGuiLayer.cpp#L47) |
 | `ImGuiLoaderContext` | `—` | [Engine/UI/src/ImGuiLayer.cpp:486](../../Engine/UI/src/ImGuiLayer.cpp#L486) |
 | `CanvasViewportMapping` | `—` | [Engine/UI/src/RectTransformGizmo.cpp:16](../../Engine/UI/src/RectTransformGizmo.cpp#L16) |
-| `Vehicle` | `—` | [Engine/Vehicle/include/Axle/Vehicle.hpp:18](../../Engine/Vehicle/include/Axle/Vehicle.hpp#L18) |
-| `VehicleAudioConfig` | `—` | [Engine/Vehicle/include/Axle/VehicleAudio.hpp:14](../../Engine/Vehicle/include/Axle/VehicleAudio.hpp#L14) |
-| `VehicleAudio` | `—` | [Engine/Vehicle/include/Axle/VehicleAudio.hpp:47](../../Engine/Vehicle/include/Axle/VehicleAudio.hpp#L47) |
-| `WheelConfig` | `—` | [Engine/Vehicle/include/Axle/VehicleConfig.hpp:17](../../Engine/Vehicle/include/Axle/VehicleConfig.hpp#L17) |
-| `VehicleConfig` | `—` | [Engine/Vehicle/include/Axle/VehicleConfig.hpp:33](../../Engine/Vehicle/include/Axle/VehicleConfig.hpp#L33) |
-| `WheelTelemetryData` | `—` | [Engine/Vehicle/include/Axle/VehicleTelemetry.hpp:7](../../Engine/Vehicle/include/Axle/VehicleTelemetry.hpp#L7) |
-| `VehicleTelemetryData` | `—` | [Engine/Vehicle/include/Axle/VehicleTelemetry.hpp:17](../../Engine/Vehicle/include/Axle/VehicleTelemetry.hpp#L17) |
-| `VehicleVFXConfig` | `—` | [Engine/Vehicle/include/Axle/VehicleVFX.hpp:26](../../Engine/Vehicle/include/Axle/VehicleVFX.hpp#L26) |
-| `VehicleVFX` | `—` | [Engine/Vehicle/include/Axle/VehicleVFX.hpp:62](../../Engine/Vehicle/include/Axle/VehicleVFX.hpp#L62) |
+| `Vehicle` | `—` | `Engine/Vehicle/include/Axle/Vehicle.hpp:18` (historical path; unavailable in this checkout) |
+| `VehicleAudioConfig` | `—` | `Engine/Vehicle/include/Axle/VehicleAudio.hpp:14` (historical path; unavailable in this checkout) |
+| `VehicleAudio` | `—` | `Engine/Vehicle/include/Axle/VehicleAudio.hpp:47` (historical path; unavailable in this checkout) |
+| `WheelConfig` | `—` | `Engine/Vehicle/include/Axle/VehicleConfig.hpp:17` (historical path; unavailable in this checkout) |
+| `VehicleConfig` | `—` | `Engine/Vehicle/include/Axle/VehicleConfig.hpp:33` (historical path; unavailable in this checkout) |
+| `WheelTelemetryData` | `—` | `Engine/Vehicle/include/Axle/VehicleTelemetry.hpp:7` (historical path; unavailable in this checkout) |
+| `VehicleTelemetryData` | `—` | `Engine/Vehicle/include/Axle/VehicleTelemetry.hpp:17` (historical path; unavailable in this checkout) |
+| `VehicleVFXConfig` | `—` | `Engine/Vehicle/include/Axle/VehicleVFX.hpp:26` (historical path; unavailable in this checkout) |
+| `VehicleVFX` | `—` | `Engine/Vehicle/include/Axle/VehicleVFX.hpp:62` (historical path; unavailable in this checkout) |
 | `CurlNoiseConfig` | `—` | [Engine/VFX/include/Axle/CurlNoise.hpp:8](../../Engine/VFX/include/Axle/CurlNoise.hpp#L8) |
 | `CurlNoise` | `—` | [Engine/VFX/include/Axle/CurlNoise.hpp:18](../../Engine/VFX/include/Axle/CurlNoise.hpp#L18) |
 | `ParticleCollisionPlane` | `—` | [Engine/VFX/include/Axle/ParticleCollision.hpp:10](../../Engine/VFX/include/Axle/ParticleCollision.hpp#L10) |
@@ -448,6 +453,6 @@ This is a lexical declaration index, not a compiler AST. It includes nested/loca
 | `TerrainSplineCarver` | `—` | [Plugins/Terrain/include/AxleTerrain/TerrainSplineCarver.hpp:16](../../Plugins/Terrain/include/AxleTerrain/TerrainSplineCarver.hpp#L16) |
 | `CanvasItem` | `—` | [Runtime/src/RuntimeLayer.cpp:380](../../Runtime/src/RuntimeLayer.cpp#L380) |
 | `RuntimeLayer` | `public Layer` | [Runtime/src/RuntimeLayer.hpp:23](../../Runtime/src/RuntimeLayer.hpp#L23) |
-| `CarController` | `public Axle::ScriptableEntity` | [Samples/TestProject/assets/scripts/CarController.hpp:11](../../Samples/TestProject/assets/scripts/CarController.hpp#L11) |
-| `RacingHUD` | `public Axle::ScriptableEntity` | [Samples/TestProject/assets/scripts/RacingHUD.hpp:16](../../Samples/TestProject/assets/scripts/RacingHUD.hpp#L16) |
-| `VehicleChaseCamera` | `public Axle::ScriptableEntity` | [Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp:23](../../Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp#L23) |
+| `CarController` | `public Axle::ScriptableEntity` | `Samples/TestProject/assets/scripts/CarController.hpp:11` (historical path; unavailable in this checkout) |
+| `RacingHUD` | `public Axle::ScriptableEntity` | `Samples/TestProject/assets/scripts/RacingHUD.hpp:16` (historical path; unavailable in this checkout) |
+| `VehicleChaseCamera` | `public Axle::ScriptableEntity` | `Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp:23` (historical path; unavailable in this checkout) |

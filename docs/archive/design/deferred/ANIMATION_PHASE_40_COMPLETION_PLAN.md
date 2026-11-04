@@ -1,19 +1,23 @@
 # Phase 40: Skeletal Animation Studio Completion Plan
 
-> **Priority update (2026-11-03):** [Phase 41 rendering foundations](RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md)
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
+> **Priority update (2026-11-03):** [Phase 41 rendering foundations](../../../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md)
 > execute before new Phase 40 authoring. Existing deliveries and open acceptance
 > remain recorded. P41-23/24 reuse F1-F3 rendering contracts; do not implement a
 > competing skinning/picking pipeline. Read the shared exchange for actual scope.
 
 Date: 2026-11-03. Source baseline: `538163b`.
 Status: **foundation implementation in progress**. Actual completed packages and
-verification are recorded in the [foundation report](ANIMATION_PHASE_40_FOUNDATION_REPORT.md);
+verification are recorded in the [foundation report](../reports/ANIMATION_PHASE_40_FOUNDATION_REPORT.md);
 unchecked packages below remain implementation/acceptance requirements.
 
-Parent: [ROADMAP.md](../../ROADMAP.md). Implementation contracts and the Gemini
+Parent: [ROADMAP.md](../../../../ROADMAP.md). Implementation contracts and the Gemini
 assignment: [coding guide](ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
-General rules: [development conventions](../guides/DEVELOPMENT.md) and
-[architecture assessment](../architecture/ASSESSMENT.md).
+General rules: [development conventions](../../../guides/DEVELOPMENT.md) and
+[architecture assessment](../../../architecture/ASSESSMENT.md).
 
 This is the canonical scope, work breakdown and acceptance plan. The companion
 explains algorithms and integration; proposed names there are not existing APIs.
@@ -69,17 +73,17 @@ for this planning-only change.
 | P1 | `RHIObjectPicker` gathers static `MeshInstance3D` geometry | Picking must match the animated silhouette; bone picking is a separate authoring tool |
 | P2 | Existing Steps 36-41 exercise legacy animation; Step 103 is absent from the runner and Milestone 10 implementation | Always-active CPU suites plus actual GPU/UI acceptance; retain useful legacy regressions |
 
-Source anchors: [Animation module](../../Engine/Animation/CMakeLists.txt),
-[clip sampling](../../Engine/Animation/src/AnimationClip.cpp),
-[controller](../../Engine/Animation/src/AnimationStateMachine.cpp),
-[components](../../Engine/Scene/include/Axle/Components.hpp),
-[scene lifecycle](../../Engine/Scene/src/Scene.cpp),
-[scene persistence](../../Engine/Scene/src/SceneSerializer.cpp),
-[assembly data](../../Engine/Scene/include/Axle/AssemblySerializer.hpp),
-[RHI vertex layouts](../../Engine/RHI/include/Axle/RHI/RHIVertexLayout.hpp),
-[RHI scene draws](../../Engine/Scene/src/RHISceneRenderer.cpp),
-[asset types](../../Engine/Asset/include/Axle/AssetTypes.hpp),
-[test runner](../../Editor/src/Test.cpp).
+Source anchors: [Animation module](../../../../Engine/Animation/CMakeLists.txt),
+[clip sampling](../../../../Engine/Animation/src/AnimationClip.cpp),
+[controller](../../../../Engine/Animation/src/AnimationStateMachine.cpp),
+[components](../../../../Engine/Scene/include/Axle/Components.hpp),
+[scene lifecycle](../../../../Engine/Scene/src/Scene.cpp),
+[scene persistence](../../../../Engine/Scene/src/SceneSerializer.cpp),
+[assembly data](../../../../Engine/Scene/include/Axle/AssemblySerializer.hpp),
+[RHI vertex layouts](../../../../Engine/RHI/include/Axle/RHI/RHIVertexLayout.hpp),
+[RHI scene draws](../../../../Engine/Scene/src/RHISceneRenderer.cpp),
+[asset types](../../../../Engine/Asset/include/Axle/AssetTypes.hpp),
+[test runner](../../../../Tests/src/Test.cpp).
 
 ### Rendering boundary discovered during inspection
 

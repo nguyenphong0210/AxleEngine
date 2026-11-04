@@ -1,5 +1,9 @@
 # Phase 40 Gemini foundation review
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 Date: 2026-11-03. Reviewed HEAD: `a6efa8c`.
 Range: `7c72f35..a6efa8c` (eight implementation commits, A1/A2/A3/B1/B2/C1/C2/B3).
 Status: **foundation implementation present; acceptance reopened**.

@@ -1,8 +1,12 @@
 # Editor Tooling Improvement Roadmap
 
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
 Status: **proposed work**, reviewed 2026-11-01; Phase 39 VFX sequencing updated 2026-11-02; Phase 40 animation handoff updated 2026-11-03. This consolidates durable ideas from older visual-editor and parity specifications. It is not a list of implemented capabilities or a fixed phase schedule.
 
-Current material/UI behavior is documented in the [material guide](../guides/MATERIALS_AND_SHADERS.md) and [UI guide](../guides/UI.md). Address dependency and lifecycle issues in the [architecture assessment](../architecture/ASSESSMENT.md) alongside feature development.
+Current material/UI behavior is documented in the [material guide](../../../guides/MATERIALS_AND_SHADERS.md) and [UI guide](../../../guides/UI.md). Address dependency and lifecycle issues in the [architecture assessment](../../../architecture/ASSESSMENT.md) alongside feature development.
 
 ## 1. Shared authoring foundations
 

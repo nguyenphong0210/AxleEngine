@@ -1,8 +1,12 @@
 # Phase 38.3 Material System: Implementation Handoff for Gemini
 
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
 > **Technical reference, not an active assignment.** Read the
-> [shared working protocol](../agents/WORKING_PROTOCOL.md) and
-> [current task/messages](../agents/CODEX_GEMINI_EXCHANGE.json) first. Only a
+> [shared working protocol](../../../agents/WORKING_PROTOCOL.md) and
+> [current task/messages](../../../agents/CODEX_GEMINI_EXCHANGE.json) first. Only a
 > current released scope authorizes implementation. Historical examples and
 > broad phase instructions below must not restart completed work.
 
@@ -14,7 +18,7 @@ Baseline inspected: `01da2d3` (`added icons`)
 
 Status update: this is the original implementation handoff. Post-review runtime
 fixes and actual DX12/Vulkan results are recorded in the
-[acceptance report](MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md); its remaining UI
+[acceptance report](../reports/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md); its remaining UI
 checks supersede the original NOT RUN status in this planning document.
 
 ## 1. Assignment and execution limits
@@ -1100,6 +1104,6 @@ commit or justify omitting persistence and legacy-compatibility tests.
 
 ## 16. Ready-to-use prompt for Gemini
 
-Current entry point: [agent collaboration](../agents/README.md). Read and reply
+Current entry point: [agent collaboration](../../../agents/README.md). Read and reply
 in the shared exchange; implement only the package released there.
-The [original full-scope prompt](../agents/archive/MATERIAL_PHASE_38_3_ORIGINAL_PROMPT.txt) is retained as history, not a task to run.
+The [original full-scope prompt](../../../agents/archive/MATERIAL_PHASE_38_3_ORIGINAL_PROMPT.txt) is retained as history, not a task to run.

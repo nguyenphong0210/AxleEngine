@@ -1,5 +1,10 @@
 # Current Dependency Map
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Reviewed: 2026-11-01. Link dependencies, build-order constraints and textual include edges are different relationships. This report keeps them separate.
 
 ## 1. Direct target links
@@ -29,7 +34,7 @@ Extracted from first-party target_link_libraries calls. Platform conditions/gene
 | `AxleUI` | PRIVATE | `glfw`, `glad` | [Engine/UI/CMakeLists.txt](../../Engine/UI/CMakeLists.txt) |
 | `AxleUI` | PRIVATE | `d3d12`, `dxgi`, `d3dcompiler` | [Engine/UI/CMakeLists.txt](../../Engine/UI/CMakeLists.txt) |
 | `AxleUI` | PRIVATE | `Vulkan::Vulkan` | [Engine/UI/CMakeLists.txt](../../Engine/UI/CMakeLists.txt) |
-| `AxleVehicle` | PUBLIC | `Axle::Core`, `Axle::Physics`, `Axle::Renderer`, `Axle::Audio`, `Axle::VFX`, `Jolt` | [Engine/Vehicle/CMakeLists.txt](../../Engine/Vehicle/CMakeLists.txt) |
+| `AxleVehicle` | PUBLIC | `Axle::Core`, `Axle::Physics`, `Axle::Renderer`, `Axle::Audio`, `Axle::VFX`, `Jolt` | `Engine/Vehicle/CMakeLists.txt` (historical path; unavailable in this checkout) |
 | `AxleVFX` | PUBLIC | `Axle::Core`, `Axle::Renderer`, `Axle::RHI`, `Axle::Asset` | [Engine/VFX/CMakeLists.txt](../../Engine/VFX/CMakeLists.txt) |
 | `AxleVFX` | PRIVATE | `glad` | [Engine/VFX/CMakeLists.txt](../../Engine/VFX/CMakeLists.txt) |
 | `AxleSpline` | PUBLIC | `Axle::Core`, `Axle::Renderer`, `Axle::Physics`, `Axle::Scene`, `Axle::UI` | [Plugins/Spline/CMakeLists.txt](../../Plugins/Spline/CMakeLists.txt) |
@@ -217,10 +222,10 @@ Includes are textual, including inactive preprocessor branches. This is not a ca
 | Engine/VFX | Engine/Platform | 1 | [Engine/VFX/src/ParticleRenderer.cpp:3](../../Engine/VFX/src/ParticleRenderer.cpp#L3) → `Axle/Window.hpp` |
 | Engine/VFX | Engine/RHI | 12 | [Engine/VFX/include/Axle/RHIParticleRenderer.hpp:10](../../Engine/VFX/include/Axle/RHIParticleRenderer.hpp#L10) → `Axle/RHI/RHICommon.hpp` |
 | Engine/VFX | Engine/Renderer | 7 | [Engine/VFX/include/Axle/ParticleRenderer.hpp:4](../../Engine/VFX/include/Axle/ParticleRenderer.hpp#L4) → `Axle/Shader.hpp` |
-| Engine/Vehicle | Engine/Audio | 2 | [Engine/Vehicle/include/Axle/VehicleAudio.hpp:5](../../Engine/Vehicle/include/Axle/VehicleAudio.hpp#L5) → `Axle/AudioSource.hpp` |
-| Engine/Vehicle | Engine/Core | 9 | [Engine/Vehicle/include/Axle/Vehicle.hpp:2](../../Engine/Vehicle/include/Axle/Vehicle.hpp#L2) → `Axle/Types.hpp` |
-| Engine/Vehicle | Engine/Physics | 2 | [Engine/Vehicle/include/Axle/Vehicle.hpp:5](../../Engine/Vehicle/include/Axle/Vehicle.hpp#L5) → `Axle/PhysicsScene.hpp` |
-| Engine/Vehicle | Engine/VFX | 2 | [Engine/Vehicle/include/Axle/VehicleVFX.hpp:6](../../Engine/Vehicle/include/Axle/VehicleVFX.hpp#L6) → `Axle/ParticleSystem.hpp` |
+| Engine/Vehicle | Engine/Audio | 2 | `Engine/Vehicle/include/Axle/VehicleAudio.hpp:5` (historical path; unavailable in this checkout) → `Axle/AudioSource.hpp` |
+| Engine/Vehicle | Engine/Core | 9 | `Engine/Vehicle/include/Axle/Vehicle.hpp:2` (historical path; unavailable in this checkout) → `Axle/Types.hpp` |
+| Engine/Vehicle | Engine/Physics | 2 | `Engine/Vehicle/include/Axle/Vehicle.hpp:5` (historical path; unavailable in this checkout) → `Axle/PhysicsScene.hpp` |
+| Engine/Vehicle | Engine/VFX | 2 | `Engine/Vehicle/include/Axle/VehicleVFX.hpp:6` (historical path; unavailable in this checkout) → `Axle/ParticleSystem.hpp` |
 | Plugins/Spline | Engine/Core | 7 | [Plugins/Spline/include/AxleSpline/Curve3D.hpp:2](../../Plugins/Spline/include/AxleSpline/Curve3D.hpp#L2) → `Axle/Types.hpp` |
 | Plugins/Spline | Engine/Physics | 4 | [Plugins/Spline/include/AxleSpline/SplineComponent.hpp:5](../../Plugins/Spline/include/AxleSpline/SplineComponent.hpp#L5) → `Axle/PhysicsScene.hpp` |
 | Plugins/Spline | Engine/Renderer | 3 | [Plugins/Spline/include/AxleSpline/SplineComponent.hpp:4](../../Plugins/Spline/include/AxleSpline/SplineComponent.hpp#L4) → `Axle/VertexArray.hpp` |
@@ -242,11 +247,11 @@ Includes are textual, including inactive preprocessor branches. This is not a ca
 | Runtime | Engine/Vehicle | 1 | [Runtime/src/RuntimeLayer.hpp:5](../../Runtime/src/RuntimeLayer.hpp#L5) → `Axle/Vehicle.hpp` |
 | Runtime | Plugins/Spline | 3 | [Runtime/src/RuntimeLayer.cpp:10](../../Runtime/src/RuntimeLayer.cpp#L10) → `AxleSpline/SplineComponent.hpp` |
 | Runtime | Plugins/Terrain | 4 | [Runtime/src/RuntimeLayer.cpp:13](../../Runtime/src/RuntimeLayer.cpp#L13) → `AxleTerrain/TerrainComponent.hpp` |
-| Samples | Engine/Core | 3 | [Samples/TestProject/assets/scripts/CarController.hpp:7](../../Samples/TestProject/assets/scripts/CarController.hpp#L7) → `Axle/Log.hpp` |
-| Samples | Engine/Physics | 1 | [Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp:9](../../Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp#L9) → `Axle/PhysicsScene.hpp` |
-| Samples | Engine/Platform | 6 | [Samples/TestProject/assets/scripts/CarController.hpp:5](../../Samples/TestProject/assets/scripts/CarController.hpp#L5) → `Axle/Input.hpp` |
-| Samples | Engine/Scene | 11 | [Samples/TestProject/assets/scripts/CarController.hpp:2](../../Samples/TestProject/assets/scripts/CarController.hpp#L2) → `Axle/ScriptableEntity.hpp` |
-| Samples | Engine/Vehicle | 2 | [Samples/TestProject/assets/scripts/RacingHUD.hpp:8](../../Samples/TestProject/assets/scripts/RacingHUD.hpp#L8) → `Axle/Vehicle.hpp` |
+| Samples | Engine/Core | 3 | `Samples/TestProject/assets/scripts/CarController.hpp:7` (historical path; unavailable in this checkout) → `Axle/Log.hpp` |
+| Samples | Engine/Physics | 1 | `Samples/TestProject/assets/scripts/VehicleChaseCamera.hpp:9` (historical path; unavailable in this checkout) → `Axle/PhysicsScene.hpp` |
+| Samples | Engine/Platform | 6 | `Samples/TestProject/assets/scripts/CarController.hpp:5` (historical path; unavailable in this checkout) → `Axle/Input.hpp` |
+| Samples | Engine/Scene | 11 | `Samples/TestProject/assets/scripts/CarController.hpp:2` (historical path; unavailable in this checkout) → `Axle/ScriptableEntity.hpp` |
+| Samples | Engine/Vehicle | 2 | `Samples/TestProject/assets/scripts/RacingHUD.hpp:8` (historical path; unavailable in this checkout) → `Axle/Vehicle.hpp` |
 
 ## 5. Architectural interpretation
 

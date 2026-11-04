@@ -1,8 +1,12 @@
 # Phase 40: Animation Coding Guide for Gemini
 
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
 > **Technical reference, not an active assignment.** Read the
-> [shared working protocol](../agents/WORKING_PROTOCOL.md) and
-> [current task/messages](../agents/CODEX_GEMINI_EXCHANGE.json) first. Only a
+> [shared working protocol](../../../agents/WORKING_PROTOCOL.md) and
+> [current task/messages](../../../agents/CODEX_GEMINI_EXCHANGE.json) first. Only a
 > current released scope authorizes implementation. Historical examples and
 > broad phase instructions below must not restart completed work.
 
@@ -751,6 +755,6 @@ reason and the final supported behavior rather than weakening tests to match a b
 
 ## 15. Copyable Gemini assignment
 
-Current entry point: [agent collaboration](../agents/README.md). Read and reply
+Current entry point: [agent collaboration](../../../agents/README.md). Read and reply
 in the shared exchange; implement only the package released there.
-The [original full-scope prompt](../agents/archive/ANIMATION_PHASE_40_ORIGINAL_PROMPT.txt) is retained as history, not a task to run.
+The [original full-scope prompt](../../../agents/archive/ANIMATION_PHASE_40_ORIGINAL_PROMPT.txt) is retained as history, not a task to run.

@@ -1,5 +1,9 @@
 # Screen-space material refraction
 
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
 Use **Surface / Transparency > Transparent**, disable depth writes, then enable
 **Refraction**. IOR 1.5 is a useful starting point for automotive glass. Strength
 scales displacement; thickness is a distance in scene units. Tint attenuates

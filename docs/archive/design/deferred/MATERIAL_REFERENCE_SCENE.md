@@ -1,5 +1,9 @@
 # Automotive material reference scene
 
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
 Open `Editor/assets/scenes/MaterialReference.axlescene`. The primary camera is
 at (0, 0, 10), facing -Z. The top row contains car paint, brushed metal and carbon
 fiber; the bottom row contains rubber, leather and glass. A colored checkerboard
@@ -60,7 +64,7 @@ and detail normal with refraction. Results include CPU recording, GPU submission
 and queue idle. They are not isolated shader timings and have no pass/fail
 performance threshold. Run one `--stepNNN` option per AxleTests process.
 
-See the [2026-11-02 acceptance report](MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md)
+See the [2026-11-02 acceptance report](../reports/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md)
 for verified DX12/Vulkan results, measurements and remaining interactive checks.
 
 ### Acceptance Report Template

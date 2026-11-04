@@ -1,5 +1,9 @@
 # Phase 39: VFX Editor Completion Plan
 
+> **Deferred reference:** outside the active architecture cleanup. Follow the
+> [optimization roadmap](../../../ROADMAP.md); embedded prompts and old priorities
+> are historical guidance, not a current assignment. Recheck APIs before resuming.
+
 Status: **corrective implementation delivered; interactive editor/OpenGL acceptance remains open**.
 Reviewed: 2026-11-03.
 
@@ -14,7 +18,7 @@ passing Step 102 establish a completed VFX editor. Existing simulation and UI
 code are foundations to preserve. The work below is not implemented by this
 document, and its proposed names are not existing APIs.
 
-The parent checklist is [ROADMAP.md](../../ROADMAP.md). Related guidance is in
+The parent checklist is [ROADMAP.md](../../../../ROADMAP.md). Related guidance is in
 the [editor tooling roadmap](EDITOR_TOOLING_ROADMAP.md). The companion
 [Gemini coding guide](VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) provides
 proposed C++ types, algorithms, integration flows, explicit fixtures and a
@@ -23,7 +27,7 @@ acceptance remains a separate user-owned task; this plan does not close it or
 start Phase 40.
 
 Current implementation and automated/physical verification are recorded in the
-[follow-up review and acceptance report](VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
+[follow-up review and acceptance report](../reports/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
 The gaps in Section 2 describe the pre-implementation baseline; proposed type
 names and commit subjects below are design guidance rather than proof of closure.
 
@@ -76,18 +80,18 @@ result is supplied by this planning change.
 
 Source entry points:
 
-- [VFXEditorPanel.cpp](../../Engine/UI/src/VFXEditorPanel.cpp),
-  [EditorLayer.cpp](../../Editor/src/EditorLayer.cpp).
-- [Components.hpp](../../Engine/Scene/include/Axle/Components.hpp),
-  [SceneSerializer.cpp](../../Engine/Scene/src/SceneSerializer.cpp).
-- [ParticleEmitterSerializer.cpp](../../Engine/VFX/src/ParticleEmitterSerializer.cpp),
-  [ParticleSystem.cpp](../../Engine/VFX/src/ParticleSystem.cpp).
-- [RHIParticleRenderer.cpp](../../Engine/VFX/src/RHIParticleRenderer.cpp),
-  [Scene.cpp](../../Engine/Scene/src/Scene.cpp),
-  [Particle.hlsl](../../Engine/Resources/Shaders/Particle.hlsl).
-- [CurveEditorWidget.cpp](../../Engine/UI/src/CurveEditorWidget.cpp),
-  [ParticleEmitter.cpp](../../Engine/VFX/src/ParticleEmitter.cpp),
-  [Step 102](../../Editor/src/Tests/Test_Milestone10.cpp).
+- [VFXEditorPanel.cpp](../../../../Engine/UI/src/VFXEditorPanel.cpp),
+  [EditorLayer.cpp](../../../../Editor/src/EditorLayer.cpp).
+- [Components.hpp](../../../../Engine/Scene/include/Axle/Components.hpp),
+  [SceneSerializer.cpp](../../../../Engine/Scene/src/SceneSerializer.cpp).
+- [ParticleEmitterSerializer.cpp](../../../../Engine/VFX/src/ParticleEmitterSerializer.cpp),
+  [ParticleSystem.cpp](../../../../Engine/VFX/src/ParticleSystem.cpp).
+- [RHIParticleRenderer.cpp](../../../../Engine/VFX/src/RHIParticleRenderer.cpp),
+  [Scene.cpp](../../../../Engine/Scene/src/Scene.cpp),
+  [Particle.hlsl](../../../../Engine/Resources/Shaders/Particle.hlsl).
+- [CurveEditorWidget.cpp](../../../../Engine/UI/src/CurveEditorWidget.cpp),
+  [ParticleEmitter.cpp](../../../../Engine/VFX/src/ParticleEmitter.cpp),
+  [Step 102](../../../../Tests/src/Test_Milestone10.cpp).
 
 Step 102 creates multiple component stacks, but its persistence case serializes
 one `ParticleEmitterConfig`. Its MeshSurface assertion checks a normalized

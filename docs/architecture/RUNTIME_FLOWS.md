@@ -1,5 +1,10 @@
 # Execution Flows: Current System
 
+> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
+> retirement and later sample cleanup. It is retained for architectural context,
+> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
+> for execution; unavailable source paths below are historical references.
+
 Reviewed: 2026-11-01; startup paths updated 2026-11-03. Diagrams preserve architecture-relevant call order while omitting widget and command-level details. They describe source paths; execution success was not measured.
 
 ## 1. Editor startup and backend selection

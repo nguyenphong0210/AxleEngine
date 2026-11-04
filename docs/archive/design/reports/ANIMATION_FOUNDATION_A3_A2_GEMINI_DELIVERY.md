@@ -1,5 +1,9 @@
 # Animation Foundation A3 & A2 Delivery and Review Correction Report
 
+> **Archived delivery/review:** Evidence retains its recorded revision and verification limits; archival does not establish acceptance.
+> Follow the [optimization roadmap](../../../ROADMAP.md) for current work;
+> recorded instructions/commands below describe the original task.
+
 Date: 2026-11-03  
 Branch: `main`  
 Reviewed Baseline Commit: `c13b21a` (`docs(animation): deliver A3 immutable publication and A2 adaptive curve baking report`) followed by reviewer commit `2e4f7c8` (`docs(animation): review A3 A2 delivery and reopen scoped acceptance`)  

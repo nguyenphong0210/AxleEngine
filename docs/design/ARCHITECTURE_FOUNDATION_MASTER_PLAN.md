@@ -1,8 +1,13 @@
 # Architecture Foundation Master Plan
 
+> **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
+> technical contract, not a separate phase queue. Old Phase/G labels and
+> source-audit baselines are retained for traceability. Early Vehicle retirement
+> is delivered; independent review and new plugin implementation remain open.
+
 Date: **2026-11-04**. Source baseline:
 **cb200d373550b6dd4f7e12d483a161012d863a27**.
-Status: **planning only; no production implementation released**.
+Status: **technical contract; execution/progress is tracked in [docs/ROADMAP.md](../ROADMAP.md)**.
 
 The latest user priority is to make the architecture clean before expanding
 features. This coordinator combines NRI/RHI standardization, EnTT/enkiTS
@@ -15,7 +20,8 @@ The [exchange](../agents/CODEX_GEMINI_EXCHANGE.json) records actual assignments.
 
 | Document | Authoritative responsibility |
 | --- | --- |
-| This master plan | Architecture-first sequence, cross-plan prerequisites, new AF packages and overall exit |
+| [Optimization roadmap](../ROADMAP.md) | Single execution order, OPT phases and package progress |
+| This master plan | Fixed architecture decisions, cross-plan prerequisites, AF contracts and overall exit |
 | [Architecture assessment](../architecture/ASSESSMENT.md) | Historical A1..A12 source observations; recheck current delivery status |
 | [EnTT/enkiTS review](../architecture/ENTT_ENKITS_REVIEW.md) | ECSJ-01..05 findings and actual native reproduction limits |
 | [ECS/jobs refactor plan](ENTT_ENKITS_REFACTOR_PLAN.md) | EJ package internals, threading, bridge lifetime, ECS and simulation clocks |
@@ -26,7 +32,7 @@ The [exchange](../agents/CODEX_GEMINI_EXCHANGE.json) records actual assignments.
 Keep existing identifiers: **Phase 41 / P41** is rendering/NRI; **Phase 42 / EJ**
 is ECS/jobs normalization; **Phase 43 / PLG** is plugin/project composition and
 Vehicle replacement. These labels formalize the previously proposed numbering
-for documentation navigation. They are workstreams, not a command to finish every
+for historical navigation. The OPT sequence replaces them as the work queue. They are domains, not a command to finish every
 Phase 41 feature before touching a Phase 42 safety prerequisite. AF-00..05 are
 cross-cutting foundation packages, not a fourth feature phase.
 
@@ -128,38 +134,22 @@ A finished enki job is not proof the GPU is done; a submitted fence does not
 protect CPU-recorded/unsubmitted UI references by itself. Plugin code leases
 must span every callback/destructor/resource that still needs that DLL.
 
-## 5. Architecture-first execution waves
+## 5. Sequential execution order
 
-The package table below is exhaustive and machine-checkable. Packages within a
-wave execute in their own topological order and never imply concurrent writers.
-The internal dependency tables plus section 6 define the complete graph.
+Use **[OPT-00..11 in the optimization roadmap](../ROADMAP.md)** for the only
+execution order and package progress checklist. The previous W0..W9 wave queue
+is superseded. Domain G gates remain contract groupings, not another work queue.
 
-| Wave | Packages | Reviewable outcome |
-| --- | --- | --- |
-| W0 | AF-00, AF-01, EJ-00, P41-00, PLG-00 | Stable identity policy, current fault/render/plugin baseline and permanent harnesses |
-| W1 | EJ-01..07, AF-02 | Close P1 threading/task/DLL hazards; establish Core/composition ownership |
-| W2 | EJ-08..10, AF-03, AF-04 | Correct ECS mutation/transforms and independently buildable scene/asset data boundaries |
-| W3 | EJ-11..14, P41-01..11 | Shared simulation in both products plus checked NRI device/resource/frame/present/upload foundation |
-| W4 | P41-12..20, P41-25 | One renderer service for products/previews/UI/debug with honest capabilities |
-| W5 | PLG-01..13 | Shared DLL hosts, same Engine/project SDK, Plugins window and real build/restart fixture |
-| W6 | PLG-14..21 | Fresh Vehicle, old-code retirement, converted Spline/Terrain and project script dependencies |
-| W7 | PLG-22..23, P41-26 | Selected static player, matching cook/export and final module/product boundary verification |
-| W8 | EJ-15..17, PLG-24..25, AF-05 | Current stress/parity/native/product evidence and architecture acceptance |
-| W9 | P41-21..24, P41-27..29 | Deferred rendering features, complete Phase 41 measurement/acceptance/default rollout |
+The roadmap serializes all 80 existing packages without changing their IDs or
+internal prerequisites. OPT-00 verifies the delivered early Vehicle retirement;
+OPT-01..10 covers the 73-package architecture exit; OPT-11 retains the seven
+deferred rendering feature/full-phase packages. The graph in section 6 and the
+three domain dependency tables remain technical constraints on any reorder.
 
-W0..W8 contain 73 unique packages. W9's seven packages remain in the canonical
-backlog and are not silently completed, removed or required for a falsely broad
-architecture-parity claim. Architecture results may supply evidence to P41-27;
-that whole package still depends on its original feature coverage. P41-28/29
-full-phase acceptance/default rollout remains open until its prerequisites pass.
-
-In W4, P41-25 creates the generic debug consumer with current adapters. W6 replaces
-the legacy Vehicle adapter with plugin registrations and reruns affected debug
-checks. Do not make the initial renderer/debug service depend on the existence of
-the new Vehicle plugin; that would create a circular prerequisite.
-
-Each package must have current tests before its consumer is enabled. W8 is broad
-acceptance, not permission to postpone all testing until the final wave.
+P41-25 initially provides generic physics debug without requiring a new Vehicle
+plugin. OPT-07 later adds plugin contributions and verifies retained lifetimes.
+Do not introduce a circular requirement that rendering must wait for Vehicle.
+Run relevant tests with each package; final acceptance consolidates evidence.
 
 ## 6. Cross-plan prerequisite edges
 
@@ -195,14 +185,14 @@ can satisfy a node only with a recorded mapping, never by guessing it is similar
 
 Foundation packages have their own dependencies:
 
-| Package | Requires | Wave |
+| Package | Requires | Execution phase |
 | --- | --- | --- |
-| AF-00 | none | W0 |
-| AF-01 | AF-00 | W0 |
-| AF-02 | AF-00, EJ-07 | W1 |
-| AF-03 | AF-01, AF-02, EJ-10 | W2 |
-| AF-04 | AF-01, AF-02 | W2 |
-| AF-05 | AF-03, AF-04, EJ-17, PLG-25, P41-20, P41-25, P41-26 | W8 |
+| AF-00 | none | OPT-01 |
+| AF-01 | AF-00 | OPT-01 |
+| AF-02 | AF-00, EJ-07 | OPT-03 |
+| AF-03 | AF-01, AF-02, EJ-10 | OPT-03 |
+| AF-04 | AF-01, AF-02 | OPT-03 |
+| AF-05 | AF-03, AF-04, EJ-17, PLG-25, P41-20, P41-25, P41-26 | OPT-10 |
 
 Validate the union graph before accepting a sequencing change. Do not introduce
 P41-26 -> PLG-22 -> P41-26 or EJ-16 -> PLG-25 -> EJ-17 -> EJ-16 by making every
@@ -378,8 +368,9 @@ For Vehicle:
    Use four-wheel Jolt behavior with declared controls/configuration and headless tests.
 3. Prove Inspector/setup, Play/Pause/Step/Stop, reset, copy/remap and submitted debug
    lifetimes through the common APIs, not product-specific Scene methods.
-4. Retire old Engine/Vehicle and its built-in components/serializers/queries/UI
-   branches only after a new runnable fixture and unknown-data protection exist.
+4. Verify the already-delivered early retirement of Engine/Vehicle and its
+   built-in ownership/UI wiring. PLG-17 closes remaining cutover and generic
+   legacy-data protection gaps; it does not restore or delete the old module again.
 5. Restore the scoped existing audio/VFX integrations via telemetry adapters,
    convert Spline/Terrain and scripts, then verify selected static Runtime export.
 
@@ -449,10 +440,10 @@ feature, every platform or arbitrary binary plugin ABI is supported.
 
 ## 12. Start package and planning limits
 
-First proposed released unit, **only after explicit implementation assignment**:
-AF-00 plus EJ-00, then EJ-01..03. Establish the baseline/identity inventory before
-moving module or asset files. AF-01 must pass before identity-sensitive relocation
-or packaging changes; close the remaining P1 lifetime risks in EJ-04..07 next.
+Follow the [optimization roadmap](../ROADMAP.md): OPT-00 retirement review,
+then AF-00 + EJ-00 as the first implementation unit in OPT-01. Finish the remaining
+OPT-01 baseline/identity packages before OPT-02 (EJ-01..07). No package is assigned
+by reading this contract. AF-01 precedes identity-sensitive relocation/export.
 
 No delivery dates or speedup/binary-size claims are invented. Per-package estimates
 come after its baseline and API ownership are verified. If a required GPU, native
@@ -460,6 +451,6 @@ DLL/UI, clean-checkout or packaged-player environment is unavailable, leave its
 acceptance open. Documented APIs are proposals until implemented and tested.
 
 This planning task validates document/source links, package coverage, combined
-internal/external dependency acyclicity, execution-wave ordering and navigation.
+internal/external dependency acyclicity, sequential OPT ordering and navigation.
 It does not run new C++/GPU/physics/player tests, change vendor revisions or mark
 existing findings fixed.

@@ -1,7 +1,12 @@
 # Plugin System Implementation Plan
 
+> **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
+> technical contract, not a separate phase queue. Old Phase/G labels and
+> source-audit baselines are retained for traceability. Early Vehicle retirement
+> is delivered; independent review and new plugin implementation remain open.
+
 Date: **2026-11-04**. Baseline: **3190ab205ace417b81172c0fa92f92e64b5b46f4**.
-Status: **planning only; every PLG package below is unimplemented and unreleased**.
+Status: **plugin contracts; PLG-00..25 remain open; early Vehicle retirement delivered separately, review pending**.
 
 The user requests detailed plans before code. DLL modules in Editor, static
 Runtime modules, project-level selection and a new Plugins window are the selected
@@ -12,8 +17,9 @@ test design. The [exchange](../agents/CODEX_GEMINI_EXCHANGE.json) determines act
 assignments; this checklist does not release the entire backlog.
 
 **Architecture-first coordinator (2026-11-04):** This is the Phase 43 plugin/Vehicle
-workstream in the [master plan](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md). Its wave
-table and external prerequisite edges supplement this plan's internal graph.
+domain in the [master contract](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md). The
+[optimization roadmap](../ROADMAP.md) owns sequential order and progress; the
+master's external prerequisite edges supplement this plan's internal graph.
 Retain all PLG identifiers. Use the [NRI contract](NRI_INTEGRATION_CONTRACT.md)
 for shared GPU/device/frame ownership; plugins must not create another renderer
 or link private Engine/NRI device state. No production implementation is released.
@@ -90,7 +96,7 @@ and source ownership still apply to independently ready packages.
 | PLG-14 | PLG-13 | Fresh Vehicle data/configuration and codecs |
 | PLG-15 | PLG-09, PLG-14 | New Jolt Vehicle system and reset lifecycle |
 | PLG-16 | PLG-10, PLG-15 | Vehicle Editor tools and real Play fixture |
-| PLG-17 | PLG-08, PLG-16 | Retire built-in Vehicle and domain wiring |
+| PLG-17 | PLG-08, PLG-16 | Verify early retirement and close plugin cutover gaps |
 | PLG-18 | PLG-16, PLG-17 | Vehicle audio/VFX integration and feature accounting |
 | PLG-19 | PLG-09, PLG-13, PLG-17 | Spline Runtime/Editor conversion |
 | PLG-20 | PLG-19 | Terrain Runtime/Editor conversion |
@@ -325,11 +331,13 @@ The diagram groups work for orientation; the table is the exact dependency set.
   wheel hierarchy and correct edit-scene restoration; native tool visibility recorded.
 - **Exit:** first complete new Vehicle workflow; audio/VFX still pending PLG-18.
 
-### PLG-17 - Remove old built-in Vehicle
+### PLG-17 - Verify early retirement and close plugin cutover gaps
 
-- Retire `Engine/Vehicle` and `Axle::Vehicle` legacy target, built-in component
-  declarations, serializer branches, Scene runtime ownership/query APIs, renderer
-  debug/VFX branches and hardcoded Editor/Runtime vehicle logic.
+- Old built-in Vehicle retirement was delivered early in `fa74981`; independent
+  review remains pending in OPT-00. Do not restore the module or repeat deletion.
+- Recheck the absent target, built-in component/lifecycle/query/UI wiring against
+  the new plugin and generic codec contracts. Replace temporary vehicle-specific
+  legacy handling only when generic unknown-data/body-readiness protection passes.
 - Inspect `UIVectorIcons`, DebugPanel, UIDataContext `Vehicle.` aliases/designer
   defaults, RHI vehicle-light helpers, scripts, physics restore and all tests/sample
   consumers. Move genuinely domain features into the plugin/sample; generic APIs

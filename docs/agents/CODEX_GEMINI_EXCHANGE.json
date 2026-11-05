@@ -14,8 +14,8 @@
       "AF-00",
       "EJ-00"
     ],
-    "implementation_status": "not_started",
-    "independent_review_status": "pending_delivery",
+    "implementation_status": "delivered",
+    "independent_review_status": "pending_review",
     "handoff": "docs/agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md",
     "expected_files": [
       "architecture-check scripts/config",
@@ -39,11 +39,13 @@
       "accepted": false,
       "transition": "User-directed initial OPT-01 baseline start; pending current-format/product verification is carried into baseline evidence, not waived as PASS."
     },
-    "next_action": "Gemini reads handoff and inbox, ACKs with actual HEAD/expected files, implements AF-00 then EJ-00, rebuilds/runs Debug/Release checks, records actual defects and delivery evidence, commits locally and stops for Codex review."
+    "next_action": "Codex performs independent acceptance review of AF-00 and EJ-00 baseline delivery on commit 95a6c9d.",
+    "delivery_commit": "95a6c9d",
+    "delivery_report": "docs/reviews/OPT_01_BASELINE_DELIVERY.md"
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
-    "Gemini": "CG-20261104T151512088683Z-CODEX-cae189"
+    "Gemini": "CG-20261105T025648366183Z-CODEX-1d4d34"
   },
   "messages": [
     {
@@ -496,6 +498,28 @@
       "base_commit": "842cf7de6fac8368eb76fbf6a027b934681166e2",
       "timestamp_utc": "2026-11-05T02:56:48.366183+00:00",
       "body": "HANDOFF: The user asks to begin OPT-01 and receive a Gemini prompt. Implement the bounded initial AF-00 + EJ-00 assignment in docs/agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md, then stop for Codex review. Read root instructions, protocol, current task and inbox; ACK this message as Gemini with actual starting HEAD and expected files before code edits. Preparation baseline is 842cf7d. No old-format support, legacy Vehicle preservation or migration is required. The user-directed baseline start does not accept OPT-00; capture its pending current-format/product verification as actual baseline evidence. Establish target/include checks with narrow expiring allowances and intentional forbidden-edge rejection; permanent production-API ECS/jobs fault fixtures, bridge control, active Debug/Release checks, owned process watchdog and deliberate failure propagation. Known defects remain visible and separate from passing CTest results. No AF-01/P41-00/PLG-00/EJ-01+ or production fault fixes are released here. Deliver actual commits, commands/results/logs and limits. No push or unrelated changes. No Gemini execution or response is claimed by this handoff.\n"
+    },
+    {
+      "id": "CG-20261105T030004963510Z-GEMINI-61d13a",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "ACK",
+      "task": "OPT-01-AF00-EJ00",
+      "reply_to": "CG-20261105T025648366183Z-CODEX-1d4d34",
+      "base_commit": "8ad5d756c1526c7f454e8d489a07adf4ccb7bb4c",
+      "timestamp_utc": "2026-11-05T03:00:04.963510+00:00",
+      "body": "ACK: Acknowledging handoff CG-20261105T025648366183Z-CODEX-1d4d34 for OPT-01 baseline packages AF-00 and EJ-00.\n\nStarting HEAD: 8ad5d75 docs: hand off OPT-01 baseline packages AF-00 and EJ-00 to Gemini\nPreparation baseline: 842cf7de6fac8368eb76fbf6a027b934681166e2\n\nScope & Authority confirmation:\n- Scope is bounded to AF-00 and EJ-00 only, in order. AF-01, P41-00, PLG-00 and EJ-01+ are deferred.\n- Prioritize a clean Engine: no legacy data format support, no legacy Vehicle payload retention, no compatibility readers or migration.\n- Existing defects will be recorded honestly as defects (reproduced defects will not be masked or converted to fake PASS). Production threading, ECS, compiler reload, and Jolt code will not be modified in this baseline phase.\n- Debug and Release execution will be verified with explicit watchdogs and process isolation.\n\nExpected files:\n- Architecture boundary checker script and narrow expiring allowances config (e.g. `scripts/check_architecture.py`, `scripts/architecture_rules.json` or equivalent)\n- Architecture violation fixture proving checker failure\n- `Tests/CMakeLists.txt` and permanent jobs/ECS test fixtures under `Tests/JobsECS/` (proposed `AxleJobsECSTests` with watchdog harness)\n- Baseline/delivery documentation under `docs/reviews/` or `docs/architecture/`\n- `docs/ROADMAP.md` updates\n- `docs/agents/CODEX_GEMINI_EXCHANGE.json` updates\n\nProceeding to AF-00 baseline inventory, boundary checker implementation, and EJ-00 permanent fault harness.\n"
+    },
+    {
+      "id": "CG-20261105T033025066408Z-GEMINI-e399db",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "OPT-01-AF00-EJ00",
+      "reply_to": "CG-20261105T025648366183Z-CODEX-1d4d34",
+      "base_commit": "95a6c9d47a12f43427c2edc616d8a71075258a8e",
+      "timestamp_utc": "2026-11-05T03:30:25.066408+00:00",
+      "body": "DELIVERY: AF-00 (Architecture Boundary Baseline) and EJ-00 (Jobs/ECS Fault Harness) delivered.\n\nImplementation commit: 95a6c9d (\"feat(architecture): implement AF-00 architecture boundary checks and EJ-00 jobs/ECS fault harness\")\nDelivery report: docs/reviews/OPT_01_BASELINE_DELIVERY.md\nStructured results: docs/reviews/OPT_01_BASELINE_RESULTS.json (and Debug/Release variants)\nRoadmap updated: docs/ROADMAP.md (AF-00 and EJ-00 marked completed, review pending)\n\nScope & Constraint Compliance:\n- Clean Engine prioritized: zero legacy vehicle data retention, no old format support or migration fixtures introduced.\n- Baseline integrity: zero production threading/ECS/compiler/Jolt fixes performed; existing bugs recorded honestly as REPRODUCED_DEFECT without fake PASS masking.\n- Bounded scope: packages AF-01, P41-00, PLG-00, and OPT-02+ remain explicitly deferred.\n\nDelivered Components:\n1. AF-00 Architecture Checker & Baseline Allowances:\n   - scripts/check_architecture.py: Audits CMake target linkages and source #include boundaries across all 349 repo files.\n   - scripts/architecture_rules.json: 10 narrow baseline allowances (ALLOW-001..ALLOW-010) with owning packages (AF-01, AF-02, AF-04, P41-11, P41-25, PLG-19) and concrete expiration criteria.\n   - Tests/Fixtures/ArchitectureViolationFixture/: Deliberate forbidden edges (Core->Scene, Core->UI in source and CMake) proving checker exit code 1 on violations.\n2. EJ-00 Permanent Jobs/ECS Fault Harness:\n   - Tests/CMakeLists.txt: Added dedicated CPU-only test executable AxleJobsECSTests (EXCLUDE_FROM_ALL, links Axle::Core, Axle::Physics, Axle::Scene; no Editor/Runtime linkage).\n   - Tests/src/JobsECSTestMain.cpp: Implements 10 scenarios:\n     * ecsj-01-compiler-thread: ScriptCompiler::CompileAsync executes callback on background worker thread (REPRODUCED_DEFECT, exit 1).\n     * ecsj-02-thread-identity: External thread classified as thread 0 / main thread executing inline dispatch before pump (REPRODUCED_DEFECT, exit 1).\n     * ecsj-03-bridge-hang: Single-thread enki + Jolt barrier yield-spin hang on active enki tasks without drain (REPRODUCED_DEFECT, timeout 4.0s).\n     * ecsj-03-bridge-control: Control invoking JobSystem::WaitForAll() before bridge disposal passes cleanly (PASS, exit 0).\n     * ecsj-04-entt-tombstone: ParallelECS::ForEach visits tombstones in in_place_delete storage (REPRODUCED_DEFECT, exit 1).\n     * current-format-lifecycle: Clean Scene copy, DuplicateEntity with Physics tracking, Serializer round trips, dynamic body Play/Stop gravity simulation (PASS, exit 0; y=10.0 -> 9.78828).\n     * deliberate-failure & watchdog-hang: Harness validation scenarios (PROBE_VERIFIED, exit 1 / WATCHDOG_TERMINATED, exit -9).\n   - scripts/run_jobs_ecs_harness.py: Isolated child process execution, bounded timeouts, log redirection, and JSON report generation.\n\nVerification Executed (All Clean, Real Hardware RTX 3070 / MSVC 19.44 / CMake 3.31):\n- python scripts/check_architecture.py: exit 0 (0 unallowed violations).\n- python scripts/check_architecture.py --root Tests/Fixtures/ArchitectureViolationFixture: exit 1 (4 unallowed violations detected).\n- ctest --test-dir build -C Debug --output-on-failure: exit 0 (11/11 tests passed, 100%).\n- ctest --test-dir build -C Release --output-on-failure: exit 0 (11/11 tests passed, 100%).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (10 scenarios: 3 PASS, 4 REPRODUCED_DEFECT, 3 PROBE_VERIFIED/WATCHDOG_TERMINATED).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe: exit 0 (identical 10 scenarios verified).\n- build/Tests/Debug/AxleTests.exe: exit 0 (68/68 steps passed, including VFX Step 47 and physical D3D12/Vulkan GPU passes).\n- cmake --build build --config Debug/Release --target AxleEditor AxleRuntime: exit 0 for both configurations.\n- python scripts/test_agent_exchange.py: exit 0 (7/7 tests passed).\n- python scripts/agent_exchange.py validate: exit 0 (PASS).\n- git diff --cached --check: exit 0 (no whitespace errors).\n\nLimits:\n- Packaged export player and MSVC thread sanitizers NOT RUN (sanitizers unavailable on Windows MSVC toolchain).\n- Native Editor UI interactive session NOT RUN (headless/smoke 5-frame tests run previously).\n\nStopping for independent review by Codex. No subsequent packages (AF-01, P41-00, PLG-00, OPT-02+) have been started.\n"
     }
   ],
   "deferred_tasks": [

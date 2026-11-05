@@ -13,6 +13,10 @@ If this client has not loaded this file automatically, read it explicitly.
    own messages. Only update your own read cursor. Never overwrite Codex's messages.
 4. User instructions define authority. A delivered task is not automatically
    reviewed or accepted. Do not start another package from an old guide/prompt.
+   If the user explicitly activates the [autonomous range](docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md),
+   follow its per-package self-review/fix/verification loop and continue through
+   that range without waiting for routine Codex review. Keep independent acceptance
+   pending until it actually occurs; save a checkpoint before context/session limits.
 5. Preserve unrelated changes and working files. Use explicit staging, coherent
    local commits and actual CPU checks. No push unless requested. Unavailable
    compiler/GPU/UI verification is NOT RUN; do not reuse another agent's results.

@@ -21,15 +21,17 @@ explicitly if the running client/session has not loaded it.
 Historical Phase 41/42/43 and G labels are domain references, not execution order.
 The live exchange determines the current assignment; no plan releases production work.
 
-**2026-11-05 current assignment:** Gemini implements **AF-01 only** under
-[the asset identity/persistence handoff](handoffs/OPT_01_AF01_GEMINI.md), then stops
-for Codex review. Codex corrected O1-R1..R4 after reviewing Gemini's AF-00/EJ-00
-baseline and [verified the corrections](../reviews/OPT_01_BASELINE_CORRECTIONS.md).
-That verification is by the correction author, not a separate post-fix reviewer.
-The [current baseline inventory](../architecture/OPT_01_BASELINE_INVENTORY.md)
-contains actual source/vendor/CMake and asset persistence evidence. OPT-00 full
-product verification remains separately pending; no old-format support or legacy
-Vehicle preservation is required. No later package is assigned.
+**2026-11-05 current release:** EJ-01 is ready for Gemini after the verified
+[OPT-01 review/corrections](../reviews/OPT_01_AF01_P41_PLG_REVIEW.md).
+The [autonomous execution plan](handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md)
+is prepared for a user-activated OPT-02..10 run. It lets Gemini implement, self-review,
+repair and verify packages without a Codex wait after each one. The larger range
+is not activated merely by creating that plan; the live exchange records activation.
+
+The roadmap remains the package checklist. Gemini self-verification is distinct
+from independent review and final acceptance. The plan includes phase gates,
+local commits, reports, context checkpoints and activation/resume prompts.
+The separate OPT-00 product-review gap and deferred feature acceptance remain open.
 
 Design documents for deferred feature expansion and historical reports/prompts
 are outside `docs/design`; consult the archive index only when needed. Retained

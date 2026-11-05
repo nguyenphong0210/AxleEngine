@@ -9,7 +9,7 @@
     "reviewer": "Codex",
     "code_baseline": "d0b11bb",
     "scope_updated_on": "2026-11-05",
-    "user_scope": "User requested review and direct correction of Gemini deliveries, followed by the next English prompt. OPT-01 corrections are verified; prepare the next Gemini session for EJ-01 only. Do not infer authorization for EJ-02+.",
+    "user_scope": "User requested review and direct correction of Gemini deliveries, followed by the next English prompt. OPT-01 corrections are verified; prepare the next Gemini session for EJ-01 only. Do not infer authorization for EJ-02+. Latest request: prepare a plan for Gemini to handle most work autonomously. Documentation only here; wider execution awaits user activation.",
     "released_packages": [
       "EJ-01"
     ],
@@ -49,7 +49,25 @@
       "state": "full_product_verification_pending",
       "note": "User-directed progression retains this gap; legacy preservation requirements are superseded. No old-format support required."
     },
-    "next_action": "Gemini reads the EJ-01 handoff and inbox, checks HEAD/status, then posts its own ACK/IN_PROGRESS before source edits; delivers for Codex review and stops before EJ-02."
+    "next_action": "Gemini reads the EJ-01 handoff and inbox, checks HEAD/status, then posts its own ACK/IN_PROGRESS before source edits; delivers for Codex review and stops before EJ-02.",
+    "autonomy_plan": {
+      "status": "prepared_not_activated",
+      "document": "docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md",
+      "proposed_execution_range": "OPT-02 through OPT-10, roadmap order",
+      "first_phase": [
+        "EJ-01",
+        "EJ-02",
+        "EJ-03",
+        "EJ-04",
+        "EJ-05",
+        "EJ-06",
+        "EJ-07"
+      ],
+      "activation": "User invokes the activation prompt or equivalent explicit instruction in a Gemini session",
+      "cadence": "Gemini implementation/self-review/fix/verification per package; phase checkpoints; no routine Codex waits after activation",
+      "independent_review": "Pending until actually performed; self-verification is not independent acceptance",
+      "current_release_unchanged": true
+    }
   },
   "last_read": {
     "Codex": "CG-20261105T070853969976Z-GEMINI-8aeaf8",
@@ -726,6 +744,17 @@
       "base_commit": "d0b11bb",
       "timestamp_utc": "2026-11-05T13:36:51.562625+00:00",
       "body": "HANDOFF READY: OPT-02 / EJ-01 only, at corrected source baseline d0b11bb (asset contract bff13f0). User requested the next English prompt after review and direct fixes.\nRead docs/agents/handoffs/OPT_02_EJ01_GEMINI.md, current task card, protocol and inbox before editing. Establish OS owner identity, preserve invalid enki indices, enforce scheduler entry contexts, synchronize admission versus shutdown, and define stopped/reinitialized epochs and thread-count diagnostics. Add active bounded Debug/Release identity/lifecycle/race tests. Follow the exact handoff boundary.\nDo not implement EJ-02 deferred executor/owner tokens, compiler/Jolt bridge/ECS work, AF-02+, rendering migration, plugin framework or Vehicle. Preserve raw paths/native embedded UUIDs and pinned vendors. No old-format support, sidecars or central authored registry.\nPost your own ACK/IN_PROGRESS, deliver with local commits and exact verification, then stop for Codex review. No push. This file-based handoff is not a claim that Gemini has started or acknowledged it. Previous review evidence and the separate OPT-00 manual/full-product acceptance gap remain explicit.\n"
+    },
+    {
+      "id": "CG-20261105T134134858914Z-CODEX-8a6816",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "GEMINI-AUTONOMY-PLAN",
+      "reply_to": "CG-20261105T133651562625Z-CODEX-b1d922",
+      "base_commit": "5a44a60",
+      "timestamp_utc": "2026-11-05T13:41:34.858914+00:00",
+      "body": "IN_PROGRESS: User requested a plan enabling Gemini to carry out most work without Codex reviewing every package. Documentation-only preparation on 5a44a60; no Engine implementation or expanded production release in this turn.\nPreparing a user-activated OPT-02..OPT-10 sequential execution plan with per-package implementation/self-review/fix/test/commit loops, phase checkpoints, truthful pending independent review, and context-resume instructions. Existing EJ-01 single-package handoff remains valid until the user explicitly invokes the broader activation prompt.\nExpected files: new docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md, WORKING_PROTOCOL.md, agents README, GEMINI.md, EJ-01 handoff clarification, roadmap navigation and own exchange metadata/messages. Preserve all prior messages and Gemini cursor. No push.\n"
     }
   ],
   "deferred_tasks": [

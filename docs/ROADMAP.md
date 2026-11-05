@@ -21,9 +21,12 @@ post-fix independent review is claimed.
 Latest identity policy: **raw PNG/external resources use canonical root-relative
 paths; native Engine assets embed UUIDs inside the file.** No .meta/.uid/.import
 sidecars, authored central identity registry or legacy migration are required.
-The [EJ-01 handoff](agents/handoffs/OPT_02_EJ01_GEMINI.md) is the next single unit.
-EJ-02+ is not assigned. Known production ECS/jobs faults remain recorded for their
-own packages. The separate OPT-00 manual/full-product acceptance gap remains open.
+The [EJ-01 handoff](agents/handoffs/OPT_02_EJ01_GEMINI.md) is the current single unit.
+The user requested a [Gemini autonomous execution plan](agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md).
+Its activation prompt can release OPT-02..10 as a sequential range, starting with
+EJ-01..07, without per-package Codex waits. The plan is prepared; the larger range
+has not been activated in this documentation-only turn. EJ-02+ is not yet assigned.
+Known production ECS/jobs faults remain recorded for their own packages. The separate OPT-00 manual/full-product acceptance gap remains open.
 
 **Prior checkpoint: OPT-00, clean-removal follow-up awaiting independent verification.**
 The user confirmed on **2026-11-05** that Engine must be clean: old data formats,
@@ -73,6 +76,10 @@ checkpoint outside that count. Package count is not a time estimate.
   does not close a package; record implementation and verification separately.
 - For each package, attach commit(s), exact rebuilt targets/configuration,
   commands/results/log paths, independent review where required, and limitations.
+- Under an explicitly activated autonomous range, record Gemini deliveries as
+  implemented/self-verified with evidence, and track independent review separately.
+  Passing delivery gates permit continuation within the range; they do not fabricate
+  final architecture acceptance. Required unavailable gates remain open.
 - Run relevant checks with each package. OPT-10 consolidates evidence; it is not
   permission to postpone regression tests until the end.
 - Packages inside a phase run in the listed order. Earlier phases and the

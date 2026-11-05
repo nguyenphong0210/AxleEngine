@@ -1,6 +1,12 @@
 # Gemini handoff: OPT-02 / EJ-01
 
-Implement **EJ-01 only: thread identity and lifecycle admission** in this repository.
+Implement **EJ-01 only: thread identity and lifecycle admission** in this repository
+under this standalone handoff.
+
+If the user explicitly activates the [autonomous multi-package plan](GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md),
+retain this file's EJ-01 technical requirements. That activation supersedes its
+single-package stop/review boundary and permits later packages only in the activated
+roadmap order, after their preceding delivery gates pass.
 
 Before editing, read AGENTS.md / GEMINI.md, docs/agents/WORKING_PROTOCOL.md,
 docs/agents/CODEX_GEMINI_EXCHANGE.json, and your inbox:

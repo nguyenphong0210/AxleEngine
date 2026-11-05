@@ -51,6 +51,26 @@ The other files here are this project's conventions, not a product guarantee.
   handoffs. The implementer supplies progress/delivery messages; the reviewer
   supplies findings/verification. Roles may change when the user assigns them.
 
+## Explicitly delegated multi-package runs
+
+A user may explicitly activate a concrete package/phase range and delegate
+implementation, self-review, repairs and verification to Gemini. In that case,
+the activated range is the assignment boundary: passing delivery gates permits
+continuation without waiting for Codex after every package. Historical narrower
+stop instructions are superseded within that range; domain contracts, dependency
+order and required native gates remain in force.
+
+Gemini records implemented/self-verified delivery separately from independent
+review and final acceptance. It posts phase checkpoints, saves resumable state
+and stops at the activated range boundary or a genuine unresolved dependency.
+It never invents Codex approval. An unavailable required check stays NOT RUN and
+blocks dependent acceptance; it is not silently waived to continue.
+
+The [autonomous execution plan](handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md)
+contains a proposed OPT-02..10 range and activation/resume prompts. Preparing
+that document alone does not activate the range. Preserve an existing release
+until an actual user instruction activates its replacement.
+
 ## Read and reply on every work session
 
 1. Read root role instructions, this protocol, the current task card and inbox.

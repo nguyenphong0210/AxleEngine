@@ -113,6 +113,7 @@ private:
     float m_ScriptCompileStatusTimer = 0.0f;
     std::string m_ScriptCompileStatusText;
     ImVec4 m_ScriptCompileStatusColor = ImVec4(0.35f, 0.95f, 0.55f, 1.0f);
+    Axle::OperationOwner m_CompileOwner;
     std::filesystem::path m_CurrentScenePath;
     std::filesystem::path m_CurrentProjectPath;
 

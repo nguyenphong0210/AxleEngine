@@ -464,6 +464,9 @@ void EditorLayer::UnlockCursor() {
 }
 
 void EditorLayer::OnDetach() {
+    m_CompileOwner.Invalidate();
+    Axle::ScriptCompiler::Get().Cancel();
+    Axle::ScriptCompiler::Get().WaitForCompletion();
     if (m_RuntimeBuildCancel) m_RuntimeBuildCancel->store(true);
     if (m_RuntimeBuildFuture.valid()) m_RuntimeBuildFuture.wait();
     AXLE_INFO("EditorLayer::OnDetach -> [1/14] UnlockCursor");
@@ -588,7 +591,7 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
                 std::filesystem::copy_file(srcPath, destAxlePath, std::filesystem::copy_options::overwrite_existing, ec);
             }
             auto loaded = Axle::AssetSerializer::LoadMesh(destAxlePath);
-            AXLE_INFO("Asset Pipeline: Ingested .axle asset '{0}' (Cache: {1})", 
+            AXLE_INFO("Asset Pipeline: Ingested .axle asset '{0}' (Cache: {1})",
                 destAxlePath.filename().string(), loaded.LoadedFromCache ? "HIT" : "MISS");
 
             if (m_ViewportHovered && loaded.Success) {
@@ -685,7 +688,7 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
             std::filesystem::path destPath = destFolder / srcPath.filename();
             if (srcPath != destPath) {
                 std::filesystem::copy_file(srcPath, destPath, std::filesystem::copy_options::overwrite_existing, ec);
-                AXLE_INFO("Asset Pipeline: Ingested file '{0}' into '{1}'", 
+                AXLE_INFO("Asset Pipeline: Ingested file '{0}' into '{1}'",
                     srcPath.filename().string(), destFolder.string());
             }
         }
@@ -772,7 +775,7 @@ void EditorLayer::TriggerScriptCompilationAndReload() {
     m_ScriptCompileStatusColor = ImVec4(0.95f, 0.75f, 0.15f, 1.0f);
     AXLE_INFO("Editor: Starting background script compilation for 'AxleScripts'...");
 
-    Axle::ScriptCompiler::Get().CompileAsync([this](const Axle::CompilationResult& result) {
+    Axle::ScriptCompiler::Get().CompileAsync(m_CompileOwner.GetToken(), [this](const Axle::CompilationResult& result) {
         if (result.Success) {
             auto reloadResult = Axle::ScriptHotReloadManager::Get().Reload(m_Scene, m_SceneState == SceneState::Play);
             if (reloadResult.Success) {
@@ -1068,6 +1071,11 @@ void EditorLayer::SaveSceneAs() {
 }
 
 void EditorLayer::NewProject() {
+    m_CompileOwner.Invalidate();
+    Axle::ScriptCompiler::Get().Cancel();
+    Axle::ScriptCompiler::Get().WaitForCompletion();
+    m_CompileOwner.Reset();
+
     auto defaultDir = std::filesystem::current_path();
     std::string filepath = Axle::FileDialogs::SaveFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", defaultDir.string().c_str(), "axleproj");
     if (filepath.empty()) return;
@@ -1124,6 +1132,11 @@ void EditorLayer::OpenProject(const std::filesystem::path& filepath) {
 
     auto project = Axle::Project::Load(target);
     if (project) {
+        m_CompileOwner.Invalidate();
+        Axle::ScriptCompiler::Get().Cancel();
+        Axle::ScriptCompiler::Get().WaitForCompletion();
+        m_CompileOwner.Reset();
+
         m_CurrentProjectPath = target;
         Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
         m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
@@ -1607,11 +1620,11 @@ void EditorLayer::RenderToolbar() {
     ImGui::SetNextWindowSize(ImVec2(mainViewport->WorkSize.x, toolbarHeight));
     ImGui::SetNextWindowViewport(mainViewport->ID);
 
-    ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoDocking 
-                                  | ImGuiWindowFlags_NoTitleBar 
-                                  | ImGuiWindowFlags_NoResize 
-                                  | ImGuiWindowFlags_NoMove 
-                                  | ImGuiWindowFlags_NoScrollbar 
+    ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoDocking
+                                  | ImGuiWindowFlags_NoTitleBar
+                                  | ImGuiWindowFlags_NoResize
+                                  | ImGuiWindowFlags_NoMove
+                                  | ImGuiWindowFlags_NoScrollbar
                                   | ImGuiWindowFlags_NoSavedSettings;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -2161,9 +2174,9 @@ void EditorLayer::OnImGuiRender() {
     ImGui::SetNextWindowSize(dockspaceSize);
     ImGui::SetNextWindowViewport(mainViewport->ID);
 
-    ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_NoDocking 
-                                         | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse 
-                                         | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove 
+    ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_NoDocking
+                                         | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse
+                                         | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
                                          | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -2222,7 +2235,7 @@ void EditorLayer::OnImGuiRender() {
 
     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
     if (viewportSize.x > 0.0f && viewportSize.y > 0.0f &&
-        (m_ViewportWidth != static_cast<Axle::u32>(viewportSize.x) || 
+        (m_ViewportWidth != static_cast<Axle::u32>(viewportSize.x) ||
          m_ViewportHeight != static_cast<Axle::u32>(viewportSize.y))) {
         m_ViewportWidth = static_cast<Axle::u32>(viewportSize.x);
         m_ViewportHeight = static_cast<Axle::u32>(viewportSize.y);
@@ -2247,7 +2260,7 @@ void EditorLayer::OnImGuiRender() {
     } else if (m_Framebuffer) {
         uint32_t textureID = m_Framebuffer->GetColorAttachmentRendererID();
         // Flip UV coordinates vertically for OpenGL
-        ImGui::Image(reinterpret_cast<void*>(static_cast<intptr_t>(textureID)), 
+        ImGui::Image(reinterpret_cast<void*>(static_cast<intptr_t>(textureID)),
                      viewportSize, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
     }
 
@@ -2389,7 +2402,7 @@ void EditorLayer::OnImGuiRender() {
                         }
 
                         m_SceneHierarchyPanel.SetSelectedEntity(rootEntity);
-                        AXLE_INFO("Instantiated Model Package '{0}' ({1} submeshes) into Viewport at ({2:.2f}, {3:.2f}, {4:.2f})", 
+                        AXLE_INFO("Instantiated Model Package '{0}' ({1} submeshes) into Viewport at ({2:.2f}, {3:.2f}, {4:.2f})",
                             rootTag, pkg.Parts.size(), spawnPos.x, spawnPos.y, spawnPos.z);
                     } else if (!pkg.Parts.empty()) {
                         const auto& part = pkg.Parts[0];
@@ -2407,7 +2420,7 @@ void EditorLayer::OnImGuiRender() {
                         );
 
                         m_SceneHierarchyPanel.SetSelectedEntity(entity);
-                        AXLE_INFO("Instantiated 3D model '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})", 
+                        AXLE_INFO("Instantiated 3D model '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})",
                             entityTag, spawnPos.x, spawnPos.y, spawnPos.z);
                     }
                 }
@@ -2808,8 +2821,8 @@ void EditorLayer::OnImGuiRender() {
                     if (ProjectWorldToScreen(center, centerScreen)) {
                         drawList->AddCircleFilled(centerScreen, 5.0f, IM_COL32(0, 230, 210, 255));
                         drawList->AddCircle(centerScreen, 7.0f, IM_COL32(255, 255, 255, 200), 12, 1.2f);
-                        std::string label = asc.AssetPath.empty() 
-                            ? "[3D Audio]" 
+                        std::string label = asc.AssetPath.empty()
+                            ? "[3D Audio]"
                             : ("[Audio: " + std::filesystem::path(asc.AssetPath).filename().string() + "]");
                         drawList->AddText(ImVec2(centerScreen.x + 10.0f, centerScreen.y - 7.0f), IM_COL32(255, 255, 255, 230), label.c_str());
                     }
@@ -3197,11 +3210,11 @@ void EditorLayer::RenderStatusBar() {
     ImGui::SetNextWindowSize(statusBarSize);
     ImGui::SetNextWindowViewport(mainViewport->ID);
 
-    ImGuiWindowFlags statusFlags = ImGuiWindowFlags_NoDocking 
-                                 | ImGuiWindowFlags_NoTitleBar 
-                                 | ImGuiWindowFlags_NoResize 
-                                 | ImGuiWindowFlags_NoMove 
-                                 | ImGuiWindowFlags_NoScrollbar 
+    ImGuiWindowFlags statusFlags = ImGuiWindowFlags_NoDocking
+                                 | ImGuiWindowFlags_NoTitleBar
+                                 | ImGuiWindowFlags_NoResize
+                                 | ImGuiWindowFlags_NoMove
+                                 | ImGuiWindowFlags_NoScrollbar
                                  | ImGuiWindowFlags_NoSavedSettings;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -3237,7 +3250,7 @@ void EditorLayer::RenderStatusBar() {
         }
 
         std::string sceneName = m_CurrentScenePath.empty() ? "Untitled Scene" : m_CurrentScenePath.filename().string();
-        std::string rightText = std::string(rhiName) + " | " + std::to_string(static_cast<int>(fps)) + " FPS (" + 
+        std::string rightText = std::string(rhiName) + " | " + std::to_string(static_cast<int>(fps)) + " FPS (" +
                                 std::to_string(static_cast<int>(ms)) + " ms) | " + sceneName;
 
         float textWidth = ImGui::CalcTextSize(rightText.c_str()).x;
@@ -3475,7 +3488,7 @@ void EditorLayer::RenderImportModal() {
             );
 
             if (success) {
-                AXLE_INFO("Asset Pipeline: Successfully converted '{0}' -> '{1}' (with binary cache)", 
+                AXLE_INFO("Asset Pipeline: Successfully converted '{0}' -> '{1}' (with binary cache)",
                     m_ImportModalData.SourcePath.filename().string(), destAxlePath.filename().string());
 
                 ImGui::CloseCurrentPopup();

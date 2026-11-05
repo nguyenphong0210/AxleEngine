@@ -27,6 +27,7 @@ namespace {
 // ECSJ-01: Script Compiler Async Completion Thread Probe
 // ============================================================================
 int RunCompilerThreadProbe(const std::filesystem::path& workspace) {
+    Axle::JobSystem::Init(2);
     const auto fixtureDir = workspace / "compiler_probe";
     std::filesystem::create_directories(fixtureDir);
 
@@ -44,6 +45,7 @@ int RunCompilerThreadProbe(const std::filesystem::path& workspace) {
     std::string configureCmd = "cmake -S \"" + fixtureDir.string() + "\" -B \"" + (fixtureDir / "build").string() + "\"";
     if (std::system(configureCmd.c_str()) != 0) {
         std::cerr << "ERROR: Compiler fixture configure failed\n";
+        Axle::JobSystem::Shutdown();
         return 2;
     }
 
@@ -76,15 +78,18 @@ int RunCompilerThreadProbe(const std::filesystem::path& workspace) {
 
     if (!started || !callbackRan.load() || !compilationSucceeded.load()) {
         std::cerr << "ERROR: Successful compiler fixture prerequisite did not complete\n";
+        Axle::JobSystem::Shutdown();
         return 2;
     }
 
     // Architectural assertion: completion callback must run on the owner / main thread
     if (!callbackOnMain.load()) {
         std::cerr << "DEFECT REPRODUCED [ECSJ-01]: ScriptCompiler callback executed on background worker thread\n";
+        Axle::JobSystem::Shutdown();
         return 1;
     }
 
+    Axle::JobSystem::Shutdown();
     std::cout << "RESULT ecsj-01-compiler-thread PASS" << std::endl;
     return 0;
 }
@@ -542,6 +547,127 @@ int RunEJ02DeferredExecutorProbe() {
 }
 
 // ============================================================================
+// EJ-03: Compiler Request/Result Handoff & Safe Owner Detach
+// ============================================================================
+int RunEJ03CompilerHandoffProbe(const std::filesystem::path& workspace) {
+    Axle::JobSystem::Init(2);
+    const std::thread::id mainThreadId = std::this_thread::get_id();
+
+    const auto fixtureDir = workspace / "ej03_compiler_probe";
+    std::filesystem::create_directories(fixtureDir);
+
+    const auto cmakePath = fixtureDir / "CMakeLists.txt";
+    std::ofstream cmakeFile(cmakePath);
+    cmakeFile << "cmake_minimum_required(VERSION 3.22)\n"
+              << "project(EJ03CompilerProbe NONE)\n"
+              << "add_custom_target(EJ03ValidTarget\n"
+              << "    COMMAND \"${CMAKE_COMMAND}\" -E echo \"EJ03TargetExecuted\"\n"
+              << "    VERBATIM)\n";
+    cmakeFile.close();
+
+    std::string configureCmd = "cmake -S \"" + fixtureDir.string() + "\" -B \"" + (fixtureDir / "build").string() + "\"";
+    if (std::system(configureCmd.c_str()) != 0) {
+        std::cerr << "FAIL [EJ-03]: Compiler fixture configure failed\n";
+        Axle::JobSystem::Shutdown();
+        return 2;
+    }
+
+    auto& compiler = Axle::ScriptCompiler::Get();
+    compiler.SetWorkspaceDirectory(fixtureDir);
+    compiler.SetTarget("EJ03ValidTarget");
+#ifdef NDEBUG
+    compiler.SetBuildConfig("Release");
+#else
+    compiler.SetBuildConfig("Debug");
+#endif
+
+    // 1. Immutable Request Snapshot: mutating compiler after submission does not corrupt in-flight build
+    auto request = compiler.CreateRequest();
+    compiler.SetTarget("NonExistentInvalidTargetName");
+    compiler.SetBuildConfig("BogusInvalidConfig");
+
+    std::atomic<bool> immutableCallbackRan{false};
+    std::atomic<bool> immutableSuccess{false};
+    std::atomic<bool> immutableOnMain{false};
+
+    bool started = compiler.CompileAsync(request, [&](const Axle::CompilationResult& res) {
+        immutableCallbackRan = true;
+        immutableSuccess = res.Success;
+        immutableOnMain = (std::this_thread::get_id() == mainThreadId);
+    });
+    if (!started) {
+        std::cerr << "FAIL [EJ-03]: CompileAsync failed to start with valid request\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    compiler.WaitForCompletion();
+    if (!immutableCallbackRan.load() || !immutableSuccess.load() || !immutableOnMain.load()) {
+        std::cerr << "FAIL [EJ-03]: Request immutability violated or completion failed on main thread\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // Restore compiler valid target for remaining tests
+    compiler.SetTarget("EJ03ValidTarget");
+#ifdef NDEBUG
+    compiler.SetBuildConfig("Release");
+#else
+    compiler.SetBuildConfig("Debug");
+#endif
+
+    // 2. Owner Token Invalidation: Invalidation during in-flight compilation safely discards completion
+    Axle::OperationOwner ownerA;
+    std::atomic<bool> invalidatedCallbackRan{false};
+
+    started = compiler.CompileAsync(ownerA.GetToken(), [&](const Axle::CompilationResult&) {
+        invalidatedCallbackRan = true;
+    });
+    if (!started) {
+        std::cerr << "FAIL [EJ-03]: CompileAsync failed to start for owner invalidation test\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // Invalidate owner while worker is compiling
+    ownerA.Invalidate();
+    compiler.WaitForCompletion();
+
+    if (invalidatedCallbackRan.load()) {
+        std::cerr << "FAIL [EJ-03]: Invalidated owner received completion callback\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 3. Cooperative / Safe Process Cancellation
+    std::atomic<bool> cancelledCallbackRan{false};
+    std::atomic<bool> wasCancelled{false};
+
+    started = compiler.CompileAsync([&](const Axle::CompilationResult& res) {
+        cancelledCallbackRan = true;
+        wasCancelled = res.Cancelled;
+    });
+    if (!started) {
+        std::cerr << "FAIL [EJ-03]: CompileAsync failed to start for cancellation test\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    compiler.Cancel();
+    compiler.WaitForCompletion();
+
+    if (compiler.IsCompiling()) {
+        std::cerr << "FAIL [EJ-03]: Compiler still running after Cancel() and WaitForCompletion()\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    Axle::JobSystem::Shutdown();
+    std::cout << "RESULT ej03-compiler-handoff PASS" << std::endl;
+    return 0;
+}
+
+// ============================================================================
 // ECSJ-04: EnTT Stable Storage Tombstone Iteration Probe
 // ============================================================================
 struct StableTombstoneComponent {
@@ -726,6 +852,7 @@ int main(int argc, char** argv) {
                   << "  ecsj-02-thread-identity\n"
                   << "  ej01-lifecycle-admission\n"
                   << "  ej02-deferred-executor\n"
+                  << "  ej03-compiler-handoff\n"
                   << "  ecsj-03-bridge-hang\n"
                   << "  ecsj-03-bridge-control\n"
                   << "  ecsj-04-entt-tombstone\n"
@@ -755,6 +882,7 @@ int main(int argc, char** argv) {
         if (scenario == "ecsj-02-thread-identity") return finish(RunThreadIdentityProbe());
         if (scenario == "ej01-lifecycle-admission") return finish(RunEJ01LifecycleAdmissionProbe());
         if (scenario == "ej02-deferred-executor") return finish(RunEJ02DeferredExecutorProbe());
+        if (scenario == "ej03-compiler-handoff") return finish(RunEJ03CompilerHandoffProbe(workspace));
         if (scenario == "queued-delivery-control") return finish(RunThreadIdentityProbe(true));
         if (scenario == "ecsj-03-bridge-hang") return finish(RunBridgeProbe(false));
         if (scenario == "ecsj-03-bridge-control" || scenario == "--passing" || scenario == "passing-control")

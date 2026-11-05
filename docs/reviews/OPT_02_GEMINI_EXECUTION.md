@@ -138,3 +138,62 @@ Evolving execution log and verification record for the sequential implementation
 - Script compiler async completion on worker thread (`ECSJ-01`) is deferred to EJ-03 (which will consume EJ-02 `PostToMainThread`).
 - EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
 - Independent acceptance remains pending; this report documents self-verification under autonomous authorization.
+
+---
+
+## Package EJ-03: Compiler Request/Result Handoff
+
+- **Status:** Implemented and self-verified; local delivery committed. Independent review remains pending at phase checkpoint.
+- **Base Baseline:** `3145a30`
+- **Scope & Contract:** [GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md](../agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md) and [ROADMAP.md](../ROADMAP.md)
+
+### Implementation Summary
+1. **Immutable Request Snapshot (`CompileRequest`):**
+   - Added `CompileRequest` struct snapshotting `WorkspaceDirectory`, `BuildConfig`, `Target`, `OwnerToken`, and monotonic `RequestId` at submission time.
+   - Background worker thread executes against the immutable value snapshot; mutations to `ScriptCompiler` configuration while compilation is in-flight have zero effect on in-flight builds.
+2. **Safe Windows Process Management & Cancellation:**
+   - Synchronized process handle (`m_ProcessHandle`) and cancellation flags under dedicated `m_ProcessMutex`.
+   - Guaranteed atomic check before and after process creation; child process handles are never closed while `TerminateProcess` operates on them, completely preventing handle recycling races.
+3. **Main-Thread Deferred Completion & Owner Invalidation (Defect `ECSJ-01` Resolved):**
+   - Replaced direct worker thread completion invocation with `JobSystem::PostToMainThread(request.Owner, ...)`.
+   - When compilation completes, the callback is queued and dispatched strictly on the engine's main thread during `JobSystem::PumpMainThreadCompletions()`.
+   - Integrated `OperationOwner m_CompileOwner` in `EditorLayer`. If `EditorLayer` detaches or project switches before compilation finishes, `m_CompileOwner.Invalidate()` ensures the completion is discarded without dangling pointer dereference or invalid state reload.
+   - For offline test harnesses where `JobSystem` is uninitialized, completions are safely buffered in a fallback queue and pumped upon caller `WaitForCompletion()`.
+
+### Verification Evidence
+
+1. **Focused Scenarios (`AxleJobsECSTests`):**
+   - `ecsj-01-compiler-thread`: **Defect ECSJ-01 resolved and verified PASS (exit 0)** in Debug and Release (`callbackOnMain` is 1).
+   - `ej03-compiler-handoff`: Deterministic suite verifying:
+     - Request immutability: mutating `ScriptCompiler` target/config after submission does not corrupt in-flight build.
+     - Owner invalidation: `OperationOwner::Invalidate()` during build safely suppresses callback invocation during pump.
+     - Cooperative cancellation: `Cancel()` cleanly aborts process execution without leaks or hangs.
+     - PASS (exit 0) in Debug and Release.
+
+2. **Typed Baseline Harness (`scripts/run_jobs_ecs_harness.py`):**
+   - Updated `ecsj-01-compiler-thread` to expected `PASS` and registered `ej03-compiler-handoff` as native `PASS`.
+   - **Debug:** `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe --workspace build/opt02-debug --report build/opt02-debug/harness-debug.json`
+     - Result: **8 PASS, 2 recorded defects (ECSJ-03, ECSJ-04 preserved), 3 verified probes, 0 unexpected failures**.
+   - **Release:** `python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe --workspace build/opt02-release --report build/opt02-release/harness-release.json`
+     - Result: **8 PASS, 2 recorded defects, 3 verified probes, 0 unexpected failures**.
+
+3. **CTest Suite (Debug & Release):**
+   - Registered `JobsECS_CompilerThread` and `JobsECS_CompilerHandoff` in `Tests/CMakeLists.txt` (total 26 tests).
+   - Debug: `ctest --test-dir build -C Debug --output-on-failure` -> **26/26 tests passed (100%)**.
+   - Release: `ctest --test-dir build -C Release --output-on-failure` -> **26/26 tests passed (100%)**.
+
+4. **Integration Suite (`AxleTests.exe`):**
+   - Step 21 verified: `AxleTests.exe 21` -> **100% passed**.
+   - Full 68-step integration verified.
+
+5. **Tooling & Architecture:**
+   - `python scripts/check_architecture.py --root .` -> **AXLE_ARCH_CHECK PASS** (342 files scanned).
+   - `python scripts/test_baseline_tools.py` -> **18 tests passed (OK)**.
+
+6. **Product Target Builds:**
+   - `AxleEditor` & `AxleRuntime` built successfully (exit 0) in Debug and Release.
+
+### Remaining Limitations
+- Single-thread Jolt bridge hang (`ECSJ-03`) is deferred to EJ-06.
+- EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
+- Independent acceptance remains pending; this report documents self-verification under autonomous authorization.

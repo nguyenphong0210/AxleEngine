@@ -40,9 +40,23 @@ namespace Axle {
         WaitForCompletion();
     }
 
+    CompileRequest ScriptCompiler::CreateRequest(const OwnerToken& owner) const {
+        CompileRequest request;
+        {
+            std::lock_guard<std::mutex> lock(m_ConfigMutex);
+            request.WorkspaceDirectory = m_WorkspaceDirectory;
+            request.BuildConfig = m_BuildConfig;
+            request.Target = m_Target;
+        }
+        request.Owner = owner;
+        request.RequestId = const_cast<ScriptCompiler*>(this)->m_NextRequestId.fetch_add(1, std::memory_order_relaxed);
+        return request;
+    }
+
     void ScriptCompiler::Cancel() {
-        m_CancelRequested = true;
+        m_CancelRequested.store(true, std::memory_order_release);
 #ifdef _WIN32
+        std::lock_guard<std::mutex> lock(m_ProcessMutex);
         if (m_ProcessHandle) {
             TerminateProcess((HANDLE)m_ProcessHandle, 1);
         }
@@ -52,6 +66,23 @@ namespace Axle {
     void ScriptCompiler::WaitForCompletion() {
         if (m_WorkerThread.joinable()) {
             m_WorkerThread.join();
+        }
+
+        // Deliver queued completions immediately if called on the engine main thread
+        if (JobSystem::IsInitialized() && JobSystem::IsMainThread()) {
+            JobSystem::PumpMainThreadCompletions();
+        }
+
+        // Flush offline pending callback if JobSystem is not initialized
+        if (!JobSystem::IsInitialized()) {
+            std::function<void()> cb;
+            {
+                std::lock_guard<std::mutex> lock(m_PendingMutex);
+                cb = std::move(m_PendingCallback);
+            }
+            if (cb) {
+                cb();
+            }
         }
     }
 
@@ -121,16 +152,17 @@ namespace Axle {
         return diag;
     }
 
-    bool ScriptCompiler::CompileAsync(OnCompleteCallback onComplete) {
-        if (m_Status.load() == CompilerStatus::Compiling) {
+    bool ScriptCompiler::CompileAsync(const CompileRequest& request, OnCompleteCallback onComplete) {
+        if (m_Status.load(std::memory_order_acquire) == CompilerStatus::Compiling) {
             AXLE_WARN("ScriptCompiler: CompileAsync called while a build is already in progress!");
             return false;
         }
 
         WaitForCompletion();
 
-        m_CancelRequested = false;
-        m_Status = CompilerStatus::Compiling;
+        m_CancelRequested.store(false, std::memory_order_release);
+        m_ActiveRequestId.store(request.RequestId, std::memory_order_release);
+        m_Status.store(CompilerStatus::Compiling, std::memory_order_release);
 
         {
             std::lock_guard<std::mutex> lock(m_ResultMutex);
@@ -138,24 +170,65 @@ namespace Axle {
             m_LastResult = CompilationResult();
         }
 
-        m_WorkerThread = std::thread([this, onComplete]() {
-            CompilationResult result = ExecuteCompileProcess();
+        m_WorkerThread = std::thread([this, request, onComplete]() {
+            CompilationResult result = ExecuteCompileProcess(request);
+
+            const bool wasCancelled = m_CancelRequested.load(std::memory_order_acquire);
+            if (wasCancelled) {
+                result.Cancelled = true;
+                result.Success = false;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(m_ResultMutex);
+                m_LastResult = result;
+                m_Status.store(
+                    result.Success ? CompilerStatus::Success :
+                    (result.Cancelled ? CompilerStatus::Cancelled : CompilerStatus::Failed),
+                    std::memory_order_release
+                );
+            }
+
             if (onComplete) {
-                onComplete(result);
+                if (JobSystem::IsInitialized()) {
+                    // Deliver to engine OS owner thread via PostToMainThread with owner token
+                    JobSystem::PostToMainThread(request.Owner, [onComplete, result]() {
+                        if (onComplete) {
+                            onComplete(result);
+                        }
+                    });
+                } else {
+                    // JobSystem not initialized: store in pending callback for caller flush
+                    std::lock_guard<std::mutex> lock(m_PendingMutex);
+                    m_PendingCallback = [onComplete, result]() {
+                        if (onComplete) {
+                            onComplete(result);
+                        }
+                    };
+                }
             }
         });
 
         return true;
     }
 
-    CompilationResult ScriptCompiler::CompileSync() {
-        if (m_Status.load() == CompilerStatus::Compiling) {
+    bool ScriptCompiler::CompileAsync(const OwnerToken& owner, OnCompleteCallback onComplete) {
+        return CompileAsync(CreateRequest(owner), std::move(onComplete));
+    }
+
+    bool ScriptCompiler::CompileAsync(OnCompleteCallback onComplete) {
+        return CompileAsync(OwnerToken::Global(), std::move(onComplete));
+    }
+
+    CompilationResult ScriptCompiler::CompileSync(const CompileRequest& request) {
+        if (m_Status.load(std::memory_order_acquire) == CompilerStatus::Compiling) {
             WaitForCompletion();
             return GetLastResult();
         }
 
-        m_CancelRequested = false;
-        m_Status = CompilerStatus::Compiling;
+        m_CancelRequested.store(false, std::memory_order_release);
+        m_ActiveRequestId.store(request.RequestId, std::memory_order_release);
+        m_Status.store(CompilerStatus::Compiling, std::memory_order_release);
 
         {
             std::lock_guard<std::mutex> lock(m_ResultMutex);
@@ -163,14 +236,43 @@ namespace Axle {
             m_LastResult = CompilationResult();
         }
 
-        return ExecuteCompileProcess();
+        CompilationResult result = ExecuteCompileProcess(request);
+        const bool wasCancelled = m_CancelRequested.load(std::memory_order_acquire);
+        if (wasCancelled) {
+            result.Cancelled = true;
+            result.Success = false;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(m_ResultMutex);
+            m_LastResult = result;
+            m_Status.store(
+                result.Success ? CompilerStatus::Success :
+                (result.Cancelled ? CompilerStatus::Cancelled : CompilerStatus::Failed),
+                std::memory_order_release
+            );
+        }
+
+        return result;
     }
 
-    CompilationResult ScriptCompiler::ExecuteCompileProcess() {
+    CompilationResult ScriptCompiler::CompileSync() {
+        return CompileSync(CreateRequest());
+    }
+
+    CompilationResult ScriptCompiler::ExecuteCompileProcess(const CompileRequest& request) {
         auto startTime = std::chrono::high_resolution_clock::now();
         CompilationResult result;
 
 #ifdef _WIN32
+        if (m_CancelRequested.load(std::memory_order_acquire)) {
+            result.Success = false;
+            result.Cancelled = true;
+            result.ExitCode = 1;
+            result.OutputLog = "Compilation cancelled before process creation.";
+            return result;
+        }
+
         SECURITY_ATTRIBUTES sa;
         sa.nLength = sizeof(SECURITY_ATTRIBUTES);
         sa.bInheritHandle = TRUE;
@@ -181,9 +283,6 @@ namespace Axle {
             result.Success = false;
             result.ExitCode = -1;
             result.OutputLog = "Failed to create I/O pipes for compiler execution.";
-            m_Status = CompilerStatus::Failed;
-            std::lock_guard<std::mutex> lock(m_ResultMutex);
-            m_LastResult = result;
             return result;
         }
 
@@ -197,8 +296,8 @@ namespace Axle {
 
         PROCESS_INFORMATION pi = { 0 };
 
-        std::string cmd = "cmd.exe /c cmake --build build --config " + m_BuildConfig + " --target " + m_Target;
-        std::string workingDir = m_WorkspaceDirectory.string();
+        std::string cmd = "cmd.exe /c cmake --build build --config " + request.BuildConfig + " --target " + request.Target;
+        std::string workingDir = request.WorkspaceDirectory.string();
 
         char cmdBuffer[2048];
         strncpy_s(cmdBuffer, cmd.c_str(), sizeof(cmdBuffer) - 1);
@@ -224,20 +323,25 @@ namespace Axle {
             result.Success = false;
             result.ExitCode = (int)err;
             result.OutputLog = "Failed to spawn compile process: error code " + std::to_string(err);
-            m_Status = CompilerStatus::Failed;
-            std::lock_guard<std::mutex> lock(m_ResultMutex);
-            m_LastResult = result;
             return result;
         }
 
-        m_ProcessHandle = pi.hProcess;
+        {
+            std::lock_guard<std::mutex> lock(m_ProcessMutex);
+            if (m_CancelRequested.load(std::memory_order_acquire)) {
+                TerminateProcess(pi.hProcess, 1);
+            } else {
+                m_ProcessHandle = pi.hProcess;
+            }
+        }
 
         // Real-time stdout/stderr capture
         char buffer[2048];
         DWORD bytesRead = 0;
         std::string lineAccumulator;
 
-        while (ReadFile(hReadPipe, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead > 0) {
+        while (!m_CancelRequested.load(std::memory_order_acquire) &&
+               ReadFile(hReadPipe, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead > 0) {
             buffer[bytesRead] = '\0';
             std::string chunk(buffer, bytesRead);
 
@@ -284,39 +388,42 @@ namespace Axle {
         GetExitCodeProcess(pi.hProcess, &exitCode);
 
         CloseHandle(hReadPipe);
+
+        {
+            std::lock_guard<std::mutex> lock(m_ProcessMutex);
+            m_ProcessHandle = nullptr;
+        }
+
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
-        m_ProcessHandle = nullptr;
 
         auto endTime = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> duration = endTime - startTime;
 
         result.ExitCode = (int)exitCode;
-        result.Success = (exitCode == 0);
+        result.Success = (exitCode == 0 && !m_CancelRequested.load(std::memory_order_acquire));
+        result.Cancelled = m_CancelRequested.load(std::memory_order_acquire);
         result.DurationSeconds = duration.count();
 
         {
             std::lock_guard<std::mutex> lock(m_ResultMutex);
             result.OutputLog = m_LiveOutputLog;
-            m_LastResult = result;
         }
-
-        m_Status = result.Success ? CompilerStatus::Success : CompilerStatus::Failed;
 
         if (result.Success) {
             AXLE_INFO("ScriptCompiler: [OK] Compiled target '{0}' successfully in {1:.2f}s ({2} warnings)",
-                m_Target, result.DurationSeconds, result.WarningCount);
+                request.Target, result.DurationSeconds, result.WarningCount);
+        } else if (result.Cancelled) {
+            AXLE_WARN("ScriptCompiler: [CANCELLED] Target '{0}' compilation was cancelled", request.Target);
         } else {
             AXLE_ERROR("ScriptCompiler: [FAILED] Target '{0}' failed with exit code {1} ({2} errors, {3} warnings)",
-                m_Target, result.ExitCode, result.ErrorCount, result.WarningCount);
+                request.Target, result.ExitCode, result.ErrorCount, result.WarningCount);
         }
 
         return result;
 #else
         result.Success = false;
-        result.ExitCode = -1;
         result.OutputLog = "ScriptCompiler is currently supported on Windows only.";
-        m_Status = CompilerStatus::Failed;
         return result;
 #endif
     }

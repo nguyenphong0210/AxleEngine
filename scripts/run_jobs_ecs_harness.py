@@ -94,6 +94,7 @@ def main():
         ("ecsj-01-compiler-thread", "REPRODUCED_DEFECT", max(args.timeout, 20)),
         ("ecsj-02-thread-identity", "PASS", args.timeout),
         ("ej01-lifecycle-admission", "PASS", args.timeout),
+        ("ej02-deferred-executor", "PASS", args.timeout),
         ("ecsj-03-bridge-hang", "REPRODUCED_DEFECT", 4),
         ("ecsj-03-bridge-control", "PASS", args.timeout),
         ("ecsj-04-entt-tombstone", "REPRODUCED_DEFECT", args.timeout),

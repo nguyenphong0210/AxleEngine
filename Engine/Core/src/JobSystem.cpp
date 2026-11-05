@@ -17,7 +17,8 @@ namespace Axle {
         std::mutex AdmissionMutex;
 
         std::mutex MainThreadMutex;
-        std::vector<std::function<void()>> MainThreadQueue;
+        std::vector<QueuedCompletion> MainThreadQueue;
+        static constexpr size_t MaxMainThreadQueueCapacity = 16384;
 
         std::mutex ActiveTasksMutex;
         std::vector<std::shared_ptr<enki::ICompletable>> ActiveTasks;
@@ -96,7 +97,6 @@ namespace Axle {
         }
 
         // 2. Draining: wait for all admitted tasks and internal children to complete, shut down enkiTS
-        // Note: AdmissionMutex is NOT held during waiting/draining.
         s_Data->State.store(JobSystemState::Draining, std::memory_order_release);
         s_Data->Scheduler.WaitforAllAndShutdown();
 
@@ -193,18 +193,8 @@ namespace Axle {
         // Run enkiTS pinned tasks assigned to this thread (thread 0)
         s_Data->Scheduler.RunPinnedTasks();
 
-        // Drain main thread dispatch queue
-        std::vector<std::function<void()>> toRun;
-        {
-            std::lock_guard<std::mutex> lock(s_Data->MainThreadMutex);
-            if (!s_Data->MainThreadQueue.empty()) {
-                toRun.swap(s_Data->MainThreadQueue);
-            }
-        }
-
-        for (auto& func : toRun) {
-            if (func) func();
-        }
+        // Drain deferred main thread completions for unified pump coverage
+        PumpMainThreadCompletions();
 
         // Periodically clean up completed async task handles
         std::lock_guard<std::mutex> lock(s_Data->ActiveTasksMutex);
@@ -290,21 +280,80 @@ namespace Axle {
         s_Data->Scheduler.WaitforAll();
     }
 
-    void JobSystem::DispatchToMainThread(std::function<void()> func) {
-        if (!func) return;
+    PostResult JobSystem::PostToMainThread(const OwnerToken& owner, std::function<void()> completion) {
+        if (!completion) return PostResult::Success;
 
-        if (IsMainThread()) {
-            func();
-            return;
-        }
-
-        if (!s_Data) {
-            AXLE_CORE_WARN("JobSystem::DispatchToMainThread dropped: JobSystem not initialized!");
-            return;
+        if (!s_Data || s_Data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
+            AXLE_CORE_WARN("JobSystem::PostToMainThread rejected: JobSystem stopped!");
+            return PostResult::RejectedStopped;
         }
 
         std::lock_guard<std::mutex> lock(s_Data->MainThreadMutex);
-        s_Data->MainThreadQueue.push_back(std::move(func));
+        if (s_Data->MainThreadQueue.size() >= JobSystemData::MaxMainThreadQueueCapacity) {
+            AXLE_CORE_ERROR("JobSystem::PostToMainThread rejected: queue capacity exhausted!");
+            return PostResult::RejectedQueueFull;
+        }
+
+        s_Data->MainThreadQueue.push_back(QueuedCompletion{
+            owner,
+            s_Epoch.load(std::memory_order_relaxed),
+            std::move(completion)
+        });
+
+        return PostResult::Success;
+    }
+
+    PostResult JobSystem::PostToMainThread(std::function<void()> completion) {
+        return PostToMainThread(OwnerToken::Global(), std::move(completion));
+    }
+
+    u32 JobSystem::PumpMainThreadCompletions(u32 maxItems) {
+        if (!s_Data) return 0;
+        if (!IsMainThread()) {
+            ReportInvalidContext("PumpMainThreadCompletions");
+            return 0;
+        }
+
+        std::vector<QueuedCompletion> toRun;
+        {
+            std::lock_guard<std::mutex> lock(s_Data->MainThreadMutex);
+            if (s_Data->MainThreadQueue.empty()) {
+                return 0;
+            }
+            if (maxItems == 0 || s_Data->MainThreadQueue.size() <= maxItems) {
+                toRun.swap(s_Data->MainThreadQueue);
+            } else {
+                toRun.assign(
+                    std::make_move_iterator(s_Data->MainThreadQueue.begin()),
+                    std::make_move_iterator(s_Data->MainThreadQueue.begin() + maxItems)
+                );
+                s_Data->MainThreadQueue.erase(
+                    s_Data->MainThreadQueue.begin(),
+                    s_Data->MainThreadQueue.begin() + maxItems
+                );
+            }
+        }
+
+        u32 executedCount = 0;
+        const u32 currentEpoch = s_Epoch.load(std::memory_order_relaxed);
+
+        for (auto& item : toRun) {
+            if (item.Token.IsValid() && item.Epoch == currentEpoch) {
+                if (item.Callback) {
+                    item.Callback();
+                    ++executedCount;
+                }
+            } else {
+                // Invalidation: release callback and captures safely without invocation
+                item.Callback = nullptr;
+            }
+        }
+
+        return executedCount;
+    }
+
+    void JobSystem::DispatchToMainThread(std::function<void()> func) {
+        PostToMainThread(std::move(func));
     }
 
     void JobSystem::IncrementActiveTaskDepth() {

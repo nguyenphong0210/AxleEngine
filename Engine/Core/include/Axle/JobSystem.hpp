@@ -3,6 +3,7 @@
 #include <Axle/Types.hpp>
 #include <TaskScheduler.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <type_traits>
@@ -21,6 +22,102 @@ namespace Axle {
     };
 
     inline static constexpr u32 InvalidThreadIndex = enki::NO_THREAD_NUM;
+
+    // Operation owner state supporting generation-based invalidation
+    struct OperationOwnerState {
+        std::atomic<bool> Valid{true};
+        std::atomic<u64> Generation{1};
+    };
+
+    // Lightweight token carried by queued completions to verify ownership validity
+    class OwnerToken {
+    public:
+        OwnerToken() = default;
+        OwnerToken(std::weak_ptr<OperationOwnerState> state, u64 generation)
+            : m_State(std::move(state)), m_Generation(generation), m_IsGlobal(false) {}
+
+        // Global token that remains perpetually valid across the engine session
+        static OwnerToken Global() {
+            OwnerToken token;
+            token.m_IsGlobal = true;
+            return token;
+        }
+
+        // Returns true if the owning object is still alive and has not been invalidated or generation-bumped
+        bool IsValid() const {
+            if (m_IsGlobal) return true;
+            auto state = m_State.lock();
+            return state && state->Valid.load(std::memory_order_acquire) &&
+                   (state->Generation.load(std::memory_order_acquire) == m_Generation);
+        }
+
+        u64 GetGeneration() const { return m_Generation; }
+        bool IsGlobal() const { return m_IsGlobal; }
+
+    private:
+        std::weak_ptr<OperationOwnerState> m_State;
+        u64 m_Generation = 0;
+        bool m_IsGlobal = false;
+    };
+
+    // Scoped owner of asynchronous main-thread operations.
+    // Invalidation or destruction safely prevents pending callbacks from executing.
+    class OperationOwner {
+    public:
+        OperationOwner()
+            : m_State(std::make_shared<OperationOwnerState>()) {}
+
+        ~OperationOwner() {
+            Invalidate();
+        }
+
+        OperationOwner(const OperationOwner&) = delete;
+        OperationOwner& operator=(const OperationOwner&) = delete;
+        OperationOwner(OperationOwner&&) noexcept = default;
+        OperationOwner& operator=(OperationOwner&&) noexcept = default;
+
+        // Invalidate all tokens issued up to this point
+        void Invalidate() {
+            if (m_State) {
+                m_State->Valid.store(false, std::memory_order_release);
+                m_State->Generation.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+
+        // Reset and begin a fresh generation
+        void Reset() {
+            Invalidate();
+            m_State = std::make_shared<OperationOwnerState>();
+        }
+
+        bool IsValid() const {
+            return m_State && m_State->Valid.load(std::memory_order_acquire);
+        }
+
+        u64 GetGeneration() const {
+            return m_State ? m_State->Generation.load(std::memory_order_acquire) : 0;
+        }
+
+        OwnerToken GetToken() const {
+            if (!m_State) return OwnerToken{};
+            return OwnerToken(m_State, m_State->Generation.load(std::memory_order_acquire));
+        }
+
+    private:
+        std::shared_ptr<OperationOwnerState> m_State;
+    };
+
+    enum class PostResult {
+        Success = 0,
+        RejectedStopped,
+        RejectedQueueFull
+    };
+
+    struct QueuedCompletion {
+        OwnerToken Token;
+        u32 Epoch = 0;
+        std::function<void()> Callback;
+    };
 
     // Lightweight handle referencing an asynchronous task dispatched to JobSystem
     class JobHandle {
@@ -101,8 +198,20 @@ namespace Axle {
         // Block until all currently queued tasks are finished.
         static void WaitForAll();
 
+        // Post an always-deferred operation completion to be executed on the Engine's OS owner thread.
+        // Never executes inline; caller can specify an OwnerToken for automatic cancellation.
+        static PostResult PostToMainThread(const OwnerToken& owner, std::function<void()> completion);
+        static PostResult PostToMainThread(std::function<void()> completion);
+
+        // Execute a bounded FIFO batch of queued main-thread completions at a safe frame boundary.
+        // Returns the number of completions actually executed during this pump.
+        // Discards entries whose owner token is invalid or whose epoch does not match.
+        // maxItems: Maximum number of completions to pump in one call (0 = drain all currently queued).
+        static u32 PumpMainThreadCompletions(u32 maxItems = 1024);
+
         // Post a function to be executed specifically on the main thread (thread 0).
         // Accepts external completion producer threads safely.
+        // Unified compatibility wrapper that routes through PostToMainThread (always deferred).
         static void DispatchToMainThread(std::function<void()> func);
 
         // Internal permit / task depth helpers for admitted task graphs and internal children.

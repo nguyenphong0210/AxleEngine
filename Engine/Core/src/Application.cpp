@@ -115,6 +115,7 @@ namespace Axle {
             Input::SetMouseScrollY(0.0f);
             m_Window->PollEvents();
             JobSystem::RunPinnedTasks();
+            JobSystem::PumpMainThreadCompletions();
 
             const auto time = static_cast<f32>(glfwGetTime());
             Timestep ts = time - m_LastFrameTime;

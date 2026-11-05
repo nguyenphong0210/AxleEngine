@@ -365,6 +365,183 @@ int RunEJ01LifecycleAdmissionProbe() {
 }
 
 // ============================================================================
+// EJ-02: Always-Deferred Main-Thread Executor and Owner Tokens
+// ============================================================================
+int RunEJ02DeferredExecutorProbe() {
+    Axle::JobSystem::Init(2);
+    const std::thread::id mainThreadId = std::this_thread::get_id();
+
+    // 1. Posting from main thread is ALWAYS deferred (never executes inline)
+    std::atomic<bool> mainPostRan{false};
+    Axle::JobSystem::PostToMainThread([&] {
+        mainPostRan = true;
+    });
+    if (mainPostRan.load()) {
+        std::cerr << "FAIL [EJ-02]: PostToMainThread executed inline on main thread\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+    Axle::u32 pumped = Axle::JobSystem::PumpMainThreadCompletions();
+    if (!mainPostRan.load() || pumped != 1) {
+        std::cerr << "FAIL [EJ-02]: PumpMainThreadCompletions failed to execute deferred task\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 2. Cross-thread posting and safe FIFO execution on main thread
+    std::atomic<bool> workerPostRan{false};
+    std::atomic<bool> workerPostOnMain{false};
+    auto workerTask = Axle::JobSystem::Dispatch([&] {
+        Axle::JobSystem::PostToMainThread([&] {
+            workerPostRan = true;
+            workerPostOnMain = (std::this_thread::get_id() == mainThreadId);
+        });
+    });
+    workerTask.Wait();
+    if (workerPostRan.load()) {
+        std::cerr << "FAIL [EJ-02]: Worker post executed prematurely before pump\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+    pumped = Axle::JobSystem::PumpMainThreadCompletions();
+    if (!workerPostRan.load() || !workerPostOnMain.load() || pumped != 1) {
+        std::cerr << "FAIL [EJ-02]: Worker post failed to execute on main thread via pump\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 3. Nested posts run in later batches (non-recursive bounded pump)
+    std::atomic<bool> nested1Ran{false};
+    std::atomic<bool> nested2Ran{false};
+    Axle::JobSystem::PostToMainThread([&] {
+        nested1Ran = true;
+        Axle::JobSystem::PostToMainThread([&] {
+            nested2Ran = true;
+        });
+    });
+    // First pump: nested1 runs, nested2 must NOT run yet
+    pumped = Axle::JobSystem::PumpMainThreadCompletions();
+    if (!nested1Ran.load() || nested2Ran.load() || pumped != 1) {
+        std::cerr << "FAIL [EJ-02]: Nested post executed in same pump batch\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+    // Second pump: nested2 runs
+    pumped = Axle::JobSystem::PumpMainThreadCompletions();
+    if (!nested2Ran.load() || pumped != 1) {
+        std::cerr << "FAIL [EJ-02]: Nested post failed to execute in subsequent pump batch\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 4. OperationOwner invalidation & generation invalidation
+    std::atomic<bool> validTokenRan{false};
+    std::atomic<bool> invalidTokenRan{false};
+    std::atomic<bool> destroyedOwnerRan{false};
+    std::atomic<bool> generationBumpedRan{false};
+
+    Axle::OperationOwner ownerA;
+    Axle::JobSystem::PostToMainThread(ownerA.GetToken(), [&] {
+        validTokenRan = true;
+    });
+
+    // Invalidate ownerA: pending post must be discarded
+    ownerA.Invalidate();
+
+    Axle::JobSystem::PostToMainThread(ownerA.GetToken(), [&] {
+        invalidTokenRan = true;
+    });
+
+    // Reset / bump generation: token from older generation must be discarded
+    ownerA.Reset();
+    auto oldToken = ownerA.GetToken();
+    ownerA.Invalidate();
+    Axle::JobSystem::PostToMainThread(oldToken, [&] {
+        generationBumpedRan = true;
+    });
+
+    // Destroyed owner
+    {
+        Axle::OperationOwner localOwner;
+        Axle::JobSystem::PostToMainThread(localOwner.GetToken(), [&] {
+            destroyedOwnerRan = true;
+        });
+    }
+
+    pumped = Axle::JobSystem::PumpMainThreadCompletions();
+    if (validTokenRan.load() || invalidTokenRan.load() || generationBumpedRan.load() || destroyedOwnerRan.load()) {
+        std::cerr << "FAIL [EJ-02]: Invalidated / destroyed owner token callback was executed\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 5. Epoch invalidation: completions posted before shutdown do not run in new epoch
+    std::atomic<bool> oldEpochRan{false};
+    Axle::JobSystem::PostToMainThread([&] {
+        oldEpochRan = true;
+    });
+    Axle::JobSystem::Shutdown();
+
+    Axle::JobSystem::Init(2);
+    pumped = Axle::JobSystem::PumpMainThreadCompletions();
+    if (oldEpochRan.load() || pumped != 0) {
+        std::cerr << "FAIL [EJ-02]: Callback from previous scheduler epoch executed in new epoch\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 6. Bounded FIFO order preservation
+    std::vector<int> executionOrder;
+    for (int i = 0; i < 10; ++i) {
+        Axle::JobSystem::PostToMainThread([&executionOrder, i] {
+            executionOrder.push_back(i);
+        });
+    }
+    // Pump first 4 items
+    pumped = Axle::JobSystem::PumpMainThreadCompletions(4);
+    if (pumped != 4 || executionOrder.size() != 4) {
+        std::cerr << "FAIL [EJ-02]: Bounded pump batch size mismatch\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+    // Pump remaining 6 items
+    pumped = Axle::JobSystem::PumpMainThreadCompletions(10);
+    if (pumped != 6 || executionOrder.size() != 10) {
+        std::cerr << "FAIL [EJ-02]: Bounded pump remainder size mismatch\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+    for (int i = 0; i < 10; ++i) {
+        if (executionOrder[i] != i) {
+            std::cerr << "FAIL [EJ-02]: FIFO execution order violated at index " << i << "\n";
+            Axle::JobSystem::Shutdown();
+            return 1;
+        }
+    }
+
+    // 7. DispatchToMainThread unified compatibility
+    std::atomic<bool> compatRan{false};
+    Axle::JobSystem::DispatchToMainThread([&] {
+        compatRan = true;
+    });
+    if (compatRan.load()) {
+        std::cerr << "FAIL [EJ-02]: DispatchToMainThread ran inline instead of being deferred\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+    pumped = Axle::JobSystem::PumpMainThreadCompletions();
+    if (!compatRan.load() || pumped != 1) {
+        std::cerr << "FAIL [EJ-02]: DispatchToMainThread failed to execute via pump\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    Axle::JobSystem::Shutdown();
+    std::cout << "RESULT ej02-deferred-executor PASS" << std::endl;
+    return 0;
+}
+
+// ============================================================================
 // ECSJ-04: EnTT Stable Storage Tombstone Iteration Probe
 // ============================================================================
 struct StableTombstoneComponent {
@@ -548,6 +725,7 @@ int main(int argc, char** argv) {
                   << "  ecsj-01-compiler-thread\n"
                   << "  ecsj-02-thread-identity\n"
                   << "  ej01-lifecycle-admission\n"
+                  << "  ej02-deferred-executor\n"
                   << "  ecsj-03-bridge-hang\n"
                   << "  ecsj-03-bridge-control\n"
                   << "  ecsj-04-entt-tombstone\n"
@@ -576,6 +754,7 @@ int main(int argc, char** argv) {
         if (scenario == "ecsj-01-compiler-thread") return finish(RunCompilerThreadProbe(workspace));
         if (scenario == "ecsj-02-thread-identity") return finish(RunThreadIdentityProbe());
         if (scenario == "ej01-lifecycle-admission") return finish(RunEJ01LifecycleAdmissionProbe());
+        if (scenario == "ej02-deferred-executor") return finish(RunEJ02DeferredExecutorProbe());
         if (scenario == "queued-delivery-control") return finish(RunThreadIdentityProbe(true));
         if (scenario == "ecsj-03-bridge-hang") return finish(RunBridgeProbe(false));
         if (scenario == "ecsj-03-bridge-control" || scenario == "--passing" || scenario == "passing-control")

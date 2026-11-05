@@ -72,3 +72,69 @@ Evolving execution log and verification record for the sequential implementation
 - Script compiler async completion on worker thread (`ECSJ-01`) is deferred to EJ-03.
 - EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
 - Independent acceptance remains pending; this report documents self-verification under autonomous authorization.
+---
+
+## Package EJ-02: Deferred Main-Thread Executor and Owner Tokens
+
+- **Status:** Implemented and self-verified; local delivery committed. Independent review remains pending at phase checkpoint.
+- **Base Baseline:** `c5b3d23`
+- **Scope & Contract:** [GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md](../agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md) and [ROADMAP.md](../ROADMAP.md)
+
+### Implementation Summary
+1. **Always-Deferred Execution Semantics:**
+   - Inlined execution on the main thread during `DispatchToMainThread` or `PostToMainThread` is completely prohibited. enkiTS work-stealing during `Wait` or physics steps can execute tasks on the main thread; executing callbacks inline under those conditions creates reentrant, concurrent mutations on Scene/UI data structures.
+   - Every posted completion is enqueued to `MainThreadQueue` with bounded FIFO ordering (capacity 16,384) under `MainThreadMutex`.
+2. **Owner Tokens & Generation-Based Invalidation (`OperationOwner`, `OwnerToken`):**
+   - Added `OperationOwner` RAII controller and copyable `OwnerToken`.
+   - Invalidation or destruction of `OperationOwner` marks the shared owner state invalid and bumps the generation counter atomically.
+   - When the main thread pumps completions via `PumpMainThreadCompletions()`, expired or invalidated entries are discarded cleanly (`Callback = nullptr`) without invoking the closure or dereferencing invalidated captured state.
+   - Added `OwnerToken::Global()` for perpetual engine-level background notifications.
+3. **Bounded Non-Recursive Batch Draining (`PumpMainThreadCompletions`):**
+   - Implemented `PumpMainThreadCompletions(u32 maxItems = 1024)` in `JobSystem`.
+   - Swaps/slices a bounded batch from the queue under lock and executes callbacks outside the lock. Callbacks posting further main-thread work are safely queued for subsequent pump batches without recursion, deadlock, or unbounded frame starvation.
+   - Integrates with `Application::Run()` at the main loop frame boundary immediately following `JobSystem::RunPinnedTasks()`.
+4. **Epoch Validation:**
+   - Queued completions record the active scheduler epoch (`s_Epoch`). Completions queued prior to `Shutdown()` are discarded if pumped in a subsequent scheduler epoch.
+5. **Unified Compatibility (`DispatchToMainThread`):**
+   - Deprecated raw, unsafe inline execution in `DispatchToMainThread`; routed directly through `PostToMainThread` to preserve all legacy callers while guaranteeing deferred execution.
+
+### Verification Evidence
+
+1. **Focused Scenarios (`AxleJobsECSTests`):**
+   - `ej02-deferred-executor`: Comprehensive 7-stage deterministic suite verifying:
+     - Main-thread post is never inline and only runs upon explicit pump (`mainPostRan` false until pump).
+     - Worker thread cross-thread dispatch and guaranteed main-thread execution via pump.
+     - Nested posting runs in subsequent pump batch (non-recursive batching).
+     - RAII `OperationOwner` invalidation, reset/generation bumping, and destroyed-owner safe callback dropping without crashes or invocations.
+     - Scheduler epoch invalidation (completions from prior epoch discarded in new epoch).
+     - Bounded FIFO ordering preservation (e.g. 4-item pump followed by 6-item remainder).
+     - Unified `DispatchToMainThread` compatibility verification.
+     - PASS (exit 0) in Debug and Release.
+
+2. **Typed Baseline Harness (`scripts/run_jobs_ecs_harness.py`):**
+   - Registered `ej02-deferred-executor` as permanent PASS native scenario.
+   - **Debug:** `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe --workspace build/opt02-debug --report build/opt02-debug/harness-debug.json`
+     - Result: **7 PASS, 3 recorded defects (ECSJ-01, ECSJ-03, ECSJ-04 preserved), 3 verified probes, 0 unexpected failures**.
+   - **Release:** `python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe --workspace build/opt02-release --report build/opt02-release/harness-release.json`
+     - Result: **7 PASS, 3 recorded defects, 3 verified probes, 0 unexpected failures**.
+
+3. **CTest Suite (Debug & Release):**
+   - Registered `JobsECS_DeferredExecutor` in `Tests/CMakeLists.txt` (total 24 tests).
+   - Debug: `ctest --test-dir build -C Debug --output-on-failure` -> **24/24 tests passed (100%)**.
+   - Release: `ctest --test-dir build -C Release --output-on-failure` -> **24/24 tests passed (100%)**.
+
+4. **Integration Suite (`AxleTests.exe`):**
+   - Release: `build/Tests/Release/AxleTests.exe` -> **All 68 steps passed (100%)**.
+
+5. **Tooling & Architecture:**
+   - `python scripts/check_architecture.py --root .` -> **AXLE_ARCH_CHECK PASS** (342 files scanned).
+   - `python scripts/test_baseline_tools.py` -> **18 tests passed (OK)**.
+
+6. **Product Target Builds:**
+   - `AxleEditor` & `AxleRuntime` built successfully (exit 0) in Debug and Release.
+
+### Remaining Limitations
+- Single-thread Jolt bridge hang (`ECSJ-03`) is deferred to EJ-06.
+- Script compiler async completion on worker thread (`ECSJ-01`) is deferred to EJ-03 (which will consume EJ-02 `PostToMainThread`).
+- EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
+- Independent acceptance remains pending; this report documents self-verification under autonomous authorization.

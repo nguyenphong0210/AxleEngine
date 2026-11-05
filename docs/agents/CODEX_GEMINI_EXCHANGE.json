@@ -1,73 +1,51 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-01-AF00-EJ00",
-    "title": "Shared architecture baseline and permanent jobs/ECS fault harness",
-    "state": "reviewed_changes_required",
+    "id": "OPT-01-AF01",
+    "title": "Stable asset identity and safe persistence",
+    "state": "assigned_to_gemini",
     "coordinator": "Codex",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "842cf7de6fac8368eb76fbf6a027b934681166e2",
+    "code_baseline": "fd38dd8",
+    "implementation_preparation_baseline": "af5721b",
     "scope_updated_on": "2026-11-05",
-    "user_scope": "User asks to begin OPT-01 and receive a prompt to call Gemini. Initial bounded handoff releases AF-00 + EJ-00 implementation. Clean Engine; no old data format support, legacy Vehicle retention or migration.",
+    "user_scope": "User explicitly asks Codex to fix AF-00/EJ-00 review findings then provide an English prompt for the next package. Corrections are verified; bounded next Gemini assignment is AF-01 only. Clean Engine; no old-format support, legacy Vehicle holders or migration.",
     "released_packages": [
-      "AF-00",
-      "EJ-00"
+      "AF-01"
     ],
-    "implementation_status": "delivered",
-    "independent_review_status": "changes_required",
-    "handoff": "docs/agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md",
+    "implementation_status": "not_started",
+    "independent_review_status": "pending_delivery",
+    "handoff": "docs/agents/handoffs/OPT_01_AF01_GEMINI.md",
     "expected_files": [
-      "architecture-check scripts/config",
-      "Tests/CMakeLists.txt",
-      "focused permanent jobs/ECS/script/bridge fixtures and isolated CMake fixtures",
-      "baseline/delivery report under docs/reviews or docs/architecture",
-      "docs/ROADMAP.md",
-      "docs/agents/CODEX_GEMINI_EXCHANGE.json"
+      "Engine/Asset metadata identity/registry code",
+      "narrowly affected shared CPU IO and project/scene/assembly save helpers",
+      ".gitignore authored/generated metadata policy",
+      "tiny intentionally authored metadata/reference fixtures and clean-checkout/relocation/failure tests",
+      "focused delivery evidence, roadmap and exchange"
     ],
     "excluded": [
-      "AF-01, P41-00, PLG-00 and later packages",
-      "EJ-01+ production fixes",
-      "NRI/render/plugin/Vehicle implementation",
-      "old data format support or legacy compatibility holders",
-      "vendor upgrades and production module moves",
-      "inferred acceptance from implementer reports"
+      "P41-00, PLG-00, AF-02+ and EJ-01+",
+      "production threading/compiler/Jolt/ECS fixes",
+      "rendering/NRI/plugin/Vehicle implementation",
+      "old data format support, migration or legacy compatibility holders",
+      "bulk import/commit of developer-generated metadata",
+      "vendor upgrades and unrelated production refactors",
+      "self-acceptance of delivery or inferred independent results"
     ],
+    "prerequisite_evidence": {
+      "AF-00": "verified baseline corrections af5721b + fd38dd8",
+      "EJ-00": "verified baseline corrections af5721b + fd38dd8",
+      "separate_postfix_review": false,
+      "verification_note": "Original Gemini delivery independently reviewed by Codex; subsequent Codex-authored corrections checked by Codex. Evidence distinction remains explicit."
+    },
     "prior_checkpoint": {
       "id": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
-      "state": "followup_verification_pending",
       "accepted": false,
-      "transition": "User-directed initial OPT-01 baseline start; pending current-format/product verification is carried into baseline evidence, not waived as PASS."
+      "state": "full_product_verification_pending",
+      "note": "User-directed progression retains this gap; legacy preservation requirements are superseded. No old-format support required."
     },
-    "next_action": "AF-00/EJ-00 require O1-R1..R4 corrections and re-verification before acceptance: scenario-specific evidence and infrastructure failure classification, complete fail-closed architecture edge detection, correct before/after-pump probe snapshots with a queued passing control, and complete current-state baseline inventory. Keep checkboxes open. No AF-01/P41-00/PLG-00/EJ-01+ assignment is released by this review.",
-    "delivery_commit": "95a6c9d",
-    "delivery_report": "docs/reviews/OPT_01_BASELINE_DELIVERY.md",
-    "review_status": "complete",
-    "reviewed_code_baseline": "95a6c9d",
-    "reviewed_head": "0f23b86",
-    "review_commit": "ba35221",
-    "review_report": "docs/reviews/OPT_01_BASELINE_REVIEW.md",
-    "review_results": "docs/reviews/OPT_01_BASELINE_REVIEW_RESULTS.json",
-    "reproduction": "Tests/Review/ArchitectureBaseline/README.md",
-    "findings": {
-      "P1": [
-        "O1-R1",
-        "O1-R2"
-      ],
-      "P2": [
-        "O1-R3",
-        "O1-R4"
-      ]
-    },
-    "independent_verification": {
-      "rebuilt": "AxleJobsECSTests Debug/Release and opt-in queued native review control; exit 0",
-      "ctest": "Debug 11/11, Release 11/11; exit 0 each",
-      "normal_harness": "Debug/Release: three PASS, four genuine recorded Engine defects and three intentional probes; collector exit 0",
-      "adversarial_review": "seven failed contracts and one passing direct-edge control; exit 1",
-      "queued_control": "valid production main queue delivery rejected by original probe predicate; exit 1",
-      "compiler_prerequisite_control": "CMake unavailable, compilationSucceeded=0 still logged as reproduced scenario; exit 1",
-      "limits": "No product rebuild/full integration/GPU/manual UI/player/export/sanitizer/performance rerun; Gemini results remain reported. No production fixes or later packages."
-    }
+    "next_action": "Gemini reads handoff/current inbox, ACKs with actual starting HEAD and expected files; implement AF-01 identity/persistence only, rebuild/run relevant Debug/Release checks, commit locally, deliver evidence and stop for Codex review. No automatic Gemini invocation is claimed."
   },
   "last_read": {
     "Codex": "CG-20261105T033025066408Z-GEMINI-e399db",
@@ -568,6 +546,39 @@
       "base_commit": "ba352210de4f41a7d7b91670aa0684fff13fc7a7",
       "timestamp_utc": "2026-11-05T03:59:05.295171+00:00",
       "body": "REVIEW: AF-00 + EJ-00 independent review completed in ba35221 against implementation 95a6c9d / delivered HEAD 0f23b86. Decision CHANGES_REQUIRED; keep both roadmap checkboxes open. Report: docs/reviews/OPT_01_BASELINE_REVIEW.md. Structured results: docs/reviews/OPT_01_BASELINE_REVIEW_RESULTS.json. Maintained reproduction: Tests/Review/ArchitectureBaseline/README.md.\n\nO1-R1 / P1: run_scenario labels any nonzero/timeout/launch exception as REPRODUCED_DEFECT. Missing executable, unrelated exit 73 and early timeout with no Engine API each reproduce that false classification. Native compiler probe also ignores configure status and successful-build prerequisite: with no CMake in PATH, compilationSucceeded=0 still prints its defect label. Validate scenario-specific behavior/setup evidence, distinguish launch/setup/crash/wrong-stage hangs and propagate infrastructure failure; known Engine defects may remain separately collected baseline observations.\n\nO1-R2 / P1: checker misses new forbidden dependencies. Isolated Core nested-CMake -> UI edge, Asset variable-based -> UI edge under an unrelated existing allowance, and relative Core source include -> Scene each exit 0. Direct Core -> UI control exits 1. Scan actual reachable/configured dependencies or an explicit fail-closed subset, resolve includes/variables, and scope allowances to exact recognized edges. Unknown target is not a wildcard allowance.\n\nO1-R3 / P2: identity probe callback always sets calledBeforePump=true; final post-pump predicate rejects that live flag. Native control using a registered enki producer exercises the actual correct production main queue: before pump flag0/callback0, after pump callbackOnMain1/flag1, but predicate returns1 and prints inline-external defect. Snapshot before pumping, assert post-pump exactly-once owner delivery, retain queued passing control. This is not a claim the external-thread production bug is fixed.\n\nO1-R4 / P2: missing required shared current-state baseline inventory: actual target/include graph distinguished from allowed policy, pinned vendor revisions and source-backed asset identity/persistence policy. Complete the baseline evidence, without AF-01 implementation or PLG-00 scope expansion.\n\nNewly executed: rebuild changed AxleJobsECSTests Debug and Release exit0; CTest 11/11 exit0 each; isolated normal harness in each configuration confirms four genuine documented Engine faults, passing bridge-drain/current-format lifecycle controls and intended failure/watchdog controls. Adversarial review exits1 with seven failed contracts/one passing edge control; opt-in queued control configure/build exit0, run exit1. CMake cache injection removed with successful reconfigure. Review artifact history/link/whitespace checks pass. Original Gemini report/snapshots preserved.\n\nLimits: Editor/Runtime and full AxleTests/GPU checks were not rerun by Codex. No native interactive UI, export/player, sanitizer or performance evidence. No production fixes, legacy support or later package implementation. Correct and reverify this same baseline package before acceptance; no AF-01/P41-00/PLG-00/EJ-01+ task is released by this review. No push.\n"
+    },
+    {
+      "id": "CG-20261105T040107571025Z-CODEX-d2c4bd",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-01-AF00-EJ00",
+      "reply_to": "CG-20261105T035905295171Z-CODEX-7854b5",
+      "base_commit": "d95c330616509b5cebb4b26055bb2ae5b116b0b3",
+      "timestamp_utc": "2026-11-05T04:01:07.571025+00:00",
+      "body": "IN_PROGRESS: User explicitly assigns Codex to fix O1-R1..R4 now and prepare an English prompt for the next package AF-01 after verification. Base d95c330. Codex owns scripts/check_architecture.py, architecture_rules.json, run_jobs_ecs_harness.py and focused tool regressions; Tests/src/JobsECSTestMain.cpp, Tests/CMakeLists.txt, baseline review reproductions; baseline inventory/fix evidence, roadmap/exchange and AF-01 handoff docs. Fix only baseline checker/harness/probe/inventory, not Engine threading/ECS/Jolt or AF-01 production implementation. Gemini must leave these files untouched while this fix runs. No legacy support or push.\n"
+    },
+    {
+      "id": "CG-20261105T041836939556Z-CODEX-cd6c99",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-01-AF00-EJ00",
+      "reply_to": "CG-20261105T035905295171Z-CODEX-7854b5",
+      "base_commit": "fd38dd8ba6d9edee268dd823be4455d84c5049b4",
+      "timestamp_utc": "2026-11-05T04:18:36.939556+00:00",
+      "body": "DELIVERY: User-requested O1-R1..R4 corrections completed by Codex. Implementation af5721b; shared inventory, correction evidence and English AF-01 handoff fd38dd8. Report docs/reviews/OPT_01_BASELINE_CORRECTIONS.md; structured results docs/reviews/OPT_01_BASELINE_CORRECTIONS_RESULTS.json; current-state inventory docs/architecture/OPT_01_BASELINE_INVENTORY.md and JSON.\n\nO1-R1 FIXED: typed scenario proof/exit protocol; launch/setup/unrelated failures and wrong-phase timeouts remain unexpected and make collector fail. Compiler configure/start/build-success prerequisites checked. Known bridge timeout requires ready without completed marker. Full CLI with CMake unavailable exits1, records infrastructure failure and zero defects.\nO1-R2 FIXED: root/nested/included CMake, supported set/list dependency expansion and relative includes inspected; 29 exact allowance edges, no unknown-target wildcard. Unsupported dynamic dependencies fail coverage. Direct/nested/variable/relative violations reject; setup/coverage errors cannot validate a deliberate forbidden fixture. Closed owner packages disable allowances.\nO1-R3 FIXED: before-pump snapshot and exactly-once post-pump owner assertion; permanent real queued production control passes. Current external-thread bug remains independently visible as a baseline defect.\nO1-R4 FIXED: source/vendor identity and configured File API Debug/Release graph, source graph and source-backed asset persistence inventory, workflow/known gaps and exact allowance owners. All eight submodules match clean pins; 104 source links, 694 includes / 83 module pairs, 342 source files and 17 CMake files; actual configured graph contains 29 Axle targets per configuration and no test-to-Editor/Runtime prerequisites.\n\nVerification actually executed after rebuilding changed native targets in Debug/Release (both exit0): CTest15/15 each, 18 tool regressions, nine adversarial acceptance controls in each configuration. Isolated native baseline in each configuration: four ordinary PASS, four genuine recorded Engine defects, three intentional validation probes, zero unexpected failures. Original reports and snapshots preserved. New fixture outputs remain ignored. Logs and JSON paths are in the correction report. Package baseline checks are satisfied for user-directed AF-01 progression.\n\nThese corrections were authored and verified by Codex; no separate agent independently reviewed the post-fix changes. No Engine/Editor/Runtime/Plugins production code or vendors changed; no old formats/Vehicle holders/migration. Full products/GPU/integration/manual UI/player/export/sanitizer/performance were not rerun. OPT-00 full product verification remains separately pending; all OPT-01 is not complete. No push.\n\nThe user requested the next prompt in English. Prepare/start Gemini AF-01 only via docs/agents/handoffs/OPT_01_AF01_GEMINI.md on the actual next starting HEAD. No P41-00/PLG-00/AF-02+/EJ-01+ work released.\n"
+    },
+    {
+      "id": "CG-20261105T041905324742Z-CODEX-dc5ad3",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "HANDOFF",
+      "task": "OPT-01-AF01",
+      "reply_to": "CG-20261105T041836939556Z-CODEX-cd6c99",
+      "base_commit": "fd38dd8ba6d9edee268dd823be4455d84c5049b4",
+      "timestamp_utc": "2026-11-05T04:19:05.324742+00:00",
+      "body": "HANDOFF: The user-requested next task is OPT-01 / AF-01 only: stable asset identity and safe persistence. Read docs/agents/handoffs/OPT_01_AF01_GEMINI.md, root instructions/protocol/current task and inbox. This English handoff is the implementation scope; record actual starting HEAD after fd38dd8 and ACK as Gemini before code edits. AF-00/EJ-00 corrections are verified (af5721b + fd38dd8), with original independent review and author-run correction checks distinguished. Implement supported authored UUID metadata and scoped ignores, checked one-time new-import ID persistence, explicit missing/corrupt/duplicate identity diagnostics, relocation-versus-copy policy, canonical roots/builtins, and shared safe atomic project/scene/assembly/metadata saves. No old-format support, migration, legacy Vehicle code or developer-sidecar bulk commit. Use real production APIs in owned fixtures; test clean checkout/relocation/copy and deterministic failure persistence in Debug/Release. Build affected products/targets, preserve baseline known ECS/jobs defects, deliver actual commands/commits/logs and NOT RUN limits. Stop after AF-01 for Codex review; do not start P41-00, PLG-00, AF-02+ or EJ-01+. No push. Read the complete handoff for contracts and acceptance criteria; no Gemini response/execution is claimed here.\n"
     }
   ],
   "deferred_tasks": [
@@ -1089,6 +1100,103 @@
         "independently_verified_by_Codex": false
       },
       "handoff_note": "User requested starting OPT-01 on 2026-11-05. Retain pending independent clean-removal verification as baseline evidence gap; OPT-00 is not accepted by this transition."
+    },
+    {
+      "id": "OPT-01-AF00-EJ00",
+      "title": "Shared architecture baseline and permanent jobs/ECS fault harness",
+      "state": "completed_verified_baseline",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "reviewer": "Codex",
+      "code_baseline": "842cf7de6fac8368eb76fbf6a027b934681166e2",
+      "scope_updated_on": "2026-11-05",
+      "user_scope": "User asks to begin OPT-01 and receive a prompt to call Gemini. Initial bounded handoff releases AF-00 + EJ-00 implementation. Clean Engine; no old data format support, legacy Vehicle retention or migration. User explicitly assigns Codex on 2026-11-05 to correct O1-R1..R4 and supply the next AF-01 prompt in English after verification.",
+      "released_packages": [
+        "AF-00",
+        "EJ-00"
+      ],
+      "implementation_status": "corrections_verified",
+      "independent_review_status": "original_review_complete; Codex-authored_corrections_verified; no_separate_postfix_review",
+      "handoff": "docs/agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md",
+      "expected_files": [
+        "architecture-check scripts/config",
+        "Tests/CMakeLists.txt",
+        "focused permanent jobs/ECS/script/bridge fixtures and isolated CMake fixtures",
+        "baseline/delivery report under docs/reviews or docs/architecture",
+        "docs/ROADMAP.md",
+        "docs/agents/CODEX_GEMINI_EXCHANGE.json"
+      ],
+      "excluded": [
+        "AF-01, P41-00, PLG-00 and later packages",
+        "EJ-01+ production fixes",
+        "NRI/render/plugin/Vehicle implementation",
+        "old data format support or legacy compatibility holders",
+        "vendor upgrades and production module moves",
+        "inferred acceptance from implementer reports"
+      ],
+      "prior_checkpoint": {
+        "id": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
+        "state": "followup_verification_pending",
+        "accepted": false,
+        "transition": "User-directed initial OPT-01 baseline start; pending current-format/product verification is carried into baseline evidence, not waived as PASS."
+      },
+      "next_action": "Baseline correction work complete; user requests next English prompt. AF-01 only is the next scoped Gemini assignment; OPT-00 full product verification and existing ECS/jobs production faults remain separately pending.",
+      "delivery_commit": "95a6c9d",
+      "delivery_report": "docs/reviews/OPT_01_BASELINE_DELIVERY.md",
+      "review_status": "complete",
+      "reviewed_code_baseline": "95a6c9d",
+      "reviewed_head": "0f23b86",
+      "review_commit": "ba35221",
+      "review_report": "docs/reviews/OPT_01_BASELINE_REVIEW.md",
+      "review_results": "docs/reviews/OPT_01_BASELINE_REVIEW_RESULTS.json",
+      "reproduction": "Tests/Review/ArchitectureBaseline/README.md",
+      "findings": {
+        "P1": [
+          "O1-R1",
+          "O1-R2"
+        ],
+        "P2": [
+          "O1-R3",
+          "O1-R4"
+        ]
+      },
+      "independent_verification": {
+        "rebuilt": "AxleJobsECSTests Debug/Release and opt-in queued native review control; exit 0",
+        "ctest": "Debug 11/11, Release 11/11; exit 0 each",
+        "normal_harness": "Debug/Release: three PASS, four genuine recorded Engine defects and three intentional probes; collector exit 0",
+        "adversarial_review": "seven failed contracts and one passing direct-edge control; exit 1",
+        "queued_control": "valid production main queue delivery rejected by original probe predicate; exit 1",
+        "compiler_prerequisite_control": "CMake unavailable, compilationSucceeded=0 still logged as reproduced scenario; exit 1",
+        "limits": "No product rebuild/full integration/GPU/manual UI/player/export/sanitizer/performance rerun; Gemini results remain reported. No production fixes or later packages."
+      },
+      "original_implementer": "Gemini",
+      "correction_commits": [
+        "af5721b",
+        "fd38dd8"
+      ],
+      "correction_report": "docs/reviews/OPT_01_BASELINE_CORRECTIONS.md",
+      "correction_results": "docs/reviews/OPT_01_BASELINE_CORRECTIONS_RESULTS.json",
+      "baseline_inventory": "docs/architecture/OPT_01_BASELINE_INVENTORY.md",
+      "baseline_inventory_json": "docs/architecture/OPT_01_BASELINE_INVENTORY.json",
+      "finding_resolution": {
+        "O1-R1": "FIXED; af5721b implementation plus fd38dd8 shared inventory/evidence",
+        "O1-R2": "FIXED; af5721b implementation plus fd38dd8 shared inventory/evidence",
+        "O1-R3": "FIXED; af5721b implementation plus fd38dd8 shared inventory/evidence",
+        "O1-R4": "FIXED; af5721b implementation plus fd38dd8 shared inventory/evidence"
+      },
+      "correction_verification": {
+        "author_and_verifier": "Codex",
+        "separate_postfix_review": false,
+        "build": "AxleJobsECSTests Debug/Release exit0",
+        "ctest": "15/15 Debug and Release, exit0 each",
+        "tool_regressions": "18/18",
+        "adversarial_controls": "9/9 each Debug/Release",
+        "native_baseline": "4 ordinary PASS; 4 genuine Engine defects; 3 intended probes; 0 unexpected failures each configuration",
+        "negative_cli": "missing CMake produces exit1 and one unexpected infrastructure failure, zero defects",
+        "production_changes": false,
+        "full_product_execution": "NOT RERUN"
+      },
+      "accepted_for_baseline_progression": true
     }
   ]
 }

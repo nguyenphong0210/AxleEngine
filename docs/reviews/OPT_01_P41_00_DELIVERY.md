@@ -65,3 +65,4 @@ In strict accordance with the P41-00 requirements:
 - **NOT RUN**: Physical GPU device verification (hardware D3D12/Vulkan adapter readback), interactive windowed present checks, and standalone player export execution.
 - **NO SCOPE CREEP**: Did not implement P41-01..29, Phase 40 D1/D2/G2, PLG-00, AF-02+, or full renderer rewrites.
 - **PRESERVED BASELINE**: Known baseline ECS/jobs defects preserved as visible per contract.
+

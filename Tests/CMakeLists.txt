@@ -213,6 +213,28 @@ set_tests_properties(RenderHarnessFailure PROPERTIES WILL_FAIL TRUE)
 
 option(AXLE_ENABLE_RENDER_GPU_TESTS "Register physical D3D12/Vulkan render tests" OFF)
 
+# Dedicated CPU-Only Plugin Baseline & Retirement Harness (PLG-00)
+add_executable(AxlePluginUnitTests EXCLUDE_FROM_ALL
+    plugin/PluginUnitTestMain.cpp
+    plugin/Test_PluginBaselineUnit.cpp
+)
+target_include_directories(AxlePluginUnitTests PRIVATE plugin src)
+target_link_libraries(AxlePluginUnitTests PRIVATE
+    Axle::Core
+    Axle::Physics
+    Axle::Scene
+    Axle::UI
+    Axle::Spline
+    Axle::Terrain
+)
+if (MSVC)
+    target_compile_options(AxlePluginUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME PluginUnitTests COMMAND $<TARGET_FILE:AxlePluginUnitTests>)
+add_test(NAME PluginHarnessFailure COMMAND $<TARGET_FILE:AxlePluginUnitTests> --self-test-failure)
+set_tests_properties(PluginUnitTests PluginHarnessFailure PROPERTIES LABELS "plugin;cpu")
+set_tests_properties(PluginHarnessFailure PROPERTIES WILL_FAIL TRUE)
+
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
     src/JobsECSTestMain.cpp
@@ -258,7 +280,7 @@ set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture
     PROPERTIES LABELS "architecture;cpu" TIMEOUT 60)
 
 # Explicit developer/test build. Neither this target nor its executables are in ALL.
-set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleAssetUnitTests AxleRenderUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
+set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleAssetUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
 if(WIN32)
     add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
     target_include_directories(AxleBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/Editor/generated/$<CONFIG>")

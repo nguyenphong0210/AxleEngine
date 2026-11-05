@@ -128,7 +128,7 @@ The diagram groups work for orientation; the table is the exact dependency set.
   Scene lifecycle and all Vehicle/Spline/Terrain include/link consumers.
 - Record old Vehicle features/tests/sample dependencies before deletion. Separate
   general physics coverage, Vehicle behavior, domain-specific demo UI and obsolete API checks.
-- **Expected files:** baseline report under `docs/design/`, focused fixtures under
+- **Expected files:** baseline inventory under `docs/architecture/`, focused fixtures under
   `Tests/`; inspect root/module CMake, `Engine/Scene`, `Engine/UI`, products and samples.
 - **Evidence:** build current explicit test targets; run CPU tests and available
   physics/player cases with exact logs. Missing GPU/UI/toolchain is NOT RUN.

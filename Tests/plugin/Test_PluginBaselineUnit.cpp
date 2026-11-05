@@ -4,6 +4,7 @@
 #include <AxleTerrain/TerrainPlugin.hpp>
 #include <AxleTerrain/TerrainData.hpp>
 #include <Axle/PhysicsEngine.hpp>
+#include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
@@ -80,6 +81,11 @@ namespace Axle::PluginTests {
         PLUGIN_CHECK(PhysicsEngine::IsInitialized(), "PhysicsEngine initialized");
 
         {
+            PhysicsDebugRenderer debugRenderer;
+            PLUGIN_CHECK(JPH::DebugRenderer::sInstance == &debugRenderer, "Jolt owns active debug renderer singleton");
+        }
+        PLUGIN_CHECK(JPH::DebugRenderer::sInstance == nullptr, "Base destructor releases debug renderer singleton");
+        {
             PhysicsScene physicsScene;
 
             // Spawn static ground box
@@ -149,29 +155,29 @@ namespace Axle::PluginTests {
 
     static bool Test_UIDataContextGenericBindings() {
         UIDataContext rootContext;
-        rootContext.SetInt("Vehicle.SpeedKmh", 120);
-        rootContext.SetFloat("Vehicle.RPMNormalized", 0.75f);
-        rootContext.SetBool("Vehicle.IsRedline", false);
-        rootContext.SetString("Vehicle.GearString", "4");
+        rootContext.SetInt("Telemetry.Speed", 120);
+        rootContext.SetFloat("Telemetry.Rate", 0.75f);
+        rootContext.SetBool("Telemetry.Alert", false);
+        rootContext.SetString("Telemetry.Label", "4");
 
-        PLUGIN_CHECK(rootContext.Has("Vehicle.SpeedKmh"), "rootContext has SpeedKmh");
-        PLUGIN_CHECK(rootContext.Has("Vehicle.RPMNormalized"), "rootContext has RPMNormalized");
-        PLUGIN_CHECK(rootContext.Has("Vehicle.IsRedline"), "rootContext has IsRedline");
+        PLUGIN_CHECK(rootContext.Has("Telemetry.Speed"), "rootContext has SpeedKmh");
+        PLUGIN_CHECK(rootContext.Has("Telemetry.Rate"), "rootContext has RPMNormalized");
+        PLUGIN_CHECK(rootContext.Has("Telemetry.Alert"), "rootContext has IsRedline");
 
-        const auto* speedVal = rootContext.Get("Vehicle.SpeedKmh");
+        const auto* speedVal = rootContext.Get("Telemetry.Speed");
         PLUGIN_CHECK(speedVal != nullptr && std::holds_alternative<int32_t>(*speedVal), "Speed is int32_t");
         PLUGIN_CHECK(std::get<int32_t>(*speedVal) == 120, "Speed is 120");
 
         // Scoped child context override
         UIDataContext childContext(&rootContext);
-        PLUGIN_CHECK(childContext.Has("Vehicle.SpeedKmh"), "childContext inherits SpeedKmh");
+        PLUGIN_CHECK(childContext.Has("Telemetry.Speed"), "childContext inherits SpeedKmh");
 
-        childContext.SetInt("Vehicle.SpeedKmh", 240);
-        const auto* childSpeedVal = childContext.Get("Vehicle.SpeedKmh");
+        childContext.SetInt("Telemetry.Speed", 240);
+        const auto* childSpeedVal = childContext.Get("Telemetry.Speed");
         PLUGIN_CHECK(std::get<int32_t>(*childSpeedVal) == 240, "childContext overrides SpeedKmh to 240");
 
         // Parent context remains unchanged
-        const auto* parentSpeedVal = rootContext.Get("Vehicle.SpeedKmh");
+        const auto* parentSpeedVal = rootContext.Get("Telemetry.Speed");
         PLUGIN_CHECK(std::get<int32_t>(*parentSpeedVal) == 120, "parentContext retains SpeedKmh 120");
 
         return true;

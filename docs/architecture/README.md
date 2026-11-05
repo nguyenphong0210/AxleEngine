@@ -56,3 +56,5 @@ All selected text files were scanned completely by tooling. Manual interpretatio
 Repository-relative links make the documentation portable between checkouts. Source line anchors are navigation aids and may move as the code changes. The proposed module names and build options in the target architecture are design suggestions, not newly implemented targets.
 
 For feature workflows and format references, return to the [documentation hub](../README.md). Future editor feature proposals are in the [tooling roadmap](../archive/design/deferred/EDITOR_TOOLING_ROADMAP.md).
+
+The [PLG-00 baseline inventory](PLUGIN_BASELINE_INVENTORY.md) records verified current startup, ownership and retirement consumers.

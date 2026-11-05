@@ -9,6 +9,7 @@ bool RunRenderPrimitiveIdentityUnitTests();
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure") {
         std::cout << "[AxleRenderUnitTests] Running intentional self-test failure probe...\n";
+        std::cout << "AXLE_TEST_EXPECTED_FAILURE render-probe\n";
         return Axle::RenderTests::Check(false, "Deliberate test harness failure probe (--self-test-failure)", __FILE__, __LINE__) ? 0 : 1;
     }
 

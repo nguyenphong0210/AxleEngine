@@ -177,6 +177,9 @@ target_include_directories(AxleProjectUnitTests PRIVATE src "${CMAKE_SOURCE_DIR}
 target_link_libraries(AxleProjectUnitTests PRIVATE Axle::Project Axle::Scene Axle::UI)
 add_test(NAME ProjectStartupTests COMMAND $<TARGET_FILE:AxleProjectUnitTests>)
 
+# Explicit baseline toolchain; failure probes must validate their exact cause.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 # Dedicated CPU-Only Asset Identity and Safe Persistence Test Target (AF-01)
 add_executable(AxleAssetUnitTests EXCLUDE_FROM_ALL src/Test_AssetIdentityAndPersistence.cpp)
 target_include_directories(AxleAssetUnitTests PRIVATE src)
@@ -185,7 +188,9 @@ if (MSVC)
     target_compile_options(AxleAssetUnitTests PRIVATE /bigobj /FS)
 endif()
 add_test(NAME AssetIdentityAndPersistenceTests COMMAND $<TARGET_FILE:AxleAssetUnitTests>)
-set_tests_properties(AssetIdentityAndPersistenceTests PROPERTIES LABELS "asset;cpu")
+set_tests_properties(AssetIdentityAndPersistenceTests PROPERTIES LABELS "asset;cpu" TIMEOUT 45)
+add_test(NAME AssetHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleAssetUnitTests> --case asset-probe)
+set_tests_properties(AssetHarnessFailure PROPERTIES LABELS "asset;cpu" TIMEOUT 15)
 
 # Dedicated CPU-Only Render Contracts & Always-Active Harness (P41-00)
 add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
@@ -207,11 +212,26 @@ if (MSVC)
     target_compile_options(AxleRenderUnitTests PRIVATE /bigobj /FS)
 endif()
 add_test(NAME RenderUnitTests COMMAND $<TARGET_FILE:AxleRenderUnitTests>)
-add_test(NAME RenderHarnessFailure COMMAND $<TARGET_FILE:AxleRenderUnitTests> --self-test-failure)
+add_test(NAME RenderHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleRenderUnitTests> --case render-probe)
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES LABELS "render;cpu")
-set_tests_properties(RenderHarnessFailure PROPERTIES WILL_FAIL TRUE)
+set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES TIMEOUT 30)
 
-option(AXLE_ENABLE_RENDER_GPU_TESTS "Register physical D3D12/Vulkan render tests" OFF)
+option(AXLE_ENABLE_RENDER_GPU_TESTS "Register shared physical D3D12/Vulkan render readback tests" OFF)
+if(AXLE_ENABLE_RENDER_GPU_TESTS)
+    foreach(backend D3D12 Vulkan)
+        add_test(NAME RenderGPU_${backend} COMMAND $<TARGET_FILE:AxleVFXGPUTests>)
+        set_tests_properties(RenderGPU_${backend} PROPERTIES
+            ENVIRONMENT "AXLE_VFX_TEST_BACKEND=${backend}" LABELS "render;gpu;shared-vfx" RUN_SERIAL TRUE TIMEOUT 120)
+    endforeach()
+endif()
+option(AXLE_ENABLE_RENDER_WINDOW_TESTS "Register opt-in real Editor startup/present smoke" OFF)
+if(AXLE_ENABLE_RENDER_WINDOW_TESTS)
+    foreach(backend dx12 vulkan gl)
+        add_test(NAME RenderWindow_${backend} COMMAND $<TARGET_FILE:AxleEditor> --verify-empty-startup --rhi=${backend})
+        set_tests_properties(RenderWindow_${backend} PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:AxleEditor>" LABELS "render;gpu;window;product" RUN_SERIAL TRUE TIMEOUT 90)
+    endforeach()
+endif()
 
 # Dedicated CPU-Only Plugin Baseline & Retirement Harness (PLG-00)
 add_executable(AxlePluginUnitTests EXCLUDE_FROM_ALL
@@ -231,9 +251,9 @@ if (MSVC)
     target_compile_options(AxlePluginUnitTests PRIVATE /bigobj /FS)
 endif()
 add_test(NAME PluginUnitTests COMMAND $<TARGET_FILE:AxlePluginUnitTests>)
-add_test(NAME PluginHarnessFailure COMMAND $<TARGET_FILE:AxlePluginUnitTests> --self-test-failure)
+add_test(NAME PluginHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxlePluginUnitTests> --case plugin-probe)
 set_tests_properties(PluginUnitTests PluginHarnessFailure PROPERTIES LABELS "plugin;cpu")
-set_tests_properties(PluginHarnessFailure PROPERTIES WILL_FAIL TRUE)
+set_tests_properties(PluginUnitTests PluginHarnessFailure PROPERTIES TIMEOUT 30)
 
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL

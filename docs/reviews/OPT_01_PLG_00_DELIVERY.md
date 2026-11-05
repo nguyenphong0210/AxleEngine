@@ -12,7 +12,7 @@ Status: **Delivered (pending Codex independent review)**
 
 In strict accordance with the PLG-00 requirements:
 1. **Authored Comprehensive Baseline & Retirement Inventory Report**:
-   - Created [`docs/design/PLUGIN_BASELINE_INVENTORY.md`](../design/PLUGIN_BASELINE_INVENTORY.md).
+   - Created [current inventory](../architecture/PLUGIN_BASELINE_INVENTORY.md) (original delivery path: `docs/design/PLUGIN_BASELINE_INVENTORY.md`).
    - Analyzed current build & module link topology: root `CMakeLists.txt`, monolithic static libraries `AxleSpline` and `AxleTerrain`, and static linkage into `AxleEditor` and `AxleRuntime`.
    - Documented Editor and Runtime startup sequencing (`EditorLayer::OnAttach`, `RuntimeLayer::OnAttach`) and `Scene::OnUpdateRuntime` lifecycle execution flow.
    - Audited physics step ordering (`PhysicsScene::Step`), confirming Jolt simulation boundaries and complete separation from domain-specific vehicle code.

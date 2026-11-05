@@ -7,7 +7,6 @@ namespace Axle {
     PhysicsDebugRenderer::PhysicsDebugRenderer()
         : JPH::DebugRendererSimple() {
         if (!Window::HasActiveContext()) {
-            sInstance = this;
             return;
         }
 
@@ -48,14 +47,10 @@ namespace Axle {
         m_VertexArray = std::make_shared<VertexArray>();
         m_VertexArray->AddVertexBuffer(m_VertexBuffer);
 
-        sInstance = this;
     }
 
-    PhysicsDebugRenderer::~PhysicsDebugRenderer() {
-        if (sInstance == this) {
-            sInstance = nullptr;
-        }
-    }
+    // Jolt owns singleton registration and release in its base lifetime.
+    PhysicsDebugRenderer::~PhysicsDebugRenderer() = default;
 
     void PhysicsDebugRenderer::DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, JPH::ColorArg inColor) {
         const float fx = static_cast<float>(inFrom.GetX());
@@ -92,7 +87,6 @@ namespace Axle {
     }
 
     void PhysicsDebugRenderer::Begin(const glm::vec3& cameraPos) {
-        sInstance = this;
         SetCameraPos(JPH::RVec3(cameraPos.x, cameraPos.y, cameraPos.z));
         m_LineVertices.clear();
         NextFrame();

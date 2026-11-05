@@ -258,19 +258,24 @@ bool RunTest_Step68_Phase33_Step1_TransformStreamingAndRHISceneRenderer() {
     auto plane = meshRegistry.GetPlane();
     assert(plane != nullptr && plane->IsValid());
 
-    auto chassis = meshRegistry.GetMesh("SportsCar_Chassis");
-    if (!chassis) chassis = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Chassis.axlemesh");
-    if (!chassis) chassis = meshRegistry.GetOrCreateMesh("SportsCar_Chassis.axlemesh");
-    if (chassis) meshRegistry.RegisterMesh("SportsCar_Chassis", chassis);
-    assert(chassis != nullptr && chassis->IsValid());
-    assert(chassis->GetVertexCount() > 0);
-
-    auto wheel = meshRegistry.GetMesh("SportsCar_Wheel");
-    if (!wheel) wheel = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Wheel.axlemesh");
-    if (!wheel) wheel = meshRegistry.GetOrCreateMesh("SportsCar_Wheel.axlemesh");
-    if (wheel) meshRegistry.RegisterMesh("SportsCar_Wheel", wheel);
-    assert(wheel != nullptr && wheel->IsValid());
-    assert(wheel->GetVertexCount() > 0);
+    // This cache test owns tiny authored geometry; it does not depend on retired
+    // Engine/Resources models or a previous test step populating a registry alias.
+    auto loadFixture = [&](const std::string& name, float width) {
+        Axle::AxleMeshSource source;
+        source.Name = name;
+        source.Vertices = {{0,0,0},{width,0,0},{0,1,0}};
+        source.Normals = {{0,0,1},{0,0,1},{0,0,1}};
+        source.UVs = {{0,0},{1,0},{0,1}};
+        source.Indices = {0,1,2};
+        const auto path = std::filesystem::current_path()/(name+".axleasset");
+        assert(Axle::AssetSerializer::SaveToAxleText(path,source));
+        auto mesh = meshRegistry.GetOrCreateMesh(path.string());
+        assert(mesh && mesh->IsValid() && mesh->GetVertexCount()==3 && mesh->GetIndexCount()==3);
+        assert(meshRegistry.GetOrCreateMesh(path.string())==mesh);
+        return mesh;
+    };
+    auto chassis = loadFixture("CacheFixtureA",2.0f);
+    auto wheel = loadFixture("CacheFixtureB",1.0f);
 
     auto terrain = meshRegistry.GetProceduralTerrain();
     assert(terrain != nullptr && terrain->IsValid());

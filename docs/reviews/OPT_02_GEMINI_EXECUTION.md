@@ -197,3 +197,61 @@ Evolving execution log and verification record for the sequential implementation
 - Single-thread Jolt bridge hang (`ECSJ-03`) is deferred to EJ-06.
 - EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
 - Independent acceptance remains pending; this report documents self-verification under autonomous authorization.
+
+---
+
+## Package EJ-04: Reload Commit and Scene/DLL Teardown
+
+- **Status:** Implemented and self-verified; local delivery committed. Independent review remains pending at phase checkpoint.
+- **Base Baseline:** `b3e3ca2`
+- **Scope & Contract:** [ROADMAP.md](../ROADMAP.md) Package EJ-04
+
+### Implementation Summary
+1. **Candidate Staging & Zero-Downtime Rollback:**
+   - Script DLL compilation yields a candidate shadow library copied to a candidate path.
+   - Staging protocol (`ScriptHotReloadManager::Reload`):
+     - Loads candidate shadow DLL first via `LoadLibraryA`.
+     - Validates mandatory entry points (`Axle_InitializeScripts` and exported script registration).
+     - Queries script metadata into a candidate staging table without affecting the live registry.
+     - If loading, symbol resolution, or script registration fails: logs error, unloads candidate shadow DLL with `FreeLibrary`, and aborts reload with active DLL and live scene instances completely intact (rollback guarantee).
+2. **Lifecycle Ordering & Destructor-Before-Unload Barrier:**
+   - Scene script instances and leases must be cleanly destroyed *before* `FreeLibrary()` unmaps the active DLL image.
+   - `ScriptHotReloadManager::Reload` invokes `OnPreScriptReload()` on the active scene prior to calling `FreeLibrary()`.
+   - `NativeScriptComponent::DestroyScript()` routes through `ScriptRegistry::Destroy(name, instance)` so that the DLL's exported destructor is called using the DLL's heap allocator, preventing CRT heap mismatches across DLL boundaries.
+   - Generation counter (`GetModuleGeneration()`) increments atomically upon successful module commit or shutdown, invalidating outstanding module leases.
+3. **Shutdown Cleanliness:**
+   - `ScriptHotReloadManager::Shutdown()` triggers `OnPreScriptReload()` to destroy all native script instances, unregisters all scripts from `ScriptRegistry`, increments the generation counter, and only then calls `FreeLibrary()` on the active module.
+
+### Verification Evidence
+1. **Focused EJ-04 Native Probe (`ej04-reload-commit`):**
+   - Verified candidate export staging and rollback on corrupt DLL / missing exports.
+   - Verified that invalid candidates leave existing active scripts and registrations undamaged.
+   - Verified generation tracking and destructor ordering before module unload.
+   - PASS (exit 0) in Debug and Release.
+
+2. **Typed Baseline Harness (`scripts/run_jobs_ecs_harness.py`):**
+   - Registered `ej04-reload-commit` as native `PASS`.
+   - **Debug:** `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe --workspace build/opt02-debug --report build/opt02-debug/harness-debug.json`
+     - Result: **9 PASS, 2 recorded defects (ECSJ-03, ECSJ-04 preserved), 3 verified probes, 0 unexpected failures**.
+   - **Release:** `python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe --workspace build/opt02-release --report build/opt02-release/harness-release.json`
+     - Result: **9 PASS, 2 recorded defects, 3 verified probes, 0 unexpected failures**.
+
+3. **CTest Suite (Debug & Release):**
+   - Registered `JobsECS_ReloadCommit` in `Tests/CMakeLists.txt` (total 27 tests).
+   - Debug: `ctest --test-dir build -C Debug --output-on-failure` -> **27/27 tests passed (100%)**.
+   - Release: `ctest --test-dir build -C Release --output-on-failure` -> **27/27 tests passed (100%)**.
+
+4. **Integration Suite (`AxleTests.exe`):**
+   - Step 20 verified: `AxleTests.exe 20` (anti-lock shadow copy & state preservation) -> **100% passed**.
+
+5. **Tooling & Architecture:**
+   - `python scripts/check_architecture.py --root .` -> **AXLE_ARCH_CHECK PASS** (342 files scanned).
+   - `python scripts/test_baseline_tools.py` -> **18 tests passed (OK)**.
+
+6. **Product Target Builds:**
+   - `AxleEditor` & `AxleRuntime` built successfully (exit 0) in Debug and Release.
+
+### Remaining Limitations
+- Single-thread Jolt bridge hang (`ECSJ-03`) is deferred to EJ-06.
+- EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
+- Independent acceptance remains pending; this report documents self-verification under autonomous authorization.

@@ -104,30 +104,7 @@ namespace Axle {
             activeScene = m_ActiveScene.lock();
         }
 
-        // Phase 1: Preserve Scene Script States and Unbind old instances
-        if (activeScene) {
-            AXLE_INFO("ScriptHotReloadManager: Preserving field states for scene entities...");
-            activeScene->OnPreScriptReload();
-        }
-
-        // Phase 2: Unload previous runtime DLL
-        if (m_ModuleHandle) {
-#ifdef _WIN32
-            auto fnShutdown = (void(*)())GetProcAddress((HMODULE)m_ModuleHandle, "Axle_ShutdownScripts");
-            if (fnShutdown) {
-                fnShutdown();
-            }
-
-            ScriptRegistry::ClearDynamicScripts();
-
-            FreeLibrary((HMODULE)m_ModuleHandle);
-            m_OldRuntimeDlls.push_back(m_CurrentRuntimeDllPath);
-            m_ModuleHandle = nullptr;
-            AXLE_INFO("ScriptHotReloadManager: Unloaded old runtime DLL '{0}'", m_CurrentRuntimeDllPath.filename().string());
-#endif
-        }
-
-        // Phase 3: Create anti-lock timestamped shadow copy
+        // Verify source DLL exists
         if (!std::filesystem::exists(m_SourceDllPath)) {
             m_SourceDllPath = ResolveSourceDllPath(m_SourceDllPath);
         }
@@ -139,72 +116,112 @@ namespace Axle {
             return result;
         }
 
+        // Phase 1: Staging - Create candidate shadow copy and validate handshake before touching active module
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        std::string runtimeDllFilename = "AxleScripts_Runtime_" + std::to_string(ms) + ".dll";
-        m_CurrentRuntimeDllPath = m_SourceDllPath.parent_path() / runtimeDllFilename;
+        std::string candidateFilename = "AxleScripts_Runtime_" + std::to_string(ms) + ".dll";
+        std::filesystem::path candidatePath = m_SourceDllPath.parent_path() / candidateFilename;
 
         std::error_code ec;
-        std::filesystem::copy_file(m_SourceDllPath, m_CurrentRuntimeDllPath, std::filesystem::copy_options::overwrite_existing, ec);
+        std::filesystem::copy_file(m_SourceDllPath, candidatePath, std::filesystem::copy_options::overwrite_existing, ec);
         if (ec) {
             result.Success = false;
-            result.Message = "Failed to create runtime shadow copy: " + ec.message();
+            result.Message = "Failed to create candidate shadow copy: " + ec.message();
             AXLE_ERROR("ScriptHotReloadManager: {0}", result.Message);
             return result;
         }
 
-        // Also copy .pdb symbol file if available for stack tracing and debugging
+        // Copy symbol file (.pdb) if available
         std::filesystem::path srcPdb = m_SourceDllPath;
         srcPdb.replace_extension(".pdb");
         if (std::filesystem::exists(srcPdb)) {
-            std::filesystem::path dstPdb = m_CurrentRuntimeDllPath;
+            std::filesystem::path dstPdb = candidatePath;
             dstPdb.replace_extension(".pdb");
             std::filesystem::copy_file(srcPdb, dstPdb, std::filesystem::copy_options::overwrite_existing, ec);
         }
 
-        // Phase 4: Load runtime shadow copy into process
 #ifdef _WIN32
-        m_ModuleHandle = LoadLibraryA(m_CurrentRuntimeDllPath.string().c_str());
-        if (!m_ModuleHandle) {
+        // Load candidate module into process memory
+        HMODULE hCandidate = LoadLibraryA(candidatePath.string().c_str());
+        if (!hCandidate) {
             DWORD err = GetLastError();
+            std::filesystem::remove(candidatePath, ec);
             result.Success = false;
-            result.Message = "LoadLibrary failed with error code: " + std::to_string(err);
+            result.Message = "LoadLibrary failed for candidate module with error code: " + std::to_string(err);
             AXLE_ERROR("ScriptHotReloadManager: {0}", result.Message);
             return result;
         }
 
-        // Synchronize engine input context to newly loaded script DLL
-        SyncInputContext();
-
-        // Phase 5: Query exports and register scripts into ScriptRegistry
+        // Validate required ABI exports
         using GetCountFn = uint32_t(*)();
         using InitFn = void(*)(ScriptRegisterCallback);
 
-        auto fnGetCount = (GetCountFn)GetProcAddress((HMODULE)m_ModuleHandle, "Axle_GetScriptCount");
-        auto fnInit = (InitFn)GetProcAddress((HMODULE)m_ModuleHandle, "Axle_InitializeScripts");
+        auto fnGetCount = (GetCountFn)GetProcAddress(hCandidate, "Axle_GetScriptCount");
+        auto fnInit = (InitFn)GetProcAddress(hCandidate, "Axle_InitializeScripts");
 
         if (!fnInit) {
+            FreeLibrary(hCandidate);
+            std::filesystem::remove(candidatePath, ec);
             result.Success = false;
-            result.Message = "AxleScripts module missing required export 'Axle_InitializeScripts'!";
+            result.Message = "Candidate AxleScripts module missing required export 'Axle_InitializeScripts'!";
             AXLE_ERROR("ScriptHotReloadManager: {0}", result.Message);
-            FreeLibrary((HMODULE)m_ModuleHandle);
-            m_ModuleHandle = nullptr;
             return result;
         }
 
-        fnInit([](const char* name, const ScriptMetadata* meta) {
-            ScriptRegistry::RegisterMetadata(name, *meta, true);
-        });
+        // Query candidate metadata into a staging registry before commit
+        static thread_local std::vector<std::pair<std::string, ScriptMetadata>>* s_CandidateScripts = nullptr;
+        std::vector<std::pair<std::string, ScriptMetadata>> candidateScripts;
+        s_CandidateScripts = &candidateScripts;
 
-        result.ScriptCount = fnGetCount ? fnGetCount() : 0;
+        fnInit([](const char* name, const ScriptMetadata* meta) {
+            if (name && meta && s_CandidateScripts) {
+                s_CandidateScripts->emplace_back(std::string(name), *meta);
+            }
+        });
+        s_CandidateScripts = nullptr;
+
+        // Phase 2: Enter Scene Reload Barrier & destroy existing script instances safely
+        if (activeScene) {
+            AXLE_INFO("ScriptHotReloadManager: Preserving field states for scene entities...");
+            activeScene->OnPreScriptReload();
+        }
+
+        // Phase 3: Unload previous runtime DLL
+        if (m_ModuleHandle) {
+            auto fnShutdown = (void(*)())GetProcAddress((HMODULE)m_ModuleHandle, "Axle_ShutdownScripts");
+            if (fnShutdown) {
+                fnShutdown();
+            }
+
+            FreeLibrary((HMODULE)m_ModuleHandle);
+            m_OldRuntimeDlls.push_back(m_CurrentRuntimeDllPath);
+            m_ModuleHandle = nullptr;
+            AXLE_INFO("ScriptHotReloadManager: Unloaded previous runtime DLL '{0}'", m_CurrentRuntimeDllPath.filename().string());
+        }
+
+        // Phase 4: Commit candidate module and update generation
+        m_ModuleHandle = (void*)hCandidate;
+        m_CurrentRuntimeDllPath = candidatePath;
+        m_ModuleGeneration.fetch_add(1, std::memory_order_release);
+
+        // Commit candidate metadata to ScriptRegistry
+        ScriptRegistry::ClearDynamicScripts();
+        for (const auto& [name, meta] : candidateScripts) {
+            ScriptRegistry::RegisterMetadata(name, meta, true);
+        }
+
+        result.ScriptCount = fnGetCount ? fnGetCount() : static_cast<uint32_t>(candidateScripts.size());
+
+        // Synchronize engine input context to newly committed script DLL
+        SyncInputContext();
 #endif
 
-        // Phase 6: Restore Scene entities and re-bind new class instances
+        // Phase 5: Restore Scene entities and re-bind new class instances
         if (activeScene) {
             AXLE_INFO("ScriptHotReloadManager: Restoring and re-binding scene entities...");
             activeScene->OnPostScriptReload(isRuntimeActive);
         }
 
-        // Phase 7: Clean up previous unlocked shadow copies
+        // Phase 6: Clean up previous unlocked shadow copies
         CleanupOldShadowCopies();
 
         auto endTime = std::chrono::high_resolution_clock::now();
@@ -213,8 +230,8 @@ namespace Axle {
         result.DurationSeconds = duration.count();
         result.Message = "Hot reload completed successfully in " + std::to_string(result.DurationSeconds) + "s";
 
-        AXLE_INFO("ScriptHotReloadManager: [OK] Reloaded {0} script(s) from '{1}' in {2:.3f}s",
-            result.ScriptCount, m_CurrentRuntimeDllPath.filename().string(), result.DurationSeconds);
+        AXLE_INFO("ScriptHotReloadManager: [OK] Reloaded {0} script(s) from '{1}' in {2:.3f}s (generation {3})",
+            result.ScriptCount, m_CurrentRuntimeDllPath.filename().string(), result.DurationSeconds, m_ModuleGeneration.load());
 
         return result;
     }
@@ -290,6 +307,13 @@ namespace Axle {
     }
 
     void ScriptHotReloadManager::Shutdown() {
+        if (!m_ActiveScene.expired()) {
+            auto scene = m_ActiveScene.lock();
+            if (scene) {
+                scene->OnPreScriptReload();
+            }
+        }
+        m_ModuleGeneration.fetch_add(1, std::memory_order_release);
 #ifdef _WIN32
         if (m_ModuleHandle) {
             auto fnShutdown = (void(*)())GetProcAddress((HMODULE)m_ModuleHandle, "Axle_ShutdownScripts");

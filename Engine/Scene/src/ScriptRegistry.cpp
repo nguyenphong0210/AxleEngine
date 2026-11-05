@@ -92,7 +92,7 @@ namespace Axle {
             InstantiateScript = meta->Factory;
             DestroyScript = [](NativeScriptComponent* nsc) {
                 if (nsc->Instance) {
-                    delete nsc->Instance;
+                    ScriptRegistry::Destroy(nsc->ScriptName, nsc->Instance);
                     nsc->Instance = nullptr;
                 }
             };

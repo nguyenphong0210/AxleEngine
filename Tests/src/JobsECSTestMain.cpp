@@ -1,5 +1,7 @@
 #include <Axle/JobSystem.hpp>
 #include <Axle/ScriptCompiler.hpp>
+#include <Axle/ScriptHotReloadManager.hpp>
+#include <Axle/ScriptRegistry.hpp>
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/Scene.hpp>
@@ -668,6 +670,79 @@ int RunEJ03CompilerHandoffProbe(const std::filesystem::path& workspace) {
 }
 
 // ============================================================================
+// EJ-04: Reload Commit, Staging Rollback and Scene/DLL Teardown
+// ============================================================================
+int RunEJ04ReloadCommitProbe(const std::filesystem::path& workspace) {
+    Axle::JobSystem::Init(2);
+
+    auto& manager = Axle::ScriptHotReloadManager::Get();
+    if (!manager.Initialize()) {
+        std::cerr << "FAIL [EJ-04]: ScriptHotReloadManager failed initial module load\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    if (!manager.IsLoaded()) {
+        std::cerr << "FAIL [EJ-04]: ScriptHotReloadManager module not loaded after Initialize\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    const uint64_t initialGen = manager.GetModuleGeneration();
+    auto testScene = std::make_shared<Axle::Scene>();
+    manager.SetActiveScene(testScene);
+
+    auto ent = testScene->CreateEntity("ReloadTestBeacon");
+    ent.AddComponent<Axle::NativeScriptComponent>();
+
+    // 1. Successful reload and module generation advancement
+    auto reloadRes = manager.Reload(testScene, false);
+    if (!reloadRes.Success || manager.GetModuleGeneration() <= initialGen) {
+        std::cerr << "FAIL [EJ-04]: Reload failed or module generation did not increment\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 2. Destructor-before-unload guarantee & clean teardown ordering
+    const uint64_t genBeforeShutdown = manager.GetModuleGeneration();
+    manager.Shutdown();
+
+    if (manager.IsLoaded()) {
+        std::cerr << "FAIL [EJ-04]: Manager still reports loaded after Shutdown()\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    if (manager.GetModuleGeneration() <= genBeforeShutdown) {
+        std::cerr << "FAIL [EJ-04]: Shutdown did not increment module generation lease\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // Verify entity instance is nullptr and dynamic scripts are cleared
+    auto& nsc = ent.GetComponent<Axle::NativeScriptComponent>();
+    if (nsc.Instance != nullptr) {
+        std::cerr << "FAIL [EJ-04]: Scene script instance was not destroyed before DLL unload\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 3. Re-initialization recovery
+    if (!manager.Initialize()) {
+        std::cerr << "FAIL [EJ-04]: Manager failed re-initialization after shutdown\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    manager.Shutdown();
+    manager.SetActiveScene(nullptr);
+
+    Axle::JobSystem::Shutdown();
+    std::cout << "RESULT ej04-reload-commit PASS" << std::endl;
+    return 0;
+}
+
+// ============================================================================
 // ECSJ-04: EnTT Stable Storage Tombstone Iteration Probe
 // ============================================================================
 struct StableTombstoneComponent {
@@ -853,6 +928,7 @@ int main(int argc, char** argv) {
                   << "  ej01-lifecycle-admission\n"
                   << "  ej02-deferred-executor\n"
                   << "  ej03-compiler-handoff\n"
+                  << "  ej04-reload-commit\n"
                   << "  ecsj-03-bridge-hang\n"
                   << "  ecsj-03-bridge-control\n"
                   << "  ecsj-04-entt-tombstone\n"
@@ -883,6 +959,7 @@ int main(int argc, char** argv) {
         if (scenario == "ej01-lifecycle-admission") return finish(RunEJ01LifecycleAdmissionProbe());
         if (scenario == "ej02-deferred-executor") return finish(RunEJ02DeferredExecutorProbe());
         if (scenario == "ej03-compiler-handoff") return finish(RunEJ03CompilerHandoffProbe(workspace));
+        if (scenario == "ej04-reload-commit") return finish(RunEJ04ReloadCommitProbe(workspace));
         if (scenario == "queued-delivery-control") return finish(RunThreadIdentityProbe(true));
         if (scenario == "ecsj-03-bridge-hang") return finish(RunBridgeProbe(false));
         if (scenario == "ecsj-03-bridge-control" || scenario == "--passing" || scenario == "passing-control")

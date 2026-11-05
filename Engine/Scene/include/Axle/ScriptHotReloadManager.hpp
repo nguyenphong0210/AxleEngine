@@ -52,6 +52,7 @@ namespace Axle {
         void Shutdown();
 
         bool IsLoaded() const { return m_ModuleHandle != nullptr; }
+        uint64_t GetModuleGeneration() const { return m_ModuleGeneration.load(std::memory_order_acquire); }
         const std::filesystem::path& GetSourceDllPath() const { return m_SourceDllPath; }
         const std::filesystem::path& GetCurrentRuntimeDllPath() const { return m_CurrentRuntimeDllPath; }
         uint32_t GetLoadedScriptCount() const;
@@ -72,6 +73,7 @@ namespace Axle {
         std::filesystem::path ResolveSourceDllPath(const std::filesystem::path& requestedPath) const;
 
     private:
+        std::atomic<uint64_t> m_ModuleGeneration{ 1 };
         void* m_ModuleHandle = nullptr;
         void* m_WindowContext = nullptr;
         void* m_ImGuiContext = nullptr;

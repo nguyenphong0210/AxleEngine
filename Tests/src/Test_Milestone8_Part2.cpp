@@ -1305,7 +1305,8 @@ bool RunTest_Step51_Phase32_Step4_PipelineLayoutAndPSOHashCache() {
     auto autoLayout = RHIShaderReflection::Merge({ vsRes.Reflection, psRes.Reflection }).BuildPipelineLayoutDesc();
     RHIPipelineLayout pipelineLayout;
     assert(!pipelineLayout.IsValid());
-    assert(pipelineLayout.Init(autoLayout));
+    bool layoutInitOk = pipelineLayout.Init(autoLayout);
+    assert(layoutInitOk);
     assert(pipelineLayout.IsValid());
     assert(pipelineLayout.GetNative() != nullptr);
     assert(pipelineLayout.GetRootConstants().size() == 1); // PushConstants
@@ -1358,7 +1359,8 @@ bool RunTest_Step51_Phase32_Step4_PipelineLayoutAndPSOHashCache() {
 
     auto csAutoLayout = csRes.Reflection.BuildPipelineLayoutDesc();
     RHIPipelineLayout csLayout;
-    assert(csLayout.Init(csAutoLayout));
+    bool csLayoutInitOk = csLayout.Init(csAutoLayout);
+    assert(csLayoutInitOk);
 
     RHIComputePipelineDesc compPipeDesc;
     compPipeDesc.Layout = &csLayout;
@@ -1588,7 +1590,8 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
         RHIDeviceDesc devDesc;
         devDesc.PreferredBackend = RHIType::Direct3D12;
         devDesc.EnableValidation = false;
-        assert(rhiDevice.Init(devDesc));
+        bool devInitOk = rhiDevice.Init(devDesc);
+        assert(devInitOk);
     }
 
     auto* nativeDevice = rhiDevice.GetNRIDevice();
@@ -1630,12 +1633,14 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
 
     // Initialize RHICommandBuffer with dedicated allocator
     RHICommandBuffer cmdBuf;
-    assert(cmdBuf.Init(queue));
+    bool cmdInitOk = cmdBuf.Init(queue);
+    assert(cmdInitOk);
     assert(cmdBuf.IsValid());
     assert(!cmdBuf.IsRecording());
 
     // Begin recording
-    assert(cmdBuf.Begin());
+    bool cmdBeginOk = cmdBuf.Begin();
+    assert(cmdBeginOk);
     assert(cmdBuf.IsRecording());
 
     // Record Transition: Texture Undefined -> ColorAttachment, Buffer None -> VertexBuffer
@@ -1648,12 +1653,14 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
     cmdBuf.TransitionTexture(gpuTexture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
 
     // End recording
-    assert(cmdBuf.End());
+    bool cmdEndOk = cmdBuf.End();
+    assert(cmdEndOk);
     assert(!cmdBuf.IsRecording());
 
     // Submit to GPU queue and signal testFence with value 1
     uint64_t signalVal = 1;
-    assert(cmdBuf.Submit(queue, nullptr, 0, testFence, signalVal));
+    bool submitOk = cmdBuf.Submit(queue, nullptr, 0, testFence, signalVal);
+    assert(submitOk);
 
     // Wait on CPU for GPU queue completion
     core.Wait(*testFence, signalVal);
@@ -1671,7 +1678,8 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
 
         Axle::Window window(props);
         RHISurface surface;
-        assert(surface.Init(window));
+        bool surfInitOk = surface.Init(window);
+        assert(surfInitOk);
 
         RHISwapChain swapChain;
         RHISwapChainDesc scDesc;
@@ -1679,35 +1687,43 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
         scDesc.Height = 480;
         scDesc.BufferCount = 2;
         scDesc.FramesInFlight = 2;
-        assert(swapChain.Init(surface, scDesc));
+        bool scInitOk = swapChain.Init(surface, scDesc);
+        assert(scInitOk);
 
         // Prepare frame
-        assert(swapChain.BeginFrame());
+        bool bfOk = swapChain.BeginFrame();
+        assert(bfOk);
         nri::Texture* backbuffer = swapChain.GetCurrentTexture();
         assert(backbuffer != nullptr);
 
         // Record command buffer with explicit backbuffer transition:
         // Undefined -> ColorAttachment -> Present
         RHICommandBuffer frameCmd;
-        assert(frameCmd.Init(swapChain.GetCurrentCommandAllocator()));
-        assert(frameCmd.Begin());
+        bool fcmdInitOk = frameCmd.Init(swapChain.GetCurrentCommandAllocator());
+        assert(fcmdInitOk);
+        bool fcmdBeginOk = frameCmd.Begin();
+        assert(fcmdBeginOk);
 
         RHIResourceStateTracker scTracker;
         scTracker.TrackTexture(backbuffer, RHIResourceLayout::Undefined);
 
         // 1. Transition to ColorAttachment
-        assert(frameCmd.TransitionTexture(scTracker, backbuffer, RHIResourceLayout::ColorAttachment));
+        bool t1Ok = frameCmd.TransitionTexture(scTracker, backbuffer, RHIResourceLayout::ColorAttachment);
+        assert(t1Ok);
         assert(scTracker.GetTextureState(backbuffer) == RHIResourceLayout::ColorAttachment);
 
         // 2. Transition to Present
-        assert(frameCmd.TransitionTexture(scTracker, backbuffer, RHIResourceLayout::Present));
+        bool t2Ok = frameCmd.TransitionTexture(scTracker, backbuffer, RHIResourceLayout::Present);
+        assert(t2Ok);
         assert(scTracker.GetTextureState(backbuffer) == RHIResourceLayout::Present);
 
-        assert(frameCmd.End());
+        bool fcmdEndOk = frameCmd.End();
+        assert(fcmdEndOk);
 
         // Present with recorded command buffer submitted into the swapchain queue!
         const nri::CommandBuffer* nativeCmd = frameCmd.GetNative();
-        assert(swapChain.PresentFrame(&nativeCmd, 1));
+        bool presOk = swapChain.PresentFrame(&nativeCmd, 1);
+        assert(presOk);
         std::cout << "  -> PASS: SwapChain BackBuffer transitioned (Undefined -> ColorAttachment -> Present) and presented cleanly." << std::endl;
 
         frameCmd.Shutdown();
@@ -1793,7 +1809,8 @@ bool RunTest_Step53_Phase32_Step5_Part1_GPUMemoryAndBuffers() {
         RHIDeviceDesc devDesc;
         devDesc.PreferredBackend = RHIType::Direct3D12;
         devDesc.EnableValidation = false;
-        assert(rhiDevice.Init(devDesc));
+        bool devInitOk = rhiDevice.Init(devDesc);
+        assert(devInitOk);
     }
 
     RHIBuffer cbBuffer;
@@ -1936,7 +1953,8 @@ bool RunTest_Step54_Phase32_Step5_Part2_DynamicStagingStreamer() {
         RHIDeviceDesc devDesc;
         devDesc.PreferredBackend = RHIType::Direct3D12;
         devDesc.EnableValidation = false;
-        assert(rhiDevice.Init(devDesc));
+        bool devInitOk = rhiDevice.Init(devDesc);
+        assert(devInitOk);
     }
     auto* nativeDevice = rhiDevice.GetNRIDevice();
     const auto& core = rhiDevice.GetNRICore();
@@ -2159,7 +2177,8 @@ bool RunTest_Step55_Phase32_Step5_Part3_ECSStreamingAndIndirectDraw() {
         RHIDeviceDesc devDesc;
         devDesc.PreferredBackend = RHIType::Direct3D12;
         devDesc.EnableValidation = false;
-        assert(rhiDevice.Init(devDesc));
+        bool devInitOk = rhiDevice.Init(devDesc);
+        assert(devInitOk);
     }
     auto* nativeDevice = rhiDevice.GetNRIDevice();
     const auto& core = rhiDevice.GetNRICore();

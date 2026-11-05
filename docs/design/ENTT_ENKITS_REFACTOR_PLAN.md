@@ -7,12 +7,15 @@
 
 Date: **2026-11-04**. Source baseline:
 **84ad556678693c33039703801ea013d2d2686913**.
-Status: **design only; EJ-00..17 are unimplemented and unreleased**.
+Status: **technical contract; EJ-00 assigned to Gemini under the
+[initial OPT-01 handoff](../agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md) on 2026-11-05;
+implementation/review pending; EJ-01..17 remain unreleased**.
 
 The user requests a detailed plan following the
 [EnTT/enkiTS review](../architecture/ENTT_ENKITS_REVIEW.md). This task changes
-documentation only. Keep EnTT, enkiTS and Jolt; repair their Engine integration.
-No production fixes, Vehicle deletion, plugin implementation or vendor upgrade
+documentation only at its original baseline. The current handoff releases EJ-00
+fixtures and harness work only. Keep EnTT, enkiTS and Jolt.
+No production fault fixes, Vehicle deletion, plugin implementation or vendor upgrade
 are performed by this document. The [exchange](../agents/CODEX_GEMINI_EXCHANGE.json)
 owns the next actual assignment.
 

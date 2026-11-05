@@ -10,7 +10,15 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Current position: OPT-00, clean-removal follow-up awaiting independent verification.**
+**Current assignment: OPT-01 initial AF-00 + EJ-00, assigned to Gemini.**
+The user requested starting OPT-01 on **2026-11-05**. This releases only the
+[initial baseline handoff](agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md), in AF-00
+then EJ-00 order, followed by Codex review. AF-01, P41-00 and PLG-00 remain planned.
+This user-directed baseline start is a bounded sequencing exception: pending
+OPT-00 current-format/product verification is carried into baseline evidence;
+OPT-00 is not marked accepted. Production fault fixes remain in later packages.
+
+**Prior checkpoint: OPT-00, clean-removal follow-up awaiting independent verification.**
 The user confirmed on **2026-11-05** that Engine must be clean: old data formats,
 legacy Vehicle payload preservation, compatibility holders and automatic migration
 are not requirements. The earlier [review](reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md)
@@ -25,7 +33,8 @@ No AF/EJ/P41/PLG package is closed by this scope clarification.
 The first implementation unit after OPT-00 is **AF-00 + EJ-00**, followed by the
 remaining OPT-01 packages in their listed order. OPT-02 starts after OPT-01 exits.
 The [exchange](agents/CODEX_GEMINI_EXCHANGE.json) records actual assignments and
-evidence; this documentation task does not start production implementation.
+evidence. The current handoff releases AF-00 + EJ-00 only; the remaining plan
+does not authorize further implementation.
 
 ## One sequence, stable technical identifiers
 
@@ -101,7 +110,7 @@ Historical VR-R1..R3 concern the superseded legacy contract. Status: **FOLLOW-UP
 
 **Exit:** Debug/Release checks remain active; intentional failure probes fail; existing fault reproductions are recorded as faults, not hidden as passing tests. Asset identity survives a clean checkout and relocation.
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** AF-00 + EJ-00 assigned in the [initial handoff](agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md); implementation and review pending. No OPT-01 checkbox is closed.
 
 ### OPT-02 - Repair threading, scripts and physics jobs
 

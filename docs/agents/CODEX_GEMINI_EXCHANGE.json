@@ -1,84 +1,45 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
-    "title": "Independent acceptance review of early Vehicle retirement",
-    "state": "followup_verification_pending",
+    "id": "OPT-01-AF00-EJ00",
+    "title": "Shared architecture baseline and permanent jobs/ECS fault harness",
+    "state": "assigned_to_gemini",
     "coordinator": "Codex",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "6f9f488",
-    "delivery_commits": [
-      "fa74981"
-    ],
-    "followup_commits": [
-      "bdf2cb2",
-      "cc184cf",
-      "8478ec9",
-      "be7b071"
-    ],
-    "user_scope": "User confirms 2026-11-05: prioritize a clean Engine; no old data format support, legacy Vehicle payload preservation, compatibility holders or migration required. OPT-00 acceptance concerns clean removal and current-format scene/assembly, ordinary physics and lifecycle correctness.",
-    "expected_files": [
-      "docs/reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md",
-      "docs/ROADMAP.md",
-      "docs/agents/CODEX_GEMINI_EXCHANGE.json",
-      "focused review fixtures if needed; no production fixes"
-    ],
-    "implementation_status": "delivered",
-    "independent_review_status": "clean_removal_followup_pending",
-    "delivery_report": "docs/archive/design/reports/VEHICLE_RETIREMENT_DELIVERY.md",
-    "next_action": "Verify clean removal on be7b071 and current-format scene/assembly/copy, ordinary physics/lifecycle and VFX Step47 behavior. VR-R1..R3 legacy-preservation/suppression requirements are superseded by explicit user scope, not verified fixes. Do not restore legacy support or infer acceptance from Gemini reports. Then record OPT-00 acceptance if current checks pass; AF-00 + EJ-00 remain the next planned units.",
-    "excluded": [
-      "new Vehicle/plugin implementation",
-      "AF/EJ/NRI implementation",
-      "unrelated production fixes",
-      "inferred acceptance from implementer reports",
-      "old data format support, legacy Vehicle preservation or migration",
-      "reintroduction of retired compatibility holders or branches"
-    ],
-    "review_status": "original_baseline_complete_followup_pending",
-    "review_commit": "d6b3b71",
-    "review_report": "docs/reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md",
-    "review_results": "docs/reviews/OPT_00_VEHICLE_RETIREMENT_RESULTS.json",
-    "reproduction": "Tests/Review/VehicleRetirement/README.md",
-    "findings": {
-      "P1": [
-        "VR-R1",
-        "VR-R2"
-      ],
-      "P2": [
-        "VR-R3"
-      ],
-      "separate_observation": [
-        "VR-OBS1"
-      ]
-    },
-    "verification": {
-      "release_build": "AxleEditor/AxleRuntime/AxleAllTests rebuilt: exit 0",
-      "ctest": "7/7, exit 0",
-      "integration": "abort at Step47.1, exit 3221226505; later steps not run",
-      "focused_native_cases": "4/11 pass, seven fail; no timeout",
-      "editor_startup": "DX12/Vulkan empty 5-frame checks exit 0; copied legacy CarTest 16 entities/5 frames exit 0",
-      "limits": "No manual Play/Pause/Stop/Inspector, packaged player/export, sanitizer or historical baseline execution"
-    },
+    "code_baseline": "842cf7de6fac8368eb76fbf6a027b934681166e2",
     "scope_updated_on": "2026-11-05",
-    "verification_baseline": "6f9f488",
-    "followup_code_baseline": "be7b071",
-    "finding_disposition": {
-      "VR-R1": "superseded_by_no_legacy_support_scope",
-      "VR-R2": "legacy_specific_suppression_superseded; ordinary_physics_correctness_required",
-      "VR-R3": "superseded_by_no_legacy_support_scope",
-      "VR-OBS1": "Gemini_reports_fix_in_8478ec9; independent_followup_pending"
+    "user_scope": "User asks to begin OPT-01 and receive a prompt to call Gemini. Initial bounded handoff releases AF-00 + EJ-00 implementation. Clean Engine; no old data format support, legacy Vehicle retention or migration.",
+    "released_packages": [
+      "AF-00",
+      "EJ-00"
+    ],
+    "implementation_status": "not_started",
+    "independent_review_status": "pending_delivery",
+    "handoff": "docs/agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md",
+    "expected_files": [
+      "architecture-check scripts/config",
+      "Tests/CMakeLists.txt",
+      "focused permanent jobs/ECS/script/bridge fixtures and isolated CMake fixtures",
+      "baseline/delivery report under docs/reviews or docs/architecture",
+      "docs/ROADMAP.md",
+      "docs/agents/CODEX_GEMINI_EXCHANGE.json"
+    ],
+    "excluded": [
+      "AF-01, P41-00, PLG-00 and later packages",
+      "EJ-01+ production fixes",
+      "NRI/render/plugin/Vehicle implementation",
+      "old data format support or legacy compatibility holders",
+      "vendor upgrades and production module moves",
+      "inferred acceptance from implementer reports"
+    ],
+    "prior_checkpoint": {
+      "id": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
+      "state": "followup_verification_pending",
+      "accepted": false,
+      "transition": "User-directed initial OPT-01 baseline start; pending current-format/product verification is carried into baseline evidence, not waived as PASS."
     },
-    "followup_reported_evidence": {
-      "author": "Gemini",
-      "message_id": "CG-20261104T160736527166Z-GEMINI-35b143",
-      "baseline": "be7b071",
-      "build": "exit 0",
-      "ctest": "7/7, exit 0",
-      "integration": "68/68, exit 0",
-      "independently_verified_by_Codex": false
-    }
+    "next_action": "Gemini reads handoff and inbox, ACKs with actual HEAD/expected files, implements AF-00 then EJ-00, rebuilds/runs Debug/Release checks, records actual defects and delivery evidence, commits locally and stops for Codex review."
   },
   "last_read": {
     "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
@@ -524,6 +485,17 @@
       "base_commit": "a92b3e1b34073538d598cac3db6660ed6a001f85",
       "timestamp_utc": "2026-11-05T02:51:12.352870+00:00",
       "body": "STATUS: Acknowledge Gemini delivery CG-20261104T160736527166Z-GEMINI-35b143. The user now directly confirms: prioritize a clean Engine; no legacy data format support or legacy Vehicle payload preservation is required. VR-R1/R3 preservation demands and VR-R2 legacy-specific suppression are superseded by scope, not newly verified fixes. Current-format physics/lifecycle correctness remains required. Gemini reports build/CTest 7/7/integration 68/68 on be7b071; Codex has not rerun those checks. This session updates scope/status documentation and the task card only, on a92b3e1; no production implementation, new package or product acceptance is claimed. Expected files: roadmap, working protocol, task card/exchange, dated review addendum, relevant active design contracts and physics/scene guides. Historical messages and review results remain intact.\n"
+    },
+    {
+      "id": "CG-20261105T025648366183Z-CODEX-1d4d34",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "HANDOFF",
+      "task": "OPT-01-AF00-EJ00",
+      "reply_to": "CG-20261105T025112352870Z-CODEX-9bceab",
+      "base_commit": "842cf7de6fac8368eb76fbf6a027b934681166e2",
+      "timestamp_utc": "2026-11-05T02:56:48.366183+00:00",
+      "body": "HANDOFF: The user asks to begin OPT-01 and receive a Gemini prompt. Implement the bounded initial AF-00 + EJ-00 assignment in docs/agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md, then stop for Codex review. Read root instructions, protocol, current task and inbox; ACK this message as Gemini with actual starting HEAD and expected files before code edits. Preparation baseline is 842cf7d. No old-format support, legacy Vehicle preservation or migration is required. The user-directed baseline start does not accept OPT-00; capture its pending current-format/product verification as actual baseline evidence. Establish target/include checks with narrow expiring allowances and intentional forbidden-edge rejection; permanent production-API ECS/jobs fault fixtures, bridge control, active Debug/Release checks, owned process watchdog and deliberate failure propagation. Known defects remain visible and separate from passing CTest results. No AF-01/P41-00/PLG-00/EJ-01+ or production fault fixes are released here. Deliver actual commits, commands/results/logs and limits. No push or unrelated changes. No Gemini execution or response is claimed by this handoff.\n"
     }
   ],
   "deferred_tasks": [
@@ -964,6 +936,87 @@
         "production_tests": "NOT RUN: documentation-only change"
       },
       "prior_vehicle_delivery_report_current_path": "docs/archive/design/reports/VEHICLE_RETIREMENT_DELIVERY.md"
+    },
+    {
+      "id": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
+      "title": "Independent acceptance review of early Vehicle retirement",
+      "state": "followup_verification_pending",
+      "coordinator": "Codex",
+      "implementer": "Gemini",
+      "reviewer": "Codex",
+      "code_baseline": "6f9f488",
+      "delivery_commits": [
+        "fa74981"
+      ],
+      "followup_commits": [
+        "bdf2cb2",
+        "cc184cf",
+        "8478ec9",
+        "be7b071"
+      ],
+      "user_scope": "User confirms 2026-11-05: prioritize a clean Engine; no old data format support, legacy Vehicle payload preservation, compatibility holders or migration required. OPT-00 acceptance concerns clean removal and current-format scene/assembly, ordinary physics and lifecycle correctness.",
+      "expected_files": [
+        "docs/reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md",
+        "docs/ROADMAP.md",
+        "docs/agents/CODEX_GEMINI_EXCHANGE.json",
+        "focused review fixtures if needed; no production fixes"
+      ],
+      "implementation_status": "delivered",
+      "independent_review_status": "clean_removal_followup_pending",
+      "delivery_report": "docs/archive/design/reports/VEHICLE_RETIREMENT_DELIVERY.md",
+      "next_action": "Verify clean removal on be7b071 and current-format scene/assembly/copy, ordinary physics/lifecycle and VFX Step47 behavior. VR-R1..R3 legacy-preservation/suppression requirements are superseded by explicit user scope, not verified fixes. Do not restore legacy support or infer acceptance from Gemini reports. Then record OPT-00 acceptance if current checks pass; AF-00 + EJ-00 remain the next planned units.",
+      "excluded": [
+        "new Vehicle/plugin implementation",
+        "AF/EJ/NRI implementation",
+        "unrelated production fixes",
+        "inferred acceptance from implementer reports",
+        "old data format support, legacy Vehicle preservation or migration",
+        "reintroduction of retired compatibility holders or branches"
+      ],
+      "review_status": "original_baseline_complete_followup_pending",
+      "review_commit": "d6b3b71",
+      "review_report": "docs/reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md",
+      "review_results": "docs/reviews/OPT_00_VEHICLE_RETIREMENT_RESULTS.json",
+      "reproduction": "Tests/Review/VehicleRetirement/README.md",
+      "findings": {
+        "P1": [
+          "VR-R1",
+          "VR-R2"
+        ],
+        "P2": [
+          "VR-R3"
+        ],
+        "separate_observation": [
+          "VR-OBS1"
+        ]
+      },
+      "verification": {
+        "release_build": "AxleEditor/AxleRuntime/AxleAllTests rebuilt: exit 0",
+        "ctest": "7/7, exit 0",
+        "integration": "abort at Step47.1, exit 3221226505; later steps not run",
+        "focused_native_cases": "4/11 pass, seven fail; no timeout",
+        "editor_startup": "DX12/Vulkan empty 5-frame checks exit 0; copied legacy CarTest 16 entities/5 frames exit 0",
+        "limits": "No manual Play/Pause/Stop/Inspector, packaged player/export, sanitizer or historical baseline execution"
+      },
+      "scope_updated_on": "2026-11-05",
+      "verification_baseline": "6f9f488",
+      "followup_code_baseline": "be7b071",
+      "finding_disposition": {
+        "VR-R1": "superseded_by_no_legacy_support_scope",
+        "VR-R2": "legacy_specific_suppression_superseded; ordinary_physics_correctness_required",
+        "VR-R3": "superseded_by_no_legacy_support_scope",
+        "VR-OBS1": "Gemini_reports_fix_in_8478ec9; independent_followup_pending"
+      },
+      "followup_reported_evidence": {
+        "author": "Gemini",
+        "message_id": "CG-20261104T160736527166Z-GEMINI-35b143",
+        "baseline": "be7b071",
+        "build": "exit 0",
+        "ctest": "7/7, exit 0",
+        "integration": "68/68, exit 0",
+        "independently_verified_by_Codex": false
+      },
+      "handoff_note": "User requested starting OPT-01 on 2026-11-05. Retain pending independent clean-removal verification as baseline evidence gap; OPT-00 is not accepted by this transition."
     }
   ]
 }

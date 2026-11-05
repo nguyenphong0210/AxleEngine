@@ -1,9 +1,0 @@
-AssetRegistry:
-  Version: 1
-  Entries:
-    - UUID: 200000000000000001
-      Path: dup_a.png
-      Type: Texture2D
-    - UUID: 200000000000000001
-      Path: dup_b.png
-      Type: Texture2D

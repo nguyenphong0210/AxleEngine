@@ -90,13 +90,16 @@ namespace Axle {
                 case AssetKind::SkeletalMesh:    return AssetType::SkeletalMesh;
                 case AssetKind::AnimationClip:   return AssetType::AnimationClip;
                 case AssetKind::AnimatorController: return AssetType::AnimatorController;
-                default:                         return AssetType::Material;
+                default:                         return AssetType::None;
             }
         }
         if (ext == ".axlemat" || ext == ".amat" || ext == ".mat") return AssetType::Material;
         if (ext == ".physmat") return AssetType::PhysicsMaterial;
         if (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") return AssetType::Mesh;
         if (ext == ".axle") return AssetType::Assembly;
+        if (ext == ".axle_vfx" || ext == ".vfx") return AssetType::ParticleEmitter;
+        if (ext == ".axleui") return AssetType::Canvas;
+        if (ext == ".axleterrain") return AssetType::Terrain;
         if (ext == ".hpp" || ext == ".cpp" || ext == ".cs" || ext == ".lua") return AssetType::Script;
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") return AssetType::Texture;
         if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") return AssetType::Audio;

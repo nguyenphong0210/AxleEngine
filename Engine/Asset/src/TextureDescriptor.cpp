@@ -94,11 +94,9 @@ namespace Axle {
     }
 
     bool TextureDescriptor::Save(const std::string& filepath, const TextureDescriptor& desc) {
-        std::ofstream file(filepath);
-        if (!file.is_open()) return false;
-
-        file << Serialize(desc);
-        return true;
+        TextureDescriptor canonical = desc;
+        if (!FileSystem::MakeAssetReference(desc.Source, canonical.Source)) return false;
+        return FileSystem::WriteIdentifiedTextFile(filepath, Serialize(canonical), nullptr);
     }
 
     TextureDescriptor TextureDescriptor::CreateFromImageFile(const std::filesystem::path& imagePath, const std::filesystem::path& assetDirectory) {

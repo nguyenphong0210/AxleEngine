@@ -1,691 +1,444 @@
 #include <Axle/AssetManager.hpp>
-#include <Axle/AssetSerializer.hpp>
+#include <Axle/AssetMetadataSerializer.hpp>
+#include <Axle/TextureDescriptor.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Package.hpp>
 #include <Axle/Log.hpp>
-#include <fstream>
 #include <algorithm>
-#include <cctype>
+#include <fstream>
+#include <regex>
+#include <set>
+#include <sstream>
 
 namespace Axle {
-
     std::filesystem::path AssetManager::s_AssetDirectory;
     std::unordered_map<UUID, AssetMetadata> AssetManager::s_Assets;
     std::unordered_map<std::string, UUID> AssetManager::s_PathToUUID;
+    std::unordered_map<std::string, AssetMetadata> AssetManager::s_MetadataByPath;
     std::unordered_map<UUID, std::filesystem::path> AssetManager::s_ReferencedAssets;
     std::vector<AssetDiagnostic> AssetManager::s_Diagnostics;
-
     std::unordered_map<std::string, std::shared_ptr<Texture2D>> AssetManager::s_TextureCacheByPath;
     std::unordered_map<UUID, std::shared_ptr<Texture2D>> AssetManager::s_TextureCacheByUUID;
     std::unordered_map<UUID, std::shared_ptr<Material>> AssetManager::s_MaterialCacheByUUID;
     std::unordered_map<std::string, std::shared_ptr<Material>> AssetManager::s_MaterialCacheByPath;
     std::unordered_map<UUID, std::shared_ptr<RHI::RHIMaterial>> AssetManager::s_RHIMaterialCacheByUUID;
     std::unordered_map<std::string, std::shared_ptr<RHI::RHIMaterial>> AssetManager::s_RHIMaterialCacheByPath;
-
     std::recursive_mutex AssetManager::s_AssetMutex;
     bool AssetManager::s_Initialized = false;
 
-    // -------------------------------------------------------------------------
-    // Builtin Asset Identities
-    // -------------------------------------------------------------------------
-    bool AssetManager::IsBuiltin(const std::filesystem::path& assetPath) {
-        std::string s = assetPath.generic_string();
-        return s.rfind("builtin://", 0) == 0 || s.rfind("builtin:", 0) == 0;
-    }
-
-    bool AssetManager::IsBuiltin(UUID uuid) {
-        uint64_t val = static_cast<uint64_t>(uuid);
-        return val >= BuiltinAssets::CubeUUID && val <= BuiltinAssets::PlaneUUID;
-    }
-
-    AssetMetadata AssetManager::GetBuiltinMetadata(const std::filesystem::path& assetPath) {
-        std::string s = assetPath.generic_string();
-        std::string lower = s;
-        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
-
-        uint64_t id = BuiltinAssets::CubeUUID;
-        if (lower == "builtin://cube" || lower == "builtin:cube") id = BuiltinAssets::CubeUUID;
-        else if (lower == "builtin://sphere" || lower == "builtin:sphere") id = BuiltinAssets::SphereUUID;
-        else if (lower == "builtin://cylinder" || lower == "builtin:cylinder") id = BuiltinAssets::CylinderUUID;
-        else if (lower == "builtin://cone" || lower == "builtin:cone") id = BuiltinAssets::ConeUUID;
-        else if (lower == "builtin://plane" || lower == "builtin:plane") id = BuiltinAssets::PlaneUUID;
-
-        return AssetMetadata{ UUID(id), AssetType::Mesh, s, 1 };
-    }
-
-    AssetMetadata AssetManager::GetBuiltinMetadata(UUID uuid) {
-        uint64_t val = static_cast<uint64_t>(uuid);
-        std::string path;
-        switch (val) {
-            case BuiltinAssets::CubeUUID: path = "builtin://cube"; break;
-            case BuiltinAssets::SphereUUID: path = "builtin://sphere"; break;
-            case BuiltinAssets::CylinderUUID: path = "builtin://cylinder"; break;
-            case BuiltinAssets::ConeUUID: path = "builtin://cone"; break;
-            case BuiltinAssets::PlaneUUID: path = "builtin://plane"; break;
-            default: path = "builtin://unknown"; break;
+    namespace {
+        bool Within(const std::filesystem::path& path, const std::filesystem::path& root) {
+            auto rel = path.lexically_relative(root);
+            return !rel.empty() && !rel.is_absolute() && *rel.begin() != "..";
         }
-        return AssetMetadata{ uuid, AssetType::Mesh, path, 1 };
+        bool ResolveOwned(const std::filesystem::path& root, const std::filesystem::path& path,
+                          std::filesystem::path& absolute, std::filesystem::path& relative, std::string* error) {
+            auto fail = [&] { if (error) *error = "Asset path is empty or outside its configured root: " + path.generic_string(); return false; };
+            if (root.empty() || path.empty()) return fail();
+            std::error_code ec;
+            auto candidate = path;
+            if (!path.is_absolute()) {
+                auto cwdPath = std::filesystem::weakly_canonical(std::filesystem::absolute(path), ec);
+                candidate = !ec && Within(cwdPath, root) ? cwdPath : root/path;
+            }
+            absolute = std::filesystem::weakly_canonical(candidate, ec);
+            if (ec || !Within(absolute, root) || absolute == root) return fail();
+            relative = absolute.lexically_relative(root);
+            return true;
+        }
+        std::string BuiltinName(const std::filesystem::path& path) {
+            auto name = path.generic_string();
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c); });
+            if (name.rfind("builtin:", 0) != 0) return {};
+            name.erase(0, 8);
+            while (!name.empty() && name.front() == '/') name.erase(name.begin());
+            if (name == "cube" || name == "sphere" || name == "cylinder" || name == "cone" || name == "plane") return name;
+            return {};
+        }
+        std::string PathKey(const std::filesystem::path& path) {
+            auto key = path.lexically_normal().generic_string();
+#ifdef _WIN32
+            std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
+#endif
+            return key;
+        }
+        struct PathEdit { std::filesystem::path path; std::string before, after; };
+        // Only recognized serialized path fields are rewritten, not arbitrary names/comments.
+        std::string RewritePaths(const std::string& text, const std::string& oldPath, const std::string& newPath) {
+            static const std::regex property(R"(^([ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*)(.*?)(\r?)$)");
+            std::istringstream input(text);
+            std::string line, output;
+            while (std::getline(input, line)) {
+                std::smatch match;
+                if (std::regex_match(line, match, property)) {
+                    auto key = match[2].str(), value = match[3].str();
+                    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
+                    const bool pathField = key == "source" || key == "texture" || key == "font" ||
+                        key.ends_with("path") || key.ends_with("map");
+                    const bool quoted = value.size() >= 2 && value.front() == '"' && value.back() == '"';
+                    auto plain = quoted ? value.substr(1, value.size()-2) : value;
+                    if (pathField && PathKey(plain) == PathKey(oldPath)) {
+                        line = match[1].str() + (quoted ? "\"" + newPath + "\"" : newPath) + match[4].str();
+                    }
+                }
+                output += line;
+                if (!input.eof()) output += "\n";
+            }
+            return output;
+        }
+        bool CollectPathEdits(const std::filesystem::path& root, const std::string& oldPath,
+                              const std::string& newPath, std::vector<PathEdit>& edits, std::string* error) {
+            std::error_code ec;
+            for (std::filesystem::recursive_directory_iterator it(root, ec), end; it != end && !ec; it.increment(ec)) {
+                if (!it->is_regular_file() || !AssetMetadataSerializer::IsNativeAsset(it->path())) continue;
+                auto before = FileSystem::ReadTextFile(it->path());
+                auto after = RewritePaths(before, oldPath, newPath);
+                if (after != before) edits.push_back({it->path(), before, after});
+            }
+            if (ec) { if (error) *error = ec.message(); return false; }
+            return true;
+        }
+        bool RollbackEdits(const std::vector<PathEdit>& edits, size_t count, std::string* error) {
+            bool success = true;
+            while (count) {
+                const auto& edit = edits[--count];
+                std::string failure;
+                if (!FileSystem::WriteTextFileAtomically(edit.path, edit.before, &failure)) {
+                    success = false;
+                    if (error) *error += "; rollback failed for " + edit.path.string() + ": " + failure;
+                }
+            }
+            return success;
+        }
     }
 
-    // -------------------------------------------------------------------------
-    // Path Key Normalization
-    // -------------------------------------------------------------------------
+    bool AssetManager::IsBuiltin(const std::filesystem::path& path) { return !BuiltinName(path).empty(); }
+    bool AssetManager::IsBuiltin(UUID id) {
+        return uint64_t(id) >= BuiltinAssets::CubeUUID && uint64_t(id) <= BuiltinAssets::PlaneUUID;
+    }
+    AssetMetadata AssetManager::GetBuiltinMetadata(const std::filesystem::path& path) {
+        auto name = BuiltinName(path);
+        if (name.empty()) return {};
+        uint64_t id = name == "cube" ? BuiltinAssets::CubeUUID : name == "sphere" ? BuiltinAssets::SphereUUID :
+                      name == "cylinder" ? BuiltinAssets::CylinderUUID : name == "cone" ? BuiltinAssets::ConeUUID : BuiltinAssets::PlaneUUID;
+        return {UUID(id), AssetType::Mesh, "builtin://" + name, 1};
+    }
+    AssetMetadata AssetManager::GetBuiltinMetadata(UUID id) {
+        if (!IsBuiltin(id)) return {};
+        static constexpr const char* names[] = {"cube","sphere","cylinder","cone","plane"};
+        return {id, AssetType::Mesh, std::string("builtin://")+names[uint64_t(id)-BuiltinAssets::CubeUUID], 1};
+    }
     std::string AssetManager::NormalizePathKey(const std::filesystem::path& path) {
-        if (IsBuiltin(path)) {
-            std::string s = path.generic_string();
-            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
-            return s;
-        }
-
-        std::filesystem::path p = path;
-        try {
-            if (!s_AssetDirectory.empty() && p.is_absolute()) {
-                p = std::filesystem::relative(p, s_AssetDirectory);
-            }
-        } catch (...) {}
-
-        std::string s = p.lexically_normal().generic_string();
-        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
-        return s;
+        if (IsBuiltin(path)) return GetBuiltinMetadata(path).FilePath.generic_string();
+        std::filesystem::path full, relative;
+        return ResolveOwned(s_AssetDirectory, path, full, relative, nullptr) ? PathKey(relative) : std::string{};
     }
-
-    // -------------------------------------------------------------------------
-    // Registry Path and Safe Persistence
-    // -------------------------------------------------------------------------
-    std::filesystem::path AssetManager::GetRegistryPath() {
-        if (s_AssetDirectory.empty()) return {};
-        return s_AssetDirectory / AssetRegistrySerializer::RegistryFileName;
+    std::filesystem::path AssetManager::GetReferencePath(const std::filesystem::path& path) {
+        std::lock_guard lock(s_AssetMutex);
+        if (IsBuiltin(path)) return GetBuiltinMetadata(path).FilePath;
+        std::filesystem::path full, relative;
+        return ResolveOwned(s_AssetDirectory, path, full, relative, nullptr) ? relative : std::filesystem::path{};
     }
-
-    bool AssetManager::SaveRegistryLocked(std::string* outError) {
-        auto regPath = GetRegistryPath();
-        if (regPath.empty()) {
-            if (outError) *outError = "Asset directory not set";
-            return false;
-        }
-        return AssetRegistrySerializer::Serialize(regPath, s_Assets, outError);
+    void AssetManager::ReportDiagnostic(AssetDiagnostic::Level severity, const std::string& message,
+                                        const std::filesystem::path& path, UUID id) {
+        std::lock_guard lock(s_AssetMutex);
+        s_Diagnostics.push_back({severity, message, path, id});
     }
-
-    // -------------------------------------------------------------------------
-    // Diagnostics and Reference Tracking
-    // -------------------------------------------------------------------------
-    void AssetManager::ReportDiagnostic(AssetDiagnostic::Level severity, const std::string& message, const std::filesystem::path& path, UUID uuid) {
-        s_Diagnostics.push_back({ severity, message, path, uuid });
-    }
-
-    const std::vector<AssetDiagnostic>& AssetManager::GetDiagnostics() {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        return s_Diagnostics;
-    }
-
-    void AssetManager::ClearDiagnostics() {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        s_Diagnostics.clear();
-    }
-
-    bool AssetManager::HasDiagnostics() {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        return !s_Diagnostics.empty();
-    }
-
+    std::vector<AssetDiagnostic> AssetManager::GetDiagnostics() { std::lock_guard lock(s_AssetMutex); return s_Diagnostics; }
+    void AssetManager::ClearDiagnostics() { std::lock_guard lock(s_AssetMutex); s_Diagnostics.clear(); }
+    bool AssetManager::HasDiagnostics() { std::lock_guard lock(s_AssetMutex); return !s_Diagnostics.empty(); }
     bool AssetManager::HasDiagnosticErrors() {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        for (const auto& diag : s_Diagnostics) {
-            if (diag.Severity == AssetDiagnostic::Level::Error) return true;
-        }
-        return false;
+        std::lock_guard lock(s_AssetMutex);
+        return std::any_of(s_Diagnostics.begin(),s_Diagnostics.end(),[](const auto& d){ return d.Severity == AssetDiagnostic::Level::Error; });
     }
-
-    void AssetManager::TrackReferencedAsset(UUID uuid, const std::filesystem::path& expectedPath) {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        if (uuid != 0) {
-            s_ReferencedAssets[uuid] = expectedPath;
-        }
+    void AssetManager::TrackReferencedAsset(UUID id, const std::filesystem::path& path) {
+        std::lock_guard lock(s_AssetMutex);
+        if (id != 0) s_ReferencedAssets[id] = path;
     }
+    bool AssetManager::IsAssetReferenced(UUID id) { std::lock_guard lock(s_AssetMutex); return s_ReferencedAssets.contains(id); }
 
-    bool AssetManager::IsAssetReferenced(UUID uuid) {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        return s_ReferencedAssets.find(uuid) != s_ReferencedAssets.end();
-    }
-
-    // -------------------------------------------------------------------------
-    // Lifecycle Management
-    // -------------------------------------------------------------------------
-    void AssetManager::Init(const std::filesystem::path& assetDirectory) {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        s_AssetDirectory = std::filesystem::absolute(assetDirectory);
-        s_Assets.clear();
-        s_PathToUUID.clear();
-        s_ReferencedAssets.clear();
-        s_Diagnostics.clear();
-        ClearTextureCache();
-        ClearMaterialCache();
-        ClearRHIMaterialCache();
+    void AssetManager::Init(const std::filesystem::path& root) {
+        std::lock_guard lock(s_AssetMutex);
+        Shutdown();
+        if (root.empty()) return;
+        s_AssetDirectory = std::filesystem::weakly_canonical(std::filesystem::absolute(root));
+        FileSystem::SetAssetDirectory(s_AssetDirectory);
         s_Initialized = true;
-        AXLE_INFO("AssetManager initialized with AssetDirectory: '{0}'", s_AssetDirectory.string());
-
-        // Load root registry if it exists
-        auto regPath = GetRegistryPath();
-        if (std::filesystem::exists(regPath)) {
-            std::string err;
-            if (!AssetRegistrySerializer::Deserialize(regPath, s_Assets, s_PathToUUID, &s_Diagnostics, &err)) {
-                AXLE_ERROR("AssetManager: Failed to deserialize asset registry '{0}': {1}", regPath.generic_string(), err);
-                ReportDiagnostic(AssetDiagnostic::Level::Error, err, regPath, 0);
-            }
-        }
+        Sync();
     }
-
     void AssetManager::Shutdown() {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        ClearTextureCache();
-        ClearMaterialCache();
-        ClearRHIMaterialCache();
-        s_Assets.clear();
-        s_PathToUUID.clear();
-        s_ReferencedAssets.clear();
-        s_Diagnostics.clear();
-        s_AssetDirectory.clear();
-        s_Initialized = false;
-        AXLE_INFO("AssetManager shutdown.");
+        std::lock_guard lock(s_AssetMutex);
+        ClearTextureCache(); ClearMaterialCache(); ClearRHIMaterialCache();
+        s_Assets.clear(); s_PathToUUID.clear(); s_MetadataByPath.clear(); s_ReferencedAssets.clear(); s_Diagnostics.clear();
+        s_AssetDirectory.clear(); s_Initialized = false;
     }
-
     void AssetManager::Sync(const std::filesystem::path& directory) {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        std::filesystem::path targetDir = directory.empty() ? s_AssetDirectory : directory;
-        if (targetDir.empty() || !std::filesystem::exists(targetDir)) {
-            return;
-        }
-
-        bool registryChanged = false;
+        std::lock_guard lock(s_AssetMutex);
+        if (!s_Initialized) return;
+        // Discovery is read-only. Rebuild the complete index, including native files moved outside Editor.
+        std::unordered_map<UUID,AssetMetadata> assets;
+        std::unordered_map<std::string,UUID> paths;
+        std::unordered_map<std::string,AssetMetadata> metadata;
+        std::set<uint64_t> duplicates;
         std::error_code ec;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(targetDir, ec)) {
-            if (!entry.is_regular_file()) continue;
-
-            const auto& path = entry.path();
-            if (path.filename() == AssetRegistrySerializer::RegistryFileName) continue;
-            if (path.extension() == ".meta" || path.extension() == ".uid" || path.extension() == ".import") continue;
-
-            std::string filename = path.filename().string();
-            if (!filename.empty() && filename[0] == '.') continue;
-
-            std::filesystem::path relPath = path;
-            try {
-                if (!s_AssetDirectory.empty() && path.is_absolute()) {
-                    relPath = std::filesystem::relative(path, s_AssetDirectory);
+        std::vector<std::filesystem::path> files;
+        if (const auto* package = FileSystem::GetMountedPackage()) {
+            for (const auto& [path, entry] : package->GetEntries()) files.push_back(s_AssetDirectory/path);
+        } else if (std::filesystem::is_directory(s_AssetDirectory)) {
+            for (std::filesystem::recursive_directory_iterator it(s_AssetDirectory,ec), end; it != end && !ec; it.increment(ec))
+                if (it->is_regular_file()) files.push_back(it->path());
+        }
+        for (const auto& file : files) {
+            std::filesystem::path full, relative;
+            if (!ResolveOwned(s_AssetDirectory,file,full,relative,nullptr)) continue;
+            auto type = GetAssetTypeFromPath(full);
+            if (type == AssetType::None) continue;
+            AssetMetadata item{UUID(0),type,relative,1};
+            const auto key = PathKey(relative);
+            if (AssetMetadataSerializer::IsNativeAsset(full)) {
+                std::string error;
+                if (!AssetMetadataSerializer::Deserialize(full,item,&error)) {
+                    ReportDiagnostic(AssetDiagnostic::Level::Error,error,relative); continue;
                 }
-            } catch (...) {}
-
-            std::string key = NormalizePathKey(relPath);
-            if (s_PathToUUID.find(key) != s_PathToUUID.end()) {
-                continue; // Already registered
-            }
-
-            // Check if this was an already-referenced asset whose registry entry is missing
-            bool wasReferenced = false;
-            for (const auto& [refUUID, refPath] : s_ReferencedAssets) {
-                if (!refPath.empty() && NormalizePathKey(refPath) == key) {
-                    std::string msg = "Missing authored registry entry for referenced asset '" + path.generic_string() +
-                                      "' (expected UUID " + std::to_string(static_cast<uint64_t>(refUUID)) + ")";
-                    AXLE_ERROR("AssetManager: {0}", msg);
-                    ReportDiagnostic(AssetDiagnostic::Level::Error, msg, path, refUUID);
-                    wasReferenced = true;
-                    break;
+                item.FilePath = relative;
+                if (duplicates.contains(uint64_t(item.Handle))) continue;
+                auto existing = assets.find(item.Handle);
+                if (existing != assets.end()) {
+                    paths.erase(PathKey(existing->second.FilePath));
+                    metadata.erase(PathKey(existing->second.FilePath));
+                    assets.erase(existing);
+                    duplicates.insert(uint64_t(item.Handle));
+                    ReportDiagnostic(AssetDiagnostic::Level::Error,"Duplicate embedded asset UUID; all copies are unresolved",relative,item.Handle);
+                    continue;
                 }
+                assets[item.Handle] = item;
+                paths[key] = item.Handle;
             }
-            if (wasReferenced) {
-                continue; // Do not silently regenerate UUID for referenced asset
-            }
-
-            // Genuinely new import: allocate fresh UUID
-            UUID newHandle;
-            AssetType type = GetAssetTypeFromPath(path);
-            AssetMetadata meta{ newHandle, type, relPath, 1 };
-
-            s_Assets[newHandle] = meta;
-            s_PathToUUID[key] = newHandle;
-            registryChanged = true;
+            metadata[key] = item;
         }
-
-        if (registryChanged) {
-            std::string saveErr;
-            if (!SaveRegistryLocked(&saveErr)) {
-                AXLE_ERROR("AssetManager: Failed to save registry during Sync: {0}", saveErr);
-                ReportDiagnostic(AssetDiagnostic::Level::Error, "Failed to save registry during Sync: " + saveErr, GetRegistryPath(), 0);
-            }
-        }
+        if (ec) { ReportDiagnostic(AssetDiagnostic::Level::Error,ec.message(),s_AssetDirectory); return; }
+        s_Assets.swap(assets); s_PathToUUID.swap(paths); s_MetadataByPath.swap(metadata);
+        for (const auto& [id,path] : s_ReferencedAssets)
+            if (!IsBuiltin(id) && !s_Assets.contains(id))
+                ReportDiagnostic(AssetDiagnostic::Level::Error,"Referenced native asset UUID is unresolved",path,id);
     }
-
-    AssetMetadata AssetManager::GetOrCreateMetadata(const std::filesystem::path& assetPath) {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        if (assetPath.empty()) return AssetMetadata{};
-
-        // Builtin primitives use canonical builtin identities; never write registry entries
-        if (IsBuiltin(assetPath)) {
-            return GetBuiltinMetadata(assetPath);
+    AssetMetadata AssetManager::GetOrCreateMetadata(const std::filesystem::path& path) {
+        std::lock_guard lock(s_AssetMutex);
+        if (IsBuiltin(path)) return GetBuiltinMetadata(path);
+        std::filesystem::path full, relative;
+        std::string error;
+        if (!ResolveOwned(s_AssetDirectory,path,full,relative,&error) || !std::filesystem::is_regular_file(full)) {
+            ReportDiagnostic(AssetDiagnostic::Level::Error,error.empty() ? "Asset file does not exist" : error,path); return {};
         }
-
-        std::string key = NormalizePathKey(assetPath);
-        auto it = s_PathToUUID.find(key);
-        if (it != s_PathToUUID.end()) {
-            return s_Assets[it->second];
+        auto type = GetAssetTypeFromPath(full);
+        if (type == AssetType::None) return {};
+        if (!AssetMetadataSerializer::IsNativeAsset(full)) {
+            AssetMetadata raw{UUID(0),type,relative,1};
+            s_MetadataByPath[PathKey(relative)] = raw;
+            return raw;
         }
-
-        std::filesystem::path relPath = assetPath;
-        try {
-            if (!s_AssetDirectory.empty() && assetPath.is_absolute()) {
-                relPath = std::filesystem::relative(assetPath, s_AssetDirectory);
+        AssetMetadata item;
+        uint64_t existingID = 0;
+        if (!FileSystem::ReadFileIdentity(full, existingID, nullptr)) {
+            // Explicit creation/import may identify a new document; discovery and UUID lookup never do.
+            for (const auto& [id,expected] : s_ReferencedAssets)
+                if (!expected.empty() && NormalizePathKey(expected) == PathKey(relative)) {
+                    ReportDiagnostic(AssetDiagnostic::Level::Error,"Referenced native file has missing or invalid identity",relative,id); return {};
+                }
+            std::ifstream input(full);
+            std::string first;
+            std::getline(input,first);
+            input.close();
+            if (first.rfind("# AxleFileIdentity:",0) == 0) {
+                ReportDiagnostic(AssetDiagnostic::Level::Error,"Malformed existing identity cannot be regenerated",relative); return {};
             }
-        } catch (...) {}
-
-        // Check if this was an already-referenced asset whose registry entry is missing
-        for (const auto& [refUUID, refPath] : s_ReferencedAssets) {
-            if (!refPath.empty() && NormalizePathKey(refPath) == key) {
-                std::string msg = "Missing authored registry entry for referenced asset '" + assetPath.generic_string() +
-                                  "' (expected UUID " + std::to_string(static_cast<uint64_t>(refUUID)) + ")";
-                AXLE_ERROR("AssetManager: {0}", msg);
-                ReportDiagnostic(AssetDiagnostic::Level::Error, msg, assetPath, refUUID);
-                return AssetMetadata{}; // Reject without regenerating
+            UUID id;
+            while (id == 0 || IsBuiltin(id)) id = UUID();
+            AssetMetadata fresh{id,type,relative,1};
+            if (!AssetMetadataSerializer::Serialize(full,fresh,&error)) {
+                ReportDiagnostic(AssetDiagnostic::Level::Error,error,relative); return {};
             }
         }
-
-        // Genuinely new import: allocate a fresh UUID and atomically persist registry before publishing
-        UUID newHandle;
-        AssetType type = GetAssetTypeFromPath(assetPath);
-        AssetMetadata meta{ newHandle, type, relPath, 1 };
-
-        s_Assets[newHandle] = meta;
-        s_PathToUUID[key] = newHandle;
-
-        std::string writeError;
-        if (!SaveRegistryLocked(&writeError)) {
-            s_Assets.erase(newHandle);
-            s_PathToUUID.erase(key);
-
-            std::string msg = "Failed to atomically persist registry for new import '" + assetPath.generic_string() +
-                              "': " + writeError;
-            AXLE_ERROR("AssetManager: {0}", msg);
-            ReportDiagnostic(AssetDiagnostic::Level::Error, msg, assetPath, newHandle);
-            return AssetMetadata{};
-        }
-
-        AXLE_INFO("AssetManager: Persisted registry entry for new import '{0}' [UUID: {1}, Type: {2}]",
-                  relPath.string(), static_cast<uint64_t>(newHandle), AssetTypeToString(type));
-        return meta;
+        Sync();
+        auto found = s_MetadataByPath.find(PathKey(relative));
+        return found != s_MetadataByPath.end() ? found->second : AssetMetadata{};
     }
-
-    UUID AssetManager::GetAssetUUID(const std::filesystem::path& assetPath) {
-        if (IsBuiltin(assetPath)) {
-            return GetBuiltinMetadata(assetPath).Handle;
-        }
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        std::string key = NormalizePathKey(assetPath);
-        auto it = s_PathToUUID.find(key);
-        if (it != s_PathToUUID.end()) {
-            return it->second;
-        }
-        return GetOrCreateMetadata(assetPath).Handle;
-    }
-
-    std::filesystem::path AssetManager::GetAssetPath(UUID uuid) {
-        if (uuid == 0) return {};
-        if (IsBuiltin(uuid)) {
-            return GetBuiltinMetadata(uuid).FilePath;
-        }
-
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        auto it = s_Assets.find(uuid);
-        if (it != s_Assets.end()) {
-            const auto& rel = it->second.FilePath;
-            if (rel.is_absolute()) return rel;
-            if (!s_AssetDirectory.empty()) {
-                return (s_AssetDirectory / rel).lexically_normal();
+    UUID AssetManager::GetAssetUUID(const std::filesystem::path& path) {
+        std::lock_guard lock(s_AssetMutex);
+        if (IsBuiltin(path)) return GetBuiltinMetadata(path).Handle;
+        const auto key = NormalizePathKey(path);
+        auto found = s_PathToUUID.find(key);
+        if (AssetMetadataSerializer::IsNativeAsset(path)) {
+            uint64_t actual = 0;
+            if (found == s_PathToUUID.end() ||
+                !FileSystem::ReadFileIdentity(s_AssetDirectory/key, actual) || actual != uint64_t(found->second)) {
+                Sync(); found = s_PathToUUID.find(key);
             }
-            return rel;
         }
-        return {};
+        return found != s_PathToUUID.end() ? found->second : UUID(0);
     }
-
-    std::filesystem::path AssetManager::GetRelativeAssetPath(UUID uuid) {
-        if (uuid == 0) return {};
-        if (IsBuiltin(uuid)) {
-            return GetBuiltinMetadata(uuid).FilePath;
+    std::filesystem::path AssetManager::GetAssetPath(UUID id) {
+        std::lock_guard lock(s_AssetMutex);
+        if (IsBuiltin(id)) return GetBuiltinMetadata(id).FilePath;
+        auto found = s_Assets.find(id);
+        AssetMetadata actual;
+        if (found == s_Assets.end() ||
+            !AssetMetadataSerializer::Deserialize(s_AssetDirectory/found->second.FilePath,actual) || actual.Handle != id) {
+            Sync(); found = s_Assets.find(id);
         }
-
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        auto it = s_Assets.find(uuid);
-        if (it != s_Assets.end()) {
-            return it->second.FilePath;
-        }
-        return {};
+        return found != s_Assets.end() ? s_AssetDirectory/found->second.FilePath : std::filesystem::path{};
     }
-
-    AssetType AssetManager::GetAssetType(UUID uuid) {
-        if (uuid == 0) return AssetType::None;
-        if (IsBuiltin(uuid)) {
-            return AssetType::Mesh;
-        }
-
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        auto it = s_Assets.find(uuid);
-        if (it != s_Assets.end()) {
-            return it->second.Type;
-        }
-        return AssetType::None;
+    std::filesystem::path AssetManager::GetRelativeAssetPath(UUID id) {
+        auto path = GetAssetPath(id);
+        return path.empty() || IsBuiltin(id) ? path : GetReferencePath(path);
     }
-
-    AssetType AssetManager::GetAssetType(const std::filesystem::path& assetPath) {
-        if (assetPath.empty()) return AssetType::None;
-        if (IsBuiltin(assetPath)) return AssetType::Mesh;
-
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        std::string key = NormalizePathKey(assetPath);
-        auto it = s_PathToUUID.find(key);
-        if (it != s_PathToUUID.end()) {
-            return s_Assets[it->second].Type;
-        }
-        return GetAssetTypeFromPath(assetPath);
+    AssetType AssetManager::GetAssetType(UUID id) {
+        std::lock_guard lock(s_AssetMutex);
+        if (IsBuiltin(id)) return AssetType::Mesh;
+        auto found = s_Assets.find(id);
+        return found != s_Assets.end() ? found->second.Type : AssetType::None;
     }
-
-    const AssetMetadata* AssetManager::GetMetadata(UUID uuid) {
-        if (uuid == 0) return nullptr;
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        auto it = s_Assets.find(uuid);
-        if (it != s_Assets.end()) {
-            return &it->second;
-        }
-        return nullptr;
+    AssetType AssetManager::GetAssetType(const std::filesystem::path& path) {
+        if (IsBuiltin(path)) return AssetType::Mesh;
+        std::lock_guard lock(s_AssetMutex);
+        // Type inspection is also used for external import sources. It does not
+        // publish identity or authorize an out-of-root resource reference.
+        if (std::filesystem::is_regular_file(path)) return GetAssetTypeFromPath(path);
+        std::filesystem::path full, relative;
+        return ResolveOwned(s_AssetDirectory,path,full,relative,nullptr) ? GetAssetTypeFromPath(full) : AssetType::None;
     }
-
-    const AssetMetadata* AssetManager::GetMetadata(const std::filesystem::path& assetPath) {
-        if (assetPath.empty()) return nullptr;
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        std::string key = NormalizePathKey(assetPath);
-        auto it = s_PathToUUID.find(key);
-        if (it != s_PathToUUID.end()) {
-            return &s_Assets[it->second];
-        }
-        return nullptr;
+    const AssetMetadata* AssetManager::GetMetadata(UUID id) {
+        std::lock_guard lock(s_AssetMutex);
+        auto found = s_Assets.find(id); return found != s_Assets.end() ? &found->second : nullptr;
     }
-
-    bool AssetManager::HasAsset(UUID uuid) {
-        if (uuid == 0) return false;
-        if (IsBuiltin(uuid)) return true;
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        return s_Assets.find(uuid) != s_Assets.end();
+    const AssetMetadata* AssetManager::GetMetadata(const std::filesystem::path& path) {
+        std::lock_guard lock(s_AssetMutex);
+        auto found = s_MetadataByPath.find(NormalizePathKey(path));
+        return found != s_MetadataByPath.end() ? &found->second : nullptr;
     }
-
-    bool AssetManager::HasAsset(const std::filesystem::path& assetPath) {
-        if (assetPath.empty()) return false;
-        if (IsBuiltin(assetPath)) return true;
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        std::string key = NormalizePathKey(assetPath);
-        return s_PathToUUID.find(key) != s_PathToUUID.end();
+    bool AssetManager::HasAsset(UUID id) {
+        std::lock_guard lock(s_AssetMutex); return IsBuiltin(id) || s_Assets.contains(id);
     }
-
-    // -------------------------------------------------------------------------
-    // External Relink
-    // -------------------------------------------------------------------------
-    bool AssetManager::RelinkAsset(UUID uuid, const std::filesystem::path& newPath, std::string* outError) {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        if (uuid == 0 || newPath.empty()) {
-            if (outError) *outError = "Invalid UUID or empty path for RelinkAsset";
+    bool AssetManager::HasAsset(const std::filesystem::path& path) {
+        std::lock_guard lock(s_AssetMutex); return IsBuiltin(path) || s_MetadataByPath.contains(NormalizePathKey(path));
+    }
+    bool AssetManager::RelinkAsset(UUID id, const std::filesystem::path& path, std::string* error) {
+        std::lock_guard lock(s_AssetMutex);
+        std::filesystem::path full, relative;
+        AssetMetadata item;
+        if (!ResolveOwned(s_AssetDirectory,path,full,relative,error) ||
+            !AssetMetadataSerializer::Deserialize(full,item,error) || item.Handle != id) {
+            if (error && error->empty()) *error = "Relink target has a different embedded UUID";
             return false;
         }
-
-        auto it = s_Assets.find(uuid);
-        if (it == s_Assets.end()) {
-            if (outError) *outError = "UUID not found in registry: " + std::to_string(static_cast<uint64_t>(uuid));
-            return false;
-        }
-
-        std::filesystem::path relPath = newPath;
-        try {
-            if (!s_AssetDirectory.empty() && newPath.is_absolute()) {
-                relPath = std::filesystem::relative(newPath, s_AssetDirectory);
+        Sync();
+        return HasAsset(id);
+    }
+    bool AssetManager::RelinkPathReferences(const std::filesystem::path& oldPath, const std::filesystem::path& newPath, std::string* error) {
+        std::lock_guard lock(s_AssetMutex);
+        std::filesystem::path oldFull,oldRel,newFull,newRel;
+        if (!ResolveOwned(s_AssetDirectory,oldPath,oldFull,oldRel,error) ||
+            !ResolveOwned(s_AssetDirectory,newPath,newFull,newRel,error) || !std::filesystem::is_regular_file(newFull)) return false;
+        std::vector<PathEdit> edits;
+        if (!CollectPathEdits(s_AssetDirectory,oldRel.generic_string(),newRel.generic_string(),edits,error)) return false;
+        size_t count = 0;
+        for (const auto& edit : edits) {
+            if (!FileSystem::WriteTextFileAtomically(edit.path,edit.after,error)) {
+                RollbackEdits(edits,count,error); return false;
             }
-        } catch (...) {}
-
-        std::string oldKey = NormalizePathKey(it->second.FilePath);
-        std::string newKey = NormalizePathKey(relPath);
-
-        auto destIt = s_PathToUUID.find(newKey);
-        if (destIt != s_PathToUUID.end() && destIt->second != uuid) {
-            if (outError) *outError = "Destination path already assigned in registry to another asset: " + newPath.generic_string();
-            ReportDiagnostic(AssetDiagnostic::Level::Error, *outError, newPath, uuid);
-            return false;
+            ++count;
         }
-
-        auto oldMeta = it->second;
-        it->second.FilePath = relPath;
-        s_PathToUUID.erase(oldKey);
-        s_PathToUUID[newKey] = uuid;
-
-        std::string saveErr;
-        if (!SaveRegistryLocked(&saveErr)) {
-            // Roll back
-            it->second = oldMeta;
-            s_PathToUUID.erase(newKey);
-            s_PathToUUID[oldKey] = uuid;
-            if (outError) *outError = "Failed to atomically persist registry during RelinkAsset: " + saveErr;
-            ReportDiagnostic(AssetDiagnostic::Level::Error, *outError, newPath, uuid);
-            return false;
-        }
-
-        AXLE_INFO("AssetManager: Relinked asset [UUID: {0}] to '{1}'", static_cast<uint64_t>(uuid), relPath.generic_string());
+        Sync();
         return true;
     }
-
-    // -------------------------------------------------------------------------
-    // Relocation versus Copy
-    // -------------------------------------------------------------------------
-    bool AssetManager::RelocateAsset(const std::filesystem::path& oldPath, const std::filesystem::path& newPath, std::string* outError) {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        if (oldPath.empty() || newPath.empty()) {
-            if (outError) *outError = "Paths cannot be empty for relocation";
-            return false;
-        }
-
-        std::string oldKey = NormalizePathKey(oldPath);
-        std::string newKey = NormalizePathKey(newPath);
-        if (oldKey == newKey) return true;
-
-        auto it = s_PathToUUID.find(oldKey);
-        if (it == s_PathToUUID.end()) {
-            std::filesystem::path absOld = oldPath.is_absolute() ? oldPath : (s_AssetDirectory / oldPath);
-            std::string absOldKey = NormalizePathKey(absOld);
-            it = s_PathToUUID.find(absOldKey);
-            if (it == s_PathToUUID.end()) {
-                if (outError) *outError = "Asset not found in registry for relocation: " + oldPath.string();
-                return false;
-            }
-            oldKey = absOldKey;
-        }
-
-        UUID id = it->second;
-
-        auto destIt = s_PathToUUID.find(newKey);
-        if (destIt != s_PathToUUID.end() && destIt->second != id) {
-            if (outError) *outError = "Destination path already occupied in registry: " + newPath.string();
-            ReportDiagnostic(AssetDiagnostic::Level::Error, *outError, newPath, id);
-            return false;
-        }
-
+    bool AssetManager::RelocateAsset(const std::filesystem::path& oldPath, const std::filesystem::path& newPath, std::string* error) {
+        std::lock_guard lock(s_AssetMutex);
+        std::filesystem::path oldFull,oldRel,newFull,newRel;
+        auto fail = [&](const std::string& message){ if(error)*error=message; ReportDiagnostic(AssetDiagnostic::Level::Error,message,newPath); return false; };
+        if (!ResolveOwned(s_AssetDirectory,oldPath,oldFull,oldRel,error) ||
+            !ResolveOwned(s_AssetDirectory,newPath,newFull,newRel,error)) return false;
+        if (!std::filesystem::is_regular_file(oldFull)) return fail("Relocation source does not exist");
+        if (oldFull == newFull) return true;
+        if (std::filesystem::exists(newFull)) return fail("Relocation destination already exists");
+        if (AssetMetadataSerializer::IsNativeAsset(oldFull) != AssetMetadataSerializer::IsNativeAsset(newFull))
+            return fail("Relocation cannot change native/raw identity kind");
         std::error_code ec;
-        if (newPath.has_parent_path()) {
-            std::filesystem::create_directories(newPath.parent_path(), ec);
-        }
-
-        // 1. Move physical asset if oldPath physically exists and newPath does not
-        bool physicallyMoved = false;
-        if (std::filesystem::exists(oldPath, ec) && !std::filesystem::exists(newPath, ec)) {
-            std::filesystem::rename(oldPath, newPath, ec);
-            if (ec) {
-                if (outError) *outError = "Failed to rename asset file: " + ec.message();
-                ReportDiagnostic(AssetDiagnostic::Level::Error, *outError, oldPath, id);
-                return false;
+        std::filesystem::create_directories(newFull.parent_path(),ec);
+        if (ec) return fail(ec.message());
+        std::vector<PathEdit> edits;
+        if (!AssetMetadataSerializer::IsNativeAsset(oldFull) &&
+            !CollectPathEdits(s_AssetDirectory,oldRel.generic_string(),newRel.generic_string(),edits,error)) return false;
+        size_t count = 0;
+        for (const auto& edit : edits) {
+            if (!FileSystem::WriteTextFileAtomically(edit.path,edit.after,error)) {
+                RollbackEdits(edits,count,error); return false;
             }
-            physicallyMoved = true;
+            ++count;
         }
-
-        // 2. Update FilePath in registry
-        std::filesystem::path relPath = newPath;
-        try {
-            if (!s_AssetDirectory.empty() && newPath.is_absolute()) {
-                relPath = std::filesystem::relative(newPath, s_AssetDirectory);
-            }
-        } catch (...) {}
-
-        auto previousMeta = s_Assets[id];
-        s_Assets[id].FilePath = relPath;
-        s_PathToUUID.erase(oldKey);
-        s_PathToUUID[newKey] = id;
-
-        std::string saveErr;
-        if (!SaveRegistryLocked(&saveErr)) {
-            // Roll back
-            s_Assets[id] = previousMeta;
-            s_PathToUUID.erase(newKey);
-            s_PathToUUID[oldKey] = id;
-            if (physicallyMoved) {
-                std::filesystem::rename(newPath, oldPath, ec);
-            }
-            if (outError) *outError = "Failed to update registry during relocation: " + saveErr;
-            ReportDiagnostic(AssetDiagnostic::Level::Error, *outError, newPath, id);
-            return false;
+        std::filesystem::rename(oldFull,newFull,ec);
+        if (ec) {
+            if (error) *error=ec.message();
+            RollbackEdits(edits,count,error); return false;
         }
-
-        // Update path-based caches
-        auto texIt = s_TextureCacheByPath.find(oldKey);
-        if (texIt != s_TextureCacheByPath.end()) {
-            auto tex = texIt->second;
-            s_TextureCacheByPath.erase(texIt);
-            s_TextureCacheByPath[newKey] = tex;
-        }
-        auto matIt = s_MaterialCacheByPath.find(oldKey);
-        if (matIt != s_MaterialCacheByPath.end()) {
-            auto mat = matIt->second;
-            s_MaterialCacheByPath.erase(matIt);
-            s_MaterialCacheByPath[newKey] = mat;
-        }
-        auto rhiMatIt = s_RHIMaterialCacheByPath.find(oldKey);
-        if (rhiMatIt != s_RHIMaterialCacheByPath.end()) {
-            auto rhiMat = rhiMatIt->second;
-            s_RHIMaterialCacheByPath.erase(rhiMatIt);
-            s_RHIMaterialCacheByPath[newKey] = rhiMat;
-        }
-
-        AXLE_INFO("AssetManager: Relocated asset [UUID: {0}] from '{1}' to '{2}'",
-                  static_cast<uint64_t>(id), oldPath.string(), newPath.string());
+        Sync();
         return true;
     }
-
-    bool AssetManager::CopyAsset(const std::filesystem::path& sourcePath, const std::filesystem::path& destinationPath, std::string* outError) {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        if (sourcePath.empty() || destinationPath.empty()) {
-            if (outError) *outError = "Paths cannot be empty for copy";
-            return false;
+    bool AssetManager::CopyAsset(const std::filesystem::path& sourcePath, const std::filesystem::path& destination, std::string* error) {
+        std::lock_guard lock(s_AssetMutex);
+        std::filesystem::path source,sourceRel,target,targetRel;
+        if (!ResolveOwned(s_AssetDirectory,sourcePath,source,sourceRel,error) ||
+            !ResolveOwned(s_AssetDirectory,destination,target,targetRel,error)) return false;
+        if (!std::filesystem::is_regular_file(source) || std::filesystem::exists(target)) {
+            if(error)*error="Copy requires an existing source and an unused destination"; return false;
         }
-
-        std::string destKey = NormalizePathKey(destinationPath);
-        if (s_PathToUUID.find(destKey) != s_PathToUUID.end()) {
-            if (outError) *outError = "Destination path already exists in registry: " + destinationPath.string();
-            return false;
+        if (AssetMetadataSerializer::IsNativeAsset(source) != AssetMetadataSerializer::IsNativeAsset(target)) {
+            if(error)*error="Copy cannot change native/raw identity kind"; return false;
         }
-
-        std::error_code ec;
-        if (destinationPath.has_parent_path()) {
-            std::filesystem::create_directories(destinationPath.parent_path(), ec);
+        if (AssetMetadataSerializer::IsNativeAsset(source)) {
+            AssetMetadata item;
+            if (!AssetMetadataSerializer::Deserialize(source,item,error)) return false;
+            UUID id;
+            while(id == 0 || IsBuiltin(id) || s_Assets.contains(id)) id=UUID();
+            if (!FileSystem::WriteIdentifiedTextFile(target,FileSystem::ReadTextFile(source),error,uint64_t(id))) return false;
+        } else {
+            std::ifstream input(source,std::ios::binary);
+            if (!input) { if(error)*error="Cannot read copy source"; return false; }
+            const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)),{});
+            if (input.bad()) { if(error)*error="Failed while reading copy source"; return false; }
+            if (!FileSystem::WriteBinaryFileAtomically(target,bytes.data(),bytes.size(),error)) return false;
         }
-
-        // 1. Copy physical asset file
-        if (std::filesystem::exists(sourcePath, ec)) {
-            std::filesystem::copy_file(sourcePath, destinationPath, std::filesystem::copy_options::overwrite_existing, ec);
-            if (ec) {
-                if (outError) *outError = "Failed to copy asset file: " + ec.message();
-                return false;
-            }
-        }
-
-        // 2. Allocate a brand-new distinct UUID for the copy
-        UUID newHandle;
-        AssetType type = GetAssetTypeFromPath(destinationPath);
-
-        std::filesystem::path destRel = destinationPath;
-        try {
-            if (!s_AssetDirectory.empty() && destinationPath.is_absolute()) {
-                destRel = std::filesystem::relative(destinationPath, s_AssetDirectory);
-            }
-        } catch (...) {}
-
-        AssetMetadata copyMeta{ newHandle, type, destRel, 1 };
-        s_Assets[newHandle] = copyMeta;
-        s_PathToUUID[destKey] = newHandle;
-
-        std::string writeError;
-        if (!SaveRegistryLocked(&writeError)) {
-            s_Assets.erase(newHandle);
-            s_PathToUUID.erase(destKey);
-            std::filesystem::remove(destinationPath, ec);
-            if (outError) *outError = "Failed to persist registry for copied asset: " + writeError;
-            return false;
-        }
-
-        AXLE_INFO("AssetManager: Copied asset '{0}' to '{1}' [New UUID: {2}]",
-                  sourcePath.string(), destinationPath.string(), static_cast<uint64_t>(newHandle));
+        Sync();
         return true;
     }
-
-    void AssetManager::OnAssetRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath) {
-        RelocateAsset(oldPath, newPath, nullptr);
+    void AssetManager::OnAssetRenamed(const std::filesystem::path& oldPath,const std::filesystem::path& newPath) {
+        if (std::filesystem::exists(oldPath)) RelocateAsset(oldPath,newPath);
+        else if (!AssetMetadataSerializer::IsNativeAsset(newPath)) RelinkPathReferences(oldPath,newPath);
+        else Sync();
     }
+    void AssetManager::OnAssetDeleted(const std::filesystem::path&) { Sync(); }
+    size_t AssetManager::GetAssetCount() { std::lock_guard lock(s_AssetMutex); return s_MetadataByPath.size(); }
+    const std::filesystem::path& AssetManager::GetAssetDirectory() { return s_AssetDirectory; }
+    void AssetManager::SetAssetDirectory(const std::filesystem::path& root) { Init(root); }
 
-    void AssetManager::OnAssetDeleted(const std::filesystem::path& assetPath) {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        std::string key = NormalizePathKey(assetPath);
-        auto it = s_PathToUUID.find(key);
-        if (it != s_PathToUUID.end()) {
-            UUID id = it->second;
-            s_Assets.erase(id);
-            s_PathToUUID.erase(it);
 
-            s_TextureCacheByPath.erase(key);
-            s_TextureCacheByUUID.erase(id);
-            s_MaterialCacheByPath.erase(key);
-            s_MaterialCacheByUUID.erase(id);
-            s_RHIMaterialCacheByPath.erase(key);
-            s_RHIMaterialCacheByUUID.erase(id);
-
-            SaveRegistryLocked();
-        }
-    }
-
-    size_t AssetManager::GetAssetCount() {
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        return s_Assets.size();
-    }
-
-    const std::filesystem::path& AssetManager::GetAssetDirectory() {
-        return s_AssetDirectory;
-    }
-
-    void AssetManager::SetAssetDirectory(const std::filesystem::path& dir) {
-        Init(dir);
-    }
-
-    // -------------------------------------------------------------------------
-    // Centralized Resource Caching
-    // -------------------------------------------------------------------------
     std::shared_ptr<Texture2D> AssetManager::GetTexture(const std::filesystem::path& path) {
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        std::filesystem::path ownedPath, reference;
+        if (!ResolveOwned(s_AssetDirectory, path, ownedPath, reference, nullptr) || !FileSystem::Exists(ownedPath)) {
+            ReportDiagnostic(AssetDiagnostic::Level::Error, "Resource path is missing or outside its root", path);
+            return nullptr;
+        }
+        if (AssetMetadataSerializer::IsNativeAsset(ownedPath)) {
+            TextureDescriptor descriptor;
+            if (!TextureDescriptor::Load(ownedPath.string(), descriptor)) return nullptr;
+            return GetTexture(std::filesystem::path(descriptor.Source));
+        }
         std::string key = NormalizePathKey(path);
         auto it = s_TextureCacheByPath.find(key);
         if (it != s_TextureCacheByPath.end()) return it->second;
 
-        std::filesystem::path fullPath = path;
-        if (!path.is_absolute() && !s_AssetDirectory.empty()) {
-            fullPath = s_AssetDirectory / path;
-        }
-
-        if (!std::filesystem::exists(fullPath)) {
+        const auto& fullPath = ownedPath;
+        if (!FileSystem::Exists(fullPath)) {
             AXLE_WARN("AssetManager::GetTexture: file not found: {0}", fullPath.string());
             return nullptr;
         }
@@ -704,6 +457,7 @@ namespace Axle {
     std::shared_ptr<Texture2D> AssetManager::GetTexture(UUID uuid) {
         if (uuid == 0) return nullptr;
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        if (GetAssetPath(uuid).empty()) return nullptr;
         auto it = s_TextureCacheByUUID.find(uuid);
         if (it != s_TextureCacheByUUID.end()) return it->second;
 
@@ -718,24 +472,107 @@ namespace Axle {
         s_TextureCacheByUUID.clear();
     }
 
+    static void AttachMaterialTextures(const std::shared_ptr<Material>& material) {
+        // Loading a texture must not silently re-enable an explicitly disabled map.
+        if (!material->GetClearcoatPath().empty()) {
+            bool enabled=material->IsClearcoatMapEnabled();
+            auto texture=AssetManager::GetTexture(material->GetClearcoatPath());
+            material->SetClearcoatTexture(texture,material->GetClearcoatPath());
+            material->SetUseClearcoatMap(enabled);
+        }
+        if (!material->GetAnisotropyFlowPath().empty()) {
+            bool enabled=material->IsAnisotropyFlowMapEnabled();
+            auto texture=AssetManager::GetTexture(material->GetAnisotropyFlowPath());
+            material->SetAnisotropyFlowTexture(texture,material->GetAnisotropyFlowPath());
+            material->SetUseAnisotropyFlowMap(enabled);
+        }
+        if (!material->GetDetailNormalPath().empty()) {
+            bool enabled=material->IsDetailNormalMapEnabled();
+            auto texture=AssetManager::GetTexture(material->GetDetailNormalPath());
+            material->SetDetailNormalTexture(texture,material->GetDetailNormalPath());
+            material->SetUseDetailNormalMap(enabled);
+        }
+        if (!material->GetDetailMaskPath().empty()) {
+            bool enabled=material->IsDetailMaskMapEnabled();
+            auto texture=AssetManager::GetTexture(material->GetDetailMaskPath());
+            material->SetDetailMaskTexture(texture,material->GetDetailMaskPath());
+            material->SetUseDetailMaskMap(enabled);
+        }
+        if (!material->GetAlbedoPath().empty()) {
+            bool enabled = material->IsAlbedoMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetAlbedoPath());
+            material->SetAlbedoTexture(texture, material->GetAlbedoPath());
+            material->SetUseAlbedoMap(enabled);
+        }
+        if (!material->GetNormalPath().empty()) {
+            bool enabled = material->IsNormalMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetNormalPath());
+            material->SetNormalTexture(texture, material->GetNormalPath());
+            material->SetUseNormalMap(enabled);
+        }
+        if (!material->GetRoughnessPath().empty()) {
+            bool enabled = material->IsRoughnessMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetRoughnessPath());
+            material->SetRoughnessTexture(texture, material->GetRoughnessPath());
+            material->SetUseRoughnessMap(enabled);
+        }
+        if (!material->GetMetallicPath().empty()) {
+            bool enabled = material->IsMetallicMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetMetallicPath());
+            material->SetMetallicTexture(texture, material->GetMetallicPath());
+            material->SetUseMetallicMap(enabled);
+        }
+        if (!material->GetAOPath().empty()) {
+            bool enabled = material->IsAOMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetAOPath());
+            material->SetAOTexture(texture, material->GetAOPath());
+            material->SetUseAOMap(enabled);
+        }
+        if (!material->GetEmissivePath().empty()) {
+            bool enabled = material->IsEmissiveMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetEmissivePath());
+            material->SetEmissiveTexture(texture, material->GetEmissivePath());
+            material->SetUseEmissiveMap(enabled);
+        }
+        if (!material->GetORMPath().empty()) {
+            bool enabled = material->IsORMMapEnabled();
+            auto texture = AssetManager::GetTexture(material->GetORMPath());
+            material->SetORMTexture(texture, material->GetORMPath());
+            material->SetUseORMMap(enabled);
+        }
+    }
+
     std::shared_ptr<Material> AssetManager::GetMaterial(const std::filesystem::path& path) {
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        std::filesystem::path ownedPath, reference;
+        if (!ResolveOwned(s_AssetDirectory, path, ownedPath, reference, nullptr) || !FileSystem::Exists(ownedPath)) {
+            ReportDiagnostic(AssetDiagnostic::Level::Error, "Resource path is missing or outside its root", path);
+            return nullptr;
+        }
+        const UUID identity = GetAssetUUID(path);
+        if (identity == 0) return nullptr;
         std::string key = NormalizePathKey(path);
         auto it = s_MaterialCacheByPath.find(key);
-        if (it != s_MaterialCacheByPath.end()) return it->second;
-
-        std::filesystem::path fullPath = path;
-        if (!path.is_absolute() && !s_AssetDirectory.empty()) {
-            fullPath = s_AssetDirectory / path;
+        if (it != s_MaterialCacheByPath.end()) {
+            if (it->second && it->second->GetHandle() == identity) return it->second;
+            s_MaterialCacheByPath.erase(it);
+        }
+        if (auto cached = s_MaterialCacheByUUID.find(identity); cached != s_MaterialCacheByUUID.end()) {
+            cached->second->SetFilePath(ownedPath);
+            s_MaterialCacheByPath[key] = cached->second;
+            return cached->second;
         }
 
-        if (!std::filesystem::exists(fullPath)) {
+        const auto& fullPath = ownedPath;
+        if (!FileSystem::Exists(fullPath)) {
             AXLE_WARN("AssetManager::GetMaterial: file not found: {0}", fullPath.string());
             return nullptr;
         }
 
         auto mat = std::make_shared<Material>();
         if (mat->Load(fullPath)) {
+            mat->SetHandle(GetAssetUUID(path));
+            AttachMaterialTextures(mat);
             s_MaterialCacheByPath[key] = mat;
             UUID uuid = GetAssetUUID(path);
             if (uuid != 0) {
@@ -749,6 +586,7 @@ namespace Axle {
     std::shared_ptr<Material> AssetManager::GetMaterial(UUID uuid) {
         if (uuid == 0) return nullptr;
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        if (GetAssetPath(uuid).empty()) return nullptr;
         auto it = s_MaterialCacheByUUID.find(uuid);
         if (it != s_MaterialCacheByUUID.end()) return it->second;
 
@@ -759,26 +597,34 @@ namespace Axle {
 
     void AssetManager::ReloadMaterial(UUID uuid) {
         if (uuid == 0) return;
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        std::filesystem::path path = GetAssetPath(uuid);
-        if (path.empty()) return;
-
-        s_MaterialCacheByUUID.erase(uuid);
-        std::string key = NormalizePathKey(path);
-        s_MaterialCacheByPath.erase(key);
-        GetMaterial(uuid);
+        std::lock_guard lock(s_AssetMutex);
+        const auto path = GetAssetPath(uuid);
+        if (!path.empty()) ReloadMaterial(path);
     }
 
     void AssetManager::ReloadMaterial(const std::filesystem::path& path) {
-        if (path.empty()) return;
-        std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
-        std::string key = NormalizePathKey(path);
-        s_MaterialCacheByPath.erase(key);
-        auto it = s_PathToUUID.find(key);
-        if (it != s_PathToUUID.end()) {
-            s_MaterialCacheByUUID.erase(it->second);
+        std::lock_guard lock(s_AssetMutex);
+        std::filesystem::path full, relative;
+        if (!ResolveOwned(s_AssetDirectory,path,full,relative,nullptr) || !FileSystem::Exists(full)) return;
+        const auto uuid = GetAssetUUID(path);
+        const auto key = PathKey(relative);
+        std::shared_ptr<Material> material;
+        if (auto found = s_MaterialCacheByPath.find(key); found != s_MaterialCacheByPath.end()) material = found->second;
+        if (!material && uuid != 0)
+            if (auto found = s_MaterialCacheByUUID.find(uuid); found != s_MaterialCacheByUUID.end()) material = found->second;
+        if (material) {
+            auto replacement = std::make_shared<Material>(*material);
+            if (replacement->Load(full)) {
+                replacement->SetHandle(uuid);
+                AttachMaterialTextures(replacement);
+                *material = std::move(*replacement);
+            }
         }
-        GetMaterial(path);
+        std::shared_ptr<RHI::RHIMaterial> rhiMaterial;
+        if (auto found = s_RHIMaterialCacheByPath.find(key); found != s_RHIMaterialCacheByPath.end()) rhiMaterial = found->second;
+        if (!rhiMaterial && uuid != 0)
+            if (auto found = s_RHIMaterialCacheByUUID.find(uuid); found != s_RHIMaterialCacheByUUID.end()) rhiMaterial = found->second;
+        if (rhiMaterial) rhiMaterial->Load(full);
     }
 
     void AssetManager::ClearMaterialCache() {
@@ -789,16 +635,24 @@ namespace Axle {
 
     std::shared_ptr<RHI::RHIMaterial> AssetManager::GetRHIMaterial(const std::filesystem::path& path) {
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        std::filesystem::path ownedPath, reference;
+        if (!ResolveOwned(s_AssetDirectory, path, ownedPath, reference, nullptr) || !FileSystem::Exists(ownedPath)) {
+            ReportDiagnostic(AssetDiagnostic::Level::Error, "Resource path is missing or outside its root", path);
+            return nullptr;
+        }
+        const UUID identity = GetAssetUUID(path);
+        if (identity == 0) return nullptr;
         std::string key = NormalizePathKey(path);
         auto it = s_RHIMaterialCacheByPath.find(key);
-        if (it != s_RHIMaterialCacheByPath.end()) return it->second;
-
-        std::filesystem::path fullPath = path;
-        if (!path.is_absolute() && !s_AssetDirectory.empty()) {
-            fullPath = s_AssetDirectory / path;
+        auto cached = s_RHIMaterialCacheByUUID.find(identity);
+        if (cached != s_RHIMaterialCacheByUUID.end()) {
+            s_RHIMaterialCacheByPath[key] = cached->second;
+            return cached->second;
         }
+        if (it != s_RHIMaterialCacheByPath.end()) s_RHIMaterialCacheByPath.erase(it);
 
-        if (!std::filesystem::exists(fullPath)) {
+        const auto& fullPath = ownedPath;
+        if (!FileSystem::Exists(fullPath)) {
             AXLE_WARN("AssetManager::GetRHIMaterial: file not found: {0}", fullPath.string());
             return nullptr;
         }
@@ -818,6 +672,7 @@ namespace Axle {
     std::shared_ptr<RHI::RHIMaterial> AssetManager::GetRHIMaterial(UUID uuid) {
         if (uuid == 0) return nullptr;
         std::lock_guard<std::recursive_mutex> lock(s_AssetMutex);
+        if (GetAssetPath(uuid).empty()) return nullptr;
         auto it = s_RHIMaterialCacheByUUID.find(uuid);
         if (it != s_RHIMaterialCacheByUUID.end()) return it->second;
 

@@ -50,11 +50,7 @@ namespace Axle {
 
     bool AssetSerializer::SaveToAxleText(const std::filesystem::path& path, const AxleMeshSource& mesh) {
         if (path.extension() == ".axleasset") {
-            std::ofstream file(path);
-            if (!file.is_open()) {
-                AXLE_ERROR("AssetSerializer: Failed to open file for writing: '{0}'", path.string());
-                return false;
-            }
+            std::ostringstream file;
             file << "Mesh {\n";
             file << "    name: \"" << (mesh.Name.empty() ? path.stem().string() : mesh.Name) << "\"\n";
             file << "    bounds: [" << std::fixed << std::setprecision(3) << mesh.BoundingSize.x << ", " << mesh.BoundingSize.y << ", " << mesh.BoundingSize.z << "]\n";
@@ -95,17 +91,15 @@ namespace Axle {
             file << "    ]\n";
             file << "}\n";
 
+            if (!FileSystem::WriteIdentifiedTextFile(path, file.str())) return false;
+
             // Automatically bake to binary cache
             std::filesystem::path cachePath = GetCachePathFor(path);
             SaveToAxleBinary(cachePath, mesh);
             return true;
         }
 
-        std::ofstream file(path);
-        if (!file.is_open()) {
-            AXLE_ERROR("AssetSerializer: Failed to open file for writing: '{0}'", path.string());
-            return false;
-        }
+        std::ostringstream file;
 
         file << "# Axle Engine 3D Mesh Asset\n";
         file << "# AI-Friendly & Human-Readable Structured Text Format\n";
@@ -160,7 +154,7 @@ namespace Axle {
         AXLE_INFO("AssetSerializer: Saved .axle text asset '{0}' ({1} vertices, {2} triangles)", 
             path.filename().string(), mesh.Vertices.size(), mesh.Indices.size() / 3);
 
-        return true;
+        return FileSystem::WriteIdentifiedTextFile(path, file.str());
     }
 
     bool AssetSerializer::LoadFromAxleText(const std::filesystem::path& path, AxleMeshSource& outMesh) {
@@ -583,11 +577,7 @@ namespace Axle {
                                               const std::vector<AxlePackagePart>& parts,
                                               const glm::vec3& boundingSize,
                                               const glm::vec3& halfExtent) {
-        std::ofstream file(manifestPath);
-        if (!file.is_open()) {
-            AXLE_ERROR("AssetSerializer: Failed to open package manifest for writing: '{0}'", manifestPath.string());
-            return false;
-        }
+        std::ostringstream file;
 
         file << "# Axle Engine 3D Model Package\n";
         file << "# AI-Friendly & Human-Readable Structured Text Format\n";
@@ -617,6 +607,7 @@ namespace Axle {
                  << part.LocalScale.x << ", " << part.LocalScale.y << ", " << part.LocalScale.z << "]\n";
         }
 
+        if (!FileSystem::WriteIdentifiedTextFile(manifestPath,file.str())) return false;
         AXLE_INFO("AssetSerializer: Saved multi-part package manifest '{0}' ({1} sub-parts)", 
             manifestPath.filename().string(), parts.size());
         return true;

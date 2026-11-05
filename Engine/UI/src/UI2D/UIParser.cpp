@@ -58,6 +58,8 @@ namespace Axle {
             if (c == '"') {
                 inString = true;
                 result.push_back(c);
+            } else if (c == '#' && (i == 0 || source[i-1] == '\n' || source[i-1] == '\r')) {
+                inLineComment = true;
             } else if (c == '/' && next == '/') {
                 inLineComment = true;
                 ++i;
@@ -553,15 +555,7 @@ namespace Axle {
     }
 
     bool UIParser::SaveFile(const std::string& filepath, const UIDocument& document, std::string* outError) {
-        std::ofstream file(filepath);
-        if (!file.is_open()) {
-            if (outError) *outError = "Failed to open file for writing: " + filepath;
-            return false;
-        }
-
-        std::string serialized = SerializeDocument(document);
-        file << serialized;
-        return true;
+        return FileSystem::WriteIdentifiedTextFile(filepath, SerializeDocument(document), outError);
     }
 
 } // namespace Axle

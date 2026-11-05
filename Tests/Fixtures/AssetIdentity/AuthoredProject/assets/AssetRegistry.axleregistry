@@ -1,9 +1,0 @@
-AssetRegistry:
-  Version: 1
-  Entries:
-    - UUID: 100000000000000002
-      Path: materials/test_material.axleasset
-      Type: Material
-    - UUID: 100000000000000001
-      Path: textures/test_texture.png
-      Type: Texture2D

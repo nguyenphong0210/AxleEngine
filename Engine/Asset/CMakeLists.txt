@@ -1,7 +1,6 @@
 add_library(AxleAsset STATIC
     src/AssetSerializer.cpp
     src/AssetMetadataSerializer.cpp
-    src/AssetRegistrySerializer.cpp
     src/AssetManager.cpp
     src/AssetCooker.cpp
     src/AssetDSL.cpp

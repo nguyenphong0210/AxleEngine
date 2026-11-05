@@ -55,7 +55,7 @@ namespace Axle {
 
     bool SceneSerializer::Serialize(const std::filesystem::path& filepath) {
         const auto serialized = SerializeToString();
-        return !serialized.empty() && FileSystem::WriteTextFileAtomically(filepath, serialized);
+        return !serialized.empty() && FileSystem::WriteIdentifiedTextFile(filepath, serialized);
     }
 
     std::string SceneSerializer::SerializeToString() {
@@ -1086,13 +1086,20 @@ namespace Axle {
                         } else if (trimmed.rfind("MaterialHandle:", 0) == 0) {
                             mat.MaterialHandle = std::stoull(Trim(trimmed.substr(15)));
                             if (mat.MaterialHandle != 0) {
+                                AssetManager::TrackReferencedAsset(mat.MaterialHandle);
                                 mat.MaterialAsset = AssetManager::GetMaterial(mat.MaterialHandle);
                                 if (mat.MaterialAsset) mat.SyncFromAsset();
                             }
                         } else if (trimmed.rfind("AssetPath:", 0) == 0) {
                             std::string path = Trim(trimmed.substr(10));
                             mat.AssetPath = path;
-                            if (!path.empty() && !mat.MaterialAsset) {
+                            if (mat.MaterialHandle != 0) {
+                                AssetManager::TrackReferencedAsset(mat.MaterialHandle, path);
+                                auto resolved = AssetManager::GetRelativeAssetPath(mat.MaterialHandle);
+                                if (!resolved.empty()) mat.AssetPath = resolved.generic_string();
+                                else AssetManager::ReportDiagnostic(AssetDiagnostic::Level::Error, "Scene material UUID is unresolved", path, mat.MaterialHandle);
+                            }
+                            if (mat.MaterialHandle == 0 && !path.empty() && !mat.MaterialAsset) {
                                 mat.MaterialAsset = AssetManager::GetMaterial(path);
                                 if (mat.MaterialAsset) {
                                     mat.MaterialHandle = mat.MaterialAsset->GetHandle();

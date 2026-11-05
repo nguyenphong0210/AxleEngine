@@ -33,8 +33,10 @@ The other files here are this project's conventions, not a product guarantee.
   The clean removal in `be7b071` awaits independent current-format verification.
   Plans and review reports do not release subsequent production packages.
 - Asset identity steering (2026-11-05): AF-01 must generate no per-asset .meta
-  files or renamed .uid/.import substitutes. Use a source-controlled root registry;
-  keep generated caches ignored. The updated AF-01 handoff owns the exact contract.
+  files or renamed .uid/.import substitutes. Raw resources (PNG, fonts, audio, etc.)
+  use canonical root-relative paths. Native Engine assets embed their UUID in the
+  file; discovery rebuilds an in-memory index without an authored root registry.
+  Keep generated caches ignored. The updated AF-01 handoff owns the exact contract.
 - Only a concrete released task authorizes implementation. A roadmap, reference
   guide, old prompt, or suggested next task does not release every later package.
 - Historical checkpoint (2026-11-03): the user placed Phase 41 RHI-primary rendering

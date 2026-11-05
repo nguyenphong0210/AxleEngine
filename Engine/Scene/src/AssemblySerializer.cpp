@@ -352,7 +352,7 @@ namespace Axle {
             }
         }
 
-        if (!FileSystem::WriteTextFileAtomically(filepath, fout.str())) return false;
+        if (!FileSystem::WriteIdentifiedTextFile(filepath, fout.str())) return false;
         AXLE_INFO("AssemblySerializer: Successfully exported Assembly '{0}' ({1} entities) to '{2}'", 
                   rootName, hierarchy.size(), filepath.string());
         return true;
@@ -1356,7 +1356,7 @@ namespace Axle {
         fout << "Entities:\n";
         WriteAssemblyNode(fout, data.RootNode, (u64)rootUUID, 0);
 
-        if (!fout.good() || !FileSystem::WriteTextFileAtomically(filepath, fout.str())) return false;
+        if (!fout.good() || !FileSystem::WriteIdentifiedTextFile(filepath, fout.str())) return false;
         AXLE_INFO("AssemblySerializer: Saved Assembly data '{0}' to '{1}'", data.Name, filepath.string());
         return true;
     }

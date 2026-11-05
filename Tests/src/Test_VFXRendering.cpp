@@ -1,3 +1,4 @@
+#include "ScopedAssetTestRoot.hpp"
 #include "Test_VFXAcceptance.hpp"
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
@@ -211,6 +212,7 @@ namespace Axle {
             std::cerr << error << std::endl;
             return false;
         }
+        Axle::Tests::ScopedAssetTestRoot ownedAssets(captures);
         auto writeTexture = [&](const char *name, std::array<uint8_t, 4> rgba) {
             auto path = captures / name;
             std::ofstream file(path, std::ios::binary);

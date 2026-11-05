@@ -7,6 +7,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/ContentBrowserPanel.hpp>
 #include <fstream>
+#include <Axle/FileSystem.hpp>
 
 namespace {
     bool TestContentBrowserCreatesVFXAsset() {
@@ -15,6 +16,10 @@ namespace {
         VFX_TEST_CHECK(!first.empty() && std::filesystem::is_regular_file(first), "Create menu writes a VFX asset");
         Axle::ParticleEffectDefinition loaded;
         VFX_TEST_CHECK(Axle::ParticleEffectSerializer::DeserializeFromFile(first.string(), loaded), "Created asset loads through production codec");
+        uint64_t firstID=0, savedID=0;
+        VFX_TEST_CHECK(Axle::FileSystem::ReadFileIdentity(first,firstID) && firstID!=0, "Native VFX embeds identity");
+        VFX_TEST_CHECK(Axle::ParticleEffectSerializer::SerializeToFile(first.string(),loaded), "Resave native VFX");
+        VFX_TEST_CHECK(Axle::FileSystem::ReadFileIdentity(first,savedID) && savedID==firstID, "VFX resave preserves identity");
         VFX_TEST_CHECK(loaded.Emitters.empty(), "Create writes an empty effect without a baked-in effect");
         Axle::ParticleEmitterComponent component;
         VFX_TEST_CHECK(component.LoadFromAsset(first.string()), "Created asset instantiates in a scene component");

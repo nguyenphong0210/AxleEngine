@@ -1,3 +1,4 @@
+#include "ScopedAssetTestRoot.hpp"
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Scene.hpp>
@@ -17,6 +18,7 @@
 bool VerifyMaterialMeshImport(const std::filesystem::path& root);
 
 bool VerifyMaterialRendering(const std::filesystem::path& root) {
+    Axle::Tests::ScopedAssetTestRoot ownedAssets(root);
     using namespace Axle;
     using namespace Axle::RHI;
     auto check = [](bool result, const char* message) {

@@ -1,3 +1,4 @@
+#include <Axle/AssetManager.hpp>
 #include "RuntimeLayer.hpp"
 #include <Axle/Application.hpp>
 #include <Axle/Package.hpp>
@@ -96,6 +97,8 @@ namespace Axle {
                 AXLE_INFO("Runtime: Loaded project from '{0}'", projPath.string());
             }
         }
+
+        AssetManager::Init(FileSystem::GetAssetDirectory());
 
         // Step B: Locate start scene
         std::filesystem::path startScenePath;

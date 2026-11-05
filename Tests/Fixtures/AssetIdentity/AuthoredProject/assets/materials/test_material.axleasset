@@ -1,5 +1,5 @@
-# Axle Material Definition File
-Material:
-  Name: TestMaterial
-  AlbedoColor: [1.0, 1.0, 1.0, 1.0]
-
+# AxleFileIdentity: 1 100000000000000002
+Material {
+    name: "TestMaterial"
+    roughness: 0.5
+}

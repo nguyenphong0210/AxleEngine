@@ -36,6 +36,13 @@ namespace Axle {
         static bool WriteTextFileAtomically(const std::filesystem::path& filepath, const std::string& text, std::string* outError = nullptr);
         static bool WriteBinaryFileAtomically(const std::filesystem::path& filepath, const void* data, size_t size, std::string* outError = nullptr);
 
+        static bool MakeAssetReference(const std::filesystem::path& path, std::string& reference);
+
+        // Optional versioned identity envelope for native text documents; no sidecars or registry.
+        static bool ReadFileIdentity(const std::filesystem::path& path, uint64_t& id, std::string* error = nullptr);
+        static bool WriteIdentifiedTextFile(const std::filesystem::path& path, const std::string& text,
+                                           std::string* error = nullptr, uint64_t requestedID = 0);
+
         // Checks whether a path exists
         static bool Exists(const std::filesystem::path& filepath);
     };

@@ -283,7 +283,7 @@ namespace Axle {
 
     private:
         std::string m_CustomShaderDiagnostic; // Transient renderer status; never serialized.
-        UUID m_Handle = 0;
+        mutable UUID m_Handle = 0; // Cached file identity, assigned only after successful persistence.
         std::string m_Name;
         std::filesystem::path m_FilePath;
 

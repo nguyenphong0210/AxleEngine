@@ -151,7 +151,7 @@ namespace Axle {
             return false;
         }
         std::string text = AssetDSL::SerializeDocument(doc);
-        return WriteTextFileAtomically(filepath, text, outError);
+        return FileSystem::WriteIdentifiedTextFile(filepath, text, outError);
     }
 
     bool AnimationAssetCodec::LoadSkeleton(const std::string& filepath, SkeletonDefinition& outDef, std::string* outError) {
@@ -223,7 +223,7 @@ namespace Axle {
             return false;
         }
         std::string text = AssetDSL::SerializeDocument(doc);
-        return WriteTextFileAtomically(filepath, text, outError);
+        return FileSystem::WriteIdentifiedTextFile(filepath, text, outError);
     }
 
     bool AnimationAssetCodec::LoadSkeletalMesh(const std::string& filepath, SkeletalMeshDefinition& outDef, std::string* outError) {
@@ -393,7 +393,7 @@ namespace Axle {
             return false;
         }
         std::string text = AssetDSL::SerializeDocument(doc);
-        return WriteTextFileAtomically(filepath, text, outError);
+        return FileSystem::WriteIdentifiedTextFile(filepath, text, outError);
     }
 
     bool AnimationAssetCodec::LoadAnimationClip(const std::string& filepath, AnimationClipDefinition& outDef, std::string* outError) {
@@ -679,7 +679,7 @@ namespace Axle {
             return false;
         }
         std::string text = AssetDSL::SerializeDocument(doc);
-        return WriteTextFileAtomically(filepath, text, outError);
+        return FileSystem::WriteIdentifiedTextFile(filepath, text, outError);
     }
 
     bool AnimationAssetCodec::LoadAnimatorController(const std::string& filepath, AnimatorControllerDefinition& outDef, std::string* outError) {

@@ -462,12 +462,20 @@ namespace Axle {
     }
 
     bool Material::Save(const std::filesystem::path& filepath) const {
-        std::ofstream fout(filepath);
-        if (!fout.is_open()) {
-            AXLE_ERROR("Material::Save: Failed to open file for writing: '{0}'", filepath.string());
-            return false;
-        }
-
+        std::ostringstream fout;
+        bool pathsValid = true;
+        auto reference = [&](const std::string& path) {
+            std::string relative;
+            pathsValid = FileSystem::MakeAssetReference(path,relative) && pathsValid;
+            return relative;
+        };
+        auto persist = [&] {
+            if (!pathsValid) return false;
+            if (!FileSystem::WriteIdentifiedTextFile(filepath, fout.str(), nullptr, uint64_t(m_Handle))) return false;
+            uint64_t stored = 0;
+            if (FileSystem::ReadFileIdentity(filepath, stored)) m_Handle = UUID(stored);
+            return true;
+        };
         std::string ext = filepath.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
         if (ext == ".axleasset" || ext.empty()) {
@@ -476,13 +484,13 @@ namespace Axle {
             fout << "    shader: \"ForwardPBR\"\n";
             fout << "    useCustomShader: " << (m_UseCustomShader ? "true" : "false") << "\n";
             if (!m_CustomShaderPath.empty()) {
-                fout << "    customShaderPath: \"" << m_CustomShaderPath << "\"\n";
+                fout << "    customShaderPath: \"" << reference(m_CustomShaderPath) << "\"\n";
             }
             fout << "\n";
             fout << "    // Texture Packing Mode\n";
             fout << "    textureMode: \"" << TextureModeToString(m_TextureMode) << "\"\n";
             if (!m_ORMPath.empty()) {
-                fout << "    ormMap: \"" << m_ORMPath << "\"\n";
+                fout << "    ormMap: \"" << reference(m_ORMPath) << "\"\n";
             }
 
             fout << "    // Surface Options\n";
@@ -495,14 +503,14 @@ namespace Axle {
             fout << "    renderQueue: " << m_RenderQueue << "\n\n";
             fout << "    // Base Color & Texture\n";
             fout << "    albedoColor: [ " << m_AlbedoColor.r << " , " << m_AlbedoColor.g << " , " << m_AlbedoColor.b << " , " << m_AlbedoColor.a << " ]\n";
-            fout << "    albedoMap: \"" << m_AlbedoPath << "\"\n\n";
+            fout << "    albedoMap: \"" << reference(m_AlbedoPath) << "\"\n\n";
             fout << "    // Surface Microfacet\n";
             fout << "    metallic: " << m_Metallic << "\n";
             fout << "    roughness: " << m_Roughness << "\n";
-            fout << "    normalMap: \"" << m_NormalPath << "\"\n";
-            fout << "    roughnessMap: \"" << m_RoughnessPath << "\"\n";
-            fout << "    metallicMap: \"" << m_MetallicPath << "\"\n";
-            fout << "    emissiveMap: \"" << m_EmissivePath << "\"\n";
+            fout << "    normalMap: \"" << reference(m_NormalPath) << "\"\n";
+            fout << "    roughnessMap: \"" << reference(m_RoughnessPath) << "\"\n";
+            fout << "    metallicMap: \"" << reference(m_MetallicPath) << "\"\n";
+            fout << "    emissiveMap: \"" << reference(m_EmissivePath) << "\"\n";
             fout << "    normalStrength: " << m_NormalStrength << "\n";
             fout << "    detailNormalStrength: " << m_DetailNormalStrength << "\n";
             fout << "    detailUVScale: " << "[ " << m_DetailUVScale.x << " , " << m_DetailUVScale.y << " ]\n";
@@ -516,7 +524,7 @@ namespace Axle {
             fout << "    clearcoatRoughness: " << m_ClearcoatRoughness << "\n";
             fout << "    anisotropyStrength: " << m_AnisotropyStrength << "\n";
             fout << "    anisotropyRotation: " << m_AnisotropyRotation << "\n";
-            fout << "    occlusionMap: \"" << m_AOPath << "\"\n";
+            fout << "    occlusionMap: \"" << reference(m_AOPath) << "\"\n";
             fout << "    occlusionStrength: " << m_AOStrength << "\n\n";
             fout << "    // Emission & UV Scaling\n";
             fout << "    emissionColor: [ " << m_EmissionColor.r << " , " << m_EmissionColor.g << " , " << m_EmissionColor.b << " ]\n";
@@ -530,23 +538,23 @@ namespace Axle {
             fout << "    useMetallicMap: " << (m_UseMetallicMap ? "true" : "false") << "\n";
             fout << "    useAOMap: " << (m_UseAOMap ? "true" : "false") << "\n";
             fout << "    useEmissiveMap: " << (m_UseEmissiveMap ? "true" : "false") << "\n";
-            fout << "    clearcoatMap: \"" << m_ClearcoatPath << "\"\n";
+            fout << "    clearcoatMap: \"" << reference(m_ClearcoatPath) << "\"\n";
             fout << "    useClearcoatMap: " << (m_UseClearcoatMap ? "true" : "false") << "\n";
-            fout << "    anisotropyFlowMap: \"" << m_AnisotropyFlowPath << "\"\n";
+            fout << "    anisotropyFlowMap: \"" << reference(m_AnisotropyFlowPath) << "\"\n";
             fout << "    useAnisotropyFlowMap: " << (m_UseAnisotropyFlowMap?"true":"false") << "\n";
-            fout << "    detailNormalMap: \"" << m_DetailNormalPath << "\"\n";
+            fout << "    detailNormalMap: \"" << reference(m_DetailNormalPath) << "\"\n";
             fout << "    useDetailNormalMap: " << (m_UseDetailNormalMap?"true":"false") << "\n";
-            fout << "    detailMaskMap: \"" << m_DetailMaskPath << "\"\n";
+            fout << "    detailMaskMap: \"" << reference(m_DetailMaskPath) << "\"\n";
             fout << "    useDetailMaskMap: " << (m_UseDetailMaskMap?"true":"false") << "\n";
             WriteShaderProperties(fout,m_CustomProperties);
             fout << "}\n";
-            return true;
+            return persist();
         }
 
         fout << "MaterialAsset:\n";
         fout << "  TextureMode: " << TextureModeToString(m_TextureMode) << "\n";
         if (!m_ORMPath.empty()) {
-            fout << "  ORMPath: " << m_ORMPath << "\n";
+            fout << "  ORMPath: " << reference(m_ORMPath) << "\n";
             fout << "  UseORMMap: " << (m_UseORMMap ? "true" : "false") << "\n";
         }
 
@@ -558,9 +566,9 @@ namespace Axle {
         fout << "  AlphaCutoff: " << m_AlphaCutoff << "\n";
         fout << "  DepthWrite: " << (m_DepthWrite ? "true" : "false") << "\n";
         fout << "  AlbedoColor: [ " << m_AlbedoColor.r << " , " << m_AlbedoColor.g << " , " << m_AlbedoColor.b << " , " << m_AlbedoColor.a << " ]\n";
-        fout << "  AlbedoPath: " << m_AlbedoPath << "\n";
+        fout << "  AlbedoPath: " << reference(m_AlbedoPath) << "\n";
         fout << "  UseAlbedoMap: " << (m_UseAlbedoMap ? "true" : "false") << "\n";
-        fout << "  NormalPath: " << m_NormalPath << "\n";
+        fout << "  NormalPath: " << reference(m_NormalPath) << "\n";
         fout << "  UseNormalMap: " << (m_UseNormalMap ? "true" : "false") << "\n";
         fout << "  NormalStrength: " << m_NormalStrength << "\n";
         fout << "  ClearcoatStrength: " << m_ClearcoatStrength << "\n";
@@ -568,23 +576,22 @@ namespace Axle {
         fout << "  AnisotropyStrength: " << m_AnisotropyStrength << "\n";
         fout << "  AnisotropyRotation: " << m_AnisotropyRotation << "\n";
         fout << "  Roughness: " << m_Roughness << "\n";
-        fout << "  RoughnessPath: " << m_RoughnessPath << "\n";
+        fout << "  RoughnessPath: " << reference(m_RoughnessPath) << "\n";
         fout << "  UseRoughnessMap: " << (m_UseRoughnessMap ? "true" : "false") << "\n";
         fout << "  Metallic: " << m_Metallic << "\n";
-        fout << "  MetallicPath: " << m_MetallicPath << "\n";
+        fout << "  MetallicPath: " << reference(m_MetallicPath) << "\n";
         fout << "  UseMetallicMap: " << (m_UseMetallicMap ? "true" : "false") << "\n";
         fout << "  AO: " << m_AOStrength << "\n";
-        fout << "  AOPath: " << m_AOPath << "\n";
+        fout << "  AOPath: " << reference(m_AOPath) << "\n";
         fout << "  UseAOMap: " << (m_UseAOMap ? "true" : "false") << "\n";
-        fout << "  EmissivePath: " << m_EmissivePath << "\n";
+        fout << "  EmissivePath: " << reference(m_EmissivePath) << "\n";
         fout << "  UseEmissiveMap: " << (m_UseEmissiveMap ? "true" : "false") << "\n";
         fout << "  EmissionColor: [ " << m_EmissionColor.r << " , " << m_EmissionColor.g << " , " << m_EmissionColor.b << " ]\n";
         fout << "  EmissionIntensity: " << m_EmissionIntensity << "\n";
         fout << "  UVScale: [ " << m_UVScale.x << " , " << m_UVScale.y << " ]\n";
         fout << "  UVOffset: [ " << m_UVOffset.x << " , " << m_UVOffset.y << " ]\n";
 
-        fout.close();
-        return true;
+        return persist();
     }
 
     bool Material::Load(const std::filesystem::path& filepath) {
@@ -596,6 +603,8 @@ namespace Axle {
 
         // Preserve identity while resetting fields absent from the replacement asset.
         *this = Material(m_Name, m_Handle);
+        uint64_t storedID = 0;
+        if (FileSystem::ReadFileIdentity(filepath, storedID)) m_Handle = UUID(storedID);
         m_FilePath = filepath;
         if (m_Name.empty() || m_Name == "New Material") {
             m_Name = filepath.stem().string();

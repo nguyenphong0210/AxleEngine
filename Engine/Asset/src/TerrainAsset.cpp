@@ -55,7 +55,7 @@ namespace Axle {
 
     bool TerrainAsset::Save(const std::filesystem::path& filepath, const TerrainAsset& asset) {
         std::string content = Serialize(asset);
-        return FileSystem::WriteTextFile(filepath, content);
+        return FileSystem::WriteIdentifiedTextFile(filepath, content);
     }
 
     bool TerrainAsset::Load(const std::filesystem::path& filepath, TerrainAsset& outAsset) {

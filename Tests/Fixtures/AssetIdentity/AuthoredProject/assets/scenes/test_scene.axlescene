@@ -1,15 +1,9 @@
-# Axle Scene Definition File
+# AxleFileIdentity: 1 100000000000000003
 Scene: TestScene
 Entities:
   - Entity: 500000000000000001
     TagComponent:
-      Tag: TexturedQuad
-    TransformComponent:
-      Position: [0.000000, 0.000000, 0.000000]
-      Rotation: [0.000000, 0.000000, 0.000000]
-      Scale: [1.000000, 1.000000, 1.000000]
-    MeshComponent:
-      AssetPath: builtin://cube
+      Tag: AuthoredMaterial
     MaterialComponent:
       MaterialHandle: 100000000000000002
       AssetPath: materials/test_material.axleasset

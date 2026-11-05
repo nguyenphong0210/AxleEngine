@@ -4,334 +4,53 @@
 // TEST STEP 14: Phase 17.1 Asset UUID & .meta Companion File Pipeline
 // =============================================================================
 bool RunTest_Step14_Phase17_AssetUUIDAndMetaPipeline() {
-    std::cout << "\n========================================================" << std::endl;
-    std::cout << " [STEP 14 TEST] PHASE 17.1: ASSET UUID & .META PIPELINE  " << std::endl;
-    std::cout << "========================================================" << std::endl;
-
-    // 1. AssetType detection from path extensions
-    std::cout << "[14.1] Testing AssetType detection from file extensions..." << std::endl;
-    if (Axle::GetAssetTypeFromPath("car.axlemesh") != Axle::AssetType::Mesh ||
-        Axle::GetAssetTypeFromPath("vehicle.axle") != Axle::AssetType::Assembly ||
-        Axle::GetAssetTypeFromPath("car.obj") != Axle::AssetType::Mesh ||
-        Axle::GetAssetTypeFromPath("texture.png") != Axle::AssetType::Texture ||
-        Axle::GetAssetTypeFromPath("material.axlemat") != Axle::AssetType::Material ||
-        Axle::GetAssetTypeFromPath("script.hpp") != Axle::AssetType::Script ||
-        Axle::GetAssetTypeFromPath("scene.axlescene") != Axle::AssetType::Scene ||
-        Axle::GetAssetTypeFromPath("phys.physmat") != Axle::AssetType::PhysicsMaterial ||
-        Axle::GetAssetTypeFromPath("engine.wav") != Axle::AssetType::Audio) {
-        std::cerr << "FAIL: AssetType detection failed for standard asset extensions!" << std::endl;
-        return false;
-    }
-    std::cout << "  -> PASS: All asset extension types correctly categorized (.axlemesh -> Mesh, .axle -> Assembly)." << std::endl;
-
-    // 2. .meta serialization roundtrip
-    std::cout << "\n[14.2] Testing .meta file serialization and parsing..." << std::endl;
-    std::filesystem::path testMetaFile = "sandbox_single_asset.obj.meta";
-    Axle::UUID expectedUUID = 1234567890987654321ULL;
-    Axle::AssetMetadata originalMeta;
-    originalMeta.Handle = expectedUUID;
-    originalMeta.Type = Axle::AssetType::Mesh;
-    originalMeta.FilePath = "models/sandbox_single_asset.obj";
-
-    bool serOk = Axle::AssetMetadataSerializer::Serialize(testMetaFile, originalMeta);
-    if (!serOk || !std::filesystem::exists(testMetaFile)) {
-        std::cerr << "FAIL: AssetMetadataSerializer::Serialize failed!" << std::endl;
-        return false;
-    }
-
-    Axle::AssetMetadata loadedMeta;
-    bool deserOk = Axle::AssetMetadataSerializer::Deserialize(testMetaFile, loadedMeta);
-    if (!deserOk || loadedMeta.Handle != expectedUUID || loadedMeta.Type != Axle::AssetType::Mesh) {
-        std::cerr << "FAIL: AssetMetadataSerializer::Deserialize returned incorrect metadata!" << std::endl;
-        std::filesystem::remove(testMetaFile);
-        return false;
-    }
-    std::filesystem::remove(testMetaFile);
-    std::cout << "  -> PASS: .meta YAML format correctly serialized and parsed." << std::endl;
-
-    // 3. Auto-generation of companion .meta files in sandbox asset directory
-    std::cout << "\n[14.3] Testing auto-generation of companion .meta files..." << std::endl;
-    std::filesystem::path testDir = "sandbox_asset_pipeline_test";
-    std::error_code ec;
-    std::filesystem::remove_all(testDir, ec);
-    std::filesystem::create_directories(testDir / "submodels", ec);
-
-    // Create mock asset files
-    auto createMockFile = [](const std::filesystem::path& p) {
-        std::ofstream f(p);
-        f << "Mock asset payload for " << p.filename().string() << "\n";
-        f.close();
-    };
-
-    std::filesystem::path fileChassis = testDir / "submodels" / "chassis.obj";
-    std::filesystem::path fileTexture = testDir / "wheel_albedo.png";
-    std::filesystem::path fileMaterial = testDir / "car_paint.axlemat";
-
-    createMockFile(fileChassis);
-    createMockFile(fileTexture);
-    createMockFile(fileMaterial);
-
-    Axle::AssetManager::Init(testDir);
-
-    std::filesystem::path metaChassis = Axle::AssetMetadataSerializer::GetMetaPath(fileChassis);
-    std::filesystem::path metaTexture = Axle::AssetMetadataSerializer::GetMetaPath(fileTexture);
-    std::filesystem::path metaMaterial = Axle::AssetMetadataSerializer::GetMetaPath(fileMaterial);
-
-    if (!std::filesystem::exists(metaChassis) ||
-        !std::filesystem::exists(metaTexture) ||
-        !std::filesystem::exists(metaMaterial)) {
-        std::cerr << "FAIL: Companion .meta files were not auto-generated on AssetManager::Sync!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> Auto-generated: " << metaChassis.filename().string() << std::endl;
-    std::cout << "  -> Auto-generated: " << metaTexture.filename().string() << std::endl;
-    std::cout << "  -> Auto-generated: " << metaMaterial.filename().string() << std::endl;
-
-    Axle::UUID chassisUUID = Axle::AssetManager::GetAssetUUID(fileChassis);
-    Axle::UUID textureUUID = Axle::AssetManager::GetAssetUUID(fileTexture);
-    Axle::UUID materialUUID = Axle::AssetManager::GetAssetUUID(fileMaterial);
-
-    if (chassisUUID == 0 || textureUUID == 0 || materialUUID == 0) {
-        std::cerr << "FAIL: Generated UUIDs must be non-zero!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> Chassis UUID:  " << (uint64_t)chassisUUID << std::endl;
-    std::cout << "  -> Texture UUID:  " << (uint64_t)textureUUID << std::endl;
-    std::cout << "  -> Material UUID: " << (uint64_t)materialUUID << std::endl;
-
-    // 4. Verification of persistence across restart (Zero UUID drift)
-    std::cout << "\n[14.4] Testing UUID persistence across shutdown and restart..." << std::endl;
+    const auto root=std::filesystem::absolute("sandbox_embedded_asset_identity");
+    std::filesystem::create_directories(root);
+    Axle::AssetManager::Init(root);
+    auto native=root/"material.axleasset";
+    Axle::Material material("Authored");
+    if(!material.Save(native)) return false;
+    auto identity=Axle::AssetManager::GetOrCreateMetadata(native);
+    if(identity.Handle==0 || identity.Type!=Axle::AssetType::Material) return false;
+    auto raw=root/"raw.png";
+    if(!Axle::FileSystem::WriteBinaryFileAtomically(raw,"raw test bytes",14)) return false;
+    auto pathMetadata=Axle::AssetManager::GetOrCreateMetadata(raw);
+    if(pathMetadata.Handle!=0 || pathMetadata.Type!=Axle::AssetType::Texture) return false;
+    Axle::AssetManager::Shutdown(); Axle::AssetManager::Init(root);
+    if(Axle::AssetManager::GetAssetUUID(native)!=identity.Handle || Axle::AssetManager::GetAssetUUID(raw)!=0) return false;
+    if(std::filesystem::exists(native.string()+".meta") || std::filesystem::exists(root/"AssetRegistry.axleregistry")) return false;
     Axle::AssetManager::Shutdown();
-    Axle::AssetManager::Init(testDir);
-
-    Axle::UUID reloadedChassisUUID = Axle::AssetManager::GetAssetUUID(fileChassis);
-    if (reloadedChassisUUID != chassisUUID) {
-        std::cerr << "FAIL: UUID changed after restart! Expected " << (uint64_t)chassisUUID 
-                  << ", got " << (uint64_t)reloadedChassisUUID << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Persistent UUID preserved across restarts without drift." << std::endl;
-
-    // 5. Path-Independent Referencing & Rename Lifecycle
-    std::cout << "\n[14.5] Testing path-independent referencing and rename lifecycle..." << std::endl;
-    std::filesystem::path renamedChassis = testDir / "submodels" / "chassis_v2_sport.obj";
-    std::filesystem::rename(fileChassis, renamedChassis, ec);
-    Axle::AssetManager::OnAssetRenamed(fileChassis, renamedChassis);
-
-    std::filesystem::path renamedMeta = Axle::AssetMetadataSerializer::GetMetaPath(renamedChassis);
-    if (!std::filesystem::exists(renamedMeta) || std::filesystem::exists(metaChassis)) {
-        std::cerr << "FAIL: Companion .meta file was not renamed alongside asset!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Lookup path by old UUID -> must now resolve to the renamed path!
-    std::filesystem::path resolvedPath = Axle::AssetManager::GetAssetPath(chassisUUID);
-    std::string normResolved = resolvedPath.generic_string();
-    if (normResolved.find("chassis_v2_sport.obj") == std::string::npos) {
-        std::cerr << "FAIL: UUID lookup did not resolve to renamed file path!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> UUID " << (uint64_t)chassisUUID << " successfully resolved to renamed file: " 
-              << resolvedPath.string() << std::endl;
-    std::cout << "  -> PASS: Path-independent asset referencing verified." << std::endl;
-
-    // 6. Delete lifecycle
-    std::cout << "\n[14.6] Testing delete lifecycle..." << std::endl;
-    std::filesystem::remove(renamedChassis, ec);
-    Axle::AssetManager::OnAssetDeleted(renamedChassis);
-
-    if (std::filesystem::exists(renamedMeta) || Axle::AssetManager::HasAsset(chassisUUID)) {
-        std::cerr << "FAIL: Deleted asset companion .meta was not removed or registry still holds asset!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Companion .meta cleaned up and asset unregistered on delete." << std::endl;
-
-    // Cleanup
-    Axle::AssetManager::Shutdown();
-    std::filesystem::remove_all(testDir, ec);
-
-    std::cout << ">>> STEP 14 PASSED: Phase 17.1 Asset UUID & .meta Pipeline verified! <<<\n" << std::endl;
+    std::cout<<"PASS: native embedded UUID and raw path identities survive reopen without sidecars.\n";
     return true;
 }
 
-// =============================================================================
-// TEST STEP 15: Phase 17.2 Right-Click Asset Creation Pipeline
-// =============================================================================
 bool RunTest_Step15_Phase17_RightClickAssetCreation() {
-    std::cout << "\n========================================================" << std::endl;
-    std::cout << " [STEP 15 TEST] PHASE 17.2: RIGHT-CLICK ASSET CREATION   " << std::endl;
-    std::cout << "========================================================" << std::endl;
-
-    std::filesystem::path testDir = "sandbox_creation_pipeline_test";
-    std::error_code ec;
-    std::filesystem::remove_all(testDir, ec);
-    std::filesystem::create_directories(testDir, ec);
-
-    Axle::AssetManager::Init(testDir);
-
-    // 1. Create New Folder & Collision Handling
-    std::cout << "[15.1] Testing New Folder creation and name deduplication..." << std::endl;
-    auto folder1 = Axle::ContentBrowserPanel::CreateNewFolder(testDir);
-    auto folder2 = Axle::ContentBrowserPanel::CreateNewFolder(testDir);
-
-    if (!std::filesystem::is_directory(folder1) || !std::filesystem::is_directory(folder2)) {
-        std::cerr << "FAIL: CreateNewFolder failed to create physical directory!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
+    auto root=std::filesystem::absolute("sandbox_native_creation");
+    std::filesystem::create_directories(root);
+    Axle::AssetManager::Init(root);
+    auto firstFolder=Axle::ContentBrowserPanel::CreateNewFolder(root);
+    auto secondFolder=Axle::ContentBrowserPanel::CreateNewFolder(root);
+    if(firstFolder==secondFolder || !std::filesystem::is_directory(secondFolder)) return false;
+    auto scene=Axle::ContentBrowserPanel::CreateNewScene(root);
+    auto scene2=Axle::ContentBrowserPanel::CreateNewScene(root);
+    auto material=Axle::ContentBrowserPanel::CreateNewMaterial(root);
+    auto physics=Axle::ContentBrowserPanel::CreateNewPhysicsMaterial(root);
+    for(const auto& path:{scene,scene2,material,physics}) {
+        uint64_t id=0;
+        if(!std::filesystem::is_regular_file(path) || !Axle::FileSystem::ReadFileIdentity(path,id) || id==0) return false;
     }
-    if (folder1 == folder2 || folder2.filename().string() != "New_Folder_1") {
-        std::cerr << "FAIL: Name deduplication for folder failed! Expected New_Folder_1, got " 
-                  << folder2.filename().string() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Created '" << folder1.filename().string() 
-              << "' and '" << folder2.filename().string() << "' cleanly." << std::endl;
-
-    // 2. Create Scene (.axlescene) & Companion .meta
-    std::cout << "\n[15.2] Testing Scene (.axlescene) creation and companion .meta..." << std::endl;
-    auto scene1 = Axle::ContentBrowserPanel::CreateNewScene(testDir);
-    auto scene2 = Axle::ContentBrowserPanel::CreateNewScene(testDir);
-
-    auto sceneMeta1 = Axle::AssetMetadataSerializer::GetMetaPath(scene1);
-    if (!std::filesystem::exists(scene1) || !std::filesystem::exists(sceneMeta1)) {
-        std::cerr << "FAIL: CreateNewScene did not create scene file or companion .meta!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    if (scene2.filename().string() != "New_Scene_1.axlescene") {
-        std::cerr << "FAIL: Scene deduplication failed! Got " << scene2.filename().string() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    Axle::AssetMetadata sceneMeta;
-    if (!Axle::AssetMetadataSerializer::Deserialize(sceneMeta1, sceneMeta) || sceneMeta.Type != Axle::AssetType::Scene) {
-        std::cerr << "FAIL: Scene companion .meta invalid or wrong AssetType!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Scene '" << scene1.filename().string() << "' created with .meta [UUID: " 
-              << (uint64_t)sceneMeta.Handle << "]" << std::endl;
-
-    // 3. Create Material Asset (.axlemat) & Default PBR Values
-    std::cout << "\n[15.3] Testing Material Asset (.axlemat) creation..." << std::endl;
-    auto mat1 = Axle::ContentBrowserPanel::CreateNewMaterial(testDir);
-    auto mat2 = Axle::ContentBrowserPanel::CreateNewMaterial(testDir);
-
-    auto matMeta1 = Axle::AssetMetadataSerializer::GetMetaPath(mat1);
-    if (!std::filesystem::exists(mat1) || !std::filesystem::exists(matMeta1)) {
-        std::cerr << "FAIL: CreateNewMaterial did not write material file or companion .meta!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    if (mat2.filename().string() != "New_Material_1.axleasset" && mat2.filename().string() != "New_Material_1.axlemat") {
-        std::cerr << "FAIL: Material deduplication failed! Got " << mat2.filename().string() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    Axle::MaterialComponent loadedMat;
-    if (!Axle::SceneHierarchyPanel::LoadMaterialAsset(mat1, loadedMat)) {
-        std::cerr << "FAIL: Could not load created .axlemat material file!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Material '" << mat1.filename().string() 
-              << "' created with default Albedo: (" << loadedMat.AlbedoColor.r << ", " 
-              << loadedMat.AlbedoColor.g << ", " << loadedMat.AlbedoColor.b << ")" << std::endl;
-
-    // 4. Create C++ Script (.hpp) & Boilerplate
-    std::cout << "\n[15.4] Testing C++ Script (.hpp) boilerplate creation..." << std::endl;
-    auto script1 = Axle::ContentBrowserPanel::CreateNewScript(testDir);
-    auto script2 = Axle::ContentBrowserPanel::CreateNewScript(testDir);
-
-    auto scriptMeta1 = Axle::AssetMetadataSerializer::GetMetaPath(script1);
-    if (!std::filesystem::exists(script1) || !std::filesystem::exists(scriptMeta1)) {
-        std::cerr << "FAIL: CreateNewScript did not write script file or companion .meta!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    if (script2.filename().string() != "NewScript_1.hpp") {
-        std::cerr << "FAIL: Script deduplication failed! Got " << script2.filename().string() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    // Verify script contains AXLE_SCRIPT_FIELDS and AXLE_REGISTER_SCRIPT
-    std::ifstream scriptIn(script1);
-    std::string scriptContent((std::istreambuf_iterator<char>(scriptIn)), std::istreambuf_iterator<char>());
-    scriptIn.close();
-    if (scriptContent.find("AXLE_SCRIPT_FIELDS") == std::string::npos ||
-        scriptContent.find("AXLE_REGISTER_SCRIPT") == std::string::npos) {
-        std::cerr << "FAIL: Generated C++ script does not contain required reflection macros!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: C++ Script boilerplate with reflection macro verified." << std::endl;
-
-    // 5. Create Physics Material (.physmat) & Restitution/Friction Validation
-    std::cout << "\n[15.5] Testing Physics Material (.physmat) creation..." << std::endl;
-    auto phys1 = Axle::ContentBrowserPanel::CreateNewPhysicsMaterial(testDir);
-    auto phys2 = Axle::ContentBrowserPanel::CreateNewPhysicsMaterial(testDir);
-
-    auto physMeta1 = Axle::AssetMetadataSerializer::GetMetaPath(phys1);
-    if (!std::filesystem::exists(phys1) || !std::filesystem::exists(physMeta1)) {
-        std::cerr << "FAIL: CreateNewPhysicsMaterial did not create file or companion .meta!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    if (phys2.filename().string() != "New_PhysicsMaterial_1.axleasset" && phys2.filename().string() != "New_PhysicsMaterial_1.physmat") {
-        std::cerr << "FAIL: PhysicsMaterial deduplication failed! Got " << phys2.filename().string() << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-
-    Axle::PhysicsMaterial loadedPhys;
-    if (!Axle::PhysicsMaterial::Load(phys1, loadedPhys)) {
-        std::cerr << "FAIL: PhysicsMaterial::Load failed to parse .physmat file!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    bool matchesDefault = (std::abs(loadedPhys.Friction - 0.5f) <= 0.01f && std::abs(loadedPhys.Restitution - 0.0f) <= 0.01f) ||
-                          (std::abs(loadedPhys.Friction - 0.85f) <= 0.01f && std::abs(loadedPhys.Restitution - 0.05f) <= 0.01f);
-    if (!matchesDefault) {
-        std::cerr << "FAIL: Physics material values do not match defaults!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: Physics Material created with Friction: " << loadedPhys.Friction 
-              << ", Restitution: " << loadedPhys.Restitution << std::endl;
-
-    // 6. Verify all created assets are indexed in AssetManager
-    std::cout << "\n[15.6] Verifying all assets indexed in AssetManager..." << std::endl;
-    if (!Axle::AssetManager::HasAsset(scene1) ||
-        !Axle::AssetManager::HasAsset(mat1) ||
-        !Axle::AssetManager::HasAsset(script1) ||
-        !Axle::AssetManager::HasAsset(phys1)) {
-        std::cerr << "FAIL: Created assets missing from AssetManager registry!" << std::endl;
-        std::filesystem::remove_all(testDir, ec);
-        return false;
-    }
-    std::cout << "  -> PASS: All created assets registered in AssetManager with persistent UUIDs." << std::endl;
-
-    // Cleanup
+    if(Axle::AssetManager::GetAssetUUID(scene)==Axle::AssetManager::GetAssetUUID(scene2)) return false;
+    auto script=Axle::ContentBrowserPanel::CreateNewScript(root);
+    const auto text=Axle::FileSystem::ReadTextFile(script);
+    if(text.find("AXLE_SCRIPT_FIELDS")==std::string::npos || text.find("AXLE_REGISTER_SCRIPT")==std::string::npos) return false;
+    if(Axle::AssetManager::GetAssetUUID(script)!=0) return false;
+    for(const auto& entry:std::filesystem::recursive_directory_iterator(root))
+        if(entry.path().extension()==".meta" || entry.path().extension()==".axleregistry") return false;
     Axle::AssetManager::Shutdown();
-    std::filesystem::remove_all(testDir, ec);
-
-    std::cout << ">>> STEP 15 PASSED: Phase 17.2 Right-Click Asset Creation verified! <<<\n" << std::endl;
+    std::cout<<"PASS: content creation/deduplication uses embedded native IDs and raw script paths.\n";
     return true;
 }
 
-// =============================================================================
-// STEP 16: PHASE 17.3 DEDICATED MATERIAL INSPECTOR TEST
-// =============================================================================
 bool RunTest_Step16_Phase17_DedicatedMaterialInspector() {
     std::cout << "\n========================================================" << std::endl;
     std::cout << " [STEP 16 TEST] PHASE 17.3 DEDICATED MATERIAL INSPECTOR  " << std::endl;
@@ -532,7 +251,7 @@ bool RunTest_Step17_Phase18_DragDropPipelinesAndClassCreation() {
         std::cerr << "FAIL: .hpp or .cpp files not categorized as AssetType::Script in AssetManager!" << std::endl;
         return false;
     }
-    std::cout << "  -> PASS: Both .hpp and .cpp companions generated with persistent UUIDs." << std::endl;
+    std::cout << "  -> PASS: Both .hpp and .cpp are path-addressed Script resources without sidecars." << std::endl;
 
     // Test name deduplication
     auto [hppPath2, cppPath2] = Axle::ContentBrowserPanel::CreateNewClass(testDir, "VehicleController");

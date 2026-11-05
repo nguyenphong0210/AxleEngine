@@ -4,17 +4,11 @@
 #include <string>
 
 namespace Axle {
-
+    // Reads/writes identity inside an Engine-owned asset file. There is no sidecar path.
     class AssetMetadataSerializer {
     public:
-        static inline constexpr uint32_t CurrentVersion = 1;
-
-        static std::filesystem::path GetMetaPath(const std::filesystem::path& assetPath);
-        static bool IsMetaFile(const std::filesystem::path& path);
-        static std::filesystem::path GetAssetPathFromMeta(const std::filesystem::path& metaPath);
-
-        static bool Serialize(const std::filesystem::path& metaPath, const AssetMetadata& metadata, std::string* outError = nullptr);
-        static bool Deserialize(const std::filesystem::path& metaPath, AssetMetadata& outMetadata, std::string* outError = nullptr);
+        static bool IsNativeAsset(const std::filesystem::path& path);
+        static bool Serialize(const std::filesystem::path& assetPath, const AssetMetadata& metadata, std::string* error = nullptr);
+        static bool Deserialize(const std::filesystem::path& assetPath, AssetMetadata& metadata, std::string* error = nullptr);
     };
-
 }

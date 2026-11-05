@@ -406,12 +406,13 @@ namespace Axle::RHI {
     }
 
     bool RHIMaterial::Save(const std::filesystem::path& filepath) const {
-        std::ofstream fout(filepath);
-        if (!fout.is_open()) {
-            AXLE_CORE_ERROR("RHIMaterial::Save: Could not open file '{0}' for writing", filepath.string());
-            return false;
-        }
-
+        std::ostringstream fout;
+        bool pathsValid = true;
+        auto reference = [&](const std::string& path) {
+            std::string relative;
+            pathsValid = FileSystem::MakeAssetReference(path,relative) && pathsValid;
+            return relative;
+        };
         std::string ext = filepath.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
         if (ext == ".axleasset" || ext.empty()) {
@@ -425,13 +426,13 @@ namespace Axle::RHI {
             fout << "    depthWrite: " << (m_Desc.DepthWrite ? "true" : "false") << "\n\n";
             fout << "    // Base Color & Texture\n";
             fout << "    albedoColor: [ " << m_Desc.BaseColor.r << " , " << m_Desc.BaseColor.g << " , " << m_Desc.BaseColor.b << " , " << m_Desc.BaseColor.a << " ]\n";
-            fout << "    albedoMap: \"" << m_Desc.AlbedoPath << "\"\n\n";
+            fout << "    albedoMap: \"" << reference(m_Desc.AlbedoPath) << "\"\n\n";
             fout << "    // Surface Microfacet\n";
             fout << "    metallic: " << m_Desc.Metallic << "\n";
             fout << "    roughness: " << m_Desc.Roughness << "\n";
-            fout << "    normalMap: \"" << m_Desc.NormalPath << "\"\n";
+            fout << "    normalMap: \"" << reference(m_Desc.NormalPath) << "\"\n";
             fout << "    normalStrength: " << m_Desc.NormalStrength << "\n";
-            fout << "    occlusionMap: \"" << m_Desc.AOPath << "\"\n";
+            fout << "    occlusionMap: \"" << reference(m_Desc.AOPath) << "\"\n";
             fout << "    occlusionStrength: " << m_Desc.AO << "\n\n";
             fout << "    detailNormalStrength: " << m_Desc.DetailNormalStrength << "\n";
             fout << "    detailUVScale: " << "[ " << m_Desc.DetailUVScale.x << " , " << m_Desc.DetailUVScale.y << " ]\n";
@@ -446,17 +447,17 @@ namespace Axle::RHI {
             fout << "    anisotropyStrength: " << m_Desc.AnisotropyStrength << "\n";
             fout << "    anisotropyRotation: " << m_Desc.AnisotropyRotation << "\n";
             fout << "    renderQueue: " << m_Desc.RenderQueue << "\n";
-            fout << "    roughnessMap: \"" << m_Desc.RoughnessPath << "\"\n";
-            fout << "    metallicMap: \"" << m_Desc.MetallicPath << "\"\n";
-            fout << "    emissiveMap: \"" << m_Desc.EmissivePath << "\"\n";
-            fout << "    ormMap: \"" << m_Desc.ORMPath << "\"\n";
-            fout << "    clearcoatMap: \"" << m_Desc.ClearcoatPath << "\"\n";
+            fout << "    roughnessMap: \"" << reference(m_Desc.RoughnessPath) << "\"\n";
+            fout << "    metallicMap: \"" << reference(m_Desc.MetallicPath) << "\"\n";
+            fout << "    emissiveMap: \"" << reference(m_Desc.EmissivePath) << "\"\n";
+            fout << "    ormMap: \"" << reference(m_Desc.ORMPath) << "\"\n";
+            fout << "    clearcoatMap: \"" << reference(m_Desc.ClearcoatPath) << "\"\n";
             fout << "    useClearcoatMap: " << ((m_Desc.TextureEnableMask & (1u<<6)) ? "true" : "false") << "\n";
-            fout << "    anisotropyFlowMap: \"" << m_Desc.AnisotropyFlowPath << "\"\n";
+            fout << "    anisotropyFlowMap: \"" << reference(m_Desc.AnisotropyFlowPath) << "\"\n";
             fout << "    useAnisotropyFlowMap: " << ((m_Desc.TextureEnableMask & (1u<<7))?"true":"false") << "\n";
-            fout << "    detailNormalMap: \"" << m_Desc.DetailNormalPath << "\"\n";
+            fout << "    detailNormalMap: \"" << reference(m_Desc.DetailNormalPath) << "\"\n";
             fout << "    useDetailNormalMap: " << ((m_Desc.TextureEnableMask & (1u<<8))?"true":"false") << "\n";
-            fout << "    detailMaskMap: \"" << m_Desc.DetailMaskPath << "\"\n";
+            fout << "    detailMaskMap: \"" << reference(m_Desc.DetailMaskPath) << "\"\n";
             fout << "    useDetailMaskMap: " << ((m_Desc.TextureEnableMask & (1u<<9))?"true":"false") << "\n";
             fout << "    textureMode: \"" << TextureModeToString(m_Desc.TextureMode) << "\"\n";
             fout << "    specularHighlights: " << (m_Desc.EnableSpecularHighlights ? "true" : "false") << "\n";
@@ -474,7 +475,7 @@ namespace Axle::RHI {
             fout << "    uvTiling: [ " << m_Desc.UVScale.x << " , " << m_Desc.UVScale.y << " ]\n";
             fout << "    uvOffset: [ " << m_Desc.UVOffset.x << " , " << m_Desc.UVOffset.y << " ]\n";
             fout << "}\n";
-            return true;
+            return pathsValid && FileSystem::WriteIdentifiedTextFile(filepath, fout.str());
         }
 
         fout << "RHIMaterial:\n";
@@ -494,15 +495,14 @@ namespace Axle::RHI {
         fout << "  UVOffset: [ " << m_Desc.UVOffset.x << " , " << m_Desc.UVOffset.y << " ]\n";
         fout << "  ShadingModel: " << static_cast<uint32_t>(m_Desc.ShadingModel) << "\n";
 
-        if (!m_Desc.AlbedoPath.empty()) fout << "  AlbedoPath: " << m_Desc.AlbedoPath << "\n";
-        if (!m_Desc.NormalPath.empty()) fout << "  NormalPath: " << m_Desc.NormalPath << "\n";
-        if (!m_Desc.RoughnessPath.empty()) fout << "  RoughnessPath: " << m_Desc.RoughnessPath << "\n";
-        if (!m_Desc.MetallicPath.empty()) fout << "  MetallicPath: " << m_Desc.MetallicPath << "\n";
-        if (!m_Desc.AOPath.empty()) fout << "  AOPath: " << m_Desc.AOPath << "\n";
-        if (!m_Desc.EmissivePath.empty()) fout << "  EmissivePath: " << m_Desc.EmissivePath << "\n";
+        if (!m_Desc.AlbedoPath.empty()) fout << "  AlbedoPath: " << reference(m_Desc.AlbedoPath) << "\n";
+        if (!m_Desc.NormalPath.empty()) fout << "  NormalPath: " << reference(m_Desc.NormalPath) << "\n";
+        if (!m_Desc.RoughnessPath.empty()) fout << "  RoughnessPath: " << reference(m_Desc.RoughnessPath) << "\n";
+        if (!m_Desc.MetallicPath.empty()) fout << "  MetallicPath: " << reference(m_Desc.MetallicPath) << "\n";
+        if (!m_Desc.AOPath.empty()) fout << "  AOPath: " << reference(m_Desc.AOPath) << "\n";
+        if (!m_Desc.EmissivePath.empty()) fout << "  EmissivePath: " << reference(m_Desc.EmissivePath) << "\n";
 
-        fout.close();
-        return true;
+        return pathsValid && FileSystem::WriteIdentifiedTextFile(filepath, fout.str());
     }
 
     bool RHIMaterial::Load(const std::filesystem::path& filepath) {

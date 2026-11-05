@@ -220,44 +220,43 @@ their owning package's cutover. Do not bless a whole directory permanently.
 - **Exit:** reproducible current evidence and a measurable violation inventory;
   no speculative performance score or production move.
 
-### AF-01 - Stable asset identity and safe persistence
+### AF-01 - Native asset identity, raw resource paths and safe persistence
 
-**User steering, 2026-11-05: no per-asset sidecars.** Use a source-controlled,
-versioned root asset registry (normally one per project), rather than generating
-.meta/.uid/.import files beside assets. Registry UUID/path/import-setting records
-are authored data; generated caches and compiled imports remain ignored. Existing
-native asset UUID fields, where present, must agree with the canonical registry;
-do not invent independent identities or rewrite all serializers to embed new fields.
-Do not retain the old sidecar-based system as a second active authority. No old
-.meta reader, conversion, compatibility fallback or bulk metadata commit is required.
+Latest user steering (2026-11-05) supersedes the earlier root-registry proposal.
+Raw external resources (PNG/JPEG, audio, fonts, source meshes, scripts) are referenced
+by canonical project-root-relative paths and have no persistent UUID. Native Engine
+text assets embed one versioned UUID in their own file. There are no generated
+.meta/.uid/.import files and no source-controlled central identity registry.
 
-Preserve valid supported UUIDs rather than replacing them with path/content hashes.
-Define schema/version validation and canonical root-relative project/package paths
-without absolute machine locations. Builtin primitives use canonical builtin IDs.
-A genuinely new import may allocate an ID once only after its registry entry is
-atomically persisted. Corrupt/unsupported/missing registry data for referenced
-assets and duplicate UUID/path records require recovery diagnostics rather than
-silent identity regeneration. Stable text ordering keeps registry edits reviewable.
+The current envelope is a first-line comment: "# AxleFileIdentity: 1 <uint64>".
+The body remains owned by its native serializer. Existing valid UUIDs survive
+save, project-root relocation, and native rename/move. Explicitly copying a native
+asset as a new asset allocates a new identity; raw copies retain bytes and use a
+new path. Builtin primitives use reserved canonical identities.
 
-Editor rename/move and project-root relocation preserve UUID; copying an asset as
-a new asset uses an explicit identity policy. External moves require detectable
-unresolved entries and an explicit UUID-preserving relink path. Do not promise
-unambiguous external-move inference from content hashes; identical files can share
-content while representing different assets. Fingerprints are recovery hints only.
+Discovery is read-only and rebuilds an in-memory index from embedded identities,
+including mounted package contents. Missing, malformed, unsupported or duplicate
+native identities are diagnosed rather than regenerated. All conflicting duplicate
+copies are unresolved. A new document/import publishes its UUID only after
+successful atomic persistence. No compatibility reader or migration is required.
 
-Add atomic registry/project/scene/assembly persistence at the shared CPU IO seam.
-Save failure preserves the prior valid file and published in-memory registry state;
-rename/relink transactions have explicit failure recovery. Serializer/codec owners
-retain their schemas. This is not a universal serializer or plugin-framework rewrite.
+Native external moves can be resolved by scanning the same embedded UUID. Raw
+external moves require explicit path relink; Editor moves update supported serialized
+path fields. Content hashes are not identities. Rewriting multiple consumer files
+has best-effort rollback on synchronous failure; it is not a crash-atomic transaction.
+No universal plugin codec or whole serializer boundary extraction is released here.
 
-- **Files:** AssetManager/canonical registry serializer, active sidecar path retirement,
-  registry/cache ignore policy, affected shared save helpers, tiny authored registry
-  fixtures and clean-checkout identity tests.
-- **Evidence:** fresh checkout resolves identical references; rename/move/root
-  relocation and explicit relink preserve IDs; copy policy, duplicate/corrupt/missing
-  registry data and save failures are verified; asset operations generate no sidecars.
-- **Exit:** repeatable source-controlled identities and safe saves without per-asset
-  metadata files, before large module/asset relocation and export.
+Use a shared CPU atomic IO seam for asset/project/scene/assembly saves. Invalid
+input and replacement failures preserve the prior valid file. Identity persistence
+failure must not publish an in-memory entry. Core has no upward Asset/Scene dependency.
+
+- **Files:** AssetManager, embedded identity serializer, active sidecar/registry
+  retirement, affected native save helpers, authored native/raw fixtures and tests.
+- **Evidence:** cold reopen, actual serialized references, root relocation, native
+  and raw moves, explicit relink/copy, duplicates, invalid identity and deterministic
+  save failures; no sidecars or central authored registry are generated.
+- **Boundary:** CPU format extraction remains AF-04; no AF-02+, EJ+, NRI or plugin
+  framework implementation is implied.
 
 ### AF-02 - Foundation, Application and explicit service ownership
 

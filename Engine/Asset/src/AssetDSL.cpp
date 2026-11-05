@@ -1,4 +1,5 @@
 #include <Axle/AssetDSL.hpp>
+#include <Axle/FileSystem.hpp>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -109,6 +110,8 @@ namespace Axle {
             if (c == '"') {
                 inString = true;
                 result.push_back(c);
+            } else if (c == '#' && (i == 0 || source[i-1] == '\n' || source[i-1] == '\r')) {
+                inLineComment = true;
             } else if (c == '/' && next == '/') {
                 inLineComment = true;
                 ++i;
@@ -131,15 +134,8 @@ namespace Axle {
     }
 
     AssetKind AssetDSL::PeekAssetKindFromFile(const std::string& filepath) {
-        std::ifstream file(filepath);
-        if (!file.is_open()) return AssetKind::Unknown;
-
-        char buffer[512];
-        file.read(buffer, sizeof(buffer) - 1);
-        std::streamsize bytesRead = file.gcount();
-        buffer[bytesRead] = '\0';
-
-        return PeekAssetKind(std::string_view(buffer, static_cast<size_t>(bytesRead)));
+        const auto content = FileSystem::ReadTextFile(filepath);
+        return PeekAssetKind(content);
     }
 
     glm::vec4 AssetDSL::ParseHexColor(std::string_view hex) {
@@ -732,15 +728,12 @@ namespace Axle {
     }
 
     bool AssetDSL::ParseFile(const std::string& filepath, AssetDocument& outDoc, std::string* outError) {
-        std::ifstream file(filepath);
-        if (!file.is_open()) {
-            if (outError) *outError = "Could not open asset file: " + filepath;
+        const auto content = FileSystem::ReadTextFile(filepath);
+        if (content.empty()) {
+            if (outError) *outError = "Could not read asset file: " + filepath;
             return false;
         }
-
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        return ParseSource(buffer.str(), outDoc, outError);
+        return ParseSource(content, outDoc, outError);
     }
 
     // -------------------------------------------------------------------------
@@ -778,15 +771,12 @@ namespace Axle {
     }
 
     bool AssetDSL::SaveFile(const std::string& filepath, const AssetDocument& doc, std::string* outError) {
-        std::ofstream file(filepath);
-        if (!file.is_open()) {
-            if (outError) *outError = "Failed to open file for writing: " + filepath;
+        const auto content = SerializeDocument(doc);
+        if (content.empty()) {
+            if (outError) *outError = "Cannot save an empty asset document";
             return false;
         }
-
-        std::string content = SerializeDocument(doc);
-        file << content;
-        return true;
+        return FileSystem::WriteIdentifiedTextFile(filepath, content, outError);
     }
 
 } // namespace Axle

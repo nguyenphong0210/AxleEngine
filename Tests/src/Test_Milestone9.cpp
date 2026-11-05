@@ -12,6 +12,7 @@
 #define NOMINMAX
 #endif
 #include "TestCommon.hpp"
+#include "ScopedAssetTestRoot.hpp"
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <Axle/TextureDescriptor.hpp>
@@ -294,6 +295,7 @@ bool RunTest_Step98_Phase35_Step4_VulkanGraphicsBackendAndParity() {
 // STEP 99: PHASE 36 STEP 1 - ASSETDSL LEXER, PARSER & PEEK UTILITY
 // =============================================================================
 bool RunTest_Step99_Phase36_Step1_AssetDSLLexerAndParser() {
+    Axle::Tests::ScopedAssetTestRoot ownedAssets(std::filesystem::current_path()/"assets");
     std::cout << "\n========================================================" << std::endl;
     std::cout << " [STEP 99 TEST] PHASE 36 STEP 1: ASSETDSL LEXER & PARSER" << std::endl;
     std::cout << " (AST Blocks, Peek Utility, Hex Colors, Serialization)  " << std::endl;
@@ -594,6 +596,7 @@ Mesh {
         // 1. Assign Material asset
         assert(!entity.HasComponent<MaterialComponent>());
         std::filesystem::path matFile = "assets/materials/SilverCarPaint.axleasset";
+        assert(AssetDSL::SaveFile(matFile.string(),matDoc));
         {
             if (!entity.HasComponent<MaterialComponent>()) {
                 entity.AddComponent<MaterialComponent>();
@@ -602,7 +605,7 @@ Mesh {
             mc.AssetPath = matFile.string();
             auto mat = std::make_shared<Material>();
             if (mat->Load(matFile)) {
-                mc.SetAsset(12345, mat);
+                mc.SetAsset(AssetManager::GetAssetUUID(matFile), mat);
             }
         }
         assert(entity.HasComponent<MaterialComponent>());
@@ -1160,6 +1163,7 @@ bool RunTest_Step100_Phase37_RawMediaIngestionAndOptInDescriptors() {
     std::error_code ec;
     std::filesystem::remove_all(tempDir, ec);
     std::filesystem::create_directories(tempDir, ec);
+    Axle::Tests::ScopedAssetTestRoot ownedAssets(tempDir);
 
     // [100.1] Testing Single-File Zero-Companion Ingestion
     std::cout << "\n[100.1] Testing Single-File Zero-Companion Raw Media Ingestion..." << std::endl;

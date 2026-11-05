@@ -1,4 +1,7 @@
 #include <Axle/FileSystem.hpp>
+#include <Axle/UUID.hpp>
+#include <algorithm>
+#include <string_view>
 #include <Axle/Package.hpp>
 #include <Axle/Log.hpp>
 #include <fstream>
@@ -20,6 +23,18 @@ namespace Axle {
 
     static std::filesystem::path s_AssetDirectory;
     static std::unique_ptr<Package> s_MountedPackage = nullptr;
+
+    static std::string PackageKey(const std::filesystem::path& path) {
+        auto relative = path;
+        if (path.is_absolute()) {
+            std::error_code error;
+            auto root = std::filesystem::weakly_canonical(FileSystem::GetAssetDirectory(), error);
+            if (error) return {};
+            relative = path.lexically_normal().lexically_relative(root);
+            if (relative.empty() || relative.is_absolute() || *relative.begin() == "..") return {};
+        }
+        return Package::NormalizePath(relative.generic_string());
+    }
 
     bool FileSystem::MountPackage(const std::filesystem::path& packagePath) {
         auto pkg = std::make_unique<Package>();
@@ -59,7 +74,7 @@ namespace Axle {
     std::filesystem::path FileSystem::ResolveAssetPath(const std::filesystem::path& relativePath) {
         // 0. If package is mounted and contains this virtual path, return it directly
         if (s_MountedPackage && s_MountedPackage->IsOpen()) {
-            std::string norm = Package::NormalizePath(relativePath.generic_string());
+            std::string norm = PackageKey(relativePath);
             if (s_MountedPackage->HasEntry(norm)) {
                 return relativePath;
             }
@@ -121,7 +136,7 @@ namespace Axle {
     std::string FileSystem::ReadTextFile(const std::filesystem::path& filepath) {
         // 1. Check mounted VFS package first
         if (s_MountedPackage && s_MountedPackage->IsOpen()) {
-            std::string norm = Package::NormalizePath(filepath.generic_string());
+            std::string norm = PackageKey(filepath);
             if (s_MountedPackage->HasEntry(norm)) {
                 return s_MountedPackage->ReadEntryAsText(norm);
             }
@@ -151,7 +166,7 @@ namespace Axle {
     std::vector<uint8_t> FileSystem::ReadBinaryFile(const std::filesystem::path& filepath) {
         // 1. Check mounted VFS package first
         if (s_MountedPackage && s_MountedPackage->IsOpen()) {
-            std::string norm = Package::NormalizePath(filepath.generic_string());
+            std::string norm = PackageKey(filepath);
             if (s_MountedPackage->HasEntry(norm)) {
                 return s_MountedPackage->ReadEntry(norm);
             }
@@ -197,6 +212,11 @@ namespace Axle {
     }
 
     bool FileSystem::WriteBinaryFileAtomically(const std::filesystem::path& filepath, const void* data, size_t size, std::string* outError) {
+        if (outError) outError->clear();
+        if (size != 0 && data == nullptr) {
+            if (outError) *outError = "Nonempty write requires a non-null data buffer";
+            return false;
+        }
         if (filepath.empty()) {
             if (outError) *outError = "Filepath cannot be empty";
             return false;
@@ -234,21 +254,29 @@ namespace Axle {
                 return false;
             }
             out.close();
+            if (out.fail()) {
+                std::error_code cleanup;
+                std::filesystem::remove(tempPath, cleanup);
+                if (outError) *outError = "Failed to close temporary file after writing";
+                return false;
+            }
         }
 
 #ifdef _WIN32
         if (!MoveFileExW(tempPath.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            const auto failure = GetLastError();
             std::error_code ec;
             std::filesystem::remove(tempPath, ec);
-            if (outError) *outError = "Failed to atomically replace target file: Windows error " + std::to_string(GetLastError());
+            if (outError) *outError = "Failed to atomically replace target file: Windows error " + std::to_string(failure);
             return false;
         }
 #else
         std::error_code ec;
         std::filesystem::rename(tempPath, target, ec);
         if (ec) {
+            const auto failure = ec.message();
             std::filesystem::remove(tempPath, ec);
-            if (outError) *outError = "Failed to atomically replace target file: " + ec.message();
+            if (outError) *outError = "Failed to atomically replace target file: " + failure;
             return false;
         }
 #endif
@@ -256,9 +284,106 @@ namespace Axle {
         return true;
     }
 
+
+    bool FileSystem::MakeAssetReference(const std::filesystem::path& path, std::string& reference) {
+        reference.clear();
+        if (path.empty()) return true;
+        std::error_code error;
+        auto relative = path;
+        if (path.is_absolute()) {
+            if (s_AssetDirectory.empty()) return false;
+            relative = std::filesystem::relative(path, s_AssetDirectory, error);
+        }
+        relative = relative.lexically_normal();
+        if (error || relative.empty() || relative.is_absolute() || *relative.begin() == "..") return false;
+        reference = relative.generic_string();
+        return true;
+    }
+
+    bool FileSystem::ReadFileIdentity(const std::filesystem::path& path, uint64_t& id, std::string* error) {
+        id = 0;
+        std::string first;
+        if (HasMountedPackage() && s_MountedPackage->HasEntry(PackageKey(path))) {
+            std::istringstream input(ReadTextFile(path));
+            std::getline(input, first);
+        } else {
+            std::ifstream input(path, std::ios::binary);
+            std::getline(input, first);
+        }
+        if (first.empty()) {
+            if (error) *error = "Cannot read asset identity: " + path.string();
+            return false;
+        }
+        if (!first.empty() && first.back() == '\r') first.pop_back();
+        constexpr std::string_view prefix = "# AxleFileIdentity: ";
+        if (first.rfind(prefix, 0) != 0) {
+            if (error) *error = "Asset has no embedded identity: " + path.string();
+            return false;
+        }
+        std::istringstream values(first.substr(prefix.size()));
+        unsigned version = 0;
+        std::string value, extra;
+        if (!(values >> version >> value) || version != 1 || (values >> extra) || value.empty() ||
+            !std::all_of(value.begin(), value.end(), [](unsigned char c) { return c >= '0' && c <= '9'; })) {
+            if (error) *error = "Malformed or unsupported asset identity: " + path.string();
+            return false;
+        }
+        try { id = std::stoull(value); } catch (...) { id = 0; }
+        if (id == 0) {
+            if (error) *error = "Invalid asset UUID: " + path.string();
+            return false;
+        }
+        return true;
+    }
+
+    bool FileSystem::WriteIdentifiedTextFile(const std::filesystem::path& path, const std::string& text,
+                                              std::string* error, uint64_t requestedID) {
+        if (error) error->clear();
+        constexpr std::string_view prefix = "# AxleFileIdentity:";
+        auto decode = [&](const std::string& line, uint64_t& id) {
+            if (line.rfind(prefix, 0) != 0) return false;
+            std::istringstream header(line.substr(prefix.size()));
+            unsigned version = 0;
+            std::string value, extra;
+            if (!(header >> version >> value) || version != 1 || (header >> extra) || value.empty() ||
+                !std::all_of(value.begin(), value.end(), [](unsigned char c){ return c >= '0' && c <= '9'; })) return false;
+            try { id = std::stoull(value); } catch (...) { return false; }
+            return id != 0;
+        };
+        std::string body = text;
+        uint64_t incoming = 0, existing = 0;
+        if (body.rfind(prefix, 0) == 0) {
+            auto end = body.find('\n');
+            if (end == std::string::npos || !decode(body.substr(0,end), incoming)) {
+                if(error)*error="Invalid or unsupported incoming document identity";
+                return false;
+            }
+            body.erase(0,end+1);
+        }
+        if (body.empty()) { if(error)*error="Identified document body is empty"; return false; }
+        if (std::filesystem::is_regular_file(path)) {
+            std::ifstream old(path,std::ios::binary);
+            std::string first;
+            if (!old || !std::getline(old,first)) { if(error)*error="Cannot read existing document before saving"; return false; }
+            if (first.rfind(prefix,0) == 0 && !decode(first,existing)) {
+                if(error)*error="Existing document identity is malformed; recovery is required"; return false;
+            }
+        }
+        if (existing && ((requestedID && requestedID != existing) ||
+                         (!requestedID && incoming && incoming != existing))) {
+            if(error)*error="Save cannot replace an existing document's identity";
+            return false;
+        }
+        uint64_t id = requestedID ? requestedID : existing ? existing : incoming;
+        if (!id) id = static_cast<uint64_t>(UUID());
+        if (!id) { if(error)*error="Cannot allocate document UUID"; return false; }
+        return WriteTextFileAtomically(path, "# AxleFileIdentity: 1 " + std::to_string(id) + "\n" + body, error);
+    }
+
+
     bool FileSystem::Exists(const std::filesystem::path& filepath) {
         if (s_MountedPackage && s_MountedPackage->IsOpen()) {
-            std::string norm = Package::NormalizePath(filepath.generic_string());
+            std::string norm = PackageKey(filepath);
             if (s_MountedPackage->HasEntry(norm)) {
                 return true;
             }

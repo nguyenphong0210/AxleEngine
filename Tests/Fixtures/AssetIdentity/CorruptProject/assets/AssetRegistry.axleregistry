@@ -1,6 +1,0 @@
-AssetRegistry:
-  Version: 1
-  Entries:
-    - UUID: NOT_A_NUMERIC_UUID
-      Path: corrupt.png
-      Type: Texture2D

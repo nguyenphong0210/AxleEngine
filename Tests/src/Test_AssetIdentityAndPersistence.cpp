@@ -1,559 +1,327 @@
 #include "TestWorkspace.hpp"
 #include <Axle/AssetManager.hpp>
-#include <Axle/AssetRegistrySerializer.hpp>
+#include <Axle/AssetMetadataSerializer.hpp>
+#include <Axle/AssetDSL.hpp>
+#include <Axle/TextureDescriptor.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Package.hpp>
+#include <Axle/UI/UIParser.hpp>
+#include <Axle/UI/UIDocument.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
 #include <Axle/Scene.hpp>
+#include <Axle/Entity.hpp>
 #include <Axle/SceneSerializer.hpp>
-#include <Axle/Components.hpp>
-#include <iostream>
+#include <Axle/AssemblySerializer.hpp>
+#include <Axle/Material.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
+#include <chrono>
 #include <fstream>
-#include <string>
-#include <vector>
-#include <filesystem>
+#include <iostream>
+#include <functional>
+#include <string_view>
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#endif
 
-#define ASSET_CHECK(cond, msg) \
-    do { \
-        if (!(cond)) { \
-            std::cerr << "  [FAIL] Assertion failed: (" #cond ") - " << (msg) << " at " << __FILE__ << ":" << __LINE__ << std::endl; \
-            return false; \
-        } \
-    } while (false)
+#define CHECK(value) do { if (!(value)) { std::cerr << "FAIL " << __FILE__ << ":" << __LINE__ << " " #value "\n"; return false; } } while(0)
 
 namespace {
-
-    std::filesystem::path GetSourceFixtureRoot() {
-        return std::filesystem::path(AXLE_TEST_SOURCE_DIR) / "Tests" / "Fixtures" / "AssetIdentity";
+    using namespace Axle;
+    constexpr uint64_t MaterialID = 100000000000000002ULL;
+    std::filesystem::path Workspace() {
+        static unsigned counter=0;
+        auto path=std::filesystem::current_path()/"asset-identity-review"/
+            (std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+"_"+std::to_string(++counter));
+        std::filesystem::create_directories(path);
+        return path;
     }
-
-    std::filesystem::path CreateUniqueWorkspace(const std::string& name) {
-        static uint64_t counter = 0;
-        std::filesystem::path p = std::filesystem::current_path() / "asset-tests" / (name + "_" + std::to_string(++counter));
-        std::error_code ec;
-        std::filesystem::remove_all(p, ec);
-        std::filesystem::create_directories(p, ec);
-        return p;
+    std::filesystem::path Fixture() {
+        auto path=Workspace();
+        std::filesystem::copy(std::filesystem::path(AXLE_TEST_SOURCE_DIR)/"Tests/Fixtures/AssetIdentity/AuthoredProject",path,
+                              std::filesystem::copy_options::recursive);
+        AssetManager::Init(path/"assets");
+        FileSystem::SetAssetDirectory(path/"assets");
+        return path/"assets";
     }
-
-    void AssertZeroSidecars(const std::filesystem::path& root, const std::string& context) {
-        std::error_code ec;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(root, ec)) {
-            if (!entry.is_regular_file()) continue;
-            auto ext = entry.path().extension().string();
-            if (ext == ".meta" || ext == ".uid" || ext == ".import") {
-                std::cerr << "  [FAIL] Sidecar file detected: " << entry.path().generic_string() << " in " << context << "\n";
-                throw std::runtime_error("Sidecar file detected: " + entry.path().generic_string());
-            }
+    bool NoAuxiliary(const std::filesystem::path& root) {
+        for (const auto& entry:std::filesystem::recursive_directory_iterator(root)) {
+            auto ext=entry.path().extension().string();
+            if(ext==".meta" || ext==".uid" || ext==".import" || ext==".axleregistry") return false;
         }
+        return true;
     }
-
-    // -------------------------------------------------------------------------
-    // 1. Clean Checkout Reference Resolution
-    // -------------------------------------------------------------------------
-    bool TestCleanCheckoutReferenceResolution() {
-        std::cout << "  [RUN] TestCleanCheckoutReferenceResolution...\n";
-        auto workspace = CreateUniqueWorkspace("clean_checkout");
-        auto fixtureSource = GetSourceFixtureRoot() / "AuthoredProject";
-        ASSET_CHECK(std::filesystem::exists(fixtureSource), "Fixture AuthoredProject must exist");
-
-        // Simulate fresh checkout by copying fixture without any cache or machine paths
-        std::error_code ec;
-        std::filesystem::copy(fixtureSource, workspace, std::filesystem::copy_options::recursive, ec);
-        ASSET_CHECK(!ec, "Copying fixture to clean checkout workspace must succeed");
-
-        auto assetDir = workspace / "assets";
-        Axle::AssetManager::Init(assetDir);
-
-        // Verify authored UUIDs from root registry are loaded and preserved exactly
-        Axle::UUID textureUUID = Axle::AssetManager::GetAssetUUID("textures/test_texture.png");
-        ASSET_CHECK(static_cast<uint64_t>(textureUUID) == 100000000000000001ULL, "Authored texture UUID must match exactly");
-
-        Axle::UUID materialUUID = Axle::AssetManager::GetAssetUUID("materials/test_material.axleasset");
-        ASSET_CHECK(static_cast<uint64_t>(materialUUID) == 100000000000000002ULL, "Authored material UUID must match exactly");
-
-        // Verify scene deserialization resolves the exact same material reference
-        Axle::Scene scene;
-        Axle::SceneSerializer serializer(&scene);
-        bool deserialized = serializer.Deserialize((assetDir / "scenes" / "test_scene.axlescene").string());
-        ASSET_CHECK(deserialized, "Scene deserialization must succeed");
-
-        bool foundEntity = false;
-        auto view = scene.GetRegistry().view<Axle::MaterialComponent>();
-        for (auto e : view) {
-            const auto& mc = view.get<Axle::MaterialComponent>(e);
-            ASSET_CHECK(static_cast<uint64_t>(mc.MaterialHandle) == 100000000000000002ULL,
-                        "Serialized scene entity material UUID must resolve to authored material UUID");
-            foundEntity = true;
+    bool RawPathsAndColdNativeIdentity() {
+        auto root=Fixture();
+        auto before=FileSystem::ReadBinaryFile(root/"textures/test_texture.png");
+        CHECK(AssetManager::GetAssetUUID("textures/test_texture.png")==0);
+        auto raw=AssetManager::GetOrCreateMetadata(root/"textures/test_texture.png");
+        CHECK(raw.Type==AssetType::Texture && raw.Handle==0 && raw.FilePath=="textures/test_texture.png");
+        CHECK(AssetManager::GetAssetUUID("materials/test_material.axleasset")==MaterialID);
+        CHECK(FileSystem::ReadBinaryFile(root/"textures/test_texture.png")==before);
+        AssetManager::Shutdown(); AssetManager::Init(root);
+        CHECK(AssetManager::GetAssetUUID("materials/test_material.axleasset")==MaterialID);
+        CHECK(NoAuxiliary(root));
+        return true;
+    }
+    bool RootRelocationAndNativeExternalMove() {
+        auto root=Fixture(), moved=Workspace()/"assets";
+        std::filesystem::copy(root,moved,std::filesystem::copy_options::recursive);
+        AssetManager::Shutdown(); AssetManager::Init(moved);
+        CHECK(AssetManager::GetAssetPath(MaterialID)==moved/"materials/test_material.axleasset");
+        std::filesystem::rename(moved/"materials/test_material.axleasset",moved/"materials/moved.axleasset");
+        CHECK(AssetManager::GetAssetPath(MaterialID)==moved/"materials/moved.axleasset");
+        AssetManager::Shutdown(); AssetManager::Init(moved);
+        CHECK(AssetManager::GetAssetUUID("materials/moved.axleasset")==MaterialID);
+        Scene scene; SceneSerializer reader(&scene);
+        CHECK(reader.Deserialize(moved/"scenes/test_scene.axlescene"));
+        size_t count=0;
+        for(auto entity:scene.GetRegistry().view<MaterialComponent>()) {
+            auto& material=scene.GetRegistry().get<MaterialComponent>(entity);
+            CHECK(material.MaterialHandle==MaterialID);
+            CHECK(material.MaterialAsset && material.MaterialAsset->GetHandle()==MaterialID);
+            CHECK(material.AssetPath=="materials/moved.axleasset");
+            ++count;
         }
-        ASSET_CHECK(foundEntity, "Entity with MaterialComponent must be found in scene");
-
-        // Verify no sidecar files were created
-        AssertZeroSidecars(workspace, "TestCleanCheckoutReferenceResolution");
-
-        Axle::AssetManager::Shutdown();
+        CHECK(count==1 && NoAuxiliary(moved));
         return true;
     }
-
-    // -------------------------------------------------------------------------
-    // 2. Project-Root Relocation
-    // -------------------------------------------------------------------------
-    bool TestProjectRootRelocation() {
-        std::cout << "  [RUN] TestProjectRootRelocation...\n";
-        auto origin = CreateUniqueWorkspace("reloc_origin");
-        auto destination = CreateUniqueWorkspace("reloc_destination");
-        auto fixtureSource = GetSourceFixtureRoot() / "AuthoredProject";
-
-        std::error_code ec;
-        std::filesystem::copy(fixtureSource, origin, std::filesystem::copy_options::recursive, ec);
-        ASSET_CHECK(!ec, "Staging origin workspace must succeed");
-
-        // Relocate entire project directory to destination
-        std::filesystem::copy(origin, destination, std::filesystem::copy_options::recursive, ec);
-        ASSET_CHECK(!ec, "Relocating project to destination must succeed");
-        std::filesystem::remove_all(origin, ec); // Remove origin completely
-
-        Axle::AssetManager::Init(destination / "assets");
-
-        Axle::UUID texUUID = Axle::AssetManager::GetAssetUUID("textures/test_texture.png");
-        ASSET_CHECK(static_cast<uint64_t>(texUUID) == 100000000000000001ULL, "UUID must remain invariant under project-root relocation");
-
-        // Verify resolved absolute path points to new relocated destination
-        auto absPath = Axle::AssetManager::GetAssetPath(texUUID);
-        ASSET_CHECK(absPath.generic_string().find(destination.generic_string()) != std::string::npos,
-                    "Asset path must resolve against new project root without baking old machine root");
-
-        AssertZeroSidecars(destination, "TestProjectRootRelocation");
-
-        Axle::AssetManager::Shutdown();
+    bool SavePreservesIdentityAcrossOwners() {
+        auto root=Fixture(); const auto path=root/"materials/test_material.axleasset";
+        Material material; CHECK(material.Load(path)); CHECK(material.GetHandle()==MaterialID);
+        material.SetRoughness(0.73f); CHECK(material.Save(path));
+        uint64_t id=0; CHECK(FileSystem::ReadFileIdentity(path,id) && id==MaterialID);
+        AssetDocument document; CHECK(AssetDSL::ParseFile(path,document));
+        document.Root->SetFloat("roughness",0.31f); CHECK(AssetDSL::SaveFile(path,document));
+        CHECK(FileSystem::ReadFileIdentity(path,id) && id==MaterialID);
+        RHI::RHIMaterial rhi; CHECK(rhi.Load(path)); CHECK(rhi.Save(path));
+        CHECK(FileSystem::ReadFileIdentity(path,id) && id==MaterialID);
+        TextureDescriptor descriptor; descriptor.Source="textures/test_texture.png";
+        auto descPath=root/"texture.axleasset"; CHECK(TextureDescriptor::Save(descPath.string(),descriptor));
+        CHECK(FileSystem::ReadFileIdentity(descPath,id)); const auto firstID=id;
+        descriptor.Filter="Nearest"; CHECK(TextureDescriptor::Save(descPath.string(),descriptor));
+        CHECK(FileSystem::ReadFileIdentity(descPath,id) && id==firstID);
+        Material paths("Paths"); paths.SetAlbedoTexture(nullptr,(root/"textures/test_texture.png").string());
+        const auto materialPath=root/"paths.axleasset"; CHECK(paths.Save(materialPath));
+        AssetDocument encoded; CHECK(AssetDSL::ParseFile(materialPath,encoded));
+        CHECK(encoded.Root->GetString("albedoMap")=="textures/test_texture.png");
+        const auto before=FileSystem::ReadTextFile(descPath);
+        descriptor.Source="../escape.png"; CHECK(!TextureDescriptor::Save(descPath.string(),descriptor));
+        CHECK(FileSystem::ReadTextFile(descPath)==before);
+        CHECK(NoAuxiliary(root)); return true;
+    }
+    bool RawMoveAndExplicitRelinkUpdateRealReferences() {
+        auto root=Fixture(); TextureDescriptor descriptor; descriptor.Source="textures/test_texture.png";
+        auto path=root/"texture.axleasset"; CHECK(TextureDescriptor::Save(path.string(),descriptor));
+        std::string error;
+        CHECK(AssetManager::RelocateAsset("textures/test_texture.png","textures/nested/renamed.png",&error));
+        CHECK(std::filesystem::is_regular_file(root/"textures/nested/renamed.png"));
+        CHECK(!std::filesystem::exists(root/"textures/test_texture.png"));
+        CHECK(TextureDescriptor::Load(path.string(),descriptor) && descriptor.Source=="textures/nested/renamed.png");
+        CHECK(AssetManager::GetAssetUUID("textures/nested/renamed.png")==0);
+        std::filesystem::rename(root/"textures/nested/renamed.png",root/"textures/external.png");
+        CHECK(!std::filesystem::exists(root/descriptor.Source));
+        CHECK(AssetManager::RelinkPathReferences("textures/nested/renamed.png","textures/external.png",&error));
+        CHECK(TextureDescriptor::Load(path.string(),descriptor) && descriptor.Source=="textures/external.png");
+        CHECK(NoAuxiliary(root)); return true;
+    }
+    bool CopyAndDuplicateIdentity() {
+        auto root=Fixture(); std::string error;
+        CHECK(AssetManager::CopyAsset("materials/test_material.axleasset","materials/copy.axleasset",&error));
+        const auto copyID=AssetManager::GetAssetUUID("materials/copy.axleasset");
+        CHECK(copyID!=0 && copyID!=MaterialID);
+        CHECK(AssetManager::CopyAsset("textures/test_texture.png","textures/copy.png",&error));
+        CHECK(FileSystem::ReadBinaryFile(root/"textures/test_texture.png")==FileSystem::ReadBinaryFile(root/"textures/copy.png"));
+        CHECK(AssetManager::GetAssetUUID("textures/copy.png")==0);
+        std::filesystem::copy_file(root/"materials/test_material.axleasset",root/"materials/external-copy.axleasset");
+        AssetManager::Sync();
+        CHECK(!AssetManager::HasAsset(MaterialID) && AssetManager::HasDiagnosticErrors());
+        CHECK(!AssetManager::GetMaterial("materials/test_material.axleasset"));
+        CHECK(AssetManager::HasAsset(copyID));
+        CHECK(NoAuxiliary(root)); return true;
+    }
+    bool InvalidIdentityIsNotRegenerated() {
+        auto root=Fixture(); const auto path=root/"invalid.axleasset";
+        const std::string invalid="# AxleFileIdentity: 99 4321\nMaterial { name: \"invalid\" }\n";
+        CHECK(FileSystem::WriteTextFileAtomically(path,invalid));
+        CHECK(!AssetManager::GetOrCreateMetadata(path));
+        CHECK(FileSystem::ReadTextFile(path)==invalid);
+        CHECK(!FileSystem::WriteIdentifiedTextFile(path,"Material { name: \"replacement\" }\n"));
+        CHECK(FileSystem::ReadTextFile(path)==invalid);
+        const auto missing=root/"missing-id.axleasset";
+        const std::string body="Material { name: \"new\" }\n";
+        CHECK(FileSystem::WriteTextFileAtomically(missing,body));
+        AssetManager::Sync();
+        CHECK(FileSystem::ReadTextFile(missing)==body); // Discovery never mutates assets.
+        AssetManager::TrackReferencedAsset(Axle::UUID(7889),"missing-id.axleasset");
+        CHECK(!AssetManager::GetOrCreateMetadata(missing));
+        CHECK(FileSystem::ReadTextFile(missing)==body && NoAuxiliary(root));
         return true;
     }
-
-    // -------------------------------------------------------------------------
-    // 3. Asset Relocation (Move / Rename) Preserves Identity
-    // -------------------------------------------------------------------------
-    bool TestAssetRelocationPreservesIdentity() {
-        std::cout << "  [RUN] TestAssetRelocationPreservesIdentity...\n";
-        auto workspace = CreateUniqueWorkspace("asset_relocate");
-        auto fixtureSource = GetSourceFixtureRoot() / "AuthoredProject";
-
-        std::error_code ec;
-        std::filesystem::copy(fixtureSource, workspace, std::filesystem::copy_options::recursive, ec);
-        auto assetDir = workspace / "assets";
-        Axle::AssetManager::Init(assetDir);
-
-        std::filesystem::path oldRelative = "textures/test_texture.png";
-        std::filesystem::path newRelative = "textures/subfolder/renamed_texture.png";
-
-        std::filesystem::path oldAbs = assetDir / oldRelative;
-        std::filesystem::path newAbs = assetDir / newRelative;
-
-        std::string err;
-        bool relocated = Axle::AssetManager::RelocateAsset(oldAbs, newAbs, &err);
-        ASSET_CHECK(relocated, "RelocateAsset must succeed: " + err);
-
-        // Verify UUID is preserved exactly
-        Axle::UUID newLookupUUID = Axle::AssetManager::GetAssetUUID(newRelative);
-        ASSET_CHECK(static_cast<uint64_t>(newLookupUUID) == 100000000000000001ULL, "Relocated asset must retain exact same UUID");
-
-        // Verify old path is no longer mapped
-        ASSET_CHECK(!Axle::AssetManager::HasAsset(oldRelative), "Old path must no longer be present in registry");
-
-        // Verify root registry file on disk reflects new relative path
-        auto regPath = Axle::AssetManager::GetRegistryPath();
-        ASSET_CHECK(std::filesystem::exists(regPath), "AssetRegistry.axleregistry must exist");
-
-        std::unordered_map<Axle::UUID, Axle::AssetMetadata> reloadedEntries;
-        std::unordered_map<std::string, Axle::UUID> reloadedPaths;
-        std::vector<Axle::AssetDiagnostic> diags;
-        ASSET_CHECK(Axle::AssetRegistrySerializer::Deserialize(regPath, reloadedEntries, reloadedPaths, &diags),
-                    "Deserializing updated registry must succeed");
-        ASSET_CHECK(reloadedEntries.find(newLookupUUID) != reloadedEntries.end(), "Relocated UUID must be present in registry");
-        ASSET_CHECK(reloadedEntries[newLookupUUID].FilePath.generic_string() == "textures/subfolder/renamed_texture.png",
-                    "Stored path in registry must match new relative path");
-
-        // Verify zero sidecars
-        AssertZeroSidecars(workspace, "TestAssetRelocationPreservesIdentity");
-
-        Axle::AssetManager::Shutdown();
+    bool NewNativeImportPublishesAfterPersisting() {
+        auto root=Fixture(), path=root/"new.axleasset";
+        CHECK(FileSystem::WriteTextFileAtomically(path,"Material { name: \"new\" }\n"));
+        const auto metadata=AssetManager::GetOrCreateMetadata(path);
+        CHECK(metadata.Handle!=0);
+        uint64_t stored=0; CHECK(FileSystem::ReadFileIdentity(path,stored) && stored==uint64_t(metadata.Handle));
+        AssetManager::Shutdown(); AssetManager::Init(root);
+        CHECK(AssetManager::GetAssetUUID("new.axleasset")==stored);
+        CHECK(NoAuxiliary(root)); return true;
+    }
+    bool PackagedNativeIdentityAndRawPaths() {
+        auto root=Fixture(), archive=Workspace()/"Data.axlepak";
+        PackageWriter writer;
+        CHECK(writer.Begin(archive));
+        CHECK(writer.AddFile("materials/test_material.axleasset",root/"materials/test_material.axleasset",Axle::UUID(MaterialID)));
+        CHECK(writer.AddFile("textures/test_texture.png",root/"textures/test_texture.png"));
+        CHECK(writer.Finish());
+        AssetManager::Shutdown();
+        // Mount against a root that has no loose files: no disk discovery can satisfy this test.
+        const auto packedRoot=Workspace()/"missing-assets";
+        FileSystem::SetAssetDirectory(packedRoot);
+        CHECK(FileSystem::MountPackage(archive));
+        AssetManager::Init(packedRoot);
+        const bool valid = AssetManager::GetAssetUUID("materials/test_material.axleasset")==MaterialID &&
+            AssetManager::GetAssetUUID("textures/test_texture.png")==0 &&
+            !AssetManager::GetAssetPath(Axle::UUID(MaterialID)).empty() &&
+            bool(AssetManager::GetMaterial(Axle::UUID(MaterialID))) &&
+            FileSystem::ReadBinaryFile(packedRoot/"textures/test_texture.png")==FileSystem::ReadBinaryFile(root/"textures/test_texture.png");
+        FileSystem::UnmountPackage();
+        CHECK(valid); return true;
+    }
+    bool MaterialReloadPreservesLiveObject() {
+        auto root=Fixture(); auto path=root/"reload.axleasset";
+        Material original; original.SetRoughness(0.8f); CHECK(original.Save(path));
+        AssetManager::Sync();
+        const auto id=AssetManager::GetAssetUUID(path);
+        auto live=AssetManager::GetMaterial(id); CHECK(live);
+        Material changed; CHECK(changed.Load(path)); changed.SetRoughness(0.2f); CHECK(changed.Save(path));
+        AssetManager::ReloadMaterial(id);
+        CHECK(AssetManager::GetMaterial(id)==live && std::abs(live->GetRoughness()-0.2f)<0.001f);
+        CHECK(live->GetHandle()==id);
+        const uint64_t replacementID=uint64_t(id)^0x4000000000000000ULL;
+        CHECK(FileSystem::WriteTextFileAtomically(path,"# AxleFileIdentity: 1 "+std::to_string(replacementID)+"\nMaterial { name: \"Different asset\" roughness: 0.9 }\n"));
+        auto replacement=AssetManager::GetMaterial(path);
+        CHECK(replacement && replacement!=live && replacement->GetHandle()==replacementID);
+        CHECK(!AssetManager::GetMaterial(id));
+        CHECK(NoAuxiliary(root)); return true;
+    }
+    bool NativeUIRoundtrip() {
+        auto root=Fixture(); UIDocument document;
+        CHECK(UIParser::ParseSource("Canvas { name: \"Identity\" }",document));
+        auto path=root/"identity.axleui";
+        CHECK(UIParser::SaveFile(path.string(),document));
+        uint64_t before=0,after=0;
+        CHECK(FileSystem::ReadFileIdentity(path,before));
+        UIDocument restored; CHECK(UIParser::ParseFile(path.string(),restored));
+        CHECK(UIParser::SaveFile(path.string(),restored));
+        CHECK(FileSystem::ReadFileIdentity(path,after) && after==before);
+        CHECK(NoAuxiliary(root)); return true;
+    }
+    bool PathAndBuiltinValidation() {
+        auto root=Fixture(), outside=Workspace()/"outside.png";
+        CHECK(FileSystem::WriteTextFileAtomically(outside,"outside"));
+        CHECK(AssetManager::GetAssetType(outside)==AssetType::Texture);
+        CHECK(!AssetManager::GetOrCreateMetadata(outside));
+        CHECK(AssetManager::GetReferencePath("../outside.png").empty());
+        CHECK(!AssetManager::IsBuiltin("builtin://misspelled"));
+        CHECK(AssetManager::GetAssetUUID("builtin://misspelled")==0);
+        CHECK(AssetManager::GetAssetUUID("builtin://cube")==BuiltinAssets::CubeUUID);
+        CHECK(!AssetManager::RelocateAsset("materials/test_material.axleasset","materials/test_material.axleasset/collision"));
+        CHECK(!AssetManager::RelocateAsset("missing.png","textures/missing.png"));
+        CHECK(!AssetManager::RelinkAsset(Axle::UUID(MaterialID+1),"materials/test_material.axleasset"));
+        CHECK(NoAuxiliary(root)); return true;
+    }
+    bool AtomicInvalidInputAndReplacementFailure() {
+        auto root=Fixture(), path=root/"keep.txt";
+        CHECK(FileSystem::WriteTextFileAtomically(path,"previous"));
+        std::string error;
+        CHECK(!FileSystem::WriteBinaryFileAtomically(path,nullptr,5,&error));
+        CHECK(!error.empty() && FileSystem::ReadTextFile(path)=="previous");
+        const auto directory=root/"directory-target"; std::filesystem::create_directory(directory);
+        CHECK(!FileSystem::WriteTextFileAtomically(directory,"cannot replace directory",&error));
+        CHECK(std::filesystem::is_directory(directory));
+#ifdef _WIN32
+        HANDLE lock=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+        CHECK(lock!=INVALID_HANDLE_VALUE);
+        bool saved=FileSystem::WriteTextFileAtomically(path,"replacement",&error);
+        CloseHandle(lock);
+        CHECK(!saved && FileSystem::ReadTextFile(path)=="previous");
+#endif
         return true;
     }
-
-    // -------------------------------------------------------------------------
-    // 4. Asset Copy Creates Brand-New Distinct Identity
-    // -------------------------------------------------------------------------
-    bool TestAssetCopyIdentity() {
-        std::cout << "  [RUN] TestAssetCopyIdentity...\n";
-        auto workspace = CreateUniqueWorkspace("asset_copy");
-        auto fixtureSource = GetSourceFixtureRoot() / "AuthoredProject";
-
-        std::error_code ec;
-        std::filesystem::copy(fixtureSource, workspace, std::filesystem::copy_options::recursive, ec);
-        auto assetDir = workspace / "assets";
-        Axle::AssetManager::Init(assetDir);
-
-        std::filesystem::path sourceRel = "textures/test_texture.png";
-        std::filesystem::path copyRel = "textures/copied_texture.png";
-        std::filesystem::path srcAbs = assetDir / sourceRel;
-        std::filesystem::path copyAbs = assetDir / copyRel;
-
-        std::string err;
-        bool copied = Axle::AssetManager::CopyAsset(srcAbs, copyAbs, &err);
-        ASSET_CHECK(copied, "CopyAsset must succeed: " + err);
-
-        Axle::UUID srcUUID = Axle::AssetManager::GetAssetUUID(sourceRel);
-        Axle::UUID copyUUID = Axle::AssetManager::GetAssetUUID(copyRel);
-
-        ASSET_CHECK(static_cast<uint64_t>(srcUUID) == 100000000000000001ULL, "Original asset UUID must remain unchanged");
-        ASSET_CHECK(copyUUID != 0, "Copied asset must receive a non-zero UUID");
-        ASSET_CHECK(copyUUID != srcUUID, "Copied asset MUST NOT share the source UUID (must allocate fresh identity)");
-
-        // Verify registry file has both entries
-        auto regPath = Axle::AssetManager::GetRegistryPath();
-        std::unordered_map<Axle::UUID, Axle::AssetMetadata> reloadedEntries;
-        std::unordered_map<std::string, Axle::UUID> reloadedPaths;
-        std::vector<Axle::AssetDiagnostic> diags;
-        ASSET_CHECK(Axle::AssetRegistrySerializer::Deserialize(regPath, reloadedEntries, reloadedPaths, &diags),
-                    "Deserializing updated registry after copy must succeed");
-        ASSET_CHECK(reloadedEntries.find(copyUUID) != reloadedEntries.end(), "Copied UUID must be in registry");
-        ASSET_CHECK(reloadedEntries.find(srcUUID) != reloadedEntries.end(), "Source UUID must be in registry");
-
-        // Verify zero sidecars
-        AssertZeroSidecars(workspace, "TestAssetCopyIdentity");
-
-        Axle::AssetManager::Shutdown();
-        return true;
+    bool FailedNativeImportDoesNotPublish() {
+        auto root=Fixture(), path=root/"locked.axleasset";
+        const std::string body="Material { name: \"locked\" }\n";
+        CHECK(FileSystem::WriteTextFileAtomically(path,body));
+#ifdef _WIN32
+        HANDLE lock=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+        CHECK(lock!=INVALID_HANDLE_VALUE);
+        const auto result=AssetManager::GetOrCreateMetadata(path);
+        CloseHandle(lock);
+        CHECK(!result && !AssetManager::HasAsset(path));
+        CHECK(AssetManager::GetAssetUUID(path)==0 && FileSystem::ReadTextFile(path)==body);
+#else
+        // The deterministic cross-platform replacement failure is exercised above.
+        std::filesystem::create_directory(root/"directory-target");
+        CHECK(!FileSystem::WriteIdentifiedTextFile(root/"directory-target","payload"));
+#endif
+        CHECK(NoAuxiliary(root)); return true;
     }
-
-    // -------------------------------------------------------------------------
-    // 5. External Move and Explicit Relink
-    // -------------------------------------------------------------------------
-    bool TestExternalMoveAndRelink() {
-        std::cout << "  [RUN] TestExternalMoveAndRelink...\n";
-        auto workspace = CreateUniqueWorkspace("external_relink");
-        auto fixtureSource = GetSourceFixtureRoot() / "AuthoredProject";
-
-        std::error_code ec;
-        std::filesystem::copy(fixtureSource, workspace, std::filesystem::copy_options::recursive, ec);
-        auto assetDir = workspace / "assets";
-        Axle::AssetManager::Init(assetDir);
-
-        Axle::UUID targetUUID = Axle::AssetManager::GetAssetUUID("textures/test_texture.png");
-        ASSET_CHECK(static_cast<uint64_t>(targetUUID) == 100000000000000001ULL, "Original UUID must match");
-
-        // Simulate external move outside the Editor: move file directly on filesystem
-        std::filesystem::path oldAbs = assetDir / "textures" / "test_texture.png";
-        std::filesystem::path movedAbs = assetDir / "textures" / "moved_outside.png";
-        std::filesystem::rename(oldAbs, movedAbs, ec);
-        ASSET_CHECK(!ec, "Filesystem external rename must succeed");
-
-        // Now explicitly relink the UUID to the new path
-        std::string err;
-        bool relinked = Axle::AssetManager::RelinkAsset(targetUUID, "textures/moved_outside.png", &err);
-        ASSET_CHECK(relinked, "RelinkAsset must succeed: " + err);
-
-        // Verify UUID lookup on new path returns the exact original UUID
-        Axle::UUID lookup = Axle::AssetManager::GetAssetUUID("textures/moved_outside.png");
-        ASSET_CHECK(lookup == targetUUID, "Relinked path must resolve to original UUID");
-
-        // Verify registry file reflects new path
-        auto regPath = Axle::AssetManager::GetRegistryPath();
-        std::unordered_map<Axle::UUID, Axle::AssetMetadata> reloadedEntries;
-        std::unordered_map<std::string, Axle::UUID> reloadedPaths;
-        std::vector<Axle::AssetDiagnostic> diags;
-        ASSET_CHECK(Axle::AssetRegistrySerializer::Deserialize(regPath, reloadedEntries, reloadedPaths, &diags),
-                    "Reading registry after RelinkAsset must succeed");
-        ASSET_CHECK(reloadedEntries[targetUUID].FilePath.generic_string() == "textures/moved_outside.png",
-                    "Persisted path in registry must be updated");
-
-        AssertZeroSidecars(workspace, "TestExternalMoveAndRelink");
-
-        Axle::AssetManager::Shutdown();
-        return true;
-    }
-
-    // -------------------------------------------------------------------------
-    // 6. Duplicate UUID Diagnostics and Recovery
-    // -------------------------------------------------------------------------
-    bool TestDuplicateUUIDDiagnostics() {
-        std::cout << "  [RUN] TestDuplicateUUIDDiagnostics...\n";
-        auto workspace = CreateUniqueWorkspace("duplicate_test");
-        auto fixtureSource = GetSourceFixtureRoot() / "DuplicateProject";
-
-        std::error_code ec;
-        std::filesystem::copy(fixtureSource, workspace, std::filesystem::copy_options::recursive, ec);
-        auto assetDir = workspace / "assets";
-
-        Axle::AssetManager::Init(assetDir);
-
-        // Registry has dup_a.png and dup_b.png sharing UUID 200000000000000001
-        ASSET_CHECK(Axle::AssetManager::HasDiagnosticErrors(),
-                    "Init on DuplicateProject must report diagnostic errors for duplicate UUID");
-
-        // dup_a.png was registered first and should be valid; dup_b was colliding and rejected
-        ASSET_CHECK(Axle::AssetManager::HasAsset("dup_a.png"), "First asset in duplicate registry must be preserved");
-        ASSET_CHECK(!Axle::AssetManager::HasAsset("dup_b.png"), "Colliding second asset must be rejected");
-
-        AssertZeroSidecars(workspace, "TestDuplicateUUIDDiagnostics");
-
-        Axle::AssetManager::Shutdown();
-        return true;
-    }
-
-    // -------------------------------------------------------------------------
-    // 7. Corrupt & Unsupported Registry Diagnostics (No Silent Regeneration)
-    // -------------------------------------------------------------------------
-    bool TestCorruptAndUnsupportedRegistryDiagnostics() {
-        std::cout << "  [RUN] TestCorruptAndUnsupportedRegistryDiagnostics...\n";
-
-        // Corrupt registry test
-        {
-            auto workspace = CreateUniqueWorkspace("corrupt_test");
-            auto fixtureSource = GetSourceFixtureRoot() / "CorruptProject";
-            std::error_code ec;
-            std::filesystem::copy(fixtureSource, workspace, std::filesystem::copy_options::recursive, ec);
-            auto assetDir = workspace / "assets";
-
-            Axle::AssetManager::Init(assetDir);
-            ASSET_CHECK(Axle::AssetManager::HasDiagnosticErrors(), "Corrupt registry must emit diagnostic errors");
-            ASSET_CHECK(!Axle::AssetManager::HasAsset("corrupt.png"), "Corrupt asset must not be registered");
-
-            AssertZeroSidecars(workspace, "CorruptProject");
-            Axle::AssetManager::Shutdown();
+    bool SceneAssemblyAndProjectSavesKeepPreviousBytes() {
+        auto root=Fixture(); auto scene=std::make_shared<Scene>(); auto entity=scene->CreateEntity("Ordinary");
+        SceneSerializer serializer(scene.get());
+        auto scenePath=root/"save.axlescene", assemblyPath=root/"save.axle", projectPath=root/"test.axleproj";
+        CHECK(serializer.Serialize(scenePath));
+        CHECK(AssemblySerializer::Serialize(assemblyPath,entity));
+        auto project=std::make_shared<Project>(); ProjectSerializer writer(project); CHECK(writer.Serialize(projectPath));
+        uint64_t sceneID=0; CHECK(FileSystem::ReadFileIdentity(scenePath,sceneID));
+        CHECK(serializer.Serialize(scenePath)); uint64_t next=0; CHECK(FileSystem::ReadFileIdentity(scenePath,next) && next==sceneID);
+#ifdef _WIN32
+        for (const auto& path:{scenePath,assemblyPath,projectPath}) {
+            const auto before=FileSystem::ReadBinaryFile(path);
+            HANDLE lock=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+            CHECK(lock!=INVALID_HANDLE_VALUE);
+            bool saved=path==scenePath ? serializer.Serialize(path) :
+                       path==assemblyPath ? AssemblySerializer::Serialize(path,entity) : writer.Serialize(path);
+            CloseHandle(lock);
+            CHECK(!saved && FileSystem::ReadBinaryFile(path)==before);
         }
-
-        // Unsupported version test
-        {
-            auto workspace = CreateUniqueWorkspace("unsupported_version_test");
-            auto fixtureSource = GetSourceFixtureRoot() / "UnsupportedVersion";
-            std::error_code ec;
-            std::filesystem::copy(fixtureSource, workspace, std::filesystem::copy_options::recursive, ec);
-            auto assetDir = workspace / "assets";
-
-            Axle::AssetManager::Init(assetDir);
-            ASSET_CHECK(Axle::AssetManager::HasDiagnosticErrors(), "Unsupported version must emit diagnostic errors");
-            ASSET_CHECK(!Axle::AssetManager::HasAsset("future.png"), "Unsupported version asset must not be registered");
-
-            AssertZeroSidecars(workspace, "UnsupportedVersion");
-            Axle::AssetManager::Shutdown();
-        }
-
-        return true;
+#endif
+        CHECK(NoAuxiliary(root)); return true;
     }
+}
 
-    // -------------------------------------------------------------------------
-    // 8. Missing Registry Entry for Already-Referenced Asset
-    // -------------------------------------------------------------------------
-    bool TestMissingRegistryEntryReferencedAsset() {
-        std::cout << "  [RUN] TestMissingRegistryEntryReferencedAsset...\n";
-        auto workspace = CreateUniqueWorkspace("missing_ref_test");
-        auto assetDir = workspace / "assets";
-        std::filesystem::create_directories(assetDir);
-        Axle::AssetManager::Init(assetDir);
-
-        // Create an unindexed asset file on disk
-        std::ofstream(assetDir / "referenced_file.png") << "raw png content";
-
-        // Track this asset as referenced in prior scene/material
-        Axle::UUID expectedUUID{ 999111222333ULL };
-        Axle::AssetManager::TrackReferencedAsset(expectedUUID, "referenced_file.png");
-
-        Axle::AssetManager::ClearDiagnostics();
-        auto meta = Axle::AssetManager::GetOrCreateMetadata(assetDir / "referenced_file.png");
-        ASSET_CHECK(!meta.IsValid(), "Missing registry entry for referenced asset must NOT silently regenerate fresh UUID");
-        ASSET_CHECK(Axle::AssetManager::HasDiagnosticErrors(), "Missing registry entry for referenced asset must report diagnostic error");
-
-        AssertZeroSidecars(workspace, "TestMissingRegistryEntryReferencedAsset");
-
-        Axle::AssetManager::Shutdown();
-        return true;
+int main(int argc,char** argv) {
+    if(argc==2 && std::string_view(argv[1])=="--self-test-failure") {
+        std::cout<<"AXLE_TEST_EXPECTED_FAILURE asset-probe\n"; return 1;
     }
-
-    // -------------------------------------------------------------------------
-    // 9. New-Import Checked Atomic Persistence
-    // -------------------------------------------------------------------------
-    bool TestNewImportCheckedPersistence() {
-        std::cout << "  [RUN] TestNewImportCheckedPersistence...\n";
-        auto workspace = CreateUniqueWorkspace("new_import_test");
-        auto assetDir = workspace / "assets";
-        std::filesystem::create_directories(assetDir);
-        Axle::AssetManager::Init(assetDir);
-
-        std::filesystem::path newAsset = assetDir / "genuinely_new_texture.png";
-        std::ofstream(newAsset) << "pixel data";
-
-        auto meta = Axle::AssetManager::GetOrCreateMetadata(newAsset);
-        ASSET_CHECK(meta.IsValid(), "Genuinely new import must succeed");
-        ASSET_CHECK(meta.Handle != 0, "New import must be allocated a valid UUID");
-
-        // Verify root registry file was created/updated on disk
-        auto regPath = Axle::AssetManager::GetRegistryPath();
-        ASSET_CHECK(std::filesystem::exists(regPath), "AssetRegistry.axleregistry must exist on disk");
-
-        std::unordered_map<Axle::UUID, Axle::AssetMetadata> reloadedEntries;
-        std::unordered_map<std::string, Axle::UUID> reloadedPaths;
-        std::vector<Axle::AssetDiagnostic> diags;
-        ASSET_CHECK(Axle::AssetRegistrySerializer::Deserialize(regPath, reloadedEntries, reloadedPaths, &diags),
-                    "Reading persisted registry must succeed");
-        ASSET_CHECK(reloadedEntries.find(meta.Handle) != reloadedEntries.end(), "Persisted UUID on disk must match published UUID");
-        ASSET_CHECK(reloadedEntries[meta.Handle].FilePath.generic_string() == "genuinely_new_texture.png",
-                    "Persisted path must match");
-
-        // Assert zero sidecars
-        AssertZeroSidecars(workspace, "TestNewImportCheckedPersistence");
-
-        Axle::AssetManager::Shutdown();
-        return true;
-    }
-
-    // -------------------------------------------------------------------------
-    // 10. Deterministic Save Failure Preserves Prior Valid File
-    // -------------------------------------------------------------------------
-    bool TestDeterministicSaveFailurePreservesPriorFile() {
-        std::cout << "  [RUN] TestDeterministicSaveFailurePreservesPriorFile...\n";
-        auto workspace = CreateUniqueWorkspace("atomic_failure_test");
-        std::filesystem::path targetFile = workspace / "critical_data.txt";
-
-        std::string originalContent = "CRITICAL_ORIGINAL_PAYLOAD_V1\nLine 2: must never be lost.\n";
-        bool wroteInitial = Axle::FileSystem::WriteTextFileAtomically(targetFile, originalContent);
-        ASSET_CHECK(wroteInitial, "Initial atomic write must succeed");
-        ASSET_CHECK(Axle::FileSystem::ReadTextFile(targetFile) == originalContent, "Initial content must match");
-
-        // Attempt write where destination path collision is an existing directory
-        // (MoveFileEx/rename into a directory path fails deterministically on all OSes)
-        std::filesystem::path dirCollision = workspace / "dir_target";
-        std::filesystem::create_directories(dirCollision);
-
-        std::string outErr;
-        bool failedWrite = Axle::FileSystem::WriteTextFileAtomically(dirCollision, "new data", &outErr);
-        ASSET_CHECK(!failedWrite, "Atomic write targeting a directory must fail");
-        ASSET_CHECK(!outErr.empty(), "Error message must be reported");
-
-        // Verify the original file content was preserved completely
-        ASSET_CHECK(Axle::FileSystem::ReadTextFile(targetFile) == originalContent,
-                    "Prior valid file must be intact after failed write attempt");
-
-        // Test ProjectSerializer deterministic atomic save
-        std::filesystem::path projFile = workspace / "TestProj.axleproj";
-        auto proj = Axle::Project::New(workspace);
-        proj->GetConfig().Name = "PreservedProject";
-        Axle::ProjectSerializer serializer(proj);
-        ASSET_CHECK(serializer.Serialize(projFile), "Initial project serialize must succeed");
-
-        std::string initialProjContent = Axle::FileSystem::ReadTextFile(projFile);
-        ASSET_CHECK(!initialProjContent.empty(), "Project file content must not be empty");
-
-        // Attempt saving project to an invalid target directory collision
-        bool failedProjSave = serializer.Serialize(dirCollision);
-        ASSET_CHECK(!failedProjSave, "Project serialize to directory target must fail");
-        ASSET_CHECK(Axle::FileSystem::ReadTextFile(projFile) == initialProjContent,
-                    "Project file content must remain byte-for-byte identical on failed serialize");
-
-        // Test AssetRegistrySerializer deterministic atomic save failure
-        std::unordered_map<Axle::UUID, Axle::AssetMetadata> dummyEntries;
-        dummyEntries[Axle::UUID{ 12345 }] = Axle::AssetMetadata{ Axle::UUID{ 12345 }, Axle::AssetType::Texture, "a.png", 1 };
-        std::filesystem::path validReg = workspace / "ValidReg.axleregistry";
-        ASSET_CHECK(Axle::AssetRegistrySerializer::Serialize(validReg, dummyEntries), "Initial registry serialize must succeed");
-        std::string regContent = Axle::FileSystem::ReadTextFile(validReg);
-
-        bool failedRegSave = Axle::AssetRegistrySerializer::Serialize(dirCollision, dummyEntries);
-        ASSET_CHECK(!failedRegSave, "Registry serialize to directory target must fail");
-        ASSET_CHECK(Axle::FileSystem::ReadTextFile(validReg) == regContent,
-                    "Registry file content must remain intact on failed serialize");
-
-        return true;
-    }
-
-    // -------------------------------------------------------------------------
-    // 11. Canonical Builtin Primitives
-    // -------------------------------------------------------------------------
-    bool TestCanonicalBuiltinPrimitives() {
-        std::cout << "  [RUN] TestCanonicalBuiltinPrimitives...\n";
-        auto workspace = CreateUniqueWorkspace("builtins_test");
-        Axle::AssetManager::Init(workspace / "assets");
-
-        std::vector<std::pair<std::string, uint64_t>> builtins = {
-            { "builtin://cube",     Axle::BuiltinAssets::CubeUUID },
-            { "builtin://sphere",   Axle::BuiltinAssets::SphereUUID },
-            { "builtin://cylinder", Axle::BuiltinAssets::CylinderUUID },
-            { "builtin://cone",     Axle::BuiltinAssets::ConeUUID },
-            { "builtin://plane",    Axle::BuiltinAssets::PlaneUUID }
-        };
-
-        for (const auto& [uri, expectedUUID] : builtins) {
-            ASSET_CHECK(Axle::AssetManager::IsBuiltin(uri), "AssetManager::IsBuiltin must recognize " + uri);
-            Axle::UUID uuid = Axle::AssetManager::GetAssetUUID(uri);
-            ASSET_CHECK(static_cast<uint64_t>(uuid) == expectedUUID, "Builtin UUID must match canonical constant");
-            ASSET_CHECK(Axle::AssetManager::IsBuiltin(uuid), "AssetManager::IsBuiltin(UUID) must return true");
-
-            auto path = Axle::AssetManager::GetAssetPath(uuid);
-            ASSET_CHECK(path.generic_string() == uri, "AssetManager::GetAssetPath must return canonical URI");
-        }
-
-        // Verify NO sidecar files or registry entries were generated for builtins
-        AssertZeroSidecars(workspace, "TestCanonicalBuiltinPrimitives");
-
-        Axle::AssetManager::Shutdown();
-        return true;
-    }
-
-} // namespace
-
-int main(int argc, char** argv) {
-    (void)argc;
-    (void)argv;
     Axle::Tests::InitializeWorkspace();
-
-    std::cout << "\n========================================================\n"
-              << "       AxleEngine Asset Identity & Safe Persistence       \n"
-              << "========================================================\n"
-              << " [AF-01] Canonical Root Registry & Safe Persistence     \n"
-              << "--------------------------------------------------------\n";
-
-    struct TestCase {
-        std::string Name;
-        bool (*Function)();
+    const std::pair<const char*,std::function<bool()>> tests[] = {
+        {"raw paths and cold native UUID",RawPathsAndColdNativeIdentity},
+        {"root relocation and external native move",RootRelocationAndNativeExternalMove},
+        {"serializer identity preservation",SavePreservesIdentityAcrossOwners},
+        {"raw move and explicit relink",RawMoveAndExplicitRelinkUpdateRealReferences},
+        {"copy and duplicate identity",CopyAndDuplicateIdentity},
+        {"invalid identity and read-only discovery",InvalidIdentityIsNotRegenerated},
+        {"new native import",NewNativeImportPublishesAfterPersisting},
+        {"packaged identity and raw paths",PackagedNativeIdentityAndRawPaths},
+        {"in-place material reload",MaterialReloadPreservesLiveObject},
+        {"native UI roundtrip",NativeUIRoundtrip},
+        {"path and builtin validation",PathAndBuiltinValidation},
+        {"invalid atomic input and failure",AtomicInvalidInputAndReplacementFailure},
+        {"failed identity publication",FailedNativeImportDoesNotPublish},
+        {"scene assembly project persistence",SceneAssemblyAndProjectSavesKeepPreviousBytes}
     };
-
-    std::vector<TestCase> cases = {
-        { "Clean Checkout Reference Resolution",        TestCleanCheckoutReferenceResolution },
-        { "Project-Root Relocation",                     TestProjectRootRelocation },
-        { "Asset Relocation (Move/Rename) Identity",    TestAssetRelocationPreservesIdentity },
-        { "Asset Copy Brand-New Identity",               TestAssetCopyIdentity },
-        { "External Move and Explicit Relink",          TestExternalMoveAndRelink },
-        { "Duplicate UUID Diagnostics & Recovery",      TestDuplicateUUIDDiagnostics },
-        { "Corrupt & Unsupported Registry Diagnostics", TestCorruptAndUnsupportedRegistryDiagnostics },
-        { "Missing Registry Entry for Referenced Asset", TestMissingRegistryEntryReferencedAsset },
-        { "New-Import Checked Atomic Persistence",       TestNewImportCheckedPersistence },
-        { "Deterministic Save Failure Preserves Prior",  TestDeterministicSaveFailurePreservesPriorFile },
-        { "Canonical Builtin Primitives",                TestCanonicalBuiltinPrimitives },
-    };
-
-    size_t passed = 0;
-    for (const auto& test : cases) {
-        bool ok = false;
-        try {
-            ok = test.Function();
-        } catch (const std::exception& e) {
-            std::cerr << "  [EXCEPTION] in " << test.Name << ": " << e.what() << "\n";
-            ok = false;
-        } catch (...) {
-            std::cerr << "  [EXCEPTION] unknown in " << test.Name << "\n";
-            ok = false;
+    size_t passed=0;
+    try {
+        for(const auto& [name,test]:tests) {
+            std::cout<<"RUN "<<name<<std::endl;
+            if(!test()) {AssetManager::Shutdown(); return 1;}
+            AssetManager::Shutdown(); ++passed;
         }
-
-        if (ok) {
-            std::cout << "[PASS] " << test.Name << "\n";
-            passed++;
-        } else {
-            std::cerr << "[FAIL] " << test.Name << "\n";
-            return 1;
-        }
-    }
-
-    std::cout << "\n--------------------------------------------------------\n"
-              << " Result: " << passed << "/" << cases.size() << " test suites passed.\n"
-              << "========================================================\n\n";
-
+    } catch(const std::exception& error) {std::cerr<<error.what()<<"\n";AssetManager::Shutdown();return 1;}
+    std::cout<<"PASS "<<passed<<"/"<<std::size(tests)<<" asset suites\n";
     return 0;
 }

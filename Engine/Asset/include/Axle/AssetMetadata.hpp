@@ -28,7 +28,7 @@ namespace Axle {
         uint32_t Version = 1;
 
         bool IsValid() const {
-            return Handle != 0 && Type != AssetType::None;
+            return Type != AssetType::None && !FilePath.empty(); // Raw resources are identified by path, not UUID.
         }
 
         operator bool() const {

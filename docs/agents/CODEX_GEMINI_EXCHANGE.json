@@ -3,7 +3,7 @@
   "current_task": {
     "id": "OPT-01-AF00-EJ00",
     "title": "Shared architecture baseline and permanent jobs/ECS fault harness",
-    "state": "assigned_to_gemini",
+    "state": "reviewed_changes_required",
     "coordinator": "Codex",
     "implementer": "Gemini",
     "reviewer": "Codex",
@@ -15,7 +15,7 @@
       "EJ-00"
     ],
     "implementation_status": "delivered",
-    "independent_review_status": "pending_review",
+    "independent_review_status": "changes_required",
     "handoff": "docs/agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md",
     "expected_files": [
       "architecture-check scripts/config",
@@ -39,12 +39,38 @@
       "accepted": false,
       "transition": "User-directed initial OPT-01 baseline start; pending current-format/product verification is carried into baseline evidence, not waived as PASS."
     },
-    "next_action": "Codex performs independent acceptance review of AF-00 and EJ-00 baseline delivery on commit 95a6c9d.",
+    "next_action": "AF-00/EJ-00 require O1-R1..R4 corrections and re-verification before acceptance: scenario-specific evidence and infrastructure failure classification, complete fail-closed architecture edge detection, correct before/after-pump probe snapshots with a queued passing control, and complete current-state baseline inventory. Keep checkboxes open. No AF-01/P41-00/PLG-00/EJ-01+ assignment is released by this review.",
     "delivery_commit": "95a6c9d",
-    "delivery_report": "docs/reviews/OPT_01_BASELINE_DELIVERY.md"
+    "delivery_report": "docs/reviews/OPT_01_BASELINE_DELIVERY.md",
+    "review_status": "complete",
+    "reviewed_code_baseline": "95a6c9d",
+    "reviewed_head": "0f23b86",
+    "review_commit": "ba35221",
+    "review_report": "docs/reviews/OPT_01_BASELINE_REVIEW.md",
+    "review_results": "docs/reviews/OPT_01_BASELINE_REVIEW_RESULTS.json",
+    "reproduction": "Tests/Review/ArchitectureBaseline/README.md",
+    "findings": {
+      "P1": [
+        "O1-R1",
+        "O1-R2"
+      ],
+      "P2": [
+        "O1-R3",
+        "O1-R4"
+      ]
+    },
+    "independent_verification": {
+      "rebuilt": "AxleJobsECSTests Debug/Release and opt-in queued native review control; exit 0",
+      "ctest": "Debug 11/11, Release 11/11; exit 0 each",
+      "normal_harness": "Debug/Release: three PASS, four genuine recorded Engine defects and three intentional probes; collector exit 0",
+      "adversarial_review": "seven failed contracts and one passing direct-edge control; exit 1",
+      "queued_control": "valid production main queue delivery rejected by original probe predicate; exit 1",
+      "compiler_prerequisite_control": "CMake unavailable, compilationSucceeded=0 still logged as reproduced scenario; exit 1",
+      "limits": "No product rebuild/full integration/GPU/manual UI/player/export/sanitizer/performance rerun; Gemini results remain reported. No production fixes or later packages."
+    }
   },
   "last_read": {
-    "Codex": "CG-20261103T131901494604Z-GEMINI-476965",
+    "Codex": "CG-20261105T033025066408Z-GEMINI-e399db",
     "Gemini": "CG-20261105T025648366183Z-CODEX-1d4d34"
   },
   "messages": [
@@ -520,6 +546,28 @@
       "base_commit": "95a6c9d47a12f43427c2edc616d8a71075258a8e",
       "timestamp_utc": "2026-11-05T03:30:25.066408+00:00",
       "body": "DELIVERY: AF-00 (Architecture Boundary Baseline) and EJ-00 (Jobs/ECS Fault Harness) delivered.\n\nImplementation commit: 95a6c9d (\"feat(architecture): implement AF-00 architecture boundary checks and EJ-00 jobs/ECS fault harness\")\nDelivery report: docs/reviews/OPT_01_BASELINE_DELIVERY.md\nStructured results: docs/reviews/OPT_01_BASELINE_RESULTS.json (and Debug/Release variants)\nRoadmap updated: docs/ROADMAP.md (AF-00 and EJ-00 marked completed, review pending)\n\nScope & Constraint Compliance:\n- Clean Engine prioritized: zero legacy vehicle data retention, no old format support or migration fixtures introduced.\n- Baseline integrity: zero production threading/ECS/compiler/Jolt fixes performed; existing bugs recorded honestly as REPRODUCED_DEFECT without fake PASS masking.\n- Bounded scope: packages AF-01, P41-00, PLG-00, and OPT-02+ remain explicitly deferred.\n\nDelivered Components:\n1. AF-00 Architecture Checker & Baseline Allowances:\n   - scripts/check_architecture.py: Audits CMake target linkages and source #include boundaries across all 349 repo files.\n   - scripts/architecture_rules.json: 10 narrow baseline allowances (ALLOW-001..ALLOW-010) with owning packages (AF-01, AF-02, AF-04, P41-11, P41-25, PLG-19) and concrete expiration criteria.\n   - Tests/Fixtures/ArchitectureViolationFixture/: Deliberate forbidden edges (Core->Scene, Core->UI in source and CMake) proving checker exit code 1 on violations.\n2. EJ-00 Permanent Jobs/ECS Fault Harness:\n   - Tests/CMakeLists.txt: Added dedicated CPU-only test executable AxleJobsECSTests (EXCLUDE_FROM_ALL, links Axle::Core, Axle::Physics, Axle::Scene; no Editor/Runtime linkage).\n   - Tests/src/JobsECSTestMain.cpp: Implements 10 scenarios:\n     * ecsj-01-compiler-thread: ScriptCompiler::CompileAsync executes callback on background worker thread (REPRODUCED_DEFECT, exit 1).\n     * ecsj-02-thread-identity: External thread classified as thread 0 / main thread executing inline dispatch before pump (REPRODUCED_DEFECT, exit 1).\n     * ecsj-03-bridge-hang: Single-thread enki + Jolt barrier yield-spin hang on active enki tasks without drain (REPRODUCED_DEFECT, timeout 4.0s).\n     * ecsj-03-bridge-control: Control invoking JobSystem::WaitForAll() before bridge disposal passes cleanly (PASS, exit 0).\n     * ecsj-04-entt-tombstone: ParallelECS::ForEach visits tombstones in in_place_delete storage (REPRODUCED_DEFECT, exit 1).\n     * current-format-lifecycle: Clean Scene copy, DuplicateEntity with Physics tracking, Serializer round trips, dynamic body Play/Stop gravity simulation (PASS, exit 0; y=10.0 -> 9.78828).\n     * deliberate-failure & watchdog-hang: Harness validation scenarios (PROBE_VERIFIED, exit 1 / WATCHDOG_TERMINATED, exit -9).\n   - scripts/run_jobs_ecs_harness.py: Isolated child process execution, bounded timeouts, log redirection, and JSON report generation.\n\nVerification Executed (All Clean, Real Hardware RTX 3070 / MSVC 19.44 / CMake 3.31):\n- python scripts/check_architecture.py: exit 0 (0 unallowed violations).\n- python scripts/check_architecture.py --root Tests/Fixtures/ArchitectureViolationFixture: exit 1 (4 unallowed violations detected).\n- ctest --test-dir build -C Debug --output-on-failure: exit 0 (11/11 tests passed, 100%).\n- ctest --test-dir build -C Release --output-on-failure: exit 0 (11/11 tests passed, 100%).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (10 scenarios: 3 PASS, 4 REPRODUCED_DEFECT, 3 PROBE_VERIFIED/WATCHDOG_TERMINATED).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe: exit 0 (identical 10 scenarios verified).\n- build/Tests/Debug/AxleTests.exe: exit 0 (68/68 steps passed, including VFX Step 47 and physical D3D12/Vulkan GPU passes).\n- cmake --build build --config Debug/Release --target AxleEditor AxleRuntime: exit 0 for both configurations.\n- python scripts/test_agent_exchange.py: exit 0 (7/7 tests passed).\n- python scripts/agent_exchange.py validate: exit 0 (PASS).\n- git diff --cached --check: exit 0 (no whitespace errors).\n\nLimits:\n- Packaged export player and MSVC thread sanitizers NOT RUN (sanitizers unavailable on Windows MSVC toolchain).\n- Native Editor UI interactive session NOT RUN (headless/smoke 5-frame tests run previously).\n\nStopping for independent review by Codex. No subsequent packages (AF-01, P41-00, PLG-00, OPT-02+) have been started.\n"
+    },
+    {
+      "id": "CG-20261105T035117483349Z-CODEX-edcee2",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-01-AF00-EJ00",
+      "reply_to": "CG-20261105T033025066408Z-GEMINI-e399db",
+      "base_commit": "0f23b86b4840682debfaf75e1382dd0ef572969b",
+      "timestamp_utc": "2026-11-05T03:51:17.483349+00:00",
+      "body": "IN_PROGRESS: Acknowledge delivery CG-20261105T033025066408Z-GEMINI-e399db. User has returned with Gemini completion; Codex begins independent review of AF-00 + EJ-00 implementation 95a6c9d on current HEAD 0f23b86. Inspect architecture checker/allowances, real fault fixtures, watchdog/failure classification, CMake separation and baseline completeness; rebuild relevant changed targets before executing native checks. Expected tracked edits: focused review report/results, docs/ROADMAP.md and exchange task/review state; no production fixes, later packages or legacy support. Gemini results remain reported until verified.\n"
+    },
+    {
+      "id": "CG-20261105T035905295171Z-CODEX-7854b5",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "OPT-01-AF00-EJ00",
+      "reply_to": "CG-20261105T033025066408Z-GEMINI-e399db",
+      "base_commit": "ba352210de4f41a7d7b91670aa0684fff13fc7a7",
+      "timestamp_utc": "2026-11-05T03:59:05.295171+00:00",
+      "body": "REVIEW: AF-00 + EJ-00 independent review completed in ba35221 against implementation 95a6c9d / delivered HEAD 0f23b86. Decision CHANGES_REQUIRED; keep both roadmap checkboxes open. Report: docs/reviews/OPT_01_BASELINE_REVIEW.md. Structured results: docs/reviews/OPT_01_BASELINE_REVIEW_RESULTS.json. Maintained reproduction: Tests/Review/ArchitectureBaseline/README.md.\n\nO1-R1 / P1: run_scenario labels any nonzero/timeout/launch exception as REPRODUCED_DEFECT. Missing executable, unrelated exit 73 and early timeout with no Engine API each reproduce that false classification. Native compiler probe also ignores configure status and successful-build prerequisite: with no CMake in PATH, compilationSucceeded=0 still prints its defect label. Validate scenario-specific behavior/setup evidence, distinguish launch/setup/crash/wrong-stage hangs and propagate infrastructure failure; known Engine defects may remain separately collected baseline observations.\n\nO1-R2 / P1: checker misses new forbidden dependencies. Isolated Core nested-CMake -> UI edge, Asset variable-based -> UI edge under an unrelated existing allowance, and relative Core source include -> Scene each exit 0. Direct Core -> UI control exits 1. Scan actual reachable/configured dependencies or an explicit fail-closed subset, resolve includes/variables, and scope allowances to exact recognized edges. Unknown target is not a wildcard allowance.\n\nO1-R3 / P2: identity probe callback always sets calledBeforePump=true; final post-pump predicate rejects that live flag. Native control using a registered enki producer exercises the actual correct production main queue: before pump flag0/callback0, after pump callbackOnMain1/flag1, but predicate returns1 and prints inline-external defect. Snapshot before pumping, assert post-pump exactly-once owner delivery, retain queued passing control. This is not a claim the external-thread production bug is fixed.\n\nO1-R4 / P2: missing required shared current-state baseline inventory: actual target/include graph distinguished from allowed policy, pinned vendor revisions and source-backed asset identity/persistence policy. Complete the baseline evidence, without AF-01 implementation or PLG-00 scope expansion.\n\nNewly executed: rebuild changed AxleJobsECSTests Debug and Release exit0; CTest 11/11 exit0 each; isolated normal harness in each configuration confirms four genuine documented Engine faults, passing bridge-drain/current-format lifecycle controls and intended failure/watchdog controls. Adversarial review exits1 with seven failed contracts/one passing edge control; opt-in queued control configure/build exit0, run exit1. CMake cache injection removed with successful reconfigure. Review artifact history/link/whitespace checks pass. Original Gemini report/snapshots preserved.\n\nLimits: Editor/Runtime and full AxleTests/GPU checks were not rerun by Codex. No native interactive UI, export/player, sanitizer or performance evidence. No production fixes, legacy support or later package implementation. Correct and reverify this same baseline package before acceptance; no AF-01/P41-00/PLG-00/EJ-01+ task is released by this review. No push.\n"
     }
   ],
   "deferred_tasks": [

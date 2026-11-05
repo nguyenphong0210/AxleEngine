@@ -10,10 +10,14 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Current assignment: OPT-01 initial AF-00 + EJ-00, assigned to Gemini.**
+**Current assignment: OPT-01 AF-00 + EJ-00, independent review CHANGES_REQUIRED.**
 The user requested starting OPT-01 on **2026-11-05**. This releases only the
 [initial baseline handoff](agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md), in AF-00
-then EJ-00 order, followed by Codex review. AF-01, P41-00 and PLG-00 remain planned.
+then EJ-00 order. Gemini delivered `95a6c9d`; the
+[Codex review](reviews/OPT_01_BASELINE_REVIEW.md) requires O1-R1..R4 corrections.
+Fresh Debug/Release CTest passes 11/11, but adversarial checks expose defect
+misclassification, forbidden-edge bypasses and a false-rejecting delivery probe;
+the shared baseline inventory is incomplete. AF-01, P41-00 and PLG-00 remain planned.
 This user-directed baseline start is a bounded sequencing exception: pending
 OPT-00 current-format/product verification is carried into baseline evidence;
 OPT-00 is not marked accepted. Production fault fixes remain in later packages.
@@ -102,15 +106,20 @@ Historical VR-R1..R3 concern the superseded legacy contract. Status: **FOLLOW-UP
 
 **Work:** Maintain permanent jobs/ECS/render failure fixtures, inventory target/include boundaries and legacy consumers, and establish stable asset identity and safe persistence. Reuse common harness infrastructure.
 
-- [ ] **AF-00:** Shared baseline and architecture checks (delivery completed; review pending in [OPT_01_BASELINE_DELIVERY.md](reviews/OPT_01_BASELINE_DELIVERY.md)).
-- [ ] **EJ-00:** Permanent baseline and meaningful harness (delivery completed; review pending in [OPT_01_BASELINE_DELIVERY.md](reviews/OPT_01_BASELINE_DELIVERY.md)).
+- [ ] **AF-00:** Shared baseline and architecture checks (delivered `95a6c9d`; [review CHANGES_REQUIRED](reviews/OPT_01_BASELINE_REVIEW.md), O1-R2/R4).
+- [ ] **EJ-00:** Permanent baseline and meaningful harness (delivered `95a6c9d`; [review CHANGES_REQUIRED](reviews/OPT_01_BASELINE_REVIEW.md), O1-R1/R3).
 - [ ] **AF-01:** Stable asset identity and safe persistence.
 - [ ] **P41-00:** Baseline and always-active render tests.
 - [ ] **PLG-00:** Baseline and retirement inventory.
 
 **Exit:** Debug/Release checks remain active; intentional failure probes fail; existing fault reproductions are recorded as faults, not hidden as passing tests. Asset identity survives a clean checkout and relocation.
 
-**Evidence:** AF-00 + EJ-00 delivered in [OPT_01_BASELINE_DELIVERY.md](reviews/OPT_01_BASELINE_DELIVERY.md); independent review pending. No OPT-01 checkbox is closed prior to review.
+**Evidence:** [Gemini delivery](reviews/OPT_01_BASELINE_DELIVERY.md),
+[independent Codex review](reviews/OPT_01_BASELINE_REVIEW.md),
+[structured independent results](reviews/OPT_01_BASELINE_REVIEW_RESULTS.json) and
+[review reproductions](../Tests/Review/ArchitectureBaseline/README.md).
+AF-00/EJ-00 remain unchecked until O1-R1..R4 corrections and re-verification.
+No later package is released by this review.
 
 ### OPT-02 - Repair threading, scripts and physics jobs
 

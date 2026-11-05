@@ -1,0 +1,302 @@
+{
+  "reviewer": "Codex",
+  "date": "2026-11-05",
+  "implementation_commit": "95a6c9d",
+  "reviewed_head": "0f23b86",
+  "decision": "CHANGES_REQUIRED",
+  "findings": {
+    "P1": [
+      "O1-R1",
+      "O1-R2"
+    ],
+    "P2": [
+      "O1-R3",
+      "O1-R4"
+    ]
+  },
+  "verification": {
+    "debug": {
+      "rebuilt_target": "AxleJobsECSTests",
+      "build_exit": 0,
+      "ctest_exit": 0,
+      "ctest_passed": 11,
+      "ctest_total": 11,
+      "harness_collector_exit": 0,
+      "harness_summary": {
+        "pass_count": 3,
+        "reproduced_defects": 4,
+        "probes_verified": 3,
+        "unexpected_failures": 0
+      },
+      "scenarios": [
+        {
+          "scenario": "arch-boundary-checks",
+          "status": "PASS",
+          "exit_code": 0,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\arch-boundary-checks.log"
+        },
+        {
+          "scenario": "arch-forbidden-fixture",
+          "status": "PROBE_VERIFIED",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\arch-forbidden-fixture.log"
+        },
+        {
+          "scenario": "ecsj-01-compiler-thread",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\ecsj-01-compiler-thread.log"
+        },
+        {
+          "scenario": "ecsj-02-thread-identity",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\ecsj-02-thread-identity.log"
+        },
+        {
+          "scenario": "ecsj-03-bridge-hang",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": -9,
+          "timed_out": true,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\ecsj-03-bridge-hang.log"
+        },
+        {
+          "scenario": "ecsj-03-bridge-control",
+          "status": "PASS",
+          "exit_code": 0,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\ecsj-03-bridge-control.log"
+        },
+        {
+          "scenario": "ecsj-04-entt-tombstone",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\ecsj-04-entt-tombstone.log"
+        },
+        {
+          "scenario": "current-format-lifecycle",
+          "status": "PASS",
+          "exit_code": 0,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\current-format-lifecycle.log"
+        },
+        {
+          "scenario": "deliberate-failure",
+          "status": "PROBE_VERIFIED",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\deliberate-failure.log"
+        },
+        {
+          "scenario": "watchdog-hang",
+          "status": "WATCHDOG_TERMINATED",
+          "exit_code": -9,
+          "timed_out": true,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\debug\\watchdog-hang.log"
+        }
+      ]
+    },
+    "release": {
+      "rebuilt_target": "AxleJobsECSTests",
+      "build_exit": 0,
+      "ctest_exit": 0,
+      "ctest_passed": 11,
+      "ctest_total": 11,
+      "harness_collector_exit": 0,
+      "harness_summary": {
+        "pass_count": 3,
+        "reproduced_defects": 4,
+        "probes_verified": 3,
+        "unexpected_failures": 0
+      },
+      "scenarios": [
+        {
+          "scenario": "arch-boundary-checks",
+          "status": "PASS",
+          "exit_code": 0,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\arch-boundary-checks.log"
+        },
+        {
+          "scenario": "arch-forbidden-fixture",
+          "status": "PROBE_VERIFIED",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\arch-forbidden-fixture.log"
+        },
+        {
+          "scenario": "ecsj-01-compiler-thread",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\ecsj-01-compiler-thread.log"
+        },
+        {
+          "scenario": "ecsj-02-thread-identity",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\ecsj-02-thread-identity.log"
+        },
+        {
+          "scenario": "ecsj-03-bridge-hang",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": -9,
+          "timed_out": true,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\ecsj-03-bridge-hang.log"
+        },
+        {
+          "scenario": "ecsj-03-bridge-control",
+          "status": "PASS",
+          "exit_code": 0,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\ecsj-03-bridge-control.log"
+        },
+        {
+          "scenario": "ecsj-04-entt-tombstone",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\ecsj-04-entt-tombstone.log"
+        },
+        {
+          "scenario": "current-format-lifecycle",
+          "status": "PASS",
+          "exit_code": 0,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\current-format-lifecycle.log"
+        },
+        {
+          "scenario": "deliberate-failure",
+          "status": "PROBE_VERIFIED",
+          "exit_code": 1,
+          "timed_out": false,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\deliberate-failure.log"
+        },
+        {
+          "scenario": "watchdog-hang",
+          "status": "WATCHDOG_TERMINATED",
+          "exit_code": -9,
+          "timed_out": true,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\release\\watchdog-hang.log"
+        }
+      ]
+    }
+  },
+  "adversarial_review": {
+    "reviewed_implementation": "95a6c9d",
+    "workspace": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6",
+    "results": [
+      {
+        "name": "missing-executable-is-not-engine-defect",
+        "expected": "do not classify unrelated infrastructure failures as REPRODUCED_DEFECT",
+        "observed": "REPRODUCED_DEFECT",
+        "contract_satisfied": false,
+        "result": {
+          "scenario": "missing-executable-is-not-engine-defect",
+          "type": "REPRODUCED_DEFECT",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": -1,
+          "timed_out": false,
+          "elapsed_seconds": 0.0,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\missing-executable-is-not-engine-defect.log",
+          "log_preview": "Failed to launch process: [WinError 2] The system cannot find the file specified"
+        }
+      },
+      {
+        "name": "unrelated-exit-is-not-specific-defect",
+        "expected": "do not classify unrelated infrastructure failures as REPRODUCED_DEFECT",
+        "observed": "REPRODUCED_DEFECT",
+        "contract_satisfied": false,
+        "result": {
+          "scenario": "unrelated-exit-is-not-specific-defect",
+          "type": "REPRODUCED_DEFECT",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": 73,
+          "timed_out": false,
+          "elapsed_seconds": 0.063,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\unrelated-exit-is-not-specific-defect.log",
+          "log_preview": ""
+        }
+      },
+      {
+        "name": "early-timeout-is-not-specific-defect",
+        "expected": "do not classify unrelated infrastructure failures as REPRODUCED_DEFECT",
+        "observed": "REPRODUCED_DEFECT",
+        "contract_satisfied": false,
+        "result": {
+          "scenario": "early-timeout-is-not-specific-defect",
+          "type": "REPRODUCED_DEFECT",
+          "status": "REPRODUCED_DEFECT",
+          "exit_code": -9,
+          "timed_out": true,
+          "elapsed_seconds": 0.219,
+          "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\early-timeout-is-not-specific-defect.log",
+          "log_preview": ""
+        }
+      },
+      {
+        "name": "direct-forbidden-link-control",
+        "expected": "checker exit 1 for a new forbidden dependency",
+        "observed": "exit 1",
+        "contract_satisfied": true,
+        "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\direct-forbidden-link-control.log",
+        "fixture": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\direct-forbidden-link-control"
+      },
+      {
+        "name": "nested-cmake-forbidden-link",
+        "expected": "checker exit 1 for a new forbidden dependency",
+        "observed": "exit 0",
+        "contract_satisfied": false,
+        "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\nested-cmake-forbidden-link.log",
+        "fixture": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\nested-cmake-forbidden-link"
+      },
+      {
+        "name": "variable-forbidden-link-with-existing-allowance",
+        "expected": "checker exit 1 for a new forbidden dependency",
+        "observed": "exit 0",
+        "contract_satisfied": false,
+        "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\variable-forbidden-link-with-existing-allowance.log",
+        "fixture": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\variable-forbidden-link-with-existing-allowance"
+      },
+      {
+        "name": "relative-forbidden-include",
+        "expected": "checker exit 1 for a new forbidden dependency",
+        "observed": "exit 0",
+        "contract_satisfied": false,
+        "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\relative-forbidden-include.log",
+        "fixture": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\relative-forbidden-include"
+      },
+      {
+        "name": "identity-probe-rejects-correct-deferred-control",
+        "expected": "correct queued delivery is accepted",
+        "observed": "exit 1",
+        "contract_satisfied": false,
+        "log": "D:\\WorkSpace\\AxleEngine\\build\\opt01-review\\adversarial\\review-ayj9v_o6\\queued-delivery-native-control.log",
+        "evidence_kind": "native production queue; actor is a registered enki worker; original probe predicate unchanged"
+      }
+    ],
+    "failed_contracts": 7
+  },
+  "queued_control": {
+    "exit_code": 1,
+    "actor": "registered enki worker using production DispatchToMainThread; original probe predicate unchanged",
+    "stdout": "[10:55:07.835] [AXLE] JobSystem initialized with 2 worker threads (Hardware concurrency: 16)\nexternal enki index=1 wrapper index=1\nincorrectlyMain=0 calledBeforePump=0 callbackOnMain=0\nreview_after_pump incorrectlyMain=0 calledBeforePump=1 callbackOnMain=1\n[10:55:07.836] [AXLE] JobSystem shutting down...\n[10:55:07.836] [AXLE] JobSystem shutdown complete.\nDEFECT REPRODUCED [ECSJ-02]: External thread classified as main thread zero; callback executed inline before pump\n"
+  },
+  "compiler_prerequisite_control": {
+    "exit_code": 1,
+    "stdout": "[10:55:43.323] [APP] ScriptCompiler: [FAILED] Target 'CompilerProbeTarget' failed with exit code 1 (0 errors, 0 warnings)\nstarted=1 callbackRan=1 compilationSucceeded=0 callbackOnMain=0\nDEFECT REPRODUCED [ECSJ-01]: ScriptCompiler callback executed on background worker thread\n",
+    "injection": "PATH limited to Windows System32; CMake intentionally unavailable"
+  },
+  "limits": [
+    "No production fixes or old-format support",
+    "Editor/Runtime and full integration/GPU results remain Gemini-reported, not rerun",
+    "No manual UI/player/export/sanitizer/performance verification",
+    "OPT-00 not independently accepted; no later package released"
+  ]
+}

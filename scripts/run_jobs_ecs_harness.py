@@ -94,6 +94,7 @@ def main():
         ("ecsj-01-compiler-thread", "PASS", max(args.timeout, 20)),
         ("ecsj-02-thread-identity", "PASS", args.timeout),
         ("ej01-lifecycle-admission", "PASS", args.timeout),
+        ("ej01-review-fixes", "PASS", args.timeout),
         ("ej02-deferred-executor", "PASS", args.timeout),
         ("ej03-compiler-handoff", "PASS", max(args.timeout, 20)),
         ("ej04-reload-commit", "PASS", args.timeout),

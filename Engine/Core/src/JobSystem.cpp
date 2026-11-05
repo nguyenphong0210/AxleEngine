@@ -1,6 +1,7 @@
 #include <Axle/JobSystem.hpp>
 #include <Axle/Log.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -24,10 +25,46 @@ namespace Axle {
         std::vector<std::shared_ptr<enki::ICompletable>> ActiveTasks;
     };
 
-    static std::unique_ptr<JobSystemData> s_Data = nullptr;
+    static std::shared_ptr<JobSystemData> s_Data = nullptr;
+    static std::mutex s_LifecycleMutex;
     static std::thread::id s_OwnerThreadId{};
     static std::atomic<u32> s_Epoch{0};
-    static thread_local u32 t_ActiveTaskDepth = 0;
+
+    struct ThreadTaskContext {
+        u32 Epoch = 0;
+        u32 Depth = 0;
+    };
+    static thread_local ThreadTaskContext t_TaskContext{};
+
+    static std::shared_ptr<JobSystemData> GetJobSystemData() {
+        std::lock_guard<std::mutex> lock(s_LifecycleMutex);
+        return s_Data;
+    }
+
+    // --- TaskExecutionScope Implementation ---
+
+    namespace Detail {
+        TaskExecutionScope::TaskExecutionScope() {
+            if (!JobSystem::IsValidSchedulerContext()) {
+                JobSystem::ReportInvalidContext("TaskExecutionScope");
+                return;
+            }
+            t_TaskContext.Epoch = JobSystem::GetEpoch();
+            ++t_TaskContext.Depth;
+            m_Active = true;
+        }
+
+        TaskExecutionScope::~TaskExecutionScope() {
+            if (m_Active) {
+                if (t_TaskContext.Depth > 0) {
+                    --t_TaskContext.Depth;
+                    if (t_TaskContext.Depth == 0) {
+                        t_TaskContext.Epoch = 0;
+                    }
+                }
+            }
+        }
+    }
 
     // --- JobHandle Implementation ---
 
@@ -52,6 +89,7 @@ namespace Axle {
             return;
         }
 
+        std::lock_guard<std::mutex> lifeLock(s_LifecycleMutex);
         if (s_Data && s_Data->State.load(std::memory_order_acquire) != JobSystemState::Stopped) {
             AXLE_CORE_WARN("JobSystem::Init() called while already initialized (state: {0})!",
                 static_cast<int>(s_Data->State.load()));
@@ -64,13 +102,13 @@ namespace Axle {
         u32 totalThreads = (numThreads > 0) ? numThreads : hwThreads;
         u32 dedicatedWorkers = (totalThreads > 1) ? (totalThreads - 1) : 0;
 
-        auto data = std::make_unique<JobSystemData>();
+        auto data = std::make_shared<JobSystemData>();
         data->TotalThreads = totalThreads;
         data->DedicatedWorkerThreads = dedicatedWorkers;
         data->Scheduler.Initialize(totalThreads);
         data->State.store(JobSystemState::Running, std::memory_order_release);
 
-        s_Data = std::move(data);
+        s_Data = data;
         s_Epoch.fetch_add(1, std::memory_order_relaxed);
 
         AXLE_CORE_INFO("JobSystem initialized (epoch {0}) with {1} total scheduler threads ({2} dedicated worker threads, hardware concurrency: {3})",
@@ -84,7 +122,13 @@ namespace Axle {
             return;
         }
 
-        if (!s_Data || s_Data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
+        std::shared_ptr<JobSystemData> data;
+        {
+            std::lock_guard<std::mutex> lifeLock(s_LifecycleMutex);
+            data = s_Data;
+        }
+
+        if (!data || data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
             return;
         }
 
@@ -92,44 +136,52 @@ namespace Axle {
 
         // 1. Quiescing: reject new application work under admission lock
         {
-            std::lock_guard<std::mutex> lock(s_Data->AdmissionMutex);
-            s_Data->State.store(JobSystemState::Quiescing, std::memory_order_release);
+            std::lock_guard<std::mutex> lock(data->AdmissionMutex);
+            data->State.store(JobSystemState::Quiescing, std::memory_order_release);
         }
 
         // 2. Draining: wait for all admitted tasks and internal children to complete, shut down enkiTS
-        s_Data->State.store(JobSystemState::Draining, std::memory_order_release);
-        s_Data->Scheduler.WaitforAllAndShutdown();
+        data->State.store(JobSystemState::Draining, std::memory_order_release);
+        data->Scheduler.WaitforAllAndShutdown();
 
         // 3. Clear active tasks and queues
         {
-            std::lock_guard<std::mutex> lock(s_Data->ActiveTasksMutex);
-            s_Data->ActiveTasks.clear();
+            std::lock_guard<std::mutex> lock(data->ActiveTasksMutex);
+            data->ActiveTasks.clear();
         }
 
         {
-            std::lock_guard<std::mutex> lock(s_Data->MainThreadMutex);
-            s_Data->MainThreadQueue.clear();
+            std::lock_guard<std::mutex> lock(data->MainThreadMutex);
+            data->MainThreadQueue.clear();
         }
 
         // 4. Stopped
         {
-            std::lock_guard<std::mutex> lock(s_Data->AdmissionMutex);
-            s_Data->State.store(JobSystemState::Stopped, std::memory_order_release);
-            s_Data->TotalThreads = 0;
-            s_Data->DedicatedWorkerThreads = 0;
+            std::lock_guard<std::mutex> lock(data->AdmissionMutex);
+            data->State.store(JobSystemState::Stopped, std::memory_order_release);
+            data->TotalThreads = 0;
+            data->DedicatedWorkerThreads = 0;
         }
 
-        s_Data.reset();
+        {
+            std::lock_guard<std::mutex> lifeLock(s_LifecycleMutex);
+            if (s_Data == data) {
+                s_Data.reset();
+            }
+        }
+
         AXLE_CORE_INFO("JobSystem shutdown complete.");
     }
 
     bool JobSystem::IsInitialized() {
-        return s_Data != nullptr && s_Data->State.load(std::memory_order_acquire) == JobSystemState::Running;
+        auto data = GetJobSystemData();
+        return data != nullptr && data->State.load(std::memory_order_acquire) == JobSystemState::Running;
     }
 
     JobSystemState JobSystem::GetState() {
-        if (!s_Data) return JobSystemState::Stopped;
-        return s_Data->State.load(std::memory_order_acquire);
+        auto data = GetJobSystemData();
+        if (!data) return JobSystemState::Stopped;
+        return data->State.load(std::memory_order_acquire);
     }
 
     u32 JobSystem::GetEpoch() {
@@ -137,17 +189,19 @@ namespace Axle {
     }
 
     u32 JobSystem::GetTotalThreadCount() {
-        if (!s_Data || s_Data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
+        auto data = GetJobSystemData();
+        if (!data || data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
             return 0;
         }
-        return s_Data->TotalThreads;
+        return data->TotalThreads;
     }
 
     u32 JobSystem::GetDedicatedWorkerThreadCount() {
-        if (!s_Data || s_Data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
+        auto data = GetJobSystemData();
+        if (!data || data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
             return 0;
         }
-        return s_Data->DedicatedWorkerThreads;
+        return data->DedicatedWorkerThreads;
     }
 
     u32 JobSystem::GetWorkerThreadCount() {
@@ -155,10 +209,11 @@ namespace Axle {
     }
 
     u32 JobSystem::GetCurrentThreadIndex() {
-        if (!IsInitialized()) {
+        auto data = GetJobSystemData();
+        if (!data || data->State.load(std::memory_order_acquire) != JobSystemState::Running) {
             return enki::NO_THREAD_NUM;
         }
-        return s_Data->Scheduler.GetThreadNum();
+        return data->Scheduler.GetThreadNum();
     }
 
     bool JobSystem::IsMainThread() {
@@ -167,43 +222,47 @@ namespace Axle {
 
     bool JobSystem::IsValidSchedulerContext() {
         if (IsMainThread()) return true;
-        if (t_ActiveTaskDepth > 0) return true;
-        if (!s_Data || s_Data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) return false;
-        uint32_t threadNum = s_Data->Scheduler.GetThreadNum();
-        return (threadNum != enki::NO_THREAD_NUM && threadNum < s_Data->Scheduler.GetNumTaskThreads());
+        auto data = GetJobSystemData();
+        if (!data || data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) return false;
+        uint32_t threadNum = data->Scheduler.GetThreadNum();
+        return (threadNum != enki::NO_THREAD_NUM && threadNum < data->Scheduler.GetNumTaskThreads());
     }
 
-    enki::TaskScheduler& JobSystem::GetScheduler() {
-        AXLE_CORE_ASSERT(s_Data && s_Data->State.load(std::memory_order_acquire) == JobSystemState::Running, "JobSystem not initialized!");
-        if (!s_Data) {
-            AXLE_CORE_ERROR("JobSystem::GetScheduler called while not initialized!");
-            static enki::TaskScheduler s_DummyFallback;
-            return s_DummyFallback;
+    enki::TaskScheduler* JobSystem::GetScheduler() {
+        if (!IsValidSchedulerContext()) {
+            ReportInvalidContext("GetScheduler");
+            return nullptr;
         }
-        return s_Data->Scheduler;
+        auto data = GetJobSystemData();
+        if (!data || data->State.load(std::memory_order_acquire) != JobSystemState::Running) {
+            ReportInvalidContext("GetScheduler");
+            return nullptr;
+        }
+        return &data->Scheduler;
     }
 
     void JobSystem::RunPinnedTasks() {
-        if (!s_Data) return;
         if (!IsMainThread()) {
             ReportInvalidContext("RunPinnedTasks");
             return;
         }
+        auto data = GetJobSystemData();
+        if (!data) return;
 
         // Run enkiTS pinned tasks assigned to this thread (thread 0)
-        s_Data->Scheduler.RunPinnedTasks();
+        data->Scheduler.RunPinnedTasks();
 
         // Drain deferred main thread completions for unified pump coverage
         PumpMainThreadCompletions();
 
         // Periodically clean up completed async task handles
-        std::lock_guard<std::mutex> lock(s_Data->ActiveTasksMutex);
-        if (!s_Data->ActiveTasks.empty()) {
-            auto it = std::remove_if(s_Data->ActiveTasks.begin(), s_Data->ActiveTasks.end(),
+        std::lock_guard<std::mutex> lock(data->ActiveTasksMutex);
+        if (!data->ActiveTasks.empty()) {
+            auto it = std::remove_if(data->ActiveTasks.begin(), data->ActiveTasks.end(),
                 [](const std::shared_ptr<enki::ICompletable>& task) {
                     return task->GetIsComplete();
                 });
-            s_Data->ActiveTasks.erase(it, s_Data->ActiveTasks.end());
+            data->ActiveTasks.erase(it, data->ActiveTasks.end());
         }
     }
 
@@ -215,7 +274,8 @@ namespace Axle {
             return JobHandle();
         }
 
-        if (!s_Data) {
+        auto data = GetJobSystemData();
+        if (!data) {
             AXLE_CORE_WARN("JobSystem::Dispatch rejected: JobSystem stopped!");
             return JobHandle();
         }
@@ -227,29 +287,30 @@ namespace Axle {
 
             void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override {
                 (void)range; (void)threadnum;
-                JobSystem::IncrementActiveTaskDepth();
+                Detail::TaskExecutionScope scope;
                 if (TaskFunc) TaskFunc();
-                JobSystem::DecrementActiveTaskDepth();
             }
         };
 
         auto task = std::make_shared<AsyncLambdaTask>(std::move(func));
 
         {
-            std::lock_guard<std::mutex> lock(s_Data->AdmissionMutex);
-            JobSystemState state = s_Data->State.load(std::memory_order_acquire);
+            std::lock_guard<std::mutex> lock(data->AdmissionMutex);
+            JobSystemState state = data->State.load(std::memory_order_acquire);
+            const u32 currentEpoch = s_Epoch.load(std::memory_order_relaxed);
+            bool isChild = (t_TaskContext.Depth > 0 && t_TaskContext.Epoch == currentEpoch);
             bool admit = (state == JobSystemState::Running) ||
-                         ((state == JobSystemState::Quiescing || state == JobSystemState::Draining) && t_ActiveTaskDepth > 0);
+                         ((state == JobSystemState::Quiescing || state == JobSystemState::Draining) && isChild);
             if (!admit) {
                 AXLE_CORE_WARN("JobSystem::Dispatch rejected: scheduler is not accepting new work!");
                 return JobHandle();
             }
 
             {
-                std::lock_guard<std::mutex> taskLock(s_Data->ActiveTasksMutex);
-                s_Data->ActiveTasks.push_back(task);
+                std::lock_guard<std::mutex> taskLock(data->ActiveTasksMutex);
+                data->ActiveTasks.push_back(task);
             }
-            s_Data->Scheduler.AddTaskSetToPipe(task.get());
+            data->Scheduler.AddTaskSetToPipe(task.get());
         }
 
         return JobHandle(task);
@@ -263,38 +324,46 @@ namespace Axle {
     }
 
     void JobSystem::Wait(const enki::ICompletable* completable) {
-        if (!s_Data || !completable) return;
+        if (!completable) return;
         if (!IsValidSchedulerContext()) {
             ReportInvalidContext("Wait");
             return;
         }
-        s_Data->Scheduler.WaitforTask(completable);
+        auto data = GetJobSystemData();
+        if (!data || data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) return;
+        data->Scheduler.WaitforTask(completable);
     }
 
     void JobSystem::WaitForAll() {
-        if (!s_Data) return;
         if (!IsValidSchedulerContext()) {
             ReportInvalidContext("WaitForAll");
             return;
         }
-        s_Data->Scheduler.WaitforAll();
+        auto data = GetJobSystemData();
+        if (!data || data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) return;
+        data->Scheduler.WaitforAll();
     }
 
     PostResult JobSystem::PostToMainThread(const OwnerToken& owner, std::function<void()> completion) {
         if (!completion) return PostResult::Success;
 
-        if (!s_Data || s_Data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
+        auto data = GetJobSystemData();
+        if (!data || data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
             AXLE_CORE_WARN("JobSystem::PostToMainThread rejected: JobSystem stopped!");
             return PostResult::RejectedStopped;
         }
 
-        std::lock_guard<std::mutex> lock(s_Data->MainThreadMutex);
-        if (s_Data->MainThreadQueue.size() >= JobSystemData::MaxMainThreadQueueCapacity) {
+        std::lock_guard<std::mutex> lock(data->MainThreadMutex);
+        if (data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
+            return PostResult::RejectedStopped;
+        }
+
+        if (data->MainThreadQueue.size() >= JobSystemData::MaxMainThreadQueueCapacity) {
             AXLE_CORE_ERROR("JobSystem::PostToMainThread rejected: queue capacity exhausted!");
             return PostResult::RejectedQueueFull;
         }
 
-        s_Data->MainThreadQueue.push_back(QueuedCompletion{
+        data->MainThreadQueue.push_back(QueuedCompletion{
             owner,
             s_Epoch.load(std::memory_order_relaxed),
             std::move(completion)
@@ -308,28 +377,29 @@ namespace Axle {
     }
 
     u32 JobSystem::PumpMainThreadCompletions(u32 maxItems) {
-        if (!s_Data) return 0;
         if (!IsMainThread()) {
             ReportInvalidContext("PumpMainThreadCompletions");
             return 0;
         }
+        auto data = GetJobSystemData();
+        if (!data) return 0;
 
         std::vector<QueuedCompletion> toRun;
         {
-            std::lock_guard<std::mutex> lock(s_Data->MainThreadMutex);
-            if (s_Data->MainThreadQueue.empty()) {
+            std::lock_guard<std::mutex> lock(data->MainThreadMutex);
+            if (data->MainThreadQueue.empty()) {
                 return 0;
             }
-            if (maxItems == 0 || s_Data->MainThreadQueue.size() <= maxItems) {
-                toRun.swap(s_Data->MainThreadQueue);
+            if (maxItems == 0 || data->MainThreadQueue.size() <= maxItems) {
+                toRun.swap(data->MainThreadQueue);
             } else {
                 toRun.assign(
-                    std::make_move_iterator(s_Data->MainThreadQueue.begin()),
-                    std::make_move_iterator(s_Data->MainThreadQueue.begin() + maxItems)
+                    std::make_move_iterator(data->MainThreadQueue.begin()),
+                    std::make_move_iterator(data->MainThreadQueue.begin() + maxItems)
                 );
-                s_Data->MainThreadQueue.erase(
-                    s_Data->MainThreadQueue.begin(),
-                    s_Data->MainThreadQueue.begin() + maxItems
+                data->MainThreadQueue.erase(
+                    data->MainThreadQueue.begin(),
+                    data->MainThreadQueue.begin() + maxItems
                 );
             }
         }
@@ -356,18 +426,8 @@ namespace Axle {
         PostToMainThread(std::move(func));
     }
 
-    void JobSystem::IncrementActiveTaskDepth() {
-        ++t_ActiveTaskDepth;
-    }
-
-    void JobSystem::DecrementActiveTaskDepth() {
-        if (t_ActiveTaskDepth > 0) {
-            --t_ActiveTaskDepth;
-        }
-    }
-
     u32 JobSystem::GetActiveTaskDepth() {
-        return t_ActiveTaskDepth;
+        return t_TaskContext.Depth;
     }
 
     bool JobSystem::TryAdmitTaskSet(enki::ITaskSet* taskSet) {
@@ -376,16 +436,19 @@ namespace Axle {
             ReportInvalidContext("TryAdmitTaskSet");
             return false;
         }
-        if (!s_Data) return false;
+        auto data = GetJobSystemData();
+        if (!data) return false;
 
-        std::lock_guard<std::mutex> lock(s_Data->AdmissionMutex);
-        JobSystemState state = s_Data->State.load(std::memory_order_acquire);
+        std::lock_guard<std::mutex> lock(data->AdmissionMutex);
+        JobSystemState state = data->State.load(std::memory_order_acquire);
         if (state == JobSystemState::Running) {
-            s_Data->Scheduler.AddTaskSetToPipe(taskSet);
+            data->Scheduler.AddTaskSetToPipe(taskSet);
             return true;
         }
-        if ((state == JobSystemState::Quiescing || state == JobSystemState::Draining) && t_ActiveTaskDepth > 0) {
-            s_Data->Scheduler.AddTaskSetToPipe(taskSet);
+        const u32 currentEpoch = s_Epoch.load(std::memory_order_relaxed);
+        bool isChild = (t_TaskContext.Depth > 0 && t_TaskContext.Epoch == currentEpoch);
+        if ((state == JobSystemState::Quiescing || state == JobSystemState::Draining) && isChild) {
+            data->Scheduler.AddTaskSetToPipe(taskSet);
             return true;
         }
         return false;

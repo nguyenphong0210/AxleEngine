@@ -13,6 +13,20 @@ namespace Axle {
 
     class JobSystem;
 
+    namespace Detail {
+        // Scoped RAII token marking active execution of an admitted scheduler task.
+        // Unforgeable: validates scheduler context on construction.
+        class TaskExecutionScope {
+        public:
+            TaskExecutionScope();
+            ~TaskExecutionScope();
+            TaskExecutionScope(const TaskExecutionScope&) = delete;
+            TaskExecutionScope& operator=(const TaskExecutionScope&) = delete;
+        private:
+            bool m_Active = false;
+        };
+    }
+
     // Lifecycle states for the JobSystem scheduler
     enum class JobSystemState {
         Stopped = 0,
@@ -178,7 +192,9 @@ namespace Axle {
         static bool IsValidSchedulerContext();
 
         // Direct access to the underlying enki::TaskScheduler.
-        static enki::TaskScheduler& GetScheduler();
+        // Returns nullptr and reports an invalid-context diagnostic if called outside a valid scheduler context
+        // (Engine's OS owner thread or registered worker thread) or if the scheduler is stopped.
+        static enki::TaskScheduler* GetScheduler();
 
         // Run pinned tasks scheduled for the calling thread (e.g. main thread frame loop).
         // Must be called from the OS owner thread.
@@ -214,9 +230,7 @@ namespace Axle {
         // Unified compatibility wrapper that routes through PostToMainThread (always deferred).
         static void DispatchToMainThread(std::function<void()> func);
 
-        // Internal permit / task depth helpers for admitted task graphs and internal children.
-        static void IncrementActiveTaskDepth();
-        static void DecrementActiveTaskDepth();
+        // Diagnostic query for active admitted task depth on current thread.
         static u32 GetActiveTaskDepth();
 
         // Internal admission helper: synchronizes admission check and enqueue under admission lock.
@@ -255,7 +269,7 @@ namespace Axle {
                     : enki::ITaskSet(size, minR), m_Func(std::forward<Func>(f)) {}
 
                 void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override {
-                    IncrementActiveTaskDepth();
+                    Detail::TaskExecutionScope scope;
                     for (uint32_t i = range.start; i < range.end; ++i) {
                         if constexpr (std::is_invocable_v<std::decay_t<Func>, uint32_t, uint32_t>) {
                             m_Func(i, threadnum);
@@ -263,7 +277,6 @@ namespace Axle {
                             m_Func(i);
                         }
                     }
-                    DecrementActiveTaskDepth();
                 }
             };
 
@@ -307,13 +320,12 @@ namespace Axle {
                     : enki::ITaskSet(size, minR), m_Func(std::forward<Func>(f)) {}
 
                 void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override {
-                    IncrementActiveTaskDepth();
+                    Detail::TaskExecutionScope scope;
                     if constexpr (std::is_invocable_v<std::decay_t<Func>, uint32_t, uint32_t, uint32_t>) {
                         m_Func(range.start, range.end, threadnum);
                     } else {
                         m_Func(range.start, range.end);
                     }
-                    DecrementActiveTaskDepth();
                 }
             };
 

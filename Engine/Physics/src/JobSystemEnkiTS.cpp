@@ -55,7 +55,7 @@ namespace Axle {
         if (!Axle::JobSystem::IsInitialized()) {
             return static_cast<int>(std::max(1u, std::thread::hardware_concurrency()));
         }
-        return static_cast<int>(Axle::JobSystem::GetScheduler().GetNumTaskThreads());
+        return static_cast<int>(Axle::JobSystem::GetTotalThreadCount());
     }
 
     JPH::JobHandle JobSystemEnkiTS::CreateJob(const char* inName, JPH::ColorArg inColor, const JobFunction& inJobFunction, JPH::uint32 inNumDependencies) {
@@ -89,7 +89,6 @@ namespace Axle {
         if (!Axle::JobSystem::IsInitialized()) {
             Axle::JobSystem::Init();
         }
-        auto& scheduler = Axle::JobSystem::GetScheduler();
         for (JPH::uint i = 0; i < inNumJobs; ++i) {
             Job* job = inJobs[i];
             job->AddRef();
@@ -100,7 +99,10 @@ namespace Axle {
             m_EnkiTasks[index].m_Owner = this;
 
             m_ActiveEnkiTasks.fetch_add(1, std::memory_order_relaxed);
-            scheduler.AddTaskSetToPipe(&m_EnkiTasks[index]);
+            if (!Axle::JobSystem::TryAdmitTaskSet(&m_EnkiTasks[index])) {
+                // If admission is rejected (e.g. Quiescing/Stopped), execute synchronously
+                m_EnkiTasks[index].ExecuteRange(enki::TaskSetPartition{0, 1}, 0);
+            }
         }
     }
 

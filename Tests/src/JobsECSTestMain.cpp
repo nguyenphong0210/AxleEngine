@@ -109,7 +109,8 @@ int RunThreadIdentityProbe(bool registeredProducer = false) {
     std::atomic<uint32_t> callbackCount{0};
 
     auto produce = [&] {
-        rawEnki = Axle::JobSystem::GetScheduler().GetThreadNum();
+        auto* sched = Axle::JobSystem::GetScheduler();
+        rawEnki = sched ? sched->GetThreadNum() : Axle::InvalidThreadIndex;
         wrapperIndex = Axle::JobSystem::GetCurrentThreadIndex();
         incorrectlyMain = Axle::JobSystem::IsMainThread();
         Axle::JobSystem::DispatchToMainThread([&] {
@@ -368,6 +369,173 @@ int RunEJ01LifecycleAdmissionProbe() {
     Axle::JobSystem::Shutdown();
 
     std::cout << "RESULT ej01-lifecycle-admission PASS" << std::endl;
+    return 0;
+}
+
+// ============================================================================
+// EJ-01 Review Fixes: Direct Access, Shutdown Race, Forgery & Quiescing Probe
+// ============================================================================
+int RunEJ01ReviewFixProbe() {
+    std::cout << "[EJ01-Fix] Running review fixes verification probe..." << std::endl;
+
+    // --- Subtest 1: EJ01-R1 External Direct Access Rejection ---
+    Axle::JobSystem::Init(2);
+    std::atomic<bool> externalDirectAccessRejected{false};
+    std::atomic<bool> externalDispatchRejected{false};
+    std::atomic<bool> externalTryAdmitRejected{false};
+
+    std::thread externalTester([&] {
+        // 1. External thread calling GetScheduler() must return nullptr and be diagnosed
+        enki::TaskScheduler* sched = Axle::JobSystem::GetScheduler();
+        if (sched == nullptr) {
+            externalDirectAccessRejected.store(true);
+        }
+
+        // 2. External thread calling Dispatch directly must be rejected
+        auto handle = Axle::JobSystem::Dispatch([] {});
+        if (!handle.IsValid()) {
+            externalDispatchRejected.store(true);
+        }
+
+        // 3. External thread calling TryAdmitTaskSet must be rejected
+        struct DummyTask : public enki::ITaskSet {
+            DummyTask() : enki::ITaskSet(1) {}
+            void ExecuteRange(enki::TaskSetPartition, uint32_t) override {}
+        } dummy;
+        if (!Axle::JobSystem::TryAdmitTaskSet(&dummy)) {
+            externalTryAdmitRejected.store(true);
+        }
+    });
+    externalTester.join();
+
+    if (!externalDirectAccessRejected.load() || !externalDispatchRejected.load() || !externalTryAdmitRejected.load()) {
+        std::cerr << "[EJ01-Fix] FAILED: External thread direct access / dispatch was not cleanly rejected!\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // --- Subtest 2: EJ01-R3 Unforgeable Task Permit & Context Protection ---
+    std::atomic<bool> forgeryRejected{false};
+    std::thread forgeryTester([&] {
+        // Attempting to instantiate Detail::TaskExecutionScope from an external thread
+        {
+            Axle::Detail::TaskExecutionScope scope;
+            // GetActiveTaskDepth() must remain 0 because constructor rejected invalid context
+            if (Axle::JobSystem::GetActiveTaskDepth() == 0 && !Axle::JobSystem::IsValidSchedulerContext()) {
+                // And dispatch still rejected
+                auto h = Axle::JobSystem::Dispatch([] {});
+                if (!h.IsValid()) {
+                    forgeryRejected.store(true);
+                }
+            }
+        }
+    });
+    forgeryTester.join();
+
+    if (!forgeryRejected.load()) {
+        std::cerr << "[EJ01-Fix] FAILED: External permit forgery was not rejected!\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // --- Subtest 3: Submission Rejection during Quiescing & Child Admission ---
+    std::atomic<bool> parentStarted{false};
+    std::atomic<bool> releaseParent{false};
+    std::atomic<bool> childAdmittedInQuiescing{false};
+    std::atomic<bool> rootRejectedInQuiescing{false};
+
+    // Dispatch a root task that holds worker until main thread initiates shutdown
+    auto parentJob = Axle::JobSystem::Dispatch([&] {
+        parentStarted.store(true);
+        while (!releaseParent.load()) {
+            std::this_thread::yield();
+        }
+
+        // At this point, main thread is blocked inside Shutdown() (Quiescing / Draining)
+        // As an already-admitted task executing on a worker, child dispatch MUST succeed:
+        auto childJob = Axle::JobSystem::Dispatch([&] {
+            childAdmittedInQuiescing.store(true);
+        });
+        if (childJob.IsValid()) {
+            childJob.Wait();
+        }
+    });
+
+    while (!parentStarted.load()) {
+        std::this_thread::yield();
+    }
+
+    std::thread backgroundTester([&] {
+        // Sleep briefly to ensure main thread enters Shutdown()
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        // External or unadmitted work while quiescing/draining must be rejected
+        auto rejectedRoot = Axle::JobSystem::Dispatch([] {});
+        if (!rejectedRoot.IsValid()) {
+            rootRejectedInQuiescing.store(true);
+        }
+
+        // Release parent task so draining can finish
+        releaseParent.store(true);
+    });
+
+    // Main thread executes Shutdown() cleanly
+    Axle::JobSystem::Shutdown();
+    backgroundTester.join();
+
+    if (!childAdmittedInQuiescing.load() || !rootRejectedInQuiescing.load()) {
+        std::cerr << "[EJ01-Fix] FAILED: Quiescing admission boundary violated (child="
+                  << childAdmittedInQuiescing.load() << ", rootRejected=" << rootRejectedInQuiescing.load() << ")\n";
+        return 1;
+    }
+
+    // --- Subtest 4: EJ01-R2 Shutdown Race with External Producers ---
+    // Reinitialize JobSystem to test aggressive concurrent producer racing with Shutdown()
+    Axle::JobSystem::Init(4);
+
+    constexpr int kProducerCount = 8;
+    std::atomic<bool> runProducers{true};
+    std::atomic<uint32_t> successfulPosts{0};
+    std::atomic<uint32_t> rejectedPosts{0};
+    std::vector<std::thread> producers;
+    producers.reserve(kProducerCount);
+
+    for (int i = 0; i < kProducerCount; ++i) {
+        producers.emplace_back([&] {
+            while (runProducers.load(std::memory_order_relaxed)) {
+                auto res = Axle::JobSystem::PostToMainThread([] {});
+                if (res == Axle::PostResult::Success) {
+                    successfulPosts.fetch_add(1, std::memory_order_relaxed);
+                } else if (res == Axle::PostResult::RejectedStopped) {
+                    rejectedPosts.fetch_add(1, std::memory_order_relaxed);
+                }
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            }
+        });
+    }
+
+    // Let producers run briefly
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+    // Shutdown concurrently while producers are actively posting
+    Axle::JobSystem::Shutdown();
+
+    // Signal producers to finish and join
+    runProducers.store(false, std::memory_order_release);
+    for (auto& t : producers) {
+        t.join();
+    }
+
+    // Any subsequent post after shutdown must return RejectedStopped
+    auto postAfterShutdown = Axle::JobSystem::PostToMainThread([] {});
+    if (postAfterShutdown != Axle::PostResult::RejectedStopped) {
+        std::cerr << "[EJ01-Fix] FAILED: PostToMainThread after shutdown returned unexpected code\n";
+        return 1;
+    }
+
+    std::cout << "[EJ01-Fix] PASS: All review fixes verified (successful_posts="
+              << successfulPosts.load() << ", rejected_posts=" << rejectedPosts.load() << ")\n";
+    std::cout << "RESULT ej01-review-fixes PASS" << std::endl;
     return 0;
 }
 
@@ -926,6 +1094,7 @@ int main(int argc, char** argv) {
                   << "  ecsj-01-compiler-thread\n"
                   << "  ecsj-02-thread-identity\n"
                   << "  ej01-lifecycle-admission\n"
+                  << "  ej01-review-fixes\n"
                   << "  ej02-deferred-executor\n"
                   << "  ej03-compiler-handoff\n"
                   << "  ej04-reload-commit\n"
@@ -957,6 +1126,7 @@ int main(int argc, char** argv) {
         if (scenario == "ecsj-01-compiler-thread") return finish(RunCompilerThreadProbe(workspace));
         if (scenario == "ecsj-02-thread-identity") return finish(RunThreadIdentityProbe());
         if (scenario == "ej01-lifecycle-admission") return finish(RunEJ01LifecycleAdmissionProbe());
+        if (scenario == "ej01-review-fixes") return finish(RunEJ01ReviewFixProbe());
         if (scenario == "ej02-deferred-executor") return finish(RunEJ02DeferredExecutorProbe());
         if (scenario == "ej03-compiler-handoff") return finish(RunEJ03CompilerHandoffProbe(workspace));
         if (scenario == "ej04-reload-commit") return finish(RunEJ04ReloadCommitProbe(workspace));

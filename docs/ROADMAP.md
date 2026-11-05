@@ -10,19 +10,20 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Current assignment: OPT-01 AF-01, assigned to Gemini.** The user requested
-Codex correct O1-R1..R4 and provide the next English prompt. AF-00/EJ-00 corrections
-in `af5721b` plus the completed inventory satisfy baseline entry checks: Debug and
-Release CTest 15/15, 18 tool regressions, and nine acceptance controls per native
-configuration. [Correction evidence](reviews/OPT_01_BASELINE_CORRECTIONS.md) explicitly
-records Codex-authored verification, not a separate post-fix independent review.
-The [AF-01 handoff](agents/handoffs/OPT_01_AF01_GEMINI.md) releases stable asset
-identity and safe persistence only. Latest user steering requires **no per-asset
-.meta/.uid/.import files**: use a versioned source-controlled root registry, with
-explicit rename/relink and safe persistence. P41-00, PLG-00 and later packages remain planned.
-This user-directed progression retains pending OPT-00 full product verification
-as a recorded evidence gap; OPT-00 is not marked accepted. Existing production
-ECS/jobs faults remain visible for their later EJ packages.
+**Next bounded assignment: OPT-02 / EJ-01, English handoff ready for Gemini.**
+Codex reviewed Gemini AF-01, P41-00 and PLG-00 on 8e3450a, corrected the findings,
+and verified the final implementation. The [combined review](reviews/OPT_01_AF01_P41_PLG_REVIEW.md)
+and [structured results](reviews/OPT_01_AF01_P41_PLG_RESULTS.json) distinguish original
+independent review from Codex-authored correction verification. AF-00/EJ-00 and
+the three remaining OPT-01 packages are closed for baseline progression; no external
+post-fix independent review is claimed.
+
+Latest identity policy: **raw PNG/external resources use canonical root-relative
+paths; native Engine assets embed UUIDs inside the file.** No .meta/.uid/.import
+sidecars, authored central identity registry or legacy migration are required.
+The [EJ-01 handoff](agents/handoffs/OPT_02_EJ01_GEMINI.md) is the next single unit.
+EJ-02+ is not assigned. Known production ECS/jobs faults remain recorded for their
+own packages. The separate OPT-00 manual/full-product acceptance gap remains open.
 
 **Prior checkpoint: OPT-00, clean-removal follow-up awaiting independent verification.**
 The user confirmed on **2026-11-05** that Engine must be clean: old data formats,
@@ -36,11 +37,9 @@ rerun those results. Verify current-format scene/assembly operations, normal phy
 and lifecycle behavior, source/build cleanliness and VFX Step 47 before acceptance.
 No AF/EJ/P41/PLG package is closed by this scope clarification.
 
-The first implementation unit after OPT-00 is **AF-00 + EJ-00**, followed by the
-remaining OPT-01 packages in their listed order. OPT-02 starts after OPT-01 exits.
-The [exchange](agents/CODEX_GEMINI_EXCHANGE.json) records actual assignments and
-evidence. The current handoff releases AF-01 only; the remaining plan does not
-authorize further implementation.
+OPT-01 ran AF-00/EJ-00, AF-01, P41-00 and PLG-00 in sequence. The
+[exchange](agents/CODEX_GEMINI_EXCHANGE.json) records actual assignments and evidence.
+OPT-02 begins with EJ-01 only; reading the remaining plan does not authorize it.
 
 ## One sequence, stable technical identifiers
 
@@ -110,9 +109,9 @@ Historical VR-R1..R3 concern the superseded legacy contract. Status: **FOLLOW-UP
 
 - [x] **AF-00:** Shared baseline and architecture checks (Gemini `95a6c9d`, Codex correction `af5721b` and completed inventory; [verified correction evidence](reviews/OPT_01_BASELINE_CORRECTIONS.md)).
 - [x] **EJ-00:** Permanent baseline and meaningful harness (Gemini `95a6c9d`, Codex correction `af5721b`; [verified correction evidence](reviews/OPT_01_BASELINE_CORRECTIONS.md); known Engine defects remain open).
-- [ ] **AF-01:** Stable registry-backed asset identity and safe persistence, no per-asset sidecars (delivered by Gemini; pending Codex review).
-- [ ] **P41-00:** Baseline and always-active render tests (delivered by Gemini; pending Codex review).
-- [ ] **PLG-00:** Baseline and retirement inventory (delivered by Gemini; pending Codex review).
+- [x] **AF-01:** Native embedded UUIDs, raw resource paths and safe persistence (Gemini delivery plus verified Codex corrections; [review](reviews/OPT_01_AF01_P41_PLG_REVIEW.md)).
+- [x] **P41-00:** Baseline, active render checks, exact failure probes and opt-in native GPU/Editor smoke ([review](reviews/OPT_01_AF01_P41_PLG_REVIEW.md)).
+- [x] **PLG-00:** Verified baseline and corrected retirement inventory, including debug-renderer lifetime regression ([review](reviews/OPT_01_AF01_P41_PLG_REVIEW.md)).
 
 **Exit:** Debug/Release checks remain active; intentional failure probes fail; existing fault reproductions are recorded as faults, not hidden as passing tests. Asset identity survives a clean checkout and relocation.
 
@@ -123,8 +122,8 @@ Historical VR-R1..R3 concern the superseded legacy contract. Status: **FOLLOW-UP
 O1-R1..R4 were corrected and reverified in the [follow-up](reviews/OPT_01_BASELINE_CORRECTIONS.md),
 with a [complete shared inventory](architecture/OPT_01_BASELINE_INVENTORY.md).
 AF-00/EJ-00 are closed for baseline progression; no external post-fix independent
-review is claimed. The user-directed AF-01 handoff releases the next bounded unit,
-not the remainder of OPT-01 or OPT-02.
+review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in the
+[combined follow-up](reviews/OPT_01_AF01_P41_PLG_REVIEW.md). EJ-01 is the next bounded unit.
 
 ### OPT-02 - Repair threading, scripts and physics jobs
 

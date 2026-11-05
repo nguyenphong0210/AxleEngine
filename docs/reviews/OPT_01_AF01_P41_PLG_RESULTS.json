@@ -1,0 +1,510 @@
+{
+  "schema_version": 1,
+  "reviewer_and_corrector": "Codex",
+  "date": "2026-11-05",
+  "review_base": "8e3450a",
+  "original_implementations": {
+    "AF-01": "7e79d22",
+    "P41-00": "8d1fece",
+    "PLG-00": "179d66e"
+  },
+  "correction_commits": [
+    "bff13f0",
+    "d0b11bb"
+  ],
+  "evidence_ownership": {
+    "original_release_tests": "independently rebuilt and run by Codex before correction",
+    "correction_verification": "Codex authored and verified; no separate post-fix independent review"
+  },
+  "accepted_for_baseline_progression": [
+    "AF-01",
+    "P41-00",
+    "PLG-00"
+  ],
+  "storage_contract": {
+    "raw_resources": "canonical root-relative paths; no persistent UUID",
+    "native_assets": "first-line # AxleFileIdentity: 1 <decimal uint64> inside file",
+    "sidecars": false,
+    "authored_central_registry": false,
+    "index": "read-only discovery, in-memory, rebuildable",
+    "legacy_migration": false
+  },
+  "original_independent_results": {
+    "AxleAssetUnitTests": 0,
+    "AxleRenderUnitTests": 0,
+    "AxlePluginUnitTests": 0
+  },
+  "builds": [
+    {
+      "configuration": "Debug",
+      "command": [
+        "cmake",
+        "--build",
+        "build",
+        "--config",
+        "Debug",
+        "--target",
+        "AxleAllTests",
+        "AxleEditor",
+        "AxleRuntime",
+        "--parallel",
+        "4"
+      ],
+      "exit_code": 0,
+      "log": "build/opt01-final-review/build-debug-jolt-fix.log"
+    },
+    {
+      "configuration": "Release",
+      "command": [
+        "cmake",
+        "--build",
+        "build",
+        "--config",
+        "Release",
+        "--target",
+        "AxleAllTests",
+        "AxleEditor",
+        "AxleRuntime",
+        "--parallel",
+        "6"
+      ],
+      "exit_code": 0,
+      "log": "build/opt01-final-review/build-release-jolt-fix.log"
+    }
+  ],
+  "verification": {
+    "Debug": [
+      {
+        "name": "asset-direct",
+        "command": [
+          "D:\\WorkSpace\\AxleEngine\\build\\Tests\\Debug\\AxleAssetUnitTests.exe"
+        ],
+        "expected_exit": 0,
+        "exit_code": 0,
+        "passed": true,
+        "elapsed_seconds": 0.42,
+        "log": "build\\opt01-final-review\\Debug-asset-direct.log"
+      },
+      {
+        "name": "ctest",
+        "command": [
+          "ctest",
+          "--test-dir",
+          "build",
+          "-C",
+          "Debug",
+          "--output-on-failure"
+        ],
+        "expected_exit": 0,
+        "exit_code": 0,
+        "passed": true,
+        "elapsed_seconds": 14.66,
+        "log": "build\\opt01-final-review\\Debug-ctest.log"
+      },
+      {
+        "name": "integration",
+        "command": [
+          "D:\\WorkSpace\\AxleEngine\\build\\Tests\\Debug\\AxleTests.exe"
+        ],
+        "expected_exit": 0,
+        "exit_code": 0,
+        "passed": true,
+        "elapsed_seconds": 38.36,
+        "log": "build\\opt01-final-review\\Debug-integration.log"
+      },
+      {
+        "name": "jobs-controls",
+        "command": [
+          "C:\\Users\\nguyenphong\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "scripts/run_jobs_ecs_harness.py",
+          "build/Tests/Debug/AxleJobsECSTests.exe",
+          "--workspace",
+          "D:\\WorkSpace\\AxleEngine\\build\\opt01-final-review\\jobs-Debug",
+          "--report",
+          "D:\\WorkSpace\\AxleEngine\\build\\opt01-final-review\\jobs-Debug.json"
+        ],
+        "expected_exit": 0,
+        "exit_code": 0,
+        "passed": true,
+        "elapsed_seconds": 8.08,
+        "log": "build\\opt01-final-review\\Debug-jobs-controls.log"
+      },
+      {
+        "name": "wrong-failure-marker",
+        "command": [
+          "C:\\Users\\nguyenphong\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "scripts/verify_failure_probe.py",
+          "build/Tests/Debug/AxleRenderUnitTests.exe",
+          "--case",
+          "plugin-probe"
+        ],
+        "expected_exit": 1,
+        "exit_code": 1,
+        "passed": true,
+        "elapsed_seconds": 0.09,
+        "log": "build\\opt01-final-review\\Debug-wrong-failure-marker.log"
+      },
+      {
+        "name": "missing-failure-binary",
+        "command": [
+          "C:\\Users\\nguyenphong\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "scripts/verify_failure_probe.py",
+          "D:\\WorkSpace\\AxleEngine\\build\\opt01-final-review\\missing.exe",
+          "--case",
+          "render-probe"
+        ],
+        "expected_exit": 1,
+        "exit_code": 1,
+        "passed": true,
+        "elapsed_seconds": 0.08,
+        "log": "build\\opt01-final-review\\Debug-missing-failure-binary.log"
+      }
+    ],
+    "Release": [
+      {
+        "name": "asset-direct",
+        "command": [
+          "D:\\WorkSpace\\AxleEngine\\build\\Tests\\Release\\AxleAssetUnitTests.exe"
+        ],
+        "expected_exit": 0,
+        "exit_code": 0,
+        "passed": true,
+        "elapsed_seconds": 0.28,
+        "log": "build\\opt01-final-review\\Release-asset-direct.log"
+      },
+      {
+        "name": "ctest",
+        "command": [
+          "ctest",
+          "--test-dir",
+          "build",
+          "-C",
+          "Release",
+          "--output-on-failure"
+        ],
+        "expected_exit": 0,
+        "exit_code": 0,
+        "passed": true,
+        "elapsed_seconds": 13.52,
+        "log": "build\\opt01-final-review\\Release-ctest.log"
+      },
+      {
+        "name": "integration",
+        "command": [
+          "D:\\WorkSpace\\AxleEngine\\build\\Tests\\Release\\AxleTests.exe"
+        ],
+        "expected_exit": 0,
+        "exit_code": 0,
+        "passed": true,
+        "elapsed_seconds": 35.72,
+        "log": "build\\opt01-final-review\\Release-integration.log"
+      },
+      {
+        "name": "jobs-controls",
+        "command": [
+          "C:\\Users\\nguyenphong\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "scripts/run_jobs_ecs_harness.py",
+          "build/Tests/Release/AxleJobsECSTests.exe",
+          "--workspace",
+          "D:\\WorkSpace\\AxleEngine\\build\\opt01-final-review\\jobs-Release",
+          "--report",
+          "D:\\WorkSpace\\AxleEngine\\build\\opt01-final-review\\jobs-Release.json"
+        ],
+        "expected_exit": 0,
+        "exit_code": 0,
+        "passed": true,
+        "elapsed_seconds": 8.3,
+        "log": "build\\opt01-final-review\\Release-jobs-controls.log"
+      },
+      {
+        "name": "wrong-failure-marker",
+        "command": [
+          "C:\\Users\\nguyenphong\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "scripts/verify_failure_probe.py",
+          "build/Tests/Release/AxleRenderUnitTests.exe",
+          "--case",
+          "plugin-probe"
+        ],
+        "expected_exit": 1,
+        "exit_code": 1,
+        "passed": true,
+        "elapsed_seconds": 0.09,
+        "log": "build\\opt01-final-review\\Release-wrong-failure-marker.log"
+      },
+      {
+        "name": "missing-failure-binary",
+        "command": [
+          "C:\\Users\\nguyenphong\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "scripts/verify_failure_probe.py",
+          "D:\\WorkSpace\\AxleEngine\\build\\opt01-final-review\\missing.exe",
+          "--case",
+          "render-probe"
+        ],
+        "expected_exit": 1,
+        "exit_code": 1,
+        "passed": true,
+        "elapsed_seconds": 0.08,
+        "log": "build\\opt01-final-review\\Release-missing-failure-binary.log"
+      }
+    ]
+  },
+  "native_identity_suites": 14,
+  "default_ctest_tests_per_configuration": 21,
+  "jobs_ecs": {
+    "Debug": {
+      "pass_count": 4,
+      "reproduced_defects": 4,
+      "not_reproduced": 0,
+      "probes_verified": 3,
+      "unexpected_failures": 0
+    },
+    "Release": {
+      "pass_count": 4,
+      "reproduced_defects": 4,
+      "not_reproduced": 0,
+      "probes_verified": 3,
+      "unexpected_failures": 0
+    }
+  },
+  "hardware": [
+    {
+      "name": "hardware-configure",
+      "command": [
+        "cmake",
+        "-S",
+        ".",
+        "-B",
+        "build",
+        "-DAXLE_ENABLE_RENDER_GPU_TESTS=ON",
+        "-DAXLE_ENABLE_RENDER_WINDOW_TESTS=ON"
+      ],
+      "exit_code": 0,
+      "log": "build\\opt01-final-review\\hardware-configure.log"
+    },
+    {
+      "name": "hardware-registration",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "build",
+        "-C",
+        "Release",
+        "--show-only=json-v1"
+      ],
+      "exit_code": 0,
+      "log": "build\\opt01-final-review\\hardware-registration.log"
+    },
+    {
+      "name": "hardware-Release",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "build",
+        "-C",
+        "Release",
+        "-L",
+        "gpu",
+        "--output-on-failure"
+      ],
+      "exit_code": 0,
+      "log": "build\\opt01-final-review\\hardware-Release.log"
+    },
+    {
+      "name": "hardware-Debug",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "build",
+        "-C",
+        "Debug",
+        "-L",
+        "gpu",
+        "--output-on-failure"
+      ],
+      "exit_code": 0,
+      "log": "build\\opt01-final-review\\hardware-Debug.log"
+    },
+    {
+      "name": "restore-default-tests",
+      "command": [
+        "cmake",
+        "-S",
+        ".",
+        "-B",
+        "build",
+        "-DAXLE_ENABLE_RENDER_GPU_TESTS=OFF",
+        "-DAXLE_ENABLE_RENDER_WINDOW_TESTS=OFF"
+      ],
+      "exit_code": 0,
+      "log": "build\\opt01-final-review\\restore-default-tests.log"
+    }
+  ],
+  "hardware_tests_per_configuration": 5,
+  "hardware_observation": {
+    "adapter": "NVIDIA GeForce RTX 3070",
+    "readback_backends": [
+      "D3D12",
+      "Vulkan"
+    ],
+    "editor_backends": [
+      "D3D12",
+      "Vulkan",
+      "OpenGL"
+    ],
+    "software_adapter_or_fallback_accepted_by_readback": false,
+    "default_opt_in_options_restored_off": true
+  },
+  "architecture": {
+    "capture_head": "d0b11bbb8db48c2291b6d08e0863f397e91ed214",
+    "working_tree_changes_at_capture": "remaining review/handoff/roadmap/exchange docs only",
+    "configured_target_count": {
+      "Debug": 32,
+      "Release": 32
+    },
+    "source_files_scanned": 342,
+    "source_link_edges": 104,
+    "source_include_module_pairs": 82,
+    "vendor_revisions": [
+      {
+        "path": "ThirdParty/ImGuizmo",
+        "storage": "tree",
+        "pinned_revision_or_tree": "df11027f98b27d700f8e2be3821f43f5d266cd23"
+      },
+      {
+        "path": "ThirdParty/JoltPhysics",
+        "storage": "commit",
+        "pinned_revision_or_tree": "a63aa3b8e24cf95f3fab2613f9a3015b164ef62c",
+        "checkout_revision": "a63aa3b8e24cf95f3fab2613f9a3015b164ef62c",
+        "checkout_dirty": false,
+        "matches_pin": true
+      },
+      {
+        "path": "ThirdParty/NRI",
+        "storage": "commit",
+        "pinned_revision_or_tree": "6998e3fbbaed1b132f386a9d49743a2481003487",
+        "checkout_revision": "6998e3fbbaed1b132f386a9d49743a2481003487",
+        "checkout_dirty": false,
+        "matches_pin": true
+      },
+      {
+        "path": "ThirdParty/cgltf",
+        "storage": "tree",
+        "pinned_revision_or_tree": "8e7b3a1e34571d5c1e5b8184b8094d600559bf8a"
+      },
+      {
+        "path": "ThirdParty/dxc",
+        "storage": "tree",
+        "pinned_revision_or_tree": "d97133ae42cc82301d82e98deaac9a0c16d8a479"
+      },
+      {
+        "path": "ThirdParty/enkiTS",
+        "storage": "commit",
+        "pinned_revision_or_tree": "404a3bf8f855039dfff2052184d6308655286c07",
+        "checkout_revision": "404a3bf8f855039dfff2052184d6308655286c07",
+        "checkout_dirty": false,
+        "matches_pin": true
+      },
+      {
+        "path": "ThirdParty/entt",
+        "storage": "commit",
+        "pinned_revision_or_tree": "4a2d1a8541228a90e02a873dba6a980506c42c03",
+        "checkout_revision": "4a2d1a8541228a90e02a873dba6a980506c42c03",
+        "checkout_dirty": false,
+        "matches_pin": true
+      },
+      {
+        "path": "ThirdParty/glad",
+        "storage": "tree",
+        "pinned_revision_or_tree": "9da35dd53632dd5fa2e4e2fb0a0b3ba24e541f9c"
+      },
+      {
+        "path": "ThirdParty/glfw",
+        "storage": "commit",
+        "pinned_revision_or_tree": "7b6aead9fb88b3623e3b3725ebb42670cbe4c579",
+        "checkout_revision": "7b6aead9fb88b3623e3b3725ebb42670cbe4c579",
+        "checkout_dirty": false,
+        "matches_pin": true
+      },
+      {
+        "path": "ThirdParty/glm",
+        "storage": "commit",
+        "pinned_revision_or_tree": "0af55ccecd98d4e5a8d1fad7de25ba429d60e863",
+        "checkout_revision": "0af55ccecd98d4e5a8d1fad7de25ba429d60e863",
+        "checkout_dirty": false,
+        "matches_pin": true
+      },
+      {
+        "path": "ThirdParty/imgui",
+        "storage": "commit",
+        "pinned_revision_or_tree": "778992face67ecefaa5c2932db4b2101545ea4df",
+        "checkout_revision": "778992face67ecefaa5c2932db4b2101545ea4df",
+        "checkout_dirty": false,
+        "matches_pin": true
+      },
+      {
+        "path": "ThirdParty/miniaudio",
+        "storage": "tree",
+        "pinned_revision_or_tree": "1f0e8341e4d79ad5e7e25024288405a047063b39"
+      },
+      {
+        "path": "ThirdParty/spdlog",
+        "storage": "commit",
+        "pinned_revision_or_tree": "27cb4c76708608465c413f6d0e6b8d99a4d84302",
+        "checkout_revision": "27cb4c76708608465c413f6d0e6b8d99a4d84302",
+        "checkout_dirty": false,
+        "matches_pin": true
+      },
+      {
+        "path": "ThirdParty/stb",
+        "storage": "tree",
+        "pinned_revision_or_tree": "339cfdfb4a67d964894e3d11b659a52eb5aac831"
+      },
+      {
+        "path": "ThirdParty/ufbx",
+        "storage": "tree",
+        "pinned_revision_or_tree": "3f8995015b73a568a272c4aecbf53144e01a35e0"
+      }
+    ],
+    "capture_command": [
+      "python",
+      "scripts/capture_architecture_baseline.py",
+      "--build",
+      "build",
+      "--report",
+      "build/opt01-final-review/final-inventory.json"
+    ],
+    "report": "build/opt01-final-review/final-inventory.json",
+    "new_allowances": 0
+  },
+  "standalone_tool_results": [
+    {
+      "name": "architecture",
+      "command": [
+        "python",
+        "scripts/check_architecture.py",
+        "--root",
+        ".",
+        "--report",
+        "build\\opt01-final-review\\architecture.json"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "tools",
+      "command": [
+        "python",
+        "scripts/test_baseline_tools.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Manual interactive Editor Play/Stop NOT RUN",
+    "Selected packaged export/player acceptance NOT RUN; mounted-package native/raw lookup tested separately",
+    "No injected automatic backend-fallback equivalence proof",
+    "Multi-file path rewriting is synchronous best-effort rollback, not a crash-atomic transaction",
+    "Existing LNK4098 and full-suite null-string logger warnings remain visible",
+    "Known ECSJ-01/02/03/04 faults remain reproduced; next EJ-01 implementation not started"
+  ],
+  "next_handoff": "docs/agents/handoffs/OPT_02_EJ01_GEMINI.md"
+}

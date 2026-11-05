@@ -1,6 +1,5 @@
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/AssemblySerializer.hpp>
-#include <Axle/AnimationAssetCodec.hpp>
 #include <Axle/SkeletalMeshImporter.hpp>
 #include <Axle/Skeleton.hpp>
 #include <Axle/Components.hpp>
@@ -353,7 +352,7 @@ namespace Axle {
             }
         }
 
-        if (!AnimationAssetCodec::WriteTextFileAtomically(filepath.string(), fout.str())) return false;
+        if (!FileSystem::WriteTextFileAtomically(filepath, fout.str())) return false;
         AXLE_INFO("AssemblySerializer: Successfully exported Assembly '{0}' ({1} entities) to '{2}'", 
                   rootName, hierarchy.size(), filepath.string());
         return true;
@@ -1357,7 +1356,7 @@ namespace Axle {
         fout << "Entities:\n";
         WriteAssemblyNode(fout, data.RootNode, (u64)rootUUID, 0);
 
-        if (!fout.good() || !AnimationAssetCodec::WriteTextFileAtomically(filepath.string(), fout.str())) return false;
+        if (!fout.good() || !FileSystem::WriteTextFileAtomically(filepath, fout.str())) return false;
         AXLE_INFO("AssemblySerializer: Saved Assembly data '{0}' to '{1}'", data.Name, filepath.string());
         return true;
     }

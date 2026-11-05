@@ -1,7 +1,6 @@
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/SceneSerializer.hpp>
-#include <Axle/AnimationAssetCodec.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/AssetSerializer.hpp>
@@ -56,7 +55,7 @@ namespace Axle {
 
     bool SceneSerializer::Serialize(const std::filesystem::path& filepath) {
         const auto serialized = SerializeToString();
-        return !serialized.empty() && AnimationAssetCodec::WriteTextFileAtomically(filepath.string(), serialized);
+        return !serialized.empty() && FileSystem::WriteTextFileAtomically(filepath, serialized);
     }
 
     std::string SceneSerializer::SerializeToString() {

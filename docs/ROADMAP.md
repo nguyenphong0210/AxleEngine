@@ -110,7 +110,7 @@ Historical VR-R1..R3 concern the superseded legacy contract. Status: **FOLLOW-UP
 
 - [x] **AF-00:** Shared baseline and architecture checks (Gemini `95a6c9d`, Codex correction `af5721b` and completed inventory; [verified correction evidence](reviews/OPT_01_BASELINE_CORRECTIONS.md)).
 - [x] **EJ-00:** Permanent baseline and meaningful harness (Gemini `95a6c9d`, Codex correction `af5721b`; [verified correction evidence](reviews/OPT_01_BASELINE_CORRECTIONS.md); known Engine defects remain open).
-- [ ] **AF-01:** Stable registry-backed asset identity and safe persistence, no per-asset sidecars ([assigned to Gemini](agents/handoffs/OPT_01_AF01_GEMINI.md); implementation/review pending).
+- [ ] **AF-01:** Stable registry-backed asset identity and safe persistence, no per-asset sidecars (delivered by Gemini; pending Codex review).
 - [ ] **P41-00:** Baseline and always-active render tests.
 - [ ] **PLG-00:** Baseline and retirement inventory.
 

@@ -2,26 +2,36 @@
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/AssetMetadata.hpp>
-#include <Axle/AssetMetadataSerializer.hpp>
+#include <Axle/AssetRegistrySerializer.hpp>
 #include <Axle/Texture2D.hpp>
 #include <Axle/Material.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <filesystem>
 #include <unordered_map>
+#include <vector>
 #include <mutex>
 #include <memory>
+#include <string>
 
 namespace Axle {
+
+    namespace BuiltinAssets {
+        inline constexpr uint64_t CubeUUID     = 0xBA5E0001ULL;
+        inline constexpr uint64_t SphereUUID   = 0xBA5E0002ULL;
+        inline constexpr uint64_t CylinderUUID = 0xBA5E0003ULL;
+        inline constexpr uint64_t ConeUUID     = 0xBA5E0004ULL;
+        inline constexpr uint64_t PlaneUUID    = 0xBA5E0005ULL;
+    }
 
     class AssetManager {
     public:
         static void Init(const std::filesystem::path& assetDirectory);
         static void Shutdown();
 
-        // Recursively traverses the asset directory and ensures companion .meta files exist
+        // Recursively traverses the asset directory and ensures entries exist in root registry
         static void Sync(const std::filesystem::path& directory = {});
 
-        // Retrieves existing metadata or automatically creates & serializes a companion .meta file
+        // Retrieves existing metadata or allocates fresh UUID and persists into root registry for new imports
         static AssetMetadata GetOrCreateMetadata(const std::filesystem::path& assetPath);
 
         // Fast Lookups
@@ -37,6 +47,29 @@ namespace Axle {
         static bool HasAsset(UUID uuid);
         static bool HasAsset(const std::filesystem::path& assetPath);
 
+        // Builtin asset primitives
+        static bool IsBuiltin(const std::filesystem::path& assetPath);
+        static bool IsBuiltin(UUID uuid);
+
+        // Reference tracking & diagnostics
+        static void TrackReferencedAsset(UUID uuid, const std::filesystem::path& expectedPath = {});
+        static bool IsAssetReferenced(UUID uuid);
+        static const std::vector<AssetDiagnostic>& GetDiagnostics();
+        static void ClearDiagnostics();
+        static bool HasDiagnostics();
+        static bool HasDiagnosticErrors();
+        static void ReportDiagnostic(AssetDiagnostic::Level severity, const std::string& message, const std::filesystem::path& path = {}, UUID uuid = 0);
+
+        // Explicit Relink for external moves
+        static bool RelinkAsset(UUID uuid, const std::filesystem::path& newPath, std::string* outError = nullptr);
+
+        // Explicit Relocation versus Copy
+        // Relocation (move/rename) preserves the existing UUID and updates root registry path
+        static bool RelocateAsset(const std::filesystem::path& oldPath, const std::filesystem::path& newPath, std::string* outError = nullptr);
+
+        // Copy duplicates the asset and allocates a brand-new distinct authored UUID in root registry
+        static bool CopyAsset(const std::filesystem::path& sourcePath, const std::filesystem::path& destinationPath, std::string* outError = nullptr);
+
         // File lifecycle events
         static void OnAssetRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
         static void OnAssetDeleted(const std::filesystem::path& assetPath);
@@ -45,6 +78,7 @@ namespace Axle {
         static size_t GetAssetCount();
         static const std::filesystem::path& GetAssetDirectory();
         static void SetAssetDirectory(const std::filesystem::path& dir);
+        static std::filesystem::path GetRegistryPath();
 
         // ---------------------------------------------------------------------
         // Centralized Resource Cache (TextureCache & MaterialCache)
@@ -68,11 +102,16 @@ namespace Axle {
 
     private:
         static std::string NormalizePathKey(const std::filesystem::path& path);
+        static AssetMetadata GetBuiltinMetadata(const std::filesystem::path& assetPath);
+        static AssetMetadata GetBuiltinMetadata(UUID uuid);
+        static bool SaveRegistryLocked(std::string* outError = nullptr);
 
     private:
         static std::filesystem::path s_AssetDirectory;
         static std::unordered_map<UUID, AssetMetadata> s_Assets;
         static std::unordered_map<std::string, UUID> s_PathToUUID;
+        static std::unordered_map<UUID, std::filesystem::path> s_ReferencedAssets;
+        static std::vector<AssetDiagnostic> s_Diagnostics;
 
         static std::unordered_map<std::string, std::shared_ptr<Texture2D>> s_TextureCacheByPath;
         static std::unordered_map<UUID, std::shared_ptr<Texture2D>> s_TextureCacheByUUID;

@@ -21,14 +21,8 @@ namespace Axle {
     bool ProjectSerializer::Serialize(const std::filesystem::path& filepath) {
         if (!m_Project) return false;
 
-        std::ofstream fout(filepath);
-        if (!fout.is_open()) {
-            AXLE_ERROR("ProjectSerializer: Could not open file for writing: '{0}'", filepath.string());
-            return false;
-        }
-
         const auto& config = m_Project->GetConfig();
-
+        std::stringstream fout;
         fout << "# Axle Engine Project Configuration File\n";
         fout << "Project:\n";
         fout << "  Name: " << config.Name << "\n";
@@ -36,7 +30,12 @@ namespace Axle {
         fout << "  AssetDirectory: " << config.AssetDirectory.string() << "\n";
         fout << "  RHIBackend: " << config.RHIBackend << "\n";
 
-        fout.close();
+        std::string outError;
+        if (!FileSystem::WriteTextFileAtomically(filepath, fout.str(), &outError)) {
+            AXLE_ERROR("ProjectSerializer: Failed to atomically save project to '{0}': {1}", filepath.string(), outError);
+            return false;
+        }
+
         AXLE_INFO("ProjectSerializer: Successfully saved project to '{0}'", filepath.string());
         return true;
     }

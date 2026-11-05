@@ -177,6 +177,16 @@ target_include_directories(AxleProjectUnitTests PRIVATE src "${CMAKE_SOURCE_DIR}
 target_link_libraries(AxleProjectUnitTests PRIVATE Axle::Project Axle::Scene Axle::UI)
 add_test(NAME ProjectStartupTests COMMAND $<TARGET_FILE:AxleProjectUnitTests>)
 
+# Dedicated CPU-Only Asset Identity and Safe Persistence Test Target (AF-01)
+add_executable(AxleAssetUnitTests EXCLUDE_FROM_ALL src/Test_AssetIdentityAndPersistence.cpp)
+target_include_directories(AxleAssetUnitTests PRIVATE src)
+target_link_libraries(AxleAssetUnitTests PRIVATE Axle::Asset Axle::Project Axle::Scene)
+if (MSVC)
+    target_compile_options(AxleAssetUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME AssetIdentityAndPersistenceTests COMMAND $<TARGET_FILE:AxleAssetUnitTests>)
+set_tests_properties(AssetIdentityAndPersistenceTests PROPERTIES LABELS "asset;cpu")
+
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
     src/JobsECSTestMain.cpp
@@ -222,7 +232,7 @@ set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture
     PROPERTIES LABELS "architecture;cpu" TIMEOUT 60)
 
 # Explicit developer/test build. Neither this target nor its executables are in ALL.
-set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
+set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleAssetUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
 if(WIN32)
     add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
     target_include_directories(AxleBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/Editor/generated/$<CONFIG>")

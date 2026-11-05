@@ -1,0 +1,6 @@
+AssetRegistry:
+  Version: 999
+  Entries:
+    - UUID: 300000000000000001
+      Path: future.png
+      Type: Texture2D

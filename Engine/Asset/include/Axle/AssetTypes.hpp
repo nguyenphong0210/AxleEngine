@@ -58,7 +58,7 @@ namespace Axle {
         if (typeStr == "Material")                               return AssetType::Material;
         if (typeStr == "PhysicsMaterial")                        return AssetType::PhysicsMaterial;
         if (typeStr == "Script")                                 return AssetType::Script;
-        if (typeStr == "Texture")                                return AssetType::Texture;
+        if (typeStr == "Texture" || typeStr == "Texture2D")      return AssetType::Texture;
         if (typeStr == "Audio")                                  return AssetType::Audio;
         if (typeStr == "Font")                                   return AssetType::Font;
         if (typeStr == "ParticleEmitter" || typeStr == "VFX")    return AssetType::ParticleEmitter;

@@ -43,71 +43,15 @@ namespace Axle {
     }
 
     // -------------------------------------------------------------------------
-    // Atomic File IO Utilities
+    // Atomic File IO Utilities (forwarded to Core FileSystem)
     // -------------------------------------------------------------------------
 
     bool AnimationAssetCodec::WriteTextFileAtomically(const std::string& filepath, const std::string& text, std::string* outError) {
-        return WriteBinaryFileAtomically(filepath, text.data(), text.size(), outError);
+        return FileSystem::WriteTextFileAtomically(filepath, text, outError);
     }
 
     bool AnimationAssetCodec::WriteBinaryFileAtomically(const std::string& filepath, const void* data, size_t size, std::string* outError) {
-        if (filepath.empty()) {
-            if (outError) *outError = "Filepath cannot be empty";
-            return false;
-        }
-
-        std::filesystem::path target(filepath);
-        if (target.has_parent_path()) {
-            std::error_code ec;
-            std::filesystem::create_directories(target.parent_path(), ec);
-            if (ec) {
-                if (outError) *outError = "Cannot create directory: " + ec.message();
-                return false;
-            }
-        }
-
-        static std::atomic<uint64_t> s_Counter{0};
-        auto now = std::chrono::steady_clock::now().time_since_epoch().count();
-        std::filesystem::path tempPath = target.string() + ".tmp." + std::to_string(now) + "." + std::to_string(s_Counter++);
-
-        {
-            std::ofstream out(tempPath, std::ios::binary);
-            if (!out.is_open()) {
-                if (outError) *outError = "Failed to open temporary file for write: " + tempPath.string();
-                return false;
-            }
-            if (size > 0 && data != nullptr) {
-                out.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
-            }
-            out.flush();
-            if (!out.good()) {
-                out.close();
-                std::error_code ec;
-                std::filesystem::remove(tempPath, ec);
-                if (outError) *outError = "Failed to write complete data to temporary file";
-                return false;
-            }
-            out.close();
-        }
-
-#ifdef _WIN32
-        if (!MoveFileExW(tempPath.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-            std::error_code ec;
-            std::filesystem::remove(tempPath, ec);
-            if (outError) *outError = "Failed to atomically replace target file: Windows error " + std::to_string(GetLastError());
-            return false;
-        }
-#else
-        std::error_code ec;
-        std::filesystem::rename(tempPath, target, ec);
-        if (ec) {
-            std::filesystem::remove(tempPath, ec);
-            if (outError) *outError = "Failed to atomically replace target file: " + ec.message();
-            return false;
-        }
-#endif
-
-        return true;
+        return FileSystem::WriteBinaryFileAtomically(filepath, data, size, outError);
     }
 
     // -------------------------------------------------------------------------

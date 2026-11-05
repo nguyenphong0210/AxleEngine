@@ -29,8 +29,12 @@ namespace Axle {
         // Read entire binary file into byte buffer
         static std::vector<uint8_t> ReadBinaryFile(const std::filesystem::path& filepath);
 
-        // Write string content to text file
+        // Write string content to text file (atomically replaces target, preserving prior file on failure)
         static bool WriteTextFile(const std::filesystem::path& filepath, const std::string& content);
+
+        // Atomic write operations (guarantees target preservation on failure)
+        static bool WriteTextFileAtomically(const std::filesystem::path& filepath, const std::string& text, std::string* outError = nullptr);
+        static bool WriteBinaryFileAtomically(const std::filesystem::path& filepath, const void* data, size_t size, std::string* outError = nullptr);
 
         // Checks whether a path exists
         static bool Exists(const std::filesystem::path& filepath);

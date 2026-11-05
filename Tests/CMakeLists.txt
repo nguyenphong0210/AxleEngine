@@ -196,20 +196,30 @@ if (MSVC)
     target_compile_options(AxleJobsECSTests PRIVATE /bigobj /FS)
 endif()
 
-add_test(NAME JobsECS_Control COMMAND $<TARGET_FILE:AxleJobsECSTests> ecsj-03-bridge-control)
-add_test(NAME JobsECS_HarnessFailure COMMAND $<TARGET_FILE:AxleJobsECSTests> deliberate-failure)
-set_tests_properties(JobsECS_Control JobsECS_HarnessFailure PROPERTIES LABELS "ecs-jobs;cpu")
-set_tests_properties(JobsECS_HarnessFailure PROPERTIES WILL_FAIL TRUE)
+# Python is part of the explicit baseline test toolchain; missing it must fail configure.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+function(axle_add_jobs_control name scenario)
+    add_test(NAME ${name} COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_SOURCE_DIR}/scripts/run_jobs_ecs_harness.py" "$<TARGET_FILE:AxleJobsECSTests>"
+        --case "${scenario}" --workspace "${CMAKE_CURRENT_BINARY_DIR}/baseline/$<CONFIG>/workspace"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/baseline/$<CONFIG>/${name}.json")
+    set_tests_properties(${name} PROPERTIES LABELS "ecs-jobs;cpu" TIMEOUT 25)
+endfunction()
+axle_add_jobs_control(JobsECS_Control ecsj-03-bridge-control)
+axle_add_jobs_control(JobsECS_QueuedDelivery queued-delivery-control)
+axle_add_jobs_control(JobsECS_Lifecycle current-format-lifecycle)
+axle_add_jobs_control(JobsECS_HarnessFailure deliberate-failure)
+axle_add_jobs_control(JobsECS_Watchdog watchdog-hang)
 
-# Architecture Boundary Checks (AF-00)
-find_package(Python3 COMPONENTS Interpreter)
-if (Python3_FOUND)
-    add_test(NAME ArchitectureBoundaryChecks COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_architecture.py" --root "${CMAKE_SOURCE_DIR}")
-    set_tests_properties(ArchitectureBoundaryChecks PROPERTIES LABELS "architecture;cpu")
-
-    add_test(NAME ArchitectureForbiddenEdgeFixture COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_architecture.py" --fixture "${CMAKE_SOURCE_DIR}/Tests/Fixtures/ArchitectureViolationFixture")
-    set_tests_properties(ArchitectureForbiddenEdgeFixture PROPERTIES LABELS "architecture;cpu" WILL_FAIL TRUE)
-endif()
+add_test(NAME ArchitectureBoundaryChecks COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_SOURCE_DIR}/scripts/check_architecture.py" --root "${CMAKE_SOURCE_DIR}")
+add_test(NAME ArchitectureForbiddenEdgeFixture COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_SOURCE_DIR}/scripts/check_architecture.py"
+    --fixture "${CMAKE_SOURCE_DIR}/Tests/Fixtures/ArchitectureViolationFixture" --expect-violation)
+add_test(NAME BaselineToolRegressions COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_SOURCE_DIR}/scripts/test_baseline_tools.py")
+set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture BaselineToolRegressions
+    PROPERTIES LABELS "architecture;cpu" TIMEOUT 60)
 
 # Explicit developer/test build. Neither this target nor its executables are in ALL.
 set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)

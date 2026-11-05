@@ -41,8 +41,11 @@ int RunCompilerThreadProbe(const std::filesystem::path& workspace) {
     cmakeFile.close();
 
     // Configure fixture once
-    std::string configureCmd = "cmake -S \"" + fixtureDir.string() + "\" -B \"" + (fixtureDir / "build").string() + "\" > nul 2>&1";
-    std::system(configureCmd.c_str());
+    std::string configureCmd = "cmake -S \"" + fixtureDir.string() + "\" -B \"" + (fixtureDir / "build").string() + "\"";
+    if (std::system(configureCmd.c_str()) != 0) {
+        std::cerr << "ERROR: Compiler fixture configure failed\n";
+        return 2;
+    }
 
     auto& compiler = Axle::ScriptCompiler::Get();
     compiler.SetWorkspaceDirectory(fixtureDir);
@@ -71,8 +74,13 @@ int RunCompilerThreadProbe(const std::filesystem::path& workspace) {
               << " compilationSucceeded=" << (compilationSucceeded.load() ? 1 : 0)
               << " callbackOnMain=" << (callbackOnMain.load() ? 1 : 0) << std::endl;
 
+    if (!started || !callbackRan.load() || !compilationSucceeded.load()) {
+        std::cerr << "ERROR: Successful compiler fixture prerequisite did not complete\n";
+        return 2;
+    }
+
     // Architectural assertion: completion callback must run on the owner / main thread
-    if (!callbackRan.load() || !callbackOnMain.load()) {
+    if (!callbackOnMain.load()) {
         std::cerr << "DEFECT REPRODUCED [ECSJ-01]: ScriptCompiler callback executed on background worker thread\n";
         return 1;
     }
@@ -84,49 +92,50 @@ int RunCompilerThreadProbe(const std::filesystem::path& workspace) {
 // ============================================================================
 // ECSJ-02: External Thread Identity and Main-Thread Delivery Probe
 // ============================================================================
-int RunThreadIdentityProbe() {
+int RunThreadIdentityProbe(bool registeredProducer = false) {
     Axle::JobSystem::Init(2);
-
     const std::thread::id mainThreadId = std::this_thread::get_id();
     std::atomic<uint32_t> rawEnki{0};
     std::atomic<uint32_t> wrapperIndex{0};
     std::atomic<bool> incorrectlyMain{false};
-    std::atomic<bool> calledBeforePump{false};
     std::atomic<bool> callbackOnMain{false};
+    std::atomic<uint32_t> callbackCount{0};
 
-    std::thread ext([&] {
+    auto produce = [&] {
         rawEnki = Axle::JobSystem::GetScheduler().GetThreadNum();
         wrapperIndex = Axle::JobSystem::GetCurrentThreadIndex();
         incorrectlyMain = Axle::JobSystem::IsMainThread();
-
         Axle::JobSystem::DispatchToMainThread([&] {
             callbackOnMain = (std::this_thread::get_id() == mainThreadId);
-            calledBeforePump = true;
+            callbackCount.fetch_add(1);
         });
-    });
-    ext.join();
-
-    std::cout << "external enki index=" << rawEnki.load()
-              << " wrapper index=" << wrapperIndex.load() << std::endl;
-    std::cout << "incorrectlyMain=" << (incorrectlyMain.load() ? 1 : 0)
-              << " calledBeforePump=" << (calledBeforePump.load() ? 1 : 0)
-              << " callbackOnMain=" << (callbackOnMain.load() ? 1 : 0) << std::endl;
-
-    // Pump main thread queue on actual main thread
-    Axle::JobSystem::RunPinnedTasks();
-
-    Axle::JobSystem::Shutdown();
-
-    // Architectural assertion:
-    // 1. External thread must not be reported as main thread
-    // 2. DispatchToMainThread must not execute inline immediately on external thread
-    // 3. Callback must run on the owning main thread during pump
-    if (incorrectlyMain.load() || calledBeforePump.load() || !callbackOnMain.load()) {
-        std::cerr << "DEFECT REPRODUCED [ECSJ-02]: External thread classified as main thread zero; callback executed inline before pump\n";
-        return 1;
+    };
+    if (registeredProducer) {
+        // This already-correct production path proves the probe accepts queued delivery.
+        auto task = Axle::JobSystem::Dispatch(produce);
+        while (!task.IsComplete()) std::this_thread::yield();
+        task.Wait();
+    } else {
+        std::thread producer(produce);
+        producer.join();
     }
 
-    std::cout << "RESULT ecsj-02-thread-identity PASS" << std::endl;
+    const auto callbacksBeforePump = callbackCount.load();
+    Axle::JobSystem::RunPinnedTasks();
+    const auto callbacksAfterPump = callbackCount.load();
+    const bool deliveredOnMain = callbackOnMain.load();
+    Axle::JobSystem::Shutdown();
+
+    std::cout << "raw_index=" << rawEnki.load() << " wrapper_index=" << wrapperIndex.load()
+              << " incorrectlyMain=" << incorrectlyMain.load()
+              << " callbacks_before_pump=" << callbacksBeforePump
+              << " callbacks_after_pump=" << callbacksAfterPump
+              << " callbackOnMain=" << deliveredOnMain << std::endl;
+    if (incorrectlyMain.load() || wrapperIndex.load() == 0 || callbacksBeforePump != 0 ||
+        callbacksAfterPump != 1 || !deliveredOnMain) {
+        std::cerr << "DEFECT REPRODUCED [ECSJ-02]: Thread identity or exactly-once owning-thread delivery failed\n";
+        return 1;
+    }
     return 0;
 }
 
@@ -159,7 +168,11 @@ int RunBridgeProbe(bool useControlDrain) {
         }
 
         std::cout << "Destroying bridge" << std::endl;
+        if (!useControlDrain && ran.load())
+            std::cout << "AXLE_TEST_READY ecsj-03-bridge-hang" << std::endl;
         bridge.reset();
+        if (!useControlDrain)
+            std::cout << "AXLE_TEST_COMPLETED ecsj-03-bridge-hang" << std::endl;
         std::cout << "Bridge destruction returned" << std::endl;
     }
 
@@ -340,6 +353,7 @@ int RunDeliberateFailure() {
 
 int RunWatchdogHang() {
     std::cout << "Executing watchdog hang probe: spinning indefinitely" << std::endl;
+    std::cout << "AXLE_TEST_READY watchdog-hang" << std::endl;
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
@@ -359,6 +373,8 @@ int main(int argc, char** argv) {
                   << "  ecsj-03-bridge-hang\n"
                   << "  ecsj-03-bridge-control\n"
                   << "  ecsj-04-entt-tombstone\n"
+                  << "  queued-delivery-control\n"
+                  << "  current-format-lifecycle\n"
                   << "  deliberate-failure\n"
                   << "  watchdog-hang\n"
                   << "  --passing\n";
@@ -370,45 +386,29 @@ int main(int argc, char** argv) {
         ? std::filesystem::absolute(argv[2])
         : std::filesystem::current_path() / "JobsECSTestWorkspace";
 
+    auto finish = [&](int result) {
+        const char* event = result == 0 ? "AXLE_TEST_PASS" :
+                            result == 1 ? "AXLE_TEST_DEFECT" : "AXLE_TEST_ERROR";
+        if (scenario == "deliberate-failure" && result == 1)
+            event = "AXLE_TEST_EXPECTED_FAILURE";
+        std::cout << event << " " << scenario << std::endl;
+        return result;
+    };
     try {
-        if (scenario == "ecsj-01-compiler-thread") {
-            return RunCompilerThreadProbe(workspace);
-        }
-        if (scenario == "ecsj-02-thread-identity") {
-            return RunThreadIdentityProbe();
-        }
-        if (scenario == "ecsj-03-bridge-hang") {
-            const int rc = RunBridgeProbe(false);
-            if (rc == 0) std::cout << "RESULT ecsj-03-bridge-hang PASS" << std::endl;
-            return rc;
-        }
-        if (scenario == "ecsj-03-bridge-control") {
-            const int rc = RunBridgeProbe(true);
-            if (rc == 0) std::cout << "RESULT ecsj-03-bridge-control PASS" << std::endl;
-            return rc;
-        }
-        if (scenario == "ecsj-04-entt-tombstone") {
-            return RunEnTTTombstoneProbe();
-        }
-        if (scenario == "deliberate-failure") {
-            return RunDeliberateFailure();
-        }
-        if (scenario == "watchdog-hang") {
-            return RunWatchdogHang();
-        }
-        if (scenario == "current-format-lifecycle") {
-            return RunCurrentFormatLifecycleProbe(workspace);
-        }
-        if (scenario == "--passing" || scenario == "passing-control") {
-            const int rc = RunBridgeProbe(true);
-            if (rc == 0) std::cout << "RESULT passing-control PASS" << std::endl;
-            return rc;
-        }
-
+        if (scenario == "ecsj-01-compiler-thread") return finish(RunCompilerThreadProbe(workspace));
+        if (scenario == "ecsj-02-thread-identity") return finish(RunThreadIdentityProbe());
+        if (scenario == "queued-delivery-control") return finish(RunThreadIdentityProbe(true));
+        if (scenario == "ecsj-03-bridge-hang") return finish(RunBridgeProbe(false));
+        if (scenario == "ecsj-03-bridge-control" || scenario == "--passing" || scenario == "passing-control")
+            return finish(RunBridgeProbe(true));
+        if (scenario == "ecsj-04-entt-tombstone") return finish(RunEnTTTombstoneProbe());
+        if (scenario == "deliberate-failure") return finish(RunDeliberateFailure());
+        if (scenario == "watchdog-hang") return finish(RunWatchdogHang());
+        if (scenario == "current-format-lifecycle") return finish(RunCurrentFormatLifecycleProbe(workspace));
         std::cerr << "Unknown scenario: " << scenario << std::endl;
-        return 2;
+        return finish(2);
     } catch (const std::exception& ex) {
         std::cerr << "EXCEPTION: " << ex.what() << std::endl;
-        return 1;
+        return finish(2);
     }
 }

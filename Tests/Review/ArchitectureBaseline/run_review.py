@@ -23,47 +23,11 @@ def load_module(path):
     return module
 
 
-def prepare_queued_control(folder):
-    """Copy the reviewed probe, changing only its actor to an existing valid queue path."""
-    folder.mkdir(parents=True, exist_ok=True)
-    source = (ROOT / "Tests/src/JobsECSTestMain.cpp").read_text(encoding="utf-8")
-    replacements = {
-        "std::thread ext([&] {": "auto ext = Axle::JobSystem::Dispatch([&] {",
-        "    ext.join();": "    while (!ext.IsComplete()) std::this_thread::yield();\n    ext.Wait();",
-        "    // Pump main thread queue on actual main thread\n    Axle::JobSystem::RunPinnedTasks();":
-            "    // Pump main thread queue on actual main thread\n    Axle::JobSystem::RunPinnedTasks();\n"
-            '    std::cout << "review_after_pump incorrectlyMain=" << incorrectlyMain.load()\n'
-            '              << " calledBeforePump=" << calledBeforePump.load()\n'
-            '              << " callbackOnMain=" << callbackOnMain.load() << std::endl;',
-    }
-    for original, replacement in replacements.items():
-        if source.count(original) != 1:
-            raise ValueError("Reviewed probe changed; inspect the new implementation before regenerating this control")
-        source = source.replace(original, replacement, 1)
-    (folder / "QueuedIdentity.cpp").write_text(source, encoding="utf-8")
-    cmake = (
-        "if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)\n"
-        f'  add_executable(AxleOPT01QueuedReview EXCLUDE_FROM_ALL "{(folder / "QueuedIdentity.cpp").as_posix()}")\n'
-        "  target_compile_features(AxleOPT01QueuedReview PRIVATE cxx_std_20)\n"
-        "  if(MSVC)\n    target_compile_options(AxleOPT01QueuedReview PRIVATE /bigobj /FS)\n  endif()\n"
-        "  target_link_libraries(AxleOPT01QueuedReview PRIVATE Axle::Core Axle::Physics Axle::Scene)\n"
-        f'  set_target_properties(AxleOPT01QueuedReview PROPERTIES RUNTIME_OUTPUT_DIRECTORY "{(folder / "bin").as_posix()}")\n'
-        "endif()\n"
-    )
-    hook = folder / "inject.cmake"
-    hook.write_text(cmake, encoding="utf-8")
-    print(f"Generated review-only CMake hook: {hook}")
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, default=ROOT / "build/opt01-review/adversarial")
-    parser.add_argument("--queued-binary", type=Path, help="Optional built queued-delivery native review control")
-    parser.add_argument("--prepare-queued-control", type=Path, help="Generate the opt-in native control and CMake hook, then exit")
+    parser.add_argument("--binary", type=Path, help="Newly built AxleJobsECSTests for native passing and setup-failure controls")
     args = parser.parse_args()
-    if args.prepare_queued_control:
-        prepare_queued_control(args.prepare_queued_control.resolve())
-        return 0
     args.workspace.mkdir(parents=True, exist_ok=True)
     workspace = Path(tempfile.mkdtemp(prefix="review-", dir=args.workspace.resolve()))
     results = []
@@ -114,16 +78,23 @@ def main():
         record(name, "checker exit 1 for a new forbidden dependency", f"exit {result.returncode}",
                result.returncode == 1, log=str(log), fixture=str(fixture))
 
-    if args.queued_binary:
-        result = subprocess.run([str(args.queued_binary.resolve()), "ecsj-02-thread-identity"],
+    if args.binary:
+        result = subprocess.run([str(args.binary.resolve()), "queued-delivery-control"],
                                 capture_output=True, text=True, timeout=15)
         log = workspace / "queued-delivery-native-control.log"
         log.write_text(result.stdout + result.stderr, encoding="utf-8")
-        record("identity-probe-rejects-correct-deferred-control", "correct queued delivery is accepted",
+        record("identity-probe-accepts-correct-deferred-control", "correct queued delivery is accepted",
                f"exit {result.returncode}", result.returncode == 0, log=str(log),
-               evidence_kind="native production queue; actor is a registered enki worker; original probe predicate unchanged")
+               evidence_kind="permanent registered-worker production queue control with before/after snapshots")
+        import os
+        env = os.environ.copy()
+        env["PATH"] = ""
+        native = harness.run_scenario([str(args.binary.resolve()), "ecsj-01-compiler-thread", str(workspace)],
+                                      "ecsj-01-compiler-thread", 10, "REPRODUCED_DEFECT", workspace, env=env)
+        record("compiler-prerequisite-failure-is-infrastructure", "setup failure is an unexpected infrastructure failure",
+               native["status"], native["status"] == "INFRASTRUCTURE_FAILURE" and native["unexpected"], result=native)
 
-    report = {"reviewed_implementation": "95a6c9d", "workspace": str(workspace),
+    report = {"subject": "current AF-00/EJ-00 corrections; original failing reference 95a6c9d", "workspace": str(workspace),
               "results": results, "failed_contracts": sum(not r["contract_satisfied"] for r in results)}
     report_path = workspace / "results.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

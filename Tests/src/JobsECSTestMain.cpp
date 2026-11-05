@@ -188,6 +188,183 @@ int RunBridgeProbe(bool useControlDrain) {
 }
 
 // ============================================================================
+// EJ-01: Thread Identity, Lifecycle Admission and Reinitialization
+// ============================================================================
+int RunEJ01LifecycleAdmissionProbe() {
+    // 1. Stopped state check
+    if (Axle::JobSystem::IsInitialized() ||
+        Axle::JobSystem::GetState() != Axle::JobSystemState::Stopped ||
+        Axle::JobSystem::GetTotalThreadCount() != 0 ||
+        Axle::JobSystem::GetDedicatedWorkerThreadCount() != 0 ||
+        Axle::JobSystem::GetCurrentThreadIndex() != Axle::InvalidThreadIndex) {
+        std::cerr << "FAIL [EJ-01]: Stopped state invariants violated\n";
+        return 1;
+    }
+
+    // 2. Establish owner on main thread with Init(2)
+    Axle::JobSystem::Init(2);
+    if (!Axle::JobSystem::IsInitialized() ||
+        !Axle::JobSystem::IsMainThread() ||
+        Axle::JobSystem::GetState() != Axle::JobSystemState::Running ||
+        Axle::JobSystem::GetTotalThreadCount() != 2 ||
+        Axle::JobSystem::GetDedicatedWorkerThreadCount() != 1 ||
+        Axle::JobSystem::GetCurrentThreadIndex() != 0 ||
+        !Axle::JobSystem::IsValidSchedulerContext()) {
+        std::cerr << "FAIL [EJ-01]: Main thread initialization invariants violated\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+    const Axle::u32 epoch1 = Axle::JobSystem::GetEpoch();
+
+    // 3. Verify external thread identity and rejection of scheduler operations
+    std::atomic<bool> externalOk{true};
+    std::atomic<bool> externalLambdaRan{false};
+    std::thread externalThread([&] {
+        if (Axle::JobSystem::IsMainThread()) externalOk = false;
+        if (Axle::JobSystem::GetCurrentThreadIndex() != Axle::InvalidThreadIndex) externalOk = false;
+        if (Axle::JobSystem::IsValidSchedulerContext()) externalOk = false;
+
+        // External Init / Shutdown calls must be rejected
+        Axle::JobSystem::Init(4);
+        Axle::JobSystem::Shutdown();
+
+        // External Dispatch must return invalid handle and NOT run lambda inline
+        auto handle = Axle::JobSystem::Dispatch([&] {
+            externalLambdaRan = true;
+        });
+        if (handle.IsValid()) externalOk = false;
+
+        // External ParallelFor must not execute or crash
+        Axle::JobSystem::ParallelFor(10, [&](Axle::u32) {
+            externalLambdaRan = true;
+        });
+
+        // External Wait / WaitForAll / RunPinnedTasks must not crash or hang
+        Axle::JobSystem::Wait(nullptr);
+        Axle::JobSystem::WaitForAll();
+        Axle::JobSystem::RunPinnedTasks();
+    });
+    externalThread.join();
+
+    if (!externalOk.load() || externalLambdaRan.load()) {
+        std::cerr << "FAIL [EJ-01]: External thread checks or rejection failed\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 4. Verify worker thread context from within an admitted task
+    std::atomic<bool> workerOk{false};
+    std::atomic<bool> taskRan{false};
+    auto workerTask = Axle::JobSystem::Dispatch([&] {
+        const Axle::u32 idx = Axle::JobSystem::GetCurrentThreadIndex();
+        const bool main = Axle::JobSystem::IsMainThread();
+        const bool validContext = Axle::JobSystem::IsValidSchedulerContext();
+        if (!main && validContext && idx != Axle::InvalidThreadIndex && idx < 2) {
+            workerOk = true;
+        }
+        taskRan = true;
+    });
+    // Yield to let the dedicated worker thread execute the task rather than stealing on main during Wait
+    while (!taskRan.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+    }
+    workerTask.Wait();
+    if (!workerOk.load()) {
+        std::cerr << "FAIL [EJ-01]: Worker thread context verification failed\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // 5. Shutdown and verify stopped state retains owner identity
+    Axle::JobSystem::Shutdown();
+    if (Axle::JobSystem::IsInitialized() ||
+        !Axle::JobSystem::IsMainThread() ||
+        Axle::JobSystem::GetState() != Axle::JobSystemState::Stopped ||
+        Axle::JobSystem::GetTotalThreadCount() != 0 ||
+        Axle::JobSystem::GetDedicatedWorkerThreadCount() != 0 ||
+        Axle::JobSystem::GetCurrentThreadIndex() != Axle::InvalidThreadIndex) {
+        std::cerr << "FAIL [EJ-01]: Stopped state after shutdown violated\n";
+        return 1;
+    }
+
+    // 6. Reinitialization with Init(1) -> 1 total thread, 0 dedicated workers, new epoch
+    Axle::JobSystem::Init(1);
+    const Axle::u32 epoch2 = Axle::JobSystem::GetEpoch();
+    if (!Axle::JobSystem::IsInitialized() ||
+        epoch2 <= epoch1 ||
+        Axle::JobSystem::GetTotalThreadCount() != 1 ||
+        Axle::JobSystem::GetDedicatedWorkerThreadCount() != 0) {
+        std::cerr << "FAIL [EJ-01]: Reinitialization with Init(1) failed\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+    Axle::JobSystem::Shutdown();
+
+    // 7. Barrier-coordinated admission vs shutdown
+    Axle::JobSystem::Init(2);
+
+    std::atomic<bool> taskAStarted{false};
+    std::atomic<bool> taskARelease{false};
+    std::atomic<bool> taskAFinished{false};
+    std::atomic<bool> childCRan{false};
+    std::atomic<bool> rejectedTaskRan{false};
+
+    auto taskA = Axle::JobSystem::Dispatch([&] {
+        taskAStarted.store(true, std::memory_order_release);
+        while (!taskARelease.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+
+        // Inside task A, dispatch child task C (admitted permit)
+        auto childHandle = Axle::JobSystem::Dispatch([&] {
+            childCRan.store(true, std::memory_order_release);
+        });
+        if (childHandle.IsValid()) {
+            childHandle.Wait();
+        }
+        taskAFinished.store(true, std::memory_order_release);
+    });
+
+    while (!taskAStarted.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+    }
+
+    std::thread releaser([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        taskARelease.store(true, std::memory_order_release);
+    });
+
+    Axle::JobSystem::Shutdown();
+    releaser.join();
+
+    if (!taskAFinished.load() || !childCRan.load()) {
+        std::cerr << "FAIL [EJ-01]: Task A or child task C failed to complete during draining\n";
+        return 1;
+    }
+
+    // After shutdown, dispatch must reject new work
+    auto postShutdownHandle = Axle::JobSystem::Dispatch([&] {
+        rejectedTaskRan = true;
+    });
+    if (postShutdownHandle.IsValid() || rejectedTaskRan.load()) {
+        std::cerr << "FAIL [EJ-01]: Dispatch after shutdown was not rejected\n";
+        return 1;
+    }
+
+    // Safe reinitialization
+    Axle::JobSystem::Init(2);
+    if (!Axle::JobSystem::IsInitialized() || Axle::JobSystem::GetEpoch() <= epoch2) {
+        std::cerr << "FAIL [EJ-01]: Safe reinitialization after draining failed\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+    Axle::JobSystem::Shutdown();
+
+    std::cout << "RESULT ej01-lifecycle-admission PASS" << std::endl;
+    return 0;
+}
+
+// ============================================================================
 // ECSJ-04: EnTT Stable Storage Tombstone Iteration Probe
 // ============================================================================
 struct StableTombstoneComponent {
@@ -370,6 +547,7 @@ int main(int argc, char** argv) {
                   << "Scenarios:\n"
                   << "  ecsj-01-compiler-thread\n"
                   << "  ecsj-02-thread-identity\n"
+                  << "  ej01-lifecycle-admission\n"
                   << "  ecsj-03-bridge-hang\n"
                   << "  ecsj-03-bridge-control\n"
                   << "  ecsj-04-entt-tombstone\n"
@@ -397,6 +575,7 @@ int main(int argc, char** argv) {
     try {
         if (scenario == "ecsj-01-compiler-thread") return finish(RunCompilerThreadProbe(workspace));
         if (scenario == "ecsj-02-thread-identity") return finish(RunThreadIdentityProbe());
+        if (scenario == "ej01-lifecycle-admission") return finish(RunEJ01LifecycleAdmissionProbe());
         if (scenario == "queued-delivery-control") return finish(RunThreadIdentityProbe(true));
         if (scenario == "ecsj-03-bridge-hang") return finish(RunBridgeProbe(false));
         if (scenario == "ecsj-03-bridge-control" || scenario == "--passing" || scenario == "passing-control")

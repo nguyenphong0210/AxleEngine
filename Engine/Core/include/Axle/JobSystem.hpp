@@ -12,6 +12,16 @@ namespace Axle {
 
     class JobSystem;
 
+    // Lifecycle states for the JobSystem scheduler
+    enum class JobSystemState {
+        Stopped = 0,
+        Running,
+        Quiescing,
+        Draining
+    };
+
+    inline static constexpr u32 InvalidThreadIndex = enki::NO_THREAD_NUM;
+
     // Lightweight handle referencing an asynchronous task dispatched to JobSystem
     class JobHandle {
     public:
@@ -32,45 +42,82 @@ namespace Axle {
     class JobSystem {
     public:
         // Initialize persistent worker threads matching CPU hardware concurrency.
+        // Must be called from the Engine's OS owner thread.
         // numThreads: Total threads in scheduler (including main thread = 0).
         // If 0, automatically uses CPU hardware concurrency.
         static void Init(u32 numThreads = 0);
 
         // Terminate worker threads and shut down the scheduler.
+        // Must be called from the Engine's OS owner thread.
         static void Shutdown();
 
-        // Returns true if the JobSystem is initialized and active.
+        // Returns true if the JobSystem is initialized and actively running.
         static bool IsInitialized();
 
-        // Total worker threads participating in scheduling (including main thread).
+        // Current lifecycle state of the JobSystem scheduler.
+        static JobSystemState GetState();
+
+        // Current initialization epoch counter (increments on each successful Init).
+        static u32 GetEpoch();
+
+        // Total threads participating in scheduling (including main thread = 0). Returns 0 when stopped.
+        static u32 GetTotalThreadCount();
+
+        // Dedicated background worker threads created by scheduler (excluding main thread). Returns 0 when stopped.
+        static u32 GetDedicatedWorkerThreadCount();
+
+        // Total worker/task threads in scheduler (including main thread = 0). Preserved for existing callers.
         static u32 GetWorkerThreadCount();
 
-        // Calling thread's scheduler index (0 = main thread, < WorkerThreadCount).
+        // Calling thread's scheduler index (0 = main thread, < TotalThreadCount, or enki::NO_THREAD_NUM).
+        // External unregistered threads receive enki::NO_THREAD_NUM (never mapped to 0).
         static u32 GetCurrentThreadIndex();
 
-        // Returns true if caller is executing on the engine's main thread (thread 0).
+        // Returns true if caller is executing on the Engine's OS owner thread.
+        // Verifies actual OS thread identity; preserves false for external threads across stopped/reinitialized states.
         static bool IsMainThread();
+
+        // Returns true if caller is executing in a valid scheduler context (OS owner thread or registered worker).
+        static bool IsValidSchedulerContext();
 
         // Direct access to the underlying enki::TaskScheduler.
         static enki::TaskScheduler& GetScheduler();
 
         // Run pinned tasks scheduled for the calling thread (e.g. main thread frame loop).
+        // Must be called from the OS owner thread.
         static void RunPinnedTasks();
 
         // Dispatch a lambda task asynchronously. Returns a JobHandle to query or wait on.
+        // Rejects new application work after quiescing; preserves progress of already-admitted task graphs.
         static JobHandle Dispatch(std::function<void()> func);
 
         // Dispatch an enki::ITaskSet to the scheduler without blocking.
         static void Dispatch(enki::ITaskSet* taskSet);
 
         // Block until the specified task or completable is finished.
+        // Rejects execution from unsupported external thread contexts with an active diagnostic.
         static void Wait(const enki::ICompletable* completable);
 
         // Block until all currently queued tasks are finished.
         static void WaitForAll();
 
         // Post a function to be executed specifically on the main thread (thread 0).
+        // Accepts external completion producer threads safely.
         static void DispatchToMainThread(std::function<void()> func);
+
+        // Internal permit / task depth helpers for admitted task graphs and internal children.
+        static void IncrementActiveTaskDepth();
+        static void DecrementActiveTaskDepth();
+        static u32 GetActiveTaskDepth();
+
+        // Internal admission helper: synchronizes admission check and enqueue under admission lock.
+        static bool TryAdmitTaskSet(enki::ITaskSet* taskSet);
+
+        // Diagnostic reporter for unsupported external context violations in both Debug and Release.
+        static void ReportInvalidContext(const char* operation);
+
+        // Optional reset helper for isolated test harnesses.
+        static void ResetOwnerForTesting();
 
         // Execute a parallel loop dividing [0, count) across worker threads.
         // Supports func(u32 index) or func(u32 index, u32 threadNum).
@@ -78,7 +125,11 @@ namespace Axle {
         template<typename Func>
         static void ParallelFor(u32 count, Func&& func, u32 minRange = 1) {
             if (count == 0) return;
-            if (!IsInitialized() || count == 1 || GetWorkerThreadCount() <= 1) {
+            if (!IsValidSchedulerContext()) {
+                ReportInvalidContext("ParallelFor");
+                return;
+            }
+            if (!IsInitialized() || count == 1 || GetTotalThreadCount() <= 1) {
                 for (u32 i = 0; i < count; ++i) {
                     if constexpr (std::is_invocable_v<std::decay_t<Func>, uint32_t, uint32_t>) {
                         func(i, 0);
@@ -95,6 +146,7 @@ namespace Axle {
                     : enki::ITaskSet(size, minR), m_Func(std::forward<Func>(f)) {}
 
                 void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override {
+                    IncrementActiveTaskDepth();
                     for (uint32_t i = range.start; i < range.end; ++i) {
                         if constexpr (std::is_invocable_v<std::decay_t<Func>, uint32_t, uint32_t>) {
                             m_Func(i, threadnum);
@@ -102,12 +154,24 @@ namespace Axle {
                             m_Func(i);
                         }
                     }
+                    DecrementActiveTaskDepth();
                 }
             };
 
             LambdaTaskSet taskSet(count, minRange, std::forward<Func>(func));
-            GetScheduler().AddTaskSetToPipe(&taskSet);
-            GetScheduler().WaitforTask(&taskSet);
+            if (TryAdmitTaskSet(&taskSet)) {
+                Wait(&taskSet);
+            } else {
+                if (IsMainThread()) {
+                    for (u32 i = 0; i < count; ++i) {
+                        if constexpr (std::is_invocable_v<std::decay_t<Func>, uint32_t, uint32_t>) {
+                            func(i, 0);
+                        } else {
+                            func(i);
+                        }
+                    }
+                }
+            }
         }
 
         // Execute a parallel loop passing partition ranges [start, end) across worker threads.
@@ -115,7 +179,11 @@ namespace Axle {
         template<typename Func>
         static void ParallelForRange(u32 count, Func&& func, u32 minRange = 1) {
             if (count == 0) return;
-            if (!IsInitialized() || count == 1 || GetWorkerThreadCount() <= 1) {
+            if (!IsValidSchedulerContext()) {
+                ReportInvalidContext("ParallelForRange");
+                return;
+            }
+            if (!IsInitialized() || count == 1 || GetTotalThreadCount() <= 1) {
                 if constexpr (std::is_invocable_v<std::decay_t<Func>, uint32_t, uint32_t, uint32_t>) {
                     func(0, count, 0);
                 } else {
@@ -130,17 +198,28 @@ namespace Axle {
                     : enki::ITaskSet(size, minR), m_Func(std::forward<Func>(f)) {}
 
                 void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override {
+                    IncrementActiveTaskDepth();
                     if constexpr (std::is_invocable_v<std::decay_t<Func>, uint32_t, uint32_t, uint32_t>) {
                         m_Func(range.start, range.end, threadnum);
                     } else {
                         m_Func(range.start, range.end);
                     }
+                    DecrementActiveTaskDepth();
                 }
             };
 
             LambdaRangeTaskSet taskSet(count, minRange, std::forward<Func>(func));
-            GetScheduler().AddTaskSetToPipe(&taskSet);
-            GetScheduler().WaitforTask(&taskSet);
+            if (TryAdmitTaskSet(&taskSet)) {
+                Wait(&taskSet);
+            } else {
+                if (IsMainThread()) {
+                    if constexpr (std::is_invocable_v<std::decay_t<Func>, uint32_t, uint32_t, uint32_t>) {
+                        func(0, count, 0);
+                    } else {
+                        func(0, count);
+                    }
+                }
+            }
         }
     };
 

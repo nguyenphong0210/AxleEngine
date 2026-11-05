@@ -63,6 +63,12 @@ names in `.gitmodules` do not substitute for these actual revisions.
 
 ## Current asset identity and persistence policy: source observations
 
+**Scope update, 2026-11-05:** The user now requires no per-asset sidecars. The
+[AF-01 handoff](../agents/handoffs/OPT_01_AF01_GEMINI.md) uses a source-controlled
+root registry and retires active .meta generation. The .meta behavior below is a
+historical source observation at `af5721b`, not a requirement to retain or commit
+sidecars. Source capture and vendor graph evidence remain unchanged.
+
 These are current implementation facts/risks from source inspection, not claims
 that AF-01 is implemented or failure-injection tests already pass.
 

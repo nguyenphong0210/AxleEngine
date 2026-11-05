@@ -222,29 +222,42 @@ their owning package's cutover. Do not bless a whole directory permanently.
 
 ### AF-01 - Stable asset identity and safe persistence
 
-Use source-controlled authored metadata as the initial source of asset UUID
-identity. Preserve existing UUIDs rather than replacing them with path hashes.
-Remove blanket ignore for authored project/plugin metadata; keep generated test,
-cache and intermediate metadata scoped to ignored workspaces. Builtin primitives
-use canonical builtin identities. Define schema/version handling and canonical
-project/plugin roots without embedding absolute machine paths.
+**User steering, 2026-11-05: no per-asset sidecars.** Use a source-controlled,
+versioned root asset registry (normally one per project), rather than generating
+.meta/.uid/.import files beside assets. Registry UUID/path/import-setting records
+are authored data; generated caches and compiled imports remain ignored. Existing
+native asset UUID fields, where present, must agree with the canonical registry;
+do not invent independent identities or rewrite all serializers to embed new fields.
+Do not retain the old sidecar-based system as a second active authority. No old
+.meta reader, conversion, compatibility fallback or bulk metadata commit is required.
 
-Missing metadata for a genuinely new import can allocate and atomically persist
-an ID once. Corrupt metadata or a missing sidecar for an already-referenced asset
-must produce a recovery diagnostic rather than silently regenerate identity.
-Detect duplicate UUIDs and preserve references during rename/move/copy with an
-explicit new-identity-versus-relocation policy. Do not scan a developer's generated
-metadata and blindly commit it as authoritative.
+Preserve valid supported UUIDs rather than replacing them with path/content hashes.
+Define schema/version validation and canonical root-relative project/package paths
+without absolute machine locations. Builtin primitives use canonical builtin IDs.
+A genuinely new import may allocate an ID once only after its registry entry is
+atomically persisted. Corrupt/unsupported/missing registry data for referenced
+assets and duplicate UUID/path records require recovery diagnostics rather than
+silent identity regeneration. Stable text ordering keeps registry edits reviewable.
 
-Add atomic project/scene/assembly metadata persistence at the relevant shared IO
-seam; serializer/codec owners retain their own schema and unknown-data policies.
-Failure leaves the prior valid file intact. This is not a universal serializer rewrite.
+Editor rename/move and project-root relocation preserve UUID; copying an asset as
+a new asset uses an explicit identity policy. External moves require detectable
+unresolved entries and an explicit UUID-preserving relink path. Do not promise
+unambiguous external-move inference from content hashes; identical files can share
+content while representing different assets. Fingerprints are recovery hints only.
 
-- **Files:** AssetManager/metadata serializer, ignore rules, affected save helpers,
-  source fixtures and clean-checkout identity tests.
-- **Evidence:** fresh temporary checkout/copy resolves serialized references;
-  rename/move preserves identity; duplicates/corrupt sidecars/save failures are visible.
-- **Exit:** repeatable identities before large module/asset relocation and export.
+Add atomic registry/project/scene/assembly persistence at the shared CPU IO seam.
+Save failure preserves the prior valid file and published in-memory registry state;
+rename/relink transactions have explicit failure recovery. Serializer/codec owners
+retain their schemas. This is not a universal serializer or plugin-framework rewrite.
+
+- **Files:** AssetManager/canonical registry serializer, active sidecar path retirement,
+  registry/cache ignore policy, affected shared save helpers, tiny authored registry
+  fixtures and clean-checkout identity tests.
+- **Evidence:** fresh checkout resolves identical references; rename/move/root
+  relocation and explicit relink preserve IDs; copy policy, duplicate/corrupt/missing
+  registry data and save failures are verified; asset operations generate no sidecars.
+- **Exit:** repeatable source-controlled identities and safe saves without per-asset
+  metadata files, before large module/asset relocation and export.
 
 ### AF-02 - Foundation, Application and explicit service ownership
 

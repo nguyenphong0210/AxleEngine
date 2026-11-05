@@ -17,7 +17,9 @@ Release CTest 15/15, 18 tool regressions, and nine acceptance controls per nativ
 configuration. [Correction evidence](reviews/OPT_01_BASELINE_CORRECTIONS.md) explicitly
 records Codex-authored verification, not a separate post-fix independent review.
 The [AF-01 handoff](agents/handoffs/OPT_01_AF01_GEMINI.md) releases stable asset
-identity and safe persistence only. P41-00, PLG-00 and later packages remain planned.
+identity and safe persistence only. Latest user steering requires **no per-asset
+.meta/.uid/.import files**: use a versioned source-controlled root registry, with
+explicit rename/relink and safe persistence. P41-00, PLG-00 and later packages remain planned.
 This user-directed progression retains pending OPT-00 full product verification
 as a recorded evidence gap; OPT-00 is not marked accepted. Existing production
 ECS/jobs faults remain visible for their later EJ packages.
@@ -108,7 +110,7 @@ Historical VR-R1..R3 concern the superseded legacy contract. Status: **FOLLOW-UP
 
 - [x] **AF-00:** Shared baseline and architecture checks (Gemini `95a6c9d`, Codex correction `af5721b` and completed inventory; [verified correction evidence](reviews/OPT_01_BASELINE_CORRECTIONS.md)).
 - [x] **EJ-00:** Permanent baseline and meaningful harness (Gemini `95a6c9d`, Codex correction `af5721b`; [verified correction evidence](reviews/OPT_01_BASELINE_CORRECTIONS.md); known Engine defects remain open).
-- [ ] **AF-01:** Stable asset identity and safe persistence ([assigned to Gemini](agents/handoffs/OPT_01_AF01_GEMINI.md); implementation/review pending).
+- [ ] **AF-01:** Stable registry-backed asset identity and safe persistence, no per-asset sidecars ([assigned to Gemini](agents/handoffs/OPT_01_AF01_GEMINI.md); implementation/review pending).
 - [ ] **P41-00:** Baseline and always-active render tests.
 - [ ] **PLG-00:** Baseline and retirement inventory.
 

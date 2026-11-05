@@ -25,36 +25,60 @@ AF-00/EJ-00 corrections were authored and verified by Codex, not independently
 reviewed by another agent after the fixes. Keep that evidence distinction. OPT-00
 has not been marked accepted; do not restore its superseded legacy requirements.
 
+## Latest user steering: no per-asset sidecars
+
+The user explicitly rejects generating many .meta files. This overrides the
+original sidecar-oriented handoff and Gemini ACK of that earlier scope.
+**Do not generate per-asset .meta files, or substitute .uid/.import sidecars.**
+Use one source-controlled versioned asset registry per independently owned asset
+root (normally one project registry; package-local registries only for existing
+independently distributed roots). A suitable default project filename is
+AssetRegistry.axleregistry. Caches and imported/compiled outputs remain ignored.
+This registry is authored project data even when the Editor initially creates it.
+
+A canonical registry owns UUID/path/import-setting records for current assets.
+Native formats with an already-persisted asset UUID must agree with that mapping;
+do not create two independently generated identities. Do not add embedded UUIDs
+to every native format as a universal serializer rewrite. No legacy .meta reader,
+converter or fallback is required. Existing sidecar-based code must not remain
+as a second active identity system.
+
 ## Implement AF-01
 
-1. Establish source-controlled authored metadata as the initial asset UUID identity.
-   Preserve valid existing UUIDs in the supported schema; never replace identity
-   with path hashes. Scope ignore rules so genuinely authored metadata can be
-   tracked while test-generated, cache and intermediate sidecars remain ignored.
+1. Implement the source-controlled root registry as the stable identity authority.
+   Use deterministic text ordering and schema/version validation. Keep UUIDs stable
+   in the supported schema, independent of paths/content hashes. Track intentionally
+   authored registry fixtures; keep per-asset .meta files and generated caches ignored.
    Do not bulk-add developer-generated metadata or scan private projects into Git.
-2. Define schema/version handling and canonical supported project/plugin asset-root
-   identities without absolute machine paths. Builtin primitives use canonical
-   builtin identities, not generated authored sidecars. This does not release the
-   plugin framework or a universal serializer rewrite.
-3. Allocate and atomically persist an ID once for a genuinely new import, checking
-   persistence before publishing it. Missing metadata for an already-referenced
-   asset, corrupt/unsupported metadata and duplicate UUIDs require explicit
-   diagnostics/recovery. Never silently regenerate a referenced asset's identity.
-4. Implement an explicit distinction between relocation (rename/move/project-root
-   relocation preserves identity) and copying an asset as a new authored identity.
-   Preserve serialized references and surface filesystem/save failures.
-5. Put reusable atomic persistence at the appropriate shared CPU IO seam and use
-   it for relevant project, scene, assembly and metadata saves. Reuse and correctly
-   place existing atomic behavior; Core must not depend upward on Animation/Scene.
-   Failed writes/replacements leave the previous valid file intact and report the
-   actual error. Keep serializer/codec schema responsibilities with their owners.
+2. Define canonical root-relative project/package paths without absolute machine
+   paths. Builtin primitives use canonical builtin identities. Existing native
+   identity fields must be consistent with the registry; avoid independent duplicate
+   authorities. This does not release a plugin framework or universal serializer rewrite.
+3. Allocate an ID once for a genuinely new import and atomically persist its registry
+   entry before publishing it. Corrupt/unsupported registries, duplicate UUIDs/paths,
+   unresolved referenced IDs and missing registry entries require diagnostics/recovery.
+   Never silently regenerate a referenced asset's identity or use content hash as UUID.
+4. Editor rename/move must update the registry path without changing UUID; copying
+   a project root preserves identity, while copying an asset as a new asset follows
+   an explicit new-identity policy. If a file moves outside Editor, detect the
+   unresolved entry and provide explicit relink preserving the UUID. Do not claim
+   arbitrary external moves can be matched automatically without evidence. Identical
+   files make content hashes ambiguous; fingerprints may assist recovery only.
+5. Put reusable atomic persistence at the appropriate shared CPU IO seam for the
+   registry and relevant project/scene/assembly saves. Registry failure must leave
+   both the prior valid file and published in-memory identity state unchanged;
+   coordinate rename/relink failure recovery explicitly. Reuse correctly placed
+   atomic behavior; Core must not depend upward on Animation/Scene. Keep serializer
+   schema responsibilities with owners. A missing registry for already-referenced
+   project data must not be silently replaced with newly generated identities.
 
 Engine cleanliness is mandatory: no old-format support, legacy Vehicle holders,
 compatibility readers, API wrappers or migration implementation. Unsupported data
 may be rejected clearly. Keep current-format behavior and valid UUIDs stable.
 
-Expected areas: AssetManager/AssetMetadataSerializer, narrowly affected shared IO
-and serializer save helpers, .gitignore, tiny intentionally authored fixture files,
+Expected areas: AssetManager and the canonical registry serializer, retirement of
+active sidecar generation paths, narrowly affected shared IO/serializer save helpers,
+.gitignore registry/cache policy, tiny intentionally authored registry/reference fixtures,
 clean-checkout/relocation/failure tests and baseline documentation. Do not expand
 the allowlist to hide new dependencies. ALLOW-008's CPU asset-format extraction is
 owned by AF-04, not AF-01; do not perform that later extraction here.
@@ -66,8 +90,10 @@ owned by AF-04, not AF-01; do not perform that later extraction here.
   infrastructure. Never use the active Editor project as a test asset root.
 - Verify a fresh temporary checkout/copy without developer caches resolves the
   same serialized references. Exercise rename/move and project-root relocation,
-  explicit copy identity, duplicate UUIDs, corrupt/unsupported/missing metadata,
-  new-import persistence and deterministic save/replacement failures. Compare
+  explicit copy identity, external moves and relink, identical-content ambiguity,
+  duplicate UUIDs/paths, corrupt/unsupported/missing registries or referenced entries,
+  new-import persistence and deterministic save/replacement failures. Assert that
+  discovery/import/save/rename/reopen create no per-asset sidecars. Compare
   actual UUIDs and prior file bytes, not only tags, counters or printed PASS.
 - Rebuild affected targets in Debug/Release before execution. Build Editor and
   Runtime after shared Engine/serializer changes; distinguish builds from actual

@@ -102,15 +102,15 @@ Historical VR-R1..R3 concern the superseded legacy contract. Status: **FOLLOW-UP
 
 **Work:** Maintain permanent jobs/ECS/render failure fixtures, inventory target/include boundaries and legacy consumers, and establish stable asset identity and safe persistence. Reuse common harness infrastructure.
 
-- [ ] **AF-00:** Shared baseline and architecture checks.
-- [ ] **EJ-00:** Permanent baseline and meaningful harness.
+- [ ] **AF-00:** Shared baseline and architecture checks (delivery completed; review pending in [OPT_01_BASELINE_DELIVERY.md](reviews/OPT_01_BASELINE_DELIVERY.md)).
+- [ ] **EJ-00:** Permanent baseline and meaningful harness (delivery completed; review pending in [OPT_01_BASELINE_DELIVERY.md](reviews/OPT_01_BASELINE_DELIVERY.md)).
 - [ ] **AF-01:** Stable asset identity and safe persistence.
 - [ ] **P41-00:** Baseline and always-active render tests.
 - [ ] **PLG-00:** Baseline and retirement inventory.
 
 **Exit:** Debug/Release checks remain active; intentional failure probes fail; existing fault reproductions are recorded as faults, not hidden as passing tests. Asset identity survives a clean checkout and relocation.
 
-**Evidence:** AF-00 + EJ-00 assigned in the [initial handoff](agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md); implementation and review pending. No OPT-01 checkbox is closed.
+**Evidence:** AF-00 + EJ-00 delivered in [OPT_01_BASELINE_DELIVERY.md](reviews/OPT_01_BASELINE_DELIVERY.md); independent review pending. No OPT-01 checkbox is closed prior to review.
 
 ### OPT-02 - Repair threading, scripts and physics jobs
 

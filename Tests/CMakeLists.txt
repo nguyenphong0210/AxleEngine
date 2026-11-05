@@ -177,8 +177,42 @@ target_include_directories(AxleProjectUnitTests PRIVATE src "${CMAKE_SOURCE_DIR}
 target_link_libraries(AxleProjectUnitTests PRIVATE Axle::Project Axle::Scene Axle::UI)
 add_test(NAME ProjectStartupTests COMMAND $<TARGET_FILE:AxleProjectUnitTests>)
 
+# Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
+add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
+    src/JobsECSTestMain.cpp
+)
+
+target_include_directories(AxleJobsECSTests PRIVATE
+    src
+)
+
+target_link_libraries(AxleJobsECSTests PRIVATE
+    Axle::Core
+    Axle::Physics
+    Axle::Scene
+)
+
+if (MSVC)
+    target_compile_options(AxleJobsECSTests PRIVATE /bigobj /FS)
+endif()
+
+add_test(NAME JobsECS_Control COMMAND $<TARGET_FILE:AxleJobsECSTests> ecsj-03-bridge-control)
+add_test(NAME JobsECS_HarnessFailure COMMAND $<TARGET_FILE:AxleJobsECSTests> deliberate-failure)
+set_tests_properties(JobsECS_Control JobsECS_HarnessFailure PROPERTIES LABELS "ecs-jobs;cpu")
+set_tests_properties(JobsECS_HarnessFailure PROPERTIES WILL_FAIL TRUE)
+
+# Architecture Boundary Checks (AF-00)
+find_package(Python3 COMPONENTS Interpreter)
+if (Python3_FOUND)
+    add_test(NAME ArchitectureBoundaryChecks COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_architecture.py" --root "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(ArchitectureBoundaryChecks PROPERTIES LABELS "architecture;cpu")
+
+    add_test(NAME ArchitectureForbiddenEdgeFixture COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_architecture.py" --fixture "${CMAKE_SOURCE_DIR}/Tests/Fixtures/ArchitectureViolationFixture")
+    set_tests_properties(ArchitectureForbiddenEdgeFixture PROPERTIES LABELS "architecture;cpu" WILL_FAIL TRUE)
+endif()
+
 # Explicit developer/test build. Neither this target nor its executables are in ALL.
-set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests)
+set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
 if(WIN32)
     add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
     target_include_directories(AxleBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/Editor/generated/$<CONFIG>")

@@ -1,0 +1,113 @@
+{
+  "timestamp": "2026-11-05T03:23:46Z",
+  "binary": "D:\\WorkSpace\\AxleEngine\\build\\Tests\\Debug\\AxleJobsECSTests.exe",
+  "total_scenarios": 10,
+  "summary": {
+    "pass_count": 3,
+    "reproduced_defects": 4,
+    "probes_verified": 3,
+    "unexpected_failures": 0
+  },
+  "results": [
+    {
+      "scenario": "arch-boundary-checks",
+      "type": "PASS",
+      "status": "PASS",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.125,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\arch-boundary-checks.log",
+      "log_preview": "=== AxleEngine Architecture Check ===\nRoot: D:\\WorkSpace\\AxleEngine\nFiles scanned: 349\nKnown baseline allowances: 10\nUnallowed violations found: 0\n\nRESULT: Architecture checks PASS (all dependencies conform to rules or narrow allowances)."
+    },
+    {
+      "scenario": "arch-forbidden-fixture",
+      "type": "PROBE_FAILURE",
+      "status": "PROBE_VERIFIED",
+      "exit_code": 1,
+      "timed_out": false,
+      "elapsed_seconds": 0.062,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\arch-forbidden-fixture.log",
+      "log_preview": "nallowed target 'Axle::UI'\n  [SourceInclude] Engine/Core/src/IllegalCoreDependency.cpp:2: Forbidden include: ##include <Axle/Scene.hpp> (resolves to module Scene)\n  [SourceInclude] Engine/Core/src/IllegalCoreDependency.cpp:3: Forbidden include: ##include <Axle/ImGuiLayer.hpp> (resolves to module UI)"
+    },
+    {
+      "scenario": "ecsj-01-compiler-thread",
+      "type": "REPRODUCED_DEFECT",
+      "status": "REPRODUCED_DEFECT",
+      "exit_code": 1,
+      "timed_out": false,
+      "elapsed_seconds": 0.5,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\ecsj-01-compiler-thread.log",
+      "log_preview": "[10:23:39.527] [APP] ScriptCompiler: [OK] Compiled target 'CompilerProbeTarget' successfully in 0.38s (0 warnings)\nstarted=1 callbackRan=1 compilationSucceeded=1 callbackOnMain=0\nDEFECT REPRODUCED [ECSJ-01]: ScriptCompiler callback executed on background worker thread"
+    },
+    {
+      "scenario": "ecsj-02-thread-identity",
+      "type": "REPRODUCED_DEFECT",
+      "status": "REPRODUCED_DEFECT",
+      "exit_code": 1,
+      "timed_out": false,
+      "elapsed_seconds": 0.015,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\ecsj-02-thread-identity.log",
+      "log_preview": "index=4294967295 wrapper index=0\nincorrectlyMain=1 calledBeforePump=1 callbackOnMain=0\n[10:23:39.549] [AXLE] JobSystem shutting down...\n[10:23:39.549] [AXLE] JobSystem shutdown complete.\nDEFECT REPRODUCED [ECSJ-02]: External thread classified as main thread zero; callback executed inline before pump"
+    },
+    {
+      "scenario": "ecsj-03-bridge-hang",
+      "type": "REPRODUCED_DEFECT",
+      "status": "REPRODUCED_DEFECT",
+      "exit_code": -9,
+      "timed_out": true,
+      "elapsed_seconds": 4.016,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\ecsj-03-bridge-hang.log",
+      "log_preview": "74] [AXLE] JobSystem initialized with 1 worker threads (Hardware concurrency: 16)\n[10:23:39.575] [AXLE] Jolt Physics Engine initialized successfully (v5.2.0)\n[10:23:39.576] [AXLE] JobSystemEnkiTS initialized (MaxJobs: 16, MaxBarriers: 8, Concurrency: 1)\nJolt barrier returned; ran=1\nDestroying bridge"
+    },
+    {
+      "scenario": "ecsj-03-bridge-control",
+      "type": "PASS",
+      "status": "PASS",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.016,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\ecsj-03-bridge-control.log",
+      "log_preview": "\nControl: calling JobSystem::WaitForAll() before bridge destruction\nDestroying bridge\nBridge destruction returned\n[10:23:43.589] [AXLE] Jolt Physics Engine shut down\n[10:23:43.589] [AXLE] JobSystem shutting down...\n[10:23:43.589] [AXLE] JobSystem shutdown complete.\nRESULT ecsj-03-bridge-control PASS"
+    },
+    {
+      "scenario": "ecsj-04-entt-tombstone",
+      "type": "REPRODUCED_DEFECT",
+      "status": "REPRODUCED_DEFECT",
+      "exit_code": 1,
+      "timed_out": false,
+      "elapsed_seconds": 0.016,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\ecsj-04-entt-tombstone.log",
+      "log_preview": "System initialized with 2 worker threads (Hardware concurrency: 16)\n[10:23:43.611] [AXLE] JobSystem shutting down...\n[10:23:43.611] [AXLE] JobSystem shutdown complete.\nsequential=1 parallel=2 invalidCallbacks=1\nDEFECT REPRODUCED [ECSJ-04]: ParallelECS::ForEach raw packed iteration visited tombstones"
+    },
+    {
+      "scenario": "current-format-lifecycle",
+      "type": "PASS",
+      "status": "PASS",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.031,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\current-format-lifecycle.log",
+      "log_preview": "fter=9.78828 bodies=1\n[10:23:43.648] [AXLE] Jolt Physics Engine shut down\n[10:23:43.648] [AXLE] JobSystem shutting down...\n[10:23:43.648] [AXLE] JobSystem shutdown complete.\nRESULT current-format-lifecycle PASS\n[10:23:43.648] [AXLE] PhysicsScene destroyed\n[10:23:43.650] [AXLE] PhysicsScene destroyed"
+    },
+    {
+      "scenario": "deliberate-failure",
+      "type": "PROBE_FAILURE",
+      "status": "PROBE_VERIFIED",
+      "exit_code": 1,
+      "timed_out": false,
+      "elapsed_seconds": 0.015,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\deliberate-failure.log",
+      "log_preview": "Executing intentional harness failure probe"
+    },
+    {
+      "scenario": "watchdog-hang",
+      "type": "PROBE_TIMEOUT",
+      "status": "WATCHDOG_TERMINATED",
+      "exit_code": -9,
+      "timed_out": true,
+      "elapsed_seconds": 2.516,
+      "log": "D:\\WorkSpace\\AxleEngine\\build\\harness_workspace\\watchdog-hang.log",
+      "log_preview": "Executing watchdog hang probe: spinning indefinitely"
+    }
+  ]
+}

@@ -1,0 +1,233 @@
+{
+  "version": "1.0.0",
+  "baseline_commit": "842cf7de6fac8368eb76fbf6a027b934681166e2",
+  "description": "Architectural layering rules and narrow expiring baseline allowances for AxleEngine.",
+  "module_roots": {
+    "Core": "Engine/Core",
+    "Platform": "Engine/Platform",
+    "RHI": "Engine/RHI",
+    "Renderer": "Engine/Renderer",
+    "Audio": "Engine/Audio",
+    "Asset": "Engine/Asset",
+    "Physics": "Engine/Physics",
+    "Animation": "Engine/Animation",
+    "VFX": "Engine/VFX",
+    "Project": "Engine/Project",
+    "UI2D": "Engine/UI/src/UI2D",
+    "UI": "Engine/UI",
+    "Scene": "Engine/Scene",
+    "Spline": "Plugins/Spline",
+    "Terrain": "Plugins/Terrain",
+    "Editor": "Editor",
+    "Runtime": "Runtime"
+  },
+  "layers": {
+    "Level0_Foundation": ["Core"],
+    "Level1_Hardware_Services": ["Platform", "RHI", "Audio", "Physics"],
+    "Level2_Resources_Visuals": ["Asset", "Renderer", "Animation", "VFX", "Project", "UI2D"],
+    "Level3_Scene_Simulation": ["Scene"],
+    "Level4_Plugins": ["Spline", "Terrain"],
+    "Level5_Applications": ["UI", "Editor", "Runtime"]
+  },
+  "allowed_target_links": {
+    "Core": ["spdlog::spdlog", "glfw", "enkiTS"],
+    "Platform": ["Axle::Core", "glfw", "comdlg32"],
+    "RHI": ["Axle::Core", "Axle::Platform", "NRI"],
+    "Renderer": ["Axle::Core", "Axle::Platform", "Axle::RHI", "glad"],
+    "Audio": ["Axle::Core"],
+    "Asset": ["Axle::Core"],
+    "Physics": ["Axle::Core", "Jolt"],
+    "Animation": ["Axle::Core", "Axle::Renderer", "Axle::Asset"],
+    "VFX": ["Axle::Core", "Axle::Renderer", "Axle::RHI", "Axle::Asset", "glad"],
+    "Project": ["Axle::Core"],
+    "UI2D": ["Axle::Core", "Axle::Platform", "Axle::Renderer", "Axle::RHI"],
+    "Scene": [
+      "Axle::Core", "Axle::RHI", "Axle::Renderer", "Axle::Animation",
+      "Axle::Physics", "Axle::Asset", "Axle::Audio", "Axle::VFX", "Axle::UI2D"
+    ],
+    "Spline": ["Axle::Core", "Axle::Renderer", "Axle::Physics", "Axle::Scene"],
+    "Terrain": ["Axle::Core", "Axle::Renderer", "Axle::Physics", "Axle::Scene", "Axle::Spline"],
+    "UI": [
+      "Axle::UI2D", "Axle::Core", "Axle::Platform", "Axle::Renderer",
+      "Axle::Asset", "Axle::Physics", "Axle::Scene", "Axle::Audio",
+      "Axle::VFX", "Axle::RHI", "glfw", "glad", "d3d12", "dxgi",
+      "d3dcompiler", "Vulkan::Vulkan"
+    ],
+    "Runtime": [
+      "Axle::Core", "Axle::Platform", "Axle::Renderer", "Axle::Audio",
+      "Axle::Asset", "Axle::Physics", "Axle::Scene", "Axle::Project",
+      "Axle::UI2D", "Axle::Spline", "Axle::Terrain", "Axle::Animation", "Axle::VFX"
+    ],
+    "Editor": [
+      "Axle::Core", "Axle::Platform", "Axle::RHI", "Axle::Renderer",
+      "Axle::Audio", "Axle::Asset", "Axle::UI", "Axle::Physics",
+      "Axle::Scene", "Axle::Project", "Axle::Spline", "Axle::Terrain",
+      "Axle::Animation", "Axle::VFX"
+    ]
+  },
+  "forbidden_include_rules": [
+    {
+      "from": "Core",
+      "forbidden_to": ["Platform", "RHI", "Renderer", "Audio", "Asset", "Physics", "Animation", "VFX", "Project", "UI2D", "Scene", "UI", "Spline", "Terrain", "Editor", "Runtime"],
+      "description": "Foundation Core must not have upward dependencies on platform, rendering, physics, scene, UI or applications."
+    },
+    {
+      "from": "Asset",
+      "forbidden_to": ["Renderer", "RHI", "Scene", "UI", "Editor", "Runtime"],
+      "description": "Asset subsystem must not depend on GPU rendering, scene, or UI."
+    },
+    {
+      "from": "Physics",
+      "forbidden_to": ["Renderer", "RHI", "Asset", "Scene", "UI", "Editor", "Runtime"],
+      "description": "Physics subsystem must not depend directly on rendering, GPU resources, asset DSL, scene, or UI."
+    },
+    {
+      "from": "Scene",
+      "forbidden_to": ["UI", "Editor", "Runtime"],
+      "description": "Scene data and simulation must not depend on Editor tooling UI or application hosts."
+    },
+    {
+      "from": "Spline",
+      "forbidden_to": ["UI", "Editor", "Runtime"],
+      "description": "Spline plugin must not depend on Editor UI or host applications."
+    },
+    {
+      "from": "Terrain",
+      "forbidden_to": ["UI", "Editor", "Runtime"],
+      "description": "Terrain plugin must not depend on Editor UI or host applications."
+    },
+    {
+      "from": "Runtime",
+      "forbidden_to": ["UI", "Editor"],
+      "description": "Standalone player Runtime must never depend on Dear ImGui Editor tooling UI or Editor composition."
+    }
+  ],
+  "baseline_allowances": [
+    {
+      "id": "ALLOW-001",
+      "from_module": "Core",
+      "to_module": "Platform",
+      "files": [
+        "Engine/Core/include/Axle/Application.hpp",
+        "Engine/Core/src/Application.cpp"
+      ],
+      "evidence": "Application boots window and reads raw input via Axle/Input.hpp before dedicated Platform host.",
+      "owning_package": "AF-02",
+      "expiration_condition": "Core bootstrap refactoring in AF-02 completes"
+    },
+    {
+      "id": "ALLOW-002",
+      "from_module": "Core",
+      "to_module": "Physics",
+      "files": [
+        "Engine/Core/src/Application.cpp"
+      ],
+      "evidence": "Application directly initializes and shuts down PhysicsEngine singleton.",
+      "owning_package": "AF-02",
+      "expiration_condition": "Lifecycle ownership moved to Application runtime services in AF-02 / EJ-07"
+    },
+    {
+      "id": "ALLOW-003",
+      "from_module": "Core",
+      "to_module": "Renderer",
+      "files": [
+        "Engine/Core/src/Application.cpp"
+      ],
+      "evidence": "Application directly issues RenderCommand::Init() in Core.",
+      "owning_package": "AF-02",
+      "expiration_condition": "Renderer initialization moved to host/render service in AF-02 / P41-01"
+    },
+    {
+      "id": "ALLOW-004",
+      "from_module": "Asset",
+      "to_module": "Renderer",
+      "files": [
+        "Engine/Asset/CMakeLists.txt",
+        "Engine/Asset/include/Axle/AssetManager.hpp",
+        "Engine/Asset/include/Axle/AssetSerializer.hpp",
+        "Engine/Asset/src/AssetManager.cpp",
+        "Engine/Asset/src/AssetSerializer.cpp"
+      ],
+      "evidence": "AssetManager references Texture2D directly and CMakeLists.txt links Axle::Renderer.",
+      "owning_package": "AF-04",
+      "expiration_condition": "CPU decode/registry separated from GPU upload in AF-04 / P41-11"
+    },
+    {
+      "id": "ALLOW-005",
+      "from_module": "Asset",
+      "to_module": "RHI",
+      "files": [
+        "Engine/Asset/CMakeLists.txt",
+        "Engine/Asset/include/Axle/AssetManager.hpp",
+        "Engine/Asset/src/AssetSerializer.cpp"
+      ],
+      "evidence": "AssetSerializer and AssetManager include Axle/RHI/* and CMakeLists.txt links Axle::RHI.",
+      "owning_package": "AF-04",
+      "expiration_condition": "RHI decoupling in AF-04 / P41-11"
+    },
+    {
+      "id": "ALLOW-006",
+      "from_module": "Physics",
+      "to_module": "Renderer",
+      "files": [
+        "Engine/Physics/CMakeLists.txt",
+        "Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp",
+        "Engine/Physics/src/PhysicsDebugRenderer.cpp"
+      ],
+      "evidence": "PhysicsDebugRenderer draws through RenderCommand and CMakeLists.txt links Axle::Renderer.",
+      "owning_package": "P41-25",
+      "expiration_condition": "Debug rendering extracted into generic consumer in P41-25"
+    },
+    {
+      "id": "ALLOW-007",
+      "from_module": "Physics",
+      "to_module": "RHI",
+      "files": [
+        "Engine/Physics/CMakeLists.txt",
+        "Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp",
+        "Engine/Physics/src/RHIPhysicsDebugRenderer.cpp"
+      ],
+      "evidence": "RHIPhysicsDebugRenderer directly records RHI command buffers and CMakeLists.txt links Axle::RHI.",
+      "owning_package": "P41-25",
+      "expiration_condition": "Debug drawing routed through extraction in P41-25"
+    },
+    {
+      "id": "ALLOW-008",
+      "from_module": "Physics",
+      "to_module": "Asset",
+      "files": [
+        "Engine/Physics/CMakeLists.txt",
+        "Engine/Physics/include/Axle/PhysicsMaterial.hpp"
+      ],
+      "evidence": "PhysicsMaterial includes Axle/AssetDSL.hpp and CMakeLists.txt links Axle::Asset.",
+      "owning_package": "AF-01",
+      "expiration_condition": "Asset DSL decoupled from physical material definition in AF-01"
+    },
+    {
+      "id": "ALLOW-009",
+      "from_module": "Spline",
+      "to_module": "UI",
+      "files": [
+        "Plugins/Spline/CMakeLists.txt",
+        "Plugins/Spline/src/SplineEditor.cpp",
+        "Plugins/Spline/include/AxleSpline/SplineEditor.hpp"
+      ],
+      "evidence": "Spline plugin embeds ImGui editor tooling directly and links Axle::UI.",
+      "owning_package": "PLG-19",
+      "expiration_condition": "Tooling separated into Vehicle/Spline Editor plugin in PLG-19..23"
+    },
+    {
+      "id": "ALLOW-010",
+      "from_module": "Terrain",
+      "to_module": "UI",
+      "files": [
+        "Plugins/Terrain/CMakeLists.txt",
+        "Plugins/Terrain/src/TerrainEditor.cpp",
+        "Plugins/Terrain/include/AxleTerrain/TerrainEditor.hpp"
+      ],
+      "evidence": "Terrain plugin embeds ImGui editor tooling directly and links Axle::UI.",
+      "owning_package": "PLG-19",
+      "expiration_condition": "Tooling separated into Terrain Editor plugin in PLG-19..23"
+    }
+  ]
+}

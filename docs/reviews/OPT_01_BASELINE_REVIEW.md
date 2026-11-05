@@ -1,5 +1,11 @@
 # OPT-01: Independent AF-00 + EJ-00 Baseline Review
 
+> **Follow-up, 2026-11-05:** Codex corrected O1-R1..R4 and verified the changes
+> in `af5721b` plus the completed baseline inventory. See the
+> [correction report](OPT_01_BASELINE_CORRECTIONS.md). The findings below remain
+> the historical independent review of `95a6c9d`; the follow-up explicitly records
+> author-run verification rather than a second independent agent review.
+
 Date: **2026-11-05**. Reviewer: **Codex**.
 Implementation: **`95a6c9d`**, delivered on **`0f23b86`**, compared with `8ad5d75`.
 

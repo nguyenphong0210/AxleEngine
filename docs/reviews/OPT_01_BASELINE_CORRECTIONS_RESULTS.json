@@ -1,0 +1,74 @@
+{
+  "date": "2026-11-05",
+  "author_and_verifier": "Codex",
+  "original_implementation": "95a6c9d",
+  "original_review": "ba35221",
+  "correction_implementation": "af5721b",
+  "separate_postfix_independent_review": false,
+  "finding_status": {
+    "O1-R1": "FIXED",
+    "O1-R2": "FIXED",
+    "O1-R3": "FIXED",
+    "O1-R4": "FIXED"
+  },
+  "tool_regressions": {
+    "exit_code": 0,
+    "tests": 18
+  },
+  "configurations": {
+    "debug": {
+      "build_exit": 0,
+      "ctest_exit": 0,
+      "ctest_passed": 15,
+      "ctest_total": 15,
+      "harness_exit": 0,
+      "harness_summary": {
+        "pass_count": 4,
+        "reproduced_defects": 4,
+        "not_reproduced": 0,
+        "probes_verified": 3,
+        "unexpected_failures": 0
+      },
+      "harness_report": "build/opt01-fix/harness-debug.json",
+      "adversarial_report": "D:\\WorkSpace\\AxleEngine\\build\\opt01-fix\\adversarial-debug\\review-ciac00g5\\results.json",
+      "adversarial_passed": 9,
+      "adversarial_failed": 0
+    },
+    "release": {
+      "build_exit": 0,
+      "ctest_exit": 0,
+      "ctest_passed": 15,
+      "ctest_total": 15,
+      "harness_exit": 0,
+      "harness_summary": {
+        "pass_count": 4,
+        "reproduced_defects": 4,
+        "not_reproduced": 0,
+        "probes_verified": 3,
+        "unexpected_failures": 0
+      },
+      "harness_report": "build/opt01-fix/harness-release.json",
+      "adversarial_report": "D:\\WorkSpace\\AxleEngine\\build\\opt01-fix\\adversarial-release\\review-39frcj94\\results.json",
+      "adversarial_passed": 9,
+      "adversarial_failed": 0
+    }
+  },
+  "negative_cli": {
+    "expected_exit": 1,
+    "summary": {
+      "pass_count": 0,
+      "reproduced_defects": 0,
+      "not_reproduced": 0,
+      "probes_verified": 0,
+      "unexpected_failures": 1
+    },
+    "report": "build/opt01-fix/negative-cli.json"
+  },
+  "baseline_inventory": "docs/architecture/OPT_01_BASELINE_INVENTORY.json",
+  "limits": [
+    "Codex-authored corrections verified by Codex; no separate post-fix reviewer",
+    "No Engine production or vendor changes",
+    "No full product/integration/GPU/native manual/player/export/sanitizer/performance rerun",
+    "OPT-00 remains separately pending; no old-format support required"
+  ]
+}

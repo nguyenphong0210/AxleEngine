@@ -7,7 +7,12 @@ single execution/progress checklist: OPT-00..10 cleans up the architecture;
 OPT-11 and later work are deferred. Historical Phase 41/42/43 names identify
 technical domains, not execution order.
 
-Current checkpoint: complete Vehicle removal in `be7b071` awaits independent
+Current assignment: [AF-01 asset identity and safe persistence](agents/handoffs/OPT_01_AF01_GEMINI.md),
+after [verified AF-00/EJ-00 corrections](reviews/OPT_01_BASELINE_CORRECTIONS.md).
+The [shared inventory](architecture/OPT_01_BASELINE_INVENTORY.md) is the current
+source/vendor/graph and asset persistence baseline.
+
+Prior checkpoint: complete Vehicle removal in `be7b071` awaits independent
 current-format verification. The user confirmed on 2026-11-05 that Engine requires
 no old-format support or legacy payload preservation. The
 [OPT-00 review](reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) includes a scope update;

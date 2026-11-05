@@ -21,14 +21,15 @@ explicitly if the running client/session has not loaded it.
 Historical Phase 41/42/43 and G labels are domain references, not execution order.
 The live exchange determines the current assignment; no plan releases production work.
 
-**2026-11-05 current assignment:** Gemini implements **AF-00 + EJ-00 only** under
-[the initial OPT-01 handoff](handoffs/OPT_01_AF00_EJ00_GEMINI.md), then stops for
-Codex review. This user-directed baseline start does not accept OPT-00. Vehicle
-retirement and the `be7b071` compatibility purge remain subject to independent
-current-format verification, carried into baseline evidence. The user requires no
-old-format support or legacy Vehicle preservation; the original
-[OPT-00 review](../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) includes that scope
-update. No later package or new Vehicle/plugin implementation is assigned.
+**2026-11-05 current assignment:** Gemini implements **AF-01 only** under
+[the asset identity/persistence handoff](handoffs/OPT_01_AF01_GEMINI.md), then stops
+for Codex review. Codex corrected O1-R1..R4 after reviewing Gemini's AF-00/EJ-00
+baseline and [verified the corrections](../reviews/OPT_01_BASELINE_CORRECTIONS.md).
+That verification is by the correction author, not a separate post-fix reviewer.
+The [current baseline inventory](../architecture/OPT_01_BASELINE_INVENTORY.md)
+contains actual source/vendor/CMake and asset persistence evidence. OPT-00 full
+product verification remains separately pending; no old-format support or legacy
+Vehicle preservation is required. No later package is assigned.
 
 Design documents for deferred feature expansion and historical reports/prompts
 are outside `docs/design`; consult the archive index only when needed. Retained
@@ -43,7 +44,7 @@ material/VFX/animation obligations and G1 review are not silently closed.
 | Native render integration | [NRI contract](../design/NRI_INTEGRATION_CONTRACT.md) | Source-pinned vendor/service/lifetime rules mapped to P41 |
 | Rendering priority | [Phase 41 plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) | Canonical packages and required gates |
 | ECS/jobs current findings | [Integration review](../architecture/ENTT_ENKITS_REVIEW.md) | Reproduced faults, source-confirmed risks and verification limits |
-| ECS/jobs refactor | [Refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 package contracts; EJ-00 assigned, later packages unreleased |
+| ECS/jobs refactor | [Refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 package contracts; EJ-00 baseline verified, EJ-01..17 unreleased |
 | Plugin product/ABI design | [Plugin architecture](../design/PLUGIN_SYSTEM_ARCHITECTURE.md) | Proposed DLL/static products, UX, lifetime and fresh Vehicle scope |
 | Plugin execution | [Plugin plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | 26 unreleased packages and acceptance gates |
 | Plugin implementation details | [Plugin coding reference](../design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Proposed algorithms, SDK contracts and real-fixture strategy |

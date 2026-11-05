@@ -11,6 +11,7 @@ Start with the [overview](OVERVIEW.md), [module reference](MODULES.md) and [curr
 
 | Document | Purpose |
 |---|---|
+| [OPT-01 current baseline inventory](OPT_01_BASELINE_INVENTORY.md) | 2026-11-05 source/vendor revisions, measured CMake target/include graphs, current asset persistence and known gaps |
 | [Current architecture assessment](ASSESSMENT.md) | Strengths, limitations, priorities and improvement exit criteria |
 | [Software Architecture Document](SAD.md) | System context, module responsibilities, dependencies, deployment, data and architectural assessment |
 | [Software Design Description](SDD.md) | Class responsibilities, ownership, interfaces, lifecycle and extension mechanisms |

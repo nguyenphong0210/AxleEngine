@@ -1,5 +1,17 @@
 # OPT-00: Independent Vehicle Retirement Review
 
+> **Scope update, 2026-11-05 (Codex):** The user explicitly requires a clean Engine
+> with no support for old data formats. Legacy Vehicle preservation, alias fidelity,
+> passive holders and legacy-specific body suppression are no longer acceptance
+> requirements. VR-R1..R3 below remain historical findings against `6f9f488`; their
+> old required corrections are superseded, not verified fixes or current blockers.
+> Gemini delivered complete removal in `be7b071` and reports build success,
+> CTest 7/7 and integration 68/68. Codex has not rerun those checks. Current-format
+> scene/assembly, ordinary physics/lifecycle, source/build cleanliness and the VFX
+> Step 47 discrepancy still need independent follow-up. The original decision,
+> detailed results and reproduction below apply only to the original baseline;
+> the legacy fixture is not an acceptance gate for the clean-removal contract.
+
 Date: **2026-11-04**. Reviewer: **Codex**.
 Reviewed production baseline: **`6f9f488`**. Retirement: **`fa74981`**, compared
 with **`503715e`**. Later `bdf2cb2` VFX restoration and `cc184cf` sample cleanup

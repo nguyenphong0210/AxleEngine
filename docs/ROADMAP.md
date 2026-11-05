@@ -1,6 +1,6 @@
 # Architecture Optimization Roadmap
 
-Updated: **2026-11-04**. Ordering baseline: `7869fce` (post-Vehicle retirement).
+Updated: **2026-11-05**. Ordering baseline: `7869fce` (post-Vehicle retirement).
 Status: **execution plan; this update changes documentation only**.
 
 ## Start here
@@ -10,13 +10,17 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Current position: OPT-00, review complete; CHANGES_REQUIRED.** The independent
-[review](reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) verified fresh builds, CTest
-7/7 and native startup, but found legacy prefab data loss, ghost physics bodies
-and payload-fidelity gaps (4/11 focused cases pass). The full integration runner
-also stops on a separate VFX Step 47 assertion. Keep OPT-00 open until corrections
-and re-verification. Later sample cleanup `cc184cf` remains separate. No
-AF/EJ/P41/PLG package is closed by this review.
+**Current position: OPT-00, clean-removal follow-up awaiting independent verification.**
+The user confirmed on **2026-11-05** that Engine must be clean: old data formats,
+legacy Vehicle payload preservation, compatibility holders and automatic migration
+are not requirements. The earlier [review](reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md)
+remains evidence for its original baseline; its legacy preservation and special
+body-suppression requirements are superseded, not acceptance blockers.
+Gemini delivered complete removal in `be7b071` after interim fixes in `8478ec9`
+and reports build success, CTest 7/7 and integration 68/68. Codex has not independently
+rerun those results. Verify current-format scene/assembly operations, normal physics
+and lifecycle behavior, source/build cleanliness and VFX Step 47 before acceptance.
+No AF/EJ/P41/PLG package is closed by this scope clarification.
 
 The first implementation unit after OPT-00 is **AF-00 + EJ-00**, followed by the
 remaining OPT-01 packages in their listed order. OPT-02 starts after OPT-01 exits.
@@ -72,7 +76,7 @@ checkpoint outside that count. Package count is not a time estimate.
 
 **Purpose:** Review the delivered removal before treating it as an accepted baseline.
 
-**Work:** Rebuild Editor/Runtime and the relevant tests; verify legacy scene and assembly load/save/copy, physics startup and Play/Stop without Vehicle. Review the later sample cleanup separately from Engine retirement.
+**Work:** Rebuild Editor/Runtime and the relevant tests; verify current-format scene and assembly load/save/copy, ordinary physics startup and Play/Stop without Vehicle. Check removal of old Vehicle targets, components and compatibility storage. Old-format support and preservation tests are not required. Review the later sample cleanup separately from Engine retirement.
 
 - [ ] **RETIREMENT-REVIEW:** Independent review and regression evidence for the delivered removal.
 
@@ -81,7 +85,7 @@ checkpoint outside that count. Package count is not a time estimate.
 **Evidence:** [Independent review and findings](reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md),
 [machine-readable results](reviews/OPT_00_VEHICLE_RETIREMENT_RESULTS.json), and
 [reproduction fixture](../Tests/Review/VehicleRetirement/README.md).
-VR-R1/R2 are P1; VR-R3 is P2. Status: **CHANGES_REQUIRED**, checkbox remains open.
+Historical VR-R1..R3 concern the superseded legacy contract. Status: **FOLLOW-UP VERIFICATION PENDING**; checkbox remains open for current Engine correctness and fresh independent evidence, not legacy support.
 
 ### OPT-01 - Establish a reproducible baseline
 
@@ -217,7 +221,7 @@ VR-R1/R2 are P1; VR-R3 is P2. Status: **CHANGES_REQUIRED**, checkbox remains ope
 - [ ] **PLG-17:** Verify early Vehicle retirement and close remaining plugin cutover gaps.
 - [ ] **PLG-18:** Vehicle audio/VFX integrations.
 
-**Exit:** The new plugin works in the real Editor fixture and relevant headless physics tests. Engine consumers contain no Vehicle-specific ownership or fallback. Legacy opaque data remains protected and is not silently interpreted as the new schema.
+**Exit:** The new plugin works in the real Editor fixture and relevant headless physics tests. Engine consumers contain no Vehicle-specific ownership or fallback. Use the new component schema; retired Vehicle data formats require no support, preservation or conversion.
 
 **Evidence:** Pending; implementation/review is not claimed here.
 

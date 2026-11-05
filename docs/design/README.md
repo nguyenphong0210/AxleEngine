@@ -4,6 +4,11 @@ Start with **[the optimization roadmap](../ROADMAP.md)**. It owns execution orde
 and package progress. This folder contains only the contracts supporting the
 current architecture cleanup; historical Phase 41/42/43 labels are domain IDs.
 
+**User scope, 2026-11-05:** prioritize a clean Engine. Support for old data formats,
+legacy Vehicle payload retention and automatic migration are not requirements.
+Generic persistence for components of the future supported plugin schema is a
+separate contract; it must not reintroduce retired Vehicle compatibility code.
+
 | Read when | Document | Purpose |
 | --- | --- | --- |
 | OPT-01..10 | [Master contract](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | Fixed decisions, AF packages and cross-plan dependencies |
@@ -29,6 +34,6 @@ redundant redirect files were removed.
 
 Archive placement does not mean every old phase is accepted or complete. In
 particular, [Vehicle retirement](../archive/design/reports/VEHICLE_RETIREMENT_DELIVERY.md)
-is delivered with corrections required by the
-[independent review](../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md). Use the roadmap
-for current status.
+was followed by the complete purge in `be7b071`. The
+[independent review](../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) records the
+original preservation contract and a scope addendum. Use the roadmap for current status.

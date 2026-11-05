@@ -6,7 +6,7 @@
 > is delivered; acceptance and new plugin implementation remain open.
 
 Date: **2026-11-04**. Baseline: **3190ab205ace417b81172c0fa92f92e64b5b46f4**.
-Status: **plugin contracts; PLG-00..25 remain open; early Vehicle retirement delivered separately; OPT-00 requires corrections**.
+Status: **plugin contracts; PLG-00..25 remain open; early Vehicle retirement delivered separately; OPT-00 awaits independent clean-removal verification**.
 
 The user requests detailed plans before code. DLL modules in Editor, static
 Runtime modules, project-level selection and a new Plugins window are the selected
@@ -46,7 +46,8 @@ All prerequisites are proposed until their own current evidence is accepted.
 - Maintain a runnable development path during migration. Temporary legacy wiring
   is explicitly marked and removed at cutover; no permanent built-in fallback.
 - Preserve authored project files and unrelated changes. Old Vehicle C++ API and
-  historical handling parity need not be preserved. Optional conversion is separate.
+  historical handling parity need not be preserved. Per the 2026-11-05 user scope,
+  old data formats, legacy payload retention and conversion are not required.
 - Never downgrade a failed test by skipping it, weakening assertions or silently
   dropping old physics/serialization coverage. Classify intentional Vehicle API
   retirement and replace its meaningful coverage against the new contract.
@@ -158,10 +159,11 @@ The diagram groups work for orientation; the table is the exact dependency set.
 
 ### PLG-03 - Project selection and migration policy
 
-- Add the additive selection schema to ProjectConfig/ProjectSerializer. Empty means
-  no optional plugins; missing means legacy compatibility policy, never accidental empty.
+- Add the current versioned selection schema to ProjectConfig/ProjectSerializer.
+  Empty means no optional plugins; unsupported old schemas receive a diagnostic,
+  with no compatibility selection or migration required.
 - Save explicit choices atomically; derived dependency states belong to resolutions.
-  Opening legacy data must not rewrite project files. Untitled Apply requires Save As.
+  Untitled Apply requires Save As.
 - **Expected files:** `Engine/Project/include/Axle/Project.hpp`, its serializer,
   plugin selection model, `Tests/src/Test_ProjectStartup.cpp` and focused new tests.
 - **Evidence:** explicit empty, old/malformed/unsupported schema, round trip,
@@ -333,11 +335,12 @@ The diagram groups work for orientation; the table is the exact dependency set.
 
 ### PLG-17 - Verify early retirement and close plugin cutover gaps
 
-- Old built-in Vehicle retirement was delivered early in `fa74981`; OPT-00
-  review requires corrections before acceptance. Do not restore the module or repeat deletion.
+- Old built-in Vehicle retirement was delivered early in `fa74981`; `be7b071`
+  purges the compatibility structures. OPT-00 awaits independent clean-removal
+  verification. Do not restore the module or repeat deletion.
 - Recheck the absent target, built-in component/lifecycle/query/UI wiring against
-  the new plugin and generic codec contracts. Replace temporary vehicle-specific
-  legacy handling only when generic unknown-data/body-readiness protection passes.
+  the new plugin and generic codec contracts. No legacy Vehicle reader, payload
+  holder, migration or special body-suppression path is required.
 - Inspect `UIVectorIcons`, DebugPanel, UIDataContext `Vehicle.` aliases/designer
   defaults, RHI vehicle-light helpers, scripts, physics restore and all tests/sample
   consumers. Move genuinely domain features into the plugin/sample; generic APIs
@@ -345,7 +348,7 @@ The diagram groups work for orientation; the table is the exact dependency set.
 - **Expected files:** the retirement ledger's explicit file list across Engine,
   products and Tests; asset edits only if separately identified and necessary.
 - **Evidence:** generic targets build without Vehicle include roots; no production
-  backward link or dormant fallback; original files retain opaque legacy data;
+  backward link, dormant fallback or retired Vehicle compatibility storage;
   meaningful general regressions and the new plugin suites pass.
 - **Exit:** Vehicle is optional in source, build and execution; obsolete samples
   are clearly diagnosed, never silently rewritten or deleted.
@@ -443,7 +446,7 @@ The diagram groups work for orientation; the table is the exact dependency set.
 
 - Update implemented architecture/build/plugin-authoring/Vehicle guides, templates,
   roadmap and exchange using actual API/target names and supported limitations.
-- Record legacy Vehicle breaking changes and optional conversion policy; preserve
+- Record intentional unsupported old formats and clean Vehicle removal; preserve
   old evidence as historical. Remove temporary compatibility source wiring.
 - **Expected files:** maintained docs, acceptance report and coordination state.
 - **Evidence:** document links/options match built products; clean explicit staging,

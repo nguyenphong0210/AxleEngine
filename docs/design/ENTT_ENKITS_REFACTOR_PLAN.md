@@ -46,7 +46,8 @@ Do not replace the ECS, create a second task pool, build an automatic task graph
 from arbitrary component accesses, rewrite the renderer, remove old Vehicle,
 implement a plugin loader or add networking determinism as part of this track.
 The new Vehicle remains separate PLG work. Old built-in Vehicle was retired
-early in `fa74981`; its legacy data protection is reviewed separately. Preserve
+early in `fa74981`; `be7b071` removes the remaining compatibility data. Old-format
+support is not required by the 2026-11-05 user clarification. Preserve
 existing Character/audio/VFX/animation behavior through explicit phase adapters.
 
 ## 2. Findings to work mapping
@@ -590,9 +591,10 @@ not authorization to start all packages or run concurrent writers.
 - Split Scene's combined update into frame scripts, fixed controls, physics,
   post-step sync/telemetry, animation/VFX and late presentation operations.
 - Add explicit script callbacks/ABI validation, migrate known controllers versus
-  camera/HUD scripts and retain temporary legacy Vehicle/Character phase adapters.
+  camera/HUD scripts and retain temporary Character phase adapters. Do not restore
+  retired Vehicle adapters or old-format support.
 - **Files:** Scene/ScriptableEntity, script module ABI/registry/build integration,
-  legacy Vehicle/Character call sites, explicit sample/fixture scripts as required.
+  Character call sites, explicit current-format sample/fixture scripts as required.
 - **Verification:** recorded phase trace, same-tick controls/post-step poses, callback
   counts and rejection of an old ABI DLL; all changed scripts rebuild before use.
 - **Done:** independently testable phases with no duplicate system update owner.

@@ -42,8 +42,9 @@ Its cross-track order supersedes the earlier no-relative-priority planning check
    project, swaps component implementations in place or runs both plugin generations.
 8. Scene and generic Editor/Runtime code must work with an empty plugin selection.
    No concrete Vehicle, Spline or Terrain header belongs in generic consumers.
-9. The old Vehicle can be retired and replaced. Passive preservation of old authored
-   data is required; automatic conversion and historical simulation parity are not.
+9. The old Vehicle is retired. Per the 2026-11-05 user clarification, old data formats,
+   passive legacy payload preservation, conversion and historical simulation parity
+   are not required. Engine must contain no retired Vehicle compatibility layer.
 10. Failed builds or module initialization never replace a known-good active session
     or produce a success-looking export from stale artifacts.
 
@@ -60,7 +61,7 @@ in `fa74981`; OPT-00 reviews that delivery and PLG-17 verifies the final cutover
 | Source at audited baseline | Observed then | Target change |
 | --- | --- | --- |
 | [Root CMake](../../CMakeLists.txt) | Unconditionally adds Vehicle, Spline, Terrain, Editor and Runtime directories | Product-specific configuration and resolved module selection |
-| `Engine/Vehicle/CMakeLists.txt` (retired source path) | Static library contained simulation, audio and VFX | Retirement delivered early; verify data protection and new plugin cutover |
+| `Engine/Vehicle/CMakeLists.txt` (retired source path) | Static library contained simulation, audio and VFX | Retirement and compatibility purge delivered; verify clean Engine and new plugin cutover |
 | [Core](../../Engine/Core/CMakeLists.txt), [Application](../../Engine/Core/src/Application.cpp) | Static Core includes application composition and uses concrete platform/render/physics services | Establish a valid shared-host boundary before loading DLLs |
 | [Scene interface](../../Engine/Scene/include/Axle/Scene.hpp), [implementation](../../Engine/Scene/src/Scene.cpp) | Owns vehicle instances and exposes vehicle queries; creates, updates, copies and renders vehicle state | Generic scene extensions and plugin-owned systems |
 | [Components](../../Engine/Scene/include/Axle/Components.hpp) | Vehicle, wheel, audio and VFX component declarations are in the common header | New Vehicle components live in the plugin |
@@ -204,13 +205,12 @@ Persist explicit IDs only. A generated resolution records dependency reasons,
 versions, source roots and selected module kinds. Do not write absolute machine
 paths or transient build status into the tracked project file.
 
-Legacy projects without these fields get a visible compatibility selection for
-the historically bundled plugins that are available. Do not silently save it on
-open. First Apply records an explicit list; new projects start with no optional
-plugins, with templates allowed to declare their choices. Legacy Vehicle data
-remains unresolved until deliberately converted; selecting the new plugin alone
-does not promise compatibility. Untitled sessions can inspect installed plugins
-but must save a project before Apply/build.
+Use the current versioned project schema and explicit plugin selections. New
+projects start with no optional plugins; templates can declare their choices.
+Old-format projects need no compatibility selection, legacy parser or automatic
+migration. Reject unsupported schemas with a clear diagnostic. Selecting the new
+Vehicle plugin does not enable retired Vehicle data. Untitled sessions can inspect
+installed plugins but must save a project before Apply/build.
 
 ## 5. Selection and artifact states
 
@@ -459,9 +459,8 @@ vehicles, motorcycles, AI driver or realistic handling-parity claim.
 
 Keep authored component data distinct from per-scene runtime state. Use a new
 component schema/identity so a legacy `VehicleComponent` is not accidentally
-interpreted as compatible. Old files remain intact and can be opened passively.
-Optional migration must be an explicit previewable command, preserve original
-assets and report unmapped fields; it is outside the minimum completion gate.
+interpreted as compatible. Old data formats require no support, passive payload
+storage or migration. Implement current schema operations without a legacy layer.
 
 The old `Engine/Vehicle` and built-in target/components/lifecycle/UI wiring
 were retired early in `fa74981`, before plugin implementation. OPT-00 reviews

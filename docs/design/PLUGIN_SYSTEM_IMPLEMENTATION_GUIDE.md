@@ -22,7 +22,9 @@ DLL component lifetime boundary in PLG-05..09. The first plugin fixture is delib
 unrelated to vehicles: it creates a component with real heap-backed state, displays
 it in an Inspector and updates it through the common scene scheduler.
 
-The old `Engine/Vehicle` was retired early in `fa74981`; OPT-00 requires corrections.
+The old `Engine/Vehicle` was retired early in `fa74981`; `be7b071` purges its
+compatibility data. OPT-00 awaits independent clean-removal verification; old-format
+support is not required by the 2026-11-05 user clarification.
 Do not restore it, change every library to `SHARED`, or recreate product-specific
 vehicle branches in a DLL. A clean Vehicle rewrite follows the common system;
 PLG-17 verifies retirement/cutover against the new generic contracts.
@@ -232,10 +234,9 @@ Vehicle chassis. The load/Play preflight checks unresolved required components a
 body ownership. Cook scans the actual assets the current packaging policy includes,
 not only whichever scene happens to be open in Editor.
 
-New Vehicle uses new component IDs. Legacy tags remain unclaimed raw data after
-old-code retirement. A future converter should preview mapped values/warnings,
-write a new asset or explicit undoable edit, and never overwrite originals merely
-because a project was opened.
+New Vehicle uses new component IDs. Retired Vehicle tags and old data formats
+require no reader, raw payload preservation or converter. Generic unresolved-data
+behavior applies to the supported plugin schema, not a retired compatibility layer.
 
 ## 8. Scheduling and resource contribution seams
 

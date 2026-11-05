@@ -49,11 +49,13 @@ This affects input, telemetry, characters, animation and VFX. See [current seque
 
 CharacterController wraps Jolt CharacterVirtual. Its component supplies movement/jump data and synchronizes transforms/animation parameters.
 
-The built-in Vehicle module and components were retired in `fa74981`. Legacy
-component payloads are passive compatibility data; no current Vehicle simulation
-is provided. The replacement is planned as a complete plugin in
-[OPT-07](../ROADMAP.md#opt-07---write-vehicle-as-a-complete-plugin). Delivery
-claims about legacy preservation/body suppression await independent review.
+The built-in Vehicle module and components were retired in `fa74981`; `be7b071`
+removed the remaining legacy payload holders and compatibility branches. The user
+requires no old-format support or legacy-specific body suppression. Ordinary
+rigid-body and CharacterController behavior remains part of current correctness.
+No current Vehicle simulation is provided. The replacement is planned as a complete
+plugin in [OPT-07](../ROADMAP.md#opt-07---write-vehicle-as-a-complete-plugin).
+Clean-removal delivery claims await independent verification.
 Existing general physics and CharacterController remain separate from that rewrite.
 
 ## 6. Debug rendering and boundaries

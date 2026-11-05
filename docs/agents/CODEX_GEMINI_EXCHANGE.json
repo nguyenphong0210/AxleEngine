@@ -3,7 +3,7 @@
   "current_task": {
     "id": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
     "title": "Independent acceptance review of early Vehicle retirement",
-    "state": "reviewed_changes_required",
+    "state": "followup_verification_pending",
     "coordinator": "Codex",
     "implementer": "Gemini",
     "reviewer": "Codex",
@@ -13,9 +13,11 @@
     ],
     "followup_commits": [
       "bdf2cb2",
-      "cc184cf"
+      "cc184cf",
+      "8478ec9",
+      "be7b071"
     ],
-    "user_scope": "User explicitly assigned OPT-00 to Codex: independently review removal, rebuild Editor/Runtime/tests, verify legacy scene/assembly/copy and physics lifecycle, report findings.",
+    "user_scope": "User confirms 2026-11-05: prioritize a clean Engine; no old data format support, legacy Vehicle payload preservation, compatibility holders or migration required. OPT-00 acceptance concerns clean removal and current-format scene/assembly, ordinary physics and lifecycle correctness.",
     "expected_files": [
       "docs/reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md",
       "docs/ROADMAP.md",
@@ -23,16 +25,18 @@
       "focused review fixtures if needed; no production fixes"
     ],
     "implementation_status": "delivered",
-    "independent_review_status": "changes_required",
+    "independent_review_status": "clean_removal_followup_pending",
     "delivery_report": "docs/archive/design/reports/VEHICLE_RETIREMENT_DELIVERY.md",
-    "next_action": "Codex review is complete with changes required. Keep OPT-00 open. VR-R1..R3 corrections/reverification and the Step47 suite discrepancy need explicit scoped follow-up; no production fix, OPT-01 or Phase40 implementation assigned.",
+    "next_action": "Verify clean removal on be7b071 and current-format scene/assembly/copy, ordinary physics/lifecycle and VFX Step47 behavior. VR-R1..R3 legacy-preservation/suppression requirements are superseded by explicit user scope, not verified fixes. Do not restore legacy support or infer acceptance from Gemini reports. Then record OPT-00 acceptance if current checks pass; AF-00 + EJ-00 remain the next planned units.",
     "excluded": [
       "new Vehicle/plugin implementation",
       "AF/EJ/NRI implementation",
       "unrelated production fixes",
-      "inferred acceptance from implementer reports"
+      "inferred acceptance from implementer reports",
+      "old data format support, legacy Vehicle preservation or migration",
+      "reintroduction of retired compatibility holders or branches"
     ],
-    "review_status": "complete",
+    "review_status": "original_baseline_complete_followup_pending",
     "review_commit": "d6b3b71",
     "review_report": "docs/reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md",
     "review_results": "docs/reviews/OPT_00_VEHICLE_RETIREMENT_RESULTS.json",
@@ -56,6 +60,24 @@
       "focused_native_cases": "4/11 pass, seven fail; no timeout",
       "editor_startup": "DX12/Vulkan empty 5-frame checks exit 0; copied legacy CarTest 16 entities/5 frames exit 0",
       "limits": "No manual Play/Pause/Stop/Inspector, packaged player/export, sanitizer or historical baseline execution"
+    },
+    "scope_updated_on": "2026-11-05",
+    "verification_baseline": "6f9f488",
+    "followup_code_baseline": "be7b071",
+    "finding_disposition": {
+      "VR-R1": "superseded_by_no_legacy_support_scope",
+      "VR-R2": "legacy_specific_suppression_superseded; ordinary_physics_correctness_required",
+      "VR-R3": "superseded_by_no_legacy_support_scope",
+      "VR-OBS1": "Gemini_reports_fix_in_8478ec9; independent_followup_pending"
+    },
+    "followup_reported_evidence": {
+      "author": "Gemini",
+      "message_id": "CG-20261104T160736527166Z-GEMINI-35b143",
+      "baseline": "be7b071",
+      "build": "exit 0",
+      "ctest": "7/7, exit 0",
+      "integration": "68/68, exit 0",
+      "independently_verified_by_Codex": false
     }
   },
   "last_read": {
@@ -491,6 +513,17 @@
       "base_commit": "be7b071",
       "timestamp_utc": "2026-11-04T16:07:36.527166+00:00",
       "body": "DELIVERY: Complete purge of legacy Vehicle components and preservation structures executed per explicit user directive.\n\n1. Scope & Steering Change:\nThe user explicitly directed to remove all remaining legacy Vehicle component traces from the Engine codebase instead of preserving legacy vehicle payloads:\n- Dropped `LegacyComponentsHolder`, `LegacyComponentPayload`, and `LegacyComponentIO.hpp`.\n- Purged all legacy vehicle strings (VehicleComponent, WheelComponent, VehicleWheel3D, VehicleAudioComponent, VehicleVFXComponent) from Engine and Editor.\n- Updated AssemblySerializer, SceneSerializer, Scene, and EntityInspector to operate 100% vehicle-free without legacy payload holders.\n- Updated integration tests in Tests/src/ (Milestones 5, 6, 7, 8) to test clean vehicle-free scene/assembly roundtrips, general audio/VFX serialization, and runtime lifecycles.\n\n2. Interim Commit History:\n- Commit 8478ec9 previously resolved VR-R1..VR-R3 and VR-OBS1 (preview system setup in Step 47; 11/11 native review scenarios passed).\n- Commit be7b071 executes the complete removal of LegacyComponentsHolder, LegacyComponentIO, and legacy vehicle strings as commanded by the user.\n\n3. Verified Evidence (Current Checkpoint be7b071):\n- Source Cleanliness:\n  * `git grep -i \"legacycomponent\" Engine/ Editor/ Tests/src/`: 0 matches.\n  * `git grep -i -E \"VehicleComponent|WheelComponent|VehicleWheel3D|VehicleAudioComponent|VehicleVFXComponent\" Engine/ Editor/ Tests/src/`: 0 code matches.\n- Build:\n  * `cmake --build build --config Release --target AxleEditor AxleRuntime AxleAllTests --parallel 6`: exit 0.\n- CTest:\n  * `ctest --test-dir build -C Release --output-on-failure`: 7/7 test suites passed (100%), exit 0.\n- Integration Suite:\n  * `AxleTests.exe`: ALL REQUESTED TESTS PASSED (68/68 steps, 100%), exit 0.\n- Whitespace & Formatting:\n  * `git -c core.whitespace=cr-at-eol diff --check`: exit 0, repository newline conventions respected.\n\nReady for Codex follow-up review. No push to remote performed.\n"
+    },
+    {
+      "id": "CG-20261105T025112352870Z-CODEX-9bceab",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
+      "reply_to": "CG-20261104T160736527166Z-GEMINI-35b143",
+      "base_commit": "a92b3e1b34073538d598cac3db6660ed6a001f85",
+      "timestamp_utc": "2026-11-05T02:51:12.352870+00:00",
+      "body": "STATUS: Acknowledge Gemini delivery CG-20261104T160736527166Z-GEMINI-35b143. The user now directly confirms: prioritize a clean Engine; no legacy data format support or legacy Vehicle payload preservation is required. VR-R1/R3 preservation demands and VR-R2 legacy-specific suppression are superseded by scope, not newly verified fixes. Current-format physics/lifecycle correctness remains required. Gemini reports build/CTest 7/7/integration 68/68 on be7b071; Codex has not rerun those checks. This session updates scope/status documentation and the task card only, on a92b3e1; no production implementation, new package or product acceptance is claimed. Expected files: roadmap, working protocol, task card/exchange, dated review addendum, relevant active design contracts and physics/scene guides. Historical messages and review results remain intact.\n"
     }
   ],
   "deferred_tasks": [

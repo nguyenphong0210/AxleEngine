@@ -60,7 +60,8 @@ marked implemented by this documentation task.
   Live plugin unloading/hot swapping is deferred. Existing script reload has its
   own safe barrier and ABI contract; it is not permission to hot-unload plugins.
 - Vehicle may be implemented freshly against Jolt. Its old C++ API/handling need
-  not be preserved. Old authored files remain intact and unknown data is preserved.
+  not be preserved. Per the 2026-11-05 user clarification, old data formats require
+  no support, payload retention or conversion. Keep retired compatibility code out of Engine.
 - No new general shadows/IBL/skinning/networking/AI feature scope is needed to
   establish the architecture. Preserve available behavior through explicit
   compatibility and capability reporting; never claim missing parity has passed.
@@ -369,15 +370,15 @@ For Vehicle:
 3. Prove Inspector/setup, Play/Pause/Step/Stop, reset, copy/remap and submitted debug
    lifetimes through the common APIs, not product-specific Scene methods.
 4. Verify the already-delivered early retirement of Engine/Vehicle and its
-   built-in ownership/UI wiring. PLG-17 closes remaining cutover and generic
-   legacy-data protection gaps; it does not restore or delete the old module again.
+   built-in ownership/UI wiring. PLG-17 closes remaining cutover and plugin
+   integration gaps; it does not restore the old module or legacy data support.
 5. Restore the scoped existing audio/VFX integrations via telemetry adapters,
    convert Spline/Terrain and scripts, then verify selected static Runtime export.
 
 Old Vehicle API/handling compatibility and automatic conversion are not gates.
-Unknown legacy data must remain passive and intact; required unresolved data
-blocks Play/cook/export. No sample entities are injected into empty Engine/Editor
-startup. No permanent legacy Vehicle fallback remains to make disabled builds pass.
+Retired Vehicle data formats are unsupported; no passive legacy holder is required.
+Required unresolved components of the supported plugin schema block Play/cook/export.
+No sample entities are injected into empty Engine/Editor startup. No permanent legacy Vehicle fallback remains to make disabled builds pass.
 
 Plugin Settings remains a first-class window with dependency reasons, Desired versus
 Active states, Apply/build/restart, logs, cancellation and recovery. A disabled

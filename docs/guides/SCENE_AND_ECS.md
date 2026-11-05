@@ -31,12 +31,11 @@ Built-in types share [Components.hpp](../../Engine/Scene/include/Axle/Components
 | Graphics | MeshInstance3D, MaterialComponent, CameraComponent, light and skybox components |
 | Physics | RigidBody3D, CollisionShape3D, CharacterControllerComponent |
 | Scripts/audio | NativeScriptComponent, AudioSourceComponent, AudioListenerComponent |
-| Legacy extension data | LegacyComponentsHolder (passive retired component payloads; not Vehicle simulation) |
 | Animation | SkeletalMeshComponent, AnimatorComponent |
 | VFX | ParticleEmitterComponent, ParticleEmitterStack, CharacterVFXComponent |
 | UI/assemblies | UICanvasComponent, AssemblyComponent |
 
-Use actual declarations for constructors/defaults. MeshComponent aliases MeshInstance3D. Material assets use the current descriptor workflow; legacy extensions do not define a universal material schema.
+Use actual declarations for constructors/defaults. MeshComponent aliases MeshInstance3D. Material assets use the current descriptor workflow. Retired Vehicle components and legacy payload holders are absent; support for old data formats is not required.
 
 ## 3. Transforms and hierarchy
 

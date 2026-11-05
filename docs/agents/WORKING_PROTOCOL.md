@@ -26,7 +26,11 @@ The other files here are this project's conventions, not a product guarantee.
   progress. The [master contract](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
   owns AF/cross-plan dependencies; P41/EJ/PLG are stable domain identifiers.
   Old Vehicle retirement was delivered early; the independent
-  [OPT-00 review](../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) requires corrections.
+  [OPT-00 review](../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) records the old
+  preservation contract. User clarification (2026-11-05): no support for old data
+  formats or legacy Vehicle payload preservation; prioritize a clean Engine.
+  Legacy preservation/suppression findings do not block acceptance under this scope.
+  The clean removal in `be7b071` awaits independent current-format verification.
   Plans and review reports do not release subsequent production packages.
 - Only a concrete released task authorizes implementation. A roadmap, reference
   guide, old prompt, or suggested next task does not release every later package.

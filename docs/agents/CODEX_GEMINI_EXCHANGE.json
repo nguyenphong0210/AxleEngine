@@ -1,21 +1,22 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-02-EJ02",
-    "title": "Deferred main-thread executor and owner tokens",
+    "id": "OPT-02-EJ03",
+    "title": "Compiler request/result handoff",
     "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "c5b3d23",
+    "code_baseline": "3145a30",
     "scope_updated_on": "2026-11-05",
     "user_scope": "User activated docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md for sequential implementation of OPT-02 through OPT-10, starting with EJ-01..EJ-07. Routine stop-for-Codex instructions superseded within activated range; per-package implementation/self-review/fix/verification/local commit loop active. Independent acceptance remains pending.",
     "execution_range": "OPT-02 through OPT-10 (EJ-01..07 active first phase)",
     "released_packages": [
       "EJ-01",
-      "EJ-02"
+      "EJ-02",
+      "EJ-03"
     ],
-    "implementation_status": "EJ01_delivered_EJ02_in_progress",
+    "implementation_status": "EJ01_EJ02_delivered_EJ03_in_progress",
     "independent_review_status": "pending_delivery_and_checkpoint",
     "handoff": "docs/agents/handoffs/OPT_02_EJ01_GEMINI.md",
     "review_report": "docs/reviews/OPT_01_AF01_P41_PLG_REVIEW.md",
@@ -24,17 +25,20 @@
       "AF-00/EJ-00": "af5721b + fd38dd8 verified baseline",
       "AF-01/P41-00/PLG-00": "bff13f0 + d0b11bb verified Codex corrections; see combined report",
       "EJ-01": "c5b3d23 verified delivery (23/23 CTest, 6/3/3 harness, 68/68 AxleTests)",
+      "EJ-02": "3145a30 verified delivery (24/24 CTest, 7/3/3 harness, 68/68 AxleTests)",
       "separate_postfix_independent_review": false
     },
     "expected_files": [
-      "Engine/Core/include/Axle/JobSystem.hpp",
-      "Engine/Core/src/JobSystem.cpp",
-      "narrowly affected Application setup and scheduler callers",
-      "bounded permanent thread/lifecycle/admission fixtures",
+      "Editor/src/ScriptCompiler.h",
+      "Editor/src/ScriptCompiler.cpp",
+      "Editor/src/EditorLayer.h",
+      "Editor/src/EditorLayer.cpp",
+      "Tests/src/JobsECSTestMain.cpp",
+      "scripts/run_jobs_ecs_harness.py",
       "delivery report, roadmap and own exchange replies"
     ],
     "excluded": [
-      "EJ-03 compiler handoff, EJ-04 reload, EJ-05..07 Jolt bridge redesign",
+      "EJ-04 reload commit and scene/DLL teardown, EJ-05..07 Jolt bridge redesign",
       "AF-02+, NRI migration, plugin framework, Vehicle and vendor upgrades",
       "legacy compatibility, sidecar identities or authored central identity registry"
     ],
@@ -53,7 +57,7 @@
       "state": "full_product_verification_pending",
       "note": "User-directed progression retains this gap; legacy preservation requirements are superseded. No old-format support required."
     },
-    "next_action": "Gemini implements EJ-02, self-reviews, verifies Debug/Release, commits locally, updates phase report, delivers to exchange, and proceeds to EJ-03 per activated autonomous plan.",
+    "next_action": "Gemini implements EJ-03, self-reviews, verifies Debug/Release, commits locally, updates phase report, delivers to exchange, and proceeds to EJ-04 per activated autonomous plan.",
     "autonomy_plan": {
       "status": "activated",
       "document": "docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md",
@@ -792,6 +796,39 @@
       "base_commit": "c5b3d23",
       "timestamp_utc": "2026-11-05T14:29:01.920697+00:00",
       "body": "DELIVERY: Package EJ-01 (Thread identity and lifecycle admission) completed and self-verified in local commit c5b3d23.\n\nImplemented changes:\n1. Engine OS owner thread identity:\n   - Established actual OS owner thread identity in JobSystem::Init(); verified in IsMainThread() via real thread id comparison.\n   - Eliminated zero-fallback conversion on invalid enki index (NO_THREAD_NUM); unregistered external threads receive NO_THREAD_NUM directly and never infer main-thread ownership.\n   - Owner identity preserved across stopped and reinitialized states.\n2. Context enforcement:\n   - IsValidSchedulerContext() restricts scheduler operations (Dispatch, ParallelFor, Wait, WaitForAll, RunPinnedTasks) to owner thread, active task permit holders, and registered scheduler threads.\n   - Unsupported external calls log active diagnostics (AXLE_CORE_ERROR) in Debug and Release without entering scheduler arrays or crashing.\n   - External producer threads safely post to DispatchToMainThread without inline execution on caller thread.\n3. Lifecycle state machine & epochs:\n   - Formalized Stopped -> Running -> Quiescing -> Draining -> Stopped states.\n   - Atomic epoch counter incremented per Init() call.\n   - Init() and Shutdown() belong strictly to OS owner; external calls rejected.\n   - Separated TotalThreadCount vs DedicatedWorkerThreadCount diagnostics.\n4. Admission synchronization:\n   - Synchronized submission admission against shutdown using AdmissionMutex.\n   - New external application submissions rejected once Quiescing begins.\n   - Already-admitted task graphs and declared internal children complete under task depth permits.\n   - AdmissionMutex is never held while executing task bodies, waiting, or destroying callable captures.\n\nVerification evidence:\n- Unit / Invariant checks (AxleJobsECSTests):\n  - ecsj-02-thread-identity: PASS (exit 0) Debug & Release.\n  - ej01-lifecycle-admission: PASS (exit 0) Debug & Release (7-stage deterministic invariant suite).\n- Baseline typed harness (scripts/run_jobs_ecs_harness.py):\n  - Debug: 6 PASS, 3 preserved defects (ECSJ-01, ECSJ-03, ECSJ-04), 3 verified probes, 0 unexpected failures (build/opt02-debug/harness-debug.json).\n  - Release: 6 PASS, 3 preserved defects, 3 verified probes, 0 unexpected failures (build/opt02-release/harness-release.json).\n- CTest default suite:\n  - Debug: 23/23 tests passed (100%).\n  - Release: 23/23 tests passed (100%).\n- Full integration runner (AxleTests.exe Release):\n  - 68/68 test steps passed (100%).\n- Tooling and architecture checks:\n  - python scripts/check_architecture.py --root . : PASS (342 files scanned).\n  - python scripts/test_baseline_tools.py : 18/18 tests passed (OK).\n- Product targets:\n  - AxleEditor & AxleRuntime built successfully (exit 0) in Debug and Release.\n\nContinuation per autonomous architecture plan: Proceeding to package EJ-02 (Deferred main-thread executor and owner tokens). Independent review and final acceptance remain pending."
+    },
+    {
+      "id": "CG-20261105T143439314091Z-GEMINI-f247bf",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "OPT-02-EJ02",
+      "reply_to": "CG-20261105T142901920697Z-GEMINI-627736",
+      "base_commit": "c5b3d23",
+      "timestamp_utc": "2026-11-05T14:34:39.314091+00:00",
+      "body": "IN_PROGRESS: Starting implementation of package EJ-02 (Deferred main-thread executor and owner tokens) on base c5b3d23.\n\nScope for EJ-02:\n1. Introduce always-deferred main-thread posting and pumping APIs (PostToMainThread, PumpMainThreadCompletions) separate from enkiTS RunPinnedTasks.\n2. Introduce OperationOwner / SessionToken / Generation invalidation:\n   - Callbacks carry a weak owner token / operation generation / epoch.\n   - Owner threads can invalidate a token before project detach/scene switch.\n   - Discard invalid-owner entries during pump without dereferencing or invoking captures unsafely.\n3. Bounded FIFO execution:\n   - Swap one bounded FIFO batch under lock; execute outside lock to prevent deadlock.\n   - Work posted during pump execution runs on a later frame/pump, avoiding recursive unbounded loops.\n   - Enforce per-pump item limits and retain unexecuted entries in order.\n4. Ensure posting from main thread also enqueues (never executes inline), eliminating accidental inline scene/UI mutations during work-stealing in physics step.\n5. Migrate DispatchToMainThread to route through the unified deferred executor.\n6. Provide bounded deterministic tests for deferred timing, bounded batches, generation invalidation, and cross-thread producer order in Debug and Release.\n7. Out of scope for EJ-02: EJ-03 compiler request/result snapshot, EJ-04 shadow DLL reload/ScriptRegistry staging, EJ-05..07 Jolt bridge redesign, AF-02+, plugins, and Vehicle."
+    },
+    {
+      "id": "CG-20261105T145747548442Z-GEMINI-66ffe7",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "OPT-02-EJ02",
+      "reply_to": "CG-20261105T143439314091Z-GEMINI-f247bf",
+      "base_commit": "3145a30",
+      "timestamp_utc": "2026-11-05T14:57:47.548442+00:00",
+      "body": "DELIVERY: Package EJ-02 (Deferred main-thread executor and owner tokens) completed and self-verified in local commit 3145a30.\n\nImplemented changes:\n1. Always-deferred main-thread executor:\n   - Added PostToMainThread(completion) and PostToMainThread(ownerToken, completion).\n   - Calling PostToMainThread or DispatchToMainThread on the main thread is ALWAYS deferred (never executes inline). This eliminates reentrant concurrent mutations on Scene/UI data structures caused by enkiTS work-stealing during Wait() or physics steps.\n   - Enqueued into MainThreadQueue with bounded capacity (16,384) under MainThreadMutex.\n2. OperationOwner & OwnerToken invalidation:\n   - Added OperationOwner RAII controller and copyable OwnerToken.\n   - Supports generation-based invalidation (Invalidate() / Reset()) and automatic cancellation upon owner destruction.\n   - Bounded pump drops invalid tokens cleanly (releasing captured callbacks without dereferencing or invocation).\n   - Provided OwnerToken::Global() for engine-wide asynchronous notifications.\n3. Bounded non-recursive batch draining (PumpMainThreadCompletions):\n   - Swaps/slices a bounded batch (default 1024) from the queue under lock and executes outside the lock.\n   - Callbacks posting further work run in subsequent frames/pumps without recursive execution loops.\n   - Integrated into Application::Run() frame boundary immediately following RunPinnedTasks().\n4. Scheduler epoch validation:\n   - Attaches s_Epoch to each queued completion; discards entries from prior epochs if pumped after reinitialization.\n5. Unified DispatchToMainThread compatibility:\n   - Routed DispatchToMainThread through PostToMainThread for unified safety across all callers.\n\nVerification evidence:\n- Unit / Invariant checks (AxleJobsECSTests):\n  - ej02-deferred-executor: PASS (exit 0) Debug & Release (7-stage deterministic suite verifying deferred timing, worker cross-thread pump, non-recursive batching, owner token invalidation/reset/destruction, epoch isolation, FIFO bounded slicing, and compatibility).\n- Baseline typed harness (scripts/run_jobs_ecs_harness.py):\n  - Debug: 7 PASS, 3 preserved defects (ECSJ-01, ECSJ-03, ECSJ-04), 3 verified probes, 0 unexpected failures (build/opt02-debug/harness-debug.json).\n  - Release: 7 PASS, 3 preserved defects, 3 verified probes, 0 unexpected failures (build/opt02-release/harness-release.json).\n- CTest default suite:\n  - Debug: 24/24 tests passed (100%), including JobsECS_DeferredExecutor.\n  - Release: 24/24 tests passed (100%), including JobsECS_DeferredExecutor.\n- Full integration runner (AxleTests.exe Release):\n  - 68/68 test steps passed (100%).\n- Tooling and architecture checks:\n  - python scripts/check_architecture.py --root . : PASS (342 files scanned).\n  - python scripts/test_baseline_tools.py : 18/18 tests passed (OK).\n- Product targets:\n  - AxleEditor & AxleRuntime built successfully (exit 0) in Debug and Release.\n\nContinuation per autonomous architecture plan: Proceeding to package EJ-03 (Compiler request/result handoff). Independent review and final acceptance remain pending."
+    },
+    {
+      "id": "CG-20261105T145808748525Z-GEMINI-afea68",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "OPT-02-EJ03",
+      "reply_to": "CG-20261105T145747548442Z-GEMINI-66ffe7",
+      "base_commit": "3145a30",
+      "timestamp_utc": "2026-11-05T14:58:08.748525+00:00",
+      "body": "IN_PROGRESS: Starting implementation of package EJ-03 (Compiler request/result handoff) on base 3145a30.\n\nScope for EJ-03:\n1. Snapshot compiler configuration into an immutable request struct at submission time:\n   - Eliminates live data-race access to mutable EditorLayer/project state from the asynchronous compiler worker thread.\n2. Safe Windows process handle management and cancel publication:\n   - Ensure clean job/process handle lifecycle and cooperative/atomic cancellation.\n3. Asynchronous compiler completion handoff via deferred executor:\n   - Replace direct raw worker callbacks with PostToMainThread (or explicit owner polling) carrying an OperationOwner token.\n   - Eliminates worker-thread UI/Scene mutation hazard (resolves defect ECSJ-01).\n4. Update baseline test harness and invariant probes:\n   - Verify asynchronous compiler thread completion runs on the main thread via PumpMainThreadCompletions.\n   - Resolve defect probe ecsj-01-compiler-thread to permanent PASS in Debug and Release.\n5. Out of scope for EJ-03: EJ-04 shadow DLL reload/ScriptRegistry staging, EJ-05..07 Jolt bridge redesign, AF-02+, plugins, and Vehicle."
     }
   ],
   "deferred_tasks": [

@@ -1,6 +1,8 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/SceneData.hpp>
 #include <Axle/Scene.hpp>
+#include <Axle/ScenePhysicsBridge.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -27,7 +29,7 @@ namespace Axle {
         if (!HasComponent<HierarchyComponent>()) return {};
 
         const auto& hc = GetComponent<HierarchyComponent>();
-        if (hc.Parent == entt::null || !m_Scene || !m_Scene->m_Registry.valid(hc.Parent)) {
+        if (hc.Parent == entt::null || !m_Scene || !m_Scene->GetRegistry().valid(hc.Parent)) {
             return {};
         }
 
@@ -36,112 +38,28 @@ namespace Axle {
 
     void Entity::Destroy(PhysicsScene* physicsScene) {
         if (m_Scene && *this) {
-            m_Scene->DestroyEntity(*this, physicsScene);
+            if (physicsScene) {
+                ScenePhysicsBridge::TeardownEntityPhysics(*m_Scene, m_EntityHandle, physicsScene);
+            }
+            m_Scene->DestroyEntity(*this);
+            m_EntityHandle = entt::null;
         }
     }
 
     void Entity::SetParent(Entity parent, bool keepWorldPosition) {
-        if (!*this) return;
+        if (!*this || !m_Scene) return;
 
-        // Prevent cross-scene parenting (wrong-scene boundary check)
+        // Prevent cross-scene parenting
         if (parent && parent.m_Scene != m_Scene) {
             return;
         }
 
-        // Prevent self-parenting or parenting to a descendant (cycle prevention)
+        // Prevent self-parenting or parenting to a descendant
         if (parent && (parent == *this || parent.IsChildOf(*this))) {
             return;
         }
 
-        // Keep World Position Stays: compute current world transform before reparenting
-        glm::mat4 currentWorld = glm::mat4(1.0f);
-        if (keepWorldPosition) {
-            currentWorld = RecomputeWorldTransform();
-        }
-
-        entt::entity childHandle = m_EntityHandle;
-        entt::entity oldParentHandle = entt::null;
-
-        // 1. Detach from current parent if attached (safe value extraction before modification)
-        if (HasComponent<HierarchyComponent>()) {
-            oldParentHandle = GetComponent<HierarchyComponent>().Parent;
-            GetComponent<HierarchyComponent>().Parent = entt::null;
-        }
-
-        if (oldParentHandle != entt::null && m_Scene && m_Scene->m_Registry.valid(oldParentHandle)) {
-            if (m_Scene->m_Registry.all_of<HierarchyComponent>(oldParentHandle)) {
-                auto& parentHc = m_Scene->m_Registry.get<HierarchyComponent>(oldParentHandle);
-                auto it = std::remove(parentHc.Children.begin(), parentHc.Children.end(), childHandle);
-                parentHc.Children.erase(it, parentHc.Children.end());
-            }
-        }
-
-        // 2. Attach to new parent if valid
-        if (parent) {
-            if (!HasComponent<HierarchyComponent>()) {
-                AddComponent<HierarchyComponent>();
-            }
-            GetComponent<HierarchyComponent>().Parent = parent.m_EntityHandle;
-
-            if (!parent.HasComponent<HierarchyComponent>()) {
-                parent.AddComponent<HierarchyComponent>();
-            }
-            auto& parentHc = parent.GetComponent<HierarchyComponent>();
-            if (std::find(parentHc.Children.begin(), parentHc.Children.end(), m_EntityHandle) == parentHc.Children.end()) {
-                parentHc.Children.push_back(m_EntityHandle);
-            }
-        }
-
-        // 3. Decompose new local transform to guarantee World Position Stays ONLY if requested!
-        if (keepWorldPosition && HasComponent<TransformComponent>()) {
-            auto& tc = GetComponent<TransformComponent>();
-            glm::mat4 newLocal = currentWorld;
-            if (parent) {
-                glm::mat4 parentWorld = parent.RecomputeWorldTransform();
-                bool inheritScale = true;
-                if (HasComponent<HierarchyComponent>()) {
-                    inheritScale = GetComponent<HierarchyComponent>().InheritScale;
-                }
-
-                if (!inheritScale) {
-                    glm::vec3 pPos = glm::vec3(parentWorld[3]);
-                    glm::vec3 col0 = glm::vec3(parentWorld[0]);
-                    glm::vec3 col1 = glm::vec3(parentWorld[1]);
-                    glm::vec3 col2 = glm::vec3(parentWorld[2]);
-                    float l0 = glm::length(col0);
-                    float l1 = glm::length(col1);
-                    float l2 = glm::length(col2);
-                    glm::mat3 rot(
-                        l0 > 1e-5f ? col0 / l0 : glm::vec3(1.0f, 0.0f, 0.0f),
-                        l1 > 1e-5f ? col1 / l1 : glm::vec3(0.0f, 1.0f, 0.0f),
-                        l2 > 1e-5f ? col2 / l2 : glm::vec3(0.0f, 0.0f, 1.0f)
-                    );
-                    glm::mat4 rigidParent = glm::mat4(rot);
-                    rigidParent[3] = glm::vec4(pPos, 1.0f);
-                    newLocal = glm::inverse(rigidParent) * currentWorld;
-                } else {
-                    newLocal = glm::inverse(parentWorld) * currentWorld;
-                }
-            }
-
-            tc.Translation = glm::vec3(newLocal[3]);
-            tc.Scale = glm::vec3(
-                glm::length(glm::vec3(newLocal[0])),
-                glm::length(glm::vec3(newLocal[1])),
-                glm::length(glm::vec3(newLocal[2]))
-            );
-
-            glm::mat3 rotMatrix(1.0f);
-            if (tc.Scale.x > 1e-6f) rotMatrix[0] = glm::vec3(newLocal[0]) / tc.Scale.x;
-            if (tc.Scale.y > 1e-6f) rotMatrix[1] = glm::vec3(newLocal[1]) / tc.Scale.y;
-            if (tc.Scale.z > 1e-6f) rotMatrix[2] = glm::vec3(newLocal[2]) / tc.Scale.z;
-
-            tc.Rotation = glm::quat_cast(rotMatrix);
-            tc.LocalMatrix = newLocal;
-            tc.WorldMatrix = currentWorld;
-        } else if (HasComponent<TransformComponent>()) {
-            RecomputeWorldTransform();
-        }
+        m_Scene->SetParent(*this, parent, keepWorldPosition);
     }
 
     std::vector<Entity> Entity::GetChildren() const {
@@ -150,24 +68,19 @@ namespace Axle {
 
         const auto& hc = GetComponent<HierarchyComponent>();
         result.reserve(hc.Children.size());
+
         for (auto childHandle : hc.Children) {
-            if (m_Scene && m_Scene->m_Registry.valid(childHandle)) {
+            if (m_Scene && m_Scene->GetRegistry().valid(childHandle)) {
                 result.emplace_back(childHandle, m_Scene);
             }
         }
+
         return result;
     }
 
     size_t Entity::GetChildCount() const {
         if (!*this || !HasComponent<HierarchyComponent>()) return 0;
-        const auto& hc = GetComponent<HierarchyComponent>();
-        size_t count = 0;
-        for (auto childHandle : hc.Children) {
-            if (m_Scene && m_Scene->m_Registry.valid(childHandle)) {
-                count++;
-            }
-        }
-        return count;
+        return GetComponent<HierarchyComponent>().Children.size();
     }
 
     Entity Entity::FindChildByTag(const std::string& tag, bool recursive) const {
@@ -175,32 +88,34 @@ namespace Axle {
 
         const auto& hc = GetComponent<HierarchyComponent>();
         for (auto childHandle : hc.Children) {
-            if (m_Scene && m_Scene->m_Registry.valid(childHandle)) {
-                Entity child(childHandle, m_Scene);
-                if (child.HasComponent<TagComponent>() && child.GetComponent<TagComponent>().Tag == tag) {
-                    return child;
-                }
-                if (recursive) {
-                    Entity found = child.FindChildByTag(tag, true);
-                    if (found) return found;
-                }
+            if (!m_Scene || !m_Scene->GetRegistry().valid(childHandle)) continue;
+
+            Entity child(childHandle, m_Scene);
+            if (child.GetName() == tag) {
+                return child;
+            }
+
+            if (recursive) {
+                Entity found = child.FindChildByTag(tag, true);
+                if (found) return found;
             }
         }
+
         return {};
     }
 
     void Entity::ForEachChild(const std::function<void(Entity)>& func, bool recursive) const {
         if (!*this || !HasComponent<HierarchyComponent>()) return;
 
-        const auto& hc = GetComponent<HierarchyComponent>();
-        auto childrenCopy = hc.Children; // Copy to protect against iterator invalidation
+        auto childrenCopy = GetComponent<HierarchyComponent>().Children;
         for (auto childHandle : childrenCopy) {
-            if (m_Scene && m_Scene->m_Registry.valid(childHandle)) {
-                Entity child(childHandle, m_Scene);
-                func(child);
-                if (recursive) {
-                    child.ForEachChild(func, true);
-                }
+            if (!m_Scene || !m_Scene->GetRegistry().valid(childHandle)) continue;
+
+            Entity child(childHandle, m_Scene);
+            func(child);
+
+            if (recursive && child) {
+                child.ForEachChild(func, true);
             }
         }
     }
@@ -213,16 +128,17 @@ namespace Axle {
             if (current == potentialParent) return true;
             current = current.GetParent();
         }
+
         return false;
     }
 
     glm::mat4 Entity::GetWorldTransform() const {
-        if (!*this) return glm::mat4(1.0f);
+        if (!*this || !m_Scene) return glm::mat4(1.0f);
         return m_Scene->GetWorldTransform(m_EntityHandle);
     }
 
     glm::mat4 Entity::RecomputeWorldTransform() {
-        if (!*this) return glm::mat4(1.0f);
+        if (!*this || !m_Scene) return glm::mat4(1.0f);
         return m_Scene->RecomputeWorldTransform(m_EntityHandle);
     }
 

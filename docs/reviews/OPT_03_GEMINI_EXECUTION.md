@@ -172,3 +172,51 @@ Evolving execution log and verification record for the sequential implementation
 - `python scripts/check_architecture.py --root . --closed-package AF-02`: exit 0, PASS (344 files, 17 CMake files, 0 violations).
 - `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
 - `git diff --check`: exit 0.
+
+---
+
+## Package AF-03: Scene Data and System Bridge Boundaries
+
+- **Status:** Implemented and self-verified; local delivery committed.
+- **Base Baseline:** `b434dd0`
+- **Scope & Contract:** [ARCHITECTURE_FOUNDATION_MASTER_PLAN.md](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
+
+### Implementation Summary
+1. **Generic SceneData Ownership (`Engine/Scene/include/Axle/SceneData.hpp`, `src/SceneData.cpp`):**
+   - Extracted headless `SceneData` owning `entt::registry m_Registry`, `u32 m_SceneGeneration`, monotonic `uint64_t m_TransformRevision`, and `SceneCommandBuffer`.
+   - Manages headless entity lifecycle (`CreateEntity`, `CreateEntityWithUUID`, `DestroyEntity`, `DuplicateEntity`, `Clear`, `GetEntityByUUID`).
+   - Owns hierarchy traversal and world transform evaluation (`GetWorldTransform`, `RecomputeWorldTransform`, `UpdateWorldTransforms`, `UpdateWorldTransformsParallel`).
+   - Deep copying (`SceneData::Copy`): clones all entities, duplicates components via extensible component codecs, and remaps hierarchy relationships without requiring GPU, physics, or script context.
+2. **Component Codec Registry (`Engine/Scene/include/Axle/ComponentCodec.hpp`, `src/ComponentCodec.cpp`):**
+   - Introduced `IComponentCodec` and `ComponentCodecRegistry` singleton.
+   - Built-in codecs for 20+ components (`Transform`, `MeshInstance3D`, `Material`, `DirectionalLight`, `PointLight`, `SpotLight`, `Camera`, `Skybox`, `Assembly`, `CollisionShape3D`, `RigidBody3D`, `NativeScript`, `AudioListener`, `AudioSource`, `SkeletalMesh`, `Animator`, `CharacterController`, `ParticleEmitter`, `CharacterVFX`, `UICanvas`, `PassiveExtensionComponent`).
+   - Provides an extensible registration seam for plugin components to register copy/remap codecs cleanly.
+3. **Passive Extension Storage:**
+   - Introduced `PassiveExtensionComponent` storing unknown or plugin YAML sections (`StorePassiveSection`, `GetPassiveSections`, `HasPassiveSections`).
+   - In `SceneSerializer`: unhandled custom component sections are captured into `PassiveExtensionComponent` and re-emitted on serialization.
+   - Preserves unknown data roundtrip through load, copy, and save without concrete plugin dependencies.
+4. **Specialized System Bridges:**
+   - `ScenePhysicsBridge`: Jolt transform synchronization (`SynchronizeTransforms`), zero-drift body reset (`RestoreBodies`), body teardown (`TeardownEntityPhysics`), body ID lookup (`FindEntityByBodyID`), and body creation (`CreateBodyForEntity`).
+   - `SceneAudioBridge`: audio source playback on awake (`OnRuntimeStart`), 3D listener/source spatial sync (`OnUpdate`), audio stoppage (`OnRuntimeStop`), and entity audio teardown (`TeardownEntityAudio`).
+   - `SceneScriptBridge`: native script instantiation and `OnCreate` (`OnRuntimeStart`), tick execution (`OnUpdate`), teardown (`OnRuntimeStop`), hot reload state capture/restore (`OnPreScriptReload`, `OnPostScriptReload`), and entity script teardown (`TeardownEntityScript`).
+   - `SceneCharacterBridge`: kinematic character controller runtime initialization, animator synchronization, and character VFX step updates.
+   - `SceneRenderBridge`: geometry pass with lights/shadows, shadow pass, skeletal mesh pass, and particle rendering (OpenGL & RHI).
+5. **EnTT Decoupled from Low-Level RHI:**
+   - Moved `RHIECSStreamer` from `Engine/RHI/` to `Engine/Renderer/`.
+   - Purged EnTT dependency and includes from `AxleRHI`.
+6. **Dedicated Test Fixture (`AxleSceneDataUnitTests`):**
+   - Added `Tests/src/Test_SceneDataUnit.cpp` registered in CTest as `SceneDataUnitTests`.
+   - 6 test cases verifying entity lifecycle, hierarchy cycle rejection & unparenting, transform evaluation & revision progression, component codecs & deep copying, passive extension storage roundtrip through serialization & copying, and `Scene` facade parity.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleSceneDataUnitTests AxleFoundationUnitTests AxleJobsECSTests AxleEditor AxleRuntime AxleTests`: exit 0.
+- `cmake --build build --config Release --target AxleSceneDataUnitTests`: exit 0.
+- `build/Tests/Debug/AxleSceneDataUnitTests.exe`: exit 0, ALL 6 SCENE DATA UNIT TESTS PASSED (100%).
+- `build/Tests/Release/AxleSceneDataUnitTests.exe`: exit 0, ALL 6 SCENE DATA UNIT TESTS PASSED (100%).
+- `build/Tests/Debug/AxleTests.exe`: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).
+- `ctest --test-dir build -C Debug --output-on-failure`: 34/34 tests passed (100%).
+- `ctest --test-dir build -C Release --output-on-failure`: 34/34 tests passed (100%).
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `python scripts/check_architecture.py --root . --closed-package AF-02`: exit 0, PASS (360 files, 17 CMake files, 0 violations).
+- `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
+- `git diff --check`: exit 0.

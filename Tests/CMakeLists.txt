@@ -286,6 +286,21 @@ endif()
 add_test(NAME SceneMutationUnitTests COMMAND $<TARGET_FILE:AxleSceneMutationUnitTests>)
 set_tests_properties(SceneMutationUnitTests PROPERTIES LABELS "scene;cpu" TIMEOUT 30)
 
+# Dedicated SceneData & System Bridge Boundaries Unit Test Target (AF-03)
+add_executable(AxleSceneDataUnitTests EXCLUDE_FROM_ALL
+    src/Test_SceneDataUnit.cpp
+)
+target_include_directories(AxleSceneDataUnitTests PRIVATE src)
+target_link_libraries(AxleSceneDataUnitTests PRIVATE
+    Axle::Scene
+    Axle::Core
+)
+if (MSVC)
+    target_compile_options(AxleSceneDataUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME SceneDataUnitTests COMMAND $<TARGET_FILE:AxleSceneDataUnitTests>)
+set_tests_properties(SceneDataUnitTests PROPERTIES LABELS "scene;data;cpu" TIMEOUT 30)
+
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
     src/JobsECSTestMain.cpp

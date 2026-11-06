@@ -3,6 +3,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/Entity.hpp>
+#include <Axle/SceneData.hpp>
 
 #include <entt/entt.hpp>
 #include <vector>
@@ -51,7 +52,7 @@ namespace Axle {
         void EmplaceOrReplace(Entity entity, Args&&... args) {
             auto tupleArgs = std::make_tuple(std::forward<Args>(args)...);
             std::lock_guard<std::mutex> lock(m_Mutex);
-            m_Commands.push_back([entity, tupleArgs = std::move(tupleArgs)](Scene& scene, ExecutionContext& ctx) mutable {
+            m_Commands.push_back([entity, tupleArgs = std::move(tupleArgs)](SceneData& scene, ExecutionContext& ctx) mutable {
                 if (!ctx.ValidateTarget(scene, entity)) return;
                 std::apply([&scene, entity](auto&&... unpacked) {
                     scene.GetRegistry().template emplace_or_replace<Component>(
@@ -67,7 +68,7 @@ namespace Axle {
         template<typename Component>
         void Remove(Entity entity) {
             std::lock_guard<std::mutex> lock(m_Mutex);
-            m_Commands.push_back([entity](Scene& scene, ExecutionContext& ctx) {
+            m_Commands.push_back([entity](SceneData& scene, ExecutionContext& ctx) {
                 if (!ctx.ValidateTarget(scene, entity)) return;
                 auto handle = static_cast<entt::entity>(entity);
                 if (scene.GetRegistry().template all_of<Component>(handle)) {
@@ -78,7 +79,7 @@ namespace Axle {
         }
 
         /// Defer custom scene mutation callback.
-        void Custom(std::function<void(Scene&)> command);
+        void Custom(std::function<void(SceneData&)> command);
 
         // --- Merge & Execution APIs ---
 
@@ -86,8 +87,9 @@ namespace Axle {
         /// Applied only after all relevant parallel worker batches join.
         void Merge(SceneCommandBuffer&& other);
 
-        /// Execute all buffered commands against the target scene.
+        /// Execute all buffered commands against the target scene data.
         /// Enforces scene generation, entity generation, and conflict resolution rules.
+        void Execute(SceneData& targetScene);
         void Execute(Scene& targetScene);
 
         // --- Status & Inspection ---
@@ -103,10 +105,10 @@ namespace Axle {
             size_t ExecutedCount = 0;
             size_t RejectedCount = 0;
 
-            bool ValidateTarget(Scene& scene, Entity entity);
+            bool ValidateTarget(SceneData& scene, Entity entity);
         };
 
-        using CommandFn = std::function<void(Scene&, ExecutionContext&)>;
+        using CommandFn = std::function<void(SceneData&, ExecutionContext&)>;
 
         mutable std::mutex m_Mutex;
         std::vector<CommandFn> m_Commands;

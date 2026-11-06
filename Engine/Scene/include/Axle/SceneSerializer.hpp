@@ -27,6 +27,7 @@ namespace Axle {
     class SceneSerializer {
     public:
         SceneSerializer(Scene* scene, PhysicsScene* physicsScene = nullptr);
+        SceneSerializer(SceneData* scene, PhysicsScene* physicsScene = nullptr);
         ~SceneSerializer() = default;
 
         void SetContext(const SceneSerializerContext& context) { m_Context = context; }
@@ -38,7 +39,7 @@ namespace Axle {
         bool DeserializeFromString(const std::string& data);
 
     private:
-        Scene* m_Scene = nullptr;
+        SceneData* m_Scene = nullptr;
         PhysicsScene* m_PhysicsScene = nullptr;
         SceneSerializerContext m_Context;
         std::string m_ResourceOwnerPath;

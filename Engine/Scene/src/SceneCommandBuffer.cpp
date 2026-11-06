@@ -1,5 +1,7 @@
 #include <Axle/SceneCommandBuffer.hpp>
+#include <Axle/SceneData.hpp>
 #include <Axle/Scene.hpp>
+#include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
 
 namespace Axle {
@@ -23,7 +25,7 @@ namespace Axle {
 
     void SceneCommandBuffer::DestroyEntity(Entity entity) {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_Commands.push_back([entity](Scene& scene, ExecutionContext& ctx) {
+        m_Commands.push_back([entity](SceneData& scene, ExecutionContext& ctx) {
             if (!ctx.ValidateTarget(scene, entity)) {
                 return;
             }
@@ -50,14 +52,14 @@ namespace Axle {
 
     void SceneCommandBuffer::SetParent(Entity child, Entity parent, bool keepWorldPosition) {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_Commands.push_back([child, parent, keepWorldPosition](Scene& scene, ExecutionContext& ctx) {
+        m_Commands.push_back([child, parent, keepWorldPosition](SceneData& scene, ExecutionContext& ctx) {
             if (!ctx.ValidateTarget(scene, child)) {
                 return;
             }
 
             if (parent) {
                 // Validate parent target
-                if (parent.GetScene() != &scene) {
+                if (parent.GetSceneData() != &scene) {
                     ctx.RejectedCount++;
                     return;
                 }
@@ -79,7 +81,7 @@ namespace Axle {
 
     void SceneCommandBuffer::CreateEntity(const std::string& name, const std::function<void(Entity)>& onCreated) {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_Commands.push_back([name, onCreated](Scene& scene, ExecutionContext& ctx) {
+        m_Commands.push_back([name, onCreated](SceneData& scene, ExecutionContext& ctx) {
             Entity entity = scene.CreateEntity(name);
             if (onCreated) {
                 onCreated(entity);
@@ -90,7 +92,7 @@ namespace Axle {
 
     void SceneCommandBuffer::CreateEntityWithUUID(UUID uuid, const std::string& name, const std::function<void(Entity)>& onCreated) {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_Commands.push_back([uuid, name, onCreated](Scene& scene, ExecutionContext& ctx) {
+        m_Commands.push_back([uuid, name, onCreated](SceneData& scene, ExecutionContext& ctx) {
             Entity entity = scene.CreateEntityWithUUID(uuid, name);
             if (onCreated) {
                 onCreated(entity);
@@ -99,9 +101,9 @@ namespace Axle {
         });
     }
 
-    void SceneCommandBuffer::Custom(std::function<void(Scene&)> command) {
+    void SceneCommandBuffer::Custom(std::function<void(SceneData&)> command) {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_Commands.push_back([command = std::move(command)](Scene& scene, ExecutionContext& ctx) {
+        m_Commands.push_back([command = std::move(command)](SceneData& scene, ExecutionContext& ctx) {
             if (command) {
                 command(scene);
                 ctx.ExecutedCount++;
@@ -119,7 +121,7 @@ namespace Axle {
         other.m_Commands.clear();
     }
 
-    void SceneCommandBuffer::Execute(Scene& targetScene) {
+    void SceneCommandBuffer::Execute(SceneData& targetScene) {
         std::vector<CommandFn> toExecute;
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
@@ -137,6 +139,10 @@ namespace Axle {
         m_LastRejectedCount = ctx.RejectedCount;
     }
 
+    void SceneCommandBuffer::Execute(Scene& targetScene) {
+        Execute(static_cast<SceneData&>(targetScene));
+    }
+
     size_t SceneCommandBuffer::GetPendingCount() const {
         std::lock_guard<std::mutex> lock(m_Mutex);
         return m_Commands.size();
@@ -149,14 +155,14 @@ namespace Axle {
         m_LastRejectedCount = 0;
     }
 
-    bool SceneCommandBuffer::ExecutionContext::ValidateTarget(Scene& scene, Entity entity) {
+    bool SceneCommandBuffer::ExecutionContext::ValidateTarget(SceneData& scene, Entity entity) {
         if (!entity) {
             RejectedCount++;
             return false;
         }
 
         // Wrong-scene boundary check
-        if (entity.GetScene() != &scene) {
+        if (entity.GetSceneData() != &scene) {
             RejectedCount++;
             return false;
         }

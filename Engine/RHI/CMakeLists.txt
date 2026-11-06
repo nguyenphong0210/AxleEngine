@@ -8,7 +8,6 @@ add_library(AxleRHI STATIC
     src/RHICommandBuffer.cpp
     src/RHIBuffer.cpp
     src/RHIStreamer.cpp
-    src/RHIECSStreamer.cpp
     src/RHITexture.cpp
     src/RHISwitcher.cpp
     src/RHIMesh.cpp
@@ -24,7 +23,6 @@ target_include_directories(AxleRHI PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/NRI/Include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/dxc/inc>
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/entt/src>
 )
 
 target_link_libraries(AxleRHI

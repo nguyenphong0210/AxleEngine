@@ -19,12 +19,14 @@ add_library(AxleRenderer STATIC
     src/MaterialBindingPlan.cpp
     src/CustomShaderInterface.cpp
     src/ShaderDragDropDecoder.cpp
+    src/RHIECSStreamer.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 
 target_include_directories(AxleRenderer PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/stb>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/entt/src>
 )
 
 target_link_libraries(AxleRenderer

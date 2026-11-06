@@ -1,7 +1,7 @@
 #pragma once
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
-#include <Axle/Scene.hpp>
+#include <Axle/SceneData.hpp>
 #include <entt/entt.hpp>
 #include <utility>
 #include <vector>
@@ -11,11 +11,15 @@
 
 namespace Axle {
 
+    class Scene;
+
     class Entity {
     public:
         Entity() = default;
-        Entity(entt::entity handle, Scene* scene)
+        Entity(entt::entity handle, SceneData* scene)
             : m_EntityHandle(handle), m_Scene(scene) {}
+        Entity(entt::entity handle, Scene* scene)
+            : m_EntityHandle(handle), m_Scene(reinterpret_cast<SceneData*>(scene)) {}
         Entity(const Entity& other) = default;
 
         template<typename T, typename... Args>
@@ -64,7 +68,8 @@ namespace Axle {
             return !(*this == other);
         }
 
-        Scene* GetScene() const { return m_Scene; }
+        Scene* GetScene() const { return reinterpret_cast<Scene*>(m_Scene); }
+        SceneData* GetSceneData() const { return m_Scene; }
 
         void Destroy(class PhysicsScene* physicsScene = nullptr);
 
@@ -84,7 +89,7 @@ namespace Axle {
 
     private:
         entt::entity m_EntityHandle{ entt::null };
-        Scene* m_Scene = nullptr;
+        SceneData* m_Scene = nullptr;
     };
 
 }

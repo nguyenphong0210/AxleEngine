@@ -53,6 +53,10 @@ namespace Axle {
         : m_Scene(scene), m_PhysicsScene(physicsScene) {
     }
 
+    SceneSerializer::SceneSerializer(SceneData* scene, PhysicsScene* physicsScene)
+        : m_Scene(scene), m_PhysicsScene(physicsScene) {
+    }
+
     bool SceneSerializer::Serialize(const std::filesystem::path& filepath) {
         const auto serialized = SerializeToString();
         return !serialized.empty() && FileSystem::WriteIdentifiedTextFile(filepath, serialized);
@@ -550,6 +554,17 @@ namespace Axle {
             if (m_Context.CustomEntitySerializer) {
                 m_Context.CustomEntitySerializer(entity, ss);
             }
+
+            // Passive Extension Storage (unknown/plugin component sections preserved)
+            if (entity.HasComponent<PassiveExtensionComponent>()) {
+                const auto& pec = entity.GetComponent<PassiveExtensionComponent>();
+                for (const auto& section : pec.Sections) {
+                    ss << "    " << section.SectionName << ":\n";
+                    for (const auto& l : section.Lines) {
+                        ss << l << "\n";
+                    }
+                }
+            }
         }
 
         return ss.str();
@@ -620,8 +635,12 @@ namespace Axle {
 
         auto flushCustomSection = [&]() {
             if (currentSection == ComponentSection::Custom && currentEntity && !currentCustomSectionName.empty()) {
+                bool handled = false;
                 if (m_Context.CustomSectionDeserializer) {
-                    m_Context.CustomSectionDeserializer(currentEntity, currentCustomSectionName, customSectionLines);
+                    handled = m_Context.CustomSectionDeserializer(currentEntity, currentCustomSectionName, customSectionLines);
+                }
+                if (!handled) {
+                    m_Scene->StorePassiveSection(currentEntity, currentCustomSectionName, customSectionLines);
                 }
                 customSectionLines.clear();
                 currentCustomSectionName.clear();

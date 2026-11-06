@@ -10,8 +10,10 @@
 
 #include <TaskScheduler.h>
 
-#include <memory>
 #include <atomic>
+#include <memory>
+#include <mutex>
+#include <vector>
 
 namespace Axle {
 
@@ -21,6 +23,20 @@ namespace Axle {
     class JobSystemEnkiTS final : public JPH::JobSystemWithBarrier {
     public:
         JPH_OVERRIDE_NEW_DELETE
+
+        /// Stable owned submission record passed to enkiTS.
+        /// Has a permanent stable memory address; lifetime is decoupled from JPH::Job slot allocation.
+        class PhysicsTaskRecord : public enki::ITaskSet {
+        public:
+            PhysicsTaskRecord() : enki::ITaskSet(1) {}
+
+            void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override;
+            void ExecuteSynchronous();
+
+            JobSystemEnkiTS* m_Owner = nullptr;
+            Job* m_Job = nullptr;
+            std::atomic<bool> m_BodyCompleted{false};
+        };
 
         explicit JobSystemEnkiTS(JPH::uint inMaxJobs = JPH::cMaxPhysicsJobs, JPH::uint inMaxBarriers = JPH::cMaxPhysicsBarriers);
         virtual ~JobSystemEnkiTS() override;
@@ -32,34 +48,43 @@ namespace Axle {
         virtual JPH::JobHandle CreateJob(const char* inName, JPH::ColorArg inColor, const JobFunction& inJobFunction, JPH::uint32 inNumDependencies = 0) override;
         virtual void WaitForJobs(Barrier* inBarrier) override;
 
+        // Metrics and lifecycle inspection for verification
+        u32 GetLiveTaskCount() const;
+        u32 GetAllocatedTaskCount() const;
+        u32 GetAllocatedHighWaterMark() const;
+        bool WaitForLiveTasks(std::chrono::milliseconds timeout = std::chrono::milliseconds(2000));
+
     protected:
         virtual void QueueJob(Job* inJob) override;
         virtual void QueueJobs(Job** inJobs, JPH::uint inNumJobs) override;
         virtual void FreeJob(Job* inJob) override;
 
     private:
+        friend class PhysicsTaskRecord;
+
+        void OnTaskBodyCompleted(PhysicsTaskRecord* record);
+        PhysicsTaskRecord* AcquireRecord();
+        void DrainPendingReclaim();
+        void ReclaimRecordSynchronous(PhysicsTaskRecord* record);
+
         class EnkiJob : public Job {
         public:
             using Job::Job;
-            JPH::uint32 m_Index = 0;
-        };
-
-        class EnkiTask : public enki::ITaskSet {
-        public:
-            EnkiTask() : enki::ITaskSet(1) {}
-
-            void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override;
-
-            JobSystemEnkiTS* m_Owner = nullptr;
-            Job* m_Job = nullptr;
         };
 
         using AvailableJobs = JPH::FixedSizeFreeList<EnkiJob>;
         AvailableJobs m_Jobs;
 
-        std::unique_ptr<EnkiTask[]> m_EnkiTasks;
         JPH::uint32 m_MaxJobs = 0;
-        std::atomic<uint32_t> m_ActiveEnkiTasks{ 0 };
+
+        // Thread-safe stable submission record pool
+        mutable std::mutex m_PoolMutex;
+        std::vector<std::unique_ptr<PhysicsTaskRecord>> m_AllRecords;
+        std::vector<PhysicsTaskRecord*> m_FreeRecords;
+        std::vector<PhysicsTaskRecord*> m_PendingReclaim;
+
+        std::atomic<u32> m_LiveTaskCount{0};
+        std::atomic<u32> m_AllocatedHighWaterMark{0};
     };
 
 }

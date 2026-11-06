@@ -911,6 +911,133 @@ int RunEJ04ReloadCommitProbe(const std::filesystem::path& workspace) {
 }
 
 // ============================================================================
+// EJ-05: Stable Physics Submission Lifetime Probe
+// ============================================================================
+int RunEJ05PhysicsLifetimeProbe() {
+    std::cout << "[EJ05] Running stable physics submission lifetime probe..." << std::endl;
+
+    if (!Axle::JobSystem::IsInitialized()) {
+        Axle::JobSystem::Init(4);
+    }
+    if (!Axle::PhysicsEngine::IsInitialized()) {
+        Axle::PhysicsEngine::Init();
+    }
+
+    // 1. Constrained Jolt pool rapid reuse (BRIDGE-02)
+    // Bridge configured with small pool (4 jobs, 2 barriers) to force aggressive slot reuse
+    {
+        auto bridge = std::make_unique<Axle::JobSystemEnkiTS>(4, 2);
+        constexpr int kTotalJobs = 32;
+        std::atomic<int> completedCount{0};
+
+        for (int i = 0; i < kTotalJobs; ++i) {
+            auto barrier = bridge->CreateBarrier();
+            auto job = bridge->CreateJob("ConstrainedReuseJob", JPH::Color::sGreen, [&completedCount] {
+                completedCount.fetch_add(1, std::memory_order_relaxed);
+            });
+            barrier->AddJob(job);
+            // Invalidate handle immediately so JPH job reference is released
+            job = {};
+
+            bridge->WaitForJobs(barrier);
+            bridge->DestroyBarrier(barrier);
+        }
+
+        if (completedCount.load() != kTotalJobs) {
+            std::cerr << "[EJ05] FAILED: Constrained pool reuse missed jobs! (" << completedCount.load() << "/" << kTotalJobs << ")\n";
+            return 1;
+        }
+
+        // Live task count must return to 0 once all enki tasks complete
+        if (!bridge->WaitForLiveTasks(std::chrono::milliseconds(2000)) || bridge->GetLiveTaskCount() != 0) {
+            std::cerr << "[EJ05] FAILED: Live task count non-zero after wait (" << bridge->GetLiveTaskCount() << ")\n";
+            return 1;
+        }
+
+        std::cout << "[EJ05] Subtest 1 PASS: Constrained pool rapid reuse completed (high_water="
+                  << bridge->GetAllocatedHighWaterMark() << ", total_allocated="
+                  << bridge->GetAllocatedTaskCount() << ")\n";
+    }
+
+    // 2. Concurrent execution and reclamation under load (BRIDGE-05)
+    {
+        auto bridge = std::make_unique<Axle::JobSystemEnkiTS>(128, 16);
+        constexpr int kTotalJobs = 100;
+        std::atomic<int> concurrentJobsRun{0};
+
+        auto barrier = bridge->CreateBarrier();
+
+        for (int j = 0; j < kTotalJobs; ++j) {
+            auto job = bridge->CreateJob("ConcurrentJob", JPH::Color::sBlue, [&concurrentJobsRun] {
+                concurrentJobsRun.fetch_add(1, std::memory_order_relaxed);
+                std::this_thread::yield();
+            });
+            barrier->AddJob(job);
+        }
+
+        bridge->WaitForJobs(barrier);
+        bridge->DestroyBarrier(barrier);
+
+        if (concurrentJobsRun.load() != kTotalJobs) {
+            std::cerr << "[EJ05] FAILED: Concurrent queueing missed jobs ("
+                      << concurrentJobsRun.load() << "/" << kTotalJobs << ")\n";
+            return 1;
+        }
+
+        if (!bridge->WaitForLiveTasks(std::chrono::milliseconds(2000)) || bridge->GetLiveTaskCount() != 0) {
+            std::cerr << "[EJ05] FAILED: Concurrent live task count non-zero (" << bridge->GetLiveTaskCount() << ")\n";
+            return 1;
+        }
+
+        if (bridge->GetAllocatedHighWaterMark() == 0 || bridge->GetAllocatedTaskCount() == 0) {
+            std::cerr << "[EJ05] FAILED: High-water mark not recorded\n";
+            return 1;
+        }
+
+        std::cout << "[EJ05] Subtest 2 PASS: Concurrent queueing and reclamation (high_water="
+                  << bridge->GetAllocatedHighWaterMark() << ", total_allocated="
+                  << bridge->GetAllocatedTaskCount() << ")\n";
+    }
+
+    // 3. Queue-full / synchronous execution fallback (BRIDGE-03)
+    {
+        // Test with stopped JobSystem: TryAdmitTaskSet will reject admission
+        Axle::JobSystem::Shutdown();
+
+        auto bridge = std::make_unique<Axle::JobSystemEnkiTS>(8, 4);
+        std::atomic<bool> fallbackRan{false};
+
+        auto barrier = bridge->CreateBarrier();
+        auto job = bridge->CreateJob("FallbackJob", JPH::Color::sYellow, [&fallbackRan] {
+            fallbackRan.store(true);
+        });
+        barrier->AddJob(job);
+        job = {};
+
+        // In Jolt, AddJob with 0 dependencies queues the job.
+        // Because JobSystem is stopped, QueueJobs executes the job synchronously as fallback.
+        if (!fallbackRan.load()) {
+            std::cerr << "[EJ05] FAILED: Synchronous fallback job did not execute\n";
+            return 1;
+        }
+
+        bridge->DestroyBarrier(barrier);
+        if (bridge->GetLiveTaskCount() != 0) {
+            std::cerr << "[EJ05] FAILED: Fallback job record leaked (" << bridge->GetLiveTaskCount() << ")\n";
+            return 1;
+        }
+
+        std::cout << "[EJ05] Subtest 3 PASS: Synchronous execution fallback verified\n";
+
+        // Reinitialize JobSystem for subsequent tests
+        Axle::JobSystem::Init(2);
+    }
+
+    std::cout << "RESULT ej05-physics-lifetime PASS" << std::endl;
+    return 0;
+}
+
+// ============================================================================
 // ECSJ-04: EnTT Stable Storage Tombstone Iteration Probe
 // ============================================================================
 struct StableTombstoneComponent {
@@ -1098,6 +1225,7 @@ int main(int argc, char** argv) {
                   << "  ej02-deferred-executor\n"
                   << "  ej03-compiler-handoff\n"
                   << "  ej04-reload-commit\n"
+                  << "  ej05-physics-lifetime\n"
                   << "  ecsj-03-bridge-hang\n"
                   << "  ecsj-03-bridge-control\n"
                   << "  ecsj-04-entt-tombstone\n"
@@ -1130,6 +1258,7 @@ int main(int argc, char** argv) {
         if (scenario == "ej02-deferred-executor") return finish(RunEJ02DeferredExecutorProbe());
         if (scenario == "ej03-compiler-handoff") return finish(RunEJ03CompilerHandoffProbe(workspace));
         if (scenario == "ej04-reload-commit") return finish(RunEJ04ReloadCommitProbe(workspace));
+        if (scenario == "ej05-physics-lifetime") return finish(RunEJ05PhysicsLifetimeProbe());
         if (scenario == "queued-delivery-control") return finish(RunThreadIdentityProbe(true));
         if (scenario == "ecsj-03-bridge-hang") return finish(RunBridgeProbe(false));
         if (scenario == "ecsj-03-bridge-control" || scenario == "--passing" || scenario == "passing-control")

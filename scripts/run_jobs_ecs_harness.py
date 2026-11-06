@@ -98,6 +98,7 @@ def main():
         ("ej02-deferred-executor", "PASS", args.timeout),
         ("ej03-compiler-handoff", "PASS", max(args.timeout, 20)),
         ("ej04-reload-commit", "PASS", args.timeout),
+        ("ej05-physics-lifetime", "PASS", args.timeout),
         ("ecsj-03-bridge-hang", "REPRODUCED_DEFECT", 4),
         ("ecsj-03-bridge-control", "PASS", args.timeout),
         ("ecsj-04-entt-tombstone", "REPRODUCED_DEFECT", args.timeout),

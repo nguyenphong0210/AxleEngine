@@ -255,3 +255,48 @@ Evolving execution log and verification record for the sequential implementation
 - Single-thread Jolt bridge hang (`ECSJ-03`) is deferred to EJ-06.
 - EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
 - Independent acceptance remains pending; this report documents self-verification under autonomous authorization.
+
+---
+
+## Package EJ-05: Stable Physics Submission Lifetime
+
+### Objectives & Deliverables
+1. **Decouple JPH Job Slot from Task Lifetime:**
+   - Eliminated the indexed reusable array `m_EnkiTasks[m_Index]` in `JobSystemEnkiTS`.
+   - Replaced with a thread-safe, dynamically allocated pool of stable `PhysicsTaskRecord` instances inheriting from `enki::ITaskSet`.
+   - Releasing or destructing a Jolt job slot in `m_Jobs` no longer touches, destroys, or aliased live enkiTS task sets.
+2. **Distinct Lifecycle Phases:**
+   - Separated JPH Job reference retention (`AddRef`/`Release`), wrapper body execution (`job->Execute()`), and scheduler completion (`enki::ITaskSet::GetIsComplete()`).
+   - Tasks returning from `ExecuteRange` transition through `OnTaskBodyCompleted` into `m_PendingReclaim` and are only reclaimed to `m_FreeRecords` once `GetIsComplete()` returns true, preventing premature task set reuse.
+3. **Synchronous Execution Fallback & Clean Teardown:**
+   - Decoupled synchronous fallback (`ExecuteSynchronous`) from scheduler task scope and asynchronous reclamation, preventing double-decrements and context check errors when admission is rejected.
+   - Replaced spinloop in `~JobSystemEnkiTS()` with graceful task draining (`WaitForLiveTasks`).
+   - Removed unmanaged auto-initialization of `JobSystem` from `JobSystemEnkiTS::QueueJobs`.
+
+### Verification Evidence
+1. **Focused EJ-05 Native Probe (`ej05-physics-lifetime`):**
+   - Subtest 1: Constrained JPH slot reuse (4 slots, 32 jobs) with aggressive rapid destruction verified without corruption or aliasing.
+   - Subtest 2: Concurrent queueing and reclamation under load (100 jobs) verified with high-water mark tracking and zero leaks.
+   - Subtest 3: Synchronous execution fallback verified with stopped `JobSystem`.
+   - PASS (exit 0) in Debug and Release.
+
+2. **Typed Baseline Harness (`scripts/run_jobs_ecs_harness.py`):**
+   - Registered `ej05-physics-lifetime` as native `PASS`.
+   - Debug: `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe --workspace build/opt02-debug --report build/opt02-debug/harness-debug.json` -> **11 PASS, 2 preserved defects (ECSJ-03, ECSJ-04), 3 verified probes, 0 unexpected failures**.
+   - Release: `python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe --workspace build/opt02-release --report build/opt02-release/harness-release.json` -> **11 PASS, 2 preserved defects (ECSJ-03, ECSJ-04), 3 verified probes, 0 unexpected failures**.
+
+3. **CTest Suite (Debug & Release):**
+   - Registered `JobsECS_PhysicsLifetime` in `Tests/CMakeLists.txt` (total 29 tests).
+   - Debug: `ctest --test-dir build -C Debug --output-on-failure` -> **29/29 tests passed (100%)**.
+   - Release: `ctest --test-dir build -C Release --output-on-failure` -> **29/29 tests passed (100%)**.
+
+4. **Integration Suite (`AxleTests.exe`):**
+   - Step 23 verified: `AxleTests.exe 23` (Phase 19.3 Jolt Physics Bridge) -> **100% passed**.
+   - Full suite verified: `AxleTests.exe` -> **All 68 steps passed (100%)**.
+
+5. **Tooling & Architecture:**
+   - `python scripts/check_architecture.py --root .` -> **AXLE_ARCH_CHECK PASS** (342 files scanned).
+   - `python scripts/test_baseline_tools.py` -> **18 tests passed (OK)**.
+
+6. **Product Target Builds:**
+   - `AxleEditor` & `AxleRuntime` built successfully (exit 0) in Debug and Release.

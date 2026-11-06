@@ -142,7 +142,7 @@ review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in th
 - [x] **EJ-02:** Deferred main-thread executor and owner tokens (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
 - [x] **EJ-03:** Compiler request/result handoff (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
 - [x] **EJ-04:** Reload commit and scene/DLL teardown (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
-- [ ] **EJ-05:** Stable physics submission lifetime.
+- [x] **EJ-05:** Stable physics submission lifetime (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
 - [ ] **EJ-06:** Physics waits and forward progress.
 - [ ] **EJ-07:** Handles, draining and shutdown.
 

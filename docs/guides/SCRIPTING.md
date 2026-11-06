@@ -2,9 +2,9 @@
 
 Navigation: [documentation hub](../README.md).
 
-For the implemented registry/DLL contracts, reload failure paths and worker-thread callback behavior, see [SDD: Native scripts](../architecture/SDD.md#10-native-scripts-and-dll-boundary) and [reload sequence](../architecture/RUNTIME_FLOWS.md#7-windows-script-compilation-and-reload). C-linkage exports still pass C++ metadata, so cross-toolchain ABI stability is not implied.
+For the implemented registry/DLL contracts, reload failure paths and worker-thread callback behavior, see [SDD: Native scripts](../architecture/SDD.md#10-native-scripts-and-dll-boundary) and [reload sequence](../architecture/RUNTIME_FLOWS.md#7-windows-script-compilation-and-reload). C-linkage exports pass C++ metadata with runtime ABI validation (`AXLE_SCRIPT_ABI_VERSION = 2`).
 
-AxleEngine adopts a high-performance **Hybrid ECS / C++ Native Scripting Architecture**. By writing gameplay code directly in native C++20, your game achieves zero language-bridge overhead, direct SIMD vectorization, and seamless integration with Jolt Physics and EnTT ECS—all while maintaining the ergonomic component-attachment workflows of Unity and Unreal Engine.
+AxleEngine adopts a high-performance **Hybrid ECS / C++ Native Scripting Architecture**. By writing gameplay code directly in native C++20, your game achieves zero language-bridge overhead, direct SIMD vectorization, and seamless integration with Jolt Physics and EnTT ECS—all while maintaining the ergonomic component-attachment workflows of modern engines.
 
 ---
 
@@ -18,8 +18,8 @@ AxleEngine adopts a high-performance **Hybrid ECS / C++ Native Scripting Archite
 │      (OOP - ScriptableEntity)     │            (DOD - Pure EnTT Component)             │
 ├───────────────────────────────────┼────────────────────────────────────────────────────┤
 │ • Low entity count (1 - 50)       │ • Massive bulk entity count (100 - 50,000 parts)   │
-│ • Vehicles, Player Camera, Turrets│ • Mechanical Hinges, Pistons, Rotors, Debris       │
-│ • Intuitive OnCreate / OnUpdate   │ • Batch memory iteration via registry.view().each()│
+│ • Player, Camera, Turrets, Drones │ • Mechanical Hinges, Pistons, Rotors, Debris       │
+│ • Intuitive Lifecycle Hooks       │ • Batch memory iteration via registry.view().each()│
 │ • Unity-like Component Attachment │ • 100% Cache-friendly, Zero vtable, Maximum SIMD   │
 └───────────────────────────────────┴────────────────────────────────────────────────────┘
 ```
@@ -47,22 +47,32 @@ public:
         m_Propeller = FindChildByTag("Propeller");
     }
 
-    // 2. Called every frame during Play Mode simulation
-    void OnUpdate(Axle::Timestep ts) override {
+    // 2. Called at fixed 60Hz intervals during FramePhase::FixedControls ahead of physics
+    void OnFixedUpdate(Axle::Timestep ts) override {
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::Space)) {
-            // Apply upward force
+            // Apply physics forces/torques or update controller velocities
             if (HasComponent<Axle::RigidBody3D>()) {
-                // Manipulate physics
+                // Manipulate physics body
             }
         }
     }
 
-    // 3. Optional: Called during the ImGui viewport rendering pass
+    // 3. Called every variable display frame during FramePhase::FrameScripts
+    void OnUpdate(Axle::Timestep ts) override {
+        // General gameplay logic, animations, visual timers
+    }
+
+    // 4. Called after physics and animation evaluation during FramePhase::LatePresentation
+    void OnLateUpdate(Axle::Timestep ts) override {
+        // Camera following, post-physics bone sync, final orientation clamps
+    }
+
+    // 5. Optional: Called during the ImGui viewport rendering pass
     void OnImGuiRender() override {
         // Render custom floating HUDs or debug overlays
     }
 
-    // 4. Called when the simulation stops or entity is destroyed
+    // 6. Called when simulation stops or entity is destroyed
     void OnDestroy() override {
         // Cleanup runtime state
     }
@@ -120,7 +130,7 @@ AXLE_REGISTER_SCRIPT(DroneController);
 
 ## 🔄 Dynamic In-Editor Script Hot-Reloading (`F9`)
 
-AxleEngine allows you to modify C++ code and see changes in the running editor without restarting:
+AxleEngine allows you to modify C++ code and see changes in the running editor without restarting. The reload manager enforces an ABI version handshake (`AXLE_SCRIPT_ABI_VERSION = 2`):
 
 ```mermaid
 sequenceDiagram
@@ -136,11 +146,12 @@ sequenceDiagram
     Compiler->>Compiler: Compile C++ to AxleScripts.dll
     Compiler-->>Editor: Build Succeeded Notification
     Editor->>Manager: ReloadScripts()
-    Manager->>Manager: Serialize active script fields to memory
     Manager->>DLL: Copy AxleScripts.dll to unique timestamped shadow DLL
     Manager->>DLL: LoadLibrary(shadow_dll) (Bypasses Windows LNK1104 file lock)
+    Manager->>DLL: Validate GetScriptABIVersion() == 2
+    Manager->>Manager: Serialize active script fields to memory
     Manager->>Editor: Re-bind new vtables and restore serialized field values
-    Editor-->>Dev: [OK] Scripts reloaded in 0.4s!
+    Editor-->>Dev: [OK] Scripts reloaded in ~0.4s!
 ```
 
 ---

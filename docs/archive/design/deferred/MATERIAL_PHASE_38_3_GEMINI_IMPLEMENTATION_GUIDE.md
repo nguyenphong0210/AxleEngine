@@ -1106,4 +1106,4 @@ commit or justify omitting persistence and legacy-compatibility tests.
 
 Current entry point: [agent collaboration](../../../agents/README.md). Read and reply
 in the shared exchange; implement only the package released there.
-The [original full-scope prompt](../../../agents/archive/MATERIAL_PHASE_38_3_ORIGINAL_PROMPT.txt) is retained as history, not a task to run.
+The historical full-scope prompt has been retired; see [historical agent archive](../../../agents/archive/README.md).

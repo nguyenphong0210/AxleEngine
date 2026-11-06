@@ -1,11 +1,6 @@
 # Execution Flows: Current System
 
-> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
-> retirement and later sample cleanup. It is retained for architectural context,
-> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
-> for execution; unavailable source paths below are historical references.
-
-Reviewed: 2026-11-01; startup paths updated 2026-11-03. Diagrams preserve architecture-relevant call order while omitting widget and command-level details. They describe source paths; execution success was not measured.
+Reviewed: **2026-11-06** (post OPT-03). Diagrams describe current runtime sequence and subsystem interactions across Editor and Runtime targets.
 
 ## 1. Editor startup and backend selection
 
@@ -46,9 +41,9 @@ sequenceDiagram
     end
 ```
 
-Editor Main handles cook/export before normal UI startup and requires an explicit project for cooking. Development startup selects the build-configured Samples project unless overridden by an explicit project or `--empty-project`. Empty mode has zero entities/assets; nearby project discovery is disabled. Backend settings come from CLI/project with fallback. UI backend availability and headless device capabilities are different concerns.
+Editor Main handles cook/export before normal UI startup and requires an explicit project for cooking. Development startup selects the build-configured Samples project unless overridden by an explicit project or `--empty-project`. Backend settings come from CLI/project with fallback.
 
-Sources: [Editor/src/Main.cpp](../../Editor/src/Main.cpp), [Engine/Core/src/Application.cpp](../../Engine/Core/src/Application.cpp), [Engine/Core/src/LayerStack.cpp](../../Engine/Core/src/LayerStack.cpp).
+Sources: [Editor/src/Main.cpp](../../Editor/src/Main.cpp), [Engine/Platform/src/Application.cpp](../../Engine/Platform/src/Application.cpp), [Engine/Platform/src/LayerStack.cpp](../../Engine/Platform/src/LayerStack.cpp).
 
 ## 2. Shared application loop
 
@@ -81,7 +76,7 @@ sequenceDiagram
 
 Layer updates run before the optional UI frame. For native RHI paths, UI/RHI integration performs additional command/presentation work; the common SwapBuffers call does not mean every backend presents through OpenGL.
 
-Sources: [Engine/Core/src/Application.cpp](../../Engine/Core/src/Application.cpp), [Engine/UI/src/ImGuiLayer.cpp](../../Engine/UI/src/ImGuiLayer.cpp).
+Sources: [Engine/Platform/src/Application.cpp](../../Engine/Platform/src/Application.cpp), [Engine/UI/src/ImGuiLayer.cpp](../../Engine/UI/src/ImGuiLayer.cpp).
 
 ## 3. Editor play, pause and stop
 
@@ -91,7 +86,7 @@ stateDiagram-v2
     Edit --> Play: OnScenePlay / clone scene + runtime start
     Play --> Pause: OnScenePause
     Pause --> Play: resume
-    Pause --> Pause: requested single physics step
+    Pause --> Pause: requested single frame step
     Play --> Edit: OnSceneStop / runtime stop + restore edit context
     Pause --> Edit: OnSceneStop
 ```
@@ -101,6 +96,7 @@ sequenceDiagram
     participant Copy as Scene Copy
     participant Runtime as Runtime Scene
     participant Panels
+    participant Driver as SimulationDriver
     participant Reload as ScriptHotReloadManager
     EL->>EL: CompileAndHotReloadAssets
     EL->>Copy: Copy editor scene
@@ -109,59 +105,64 @@ sequenceDiagram
     EL->>EL: active scene = runtime scene
     EL->>Panels: SetContext and clear selection
     EL->>Reload: sync input and ImGui context
-    EL->>Runtime: OnRuntimeStart physics
+    EL->>Driver: Start(runtimeScene, physicsScene)
     Note over EL: state = Play
-    EL->>Runtime: OnRuntimeStop on stop
+    EL->>Driver: Stop(runtimeScene, physicsScene) on stop
     EL->>EL: release runtime and restore editor scene
     EL->>Panels: restore edit context
 ```
 
-Scene::Copy preserves UUID identity and creates new registry handles. On stop, the editor restores its original Scene, restores physics bodies and panel contexts. A requested paused step in the surveyed update branch advances physics; it does not invoke the Play-only Scene update there.
+Scene::Copy preserves UUID identity and creates new registry handles. On stop, the editor restores its original Scene, restores physics bodies and panel contexts. Single-step execution delegates to `SimulationDriver::StepSingleFrame()`.
 
-Sources: [Editor/src/EditorLayer.cpp](../../Editor/src/EditorLayer.cpp), [Engine/Scene/src/Scene.cpp](../../Engine/Scene/src/Scene.cpp).
+Sources: [Editor/src/EditorLayer.cpp](../../Editor/src/EditorLayer.cpp), [Engine/Scene/src/Scene.cpp](../../Engine/Scene/src/Scene.cpp), [Engine/Scene/src/Simulation/SimulationDriver.cpp](../../Engine/Scene/src/Simulation/SimulationDriver.cpp).
 
-## 4. Different Editor and Runtime update order
+## 4. Unified SimulationDriver frame flow (shared Editor & Runtime)
+
+Both Editor Play mode and standalone Runtime step simulation via the shared `SimulationDriver`:
 
 ```mermaid
 sequenceDiagram
-    participant EL as EditorLayer OnUpdate
-    participant ES as Active Editor Scene
-    participant EP as Editor PhysicsScene
-    participant RL as RuntimeLayer OnUpdate
-    participant RP as Runtime PhysicsScene
-    participant RS as Runtime Scene
-    Note over EL,EP: Editor Play path
-    EL->>ES: OnUpdateRuntime(ts, physics)
-    EL->>EL: VFX preview / camera update
-    EL->>EP: Step(ts * simulationSpeed)
-    EL->>EL: choose camera and render backend
-    Note over RL,RS: Standalone unpaused path
-    RL->>RP: Step(ts)
-    RL->>RS: OnUpdateRuntime(ts, physics)
-    RL->>RL: choose camera, SceneRenderer RenderScene, RenderUI
+    participant Caller as EditorLayer / RuntimeLayer
+    participant Driver as SimulationDriver
+    participant Clock as SimulationClock
+    participant Input as SimulationInputAdapter
+    participant Scene as Scene / Scripts
+    participant Physics as PhysicsScene
+    Caller->>Driver: AdvanceFrame(rawDt, scene, physicsScene)
+    Driver->>Clock: Advance(rawDt)
+    Note over Clock: scale by speed, handle pause, accumulate ticks (cap max 4)
+    loop while Clock.TakeFixedStep()
+        Driver->>Scene: FramePhase::FixedControls (OnFixedUpdate)
+        Note over Scene,Input: read edge-latched key/mouse/controller states
+        Driver->>Physics: FramePhase::Physics Step(fixedDt)
+        Driver->>Scene: FramePhase::PostStepSync (sync poses to TransformComponent)
+    end
+    Driver->>Scene: FramePhase::FrameScripts (OnUpdate variableDt)
+    Driver->>Scene: FramePhase::AnimationVFX (evaluate animators & particle emitters)
+    Driver->>Scene: FramePhase::LatePresentation (OnLateUpdate & camera matrices)
 ```
 
-Editor Play calls OnUpdateRuntime before Step and scales physics time separately. Runtime calls Step before OnUpdateRuntime. These are observed sequences, not a recommended shared simulation contract.
+The unified driver resolves legacy defect `ECSJ-05`. Editor single-step executes exactly one fixed tick (60Hz) followed by presentation, identical to standalone Runtime behavior.
 
-Sources: [Editor/src/EditorLayer.cpp](../../Editor/src/EditorLayer.cpp), [Runtime/src/RuntimeLayer.cpp](../../Runtime/src/RuntimeLayer.cpp).
+Sources: [Engine/Scene/include/Axle/Simulation/SimulationDriver.hpp](../../Engine/Scene/include/Axle/Simulation/SimulationDriver.hpp), [Engine/Scene/include/Axle/Simulation/SimulationClock.hpp](../../Engine/Scene/include/Axle/Simulation/SimulationClock.hpp), [Engine/Scene/include/Axle/Simulation/SimulationInputAdapter.hpp](../../Engine/Scene/include/Axle/Simulation/SimulationInputAdapter.hpp).
 
-## 5. Inside Scene runtime update
+## 5. Discrete simulation phases
 
 ```mermaid
 flowchart TD
-    Start[OnUpdateRuntime] --> Scripts[Bind / create / OnCreate / OnUpdate scripts]
-    Scripts --> Vehicle[Driver inputs + chassis/wheels pose + telemetry]
-    Vehicle --> VA[VehicleAudio and VehicleVFX]
-    VA --> Audio[Listener and spatial AudioSource synchronization]
-    Audio --> Character[CharacterController update and transform]
-    Character --> Params[Animator parameters from character]
-    Params --> Anim[AnimatorComponent update]
-    Anim --> Particles[ParticleEmitterComponent update]
+    Clock[1. SimulationClock Tick Accumulation] --> FixedControls[2. FramePhase::FixedControls: OnFixedUpdate & Latched Inputs]
+    FixedControls --> Physics[3. FramePhase::Physics: Jolt Step]
+    Physics --> PostStepSync[4. FramePhase::PostStepSync: RigidBody to TransformComponent]
+    PostStepSync --> MoreSubsteps{More fixed ticks?}
+    MoreSubsteps -- Yes --> FixedControls
+    MoreSubsteps -- No --> FrameScripts[5. FramePhase::FrameScripts: Script OnUpdate]
+    FrameScripts --> AnimVFX[6. FramePhase::AnimationVFX: Skeletal Anim & Particles]
+    AnimVFX --> LatePres[7. FramePhase::LatePresentation: OnLateUpdate & Viewport Render Packets]
 ```
 
-PhysicsScene::Step is outside this method. Rendering/transform helpers also run through separate paths; this diagram is not a complete GPU/frame graph.
+Retired Vehicle components are eliminated from the update pipeline. General rigid bodies and `CharacterController` are synchronized deterministically during `FixedControls` and `PostStepSync`.
 
-Sources: [Engine/Scene/src/Scene.cpp](../../Engine/Scene/src/Scene.cpp).
+Sources: [Engine/Scene/src/Simulation/SimulationDriver.cpp](../../Engine/Scene/src/Simulation/SimulationDriver.cpp).
 
 ## 6. Standalone loading and shutdown
 
@@ -173,9 +174,9 @@ sequenceDiagram
     participant FS as FileSystem
     participant Proj as Project
     participant Ser as SceneSerializer
+    participant Driver as SimulationDriver
     participant Scene
     Main->>App: construct default graphics spec
-    Note over Main,App: default backend OpenGL; no RHISwitcher bootstrap here
     Main->>App: PushLayer RuntimeLayer
     App->>RL: OnAttach
     RL->>RL: init Audio, scripts, Canvas, PhysicsScene, SceneRenderer
@@ -189,14 +190,14 @@ sequenceDiagram
     else no authored start scene
         RL->>Scene: retain empty scene
     end
-    RL->>Scene: OnRuntimeStart
+    RL->>Driver: Start(scene, physicsScene)
     Main->>App: Run
     App->>RL: OnDetach during shutdown
-    RL->>Scene: OnRuntimeStop
+    RL->>Driver: Stop(scene, physicsScene)
     RL->>RL: reset scene/physics/renderer and shutdown scripts/audio
 ```
 
-Runtime uses the default OpenGL application specification. It installs plugin serializer callbacks, rebuilds authored procedural geometry/colliders, and retains an empty scene when no configured start scene loads. AssetManager::Init is not directly called in the inspected RuntimeLayer startup. SetupPauseMenu is defined but has no call in that file; this diagram does not assume it runs.
+Runtime uses the clean Platform `Application` specification. It loads packages or project scenes, initializes audio/physics, and runs simulation via `SimulationDriver`.
 
 Sources: [Runtime/src/Main.cpp](../../Runtime/src/Main.cpp), [Runtime/src/RuntimeLayer.cpp](../../Runtime/src/RuntimeLayer.cpp).
 
@@ -220,6 +221,7 @@ sequenceDiagram
         Reload->>Reload: shutdown old module, clear metadata, unload
         Reload->>Reload: copy source DLL to timestamped path
         Reload->>DLL: LoadLibrary and sync contexts
+        Reload->>DLL: Validate GetScriptABIVersion() == 2
         Reload->>DLL: Axle_InitializeScripts callback
         DLL-->>Reload: script metadata registrations
         Reload->>Scene: OnPostScriptReload
@@ -227,38 +229,32 @@ sequenceDiagram
     end
 ```
 
-CompileAsync invokes completion on the worker thread; the editor callback calls reload directly. The logical sequence does not imply a main-thread handoff. Copy/load/export failures after unloading the old DLL are not guaranteed to roll back.
+Script compilation runs asynchronously on a worker thread. Shadow copying avoids Windows DLL file locks (`LNK1104`). The runtime validates `AXLE_SCRIPT_ABI_VERSION = 2` before registering script types.
 
 Sources: [Engine/Scene/src/ScriptCompiler.cpp](../../Engine/Scene/src/ScriptCompiler.cpp), [Engine/Scene/src/ScriptHotReloadManager.cpp](../../Engine/Scene/src/ScriptHotReloadManager.cpp), [Editor/src/Scripts/ScriptsModule.cpp](../../Editor/src/Scripts/ScriptsModule.cpp), [Editor/src/EditorLayer.cpp](../../Editor/src/EditorLayer.cpp).
 
-## 8. Asset metadata, resources and cooking
+## 8. Pure CPU asset registry and package cooking
 
 ```mermaid
 sequenceDiagram
-    participant Consumer as Scene or editor consumer
-    participant AM as AssetManager
-    participant Meta as AssetMetadataSerializer
-    participant Loader as Material / Texture loader
+    participant Consumer as Scene or Editor Consumer
+    participant AM as AssetManager (Pure CPU)
+    participant FS as FileSystem / Loader
     Consumer->>AM: lookup by path or UUID
-    alt UUID/path cached
-        AM-->>Consumer: shared resource
-    else path metadata resolution
-        AM->>Meta: read companion meta
-        alt missing or invalid meta
-            AM->>AM: generate random UUID
-            AM->>Meta: write companion meta
-        end
-        AM->>Loader: load resource from descriptor/media
-        Loader-->>AM: resource
-        AM->>AM: cache by path and UUID
-        AM-->>Consumer: shared resource
+    alt UUID or path already registered
+        AM-->>Consumer: cached CPU AssetDocument / descriptor
+    else load from disk / package
+        AM->>FS: read .axleasset / raw media
+        Note over AM,FS: read embedded native UUID or assign root-relative path
+        AM->>AM: register UUID and path
+        AM-->>Consumer: CPU AssetDocument
     end
 ```
 ```mermaid
 flowchart LR
     Settings[CookSettings] --> Cooker[AssetCooker]
     Project[Project config] --> Cooker
-    Assets[Asset directory and metadata] --> Cooker
+    Assets[Asset directory - embedded UUIDs] --> Cooker
     Resources[Shader resources] --> Cooker
     Cooker --> Bake[Optional mesh bake]
     Bake --> Writer[PackageWriter]
@@ -267,7 +263,7 @@ flowchart LR
     Cooker --> Files[Copy runtime / scripts / project files as configured]
 ```
 
-A missing/invalid companion metadata file causes a new UUID. AssetCooker traverses the asset directory rather than an established referenced-asset closure. PackageWriter currently writes uncompressed data.
+Native descriptors embed 64-bit UUIDs directly; raw assets use root-relative paths. `AssetManager` is a pure CPU registry without GPU dependencies. GPU caches (`MaterialCache`, `RHIMaterial`) reside in renderer bridges.
 
 Sources: [Engine/Asset/src/AssetManager.cpp](../../Engine/Asset/src/AssetManager.cpp), [Engine/Asset/src/AssetCooker.cpp](../../Engine/Asset/src/AssetCooker.cpp), [Engine/Core/src/Package.cpp](../../Engine/Core/src/Package.cpp).
 
@@ -300,6 +296,6 @@ sequenceDiagram
     Note over Canvas: retains CPU vertices/indices and statistics; no GPU submit in EndCanvas
 ```
 
-Input processing occurs before this frame creates/loads/layouts missing documents. Scoped contexts combine scene values with reflected script fields. EndCanvas retains CPU geometry/statistics without submitting GPU work in this path.
+Input processing occurs before creating or updating canvas layouts. Scoped data contexts combine scene state with reflected script variables. `Canvas2D` outputs CPU vertices and indices for batch submission.
 
 Sources: [Runtime/src/RuntimeLayer.cpp](../../Runtime/src/RuntimeLayer.cpp), [Engine/UI/src/UI2D/UIDocument.cpp](../../Engine/UI/src/UI2D/UIDocument.cpp), [Engine/UI/src/UI2D/Canvas2D.cpp](../../Engine/UI/src/UI2D/Canvas2D.cpp).

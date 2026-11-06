@@ -757,4 +757,4 @@ reason and the final supported behavior rather than weakening tests to match a b
 
 Current entry point: [agent collaboration](../../../agents/README.md). Read and reply
 in the shared exchange; implement only the package released there.
-The [original full-scope prompt](../../../agents/archive/ANIMATION_PHASE_40_ORIGINAL_PROMPT.txt) is retained as history, not a task to run.
+The historical full-scope prompt has been retired; see [historical agent archive](../../../agents/archive/README.md).

@@ -15,27 +15,16 @@ explicitly if the running client/session has not loaded it.
 
 ## Current checkpoint
 
-**2026-11-04: sequential roadmap and documentation cleanup.** Read
-**[docs/ROADMAP.md](../ROADMAP.md)** for OPT-00..11 order/progress and the
-[active design index](../design/README.md) for the current phase's contract.
+- **OPT-00**: Vehicle Module Clean Retirement (Delivered & Verified).
+- **OPT-01**: Clean Baseline, Threading, Asset Identity & Model (Delivered & Verified).
+- **OPT-02**: Jobs & Worker Integrity, Core Leaf Decoupling (Delivered & Verified).
+- **OPT-03**: Core, SceneData, Assets & Shared Simulation (Delivered & Verified: AF-02, EJ-08..EJ-10, AF-03, AF-04, EJ-11..EJ-14).
+- **Next assignment**: [OPT-04](../ROADMAP.md#opt-04---nri-device-and-gpu-lifetime-foundation) (NRI device and GPU lifetime foundation).
+
+Read **[docs/ROADMAP.md](../ROADMAP.md)** for OPT-00..11 order/progress and the
+[active design index](../design/README.md) for current phase contracts.
 Historical Phase 41/42/43 and G labels are domain references, not execution order.
 The live exchange determines the current assignment; no plan releases production work.
-
-**2026-11-05 current release:** EJ-01 is ready for Gemini after the verified
-[OPT-01 review/corrections](../reviews/OPT_01_AF01_P41_PLG_REVIEW.md).
-The [autonomous execution plan](handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md)
-is prepared for a user-activated OPT-02..10 run. It lets Gemini implement, self-review,
-repair and verify packages without a Codex wait after each one. The larger range
-is not activated merely by creating that plan; the live exchange records activation.
-
-The roadmap remains the package checklist. Gemini self-verification is distinct
-from independent review and final acceptance. The plan includes phase gates,
-local commits, reports, context checkpoints and activation/resume prompts.
-The separate OPT-00 product-review gap and deferred feature acceptance remain open.
-
-Design documents for deferred feature expansion and historical reports/prompts
-are outside `docs/design`; consult the archive index only when needed. Retained
-material/VFX/animation obligations and G1 review are not silently closed.
 
 ## Reference map
 
@@ -46,7 +35,7 @@ material/VFX/animation obligations and G1 review are not silently closed.
 | Native render integration | [NRI contract](../design/NRI_INTEGRATION_CONTRACT.md) | Source-pinned vendor/service/lifetime rules mapped to P41 |
 | Rendering priority | [Phase 41 plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) | Canonical packages and required gates |
 | ECS/jobs current findings | [Integration review](../architecture/ENTT_ENKITS_REVIEW.md) | Reproduced faults, source-confirmed risks and verification limits |
-| ECS/jobs refactor | [Refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 package contracts; EJ-00 baseline verified, EJ-01..17 unreleased |
+| ECS/jobs refactor | [Refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 package contracts; EJ-00..EJ-14 delivered |
 | Plugin product/ABI design | [Plugin architecture](../design/PLUGIN_SYSTEM_ARCHITECTURE.md) | Proposed DLL/static products, UX, lifetime and fresh Vehicle scope |
 | Plugin execution | [Plugin plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | 26 unreleased packages and acceptance gates |
 | Plugin implementation details | [Plugin coding reference](../design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Proposed algorithms, SDK contracts and real-fixture strategy |
@@ -61,10 +50,5 @@ material/VFX/animation obligations and G1 review are not silently closed.
 
 ## Historical prompts
 
-Superseded one-shot animation prompts are retained in [archive](archive/README.md).
-Redundant design-directory redirects are removed during cleanup. Do not replay an old
-assignment based on its filename, an old completion checkbox, or a broad guide.
-
-Detailed reviews/delivery reports are indexed in the documentation archive;
-relative links are maintained after relocation. They describe their recorded revisions;
-they do not implicitly release another task.
+Superseded one-shot prompt dumps have been retired; see [historical agent archive](archive/README.md).
+Detailed reviews and delivery reports are preserved in the [design archive](../archive/design/README.md).

@@ -1,33 +1,33 @@
 # Asset Format and Identity Reference
 
-Reviewed: **2026-11-01**. This document describes current syntax and integration boundaries. It does not claim that all legacy assets have been migrated or that every recognized asset kind has a complete renderer/import pipeline.
+Reviewed: **2026-11-06** (post OPT-03). This document describes current asset syntax, identity standard, and subsystem boundaries.
 
 ## 1. Format roles
 
 | Format | Role |
 |---|---|
-| `.axleasset` | Typed, human-readable descriptor interpreted by a domain loader |
-| Raw media/model file | Source data; some consumers load directly, while others use optional descriptors |
-| `.meta` | Companion metadata storing persistent asset UUID/type/path |
-| `.axlescene` | Scene/entity/component persistence |
-| `.axle` / `.axlemesh` | Assembly/mesh text forms; interpret through the corresponding loader |
+| `.axleasset` | Typed, human-readable DSL descriptor with embedded native UUID |
+| Raw media/model file | Source data (textures, audio, meshes); identified by canonical root-relative paths (`assets/...`) |
+| `.axlescene` | Scene, entity, and component persistence with embedded native UUID |
+| `.axle` / `.axlemesh` | Assembly and mesh text representations |
 | `.axlebin` | Binary mesh cache |
-| `.axlepak` | Distribution container with header, chunks and table of contents |
-| `.axleui` | Legacy UI format/path still present in code |
-| `.axleterrain` | Terrain payload; surveyed examples are binary |
+| `.axlepak` | Shipping distribution container with header, chunks, and table of contents |
+| `.axleui` | UI layout document |
+| `.axleterrain` | Binary terrain height/surface payload |
 
-Descriptors, raw resources, caches and shipping packages have different responsibilities. Keep stable identity with source data; caches should be reproducible.
+Companion `.meta` sidecars are completely retired. Native descriptors embed their persistent 64-bit UUID directly, while raw assets are addressed by canonical root-relative paths.
 
 ## 2. DSL model
 
-[AssetDSL](../../Engine/Asset/include/Axle/AssetDSL.hpp) parses a document into AssetDocument, a shared root AssetBlock, value AssetProperty records and child blocks. AssetProperty retains a raw value and exposes typed conversion helpers. The document's kind is inferred from the root type.
+[AssetDSL](../../Engine/Asset/include/Axle/AssetDSL.hpp) parses human-readable documents into `AssetDocument`, containing a shared root `AssetBlock`, typed `AssetProperty` entries, and nested blocks.
 
-Current AssetKind values include Material, Canvas, ParticleEmitter, Mesh, Texture, Terrain and PhysicsMaterial. Recognizing a root kind does not prove all fields or all operations for that kind are implemented. Refer to the consuming loader for schema, defaults and validation.
+Current recognized `AssetKind` values: `Material`, `Canvas`, `ParticleEmitter`, `Mesh`, `Texture`, `Terrain`.
 
 Typical syntax:
 
 ```text
 Material {
+    uuid: 1234567890123456789
     name: "ExamplePaint"
     albedoColor: "#EBEFF5"
     metallic: 0.92
@@ -36,7 +36,7 @@ Material {
 }
 ```
 
-Blocks use braces and `property: value` entries. Common values include quoted strings, numeric/boolean values, arrays and hex colors. Comment stripping supports line/block comments; quoted strings and raw-value parsing follow the actual parser implementation. This is not a general JavaScript/QML execution environment.
+Blocks use braces and `property: value` entries. Supported types include quoted strings, numeric and boolean values, arrays, and hex color strings.
 
 Sources: [parser/serializer](../../Engine/Asset/src/AssetDSL.cpp), [material example](../../Tests/Fixtures/Assets/materials/SilverCarPaint.axleasset), [canvas example](../../Tests/Fixtures/Assets/ui/RacingHUD.axleasset).
 
@@ -44,33 +44,31 @@ Sources: [parser/serializer](../../Engine/Asset/src/AssetDSL.cpp), [material exa
 
 | Consumer | Responsibility |
 |---|---|
-| Material / RHIMaterial | Interpret material parameters, textures and graphics-facing state |
-| UIParser / UIDocument | Build and persist canvas nodes and bindings |
+| Material / RHIMaterial | Interpret material descriptors, texture maps, and shader parameters |
+| UIParser / UIDocument | Build and persist canvas hierarchy, layout, and UI bindings |
 | ParticleEmitterSerializer | Interpret particle emitter configuration |
-| TextureDescriptor | Optional texture-loading metadata |
-| TerrainAsset | Terrain descriptor interpretation |
-| AssetSerializer | Model conversion, mesh text/binary and manifest operations |
+| TextureDescriptor | Optional texture loading metadata and sampler hints |
+| TerrainAsset | Terrain heightmap descriptor interpretation |
+| AssetSerializer | Model conversion, mesh text/binary caching, and manifest operations |
 
-The common syntax is shared; property meaning and resource creation are domain-specific. Use existing assets as examples rather than treating historical phase specifications as implemented schemas.
+## 4. Identity standard and pure CPU AssetManager
 
-## 4. Identity and lookup
-
-AssetMetadataSerializer stores UUID, type and path in a companion `.meta`. AssetManager maps path/UUID and caches shared resources. GetOrCreateMetadata reads metadata or creates a new random UUID when it is absent/invalid.
-
-Scene components can store UUID references as well as paths and resource references. Preserve stable UUIDs when renaming or saving source assets; update references deliberately when duplicating assets. The current `.gitignore` excludes `.meta` files, which creates clean-checkout identity risk. See [assessment A3](../architecture/ASSESSMENT.md#3-limitations-impact-and-priority).
-
-Source APIs: [metadata serializer](../../Engine/Asset/src/AssetMetadataSerializer.cpp), [manager](../../Engine/Asset/src/AssetManager.cpp), [scene serialization](../../Engine/Scene/src/SceneSerializer.cpp).
+- **Native Embedded UUIDs**: Documents (`.axleasset`, `.axlescene`) embed their persistent 64-bit UUID directly within the serialized payload.
+- **Root-Relative Raw Paths**: Raw assets (images, audio clips, external meshes) are referenced via canonical root-relative paths (`assets/textures/...`).
+- **Pure CPU AssetManager**: `AssetManager` is a pure CPU registry that tracks registered assets by UUID and path. It has no upward dependency on GPU devices or graphics backends.
+- **GPU Resource Separation**: Rendering caches (such as `MaterialCache` or `RHIMaterial`) reside in renderer bridges and consume CPU asset descriptors without coupling the core asset library to graphics hardware.
 
 ## 5. Loading, caching and packaging
 
-FileSystem checks mounted package entries and then disk/resource paths. AssetManager combines registry lookup with Texture2D/Material/RHIMaterial caches. Mesh import/cache operations are handled through AssetSerializer; descriptor changes do not imply every resource cache and GPU pipeline has automatically refreshed.
+- **FileSystem**: Checks mounted `.axlepak` packages first, falling back to disk asset directories.
+- **AssetManager**: Maps UUID $\leftrightarrow$ path and maintains pure CPU asset descriptors.
+- **AssetCooker**: Traverses configured asset directories, compiles descriptors and meshes into binary form, and generates package tables of contents.
+- **PackageWriter**: Writes contiguous data chunks and a table of contents indexed by UUID and path for distribution.
 
-AssetCooker traverses the configured asset directory and optionally bakes/copies resources. PackageWriter writes chunks and a table of contents indexed by path/UUID. Current chunk writing is uncompressed; compression fields alone do not establish compression support in this path.
+## 6. Schema extension checklist
 
-There is no basis here for promising a universal texture compression pipeline, automatic migration of every extension or a package containing only transitively referenced assets. Those require explicit implementation and validation.
-
-## 6. Changes to a schema
-
-When adding a property or asset type, update parsing/conversion, domain validation, serialization, loading/cache invalidation, component references and authoring UI as applicable. Consider compatibility with existing files and binary caches. Add behavioral round-trip/loading coverage rather than tests that only repeat setter/getter behavior.
-
-See [materials](../guides/MATERIALS_AND_SHADERS.md), [UI](../guides/UI.md), [SDD asset design](../architecture/SDD.md#9-assets-dsl-and-package-storage) and the [target architecture](../architecture/TARGET_LAYERED_ARCHITECTURE.md).
+When adding an asset property or type:
+1. Update `AssetDSL` parsing and serialization routines.
+2. Update the domain consumer/loader with schema validation and sensible defaults.
+3. Keep CPU asset structs free of GPU device handles or rendering contexts.
+4. Add behavioral round-trip tests in `AxleTests.exe` validating serialization fidelity.

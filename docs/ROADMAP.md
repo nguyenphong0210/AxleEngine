@@ -169,7 +169,7 @@ review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in th
 
 **Exit:** Core/scene/asset data fixtures run without GPU or Editor startup. ECSJ-04/05 have current coverage; both products follow the same fixed-step, input, pause/step/speed and teardown rules. (Verified across AF-02, EJ-08..EJ-10, AF-03, AF-04, EJ-11..EJ-14; 39/39 CTest Debug/Release, 16/0/3 harness, 68/68 AxleTests, 0 arch violations).
 
-**Evidence:** Phase OPT-03 delivered in commits 374933a (AF-02), 4286425 (EJ-08), cc059af (EJ-09), b434dd0 (EJ-10), ca1fb42 (AF-03), b418b9e (AF-04), ae22b35 (EJ-11), 026bd91 (EJ-12), abf3300 (EJ-13), and EJ-14 commit; execution details in docs/reviews/OPT_03_GEMINI_EXECUTION.md; independent review pending.
+**Evidence:** Phase OPT-03 delivered in commits 374933a (AF-02), 4286425 (EJ-08), cc059af (EJ-09), b434dd0 (EJ-10), ca1fb42 (AF-03), b418b9e (AF-04), ae22b35 (EJ-11), 026bd91 (EJ-12), abf3300 (EJ-13), and 6e98a56 (EJ-14); execution details in docs/reviews/OPT_03_GEMINI_EXECUTION.md; independent review pending.
 
 ### OPT-04 - Normalize the NRI device and GPU lifetime foundation
 

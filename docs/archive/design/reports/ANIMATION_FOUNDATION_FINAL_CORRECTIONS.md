@@ -62,7 +62,7 @@ acceptance and full Phase 40 completion remain separately OPEN.
 
 ## Gemini continuation
 
-[The current scoped prompt](../../../agents/archive/ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt) assigns **G1
+See [historical agent archive](../../../agents/archive/README.md) for past G1 context. The G1 task assigned
 CPU document models only**. The correction gate has already been completed by
 Codex. Gemini should implement revision/history, guarded lifecycle and persistence
 with CPU tests, commit that work, and stop for review. No renderer, visible panel,

@@ -150,7 +150,7 @@ suite and may be absent in another checkout.
 
 ## Next assignment
 
-Use [the new scoped prompt](../../../agents/archive/ANIMATION_GEMINI_NEXT_SCOPED_TASKS.txt).
+See [historical agent archive](../../../agents/archive/README.md) for archived context.
 
 1. Fix S1-S4, preserve the previous regressions, correct acceptance/evidence, and
    run the available CPU checks. This is a mandatory gate.

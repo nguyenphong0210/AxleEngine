@@ -1,13 +1,8 @@
 # AxleEngine Architecture Overview
 
-> **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
-> retirement and later sample cleanup. It is retained for architectural context,
-> not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
-> for execution; unavailable source paths below are historical references.
+Reviewed: **2026-11-06** (post OPT-03). AxleEngine is organized into subsystem libraries and application targets with a progressively enforced layered dependency graph.
 
-Reviewed: **2026-11-01**. AxleEngine is organized into subsystem libraries and application targets. It has a modular foundation, but its current implementation does **not** yet enforce a strictly layered dependency graph.
-
-The complete [architecture and design documentation](README.md) separates current behavior from the proposed layered architecture:
+The complete [architecture and design documentation](README.md) details current subsystem contracts and target layering:
 
 | Reference | Contents |
 |---|---|
@@ -16,60 +11,87 @@ The complete [architecture and design documentation](README.md) separates curren
 | [Class relationships](CLASS_RELATIONSHIPS.md) | UML diagrams by subsystem |
 | [Execution flows](RUNTIME_FLOWS.md) | Startup, simulation, scripting, assets and UI |
 | [Dependency map](DEPENDENCY_MAP.md) | CMake links, build ordering and source includes |
-| [Target architecture](TARGET_LAYERED_ARCHITECTURE.md) | Proposed layering and migration acceptance criteria |
+| [Target architecture](TARGET_LAYERED_ARCHITECTURE.md) | Layered architecture and migration acceptance criteria |
 | [Verification](VERIFICATION.md) | Evidence and limits of the source review |
 
 For a prioritized evaluation, read the [current architecture assessment](ASSESSMENT.md).
 
-## Current subsystem structure
+## Subsystem structure
 
 ```mermaid
 flowchart TD
-    Editor[AxleEditor] --> UI[Editor UI]
-    Editor --> Scene[Scene and runtime integration]
-    Runtime[AxleRuntime] --> Scene
-    Runtime --> Plugins[Spline / Terrain]
-    Plugins --> UI
-    Plugins --> Scene
-    UI --> Scene
-    Scene --> Systems[Physics / Audio / Animation / VFX / Vehicle]
-    Scene --> Graphics[OpenGL Renderer / RHI]
-    Scene --> Assets[Asset and resource loading]
-    Scene --> UI2D[UI2D documents and canvas geometry]
+    subgraph Level 4: Applications
+        Editor[AxleEditor]
+        Runtime[AxleRuntime]
+    end
+
+    subgraph Level 3: Systems & Features
+        Scene[Scene & Systems]
+        SceneData[SceneData ECS]
+        Physics[Physics Engine - Jolt]
+        Audio[Audio Engine - miniaudio]
+        Animation[Animation Evaluation]
+        VFX[Particle VFX Engine]
+        Scripting[Native C++ Scripting]
+    end
+
+    subgraph Level 2: Graphics & Resources
+        Renderer[OpenGL Renderer]
+        RHI[Modern RHI - NRI]
+        Assets[Pure CPU AssetManager]
+    end
+
+    subgraph Level 1: Platform
+        Platform[Window, Input, Application Lifecycle]
+    end
+
+    subgraph Level 0: Core
+        Core[Core - Primitives, Logging, Math, Jobs]
+    end
+
+    Editor --> Scene
+    Runtime --> Scene
+    Scene --> SceneData
+    Scene --> Physics
+    Scene --> Audio
+    Scene --> Animation
+    Scene --> VFX
+    Scene --> Scripting
+    Scene --> Renderer
+    Scene --> RHI
+    Scene --> Assets
+    Scene --> Platform
+    Platform --> Core
+    Assets --> Core
+    Renderer --> Platform
+    RHI --> Platform
 ```
 
-This is a selected dependency view, not a strict layer assignment. Most modules have their own CMake target and include/src directories. Spline and Terrain are static libraries combining runtime and editor code.
+## Subsystem boundaries (post OPT-03)
 
-## Important current boundaries
-
-- Core includes Application, which uses Platform, Renderer and Physics. Its public include paths expose those higher-level headers. Axle::Foundation is currently an alias of AxleCore rather than an independent foundation library.
-- Scene combines entity/component storage, hierarchy, simulation integration, scripts, serialization and rendering. It is not an isolated ECS-only module.
-- UI2D and UI are separate targets in Engine/UI. Scene links UI2D; the editor UI target links Scene. These do not form a target cycle.
-- Runtime links Spline/Terrain, whose public dependencies include editor UI. Runtime stages engine resources and depends on the production scripts target defined under Editor; project assets come from explicit export. It is therefore not yet independent at build level.
-- Renderer is the OpenGL path. RHI wraps NRI and exposes native types; several higher subsystems retain both rendering paths.
+- **Clean Level-0 Core (`Engine/Core`)**: Contains primitive types, assertions, logging, GUIDs, math utilities, and job scheduling. It has zero upward dependencies on `Platform`, `Renderer`, `Scene`, or `Physics`.
+- **Platform Application (`Engine/Platform`)**: Owns window management, event loops, and the top-level `Application` lifecycle.
+- **Scene and SceneData Separation (`Engine/Scene`)**: `SceneData` encapsulates pure ECS data (`entt::registry`), hierarchy relationships, monotonic transform revisions (`GetTransformRevision()`), and serialization. High-level `Scene` and system bridges (`SceneRendererBridge`, `PhysicsScene`) coordinate simulation without coupling data storage to concrete device runtimes.
+- **Unified Simulation Driver**: Both Editor Play mode and standalone Runtime step simulation through the shared `SimulationDriver` and `SimulationClock`, executing deterministic discrete phases (`FixedControls` $\to$ `Physics` $\to$ `PostStepSync` $\to$ `FrameScripts` $\to$ `AnimationVFX` $\to$ `LatePresentation`). Defect `ECSJ-05` (divergent Editor vs Runtime update order) is resolved.
+- **Pure CPU Asset Pipeline (`Engine/Asset`)**: `AssetManager` is decoupled from GPU device resources. Native assets embed persistent 64-bit UUIDs directly; raw assets use canonical root-relative paths. Companion `.meta` sidecars are completely eliminated.
 
 ## Application and simulation lifecycle
 
-Application owns the window and optional UI context, holds a LayerStack and drives events, jobs, layer updates, UI hooks and buffer swapping. EditorLayer and RuntimeLayer compose application behavior through Layer hooks.
+`Application` owns the display window and UI context, holds a `LayerStack`, and drives window events, tick updates, UI hooks, and buffer swapping. `EditorLayer` and `RuntimeLayer` compose application behavior through `Layer` hooks.
 
-Editor Play clones the edit scene into a separate registry while preserving entity UUIDs. Stop tears down runtime state, restores the edit scene and physics bodies, and rebinds panel contexts. Registry handles are distinct from persistent UUID identity.
+Editor Play clones the authoring scene into an isolated runtime `SceneData` while preserving persistent entity UUIDs. Stopping Play mode tears down runtime state, releases physics bodies, and restores the edit scene.
 
-Current Editor Play calls Scene::OnUpdateRuntime before PhysicsScene::Step; standalone Runtime calls Step before OnUpdateRuntime. The editor applies simulation speed to physics separately. The sequence diagrams document these differences rather than presenting one idealized shared loop.
+Both Editor and Runtime share the `SimulationClock` (fixed 60Hz tick accumulation with overload protection cap) and `SimulationInputAdapter` (edge-latched inputs across variable frames). Single-frame stepping executes identically across both targets.
 
 ## Rendering and UI
 
-Editor selects its backend through command-line/project settings and RHISwitcher, then uses SceneRenderer or RHISceneRenderer. Runtime Main uses Application's default OpenGL configuration and RuntimeLayer owns SceneRenderer. Backend parity between these products is not established by their shared subsystem names.
-
-HLSL Studio is connected to editor open callbacks and compiles selected stages through RHIShaderCompiler. Canvas2D produces CPU geometry and statistics; EndCanvas does not itself issue GPU commands. Editor ImGui previews are a separate integration path.
+- Editor selects its graphics backend (OpenGL vs Modern RHI/NRI) via startup flags and project configuration.
+- Runtime supports both standard OpenGL and RHI pipelines.
+- Canvas2D produces CPU geometry and drawing commands; UI layout documents are parsed through `UIParser`.
+- ImGui renders editor chrome, docking, viewports, and custom script inspector controls.
 
 ## Ownership, concurrency and data
 
-Use RAII and explicit owners. Entity and panel contexts observe Scene; Scene owns its registry. Shared resources use shared references. Some GPU/OS wrappers own raw native handles and explicitly destroy them, so raw pointer syntax alone is not an ownership policy.
-
-JobSystem centralizes enkiTS scheduling, including Jolt work through JobSystemEnkiTS. ScriptCompiler has an additional worker thread, whose completion callback currently performs reload/editor state updates directly. Thread ownership is a design concern to address during modularization.
-
-AssetManager combines UUID metadata and shared resource caches. Missing metadata generates a new UUID, while .gitignore currently excludes .meta files. PackageWriter writes uncompressed chunks and a table of contents; AssetCooker traverses an asset directory and stages distribution files.
-
-## Direction for modular layering
-
-The proposed design extracts Application from Core, separates SceneData from subsystem bridges, splits runtime/editor plugins, separates asset identity from resource loading/tools, and establishes Renderer-to-RHI boundaries. CMake target checks and include checks must both enforce the policy. These changes are proposals; this documentation update does not implement a refactor.
+- **Ownership**: Explicit RAII throughout. Scene owns its registry; `Entity` is a non-owning handle.
+- **Concurrency**: `JobSystemEnkiTS` manages parallel work across available CPU cores. EnTT parallel view iterations (`ParallelECS`) handle chunk iteration safely with explicit tombstone skipping. Structural entity mutations are recorded via `SceneCommandBuffer` and executed at deterministic frame boundaries.
+- **Asset Pipeline**: Pure CPU asset descriptors are indexed by UUID and path. `PackageWriter` writes shipping `.axlepak` archives, and `AssetCooker` prepares distribution assets.

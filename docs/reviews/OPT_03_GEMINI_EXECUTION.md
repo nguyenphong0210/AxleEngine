@@ -373,3 +373,43 @@ Evolving execution log and verification record for the sequential implementation
 - `python scripts/check_architecture.py --root . --closed-package AF-04`: exit 0, PASS (369 files scanned, 17 CMake files, 0 violations).
 - `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
 - `git diff --check`: exit 0.
+
+---
+
+## Package EJ-13: Editor Cutover
+
+- **Status:** Implemented and self-verified; local delivery committed.
+- **Base Baseline:** `026bd91`
+- **Scope & Contract:** [ARCHITECTURE_FOUNDATION_MASTER_PLAN.md](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) / [ENTT_ENKITS_REFACTOR_PLAN.md](../design/ENTT_ENKITS_REFACTOR_PLAN.md)
+
+### Implementation Summary
+1. **Editor Simulation Driver Integration (`Editor/src/EditorLayer.hpp`, `Editor/src/EditorLayer.cpp`):**
+   - Added `Axle::SimulationDriver m_SimulationDriver;` member with const and non-const `GetSimulationDriver()` accessors.
+   - Wired `OnScenePlay`: resets driver, sets configured `m_SimulationSpeed`, and resumes driver.
+   - Wired `OnScenePause`: pauses driver, clears accumulator, and enables free-fly viewport inspection.
+   - Wired `OnSceneStop`: resets simulation driver and tears down runtime physics state.
+   - Wired `ResetSimulation`, `NewScene`, and `OpenScene`: cleanly resets driver state.
+2. **Unified Frame Stepping & Removal of Standalone Physics Steps:**
+   - Cut over `EditorLayer::OnUpdate(ts)`: replaced separate `m_Scene->OnUpdateRuntime(ts)` and separate standalone `m_PhysicsScene->Step(simTs)` with `m_SimulationDriver.AdvanceFrame(ts.GetSeconds(), *m_Scene, m_PhysicsScene.get())`.
+   - Single-step requests (`m_StepSingleFrame = true`) now trigger `m_SimulationDriver.RequestSingleStep()`, advancing exactly 1 fixed tick through all phases without standalone physics bypass.
+   - Completely eliminated the previous disparity where Pause single-step stepped physics without running scripts or animation/VFX updates.
+3. **Dedicated Test Fixture (`AxleEditorCutoverUnitTests`):**
+   - Added `Tests/src/Test_EditorCutoverUnit.cpp` registered in CTest as `EditorCutoverUnitTests`.
+   - 4 comprehensive headless unit tests covering:
+     - `TestEditorSimulationDriverIntegration`: validates Play/Pause/SingleStep/Resume/Stop lifecycle through `SimulationDriver` with gravity simulation on dynamic bodies.
+     - `TestEditorZeroDriftRestoration`: validates that running 60 frames under gravity moves runtime entities while stopping and restoring bodies leaves the pristine editor scene with zero transform drift (verified against `1e-4` scene tolerance and `1e-3` Jolt physics body tolerance).
+     - `TestEditorSpeedScaling`: validates that editor simulation speed (0.5x, 1.0x, 2.0x) correctly scales fixed tick execution rate.
+     - `TestEditorPrivatePreviewClockIsolation`: validates that private asset/VFX preview clocks run independently and are not affected by editor play/pause state.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleEditorCutoverUnitTests AxleEditor`: exit 0.
+- `cmake --build build --config Release --target AxleEditorCutoverUnitTests AxleEditor`: exit 0.
+- `build/Tests/Debug/AxleEditorCutoverUnitTests.exe`: exit 0, ALL 4 EDITOR CUTOVER TESTS PASSED (100%).
+- `build/Tests/Release/AxleEditorCutoverUnitTests.exe`: exit 0, ALL 4 EDITOR CUTOVER TESTS PASSED (100%).
+- `build/Tests/Debug/AxleTests.exe`: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).
+- `ctest --test-dir build -C Debug --output-on-failure`: 38/38 tests passed (100%).
+- `ctest --test-dir build -C Release --output-on-failure`: 38/38 tests passed (100%).
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `python scripts/check_architecture.py --root . --closed-package AF-04`: exit 0, PASS (369 files scanned, 17 CMake files, 0 violations).
+- `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
+- `git diff --check`: exit 0.

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-03-EJ12",
-    "title": "Fixed clock, inputs and pause/step",
+    "id": "OPT-03-EJ13",
+    "title": "Editor cutover",
     "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "ae22b35",
+    "code_baseline": "026bd91",
     "scope_updated_on": "2026-11-06",
     "user_scope": "User activated docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md for sequential implementation of OPT-02 through OPT-10, starting with EJ-01..EJ-07. Routine stop-for-Codex instructions superseded within activated range; per-package implementation/self-review/fix/verification/local commit loop active. Independent acceptance remains pending.",
     "execution_range": "OPT-03 (AF-02, EJ-08..EJ-10, AF-03, AF-04, EJ-11..EJ-14)",
@@ -23,7 +23,7 @@
       "EJ-13",
       "EJ-14"
     ],
-    "implementation_status": "EJ12_in_progress",
+    "implementation_status": "EJ13_in_progress",
     "independent_review_status": "pending_delivery_and_checkpoint",
     "handoff": "docs/agents/handoffs/OPT_02_EJ01_GEMINI.md",
     "review_report": "docs/reviews/OPT_01_AF01_P41_PLG_REVIEW.md",
@@ -46,7 +46,8 @@
       "EJ-10": "b434dd0 verified delivery (33/33 CTest, 16/0/3 harness, 12/12 transform unit tests, 68/68 AxleTests)",
       "AF-03": "ca1fb42 verified delivery (34/34 CTest, 16/0/3 harness, 6/6 AxleSceneDataUnitTests, 68/68 AxleTests)",
       "AF-04": "b418b9e verified delivery (35/35 CTest, 16/0/3 harness, 5/5 AxleAssetFormatUnitTests, 68/68 AxleTests)",
-      "EJ-11": "ae22b35 verified delivery (36/36 CTest, 16/0/3 harness, 5/5 AxleSharedRuntimePhasesUnitTests, 68/68 AxleTests)"
+      "EJ-11": "ae22b35 verified delivery (36/36 CTest, 16/0/3 harness, 5/5 AxleSharedRuntimePhasesUnitTests, 68/68 AxleTests)",
+      "EJ-12": "026bd91 verified delivery (37/37 CTest, 16/0/3 harness, 9/9 AxleSimulationClockUnitTests, 68/68 AxleTests)"
     },
     "expected_files": [
       "Engine/Core/include/Axle/JobSystem.hpp",
@@ -78,7 +79,7 @@
       "state": "full_product_verification_pending",
       "note": "User-directed progression retains this gap; legacy preservation requirements are superseded. No old-format support required."
     },
-    "next_action": "Deliver EJ-12 and proceed to EJ-13 (editor cutover).",
+    "next_action": "Deliver EJ-13 and proceed to EJ-14 (runtime cutover and product parity).",
     "autonomy_plan": {
       "status": "activated",
       "document": "docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md",
@@ -1103,6 +1104,17 @@
       "base_commit": "ae22b3533035a307c7df58c4d3e9c8e9cbeec7a8",
       "timestamp_utc": "2026-11-06T08:13:15.443337+00:00",
       "body": "DELIVERY: Package EJ-11 committed as ae22b35 (feat(scene): extract shared runtime phases and version script callback ABI (EJ-11)).\n\nSummary:\n1. Discrete Simulation Phase Architecture:\n   - Defined SimulationPhase enum (FrameScripts, FixedControls, Physics, PostStepSync, AnimationVFX, LatePresentation) in Engine/Scene/include/Axle/ScenePhase.hpp.\n   - Decomposed monolithic Scene::OnUpdateRuntime into discrete phase executors: ExecuteFrameScriptPhase, ExecuteFixedControlsPhase, ExecutePhysicsPhase, ExecutePostStepSyncPhase, ExecuteAnimationVFXPhase, ExecuteLatePresentationPhase.\n   - Added ExecuteFixedTick(fixedDt, physicsScene) and StepSimulation(dt, physicsScene) with command buffer flushing at phase boundaries.\n   - Added phase telemetry trace (EnablePhaseTracing, ClearPhaseTrace, GetPhaseTrace, RecordPhase) for phase order verification and regression testing.\n2. Extended Script Lifecycle Callbacks:\n   - Added virtual void OnFixedUpdate(Timestep ts) to ScriptableEntity for fixed simulation ticks, vehicle/character input polling, and rigid body impulses prior to physics integration.\n   - Added virtual void OnLateUpdate(Timestep ts) to ScriptableEntity for camera followers, HUD telemetry, and presentation updates after physics transforms have synchronized.\n   - Preserved OnUpdate(Timestep ts) for variable frame-rate scripts.\n   - Updated SceneScriptBridge with dedicated OnUpdate, OnFixedUpdate, and OnLateUpdate passes.\n3. Script Module ABI Handshake & Versioning:\n   - Defined constexpr uint32_t AXLE_SCRIPT_ABI_VERSION = 2 in ScriptModule.hpp.\n   - Exported AXLE_SCRIPT_API uint32_t Axle_GetScriptABIVersion() from ScriptsModule.cpp.\n   - Enforced ABI validation in ScriptHotReloadManager::Reload: candidate script modules lacking Axle_GetScriptABIVersion or with mismatched ABI versions are gracefully rejected before touching vtables or unmapping active DLLs.\n4. Decoupled Character & Animation/VFX Bridges:\n   - Extracted SceneCharacterBridge::OnFixedUpdate for kinematic character controller movement.\n   - Extracted SceneCharacterBridge::OnPostStepSync for animator telemetry sync (Speed, VerticalVelocity, IsGrounded) and character VFX sync post-physics.\n   - Extracted SceneCharacterBridge::UpdateAnimationAndVFX for standalone Animators and particle emitters.\n5. Script Fixture Migration:\n   - Migrated ThirdPersonController and CarController to OnFixedUpdate.\n   - Migrated ThirdPersonCamera, VehicleChaseCamera, and RacingHUD to OnLateUpdate.\n6. Dedicated Test Fixture (AxleSharedRuntimePhasesUnitTests):\n   - Added Tests/src/Test_SharedRuntimePhasesUnit.cpp registered in CTest as SharedRuntimePhasesUnitTests.\n   - 5 comprehensive headless test cases verifying phase order, callback invocation counts, SIM-01 same-tick controls-to-presentation contract, ABI version validation and rejection, and character bridge phase isolation.\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleSharedRuntimePhasesUnitTests AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime: exit 0.\n- cmake --build build --config Release --target AxleSharedRuntimePhasesUnitTests AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime: exit 0.\n- build/Tests/Debug/AxleSharedRuntimePhasesUnitTests.exe: exit 0, ALL 5 RUNTIME PHASE UNIT TESTS PASSED (100%).\n- build/Tests/Release/AxleSharedRuntimePhasesUnitTests.exe: exit 0, ALL 5 RUNTIME PHASE UNIT TESTS PASSED (100%).\n- build/Tests/Debug/AxleTests.exe: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).\n- ctest --test-dir build -C Debug --output-on-failure: 36/36 tests passed (100%).\n- ctest --test-dir build -C Release --output-on-failure: 36/36 tests passed (100%).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).\n- python scripts/check_architecture.py --root . --closed-package AF-04: exit 0, PASS (363 files scanned, 17 CMake files, 0 violations).\n- python scripts/test_baseline_tools.py: exit 0, 18/18 tests passed.\n- git diff --cached --check before source commit: exit 0.\n\nProceeding directly to Package EJ-12 (Fixed clock, inputs and pause/step) under autonomous architecture plan.\n"
+    },
+    {
+      "id": "CG-20261106T083317583076Z-GEMINI-774391",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "DELIVERY",
+      "task": "OPT-03-EJ12",
+      "reply_to": "CG-20261106T081315443337Z-GEMINI-5c396b",
+      "base_commit": "026bd913c3628533fdc30d7dea902e555c30068d",
+      "timestamp_utc": "2026-11-06T08:33:17.583076+00:00",
+      "body": "DELIVERY: Package EJ-12 committed as 026bd91 (feat(scene): implement fixed simulation clock, input snapshot adapter and unified driver (EJ-12)).\n\nSummary:\n1. Simulation Clock & Fixed Accumulator (SimulationClock):\n   - Implemented SimulationClock in Engine/Scene/include/Axle/SimulationClock.hpp and src/SimulationClock.cpp.\n   - Manages double-precision accumulator m_Accumulator, configurable fixed timestep (default 1/60s), configurable speed factor (0.0x, 0.5x, 1.0x, 2.0x, 4.0x), and spiral-of-death overload protection.\n   - Enforced delta time validation: non-finite (NaN, inf) and negative delta times are rejected and tracked via InvalidDtDrops.\n   - Enforced overload cap: accumulator exceeding m_MaxAccumulator (default 0.2s = 12 ticks at 60Hz) is clamped (or dropped based on ClockOverloadPolicy), incrementing OverloadDrops.\n   - Fixed accumulator tick division incorporates a 1e-6 floating-point epsilon to eliminate discrete tick loss at high refresh rates (such as 144 Hz).\n   - Pause/Resume semantics: pausing clears the accumulator to prevent catch-up bursts on resume.\n   - Paused single-step: RequestSingleStep() produces exactly 1 fixed tick on the next frame while maintaining paused state.\n   - Independent instantiability: supports private preview clocks (e.g. for VFX and asset previews) that run independently without touching the main simulation clock.\n2. Simulation Input Adapter (SimulationInputAdapter):\n   - Implemented SimulationInputAdapter and SimulationInputSnapshot in Engine/Scene/include/Axle/SimulationInput.hpp and src/SimulationInput.cpp.\n   - Captures continuous key/mouse states and discrete single-tick edge triggers (KeysJustPressed, KeysJustReleased, MouseButtonsJustPressed, MouseButtonsJustReleased).\n   - Consistent multi-tick consumption (SIM-05): edge triggers latched during 0-tick frames are preserved; in multi-tick frames (e.g. 30 Hz running 2 ticks), edge triggers are consumed exclusively on tick 0, while subsequent catch-up ticks observe held state without replaying edges.\n   - Paused UI isolation (SIM-05): Flush() clears all pending game input buffers on pause/resume, ensuring paused UI events never bleed into gameplay.\n   - Non-intrusive InputContext bridging: activates a scoped tick context during fixed updates so that scripts calling Axle::Input::IsKeyPressed or Axle::Input::IsMouseButtonPressed read transparently from the tick snapshot.\n3. Unified Simulation Driver (SimulationDriver):\n   - Implemented SimulationDriver in Engine/Scene/include/Axle/SimulationDriver.hpp and src/SimulationDriver.cpp.\n   - Combines SimulationClock, SimulationInputAdapter, and phase execution into one cohesive driver for both Editor and Runtime.\n   - AdvanceFrame(rawDt, scene, physicsScene) orchestrates: input polling, paused check & flush, clock advance, frame script execution (rawDt), per-tick input context activation & ExecuteFixedTick (fixedDt), and late presentation phase (rawDt).\n4. Dedicated Test Fixture (AxleSimulationClockUnitTests):\n   - Added Tests/src/Test_SimulationClockAndInputUnit.cpp registered in CTest as SimulationClockUnitTests.\n   - 9 comprehensive headless unit tests covering dt validation, overload cap, frame partitions (SIM-02), speed scaling, pause/resume/single-step (SIM-03), input snapshot latching & multi-tick consumption (SIM-05), paused input isolation (SIM-05), private preview clock independence, and end-to-end SimulationDriver execution.\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleSimulationClockUnitTests AxleSharedRuntimePhasesUnitTests AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime: exit 0.\n- cmake --build build --config Release --target AxleSimulationClockUnitTests AxleSharedRuntimePhasesUnitTests AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime: exit 0.\n- build/Tests/Debug/AxleSimulationClockUnitTests.exe: exit 0, ALL 9 CLOCK & INPUT TESTS PASSED (100%).\n- build/Tests/Release/AxleSimulationClockUnitTests.exe: exit 0, ALL 9 CLOCK & INPUT TESTS PASSED (100%).\n- build/Tests/Debug/AxleTests.exe: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).\n- ctest --test-dir build -C Debug --output-on-failure: 37/37 tests passed (100%).\n- ctest --test-dir build -C Release --output-on-failure: 37/37 tests passed (100%).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).\n- python scripts/check_architecture.py --root . --closed-package AF-04: exit 0, PASS (369 files scanned, 17 CMake files, 0 violations).\n- python scripts/test_baseline_tools.py: exit 0, 18/18 tests passed.\n- git diff --cached --check before source commit: exit 0.\n\nProceeding directly to Package EJ-13 (Editor cutover) under autonomous architecture plan.\n"
     }
   ],
   "deferred_tasks": [

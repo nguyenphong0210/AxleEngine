@@ -30,6 +30,7 @@
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/RHI/RHIBarrier.hpp>
 #include <Axle/RHISceneRenderer.hpp>
+#include <Axle/SimulationDriver.hpp>
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <memory>
@@ -65,6 +66,8 @@ public:
     void OnScenePlay();
     void OnScenePause();
     void OnSceneStop();
+    Axle::SimulationDriver& GetSimulationDriver() { return m_SimulationDriver; }
+    const Axle::SimulationDriver& GetSimulationDriver() const { return m_SimulationDriver; }
     void CompileAndHotReloadAssets(bool forceRebakeAll = false);
 
     void TriggerScriptCompilationAndReload();
@@ -131,6 +134,7 @@ private:
     SceneState m_SceneState = SceneState::Edit;
     bool m_StepSingleFrame = false;
     Axle::f32 m_SimulationSpeed = 1.0f;
+    Axle::SimulationDriver m_SimulationDriver;
     bool m_F5KeyWasPressed = false;
     bool m_F6KeyWasPressed = false;
     bool m_F7KeyWasPressed = false;

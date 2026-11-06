@@ -344,6 +344,23 @@ endif()
 add_test(NAME SimulationClockUnitTests COMMAND $<TARGET_FILE:AxleSimulationClockUnitTests>)
 set_tests_properties(SimulationClockUnitTests PROPERTIES LABELS "scene;sim;clock;cpu" TIMEOUT 30)
 
+# Dedicated Editor Cutover Unit Test Target (EJ-13)
+add_executable(AxleEditorCutoverUnitTests EXCLUDE_FROM_ALL
+    src/Test_EditorCutoverUnit.cpp
+)
+target_include_directories(AxleEditorCutoverUnitTests PRIVATE src)
+target_link_libraries(AxleEditorCutoverUnitTests PRIVATE
+    Axle::Scene
+    Axle::Physics
+    Axle::Core
+    Axle::Platform
+)
+if (MSVC)
+    target_compile_options(AxleEditorCutoverUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME EditorCutoverUnitTests COMMAND $<TARGET_FILE:AxleEditorCutoverUnitTests>)
+set_tests_properties(EditorCutoverUnitTests PROPERTIES LABELS "editor;sim;scene;cpu" TIMEOUT 30)
+
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
     src/JobsECSTestMain.cpp

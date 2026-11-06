@@ -726,6 +726,9 @@ void EditorLayer::OnScenePlay() {
     m_SceneHierarchyPanel.SetSelectedEntity({});
 
     m_SceneState = SceneState::Play;
+    m_SimulationDriver.Reset();
+    m_SimulationDriver.SetSpeed(m_SimulationSpeed);
+    m_SimulationDriver.Resume();
     Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(Axle::Application::Get().GetWindow().GetNativeWindow()));
     Axle::ScriptHotReloadManager::Get().SyncImGuiContext(ImGui::GetCurrentContext());
     m_Scene->OnRuntimeStart(m_PhysicsScene.get());
@@ -842,6 +845,7 @@ void EditorLayer::NewScene() {
     }
 
     m_InitialDynamicStates.clear();
+    m_SimulationDriver.Reset();
 
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
     if (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
@@ -892,6 +896,7 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
     }
 
     m_InitialDynamicStates.clear();
+    m_SimulationDriver.Reset();
 
     // 3. Create fresh PhysicsScene and maintain PhysicsDebugRenderer
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
@@ -1223,6 +1228,7 @@ void EditorLayer::UpdateWindowTitle() {
 
 void EditorLayer::OnScenePause() {
     m_SceneState = SceneState::Pause;
+    m_SimulationDriver.Pause();
     UnlockCursor();
     AXLE_INFO("Simulation paused. Viewport Free-Fly inspection enabled.");
 }
@@ -1233,6 +1239,7 @@ void EditorLayer::OnSceneStop() {
     UnlockCursor();
 
     m_SceneState = SceneState::Edit;
+    m_SimulationDriver.Reset();
 
     if (m_RuntimeScene) {
         m_RuntimeScene->OnRuntimeStop(m_PhysicsScene.get());
@@ -1282,6 +1289,7 @@ bool EditorLayer::Is2DViewMode() const {
 
 void EditorLayer::ResetSimulation() {
     AXLE_INFO("Resetting physics simulation state");
+    m_SimulationDriver.Reset();
 
     // Reset all registered dynamic bodies (pyramid crates, cones, tires, demo shapes) to initial poses
     for (const auto& [bodyIDRaw, state] : m_InitialDynamicStates) {
@@ -1521,11 +1529,19 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_F11KeyWasPressed = false;
     }
 
-    // C++ Native Scripting Runtime Execution
-    if (m_SceneState == SceneState::Play) {
-        m_Scene->OnUpdateRuntime(ts, m_PhysicsScene.get());
+    // C++ Native Scripting Runtime Execution & Shared Simulation Driver (EJ-13)
+    if (m_SceneState == SceneState::Play || m_SceneState == SceneState::Pause) {
+        if (m_StepSingleFrame) {
+            m_SimulationDriver.RequestSingleStep();
+            m_StepSingleFrame = false;
+        }
+        m_SimulationDriver.SetPaused(m_SceneState == SceneState::Pause);
+        m_SimulationDriver.SetSpeed(m_SimulationSpeed);
+        if (m_Scene) {
+            m_SimulationDriver.AdvanceFrame(ts.GetSeconds(), *m_Scene, m_PhysicsScene.get());
+        }
     } else if (m_Scene) {
-        // Live VFX Viewport Preview in Edit/Pause Mode (Phase 31 Step 6)
+        // Live VFX Viewport Preview in Edit Mode (Phase 31 Step 6)
         auto particleView = m_Scene->GetRegistry().view<Axle::ParticleEmitterComponent, Axle::TransformComponent>();
         for (auto entityID : particleView) {
             auto& pec = particleView.get<Axle::ParticleEmitterComponent>(entityID);
@@ -1556,15 +1572,6 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
                 m_CameraController->OnUpdate(ts);
             }
         }
-    }
-
-    // Physics Simulation Stepping
-    if (m_SceneState == SceneState::Play && m_PhysicsScene) {
-        Axle::Timestep simTs = ts.GetSeconds() * m_SimulationSpeed;
-        m_PhysicsScene->Step(simTs);
-    } else if (m_SceneState == SceneState::Pause && m_StepSingleFrame && m_PhysicsScene) {
-        m_PhysicsScene->Step(1.0f / 60.0f);
-        m_StepSingleFrame = false;
     }
 
 

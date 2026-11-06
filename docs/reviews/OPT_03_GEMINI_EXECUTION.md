@@ -43,3 +43,40 @@ Evolving execution log and verification record for the sequential implementation
 - `ctest --test-dir build -C Debug --output-on-failure`: 32/32 passed (100%).
 - `ctest --test-dir build -C Release --output-on-failure`: 32/32 passed (100%).
 - `git diff --check`: exit 0.
+
+---
+
+## Package EJ-08: Parallel EnTT View Correctness
+
+- **Status:** Implemented and self-verified; local delivery committed.
+- **Base Baseline:** `374933a`
+- **Defect Resolved:** `ECSJ-04` (`ParallelECS::ForEach` visited tombstones in EnTT stable/in_place_delete pools).
+
+### Implementation Summary
+1. **Parallel View Iteration Correctness (`ParallelECS::ForEach`):**
+   - Fixed entity partitioning: rather than indexing raw contiguous memory `view.handle()->data()` which contains uncompacted `entt::tombstone` slots for pools with `in_place_delete = true`, `ForEach` iterates `for (auto entity : view)`.
+   - View iteration automatically skips tombstones and evaluates multi-component membership across all participating component pools.
+   - For parallel execution above `minBatchSize`, valid entities are collected and distributed via `JobSystem::ParallelForRange`.
+   - Introduced C++20 `GetViewSizeHint` to handle `size()` on standard storage views, `size_hint()` on in-place delete storage views, and `basic_view`.
+2. **Target Deduplication in `ParallelECS::ForEachEntity`:**
+   - Added filtering and deduplication via `std::unordered_set<entt::entity> seen`.
+   - Checks `e != entt::null && e != entt::tombstone && registry.valid(e) && view.contains(e)` to guarantee disjoint, unique write targets across worker threads.
+3. **Defect Conversion and Comprehensive Probe Expansion:**
+   - Converted `ecsj-04-entt-tombstone` in `scripts/run_jobs_ecs_harness.py` from `REPRODUCED_DEFECT` to expected `PASS`.
+   - Expanded `RunEnTTTombstoneProbe()` in `Tests/src/JobsECSTestMain.cpp` to verify:
+     - Single-component stable storage tombstone skipping (original ECSJ-04 repro case).
+     - High-volume (2000 entities) multi-component view with interleaved tombstones, asserting exact entity set equivalence between serial EnTT view and parallel execution, plus component value integrity across threads.
+     - `ForEachEntity` deduplication and tombstone/null filtering with duplicate inputs.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleJobsECSTests`: exit 0.
+- `cmake --build build --config Release --target AxleJobsECSTests`: exit 0.
+- `build/Tests/Debug/AxleJobsECSTests.exe ecsj-04-entt-tombstone`: exit 0, PASS (sequential=1 parallel=1 multiCount=666 dedupCount=66 invalidCallbacks=0).
+- `build/Tests/Release/AxleJobsECSTests.exe ecsj-04-entt-tombstone`: exit 0, PASS.
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `ctest --test-dir build -C Debug --output-on-failure`: 32/32 tests passed (100%).
+- `ctest --test-dir build -C Release --output-on-failure`: 32/32 tests passed (100%).
+- `python scripts/check_architecture.py --root . --closed-package AF-02`: exit 0, PASS.
+- `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
+- `git diff --check`: exit 0.

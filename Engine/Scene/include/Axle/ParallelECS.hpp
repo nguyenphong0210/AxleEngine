@@ -6,6 +6,7 @@
 
 #include <entt/entt.hpp>
 #include <vector>
+#include <unordered_set>
 #include <functional>
 #include <type_traits>
 #include <mutex>
@@ -16,6 +17,18 @@ namespace Axle {
     /// into Axle::JobSystem worker threads with zero lock contention.
     class ParallelECS {
     public:
+        // Helper to query size or size_hint across EnTT storage/multi-component views
+        template<typename View>
+        static size_t GetViewSizeHint(const View& view) {
+            if constexpr (requires { view.size_hint(); }) {
+                return static_cast<size_t>(view.size_hint());
+            } else if constexpr (requires { view.size(); }) {
+                return static_cast<size_t>(view.size());
+            } else {
+                return 0;
+            }
+        }
+
         // =====================================================================
         // PARALLEL VIEW ITERATION (ParallelFor on entt::view)
         // =====================================================================
@@ -31,31 +44,34 @@ namespace Axle {
         template<typename... Components, typename Func>
         static void ForEach(entt::registry& registry, Func&& func, uint32_t minBatchSize = 1024) {
             auto view = registry.view<Components...>();
-            const auto* handle = view.handle();
-            if (!handle || handle->empty()) return;
-            const size_t entityCount = handle->size();
+            if (view.begin() == view.end()) return;
 
-            // Sequential fallback if JobSystem is not initialized or count is smaller than batch grain
-            if (!JobSystem::IsInitialized() || entityCount < minBatchSize || JobSystem::GetWorkerThreadCount() <= 1) {
+            const size_t estimatedCount = GetViewSizeHint(view);
+
+            // Sequential fallback if JobSystem is not initialized or count is smaller than batch grain or single-threaded
+            if (!JobSystem::IsInitialized() || estimatedCount < minBatchSize || JobSystem::GetTotalThreadCount() <= 1) {
                 for (auto entity : view) {
                     InvokeEntity<Components...>(view, entity, func, 0);
                 }
                 return;
             }
 
-            // In EnTT, view.handle() returns the leading storage pool containing contiguous entity IDs
-            const entt::entity* entities = handle->data();
-            const uint32_t totalEntities = static_cast<uint32_t>(entityCount);
+            // In EnTT, iterating `for (auto entity : view)` guarantees:
+            // 1. Skips entt::tombstone (in_place_delete / stable storage)
+            // 2. Checks view.contains(entity) across multi-component views
+            // 3. Produces only valid, active entities in the view
+            std::vector<entt::entity> entities;
+            entities.reserve(estimatedCount);
+            for (auto entity : view) {
+                entities.push_back(entity);
+            }
 
-            JobSystem::ParallelForRange(totalEntities, [&view, entities, &func](uint32_t start, uint32_t end, uint32_t threadNum) {
+            if (entities.empty()) return;
+
+            const uint32_t totalEntities = static_cast<uint32_t>(entities.size());
+            JobSystem::ParallelForRange(totalEntities, [&view, &entities, &func](uint32_t start, uint32_t end, uint32_t threadNum) {
                 for (uint32_t i = start; i < end; ++i) {
                     entt::entity entity = entities[i];
-                    // If multi-component view, ensure entity belongs to all other pools
-                    if constexpr (sizeof...(Components) > 1) {
-                        if (!view.contains(entity)) {
-                            continue;
-                        }
-                    }
                     InvokeEntity<Components...>(view, entity, func, threadNum);
                 }
             }, minBatchSize);
@@ -64,28 +80,38 @@ namespace Axle {
         /// Iterates in parallel over a predetermined collection of entities, passing components and threadNum.
         template<typename... Components, typename Func>
         static void ForEachEntity(entt::registry& registry, const std::vector<entt::entity>& entities, Func&& func, uint32_t minBatchSize = 512) {
-            const size_t count = entities.size();
-            if (count == 0) return;
+            if (entities.empty()) return;
 
             auto view = registry.view<Components...>();
 
-            if (!JobSystem::IsInitialized() || count < minBatchSize || JobSystem::GetWorkerThreadCount() <= 1) {
-                for (size_t i = 0; i < count; ++i) {
-                    entt::entity entity = entities[i];
-                    if (view.contains(entity)) {
-                        InvokeEntity<Components...>(view, entity, func, 0);
+            // Deduplicate and filter entities: must be valid in registry, not tombstone, and contained in view
+            std::vector<entt::entity> validEntities;
+            validEntities.reserve(entities.size());
+            std::unordered_set<entt::entity> seen;
+            seen.reserve(entities.size());
+
+            for (entt::entity e : entities) {
+                if (e != entt::null && e != entt::tombstone && registry.valid(e) && view.contains(e)) {
+                    if (seen.insert(e).second) {
+                        validEntities.push_back(e);
                     }
+                }
+            }
+
+            const size_t count = validEntities.size();
+            if (count == 0) return;
+
+            if (!JobSystem::IsInitialized() || count < minBatchSize || JobSystem::GetTotalThreadCount() <= 1) {
+                for (size_t i = 0; i < count; ++i) {
+                    InvokeEntity<Components...>(view, validEntities[i], func, 0);
                 }
                 return;
             }
 
             const uint32_t total = static_cast<uint32_t>(count);
-            JobSystem::ParallelForRange(total, [&view, &entities, &func](uint32_t start, uint32_t end, uint32_t threadNum) {
+            JobSystem::ParallelForRange(total, [&view, &validEntities, &func](uint32_t start, uint32_t end, uint32_t threadNum) {
                 for (uint32_t i = start; i < end; ++i) {
-                    entt::entity entity = entities[i];
-                    if (view.contains(entity)) {
-                        InvokeEntity<Components...>(view, entity, func, threadNum);
-                    }
+                    InvokeEntity<Components...>(view, validEntities[i], func, threadNum);
                 }
             }, minBatchSize);
         }
@@ -102,7 +128,7 @@ namespace Axle {
 
             // 1. Collect all root entities (entities without active parents)
             std::vector<entt::entity> rootEntities;
-            rootEntities.reserve(view.size());
+            rootEntities.reserve(GetViewSizeHint(view));
 
             for (auto entityID : view) {
                 bool isRoot = true;
@@ -121,7 +147,7 @@ namespace Axle {
             if (rootCount == 0) return;
 
             // 2. Sequential fallback if small or uninitialized
-            if (!JobSystem::IsInitialized() || rootCount < minBatchSize || JobSystem::GetWorkerThreadCount() <= 1) {
+            if (!JobSystem::IsInitialized() || rootCount < minBatchSize || JobSystem::GetTotalThreadCount() <= 1) {
                 for (uint32_t i = 0; i < rootCount; ++i) {
                     UpdateEntitySubtree(registry, rootEntities[i], glm::mat4(1.0f));
                 }

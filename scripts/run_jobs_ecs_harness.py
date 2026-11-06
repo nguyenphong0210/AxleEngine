@@ -103,7 +103,7 @@ def main():
         ("ej07-handles-shutdown", "PASS", args.timeout),
         ("ecsj-03-bridge-hang", "PASS", args.timeout),
         ("ecsj-03-bridge-control", "PASS", args.timeout),
-        ("ecsj-04-entt-tombstone", "REPRODUCED_DEFECT", args.timeout),
+        ("ecsj-04-entt-tombstone", "PASS", args.timeout),
         ("queued-delivery-control", "PASS", args.timeout),
         ("current-format-lifecycle", "PASS", args.timeout),
         ("deliberate-failure", "PROBE_FAILURE", args.timeout),

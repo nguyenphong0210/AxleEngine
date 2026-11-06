@@ -1414,8 +1414,12 @@ struct StableTombstoneComponent {
     int Value = 0;
 };
 
+struct ExtraComponent {
+    int Tag = 0;
+};
+
 int RunEnTTTombstoneProbe() {
-    Axle::JobSystem::Init(2);
+    Axle::JobSystem::Init(4);
     entt::registry registry;
 
     const auto e1 = registry.create();
@@ -1443,17 +1447,108 @@ int RunEnTTTombstoneProbe() {
         }
     }, 1);
 
+    // Architectural assertion: Parallel iteration must match sequential view and skip tombstones
+    if (sequentialCount != parallelCount.load() || invalidCallbacks.load() != 0) {
+        std::cerr << "DEFECT REPRODUCED [ECSJ-04]: ParallelECS::ForEach raw packed iteration visited tombstones\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // High-volume multi-component iteration test with interleaved tombstones
+    constexpr size_t totalTestEntities = 2000;
+    std::vector<entt::entity> allEntities;
+    allEntities.reserve(totalTestEntities);
+    for (size_t i = 0; i < totalTestEntities; ++i) {
+        auto ent = registry.create();
+        allEntities.push_back(ent);
+        registry.emplace<StableTombstoneComponent>(ent, static_cast<int>(i));
+        if (i % 2 == 0) {
+            registry.emplace<ExtraComponent>(ent, static_cast<int>(i * 10));
+        }
+    }
+
+    // Delete 1 in 3 to create numerous tombstones in StableTombstoneComponent pool
+    for (size_t i = 0; i < totalTestEntities; i += 3) {
+        registry.remove<StableTombstoneComponent>(allEntities[i]);
+    }
+
+    // Collect expected entities sequentially for multi-component view
+    std::unordered_set<entt::entity> expectedMulti;
+    for (auto ent : registry.view<StableTombstoneComponent, ExtraComponent>()) {
+        expectedMulti.insert(ent);
+    }
+
+    std::mutex collectedMutex;
+    std::unordered_set<entt::entity> parallelMulti;
+    std::atomic<size_t> multiInvalid{0};
+
+    Axle::ParallelECS::ForEach<StableTombstoneComponent, ExtraComponent>(registry,
+        [&](entt::entity ent, StableTombstoneComponent& stc, ExtraComponent& ec, uint32_t threadIndex) {
+            (void)threadIndex;
+            if (!registry.valid(ent) || ent == entt::tombstone) {
+                multiInvalid.fetch_add(1);
+                return;
+            }
+            if (stc.Value * 10 != ec.Tag) {
+                multiInvalid.fetch_add(1);
+                return;
+            }
+            std::lock_guard<std::mutex> lock(collectedMutex);
+            parallelMulti.insert(ent);
+        }, 16);
+
+    if (multiInvalid.load() != 0 || expectedMulti != parallelMulti) {
+        std::cerr << "DEFECT [ECSJ-04]: ParallelECS::ForEach multi-component mismatch or invalid callbacks. Expected: "
+                  << expectedMulti.size() << ", got: " << parallelMulti.size() << ", invalid: " << multiInvalid.load() << "\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
+    // ForEachEntity deduplication and tombstone filtering test
+    std::vector<entt::entity> duplicateQueryList;
+    duplicateQueryList.reserve(allEntities.size() * 2 + 10);
+    // Add valid and invalid entities multiple times
+    for (size_t i = 0; i < 100; ++i) {
+        duplicateQueryList.push_back(allEntities[i]);
+        duplicateQueryList.push_back(allEntities[i]); // duplicate
+    }
+    duplicateQueryList.push_back(entt::null);
+    duplicateQueryList.push_back(entt::tombstone);
+
+    std::atomic<size_t> forEachEntityCount{0};
+    std::atomic<size_t> forEachEntityInvalid{0};
+    std::mutex seenEntitiesMutex;
+    std::unordered_set<entt::entity> seenInForEachEntity;
+
+    Axle::ParallelECS::ForEachEntity<StableTombstoneComponent>(registry, duplicateQueryList,
+        [&](entt::entity ent, StableTombstoneComponent& comp, uint32_t threadIndex) {
+            (void)comp;
+            (void)threadIndex;
+            if (!registry.valid(ent) || ent == entt::tombstone || ent == entt::null) {
+                forEachEntityInvalid.fetch_add(1);
+                return;
+            }
+            forEachEntityCount.fetch_add(1);
+            std::lock_guard<std::mutex> lock(seenEntitiesMutex);
+            if (!seenInForEachEntity.insert(ent).second) {
+                // duplicate visited!
+                forEachEntityInvalid.fetch_add(1);
+            }
+        }, 8);
+
+    if (forEachEntityInvalid.load() != 0) {
+        std::cerr << "DEFECT [ECSJ-04]: ParallelECS::ForEachEntity visited duplicate or invalid entities\n";
+        Axle::JobSystem::Shutdown();
+        return 1;
+    }
+
     Axle::JobSystem::Shutdown();
 
     std::cout << "sequential=" << sequentialCount
               << " parallel=" << parallelCount.load()
-              << " invalidCallbacks=" << invalidCallbacks.load() << std::endl;
-
-    // Architectural assertion: Parallel iteration must match sequential view and skip tombstones
-    if (sequentialCount != parallelCount.load() || invalidCallbacks.load() != 0) {
-        std::cerr << "DEFECT REPRODUCED [ECSJ-04]: ParallelECS::ForEach raw packed iteration visited tombstones\n";
-        return 1;
-    }
+              << " multiCount=" << parallelMulti.size()
+              << " dedupCount=" << forEachEntityCount.load()
+              << " invalidCallbacks=0" << std::endl;
 
     std::cout << "RESULT ecsj-04-entt-tombstone PASS" << std::endl;
     return 0;

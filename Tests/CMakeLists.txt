@@ -311,6 +311,22 @@ endif()
 add_test(NAME SceneDataUnitTests COMMAND $<TARGET_FILE:AxleSceneDataUnitTests>)
 set_tests_properties(SceneDataUnitTests PROPERTIES LABELS "scene;data;cpu" TIMEOUT 30)
 
+# Dedicated Shared Runtime Phases and Script API Unit Test Target (EJ-11)
+add_executable(AxleSharedRuntimePhasesUnitTests EXCLUDE_FROM_ALL
+    src/Test_SharedRuntimePhasesUnit.cpp
+)
+target_include_directories(AxleSharedRuntimePhasesUnitTests PRIVATE src)
+target_link_libraries(AxleSharedRuntimePhasesUnitTests PRIVATE
+    Axle::Scene
+    Axle::Physics
+    Axle::Core
+)
+if (MSVC)
+    target_compile_options(AxleSharedRuntimePhasesUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME SharedRuntimePhasesUnitTests COMMAND $<TARGET_FILE:AxleSharedRuntimePhasesUnitTests>)
+set_tests_properties(SharedRuntimePhasesUnitTests PROPERTIES LABELS "scene;sim;cpu" TIMEOUT 30)
+
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
     src/JobsECSTestMain.cpp
@@ -366,7 +382,7 @@ set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture
     PROPERTIES LABELS "architecture;cpu" TIMEOUT 60)
 
 # Explicit developer/test build. Neither this target nor its executables are in ALL.
-set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleAssetUnitTests AxleAssetFormatUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
+set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleAssetUnitTests AxleAssetFormatUnitTests AxleSceneDataUnitTests AxleSharedRuntimePhasesUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
 if(WIN32)
     add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
     target_include_directories(AxleBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/Editor/generated/$<CONFIG>")

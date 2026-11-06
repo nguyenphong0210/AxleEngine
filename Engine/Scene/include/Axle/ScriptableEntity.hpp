@@ -40,6 +40,8 @@ namespace Axle {
 
         virtual void OnCreate() {}
         virtual void OnUpdate(Timestep ts) {}
+        virtual void OnFixedUpdate(Timestep ts) {}
+        virtual void OnLateUpdate(Timestep ts) {}
         virtual void OnImGuiRender() {}
         virtual void OnDestroy() {}
 

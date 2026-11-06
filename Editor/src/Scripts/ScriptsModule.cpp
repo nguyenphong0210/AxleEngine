@@ -55,4 +55,8 @@ extern "C" {
         return static_cast<uint32_t>(Axle::ScriptModuleRegistry::GetRegisteredScripts().size());
     }
 
+    AXLE_SCRIPT_API uint32_t Axle_GetScriptABIVersion() {
+        return Axle::AXLE_SCRIPT_ABI_VERSION;
+    }
+
 }

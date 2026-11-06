@@ -34,6 +34,28 @@ namespace Axle {
         }
     }
 
+    void SceneScriptBridge::OnFixedUpdate(SceneData& scene, Timestep ts) {
+        auto& registry = scene.GetRegistry();
+        auto scriptView = registry.view<NativeScriptComponent>();
+        for (auto entityID : scriptView) {
+            auto& nsc = scriptView.get<NativeScriptComponent>(entityID);
+            if (nsc.Instance) {
+                nsc.Instance->OnFixedUpdate(ts);
+            }
+        }
+    }
+
+    void SceneScriptBridge::OnLateUpdate(SceneData& scene, Timestep ts) {
+        auto& registry = scene.GetRegistry();
+        auto scriptView = registry.view<NativeScriptComponent>();
+        for (auto entityID : scriptView) {
+            auto& nsc = scriptView.get<NativeScriptComponent>(entityID);
+            if (nsc.Instance) {
+                nsc.Instance->OnLateUpdate(ts);
+            }
+        }
+    }
+
     void SceneScriptBridge::OnRuntimeStop(SceneData& scene) {
         auto& registry = scene.GetRegistry();
         auto view = registry.view<NativeScriptComponent>();

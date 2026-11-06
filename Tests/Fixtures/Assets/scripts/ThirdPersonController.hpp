@@ -42,6 +42,14 @@ public:
     }
 
     void OnUpdate(Axle::Timestep ts) override {
+        UpdateController(ts);
+    }
+
+    void OnFixedUpdate(Axle::Timestep ts) override {
+        UpdateController(ts);
+    }
+
+    void UpdateController(Axle::Timestep ts) {
         if (!HasComponent<Axle::CharacterControllerComponent>()) return;
         auto& ccc = GetComponent<Axle::CharacterControllerComponent>();
 

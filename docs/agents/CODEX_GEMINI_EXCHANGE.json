@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-03-AF04",
-    "title": "Asset registry/format versus resources and tools",
+    "id": "OPT-03-EJ11",
+    "title": "Shared runtime phases and script API",
     "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "ca1fb42",
+    "code_baseline": "b418b9e",
     "scope_updated_on": "2026-11-06",
     "user_scope": "User activated docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md for sequential implementation of OPT-02 through OPT-10, starting with EJ-01..EJ-07. Routine stop-for-Codex instructions superseded within activated range; per-package implementation/self-review/fix/verification/local commit loop active. Independent acceptance remains pending.",
     "execution_range": "OPT-03 (AF-02, EJ-08..EJ-10, AF-03, AF-04, EJ-11..EJ-14)",
@@ -23,7 +23,7 @@
       "EJ-13",
       "EJ-14"
     ],
-    "implementation_status": "AF04_in_progress",
+    "implementation_status": "EJ11_in_progress",
     "independent_review_status": "pending_delivery_and_checkpoint",
     "handoff": "docs/agents/handoffs/OPT_02_EJ01_GEMINI.md",
     "review_report": "docs/reviews/OPT_01_AF01_P41_PLG_REVIEW.md",
@@ -44,7 +44,8 @@
       "EJ-08": "4286425 verified delivery (32/32 CTest, 16/0/3 harness, ECSJ-04 resolved)",
       "EJ-09": "cc059af verified delivery (33/33 CTest, 16/0/3 harness, AxleSceneMutationUnitTests 100%)",
       "EJ-10": "b434dd0 verified delivery (33/33 CTest, 16/0/3 harness, 12/12 transform unit tests, 68/68 AxleTests)",
-      "AF-03": "ca1fb42 verified delivery (34/34 CTest, 16/0/3 harness, 6/6 AxleSceneDataUnitTests, 68/68 AxleTests)"
+      "AF-03": "ca1fb42 verified delivery (34/34 CTest, 16/0/3 harness, 6/6 AxleSceneDataUnitTests, 68/68 AxleTests)",
+      "AF-04": "b418b9e verified delivery (35/35 CTest, 16/0/3 harness, 5/5 AxleAssetFormatUnitTests, 68/68 AxleTests)"
     },
     "expected_files": [
       "Engine/Core/include/Axle/JobSystem.hpp",
@@ -76,7 +77,7 @@
       "state": "full_product_verification_pending",
       "note": "User-directed progression retains this gap; legacy preservation requirements are superseded. No old-format support required."
     },
-    "next_action": "Deliver AF-04 and proceed to EJ-11 (shared runtime phases and script API).",
+    "next_action": "Deliver EJ-11 and proceed to EJ-12 (fixed clock, inputs and pause/step).",
     "autonomy_plan": {
       "status": "activated",
       "document": "docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md",
@@ -1079,6 +1080,17 @@
       "base_commit": "ca1fb42",
       "timestamp_utc": "2026-11-06T06:39:44.130579+00:00",
       "body": "DELIVERY: Package AF-03 committed as ca1fb42 (feat(scene): decouple generic scene data from concrete system bridges (AF-03)).\n\nSummary:\n1. Generic SceneData Ownership:\n   - Extracted headless SceneData owning entt::registry m_Registry, u32 m_SceneGeneration, monotonic uint64_t m_TransformRevision, and SceneCommandBuffer.\n   - Manages headless entity lifecycle (CreateEntity, CreateEntityWithUUID, DestroyEntity, DuplicateEntity, Clear, GetEntityByUUID).\n   - Owns hierarchy traversal and world transform evaluation (GetWorldTransform, RecomputeWorldTransform, UpdateWorldTransforms, UpdateWorldTransformsParallel).\n   - Deep copying (SceneData::Copy): clones all entities, duplicates components via extensible component codecs, and remaps hierarchy relationships without requiring GPU, physics, or script context.\n2. Component Codec Registry:\n   - Introduced IComponentCodec and ComponentCodecRegistry singleton with built-in codecs for 20+ components (Transform, MeshInstance3D, Material, DirectionalLight, PointLight, SpotLight, Camera, Skybox, Assembly, CollisionShape3D, RigidBody3D, NativeScript, AudioListener, AudioSource, SkeletalMesh, Animator, CharacterController, ParticleEmitter, CharacterVFX, UICanvas, PassiveExtensionComponent).\n   - Provides an extensible registration seam for plugin components to register copy/remap codecs cleanly.\n3. Passive Extension Storage:\n   - Introduced PassiveExtensionComponent storing unknown or plugin YAML sections (StorePassiveSection, GetPassiveSections, HasPassiveSections).\n   - In SceneSerializer: unhandled custom component sections are captured into PassiveExtensionComponent and re-emitted on serialization.\n   - Preserves unknown data roundtrip through load, copy, and save without concrete plugin dependencies.\n4. Specialized System Bridges:\n   - ScenePhysicsBridge: Jolt transform synchronization (SynchronizeTransforms), zero-drift body reset (RestoreBodies), body teardown (TeardownEntityPhysics), body ID lookup (FindEntityByBodyID), and body creation (CreateBodyForEntity).\n   - SceneAudioBridge: audio source playback on awake (OnRuntimeStart), 3D listener/source spatial sync (OnUpdate), audio stoppage (OnRuntimeStop), and entity audio teardown (TeardownEntityAudio).\n   - SceneScriptBridge: native script instantiation and OnCreate (OnRuntimeStart), tick execution (OnUpdate), teardown (OnRuntimeStop), hot reload state capture/restore (OnPreScriptReload, OnPostScriptReload), and entity script teardown (TeardownEntityScript).\n   - SceneCharacterBridge: kinematic character controller runtime initialization, animator synchronization, and character VFX step updates.\n   - SceneRenderBridge: geometry pass with lights/shadows, shadow pass, skeletal mesh pass, and particle rendering (OpenGL & RHI).\n5. EnTT Decoupled from Low-Level RHI:\n   - Moved RHIECSStreamer from Engine/RHI/ to Engine/Renderer/.\n   - Purged EnTT dependency and includes from AxleRHI.\n6. Dedicated Test Fixture (AxleSceneDataUnitTests):\n   - Added Tests/src/Test_SceneDataUnit.cpp registered in CTest as SceneDataUnitTests.\n   - 6 test cases verifying entity lifecycle, hierarchy cycle rejection & unparenting, transform evaluation & revision progression, component codecs & deep copying, passive extension storage roundtrip through serialization & copying, and Scene facade parity.\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleSceneDataUnitTests AxleFoundationUnitTests AxleJobsECSTests AxleEditor AxleRuntime AxleTests: exit 0.\n- cmake --build build --config Release --target AxleSceneDataUnitTests: exit 0.\n- build/Tests/Debug/AxleSceneDataUnitTests.exe: exit 0, ALL 6 SCENE DATA UNIT TESTS PASSED (100%).\n- build/Tests/Release/AxleSceneDataUnitTests.exe: exit 0, ALL 6 SCENE DATA UNIT TESTS PASSED (100%).\n- build/Tests/Debug/AxleTests.exe: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).\n- ctest --test-dir build -C Debug --output-on-failure: 34/34 tests passed (100%).\n- ctest --test-dir build -C Release --output-on-failure: 34/34 tests passed (100%).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).\n- python scripts/check_architecture.py --root . --closed-package AF-02: exit 0, PASS (360 files, 17 CMake files, 0 violations).\n- python scripts/test_baseline_tools.py: exit 0, 18/18 tests passed.\n- git diff --check: exit 0.\n\nProceeding directly to Package AF-04 (Asset registry/format versus resources and tools) under autonomous architecture plan."
+    },
+    {
+      "id": "CG-20261106T074244796151Z-GEMINI-278ff7",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "DELIVERY",
+      "task": "OPT-03-AF04",
+      "reply_to": "CG-20261106T063944130579Z-GEMINI-65bbfa",
+      "base_commit": "b418b9e",
+      "timestamp_utc": "2026-11-06T07:42:44.796151+00:00",
+      "body": "DELIVERY: Package AF-04 committed as b418b9e (feat(asset): separate CPU asset registry and formats from GPU caches and tools (AF-04)).\n\nSummary:\n1. Pure CPU Asset Registry & Formats (AxleAsset):\n   - Purged all GPU resource caching (Texture2D, Material, RHIMaterial) and include/link dependencies from AssetManager and AssetSerializer.\n   - AxleAsset now links purely AxleCore (Level 0 Foundation).\n   - AxleLoadedMesh now encapsulates pure CPU mesh data (AxleMeshSource SourceData; bool LoadedFromCache; bool Success;), parsing and caching .axle and .axlebin files without touching GPU vertex arrays.\n2. GPU Material & Texture Caching in Renderer (MaterialCache):\n   - Introduced MaterialCache in AxleRenderer managing Texture2D, Material, and RHI::RHIMaterial caching, normalized path keys, native embedded UUID lookup via FileSystem::ReadFileIdentity, in-place live reloading, and texture attachment.\n   - Wired dependency-inversion resolvers (UUIDPathResolver and PathUUIDResolver) so MaterialCache can query AssetManager paths and validate handles without upward links to Asset.\n3. Decoupled PhysicsMaterial:\n   - Self-contained string parser in PhysicsMaterial::Deserialize supporting declarative .axleasset and legacy YAML formats without AssetDSL or AxleAsset dependencies.\n   - Removed Axle::Asset link from Engine/Physics/CMakeLists.txt.\n4. Scene VAO Decoupling:\n   - Introduced CreateVertexArrayFromMeshSource(const AxleMeshSource&) in SceneRenderBridge, bridging CPU mesh sources to OpenGL VertexArray inside AxleScene.\n   - Updated all VAO instantiation sites across Editor and UI panels.\n5. Architectural Allowances Retired:\n   - Retired ALLOW-004 (Asset -> Renderer), ALLOW-005 (Asset -> RHI), ALLOW-008 (Physics -> Asset).\n   - check_architecture.py passes with 0 violations across 362 scanned files.\n6. Dedicated Test Target (AxleAssetFormatUnitTests):\n   - Added Tests/src/Test_AssetUnit.cpp registered in CTest as AssetFormatUnitTests.\n   - 5 headless unit test suites verifying pure registry, AssetDSL, pure CPU mesh serialization/baking, decoupled PhysicsMaterial, and MaterialCache in-place reload.\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime: exit 0.\n- cmake --build build --config Release --target AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime: exit 0.\n- build/Tests/Debug/AxleAssetFormatUnitTests.exe: exit 0, ALL 5 ASSET UNIT TESTS PASSED (100%).\n- build/Tests/Release/AxleAssetFormatUnitTests.exe: exit 0, ALL 5 ASSET UNIT TESTS PASSED (100%).\n- build/Tests/Debug/AxleAssetUnitTests.exe: exit 0, PASS 14/14 asset suites (100%).\n- build/Tests/Debug/AxleTests.exe: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).\n- ctest --test-dir build -C Debug --output-on-failure: 35/35 tests passed (100%).\n- ctest --test-dir build -C Release --output-on-failure: 35/35 tests passed (100%).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).\n- python scripts/check_architecture.py --root . --closed-package AF-04: exit 0, PASS (362 files scanned, 17 CMake files, 0 violations).\n- python scripts/test_baseline_tools.py: exit 0, 18/18 tests passed.\n- git diff --check: exit 0.\n\nProceeding directly to Package EJ-11 (Shared runtime phases and script API) under autonomous architecture plan."
     }
   ],
   "deferred_tasks": [

@@ -17,6 +17,8 @@
 
 namespace Axle {
 
+    constexpr uint32_t AXLE_SCRIPT_ABI_VERSION = 2; // Incremented in EJ-11 for OnFixedUpdate and OnLateUpdate callbacks
+
     class ScriptableEntity;
 
     struct ScriptMetadata {

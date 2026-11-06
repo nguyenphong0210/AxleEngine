@@ -15,6 +15,12 @@ namespace Axle {
         // Execute frame updates for native scripts
         static void OnUpdate(SceneData& scene, Timestep ts);
 
+        // Execute fixed simulation tick updates for native scripts (OnFixedUpdate)
+        static void OnFixedUpdate(SceneData& scene, Timestep ts);
+
+        // Execute late presentation updates for native scripts (OnLateUpdate)
+        static void OnLateUpdate(SceneData& scene, Timestep ts);
+
         // Teardown and destroy all active native script instances
         static void OnRuntimeStop(SceneData& scene);
 

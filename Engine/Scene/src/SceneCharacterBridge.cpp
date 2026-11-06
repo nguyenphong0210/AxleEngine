@@ -37,25 +37,36 @@ namespace Axle {
         }
     }
 
-    void SceneCharacterBridge::OnUpdate(SceneData& scene, Timestep ts, PhysicsScene* physicsScene) {
+    void SceneCharacterBridge::OnFixedUpdate(SceneData& scene, Timestep fixedDt, PhysicsScene* /*physicsScene*/) {
         auto& registry = scene.GetRegistry();
 
-        // 1. Kinematic Character Controller Updates
+        // Kinematic Character Controller Pre-Physics Updates
         auto ccView = registry.view<CharacterControllerComponent, TransformComponent>();
         for (auto entityID : ccView) {
             auto& ccc = ccView.get<CharacterControllerComponent>(entityID);
             auto& tc = ccView.get<TransformComponent>(entityID);
 
-            ccc.Update(ts.GetSeconds());
+            ccc.Update(fixedDt.GetSeconds());
 
             if (ccc.RuntimeController) {
                 tc.Translation = ccc.RuntimeController->GetPosition();
 
                 if (ccc.OrientRotationToMovement && glm::length(ccc.MoveDirection) > 0.001f) {
                     glm::quat targetRot = glm::angleAxis(std::atan2(ccc.MoveDirection.x, ccc.MoveDirection.z), glm::vec3(0.0f, 1.0f, 0.0f));
-                    tc.Rotation = glm::slerp(tc.Rotation, targetRot, std::min(1.0f, ts.GetSeconds() * ccc.TurnSmoothing));
+                    tc.Rotation = glm::slerp(tc.Rotation, targetRot, std::min(1.0f, fixedDt.GetSeconds() * ccc.TurnSmoothing));
                 }
             }
+        }
+    }
+
+    void SceneCharacterBridge::OnPostStepSync(SceneData& scene, PhysicsScene* /*physicsScene*/) {
+        auto& registry = scene.GetRegistry();
+
+        // Telemetry readback and synchronization with Animator and VFX
+        auto ccView = registry.view<CharacterControllerComponent, TransformComponent>();
+        for (auto entityID : ccView) {
+            const auto& ccc = ccView.get<CharacterControllerComponent>(entityID);
+            const auto& tc = ccView.get<TransformComponent>(entityID);
 
             // Sync with AnimatorComponent if present
             if (registry.all_of<AnimatorComponent>(entityID)) {
@@ -69,19 +80,23 @@ namespace Axle {
             if (registry.all_of<CharacterVFXComponent>(entityID)) {
                 auto& cvfx = registry.get<CharacterVFXComponent>(entityID);
                 if (cvfx.Enabled && cvfx.RuntimeVFX) {
-                    cvfx.RuntimeVFX->Update(ts, tc.Translation, tc.Rotation, ccc.Velocity, ccc.IsGrounded, ccc.CurrentSpeed, ccc.GroundNormal);
+                    cvfx.RuntimeVFX->Update(Timestep(0.016f), tc.Translation, tc.Rotation, ccc.Velocity, ccc.IsGrounded, ccc.CurrentSpeed, ccc.GroundNormal);
                 }
             }
         }
+    }
 
-        // 2. Standalone or Character-Attached Animator Component Updates
+    void SceneCharacterBridge::UpdateAnimationAndVFX(SceneData& scene, Timestep fixedDt, PhysicsScene* physicsScene) {
+        auto& registry = scene.GetRegistry();
+
+        // 1. Standalone or Character-Attached Animator Component Updates
         auto animView = registry.view<AnimatorComponent>();
         for (auto entityID : animView) {
             auto& ac = animView.get<AnimatorComponent>(entityID);
-            ac.Update(ts.GetSeconds());
+            ac.Update(fixedDt.GetSeconds());
         }
 
-        // 3. Particle Emitter System Updates
+        // 2. Particle Emitter System Updates
         auto particleUpdateView = registry.view<ParticleEmitterComponent, TransformComponent>();
         for (auto entityID : particleUpdateView) {
             auto& pec = particleUpdateView.get<ParticleEmitterComponent>(entityID);
@@ -96,8 +111,14 @@ namespace Axle {
             }
             glm::quat worldRot = glm::quat_cast(axes);
             pec.BindPhysicsScene(physicsScene);
-            pec.Update(ts.GetSeconds(), worldPos, worldRot, worldScale);
+            pec.Update(fixedDt.GetSeconds(), worldPos, worldRot, worldScale);
         }
+    }
+
+    void SceneCharacterBridge::OnUpdate(SceneData& scene, Timestep ts, PhysicsScene* physicsScene) {
+        OnFixedUpdate(scene, ts, physicsScene);
+        OnPostStepSync(scene, physicsScene);
+        UpdateAnimationAndVFX(scene, ts, physicsScene);
     }
 
     void SceneCharacterBridge::OnRuntimeStop(SceneData& scene) {

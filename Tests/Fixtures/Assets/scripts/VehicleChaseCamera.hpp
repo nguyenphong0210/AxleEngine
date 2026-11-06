@@ -141,6 +141,14 @@ public:
     }
 
     void OnUpdate(Axle::Timestep ts) override {
+        UpdateCamera(ts);
+    }
+
+    void OnLateUpdate(Axle::Timestep ts) override {
+        UpdateCamera(ts);
+    }
+
+    void UpdateCamera(Axle::Timestep ts) {
         Axle::Scene* scene = GetEntity().GetScene();
         if (!scene) return;
 

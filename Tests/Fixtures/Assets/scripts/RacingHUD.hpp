@@ -70,6 +70,14 @@ public:
     }
 
     void OnUpdate(Axle::Timestep ts) override {
+        UpdateHUD(ts);
+    }
+
+    void OnLateUpdate(Axle::Timestep ts) override {
+        UpdateHUD(ts);
+    }
+
+    void UpdateHUD(Axle::Timestep ts) {
         // Hotkey 'H': Toggle HUD Visibility
         if (Axle::Input::IsKeyPressed(Axle::KeyCode::H)) {
             if (!m_HKeyWasPressed) {

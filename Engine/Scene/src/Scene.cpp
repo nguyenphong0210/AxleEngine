@@ -10,6 +10,7 @@
 #include <Axle/MaterialCache.hpp>
 #include <Axle/AssetManager.hpp>
 #include <Axle/ScriptableEntity.hpp>
+#include <Axle/SceneCommandBuffer.hpp>
 
 namespace Axle {
 
@@ -246,20 +247,74 @@ namespace Axle {
         SceneAudioBridge::OnRuntimeStart(*this);
     }
 
+    void Scene::ExecuteFrameScriptPhase(Timestep dt) {
+        RecordPhase(SimulationPhase::FrameScripts);
+        SceneScriptBridge::OnUpdate(*this, dt);
+    }
+
+    void Scene::ExecuteFixedControlsPhase(Timestep fixedDt, PhysicsScene* physicsScene) {
+        RecordPhase(SimulationPhase::FixedControls);
+        auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
+        GetCommandBuffer().Execute(*this);
+        SceneScriptBridge::OnFixedUpdate(*this, fixedDt);
+        SceneCharacterBridge::OnFixedUpdate(*this, fixedDt, ps);
+    }
+
+    void Scene::ExecutePhysicsPhase(Timestep fixedDt, PhysicsScene* physicsScene) {
+        RecordPhase(SimulationPhase::Physics);
+        auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
+        if (ps) {
+            ps->Step(fixedDt.GetSeconds());
+        }
+    }
+
+    void Scene::ExecutePostStepSyncPhase(PhysicsScene* physicsScene) {
+        RecordPhase(SimulationPhase::PostStepSync);
+        auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
+        ScenePhysicsBridge::SynchronizeTransforms(*this, ps);
+        SceneCharacterBridge::OnPostStepSync(*this, ps);
+    }
+
+    void Scene::ExecuteAnimationVFXPhase(Timestep fixedDt, PhysicsScene* physicsScene) {
+        RecordPhase(SimulationPhase::AnimationVFX);
+        auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
+        SceneCharacterBridge::UpdateAnimationAndVFX(*this, fixedDt, ps);
+        UpdateWorldTransformsParallel(64);
+    }
+
+    void Scene::ExecuteLatePresentationPhase(Timestep dt, PhysicsScene* physicsScene) {
+        RecordPhase(SimulationPhase::LatePresentation);
+        auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
+        SceneScriptBridge::OnLateUpdate(*this, dt);
+        UpdateWorldTransformsParallel(64);
+        SceneAudioBridge::OnUpdate(*this, dt, ps);
+    }
+
+    void Scene::ExecuteFixedTick(Timestep fixedDt, PhysicsScene* physicsScene) {
+        ExecuteFixedControlsPhase(fixedDt, physicsScene);
+        ExecutePhysicsPhase(fixedDt, physicsScene);
+        ExecutePostStepSyncPhase(physicsScene);
+        ExecuteAnimationVFXPhase(fixedDt, physicsScene);
+    }
+
+    void Scene::StepSimulation(Timestep dt, PhysicsScene* physicsScene) {
+        if (physicsScene) m_RuntimePhysicsScene = physicsScene;
+        auto* ps = m_RuntimePhysicsScene;
+
+        ExecuteFrameScriptPhase(dt);
+        ExecuteFixedTick(dt, ps);
+        ExecuteLatePresentationPhase(dt, ps);
+    }
+
     void Scene::OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene) {
         if (physicsScene) m_RuntimePhysicsScene = physicsScene;
+        auto* ps = m_RuntimePhysicsScene;
 
-        // 1. C++ Native Scripting
-        SceneScriptBridge::OnUpdate(*this, ts);
-
-        // 2. Kinematic Character Controllers, Animator & VFX
-        SceneCharacterBridge::OnUpdate(*this, ts, m_RuntimePhysicsScene);
-
-        // 3. Propagate scene graph hierarchy transforms
-        UpdateWorldTransformsParallel(64);
-
-        // 4. Audio Listener & 3D Spatial Audio Synchronization
-        SceneAudioBridge::OnUpdate(*this, ts, m_RuntimePhysicsScene);
+        ExecuteFrameScriptPhase(ts);
+        ExecuteFixedControlsPhase(ts, ps);
+        ExecutePostStepSyncPhase(ps);
+        ExecuteAnimationVFXPhase(ts, ps);
+        ExecuteLatePresentationPhase(ts, ps);
     }
 
     void Scene::OnImGuiRender() {

@@ -272,3 +272,53 @@ Evolving execution log and verification record for the sequential implementation
 - `python scripts/check_architecture.py --root . --closed-package AF-04`: exit 0, PASS (362 files scanned, 17 CMake files, 0 violations).
 - `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
 - `git diff --check`: exit 0.
+
+---
+
+## Package EJ-11: Shared Runtime Phases and Script API
+
+- **Status:** Implemented and self-verified; local delivery committed.
+- **Base Baseline:** `b418b9e`
+- **Scope & Contract:** [ARCHITECTURE_FOUNDATION_MASTER_PLAN.md](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) / [ENTT_ENKITS_REFACTOR_PLAN.md](../design/ENTT_ENKITS_REFACTOR_PLAN.md)
+
+### Implementation Summary
+1. **Discrete Simulation Phase Architecture (`Engine/Scene/include/Axle/ScenePhase.hpp`):**
+   - Formalized canonical simulation phases: `FrameScripts`, `FixedControls`, `Physics`, `PostStepSync`, `AnimationVFX`, and `LatePresentation`.
+   - Added phase telemetry trace (`EnablePhaseTracing`, `ClearPhaseTrace`, `GetPhaseTrace`, `RecordPhase`) for sequence verification and regression profiling.
+   - Decomposed monolithic `Scene::OnUpdateRuntime` into discrete phase invokers: `ExecuteFrameScriptPhase`, `ExecuteFixedControlsPhase`, `ExecutePhysicsPhase`, `ExecutePostStepSyncPhase`, `ExecuteAnimationVFXPhase`, and `ExecuteLatePresentationPhase`.
+   - Added `ExecuteFixedTick(fixedDt, physicsScene)` and `StepSimulation(dt, physicsScene)` executing full end-to-end discrete phases with command buffer flushing at phase boundaries.
+2. **Extended Script Lifecycle Callbacks (`Engine/Scene/include/Axle/ScriptableEntity.hpp`, `SceneScriptBridge.hpp`, `SceneScriptBridge.cpp`):**
+   - Added `virtual void OnFixedUpdate(Timestep ts) {}` for fixed simulation ticks, vehicle/character input polling, and rigid body impulses before physics integration.
+   - Added `virtual void OnLateUpdate(Timestep ts) {}` for post-physics camera follow, HUD telemetry, and presentation updates after physics transforms have synchronized.
+   - Preserved `virtual void OnUpdate(Timestep ts) {}` for frame-rate variable updates.
+   - Updated `SceneScriptBridge` to provide distinct iteration passes: `OnUpdate`, `OnFixedUpdate`, and `OnLateUpdate`.
+3. **Script Module ABI Handshake & Versioning (`Engine/Scene/include/Axle/ScriptModule.hpp`, `Editor/src/Scripts/ScriptsModule.cpp`, `Engine/Scene/src/ScriptHotReloadManager.cpp`):**
+   - Defined `constexpr uint32_t AXLE_SCRIPT_ABI_VERSION = 2;`.
+   - Exported `AXLE_SCRIPT_API uint32_t Axle_GetScriptABIVersion()` from `ScriptsModule.cpp`.
+   - Enforced ABI handshake in `ScriptHotReloadManager::Reload`: candidate script DLLs missing `Axle_GetScriptABIVersion` or exporting mismatched ABI versions are gracefully rejected before touching active vtables or unmapping active DLLs.
+4. **Decoupled Character and Animation/VFX Bridges (`Engine/Scene/include/Axle/SceneCharacterBridge.hpp`, `SceneCharacterBridge.cpp`):**
+   - Decomposed character update into discrete phases: `OnFixedUpdate` (kinematic controller physics updates), `OnPostStepSync` (post-physics state synchronization to `AnimatorComponent` for speed, vertical velocity, grounded state, and `CharacterVFXComponent`), and `UpdateAnimationAndVFX` (updating standalone animators and particle emitters).
+5. **Script Fixture Migration (`Tests/Fixtures/Assets/scripts/`):**
+   - Migrated `ThirdPersonController.hpp` and `CarController.hpp` to implement `OnFixedUpdate` for responsive same-tick physics input.
+   - Migrated `ThirdPersonCamera.hpp`, `VehicleChaseCamera.hpp`, and `RacingHUD.hpp` to implement `OnLateUpdate` for zero-jitter camera tracking after physics transform synchronization.
+6. **Dedicated Test Fixture (`AxleSharedRuntimePhasesUnitTests`):**
+   - Added `Tests/src/Test_SharedRuntimePhasesUnit.cpp` registered in CTest as `SharedRuntimePhasesUnitTests`.
+   - 5 comprehensive headless test cases:
+     - `TestPhaseTraceOrder`: validates exact execution order across `ExecuteFixedTick` and full simulation frames.
+     - `TestCallbackInvocationCounts`: validates exact invocation counts for `OnUpdate`, `OnFixedUpdate`, and `OnLateUpdate` across multiple ticks.
+     - `TestSameTickControlsAndPostStepPoses`: validates SIM-01 same-tick contract: controls applied in `FixedControls` are integrated in `Physics`, synchronized in `PostStepSync`, and observed by cameras in `LatePresentation` within the exact same simulation tick.
+     - `TestScriptABIVersionValidationAndRejection`: validates ABI 2 handshake and graceful rejection of legacy or corrupted candidate DLLs.
+     - `TestCharacterBridgePhaseIsolation`: validates kinematic character movement in fixed tick and animator telemetry sync post-step.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleSharedRuntimePhasesUnitTests AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime`: exit 0.
+- `cmake --build build --config Release --target AxleSharedRuntimePhasesUnitTests AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime`: exit 0.
+- `build/Tests/Debug/AxleSharedRuntimePhasesUnitTests.exe`: exit 0, ALL RUNTIME PHASE TESTS PASSED (100%).
+- `build/Tests/Release/AxleSharedRuntimePhasesUnitTests.exe`: exit 0, ALL RUNTIME PHASE TESTS PASSED (100%).
+- `build/Tests/Debug/AxleTests.exe`: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).
+- `ctest --test-dir build -C Debug --output-on-failure`: 36/36 tests passed (100%).
+- `ctest --test-dir build -C Release --output-on-failure`: 36/36 tests passed (100%).
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `python scripts/check_architecture.py --root . --closed-package AF-04`: exit 0, PASS (363 files scanned, 17 CMake files, 0 violations).
+- `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
+- `git diff --check`: exit 0.

@@ -7,6 +7,7 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/SceneData.hpp>
 #include <Axle/Entity.hpp>
+#include <Axle/ScenePhase.hpp>
 #include <Axle/UI/UIDataContext.hpp>
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
@@ -92,6 +93,31 @@ namespace Axle {
         void OnImGuiRender();
         void OnRuntimeStop(PhysicsScene* physicsScene = nullptr);
 
+        // Discrete Simulation Phase Execution (EJ-11)
+        void ExecuteFrameScriptPhase(Timestep dt);
+        void ExecuteFixedControlsPhase(Timestep fixedDt, PhysicsScene* physicsScene = nullptr);
+        void ExecutePhysicsPhase(Timestep fixedDt, PhysicsScene* physicsScene = nullptr);
+        void ExecutePostStepSyncPhase(PhysicsScene* physicsScene = nullptr);
+        void ExecuteAnimationVFXPhase(Timestep fixedDt, PhysicsScene* physicsScene = nullptr);
+        void ExecuteLatePresentationPhase(Timestep dt, PhysicsScene* physicsScene = nullptr);
+
+        // Entire Fixed Tick (Controls -> Physics -> PostStepSync -> AnimationVFX)
+        void ExecuteFixedTick(Timestep fixedDt, PhysicsScene* physicsScene = nullptr);
+
+        // Full Simulation Step (FrameScripts -> FixedTick -> LatePresentation)
+        void StepSimulation(Timestep dt, PhysicsScene* physicsScene = nullptr);
+
+        // Simulation Phase Tracing & Telemetry
+        void EnablePhaseTracing(bool enable) { m_PhaseTracingEnabled = enable; }
+        bool IsPhaseTracingEnabled() const { return m_PhaseTracingEnabled; }
+        void ClearPhaseTrace() { m_PhaseTrace.clear(); }
+        const std::vector<SimulationPhase>& GetPhaseTrace() const { return m_PhaseTrace; }
+        void RecordPhase(SimulationPhase phase) {
+            if (m_PhaseTracingEnabled) {
+                m_PhaseTrace.push_back(phase);
+            }
+        }
+
         PhysicsScene* GetPhysicsScene() const { return m_RuntimePhysicsScene; }
 
         // Script reload hooks (Script Bridge)
@@ -104,6 +130,8 @@ namespace Axle {
     private:
         PhysicsScene* m_RuntimePhysicsScene = nullptr;
         UIDataContext m_UIDataContext;
+        bool m_PhaseTracingEnabled = false;
+        std::vector<SimulationPhase> m_PhaseTrace;
 
         friend class Entity;
     };

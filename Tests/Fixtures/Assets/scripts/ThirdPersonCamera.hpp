@@ -40,6 +40,14 @@ public:
     }
 
     void OnUpdate(Axle::Timestep ts) override {
+        UpdateCamera(ts);
+    }
+
+    void OnLateUpdate(Axle::Timestep ts) override {
+        UpdateCamera(ts);
+    }
+
+    void UpdateCamera(Axle::Timestep ts) {
         if (!HasComponent<Axle::TransformComponent>()) return;
         auto& tc = GetComponent<Axle::TransformComponent>();
 

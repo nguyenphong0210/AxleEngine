@@ -154,6 +154,28 @@ namespace Axle {
         // Validate required ABI exports
         using GetCountFn = uint32_t(*)();
         using InitFn = void(*)(ScriptRegisterCallback);
+        using GetABIVersionFn = uint32_t(*)();
+
+        auto fnGetABI = (GetABIVersionFn)GetProcAddress(hCandidate, "Axle_GetScriptABIVersion");
+        if (!fnGetABI) {
+            FreeLibrary(hCandidate);
+            std::filesystem::remove(candidatePath, ec);
+            result.Success = false;
+            result.Message = "Candidate AxleScripts module missing required export 'Axle_GetScriptABIVersion' (incompatible legacy ABI)!";
+            AXLE_ERROR("ScriptHotReloadManager: {0}", result.Message);
+            return result;
+        }
+
+        uint32_t candidateABI = fnGetABI();
+        if (candidateABI != AXLE_SCRIPT_ABI_VERSION) {
+            FreeLibrary(hCandidate);
+            std::filesystem::remove(candidatePath, ec);
+            result.Success = false;
+            result.Message = "Candidate AxleScripts module ABI mismatch: expected version " +
+                             std::to_string(AXLE_SCRIPT_ABI_VERSION) + ", got " + std::to_string(candidateABI);
+            AXLE_ERROR("ScriptHotReloadManager: {0}", result.Message);
+            return result;
+        }
 
         auto fnGetCount = (GetCountFn)GetProcAddress(hCandidate, "Axle_GetScriptCount");
         auto fnInit = (InitFn)GetProcAddress(hCandidate, "Axle_InitializeScripts");

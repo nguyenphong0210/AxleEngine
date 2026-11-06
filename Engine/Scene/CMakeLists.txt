@@ -22,6 +22,9 @@ add_library(AxleScene STATIC
     src/RHIMeshRegistry.cpp
     src/CharacterVFX.cpp
     src/CustomMaterialProgram.cpp
+    src/SimulationClock.cpp
+    src/SimulationInput.cpp
+    src/SimulationDriver.cpp
 )
 add_library(Axle::Scene ALIAS AxleScene)
 add_library(Axle::SceneData ALIAS AxleScene)

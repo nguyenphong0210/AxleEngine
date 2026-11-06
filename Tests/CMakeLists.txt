@@ -327,6 +327,23 @@ endif()
 add_test(NAME SharedRuntimePhasesUnitTests COMMAND $<TARGET_FILE:AxleSharedRuntimePhasesUnitTests>)
 set_tests_properties(SharedRuntimePhasesUnitTests PROPERTIES LABELS "scene;sim;cpu" TIMEOUT 30)
 
+# Dedicated Simulation Clock, Inputs and Pause/Step Unit Test Target (EJ-12)
+add_executable(AxleSimulationClockUnitTests EXCLUDE_FROM_ALL
+    src/Test_SimulationClockAndInputUnit.cpp
+)
+target_include_directories(AxleSimulationClockUnitTests PRIVATE src)
+target_link_libraries(AxleSimulationClockUnitTests PRIVATE
+    Axle::Scene
+    Axle::Physics
+    Axle::Core
+    Axle::Platform
+)
+if (MSVC)
+    target_compile_options(AxleSimulationClockUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME SimulationClockUnitTests COMMAND $<TARGET_FILE:AxleSimulationClockUnitTests>)
+set_tests_properties(SimulationClockUnitTests PROPERTIES LABELS "scene;sim;clock;cpu" TIMEOUT 30)
+
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
     src/JobsECSTestMain.cpp

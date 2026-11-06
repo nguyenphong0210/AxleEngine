@@ -322,3 +322,54 @@ Evolving execution log and verification record for the sequential implementation
 - `python scripts/check_architecture.py --root . --closed-package AF-04`: exit 0, PASS (363 files scanned, 17 CMake files, 0 violations).
 - `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
 - `git diff --check`: exit 0.
+
+---
+
+## Package EJ-12: Fixed Clock, Inputs and Pause/Step
+
+- **Status:** Implemented and self-verified; local delivery committed.
+- **Base Baseline:** `ae22b35`
+- **Scope & Contract:** [ARCHITECTURE_FOUNDATION_MASTER_PLAN.md](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) / [ENTT_ENKITS_REFACTOR_PLAN.md](../design/ENTT_ENKITS_REFACTOR_PLAN.md)
+
+### Implementation Summary
+1. **Simulation Clock & Fixed Accumulator (`Engine/Scene/include/Axle/SimulationClock.hpp`, `src/SimulationClock.cpp`):**
+   - Implemented `SimulationClock` managing double-precision accumulator `m_Accumulator`, configurable fixed timestep (default 1/60s), configurable speed factor (0.0x, 0.5x, 1.0x, 2.0x, 4.0x), and spiral-of-death overload protection.
+   - Enforced delta time validation: non-finite (NaN, inf) and negative delta times are rejected and counted via `InvalidDtDrops`.
+   - Enforced overload cap: accumulator exceeding `m_MaxAccumulator` (default 0.2s = 12 ticks at 60Hz) is clamped (or dropped based on `ClockOverloadPolicy`), incrementing `OverloadDrops`.
+   - Fixed accumulator tick division incorporates a `1e-6` floating-point epsilon to eliminate discrete tick loss at high refresh rates (such as 144 Hz).
+   - Pause/Resume semantics: pausing clears the accumulator to prevent catch-up bursts on resume.
+   - Paused single-step: `RequestSingleStep()` produces exactly 1 fixed tick on the next frame while maintaining paused state.
+   - Independent instantiability: supports private preview clocks (e.g. for VFX and asset previews) that run independently without touching the main simulation clock.
+2. **Simulation Input Adapter (`Engine/Scene/include/Axle/SimulationInput.hpp`, `src/SimulationInput.cpp`):**
+   - Implemented `SimulationInputAdapter` and `SimulationInputSnapshot` capturing continuous key/mouse states and discrete single-tick edge triggers (`KeysJustPressed`, `KeysJustReleased`, `MouseButtonsJustPressed`, `MouseButtonsJustReleased`).
+   - Consistent multi-tick consumption (SIM-05): edge triggers latched during 0-tick frames are preserved; in multi-tick frames (e.g. 30 Hz running 2 ticks), edge triggers are consumed exclusively on tick 0, while subsequent catch-up ticks observe held state without replaying edges.
+   - Paused UI isolation (SIM-05): `Flush()` clears all pending game input buffers on pause/resume, ensuring paused UI events never bleed into gameplay.
+   - Non-intrusive `InputContext` bridging: activates a scoped tick context during fixed updates so that scripts calling `Axle::Input::IsKeyPressed` or `Axle::Input::IsMouseButtonPressed` read transparently from the tick snapshot.
+3. **Unified Simulation Driver (`Engine/Scene/include/Axle/SimulationDriver.hpp`, `src/SimulationDriver.cpp`):**
+   - Implemented `SimulationDriver` combining `SimulationClock`, `SimulationInputAdapter`, and phase execution into one cohesive driver for both Editor and Runtime.
+   - `AdvanceFrame(rawDt, scene, physicsScene)` orchestrates: input polling, paused check & flush, clock advance, frame script execution (rawDt), per-tick input context activation & `ExecuteFixedTick` (fixedDt), and late presentation phase (rawDt).
+4. **Dedicated Test Fixture (`AxleSimulationClockUnitTests`):**
+   - Added `Tests/src/Test_SimulationClockAndInputUnit.cpp` registered in CTest as `SimulationClockUnitTests`.
+   - 9 comprehensive headless unit tests covering:
+     - `TestClockDtValidation`: rejects negative, NaN, and inf delta times; counts `InvalidDtDrops`.
+     - `TestClockOverloadCap`: verifies 2.0s spike clamps to 12 ticks; tests drop policy.
+     - `TestClockFramePartitions`: verifies SIM-02 (30 Hz, 60 Hz, and 144 Hz frame rates produce identical 60 fixed ticks across 1.0 second of simulation).
+     - `TestClockSpeedScaling`: validates exact linear scaling across 0.0x, 0.5x, 1.0x, 2.0x, and 4.0x speeds.
+     - `TestClockPauseResumeAndSingleStep`: validates zero ticks when paused, exact single tick execution on single-step request, and clean resume without backlog spike (SIM-03).
+     - `TestInputSnapshotZeroOneMultipleTicks`: validates edge latching across 0-tick frames and single consumption across multi-tick frames (SIM-05).
+     - `TestPausedInputIsolation`: validates UI input flushing when paused/resumed (SIM-05).
+     - `TestPrivatePreviewClockIndependence`: validates that private preview clocks advance independently while main game clock is paused.
+     - `TestSimulationDriverEndToEnd`: validates headless scene simulation, physics falling under gravity, and telemetry tracking through `SimulationDriver::AdvanceFrame`.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleSimulationClockUnitTests AxleSharedRuntimePhasesUnitTests AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime`: exit 0.
+- `cmake --build build --config Release --target AxleSimulationClockUnitTests AxleSharedRuntimePhasesUnitTests AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime`: exit 0.
+- `build/Tests/Debug/AxleSimulationClockUnitTests.exe`: exit 0, ALL 9 CLOCK & INPUT TESTS PASSED (100%).
+- `build/Tests/Release/AxleSimulationClockUnitTests.exe`: exit 0, ALL 9 CLOCK & INPUT TESTS PASSED (100%).
+- `build/Tests/Debug/AxleTests.exe`: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).
+- `ctest --test-dir build -C Debug --output-on-failure`: 37/37 tests passed (100%).
+- `ctest --test-dir build -C Release --output-on-failure`: 37/37 tests passed (100%).
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `python scripts/check_architecture.py --root . --closed-package AF-04`: exit 0, PASS (369 files scanned, 17 CMake files, 0 violations).
+- `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
+- `git diff --check`: exit 0.

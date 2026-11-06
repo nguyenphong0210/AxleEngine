@@ -11,6 +11,8 @@
 #include <cassert>
 #include <vector>
 #include <atomic>
+#include <thread>
+#include <cmath>
 
 #define TEST_ASSERT(cond, msg) \
     do { \
@@ -298,11 +300,229 @@ namespace {
         return true;
     }
 
+    // =========================================================================
+    // EJ-10 TRANSFORM EVALUATION OWNERSHIP TESTS
+    // =========================================================================
+
+    bool MatrixEqual(const glm::mat4& a, const glm::mat4& b, float eps = 1e-4f) {
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                if (std::abs(a[c][r] - b[c][r]) > eps) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    bool TestTransformEvaluationSerialVsParallel() {
+        std::cout << "--- TestTransformEvaluationSerialVsParallel ---" << std::endl;
+        if (!Axle::JobSystem::IsInitialized()) {
+            Axle::JobSystem::Init();
+        }
+
+        Axle::Scene scene;
+        std::vector<Axle::Entity> entities;
+
+        // Build a forest of 120 entities across 20 distinct trees
+        for (int t = 0; t < 20; ++t) {
+            auto root = scene.CreateEntity("Root_" + std::to_string(t));
+            auto& rtc = root.GetComponent<Axle::TransformComponent>();
+            rtc.Translation = glm::vec3(t * 10.0f, static_cast<float>(t % 3), static_cast<float>(t % 5));
+            rtc.Rotation = glm::angleAxis(glm::radians(static_cast<float>(t * 15)), glm::vec3(0.0f, 1.0f, 0.0f));
+            rtc.Scale = glm::vec3(1.0f + 0.1f * t);
+            entities.push_back(root);
+
+            for (int c = 0; c < 3; ++c) {
+                auto child = scene.CreateEntity("Child_" + std::to_string(t) + "_" + std::to_string(c));
+                auto& ctc = child.GetComponent<Axle::TransformComponent>();
+                ctc.Translation = glm::vec3(c * 2.0f, 1.0f, 0.5f);
+                ctc.Rotation = glm::angleAxis(glm::radians(static_cast<float>(c * 30)), glm::vec3(1.0f, 0.0f, 0.0f));
+                ctc.Scale = glm::vec3(0.8f);
+                child.SetParent(root, false);
+                entities.push_back(child);
+
+                for (int gc = 0; gc < 2; ++gc) {
+                    auto grandChild = scene.CreateEntity("GC_" + std::to_string(t) + "_" + std::to_string(c) + "_" + std::to_string(gc));
+                    auto& gctc = grandChild.GetComponent<Axle::TransformComponent>();
+                    gctc.Translation = glm::vec3(0.0f, gc * 1.5f, -1.0f);
+                    grandChild.SetParent(child, false);
+                    entities.push_back(grandChild);
+                }
+            }
+        }
+
+        // 1. Compute serial transforms using batch size > total roots (forces serial fallback)
+        scene.UpdateWorldTransformsParallel(100000);
+        std::vector<glm::mat4> serialMatrices;
+        serialMatrices.reserve(entities.size());
+        for (const auto& e : entities) {
+            serialMatrices.push_back(e.GetWorldTransform());
+        }
+
+        // 2. Clear world matrices to verify parallel re-evaluates them from scratch
+        for (auto& e : entities) {
+            e.GetComponent<Axle::TransformComponent>().WorldMatrix = glm::mat4(0.0f);
+        }
+
+        // 3. Compute parallel transforms using small batch size to exercise JobSystem
+        scene.UpdateWorldTransformsParallel(2);
+
+        // 4. Compare all matrices
+        for (size_t i = 0; i < entities.size(); ++i) {
+            glm::mat4 parMat = entities[i].GetWorldTransform();
+            TEST_ASSERT(MatrixEqual(serialMatrices[i], parMat), "Serial and parallel matrices must match exactly");
+        }
+
+        std::cout << "PASS: TestTransformEvaluationSerialVsParallel" << std::endl;
+        return true;
+    }
+
+    bool TestTransformScaleInheritance() {
+        std::cout << "--- TestTransformScaleInheritance ---" << std::endl;
+        Axle::Scene scene;
+
+        auto parent = scene.CreateEntity("ScaleParent");
+        auto& ptc = parent.GetComponent<Axle::TransformComponent>();
+        ptc.Translation = glm::vec3(10.0f, 5.0f, 0.0f);
+        ptc.Scale = glm::vec3(2.0f, 3.0f, 4.0f);
+
+        auto childInherit = scene.CreateEntity("ChildInheritScale");
+        childInherit.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(1.0f, 1.0f, 1.0f);
+        childInherit.GetComponent<Axle::HierarchyComponent>().InheritScale = true;
+        childInherit.SetParent(parent, false);
+
+        auto childNoInherit = scene.CreateEntity("ChildNoInheritScale");
+        childNoInherit.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(1.0f, 1.0f, 1.0f);
+        childNoInherit.GetComponent<Axle::HierarchyComponent>().InheritScale = false;
+        childNoInherit.SetParent(parent, false);
+
+        scene.UpdateWorldTransforms();
+
+        glm::mat4 inheritMat = childInherit.GetWorldTransform();
+        glm::mat4 noInheritMat = childNoInherit.GetWorldTransform();
+
+        // With scale inheritance, child's translation in world space is (10 + 2*1, 5 + 3*1, 0 + 4*1) = (12, 8, 4)
+        glm::vec3 inheritPos = glm::vec3(inheritMat[3]);
+        TEST_ASSERT(std::abs(inheritPos.x - 12.0f) < 1e-4f, "InheritScale position X must be 12");
+        TEST_ASSERT(std::abs(inheritPos.y - 8.0f) < 1e-4f, "InheritScale position Y must be 8");
+        TEST_ASSERT(std::abs(inheritPos.z - 4.0f) < 1e-4f, "InheritScale position Z must be 4");
+
+        // Without scale inheritance, parent scale is NOT applied to child, only rigid rotation & translation:
+        // Position is (10 + 1, 5 + 1, 0 + 1) = (11, 6, 1)
+        glm::vec3 noInheritPos = glm::vec3(noInheritMat[3]);
+        TEST_ASSERT(std::abs(noInheritPos.x - 11.0f) < 1e-4f, "NoInheritScale position X must be 11");
+        TEST_ASSERT(std::abs(noInheritPos.y - 6.0f) < 1e-4f, "NoInheritScale position Y must be 6");
+        TEST_ASSERT(std::abs(noInheritPos.z - 1.0f) < 1e-4f, "NoInheritScale position Z must be 1");
+
+        std::cout << "PASS: TestTransformScaleInheritance" << std::endl;
+        return true;
+    }
+
+    bool TestTransformCycleDetectionAndRepair() {
+        std::cout << "--- TestTransformCycleDetectionAndRepair ---" << std::endl;
+        Axle::Scene scene;
+
+        auto a = scene.CreateEntity("EntityA");
+        auto b = scene.CreateEntity("EntityB");
+
+        // Manually introduce a 2-node cycle in HierarchyComponent
+        a.GetComponent<Axle::HierarchyComponent>().Parent = b;
+        b.GetComponent<Axle::HierarchyComponent>().Parent = a;
+        a.GetComponent<Axle::HierarchyComponent>().Children.push_back(b);
+        b.GetComponent<Axle::HierarchyComponent>().Children.push_back(a);
+
+        // UpdateWorldTransforms must detect cycle, repair it without hanging or crashing
+        scene.UpdateWorldTransforms();
+
+        // At least one must be promoted to root (Parent == entt::null)
+        auto& ahc = a.GetComponent<Axle::HierarchyComponent>();
+        auto& bhc = b.GetComponent<Axle::HierarchyComponent>();
+        TEST_ASSERT(ahc.Parent == entt::null || bhc.Parent == entt::null, "Cycle must be broken with at least one root");
+
+        // Self-parenting test
+        auto c = scene.CreateEntity("EntityC");
+        c.GetComponent<Axle::HierarchyComponent>().Parent = c;
+        scene.UpdateWorldTransforms();
+        TEST_ASSERT(c.GetComponent<Axle::HierarchyComponent>().Parent == entt::null, "Self-parenting must be repaired to null");
+
+        std::cout << "PASS: TestTransformCycleDetectionAndRepair" << std::endl;
+        return true;
+    }
+
+    bool TestTransformRevisionProgression() {
+        std::cout << "--- TestTransformRevisionProgression ---" << std::endl;
+        Axle::Scene scene;
+
+        uint64_t rev0 = scene.GetTransformRevision();
+        TEST_ASSERT(rev0 > 0, "Initial revision must be non-zero");
+
+        auto entity = scene.CreateEntity("TestEntity");
+        scene.UpdateWorldTransforms();
+        uint64_t rev1 = scene.GetTransformRevision();
+        TEST_ASSERT(rev1 > rev0, "UpdateWorldTransforms must increment revision");
+
+        entity.RecomputeWorldTransform();
+        uint64_t rev2 = scene.GetTransformRevision();
+        TEST_ASSERT(rev2 > rev1, "RecomputeWorldTransform must increment revision");
+
+        scene.Clear();
+        uint64_t rev3 = scene.GetTransformRevision();
+        TEST_ASSERT(rev3 > rev2, "Clear must increment revision");
+
+        std::cout << "PASS: TestTransformRevisionProgression" << std::endl;
+        return true;
+    }
+
+    bool TestTransformReadOnlyQueryConcurrency() {
+        std::cout << "--- TestTransformReadOnlyQueryConcurrency ---" << std::endl;
+        Axle::Scene scene;
+
+        auto parent = scene.CreateEntity("Parent");
+        parent.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(10.0f, 20.0f, 30.0f);
+
+        auto child = scene.CreateEntity("Child");
+        child.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(1.0f, 2.0f, 3.0f);
+        child.SetParent(parent, false);
+
+        scene.UpdateWorldTransforms();
+
+        glm::mat4 expectedParent = parent.GetWorldTransform();
+        glm::mat4 expectedChild = child.GetWorldTransform();
+
+        std::atomic<bool> failed{false};
+        std::vector<std::thread> readers;
+        const int numThreads = 8;
+        const int iterations = 50000;
+
+        for (int t = 0; t < numThreads; ++t) {
+            readers.emplace_back([&scene, parent, child, expectedParent, expectedChild, &failed]() {
+                for (int i = 0; i < iterations; ++i) {
+                    glm::mat4 pMat = scene.GetWorldTransform(parent);
+                    glm::mat4 cMat = scene.GetWorldTransform(child);
+                    if (!MatrixEqual(pMat, expectedParent) || !MatrixEqual(cMat, expectedChild)) {
+                        failed = true;
+                        break;
+                    }
+                }
+            });
+        }
+
+        for (auto& th : readers) {
+            th.join();
+        }
+
+        TEST_ASSERT(!failed.load(), "Concurrent GetWorldTransform queries must not race or return inconsistent values");
+
+        std::cout << "PASS: TestTransformReadOnlyQueryConcurrency" << std::endl;
+        return true;
+    }
+
 } // anonymous namespace
 
 int main() {
     std::cout << "========================================" << std::endl;
-    std::cout << "AxleSceneMutationUnitTests (EJ-09)" << std::endl;
+    std::cout << "AxleSceneMutationUnitTests (EJ-09 / EJ-10)" << std::endl;
     std::cout << "========================================" << std::endl;
 
     if (!TestParentChildRecursiveDestroy()) return 1;
@@ -313,8 +533,15 @@ int main() {
     if (!TestMultiThreadedRecordingAndPostJoinCommit()) return 1;
     if (!TestCommandBufferMerge()) return 1;
 
+    // EJ-10 Tests
+    if (!TestTransformEvaluationSerialVsParallel()) return 1;
+    if (!TestTransformScaleInheritance()) return 1;
+    if (!TestTransformCycleDetectionAndRepair()) return 1;
+    if (!TestTransformRevisionProgression()) return 1;
+    if (!TestTransformReadOnlyQueryConcurrency()) return 1;
+
     std::cout << "========================================" << std::endl;
-    std::cout << "ALL SCENE MUTATION UNIT TESTS PASSED" << std::endl;
+    std::cout << "ALL SCENE MUTATION & TRANSFORM UNIT TESTS PASSED" << std::endl;
     std::cout << "========================================" << std::endl;
     return 0;
 }

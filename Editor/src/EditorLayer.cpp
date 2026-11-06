@@ -2709,6 +2709,8 @@ void EditorLayer::OnImGuiRender() {
                     tc.Scale = glm::vec3(scale[0], scale[1], scale[2]);
                 }
 
+                selectedEntity.RecomputeWorldTransform();
+
                 // Real-time synchronization with Jolt Physics bodies
                 if (selectedEntity.HasComponent<Axle::RigidBody3D>() && m_PhysicsScene) {
                     auto& rb = selectedEntity.GetComponent<Axle::RigidBody3D>();

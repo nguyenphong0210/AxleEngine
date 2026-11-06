@@ -1,4 +1,4 @@
-﻿#include "TestCommon.hpp"
+#include "TestCommon.hpp"
 
 // =============================================================================
 // =============================================================================
@@ -20,6 +20,7 @@ bool RunTest_Step8_Phase15_DragAndDropReparenting() {
 
     auto draggedEntity = scene->CreateEntity("Dragged_Child");
     draggedEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(15.0f, 20.0f, 30.0f);
+    scene->UpdateWorldTransforms();
 
     // Simulate drag source: get ID payload
     uint32_t payloadData = (uint32_t)draggedEntity;

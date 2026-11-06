@@ -80,6 +80,7 @@ namespace Axle {
         const std::string& GetName() const;
         UUID GetUUID() const;
         glm::mat4 GetWorldTransform() const;
+        glm::mat4 RecomputeWorldTransform();
 
     private:
         entt::entity m_EntityHandle{ entt::null };

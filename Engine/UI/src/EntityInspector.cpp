@@ -82,10 +82,10 @@ namespace Axle {
             return;
         }
 
-        const ImGuiTreeNodeFlags treeNodeFlags = ImGuiTreeNodeFlags_DefaultOpen 
-                                               | ImGuiTreeNodeFlags_Framed 
-                                               | ImGuiTreeNodeFlags_SpanAvailWidth 
-                                               | ImGuiTreeNodeFlags_AllowOverlap 
+        const ImGuiTreeNodeFlags treeNodeFlags = ImGuiTreeNodeFlags_DefaultOpen
+                                               | ImGuiTreeNodeFlags_Framed
+                                               | ImGuiTreeNodeFlags_SpanAvailWidth
+                                               | ImGuiTreeNodeFlags_AllowOverlap
                                                | ImGuiTreeNodeFlags_FramePadding;
 
         auto& component = entity.GetComponent<T>();
@@ -274,6 +274,11 @@ namespace Axle {
             }
             if (scale != tc.Scale) {
                 tc.Scale = scale;
+                changed = true;
+            }
+
+            if (changed) {
+                entity.RecomputeWorldTransform();
             }
 
             // If rigid body attached and user modified transform, sync to physics engine (using world transform)
@@ -299,8 +304,8 @@ namespace Axle {
             // 3D Model Asset Assignment via Drag & Drop
             ImGui::Text("Model Asset:");
             ImGui::SameLine();
-            std::string assetDisplayName = mc.AssetPath.empty() 
-                ? "[ Built-in Primitive (Drop .obj here) ]" 
+            std::string assetDisplayName = mc.AssetPath.empty()
+                ? "[ Built-in Primitive (Drop .obj here) ]"
                 : std::filesystem::path(mc.AssetPath).filename().string();
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.24f, 0.32f, 0.85f));
@@ -1220,8 +1225,8 @@ namespace Axle {
         DrawComponent<AudioSourceComponent>("Audio Source", entity, [&](AudioSourceComponent& asc) {
             // 1. Audio Asset Slot with Drag & Drop
             ImGui::Text("Audio Clip:");
-            std::string displayName = asc.AssetPath.empty() 
-                ? "(None - Drop .wav / .mp3 here)" 
+            std::string displayName = asc.AssetPath.empty()
+                ? "(None - Drop .wav / .mp3 here)"
                 : std::filesystem::path(asc.AssetPath).filename().string();
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.28f, 0.85f));

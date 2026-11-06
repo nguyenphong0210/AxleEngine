@@ -36,6 +36,7 @@ namespace Axle {
         bool IsChildOf(Entity potentialParent) const { return m_Entity.IsChildOf(potentialParent); }
         const std::string& GetName() const { return m_Entity.GetName(); }
         glm::mat4 GetWorldTransform() const { return m_Entity.GetWorldTransform(); }
+        glm::mat4 RecomputeWorldTransform() { return m_Entity.RecomputeWorldTransform(); }
 
         virtual void OnCreate() {}
         virtual void OnUpdate(Timestep ts) {}

@@ -56,7 +56,7 @@ namespace Axle {
         // Keep World Position Stays: compute current world transform before reparenting
         glm::mat4 currentWorld = glm::mat4(1.0f);
         if (keepWorldPosition) {
-            currentWorld = GetWorldTransform();
+            currentWorld = RecomputeWorldTransform();
         }
 
         entt::entity childHandle = m_EntityHandle;
@@ -97,7 +97,7 @@ namespace Axle {
             auto& tc = GetComponent<TransformComponent>();
             glm::mat4 newLocal = currentWorld;
             if (parent) {
-                glm::mat4 parentWorld = parent.GetWorldTransform();
+                glm::mat4 parentWorld = parent.RecomputeWorldTransform();
                 bool inheritScale = true;
                 if (HasComponent<HierarchyComponent>()) {
                     inheritScale = GetComponent<HierarchyComponent>().InheritScale;
@@ -139,6 +139,8 @@ namespace Axle {
             tc.Rotation = glm::quat_cast(rotMatrix);
             tc.LocalMatrix = newLocal;
             tc.WorldMatrix = currentWorld;
+        } else if (HasComponent<TransformComponent>()) {
+            RecomputeWorldTransform();
         }
     }
 
@@ -217,6 +219,11 @@ namespace Axle {
     glm::mat4 Entity::GetWorldTransform() const {
         if (!*this) return glm::mat4(1.0f);
         return m_Scene->GetWorldTransform(m_EntityHandle);
+    }
+
+    glm::mat4 Entity::RecomputeWorldTransform() {
+        if (!*this) return glm::mat4(1.0f);
+        return m_Scene->RecomputeWorldTransform(m_EntityHandle);
     }
 
     Entity UICanvasComponent::GetDataSourceEntity(Scene* scene, Entity currentEntity) const {

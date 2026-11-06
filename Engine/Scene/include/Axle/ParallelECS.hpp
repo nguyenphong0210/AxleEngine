@@ -124,9 +124,40 @@ namespace Axle {
         /// Identifies root entities and distributes disjoint subtrees across worker threads.
         static void UpdateWorldTransforms(entt::registry& registry, uint32_t minBatchSize = 64) {
             auto view = registry.view<TransformComponent>();
-            if (view.empty()) return;
+            if (view.begin() == view.end()) return;
 
-            // 1. Collect all root entities (entities without active parents)
+            // 1. Detect and repair cycles/self-parenting in hierarchy links
+            for (auto entityID : view) {
+                if (registry.all_of<HierarchyComponent>(entityID)) {
+                    auto& hc = registry.get<HierarchyComponent>(entityID);
+                    if (hc.Parent != entt::null) {
+                        if (!registry.valid(hc.Parent) || !registry.all_of<TransformComponent>(hc.Parent) || hc.Parent == entityID) {
+                            hc.Parent = entt::null;
+                        } else {
+                            // Cycle detection: walk up parent chain with Floyd's Tortoise-and-Hare algorithm
+                            entt::entity slow = hc.Parent;
+                            entt::entity fast = hc.Parent;
+                            bool hasCycle = false;
+                            while (fast != entt::null && registry.valid(fast) && registry.all_of<HierarchyComponent>(fast)) {
+                                fast = registry.get<HierarchyComponent>(fast).Parent;
+                                if (fast != entt::null && registry.valid(fast) && registry.all_of<HierarchyComponent>(fast)) {
+                                    fast = registry.get<HierarchyComponent>(fast).Parent;
+                                    slow = registry.get<HierarchyComponent>(slow).Parent;
+                                    if (slow == fast || slow == entityID || fast == entityID) {
+                                        hasCycle = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (hasCycle) {
+                                hc.Parent = entt::null; // Break cycle
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Collect all root entities (entities without active parents)
             std::vector<entt::entity> rootEntities;
             rootEntities.reserve(GetViewSizeHint(view));
 
@@ -146,19 +177,19 @@ namespace Axle {
             const uint32_t rootCount = static_cast<uint32_t>(rootEntities.size());
             if (rootCount == 0) return;
 
-            // 2. Sequential fallback if small or uninitialized
+            // 3. Sequential fallback if small, single thread, or JobSystem uninitialized
             if (!JobSystem::IsInitialized() || rootCount < minBatchSize || JobSystem::GetTotalThreadCount() <= 1) {
                 for (uint32_t i = 0; i < rootCount; ++i) {
-                    UpdateEntitySubtree(registry, rootEntities[i], glm::mat4(1.0f));
+                    UpdateEntitySubtree(registry, rootEntities[i], glm::mat4(1.0f), 0);
                 }
                 return;
             }
 
-            // 3. Parallel evaluation: Each thread processes its slice of root subtrees (disjoint memory)
+            // 4. Parallel evaluation: Each thread processes its slice of root subtrees (disjoint memory)
             JobSystem::ParallelForRange(rootCount, [&registry, &rootEntities](uint32_t start, uint32_t end, uint32_t threadNum) {
                 (void)threadNum;
                 for (uint32_t i = start; i < end; ++i) {
-                    UpdateEntitySubtree(registry, rootEntities[i], glm::mat4(1.0f));
+                    UpdateEntitySubtree(registry, rootEntities[i], glm::mat4(1.0f), 0);
                 }
             }, minBatchSize);
         }
@@ -239,8 +270,11 @@ namespace Axle {
         template<typename...>
         struct always_false : std::false_type {};
 
-        // Helper: Recursive transform update down an entity subtree
-        static void UpdateEntitySubtree(entt::registry& registry, entt::entity entityID, const glm::mat4& parentWorld) {
+        // Helper: Recursive transform update down an entity subtree with depth protection
+        static void UpdateEntitySubtree(entt::registry& registry, entt::entity entityID, const glm::mat4& parentWorld, uint32_t depth = 0) {
+            if (depth > 128) {
+                return; // Prevent stack overflow on pathological graph or cycle
+            }
             if (!registry.valid(entityID) || !registry.all_of<TransformComponent>(entityID)) {
                 return;
             }
@@ -251,7 +285,8 @@ namespace Axle {
 
             if (registry.all_of<HierarchyComponent>(entityID)) {
                 const auto& hc = registry.get<HierarchyComponent>(entityID);
-                for (auto child : hc.Children) {
+                auto children = hc.Children; // Copy list to prevent iterator invalidation
+                for (auto child : children) {
                     if (registry.valid(child)) {
                         glm::mat4 childParentWorld = tc.WorldMatrix;
                         if (registry.all_of<HierarchyComponent>(child)) {
@@ -276,7 +311,7 @@ namespace Axle {
                                 childParentWorld = rigidParent;
                             }
                         }
-                        UpdateEntitySubtree(registry, child, childParentWorld);
+                        UpdateEntitySubtree(registry, child, childParentWorld, depth + 1);
                     }
                 }
             }

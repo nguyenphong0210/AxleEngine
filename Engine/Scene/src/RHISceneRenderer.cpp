@@ -1041,6 +1041,10 @@ namespace Axle {
     {
         if (!m_Initialized || !colorTarget || !colorRTV || width == 0 || height == 0) return;
 
+        if (scene) {
+            scene->UpdateWorldTransforms();
+        }
+
         m_LastDrawCallCount = 0;
         m_CustomDescriptorPool.Reset(); // The preceding RenderScene submission completed before reuse.
         m_LastRenderedEntityCount = 0;

@@ -536,7 +536,7 @@ bool RunTest_Step69_Phase33_Step2_UnifiedHLSLShaderPipelineAndForwardPBR() {
     std::cout << "\n[69.4] Extracting Shader Reflection Metadata (Root Constants & Descriptor Tables)..." << std::endl;
     auto reflection = compiler.Reflect(psDxilRes.Bytecode);
     assert(reflection.ConstantBuffers.size() >= 1);
-    
+
     // Check Root Constants (b0, space0)
     auto* objConsts = reflection.FindConstantBuffer("ObjectConstants");
     assert(objConsts != nullptr);
@@ -892,7 +892,7 @@ bool RunTest_Step70_Phase33_Step2_MetallicRoughnessPBRPipeline() {
         assert(sceneRenderer.GetRenderedEntityCount() >= 6);
         assert(sceneRenderer.GetStreamedTransformBytes() > 0);
 
-        std::cout << "  -> Rendered " << sceneRenderer.GetRenderedEntityCount() << " multi-material PBR scene entities (" 
+        std::cout << "  -> Rendered " << sceneRenderer.GetRenderedEntityCount() << " multi-material PBR scene entities ("
                   << sceneRenderer.GetDrawCallCount() << " draw calls) with ForwardPBR pipeline." << std::endl;
         std::cout << "  -> Successfully streamed Red CarPaint, Tire Rubber, Chrome, Gold, Carbon Fiber, and LED materials." << std::endl;
         std::cout << "  -> PASS: Live multi-material PBR viewport dispatch verified." << std::endl;
@@ -1248,7 +1248,7 @@ bool RunTest_Step71_Phase33_Step2_BindlessTexturesAndAnisotropicFiltering() {
 
         sceneRenderer.RenderScene(scene, camera, &colorTarget, &depthTarget);
         if (sceneRenderer.GetDrawCallCount() < 5 || sceneRenderer.GetRenderedEntityCount() < 5 || sceneRenderer.GetStreamedTransformBytes() == 0) {
-            std::cerr << "FAIL: sceneRenderer failed to render expected entities! Entities: " 
+            std::cerr << "FAIL: sceneRenderer failed to render expected entities! Entities: "
                       << sceneRenderer.GetRenderedEntityCount() << ", Draws: " << sceneRenderer.GetDrawCallCount() << std::endl;
             return false;
         }
@@ -1394,7 +1394,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
         }
 
         std::cout << "  -> 16 Point Lights capacity verified (slots 0..15 populated)." << std::endl;
-        std::cout << "  -> Evaluated smooth windowed inverse-square attenuation (1m: " << attenAt1m 
+        std::cout << "  -> Evaluated smooth windowed inverse-square attenuation (1m: " << attenAt1m
                   << ", 10m: " << attenAt10m << ", 19m: " << attenAt19m << ", 20m: " << attenAt20m << ")." << std::endl;
         std::cout << "  -> Verified lighting preset: EnvironmentLamp." << std::endl;
         std::cout << "  -> PASS: 16 Point Lights & Inverse-Square Falloff validated.\n" << std::endl;
@@ -1462,7 +1462,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
         }
 
         std::cout << "  -> 16 Spot Lights capacity verified (slots 0..15 populated)." << std::endl;
-        std::cout << "  -> Spot cone attenuation verified (0 deg: " << attenOnAxis << ", 10 deg: " << attenInsideInner 
+        std::cout << "  -> Spot cone attenuation verified (0 deg: " << attenOnAxis << ", 10 deg: " << attenInsideInner
                   << ", 22.5 deg: " << attenMidway << ", 30 deg: " << attenAtOuter << ", 35 deg: " << attenOutside << ")." << std::endl;
         std::cout << "  -> Verified 16 Spot Light capacity." << std::endl;
         std::cout << "  -> PASS: 16 Spot Lights & Cone Cutoff Angles validated.\n" << std::endl;
@@ -1563,7 +1563,7 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
             return false;
         }
 
-        std::cout << "  -> Hardware alignment verified: " << sizeof(RHIMultiLightBufferData) 
+        std::cout << "  -> Hardware alignment verified: " << sizeof(RHIMultiLightBufferData)
                   << " bytes (exactly 9 * 256 bytes, D3D12/Vulkan CBV aligned)." << std::endl;
         std::cout << "  -> RHIMultiLightBuffer created with native nri::Buffer and valid nri::Descriptor CBV." << std::endl;
         std::cout << "  -> Dynamic uploads, light insertion (16 points, 16 spots), and limit enforcement verified." << std::endl;
@@ -2120,7 +2120,7 @@ bool RunTest_Step74_ImageBasedLightingAndEnvironmentMaps() {
         assert(sceneRenderer.GetRenderedEntityCount() >= 3);
         assert(sceneRenderer.GetStreamedTransformBytes() > 0);
 
-        std::cout << "  -> Rendered " << sceneRenderer.GetRenderedEntityCount() << " entities (" 
+        std::cout << "  -> Rendered " << sceneRenderer.GetRenderedEntityCount() << " entities ("
                   << sceneRenderer.GetDrawCallCount() << " draw calls) with Split-Sum IBL and HDR skybox ambient." << std::endl;
         std::cout << "  -> PASS: Live viewport scene dispatch with Image-Based Lighting verified." << std::endl;
 
@@ -2355,7 +2355,7 @@ bool RunTest_Step75_ProceduralAtmosphericSkyboxPass() {
         assert(sceneRenderer.GetRenderedEntityCount() >= 3);
         assert(sceneRenderer.GetStreamedTransformBytes() > 0);
 
-        std::cout << "  -> Rendered " << sceneRenderer.GetRenderedEntityCount() << " scene entities and Atmospheric Skybox pass (" 
+        std::cout << "  -> Rendered " << sceneRenderer.GetRenderedEntityCount() << " scene entities and Atmospheric Skybox pass ("
                   << sceneRenderer.GetDrawCallCount() << " total draw calls)." << std::endl;
         std::cout << "  -> PASS: Live viewport scene dispatch with Procedural Atmospheric Skybox pass verified." << std::endl;
 
@@ -2768,7 +2768,7 @@ bool RunTest_Step77_ExposureAndToneMappingPass() {
         float srgbLinear05 = std::pow(0.5f, 1.0f / gamma); // ~0.7297
         assert(srgbLinear05 > 0.72f && srgbLinear05 < 0.74f);
 
-        std::cout << "  -> ACES Filmic: Black=" << acesBlack << ", MiddleGrey=" << acesMid 
+        std::cout << "  -> ACES Filmic: Black=" << acesBlack << ", MiddleGrey=" << acesMid
                   << ", 1.0 SDR=" << acesOne << ", 10.0 HDR=" << acesHDR << " (smooth asymptotic compression)." << std::endl;
         std::cout << "  -> Extended Reinhard: x=1.0 -> " << reinMid << ", x=W=4.0 -> " << reinAtWhite << " (White point highlight recovery)." << std::endl;
         std::cout << "  -> Uncharted 2 Filmic: 0.18 -> " << u2Mid << ", 1.0 -> " << u2One << ", W=11.2 -> " << u2White << " (Hable filmic tone curve)." << std::endl;
@@ -4220,6 +4220,7 @@ bool RunTest_Step82_GPUObjectIDPicking() {
     std::cout << "  -> Created Entity A (Box_Left, ID: " << idLeft << ") at (-3, 0, 0)" << std::endl;
     std::cout << "  -> Created Entity B (Sphere_Right, ID: " << idRight << ") at (3, 0, 0)" << std::endl;
     std::cout << "  -> Created Entity C (Cylinder_Occluded, ID: " << idOcc << ") at (3, 0, -8)" << std::endl;
+    scene->UpdateWorldTransforms();
     std::cout << "  -> PASS: Test bed scene constructed." << std::endl;
 
     // [82.5] Render Picking Pass and Validate Single-Click Query
@@ -4373,6 +4374,7 @@ bool RunTest_Step83_ViewportClickPickingIntegration() {
     std::cout << "  -> Front_Sphere (ID: " << idSphere << ") at (2.5, 0, 0)" << std::endl;
     std::cout << "  -> Occluded_Cone (ID: " << idCone << ") at (2.5, 0, -6)" << std::endl;
     std::cout << "  -> Ground_Plane (ID: " << idPlane << ") at (0, -2, 0)" << std::endl;
+    scene->UpdateWorldTransforms();
     std::cout << "  -> PASS: Test bed scene constructed." << std::endl;
 
     // [83.3] ImGui Viewport Coordinate Translation & Boundary Clamping
@@ -4750,6 +4752,7 @@ bool RunTest_Step84_TripleBackendSwitchingAndVisualParity() {
         plane.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, -2.0f, 0.0f);
         plane.GetComponent<TransformComponent>().Scale = glm::vec3(10.0f, 1.0f, 10.0f);
         plane.AddComponent<MeshInstance3D>().RHIMeshAsset = RHIMeshRegistry::Get().GetPlane();
+        scene->UpdateWorldTransforms();
 
         PerspectiveCamera camera(60.0f, 16.0f / 9.0f, 0.1f, 100.0f);
         camera.SetPosition(glm::vec3(0.0f, 0.0f, 8.0f));

@@ -49,6 +49,7 @@ namespace Axle {
             m_CommandBuffer->Clear();
         }
         m_SceneGeneration++;
+        m_TransformRevision++;
 
         auto scriptView = m_Registry.view<NativeScriptComponent>();
         for (auto entityID : scriptView) {
@@ -363,14 +364,24 @@ namespace Axle {
         if (!m_Registry.valid(entityID) || !m_Registry.all_of<TransformComponent>(entityID)) {
             return glm::mat4(1.0f);
         }
+        return m_Registry.get<TransformComponent>(entityID).WorldMatrix;
+    }
 
-        auto& tc = const_cast<entt::registry&>(m_Registry).get<TransformComponent>(entityID);
+    static glm::mat4 RecomputeWorldTransformInternal(entt::registry& registry, entt::entity entityID, uint32_t depth = 0) {
+        if (depth > 128) {
+            return glm::mat4(1.0f);
+        }
+        if (!registry.valid(entityID) || !registry.all_of<TransformComponent>(entityID)) {
+            return glm::mat4(1.0f);
+        }
+
+        auto& tc = registry.get<TransformComponent>(entityID);
         tc.LocalMatrix = tc.GetLocalTransform();
         glm::mat4 transform = tc.LocalMatrix;
-        if (m_Registry.all_of<HierarchyComponent>(entityID)) {
-            const auto& hc = m_Registry.get<HierarchyComponent>(entityID);
-            if (hc.InheritTransform && hc.Parent != entt::null && m_Registry.valid(hc.Parent) && m_Registry.all_of<TransformComponent>(hc.Parent)) {
-                glm::mat4 parentWorld = GetWorldTransform(hc.Parent);
+        if (registry.all_of<HierarchyComponent>(entityID)) {
+            const auto& hc = registry.get<HierarchyComponent>(entityID);
+            if (hc.InheritTransform && hc.Parent != entt::null && registry.valid(hc.Parent) && registry.all_of<TransformComponent>(hc.Parent) && hc.Parent != entityID) {
+                glm::mat4 parentWorld = RecomputeWorldTransformInternal(registry, hc.Parent, depth + 1);
                 if (!hc.InheritScale) {
                     glm::vec3 pPos = glm::vec3(parentWorld[3]);
                     glm::vec3 col0 = glm::vec3(parentWorld[0]);
@@ -396,12 +407,19 @@ namespace Axle {
         return transform;
     }
 
+    glm::mat4 Scene::RecomputeWorldTransform(entt::entity entityID) {
+        glm::mat4 result = RecomputeWorldTransformInternal(m_Registry, entityID, 0);
+        ++m_TransformRevision;
+        return result;
+    }
+
     void Scene::UpdateWorldTransforms() {
         UpdateWorldTransformsParallel(64);
     }
 
     void Scene::UpdateWorldTransformsParallel(u32 minBatchSize) {
         ParallelECS::UpdateWorldTransforms(m_Registry, minBatchSize);
+        ++m_TransformRevision;
     }
 
     void Scene::UpdateEntityTransformRecursive(entt::entity entityID, const glm::mat4& parentWorld) {
@@ -842,6 +860,9 @@ namespace Axle {
                 nsc.Instance->OnUpdate(ts);
             }
         }
+
+        // 2. Propagate scene graph hierarchy transforms (Root -> Children)
+        UpdateWorldTransformsParallel(64);
 
         // 3. Audio Listener & 3D Spatial Audio Synchronization
         Entity listenerEntity{};

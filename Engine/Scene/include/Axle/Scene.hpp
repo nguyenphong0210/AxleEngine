@@ -50,8 +50,10 @@ namespace Axle {
 
         // Hierarchical world transform calculation (propagating parent transforms)
         glm::mat4 GetWorldTransform(entt::entity entityID) const;
+        glm::mat4 RecomputeWorldTransform(entt::entity entityID);
         void UpdateWorldTransforms();
         void UpdateWorldTransformsParallel(u32 minBatchSize = 64);
+        uint64_t GetTransformRevision() const { return m_TransformRevision; }
 
         // Reparenting API with cycle check and World Position Stays logic
         void SetParent(Entity child, Entity parent, bool keepWorldPosition = true);
@@ -128,6 +130,7 @@ namespace Axle {
         UIDataContext m_UIDataContext;
         std::unique_ptr<SceneCommandBuffer> m_CommandBuffer;
         u32 m_SceneGeneration = 1;
+        uint64_t m_TransformRevision = 1;
 
         friend class Entity;
     };

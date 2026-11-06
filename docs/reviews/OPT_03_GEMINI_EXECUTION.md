@@ -128,3 +128,47 @@ Evolving execution log and verification record for the sequential implementation
 - `python scripts/check_architecture.py --root . --closed-package AF-02`: exit 0, PASS (344 files, 17 CMake files, 0 violations).
 - `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
 - `git diff --check`: exit 0.
+
+---
+
+## Package EJ-10: Transform Evaluation Ownership
+
+- **Status:** Implemented and self-verified; local delivery committed.
+- **Base Baseline:** `cc059af`
+- **Scope & Contract:** [ARCHITECTURE_FOUNDATION_MASTER_PLAN.md](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) / [ENTT_ENKITS_REFACTOR_PLAN.md](../design/ENTT_ENKITS_REFACTOR_PLAN.md)
+
+### Implementation Summary
+1. **Explicit Write/Recompute vs Pure Read-Only Queries:**
+   - Eliminated const-query cache mutations (`const_cast<entt::registry&>` writing `LocalMatrix` and `WorldMatrix` on every read query).
+   - `Scene::GetWorldTransform(entityID) const` and `Entity::GetWorldTransform() const` are now pure read-only queries returning `TransformComponent::WorldMatrix`.
+   - Introduced explicit write/recompute APIs: `Scene::RecomputeWorldTransform(entityID)`, `Entity::RecomputeWorldTransform()`, and `Scene::UpdateWorldTransforms()`.
+   - Published a monotonic transform revision counter (`GetTransformRevision()`) incremented on transform evaluation passes and `Scene::Clear()`.
+2. **Parallel Disjoint Subtree Hierarchy Evaluation:**
+   - In `ParallelECS::UpdateWorldTransforms`:
+     - Added Floyd's Tortoise-and-Hare cycle detection and self-parenting repair, breaking illegal loops before root collection to prevent deadlock/stack overflow.
+     - Root entities are partitioned across worker threads via `JobSystem::ParallelForRange`, evaluating disjoint subtrees in parallel with zero lock contention.
+     - `UpdateEntitySubtree` enforces a recursion depth guard (`depth > 128`), safe child list value-copying, and strict scale inheritance logic (rigid parent transform without scale when `InheritScale == false`).
+3. **Renderer & Runtime Integration:**
+   - `RHISceneRenderer::RenderScene` and `RHIObjectPicker::RenderPickingPass` ensure world transforms are evaluated (`if (scene) scene->UpdateWorldTransforms();`) prior to geometry extraction or draw call dispatch.
+   - `Scene::OnUpdateRuntime` now evaluates `UpdateWorldTransformsParallel(64)` during frame simulation before audio listener/3D spatial audio synchronization, aligning with `OnUpdateEditor`.
+   - `EntityInspector` and `EditorLayer` gizmo manipulation explicitly trigger `RecomputeWorldTransform()`.
+4. **Comprehensive Unit Tests (`AxleSceneMutationUnitTests`):**
+   - Added 5 dedicated EJ-10 tests:
+     - `TestTransformEvaluationSerialVsParallel`: 120 entities across 20 multi-level hierarchy trees; verified serial fallback and parallel evaluation yield identical `WorldMatrix` results.
+     - `TestTransformScaleInheritance`: verified rigid parent transform when `InheritScale == false` vs full scale propagation when `InheritScale == true`.
+     - `TestTransformCycleDetectionAndRepair`: verified detection and clean resolution of 2-node cycles (A <-> B) and self-parenting (C -> C) without hanging or crashing.
+     - `TestTransformRevisionProgression`: verified monotonic revision increments across updates, recomputations, and scene clear.
+     - `TestTransformReadOnlyQueryConcurrency`: 8 reader threads executing 50,000 concurrent `GetWorldTransform` queries on hierarchy nodes without data races or corruption.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleSceneMutationUnitTests AxleFoundationUnitTests AxleJobsECSTests AxleEditor AxleRuntime AxleTests`: exit 0.
+- `cmake --build build --config Release --target AxleSceneMutationUnitTests`: exit 0.
+- `build/Tests/Debug/AxleSceneMutationUnitTests.exe`: exit 0, ALL 12 SCENE MUTATION & TRANSFORM UNIT TESTS PASSED.
+- `build/Tests/Release/AxleSceneMutationUnitTests.exe`: exit 0, ALL 12 SCENE MUTATION & TRANSFORM UNIT TESTS PASSED.
+- `build/Tests/Debug/AxleTests.exe`: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).
+- `ctest --test-dir build -C Debug --output-on-failure`: 33/33 tests passed (100%).
+- `ctest --test-dir build -C Release --output-on-failure`: 33/33 tests passed (100%).
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `python scripts/check_architecture.py --root . --closed-package AF-02`: exit 0, PASS (344 files, 17 CMake files, 0 violations).
+- `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
+- `git diff --check`: exit 0.

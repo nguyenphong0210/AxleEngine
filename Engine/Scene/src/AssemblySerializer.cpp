@@ -85,7 +85,7 @@ namespace Axle {
         }
 
         u64 rootUUID = rootEntity.GetComponent<IDComponent>().ID;
-        std::string rootName = rootEntity.HasComponent<TagComponent>() ? 
+        std::string rootName = rootEntity.HasComponent<TagComponent>() ?
                                rootEntity.GetComponent<TagComponent>().Tag : filepath.stem().string();
 
         fout << std::fixed << std::setprecision(6);
@@ -353,7 +353,7 @@ namespace Axle {
         }
 
         if (!FileSystem::WriteIdentifiedTextFile(filepath, fout.str())) return false;
-        AXLE_INFO("AssemblySerializer: Successfully exported Assembly '{0}' ({1} entities) to '{2}'", 
+        AXLE_INFO("AssemblySerializer: Successfully exported Assembly '{0}' ({1} entities) to '{2}'",
                   rootName, hierarchy.size(), filepath.string());
         return true;
     }
@@ -1022,6 +1022,9 @@ namespace Axle {
                 }
             }
         }
+
+        // Ensure all world transforms are evaluated after assembling hierarchy
+        targetScene->UpdateWorldTransforms();
 
         // Pass 3: Physics scene integration
         if (physicsScene) {

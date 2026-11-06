@@ -1,4 +1,4 @@
-﻿#include "TestCommon.hpp"
+#include "TestCommon.hpp"
 
 // =============================================================================
 // TEST STEP 5: Phase 14 / Scene Graph & World Position Stays (Reparent/Unparent)
@@ -47,6 +47,7 @@ bool RunTest_Step5_RelationshipAndTransform() {
     auto child = scene->CreateEntity("Child");
     auto& ctc = child.GetComponent<Axle::TransformComponent>();
     ctc.Translation = glm::vec3(15.0f, 20.0f, 30.0f);
+    scene->UpdateWorldTransforms();
 
     glm::vec3 worldBefore = glm::vec3(child.GetWorldTransform()[3]);
     std::cout << "  -> Child World Pos Before Reparent: (" << worldBefore.x << ", " << worldBefore.y << ", " << worldBefore.z << ")" << std::endl;
@@ -72,6 +73,7 @@ bool RunTest_Step5_RelationshipAndTransform() {
     // -----------------------------------------------------------------
     std::cout << "[5.3] Verifying Scene Graph Matrix Propagation..." << std::endl;
     ptc.Translation += glm::vec3(5.0f, 0.0f, 0.0f); // Move parent from 10 to 15 on X
+    scene->UpdateWorldTransforms();
 
     glm::vec3 worldMoved = glm::vec3(child.GetWorldTransform()[3]);
     std::cout << "  -> Parent moved +5 on X -> Child World Pos: (" << worldMoved.x << ", " << worldMoved.y << ", " << worldMoved.z << ")" << std::endl;
@@ -90,6 +92,7 @@ bool RunTest_Step5_RelationshipAndTransform() {
 
     // Rotate parent 90 degrees around Y axis
     orbitParent.GetComponent<Axle::TransformComponent>().Rotation = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    scene->UpdateWorldTransforms();
     glm::vec3 orbitWorld = glm::vec3(orbitChild.GetWorldTransform()[3]);
     std::cout << "  -> Parent rotated 90 deg around Y -> Child World Pos: (" << orbitWorld.x << ", " << orbitWorld.y << ", " << orbitWorld.z << ") (Expected: 10, 0, 0)" << std::endl;
 
@@ -104,6 +107,7 @@ bool RunTest_Step5_RelationshipAndTransform() {
     // [5.4] World Position Stays on Unparenting
     // -----------------------------------------------------------------
     std::cout << "[5.4] Verifying World Position Stays on Unparenting..." << std::endl;
+    scene->UpdateWorldTransforms();
     glm::vec3 worldBeforeUnparent = glm::vec3(child.GetWorldTransform()[3]);
 
     child.SetParent({}); // Unparent
@@ -169,6 +173,7 @@ bool RunTest_Step5_RelationshipAndTransform() {
     glm::vec3 simulatedJoltWorldPos(115.0f, 0.0f, 0.0f);
     glm::vec3 derivedLocalPos = glm::vec3(invParent * glm::vec4(simulatedJoltWorldPos, 1.0f));
     physChild.GetComponent<Axle::TransformComponent>().Translation = derivedLocalPos;
+    scene->UpdateWorldTransforms();
 
     glm::vec3 resolvedWorldPos = glm::vec3(physChild.GetWorldTransform()[3]);
     std::cout << "  -> Simulated Jolt World Pos: (" << simulatedJoltWorldPos.x << ", " << simulatedJoltWorldPos.y << ", " << simulatedJoltWorldPos.z << ")" << std::endl;
@@ -290,6 +295,7 @@ bool RunTest_Step6_Phase15_ArchetypePresets() {
     glm::vec3 initialCubeWorld = glm::vec3(cubeEntity.GetWorldTransform()[3]);
 
     rootEntity.GetComponent<Axle::TransformComponent>().Translation += glm::vec3(5.0f, 3.0f, -2.0f);
+    scene->UpdateWorldTransforms();
     glm::vec3 movedCubeWorld = glm::vec3(cubeEntity.GetWorldTransform()[3]);
 
     if (!Vec3Eq(movedCubeWorld, initialCubeWorld + glm::vec3(5.0f, 3.0f, -2.0f))) {

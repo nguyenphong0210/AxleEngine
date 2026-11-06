@@ -699,7 +699,7 @@ bool RunTest_Step36_Phase30_Step1_CoreSkeletalDataStructures() {
     // Sub-test 1: Skeleton and Bone Hierarchy
     std::cout << "  [1/5] Testing Skeleton & Hierarchical Bone Tree..." << std::endl;
     Axle::Skeleton skeleton("Humanoid");
-    
+
     Axle::Bone root;
     root.Name = "Root";
     root.LocalTransform = glm::mat4(1.0f);
@@ -1526,6 +1526,7 @@ bool RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController
         camera.AddComponent<Axle::CameraComponent>();
         auto& camTC = camera.GetComponent<Axle::TransformComponent>();
         camTC.Rotation = glm::angleAxis(glm::half_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)); // 90 deg Yaw
+        scene->UpdateWorldTransforms();
 
         auto player = scene->CreateEntity("Player");
         auto& ccc = player.AddComponent<Axle::CharacterControllerComponent>();
@@ -1564,6 +1565,7 @@ bool RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController
         auto player = scene->CreateEntity("Player");
         player.AddComponent<Axle::CharacterControllerComponent>();
         player.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(10.0f, 0.0f, -5.0f);
+        scene->UpdateWorldTransforms();
 
         auto camera = scene->CreateEntity("Main Camera");
         camera.AddComponent<Axle::CameraComponent>();

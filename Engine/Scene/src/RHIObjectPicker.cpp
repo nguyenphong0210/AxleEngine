@@ -209,6 +209,10 @@ namespace Axle {
         if (!m_Initialized || !m_Pipeline) return;
         if (width == 0 || height == 0) return;
 
+        if (scene) {
+            scene->UpdateWorldTransforms();
+        }
+
         Resize(width, height);
         if (!m_PickingTexture || !m_PickingTexture->IsValid()) return;
         if (!m_DepthTexture || !m_DepthTexture->IsValid()) return;

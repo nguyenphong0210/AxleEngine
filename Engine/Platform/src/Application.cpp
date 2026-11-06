@@ -2,8 +2,6 @@
 #include <Axle/Input.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/JobSystem.hpp>
-#include <Axle/RenderCommand.hpp>
-#include <Axle/PhysicsEngine.hpp>
 #include <GLFW/glfw3.h>
 
 namespace Axle {
@@ -20,11 +18,6 @@ namespace Axle {
         // 2. Initialize unified Job System
         JobSystem::Init();
 
-        // 3. Initialize physics engine core
-        if (!PhysicsEngine::IsInitialized()) {
-            PhysicsEngine::Init();
-        }
-
         // 3. Create platform window
         WindowProps props;
         props.Title = spec.Name;
@@ -36,19 +29,21 @@ namespace Axle {
 
         m_Window = std::make_unique<Window>(props);
 
-        // 4. Initialize renderer context (for OpenGL legacy / fallback)
-        if (m_Window->GetGraphicsBackend() == GraphicsAPI::OpenGL) {
-            if (!RenderCommand::Init(reinterpret_cast<GLProcAddressFn>(glfwGetProcAddress))) {
+        // 4. Initialize renderer context if host callback provided
+        if (m_Specification.GraphicsBackend == GraphicsAPI::OpenGL && m_Specification.RendererInitCallback) {
+            if (!m_Specification.RendererInitCallback(reinterpret_cast<void*>(glfwGetProcAddress))) {
                 AXLE_CORE_CRITICAL("Failed to initialize renderer context in Application!");
             }
-            RenderCommand::SetViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
+            if (m_Specification.ViewportResizeCallback) {
+                m_Specification.ViewportResizeCallback(m_Window->GetWidth(), m_Window->GetHeight());
+            }
         }
 
         // 5. Setup window resize callback
         m_Window->SetWindowResizeCallback([this](const WindowResizeEvent& e) {
             if (e.Width > 0 && e.Height > 0) {
-                if (m_Window->GetGraphicsBackend() == GraphicsAPI::OpenGL) {
-                    RenderCommand::SetViewport(0, 0, e.Width, e.Height);
+                if (m_Specification.GraphicsBackend == GraphicsAPI::OpenGL && m_Specification.ViewportResizeCallback) {
+                    m_Specification.ViewportResizeCallback(e.Width, e.Height);
                 }
                 for (auto& layer : m_LayerStack) {
                     layer->OnWindowResize(e.Width, e.Height);
@@ -79,9 +74,17 @@ namespace Axle {
             m_UIContext.reset();
         }
 
-        AXLE_CORE_INFO("Application::~Application -> [4/6] Shutdown PhysicsEngine");
-        if (PhysicsEngine::IsInitialized()) {
-            PhysicsEngine::Shutdown();
+        AXLE_CORE_INFO("Application::~Application -> [4/6] Shutdown Services in reverse registration order");
+        for (auto it = m_Services.rbegin(); it != m_Services.rend(); ++it) {
+            if (*it) {
+                AXLE_CORE_INFO("Application::~Application -> Shutdown service '{0}'", (*it)->GetName());
+                (*it)->OnShutdown();
+            }
+        }
+        m_Services.clear();
+
+        if (m_Specification.RendererShutdownCallback) {
+            m_Specification.RendererShutdownCallback();
         }
 
         AXLE_CORE_INFO("Application::~Application -> [5/6] Shutdown JobSystem");
@@ -89,6 +92,31 @@ namespace Axle {
 
         AXLE_CORE_INFO("Application::~Application -> [6/6] Complete ('{0}' shut down)", m_Specification.Name);
         s_Instance = nullptr;
+    }
+
+    void Application::RegisterService(std::shared_ptr<IApplicationService> service) {
+        if (!service) return;
+        service->OnInit();
+        m_Services.push_back(std::move(service));
+    }
+
+    void Application::UnregisterService(std::string_view name) {
+        for (auto it = m_Services.begin(); it != m_Services.end(); ++it) {
+            if (*it && (*it)->GetName() == name) {
+                (*it)->OnShutdown();
+                m_Services.erase(it);
+                return;
+            }
+        }
+    }
+
+    std::shared_ptr<IApplicationService> Application::GetService(std::string_view name) const {
+        for (const auto& svc : m_Services) {
+            if (svc && svc->GetName() == name) {
+                return svc;
+            }
+        }
+        return nullptr;
     }
 
     void Application::SetUIContext(std::unique_ptr<ApplicationUIContext> uiContext) {
@@ -123,6 +151,11 @@ namespace Axle {
             const auto time = static_cast<f32>(glfwGetTime());
             Timestep ts = time - m_LastFrameTime;
             m_LastFrameTime = time;
+
+            // Update registered application services
+            for (auto& service : m_Services) {
+                service->OnUpdate(ts);
+            }
 
             // Update layers
             for (auto& layer : m_LayerStack) {

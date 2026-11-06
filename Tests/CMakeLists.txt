@@ -255,6 +255,21 @@ add_test(NAME PluginHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOUR
 set_tests_properties(PluginUnitTests PluginHarnessFailure PROPERTIES LABELS "plugin;cpu")
 set_tests_properties(PluginUnitTests PluginHarnessFailure PROPERTIES TIMEOUT 30)
 
+# Dedicated Foundation, Application & Services Unit Test Target (AF-02)
+add_executable(AxleFoundationUnitTests EXCLUDE_FROM_ALL
+    src/Test_CoreFoundationAndServicesUnit.cpp
+)
+target_include_directories(AxleFoundationUnitTests PRIVATE src)
+target_link_libraries(AxleFoundationUnitTests PRIVATE
+    Axle::Core
+    Axle::Platform
+)
+if (MSVC)
+    target_compile_options(AxleFoundationUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME FoundationUnitTests COMMAND $<TARGET_FILE:AxleFoundationUnitTests>)
+set_tests_properties(FoundationUnitTests PROPERTIES LABELS "foundation;cpu" TIMEOUT 30)
+
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
     src/JobsECSTestMain.cpp

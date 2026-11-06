@@ -1,4 +1,6 @@
 add_library(AxlePlatform STATIC
+    src/Application.cpp
+    src/LayerStack.cpp
     src/Window.cpp
     src/Input.cpp
     src/PlatformUtils.cpp

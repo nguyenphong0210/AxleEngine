@@ -64,6 +64,34 @@ namespace Axle {
                 }
             }
         }
+
+        struct AsyncLambdaTask : public enki::ITaskSet {
+            std::function<void()> TaskFunc;
+            std::shared_ptr<std::atomic<bool>> Cancelled;
+            std::shared_ptr<JobSystemData> SchedulerData;
+            std::atomic<bool> Started{false};
+
+            AsyncLambdaTask(std::function<void()> f,
+                            std::shared_ptr<std::atomic<bool>> cancelled,
+                            std::shared_ptr<JobSystemData> data)
+                : enki::ITaskSet(1)
+                , TaskFunc(std::move(f))
+                , Cancelled(std::move(cancelled))
+                , SchedulerData(std::move(data)) {}
+
+            void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override {
+                (void)range; (void)threadnum;
+                if (Cancelled && Cancelled->load(std::memory_order_acquire)) {
+                    return;
+                }
+                Started.store(true, std::memory_order_release);
+                Detail::TaskExecutionScope scope;
+                if (Cancelled && Cancelled->load(std::memory_order_acquire)) {
+                    return;
+                }
+                if (TaskFunc) TaskFunc();
+            }
+        };
     }
 
     // --- JobHandle Implementation ---
@@ -110,6 +138,11 @@ namespace Axle {
     bool JobHandle::Cancel() {
         if (!m_Cancelled || !m_Task) return false;
         if (IsComplete()) return false;
+        if (auto lambdaTask = dynamic_cast<Detail::AsyncLambdaTask*>(m_Task.get())) {
+            if (lambdaTask->Started.load(std::memory_order_acquire)) {
+                return false;
+            }
+        }
         bool expected = false;
         return m_Cancelled->compare_exchange_strong(expected, true, std::memory_order_acq_rel);
     }
@@ -351,32 +384,9 @@ namespace Axle {
             return JobHandle();
         }
 
-        struct AsyncLambdaTask : public enki::ITaskSet {
-            std::function<void()> TaskFunc;
-            std::shared_ptr<std::atomic<bool>> Cancelled;
-            std::shared_ptr<JobSystemData> SchedulerData;
-
-            AsyncLambdaTask(std::function<void()> f,
-                            std::shared_ptr<std::atomic<bool>> cancelled,
-                            std::shared_ptr<JobSystemData> data)
-                : enki::ITaskSet(1)
-                , TaskFunc(std::move(f))
-                , Cancelled(std::move(cancelled))
-                , SchedulerData(std::move(data)) {}
-
-            void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override {
-                (void)range; (void)threadnum;
-                if (Cancelled && Cancelled->load(std::memory_order_acquire)) {
-                    return;
-                }
-                Detail::TaskExecutionScope scope;
-                if (TaskFunc) TaskFunc();
-            }
-        };
-
         const u32 currentEpoch = s_Epoch.load(std::memory_order_relaxed);
         auto cancelledFlag = std::make_shared<std::atomic<bool>>(false);
-        auto task = std::make_shared<AsyncLambdaTask>(std::move(func), cancelledFlag, data);
+        auto task = std::make_shared<Detail::AsyncLambdaTask>(std::move(func), cancelledFlag, data);
 
         {
             std::lock_guard<std::mutex> lock(data->AdmissionMutex);

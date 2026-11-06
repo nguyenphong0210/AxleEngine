@@ -1,5 +1,7 @@
 #include <Axle/Application.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RenderCommand.hpp>
+#include <Axle/PhysicsEngine.hpp>
 #include "RuntimeLayer.hpp"
 #include <exception>
 #include <csignal>
@@ -97,15 +99,37 @@ int main(int argc, char** argv) {
     }
 
     try {
+        class PhysicsApplicationService final : public Axle::IApplicationService {
+        public:
+            const char* GetName() const override { return "Physics"; }
+            void OnInit() override {
+                if (!Axle::PhysicsEngine::IsInitialized()) {
+                    Axle::PhysicsEngine::Init();
+                }
+            }
+            void OnShutdown() override {
+                if (Axle::PhysicsEngine::IsInitialized()) {
+                    Axle::PhysicsEngine::Shutdown();
+                }
+            }
+        };
+
         Axle::ApplicationSpecification spec{
             .Name = "Axle Game Player",
             .Width = 1280,
             .Height = 720,
             .VSync = true,
-            .Maximized = true
+            .Maximized = true,
+            .RendererInitCallback = [](void* proc) {
+                return Axle::RenderCommand::Init(reinterpret_cast<Axle::GLProcAddressFn>(proc));
+            },
+            .ViewportResizeCallback = [](Axle::u32 width, Axle::u32 height) {
+                Axle::RenderCommand::SetViewport(0, 0, width, height);
+            }
         };
 
         auto app = std::make_unique<Axle::Application>(spec);
+        app->RegisterService(std::make_shared<PhysicsApplicationService>());
         app->PushLayer(std::make_shared<Axle::RuntimeLayer>(projectPath));
         app->Run();
     } catch (const std::exception& e) {

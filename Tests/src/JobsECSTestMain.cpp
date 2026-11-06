@@ -1222,6 +1222,18 @@ int RunEJ07HandlesShutdownProbe() {
             return 1;
         }
 
+        // Ensure all scheduler worker threads are occupied so handleCancel is queued
+        std::atomic<bool> blocker2Done{false};
+        auto blocker2 = Axle::JobSystem::Dispatch([&] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+            blocker2Done.store(true);
+        });
+        std::atomic<bool> blocker3Done{false};
+        auto blocker3 = Axle::JobSystem::Dispatch([&] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+            blocker3Done.store(true);
+        });
+
         // Test Cancellation
         std::atomic<bool> cancelledTaskRan{false};
         auto handleCancel = Axle::JobSystem::Dispatch([&] {
@@ -1229,6 +1241,8 @@ int RunEJ07HandlesShutdownProbe() {
         });
         bool didCancel = handleCancel.Cancel();
         handleCancel.Wait();
+        blocker2.Wait();
+        blocker3.Wait();
         if (didCancel && cancelledTaskRan.load()) {
             std::cerr << "[EJ07] FAILED: Cancelled task ran despite cancellation\n";
             return 1;

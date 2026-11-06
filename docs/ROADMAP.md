@@ -156,7 +156,7 @@ review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in th
 
 **Work:** Extract Application/bootstrap from Core; correct EnTT iteration, structural mutation and transform ownership; separate SceneData and CPU asset registry/format from concrete services; move Editor Play and Runtime onto one simulation driver.
 
-- [ ] **AF-02:** Foundation, Application and explicit service ownership.
+- [x] **AF-02:** Foundation, Application and explicit service ownership. (Self-verified in AF-02 commit; Core clean Level 0, Application in Platform with explicit service ownership, ALLOW-001..003 retired, 32/32 CTest, 14/1/3 harness).
 - [ ] **EJ-08:** Parallel EnTT view correctness.
 - [ ] **EJ-09:** Scene command and mutation boundaries.
 - [ ] **EJ-10:** Transform evaluation ownership.

@@ -7,9 +7,21 @@
 #include <Axle/ApplicationUI.hpp>
 
 #include <string>
+#include <string_view>
 #include <memory>
+#include <vector>
+#include <functional>
 
 namespace Axle {
+
+    class IApplicationService {
+    public:
+        virtual ~IApplicationService() = default;
+        virtual const char* GetName() const = 0;
+        virtual void OnInit() {}
+        virtual void OnUpdate(Timestep ts) {}
+        virtual void OnShutdown() {}
+    };
 
     struct ApplicationSpecification {
         std::string Name = "Axle Application";
@@ -18,6 +30,11 @@ namespace Axle {
         bool VSync = true;
         bool Maximized = true;
         GraphicsAPI GraphicsBackend = GraphicsAPI::OpenGL;
+
+        // Optional host service callbacks for renderer initialization / viewport sync
+        std::function<bool(void* procAddress)> RendererInitCallback = nullptr;
+        std::function<void(u32 width, u32 height)> ViewportResizeCallback = nullptr;
+        std::function<void()> RendererShutdownCallback = nullptr;
     };
 
     class Application {
@@ -40,6 +57,23 @@ namespace Axle {
         Window& GetWindow() { return *m_Window; }
         const Window& GetWindow() const { return *m_Window; }
 
+        // Explicit service ownership
+        void RegisterService(std::shared_ptr<IApplicationService> service);
+        void UnregisterService(std::string_view name);
+        std::shared_ptr<IApplicationService> GetService(std::string_view name) const;
+
+        template<typename T>
+        std::shared_ptr<T> GetService() const {
+            for (const auto& svc : m_Services) {
+                if (auto casted = std::dynamic_pointer_cast<T>(svc)) {
+                    return casted;
+                }
+            }
+            return nullptr;
+        }
+
+        const std::vector<std::shared_ptr<IApplicationService>>& GetServices() const { return m_Services; }
+
         static Application& Get() { return *s_Instance; }
 
     private:
@@ -47,6 +81,7 @@ namespace Axle {
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<ApplicationUIContext> m_UIContext;
         LayerStack m_LayerStack;
+        std::vector<std::shared_ptr<IApplicationService>> m_Services;
 
         bool m_Running = true;
         f32 m_LastFrameTime = 0.0f;

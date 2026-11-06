@@ -19,6 +19,7 @@ namespace Axle {
     class SkinningPipeline;
     class ParticleRenderer;
     class RHIParticleRenderer;
+    class SceneCommandBuffer;
     namespace RHI { class RHICommandBuffer; }
     struct DirectionalLightComponent;
     struct SkyboxComponent;
@@ -114,12 +115,19 @@ namespace Axle {
         UIDataContext& GetUIDataContext() { return m_UIDataContext; }
         const UIDataContext& GetUIDataContext() const { return m_UIDataContext; }
 
+        // Scene Command Buffer & Mutation Boundaries (EJ-09)
+        SceneCommandBuffer& GetCommandBuffer();
+        void ExecuteCommandBuffer();
+        u32 GetSceneGeneration() const { return m_SceneGeneration; }
+
     private:
         void UpdateEntityTransformRecursive(entt::entity entity, const glm::mat4& parentWorld);
 
         entt::registry m_Registry;
         PhysicsScene* m_RuntimePhysicsScene = nullptr;
         UIDataContext m_UIDataContext;
+        std::unique_ptr<SceneCommandBuffer> m_CommandBuffer;
+        u32 m_SceneGeneration = 1;
 
         friend class Entity;
     };

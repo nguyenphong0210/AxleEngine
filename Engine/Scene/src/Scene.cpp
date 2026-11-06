@@ -6,6 +6,7 @@
 #include <Axle/RenderCommand.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/ParallelECS.hpp>
+#include <Axle/SceneCommandBuffer.hpp>
 #include <Axle/SkinningPipeline.hpp>
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
@@ -16,6 +17,7 @@
 namespace Axle {
 
     Scene::Scene() {
+        m_CommandBuffer = std::make_unique<SceneCommandBuffer>();
     }
 
     Scene::~Scene() {
@@ -43,6 +45,11 @@ namespace Axle {
     }
 
     void Scene::Clear() {
+        if (m_CommandBuffer) {
+            m_CommandBuffer->Clear();
+        }
+        m_SceneGeneration++;
+
         auto scriptView = m_Registry.view<NativeScriptComponent>();
         for (auto entityID : scriptView) {
             auto& nsc = scriptView.get<NativeScriptComponent>(entityID);
@@ -61,39 +68,90 @@ namespace Axle {
             return;
         }
 
+        entt::entity handle = static_cast<entt::entity>(entity);
+
+        // 1. Script lifecycle cleanup
         if (entity.HasComponent<NativeScriptComponent>()) {
             auto& nsc = entity.GetComponent<NativeScriptComponent>();
             if (nsc.Instance && nsc.DestroyScript) {
                 nsc.Instance->OnDestroy();
                 nsc.DestroyScript(&nsc);
+                nsc.Instance = nullptr;
             }
         }
 
-        if (physicsScene && entity.HasComponent<RigidBody3D>()) {
+        // 2. Physics lifecycle cleanup
+        PhysicsScene* activePhysics = physicsScene ? physicsScene : m_RuntimePhysicsScene;
+        if (activePhysics && entity.HasComponent<RigidBody3D>()) {
             auto& rb = entity.GetComponent<RigidBody3D>();
             if (!rb.RuntimeBodyID.IsInvalid()) {
-                physicsScene->DestroyBody(rb.RuntimeBodyID);
+                activePhysics->DestroyBody(rb.RuntimeBodyID);
                 rb.RuntimeBodyID = {};
             }
         }
 
-        if (entity.HasComponent<HierarchyComponent>()) {
-            auto& hc = entity.GetComponent<HierarchyComponent>();
-            auto children = hc.Children; // Copy list to avoid iterator invalidation
-            for (auto child : children) {
-                if (m_Registry.valid(child)) {
-                    DestroyEntity({ child, this }, physicsScene);
-                }
-            }
-            if (hc.Parent != entt::null && m_Registry.valid(hc.Parent)) {
-                if (m_Registry.all_of<HierarchyComponent>(hc.Parent)) {
-                    auto& parentHc = m_Registry.get<HierarchyComponent>(hc.Parent);
-                    auto it = std::remove(parentHc.Children.begin(), parentHc.Children.end(), static_cast<entt::entity>(entity));
-                    parentHc.Children.erase(it, parentHc.Children.end());
-                }
+        // 3. Audio lifecycle cleanup
+        if (entity.HasComponent<AudioSourceComponent>()) {
+            auto& asc = entity.GetComponent<AudioSourceComponent>();
+            asc.Stop();
+            asc.Source = nullptr;
+        }
+
+        // 4. CharacterController & VFX cleanup
+        if (entity.HasComponent<CharacterControllerComponent>()) {
+            auto& ccc = entity.GetComponent<CharacterControllerComponent>();
+            ccc.StopRuntime();
+        }
+        if (entity.HasComponent<CharacterVFXComponent>()) {
+            auto& cvfx = entity.GetComponent<CharacterVFXComponent>();
+            cvfx.StopRuntime();
+        }
+
+        // 5. Hierarchy cleanup (safe value-copying to avoid reference invalidation across recursive calls)
+        entt::entity parentEntity = entt::null;
+        std::vector<entt::entity> childrenCopy;
+
+        if (m_Registry.all_of<HierarchyComponent>(handle)) {
+            const auto& hc = m_Registry.get<HierarchyComponent>(handle);
+            parentEntity = hc.Parent;
+            childrenCopy = hc.Children; // Value copy
+        }
+
+        // Recursively destroy children first
+        for (entt::entity child : childrenCopy) {
+            if (m_Registry.valid(child)) {
+                DestroyEntity({ child, this }, physicsScene);
             }
         }
-        m_Registry.destroy(entity);
+
+        // If this entity was destroyed by a child or callback, don't continue
+        if (!m_Registry.valid(handle)) {
+            return;
+        }
+
+        // Detach from parent's children list
+        if (parentEntity != entt::null && m_Registry.valid(parentEntity)) {
+            if (m_Registry.all_of<HierarchyComponent>(parentEntity)) {
+                auto& parentHc = m_Registry.get<HierarchyComponent>(parentEntity);
+                auto it = std::remove(parentHc.Children.begin(), parentHc.Children.end(), handle);
+                parentHc.Children.erase(it, parentHc.Children.end());
+            }
+        }
+
+        m_Registry.destroy(handle);
+    }
+
+    SceneCommandBuffer& Scene::GetCommandBuffer() {
+        if (!m_CommandBuffer) {
+            m_CommandBuffer = std::make_unique<SceneCommandBuffer>();
+        }
+        return *m_CommandBuffer;
+    }
+
+    void Scene::ExecuteCommandBuffer() {
+        if (m_CommandBuffer) {
+            m_CommandBuffer->Execute(*this);
+        }
     }
 
     Entity Scene::DuplicateEntity(Entity entity, PhysicsScene* physicsScene) {

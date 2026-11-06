@@ -80,3 +80,51 @@ Evolving execution log and verification record for the sequential implementation
 - `python scripts/check_architecture.py --root . --closed-package AF-02`: exit 0, PASS.
 - `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
 - `git diff --check`: exit 0.
+
+---
+
+## Package EJ-09: Scene Command and Mutation Boundaries
+
+- **Status:** Implemented and self-verified; local delivery committed.
+- **Base Baseline:** `4286425`
+- **Scope & Contract:** [ARCHITECTURE_FOUNDATION_MASTER_PLAN.md](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
+
+### Implementation Summary
+1. **Scene Command Buffer (`Axle::SceneCommandBuffer`):**
+   - Introduced dedicated lifecycle-aware `SceneCommandBuffer` in `Engine/Scene/include/Axle/SceneCommandBuffer.hpp` and `Engine/Scene/src/SceneCommandBuffer.cpp`.
+   - Supports thread-safe recording of `DestroyEntity`, `SetParent`, `CreateEntity`, `CreateEntityWithUUID`, `EmplaceOrReplace`, `Remove`, and `Custom` operations.
+   - Enforces scene generation, entity generation, and conflict resolution rules during execution.
+2. **Conflict & Boundary Resolution:**
+   - **Destroy-then-edit rejection:** Tracks all entities destroyed during execution (including recursive hierarchy descendants); subsequent mutation commands targeting destroyed entities are safely rejected.
+   - **Wrong-scene boundary enforcement:** Rejects any command whose entity target belongs to a different scene instance.
+   - **Post-join merge & execution:** Commands are merged (`bufferA.Merge(std::move(bufferB))`) and executed on the calling thread only after parallel worker batches join.
+3. **Hierarchy & Lifecycle Teardown Hardening:**
+   - Hardened `Scene::DestroyEntity`:
+     - Value-copies `parentEntity` and `childrenCopy` before recursive destruction, preventing reference invalidation when component pools reallocate during child destruction.
+     - Performs clean Native Script `OnDestroy` and instance teardown.
+     - Automatically cleans up physics bodies in `PhysicsScene` (using explicit or `m_RuntimePhysicsScene`).
+     - Cleans up `AudioSourceComponent`, `CharacterControllerComponent`, and `CharacterVFXComponent`.
+   - Hardened `Entity::SetParent`: rejects cross-scene parenting, self-parenting, and cycle creation; safely copies old parent handle before pool modifications.
+   - Added `Entity::Destroy()` convenience method delegating to `Scene::DestroyEntity()`.
+4. **Dedicated Test Fixture (`AxleSceneMutationUnitTests`):**
+   - Created `Tests/src/Test_SceneCommandAndMutationUnit.cpp` registered in `Tests/CMakeLists.txt` and CTest.
+   - Verifies:
+     - `TestParentChildRecursiveDestroy`: full subtree destruction without dangling references.
+     - `TestChildUnparentingAndDestruction`: single-child destruction with clean parent child list pruning.
+     - `TestScriptAndPhysicsTeardownOnDestroy`: verified script `OnDestroy` execution and physics body removal from `PhysicsScene`.
+     - `TestCommandBufferDestroyThenEditConflict`: verified destroy-then-edit conflict rejection.
+     - `TestWrongSceneCollisionRejection`: verified cross-scene parenting and mutation rejection.
+     - `TestMultiThreadedRecordingAndPostJoinCommit`: concurrent recording from 32 tasks across worker threads with deterministic post-join commit.
+     - `TestCommandBufferMerge`: buffer move-merge and sequential execution.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleSceneMutationUnitTests AxleFoundationUnitTests AxleJobsECSTests AxleEditor AxleRuntime`: exit 0.
+- `cmake --build build --config Release --target AxleSceneMutationUnitTests`: exit 0.
+- `build/Tests/Debug/AxleSceneMutationUnitTests.exe`: exit 0, ALL SCENE MUTATION UNIT TESTS PASSED.
+- `build/Tests/Release/AxleSceneMutationUnitTests.exe`: exit 0, ALL SCENE MUTATION UNIT TESTS PASSED.
+- `ctest --test-dir build -C Debug --output-on-failure`: 33/33 tests passed (100%).
+- `ctest --test-dir build -C Release --output-on-failure`: 33/33 tests passed (100%).
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `python scripts/check_architecture.py --root . --closed-package AF-02`: exit 0, PASS (344 files, 17 CMake files, 0 violations).
+- `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
+- `git diff --check`: exit 0.

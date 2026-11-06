@@ -66,6 +66,8 @@ namespace Axle {
 
         Scene* GetScene() const { return m_Scene; }
 
+        void Destroy(class PhysicsScene* physicsScene = nullptr);
+
         // Hierarchy Traversal & Management
         Entity GetParent() const;
         void SetParent(Entity parent, bool keepWorldPosition = true);

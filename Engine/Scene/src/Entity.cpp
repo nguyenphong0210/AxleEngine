@@ -34,8 +34,19 @@ namespace Axle {
         return Entity(hc.Parent, m_Scene);
     }
 
+    void Entity::Destroy(PhysicsScene* physicsScene) {
+        if (m_Scene && *this) {
+            m_Scene->DestroyEntity(*this, physicsScene);
+        }
+    }
+
     void Entity::SetParent(Entity parent, bool keepWorldPosition) {
         if (!*this) return;
+
+        // Prevent cross-scene parenting (wrong-scene boundary check)
+        if (parent && parent.m_Scene != m_Scene) {
+            return;
+        }
 
         // Prevent self-parenting or parenting to a descendant (cycle prevention)
         if (parent && (parent == *this || parent.IsChildOf(*this))) {
@@ -48,17 +59,21 @@ namespace Axle {
             currentWorld = GetWorldTransform();
         }
 
-        // 1. Detach from current parent if attached
+        entt::entity childHandle = m_EntityHandle;
+        entt::entity oldParentHandle = entt::null;
+
+        // 1. Detach from current parent if attached (safe value extraction before modification)
         if (HasComponent<HierarchyComponent>()) {
-            auto& currentHc = GetComponent<HierarchyComponent>();
-            if (currentHc.Parent != entt::null && m_Scene && m_Scene->m_Registry.valid(currentHc.Parent)) {
-                if (m_Scene->m_Registry.all_of<HierarchyComponent>(currentHc.Parent)) {
-                    auto& parentHc = m_Scene->m_Registry.get<HierarchyComponent>(currentHc.Parent);
-                    auto it = std::remove(parentHc.Children.begin(), parentHc.Children.end(), m_EntityHandle);
-                    parentHc.Children.erase(it, parentHc.Children.end());
-                }
+            oldParentHandle = GetComponent<HierarchyComponent>().Parent;
+            GetComponent<HierarchyComponent>().Parent = entt::null;
+        }
+
+        if (oldParentHandle != entt::null && m_Scene && m_Scene->m_Registry.valid(oldParentHandle)) {
+            if (m_Scene->m_Registry.all_of<HierarchyComponent>(oldParentHandle)) {
+                auto& parentHc = m_Scene->m_Registry.get<HierarchyComponent>(oldParentHandle);
+                auto it = std::remove(parentHc.Children.begin(), parentHc.Children.end(), childHandle);
+                parentHc.Children.erase(it, parentHc.Children.end());
             }
-            currentHc.Parent = entt::null;
         }
 
         // 2. Attach to new parent if valid

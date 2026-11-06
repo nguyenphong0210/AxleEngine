@@ -1,6 +1,7 @@
 add_library(AxleScene STATIC
     src/Scene.cpp
     src/Entity.cpp
+    src/SceneCommandBuffer.cpp
     src/AnimationSceneBinding.cpp
     src/SceneSerializer.cpp
     src/AssemblySerializer.cpp

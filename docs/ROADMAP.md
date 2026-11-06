@@ -158,7 +158,7 @@ review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in th
 
 - [x] **AF-02:** Foundation, Application and explicit service ownership. (Self-verified in AF-02 commit; Core clean Level 0, Application in Platform with explicit service ownership, ALLOW-001..003 retired, 32/32 CTest, 14/1/3 harness).
 - [x] **EJ-08:** Parallel EnTT view correctness. (Self-verified in EJ-08 commit; valid view iteration partitioning, tombstone skipping for in_place_delete storage, deduplicated ForEachEntity targets, ECSJ-04 converted to PASS across Debug/Release harness, 32/32 CTest).
-- [ ] **EJ-09:** Scene command and mutation boundaries.
+- [x] **EJ-09:** Scene command and mutation boundaries. (Self-verified in EJ-09 commit; SceneCommandBuffer with entity/scene generation checks, conflict resolution for destroy-then-edit and cross-scene collisions, safe recursive hierarchy/script/physics teardown without component reference invalidation, 33/33 CTest including dedicated AxleSceneMutationUnitTests).
 - [ ] **EJ-10:** Transform evaluation ownership.
 - [ ] **AF-03:** Scene data and system bridge boundaries.
 - [ ] **AF-04:** Asset registry/format versus resources and tools.

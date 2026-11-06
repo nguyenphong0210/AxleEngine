@@ -270,6 +270,22 @@ endif()
 add_test(NAME FoundationUnitTests COMMAND $<TARGET_FILE:AxleFoundationUnitTests>)
 set_tests_properties(FoundationUnitTests PROPERTIES LABELS "foundation;cpu" TIMEOUT 30)
 
+# Dedicated Scene Command Buffer & Mutation Boundaries Unit Test Target (EJ-09)
+add_executable(AxleSceneMutationUnitTests EXCLUDE_FROM_ALL
+    src/Test_SceneCommandAndMutationUnit.cpp
+)
+target_include_directories(AxleSceneMutationUnitTests PRIVATE src)
+target_link_libraries(AxleSceneMutationUnitTests PRIVATE
+    Axle::Scene
+    Axle::Physics
+    Axle::Core
+)
+if (MSVC)
+    target_compile_options(AxleSceneMutationUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME SceneMutationUnitTests COMMAND $<TARGET_FILE:AxleSceneMutationUnitTests>)
+set_tests_properties(SceneMutationUnitTests PROPERTIES LABELS "scene;cpu" TIMEOUT 30)
+
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
     src/JobsECSTestMain.cpp

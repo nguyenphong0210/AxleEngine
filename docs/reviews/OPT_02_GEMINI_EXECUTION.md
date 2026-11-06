@@ -300,3 +300,55 @@ Evolving execution log and verification record for the sequential implementation
 
 6. **Product Target Builds:**
    - `AxleEditor` & `AxleRuntime` built successfully (exit 0) in Debug and Release.
+
+### Remaining Limitations
+- Single-thread Jolt bridge hang (`ECSJ-03`) is resolved in EJ-06.
+- EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
+- Independent acceptance remains pending; this report documents self-verification under autonomous authorization.
+
+---
+
+## Package EJ-06: Physics Waits and Forward Progress
+
+### Objectives & Deliverables
+1. **Guaranteed 1-Thread and Constrained Forward Progress (Resolving Defect `ECSJ-03`):**
+   - Eliminated the destruction hang in `JobSystemEnkiTS` when running on a 1-thread scheduler (`GetDedicatedWorkerThreadCount() == 0`).
+   - Root cause: When zero background enkiTS workers exist, JPH's barrier executes `job->Execute()` directly on the calling thread, but the admitted `PhysicsTaskRecord` remains unexecuted in enkiTS's queue. During bridge destruction, `WaitForLiveTasks` hung indefinitely waiting for live tasks to reach 0.
+   - Solution: Driving `Axle::JobSystem::WaitForAll()` in `JobSystemEnkiTS::WaitForJobs` and `Shutdown()` when `GetDedicatedWorkerThreadCount() == 0` actively pumps and completes the enkiTS task set on the waiting thread, allowing immediate reclamation.
+2. **Prohibit Non-Owner and In-Job Disposal:**
+   - Implemented explicit `Shutdown()` on `JobSystemEnkiTS`.
+   - Rejects non-owner thread disposal (`!IsMainThread()`) with diagnostic logging.
+   - Prohibits disposal from within any active JPH job scope (`t_InJobScope > 0`) or active enkiTS task scope (`Axle::JobSystem::GetActiveTaskDepth() > 0`), preventing deadlock and self-destruction during job callbacks.
+3. **Elimination of Dangerous Yield Spinloops:**
+   - Replaced naked `std::this_thread::yield()` spinloops in `WaitForLiveTasks` with active task pumping (`Axle::JobSystem::WaitForAll()`) on 0-worker schedulers and bounded micro-sleeps (`std::this_thread::sleep_for(std::chrono::microseconds(100))`) on multi-worker schedulers, preventing CPU saturation.
+4. **Permanent Regression & Diagnostic Probes:**
+   - Converted baseline defect `ecsj-03-bridge-hang` in `scripts/run_jobs_ecs_harness.py` from `REPRODUCED_DEFECT` (timeout) to `PASS` (clean exit 0).
+   - Created native probe `ej06-physics-waits` in `Tests/src/JobsECSTestMain.cpp` testing:
+     - Subtest 1: 1-thread forward progress and direct bridge destruction (`Init(1)`).
+     - Subtest 2: Non-owner shutdown rejection and in-job shutdown rejection from worker callbacks.
+     - Subtest 3: Constrained scheduler forward progress under 10-job dependency chaining on a 2-thread scheduler (`Init(2)`).
+
+### Verification Evidence
+1. **Focused EJ-06 Native Probe (`ej06-physics-waits`):**
+   - All 3 subtests PASS (exit 0) in Debug and Release.
+2. **Permanent Defect Fix (`ecsj-03-bridge-hang`):**
+   - Clean exit 0 (`AXLE_TEST_COMPLETED`, no hang) in Debug and Release.
+3. **Typed Baseline Harness (`scripts/run_jobs_ecs_harness.py`):**
+   - Debug: `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe --workspace build/opt02-debug --report build/opt02-debug/harness-debug.json` -> **13 PASS, 1 preserved defect (ECSJ-04), 3 verified probes, 0 unexpected failures**.
+   - Release: `python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe --workspace build/opt02-release --report build/opt02-release/harness-release.json` -> **13 PASS, 1 preserved defect (ECSJ-04), 3 verified probes, 0 unexpected failures**.
+4. **CTest Suite (Debug & Release):**
+   - Registered `JobsECS_PhysicsWaits` in `Tests/CMakeLists.txt` (total 30 tests).
+   - Debug: `ctest --test-dir build -C Debug --output-on-failure` -> **30/30 tests passed (100%)**.
+   - Release: `ctest --test-dir build -C Release --output-on-failure` -> **30/30 tests passed (100%)**.
+5. **Integration Suite (`AxleTests.exe`):**
+   - Step 23 verified: `AxleTests.exe 23` (Phase 19.3 Jolt Physics Bridge) -> **100% passed**.
+   - Full suite verified: `AxleTests.exe` -> **All 68 steps passed (100%)**.
+6. **Tooling & Architecture:**
+   - `python scripts/check_architecture.py --root .` -> **AXLE_ARCH_CHECK PASS** (342 files scanned).
+   - `python scripts/test_baseline_tools.py` -> **18 tests passed (OK)**.
+7. **Product Target Builds:**
+   - `AxleEditor` & `AxleRuntime` built successfully (exit 0) in Debug and Release.
+
+### Remaining Limitations
+- EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
+- Independent acceptance remains pending; this report documents self-verification under autonomous authorization.

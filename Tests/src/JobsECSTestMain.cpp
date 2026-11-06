@@ -1038,6 +1038,166 @@ int RunEJ05PhysicsLifetimeProbe() {
 }
 
 // ============================================================================
+// EJ-06: Physics Waits, 1-Thread Forward Progress & Disposal Protection
+// ============================================================================
+int RunEJ06PhysicsWaitsProbe() {
+    std::cout << "[EJ06] Running physics waits and forward progress probe..." << std::endl;
+
+    // 1. Single-Thread Forward Progress & Destruction (Resolves ECSJ-03)
+    {
+        if (Axle::JobSystem::IsInitialized()) {
+            Axle::JobSystem::Shutdown();
+        }
+        Axle::JobSystem::Init(1);
+        if (!Axle::PhysicsEngine::IsInitialized()) {
+            Axle::PhysicsEngine::Init();
+        }
+
+        std::atomic<bool> jobARan{false};
+        std::atomic<bool> jobBRan{false};
+        {
+            auto bridge = std::make_unique<Axle::JobSystemEnkiTS>(16, 4);
+            auto barrier = bridge->CreateBarrier();
+
+            // Job B depends on Job A
+            auto jobB = bridge->CreateJob("SingleThreadJobB", JPH::Color::sRed, [&] {
+                if (!jobARan.load()) {
+                    std::cerr << "[EJ06] Error: Job B ran before Job A!\n";
+                }
+                jobBRan.store(true);
+            }, 1);
+
+            auto jobA = bridge->CreateJob("SingleThreadJobA", JPH::Color::sGreen, [&, jobB] () mutable {
+                jobARan.store(true);
+                jobB.RemoveDependency(1);
+            }, 0);
+
+            barrier->AddJob(jobA);
+            barrier->AddJob(jobB);
+            jobA = {};
+            jobB = {};
+
+            bridge->WaitForJobs(barrier);
+            bridge->DestroyBarrier(barrier);
+
+            if (!jobARan.load() || !jobBRan.load()) {
+                std::cerr << "[EJ06] FAILED: Dependent jobs failed to execute on 1-thread scheduler\n";
+                return 1;
+            }
+
+            // Direct destruction without manual drain - MUST NOT HANG
+            bridge.reset();
+        }
+        std::cout << "[EJ06] Subtest 1 PASS: 1-thread forward progress and direct destruction\n";
+        Axle::JobSystem::Shutdown();
+    }
+
+    // 2. Non-Owner / In-Job Disposal Rejection
+    {
+        Axle::JobSystem::Init(4);
+        auto bridge = std::make_unique<Axle::JobSystemEnkiTS>(16, 4);
+
+        // Attempt shutdown from background non-owner thread
+        std::atomic<bool> bgShutdownAttempted{false};
+        std::thread nonOwner([&] {
+            bridge->Shutdown();
+            bgShutdownAttempted.store(true);
+        });
+        nonOwner.join();
+
+        if (!bgShutdownAttempted.load()) {
+            std::cerr << "[EJ06] FAILED: Non-owner thread failed to run\n";
+            return 1;
+        }
+
+        if (bridge->IsShutdown()) {
+            std::cerr << "[EJ06] FAILED: Non-owner thread succeeded in shutting down bridge!\n";
+            return 1;
+        }
+
+        // Attempt shutdown from within a worker job
+        std::atomic<bool> inJobShutdownAttempted{false};
+        auto barrier = bridge->CreateBarrier();
+        auto job = bridge->CreateJob("InJobDisposal", JPH::Color::sYellow, [&] {
+            bridge->Shutdown();
+            inJobShutdownAttempted.store(true);
+        });
+        barrier->AddJob(job);
+        job = {};
+        bridge->WaitForJobs(barrier);
+        bridge->DestroyBarrier(barrier);
+
+        if (!inJobShutdownAttempted.load()) {
+            std::cerr << "[EJ06] FAILED: In-job disposal check failed to run\n";
+            return 1;
+        }
+
+        if (bridge->IsShutdown()) {
+            std::cerr << "[EJ06] FAILED: In-job worker succeeded in shutting down bridge!\n";
+            return 1;
+        }
+
+        // Owner thread shutdown MUST succeed
+        bridge->Shutdown();
+        if (!bridge->IsShutdown()) {
+            std::cerr << "[EJ06] FAILED: Owner thread shutdown failed!\n";
+            return 1;
+        }
+
+        std::cout << "[EJ06] Subtest 2 PASS: Non-owner and in-job disposal properly prohibited\n";
+    }
+
+    // 3. Constrained Scheduler Forward Progress Under Chaining
+    {
+        Axle::JobSystem::Shutdown();
+        Axle::JobSystem::Init(2);
+
+        auto bridge = std::make_unique<Axle::JobSystemEnkiTS>(32, 8);
+        constexpr int kChainLength = 10;
+        std::atomic<int> chainProgress{0};
+
+        auto barrier = bridge->CreateBarrier();
+        std::vector<JPH::JobHandle> chainJobs(kChainLength);
+
+        // Create chain in reverse so each job has 1 dependency (except root)
+        for (int i = kChainLength - 1; i >= 0; --i) {
+            uint32_t deps = (i == 0) ? 0 : 1;
+            JPH::JobHandle nextHandle = (i + 1 < kChainLength) ? chainJobs[i + 1] : JPH::JobHandle();
+            chainJobs[i] = bridge->CreateJob("ChainJob", JPH::Color::sCyan, [&, i, nextHandle] () mutable {
+                int expected = i;
+                if (chainProgress.load() != expected) {
+                    std::cerr << "[EJ06] Chaining ordering error: expected " << expected << ", got " << chainProgress.load() << "\n";
+                }
+                chainProgress.fetch_add(1, std::memory_order_relaxed);
+                if (nextHandle.IsValid()) {
+                    nextHandle.RemoveDependency(1);
+                    nextHandle = {};
+                }
+            }, deps);
+        }
+
+        for (int i = 0; i < kChainLength; ++i) {
+            barrier->AddJob(chainJobs[i]);
+            chainJobs[i] = {};
+        }
+
+        bridge->WaitForJobs(barrier);
+        bridge->DestroyBarrier(barrier);
+
+        if (chainProgress.load() != kChainLength) {
+            std::cerr << "[EJ06] FAILED: Chained jobs failed (" << chainProgress.load() << "/" << kChainLength << ")\n";
+            return 1;
+        }
+
+        bridge->Shutdown();
+        std::cout << "[EJ06] Subtest 3 PASS: Constrained scheduler forward progress under chaining\n";
+    }
+
+    std::cout << "RESULT ej06-physics-waits PASS" << std::endl;
+    return 0;
+}
+
+// ============================================================================
 // ECSJ-04: EnTT Stable Storage Tombstone Iteration Probe
 // ============================================================================
 struct StableTombstoneComponent {
@@ -1226,6 +1386,7 @@ int main(int argc, char** argv) {
                   << "  ej03-compiler-handoff\n"
                   << "  ej04-reload-commit\n"
                   << "  ej05-physics-lifetime\n"
+                  << "  ej06-physics-waits\n"
                   << "  ecsj-03-bridge-hang\n"
                   << "  ecsj-03-bridge-control\n"
                   << "  ecsj-04-entt-tombstone\n"
@@ -1259,6 +1420,7 @@ int main(int argc, char** argv) {
         if (scenario == "ej03-compiler-handoff") return finish(RunEJ03CompilerHandoffProbe(workspace));
         if (scenario == "ej04-reload-commit") return finish(RunEJ04ReloadCommitProbe(workspace));
         if (scenario == "ej05-physics-lifetime") return finish(RunEJ05PhysicsLifetimeProbe());
+        if (scenario == "ej06-physics-waits") return finish(RunEJ06PhysicsWaitsProbe());
         if (scenario == "queued-delivery-control") return finish(RunThreadIdentityProbe(true));
         if (scenario == "ecsj-03-bridge-hang") return finish(RunBridgeProbe(false));
         if (scenario == "ecsj-03-bridge-control" || scenario == "--passing" || scenario == "passing-control")

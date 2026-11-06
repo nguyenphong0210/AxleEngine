@@ -54,6 +54,10 @@ namespace Axle {
         u32 GetAllocatedHighWaterMark() const;
         bool WaitForLiveTasks(std::chrono::milliseconds timeout = std::chrono::milliseconds(2000));
 
+        // Explicit shutdown and disposal control
+        void Shutdown();
+        bool IsShutdown() const { return m_IsShutdown.load(std::memory_order_acquire); }
+
     protected:
         virtual void QueueJob(Job* inJob) override;
         virtual void QueueJobs(Job** inJobs, JPH::uint inNumJobs) override;
@@ -85,6 +89,7 @@ namespace Axle {
 
         std::atomic<u32> m_LiveTaskCount{0};
         std::atomic<u32> m_AllocatedHighWaterMark{0};
+        std::atomic<bool> m_IsShutdown{false};
     };
 
 }

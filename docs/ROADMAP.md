@@ -143,12 +143,12 @@ review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in th
 - [x] **EJ-03:** Compiler request/result handoff (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
 - [x] **EJ-04:** Reload commit and scene/DLL teardown (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
 - [x] **EJ-05:** Stable physics submission lifetime (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
-- [ ] **EJ-06:** Physics waits and forward progress.
+- [x] **EJ-06:** Physics waits and forward progress (Gemini implemented and self-verified; resolves ECSJ-03; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
 - [ ] **EJ-07:** Handles, draining and shutdown.
 
 **Exit:** Current ECSJ-01..03 regressions pass against production APIs, including cancellation/detach and constrained-thread bridge disposal. No Scene/UI mutation occurs on a worker.
 
-**Evidence:** [OPT-02 Gemini execution report](reviews/OPT_02_GEMINI_EXECUTION.md). EJ-01, EJ-02, EJ-03 and EJ-04 complete and self-verified; ECSJ-01 and ECSJ-02 resolved; independent acceptance remains pending.
+**Evidence:** [OPT-02 Gemini execution report](reviews/OPT_02_GEMINI_EXECUTION.md). EJ-01, EJ-02, EJ-03, EJ-04, EJ-05 and EJ-06 complete and self-verified; ECSJ-01, ECSJ-02 and ECSJ-03 resolved; independent acceptance remains pending.
 
 ### OPT-03 - Separate Core, scene data and assets; unify simulation
 

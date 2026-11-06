@@ -99,7 +99,8 @@ def main():
         ("ej03-compiler-handoff", "PASS", max(args.timeout, 20)),
         ("ej04-reload-commit", "PASS", args.timeout),
         ("ej05-physics-lifetime", "PASS", args.timeout),
-        ("ecsj-03-bridge-hang", "REPRODUCED_DEFECT", 4),
+        ("ej06-physics-waits", "PASS", args.timeout),
+        ("ecsj-03-bridge-hang", "PASS", args.timeout),
         ("ecsj-03-bridge-control", "PASS", args.timeout),
         ("ecsj-04-entt-tombstone", "REPRODUCED_DEFECT", args.timeout),
         ("queued-delivery-control", "PASS", args.timeout),
@@ -109,8 +110,6 @@ def main():
     ]
     for name, kind, timeout in native:
         case = dict(name=name, cmd=[str(binary), name, str(workspace)], type=kind, timeout=timeout)
-        if name == "ecsj-03-bridge-hang":
-            case["hang_proof"] = "AXLE_TEST_READY ecsj-03-bridge-hang"
         scenarios.append(case)
     if args.cases:
         unknown = set(args.cases)-{s["name"] for s in scenarios}

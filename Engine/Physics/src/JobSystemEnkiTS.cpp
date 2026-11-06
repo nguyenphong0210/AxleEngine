@@ -8,6 +8,8 @@
 
 namespace Axle {
 
+    static thread_local uint32_t t_InJobScope = 0;
+
     // --- PhysicsTaskRecord Implementation ---
 
     void JobSystemEnkiTS::PhysicsTaskRecord::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) {
@@ -43,7 +45,25 @@ namespace Axle {
     }
 
     JobSystemEnkiTS::~JobSystemEnkiTS() {
-        WaitForLiveTasks(std::chrono::milliseconds(5000));
+        if (!Axle::JobSystem::IsMainThread()) {
+            AXLE_CORE_ERROR("JobSystemEnkiTS destructor called from non-owner thread or worker task!");
+        }
+        Shutdown();
+    }
+
+    void JobSystemEnkiTS::Shutdown() {
+        if (!Axle::JobSystem::IsMainThread() || t_InJobScope > 0 || Axle::JobSystem::GetActiveTaskDepth() > 0) {
+            AXLE_CORE_ERROR("JobSystemEnkiTS::Shutdown() rejected: called from non-owner thread or worker task!");
+            return;
+        }
+
+        m_IsShutdown.store(true, std::memory_order_release);
+
+        if (Axle::JobSystem::IsInitialized() && Axle::JobSystem::GetDedicatedWorkerThreadCount() == 0) {
+            Axle::JobSystem::WaitForAll();
+        }
+
+        WaitForLiveTasks(std::chrono::milliseconds(2000));
     }
 
     void JobSystemEnkiTS::Init(JPH::uint inMaxJobs, JPH::uint inMaxBarriers) {
@@ -69,9 +89,22 @@ namespace Axle {
     }
 
     JPH::JobHandle JobSystemEnkiTS::CreateJob(const char* inName, JPH::ColorArg inColor, const JobFunction& inJobFunction, JPH::uint32 inNumDependencies) {
+        if (m_IsShutdown.load(std::memory_order_acquire)) {
+            AXLE_CORE_WARN("JobSystemEnkiTS::CreateJob rejected: bridge is shut down!");
+            return JPH::JobHandle();
+        }
+
+        JobFunction wrappedFunction = [inJobFunction] {
+            struct JobScope {
+                JobScope() { t_InJobScope++; }
+                ~JobScope() { t_InJobScope--; }
+            } scope;
+            inJobFunction();
+        };
+
         JPH::uint32 index;
         for (;;) {
-            index = m_Jobs.ConstructObject(inName, inColor, this, inJobFunction, inNumDependencies);
+            index = m_Jobs.ConstructObject(inName, inColor, this, wrappedFunction, inNumDependencies);
             if (index != AvailableJobs::cInvalidObjectIndex)
                 break;
             JPH_ASSERT(false, "No jobs available in JobSystemEnkiTS!");
@@ -116,6 +149,11 @@ namespace Axle {
 
     void JobSystemEnkiTS::WaitForJobs(Barrier* inBarrier) {
         JobSystemWithBarrier::WaitForJobs(inBarrier);
+
+        if (Axle::JobSystem::IsInitialized() && Axle::JobSystem::GetDedicatedWorkerThreadCount() == 0) {
+            Axle::JobSystem::WaitForAll();
+        }
+
         std::lock_guard<std::mutex> lock(m_PoolMutex);
         DrainPendingReclaim();
     }
@@ -197,7 +235,11 @@ namespace Axle {
             if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start) > timeout) {
                 return false;
             }
-            std::this_thread::yield();
+            if (Axle::JobSystem::IsInitialized() && Axle::JobSystem::GetDedicatedWorkerThreadCount() == 0) {
+                Axle::JobSystem::WaitForAll();
+            } else {
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            }
         }
         return true;
     }

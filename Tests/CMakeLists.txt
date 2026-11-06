@@ -192,6 +192,16 @@ set_tests_properties(AssetIdentityAndPersistenceTests PROPERTIES LABELS "asset;c
 add_test(NAME AssetHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleAssetUnitTests> --case asset-probe)
 set_tests_properties(AssetHarnessFailure PROPERTIES LABELS "asset;cpu" TIMEOUT 15)
 
+# Dedicated Headless Asset Registry and Format Unit Tests (AF-04)
+add_executable(AxleAssetFormatUnitTests EXCLUDE_FROM_ALL src/Test_AssetUnit.cpp)
+target_include_directories(AxleAssetFormatUnitTests PRIVATE src)
+target_link_libraries(AxleAssetFormatUnitTests PRIVATE Axle::Core Axle::Asset Axle::Renderer Axle::Physics)
+if (MSVC)
+    target_compile_options(AxleAssetFormatUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME AssetFormatUnitTests COMMAND $<TARGET_FILE:AxleAssetFormatUnitTests>)
+set_tests_properties(AssetFormatUnitTests PROPERTIES LABELS "asset;cpu" TIMEOUT 30)
+
 # Dedicated CPU-Only Render Contracts & Always-Active Harness (P41-00)
 add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/RenderUnitTestMain.cpp
@@ -356,7 +366,7 @@ set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture
     PROPERTIES LABELS "architecture;cpu" TIMEOUT 60)
 
 # Explicit developer/test build. Neither this target nor its executables are in ALL.
-set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleAssetUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
+set(AXLE_TEST_TARGETS AxleProjectUnitTests AxleAssetUnitTests AxleAssetFormatUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
 if(WIN32)
     add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
     target_include_directories(AxleBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/Editor/generated/$<CONFIG>")

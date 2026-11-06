@@ -1,6 +1,5 @@
 #pragma once
 #include <Axle/Types.hpp>
-#include <Axle/VertexArray.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <string>
@@ -27,7 +26,6 @@ namespace Axle {
     };
 
     struct AxleLoadedMesh {
-        std::shared_ptr<VertexArray> VAO;
         AxleMeshSource SourceData;
         bool LoadedFromCache = false;
         bool Success = false;

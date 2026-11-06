@@ -5,6 +5,8 @@
 #include <Axle/Entity.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/MaterialCache.hpp>
+#include <Axle/SceneRenderBridge.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/SkeletalMesh.hpp>
@@ -810,7 +812,7 @@ namespace Axle {
                                 if (FileSystem::Exists(fullPath)) {
                                     auto loaded = AssetSerializer::LoadMesh(fullPath);
                                     if (loaded.Success) {
-                                        mc.VAO = loaded.VAO;
+                                        mc.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
                                     }
                                 }
                             }
@@ -1106,7 +1108,13 @@ namespace Axle {
                             mat.MaterialHandle = std::stoull(Trim(trimmed.substr(15)));
                             if (mat.MaterialHandle != 0) {
                                 AssetManager::TrackReferencedAsset(mat.MaterialHandle);
-                                mat.MaterialAsset = AssetManager::GetMaterial(mat.MaterialHandle);
+                                mat.MaterialAsset = MaterialCache::GetMaterial(mat.MaterialHandle);
+                                if (!mat.MaterialAsset) {
+                                    auto resolvedPath = AssetManager::GetAssetPath(mat.MaterialHandle);
+                                    if (!resolvedPath.empty()) {
+                                        mat.MaterialAsset = MaterialCache::GetMaterial(resolvedPath);
+                                    }
+                                }
                                 if (mat.MaterialAsset) mat.SyncFromAsset();
                             }
                         } else if (trimmed.rfind("AssetPath:", 0) == 0) {
@@ -1118,10 +1126,18 @@ namespace Axle {
                                 if (!resolved.empty()) mat.AssetPath = resolved.generic_string();
                                 else AssetManager::ReportDiagnostic(AssetDiagnostic::Level::Error, "Scene material UUID is unresolved", path, mat.MaterialHandle);
                             }
-                            if (mat.MaterialHandle == 0 && !path.empty() && !mat.MaterialAsset) {
-                                mat.MaterialAsset = AssetManager::GetMaterial(path);
+                            if (!mat.MaterialAsset) {
+                                if (mat.MaterialHandle != 0) {
+                                    auto resolvedPath = AssetManager::GetAssetPath(mat.MaterialHandle);
+                                    if (!resolvedPath.empty()) {
+                                        mat.MaterialAsset = MaterialCache::GetMaterial(resolvedPath);
+                                    }
+                                }
+                                if (!mat.MaterialAsset && !path.empty()) {
+                                    mat.MaterialAsset = MaterialCache::GetMaterial(path);
+                                }
                                 if (mat.MaterialAsset) {
-                                    mat.MaterialHandle = mat.MaterialAsset->GetHandle();
+                                    if (mat.MaterialHandle == 0) mat.MaterialHandle = mat.MaterialAsset->GetHandle();
                                     mat.SyncFromAsset();
                                 }
                             }
@@ -1675,7 +1691,7 @@ namespace Axle {
                     if (FileSystem::Exists(fullPath)) {
                         auto loaded = AssetSerializer::LoadMesh(fullPath);
                         if (loaded.Success) {
-                            mc.VAO = loaded.VAO;
+                            mc.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
                         }
                     }
                     if (!mc.VAO) {

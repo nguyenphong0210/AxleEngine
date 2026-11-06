@@ -14,6 +14,7 @@
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/Material.hpp>
+#include <Axle/MaterialCache.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <chrono>
 #include <fstream>
@@ -137,7 +138,7 @@ namespace {
         std::filesystem::copy_file(root/"materials/test_material.axleasset",root/"materials/external-copy.axleasset");
         AssetManager::Sync();
         CHECK(!AssetManager::HasAsset(MaterialID) && AssetManager::HasDiagnosticErrors());
-        CHECK(!AssetManager::GetMaterial("materials/test_material.axleasset"));
+        CHECK(!MaterialCache::GetMaterial("materials/test_material.axleasset"));
         CHECK(AssetManager::HasAsset(copyID));
         CHECK(NoAuxiliary(root)); return true;
     }
@@ -185,7 +186,7 @@ namespace {
         const bool valid = AssetManager::GetAssetUUID("materials/test_material.axleasset")==MaterialID &&
             AssetManager::GetAssetUUID("textures/test_texture.png")==0 &&
             !AssetManager::GetAssetPath(Axle::UUID(MaterialID)).empty() &&
-            bool(AssetManager::GetMaterial(Axle::UUID(MaterialID))) &&
+            bool(MaterialCache::GetMaterial(Axle::UUID(MaterialID))) &&
             FileSystem::ReadBinaryFile(packedRoot/"textures/test_texture.png")==FileSystem::ReadBinaryFile(root/"textures/test_texture.png");
         FileSystem::UnmountPackage();
         CHECK(valid); return true;
@@ -195,16 +196,16 @@ namespace {
         Material original; original.SetRoughness(0.8f); CHECK(original.Save(path));
         AssetManager::Sync();
         const auto id=AssetManager::GetAssetUUID(path);
-        auto live=AssetManager::GetMaterial(id); CHECK(live);
+        auto live=MaterialCache::GetMaterial(id); CHECK(live);
         Material changed; CHECK(changed.Load(path)); changed.SetRoughness(0.2f); CHECK(changed.Save(path));
-        AssetManager::ReloadMaterial(id);
-        CHECK(AssetManager::GetMaterial(id)==live && std::abs(live->GetRoughness()-0.2f)<0.001f);
+        MaterialCache::ReloadMaterial(id);
+        CHECK(MaterialCache::GetMaterial(id)==live && std::abs(live->GetRoughness()-0.2f)<0.001f);
         CHECK(live->GetHandle()==id);
         const uint64_t replacementID=uint64_t(id)^0x4000000000000000ULL;
         CHECK(FileSystem::WriteTextFileAtomically(path,"# AxleFileIdentity: 1 "+std::to_string(replacementID)+"\nMaterial { name: \"Different asset\" roughness: 0.9 }\n"));
-        auto replacement=AssetManager::GetMaterial(path);
+        auto replacement=MaterialCache::GetMaterial(path);
         CHECK(replacement && replacement!=live && replacement->GetHandle()==replacementID);
-        CHECK(!AssetManager::GetMaterial(id));
+        CHECK(!MaterialCache::GetMaterial(id));
         CHECK(NoAuxiliary(root)); return true;
     }
     bool NativeUIRoundtrip() {
@@ -298,6 +299,8 @@ int main(int argc,char** argv) {
         std::cout<<"AXLE_TEST_EXPECTED_FAILURE asset-probe\n"; return 1;
     }
     Axle::Tests::InitializeWorkspace();
+    MaterialCache::SetUUIDPathResolver([](Axle::UUID id) { return AssetManager::GetAssetPath(id); });
+    MaterialCache::SetPathUUIDResolver([](const std::filesystem::path& p) { return AssetManager::GetAssetUUID(p); });
     const std::pair<const char*,std::function<bool()>> tests[] = {
         {"raw paths and cold native UUID",RawPathsAndColdNativeIdentity},
         {"root relocation and external native move",RootRelocationAndNativeExternalMove},

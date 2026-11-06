@@ -24,6 +24,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/SceneRenderBridge.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/Log.hpp>
 #include <imgui.h>
@@ -430,7 +431,7 @@ namespace Axle {
                             auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
                             if (std::filesystem::exists(resolved)) {
                                 auto loaded = AssetSerializer::LoadMesh(resolved);
-                                if (loaded.Success) node.Mesh.VAO = loaded.VAO;
+                                if (loaded.Success) node.Mesh.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
                             }
                         }
                         if (!node.Mesh.VAO) node.Mesh.VAO = m_SerializerContext->CubeMesh;
@@ -480,31 +481,32 @@ namespace Axle {
 
                 AxlePackagePart previewPart;
                 previewPart.LoadedMesh.Success = true;
+                std::shared_ptr<VertexArray> partVao = nullptr;
 
                 switch (m_PreviewMeshType) {
                     case PreviewMeshType::Cube:
                         previewPart.Name = "MaterialCube";
-                        previewPart.LoadedMesh.VAO = PrimitiveMesh::CreateCube();
+                        partVao = PrimitiveMesh::CreateCube();
                         m_TotalVertices = 36;
                         m_TotalTriangles = 12;
                         break;
                     case PreviewMeshType::Cylinder:
                         previewPart.Name = "MaterialCylinder";
-                        previewPart.LoadedMesh.VAO = PrimitiveMesh::CreateCylinder(32);
+                        partVao = PrimitiveMesh::CreateCylinder(32);
                         m_TotalVertices = 192;
                         m_TotalTriangles = 96;
                         break;
                     case PreviewMeshType::Plane:
                         previewPart.Name = "MaterialPlane";
-                        previewPart.LoadedMesh.VAO = PrimitiveMesh::CreatePlane(1, 1);
+                        partVao = PrimitiveMesh::CreatePlane(1, 1);
                         m_TotalVertices = 4;
                         m_TotalTriangles = 2;
                         break;
                     case PreviewMeshType::Sphere:
                     default:
                         previewPart.Name = "MaterialSphere";
-                        previewPart.LoadedMesh.VAO = (m_SerializerContext && m_SerializerContext->SphereMesh) ? m_SerializerContext->SphereMesh : m_FallbackMesh;
-                        if (!previewPart.LoadedMesh.VAO) previewPart.LoadedMesh.VAO = PrimitiveMesh::CreateSphere(64, 96);
+                        partVao = (m_SerializerContext && m_SerializerContext->SphereMesh) ? m_SerializerContext->SphereMesh : m_FallbackMesh;
+                        if (!partVao) partVao = PrimitiveMesh::CreateSphere(64, 96);
                         m_TotalVertices = 768;
                         m_TotalTriangles = 512;
                         break;
@@ -517,6 +519,7 @@ namespace Axle {
                 previewPart.LoadedMesh.SourceData.Vertices = { glm::vec3(-0.5f), glm::vec3(0.5f) };
                 previewPart.LoadedMesh.SourceData.Indices = { 0, 1, 0 };
                 m_CurrentPackage.Parts.push_back(previewPart);
+                m_PartVAOs = { partVao };
 
                 m_HasAsset = true;
                 m_Center = glm::vec3(0.0f);
@@ -564,8 +567,8 @@ namespace Axle {
                         }
                         if (std::filesystem::exists(resolved)) {
                             auto loaded = AssetSerializer::LoadMesh(resolved);
-                            if (loaded.Success && loaded.VAO) {
-                                node.Mesh.VAO = loaded.VAO;
+                            if (loaded.Success) {
+                                node.Mesh.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
                             }
                         }
                     }
@@ -629,6 +632,11 @@ namespace Axle {
             return;
         }
 
+        m_PartVAOs.clear();
+        for (const auto& part : m_CurrentPackage.Parts) {
+            m_PartVAOs.push_back(CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData));
+        }
+
         m_HasAsset = true;
 
         // Compute aggregate bounding box
@@ -638,7 +646,7 @@ namespace Axle {
         size_t totalIndices = 0;
 
         for (const auto& part : m_CurrentPackage.Parts) {
-            if (!part.LoadedMesh.Success || !part.LoadedMesh.VAO) continue;
+            if (!part.LoadedMesh.Success) continue;
             const auto& verts = part.LoadedMesh.SourceData.Vertices;
             glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
                                * glm::mat4_cast(part.LocalRotation)
@@ -803,8 +811,10 @@ namespace Axle {
             renderNodeRec(m_CurrentAssembly.RootNode, glm::mat4(1.0f));
         } else {
             // Render all subparts with center offset
-            for (const auto& part : m_CurrentPackage.Parts) {
-                if (!part.LoadedMesh.VAO) continue;
+            for (size_t i = 0; i < m_CurrentPackage.Parts.size(); ++i) {
+                const auto& part = m_CurrentPackage.Parts[i];
+                auto vao = i < m_PartVAOs.size() ? m_PartVAOs[i] : nullptr;
+                if (!vao) continue;
                 glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
                                    * glm::mat4_cast(part.LocalRotation)
                                    * glm::scale(glm::mat4(1.0f), part.LocalScale);
@@ -816,7 +826,7 @@ namespace Axle {
                 m_Shader->SetFloat4("u_Color1", part.LoadedMesh.SourceData.ColorPrimary);
                 m_Shader->SetFloat4("u_Color2", part.LoadedMesh.SourceData.ColorSecondary);
 
-                RenderCommand::DrawIndexed(part.LoadedMesh.VAO);
+                RenderCommand::DrawIndexed(vao);
             }
         }
 
@@ -857,14 +867,16 @@ namespace Axle {
                 rootEntity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, m_CurrentPackage.HalfExtent, 0.70f, 0.15f);
             }
 
-            for (const auto& part : m_CurrentPackage.Parts) {
+            for (size_t i = 0; i < m_CurrentPackage.Parts.size(); ++i) {
+                const auto& part = m_CurrentPackage.Parts[i];
+                auto vao = i < m_PartVAOs.size() ? m_PartVAOs[i] : nullptr;
                 auto childEntity = m_Scene->CreateEntity(part.Name);
                 auto& ct = childEntity.AddComponent<TransformComponent>(part.LocalTranslation, part.LocalScale);
                 ct.Rotation = part.LocalRotation;
 
                 auto partFullPath = m_CurrentAssetPath.parent_path() / part.RelativePath;
                 childEntity.AddComponent<MeshInstance3D>(
-                    part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_FallbackMesh,
+                    vao ? vao : m_FallbackMesh,
                     partFullPath.string(),
                     part.LoadedMesh.SourceData.PatternMode,
                     part.LoadedMesh.SourceData.TileScale,
@@ -878,11 +890,12 @@ namespace Axle {
             AXLE_INFO("AssetPreviewPanel: Instantiated package '{0}' ({1} subparts)", rootTag, m_CurrentPackage.Parts.size());
         } else {
             const auto& part = m_CurrentPackage.Parts[0];
+            auto vao = !m_PartVAOs.empty() ? m_PartVAOs[0] : nullptr;
             std::string tag = m_CurrentPackage.Name.empty() ? m_CurrentAssetPath.stem().string() : m_CurrentPackage.Name;
             auto entity = m_Scene->CreateEntity(tag);
             entity.AddComponent<TransformComponent>(spawnPos, part.LocalScale);
             entity.AddComponent<MeshInstance3D>(
-                part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_FallbackMesh,
+                vao ? vao : m_FallbackMesh,
                 m_CurrentAssetPath.string(),
                 part.LoadedMesh.SourceData.PatternMode,
                 part.LoadedMesh.SourceData.TileScale,
@@ -919,8 +932,8 @@ namespace Axle {
         else if (type == PreviewMeshType::Plane) vao = m_SerializerContext->PlaneMesh;
         else if (type == PreviewMeshType::Custom && m_CustomMeshVAO) vao = m_CustomMeshVAO;
 
-        if (!m_CurrentPackage.Parts.empty()) {
-            m_CurrentPackage.Parts[0].LoadedMesh.VAO = vao;
+        if (!m_PartVAOs.empty()) {
+            m_PartVAOs[0] = vao;
         }
     }
 
@@ -929,7 +942,7 @@ namespace Axle {
         m_CustomMeshPath = meshPath;
         AxleLoadedPackage pkg = AssetSerializer::LoadPackage(meshPath);
         if (pkg.Success && !pkg.Parts.empty()) {
-            m_CustomMeshVAO = pkg.Parts[0].LoadedMesh.VAO;
+            m_CustomMeshVAO = CreateVertexArrayFromMeshSource(pkg.Parts[0].LoadedMesh.SourceData);
             m_TotalVertices = pkg.Parts[0].LoadedMesh.SourceData.Vertices.size();
             m_TotalTriangles = pkg.Parts[0].LoadedMesh.SourceData.Indices.size() / 3;
             m_SceneNeedsRebuild = true;

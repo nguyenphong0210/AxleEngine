@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-03-AF02",
-    "title": "Foundation, Application and explicit service ownership",
+    "id": "OPT-03-AF04",
+    "title": "Asset registry/format versus resources and tools",
     "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "98fe297",
+    "code_baseline": "ca1fb42",
     "scope_updated_on": "2026-11-06",
     "user_scope": "User activated docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md for sequential implementation of OPT-02 through OPT-10, starting with EJ-01..EJ-07. Routine stop-for-Codex instructions superseded within activated range; per-package implementation/self-review/fix/verification/local commit loop active. Independent acceptance remains pending.",
     "execution_range": "OPT-03 (AF-02, EJ-08..EJ-10, AF-03, AF-04, EJ-11..EJ-14)",
@@ -23,7 +23,7 @@
       "EJ-13",
       "EJ-14"
     ],
-    "implementation_status": "AF02_in_progress",
+    "implementation_status": "AF04_in_progress",
     "independent_review_status": "pending_delivery_and_checkpoint",
     "handoff": "docs/agents/handoffs/OPT_02_EJ01_GEMINI.md",
     "review_report": "docs/reviews/OPT_01_AF01_P41_PLG_REVIEW.md",
@@ -39,7 +39,12 @@
       "EJ-01-fixes": "fc04a4a verified fixes (28/28 CTest, 10/2/3 harness, ej01-review-fixes PASS)",
       "EJ-05": "2b31691 verified delivery (29/29 CTest, 11/2/3 harness, 68/68 AxleTests)",
       "EJ-06": "d46e23d verified delivery (30/30 CTest, 13/1/3 harness, ECSJ-03 resolved, 68/68 AxleTests)",
-      "EJ-07": "98fe297 verified delivery (31/31 CTest, 14/1/3 harness, 68/68 AxleTests)"
+      "EJ-07": "98fe297 verified delivery (31/31 CTest, 14/1/3 harness, 68/68 AxleTests)",
+      "AF-02": "374933a verified delivery (32/32 CTest, 14/1/3 harness, ALLOW-001..003 retired)",
+      "EJ-08": "4286425 verified delivery (32/32 CTest, 16/0/3 harness, ECSJ-04 resolved)",
+      "EJ-09": "cc059af verified delivery (33/33 CTest, 16/0/3 harness, AxleSceneMutationUnitTests 100%)",
+      "EJ-10": "b434dd0 verified delivery (33/33 CTest, 16/0/3 harness, 12/12 transform unit tests, 68/68 AxleTests)",
+      "AF-03": "ca1fb42 verified delivery (34/34 CTest, 16/0/3 harness, 6/6 AxleSceneDataUnitTests, 68/68 AxleTests)"
     },
     "expected_files": [
       "Engine/Core/include/Axle/JobSystem.hpp",
@@ -71,7 +76,7 @@
       "state": "full_product_verification_pending",
       "note": "User-directed progression retains this gap; legacy preservation requirements are superseded. No old-format support required."
     },
-    "next_action": "Implement AF-02: extract Application to Platform, remove Core upward dependencies, establish explicit service ownership.",
+    "next_action": "Deliver AF-04 and proceed to EJ-11 (shared runtime phases and script API).",
     "autonomy_plan": {
       "status": "activated",
       "document": "docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md",
@@ -986,6 +991,94 @@
       "base_commit": "98fe297",
       "timestamp_utc": "2026-11-06T04:20:36.402637+00:00",
       "body": "IN_PROGRESS: Phase OPT-03 starting with Package AF-02 (Foundation, Application and explicit service ownership).\n\nBase commit: 98fe297 (OPT-02 checkpoint verified with 31/31 CTest, 14/1/3 harness, 68/68 AxleTests).\n\nPlanned work for AF-02:\n1. Extract Application, ApplicationUIContext, Layer, and LayerStack from Engine/Core to Engine/Platform.\n2. Remove GLFW, Window, Input, PhysicsEngine, and RenderCommand dependencies from Engine/Core.\n3. Clean Engine/Core/CMakeLists.txt: remove glfw, glm, Platform, Renderer, Physics include and link dependencies; retain pure foundation (Log, FileSystem, UUID, JobSystem, Package).\n4. Introduce explicit service ownership on Application (IApplicationService, RegisterService, GetService<T>, reverse-order shutdown).\n5. Support optional host renderer callbacks (RendererInitCallback, ViewportResizeCallback) in ApplicationSpecification.\n6. Connect Editor/Main.cpp and Runtime/Main.cpp to use explicit Physics and Renderer service registration.\n7. Retire/close baseline allowances ALLOW-001, ALLOW-002, ALLOW-003 in architecture checks.\n8. Add independent foundation/service unit test suite and verify full CTest, architecture checks, and harness."
+    },
+    {
+      "id": "CG-20261106T044339373563Z-GEMINI-a096cf",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "DELIVERY",
+      "task": "OPT-03-AF02",
+      "reply_to": "CG-20261106T042036402637Z-GEMINI-e881fc",
+      "base_commit": "374933a",
+      "timestamp_utc": "2026-11-06T04:43:39.373563+00:00",
+      "body": "DELIVERY: Package AF-02 committed as 374933a (feat(core): extract Application to Platform with explicit service ownership (AF-02)).\n\nSummary:\n1. Application, ApplicationUIContext, Layer, and LayerStack extracted from Engine/Core to Engine/Platform.\n2. Engine/Core purged of all upward include/link dependencies (glfw, Window, Input, PhysicsEngine, RenderCommand). AxleCore is purely Level 0 Foundation (Log, FileSystem, UUID, JobSystem, Package).\n3. Introduced explicit service ownership on Application: IApplicationService interface, RegisterService, UnregisterService, GetService<T>, and reverse-order shutdown.\n4. Added optional host renderer callbacks to ApplicationSpecification (RendererInitCallback, ViewportResizeCallback, RendererShutdownCallback).\n5. Editor and Runtime Main.cpp updated to register PhysicsApplicationService and provide OpenGL callbacks explicitly.\n6. Hardened JobHandle::Cancel() in JobSystem.cpp to verify task non-started status, and hardened ej07-handles-shutdown test against worker race conditions.\n7. ALLOW-001, ALLOW-002, ALLOW-003 verified retired in check_architecture.py (--closed-package AF-02 passes cleanly).\n8. Dedicated AxleFoundationUnitTests added (Log, UUID, FileSystem, JobSystem pure headless operation and Application service ownership/reverse shutdown).\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleCore AxlePlatform AxleFoundationUnitTests AxleJobsECSTests AxleEditor AxleRuntime AxleTests: exit 0.\n- cmake --build build --config Release --target AxleCore AxlePlatform AxleFoundationUnitTests AxleJobsECSTests: exit 0.\n- build/Tests/Debug/AxleFoundationUnitTests.exe: exit 0, PASS (100%).\n- build/Tests/Release/AxleFoundationUnitTests.exe: exit 0, PASS (100%).\n- python scripts/check_architecture.py --root . --closed-package AF-02: exit 0, PASS (342 files, 17 CMake files, 0 violations).\n- python scripts/test_baseline_tools.py: exit 0, 18/18 tests passed.\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (14 PASS, 1 reproduced defect ECSJ-04 preserved, 3 verified probes, 0 unexpected failures).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe: exit 0 (14 PASS, 1 reproduced defect ECSJ-04 preserved, 3 verified probes, 0 unexpected failures).\n- ctest --test-dir build -C Debug --output-on-failure: 32/32 tests passed (100%).\n- ctest --test-dir build -C Release --output-on-failure: 32/32 tests passed (100%).\n- git diff --check: exit 0.\n\nProceeding to Package EJ-08 (Parallel EnTT view correctness resolving ECSJ-04)."
+    },
+    {
+      "id": "CG-20261106T044447432277Z-GEMINI-f4ff96",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-03-EJ08",
+      "reply_to": "CG-20261106T044339373563Z-GEMINI-a096cf",
+      "base_commit": "374933a",
+      "timestamp_utc": "2026-11-06T04:44:47.432277+00:00",
+      "body": "IN_PROGRESS: Package EJ-08 (Parallel EnTT view correctness).\n\nBase commit: 374933a (Package AF-02 delivery verified with 32/32 CTest, 14/1/3 harness, check_architecture PASS).\n\nPlanned work for EJ-08:\n1. Update ParallelECS::ForEach in Engine/Scene/include/Axle/ParallelECS.hpp to partition entity IDs from valid view iteration rather than indexing raw packed storage handle->data().\n2. Skip all tombstones from in_place_delete / stable storage pools, matching serial view semantics.\n3. Update ParallelECS::ForEachEntity to validate view containment and deduplicate input IDs to guarantee unique write targets.\n4. Update scripts/run_jobs_ecs_harness.py to expect PASS for ecsj-04-entt-tombstone.\n5. Add comprehensive EnTT parallel iteration tests (serial vs parallel equivalence, tombstones, single/multi-component, empty components, duplicate input IDs).\n6. Verify full CTest, jobs ECS harness (15 PASS, 0 defects, 3 verified probes), and architecture checks."
+    },
+    {
+      "id": "CG-20261106T045315852925Z-GEMINI-184465",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "DELIVERY",
+      "task": "OPT-03-EJ08",
+      "reply_to": "CG-20261106T044447432277Z-GEMINI-f4ff96",
+      "base_commit": "4286425",
+      "timestamp_utc": "2026-11-06T04:53:15.852925+00:00",
+      "body": "DELIVERY: Package EJ-08 committed as 4286425 (feat(scene): correct parallel EnTT view iteration and tombstone handling (EJ-08)).\n\nSummary:\n1. Parallel View Iteration Correctness: Fixed ParallelECS::ForEach in Engine/Scene/include/Axle/ParallelECS.hpp. Instead of indexing raw contiguous storage handle->data() which contains uncompacted entt::tombstone slots in in_place_delete / stable storage pools, ForEach partitions from valid view iteration (for (auto entity : view)).\n2. Multi-Component Membership & SFINAE Sizing: Handled both single and multi-component views cleanly with C++20 GetViewSizeHint supporting size_hint() on in-place delete views, size() on standard views, and multi-component basic_view.\n3. Target Deduplication: Updated ParallelECS::ForEachEntity to filter null/tombstones and deduplicate entity targets via std::unordered_set, enforcing unique write targets and avoiding concurrent data races across worker threads.\n4. Defect Conversion: Converted ecsj-04-entt-tombstone in scripts/run_jobs_ecs_harness.py from REPRODUCED_DEFECT to expected PASS.\n5. Expanded Probe: Expanded RunEnTTTombstoneProbe in Tests/src/JobsECSTestMain.cpp to verify stable storage tombstone skipping, 2000-entity multi-component view equivalence with interleaved tombstones, and ForEachEntity deduplication.\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleJobsECSTests: exit 0.\n- cmake --build build --config Release --target AxleJobsECSTests: exit 0.\n- build/Tests/Debug/AxleJobsECSTests.exe ecsj-04-entt-tombstone: exit 0, PASS (sequential=1 parallel=1 multiCount=666 dedupCount=66 invalidCallbacks=0).\n- build/Tests/Release/AxleJobsECSTests.exe ecsj-04-entt-tombstone: exit 0, PASS.\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).\n- ctest --test-dir build -C Debug --output-on-failure: 32/32 tests passed (100%).\n- ctest --test-dir build -C Release --output-on-failure: 32/32 tests passed (100%).\n- python scripts/check_architecture.py --root . --closed-package AF-02: exit 0, PASS (342 files, 17 CMake files, 0 violations).\n- python scripts/test_baseline_tools.py: exit 0, 18/18 tests passed.\n- git diff --check: exit 0.\n\nProceeding directly to Package EJ-09 (Scene command and mutation boundaries) under autonomous architecture plan."
+    },
+    {
+      "id": "CG-20261106T045331354420Z-GEMINI-bb58d5",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-03-EJ09",
+      "reply_to": "CG-20261106T045315852925Z-GEMINI-184465",
+      "base_commit": "4286425",
+      "timestamp_utc": "2026-11-06T04:53:31.354420+00:00",
+      "body": "IN_PROGRESS: Package EJ-09 (Scene command and mutation boundaries).\n\nBase commit: 4286425 (Package EJ-08 delivery verified with 32/32 CTest, 16/0/3 harness with ECSJ-04 PASS, check_architecture PASS).\n\nPlanned work for EJ-09:\n1. Separate registry-only helpers from Scene lifecycle commands; create/expand SceneCommandBuffer.\n2. Validate scene and entity generations; define merge and conflict rules applied only after all relevant parallel batches join.\n3. Route destroy, reparent, add, and remove operations through coherent hierarchy, script, and physics cleanup. Avoid holding component references across recursive structural changes.\n4. Add lifecycle regression fixtures in Tests/ (parent/child destroy, live script/body cleanup, destroy-then-edit, wrong-scene collisions).\n5. Verify full CTest, harness, architecture checks, and build products."
+    },
+    {
+      "id": "CG-20261106T050807394578Z-GEMINI-b15564",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "DELIVERY",
+      "task": "OPT-03-EJ09",
+      "reply_to": "CG-20261106T045331354420Z-GEMINI-bb58d5",
+      "base_commit": "cc059af",
+      "timestamp_utc": "2026-11-06T05:08:07.394578+00:00",
+      "body": "DELIVERY: Package EJ-09 committed as cc059af (feat(scene): introduce SceneCommandBuffer and harden mutation boundaries (EJ-09)).\n\nSummary:\n1. Scene Command Buffer (SceneCommandBuffer): Introduced dedicated lifecycle-aware SceneCommandBuffer in Engine/Scene/include/Axle/SceneCommandBuffer.hpp and Engine/Scene/src/SceneCommandBuffer.cpp. Supports thread-safe recording of DestroyEntity, SetParent, CreateEntity, CreateEntityWithUUID, EmplaceOrReplace, Remove, and Custom operations.\n2. Conflict & Boundary Resolution: Enforced destroy-then-edit rejection (tracking destroyed entities and all hierarchy descendants during execution to reject subsequent mutations), wrong-scene collision checks (rejecting commands targeting entities from other scenes), and post-join merges (Merge(std::move(other)) executed only on calling thread after parallel worker batches join).\n3. Hierarchy & Lifecycle Teardown Hardening: Hardened Scene::DestroyEntity by value-copying parent and children handles before recursive destruction to prevent reference invalidation across reallocations, ensuring full script OnDestroy, physics body cleanup (explicit or m_RuntimePhysicsScene), and audio/controller teardown. Hardened Entity::SetParent against cross-scene parenting, cycles, and dangling references. Added Entity::Destroy().\n4. Dedicated Test Suite: Added Tests/src/Test_SceneCommandAndMutationUnit.cpp and registered AxleSceneMutationUnitTests in Tests/CMakeLists.txt and CTest. All 7 test fixtures pass cleanly (parent/child recursive destroy, child unparenting, script and physics teardown, destroy-then-edit conflict resolution, wrong-scene collision rejection, multi-threaded recording with post-join commit, and buffer merge).\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleSceneMutationUnitTests AxleFoundationUnitTests AxleJobsECSTests AxleEditor AxleRuntime: exit 0.\n- cmake --build build --config Release --target AxleSceneMutationUnitTests: exit 0.\n- build/Tests/Debug/AxleSceneMutationUnitTests.exe: exit 0, ALL SCENE MUTATION UNIT TESTS PASSED.\n- build/Tests/Release/AxleSceneMutationUnitTests.exe: exit 0, ALL SCENE MUTATION UNIT TESTS PASSED.\n- ctest --test-dir build -C Debug --output-on-failure: 33/33 tests passed (100%).\n- ctest --test-dir build -C Release --output-on-failure: 33/33 tests passed (100%).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).\n- python scripts/check_architecture.py --root . --closed-package AF-02: exit 0, PASS (344 files, 17 CMake files, 0 violations).\n- python scripts/test_baseline_tools.py: exit 0, 18/18 tests passed.\n- git diff --check: exit 0.\n\nProceeding directly to Package EJ-10 (Transform evaluation ownership) under autonomous architecture plan."
+    },
+    {
+      "id": "CG-20261106T050857709269Z-GEMINI-99d128",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-03-EJ10",
+      "reply_to": "CG-20261106T050807394578Z-GEMINI-b15564",
+      "base_commit": "cc059af",
+      "timestamp_utc": "2026-11-06T05:08:57.709269+00:00",
+      "body": "IN_PROGRESS: Package EJ-10 (Transform evaluation ownership).\n\nBase commit: cc059af (Package EJ-09 delivery verified with 33/33 CTest, 16/0/3 harness, check_architecture PASS).\n\nPlanned work for EJ-10:\n1. Replace const-query cache writes in TransformComponent / Scene with explicit recompute / write APIs vs immutable read-only queries.\n2. Introduce a monotonic transform revision counter published after hierarchy evaluation to enable safe cache invalidation and snapshot consistency.\n3. Harden parallel transform hierarchy evaluation in ParallelECS::UpdateWorldTransforms:\n   - Handle cycle rejection and disconnected forests cleanly.\n   - Enforce scale inheritance rules (rigid parent transform vs non-rigid).\n   - Evaluate disjoint root subtrees across worker threads and synchronize at a joined barrier before publishing new transform revision.\n4. Add comprehensive transform evaluation tests (serial vs parallel equivalence, scale inheritance, cycle rejection, parent removal, revision progression).\n5. Verify full CTest, harness, and architecture checks."
+    },
+    {
+      "id": "CG-20261106T054737021400Z-GEMINI-c1cd15",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "DELIVERY",
+      "task": "OPT-03-EJ10",
+      "reply_to": "CG-20261106T050857709269Z-GEMINI-99d128",
+      "base_commit": "b434dd0",
+      "timestamp_utc": "2026-11-06T05:47:37.021400+00:00",
+      "body": "DELIVERY: Package EJ-10 committed as b434dd0 (feat(scene): establish transform evaluation ownership and revision tracking (EJ-10)).\n\nSummary:\n1. Transform Evaluation Ownership & Pure Read-Only Queries:\n   - Eliminated const-query cache mutations (const_cast<entt::registry&> writing LocalMatrix and WorldMatrix on every read query).\n   - Scene::GetWorldTransform(entityID) and Entity::GetWorldTransform() are now pure read-only const queries returning TransformComponent::WorldMatrix without cache mutation or race hazards.\n   - Introduced explicit write/recompute APIs: Scene::RecomputeWorldTransform(entityID), Entity::RecomputeWorldTransform(), and Scene::UpdateWorldTransforms().\n   - Published a monotonic transform revision counter (GetTransformRevision()) updated on all evaluation passes and Scene::Clear().\n2. Parallel Disjoint Subtree Hierarchy Evaluation:\n   - In ParallelECS::UpdateWorldTransforms, implemented Floyd's Tortoise-and-Hare cycle detection and self-parenting repair, breaking illegal loops before root collection to prevent deadlock/infinite loops.\n   - Root entities are partitioned across worker threads via JobSystem::ParallelForRange, evaluating disjoint subtrees in parallel with zero lock contention.\n   - Hardened UpdateEntitySubtree with recursion depth guard (depth > 128), child list value-copying, and strict scale inheritance logic (rigid parent transform without scale when InheritScale == false).\n3. Renderer & Runtime Phase Synchronization:\n   - RHISceneRenderer::RenderScene and RHIObjectPicker::RenderPickingPass ensure world transforms are evaluated (if (scene) scene->UpdateWorldTransforms();) prior to geometry extraction or draw call dispatch.\n   - Scene::OnUpdateRuntime now evaluates UpdateWorldTransformsParallel(64) during frame simulation before audio listener/3D spatial audio synchronization, matching OnUpdateEditor.\n   - EntityInspector and EditorLayer gizmo manipulations explicitly trigger RecomputeWorldTransform().\n4. Dedicated Test Coverage & Verification:\n   - Added 5 dedicated EJ-10 test fixtures in Tests/src/Test_SceneCommandAndMutationUnit.cpp (serial vs parallel equivalence on 120-node forest, scale inheritance rules, cycle detection & repair, revision progression, and 8-thread concurrent read-only queries with 50,000 iterations).\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleSceneMutationUnitTests AxleFoundationUnitTests AxleJobsECSTests AxleEditor AxleRuntime AxleTests: exit 0.\n- cmake --build build --config Release --target AxleSceneMutationUnitTests: exit 0.\n- build/Tests/Debug/AxleSceneMutationUnitTests.exe: exit 0, ALL 12 SCENE MUTATION & TRANSFORM UNIT TESTS PASSED.\n- build/Tests/Release/AxleSceneMutationUnitTests.exe: exit 0, ALL 12 SCENE MUTATION & TRANSFORM UNIT TESTS PASSED.\n- build/Tests/Debug/AxleTests.exe: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).\n- ctest --test-dir build -C Debug --output-on-failure: 33/33 tests passed (100%).\n- ctest --test-dir build -C Release --output-on-failure: 33/33 tests passed (100%).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).\n- python scripts/check_architecture.py --root . --closed-package AF-02: exit 0, PASS (344 files, 17 CMake files, 0 violations).\n- python scripts/test_baseline_tools.py: exit 0, 18/18 tests passed.\n- git diff --check: exit 0.\n\nProceeding directly to Package AF-03 (Scene data and system bridge boundaries) under autonomous architecture plan."
+    },
+    {
+      "id": "CG-20261106T063944130579Z-GEMINI-65bbfa",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "DELIVERY",
+      "task": "OPT-03-AF03",
+      "reply_to": "CG-20261106T054737021400Z-GEMINI-c1cd15",
+      "base_commit": "ca1fb42",
+      "timestamp_utc": "2026-11-06T06:39:44.130579+00:00",
+      "body": "DELIVERY: Package AF-03 committed as ca1fb42 (feat(scene): decouple generic scene data from concrete system bridges (AF-03)).\n\nSummary:\n1. Generic SceneData Ownership:\n   - Extracted headless SceneData owning entt::registry m_Registry, u32 m_SceneGeneration, monotonic uint64_t m_TransformRevision, and SceneCommandBuffer.\n   - Manages headless entity lifecycle (CreateEntity, CreateEntityWithUUID, DestroyEntity, DuplicateEntity, Clear, GetEntityByUUID).\n   - Owns hierarchy traversal and world transform evaluation (GetWorldTransform, RecomputeWorldTransform, UpdateWorldTransforms, UpdateWorldTransformsParallel).\n   - Deep copying (SceneData::Copy): clones all entities, duplicates components via extensible component codecs, and remaps hierarchy relationships without requiring GPU, physics, or script context.\n2. Component Codec Registry:\n   - Introduced IComponentCodec and ComponentCodecRegistry singleton with built-in codecs for 20+ components (Transform, MeshInstance3D, Material, DirectionalLight, PointLight, SpotLight, Camera, Skybox, Assembly, CollisionShape3D, RigidBody3D, NativeScript, AudioListener, AudioSource, SkeletalMesh, Animator, CharacterController, ParticleEmitter, CharacterVFX, UICanvas, PassiveExtensionComponent).\n   - Provides an extensible registration seam for plugin components to register copy/remap codecs cleanly.\n3. Passive Extension Storage:\n   - Introduced PassiveExtensionComponent storing unknown or plugin YAML sections (StorePassiveSection, GetPassiveSections, HasPassiveSections).\n   - In SceneSerializer: unhandled custom component sections are captured into PassiveExtensionComponent and re-emitted on serialization.\n   - Preserves unknown data roundtrip through load, copy, and save without concrete plugin dependencies.\n4. Specialized System Bridges:\n   - ScenePhysicsBridge: Jolt transform synchronization (SynchronizeTransforms), zero-drift body reset (RestoreBodies), body teardown (TeardownEntityPhysics), body ID lookup (FindEntityByBodyID), and body creation (CreateBodyForEntity).\n   - SceneAudioBridge: audio source playback on awake (OnRuntimeStart), 3D listener/source spatial sync (OnUpdate), audio stoppage (OnRuntimeStop), and entity audio teardown (TeardownEntityAudio).\n   - SceneScriptBridge: native script instantiation and OnCreate (OnRuntimeStart), tick execution (OnUpdate), teardown (OnRuntimeStop), hot reload state capture/restore (OnPreScriptReload, OnPostScriptReload), and entity script teardown (TeardownEntityScript).\n   - SceneCharacterBridge: kinematic character controller runtime initialization, animator synchronization, and character VFX step updates.\n   - SceneRenderBridge: geometry pass with lights/shadows, shadow pass, skeletal mesh pass, and particle rendering (OpenGL & RHI).\n5. EnTT Decoupled from Low-Level RHI:\n   - Moved RHIECSStreamer from Engine/RHI/ to Engine/Renderer/.\n   - Purged EnTT dependency and includes from AxleRHI.\n6. Dedicated Test Fixture (AxleSceneDataUnitTests):\n   - Added Tests/src/Test_SceneDataUnit.cpp registered in CTest as SceneDataUnitTests.\n   - 6 test cases verifying entity lifecycle, hierarchy cycle rejection & unparenting, transform evaluation & revision progression, component codecs & deep copying, passive extension storage roundtrip through serialization & copying, and Scene facade parity.\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleSceneDataUnitTests AxleFoundationUnitTests AxleJobsECSTests AxleEditor AxleRuntime AxleTests: exit 0.\n- cmake --build build --config Release --target AxleSceneDataUnitTests: exit 0.\n- build/Tests/Debug/AxleSceneDataUnitTests.exe: exit 0, ALL 6 SCENE DATA UNIT TESTS PASSED (100%).\n- build/Tests/Release/AxleSceneDataUnitTests.exe: exit 0, ALL 6 SCENE DATA UNIT TESTS PASSED (100%).\n- build/Tests/Debug/AxleTests.exe: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).\n- ctest --test-dir build -C Debug --output-on-failure: 34/34 tests passed (100%).\n- ctest --test-dir build -C Release --output-on-failure: 34/34 tests passed (100%).\n- python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).\n- python scripts/check_architecture.py --root . --closed-package AF-02: exit 0, PASS (360 files, 17 CMake files, 0 violations).\n- python scripts/test_baseline_tools.py: exit 0, 18/18 tests passed.\n- git diff --check: exit 0.\n\nProceeding directly to Package AF-04 (Asset registry/format versus resources and tools) under autonomous architecture plan."
     }
   ],
   "deferred_tasks": [

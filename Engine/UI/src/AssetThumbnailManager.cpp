@@ -13,6 +13,7 @@
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/SceneRenderBridge.hpp>
 #include <Axle/FileSystem.hpp>
 #include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -486,7 +487,6 @@ namespace Axle {
             spherePart.Name = "MaterialSphere";
             spherePart.RelativePath = path.filename().string();
             spherePart.LoadedMesh.Success = true;
-            spherePart.LoadedMesh.VAO = m_PreviewSphereMesh;
             spherePart.LoadedMesh.SourceData.Name = pkg.Name;
             spherePart.LoadedMesh.SourceData.ColorPrimary = mat.AlbedoColor;
             spherePart.LoadedMesh.SourceData.ColorSecondary = mat.AlbedoColor * 0.85f;
@@ -515,7 +515,7 @@ namespace Axle {
                     }
                     if (std::filesystem::exists(meshPath)) {
                         auto loaded = AssetSerializer::LoadMesh(meshPath);
-                        if (loaded.Success && loaded.VAO) {
+                        if (loaded.Success) {
                             AxlePackagePart part;
                             part.Name = node.Tag;
                             part.LocalTranslation = glm::vec3(currentMat[3]);
@@ -559,7 +559,7 @@ namespace Axle {
         size_t totalIndices = 0;
 
         for (const auto& part : pkg.Parts) {
-            if (!part.LoadedMesh.Success || !part.LoadedMesh.VAO) continue;
+            if (!part.LoadedMesh.Success) continue;
             const auto& verts = part.LoadedMesh.SourceData.Vertices;
             glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
                                * glm::mat4_cast(part.LocalRotation)
@@ -665,7 +665,14 @@ namespace Axle {
 
         // 5. Draw parts with center offset
         for (const auto& part : pkg.Parts) {
-            if (!part.LoadedMesh.VAO) continue;
+            std::shared_ptr<VertexArray> vao;
+            if (part.Name == "MaterialSphere" && m_PreviewSphereMesh) {
+                vao = m_PreviewSphereMesh;
+            } else {
+                vao = CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
+            }
+            if (!vao) continue;
+
             glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
                                * glm::mat4_cast(part.LocalRotation)
                                * glm::scale(glm::mat4(1.0f), part.LocalScale);
@@ -677,7 +684,7 @@ namespace Axle {
             m_Shader->SetFloat4("u_Color1", part.LoadedMesh.SourceData.ColorPrimary);
             m_Shader->SetFloat4("u_Color2", part.LoadedMesh.SourceData.ColorSecondary);
 
-            RenderCommand::DrawIndexed(part.LoadedMesh.VAO);
+            RenderCommand::DrawIndexed(vao);
         }
 
         outTexID = texID;

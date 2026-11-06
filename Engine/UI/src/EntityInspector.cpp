@@ -11,6 +11,8 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/PhysicsMaterial.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/MaterialCache.hpp>
+#include <Axle/SceneRenderBridge.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/AudioEngine.hpp>
@@ -324,7 +326,7 @@ namespace Axle {
                         if (ext == ".axlemesh" || ext == ".axle") {
                             auto loaded = AssetSerializer::LoadMesh(p);
                             if (loaded.Success) {
-                                mc.VAO = loaded.VAO;
+                                mc.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
                                 mc.PatternMode = loaded.SourceData.PatternMode;
                                 mc.TileScale = loaded.SourceData.TileScale;
                                 mc.Color1 = loaded.SourceData.ColorPrimary;
@@ -337,7 +339,7 @@ namespace Axle {
                             }
                             auto loaded = AssetSerializer::LoadMesh(axlePath);
                             if (loaded.Success) {
-                                mc.VAO = loaded.VAO;
+                                mc.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
                                 mc.PatternMode = loaded.SourceData.PatternMode;
                                 mc.TileScale = loaded.SourceData.TileScale;
                                 mc.Color1 = loaded.SourceData.ColorPrimary;
@@ -437,7 +439,7 @@ namespace Axle {
                         if (ext == ".axlemesh" || ext == ".axle") {
                             auto loaded = AssetSerializer::LoadMesh(p);
                             if (loaded.Success) {
-                                loadedVao = loaded.VAO;
+                                loadedVao = CreateVertexArrayFromMeshSource(loaded.SourceData);
                                 patternMode = loaded.SourceData.PatternMode;
                                 tileScale = loaded.SourceData.TileScale;
                                 color1 = loaded.SourceData.ColorPrimary;
@@ -450,7 +452,7 @@ namespace Axle {
                             }
                             auto loaded = AssetSerializer::LoadMesh(axlePath);
                             if (loaded.Success) {
-                                loadedVao = loaded.VAO;
+                                loadedVao = CreateVertexArrayFromMeshSource(loaded.SourceData);
                                 patternMode = loaded.SourceData.PatternMode;
                                 tileScale = loaded.SourceData.TileScale;
                                 color1 = loaded.SourceData.ColorPrimary;
@@ -508,7 +510,7 @@ namespace Axle {
                     std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
                     if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(droppedPath.string()) == AssetKind::Material) {
                         UUID handle = AssetManager::GetAssetUUID(droppedPath);
-                        auto asset = AssetManager::GetMaterial(droppedPath);
+                        auto asset = MaterialCache::GetMaterial(droppedPath);
                         if (asset) {
                             mat.SetAsset(handle, asset);
                         }

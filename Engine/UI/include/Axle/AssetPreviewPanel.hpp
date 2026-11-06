@@ -86,6 +86,7 @@ namespace Axle {
     private:
         std::filesystem::path m_CurrentAssetPath;
         AxleLoadedPackage m_CurrentPackage;
+        std::vector<std::shared_ptr<VertexArray>> m_PartVAOs;
         bool m_IsAssembly = false;
         AssemblyData m_CurrentAssembly;
         bool m_HasAsset = false;

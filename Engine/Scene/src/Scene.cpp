@@ -7,12 +7,16 @@
 #include <Axle/SceneScriptBridge.hpp>
 #include <Axle/SceneCharacterBridge.hpp>
 #include <Axle/SceneRenderBridge.hpp>
+#include <Axle/MaterialCache.hpp>
+#include <Axle/AssetManager.hpp>
 #include <Axle/ScriptableEntity.hpp>
 
 namespace Axle {
 
     Scene::Scene()
         : SceneData() {
+        MaterialCache::SetUUIDPathResolver([](UUID id) { return AssetManager::GetAssetPath(id); });
+        MaterialCache::SetPathUUIDResolver([](const std::filesystem::path& p) { return AssetManager::GetAssetUUID(p); });
     }
 
     Scene::~Scene() {

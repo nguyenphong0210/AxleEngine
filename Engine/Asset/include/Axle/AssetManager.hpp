@@ -2,10 +2,6 @@
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/AssetMetadata.hpp>
-
-#include <Axle/Texture2D.hpp>
-#include <Axle/Material.hpp>
-#include <Axle/RHI/RHIMaterial.hpp>
 #include <filesystem>
 #include <unordered_map>
 #include <vector>
@@ -81,31 +77,10 @@ namespace Axle {
         static std::filesystem::path GetReferencePath(const std::filesystem::path& assetPath);
         static bool RelinkPathReferences(const std::filesystem::path& oldPath, const std::filesystem::path& newPath, std::string* error = nullptr);
 
-        // ---------------------------------------------------------------------
-        // Centralized Resource Cache (TextureCache & MaterialCache)
-        // ---------------------------------------------------------------------
-        // Texture Cache
-        static std::shared_ptr<Texture2D> GetTexture(const std::filesystem::path& path);
-        static std::shared_ptr<Texture2D> GetTexture(UUID uuid);
-        static void ClearTextureCache();
-
-        // Material Cache
-        static std::shared_ptr<Material> GetMaterial(const std::filesystem::path& path);
-        static std::shared_ptr<Material> GetMaterial(UUID uuid);
-        static void ReloadMaterial(UUID uuid);
-        static void ReloadMaterial(const std::filesystem::path& path);
-        static void ClearMaterialCache();
-
-        // Multi-Backend RHI Material Cache
-        static std::shared_ptr<RHI::RHIMaterial> GetRHIMaterial(const std::filesystem::path& path);
-        static std::shared_ptr<RHI::RHIMaterial> GetRHIMaterial(UUID uuid);
-        static void ClearRHIMaterialCache();
-
     private:
         static std::string NormalizePathKey(const std::filesystem::path& path);
         static AssetMetadata GetBuiltinMetadata(const std::filesystem::path& assetPath);
         static AssetMetadata GetBuiltinMetadata(UUID uuid);
-
 
     private:
         static std::filesystem::path s_AssetDirectory;
@@ -114,13 +89,6 @@ namespace Axle {
         static std::unordered_map<std::string, AssetMetadata> s_MetadataByPath;
         static std::unordered_map<UUID, std::filesystem::path> s_ReferencedAssets;
         static std::vector<AssetDiagnostic> s_Diagnostics;
-
-        static std::unordered_map<std::string, std::shared_ptr<Texture2D>> s_TextureCacheByPath;
-        static std::unordered_map<UUID, std::shared_ptr<Texture2D>> s_TextureCacheByUUID;
-        static std::unordered_map<UUID, std::shared_ptr<Material>> s_MaterialCacheByUUID;
-        static std::unordered_map<std::string, std::shared_ptr<Material>> s_MaterialCacheByPath;
-        static std::unordered_map<UUID, std::shared_ptr<RHI::RHIMaterial>> s_RHIMaterialCacheByUUID;
-        static std::unordered_map<std::string, std::shared_ptr<RHI::RHIMaterial>> s_RHIMaterialCacheByPath;
 
         static std::recursive_mutex s_AssetMutex;
         static bool s_Initialized;

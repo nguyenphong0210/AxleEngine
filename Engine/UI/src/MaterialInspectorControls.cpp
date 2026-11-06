@@ -1,6 +1,7 @@
 #include <Axle/MaterialInspectorControls.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/MaterialCache.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/TextureDescriptor.hpp>
 #include <Axle/FileSystem.hpp>
@@ -32,7 +33,7 @@ namespace Axle {
         }
         void AssignTexture(std::string& path,std::shared_ptr<Texture2D>& image,bool& enabled,const std::string& value) {
             path=value;
-            image=value.empty()?nullptr:AssetManager::GetTexture(value);
+            image=value.empty()?nullptr:MaterialCache::GetTexture(value);
             enabled=!value.empty();
         }
         bool BeginGroup(const char* title, bool open=false) {

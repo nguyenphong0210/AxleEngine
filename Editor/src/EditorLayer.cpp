@@ -12,6 +12,8 @@
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/MaterialCache.hpp>
+#include <Axle/SceneRenderBridge.hpp>
 #include <Axle/AssetCooker.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/Project.hpp>
@@ -295,8 +297,9 @@ void EditorLayer::OnAttach() {
                         ct.Rotation = part.LocalRotation;
 
                         auto partFullPath = axlePath.parent_path() / part.RelativePath;
+                        auto partVao = Axle::CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                         childEntity.AddComponent<Axle::MeshInstance3D>(
-                            part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                            partVao ? partVao : m_CubeMesh,
                             partFullPath.string(),
                             part.LoadedMesh.SourceData.PatternMode,
                             part.LoadedMesh.SourceData.TileScale,
@@ -313,8 +316,9 @@ void EditorLayer::OnAttach() {
                     std::string entityTag = pkg.Name.empty() ? axlePath.stem().string() : pkg.Name;
                     auto newEnt = m_Scene->CreateEntity(entityTag);
                     newEnt.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
+                    auto partVao = Axle::CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                     newEnt.AddComponent<Axle::MeshInstance3D>(
-                        part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                        partVao ? partVao : m_CubeMesh,
                         axlePath.string(),
                         part.LoadedMesh.SourceData.PatternMode,
                         part.LoadedMesh.SourceData.TileScale,
@@ -627,8 +631,9 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
 
                 auto entity = m_Scene->CreateEntity(stem);
                 entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
+                auto vao = Axle::CreateVertexArrayFromMeshSource(loaded.SourceData);
                 entity.AddComponent<Axle::MeshInstance3D>(
-                    loaded.VAO, destAxlePath.string(),
+                    vao, destAxlePath.string(),
                     loaded.SourceData.PatternMode, loaded.SourceData.TileScale,
                     loaded.SourceData.ColorPrimary, loaded.SourceData.ColorSecondary
                 );
@@ -739,8 +744,8 @@ void EditorLayer::CompileAndHotReloadAssets(bool forceRebakeAll) {
         auto& mc = view.get<Axle::MeshInstance3D>(entity);
         if (!mc.AssetPath.empty() && std::filesystem::exists(mc.AssetPath)) {
             auto loaded = Axle::AssetSerializer::LoadMesh(mc.AssetPath);
-            if (loaded.Success && loaded.VAO) {
-                mc.VAO = loaded.VAO;
+            if (loaded.Success) {
+                mc.VAO = Axle::CreateVertexArrayFromMeshSource(loaded.SourceData);
                 mc.PatternMode = loaded.SourceData.PatternMode;
                 mc.TileScale = loaded.SourceData.TileScale;
                 mc.Color1 = loaded.SourceData.ColorPrimary;
@@ -2388,8 +2393,9 @@ void EditorLayer::OnImGuiRender() {
                             ct.Rotation = part.LocalRotation;
 
                             auto partFullPath = assetPath.parent_path() / part.RelativePath;
+                            auto partVao = Axle::CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                             childEntity.AddComponent<Axle::MeshInstance3D>(
-                                part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                partVao ? partVao : m_CubeMesh,
                                 partFullPath.string(),
                                 part.LoadedMesh.SourceData.PatternMode,
                                 part.LoadedMesh.SourceData.TileScale,
@@ -2410,8 +2416,9 @@ void EditorLayer::OnImGuiRender() {
                         auto entity = m_Scene->CreateEntity(entityTag);
                         entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
 
+                        auto partVao = Axle::CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                         entity.AddComponent<Axle::MeshInstance3D>(
-                            part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                            partVao ? partVao : m_CubeMesh,
                             assetPath.string(),
                             part.LoadedMesh.SourceData.PatternMode,
                             part.LoadedMesh.SourceData.TileScale,
@@ -2539,7 +2546,7 @@ void EditorLayer::OnImGuiRender() {
                 } else {
                     // Material assignment
                     Axle::UUID matUUID = Axle::AssetManager::GetAssetUUID(assetPath);
-                    auto matAsset = Axle::AssetManager::GetMaterial(assetPath);
+                    auto matAsset = Axle::MaterialCache::GetMaterial(assetPath);
                     if (hitEntity) {
                         if (!hitEntity.HasComponent<Axle::MaterialComponent>()) {
                             hitEntity.AddComponent<Axle::MaterialComponent>();
@@ -3885,5 +3892,3 @@ void EditorLayer::OpenUICanvasDesigner(const std::filesystem::path& path) {
     m_UICanvasDesignerPanel.OpenDocument(path);
     m_ShowUICanvasDesigner = true;
 }
-
-

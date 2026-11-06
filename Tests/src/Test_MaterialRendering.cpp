@@ -3,6 +3,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/MaterialTextureCache.hpp>
+#include <Axle/MaterialCache.hpp>
 #include <Axle/AssetManager.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
@@ -361,20 +362,20 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     sharedSource.EnableSpecularHighlights = sharedSource.EnableEnvironmentReflections = false;
     auto sharedPath = root / "shared.axleasset";
     if (!check(SceneHierarchyPanel::SaveMaterialAsset(sharedPath,sharedSource), "Shared asset save")) return false;
-    auto shared = AssetManager::GetMaterial(sharedPath);
-    auto sharedRHI = AssetManager::GetRHIMaterial(sharedPath);
+    auto shared = MaterialCache::GetMaterial(sharedPath);
+    auto sharedRHI = MaterialCache::GetRHIMaterial(sharedPath);
     if (!check(shared && sharedRHI, "Both shared material caches")) return false;
     lm.SetAsset(0,shared); rm.SetAsset(0,shared);
     auto sharedRed = render();
     sharedSource.AlbedoColor = glm::vec4(0,1,0,1);
     SceneHierarchyPanel::SaveMaterialAsset(sharedPath,sharedSource);
-    AssetManager::ReloadMaterial(sharedPath);
+    MaterialCache::ReloadMaterial(sharedPath);
     auto sharedGreen = render();
     if (!check(!sharedGreen.empty() && sharedRed!=sharedGreen && sum(sharedGreen,0,64,1)>sum(sharedGreen,0,64,0)*2+1000 && sum(sharedGreen,64,128,1)>sum(sharedGreen,64,128,0)*2+1000 && sharedRHI->GetBaseColor()==sharedSource.AlbedoColor, "Asset reload updates both entity users and RHI cache")) return false;
     rm.MakeUnique(); rm.AlbedoColor = glm::vec4(0,0,1,1);
     sharedSource.AlbedoColor = glm::vec4(1,0,0,1);
     SceneHierarchyPanel::SaveMaterialAsset(sharedPath,sharedSource);
-    AssetManager::ReloadMaterial(sharedPath);
+    MaterialCache::ReloadMaterial(sharedPath);
     auto unique = render();
     if (!check(!unique.empty() && !rm.HasAsset() && sum(unique,0,64,0)>sum(unique,0,64,2)*2+1000 && sum(unique,64,128,2)>sum(unique,64,128,0)*2+1000, "Unique material stays independent after shared asset reload")) return false;
     lm.MakeUnique();

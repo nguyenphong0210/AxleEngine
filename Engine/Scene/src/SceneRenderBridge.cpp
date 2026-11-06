@@ -3,15 +3,56 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/VertexArray.hpp>
+#include <Axle/Buffer.hpp>
 #include <Axle/SkinningPipeline.hpp>
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/MaterialTextureCache.hpp>
+#include <Axle/MaterialCache.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/AssetSerializer.hpp>
 #include <Axle/FileSystem.hpp>
 #include <algorithm>
 
 namespace Axle {
+
+    std::shared_ptr<VertexArray> CreateVertexArrayFromMeshSource(const AxleMeshSource& source) {
+        if (source.Vertices.empty()) return nullptr;
+
+        glm::vec3 minBound(1e9f);
+        glm::vec3 maxBound(-1e9f);
+        for (const auto& v : source.Vertices) {
+            minBound = glm::min(minBound, v);
+            maxBound = glm::max(maxBound, v);
+        }
+        glm::vec3 size = glm::max(maxBound - minBound, glm::vec3(0.01f));
+
+        std::vector<f32> vertexBufferData;
+        vertexBufferData.reserve(source.Vertices.size() * 5);
+        for (size_t i = 0; i < source.Vertices.size(); ++i) {
+            const auto& v = source.Vertices[i];
+            vertexBufferData.push_back(v.x);
+            vertexBufferData.push_back(v.y);
+            vertexBufferData.push_back(v.z);
+            float u = source.UVs.size() == source.Vertices.size() ? source.UVs[i].x : (v.x - minBound.x) / size.x;
+            float v_coord = source.UVs.size() == source.Vertices.size() ? source.UVs[i].y : (v.z - minBound.z) / size.z;
+            vertexBufferData.push_back(u);
+            vertexBufferData.push_back(v_coord);
+        }
+
+        auto va = std::make_shared<VertexArray>();
+        auto vb = std::make_shared<VertexBuffer>(vertexBufferData.data(), static_cast<u32>(vertexBufferData.size() * sizeof(f32)));
+        vb->SetLayout({
+            { ShaderDataType::Float3, "a_Position" },
+            { ShaderDataType::Float2, "a_TexCoord" }
+        });
+        va->AddVertexBuffer(vb);
+
+        auto ib = std::make_shared<IndexBuffer>(source.Indices.data(), static_cast<u32>(source.Indices.size()));
+        va->SetIndexBuffer(ib);
+        return va;
+    }
 
     static bool GetPrimaryDirectionalLightInternal(const SceneData& scene, DirectionalLightComponent& outLight) {
         auto view = scene.GetRegistry().view<DirectionalLightComponent>();
@@ -347,7 +388,7 @@ namespace Axle {
                 if (stack.Visible && stack.Enabled && stack.System && stack.System->GetActiveParticleCount() > 0) {
                     auto resources = stack.GetDefinition().Resources;
                     if (resources.MaterialPath.empty()) resources.MaterialPath = stack.Config.MaterialPath;
-                    const auto settings = ParticleMaterialAdapter::Resolve(stack.Config, resources, [](const auto& path) { return AssetManager::GetMaterial(FileSystem::ResolveAssetPath(path)); });
+                    const auto settings = ParticleMaterialAdapter::Resolve(stack.Config, resources, [](const auto& path) { return MaterialCache::GetMaterial(FileSystem::ResolveAssetPath(path)); });
                     auto texture = textures && settings.UseTexture ? textures->Get(settings.TexturePath, true) : nullptr;
                     auto normal = textures && settings.UseNormalMap ? textures->Get(settings.NormalMapPath, false) : nullptr;
                     auto config = stack.Config;

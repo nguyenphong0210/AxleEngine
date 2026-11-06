@@ -9,6 +9,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/MaterialCache.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/VFXEditorPanel.hpp>
@@ -620,7 +621,7 @@ namespace Axle {
         auto cutout = render();
         if (!check(sum(cutout, 0, 64, 0) == 0, "Assigned material alpha cutoff actually discards fragments"))
             return false;
-        auto loadedMaterial = AssetManager::GetMaterial(materialPath);
+        auto loadedMaterial = MaterialCache::GetMaterial(materialPath);
         if (!loadedMaterial)
             return false;
         loadedMaterial->SetAlphaCutoff(0.1f);
@@ -809,4 +810,3 @@ namespace Axle {
     }
 
 } // namespace Axle
-

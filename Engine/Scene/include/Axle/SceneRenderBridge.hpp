@@ -14,7 +14,11 @@ namespace Axle {
     class RHIParticleRenderer;
     class Framebuffer;
     class MaterialTextureCache;
+    class VertexArray;
+    struct AxleMeshSource;
     namespace RHI { class RHICommandBuffer; }
+
+    std::shared_ptr<VertexArray> CreateVertexArrayFromMeshSource(const AxleMeshSource& source);
 
     class SceneRenderBridge {
     public:

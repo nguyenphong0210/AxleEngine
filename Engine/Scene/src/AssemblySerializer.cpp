@@ -6,6 +6,8 @@
 #include <Axle/Entity.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/MaterialCache.hpp>
+#include <Axle/SceneRenderBridge.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 
@@ -581,12 +583,12 @@ namespace Axle {
                     if (trimmed.rfind("MaterialHandle:", 0) == 0) {
                         current.Material.MaterialHandle = std::stoull(Trim(trimmed.substr(15)));
                         if (current.Material.MaterialHandle != 0) {
-                            current.Material.MaterialAsset = AssetManager::GetMaterial(current.Material.MaterialHandle);
+                            current.Material.MaterialAsset = MaterialCache::GetMaterial(current.Material.MaterialHandle);
                         }
                     } else if (trimmed.rfind("AssetPath:", 0) == 0) {
                         std::string path = Trim(trimmed.substr(10));
                         if (!path.empty() && !current.Material.MaterialAsset) {
-                            current.Material.MaterialAsset = AssetManager::GetMaterial(path);
+                            current.Material.MaterialAsset = MaterialCache::GetMaterial(path);
                             if (current.Material.MaterialAsset) current.Material.MaterialHandle = current.Material.MaterialAsset->GetHandle();
                         }
                     } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
@@ -916,7 +918,7 @@ namespace Axle {
                     auto resolved = FileSystem::ResolveAssetPath(path);
                     if (FileSystem::Exists(resolved)) {
                         auto loaded = AssetSerializer::LoadMesh(resolved);
-                        if (loaded.Success) vao = loaded.VAO;
+                        if (loaded.Success) vao = CreateVertexArrayFromMeshSource(loaded.SourceData);
                     }
                 }
 

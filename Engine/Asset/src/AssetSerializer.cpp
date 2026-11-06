@@ -1,9 +1,7 @@
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <Axle/FileSystem.hpp>
-#include <Axle/Buffer.hpp>
 #include <Axle/Log.hpp>
-#include <Axle/RHI/RHIDevice.hpp>
 #include <fstream>
 #include <sstream>
 #include <iomanip>
@@ -110,26 +108,26 @@ namespace Axle {
         file << "Material:\n";
         file << "  PatternMode: " << mesh.PatternMode << "\n";
         file << "  TileScale: " << std::fixed << std::setprecision(2) << mesh.TileScale << "\n";
-        file << "  ColorPrimary: [" 
-             << mesh.ColorPrimary.r << ", " << mesh.ColorPrimary.g << ", " 
+        file << "  ColorPrimary: ["
+             << mesh.ColorPrimary.r << ", " << mesh.ColorPrimary.g << ", "
              << mesh.ColorPrimary.b << ", " << mesh.ColorPrimary.a << "]\n";
-        file << "  ColorSecondary: [" 
-             << mesh.ColorSecondary.r << ", " << mesh.ColorSecondary.g << ", " 
+        file << "  ColorSecondary: ["
+             << mesh.ColorSecondary.r << ", " << mesh.ColorSecondary.g << ", "
              << mesh.ColorSecondary.b << ", " << mesh.ColorSecondary.a << "]\n\n";
 
         file << "Bounds:\n";
-        file << "  Size: [" 
-             << std::setprecision(3) << mesh.BoundingSize.x << ", " 
+        file << "  Size: ["
+             << std::setprecision(3) << mesh.BoundingSize.x << ", "
              << mesh.BoundingSize.y << ", " << mesh.BoundingSize.z << "]\n";
-        file << "  HalfExtent: [" 
-             << mesh.HalfExtent.x << ", " 
+        file << "  HalfExtent: ["
+             << mesh.HalfExtent.x << ", "
              << mesh.HalfExtent.y << ", " << mesh.HalfExtent.z << "]\n\n";
 
         file << "# Vertex positions centered at origin [X, Y, Z]\n";
         file << "Vertices:\n";
         for (const auto& v : mesh.Vertices) {
-            file << "  - [" 
-                 << std::setprecision(4) << v.x << ", " 
+            file << "  - ["
+                 << std::setprecision(4) << v.x << ", "
                  << v.y << ", " << v.z << "]\n";
         }
         file << "\n";
@@ -145,13 +143,13 @@ namespace Axle {
         file << "# Triangle indices (0-based) [v0, v1, v2]\n";
         file << "Triangles:\n";
         for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
-            file << "  - [" 
-                 << mesh.Indices[i] << ", " 
-                 << mesh.Indices[i + 1] << ", " 
+            file << "  - ["
+                 << mesh.Indices[i] << ", "
+                 << mesh.Indices[i + 1] << ", "
                  << mesh.Indices[i + 2] << "]\n";
         }
 
-        AXLE_INFO("AssetSerializer: Saved .axle text asset '{0}' ({1} vertices, {2} triangles)", 
+        AXLE_INFO("AssetSerializer: Saved .axle text asset '{0}' ({1} vertices, {2} triangles)",
             path.filename().string(), mesh.Vertices.size(), mesh.Indices.size() / 3);
 
         return FileSystem::WriteIdentifiedTextFile(path, file.str());
@@ -341,13 +339,17 @@ namespace Axle {
             outMesh.HalfExtent = glm::max(outMesh.BoundingSize * 0.5f, glm::vec3(0.05f));
         }
 
-        AXLE_INFO("AssetSerializer: Parsed .axle text '{0}' ({1} vertices, {2} triangles)", 
+        AXLE_INFO("AssetSerializer: Parsed .axle text '{0}' ({1} vertices, {2} triangles)",
             path.filename().string(), outMesh.Vertices.size(), outMesh.Indices.size() / 3);
 
         return true;
     }
 
     bool AssetSerializer::SaveToAxleBinary(const std::filesystem::path& binaryPath, const AxleMeshSource& mesh) {
+        if (!binaryPath.parent_path().empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(binaryPath.parent_path(), ec);
+        }
         std::ofstream file(binaryPath, std::ios::binary);
         if (!file.is_open()) {
             AXLE_ERROR("AssetSerializer: Failed to create binary cache '{0}'", binaryPath.string());
@@ -395,7 +397,7 @@ namespace Axle {
         if (normalCount) file.write(reinterpret_cast<const char*>(mesh.Normals.data()),size_t(normalCount)*sizeof(glm::vec3));
         if (uvCount) file.write(reinterpret_cast<const char*>(mesh.UVs.data()),size_t(uvCount)*sizeof(glm::vec2));
 
-        AXLE_INFO("AssetSerializer: Baked binary cache '{0}' ({1} bytes)", 
+        AXLE_INFO("AssetSerializer: Baked binary cache '{0}' ({1} bytes)",
             binaryPath.filename().string(), static_cast<uint64_t>(file.tellp()));
 
         return true;
@@ -521,53 +523,12 @@ namespace Axle {
             result.LoadedFromCache = false;
         }
 
-        // Active RHI renderers upload source attributes through RHIMeshRegistry.
-        if (RHI::RHIDevice::Get().IsInitialized()) {
-            result.SourceData=std::move(source);
-            result.Success=true;
-            return result;
-        }
-
-        // Upload to GPU VertexArray
-        glm::vec3 minBound(1e9f);
-        glm::vec3 maxBound(-1e9f);
-        for (const auto& v : source.Vertices) {
-            minBound = glm::min(minBound, v);
-            maxBound = glm::max(maxBound, v);
-        }
-        glm::vec3 size = glm::max(maxBound - minBound, glm::vec3(0.01f));
-
-        std::vector<f32> vertexBufferData;
-        vertexBufferData.reserve(source.Vertices.size() * 5);
-        for (size_t i=0;i<source.Vertices.size();++i) {
-            const auto& v=source.Vertices[i];
-            vertexBufferData.push_back(v.x);
-            vertexBufferData.push_back(v.y);
-            vertexBufferData.push_back(v.z);
-            float u = source.UVs.size()==source.Vertices.size()?source.UVs[i].x:(v.x - minBound.x) / size.x;
-            float v_coord = source.UVs.size()==source.Vertices.size()?source.UVs[i].y:(v.z - minBound.z) / size.z;
-            vertexBufferData.push_back(u);
-            vertexBufferData.push_back(v_coord);
-        }
-
-        auto va = std::make_shared<VertexArray>();
-        auto vb = std::make_shared<VertexBuffer>(vertexBufferData.data(), static_cast<u32>(vertexBufferData.size() * sizeof(f32)));
-        vb->SetLayout({
-            { ShaderDataType::Float3, "a_Position" },
-            { ShaderDataType::Float2, "a_TexCoord" }
-        });
-        va->AddVertexBuffer(vb);
-
-        auto ib = std::make_shared<IndexBuffer>(source.Indices.data(), static_cast<u32>(source.Indices.size()));
-        va->SetIndexBuffer(ib);
-
-        result.VAO = va;
-        result.SourceData = source;
+        result.SourceData = std::move(source);
         result.Success = true;
 
-        AXLE_INFO("AssetSerializer: Ready '{0}' via {1} ({2} vertices, {3} indices)", 
-            source.Name, result.LoadedFromCache ? "BINARY CACHE (.axlebin)" : "TEXT RE-BAKE (.axle)", 
-            source.Vertices.size(), source.Indices.size());
+        AXLE_INFO("AssetSerializer: Ready '{0}' via {1} ({2} vertices, {3} indices)",
+            result.SourceData.Name, result.LoadedFromCache ? "BINARY CACHE (.axlebin)" : "TEXT RE-BAKE (.axle)",
+            result.SourceData.Vertices.size(), result.SourceData.Indices.size());
 
         return result;
     }
@@ -586,29 +547,29 @@ namespace Axle {
         file << "Name: " << packageName << "\n\n";
 
         file << "Bounds:\n";
-        file << "  Size: [" 
-             << std::setprecision(3) << boundingSize.x << ", " 
+        file << "  Size: ["
+             << std::setprecision(3) << boundingSize.x << ", "
              << boundingSize.y << ", " << boundingSize.z << "]\n";
-        file << "  HalfExtent: [" 
-             << halfExtent.x << ", " 
+        file << "  HalfExtent: ["
+             << halfExtent.x << ", "
              << halfExtent.y << ", " << halfExtent.z << "]\n\n";
 
         file << "Parts:\n";
         for (const auto& part : parts) {
             file << "  - Name: " << part.Name << "\n";
             file << "    Path: " << part.RelativePath << "\n";
-            file << "    Position: [" 
-                 << std::setprecision(4) << part.LocalTranslation.x << ", " 
+            file << "    Position: ["
+                 << std::setprecision(4) << part.LocalTranslation.x << ", "
                  << part.LocalTranslation.y << ", " << part.LocalTranslation.z << "]\n";
-            file << "    Rotation: [" 
-                 << part.LocalRotation.x << ", " << part.LocalRotation.y << ", " 
+            file << "    Rotation: ["
+                 << part.LocalRotation.x << ", " << part.LocalRotation.y << ", "
                  << part.LocalRotation.z << ", " << part.LocalRotation.w << "]\n";
-            file << "    Scale: [" 
+            file << "    Scale: ["
                  << part.LocalScale.x << ", " << part.LocalScale.y << ", " << part.LocalScale.z << "]\n";
         }
 
         if (!FileSystem::WriteIdentifiedTextFile(manifestPath,file.str())) return false;
-        AXLE_INFO("AssetSerializer: Saved multi-part package manifest '{0}' ({1} sub-parts)", 
+        AXLE_INFO("AssetSerializer: Saved multi-part package manifest '{0}' ({1} sub-parts)",
             manifestPath.filename().string(), parts.size());
         return true;
     }
@@ -1302,7 +1263,7 @@ namespace Axle {
                 if (!node || !node->mesh || node->mesh->num_triangles == 0) continue;
 
                 ufbx_mesh* mesh = node->mesh;
-                std::string partName = node->name.length > 0 ? SanitizeFilename(node->name.data) 
+                std::string partName = node->name.length > 0 ? SanitizeFilename(node->name.data)
                                      : (mesh->name.length > 0 ? SanitizeFilename(mesh->name.data) : "Part");
 
                 RawPart part;
@@ -1570,8 +1531,8 @@ namespace Axle {
             return false;
         }
 
-        std::filesystem::path targetObjPath = outObjPath.empty() 
-            ? (axlePath.parent_path() / (axlePath.stem().string() + ".obj")) 
+        std::filesystem::path targetObjPath = outObjPath.empty()
+            ? (axlePath.parent_path() / (axlePath.stem().string() + ".obj"))
             : outObjPath;
         std::filesystem::path targetMtlPath = targetObjPath.parent_path() / (targetObjPath.stem().string() + ".mtl");
 
@@ -1734,8 +1695,8 @@ namespace Axle {
         auto pkg = LoadPackage(manifestPath);
         if (!pkg.Success || pkg.Parts.empty()) return false;
 
-        std::filesystem::path targetDir = outDir.empty() 
-            ? (manifestPath.parent_path() / (manifestPath.stem().string() + "_obj_parts")) 
+        std::filesystem::path targetDir = outDir.empty()
+            ? (manifestPath.parent_path() / (manifestPath.stem().string() + "_obj_parts"))
             : outDir;
         std::error_code ec;
         std::filesystem::create_directories(targetDir, ec);
@@ -1816,5 +1777,3 @@ namespace Axle {
     }
 
 }
-
-

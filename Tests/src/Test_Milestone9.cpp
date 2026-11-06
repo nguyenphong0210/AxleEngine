@@ -125,7 +125,7 @@ bool RunTest_Step98_Phase35_Step4_VulkanGraphicsBackendAndParity() {
         assert(hdrColorRT.GetRTV() != nullptr);
         assert(hdrColorRT.GetNativeSRVHandle() != 0);
         assert(hdrColorRT.GetNativeRTVHandle() != 0);
-        std::cout << "  -> HDR Color RT (1920x1080 RGBA16_FLOAT) allocated. Native SRV (VkImageView): 0x" 
+        std::cout << "  -> HDR Color RT (1920x1080 RGBA16_FLOAT) allocated. Native SRV (VkImageView): 0x"
                   << std::hex << hdrColorRT.GetNativeSRVHandle() << std::dec << std::endl;
     }
 
@@ -138,7 +138,7 @@ bool RunTest_Step98_Phase35_Step4_VulkanGraphicsBackendAndParity() {
         assert(depthRT.GetHeight() == 1080);
         assert(depthRT.GetDSV() != nullptr);
         assert(depthRT.GetNativeDSVHandle() != 0);
-        std::cout << "  -> Depth RT (1920x1080 D32_FLOAT) allocated. Native DSV: 0x" 
+        std::cout << "  -> Depth RT (1920x1080 D32_FLOAT) allocated. Native DSV: 0x"
                   << std::hex << depthRT.GetNativeDSVHandle() << std::dec << std::endl;
     }
 
@@ -152,7 +152,7 @@ bool RunTest_Step98_Phase35_Step4_VulkanGraphicsBackendAndParity() {
         assert(ldrColorRT.GetFormat() == RHITextureFormat::RGBA8_UNORM);
         assert(ldrColorRT.GetNativeSRVHandle() != 0);
         assert(ldrColorRT.GetNativeRTVHandle() != 0);
-        std::cout << "  -> SDR Color RT (1920x1080 RGBA8_UNORM) allocated. Native SRV: 0x" 
+        std::cout << "  -> SDR Color RT (1920x1080 RGBA8_UNORM) allocated. Native SRV: 0x"
                   << std::hex << ldrColorRT.GetNativeSRVHandle() << std::dec << std::endl;
     }
     std::cout << "  -> PASS: Vulkan offscreen render target allocations & native handles verified." << std::endl;
@@ -632,8 +632,8 @@ Mesh {
     // [99.12] Multi-Backend RHIMaterial Decoupling & Tier-2 Bindless Indices
     std::cout << "\n[99.12] Testing Multi-Backend RHIMaterial & Bindless Descriptors..." << std::endl;
     {
-        // Verify AssetManager::GetRHIMaterial
-        auto rhiMat = AssetManager::GetRHIMaterial("assets/materials/SilverCarPaint.axleasset");
+        // Verify MaterialCache::GetRHIMaterial
+        auto rhiMat = MaterialCache::GetRHIMaterial("assets/materials/SilverCarPaint.axleasset");
         assert(rhiMat != nullptr);
         assert(rhiMat->GetName() == "SilverCarPaint");
         assert(std::abs(rhiMat->GetMetallic() - 0.92f) < 1e-4f);

@@ -1,4 +1,4 @@
-﻿#include "TestCommon.hpp"
+#include "TestCommon.hpp"
 
 // =============================================================================
 // STEP 27: Phase 23 - Asset Packaging (.axlepak) & Virtual File System (VFS)
@@ -211,15 +211,15 @@ bool RunTest_Step28_Phase24_MaterialAndFlyweight() {
         }
 
         // Cache hit test: GetMaterial by path
-        auto matA = Axle::AssetManager::GetMaterial(matPath);
-        auto matB = Axle::AssetManager::GetMaterial(matPath);
+        auto matA = Axle::MaterialCache::GetMaterial(matPath);
+        auto matB = Axle::MaterialCache::GetMaterial(matPath);
         if (!matA || !matB || matA.get() != matB.get()) {
             std::cerr << "FAIL: MaterialCache failed to return identical pointer for same path!" << std::endl;
             return false;
         }
 
         // Cache hit test: GetMaterial by UUID
-        auto matByUUID = Axle::AssetManager::GetMaterial(meta.Handle);
+        auto matByUUID = Axle::MaterialCache::GetMaterial(meta.Handle);
         if (matByUUID.get() != matA.get()) {
             std::cerr << "FAIL: MaterialCache by UUID returned different pointer!" << std::endl;
             return false;
@@ -236,7 +236,7 @@ bool RunTest_Step28_Phase24_MaterialAndFlyweight() {
         }
 
         // Trigger ReloadMaterial
-        Axle::AssetManager::ReloadMaterial(meta.Handle);
+        Axle::MaterialCache::ReloadMaterial(meta.Handle);
 
         // In-place verification: pointer matA MUST NOT have changed, but its internal properties MUST be 0.05f!
         if (std::abs(matA->GetRoughness() - 0.05f) > 1e-3f ||
@@ -260,7 +260,7 @@ bool RunTest_Step28_Phase24_MaterialAndFlyweight() {
         auto& mc1 = e1.AddComponent<Axle::MaterialComponent>();
         auto& mc2 = e2.AddComponent<Axle::MaterialComponent>();
 
-        auto sharedMat = Axle::AssetManager::GetMaterial(matPath);
+        auto sharedMat = Axle::MaterialCache::GetMaterial(matPath);
         Axle::UUID matUUID = Axle::AssetManager::GetAssetUUID(matPath);
 
         // Bind shared flyweight asset to both entities
@@ -319,7 +319,7 @@ bool RunTest_Step28_Phase24_MaterialAndFlyweight() {
         ent.AddComponent<Axle::TransformComponent>(glm::vec3(1.0f, 2.0f, 3.0f));
         auto& mc = ent.AddComponent<Axle::MaterialComponent>();
 
-        auto sharedMat = Axle::AssetManager::GetMaterial(matPath);
+        auto sharedMat = Axle::MaterialCache::GetMaterial(matPath);
         Axle::UUID matUUID = Axle::AssetManager::GetAssetUUID(matPath);
         mc.SetAsset(matUUID, sharedMat);
 

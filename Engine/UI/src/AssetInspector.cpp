@@ -8,6 +8,7 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/PhysicsMaterial.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/MaterialCache.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/AudioEngine.hpp>
 #include <Axle/AudioSource.hpp>
@@ -463,7 +464,7 @@ namespace Axle {
                 if (ImGui::CollapsingHeader("Submesh Breakdown", ImGuiTreeNodeFlags_DefaultOpen)) {
                     for (size_t i = 0; i < pkg.Parts.size(); ++i) {
                         const auto& part = pkg.Parts[i];
-                        ImGui::BulletText("%s (%zu verts, %zu tris)", part.Name.c_str(), 
+                        ImGui::BulletText("%s (%zu verts, %zu tris)", part.Name.c_str(),
                             part.LoadedMesh.SourceData.Vertices.size(),
                             part.LoadedMesh.SourceData.Indices.size() / 3);
                     }
@@ -546,7 +547,7 @@ namespace Axle {
         if (ImGui::Button("Save Material Asset", ImVec2(availW, 26.0f)) || changed) {
             SaveMaterialAsset(path, m_ActiveMaterialAsset);
             AssetThumbnailManager::Invalidate(path);
-            AssetManager::ReloadMaterial(path);
+            MaterialCache::ReloadMaterial(path);
         }
         ImGui::PopStyleColor(3);
 
@@ -554,7 +555,7 @@ namespace Axle {
             ImGui::Spacing();
             if (ImGui::Button("Apply to Selected Entity", ImVec2(availW, 24.0f))) {
                 UUID handle = AssetManager::GetAssetUUID(path);
-                auto matAsset = AssetManager::GetMaterial(path);
+                auto matAsset = MaterialCache::GetMaterial(path);
                 if (m_SelectedEntity.HasComponent<MaterialComponent>()) {
                     auto& mc = m_SelectedEntity.GetComponent<MaterialComponent>();
                     if (matAsset) {

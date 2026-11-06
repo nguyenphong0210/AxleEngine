@@ -9,6 +9,7 @@
 #include <Axle/AssetManager.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/Material.hpp>
+#include <Axle/MaterialCache.hpp>
 #include <Axle/AssetMetadataSerializer.hpp>
 #include <Axle/AssetTypes.hpp>
 #include <Axle/ContentBrowserPanel.hpp>

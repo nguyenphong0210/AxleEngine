@@ -20,6 +20,7 @@ add_library(AxleRenderer STATIC
     src/CustomShaderInterface.cpp
     src/ShaderDragDropDecoder.cpp
     src/RHIECSStreamer.cpp
+    src/MaterialCache.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

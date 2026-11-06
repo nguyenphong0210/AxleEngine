@@ -3,6 +3,7 @@
 #include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/SceneRenderBridge.hpp>
 #include <Axle/Log.hpp>
 
 #include <imgui.h>
@@ -178,8 +179,8 @@ namespace Axle {
                     if (std::filesystem::exists(resolved)) {
                         auto loaded = AssetSerializer::LoadMesh(resolved);
                         if (loaded.Success) {
-                            node.Mesh.VAO = loaded.VAO;
-                            vao = loaded.VAO;
+                            node.Mesh.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
+                            vao = node.Mesh.VAO;
                         }
                     }
                 }

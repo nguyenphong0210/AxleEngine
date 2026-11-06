@@ -6,6 +6,7 @@
 #include <Axle/ScriptRegistry.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/SceneRenderBridge.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/FileSystem.hpp>
@@ -587,8 +588,9 @@ namespace Axle {
                                         ct.Rotation = part.LocalRotation;
 
                                         auto partFullPath = p.parent_path() / part.RelativePath;
+                                        auto partVao = CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                                         childEntity.AddComponent<MeshInstance3D>(
-                                            part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                            partVao ? partVao : m_CubeMesh,
                                             partFullPath.string(),
                                             part.LoadedMesh.SourceData.PatternMode,
                                             part.LoadedMesh.SourceData.TileScale,
@@ -607,8 +609,9 @@ namespace Axle {
                                     std::string entityTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
                                     auto newEnt = m_Scene->CreateEntity(entityTag);
                                     newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
+                                    auto partVao = CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                                     newEnt.AddComponent<MeshInstance3D>(
-                                        part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                        partVao ? partVao : m_CubeMesh,
                                         p.string(),
                                         part.LoadedMesh.SourceData.PatternMode,
                                         part.LoadedMesh.SourceData.TileScale,
@@ -762,8 +765,9 @@ namespace Axle {
                                             ct.Rotation = part.LocalRotation;
 
                                             auto partFullPath = p.parent_path() / part.RelativePath;
+                                            auto partVao = CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                                             childEntity.AddComponent<MeshInstance3D>(
-                                                part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                                partVao ? partVao : m_CubeMesh,
                                                 partFullPath.string(),
                                                 part.LoadedMesh.SourceData.PatternMode,
                                                 part.LoadedMesh.SourceData.TileScale,
@@ -782,8 +786,9 @@ namespace Axle {
                                         std::string entityTag = pkg.Name.empty() ? p.stem().string() : pkg.Name;
                                         auto newEnt = m_Scene->CreateEntity(entityTag);
                                         newEnt.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
+                                        auto partVao = CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                                         newEnt.AddComponent<MeshInstance3D>(
-                                            part.LoadedMesh.VAO ? part.LoadedMesh.VAO : m_CubeMesh,
+                                            partVao ? partVao : m_CubeMesh,
                                             p.string(),
                                             part.LoadedMesh.SourceData.PatternMode,
                                             part.LoadedMesh.SourceData.TileScale,

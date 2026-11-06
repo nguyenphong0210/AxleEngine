@@ -19,6 +19,4 @@ target_include_directories(AxleAsset PUBLIC
 target_link_libraries(AxleAsset
     PUBLIC
         Axle::Core
-        Axle::Renderer
-        Axle::RHI
 )

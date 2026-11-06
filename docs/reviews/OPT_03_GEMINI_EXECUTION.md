@@ -220,3 +220,55 @@ Evolving execution log and verification record for the sequential implementation
 - `python scripts/check_architecture.py --root . --closed-package AF-02`: exit 0, PASS (360 files, 17 CMake files, 0 violations).
 - `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
 - `git diff --check`: exit 0.
+
+---
+
+## Package AF-04: Asset Registry/Format versus Resources and Tools
+
+- **Status:** Implemented and self-verified; local delivery committed.
+- **Base Baseline:** `ca1fb42`
+- **Scope & Contract:** [ARCHITECTURE_FOUNDATION_MASTER_PLAN.md](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
+
+### Implementation Summary
+1. **Extraction of GPU Material & Texture Caching into Renderer (`Engine/Renderer/include/Axle/MaterialCache.hpp`, `src/MaterialCache.cpp`):**
+   - Introduced `MaterialCache` in `AxleRenderer` owning `Texture2D`, `Material`, and `RHI::RHIMaterial` caching, normalized path keys, embedded native UUID lookup via `FileSystem::ReadFileIdentity`, in-place live reloading (`ReloadMaterial`), and texture attachment.
+   - Introduced dependency inversion hooks (`UUIDPathResolver` and `PathUUIDResolver`) on `MaterialCache` so that `MaterialCache` can query asset paths and validate handles against `AssetManager` without introducing upward dependencies from `Renderer` to `Asset`.
+2. **Purged GPU Dependencies from Asset Module (`Engine/Asset/include/Axle/AssetManager.hpp`, `src/AssetManager.cpp`, `AssetSerializer.hpp`, `AssetSerializer.cpp`):**
+   - Removed `Texture2D.hpp`, `Material.hpp`, `RHIMaterial.hpp`, and GPU cache maps from `AssetManager`. `AssetManager` is now 100% pure CPU Asset Registry and Identity index.
+   - Removed `VertexArray.hpp`, `Buffer.hpp`, and `RHI/RHIDevice.hpp` from `AssetSerializer`.
+   - `AxleLoadedMesh` now encapsulates pure CPU mesh data (`AxleMeshSource SourceData; bool LoadedFromCache; bool Success;`), loading and caching `.axle` and `.axlebin` files without touching GPU vertex arrays.
+   - Removed `Axle::Renderer` and `Axle::RHI` links from `Engine/Asset/CMakeLists.txt`. `AxleAsset` links purely `Axle::Core`.
+3. **Decoupled PhysicsMaterial from AssetDSL (`Engine/Physics/include/Axle/PhysicsMaterial.hpp`, `CMakeLists.txt`):**
+   - Removed `#include <Axle/AssetDSL.hpp>`.
+   - Implemented self-contained string parser in `PhysicsMaterial::Deserialize` supporting declarative `.axleasset` format and legacy YAML format without any dependency on `AssetDSL` or `Asset`.
+   - Removed `Axle::Asset` link from `Engine/Physics/CMakeLists.txt`.
+4. **Decoupled VAO Instantiation in Scene (`Engine/Scene/include/Axle/SceneRenderBridge.hpp`, `src/SceneRenderBridge.cpp`):**
+   - Introduced `CreateVertexArrayFromMeshSource(const AxleMeshSource& source)` in `SceneRenderBridge`, bridging CPU mesh sources to OpenGL `VertexArray` inside `AxleScene`.
+   - Updated all VAO instantiation sites across Editor and UI panels (`AssemblySerializer.cpp`, `SceneSerializer.cpp`, `EditorLayer.cpp`, `AssemblyEditorPanel.cpp`, `AssetPreviewPanel.cpp`, `AssetThumbnailManager.cpp`, `EntityInspector.cpp`, `SceneHierarchyPanel.cpp`).
+5. **Architectural Allowance Retirement:**
+   - Retired `ALLOW-004` (Asset -> Renderer).
+   - Retired `ALLOW-005` (Asset -> RHI).
+   - Retired `ALLOW-008` (Physics -> Asset).
+   - Verified `check_architecture.py --root . --closed-package AF-04` passes with zero violations across all 362 scanned files.
+6. **Dedicated Headless Asset Unit Test Target (`AxleAssetFormatUnitTests`):**
+   - Added `Tests/src/Test_AssetUnit.cpp` registered in CTest as `AssetFormatUnitTests`.
+   - 5 comprehensive headless test cases verifying:
+     - Pure headless `AssetManager` registry and identity mapping.
+     - `AssetDSL` and `AssetDocument` parser/emitter roundtrip.
+     - `AssetSerializer` pure CPU mesh loading and binary baking.
+     - Decoupled `PhysicsMaterial` parsing and serialization.
+     - `MaterialCache` deduplication, path resolution, and in-place reload.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime`: exit 0.
+- `cmake --build build --config Release --target AxleAssetFormatUnitTests AxleAssetUnitTests AxleSceneDataUnitTests AxleTests AxleEditor AxleRuntime`: exit 0.
+- `build/Tests/Debug/AxleAssetFormatUnitTests.exe`: exit 0, ALL ASSET UNIT TESTS PASSED (100%).
+- `build/Tests/Release/AxleAssetFormatUnitTests.exe`: exit 0, ALL ASSET UNIT TESTS PASSED (100%).
+- `build/Tests/Debug/AxleAssetUnitTests.exe`: exit 0, PASS 14/14 asset suites (100%).
+- `build/Tests/Debug/AxleTests.exe`: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).
+- `ctest --test-dir build -C Debug --output-on-failure`: 35/35 tests passed (100%).
+- `ctest --test-dir build -C Release --output-on-failure`: 35/35 tests passed (100%).
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `python scripts/check_architecture.py --root . --closed-package AF-04`: exit 0, PASS (362 files scanned, 17 CMake files, 0 violations).
+- `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
+- `git diff --check`: exit 0.

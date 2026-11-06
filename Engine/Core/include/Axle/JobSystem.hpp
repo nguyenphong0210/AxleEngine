@@ -133,21 +133,39 @@ namespace Axle {
         std::function<void()> Callback;
     };
 
+    struct JobSystemData;
+
     // Lightweight handle referencing an asynchronous task dispatched to JobSystem
     class JobHandle {
     public:
-        JobHandle() = default;
-        explicit JobHandle(std::shared_ptr<enki::ICompletable> task)
-            : m_Task(std::move(task)) {}
+        JobHandle();
+        ~JobHandle();
+        JobHandle(const JobHandle&);
+        JobHandle& operator=(const JobHandle&);
+        JobHandle(JobHandle&&) noexcept;
+        JobHandle& operator=(JobHandle&&) noexcept;
 
-        bool IsValid() const { return m_Task != nullptr; }
+        explicit JobHandle(std::shared_ptr<enki::ICompletable> task);
+        JobHandle(std::shared_ptr<enki::ICompletable> task,
+                  std::shared_ptr<JobSystemData> data,
+                  u32 epoch,
+                  std::shared_ptr<std::atomic<bool>> cancelled = nullptr);
+
+        bool IsValid() const;
         bool IsComplete() const;
+        bool IsCancelled() const;
+        bool Cancel();
+        void Detach();
         void Wait();
 
-        enki::ICompletable* GetTask() const { return m_Task.get(); }
+        enki::ICompletable* GetTask() const;
+        u32 GetEpoch() const;
 
     private:
         std::shared_ptr<enki::ICompletable> m_Task;
+        std::shared_ptr<JobSystemData> m_Data;
+        u32 m_Epoch = 0;
+        std::shared_ptr<std::atomic<bool>> m_Cancelled;
     };
 
     class JobSystem {

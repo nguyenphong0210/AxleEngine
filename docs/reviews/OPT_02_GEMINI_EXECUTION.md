@@ -350,5 +350,78 @@ Evolving execution log and verification record for the sequential implementation
    - `AxleEditor` & `AxleRuntime` built successfully (exit 0) in Debug and Release.
 
 ### Remaining Limitations
-- EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08.
+- EnTT stable storage iteration tombstone (`ECSJ-04`) is deferred to EJ-08 in OPT-03.
 - Independent acceptance remains pending; this report documents self-verification under autonomous authorization.
+
+---
+
+## Package EJ-07: Handles, Draining and Shutdown
+
+### Objectives & Deliverables
+1. **Owning Asynchronous Handles & Lifecycle Safety:**
+   - Redesigned `JobHandle` to retain shared ownership of scheduler state (`std::shared_ptr<JobSystemData> m_Data`), task completable (`std::shared_ptr<enki::ICompletable> m_Task`), initialization epoch (`u32 m_Epoch`), and atomic cancellation token (`std::shared_ptr<std::atomic<bool>> m_Cancelled`).
+   - Implemented `JobHandle::Cancel()`: atomically cancels pending execution before `TaskFunc` starts; `JobHandle::IsCancelled()` provides synchronized query.
+   - Implemented `JobHandle::Detach()`: drops handle references safely while task continues execution without memory leaks or dangling pointers.
+   - Out-of-life `JobHandle` wait/query safety: Calling `handle.Wait()` or `handle.IsComplete()` after `JobSystem::Shutdown()` returns safely without crashing or accessing freed memory, because `m_Data` and `m_Task` are held by shared ownership and `Scheduler.WaitforAllAndShutdown()` guarantees all admitted work completed before shutdown returns.
+2. **Admitted Task Graph Retention:**
+   - Admitted tasks (`AsyncLambdaTask`) retain a `std::shared_ptr<JobSystemData>` through their execution scope, guaranteeing that scheduler state is never freed while background worker threads are actively running.
+3. **Reentrancy and In-Task Shutdown Prohibition:**
+   - Added `GetActiveTaskDepth() > 0` rejection check in `JobSystem::Shutdown()`, prohibiting reentrant self-shutdown deadlocks from inside worker or task callbacks.
+4. **Orderly Teardown Across Engine Subsystems:**
+   - In `Application::~Application()`:
+     1. Clear LayerStack (`[1/6]`): detaches all layers, stopping simulations, clearing scenes, joining compiler and worker tasks.
+     2. Drain deferred main-thread completions (`[2/6]`): calls `JobSystem::PumpMainThreadCompletions()` to safely evaluate and purge invalidated owner tokens before UI and platform systems tear down.
+     3. Shutdown `UIContext` (`[3/6]`).
+     4. Shutdown `PhysicsEngine` (`[4/6]`): unregisters Jolt types and factory only after all `PhysicsScene` instances and jobs have completed.
+     5. Shutdown `JobSystem` (`[5/6]`): quiesces admission, drains remaining engine tasks, clears queues, and shuts down enkiTS scheduler.
+     6. Complete (`[6/6]`).
+   - In `PhysicsScene::~PhysicsScene()`: explicitly invokes `m_JobSystem->Shutdown()` before body removal and physics system destruction, ensuring no background worker thread accesses the Jolt physics world while it is being destroyed.
+5. **Permanent Regression & Diagnostic Probes:**
+   - Implemented `RunEJ07HandlesShutdownProbe()` in `Tests/src/JobsECSTestMain.cpp`:
+     - Subtest 1: Owning asynchronous handles, cancellation, detach, and scheduler retention across `Shutdown()`.
+     - Subtest 2: Repeated startup/shutdown cycles (3 cycles) with monotonically increasing epochs, deferred completion pumping, non-owner shutdown rejection, and in-task shutdown rejection.
+     - Subtest 3: Full teardown sequencing order (`PhysicsScene` -> Deferred drainage -> `PhysicsEngine` -> `JobSystem`).
+   - Registered `JobsECS_HandlesShutdown` in `Tests/CMakeLists.txt` (total 31 CTest tests).
+   - Registered `("ej07-handles-shutdown", "PASS", args.timeout)` in `scripts/run_jobs_ecs_harness.py`.
+
+### Verification Evidence
+1. **Focused EJ-07 Native Probe (`ej07-handles-shutdown`):**
+   - All 3 subtests PASS (exit 0) in Debug and Release.
+2. **Typed Baseline Harness (`scripts/run_jobs_ecs_harness.py`):**
+   - Debug: `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe --workspace build/opt02-debug --report build/opt02-debug/harness-debug.json` -> **14 PASS, 1 preserved defect (ECSJ-04), 3 verified probes, 0 unexpected failures**.
+   - Release: `python scripts/run_jobs_ecs_harness.py build/Tests/Release/AxleJobsECSTests.exe --workspace build/opt02-release --report build/opt02-release/harness-release.json` -> **14 PASS, 1 preserved defect (ECSJ-04), 3 verified probes, 0 unexpected failures**.
+3. **CTest Suite (Debug & Release):**
+   - Debug: `ctest --test-dir build -C Debug --output-on-failure` -> **31/31 tests passed (100%)**.
+   - Release: `ctest --test-dir build -C Release --output-on-failure` -> **31/31 tests passed (100%)**.
+4. **Integration Suite (`AxleTests.exe`):**
+   - Step 23 verified: `AxleTests.exe 23` (Phase 19.3 Jolt Physics Bridge) -> **100% passed**.
+   - Full suite verified: `AxleTests.exe` -> **All 68 steps passed (100%)**.
+5. **Tooling & Architecture:**
+   - `python scripts/check_architecture.py --root .` -> **AXLE_ARCH_CHECK PASS** (342 files scanned).
+   - `python scripts/test_baseline_tools.py` -> **18 tests passed (OK)**.
+6. **Product Target Builds:**
+   - `AxleEditor` & `AxleRuntime` built successfully (exit 0) in Debug and Release.
+
+---
+
+## Phase OPT-02 Completion Summary
+
+Phase OPT-02 (Repair threading, scripts and physics jobs) is complete and fully self-verified under the authorized autonomous plan (`docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md`).
+
+| Package | Status | Key Deliverable | Defects Resolved |
+| --- | --- | --- | --- |
+| **EJ-01** | Delivered (`c5b3d23`, fixes `fc04a4a`) | OS thread identity, admission barrier, unforgeable permit | P1 thread identity |
+| **EJ-02** | Delivered (`3145a30`) | Deferred main executor, `OperationOwner` tokens | `ECSJ-02` |
+| **EJ-03** | Delivered (`b3e3ca2`) | Immutable compiler request snapshot & deferred completion | `ECSJ-01` |
+| **EJ-04** | Delivered (`f950fbe`) | Reload commit, candidate staging & scene/script barrier | Script DLL hazards |
+| **EJ-05** | Delivered (`2b31691`) | Decoupled Jolt job slots from enkiTS task lifetime (`PhysicsTaskRecord`) | Physics lifetime hazards |
+| **EJ-06** | Delivered (`d46e23d`) | Single-thread forward progress & non-owner disposal prohibition | `ECSJ-03` |
+| **EJ-07** | Delivered (this commit) | Owning async `JobHandle`, cancellation/detach, complete shutdown order | Shutdown races |
+
+All exit criteria for Phase OPT-02 have been satisfied:
+- ECSJ-01, ECSJ-02, and ECSJ-03 are completely resolved and verified.
+- CTest passes 31/31 tests (100%) in Debug and Release.
+- Jobs/ECS harness passes 14 scenarios, with only ECSJ-04 remaining as preserved defect (deferred to EJ-08 in OPT-03).
+- Full 68-step integration suite passes 100%.
+- Both products (`AxleEditor`, `AxleRuntime`) build cleanly with zero errors.
+- Independent acceptance remains pending; this report documents full self-verification.

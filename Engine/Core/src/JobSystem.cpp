@@ -68,14 +68,80 @@ namespace Axle {
 
     // --- JobHandle Implementation ---
 
+    JobHandle::JobHandle() = default;
+    JobHandle::~JobHandle() = default;
+    JobHandle::JobHandle(const JobHandle&) = default;
+    JobHandle& JobHandle::operator=(const JobHandle&) = default;
+    JobHandle::JobHandle(JobHandle&&) noexcept = default;
+    JobHandle& JobHandle::operator=(JobHandle&&) noexcept = default;
+
+    JobHandle::JobHandle(std::shared_ptr<enki::ICompletable> task)
+        : m_Task(std::move(task))
+        , m_Data(GetJobSystemData())
+        , m_Epoch(s_Epoch.load(std::memory_order_relaxed))
+        , m_Cancelled(nullptr) {}
+
+    JobHandle::JobHandle(std::shared_ptr<enki::ICompletable> task,
+                         std::shared_ptr<JobSystemData> data,
+                         u32 epoch,
+                         std::shared_ptr<std::atomic<bool>> cancelled)
+        : m_Task(std::move(task))
+        , m_Data(std::move(data))
+        , m_Epoch(epoch)
+        , m_Cancelled(std::move(cancelled)) {}
+
+    bool JobHandle::IsValid() const {
+        return m_Task != nullptr;
+    }
+
     bool JobHandle::IsComplete() const {
-        return !m_Task || m_Task->GetIsComplete();
+        if (!m_Task) return true;
+        if (m_Task->GetIsComplete()) return true;
+        if (m_Data && m_Data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) {
+            return true;
+        }
+        return false;
+    }
+
+    bool JobHandle::IsCancelled() const {
+        return m_Cancelled && m_Cancelled->load(std::memory_order_acquire);
+    }
+
+    bool JobHandle::Cancel() {
+        if (!m_Cancelled || !m_Task) return false;
+        if (IsComplete()) return false;
+        bool expected = false;
+        return m_Cancelled->compare_exchange_strong(expected, true, std::memory_order_acq_rel);
+    }
+
+    void JobHandle::Detach() {
+        m_Task.reset();
+        m_Data.reset();
+        m_Cancelled.reset();
+        m_Epoch = 0;
     }
 
     void JobHandle::Wait() {
-        if (m_Task) {
+        if (!m_Task || IsComplete()) return;
+        if (!JobSystem::IsValidSchedulerContext()) {
+            JobSystem::ReportInvalidContext("JobHandle::Wait");
+            return;
+        }
+        if (m_Data) {
+            if (m_Data->State.load(std::memory_order_acquire) != JobSystemState::Stopped) {
+                m_Data->Scheduler.WaitforTask(m_Task.get());
+            }
+        } else {
             JobSystem::Wait(m_Task.get());
         }
+    }
+
+    enki::ICompletable* JobHandle::GetTask() const {
+        return m_Task.get();
+    }
+
+    u32 JobHandle::GetEpoch() const {
+        return m_Epoch;
     }
 
     // --- JobSystem Implementation ---
@@ -119,6 +185,11 @@ namespace Axle {
         std::thread::id callerId = std::this_thread::get_id();
         if (s_OwnerThreadId != std::thread::id() && callerId != s_OwnerThreadId) {
             AXLE_CORE_ERROR("JobSystem::Shutdown() rejected: called from non-owner thread!");
+            return;
+        }
+
+        if (GetActiveTaskDepth() > 0) {
+            AXLE_CORE_ERROR("JobSystem::Shutdown() rejected: cannot shut down from within an active task scope!");
             return;
         }
 
@@ -247,7 +318,7 @@ namespace Axle {
             return;
         }
         auto data = GetJobSystemData();
-        if (!data) return;
+        if (!data || data->State.load(std::memory_order_acquire) == JobSystemState::Stopped) return;
 
         // Run enkiTS pinned tasks assigned to this thread (thread 0)
         data->Scheduler.RunPinnedTasks();
@@ -282,22 +353,34 @@ namespace Axle {
 
         struct AsyncLambdaTask : public enki::ITaskSet {
             std::function<void()> TaskFunc;
-            AsyncLambdaTask(std::function<void()> f)
-                : enki::ITaskSet(1), TaskFunc(std::move(f)) {}
+            std::shared_ptr<std::atomic<bool>> Cancelled;
+            std::shared_ptr<JobSystemData> SchedulerData;
+
+            AsyncLambdaTask(std::function<void()> f,
+                            std::shared_ptr<std::atomic<bool>> cancelled,
+                            std::shared_ptr<JobSystemData> data)
+                : enki::ITaskSet(1)
+                , TaskFunc(std::move(f))
+                , Cancelled(std::move(cancelled))
+                , SchedulerData(std::move(data)) {}
 
             void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override {
                 (void)range; (void)threadnum;
+                if (Cancelled && Cancelled->load(std::memory_order_acquire)) {
+                    return;
+                }
                 Detail::TaskExecutionScope scope;
                 if (TaskFunc) TaskFunc();
             }
         };
 
-        auto task = std::make_shared<AsyncLambdaTask>(std::move(func));
+        const u32 currentEpoch = s_Epoch.load(std::memory_order_relaxed);
+        auto cancelledFlag = std::make_shared<std::atomic<bool>>(false);
+        auto task = std::make_shared<AsyncLambdaTask>(std::move(func), cancelledFlag, data);
 
         {
             std::lock_guard<std::mutex> lock(data->AdmissionMutex);
             JobSystemState state = data->State.load(std::memory_order_acquire);
-            const u32 currentEpoch = s_Epoch.load(std::memory_order_relaxed);
             bool isChild = (t_TaskContext.Depth > 0 && t_TaskContext.Epoch == currentEpoch);
             bool admit = (state == JobSystemState::Running) ||
                          ((state == JobSystemState::Quiescing || state == JobSystemState::Draining) && isChild);
@@ -313,7 +396,7 @@ namespace Axle {
             data->Scheduler.AddTaskSetToPipe(task.get());
         }
 
-        return JobHandle(task);
+        return JobHandle(task, data, currentEpoch, cancelledFlag);
     }
 
     void JobSystem::Dispatch(enki::ITaskSet* taskSet) {
@@ -325,6 +408,7 @@ namespace Axle {
 
     void JobSystem::Wait(const enki::ICompletable* completable) {
         if (!completable) return;
+        if (completable->GetIsComplete()) return;
         if (!IsValidSchedulerContext()) {
             ReportInvalidContext("Wait");
             return;

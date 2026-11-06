@@ -100,6 +100,7 @@ def main():
         ("ej04-reload-commit", "PASS", args.timeout),
         ("ej05-physics-lifetime", "PASS", args.timeout),
         ("ej06-physics-waits", "PASS", args.timeout),
+        ("ej07-handles-shutdown", "PASS", args.timeout),
         ("ecsj-03-bridge-hang", "PASS", args.timeout),
         ("ecsj-03-bridge-control", "PASS", args.timeout),
         ("ecsj-04-entt-tombstone", "REPRODUCED_DEFECT", args.timeout),

@@ -44,6 +44,9 @@ namespace Axle {
     }
 
     PhysicsScene::~PhysicsScene() {
+        if (m_JobSystem) {
+            m_JobSystem->Shutdown();
+        }
         JPH::BodyIDVector bodyIDs;
         m_PhysicsSystem.GetBodies(bodyIDs);
         if (!bodyIDs.empty()) {

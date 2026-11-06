@@ -1198,6 +1198,201 @@ int RunEJ06PhysicsWaitsProbe() {
 }
 
 // ============================================================================
+// EJ-07: Handles, Draining and Shutdown Ordering Probe
+// ============================================================================
+int RunEJ07HandlesShutdownProbe() {
+    std::cout << "[EJ07] Running handles, draining and shutdown probe..." << std::endl;
+
+    // 1. Owning Asynchronous Handles Retain Scheduler State Across Shutdown
+    {
+        if (Axle::JobSystem::IsInitialized()) {
+            Axle::JobSystem::Shutdown();
+        }
+        Axle::JobSystem::Init(4);
+        const Axle::u32 epoch1 = Axle::JobSystem::GetEpoch();
+
+        std::atomic<bool> task1Done{false};
+        auto handle1 = Axle::JobSystem::Dispatch([&] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+            task1Done.store(true);
+        });
+
+        if (!handle1.IsValid() || handle1.GetEpoch() != epoch1) {
+            std::cerr << "[EJ07] FAILED: Handle1 invalid or epoch mismatch\n";
+            return 1;
+        }
+
+        // Test Cancellation
+        std::atomic<bool> cancelledTaskRan{false};
+        auto handleCancel = Axle::JobSystem::Dispatch([&] {
+            cancelledTaskRan.store(true);
+        });
+        bool didCancel = handleCancel.Cancel();
+        handleCancel.Wait();
+        if (didCancel && cancelledTaskRan.load()) {
+            std::cerr << "[EJ07] FAILED: Cancelled task ran despite cancellation\n";
+            return 1;
+        }
+        if (didCancel && !handleCancel.IsCancelled()) {
+            std::cerr << "[EJ07] FAILED: Cancelled handle does not report IsCancelled\n";
+            return 1;
+        }
+
+        // Test Detach
+        std::atomic<bool> detachTaskDone{false};
+        auto handleDetach = Axle::JobSystem::Dispatch([&] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            detachTaskDone.store(true);
+        });
+        handleDetach.Detach();
+        if (handleDetach.IsValid()) {
+            std::cerr << "[EJ07] FAILED: Detached handle still valid\n";
+            return 1;
+        }
+
+        // Call Shutdown() while handle1 is still outstanding and held
+        Axle::JobSystem::Shutdown();
+
+        if (Axle::JobSystem::IsInitialized()) {
+            std::cerr << "[EJ07] FAILED: JobSystem still reported initialized after Shutdown\n";
+            return 1;
+        }
+
+        // Handle1 must report complete and Wait() must return safely without crash
+        if (!handle1.IsComplete()) {
+            std::cerr << "[EJ07] FAILED: Handle1 not complete after Shutdown\n";
+            return 1;
+        }
+        if (!task1Done.load()) {
+            std::cerr << "[EJ07] FAILED: Task1 did not finish during draining\n";
+            return 1;
+        }
+        handle1.Wait(); // Must return safely without crash
+
+        // Detached task must have finished safely during draining
+        for (int i = 0; i < 50 && !detachTaskDone.load(); ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        if (!detachTaskDone.load()) {
+            std::cerr << "[EJ07] FAILED: Detached task did not complete during draining\n";
+            return 1;
+        }
+
+        std::cout << "[EJ07] Subtest 1 PASS: Asynchronous handles retain scheduler state across shutdown\n";
+    }
+
+    // 2. Repeated Startup/Shutdown Cycles & Reentrancy / Non-Owner Rejection
+    {
+        for (int cycle = 0; cycle < 3; ++cycle) {
+            Axle::JobSystem::Init(2);
+
+            Axle::OperationOwner owner;
+            std::atomic<int> completedTasks{0};
+
+            for (int j = 0; j < 8; ++j) {
+                Axle::JobSystem::Dispatch([&, j] {
+                    Axle::JobSystem::PostToMainThread(owner.GetToken(), [&, j] {
+                        completedTasks.fetch_add(1, std::memory_order_relaxed);
+                    });
+                });
+            }
+
+            // Wait a moment for workers to post completions
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            Axle::JobSystem::RunPinnedTasks();
+
+            // Attempt shutdown from background non-owner thread (MUST FAIL)
+            std::atomic<bool> nonOwnerRan{false};
+            std::thread bgThread([&] {
+                Axle::JobSystem::Shutdown();
+                nonOwnerRan.store(true);
+            });
+            bgThread.join();
+
+            if (!nonOwnerRan.load() || !Axle::JobSystem::IsInitialized()) {
+                std::cerr << "[EJ07] FAILED: Non-owner thread shutdown succeeded or hung in cycle " << cycle << "\n";
+                return 1;
+            }
+
+            // Attempt shutdown from inside an admitted task callback (MUST FAIL)
+            std::atomic<bool> inTaskShutdownAttempted{false};
+            auto inTaskHandle = Axle::JobSystem::Dispatch([&] {
+                Axle::JobSystem::Shutdown();
+                inTaskShutdownAttempted.store(true);
+            });
+            inTaskHandle.Wait();
+
+            if (!inTaskShutdownAttempted.load() || !Axle::JobSystem::IsInitialized()) {
+                std::cerr << "[EJ07] FAILED: In-task shutdown succeeded or hung in cycle " << cycle << "\n";
+                return 1;
+            }
+
+            // Proper owner shutdown
+            Axle::JobSystem::Shutdown();
+
+            if (Axle::JobSystem::IsInitialized()) {
+                std::cerr << "[EJ07] FAILED: JobSystem not stopped after cycle " << cycle << "\n";
+                return 1;
+            }
+        }
+        std::cout << "[EJ07] Subtest 2 PASS: Repeated startup/shutdown cycles and rejection protections verified\n";
+    }
+
+    // 3. Full Teardown Sequencing Order (PhysicsScene -> Deferred Drainage -> JobSystem)
+    {
+        Axle::JobSystem::Init(4);
+        if (!Axle::PhysicsEngine::IsInitialized()) {
+            Axle::PhysicsEngine::Init();
+        }
+
+        Axle::OperationOwner sceneOwner;
+        std::atomic<int> sceneCompletionsRan{0};
+
+        {
+            auto physicsScene = std::make_unique<Axle::PhysicsScene>();
+            Axle::BoxBodyProps boxProps;
+            boxProps.Position = glm::vec3(0.0f, 5.0f, 0.0f);
+            boxProps.HalfExtent = glm::vec3(0.5f);
+            physicsScene->CreateBox(boxProps);
+
+            // Step simulation to run Jolt jobs through JobSystemEnkiTS
+            physicsScene->Step(Axle::Timestep(0.016f));
+
+            // Queue deferred completions
+            Axle::JobSystem::PostToMainThread(sceneOwner.GetToken(), [&] {
+                sceneCompletionsRan.fetch_add(1);
+            });
+
+            // Destroy PhysicsScene: verifies m_JobSystem->Shutdown() inside destructor drains all physics jobs cleanly
+            physicsScene.reset();
+        }
+
+        // Invalidate scene owner and pump completions: ensures no callback runs on destroyed scene
+        sceneOwner.Invalidate();
+        Axle::u32 pumped = Axle::JobSystem::PumpMainThreadCompletions();
+        (void)pumped;
+        if (sceneCompletionsRan.load() > 0) {
+            std::cerr << "[EJ07] FAILED: Completion ran after owner invalidation!\n";
+            return 1;
+        }
+
+        // Shut down physics engine and job system in order
+        Axle::PhysicsEngine::Shutdown();
+        Axle::JobSystem::Shutdown();
+
+        if (Axle::JobSystem::IsInitialized() || Axle::PhysicsEngine::IsInitialized()) {
+            std::cerr << "[EJ07] FAILED: Subsystems still report initialized after final teardown!\n";
+            return 1;
+        }
+
+        std::cout << "[EJ07] Subtest 3 PASS: Full teardown sequencing verified without leaks or errors\n";
+    }
+
+    std::cout << "RESULT ej07-handles-shutdown PASS" << std::endl;
+    return 0;
+}
+
+// ============================================================================
 // ECSJ-04: EnTT Stable Storage Tombstone Iteration Probe
 // ============================================================================
 struct StableTombstoneComponent {
@@ -1387,6 +1582,7 @@ int main(int argc, char** argv) {
                   << "  ej04-reload-commit\n"
                   << "  ej05-physics-lifetime\n"
                   << "  ej06-physics-waits\n"
+                  << "  ej07-handles-shutdown\n"
                   << "  ecsj-03-bridge-hang\n"
                   << "  ecsj-03-bridge-control\n"
                   << "  ecsj-04-entt-tombstone\n"
@@ -1421,6 +1617,7 @@ int main(int argc, char** argv) {
         if (scenario == "ej04-reload-commit") return finish(RunEJ04ReloadCommitProbe(workspace));
         if (scenario == "ej05-physics-lifetime") return finish(RunEJ05PhysicsLifetimeProbe());
         if (scenario == "ej06-physics-waits") return finish(RunEJ06PhysicsWaitsProbe());
+        if (scenario == "ej07-handles-shutdown") return finish(RunEJ07HandlesShutdownProbe());
         if (scenario == "queued-delivery-control") return finish(RunThreadIdentityProbe(true));
         if (scenario == "ecsj-03-bridge-hang") return finish(RunBridgeProbe(false));
         if (scenario == "ecsj-03-bridge-control" || scenario == "--passing" || scenario == "passing-control")

@@ -165,11 +165,11 @@ review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in th
 - [x] **EJ-11:** Shared runtime phases and script API. (Self-verified in EJ-11 commit; discrete simulation phases FrameScripts/FixedControls/Physics/PostStepSync/AnimationVFX/LatePresentation with telemetry tracing, OnFixedUpdate and OnLateUpdate script callbacks, script ABI version 2 handshake and graceful rejection of mismatched DLLs, character bridge phase decomposition, same-tick SIM-01 controls-to-presentation contract, 5/5 AxleSharedRuntimePhasesUnitTests, 36/36 CTest Debug/Release, all 68 steps in AxleTests passed).
 - [x] **EJ-12:** Fixed clock, inputs and pause/step. (Self-verified in EJ-12 commit; SimulationClock with double-precision accumulator, dt validation, overload cap, speed scaling, clean pause/resume and single-step without backlog spike, SimulationInputAdapter with tick edge latching and paused UI isolation, SimulationDriver unified frame coordinator, 9/9 AxleSimulationClockUnitTests, 37/37 CTest Debug/Release, all 68 steps in AxleTests passed).
 - [x] **EJ-13:** Editor cutover. (Self-verified in EJ-13 commit; unified Play/Pause/Step/Stop/Speed to shared SimulationDriver, removed standalone physics step and frame dt multiplication, preserved zero-drift editor scene restoration, private preview clock isolation, 4/4 AxleEditorCutoverUnitTests, 38/38 CTest Debug/Release, all 68 steps in AxleTests passed).
-- [ ] **EJ-14:** Runtime cutover and product parity.
+- [x] **EJ-14:** Runtime cutover and product parity. (Self-verified in EJ-14 commit; cut over standalone player to shared SimulationDriver, resolved defect ECSJ-05 controls-to-physics ordering, established 100% simulation and telemetry parity across Editor and Runtime, 5/5 AxleRuntimeProductParityUnitTests, 39/39 CTest Debug/Release, all 68 steps in AxleTests passed).
 
-**Exit:** Core/scene/asset data fixtures run without GPU or Editor startup. ECSJ-04/05 have current coverage; both products follow the same fixed-step, input, pause/step/speed and teardown rules.
+**Exit:** Core/scene/asset data fixtures run without GPU or Editor startup. ECSJ-04/05 have current coverage; both products follow the same fixed-step, input, pause/step/speed and teardown rules. (Verified across AF-02, EJ-08..EJ-10, AF-03, AF-04, EJ-11..EJ-14; 39/39 CTest Debug/Release, 16/0/3 harness, 68/68 AxleTests, 0 arch violations).
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** Phase OPT-03 delivered in commits 374933a (AF-02), 4286425 (EJ-08), cc059af (EJ-09), b434dd0 (EJ-10), ca1fb42 (AF-03), b418b9e (AF-04), ae22b35 (EJ-11), 026bd91 (EJ-12), abf3300 (EJ-13), and EJ-14 commit; execution details in docs/reviews/OPT_03_GEMINI_EXECUTION.md; independent review pending.
 
 ### OPT-04 - Normalize the NRI device and GPU lifetime foundation
 

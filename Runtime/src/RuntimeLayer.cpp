@@ -183,6 +183,8 @@ namespace Axle {
         }
 
         // Step E: Start simulation runtime
+        m_SimulationDriver.Reset();
+        m_SimulationDriver.Resume();
         m_Scene->OnRuntimeStart(m_PhysicsScene.get());
         AXLE_INFO("Runtime: Simulation lifecycle started successfully.");
     }
@@ -209,6 +211,7 @@ namespace Axle {
         if (Input::IsKeyPressed(KeyCode::Escape)) {
             if (!m_EscapeKeyWasPressed) {
                 m_IsPaused = !m_IsPaused;
+                m_SimulationDriver.SetPaused(m_IsPaused);
                 AXLE_INFO("Runtime: Simulation {0}", m_IsPaused ? "PAUSED" : "RESUMED");
                 if (m_IsPaused) {
                     Input::SetCursorMode(CursorMode::Normal);
@@ -219,10 +222,10 @@ namespace Axle {
             m_EscapeKeyWasPressed = false;
         }
 
-        // 2. Physics Simulation Step & Script Lifecycle
-        if (!m_IsPaused && m_PhysicsScene && m_Scene) {
-            m_PhysicsScene->Step(ts);
-            m_Scene->OnUpdateRuntime(ts, m_PhysicsScene.get());
+        // 2. Shared Simulation Driver Execution (EJ-14)
+        m_SimulationDriver.SetPaused(m_IsPaused);
+        if (m_Scene) {
+            m_SimulationDriver.AdvanceFrame(ts.GetSeconds(), *m_Scene, m_PhysicsScene.get());
         }
 
         // 3. Resolve Primary Game Camera
@@ -260,6 +263,7 @@ namespace Axle {
 
         uiCtx.RegisterAction("OnResumeGame", [this]() {
             m_IsPaused = false;
+            m_SimulationDriver.Resume();
             Input::SetCursorMode(CursorMode::Normal);
             AXLE_INFO("Runtime: Game resumed via UI button");
         });
@@ -368,6 +372,7 @@ namespace Axle {
     void RuntimeLayer::OnDetach() {
         AXLE_INFO("RuntimeLayer detached - Shutting down Game Player");
         Input::SetCursorMode(CursorMode::Normal);
+        m_SimulationDriver.Reset();
         m_Canvas.Shutdown();
         if (m_Scene) {
             m_Scene->OnRuntimeStop(m_PhysicsScene.get());

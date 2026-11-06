@@ -13,6 +13,7 @@
 #include <Axle/KeyCodes.hpp>
 #include <Axle/UI/Canvas2D.hpp>
 #include <Axle/UI/UIDocument.hpp>
+#include <Axle/SimulationDriver.hpp>
 
 #include <memory>
 #include <filesystem>
@@ -30,6 +31,10 @@ namespace Axle {
         void OnImGuiRender() override {}
         void OnWindowResize(u32 width, u32 height) override;
 
+        SimulationDriver& GetSimulationDriver() { return m_SimulationDriver; }
+        const SimulationDriver& GetSimulationDriver() const { return m_SimulationDriver; }
+        bool IsPaused() const { return m_IsPaused; }
+
     private:
         void LoadProjectAndStartScene();
         void SetupPauseMenu();
@@ -40,6 +45,7 @@ namespace Axle {
         std::shared_ptr<Scene> m_Scene;
         std::unique_ptr<PhysicsScene> m_PhysicsScene;
         std::unique_ptr<SceneRenderer> m_SceneRenderer;
+        SimulationDriver m_SimulationDriver;
 
         PerspectiveCamera m_Camera;
         Canvas2D m_Canvas;

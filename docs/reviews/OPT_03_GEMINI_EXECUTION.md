@@ -413,3 +413,60 @@ Evolving execution log and verification record for the sequential implementation
 - `python scripts/check_architecture.py --root . --closed-package AF-04`: exit 0, PASS (369 files scanned, 17 CMake files, 0 violations).
 - `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
 - `git diff --check`: exit 0.
+
+---
+
+## Package EJ-14: Runtime Cutover and Product Parity
+
+- **Status:** Implemented and self-verified; local delivery committed.
+- **Base Baseline:** `abf3300`
+- **Scope & Contract:** [ARCHITECTURE_FOUNDATION_MASTER_PLAN.md](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) / [ENTT_ENKITS_REFACTOR_PLAN.md](../design/ENTT_ENKITS_REFACTOR_PLAN.md)
+
+### Implementation Summary
+1. **Runtime Simulation Driver Integration (`Runtime/src/RuntimeLayer.hpp`, `Runtime/src/RuntimeLayer.cpp`):**
+   - Added `Axle::SimulationDriver m_SimulationDriver;` member with const and non-const `GetSimulationDriver()` accessors.
+   - Cut over `LoadProjectAndStartScene()`: resets driver, resumes simulation, and calls `m_Scene->OnRuntimeStart(m_PhysicsScene.get())`.
+   - Cut over `OnUpdate(ts)`: replaced separate reversed `m_PhysicsScene->Step(ts)` and `m_Scene->OnUpdateRuntime(ts)` with unified `m_SimulationDriver.AdvanceFrame(ts.GetSeconds(), *m_Scene, m_PhysicsScene.get())`.
+   - Wired Pause/Resume via Escape key toggle and UI pause menu buttons directly to `m_SimulationDriver.SetPaused()` and `Resume()`.
+   - Wired `OnDetach()`: cleanly resets `m_SimulationDriver`, tears down runtime scenes and physics resources.
+2. **Defect ECSJ-05 Fully Resolved:**
+   - Prior to this cutover, Editor updated scripts before stepping physics, while Runtime stepped physics before updating scripts. Controls and telemetry were inverted between products, causing a 1-tick phase disparity.
+   - Now, both Editor and Runtime execute the identical discrete simulation phases (`FrameScripts` -> `FixedControls` -> `Physics` -> `PostStepSync` -> `AnimationVFX` -> `LatePresentation`).
+   - Controls applied in `OnFixedUpdate` are integrated by Jolt physics during the fixed tick, transforms are synchronized in post-step sync, and camera/HUD scripts in `OnLateUpdate` observe the synchronized pose in that exact same tick with 0-tick latency in both products.
+3. **Dedicated Test Fixture (`AxleRuntimeProductParityUnitTests`):**
+   - Added `Tests/src/Test_RuntimeProductParityUnit.cpp` registered in CTest as `RuntimeProductParityUnitTests`.
+   - 5 comprehensive headless unit tests covering:
+     - `TestSimulationParitySameTickSequence`: verifies exact match in total fixed ticks, script callback invocation counts (`OnUpdate`, `OnFixedUpdate`, `OnLateUpdate`), entity positions (`< 1e-4` tolerance), and physics linear velocities across variable-rate frame streams (60Hz, 30Hz, 120Hz, 144Hz) between Editor and Runtime drivers.
+     - `TestECSJ05ControlsToTelemetryParity`: verifies that an impulse applied in `OnFixedUpdate` during tick $T$ is integrated by physics and observed in `OnLateUpdate` during that exact tick $T$ with identical world positions in both Editor and Runtime.
+     - `TestRuntimePauseResumeInputIsolation`: verifies that pausing Runtime halts fixed ticks and keeps transforms static across 30 frames, flushes input buffers, and resuming executes 1 tick per frame without backlog burst.
+     - `TestRuntimeSpeedScalingParity`: verifies that 0.5x, 1.0x, and 2.0x speeds produce identical tick counts and matching physical states across both drivers.
+     - `TestRuntimeCleanTeardownAndPhysicsDeregistration`: verifies that simulation teardown cleans up all dynamic physics bodies without leaks.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleRuntimeProductParityUnitTests AxleRuntime AxleEditor`: exit 0.
+- `cmake --build build --config Release --target AxleRuntimeProductParityUnitTests AxleRuntime AxleEditor`: exit 0.
+- `build/Tests/Debug/AxleRuntimeProductParityUnitTests.exe`: exit 0, ALL 5 PRODUCT PARITY TESTS PASSED (100%).
+- `build/Tests/Release/AxleRuntimeProductParityUnitTests.exe`: exit 0, ALL 5 PRODUCT PARITY TESTS PASSED (100%).
+- `build/Tests/Debug/AxleTests.exe`: exit 0, ALL REQUESTED TESTS PASSED (100%, all 68 steps passed).
+- `ctest --test-dir build -C Debug --output-on-failure`: 39/39 tests passed (100%).
+- `ctest --test-dir build -C Release --output-on-failure`: 39/39 tests passed (100%).
+- `python scripts/run_jobs_ecs_harness.py build/Tests/Debug/AxleJobsECSTests.exe`: exit 0 (16 PASS, 0 defects, 3 verified probes, 0 unexpected failures).
+- `python scripts/check_architecture.py --root . --closed-package AF-04`: exit 0, PASS (369 files scanned, 17 CMake files, 0 violations).
+- `python scripts/test_baseline_tools.py`: exit 0, 18/18 tests passed.
+- `git diff --check`: exit 0.
+
+---
+
+## Phase OPT-03 Completion Summary
+
+All 10 packages of Phase OPT-03 have been fully implemented, self-reviewed, and verified in exact sequential order:
+1. `AF-02` (commit `374933a`): Foundation, Application and explicit service ownership. Removed upward dependencies, retired ALLOW-001..003.
+2. `EJ-08` (commit `4286425`): Parallel EnTT view correctness. Fixed tombstone handling, resolved defect ECSJ-04.
+3. `EJ-09` (commit `cc059af`): Scene command and mutation boundaries. Enforced generation checks, safe recursive teardown, dedicated unit tests.
+4. `EJ-10` (commit `b434dd0`): Transform evaluation ownership. Pure const read-only queries, monotonic revision tracking, Floyd cycle detection.
+5. `AF-03` (commit `ca1fb42`): Scene data and system bridge boundaries. Decoupled headless SceneData from system bridges, component codecs, passive extension storage.
+6. `AF-04` (commit `b418b9e`): Asset registry/format versus resources and tools. Separated CPU AssetManager from GPU MaterialCache, retired ALLOW-004, 005, 008.
+7. `EJ-11` (commit `ae22b35`): Shared runtime phases and script API. Discrete simulation phases, OnFixedUpdate/OnLateUpdate, ABI version 2 handshake.
+8. `EJ-12` (commit `026bd91`): Fixed clock, inputs and pause/step. SimulationClock with double-precision accumulator, SimulationInputAdapter with tick edge latching and paused UI isolation, unified SimulationDriver.
+9. `EJ-13` (commit `abf3300`): Editor cutover. Unified Play/Pause/Step/Stop/Speed to shared SimulationDriver, zero-drift edit scene restoration, private preview clock isolation.
+10. `EJ-14` (commit pending): Runtime cutover and product parity. Cut over standalone player to shared SimulationDriver, fully resolved ECSJ-05, identical simulation behavior across Editor and Runtime.

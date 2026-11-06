@@ -361,6 +361,23 @@ endif()
 add_test(NAME EditorCutoverUnitTests COMMAND $<TARGET_FILE:AxleEditorCutoverUnitTests>)
 set_tests_properties(EditorCutoverUnitTests PROPERTIES LABELS "editor;sim;scene;cpu" TIMEOUT 30)
 
+# Dedicated Runtime Cutover and Product Parity Unit Test Target (EJ-14)
+add_executable(AxleRuntimeProductParityUnitTests EXCLUDE_FROM_ALL
+    src/Test_RuntimeProductParityUnit.cpp
+)
+target_include_directories(AxleRuntimeProductParityUnitTests PRIVATE src)
+target_link_libraries(AxleRuntimeProductParityUnitTests PRIVATE
+    Axle::Scene
+    Axle::Physics
+    Axle::Core
+    Axle::Platform
+)
+if (MSVC)
+    target_compile_options(AxleRuntimeProductParityUnitTests PRIVATE /bigobj /FS)
+endif()
+add_test(NAME RuntimeProductParityUnitTests COMMAND $<TARGET_FILE:AxleRuntimeProductParityUnitTests>)
+set_tests_properties(RuntimeProductParityUnitTests PROPERTIES LABELS "runtime;sim;scene;cpu" TIMEOUT 30)
+
 # Dedicated CPU-Only Jobs and ECS Harness (EJ-00)
 add_executable(AxleJobsECSTests EXCLUDE_FROM_ALL
     src/JobsECSTestMain.cpp

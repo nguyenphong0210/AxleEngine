@@ -74,6 +74,10 @@ explicit user assignment can override these default roles.
    requirements, supported behavior and unrelated work; update affected design
    references and explain material changes. Do not limit necessary correctness
    fixes or architectural repairs merely to preserve the implementer's diff.
+   The user explicitly authorizes Codex to add, delete, rename, move, split or
+   merge project files as needed within the assigned implementation/review scope,
+   without routine per-file approval. Update affected build wiring, references
+   and verification alongside structural file changes. Preserve unrelated work.
 4. **Verify the corrected result:** rebuild and run the required gates against
    the final source. Have a separate-context reviewer recheck significant Codex
    corrections before acceptance. Keep that recheck focused on the corrections

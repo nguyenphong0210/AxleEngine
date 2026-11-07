@@ -188,6 +188,23 @@ submission, including when that view is closed or resized in the same UI frame.
 
 ### Shader, color and capability contract
 
+User lighting correction (2026-11-07): ordinary Editor/Runtime Lit views contain
+no synthesized sun, studio ambient/reflection or sky. `ResolveSceneLighting`
+resolves only authored lights and an explicitly enabled environment; absent or
+zero illumination contributes zero radiance. The default empty background is
+black. Emissive materials and deliberately unlit particles remain visible.
+Private previews author their own studio lights in their private world.
+
+Basic isotropic material shading uses matching light-unit conversions, point
+falloff/cone/window attenuation, ambient tint, Smith geometry and display
+exposure/gamma conventions across native and GL. The shared numerical GPU probe
+is `scripts/run_render_color_probe.py`; it verifies black output and bounded
+RGB differences for identical scenes. This does not claim parity for features
+explicitly deferred by backend capability reporting. GL fallback shaders embed
+the canonical source at build time. HDR IBL generation establishes/restores its
+own raster/binding state before view targets or uniforms are installed.
+
+
 - Define canonical vertex attributes, skin palette layout, material constants,
   texture slots, linear-light/sRGB handling, tone-map ownership and depth/clip
   conventions. Translate API differences at documented backend boundaries.

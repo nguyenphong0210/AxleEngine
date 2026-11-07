@@ -124,7 +124,7 @@ float4 PSMain(VSOutput input) : SV_Target {
 
     // 2. Solar Scattering & Sun Disk
     float cosTheta = dot(dir, sunDir);
-    if (cosTheta > 0.0) {
+    if (cosTheta > 0.0 && dot(u_SunColor.rgb, u_SunColor.rgb) > 0.0) {
         // Forward Mie scattering corona halo
         float sunGlow = u_Params.y;
         float glowExp = max(16.0 / max(sunGlow, 0.01), 1.0);

@@ -1,3 +1,17 @@
+foreach(stage VERTEX FRAGMENT)
+    if(stage STREQUAL "VERTEX")
+        set(ext vert)
+    else()
+        set(ext frag)
+    endif()
+    set(source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/Checkerboard.${ext}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
+    file(READ "${source}" AXLE_SCENE_${stage})
+    # MSVC caps one string token; concatenate canonical source one line per token.
+    string(REPLACE "\n" "\n)AXLESCENE\"\nR\"AXLESCENE(" AXLE_SCENE_${stage} "${AXLE_SCENE_${stage}}")
+endforeach()
+configure_file(src/SceneShaderSource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/SceneShaderSource.hpp" @ONLY)
+
 foreach(stage HLSL VERTEX FRAGMENT)
     if(stage STREQUAL "HLSL")
         set(ext hlsl)
@@ -15,6 +29,7 @@ configure_file(src/CanvasShaderSource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/genera
 add_library(AxleRenderer STATIC
     src/RenderCommand.cpp
     src/Shader.cpp
+    src/BuiltinSceneShader.cpp
     src/Buffer.cpp
     src/VertexArray.cpp
     src/PerspectiveCamera.cpp

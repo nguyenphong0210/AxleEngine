@@ -91,7 +91,7 @@ void main() {
 
     // 3. Solar Scattering & Sun Disk
     float cosTheta = dot(dir, sunDir);
-    if (cosTheta > 0.0) {
+    if (cosTheta > 0.0 && dot(u_SunColor, u_SunColor) > 0.0) {
         // Forward Mie scattering halo (Corona glow)
         float glowExp = max(16.0 / max(u_SunGlow, 0.01), 1.0);
         float glow = pow(cosTheta, glowExp) * dayFactor;

@@ -7,7 +7,7 @@ namespace Axle {
     struct SceneRenderSettings {
         bool EnableShadows = true;
         bool EnableSkybox = true;
-        bool EnableStudioLightLobes = true; // Analytical softboxes in the fallback environment.
+        bool EnableStudioLightLobes = false; // Compatibility option; previews author explicit studio lights.
         bool EnableParticles = true;
         bool EnableToneMapping = false;
         bool EnableFXAA = false;
@@ -24,7 +24,7 @@ namespace Axle {
         float FXAASubpixQuality = 0.75f;
         float FXAAEdgeThreshold = 0.166f;
         float FXAAEdgeThresholdMin = 0.0833f;
-        glm::vec4 ClearColor{ 0.12f, 0.14f, 0.18f, 1.0f }; // Configurable background clear color (Supports transparent clear for editor viewports)
+        glm::vec4 ClearColor{ 0.0f, 0.0f, 0.0f, 1.0f }; // Configurable background clear color (Supports transparent clear for editor viewports)
     };
 
 }

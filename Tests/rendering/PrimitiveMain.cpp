@@ -90,6 +90,7 @@ static bool Pixels(const std::filesystem::path& root, bool gl) {
     settings.MSAASamples = 1; settings.ClearColor = {0, 0, 0, 1};
     for (int i = 0; i < 5; ++i) {
         auto scene = std::make_shared<Scene>();
+        scene->CreateEntity("Fixture light").AddComponent<DirectionalLightComponent>().CastShadows=false;
         SceneHierarchyPanel panel(scene.get());
         auto entity = panel.CreatePrimitive(i, {0, 0, 0}, false);
         RENDER_CHECK(entity.HasComponent<MeshInstance3D>(), "real product factory has a mesh on selected backend");

@@ -643,6 +643,29 @@ namespace Axle {
     }
 
     IBLMaps Cubemap::GenerateIBLMaps(const std::string& hdrFilepath, u32 envResolution) {
+        if(!Window::HasActiveContext())return {};
+        // IBL baking is independent of the preceding view's raster state and
+        // restores the caller's bindings before publishing the generated maps.
+        struct BakeState {
+            GLint DrawFBO=0,ReadFBO=0,RBO=0,Viewport[4]{},Program=0,VAO=0,Buffer=0,Active=0,Texture=0,Cube=0,Sampler=0,DepthFunc=0,Polygon[2]{};
+            GLboolean ColorMask[4]{},DepthMask=0;GLdouble ClearDepth=1;
+            const GLenum Caps[9]={GL_CULL_FACE,GL_SCISSOR_TEST,GL_BLEND,GL_DEPTH_TEST,GL_STENCIL_TEST,GL_FRAMEBUFFER_SRGB,GL_RASTERIZER_DISCARD,GL_COLOR_LOGIC_OP,GL_POLYGON_OFFSET_FILL};
+            GLboolean Enabled[9]{};
+            BakeState() {
+                glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&DrawFBO);glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&ReadFBO);glGetIntegerv(GL_RENDERBUFFER_BINDING,&RBO);
+                glGetIntegerv(GL_VIEWPORT,Viewport);glGetIntegerv(GL_CURRENT_PROGRAM,&Program);glGetIntegerv(GL_VERTEX_ARRAY_BINDING,&VAO);glGetIntegerv(GL_ARRAY_BUFFER_BINDING,&Buffer);
+                glGetIntegerv(GL_ACTIVE_TEXTURE,&Active);glActiveTexture(GL_TEXTURE0);glGetIntegerv(GL_TEXTURE_BINDING_2D,&Texture);glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP,&Cube);glGetIntegerv(GL_SAMPLER_BINDING,&Sampler);
+                glGetIntegerv(GL_DEPTH_FUNC,&DepthFunc);glGetIntegerv(GL_POLYGON_MODE,Polygon);glGetBooleanv(GL_COLOR_WRITEMASK,ColorMask);glGetBooleanv(GL_DEPTH_WRITEMASK,&DepthMask);glGetDoublev(GL_DEPTH_CLEAR_VALUE,&ClearDepth);
+                for(int i=0;i<9;++i){Enabled[i]=glIsEnabled(Caps[i]);glDisable(Caps[i]);}
+                glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glDepthMask(GL_TRUE);glClearDepth(1);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);glBindSampler(0,0);
+            }
+            ~BakeState() {
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER,DrawFBO);glBindFramebuffer(GL_READ_FRAMEBUFFER,ReadFBO);glBindRenderbuffer(GL_RENDERBUFFER,RBO);glViewport(Viewport[0],Viewport[1],Viewport[2],Viewport[3]);
+                glUseProgram(Program);glBindVertexArray(VAO);glBindBuffer(GL_ARRAY_BUFFER,Buffer);glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,Texture);glBindTexture(GL_TEXTURE_CUBE_MAP,Cube);glBindSampler(0,Sampler);glActiveTexture(Active);
+                glDepthFunc(DepthFunc);glDepthMask(DepthMask);glClearDepth(ClearDepth);glColorMask(ColorMask[0],ColorMask[1],ColorMask[2],ColorMask[3]);glPolygonMode(GL_FRONT_AND_BACK,Polygon[0]);
+                for(int i=0;i<9;++i){if(Enabled[i])glEnable(Caps[i]);else glDisable(Caps[i]);}
+            }
+        } state;
         IBLMaps maps;
         maps.EnvironmentMap = CreateFromEquirectangular(hdrFilepath, envResolution);
         if (maps.EnvironmentMap) {

@@ -274,7 +274,7 @@ namespace Axle {
                         discard;
                     }
 
-                    if (u_LightingEnabled == 1 && v_LightingFlag > 0.5) {
+                    if (u_LightingEnabled == 1) {
                         vec3 N = normalize(v_Normal);
                         if (u_HasNormalMap == 1) {
                             vec3 normalTex = texture(u_ParticleNormalMap, v_TexCoord*u_UVTransform.xy+u_UVTransform.zw).xyz * 2.0 - 1.0;

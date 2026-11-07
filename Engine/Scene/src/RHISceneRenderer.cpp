@@ -1,5 +1,6 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RenderGraph.hpp>
+#include <Axle/SceneLighting.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/MeshResourceResolver.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
@@ -123,12 +124,12 @@ namespace Axle {
 
             float3 L = normalize(u_SunDirAndIntensity.xyz);
             float NdotL = max(0.0, dot(N, L));
-            float sunIntensity = max(0.2, u_SunDirAndIntensity.w);
+            float sunIntensity = max(0.0, u_SunDirAndIntensity.w);
             float3 diffuse = baseColor.rgb * (NdotL * sunIntensity);
-            float3 ambient = baseColor.rgb * float3(0.22, 0.25, 0.32);
+            float3 ambient = baseColor.rgb * u_AmbientLight.rgb * u_AmbientLight.w;
             float3 H = normalize(L + V);
             float NdotH = max(0.0, dot(N, H));
-            float3 specular = float3(0.9, 0.9, 0.9) * pow(NdotH, 32.0) * (1.0 - u_Params.z) * 0.35;
+            float3 specular = float3(0.9, 0.9, 0.9) * pow(NdotH, 32.0) * (1.0 - u_Params.z) * 0.35 * sunIntensity;
 
             return float4(ambient + diffuse + specular, baseColor.a);
         }
@@ -1142,13 +1143,14 @@ namespace Axle {
         m_LastStreamedTransformBytes = 0;
 
         // 1. Stream Global Scene Constants & Forward+ Multi-Light Buffer
+        const auto lighting=ResolveSceneLighting(world);
         RHISceneConstants sceneConstants;
         sceneConstants.ViewProjection = camera.GetViewProjectionMatrixZO();
         sceneConstants.View = camera.GetViewMatrix();
         sceneConstants.Projection = camera.GetProjectionMatrixZO();
         sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), settings.EnableToneMapping ? 1.0f : 0.0f);
-        sceneConstants.AmbientLight = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
-        sceneConstants.SunDirection = glm::vec4(0.45f, 0.85f, 0.25f, 1.2f);
+        sceneConstants.AmbientLight = glm::vec4(0.22f, 0.25f, 0.32f, lighting.AmbientIntensity);
+        sceneConstants.SunDirection = glm::vec4(lighting.SunDirection,0.0f);
         sceneConstants.SunColor = glm::vec4(1.0f, 0.98f, 0.92f, 1.0f);
 
         RHIMultiLightBufferData lightData{};
@@ -1159,14 +1161,14 @@ namespace Axle {
             const auto& dl = *world.DirectionalLight;
             float lux = (dl.Intensity > 100.0f) ? dl.Intensity : (dl.Intensity * PhysicalIlluminance::DirectSunlight);
             lightData.SunLight.DirectionAndIlluminance = glm::vec4(dl.Direction, lux);
-            lightData.SunLight.ColorAndAmbient = glm::vec4(dl.Color, dl.AmbientIntensity);
-            lightData.SunLight.AmbientColor = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
+            lightData.SunLight.ColorAndAmbient = glm::vec4(dl.Color, lighting.AmbientIntensity);
+            lightData.SunLight.AmbientColor = glm::vec4(lighting.AmbientColor,1.0f);
             lightData.SunLight.ShadowParams = glm::vec4(0.0012f, 2.0f, 0.0f, 0.0f);
             lightData.LightCounts.z = 1;
         } else {
-            lightData.SunLight.DirectionAndIlluminance = glm::vec4(glm::normalize(glm::vec3(0.45f, 0.85f, 0.25f)), PhysicalIlluminance::DirectSunlight);
-            lightData.SunLight.ColorAndAmbient = glm::vec4(1.0f, 0.98f, 0.92f, 0.25f);
-            lightData.SunLight.AmbientColor = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
+            lightData.SunLight.DirectionAndIlluminance = glm::vec4(glm::normalize(lighting.SunDirection),0.0f);
+            lightData.SunLight.ColorAndAmbient = glm::vec4(lighting.SunColor,lighting.AmbientIntensity);
+            lightData.SunLight.AmbientColor = glm::vec4(lighting.AmbientColor,1.0f);
             lightData.SunLight.ShadowParams = glm::vec4(0.0012f, 2.0f, 0.0f, 0.0f);
             lightData.LightCounts.z = 1;
         }
@@ -1205,7 +1207,8 @@ namespace Axle {
         }
         lightData.LightCounts.y = spotIndex;
 
-        bool useIBL = m_UseIBL || (world.Skybox.Enabled && world.Skybox.Type == 1);
+        bool useIBL = m_UseIBL && lighting.Environment && world.Skybox.Type==1;
+        lightData.ReservedHeader[0].y = lighting.AmbientIntensity;
         lightData.LightCounts.w = useIBL ? 1u : 0u;
 
         m_LightBuffer.Update(lightData);
@@ -1418,7 +1421,7 @@ namespace Axle {
 
         auto RenderSkybox=[&]() {
         // 5. Procedural Atmospheric Skybox Pass (Rayleigh & Mie scattering at infinity)
-        if (settings.EnableSkybox && m_SkyboxPipeline) {
+        if (settings.EnableSkybox && m_SkyboxPipeline && lighting.Environment) {
             SkyboxComponent activeSkybox = m_SkyboxParams;
             if (world.Skybox.Authored) {
                 activeSkybox.Enabled = world.Skybox.Enabled;
@@ -1436,18 +1439,7 @@ namespace Axle {
 
             if (activeSkybox.Enabled && activeSkybox.Type == SkyboxType::ProceduralAtmospheric) {
                 // 1. Determine normalized Sun direction
-                glm::vec3 sunDir(0.45f, 0.85f, 0.25f);
-                if (activeSkybox.SyncWithSun) {
-                    sunDir = glm::vec3(sceneConstants.SunDirection);
-                } else {
-                    float radAz = glm::radians(activeSkybox.CustomAzimuth);
-                    float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
-                    sunDir = glm::vec3(
-                        std::cos(radEl) * std::sin(radAz),
-                        std::sin(radEl),
-                        std::cos(radEl) * std::cos(radAz)
-                    );
-                }
+                glm::vec3 sunDir(world.Skybox.SunDirection);
                 if (glm::length(sunDir) > 1e-4f) {
                     sunDir = glm::normalize(sunDir);
                 } else {
@@ -1464,7 +1456,7 @@ namespace Axle {
                 skyboxConstants.InvViewProjection = glm::inverse(sceneConstants.ViewProjection);
                 skyboxConstants.CameraPosition = sceneConstants.CameraPosition;
                 skyboxConstants.SunDirection = glm::vec4(sunDir, sunElev);
-                skyboxConstants.SunColor = glm::vec4(glm::vec3(sceneConstants.SunColor) * activeSkybox.Intensity, dayFactor);
+                skyboxConstants.SunColor = glm::vec4(glm::vec3(world.Skybox.SunColor) * activeSkybox.Intensity, dayFactor);
                 skyboxConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
                 skyboxConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
                 skyboxConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);

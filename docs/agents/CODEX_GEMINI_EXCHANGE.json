@@ -1,102 +1,23 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-05-IMPLEMENTATION",
-    "title": "Phase OPT-05: Unify rendering across Editor, previews and Runtime",
-    "state": "accepted",
+    "id": "SCENE-LIGHTING-PARITY",
+    "title": "Authored-only scene lighting parity across native and GL",
+    "state": "in_progress",
     "coordinator": "Codex",
-    "implementer": "Gemini",
+    "implementer": "Codex",
     "reviewer": "Codex",
-    "scope_updated_on": "2026-11-07",
-    "user_scope": "Gemini implements Phase OPT-05 (P41-12 through P41-20, P41-25) in order with per-package self-checks and verification, commits locally, then hands off to Codex for one consolidated final review, architecture evaluation, and repairs.",
-    "user_instruction": "User requests review, implementation/repairs and acceptance of OPT-05 (2026-11-07). Codex owns final design/code/verification; Gemini delivery is a reference candidate.",
-    "code_baseline": "2baf3de7223b5d3c8c77395048cb6faad8e515d9",
-    "execution_range": "OPT-05 / P41-12..P41-20, P41-25",
-    "released_packages": [
-      "P41-12",
-      "P41-13",
-      "P41-14",
-      "P41-15",
-      "P41-16",
-      "P41-17",
-      "P41-18",
-      "P41-19",
-      "P41-20",
-      "P41-25"
+    "code_baseline": "b78fa6ee83d03fded95c64258103cb2fa50106ef",
+    "user_instruction": "User requests UE-like Lit behavior without added lights and consistent GL/native appearance (2026-11-07).",
+    "user_scope": "UE-like Lit semantics: no authored illumination/environment means black nonemissive surfaces and default black background. Similar basic material colors across D3D12/Vulkan/OpenGL through matching lighting/ambient/display conventions. Private previews own explicit lights; preserve emissive/unlit behavior. No OPT-06 or vendor changes.",
+    "codex_report": "docs/reviews/SCENE_LIGHTING_PARITY.md",
+    "next_action": "Implement shared lighting policy and actual three-backend no-light/explicit-light/emission/environment regressions; source recheck, build/test and local commit.",
+    "preserve_unrelated_changes": [
+      "Samples/TestProject/TestProject.axleproj",
+      "Samples/TestProject/assets/scenes/Test.axlescene"
     ],
-    "current_phase": "OPT-05",
-    "current_package": "P41-25",
-    "completed_packages": [
-      "P41-12",
-      "P41-13",
-      "P41-14",
-      "P41-15",
-      "P41-16",
-      "P41-17",
-      "P41-18",
-      "P41-19",
-      "P41-20",
-      "P41-25"
-    ],
-    "implementation_status": "Gemini candidate reviewed; Codex final design/implementation and corrective checkpoints 1..9 delivered through de97d9baf76dd2fcf1a9783175bba3dc4d1eb53d.",
-    "independent_review_status": "separate_context_source_recheck_complete_no_remaining_P1_P2",
-    "phase_report": "docs/reviews/OPT_05_GEMINI_EXECUTION.md",
-    "prerequisite_evidence": {
-      "OPT-04": "Accepted baseline; docs/reviews/OPT_04_CODEX_EXECUTION.md",
-      "acceptance_commit": "38cc7372c6782b1ee0a7585b82ba5a285daf2978",
-      "review_message": "CG-20261107T095439191921Z-CODEX-dad9e4"
-    },
-    "package_commits": {
-      "P41-12": "48209c78c9b820c79c1d851a82638492944cceeb",
-      "P41-13": "2ca327ea945761a29369d76c9ef5a5b583f71c93",
-      "P41-14": "a674041b6cff2f036573c091912aa4d455d3e098",
-      "P41-15": "9f89ff2eb1d916bb4eb5431681a95e691a5e1ae7",
-      "P41-16": "d8c847f9172ea250df7eeefbf85888e2cbf10037",
-      "P41-17": "4543a0a38be9819859f7ef9a5d7c9c0d75908cf9",
-      "P41-18": "7ae65a6c117b4c6e938f3ea70ef5dd0a6b7201c1",
-      "P41-19": "22ffd614457cb1bb88f8d68d1f274cbca677c7c3",
-      "P41-20": "3c2f22b7a9fbb008d380b2a4729f2da5d16ddb77",
-      "P41-25": "5ce3aa06cfd6a5e1cfad1f5922ebfa3226db2e95"
-    },
-    "required_gates": [
-      "Production-API positive/negative/lifetime coverage for P41-12..20 and P41-25, active in Debug/Release",
-      "Full Debug/Release AxleAllTests, AxleEditor, AxleRuntime builds; full CTest and default integration",
-      "Physical D3D12/Vulkan API validation and pixels for shared service, scene/preview/thumbnail/Runtime paths, presentation/resize/teardown; GL/fallback baseline",
-      "Jobs/ECS harness, Editor/Runtime simulation, architecture and baseline tools",
-      "Runtime without ImGui presentation and real loose/cooked fixture startup/render/Canvas behavior; P41-26 Editor-disabled build closure remains later scope",
-      "Separate-context review of significant Codex corrections; unavailable required checks stay NOT RUN"
-    ],
-    "stop_boundary": "OPT-05 P41-12..20 and P41-25 accepted; no later package or push authorized.",
-    "next_action": "Stop after accepted OPT-05. Await an explicit user assignment before OPT-06; P41-26 and other later packages remain outside scope.",
-    "review_base_commit": "c597cc8d3ce4dd8462d599c4ddc0fe59177092d1",
-    "codex_report": "docs/reviews/OPT_05_CODEX_REVIEW.md",
-    "acceptance_status": "accepted_verified_final_debug_release_native_and_product_gates",
-    "reported_delivery_gates": [
-      "50/50 CTest passed (100%)",
-      "AxleRenderUnitTests (Debug and Release) 5/5 suites passed",
-      "Architecture check: PASS (407 files / 18 CMake files)",
-      "Baseline tools test: 18/18 PASS",
-      "Zero git diff on vendor NRI pinned commit 6998e3fbbaed1b132f386a9d49743a2481003487",
-      "Consolidated Codex review and repair"
-    ],
-    "codex_review_report": "docs/reviews/OPT_05_CODEX_REVIEW.md",
-    "codex_correction_head": "de97d9baf76dd2fcf1a9783175bba3dc4d1eb53d",
-    "final_implementer": "Codex",
-    "accepted_on": "2026-11-07",
-    "final_source_commit": "de97d9baf76dd2fcf1a9783175bba3dc4d1eb53d",
-    "codex_verified_gates": [
-      "Full Debug/Release AxleAllTests, AxleEditor, AxleRuntime builds: exit 0",
-      "Full CTest: 50/50 per configuration",
-      "Focused CPU/service/Canvas: 9/9; actual preview/physics/surface/VFX: 12/12 per configuration",
-      "Runtime loose/cooked fixtures: 8/8; executable/capture comparisons: 10/10; missing-scene negative cases: 6/6 per configuration",
-      "Actual D3D12/Vulkan API validation: 35/35 per configuration; synchronization validation confirmed for Vulkan; no detected API errors including teardown",
-      "Explicit material/VFX native tests plus full default integration: 5/5 per configuration",
-      "Jobs/ECS: 16 PASS, 0 defects, 3 verified controls; actual Editor/Runtime simulation probes PASS per configuration",
-      "Architecture AF-04: PASS, 422 files / 18 CMake; baseline tools: 18/18 per configuration",
-      "Separate-context source/caller review and correction rechecks: no remaining P1/P2 finding; reviewer did not execute builds/GPU tests",
-      "Pinned clean NRI 6998e3fbbaed1b132f386a9d49743a2481003487 / API 190 unchanged"
-    ],
-    "final_evidence": "build/agent-runs/OPT-05/final/{debug,release}/results.json; docs/reviews/OPT_05_CODEX_REVIEW.md"
+    "implementation_status": "Implemented and targeted Debug physical 12/12 plus numerical 36/36 comparisons, maximum RGB delta0.7161/255. Final Debug/Release builds/regressions pending.",
+    "independent_review_status": "separate_context_source_recheck_no_remaining_P1_P2"
   },
   "last_read": {
     "Codex": "CG-20261107T123652362433Z-GEMINI-e0f179",
@@ -1664,6 +1585,28 @@
       "base_commit": "de97d9baf76dd2fcf1a9783175bba3dc4d1eb53d",
       "timestamp_utc": "2026-11-07T15:42:44.937134+00:00",
       "body": "REVIEW / ACCEPTANCE: OPT-05 (P41-12..20 and P41-25) is accepted after review, repairs and actual final-source verification. Initial Gemini candidate c597cc8d3ce4dd8462d599c4ddc0fe59177092d1 was reviewed against production callers; Codex owns corrective checkpoints 1..9 through de97d9baf76dd2fcf1a9783175bba3dc4d1eb53d. Findings OPT05-R1..R7 and OPT05-FR-01..08 are closed.\n\nFinal source passed full AxleAllTests/Editor/Runtime builds in Debug and Release; 50/50 CTest, 9 focused, 12 actual consumer, 8 Runtime fixture, 10 executable/capture comparison and 6 expected missing-scene cases per configuration. Both configurations passed 35/35 actual D3D12/Vulkan API cases (Vulkan synchronization validation confirmed, zero detected API errors including teardown), explicit material/VFX plus full integration 5/5, jobs 16 PASS/0 defects/3 controls, actual Editor/Runtime simulation, architecture 422/18 and baseline tools 18/18.\n\nA separate-context reviewer inspected corrections/affected callers, identified additional issues that Codex repaired and rechecked those fixes with no remaining P1/P2 finding. This reviewer performed source/diff inspection only; the builds, physical GPU/pixel/API and product results were executed by implementing Codex. Full evidence: docs/reviews/OPT_05_CODEX_REVIEW.md and build/agent-runs/OPT-05/final/{debug,release}/results.json. Failed earlier full attempt is retained at build/agent-runs/OPT-05/attempt-2653a46.\n\nNRI remains clean and pinned at 6998e3fbbaed1b132f386a9d49743a2481003487 (API 190). P41-26 Editor-disabled closure and advanced later packages remain outside scope. Stop before OPT-06; no push or later work is authorized by this acceptance. Gemini's reported handoff evidence remains preserved separately."
+    },
+    {
+      "id": "CG-20261107T154800498662Z-CODEX-df036b",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "SCENE-LIGHTING-PARITY",
+      "reply_to": "CG-20261107T123652362433Z-GEMINI-e0f179",
+      "base_commit": "b78fa6ee83d03fded95c64258103cb2fa50106ef",
+      "timestamp_utc": "2026-11-07T15:48:00.498662+00:00",
+      "body": "STATUS: User releases SCENE-LIGHTING-PARITY from b78fa6e: remove hidden default sun/ambient/specular sky from ordinary scene views and Runtime, preserve authored light/environment/emission, give private previews explicit studio lights. Codex edits Renderer/Scene/VFX shaders and affected tests; no OPT-06/NRI changes. Preserve user-edited Samples/TestProject project and scene files. OPT-05 acceptance remains historical; new lighting behavior receives its own evidence."
+    },
+    {
+      "id": "CG-20261107T161441426025Z-CODEX-404c2f",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "SCENE-LIGHTING-PARITY",
+      "reply_to": "CG-20261107T154800498662Z-CODEX-df036b",
+      "base_commit": "b78fa6ee83d03fded95c64258103cb2fa50106ef",
+      "timestamp_utc": "2026-11-07T16:14:41.426025+00:00",
+      "body": "STATUS: Expanded user color/background steering is implemented: shared authored light policy, default black clear, aligned basic isotropic BRDF/ambient/light conversions and display parameters, explicit private studio light, safe HDR bake and canonical GL shader embedding. Targeted physical Debug 12/12 and chart36/36 pass, max RGBdelta0.7161/255. Separate-context source recheck has no remaining P1/P2. Final full Debug/Release builds and regression gates are running; no completion claimed yet. User Samples/TestProject files remain preserved."
     }
   ],
   "deferred_tasks": [
@@ -2046,6 +1989,104 @@
       ],
       "report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
       "accepted_for_baseline_progression": true
+    },
+    {
+      "id": "OPT-05-IMPLEMENTATION",
+      "title": "Phase OPT-05: Unify rendering across Editor, previews and Runtime",
+      "state": "accepted",
+      "coordinator": "Codex",
+      "implementer": "Gemini",
+      "reviewer": "Codex",
+      "scope_updated_on": "2026-11-07",
+      "user_scope": "Gemini implements Phase OPT-05 (P41-12 through P41-20, P41-25) in order with per-package self-checks and verification, commits locally, then hands off to Codex for one consolidated final review, architecture evaluation, and repairs.",
+      "user_instruction": "User requests review, implementation/repairs and acceptance of OPT-05 (2026-11-07). Codex owns final design/code/verification; Gemini delivery is a reference candidate.",
+      "code_baseline": "2baf3de7223b5d3c8c77395048cb6faad8e515d9",
+      "execution_range": "OPT-05 / P41-12..P41-20, P41-25",
+      "released_packages": [
+        "P41-12",
+        "P41-13",
+        "P41-14",
+        "P41-15",
+        "P41-16",
+        "P41-17",
+        "P41-18",
+        "P41-19",
+        "P41-20",
+        "P41-25"
+      ],
+      "current_phase": "OPT-05",
+      "current_package": "P41-25",
+      "completed_packages": [
+        "P41-12",
+        "P41-13",
+        "P41-14",
+        "P41-15",
+        "P41-16",
+        "P41-17",
+        "P41-18",
+        "P41-19",
+        "P41-20",
+        "P41-25"
+      ],
+      "implementation_status": "Gemini candidate reviewed; Codex final design/implementation and corrective checkpoints 1..9 delivered through de97d9baf76dd2fcf1a9783175bba3dc4d1eb53d.",
+      "independent_review_status": "separate_context_source_recheck_complete_no_remaining_P1_P2",
+      "phase_report": "docs/reviews/OPT_05_GEMINI_EXECUTION.md",
+      "prerequisite_evidence": {
+        "OPT-04": "Accepted baseline; docs/reviews/OPT_04_CODEX_EXECUTION.md",
+        "acceptance_commit": "38cc7372c6782b1ee0a7585b82ba5a285daf2978",
+        "review_message": "CG-20261107T095439191921Z-CODEX-dad9e4"
+      },
+      "package_commits": {
+        "P41-12": "48209c78c9b820c79c1d851a82638492944cceeb",
+        "P41-13": "2ca327ea945761a29369d76c9ef5a5b583f71c93",
+        "P41-14": "a674041b6cff2f036573c091912aa4d455d3e098",
+        "P41-15": "9f89ff2eb1d916bb4eb5431681a95e691a5e1ae7",
+        "P41-16": "d8c847f9172ea250df7eeefbf85888e2cbf10037",
+        "P41-17": "4543a0a38be9819859f7ef9a5d7c9c0d75908cf9",
+        "P41-18": "7ae65a6c117b4c6e938f3ea70ef5dd0a6b7201c1",
+        "P41-19": "22ffd614457cb1bb88f8d68d1f274cbca677c7c3",
+        "P41-20": "3c2f22b7a9fbb008d380b2a4729f2da5d16ddb77",
+        "P41-25": "5ce3aa06cfd6a5e1cfad1f5922ebfa3226db2e95"
+      },
+      "required_gates": [
+        "Production-API positive/negative/lifetime coverage for P41-12..20 and P41-25, active in Debug/Release",
+        "Full Debug/Release AxleAllTests, AxleEditor, AxleRuntime builds; full CTest and default integration",
+        "Physical D3D12/Vulkan API validation and pixels for shared service, scene/preview/thumbnail/Runtime paths, presentation/resize/teardown; GL/fallback baseline",
+        "Jobs/ECS harness, Editor/Runtime simulation, architecture and baseline tools",
+        "Runtime without ImGui presentation and real loose/cooked fixture startup/render/Canvas behavior; P41-26 Editor-disabled build closure remains later scope",
+        "Separate-context review of significant Codex corrections; unavailable required checks stay NOT RUN"
+      ],
+      "stop_boundary": "OPT-05 P41-12..20 and P41-25 accepted; no later package or push authorized.",
+      "next_action": "Stop after accepted OPT-05. Await an explicit user assignment before OPT-06; P41-26 and other later packages remain outside scope.",
+      "review_base_commit": "c597cc8d3ce4dd8462d599c4ddc0fe59177092d1",
+      "codex_report": "docs/reviews/OPT_05_CODEX_REVIEW.md",
+      "acceptance_status": "accepted_verified_final_debug_release_native_and_product_gates",
+      "reported_delivery_gates": [
+        "50/50 CTest passed (100%)",
+        "AxleRenderUnitTests (Debug and Release) 5/5 suites passed",
+        "Architecture check: PASS (407 files / 18 CMake files)",
+        "Baseline tools test: 18/18 PASS",
+        "Zero git diff on vendor NRI pinned commit 6998e3fbbaed1b132f386a9d49743a2481003487",
+        "Consolidated Codex review and repair"
+      ],
+      "codex_review_report": "docs/reviews/OPT_05_CODEX_REVIEW.md",
+      "codex_correction_head": "de97d9baf76dd2fcf1a9783175bba3dc4d1eb53d",
+      "final_implementer": "Codex",
+      "accepted_on": "2026-11-07",
+      "final_source_commit": "de97d9baf76dd2fcf1a9783175bba3dc4d1eb53d",
+      "codex_verified_gates": [
+        "Full Debug/Release AxleAllTests, AxleEditor, AxleRuntime builds: exit 0",
+        "Full CTest: 50/50 per configuration",
+        "Focused CPU/service/Canvas: 9/9; actual preview/physics/surface/VFX: 12/12 per configuration",
+        "Runtime loose/cooked fixtures: 8/8; executable/capture comparisons: 10/10; missing-scene negative cases: 6/6 per configuration",
+        "Actual D3D12/Vulkan API validation: 35/35 per configuration; synchronization validation confirmed for Vulkan; no detected API errors including teardown",
+        "Explicit material/VFX native tests plus full default integration: 5/5 per configuration",
+        "Jobs/ECS: 16 PASS, 0 defects, 3 verified controls; actual Editor/Runtime simulation probes PASS per configuration",
+        "Architecture AF-04: PASS, 422 files / 18 CMake; baseline tools: 18/18 per configuration",
+        "Separate-context source/caller review and correction rechecks: no remaining P1/P2 finding; reviewer did not execute builds/GPU tests",
+        "Pinned clean NRI 6998e3fbbaed1b132f386a9d49743a2481003487 / API 190 unchanged"
+      ],
+      "final_evidence": "build/agent-runs/OPT-05/final/{debug,release}/results.json; docs/reviews/OPT_05_CODEX_REVIEW.md"
     }
   ],
   "task_history": [

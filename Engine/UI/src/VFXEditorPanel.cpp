@@ -602,6 +602,8 @@ namespace Axle {
 
         if (!m_PreviewScene) {
             m_PreviewScene = std::make_shared<Scene>();
+            auto studio=m_PreviewScene->CreateEntity("Preview studio light");
+            studio.AddComponent<DirectionalLightComponent>().CastShadows=false;
             m_PreviewEntity = m_PreviewScene->CreateEntity("VFX Preview");
             m_PreviewEntity.AddComponent<ParticleEmitterComponent>();
             for (int axis = 0; axis < 2; ++axis)

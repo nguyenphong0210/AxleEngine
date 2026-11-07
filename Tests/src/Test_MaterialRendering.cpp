@@ -133,6 +133,7 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     rm.AlbedoPath = green; rm.UseAlbedoMap = true;
     lm.EnableSpecularHighlights = rm.EnableSpecularHighlights = false;
     lm.EnableEnvironmentReflections = rm.EnableEnvironmentReflections = false;
+    scene->CreateEntity("PBR fixture light").AddComponent<DirectionalLightComponent>().CastShadows=false;
     SceneRenderSettings settings;
     settings.EnableSkybox = settings.EnableParticles = settings.EnableShadows = false;
     settings.EnableStudioLightLobes = false;
@@ -487,6 +488,7 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     lm.UseCustomShader=false; lm.AlbedoColor={0,0,1,1};
     auto mixed=render();
     if (!check(sum(mixed,0,64,2)>sum(mixed,0,64,0)*2+1000 && sum(mixed,64,128,1)>1000,"Built-in and custom layouts can alternate in a frame")) return false;
+    auto fixtureSky=scene->CreateEntity("Authored fixture sky");fixtureSky.AddComponent<SkyboxComponent>();
     settings.EnableSkybox=true;
     rm.SurfaceType=SurfaceType::Transparent;rm.DepthWrite=false;
     auto afterSky=render();
@@ -498,7 +500,7 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
         }
     }
     if(!check(checkedPixels>100 && renderer.GetDrawCallCount()>=3,"Sky and both material queues execute during layout-switch verification"))return false;
-    settings.EnableSkybox=false;
+    settings.EnableSkybox=false;scene->DestroyEntity(fixtureSky);
     rm.SurfaceType=SurfaceType::Opaque;rm.DepthWrite=true;
     lm.UseCustomShader=true;
     lm.AlbedoColor=glm::vec4(1);

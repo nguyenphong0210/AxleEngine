@@ -1,0 +1,5 @@
+#pragma once
+namespace Axle::BuiltinSceneSource {
+inline constexpr char Vertex[]=R"AXLESCENE(@AXLE_SCENE_VERTEX@)AXLESCENE";
+inline constexpr char Fragment[]=R"AXLESCENE(@AXLE_SCENE_FRAGMENT@)AXLESCENE";
+}

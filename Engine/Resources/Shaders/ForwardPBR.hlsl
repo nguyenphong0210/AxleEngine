@@ -428,18 +428,14 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 sunDir = hasMultiLightSun ? normalize(u_SunLight.DirectionAndIlluminance.xyz) 
                                      : (length(u_SunDirection.xyz) > 0.01 ? normalize(u_SunDirection.xyz) : normalize(float3(0.45, 0.85, 0.25)));
 
-    float sunIntensity = hasMultiLightSun
-        ? (u_SunLight.DirectionAndIlluminance.w > 0.0
-            ? u_SunLight.DirectionAndIlluminance.w * 0.000035 + u_SunLight.ColorAndAmbient.w * 0.5
-            : 0.0)
-        : (u_SunDirection.w > 0.01 ? u_SunDirection.w : max(0.5, u_SunColor.w));
-    float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : ((length(u_SunColor.rgb) > 0.01) ? u_SunColor.rgb : float3(1.0, 0.98, 0.92));
+    float sunIntensity = hasMultiLightSun ? max(u_SunLight.DirectionAndIlluminance.w,0.0) * 0.000035 : max(u_SunDirection.w,0.0);
+    float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : u_SunColor.rgb;
     float3 sunRadiance = sunColor * sunIntensity;
 
     float NdotL_Sun = max(dot(N, sunDir), 0.0);
     // Photographic Studio Softbox Diffuse Wrap (Area Light Approximation)
     // Smooths the terminator so white dielectric materials form silky, continuous gradients without harsh dark crescent smudges
-    float sunWrap = 0.22;
+    float sunWrap = 0.0;
     float NdotL_Sun_Diff = saturate((dot(N, sunDir) + sunWrap) / ((1.0 + sunWrap) * (1.0 + sunWrap)));
 
     if (NdotL_Sun > 0.0 || NdotL_Sun_Diff > 0.0) {
@@ -490,7 +486,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
             radiance = pLight.ColorAndIntensity.rgb * (pLight.ColorAndIntensity.w * attenuation * 0.05);
         }
         float NdotL = max(dot(N, L), 0.0);
-        float pWrap = 0.18;
+        float pWrap = 0.0;
         float NdotL_Diff = saturate((dot(N, L) + pWrap) / ((1.0 + pWrap) * (1.0 + pWrap)));
         if (NdotL <= 0.0 && NdotL_Diff <= 0.0) continue;
 
@@ -587,51 +583,16 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_Sampler, R, clamp(coatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
         diffuseAmbient *= (1.0-coatF) * (1.0-coatF);
         specularAmbient = (specularAmbient * (1.0-coatF) * (1.0-coatF) + coatEnvironment * coatF) * u_MaterialSurface.w;
-        float envIntensity = hasMultiLightSun ? u_SunLight.ColorAndAmbient.w : 1.0;
+        float envIntensity = max(u_LightReserved[0].y,0.0);
         ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao;
     } else {
-        // Photographic Studio & Physical Hemisphere Reflection (Godot 4 Studio Environment Parity)
-        // High-fidelity studio lighting: bright photographic softbox dome, luminous reflections, no metallic smudges
-        float3 studioTop     = float3(0.82, 0.85, 0.90); // Bright overhead studio softbox dome
-        float3 studioHorizon = float3(0.62, 0.65, 0.70); // Neutral eye-level studio fill
-        float3 studioGround  = float3(0.38, 0.40, 0.44); // Studio floor ambient bounce
-
-        // Smooth continuous hemisphere diffuse illumination (scaled for realistic non-metal diffuse contrast)
-        float upWeight = saturate(N.y * 0.5 + 0.5);
-        float3 hemisphereLight = lerp(studioGround, studioTop, upWeight);
-        float3 ambientDiffuse = hemisphereLight * albedo.rgb * ambientKD * 0.40;
-
-        // Smooth photographic studio specular reflection across all latitudes (seamless panoramic wrap)
-        float3 R = reflect(-V, N);
-        float3 specUpper = lerp(studioHorizon, studioTop, saturate(R.y));
-        float3 specLower = lerp(studioGround, studioHorizon, saturate(R.y + 1.0));
-        float3 specSky = (R.y >= 0.0) ? specUpper : specLower;
-
-        // Editor previews can use just their two actual lights, without extra
-        // analytical softboxes or the camera-facing lobe. Keep the smooth ambient dome.
-        if (u_LightReserved[0].x < 0.5) {
-            // Primary Key Softbox Lobe (Crisp main light reflection)
-            float keySpec = pow(max(dot(R, sunDir), 0.0), lerp(96.0, 6.0, roughness));
-            specSky += sunColor * keySpec * (1.0 - roughness * 0.6) * 0.85;
-
-            // Secondary Fill Softbox Lobe (Soft fill reflection from opposite quadrant)
-            float3 fillDir = normalize(float3(-sunDir.x * 0.75, 0.5, -sunDir.z * 0.75));
-            float fillSpec = pow(max(dot(R, fillDir), 0.0), lerp(32.0, 4.0, roughness));
-            specSky += float3(0.75, 0.85, 1.0) * fillSpec * (1.0 - roughness * 0.7) * 0.35;
-
-            // Frontal Camera Softbox (Standard studio fill facing object center - completely eliminates dark hollow smudges in metals)
-            float frontSpec = pow(max(dot(R, V), 0.0), lerp(20.0, 3.0, roughness));
-            specSky += float3(0.80, 0.83, 0.88) * frontSpec * (1.0 - roughness * 0.4) * 0.40;
-
-            // Subtle Rim Contour Lobe (Grazing angle highlight defining shape silhouette)
-            float rimFactor = pow(1.0 - NdotV, 4.0);
-            specSky += float3(0.90, 0.95, 1.0) * rimFactor * (1.0 - roughness * 0.5) * 0.20;
-        }
-
-        float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
-        ambientDiffuse *= (1.0-coatF) * (1.0-coatF);
-        float3 specularAmbient = (specSky * ambientF * (1.0 - roughness * 0.25) * (1.0-coatF) * (1.0-coatF) + specSky * coatF) * u_MaterialSurface.w;
-        ambient = (ambientDiffuse + specularAmbient) * ao;
+        // Shared analytical environment approximation: only authored ambient
+        // strength contributes; no studio softboxes are synthesized by a view.
+        float3 ambientColor=u_SunLight.AmbientColor.rgb;
+        float3 R=reflect(-V,N);
+        float3 diffuseAmbient=ambientColor*albedo.rgb*ambientKD;
+        float3 specularAmbient=ambientColor*ambientF*(1.0-roughness*0.5)*u_MaterialSurface.w;
+        ambient=(diffuseAmbient+specularAmbient)*max(u_LightReserved[0].y,0.0)*ao;
     }
     
     // 10. Total Radiance Accumulation (Linear HDR Radiance)

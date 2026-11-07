@@ -22,7 +22,8 @@ uniform vec3 u_ExtraLightDirection[4];
 uniform vec3 u_ExtraLightColor[4];
 uniform vec3 u_LightColor;        // Sun light RGB color
 uniform float u_LightIntensity;   // Sun brightness multiplier
-uniform float u_AmbientIntensity; // Ambient fill lighting
+uniform float u_AmbientIntensity;
+    uniform vec3 u_AmbientColor; // Ambient fill lighting
 uniform int u_ShadowsEnabled;     // 1: Enable soft shadows, 0: Disable shadows
 uniform mat4 u_Transform;
 uniform mat4 u_View;              // Camera View Matrix for view-space depth
@@ -53,6 +54,7 @@ struct PointLight {
     vec3 Color;
     float Intensity;
     float Radius;
+        float Falloff;
 };
 
 struct SpotLight {
@@ -252,12 +254,11 @@ float GeometrySchlickGGX(float NdotV, float roughness) {
 }
 
 float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
-    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
-    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
-
-    return ggx1 * ggx2;
+    float nv=max(abs(dot(N,V)),0.001),nl=max(abs(dot(N,L)),0.001);
+    float a=max(roughness*roughness,0.001),a2=a*a;
+    float lv=0.5*(sqrt(1.0+a2*max(1.0-nv*nv,0.0)/(nv*nv))-1.0);
+    float ll=0.5*(sqrt(1.0+a2*max(1.0-nl*nl,0.0)/(nl*nl))-1.0);
+    return 1.0/(1.0+lv+ll);
 }
 
 // 3. Fresnel-Schlick Approximation
@@ -422,7 +423,8 @@ void main() {
 
         // Smooth quadratic attenuation with cutoff radius window
         float atten = clamp(1.0 - pow(dist / u_PointLights[i].Radius, 4.0), 0.0, 1.0);
-        atten = (atten * atten) / (dist * dist + 1.0);
+        atten = (atten * atten) / max(dist * dist,0.0025);
+        if(u_PointLights[i].Falloff>0.1&&abs(u_PointLights[i].Falloff-1.0)>0.01)atten=pow(max(atten,0.0),u_PointLights[i].Falloff);
 
         float ndf_p = DistributionGGX(N, hDir, roughness);
         float g_p   = GeometrySmith(N, V, lDir, roughness);
@@ -453,7 +455,7 @@ void main() {
 
         // Distance attenuation with windowing
         float atten = clamp(1.0 - pow(dist / u_SpotLights[i].Range, 4.0), 0.0, 1.0);
-        atten = (atten * atten) / (dist * dist + 1.0) * spotFactor;
+        atten = (atten * atten) / max(dist * dist,0.0025) * spotFactor * spotFactor;
 
         float ndf_s = DistributionGGX(N, hDir, roughness);
         float g_s   = GeometrySmith(N, V, lDir, roughness);
@@ -467,6 +469,8 @@ void main() {
     }
 
     // Ambient Irradiance & Environment Reflection (IBL or Hemisphere)
+    vec3 ambientFresnel = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
+    vec3 ambientKD = (vec3(1.0) - ambientFresnel) * (1.0 - metallic);
     vec3 ambient;
     if (u_UseIBL == 1) {
         vec3 F_ibl = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
@@ -482,45 +486,12 @@ void main() {
         vec2 envBRDF = texture(u_BRDFLUT, vec2(max(NdotV, 0.0), roughness)).rg;
         vec3 specularAmbient = prefilteredColor * (F_ibl * envBRDF.x + envBRDF.y);
 
-        float envIntensity = (u_EnvironmentIntensity > 0.0) ? u_EnvironmentIntensity : 1.0;
+        float envIntensity = max(u_EnvironmentIntensity,0.0);
         ambient = (diffuseAmbient + specularAmbient) * envIntensity;
-    } else if (u_UseHemisphereAmbient == 1) {
-        // Vertical normal component maps [-1, 1] to [0, 1] for ground-to-sky gradient
-        float upWeight = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
-        float zenithWeight = clamp(N.y, 0.0, 1.0);
-        vec3 skyUpper = mix(u_SkyHorizonColor, u_SkyZenithColor, zenithWeight);
-        vec3 hemisphereLight = mix(u_SkyGroundColor, skyUpper, upWeight);
-
-        // Diffuse hemisphere irradiance (energy-conserved via kD)
-        vec3 diffuseAmbient = hemisphereLight * baseColor.rgb * kD;
-
-        // Specular ambient environment approximation
-        vec3 R = reflect(-V, N);
-        float specZenith = clamp(R.y, 0.0, 1.0);
-        vec3 specUpper = mix(u_SkyHorizonColor, u_SkyZenithColor, specZenith);
-
-        // Distinct horizon transition for realistic automotive metallic sheen
-        float horizonFactor = smoothstep(-0.06, 0.06, R.y);
-        vec3 specSky = mix(u_SkyGroundColor, specUpper, horizonFactor);
-
-        // Environment sun reflection lobe (sharp highlight for smooth metals)
-        float sunSpec = pow(max(dot(R, L), 0.0), mix(64.0, 8.0, roughness));
-        specSky += u_LightColor * u_LightIntensity * sunSpec * (1.0 - roughness * 0.8) * 0.5;
-
-        // Ambient Fresnel with roughness attenuation
-        vec3 F_ambient = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
-        vec3 specularAmbient = specSky * F_ambient * (1.0 - roughness * 0.5);
-
-        // Physically accurate combination: diffuse is attenuated by ambient intensity,
-        // specular environment reflections retain full Fresnel reflectivity
-        ambient = diffuseAmbient * u_AmbientIntensity + specularAmbient;
     } else {
-        vec3 R = reflect(-V, N);
-        vec3 specSky = mix(vec3(0.12), vec3(0.85, 0.90, 0.98), clamp(R.y * 0.5 + 0.5, 0.0, 1.0));
-        vec3 F_ambient = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
-        vec3 specularAmbient = specSky * F_ambient * (1.0 - roughness * 0.5);
-        vec3 diffuseAmbient = u_LightColor * u_AmbientIntensity * baseColor.rgb * kD;
-        ambient = diffuseAmbient + specularAmbient;
+        vec3 diffuseAmbient=u_AmbientColor*baseColor.rgb*ambientKD;
+        vec3 specularAmbient=u_AmbientColor*ambientFresnel*(1.0-roughness*0.5);
+        ambient=(diffuseAmbient+specularAmbient)*max(u_AmbientIntensity,0.0);
     }
 
     // Emissive lighting term (Automotive lights / Glow)

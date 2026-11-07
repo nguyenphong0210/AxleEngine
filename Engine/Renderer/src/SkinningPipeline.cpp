@@ -94,13 +94,15 @@ namespace Axle {
                 uniform vec4 u_Color1;
                 uniform vec3 u_LightDir;
                 uniform vec3 u_LightColor;
+                uniform float u_LightIntensity;
+                uniform float u_AmbientIntensity;
 
                 void main() {
                     vec3 N = normalize(cross(dFdx(v_WorldPos), dFdy(v_WorldPos)));
                     vec3 L = normalize(u_LightDir);
-                    float NdotL = max(dot(N, L), 0.15);
+                    float NdotL = max(dot(N, L), 0.0);
                     vec3 albedo = u_Color1.rgb > vec3(0.0) ? u_Color1.rgb : vec3(0.85);
-                    vec3 color = albedo * (u_LightColor * NdotL + vec3(0.2));
+                    vec3 color = albedo * (u_LightColor * NdotL * u_LightIntensity + vec3(u_AmbientIntensity));
                     o_Color = vec4(color, 1.0);
                 }
             )";

@@ -14,6 +14,7 @@
 #include <Axle/ImageTextureCache.hpp>
 #include <Axle/ImageSource.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/BuiltinSceneShader.hpp>
 #include <Axle/MaterialCache.hpp>
 #include <Axle/AssetManager.hpp>
 #include <glad/glad.h>
@@ -21,6 +22,7 @@
 #include <imgui.h>
 #include <fstream>
 #include <chrono>
+#include <cstdlib>
 #include <stdexcept>
 using namespace Axle;
 using namespace Axle::RHI;
@@ -152,6 +154,7 @@ static bool Surfaces(const std::string& mode) {
     if(native){RHIDeviceDesc desc;desc.PreferredBackend=backend;desc.Headless=true;desc.AllowFallback=false;desc.EnableValidation=desc.EnableNRIValidation=true;Require(RHIDevice::Get().Init(desc),"surface probe device");}
     else{WindowProps props;props.Width=props.Height=128;props.Maximized=false;window=std::make_unique<Window>(props);Require(RenderCommand::Init(reinterpret_cast<GLProcAddressFn>(glfwGetProcAddress)),"surface probe GL context");}
     {
+        if(!native){Shader embedded{std::string(GetBuiltinSceneVertexShader()),std::string(GetBuiltinSceneFragmentShader())};Require(embedded.GetRendererID()!=0,"canonical embedded fallback shader compiles on GL");}
         RenderService service;Scene scene;
         // Front entity is authored before back entity; alpha order cannot depend
         // on registry traversal order or the last queued material.
@@ -184,6 +187,66 @@ static bool Surfaces(const std::string& mode) {
         if(native){Require(privateTargets->Configure(RHIViewTargetDesc{128,128}),"private lighting targets");privateView.ViewTargets=privateTargets;}
         Require(service.RenderView(privateWorld,privateView).Success,"private light view");
         Require(render()==beforePrivate,"no-light main view is independent of preceding private-view direction");
+        // Lit scene semantics: zero authored illumination is zero radiance,
+        // independent of the previous preview, metallic reflections or background.
+        material.Metallic=0;material.Roughness=0.5f;view.Settings.ClearColor={0.12f,0.14f,0.18f,1};
+        auto darkCenter=[&](const auto& image){return image[center]<=1&&image[center+1]<=1&&image[center+2]<=1;};
+        auto darkScene=render();Require(darkCenter(darkScene)&&darkScene[0]>20,"no-light opaque mesh is black against the clear background");
+        material.Metallic=1;material.Roughness=0.05f;Require(darkCenter(render()),"no hidden studio reflection illuminates unlit metal");material.Metallic=0;
+        material.EmissionColor={1,0,0};material.EmissionIntensity=1;auto emission=render();
+        Require(emission[center]>80&&emission[center+1]<=1&&emission[center+2]<=1,"authored emission remains visible without lights");material.EmissionIntensity=0;
+        auto zero=scene.CreateEntity("Explicit zero light");auto& zeroLight=zero.AddComponent<DirectionalLightComponent>();zeroLight.Intensity=zeroLight.AmbientIntensity=0;
+        Require(darkCenter(render()),"explicit zero-intensity sun and ambient stay zero");zeroLight.Intensity=2;
+        Require(!darkCenter(render()),"authored directional light illuminates material");scene.DestroyEntity(zero);Require(darkCenter(render()),"removing the sun removes its illumination");
+        auto point=scene.CreateEntity("Authored point");point.GetComponent<TransformComponent>().Translation={0,0,2};point.AddComponent<PointLightComponent>().Intensity=3;
+        Require(!darkCenter(render()),"point light works without a hidden directional sun");scene.DestroyEntity(point);Require(darkCenter(render()),"point removal returns to darkness");
+        auto spot=scene.CreateEntity("Authored spot");spot.GetComponent<TransformComponent>().Translation={0,0,2};spot.AddComponent<SpotLightComponent>().Intensity=3;
+        Require(!darkCenter(render()),"spot light works without a hidden directional sun");scene.DestroyEntity(spot);
+        auto sky=scene.CreateEntity("Authored environment");auto& environment=sky.AddComponent<SkyboxComponent>();environment.Enabled=true;environment.Intensity=1;
+        Require(!darkCenter(render()),"explicit environment can light a scene without direct lights");
+        view.Settings.EnableSkybox=true;environment.SyncWithSun=false;environment.CustomAzimuth=180;environment.CustomElevation=20;
+        const auto skyWithoutSun=render();auto skySun=scene.CreateEntity("Sky sun");auto& sunComponent=skySun.AddComponent<DirectionalLightComponent>();sunComponent.Intensity=sunComponent.AmbientIntensity=0;
+        Require(render()==skyWithoutSun,"authored zero sun does not change sky background");sunComponent.Intensity=2;const auto skyWithSun=render();
+        size_t changedSky=0;for(size_t i=0;i<skyWithSun.size();i+=4){const auto row=i/(128*4);if((row<24||row>103)&&(skyWithSun[i]!=skyWithoutSun[i]||skyWithSun[i+1]!=skyWithoutSun[i+1]||skyWithSun[i+2]!=skyWithoutSun[i+2]))++changedSky;}
+        Require(changedSky>0,"authored sun changes actual sky pixels");scene.DestroyEntity(skySun);Require(render()==skyWithoutSun,"sun removal restores no-sun sky pixels");
+        view.Settings.EnableSkybox=false;
+        if(native){service.GetRHIRenderer()->SetUseIBL(true);environment.Type=SkyboxType::HDRCubemap;render();}
+        environment.Intensity=0;
+        Require(darkCenter(render()),"zero environment intensity stays dark");environment.Enabled=false;Require(darkCenter(render()),"disabled environment adds no light");if(native){service.GetRHIRenderer()->SetUseIBL(true);Require(darkCenter(render()),"cached IBL cannot light a view with disabled environment");}scene.DestroyEntity(sky);
+        view.Settings.EnableSkybox=true;const auto noSky=render();
+        Require(darkCenter(noSky)&&noSky[0]==darkScene[0]&&noSky[1]==darkScene[1],"no authored sky leaves clear background even when sky rendering is enabled");
+        if(!native) {
+            const auto hdr=std::filesystem::absolute("build/agent-runs/scene-lighting/first-environment.hdr");std::filesystem::create_directories(hdr.parent_path());
+            {std::ofstream file(hdr,std::ios::binary);file<<"#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 2\n";const unsigned char pixel[4]={128,128,128,129};for(int i=0;i<4;++i)file.write(reinterpret_cast<const char*>(pixel),4);}
+            auto hdrEntity=scene.CreateEntity("First HDR environment");auto& hdrSky=hdrEntity.AddComponent<SkyboxComponent>();hdrSky.Type=SkyboxType::HDRCubemap;hdrSky.HDRPath=hdr.generic_string();
+            glEnable(GL_CULL_FACE);
+            view.Settings.EnableSkybox=false;Require(!darkCenter(render()),"first HDR load lights the requested GL framebuffer");scene.DestroyEntity(hdrEntity);Require(darkCenter(render()),"cached GL IBL cannot leak to a later no-environment view");
+        }
+        if(native){view.Settings.EnableToneMapping=true;view.Settings.EnableFXAA=true;view.Settings.MSAASamples=4;Require(darkCenter(render()),"native post processing does not invent illumination");}
+        view.Settings.ClearColor={0,0,0,1};view.Settings.EnableSkybox=false;view.Settings.EnableToneMapping=true;view.Settings.EnableFXAA=false;view.Settings.MSAASamples=1;
+        const auto* captureDirectory=std::getenv("AXLE_COLOR_CAPTURE_DIR");
+        auto chartRoot=captureDirectory?std::filesystem::path(captureDirectory):std::filesystem::absolute("build/agent-runs/scene-lighting/captures");std::filesystem::create_directories(chartRoot);
+        std::ofstream chart(chartRoot/(mode+".csv"));
+        auto sample=[&](const std::string& name){auto image=render();double rgb[3]{};for(unsigned y=60;y<69;++y)for(unsigned x=60;x<69;++x)for(int c=0;c<3;++c)rgb[c]+=image[(y*128+x)*4+c]/81.0;
+            chart<<name<<','<<rgb[0]<<','<<rgb[1]<<','<<rgb[2]<<'\n';};
+        sample("no_light");
+        auto colorSun=scene.CreateEntity("Color chart sun");auto& chartLight=colorSun.AddComponent<DirectionalLightComponent>();chartLight.AmbientIntensity=0;chartLight.CastShadows=false;
+        for(int c=0;c<5;++c){material.AlbedoColor=c==0?glm::vec4(0.5f,0.5f,0.5f,1):c==1?glm::vec4(0.8f,0.1f,0.1f,1):c==2?glm::vec4(0.1f,0.8f,0.1f,1):c==3?glm::vec4(0.1f,0.1f,0.8f,1):glm::vec4(0.9f,0.6f,0.2f,1);
+            material.Roughness=0.65f;material.Metallic=0;sample("diffuse"+std::to_string(c));material.Roughness=0.35f;material.Metallic=1;sample("metal"+std::to_string(c));}
+        material.AlbedoColor={0.5f,0.5f,0.5f,1};material.Metallic=0;material.Roughness=0.65f;
+        chartLight.Intensity=0;chartLight.AmbientIntensity=0.4f;sample("ambient");scene.DestroyEntity(colorSun);
+        auto colorEnv=scene.CreateEntity("Color environment");colorEnv.AddComponent<SkyboxComponent>();sample("environment");scene.DestroyEntity(colorEnv);
+        material.EmissionColor={0.25f,0.5f,0.75f};material.EmissionIntensity=1;sample("emission");material.EmissionIntensity=0;
+        auto colorPoint=scene.CreateEntity("Color point");colorPoint.GetComponent<TransformComponent>().Translation={0,0,2};auto& chartPoint=colorPoint.AddComponent<PointLightComponent>();sample("point");chartPoint.Falloff=2;sample("point_falloff2");scene.DestroyEntity(colorPoint);
+        auto colorSpot=scene.CreateEntity("Color spot");colorSpot.GetComponent<TransformComponent>().Translation={0,0,2};colorSpot.AddComponent<SpotLightComponent>().Intensity=1;sample("spot");scene.DestroyEntity(colorSpot);
+        sample("removed_lights");
+        ViewRequest emptyView=view;emptyView.Settings=SceneRenderSettings{};emptyView.Settings.EnableToneMapping=native;
+        Scene emptyScene;Require(service.RenderView(emptyScene,emptyView).Success,"empty scene renders successfully");
+        const auto emptyPixels=native?Axle::RenderTests::ReadTexture(*service.GetDefaultMainColorTarget()):ReadGL(view.GLTargetFBO);
+        for(size_t i=0;i<emptyPixels.size();i+=4)Require(emptyPixels[i]==0&&emptyPixels[i+1]==0&&emptyPixels[i+2]==0,"default empty scene background is black on every backend");
+
+
+
 
         service.Shutdown();
     }
@@ -230,6 +293,11 @@ static bool Particles(const std::string& mode) {
         size_t leftRed=0,rightGreen=0;for(unsigned y=0;y<128;++y)for(unsigned x=0;x<128;++x){auto i=(y*128+x)*4;if(x<64&&pixels[i]>pixels[i+1]+30)++leftRed;if(x>=64&&pixels[i+1]>pixels[i]+30)++rightGreen;}
         Require(leftRed>100&&rightGreen>100,"emitter local transforms place independent textures on opposite sides");
         emitter.EmitterStacks[0].UseTexture=false;auto disabled=render();Require(Red(disabled)==0&&greenCount(disabled)>100,"authored emitter texture toggle is respected");emitter.EmitterStacks[0].UseTexture=true;
+        emitter.EmitterStacks[0].Config.LightingEnabled=emitter.EmitterStacks[1].Config.LightingEnabled=true;
+        const auto darkParticles=render();Require(Red(darkParticles)==0&&greenCount(darkParticles)==0,"lit particles have no implicit ambient or sun");
+        auto particleSun=scene.CreateEntity("Authored particle sun");particleSun.AddComponent<DirectionalLightComponent>().CastShadows=false;
+        const auto litParticles=render();Require(Red(litParticles)>100&&greenCount(litParticles)>100,"authored sun illuminates lit particles");scene.DestroyEntity(particleSun);
+        emitter.EmitterStacks[0].Config.LightingEnabled=emitter.EmitterStacks[1].Config.LightingEnabled=false;
         // A close opaque surface must fade the intersecting particle using
         // frozen opaque depth, including when another emitter writes cutout depth.
         auto occluder=scene.CreateEntity("Soft intersection");occluder.AddComponent<MeshInstance3D>().AssetPath="builtin://cube";

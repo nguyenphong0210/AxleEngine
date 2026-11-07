@@ -165,9 +165,56 @@ initializes the real job owner before creating a Scene and tears it down normall
 Architecture AF-04, clean pinned NRI and `git diff --check` were rechecked.
 P41-02 is implemented and self-verified; the final consolidated review remains open.
 
+## P41-03 - Structured errors and bounded loss policy
+
+Starting from P41-02 commit `0e8673e`. Implementation adds the first
+GPU error (backend/operation/resource/native result/ambiguity/timeout), explicit
+ready/rebuild/lost/stopping states, blocked admission after loss, and bounded
+fence polling/checked queue drains. Unresolved shutdown retains native owners for
+a checked retry. Texture/buffer/helper/command/swapchain cleanup uses this queue.
+
+Commands reject unfinished/invalid batches and reconstruct abandoned recordings.
+Swapchain completion values advance only after successful submit; present failure
+retains that submission. Application consumes UI operational status. UI native
+operations report failures, use bounded waits and retain the native backend/context
+independently if a layer dies before an ambiguous submission can be drained.
+The D3D12 descriptor callbacks have a separate closing owner. This remains a
+transition to the resource-generation/recording/frame services in P41-05..10.
+
+Final current-source Debug/Release builds and all package checks passed:
+
+| Check | Debug | Release |
+| --- | --- | --- |
+| Error policy, native core/loss/timeout and real surface modes | 5/5, exit 0 | 5/5, exit 0 |
+| Native UI destruction with unresolved drain | 2/2, exit 0 | 2/2, exit 0 |
+| Resource boundary/readback regression modes | 3/3, exit 0 | 3/3, exit 0 |
+| Production view/MSAA/mesh regression modes | 2/2, exit 0 | 2/2, exit 0 |
+| Foundation regression modes | 5/5, exit 0 | 5/5, exit 0 |
+| Editor startup/rollback regression cases | 7/7 expected exits | 7/7 expected exits |
+| Focused rendering CTest | 5/5, exit 0 | 5/5, exit 0 |
+| Physical VFX GPU regression, both APIs | 2/2, exit 0 | 2/2, exit 0 |
+
+Build command is the P41-01 command extended with AxleRHIErrorTests,
+AxleRHIResourceTests, AxleRHIResourceViewTests and AxleVFXGPUTests. Both builds
+exit 0. Logs: `p41-03-final-build-{debug,release}.log`; exact test commands/results
+are in the ignored `verify03.py <Config>` and
+`p41-03-final-{debug,release}-results.json`. Architecture AF-04 passed (378 files,
+18 CMake files); diff whitespace and clean pinned NRI were rechecked.
+
+The destroyed-UI-owner test exposed and verified correction of viewport teardown
+ordering: renderer-owned main viewport storage survives platform-hook removal,
+then retires with its context after a checked drain. The test renders native font
+and vertex storage, destroys the original layer, then drains its retained backend.
+CRT assertions remain active and log failures without a modal dialog. Earlier
+failed/stale attempts are not final evidence. API validation remains NOT RUN on
+this host; embedded NRI validation is enabled for the native package fixtures.
+P41-03 is self-verified; consolidated final review remains pending.
+
 ## Remaining work
 
-P41-03..11 are not implemented. Next: structured errors, failed submit/present and bounded loss/teardown policy. Continue P41-03..11, then perform the consolidated final review requested by the user.
+P41-04..11 are not implemented. Next: canonical primitive identities and actual
+creation/persistence/clone/pixel checks. Continue in
+dependency order, then perform the consolidated final review requested by the user.
 
 Full phase builds, CTest, integration, jobs/ECS, final native product simulation, GPU
 readbacks and final window/lifetime checks remain open. API-validation prerequisites

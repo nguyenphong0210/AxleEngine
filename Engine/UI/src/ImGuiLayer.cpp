@@ -1,5 +1,7 @@
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
@@ -41,9 +43,39 @@
 #endif
 #include <filesystem>
 #include <stdexcept>
+#include <array>
+#include <utility>
 #include "VulkanWindowBridge.hpp"
 
 namespace Axle {
+    struct ImGuiDescriptorCallbackState { ImGuiLayer* Owner = nullptr; };
+#if defined(AXLE_HAS_D3D12)
+    static nri::Result UIResultCode(HRESULT result) {
+        if (result == DXGI_ERROR_DEVICE_REMOVED || result == DXGI_ERROR_DEVICE_RESET) return nri::Result::DEVICE_LOST;
+        return SUCCEEDED(result) ? nri::Result::SUCCESS : nri::Result::FAILURE;
+    }
+#endif
+#if defined(AXLE_HAS_VULKAN)
+    static nri::Result UIResultCode(VkResult result) {
+        if (result == VK_ERROR_DEVICE_LOST) return nri::Result::DEVICE_LOST;
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) return nri::Result::OUT_OF_DATE;
+        if (result == VK_TIMEOUT || result == VK_NOT_READY) return nri::Result::NOT_READY;
+        return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR ? nri::Result::SUCCESS : nri::Result::FAILURE;
+    }
+#endif
+    template<class F> static bool CheckUIOperation(const char* name, F&& call) {
+        RHI::ScopedRHIOperation scope("ImGui surface");
+        const auto result = RHI::ScopedRHIFault::Invoke(name, [&] { return UIResultCode(call()); });
+        if (result == nri::Result::NOT_READY) RHI::RHIDevice::Get().ObserveResult(result, name, "ImGui surface", true);
+        return result == nri::Result::SUCCESS;
+    }
+
+    bool ImGuiLayer::IsOperational() const {
+        const auto state = RHI::RHIDevice::Get().GetState();
+        return m_Initialized && (m_BackendType == ImGuiBackendType::OpenGL ||
+            (state != RHI::RHIDeviceState::Lost && state != RHI::RHIDeviceState::Stopping));
+    }
+
 
 #if defined(AXLE_HAS_VULKAN)
     struct VulkanDispatchTable {
@@ -355,14 +387,17 @@ namespace Axle {
         initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
         initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
         initInfo.SrvDescriptorHeap = m_D3D12SrvHeap;
-        initInfo.UserData = this;
+        m_DescriptorCallbacks = std::make_shared<ImGuiDescriptorCallbackState>();
+        m_DescriptorCallbacks->Owner = this;
+        initInfo.UserData = m_DescriptorCallbacks.get();
         initInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* outCpu, D3D12_GPU_DESCRIPTOR_HANDLE* outGpu) {
-            auto* self = static_cast<ImGuiLayer*>(info->UserData);
-            self->AllocateD3D12Descriptor(outCpu, outGpu);
+            auto* state = static_cast<ImGuiDescriptorCallbackState*>(info->UserData);
+            if (state->Owner) state->Owner->AllocateD3D12Descriptor(outCpu, outGpu);
+            else { *outCpu = {}; *outGpu = {}; }
         };
         initInfo.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE gpu) {
-            auto* self = static_cast<ImGuiLayer*>(info->UserData);
-            self->FreeD3D12Descriptor(&cpu, &gpu);
+            auto* state = static_cast<ImGuiDescriptorCallbackState*>(info->UserData);
+            if (state->Owner) state->Owner->FreeD3D12Descriptor(&cpu, &gpu);
         };
 
         if (!ImGui_ImplDX12_Init(&initInfo)) {
@@ -614,6 +649,79 @@ namespace Axle {
     }
 
     void ImGuiLayer::Shutdown() {
+        auto& device = RHI::RHIDevice::Get();
+        if (m_ContextCreated && m_BackendType != ImGuiBackendType::OpenGL && device.IsNativeReady() &&
+            !device.WaitIdle() && device.GetState() != RHI::RHIDeviceState::Lost) {
+            device.ObserveResult(nri::Result::FAILURE, "QueueSubmit", "unresolved UI shutdown");
+            // The native context and backend objects outlive this layer if a
+            // checked drain cannot resolve an ambiguous submission yet.
+            while (!m_DeferredReleases.empty()) {
+                auto releases = std::move(m_DeferredReleases); m_DeferredReleases.clear();
+                for (auto& release : releases) release();
+            }
+            // Detach the main viewport's renderer-owned storage while GLFW
+            // removes its hooks. That storage is restored for deferred renderer
+            // shutdown after completion, and remains owned by the context.
+            auto* viewport = ImGui::GetMainViewport();
+            auto* rendererData = std::exchange(viewport->RendererUserData, nullptr);
+            if (ImGui::GetIO().BackendPlatformUserData) ImGui_ImplGlfw_Shutdown();
+            viewport->RendererUserData = rendererData;
+            auto* context = ImGui::GetCurrentContext();
+#if defined(AXLE_HAS_D3D12)
+            if (m_BackendType == ImGuiBackendType::Direct3D12) {
+                auto callbacks = std::move(m_DescriptorCallbacks);
+                if (callbacks) callbacks->Owner = nullptr;
+                auto* srvHeap = std::exchange(m_D3D12SrvHeap, nullptr);
+                auto* rtvHeap = std::exchange(m_D3D12RtvHeap, nullptr);
+                auto* swap = std::exchange(m_D3D12SwapChain, nullptr);
+                auto* commands = std::exchange(m_D3D12CommandList, nullptr);
+                auto* fence = std::exchange(m_D3D12Fence, nullptr);
+                auto event = std::exchange(m_D3D12FenceEvent, nullptr);
+                std::array<ID3D12Resource*, 3> targets{};
+                std::array<ID3D12CommandAllocator*, 3> allocators{};
+                for (size_t i = 0; i < 3; ++i) {
+                    targets[i] = std::exchange(m_D3D12RenderTargets[i], nullptr);
+                    allocators[i] = std::exchange(m_D3D12CommandAllocators[i], nullptr);
+                }
+                device.ReleaseNative([context, callbacks, srvHeap, rtvHeap, swap, commands, fence, event, targets, allocators] {
+                    auto* previous = ImGui::GetCurrentContext(); ImGui::SetCurrentContext(context);
+                    if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplDX12_Shutdown();
+                    if (commands) commands->Release();
+                    for (auto* target : targets) if (target) target->Release();
+                    for (auto* allocator : allocators) if (allocator) allocator->Release();
+                    if (fence) fence->Release();
+                    if (event) CloseHandle(static_cast<HANDLE>(event));
+                    if (swap) swap->Release();
+                    if (rtvHeap) rtvHeap->Release();
+                    if (srvHeap) srvHeap->Release();
+                    ImGui::DestroyContext(context);
+                    ImGui::SetCurrentContext(previous == context ? nullptr : previous);
+                });
+            }
+#endif
+#if defined(AXLE_HAS_VULKAN)
+            if (m_BackendType == ImGuiBackendType::Vulkan) {
+                auto* native = device.GetNRIDevice();
+                auto vkDevice = static_cast<VkDevice>(device.GetNRICore().GetDeviceNativeObject(native));
+                auto instance = static_cast<VkInstance>(device.GetNRIWrapperVK().GetInstanceVK(*native));
+                auto* window = std::exchange(m_VulkanWindowData, nullptr);
+                device.ReleaseNative([context, vkDevice, instance, window] {
+                    auto* previous = ImGui::GetCurrentContext(); ImGui::SetCurrentContext(context);
+                    if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplVulkan_Shutdown();
+                    if (window) {
+                        DestroyWindowVK(vkDevice, *window);
+                        if (window->Surface && s_VkFuncs.vkDestroySurfaceKHR) s_VkFuncs.vkDestroySurfaceKHR(instance, window->Surface, nullptr);
+                        delete window;
+                    }
+                    ImGui::DestroyContext(context);
+                    ImGui::SetCurrentContext(previous == context ? nullptr : previous);
+                });
+            }
+#endif
+            ImGui::SetCurrentContext(nullptr);
+            m_ContextCreated = m_Initialized = false; m_Window = nullptr;
+            return;
+        }
         FlushDeferredReleases();
         if (!m_ContextCreated) return;
 
@@ -646,16 +754,7 @@ namespace Axle {
     void ImGuiLayer::ShutdownD3D12() {
 #if defined(AXLE_HAS_D3D12)
         auto& rhiDevice = RHI::RHIDevice::Get();
-        if (m_Initialized && rhiDevice.IsNativeReady() && m_D3D12Fence && m_D3D12FenceEvent) {
-            const auto& core = rhiDevice.GetNRICore();
-            auto* d3d12Queue = static_cast<ID3D12CommandQueue*>(core.GetQueueNativeObject(rhiDevice.GetGraphicsQueue()));
-            if (d3d12Queue) {
-                m_D3D12FenceValueCounter++;
-                d3d12Queue->Signal(m_D3D12Fence, m_D3D12FenceValueCounter);
-                m_D3D12Fence->SetEventOnCompletion(m_D3D12FenceValueCounter, (HANDLE)m_D3D12FenceEvent);
-                WaitForSingleObject((HANDLE)m_D3D12FenceEvent, INFINITE);
-            }
-        }
+        if (m_Initialized && rhiDevice.IsNativeReady()) rhiDevice.WaitIdle();
 
         if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplDX12_Shutdown();
         if (ImGui::GetIO().BackendPlatformUserData) {
@@ -712,9 +811,7 @@ namespace Axle {
             auto vkDevice = static_cast<VkDevice>(core.GetDeviceNativeObject(nriDev));
             auto vkInstance = static_cast<VkInstance>(wrapperVK.GetInstanceVK(*nriDev));
 
-            if (vkDevice && s_VkFuncs.vkDeviceWaitIdle) {
-                s_VkFuncs.vkDeviceWaitIdle(vkDevice);
-            }
+            if (vkDevice) rhiDevice.WaitIdle();
 
             if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplVulkan_Shutdown();
             if (ImGui::GetIO().BackendPlatformUserData) {
@@ -783,6 +880,7 @@ namespace Axle {
 
         UpdateWindowSnapping();
         ImGui::Render();
+        if (!IsOperational()) { FlushDeferredReleases(); return; }
 
         if (m_BackendType == ImGuiBackendType::OpenGL) {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -804,10 +902,7 @@ namespace Axle {
                 uint32_t curH = static_cast<uint32_t>(fbH > 0 ? fbH : 720);
 
                 if ((curW != m_D3D12Width || curH != m_D3D12Height) && curW > 0 && curH > 0) {
-                    m_D3D12FenceValueCounter++;
-                    d3d12Queue->Signal(m_D3D12Fence, m_D3D12FenceValueCounter);
-                    m_D3D12Fence->SetEventOnCompletion(m_D3D12FenceValueCounter, (HANDLE)m_D3D12FenceEvent);
-                    WaitForSingleObject((HANDLE)m_D3D12FenceEvent, INFINITE);
+                    if (!rhiDevice.WaitIdle()) return;
 
                     for (UINT i = 0; i < 3; ++i) {
                         if (m_D3D12RenderTargets[i]) {
@@ -830,14 +925,11 @@ namespace Axle {
 
             UINT backBufferIdx = m_D3D12SwapChain->GetCurrentBackBufferIndex();
 
-            // Wait for frame fence
-            if (m_D3D12Fence->GetCompletedValue() < m_D3D12FenceValues[backBufferIdx]) {
-                m_D3D12Fence->SetEventOnCompletion(m_D3D12FenceValues[backBufferIdx], (HANDLE)m_D3D12FenceEvent);
-                WaitForSingleObject((HANDLE)m_D3D12FenceEvent, INFINITE);
+            if (!rhiDevice.WaitIdle()) return;
+            if (!CheckUIOperation("BeginCommandBuffer", [&] { return m_D3D12CommandAllocators[backBufferIdx]->Reset(); }) ||
+                !CheckUIOperation("BeginCommandBuffer", [&] { return m_D3D12CommandList->Reset(m_D3D12CommandAllocators[backBufferIdx], nullptr); })) {
+                rhiDevice.ObserveResult(nri::Result::FAILURE, "QueueSubmit", "ImGui recording rejected"); return;
             }
-
-            m_D3D12CommandAllocators[backBufferIdx]->Reset();
-            m_D3D12CommandList->Reset(m_D3D12CommandAllocators[backBufferIdx], nullptr);
 
             // Transition to RENDER_TARGET
             D3D12_RESOURCE_BARRIER barrier = {};
@@ -865,16 +957,20 @@ namespace Axle {
             barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
             m_D3D12CommandList->ResourceBarrier(1, &barrier);
 
-            m_D3D12CommandList->Close();
-
-            ID3D12CommandList* ppCommandLists[] = { m_D3D12CommandList };
-            d3d12Queue->ExecuteCommandLists(1, ppCommandLists);
-
-            m_D3D12SwapChain->Present(1, 0);
-
-            m_D3D12FenceValueCounter++;
-            m_D3D12FenceValues[backBufferIdx] = m_D3D12FenceValueCounter;
-            d3d12Queue->Signal(m_D3D12Fence, m_D3D12FenceValueCounter);
+            if (!CheckUIOperation("EndCommandBuffer", [&] { return m_D3D12CommandList->Close(); })) {
+                rhiDevice.ObserveResult(nri::Result::FAILURE, "QueueSubmit", "ImGui recording rejected"); return;
+            }
+            const auto signal = m_D3D12FenceValueCounter + 1;
+            if (!CheckUIOperation("QueueSubmit", [&] {
+                ID3D12CommandList* lists[] = {m_D3D12CommandList};
+                d3d12Queue->ExecuteCommandLists(1, lists);
+                const auto removed = d3d12Device->GetDeviceRemovedReason();
+                return FAILED(removed) ? removed : d3d12Queue->Signal(m_D3D12Fence, signal);
+            })) return;
+            m_D3D12FenceValueCounter = signal;
+            m_D3D12FenceValues[backBufferIdx] = signal;
+            if (!rhiDevice.WaitIdle()) return;
+            if (!CheckUIOperation("QueuePresent", [&] { return m_D3D12SwapChain->Present(1, 0); })) return;
         }
 #endif
 #if defined(AXLE_HAS_VULKAN)
@@ -904,17 +1000,18 @@ namespace Axle {
                 int fbW = 0, fbH = 0;
                 glfwGetFramebufferSize(m_Window, &fbW, &fbH);
                 if (fbW > 0 && fbH > 0 && (m_VulkanSwapChainRebuild || m_VulkanWidth != static_cast<uint32_t>(fbW) || m_VulkanHeight != static_cast<uint32_t>(fbH))) {
-                    if (s_VkFuncs.vkDeviceWaitIdle) {
-                        s_VkFuncs.vkDeviceWaitIdle(vkDevice);
-                    }
+                    if (!rhiDevice.WaitIdle()) return;
                     m_VulkanWidth = static_cast<uint32_t>(fbW);
                     m_VulkanHeight = static_cast<uint32_t>(fbH);
-                    ImGui_ImplVulkan_SetMinImageCount(m_VulkanMinImageCount);
-                    ImGui_ImplVulkanH_CreateOrResizeWindow(
-                        vkInstance, vkPhysDevice, vkDevice, wd, queueFamily, nullptr,
-                        static_cast<int>(m_VulkanWidth), static_cast<int>(m_VulkanHeight),
-                        m_VulkanMinImageCount, 0
-                    );
+                    DestroyWindowVK(vkDevice, *wd);
+                    try {
+                        CreateWindowVK(vkPhysDevice, vkDevice, *wd, queueFamily,
+                            static_cast<int>(m_VulkanWidth), static_cast<int>(m_VulkanHeight), m_VulkanMinImageCount);
+                        rhiDevice.SurfaceRebuilt();
+                    } catch (...) {
+                        rhiDevice.ObserveResult(nri::Result::FAILURE, "QueuePresent", "ImGui surface rebuild");
+                        return;
+                    }
                     wd->FrameIndex = 0;
                     m_VulkanSwapChainRebuild = false;
                 }
@@ -924,21 +1021,24 @@ namespace Axle {
                 VkSemaphore image_acquired_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].ImageAcquiredSemaphore;
                 VkSemaphore render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
 
-                VkResult err = s_VkFuncs.vkAcquireNextImageKHR(vkDevice, wd->Swapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE, &wd->FrameIndex);
-                if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR) {
-                    m_VulkanSwapChainRebuild = true;
-                    if (err == VK_ERROR_OUT_OF_DATE_KHR) return;
+                VkResult err = VK_SUCCESS;
+                if (!CheckUIOperation("AcquireNextTexture", [&] {
+                    err = s_VkFuncs.vkAcquireNextImageKHR(vkDevice, wd->Swapchain, 2000000000ull, image_acquired_semaphore, VK_NULL_HANDLE, &wd->FrameIndex);
+                    return err;
+                })) {
+                    m_VulkanSwapChainRebuild = rhiDevice.GetState() == RHI::RHIDeviceState::SurfaceRebuildRequired;
+                    return;
                 }
-
+                if (err == VK_SUBOPTIMAL_KHR) m_VulkanSwapChainRebuild = true;
+                if (wd->FrameIndex >= wd->ImageCount) { rhiDevice.ObserveResult(nri::Result::FAILURE, "QueuePresent", "invalid surface index"); return; }
                 ImGui_ImplVulkanH_Frame* fd = &wd->Frames[wd->FrameIndex];
-                s_VkFuncs.vkWaitForFences(vkDevice, 1, &fd->Fence, VK_TRUE, UINT64_MAX);
-                s_VkFuncs.vkResetFences(vkDevice, 1, &fd->Fence);
-
-                s_VkFuncs.vkResetCommandPool(vkDevice, fd->CommandPool, 0);
+                if (!CheckUIOperation("WaitFence", [&] { return s_VkFuncs.vkWaitForFences(vkDevice, 1, &fd->Fence, VK_TRUE, 2000000000ull); }) ||
+                    !CheckUIOperation("ResetFence", [&] { return s_VkFuncs.vkResetFences(vkDevice, 1, &fd->Fence); }) ||
+                    !CheckUIOperation("ResetCommandPool", [&] { return s_VkFuncs.vkResetCommandPool(vkDevice, fd->CommandPool, 0); })) return;
                 VkCommandBufferBeginInfo beginInfo = {};
                 beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
                 beginInfo.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-                s_VkFuncs.vkBeginCommandBuffer(fd->CommandBuffer, &beginInfo);
+                if (!CheckUIOperation("BeginCommandBuffer", [&] { return s_VkFuncs.vkBeginCommandBuffer(fd->CommandBuffer, &beginInfo); })) return;
 
                 VkRenderPassBeginInfo rpInfo = {};
                 rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -954,7 +1054,7 @@ namespace Axle {
                 ImGui_ImplVulkan_RenderDrawData(draw_data, fd->CommandBuffer);
 
                 s_VkFuncs.vkCmdEndRenderPass(fd->CommandBuffer);
-                s_VkFuncs.vkEndCommandBuffer(fd->CommandBuffer);
+                if (!CheckUIOperation("EndCommandBuffer", [&] { return s_VkFuncs.vkEndCommandBuffer(fd->CommandBuffer); })) return;
 
                 VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
                 VkSubmitInfo submitInfo = {};
@@ -967,7 +1067,8 @@ namespace Axle {
                 submitInfo.signalSemaphoreCount = 1;
                 submitInfo.pSignalSemaphores = &render_complete_semaphore;
 
-                s_VkFuncs.vkQueueSubmit(vkQueue, 1, &submitInfo, fd->Fence);
+                if (!CheckUIOperation("QueueSubmit", [&] { return s_VkFuncs.vkQueueSubmit(vkQueue, 1, &submitInfo, fd->Fence); })) return;
+                if (!rhiDevice.WaitIdle()) return;
 
                 if (!m_VulkanSwapChainRebuild) {
                     VkPresentInfoKHR presentInfo = {};
@@ -978,7 +1079,10 @@ namespace Axle {
                     presentInfo.pSwapchains = &wd->Swapchain;
                     presentInfo.pImageIndices = &wd->FrameIndex;
 
-                    err = s_VkFuncs.vkQueuePresentKHR(vkQueue, &presentInfo);
+                    if (!CheckUIOperation("QueuePresent", [&] { err = s_VkFuncs.vkQueuePresentKHR(vkQueue, &presentInfo); return err; })) {
+                        m_VulkanSwapChainRebuild = rhiDevice.GetState() == RHI::RHIDeviceState::SurfaceRebuildRequired;
+                        return;
+                    }
                     if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR) {
                         m_VulkanSwapChainRebuild = true;
                     }
@@ -999,7 +1103,7 @@ namespace Axle {
         // A wait before UI submission would not protect draw lists still being built.
         // Retire after submission, and only synchronize frames that actually retire resources.
         auto& device = RHI::RHIDevice::Get();
-        if (m_BackendType != ImGuiBackendType::OpenGL && device.IsNativeReady()) device.WaitIdle();
+        if (m_BackendType != ImGuiBackendType::OpenGL && device.IsNativeReady() && !device.WaitIdle() && device.GetState() != RHI::RHIDeviceState::Lost) return;
         auto releases = std::move(m_DeferredReleases);
         m_DeferredReleases.clear();
         for (auto& release : releases) release();
@@ -1083,7 +1187,12 @@ namespace Axle {
 #if defined(AXLE_HAS_VULKAN)
         if (m_BackendType == ImGuiBackendType::Vulkan && gpuHandlePtr != 0) {
             auto descSet = reinterpret_cast<VkDescriptorSet>(gpuHandlePtr);
-            ImGui_ImplVulkan_RemoveTexture(descSet);
+            auto* context = ImGui::GetCurrentContext();
+            RHI::RHIDevice::Get().ReleaseNative([context, descSet] {
+                auto* previous = ImGui::GetCurrentContext(); ImGui::SetCurrentContext(context);
+                ImGui_ImplVulkan_RemoveTexture(descSet);
+                ImGui::SetCurrentContext(previous);
+            });
             return;
         }
 #endif

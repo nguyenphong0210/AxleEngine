@@ -2,6 +2,7 @@
 #include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHIStreamer.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 
 namespace Axle::RHI {
 
@@ -14,11 +15,15 @@ namespace Axle::RHI {
         , m_CommandAllocator(other.m_CommandAllocator)
         , m_OwnsAllocator(other.m_OwnsAllocator)
         , m_IsRecording(other.m_IsRecording)
+        , m_IsExecutable(other.m_IsExecutable)
+        , m_NeedsRecreation(other.m_NeedsRecreation)
     {
         other.m_CommandBuffer = nullptr;
         other.m_CommandAllocator = nullptr;
         other.m_OwnsAllocator = false;
         other.m_IsRecording = false;
+        other.m_IsExecutable = false;
+        other.m_NeedsRecreation = false;
     }
 
     RHICommandBuffer& RHICommandBuffer::operator=(RHICommandBuffer&& other) noexcept {
@@ -28,105 +33,70 @@ namespace Axle::RHI {
             m_CommandAllocator = other.m_CommandAllocator;
             m_OwnsAllocator = other.m_OwnsAllocator;
             m_IsRecording = other.m_IsRecording;
+            m_IsExecutable = other.m_IsExecutable;
+            m_NeedsRecreation = other.m_NeedsRecreation;
 
             other.m_CommandBuffer = nullptr;
             other.m_CommandAllocator = nullptr;
             other.m_OwnsAllocator = false;
             other.m_IsRecording = false;
+            other.m_IsExecutable = false;
+            other.m_NeedsRecreation = false;
         }
         return *this;
     }
 
     bool RHICommandBuffer::Init(nri::CommandAllocator* allocator) {
-        Shutdown();
-
-        if (!allocator) {
-            AXLE_CORE_ERROR("RHICommandBuffer::Init: CommandAllocator is null!");
-            return false;
-        }
-
-        auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) {
-            AXLE_CORE_ERROR("RHICommandBuffer::Init: RHIDevice is not initialized!");
-            return false;
-        }
-
-        const auto& core = rhiDevice.GetNRICore();
-        m_CommandAllocator = allocator;
-        m_OwnsAllocator = false;
-
-        nri::Result res = core.CreateCommandBuffer(*m_CommandAllocator, m_CommandBuffer);
-        if (res != nri::Result::SUCCESS || !m_CommandBuffer) {
-            AXLE_CORE_ERROR("RHICommandBuffer::Init: CreateCommandBuffer failed with code {0}!", static_cast<uint32_t>(res));
-            m_CommandAllocator = nullptr;
-            return false;
-        }
-
+        auto& device = RHIDevice::Get();
+        if (!allocator || !device.CanCreateResources()) return false;
+        RHICommandBuffer candidate;
+        candidate.m_CommandAllocator = allocator;
+        const auto result = ScopedRHIFault::Invoke("CreateCommandBuffer", [&] { return device.GetNRICore().CreateCommandBuffer(*allocator, candidate.m_CommandBuffer); });
+        if (result != nri::Result::SUCCESS || !candidate.m_CommandBuffer) return false;
+        *this = std::move(candidate);
         return true;
     }
 
     bool RHICommandBuffer::Init(nri::Queue* queue) {
-        Shutdown();
-
-        auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) {
-            AXLE_CORE_ERROR("RHICommandBuffer::Init: RHIDevice is not initialized!");
-            return false;
-        }
-
-        const auto& core = rhiDevice.GetNRICore();
-        if (!queue) {
-            queue = rhiDevice.GetGraphicsQueue();
-        }
-        if (!queue) {
-            AXLE_CORE_ERROR("RHICommandBuffer::Init: No valid graphics queue available!");
-            return false;
-        }
-
-        nri::Result res = core.CreateCommandAllocator(*queue, m_CommandAllocator);
-        if (res != nri::Result::SUCCESS || !m_CommandAllocator) {
-            AXLE_CORE_ERROR("RHICommandBuffer::Init: CreateCommandAllocator failed with code {0}!", static_cast<uint32_t>(res));
-            return false;
-        }
-        m_OwnsAllocator = true;
-
-        res = core.CreateCommandBuffer(*m_CommandAllocator, m_CommandBuffer);
-        if (res != nri::Result::SUCCESS || !m_CommandBuffer) {
-            AXLE_CORE_ERROR("RHICommandBuffer::Init: CreateCommandBuffer failed with code {0}!", static_cast<uint32_t>(res));
-            core.DestroyCommandAllocator(m_CommandAllocator);
-            m_CommandAllocator = nullptr;
-            m_OwnsAllocator = false;
-            return false;
-        }
-
+        auto& device = RHIDevice::Get();
+        if (!device.CanCreateResources()) return false;
+        if (!queue) queue = device.GetGraphicsQueue();
+        RHICommandBuffer candidate;
+        const auto& core = device.GetNRICore();
+        candidate.m_OwnsAllocator = true;
+        auto result = ScopedRHIFault::Invoke("CreateCommandAllocator", [&] { return core.CreateCommandAllocator(*queue, candidate.m_CommandAllocator); });
+        if (result != nri::Result::SUCCESS || !candidate.m_CommandAllocator) return false;
+        result = ScopedRHIFault::Invoke("CreateCommandBuffer", [&] { return core.CreateCommandBuffer(*candidate.m_CommandAllocator, candidate.m_CommandBuffer); });
+        if (result != nri::Result::SUCCESS || !candidate.m_CommandBuffer) return false;
+        *this = std::move(candidate);
         return true;
     }
 
     void RHICommandBuffer::Shutdown() {
-        auto& rhiDevice = RHIDevice::Get();
-        if (rhiDevice.IsNativeReady()) {
-            const auto& core = rhiDevice.GetNRICore();
-            if (m_CommandBuffer && core.DestroyCommandBuffer) {
-                core.DestroyCommandBuffer(m_CommandBuffer);
-            }
-            if (m_OwnsAllocator && m_CommandAllocator && core.DestroyCommandAllocator) {
-                core.DestroyCommandAllocator(m_CommandAllocator);
-            }
+        auto& device = RHIDevice::Get();
+        if (device.IsNativeReady()) {
+            const auto core = device.GetNRICore();
+            auto commands = m_CommandBuffer;
+            auto allocator = m_OwnsAllocator ? m_CommandAllocator : nullptr;
+            device.ReleaseNative([core, commands, allocator] {
+                if (commands) core.DestroyCommandBuffer(commands);
+                if (allocator) core.DestroyCommandAllocator(allocator);
+            });
         }
-        m_CommandBuffer = nullptr;
-        m_CommandAllocator = nullptr;
-        m_OwnsAllocator = false;
-        m_IsRecording = false;
+        m_CommandBuffer = nullptr; m_CommandAllocator = nullptr;
+        m_OwnsAllocator = m_IsRecording = m_IsExecutable = m_NeedsRecreation = false;
     }
 
     bool RHICommandBuffer::Begin(nri::DescriptorPool* descriptorPool) {
-        if (!m_CommandBuffer) return false;
+        if (!m_CommandBuffer || m_IsRecording || !RHIDevice::Get().CanSubmit()) return false;
+        m_IsExecutable = false;
 
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
 
-        nri::Result res = core.BeginCommandBuffer(*m_CommandBuffer, descriptorPool);
+        nri::Result res = ScopedRHIFault::Invoke("BeginCommandBuffer", [&] { return core.BeginCommandBuffer(*m_CommandBuffer, descriptorPool); });
         m_IsRecording = (res == nri::Result::SUCCESS);
+        m_NeedsRecreation = true;
         if (!m_IsRecording) {
             AXLE_CORE_ERROR("RHICommandBuffer::Begin failed with code {0}!", static_cast<uint32_t>(res));
         }
@@ -139,8 +109,10 @@ namespace Axle::RHI {
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
 
-        nri::Result res = core.EndCommandBuffer(*m_CommandBuffer);
+        nri::Result res = ScopedRHIFault::Invoke("EndCommandBuffer", [&] { return core.EndCommandBuffer(*m_CommandBuffer); });
         m_IsRecording = false;
+        m_IsExecutable = res == nri::Result::SUCCESS;
+        m_NeedsRecreation = !m_IsExecutable;
         if (res != nri::Result::SUCCESS) {
             AXLE_CORE_ERROR("RHICommandBuffer::End failed with code {0}!", static_cast<uint32_t>(res));
             return false;
@@ -443,45 +415,9 @@ namespace Axle::RHI {
     }
 
     bool RHICommandBuffer::Submit(nri::Queue* queue, nri::Fence* waitFence, uint64_t waitValue, nri::Fence* signalFence, uint64_t signalValue) {
-        if (!m_CommandBuffer || m_IsRecording) return false;
-
-        auto& rhiDevice = RHIDevice::Get();
-        const auto& core = rhiDevice.GetNRICore();
-        if (!queue) {
-            queue = rhiDevice.GetGraphicsQueue();
-        }
-        if (!queue || !core.QueueSubmit) return false;
-
-        nri::FenceSubmitDesc waitDesc = {};
-        if (waitFence) {
-            waitDesc.fence = waitFence;
-            waitDesc.value = waitValue;
-            waitDesc.stages = nri::StageBits::ALL;
-        }
-
-        nri::FenceSubmitDesc signalDesc = {};
-        if (signalFence) {
-            signalDesc.fence = signalFence;
-            signalDesc.value = signalValue;
-            signalDesc.stages = nri::StageBits::ALL;
-        }
-
-        const nri::CommandBuffer* const cbPtr = m_CommandBuffer;
-
-        nri::QueueSubmitDesc submitDesc = {};
-        submitDesc.commandBuffers = &cbPtr;
-        submitDesc.commandBufferNum = 1;
-        if (waitFence) {
-            submitDesc.waitFences = &waitDesc;
-            submitDesc.waitFenceNum = 1;
-        }
-        if (signalFence) {
-            submitDesc.signalFences = &signalDesc;
-            submitDesc.signalFenceNum = 1;
-        }
-
-        nri::Result res = core.QueueSubmit(*queue, submitDesc);
-        return (res == nri::Result::SUCCESS);
+        if (!m_CommandBuffer || m_IsRecording || !m_IsExecutable) return false;
+        const nri::CommandBuffer* commands = m_CommandBuffer;
+        return SubmitBatch(&commands, 1, queue, waitFence, waitValue, signalFence, signalValue);
     }
 
     bool RHICommandBuffer::SubmitBatch(const std::vector<RHICommandBuffer*>& commandBuffers,
@@ -493,9 +429,8 @@ namespace Axle::RHI {
         std::vector<const nri::CommandBuffer*> nativeCmdBuffers;
         nativeCmdBuffers.reserve(commandBuffers.size());
         for (const auto* cb : commandBuffers) {
-            if (cb && cb->IsValid()) {
-                nativeCmdBuffers.push_back(cb->GetNative());
-            }
+            if (!cb || !cb->IsValid() || cb->IsRecording() || !cb->IsExecutable()) return false;
+            nativeCmdBuffers.push_back(cb->GetNative());
         }
         if (nativeCmdBuffers.empty()) return true;
 
@@ -507,7 +442,10 @@ namespace Axle::RHI {
                                        nri::Queue* queue,
                                        nri::Fence* waitFence, uint64_t waitValue,
                                        nri::Fence* signalFence, uint64_t signalValue) {
-        if (!commandBuffers || count == 0) return true;
+        if (!count) return true;
+        if (!commandBuffers) return false;
+        for (uint32_t i = 0; i < count; ++i) if (!commandBuffers[i]) return false;
+        if (!RHIDevice::Get().CanSubmit()) return false;
 
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
@@ -542,20 +480,29 @@ namespace Axle::RHI {
             submitDesc.signalFenceNum = 1;
         }
 
-        nri::Result res = core.QueueSubmit(*queue, submitDesc);
+        nri::Result res = ScopedRHIFault::Invoke("QueueSubmit", [&] { return core.QueueSubmit(*queue, submitDesc); });
         return (res == nri::Result::SUCCESS);
     }
 
     bool RHICommandBuffer::Reset() {
         if (!m_CommandAllocator) return false;
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) return false;
+        if (!rhiDevice.CanSubmit()) return false;
 
         const auto& core = rhiDevice.GetNRICore();
+        if (!rhiDevice.WaitIdle()) return false;
+        if (m_NeedsRecreation) {
+            if (m_CommandBuffer) core.DestroyCommandBuffer(m_CommandBuffer);
+            m_CommandBuffer = nullptr;
+            const auto result = ScopedRHIFault::Invoke("CreateCommandBuffer", [&] { return core.CreateCommandBuffer(*m_CommandAllocator, m_CommandBuffer); });
+            if (result != nri::Result::SUCCESS || !m_CommandBuffer) return false;
+            m_NeedsRecreation = false;
+        }
         if (m_OwnsAllocator && core.ResetCommandAllocator) {
             core.ResetCommandAllocator(*m_CommandAllocator);
         }
         m_IsRecording = false;
+        m_IsExecutable = false;
         return true;
     }
 

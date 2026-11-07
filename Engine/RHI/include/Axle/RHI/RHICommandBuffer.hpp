@@ -123,6 +123,7 @@ namespace Axle::RHI {
 
         bool IsValid() const { return m_CommandBuffer != nullptr; }
         bool IsRecording() const { return m_IsRecording; }
+        bool IsExecutable() const { return m_IsExecutable; }
 
         nri::CommandBuffer* GetNative() const { return m_CommandBuffer; }
         operator nri::CommandBuffer*() const { return m_CommandBuffer; }
@@ -133,6 +134,8 @@ namespace Axle::RHI {
         nri::CommandAllocator* m_CommandAllocator = nullptr;
         bool m_OwnsAllocator = false;
         bool m_IsRecording = false;
+        bool m_IsExecutable = false;
+        bool m_NeedsRecreation = false;
     };
 
 }

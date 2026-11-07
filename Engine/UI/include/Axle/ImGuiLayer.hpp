@@ -4,6 +4,7 @@
 #include <Axle/Window.hpp>
 #include <vector>
 #include <functional>
+#include <memory>
 
 struct GLFWwindow;
 struct IDXGISwapChain3;
@@ -16,6 +17,7 @@ struct ImFont;
 struct ImGui_ImplVulkanH_Window;
 
 namespace Axle {
+    struct ImGuiDescriptorCallbackState;
 
     namespace RHI {
         class RHICommandBuffer;
@@ -46,6 +48,7 @@ namespace Axle {
 
         void Begin() override;
         void End() override;
+        bool IsOperational() const override;
 
         // Render recorded ImGui draw data into a command buffer (for D3D12/Vulkan RHI backends)
         void Render(RHI::RHICommandBuffer* cmdBuffer);
@@ -100,6 +103,7 @@ namespace Axle {
         bool m_ContextCreated = false;
         GLFWwindow* m_Window = nullptr;
         std::vector<std::function<void()>> m_DeferredReleases;
+        std::shared_ptr<ImGuiDescriptorCallbackState> m_DescriptorCallbacks;
 
         // D3D12 Descriptor Heap
         static constexpr uint32_t D3D12DescriptorCapacity = 1024;

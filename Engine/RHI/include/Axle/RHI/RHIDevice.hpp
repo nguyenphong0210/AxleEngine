@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/RHI/RHICommon.hpp>
+#include <Axle/RHI/RHIStatus.hpp>
 
 #include <NRI.h>
 #include <Extensions/NRIDeviceCreation.h>
@@ -10,6 +11,7 @@
 
 #include <memory>
 #include <vector>
+#include <functional>
 
 namespace Axle::RHI {
 
@@ -36,10 +38,18 @@ namespace Axle::RHI {
         bool Init(const RHIDeviceDesc& desc = RHIDeviceDesc());
 
         // Graceful shutdown
-        void Shutdown();
+        bool Shutdown();
 
         // Wait for all GPU queue operations to complete
-        void WaitIdle();
+        bool WaitIdle(uint32_t timeoutMilliseconds = 2000);
+        bool WaitForFence(nri::Fence* fence, uint64_t value, uint32_t timeoutMilliseconds = 2000);
+        bool ObserveResult(nri::Result result, std::string_view operation, std::string_view resource = {}, bool timedOut = false);
+        RHIDeviceState GetState() const { return m_State; }
+        const std::optional<RHIGPUError>& GetFirstError() const { return m_FirstError; }
+        bool CanSubmit() const { return IsNativeReady() && m_State == RHIDeviceState::Ready; }
+        bool CanCreateResources() const { return IsNativeReady() && (m_State == RHIDeviceState::Ready || m_State == RHIDeviceState::SurfaceRebuildRequired); }
+        void SurfaceRebuilt() { if (m_State == RHIDeviceState::SurfaceRebuildRequired) m_State = RHIDeviceState::Ready; }
+        void ReleaseNative(std::function<void()> release);
 
         bool IsInitialized() const { return m_Initialized; }
         bool IsBackendSelected() const { return m_Initialized; }
@@ -77,6 +87,12 @@ namespace Axle::RHI {
     private:
         bool m_Initialized = false;
         bool m_ContextReady = false;
+        RHIDeviceState m_State = RHIDeviceState::Uninitialized;
+        std::optional<RHIGPUError> m_FirstError;
+        nri::Fence* m_IdleFence = nullptr;
+        uint64_t m_IdleValue = 0;
+        bool m_UnresolvedWork = false;
+        std::vector<std::function<void()>> m_DeferredCleanup;
         RHIDeviceDesc m_Desc;
         RHIDeviceCapabilities m_Capabilities;
         std::vector<RHIAdapterInfo> m_Adapters;

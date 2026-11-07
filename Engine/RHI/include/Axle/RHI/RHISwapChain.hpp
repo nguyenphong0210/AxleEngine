@@ -89,6 +89,7 @@ namespace Axle::RHI {
         bool m_IsLegacyOpenGL = false;
         bool m_NeedsResize = false;
         bool m_IsMinimized = false;
+        bool m_Acquired = false;
 
         const RHISurface* m_Surface = nullptr;
         RHISwapChainDesc m_Desc;

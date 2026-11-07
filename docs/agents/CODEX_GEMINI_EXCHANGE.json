@@ -26,12 +26,13 @@
       "P41-11"
     ],
     "current_phase": "OPT-04",
-    "current_package": "P41-03",
+    "current_package": "P41-04",
     "completed_packages": [
       "P41-01",
-      "P41-02"
+      "P41-02",
+      "P41-03"
     ],
-    "implementation_status": "P41-01/02 implemented and self-verified Debug/Release; one final consolidated review pending after P41-11",
+    "implementation_status": "P41-01..03 implemented and self-verified Debug/Release; final consolidated review remains pending",
     "independent_review_status": "pending_single_final_separate_context_review",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
@@ -86,7 +87,7 @@
       "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
     "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Implement P41-03, continue P41-04..11 in dependency order, then consolidated review.",
+    "next_action": "Implement canonical primitive identity P41-04, then P41-05..11 and one final consolidated review.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -1247,6 +1248,17 @@
       "base_commit": "aba9a3c",
       "timestamp_utc": "2026-11-07T03:48:18.086247+00:00",
       "body": "P41-02 implemented and self-verified from aba9a3c. Final Debug/Release builds exit 0; per configuration: resource modes 3/3, native window/view resource modes 2/2, P41-01 foundation regressions 5/5, Editor startup/rollback 7/7 expected exits, focused rendering/material/VFX CTest 6/6, physical D3D12/Vulkan VFX GPU regressions 2/2. Actual old-generation pixels/bytes and drawable mesh survive injected creation/upload failures. See docs/reviews/OPT_04_CODEX_EXECUTION.md and p41-02-final-<config>-results.json under ignored agent-runs. API-validation prerequisites remain unavailable; embedded NRI validation is exercised on both physical APIs. One final consolidated review remains pending under latest user steering. Next source tranche: P41-03 device errors, command submission, swapchain/UI bounded failure paths and production renderer propagation. No push."
+    },
+    {
+      "id": "CG-20261107T041120552176Z-CODEX-2fe7db",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T034818086247Z-CODEX-eaa3e7",
+      "base_commit": "0e8673e",
+      "timestamp_utc": "2026-11-07T04:11:20.552176+00:00",
+      "body": "P41-03 implemented/self-verified from 0e8673e. Debug/Release builds exit 0. Per configuration: error/native surface modes 5/5, destroyed UI owner with unresolved drain 2/2, resource regressions 3/3, production view/MSAA/mesh regressions 2/2, foundation 5/5, Editor startup/rollback 7/7 expected exits, focused CTest 5/5 and physical VFX GPU regressions 2/2. Exact current-source logs/results are p41-03-final-<config>-results.json under ignored agent-runs; phase report records failed attempts separately. Architecture AF-04 PASS (378 files/18 CMake files), pinned NRI clean. API validation remains unavailable/NOT RUN; embedded NRI validation runs on both physical APIs. No intermediate review or phase acceptance claimed. Next sole-writer files: canonical builtin definitions/resolver, SceneHierarchyPanel creation, Scene/assembly serialization, GL/native mesh consumers and primitive regressions. Continue P41-04..11; one final consolidated review under latest user steering. No push."
     }
   ],
   "deferred_tasks": [

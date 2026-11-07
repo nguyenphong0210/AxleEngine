@@ -18,7 +18,7 @@ namespace Axle::RHI {
         if (m_Initialized) return true;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) {
+        if (!rhiDevice.CanCreateResources()) {
             AXLE_CORE_ERROR("RHIBindlessRegistry::Init failed: RHIDevice is not initialized!");
             return false;
         }

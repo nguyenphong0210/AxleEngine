@@ -17,6 +17,42 @@ using namespace Axle;
 using namespace Axle::RHI;
 using Axle::RenderTests::ReadTexture;
 
+static bool UIErrors(RHIType backend) {
+    auto& device = RHIDevice::Get();
+    WindowProps props; props.Title = "OPT-04 UI failure ownership"; props.Width = props.Height = 96; props.Maximized = false;
+    props.GraphicsBackend = backend == RHIType::Vulkan ? GraphicsAPI::Vulkan : GraphicsAPI::Direct3D12;
+    Window window(props);
+    auto ui = std::make_unique<ImGuiLayer>(backend == RHIType::Vulkan ? ImGuiBackendType::Vulkan : ImGuiBackendType::Direct3D12);
+    ui->Init(window.GetNativeWindow());
+    ui->Begin();
+    ImGui::Begin("Failure ownership fixture"); ImGui::TextUnformatted("Native font and vertex storage"); ImGui::End();
+    ui->End();
+    bool reached = false;
+    {
+        ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "QueueSubmit") { reached = true; return nri::Result::FAILURE; }
+            return {};
+        });
+        ui->Begin();
+        ImGui::Begin("Failure ownership fixture"); ImGui::TextUnformatted("Pending submission"); ImGui::End();
+        ui->End();
+    }
+    RENDER_CHECK(reached && !ui->IsOperational() && !device.CanSubmit(), "native UI submit rejection stops product admission");
+    unsigned retired = 0;
+    {
+        ScopedRHIFault fault([](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "QueueDrain") return nri::Result::FAILURE;
+            return {};
+        });
+        ui->Shutdown();
+        ui.reset();
+        device.ReleaseNative([&] { ++retired; });
+        RENDER_CHECK(retired == 0 && !ImGui::GetCurrentContext(), "destroyed UI layer retains its independent native context and callback owners");
+    }
+    RENDER_CHECK(device.WaitIdle() && retired == 1, "checked retry retires native UI after the layer has already been destroyed");
+    return true;
+}
+
 static bool Run(RHIType backend) {
     WindowProps props;
     props.Title = "OPT-04 resource transaction probe"; props.Width = props.Height = 128; props.Maximized = false;
@@ -114,6 +150,7 @@ static bool Run(RHIType backend) {
 }
 
 int main(int argc, char** argv) {
+    Axle::RenderTests::ConfigureFailureReporting();
     Log::Init();
     JobSystem::Init(2);
     RHIDeviceDesc desc;
@@ -122,7 +159,7 @@ int main(int argc, char** argv) {
     desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(desc.PreferredBackend);
     auto& device = RHIDevice::Get();
     bool ok = device.Init(desc) && device.GetBackend() == desc.PreferredBackend && !device.IsSoftwareAdapter();
-    try { if (ok) ok = Run(desc.PreferredBackend); }
+    try { if (ok) ok = argc > 2 && std::string(argv[2]) == "errors" ? UIErrors(desc.PreferredBackend) : Run(desc.PreferredBackend); }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; ok = false; }
     RHIMeshRegistry::Get().Shutdown();
     device.Shutdown();

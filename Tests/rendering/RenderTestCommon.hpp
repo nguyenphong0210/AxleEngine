@@ -10,6 +10,14 @@
 #include <cstdlib>
 
 namespace Axle::RenderTests {
+    inline void ConfigureFailureReporting() {
+#if defined(_MSC_VER)
+        // Keep assertions active and route failures to the test log, avoiding
+        // modal CRT dialogs that would hide a failure behind a test timeout.
+        _set_error_mode(_OUT_TO_STDERR);
+        _set_abort_behavior(0, _CALL_REPORTFAULT);
+#endif
+    }
 
     inline bool Check(bool condition, const char* description, const char* file, int line) {
         if (!condition) {

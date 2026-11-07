@@ -53,7 +53,7 @@ namespace Axle::RHI {
 
     bool RHISampler::Init(const RHISamplerDesc& desc) {
         auto& device = RHIDevice::Get();
-        if (!device.IsNativeReady() || !std::isfinite(desc.MipMin) || !std::isfinite(desc.MipMax) ||
+        if (!device.CanCreateResources() || !std::isfinite(desc.MipMin) || !std::isfinite(desc.MipMax) ||
             !std::isfinite(desc.MipBias) || desc.MipMin < 0 || desc.MipMax < desc.MipMin ||
             desc.Anisotropy < 1 || desc.Anisotropy > 16 ||
             desc.MinFilter > RHIFilter::Linear || desc.MagFilter > RHIFilter::Linear || desc.MipFilter > RHIFilter::Linear ||
@@ -78,7 +78,8 @@ namespace Axle::RHI {
         if (m_Sampler) {
             auto& rhiDevice = RHIDevice::Get();
             if (rhiDevice.IsNativeReady()) {
-                rhiDevice.GetNRICore().DestroyDescriptor(m_Sampler);
+                auto core = rhiDevice.GetNRICore(); auto sampler = m_Sampler;
+                rhiDevice.ReleaseNative([core, sampler] { core.DestroyDescriptor(sampler); });
             }
             m_Sampler = nullptr;
         }

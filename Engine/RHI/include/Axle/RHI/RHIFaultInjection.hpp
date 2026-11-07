@@ -1,5 +1,6 @@
 #pragma once
 #include <NRI.h>
+#include <Axle/RHI/RHIStatus.hpp>
 #include <functional>
 #include <optional>
 #include <string_view>
@@ -16,11 +17,21 @@ namespace Axle::RHI {
         ScopedRHIFault(const ScopedRHIFault&) = delete;
         ScopedRHIFault& operator=(const ScopedRHIFault&) = delete;
         template<class F> static nri::Result Invoke(std::string_view operation, F&& nativeCall) {
-            if (s_Hook) {
-                if (auto failure = s_Hook(operation); failure && *failure != nri::Result::SUCCESS)
-                    return *failure;
+            nri::Result result = nri::Result::SUCCESS;
+            bool injected = false;
+            if (!IsRHIOperationAllowed(operation)) {
+                result = nri::Result::FAILURE;
+                injected = true;
             }
-            return std::forward<F>(nativeCall)();
+            if (s_Hook) {
+                if (auto failure = s_Hook(operation); failure && *failure != nri::Result::SUCCESS) {
+                    result = *failure;
+                    injected = true;
+                }
+            }
+            if (!injected) result = std::forward<F>(nativeCall)();
+            ReportRHIFailure(result, operation, ScopedRHIOperation::Resource());
+            return result;
         }
     private:
         inline static thread_local Hook s_Hook;

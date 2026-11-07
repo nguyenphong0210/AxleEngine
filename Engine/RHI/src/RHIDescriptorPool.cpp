@@ -35,7 +35,7 @@ namespace Axle::RHI {
         RHIDescriptorPool candidate;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) {
+        if (!rhiDevice.CanCreateResources()) {
             AXLE_CORE_ERROR("RHIDescriptorPool::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -75,7 +75,8 @@ namespace Axle::RHI {
         if (m_Pool) {
             auto& rhiDevice = RHIDevice::Get();
             if (rhiDevice.IsNativeReady()) {
-                rhiDevice.GetNRICore().DestroyDescriptorPool(m_Pool);
+                auto core = rhiDevice.GetNRICore(); auto pool = m_Pool;
+                rhiDevice.ReleaseNative([core, pool] { core.DestroyDescriptorPool(pool); });
             }
             m_Pool = nullptr;
         }

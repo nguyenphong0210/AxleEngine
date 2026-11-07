@@ -1062,7 +1062,7 @@ namespace Axle {
                                        const SceneRenderSettings& settings,
                                        PhysicsScene* physicsScene)
     {
-        if (!m_Initialized || !colorTarget || !colorRTV || width == 0 || height == 0) return;
+        if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
 
         if (scene) {
             scene->UpdateWorldTransforms();
@@ -1886,10 +1886,9 @@ namespace Axle {
         }
 
         // 8. End and Submit to Queue
-        m_CommandBuffer.End();
+        if (!m_CommandBuffer.End()) return;
         auto* queue = m_Device->GetGraphicsQueue();
-        m_CommandBuffer.Submit(queue);
-        m_Device->GetNRICore().QueueWaitIdle(queue);
+        if (!m_CommandBuffer.Submit(queue) || !m_Device->WaitIdle()) return;
 
         // Reset command allocator to recycle its memory pages for next frame
         m_CommandBuffer.Reset();

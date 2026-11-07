@@ -38,7 +38,7 @@ namespace Axle::RHI {
     bool RHIStreamer::Init(RHIDevice& device, const RHIStreamerDesc& desc) {
         Shutdown();
 
-        if (!device.IsNativeReady()) {
+        if (!device.CanCreateResources()) {
             AXLE_CORE_ERROR("RHIStreamer::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -80,7 +80,8 @@ namespace Axle::RHI {
         if (m_Streamer && m_Device) {
             const auto& streamerInterface = m_Device->GetNRIStreamer();
             if (streamerInterface.DestroyStreamer) {
-                streamerInterface.DestroyStreamer(m_Streamer);
+                auto destroy = streamerInterface.DestroyStreamer; auto streamer = m_Streamer;
+                m_Device->ReleaseNative([destroy, streamer] { destroy(streamer); });
             }
         }
         m_Streamer = nullptr;

@@ -43,7 +43,7 @@ namespace Axle::RHI {
 
     bool RHIPipelineLayout::Init(const nri::PipelineLayoutDesc& desc) {
         auto& device = RHIDevice::Get();
-        if (!device.IsNativeReady()) return false;
+        if (!device.CanCreateResources()) return false;
         const auto& core = device.GetNRICore();
         const auto& limits = core.GetDeviceDesc(*device.GetNRIDevice()).pipelineLayout;
         if ((desc.rootConstantNum && !desc.rootConstants) || (desc.rootDescriptorNum && !desc.rootDescriptors) ||
@@ -82,7 +82,8 @@ namespace Axle::RHI {
         if (m_Layout) {
             auto& rhiDevice = RHIDevice::Get();
             if (rhiDevice.IsNativeReady()) {
-                rhiDevice.GetNRICore().DestroyPipelineLayout(m_Layout);
+                auto core = rhiDevice.GetNRICore(); auto layout = m_Layout;
+                rhiDevice.ReleaseNative([core, layout] { core.DestroyPipelineLayout(layout); });
             }
             m_Layout = nullptr;
         }
@@ -238,7 +239,8 @@ namespace Axle::RHI {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
             if (victim.Pipeline && rhiDevice.IsNativeReady()) {
-                nriCore.DestroyPipeline(victim.Pipeline);
+                auto core = nriCore; auto pipeline = victim.Pipeline;
+                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
             }
             m_LRUList.pop_back();
         }
@@ -254,7 +256,8 @@ namespace Axle::RHI {
 
         for (auto& entry : m_LRUList) {
             if (entry.Pipeline && rhiDevice.IsNativeReady()) {
-                nriCore.DestroyPipeline(entry.Pipeline);
+                auto core = nriCore; auto pipeline = entry.Pipeline;
+                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
             }
         }
         m_LRUList.clear();
@@ -262,6 +265,7 @@ namespace Axle::RHI {
     }
 
     nri::Pipeline* RHIPipelineCache::GetOrCreateGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
+        if (!RHIDevice::Get().CanCreateResources()) return nullptr;
         if (!desc.Layout || !desc.Layout->IsValid() || desc.Shaders.empty() || desc.Shaders.size() > UINT32_MAX ||
             desc.VertexInput.Attributes.size() > UINT8_MAX || desc.VertexInput.Streams.size() > UINT8_MAX ||
             desc.ColorAttachmentFormats.size() > 8 || desc.ColorAttachments.size() > 8 ||
@@ -283,7 +287,7 @@ namespace Axle::RHI {
         m_MissCount++;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) {
+        if (!rhiDevice.CanCreateResources()) {
             AXLE_CORE_ERROR("RHIPipelineCache::GetOrCreateGraphicsPipeline failed: RHIDevice is not initialized!");
             return nullptr;
         }
@@ -432,7 +436,10 @@ namespace Axle::RHI {
         nri::Pipeline* newPipeline = nullptr;
         nri::Result res = ScopedRHIFault::Invoke("CreateGraphicsPipeline", [&] { return nriCore.CreateGraphicsPipeline(*nativeDevice, pipelineDesc, newPipeline); });
         if (res != nri::Result::SUCCESS || !newPipeline) {
-            if (newPipeline) nriCore.DestroyPipeline(newPipeline);
+            if (newPipeline) {
+                auto core = nriCore; auto pipeline = newPipeline;
+                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
+            }
             AXLE_CORE_ERROR("RHIPipelineCache: CreateGraphicsPipeline failed with code {0}!", static_cast<uint32_t>(res));
             return nullptr;
         }
@@ -445,7 +452,8 @@ namespace Axle::RHI {
                 if (rhiDevice.IsNativeReady()) {
                     rhiDevice.WaitIdle();
                 }
-                nriCore.DestroyPipeline(victim.Pipeline);
+                auto core = nriCore; auto pipeline = victim.Pipeline;
+                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
             }
             m_LRUList.pop_back();
         }
@@ -465,6 +473,7 @@ namespace Axle::RHI {
     }
 
     nri::Pipeline* RHIPipelineCache::GetOrCreateComputePipeline(const RHIComputePipelineDesc& desc) {
+        if (!RHIDevice::Get().CanCreateResources()) return nullptr;
         if (!desc.Layout || !desc.Layout->IsValid() || !desc.ComputeShader.GetData() || !desc.ComputeShader.GetSize() || !m_MaxCapacity) return nullptr;
         uint64_t hash = ComputeComputePipelineHash(desc);
 
@@ -480,7 +489,7 @@ namespace Axle::RHI {
         m_MissCount++;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) {
+        if (!rhiDevice.CanCreateResources()) {
             AXLE_CORE_ERROR("RHIPipelineCache::GetOrCreateComputePipeline failed: RHIDevice is not initialized!");
             return nullptr;
         }
@@ -495,7 +504,10 @@ namespace Axle::RHI {
         nri::Pipeline* newPipeline = nullptr;
         nri::Result res = ScopedRHIFault::Invoke("CreateComputePipeline", [&] { return nriCore.CreateComputePipeline(*nativeDevice, compDesc, newPipeline); });
         if (res != nri::Result::SUCCESS || !newPipeline) {
-            if (newPipeline) nriCore.DestroyPipeline(newPipeline);
+            if (newPipeline) {
+                auto core = nriCore; auto pipeline = newPipeline;
+                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
+            }
             AXLE_CORE_ERROR("RHIPipelineCache: CreateComputePipeline failed with code {0}!", static_cast<uint32_t>(res));
             return nullptr;
         }
@@ -508,7 +520,8 @@ namespace Axle::RHI {
                 if (rhiDevice.IsNativeReady()) {
                     rhiDevice.WaitIdle();
                 }
-                nriCore.DestroyPipeline(victim.Pipeline);
+                auto core = nriCore; auto pipeline = victim.Pipeline;
+                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
             }
             m_LRUList.pop_back();
         }

@@ -1,5 +1,7 @@
 #include <Axle/RHI/RHISwapChain.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
+#include <limits>
 
 #include <algorithm>
 
@@ -10,9 +12,9 @@ namespace Axle::RHI {
     }
 
     bool RHISwapChain::Init(const RHISurface& surface, const RHISwapChainDesc& desc) {
-        if (m_Initialized) {
-            Shutdown();
-        }
+        Shutdown();
+        if (!desc.FramesInFlight || desc.FramesInFlight > 3 || desc.BufferCount < 2 || desc.BufferCount > 4 ||
+            surface.GetWidth() > std::numeric_limits<nri::Dim_t>::max() || surface.GetHeight() > std::numeric_limits<nri::Dim_t>::max()) return false;
 
         if (!surface.IsValid()) {
             AXLE_CORE_ERROR("Failed to initialize RHISwapChain: provided RHISurface is invalid!");
@@ -21,7 +23,7 @@ namespace Axle::RHI {
 
         auto& device = RHIDevice::Get();
         if (!device.IsBackendSelected() ||
-            (device.GetBackend() != RHIType::OpenGL && !device.IsNativeReady())) {
+            (device.GetBackend() != RHIType::OpenGL && !device.CanCreateResources())) {
             AXLE_CORE_ERROR("Failed to initialize RHISwapChain: RHIDevice is not initialized!");
             return false;
         }
@@ -44,6 +46,7 @@ namespace Axle::RHI {
         m_IsLegacyOpenGL = false;
         if (!CreateNRIResources(surface)) {
             AXLE_CORE_ERROR("Failed to create NRI SwapChain resources!");
+            DestroyNRIResources();
             return false;
         }
 
@@ -76,7 +79,7 @@ namespace Axle::RHI {
         scDesc.scaling = nri::Scaling::STRETCH;
         scDesc.queuedFrameNum = static_cast<uint8_t>(std::clamp(m_Desc.FramesInFlight, 1u, 3u));
 
-        nri::Result res = sc.CreateSwapChain(*nriDevice, scDesc, m_SwapChain);
+        nri::Result res = ScopedRHIFault::Invoke("CreateSwapChain", [&] { return sc.CreateSwapChain(*nriDevice, scDesc, m_SwapChain); });
         if (res != nri::Result::SUCCESS || !m_SwapChain) {
             AXLE_CORE_ERROR("NRI SwapChain creation failed with error code: {0}", static_cast<int>(res));
             return false;
@@ -143,81 +146,41 @@ namespace Axle::RHI {
 
     void RHISwapChain::DestroyNRIResources() {
         auto& device = RHIDevice::Get();
-        const auto& core = device.GetNRICore();
-        const auto& sc = device.GetNRISwapChain();
-        nri::Queue* queue = device.GetGraphicsQueue();
-
-        // 1. Wait for GPU queue and in-flight work to finish before releasing resources
-        if (queue && core.QueueWaitIdle) {
-            core.QueueWaitIdle(queue);
-        }
-        if (m_FrameFence && core.Wait && m_FrameCount > 0) {
-            core.Wait(*m_FrameFence, m_FrameCount);
-        }
-
-        // 2. Destroy command allocators
-        if (core.DestroyCommandAllocator) {
-            for (auto& f : m_Frames) {
-                if (f.CommandAllocator) {
-                    core.DestroyCommandAllocator(f.CommandAllocator);
-                    f.CommandAllocator = nullptr;
+        if (device.IsNativeReady()) {
+            device.WaitIdle();
+            const auto core = device.GetNRICore();
+            const auto sc = device.GetNRISwapChain();
+            auto frames = std::move(m_Frames);
+            auto textures = std::move(m_Textures);
+            auto fence = m_FrameFence; auto swapchain = m_SwapChain;
+            device.ReleaseNative([core, sc, frames = std::move(frames), textures = std::move(textures), fence, swapchain] {
+                for (const auto& frame : frames) if (frame.CommandAllocator) core.DestroyCommandAllocator(frame.CommandAllocator);
+                for (const auto& texture : textures) {
+                    if (texture.AcquireSemaphore) core.DestroyFence(texture.AcquireSemaphore);
+                    if (texture.ReleaseSemaphore) core.DestroyFence(texture.ReleaseSemaphore);
                 }
-            }
+                if (fence) core.DestroyFence(fence);
+                if (swapchain) sc.DestroySwapChain(swapchain);
+            });
         }
-        m_Frames.clear();
-
-        // 3. Destroy semaphores
-        if (core.DestroyFence) {
-            for (auto& t : m_Textures) {
-                if (t.AcquireSemaphore) {
-                    core.DestroyFence(t.AcquireSemaphore);
-                    t.AcquireSemaphore = nullptr;
-                }
-                if (t.ReleaseSemaphore) {
-                    core.DestroyFence(t.ReleaseSemaphore);
-                    t.ReleaseSemaphore = nullptr;
-                }
-            }
-            m_Textures.clear();
-
-            if (m_FrameFence) {
-                core.DestroyFence(m_FrameFence);
-                m_FrameFence = nullptr;
-            }
-        }
-
-        // 4. Destroy swapchain
-        if (m_SwapChain && sc.DestroySwapChain) {
-            sc.DestroySwapChain(m_SwapChain);
-            m_SwapChain = nullptr;
-        }
-
-        m_ActualTextureCount = 0;
+        m_Frames.clear(); m_Textures.clear();
+        m_FrameFence = nullptr; m_SwapChain = nullptr;
+        m_ActualTextureCount = 0; m_Acquired = false;
     }
 
     void RHISwapChain::Shutdown() {
-        if (!m_Initialized) return;
-
-        AXLE_CORE_INFO("Shutting down RHISwapChain...");
-        if (!m_IsLegacyOpenGL) {
-            DestroyNRIResources();
-        }
-
-        m_Initialized = false;
-        m_IsLegacyOpenGL = false;
-        m_NeedsResize = false;
-        m_IsMinimized = false;
-        m_Surface = nullptr;
-        m_FrameCount = 0;
-        AXLE_CORE_INFO("RHISwapChain successfully shut down.");
+        if (!m_IsLegacyOpenGL && (m_SwapChain || m_FrameFence || !m_Frames.empty())) DestroyNRIResources();
+        m_Initialized = m_IsLegacyOpenGL = m_NeedsResize = m_IsMinimized = m_Acquired = false;
+        m_Surface = nullptr; m_FrameCount = 0;
     }
 
     bool RHISwapChain::BeginFrame() {
-        if (!m_Initialized || m_IsMinimized) return false;
+        if (!m_Initialized || m_IsMinimized || m_Acquired) return false;
 
         if (m_IsLegacyOpenGL) {
             m_CurrentTextureIndex = (m_CurrentTextureIndex + 1) % m_ActualTextureCount;
             m_FrameInFlightIndex = static_cast<uint32_t>(m_FrameCount % m_Desc.FramesInFlight);
+            m_Acquired = true;
             return true;
         }
 
@@ -229,41 +192,27 @@ namespace Axle::RHI {
         const auto& core = device.GetNRICore();
         const auto& sc = device.GetNRISwapChain();
 
-        // 1. Determine active frame-in-flight slot
+        if (!device.CanSubmit()) return false;
         m_FrameInFlightIndex = static_cast<uint32_t>(m_FrameCount % m_Desc.FramesInFlight);
-
-        // 2. Wait for GPU on host if this frame slot is still processing from N frames ago
-        uint64_t waitValue = (m_FrameCount >= m_Desc.FramesInFlight)
-            ? (1 + m_FrameCount - m_Desc.FramesInFlight)
-            : 0;
-
-        if (waitValue > 0) {
-            core.Wait(*m_FrameFence, waitValue);
-        }
-
-        // 3. Reset the per-frame Command Allocator
-        if (m_Frames[m_FrameInFlightIndex].CommandAllocator) {
-            core.ResetCommandAllocator(*m_Frames[m_FrameInFlightIndex].CommandAllocator);
-        }
-
-        // 4. Acquire the next backbuffer texture
-        uint32_t acquireIndex = static_cast<uint32_t>(m_FrameCount % m_ActualTextureCount);
-        nri::Fence* acquireSemaphore = m_Textures[acquireIndex].AcquireSemaphore;
-
-        nri::Result res = sc.AcquireNextTexture(*m_SwapChain, *acquireSemaphore, m_CurrentTextureIndex);
-        if (res == nri::Result::OUT_OF_DATE) {
-            m_NeedsResize = true;
-            return false;
-        }
-
-        return (res == nri::Result::SUCCESS);
+        auto& frame = m_Frames[m_FrameInFlightIndex];
+        if (!device.WaitForFence(m_FrameFence, frame.FenceValue)) return false;
+        if (frame.CommandAllocator) core.ResetCommandAllocator(*frame.CommandAllocator);
+        const uint32_t acquireIndex = static_cast<uint32_t>(m_FrameCount % m_ActualTextureCount);
+        const auto result = ScopedRHIFault::Invoke("AcquireNextTexture", [&] {
+            return sc.AcquireNextTexture(*m_SwapChain, *m_Textures[acquireIndex].AcquireSemaphore, m_CurrentTextureIndex);
+        });
+        if (result == nri::Result::OUT_OF_DATE) m_NeedsResize = true;
+        if (result != nri::Result::SUCCESS) return false;
+        if (m_CurrentTextureIndex >= m_Textures.size()) return device.ObserveResult(nri::Result::FAILURE, "AcquireNextTexture", "invalid backbuffer index");
+        m_Acquired = true;
+        return true;
     }
 
     bool RHISwapChain::PresentFrame(const nri::CommandBuffer* const* commandBuffers, uint32_t commandBufferNum) {
-        if (!m_Initialized || m_IsMinimized) return false;
+        if (!m_Initialized || m_IsMinimized || !m_Acquired) return false;
 
         if (m_IsLegacyOpenGL) {
-            m_FrameCount++;
+            m_FrameCount++; m_Acquired = false;
             return true;
         }
 
@@ -276,6 +225,8 @@ namespace Axle::RHI {
         const auto& sc = device.GetNRISwapChain();
         nri::Queue* queue = device.GetGraphicsQueue();
 
+        if (!device.CanSubmit() || (commandBufferNum && !commandBuffers)) return false;
+        for (uint32_t i = 0; i < commandBufferNum; ++i) if (!commandBuffers[i]) return false;
         uint32_t acquireIndex = static_cast<uint32_t>(m_FrameCount % m_ActualTextureCount);
         nri::Fence* acquireSemaphore = m_Textures[acquireIndex].AcquireSemaphore;
         nri::Fence* releaseSemaphore = m_Textures[m_CurrentTextureIndex].ReleaseSemaphore;
@@ -304,15 +255,17 @@ namespace Axle::RHI {
         submitDesc.signalFences = signalFences;
         submitDesc.signalFenceNum = 2;
 
-        core.QueueSubmit(*queue, submitDesc);
-
-        // Queue image for display presentation
-        nri::Result res = sc.QueuePresent(*m_SwapChain, *releaseSemaphore, signalValue);
+        const auto submitted = ScopedRHIFault::Invoke("QueueSubmit", [&] { return core.QueueSubmit(*queue, submitDesc); });
+        m_Acquired = false;
+        if (submitted != nri::Result::SUCCESS) return false;
+        m_Frames[m_FrameInFlightIndex].FenceValue = signalValue;
+        m_FrameCount = signalValue;
+        // Presentation cannot undo an accepted submission or its completion value.
+        nri::Result res = ScopedRHIFault::Invoke("QueuePresent", [&] { return sc.QueuePresent(*m_SwapChain, *releaseSemaphore, signalValue); });
         if (res == nri::Result::OUT_OF_DATE) {
             m_NeedsResize = true;
         }
 
-        m_FrameCount++;
         return (res == nri::Result::SUCCESS);
     }
 
@@ -362,109 +315,15 @@ namespace Axle::RHI {
 
     bool RHISwapChain::RecreateSwapChain() {
         if (!m_Initialized || m_IsLegacyOpenGL) return true;
-
-        if (m_IsMinimized || m_Desc.Width == 0 || m_Desc.Height == 0) {
-            AXLE_CORE_WARN("RHISwapChain: Window is minimized ({0}x{1}), skipping recreation.", m_Desc.Width, m_Desc.Height);
-            return true;
-        }
-
-        if (!m_Surface || m_Surface->GetNativeHandle() == nullptr) {
-            AXLE_CORE_ERROR("Failed to recreate RHISwapChain: RHISurface native handle is invalid!");
-            return false;
-        }
-
         auto& device = RHIDevice::Get();
-        nri::Device* nriDevice = device.GetNRIDevice();
-        const auto& core = device.GetNRICore();
-        const auto& sc = device.GetNRISwapChain();
-        nri::Queue* queue = device.GetGraphicsQueue();
-
-        if (!nriDevice || !queue || !sc.CreateSwapChain || !sc.DestroySwapChain) {
-            AXLE_CORE_ERROR("Missing NRI Device or SwapChain interface for recreation!");
+        if (m_IsMinimized || !m_Desc.Width || !m_Desc.Height || !m_Surface || !device.CanCreateResources()) return false;
+        if (m_Desc.Width > std::numeric_limits<nri::Dim_t>::max() || m_Desc.Height > std::numeric_limits<nri::Dim_t>::max() || !device.WaitIdle()) return false;
+        DestroyNRIResources();
+        if (!CreateNRIResources(*m_Surface)) {
+            DestroyNRIResources(); m_NeedsResize = true;
             return false;
         }
-
-        // 1. Wait for GPU idle on all in-flight frames to prevent race conditions
-        if (queue && core.QueueWaitIdle) {
-            core.QueueWaitIdle(queue);
-        }
-        if (m_FrameFence && core.Wait && m_FrameCount > 0) {
-            core.Wait(*m_FrameFence, m_FrameCount);
-        }
-
-        // 2. Destroy existing backbuffer acquire/release semaphores
-        if (core.DestroyFence) {
-            for (auto& t : m_Textures) {
-                if (t.AcquireSemaphore) {
-                    core.DestroyFence(t.AcquireSemaphore);
-                    t.AcquireSemaphore = nullptr;
-                }
-                if (t.ReleaseSemaphore) {
-                    core.DestroyFence(t.ReleaseSemaphore);
-                    t.ReleaseSemaphore = nullptr;
-                }
-            }
-            m_Textures.clear();
-        }
-
-        // 3. Destroy old swapchain
-        if (m_SwapChain) {
-            sc.DestroySwapChain(m_SwapChain);
-            m_SwapChain = nullptr;
-        }
-
-        // 4. Create new SwapChain with updated dimensions and VSync setting
-        nri::SwapChainDesc scDesc = {};
-        scDesc.window = m_Surface->GetNRIWindow();
-        scDesc.queue = queue;
-        scDesc.width = static_cast<nri::Dim_t>(m_Desc.Width);
-        scDesc.height = static_cast<nri::Dim_t>(m_Desc.Height);
-        scDesc.textureNum = static_cast<uint8_t>(std::clamp(m_Desc.BufferCount, 2u, 4u));
-        scDesc.format = m_Desc.Format;
-        scDesc.flags = m_Desc.VSync ? nri::SwapChainBits::VSYNC : nri::SwapChainBits::ALLOW_TEARING;
-        scDesc.scaling = nri::Scaling::STRETCH;
-        scDesc.queuedFrameNum = static_cast<uint8_t>(std::clamp(m_Desc.FramesInFlight, 1u, 3u));
-
-        nri::Result res = sc.CreateSwapChain(*nriDevice, scDesc, m_SwapChain);
-        if (res != nri::Result::SUCCESS || !m_SwapChain) {
-            AXLE_CORE_ERROR("NRI SwapChain recreation failed with error code: {0}", static_cast<int>(res));
-            return false;
-        }
-
-        // 5. Query new backbuffer textures
-        uint32_t textureNum = 0;
-        nri::Texture* const* textures = sc.GetSwapChainTextures(*m_SwapChain, textureNum);
-        if (!textures || textureNum == 0) {
-            AXLE_CORE_ERROR("Failed to query textures from recreated NRI SwapChain!");
-            sc.DestroySwapChain(m_SwapChain);
-            m_SwapChain = nullptr;
-            return false;
-        }
-
-        m_ActualTextureCount = textureNum;
-        m_Textures.resize(m_ActualTextureCount);
-
-        for (uint32_t i = 0; i < m_ActualTextureCount; ++i) {
-            m_Textures[i].Texture = textures[i];
-
-            res = core.CreateFence(*nriDevice, nri::SWAPCHAIN_SEMAPHORE, m_Textures[i].AcquireSemaphore);
-            if (res != nri::Result::SUCCESS) {
-                AXLE_CORE_ERROR("Failed to create SwapChain acquire semaphore for buffer {0} during recreation!", i);
-                return false;
-            }
-
-            res = core.CreateFence(*nriDevice, nri::SWAPCHAIN_SEMAPHORE, m_Textures[i].ReleaseSemaphore);
-            if (res != nri::Result::SUCCESS) {
-                AXLE_CORE_ERROR("Failed to create SwapChain release semaphore for buffer {0} during recreation!", i);
-                return false;
-            }
-        }
-
-        m_CurrentTextureIndex = 0;
-        m_NeedsResize = false;
-
-        AXLE_CORE_INFO("RHISwapChain successfully recreated ({0}x{1}, {2} buffers, VSync: {3})",
-            m_Desc.Width, m_Desc.Height, m_ActualTextureCount, m_Desc.VSync ? "ON" : "OFF");
+        device.SurfaceRebuilt();
         return true;
     }
 
@@ -490,6 +349,7 @@ namespace Axle::RHI {
     }
 
     nri::Fence* RHISwapChain::GetCurrentAcquireSemaphore() const {
+        if (!m_ActualTextureCount) return nullptr;
         uint32_t acquireIndex = static_cast<uint32_t>(m_FrameCount % m_ActualTextureCount);
         if (acquireIndex < m_Textures.size()) {
             return m_Textures[acquireIndex].AcquireSemaphore;

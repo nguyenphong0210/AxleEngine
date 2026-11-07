@@ -51,10 +51,11 @@ namespace Axle::RHI {
     }
 
     bool RHITexture::Build(const RHITextureDesc& desc) {
+        ScopedRHIOperation operation(desc.DebugName);
         m_Desc = desc;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) {
+        if (!rhiDevice.CanCreateResources()) {
             AXLE_CORE_ERROR("RHITexture::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -85,7 +86,7 @@ namespace Axle::RHI {
                 (desc.Width > limits.dimensions.attachmentMaxDim || desc.Height > limits.dimensions.attachmentMaxDim ||
                  desc.ArrayLayers > limits.dimensions.attachmentLayerMaxNum))) {
             AXLE_CORE_ERROR("RHITexture '{}': invalid dimensions, format, samples or usage", desc.DebugName);
-            return false;
+            return rhiDevice.ObserveResult(nri::Result::INVALID_ARGUMENT, "ValidateTextureDesc", desc.DebugName);
         }
         const auto support = rhiDevice.GetTextureFormatSupport(format);
         auto required = nri::FormatSupportBits::UNSUPPORTED;
@@ -100,7 +101,7 @@ namespace Axle::RHI {
         if (support == nri::FormatSupportBits::UNSUPPORTED ||
             (static_cast<uint32_t>(support) & static_cast<uint32_t>(required)) != static_cast<uint32_t>(required)) {
             AXLE_CORE_ERROR("RHITexture '{}': requested format usage is unsupported", desc.DebugName);
-            return false;
+            return rhiDevice.ObserveResult(nri::Result::UNSUPPORTED, "ValidateTextureFormat", desc.DebugName);
         }
 
         nri::TextureDesc texDesc = {};
@@ -197,12 +198,16 @@ namespace Axle::RHI {
     void RHITexture::Shutdown() {
         auto& device = RHIDevice::Get();
         if (device.IsNativeReady()) {
-            const auto& core = device.GetNRICore();
-            if (m_SRV) core.DestroyDescriptor(m_SRV);
-            if (m_RTV) core.DestroyDescriptor(m_RTV);
-            if (m_DSV) core.DestroyDescriptor(m_DSV);
-            if (m_Texture) core.DestroyTexture(m_Texture);
-            if (m_Memory) core.FreeMemory(m_Memory);
+            const auto core = device.GetNRICore();
+            auto srv = m_SRV, rtv = m_RTV, dsv = m_DSV;
+            auto texture = m_Texture; auto memory = m_Memory;
+            device.ReleaseNative([core, srv, rtv, dsv, texture, memory] {
+                if (srv) core.DestroyDescriptor(srv);
+                if (rtv) core.DestroyDescriptor(rtv);
+                if (dsv) core.DestroyDescriptor(dsv);
+                if (texture) core.DestroyTexture(texture);
+                if (memory) core.FreeMemory(memory);
+            });
         }
         m_SRV = m_RTV = m_DSV = nullptr;
         m_Texture = nullptr;

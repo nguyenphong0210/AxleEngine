@@ -181,6 +181,7 @@ namespace Axle {
                     layer->OnImGuiRender();
                 }
                 m_UIContext->End();
+                if (!m_UIContext->IsOperational()) m_Running = false;
             }
 
             m_Window->SwapBuffers();

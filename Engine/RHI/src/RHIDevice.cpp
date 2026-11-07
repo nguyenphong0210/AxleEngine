@@ -6,6 +6,8 @@
 
 #include <cstring>
 #include <algorithm>
+#include <chrono>
+#include <thread>
 
 namespace Axle::RHI {
 
@@ -121,9 +123,11 @@ namespace Axle::RHI {
     bool RHIDevice::Init(const RHIDeviceDesc& desc) {
         if (m_Initialized) {
             AXLE_CORE_WARN("RHIDevice is already initialized. Shutting down previous instance before re-initialization.");
-            Shutdown();
+            if (!Shutdown()) return false;
         }
 
+        m_FirstError.reset();
+        m_State = RHIDeviceState::Uninitialized;
         m_Desc = desc;
         m_Adapters = EnumerateAdapters();
 
@@ -231,6 +235,7 @@ namespace Axle::RHI {
         }
 
         m_Initialized = true;
+        m_State = RHIDeviceState::Ready;
         return true;
     }
 
@@ -294,7 +299,7 @@ namespace Axle::RHI {
             !interfaces.Core.GetTextureMemoryDesc || !interfaces.Core.GetBufferMemoryDesc ||
             !interfaces.Core.AllocateMemory || !interfaces.Core.FreeMemory ||
             !interfaces.Core.BindTextureMemory || !interfaces.Core.BindBufferMemory ||
-            !interfaces.Core.MapBuffer || !interfaces.Core.UnmapBuffer ||
+            !interfaces.Core.MapBuffer || !interfaces.Core.UnmapBuffer || !interfaces.Core.GetFenceValue || !interfaces.Core.CreateFence ||
             !interfaces.Core.GetDeviceNativeObject || !interfaces.Core.GetQueueNativeObject)
             return reject("CoreInterface");
         res = ScopedRHIFault::Invoke("HelperInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::HelperInterface), &interfaces.Helper); });
@@ -402,27 +407,109 @@ namespace Axle::RHI {
         AXLE_CORE_INFO("==================================================");
     }
 
-    void RHIDevice::WaitIdle() {
-        if (m_Initialized && m_Device && m_NRI.Core.DeviceWaitIdle) {
-            m_NRI.Core.DeviceWaitIdle(m_Device);
-        } else if (m_Initialized && m_GraphicsQueue && m_NRI.Core.QueueWaitIdle) {
-            m_NRI.Core.QueueWaitIdle(m_GraphicsQueue);
-        }
+    void ReportRHIFailure(nri::Result result, std::string_view operation, std::string_view resource) {
+        RHIDevice::Get().ObserveResult(result, operation, resource);
     }
 
-    void RHIDevice::Shutdown() {
-        if (!m_Initialized) return;
+    bool IsRHIOperationAllowed(std::string_view operation) {
+        auto& device = RHIDevice::Get();
+        if (operation == "QueueDrain" || operation == "CreateIdleFence" || operation == "WaitFence") return true;
+        return device.GetState() != RHIDeviceState::Lost && device.GetState() != RHIDeviceState::Stopping;
+    }
+
+    bool RHIDevice::ObserveResult(nri::Result result, std::string_view operation, std::string_view resource, bool timedOut) {
+        if (result == nri::Result::SUCCESS) {
+            if (operation == "QueueSubmit" || operation == "QueueDrain") m_UnresolvedWork = true;
+            return true;
+        }
+        if (result == nri::Result::NOT_READY && !timedOut) return false;
+        const bool ambiguous = operation == "QueueSubmit" || operation == "QueueDrain";
+        if (ambiguous) m_UnresolvedWork = true;
+        if (!m_FirstError) m_FirstError = RHIGPUError{result, GetBackend() == RHIType::None ? m_Desc.PreferredBackend : GetBackend(), std::string(operation), std::string(resource), ambiguous, timedOut};
+        if (m_Initialized) {
+            if (result == nri::Result::DEVICE_LOST) m_State = RHIDeviceState::Lost;
+            else if (m_State != RHIDeviceState::Lost) {
+                if (ambiguous || timedOut || operation == "QueuePresent") m_State = RHIDeviceState::Stopping;
+                if (result == nri::Result::OUT_OF_DATE && (operation == "AcquireNextTexture" || operation == "QueuePresent")) m_State = RHIDeviceState::SurfaceRebuildRequired;
+            }
+            if (m_State == RHIDeviceState::Lost || m_State == RHIDeviceState::Stopping) m_ContextReady = false;
+        }
+        return false;
+    }
+
+    bool RHIDevice::WaitForFence(nri::Fence* fence, uint64_t value, uint32_t timeoutMilliseconds) {
+        if (!value) return true;
+        if (!IsNativeReady() || !fence || m_State == RHIDeviceState::Lost) return false;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMilliseconds);
+        do {
+            uint64_t completed = 0;
+            const auto result = ScopedRHIFault::Invoke("WaitFence", [&] {
+                completed = m_NRI.Core.GetFenceValue(*fence);
+                return completed == UINT64_MAX ? nri::Result::DEVICE_LOST : nri::Result::SUCCESS;
+            });
+            if (result != nri::Result::SUCCESS) return false;
+            if (completed >= value) return true;
+            if (std::chrono::steady_clock::now() >= deadline) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } while (true);
+        return ObserveResult(nri::Result::NOT_READY, "WaitFence", "completion deadline", true);
+    }
+
+    bool RHIDevice::WaitIdle(uint32_t timeoutMilliseconds) {
+        if (!m_Device) return true;
+        if (!IsNativeReady() || m_State == RHIDeviceState::Lost) return false;
+        if (!m_IdleFence) {
+            const auto result = ScopedRHIFault::Invoke("CreateIdleFence", [&] { return m_NRI.Core.CreateFence(*m_Device, 0, m_IdleFence); });
+            if (result != nri::Result::SUCCESS || !m_IdleFence) return false;
+        }
+        nri::FenceSubmitDesc signal{};
+        signal.fence = m_IdleFence; signal.value = m_IdleValue + 1; signal.stages = nri::StageBits::ALL;
+        nri::QueueSubmitDesc submit{}; submit.signalFences = &signal; submit.signalFenceNum = 1;
+        const auto result = ScopedRHIFault::Invoke("QueueDrain", [&] { return m_NRI.Core.QueueSubmit(*m_GraphicsQueue, submit); });
+        if (result != nri::Result::SUCCESS) return false;
+        m_IdleValue = signal.value;
+        if (!WaitForFence(m_IdleFence, m_IdleValue, timeoutMilliseconds)) return false;
+        m_UnresolvedWork = false;
+        while (!m_DeferredCleanup.empty()) {
+            auto releases = std::move(m_DeferredCleanup);
+            m_DeferredCleanup.clear();
+            for (auto& release : releases) release();
+        }
+        return true;
+    }
+
+    void RHIDevice::ReleaseNative(std::function<void()> release) {
+        if (m_UnresolvedWork && m_State == RHIDeviceState::Stopping) m_DeferredCleanup.push_back(std::move(release));
+        else release();
+    }
+
+    bool RHIDevice::Shutdown() {
+        if (!m_Initialized) return true;
 
         AXLE_CORE_INFO("Shutting down RHI Device ({0})...", RHITypeToString(m_Capabilities.ActiveBackend));
 
-        WaitIdle();
+        if (m_State != RHIDeviceState::Lost && !WaitIdle()) {
+            m_State = m_State == RHIDeviceState::Lost ? RHIDeviceState::Lost : RHIDeviceState::Stopping;
+            if (m_State != RHIDeviceState::Lost) {
+                AXLE_CORE_ERROR("RHI shutdown retained native owners: queue completion is unresolved");
+                return false;
+            }
+        }
+        m_UnresolvedWork = false;
+        while (!m_DeferredCleanup.empty()) {
+            auto releases = std::move(m_DeferredCleanup); m_DeferredCleanup.clear();
+            for (auto& release : releases) release();
+        }
+        m_State = m_State == RHIDeviceState::Lost ? RHIDeviceState::Lost : RHIDeviceState::Stopping;
 
         RHIPipelineCache::Get().Clear();
 
         RHIMaterial::ReleaseDefaultTextures();
 
-        WaitIdle();
+        if (!WaitIdle() && m_State != RHIDeviceState::Lost) return false;
 
+        if (m_IdleFence) { m_NRI.Core.DestroyFence(m_IdleFence); m_IdleFence = nullptr; }
+        m_IdleValue = 0;
         if (m_Device) {
             nri::nriDestroyDevice(m_Device);
             m_Device = nullptr;
@@ -434,8 +521,10 @@ namespace Axle::RHI {
         m_Adapters.clear();
         m_Initialized = false;
         m_ContextReady = false;
+        m_State = RHIDeviceState::Uninitialized;
 
         AXLE_CORE_INFO("RHI Device successfully shut down.");
+        return true;
     }
 
 }

@@ -47,7 +47,7 @@ namespace Axle::RHI {
     namespace {
         bool ValidBufferDesc(const RHIBufferDesc& desc) {
             auto& device = RHIDevice::Get();
-            if (!device.IsNativeReady()) return false;
+            if (!device.CanCreateResources()) return false;
             const auto& limits = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice());
             if (!desc.Size || desc.Size > limits.memory.bufferMaxSize || desc.Size > SIZE_MAX ||
                 static_cast<uint32_t>(desc.MemoryLocation) > static_cast<uint32_t>(RHIMemoryLocation::HostReadback) ||
@@ -117,7 +117,8 @@ namespace Axle::RHI {
     }
 
     bool RHIBuffer::Build(const RHIBufferDesc& desc, const void* initialData, nri::Memory* borrowedMemory, uint64_t memoryOffset) {
-        if (!ValidBufferDesc(desc) || (initialData && desc.MemoryLocation == RHIMemoryLocation::HostReadback)) return false;
+        ScopedRHIOperation operation(desc.DebugName);
+        if (!ValidBufferDesc(desc) || (initialData && desc.MemoryLocation == RHIMemoryLocation::HostReadback)) return RHIDevice::Get().ObserveResult(nri::Result::INVALID_ARGUMENT, "ValidateBufferDesc", desc.DebugName);
         m_Desc = desc;
         auto& device = RHIDevice::Get();
         const auto& core = device.GetNRICore();
@@ -176,10 +177,13 @@ namespace Axle::RHI {
         auto& device = RHIDevice::Get();
         if (device.IsNativeReady()) {
             Unmap();
-            const auto& core = device.GetNRICore();
-            if (m_CBV) core.DestroyDescriptor(m_CBV);
-            if (m_Buffer) core.DestroyBuffer(m_Buffer);
-            if (m_Memory && m_OwnsMemory) core.FreeMemory(m_Memory);
+            const auto core = device.GetNRICore();
+            auto cbv = m_CBV; auto buffer = m_Buffer; auto memory = m_OwnsMemory ? m_Memory : nullptr;
+            device.ReleaseNative([core, cbv, buffer, memory] {
+                if (cbv) core.DestroyDescriptor(cbv);
+                if (buffer) core.DestroyBuffer(buffer);
+                if (memory) core.FreeMemory(memory);
+            });
         }
         m_CBV = nullptr; m_Buffer = nullptr; m_Memory = nullptr;
         m_OwnsMemory = false; m_MappedData = nullptr;
@@ -188,7 +192,7 @@ namespace Axle::RHI {
     }
 
     void* RHIBuffer::Map(uint64_t offset, uint64_t size) {
-        if (!m_Buffer || m_Desc.MemoryLocation == RHIMemoryLocation::Device || offset >= m_Desc.Size) return nullptr;
+        if (!RHIDevice::Get().CanCreateResources() || !m_Buffer || m_Desc.MemoryLocation == RHIMemoryLocation::Device || offset >= m_Desc.Size) return nullptr;
         const uint64_t count = size ? size : m_Desc.Size - offset;
         if (count > m_Desc.Size - offset) return nullptr;
         if (m_MappedData) {
@@ -215,7 +219,7 @@ namespace Axle::RHI {
     bool RHIBuffer::UpdateData(const void* data, uint64_t size, uint64_t offset) {
         if (!m_Buffer || !data || !size || offset > m_Desc.Size || size > m_Desc.Size - offset) return false;
         auto& device = RHIDevice::Get();
-        if (!device.IsNativeReady()) return false;
+        if (!device.CanCreateResources()) return false;
         if (m_Desc.MemoryLocation == RHIMemoryLocation::HostUpload || m_Desc.MemoryLocation == RHIMemoryLocation::DeviceUpload) {
             const bool alreadyMapped = m_MappedData != nullptr;
             void* ptr = Map(offset, size);
@@ -263,7 +267,7 @@ namespace Axle::RHI {
                                              uint64_t preferredChunkSize)
     {
         auto& device = RHIDevice::Get();
-        if (!device.IsNativeReady() || descs.size() > UINT32_MAX || !preferredChunkSize) return false;
+        if (!device.CanCreateResources() || descs.size() > UINT32_MAX || !preferredChunkSize) return false;
         const auto& core = device.GetNRICore();
         const auto& helper = device.GetNRIHelper();
         std::vector<std::unique_ptr<RHIBuffer>> candidates;
@@ -317,7 +321,8 @@ namespace Axle::RHI {
 
         for (auto* chunk : chunks) {
             if (chunk) {
-                core.FreeMemory(chunk);
+                auto functions = core;
+                rhiDevice.ReleaseNative([functions, chunk] { functions.FreeMemory(chunk); });
             }
         }
         chunks.clear();

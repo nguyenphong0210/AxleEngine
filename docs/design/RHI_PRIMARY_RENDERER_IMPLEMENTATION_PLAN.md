@@ -463,7 +463,8 @@ assignment from unchecked roadmap rows.
 | P41-00 | Delivered in OPT-01 | Accepted predecessor | See OPT-01 review |
 | P41-01 | Implemented and self-verified Debug/Release | Final review pending | See OPT-04 execution record; API-validation layers unavailable |
 | P41-02 | Implemented and self-verified Debug/Release | Final review pending | See OPT-04 execution record |
-| P41-03..11 | NOT STARTED | NOT STARTED | NOT RUN |
+| P41-03 | Implemented and self-verified Debug/Release | Final review pending | See OPT-04 execution record |
+| P41-04..11 | NOT STARTED | NOT STARTED | NOT RUN |
 | P41-12..29 | NOT STARTED | NOT STARTED | NOT RUN |
 
 Split this row into per-package rows as implementation starts. Documentation

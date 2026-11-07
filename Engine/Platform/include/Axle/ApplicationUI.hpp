@@ -11,6 +11,7 @@ namespace Axle {
         virtual void Shutdown() = 0;
         virtual void Begin() = 0;
         virtual void End() = 0;
+        virtual bool IsOperational() const { return true; }
     };
 
 }

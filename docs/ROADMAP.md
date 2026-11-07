@@ -199,7 +199,7 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 
 - [x] **P41-01:** Backend readiness and fallback equivalence (self-verified; final review pending).
 - [x] **P41-02:** Transactional GPU resource construction (self-verified; final review pending).
-- [ ] **P41-03:** Error propagation and device-loss state.
+- [x] **P41-03:** Error propagation and device-loss state (self-verified; final review pending).
 - [ ] **P41-04:** Primitive creation and canonical mesh identity.
 - [ ] **P41-05:** Resource identity and generation ownership.
 - [ ] **P41-06:** Unified retirement for recorded and submitted work.
@@ -214,7 +214,7 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 **Assignment:** Codex implementation with one consolidated separate-context Codex review after P41-11 and supplementary Gemini review; [current handoff](agents/handoffs/OPT_04_CODEX.md). Complete P41-01..11 and stop after the final review gate.
 
 **Evidence:** [Codex execution record](reviews/OPT_04_CODEX_EXECUTION.md).
-P41-01/02 are self-verified in Debug/Release; P41-03 is next. No phase acceptance is claimed.
+P41-01..03 are self-verified in Debug/Release; P41-04 is next. No phase acceptance is claimed.
 
 ### OPT-05 - Unify rendering across Editor, previews and Runtime
 

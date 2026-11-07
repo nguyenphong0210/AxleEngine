@@ -8,7 +8,7 @@ Workflow: Default workflow under `docs/agents/WORKING_PROTOCOL.md` (Gemini imple
 
 Scope:
 - [x] **P41-12:** RenderWorld and shared scene extraction
-- [ ] **P41-13:** RenderService and minimal modern render graph
+- [x] **P41-13:** RenderService and minimal modern render graph
 - [ ] **P41-14:** OpenGL compatibility behind the same service
 - [ ] **P41-15:** Asset and material previews
 - [ ] **P41-16:** VFX preview
@@ -52,5 +52,43 @@ Scope:
 - `ctest --test-dir build -C Debug -R RenderUnitTests`: 1/1 passed, exit 0
 - `ctest --test-dir build -C Release -R RenderUnitTests`: 1/1 passed, exit 0
 - `python scripts/check_architecture.py --root .`: PASS (400 files / 18 CMake files)
+- `python scripts/test_baseline_tools.py`: 18/18 PASS
+- `git diff --check`: PASS
+
+---
+
+## Package P41-13: RenderService and Minimal Modern Render Graph
+
+- **Status:** Implemented and self-verified in Debug and Release.
+- **Scope & Contract:** `docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md` lines 251-260
+
+### Implementation Summary
+1. **ViewRequest & RenderResult Contracts (`Engine/Renderer/include/Axle/ViewRequest.hpp`):**
+   - `RenderViewKind`: `Main`, `AssetPreview`, `VFXPreview`, `AssemblyPreview`, `Thumbnail`.
+   - `ViewRequest`: Viewport dimensions, `PerspectiveCamera`, `SceneRenderSettings`, leased modern targets (`ColorTarget`, `DepthTarget`, `ViewTargets`), legacy OpenGL target (`GLTargetFBO`), optional `PhysicsScene`, and view diagnostic name.
+   - `RenderResult`: Structured execution record reporting `Success`, `RHICompletionToken`, `DrawCallCount`, `RenderedEntityCount`, and `ErrorMessage`.
+2. **RenderService Coordinator (`Engine/Scene/include/Axle/RenderService.hpp`, `Engine/Scene/src/RenderService.cpp`):**
+   - Central coordinator orchestrating views across modern RHI and legacy GL rendering backends.
+   - Entry points: `RenderView(const RenderWorld& world, const ViewRequest& request)` and `RenderView(Scene& scene, const ViewRequest& request)`.
+   - Automatic target validation: gracefully rejects view requests with missing targets or unavailable backends without crashing.
+   - External view/UI textures are imported and leased rather than destroyed by render graphs.
+3. **Modern Scene Renderer RenderWorld Execution (`Engine/Scene/src/RHISceneRenderer.cpp`):**
+   - Implemented `RenderWorldView` overloads taking `const RenderWorld& world` and camera/targets.
+   - Consistently handles lighting buffer updates, skybox pass, opaque geometry queue, refraction, transparent queue, and post-process steps (MSAA resolve, tone mapping, FXAA).
+4. **Dedicated Unit Verification (`Tests/rendering/Test_RenderServiceUnit.cpp`):**
+   - `Test_ViewRequestDefaults`: Verifies default parameters and configurations.
+   - `Test_ViewRequestCustomization`: Verifies preview-specific settings (MSAA, ToneMapping, dimensions).
+   - `Test_RenderResultContract`: Verifies stats, draw call tracking, and completion token propagation.
+   - `Test_RenderServiceTargetValidation`: Verifies safe rejection of invalid/unconfigured targets.
+   - `Test_RenderServiceMultipleViewKinds`: Validates across all 5 view kinds without state leakage.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleRenderUnitTests`: exit 0
+- `cmake --build build --config Release --target AxleRenderUnitTests`: exit 0
+- `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `ctest --test-dir build -C Debug -R RenderUnitTests`: 1/1 passed, exit 0
+- `ctest --test-dir build -C Release -R RenderUnitTests`: 1/1 passed, exit 0
+- `python scripts/check_architecture.py --root .`: PASS (403 files / 18 CMake files)
 - `python scripts/test_baseline_tools.py`: 18/18 PASS
 - `git diff --check`: PASS

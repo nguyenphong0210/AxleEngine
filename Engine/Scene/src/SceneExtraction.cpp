@@ -144,11 +144,19 @@ namespace Axle {
             // Material properties
             if (registry.all_of<MaterialComponent>(entity)) {
                 const auto& matComp = registry.get<MaterialComponent>(entity);
+                if (options.ResolveResources && !matComp.RHIMaterialAsset) {
+                    auto& mutableMat = const_cast<MaterialComponent&>(matComp);
+                    if (mutableMat.HasAsset() && mutableMat.MaterialAsset) mutableMat.SyncFromAsset();
+                    else mutableMat.SyncToRHI();
+                }
                 rmi.Material.MaterialUUID = matComp.MaterialHandle;
                 rmi.Material.MaterialPath = matComp.AssetPath;
                 rmi.Material.MaterialAsset = matComp.MaterialAsset;
+                rmi.Material.RHIMaterialAsset = matComp.RHIMaterialAsset;
                 rmi.Material.UseCustomShader = matComp.UseCustomShader;
                 rmi.Material.CustomShaderPath = matComp.CustomShaderPath;
+            } else {
+                rmi.Material.RHIMaterialAsset = mc.RHIMaterialAsset;
             }
             rmi.Material.AlbedoColor = mc.Color1;
             rmi.Material.SecondaryColor = mc.Color2;

@@ -13,7 +13,10 @@
 namespace Axle {
     class VertexArray;
     class Material;
-    namespace RHI { class RHIMesh; }
+    namespace RHI {
+        class RHIMesh;
+        class RHIMaterial;
+    }
 
     enum class RenderLightType : uint8_t {
         Directional,
@@ -36,6 +39,7 @@ namespace Axle {
         UUID MaterialUUID = 0;
         std::string MaterialPath;
         std::shared_ptr<Material> MaterialAsset;
+        std::shared_ptr<RHI::RHIMaterial> RHIMaterialAsset;
         glm::vec4 AlbedoColor{ 1.0f };
         glm::vec4 SecondaryColor{ 1.0f };
         glm::vec2 TileScale{ 1.0f, 1.0f };

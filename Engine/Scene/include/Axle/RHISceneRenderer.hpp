@@ -3,6 +3,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/SceneRenderer.hpp>
+#include <Axle/RenderWorld.hpp>
 
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -96,6 +97,27 @@ namespace Axle {
                          const SceneRenderSettings& settings = SceneRenderSettings{},
                          PhysicsScene* physicsScene = nullptr,
                          std::shared_ptr<RHI::RHIViewTargets> viewTargets = {});
+
+        // Render an immutable RenderWorld snapshot into offscreen RHITexture targets
+        void RenderWorldView(const RenderWorld& world,
+                             const PerspectiveCamera& camera,
+                             RHI::RHITexture* colorTarget,
+                             RHI::RHITexture* depthTarget = nullptr,
+                             const SceneRenderSettings& settings = SceneRenderSettings{},
+                             PhysicsScene* physicsScene = nullptr,
+                             std::shared_ptr<RHI::RHIViewTargets> viewTargets = {});
+
+        // Render an immutable RenderWorld snapshot into specific native render targets
+        void RenderWorldView(const RenderWorld& world,
+                             const PerspectiveCamera& camera,
+                             nri::Texture* colorTarget,
+                             nri::Descriptor* colorRTV,
+                             nri::Texture* depthTarget,
+                             nri::Descriptor* depthDSV,
+                             uint32_t width, uint32_t height,
+                             const SceneRenderSettings& settings = SceneRenderSettings{},
+                             PhysicsScene* physicsScene = nullptr,
+                             std::shared_ptr<RHI::RHIViewTargets> viewTargets = {});
 
         // Performance & Telemetry metrics
         uint32_t GetDrawCallCount() const { return m_LastDrawCallCount; }

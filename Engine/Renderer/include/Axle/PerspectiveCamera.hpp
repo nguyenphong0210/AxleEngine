@@ -11,6 +11,7 @@ namespace Axle {
 
     class PerspectiveCamera {
     public:
+        PerspectiveCamera() : PerspectiveCamera(45.0f, 16.0f / 9.0f, 0.1f, 1000.0f) {}
         PerspectiveCamera(f32 fovDegrees, f32 aspectRatio, f32 nearClip = 0.1f, f32 farClip = 1000.0f);
 
         void SetProjection(f32 fovDegrees, f32 aspectRatio, f32 nearClip = 0.1f, f32 farClip = 1000.0f);
@@ -19,7 +20,7 @@ namespace Axle {
 
         CameraProjectionType GetProjectionType() const { return m_ProjectionType; }
         bool IsOrthographic() const { return m_ProjectionType == CameraProjectionType::Orthographic; }
-        
+
         void SetPosition(const glm::vec3& position);
         void SetRotation(const glm::vec3& rotation); // Euler angles (Pitch, Yaw, Roll) in degrees
         void SetWorldTransform(const glm::mat4& transform);

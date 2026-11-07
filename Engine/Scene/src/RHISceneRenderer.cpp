@@ -1029,6 +1029,22 @@ namespace Axle {
         }
     }
 
+    struct DrawItem {
+        std::shared_ptr<RHIMesh> Mesh;
+        RHIObjectPushConstants PushConsts;
+        Axle::SurfaceType SurfaceType = Axle::SurfaceType::Opaque;
+        Axle::CullMode CullMode = Axle::CullMode::None;
+        bool DepthWrite = true;
+        float DistanceSq = 0.0f;
+        int RenderQueue = 2000;
+        std::shared_ptr<RHIMaterial> Material;
+        bool UseCustomShader = false;
+        std::shared_ptr<const CustomReadyGeneration> CustomGeneration;
+        PackedMaterialResultData PackedConstants;
+        std::vector<TextureRequest> TextureRequests;
+        entt::entity DiagnosticEntity = entt::null;
+    };
+
     void RHISceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene,
                                        const PerspectiveCamera& camera,
                                        RHITexture* colorTarget,
@@ -1419,22 +1435,6 @@ namespace Axle {
         if (scene) {
             auto& registry = scene->GetRegistry();
             auto meshView = registry.view<TransformComponent, MeshInstance3D>();
-
-            struct DrawItem {
-                std::shared_ptr<RHIMesh> Mesh;
-                RHIObjectPushConstants PushConsts;
-                Axle::SurfaceType SurfaceType = Axle::SurfaceType::Opaque;
-                Axle::CullMode CullMode = Axle::CullMode::None;
-                bool DepthWrite = true;
-                float DistanceSq = 0.0f;
-                int RenderQueue = 2000;
-                std::shared_ptr<RHIMaterial> Material;
-                bool UseCustomShader = false;
-                std::shared_ptr<const CustomReadyGeneration> CustomGeneration;
-                PackedMaterialResultData PackedConstants;
-                std::vector<TextureRequest> TextureRequests;
-                entt::entity DiagnosticEntity = entt::null;
-            };
 
             std::vector<DrawItem> opaqueQueue;
             std::vector<DrawItem> transparentQueue;
@@ -1863,6 +1863,521 @@ namespace Axle {
         // Reset command allocator to recycle its memory pages for next frame
         m_CommandBuffer.Reset();
 
+        if (m_Streamer) {
+            m_Streamer->EndFrame();
+        }
+    }
+
+    void RHISceneRenderer::RenderWorldView(const RenderWorld& world,
+                                           const PerspectiveCamera& camera,
+                                           RHITexture* colorTarget,
+                                           RHITexture* depthTarget,
+                                           const SceneRenderSettings& settings,
+                                           PhysicsScene* physicsScene,
+                                           std::shared_ptr<RHI::RHIViewTargets> viewTargets)
+    {
+        if (!colorTarget || !colorTarget->IsValid()) return;
+
+        m_CurrentColorFormat = RHI::ToNRIFormat(colorTarget->GetFormat());
+        m_CurrentDepthFormat = depthTarget ? RHI::ToNRIFormat(depthTarget->GetFormat()) : nri::Format::D32_SFLOAT;
+
+        nri::Texture* nativeColor = colorTarget->GetNative();
+        nri::Descriptor* colorRTV = colorTarget->GetRTV();
+        nri::Texture* nativeDepth = depthTarget ? depthTarget->GetNative() : nullptr;
+        nri::Descriptor* depthDSV = depthTarget ? depthTarget->GetDSV() : nullptr;
+
+        RenderWorldView(world, camera,
+                        nativeColor, colorRTV,
+                        nativeDepth, depthDSV,
+                        colorTarget->GetWidth(), colorTarget->GetHeight(),
+                        settings, physicsScene, viewTargets);
+    }
+
+    void RHISceneRenderer::RenderWorldView(const RenderWorld& world,
+                                           const PerspectiveCamera& camera,
+                                           nri::Texture* colorTarget,
+                                           nri::Descriptor* colorRTV,
+                                           nri::Texture* depthTarget,
+                                           nri::Descriptor* depthDSV,
+                                           uint32_t width, uint32_t height,
+                                           const SceneRenderSettings& settings,
+                                           PhysicsScene* physicsScene,
+                                           std::shared_ptr<RHI::RHIViewTargets> viewTargets)
+    {
+        if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
+
+        m_LastDrawCallCount = 0;
+        m_CustomDescriptorPool.Reset();
+        m_LastRenderedEntityCount = 0;
+        m_LastStreamedTransformBytes = 0;
+
+        // 1. Stream Global Scene Constants & Lighting Buffer
+        RHISceneConstants sceneConstants;
+        sceneConstants.ViewProjection = camera.GetViewProjectionMatrixZO();
+        sceneConstants.View = camera.GetViewMatrix();
+        sceneConstants.Projection = camera.GetProjectionMatrixZO();
+        sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), settings.EnableToneMapping ? 1.0f : 0.0f);
+        sceneConstants.AmbientLight = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
+        sceneConstants.SunDirection = glm::vec4(0.45f, 0.85f, 0.25f, 1.2f);
+        sceneConstants.SunColor = glm::vec4(1.0f, 0.98f, 0.92f, 1.0f);
+
+        RHIMultiLightBufferData lightData{};
+        lightData.CameraPosAndExposure = glm::vec4(camera.GetPosition(), 1.0f);
+        lightData.ReservedHeader[0].x = settings.EnableStudioLightLobes ? 0.0f : 1.0f;
+
+        if (world.DirectionalLight.has_value()) {
+            const auto& dl = *world.DirectionalLight;
+            float lux = (dl.Intensity > 100.0f) ? dl.Intensity : (dl.Intensity * PhysicalIlluminance::DirectSunlight);
+            lightData.SunLight.DirectionAndIlluminance = glm::vec4(dl.Direction, lux);
+            lightData.SunLight.ColorAndAmbient = glm::vec4(dl.Color, dl.AmbientIntensity);
+            lightData.SunLight.AmbientColor = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
+            lightData.SunLight.ShadowParams = glm::vec4(0.0012f, 2.0f, 0.0f, 0.0f);
+            lightData.LightCounts.z = 1;
+        } else {
+            lightData.SunLight.DirectionAndIlluminance = glm::vec4(glm::normalize(glm::vec3(0.45f, 0.85f, 0.25f)), PhysicalIlluminance::DirectSunlight);
+            lightData.SunLight.ColorAndAmbient = glm::vec4(1.0f, 0.98f, 0.92f, 0.25f);
+            lightData.SunLight.AmbientColor = glm::vec4(0.22f, 0.25f, 0.32f, 1.0f);
+            lightData.SunLight.ShadowParams = glm::vec4(0.0012f, 2.0f, 0.0f, 0.0f);
+            lightData.LightCounts.z = 1;
+        }
+
+        uint32_t pointIndex = 0;
+        for (const auto& pl : world.PointLights) {
+            if (pointIndex >= MAX_POINT_LIGHTS) break;
+            float intensity = (pl.Intensity > 10.0f) ? pl.Intensity : (pl.Intensity * 1000.0f);
+            lightData.PointLights[pointIndex].PositionAndRadius = glm::vec4(pl.Position, pl.Radius);
+            lightData.PointLights[pointIndex].ColorAndIntensity = glm::vec4(pl.Color, intensity);
+            lightData.PointLights[pointIndex].Params = glm::vec4(pl.Falloff, 0.05f * 0.05f, 0.0f, 0.0f);
+            pointIndex++;
+        }
+        lightData.LightCounts.x = pointIndex;
+
+        uint32_t spotIndex = 0;
+        for (const auto& sl : world.SpotLights) {
+            if (spotIndex >= MAX_SPOT_LIGHTS) break;
+            float intensity = (sl.Intensity > 10.0f) ? sl.Intensity : (sl.Intensity * 500.0f);
+            float cosInner = std::cos(glm::radians(sl.InnerAngle));
+            float cosOuter = std::cos(glm::radians(sl.OuterAngle));
+            lightData.SpotLights[spotIndex].PositionAndRange = glm::vec4(sl.Position, sl.Range);
+            lightData.SpotLights[spotIndex].DirectionAndIntensity = glm::vec4(sl.Direction, intensity);
+            lightData.SpotLights[spotIndex].ColorAndInnerAngle = glm::vec4(sl.Color, cosInner);
+            lightData.SpotLights[spotIndex].AngleParams = glm::vec4(cosOuter, 1.0f, 0.0f, 0.0f);
+            spotIndex++;
+        }
+        lightData.LightCounts.y = spotIndex;
+
+        bool useIBL = m_UseIBL || (world.Skybox.Enabled && world.Skybox.Type == 1);
+        lightData.LightCounts.w = useIBL ? 1u : 0u;
+
+        m_LightBuffer.Update(lightData);
+
+        const auto& sun = lightData.SunLight;
+        sceneConstants.SunDirection = glm::vec4(sun.DirectionAndIlluminance.x,
+                                                sun.DirectionAndIlluminance.y,
+                                                sun.DirectionAndIlluminance.z,
+                                                sun.DirectionAndIlluminance.w * 0.0005f);
+        sceneConstants.SunColor = sun.ColorAndAmbient;
+        sceneConstants.AmbientLight = glm::vec4(sun.AmbientColor.r, sun.AmbientColor.g, sun.AmbientColor.b, sun.ColorAndAmbient.w);
+
+        if (m_SceneConstantBuffer.IsValid()) {
+            if (!m_SceneConstantBuffer.UpdateData(&sceneConstants, sizeof(RHISceneConstants))) return;
+        }
+
+        if (m_Streamer && m_Streamer->IsValid()) {
+            if (m_Streamer->StreamConstant(sceneConstants) == UINT32_MAX) return;
+            m_LastStreamedTransformBytes += sizeof(RHISceneConstants);
+        }
+
+        bool useMSAA = (settings.MSAASamples > 1);
+        uint8_t activeSampleCount = useMSAA ? settings.MSAASamples : 1;
+        bool useToneMap = settings.EnableToneMapping;
+        bool useFXAA = settings.EnableFXAA;
+
+        nri::Texture* sceneTargetTexture = colorTarget;
+        nri::Descriptor* sceneTargetRTV = colorRTV;
+        nri::Texture* sceneDepthTexture = depthTarget;
+        nri::Descriptor* sceneDepthDSV = depthDSV;
+        nri::Format sceneTargetFormat = m_CurrentColorFormat;
+
+        auto rejectTargets = [&] { if (m_Streamer) m_Streamer->EndFrame(); };
+        RHIViewTargetDesc targetDesc; targetDesc.Width = width; targetDesc.Height = height;
+        targetDesc.ColorFormat = FromNRIFormat(m_CurrentColorFormat); targetDesc.DepthFormat = FromNRIFormat(m_CurrentDepthFormat);
+        targetDesc.EnableDepth = sceneDepthTexture != nullptr; targetDesc.Samples = activeSampleCount;
+        targetDesc.HDR = useToneMap; targetDesc.FXAA = useFXAA; targetDesc.OwnPrimary = false;
+        if (viewTargets) {
+            auto expected = targetDesc; expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
+            expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
+            if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
+                (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
+                (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) { rejectTargets(); return; }
+            m_ImplicitViewTargets.reset(); m_ImplicitViewColor = {};
+        } else {
+            const auto identity = m_Device->GetResources().AcquireNative(colorTarget).GetHandle();
+            if (!m_ImplicitViewTargets || !m_ImplicitViewTargets->IsValid() || m_ImplicitViewTargets->GetDesc() != targetDesc || m_ImplicitViewColor != identity) {
+                auto candidate = std::make_shared<RHIViewTargets>();
+                if (!candidate->Configure(targetDesc)) { rejectTargets(); return; }
+                m_ImplicitViewTargets = std::move(candidate); m_ImplicitViewColor = identity;
+            }
+            viewTargets = m_ImplicitViewTargets;
+        }
+        m_ActiveViewTargets = viewTargets;
+        m_MSAAColorTarget = viewTargets->Get(RHIViewTarget::MSAAColor); m_MSAADepthTarget = viewTargets->Get(RHIViewTarget::MSAADepth);
+        m_IntermediateHDRTarget = viewTargets->Get(RHIViewTarget::HDR); m_IntermediateFXAATarget = viewTargets->Get(RHIViewTarget::FXAA);
+        m_OpaqueSceneColor = viewTargets->Get(RHIViewTarget::OpaqueColor); m_OpaqueSceneDepth = viewTargets->Get(RHIViewTarget::OpaqueDepth);
+        m_ParticleSceneDepth = viewTargets->Get(RHIViewTarget::ParticleDepth);
+        if (useMSAA) sceneTargetFormat = useToneMap ? nri::Format::RGBA16_SFLOAT : m_CurrentColorFormat;
+        if (useMSAA) {
+            m_CurrentMSAASamples = activeSampleCount;
+            sceneTargetTexture = m_MSAAColorTarget->GetNative(); sceneTargetRTV = m_MSAAColorTarget->GetRTV();
+            sceneDepthTexture = m_MSAADepthTarget ? m_MSAADepthTarget->GetNative() : nullptr; sceneDepthDSV = m_MSAADepthTarget ? m_MSAADepthTarget->GetDSV() : nullptr;
+        } else if (useToneMap) {
+            sceneTargetTexture = m_IntermediateHDRTarget->GetNative(); sceneTargetRTV = m_IntermediateHDRTarget->GetRTV();
+            sceneTargetFormat = nri::Format::RGBA16_SFLOAT;
+        } else if (useFXAA) {
+            sceneTargetTexture = m_IntermediateFXAATarget->GetNative(); sceneTargetRTV = m_IntermediateFXAATarget->GetRTV();
+        }
+        nri::Pipeline* activePipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR && activeSampleCount == 1)
+                                            ? m_PipelineHDR
+                                            : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_Pipeline && activeSampleCount == 1)
+                                                  ? m_Pipeline
+                                                  : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
+        if (!activePipeline) { rejectTargets(); return; }
+
+        if (!m_CommandBuffer.Begin()) return;
+
+        m_CommandBuffer.TransitionTexture(sceneTargetTexture, RHIResourceLayout::ShaderResource, RHIResourceLayout::ColorAttachment);
+        if (sceneDepthTexture) {
+            m_CommandBuffer.TransitionTexture(sceneDepthTexture, RHIResourceLayout::DepthStencilRead, RHIResourceLayout::DepthStencilWrite);
+        }
+
+        nri::AttachmentDesc colorAttachment = {};
+        colorAttachment.descriptor = sceneTargetRTV;
+        colorAttachment.loadOp = nri::LoadOp::CLEAR;
+        colorAttachment.storeOp = nri::StoreOp::STORE;
+        colorAttachment.clearValue.color.f = { settings.ClearColor.r, settings.ClearColor.g, settings.ClearColor.b, settings.ClearColor.a };
+
+        nri::AttachmentDesc depthAttachment = {};
+        if (sceneDepthDSV) {
+            depthAttachment.descriptor = sceneDepthDSV;
+            depthAttachment.loadOp = nri::LoadOp::CLEAR;
+            depthAttachment.storeOp = nri::StoreOp::STORE;
+            depthAttachment.clearValue.depthStencil.depth = 1.0f;
+            depthAttachment.clearValue.depthStencil.stencil = 0;
+        }
+
+        nri::RenderingDesc renderingDesc = {};
+        renderingDesc.colors = &colorAttachment;
+        renderingDesc.colorNum = 1;
+        if (sceneDepthDSV) {
+            renderingDesc.depth = depthAttachment;
+        }
+
+        m_CommandBuffer.BeginRendering(renderingDesc);
+
+        nri::Viewport vp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+        m_CommandBuffer.SetViewport(vp);
+
+        nri::Rect scissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+        m_CommandBuffer.SetScissor(scissor);
+
+        m_CommandBuffer.SetPipeline(activePipeline);
+        m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+
+        if (m_SceneConstantBuffer.IsValid() && m_SceneConstantBuffer.GetCBV()) {
+            m_CommandBuffer.SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
+        }
+        if (m_LightBuffer.IsValid() && m_LightBuffer.GetCBV()) {
+            m_CommandBuffer.SetRootDescriptor(1, m_LightBuffer.GetCBV());
+        }
+
+        if (m_DescriptorPool.IsValid()) {
+            m_DescriptorPool.Bind(m_CommandBuffer.GetNative());
+            if (m_DefaultDescriptorSet) {
+                RHIDescriptorPool::BindDescriptorSet(m_CommandBuffer.GetNative(), 0, m_DefaultDescriptorSet);
+            }
+        }
+
+        auto RenderSkybox = [&]() {
+            if (settings.EnableSkybox && m_SkyboxPipeline) {
+                if (world.Skybox.Enabled && world.Skybox.Type == 0) {
+                    glm::vec3 sunDir = glm::vec3(sceneConstants.SunDirection);
+                    if (glm::length(sunDir) > 1e-4f) sunDir = glm::normalize(sunDir);
+                    else sunDir = glm::vec3(0.0f, 1.0f, 0.0f);
+                    float sunElev = sunDir.y;
+                    float dayFactor = std::clamp(sunElev * 3.0f + 0.5f, 0.0f, 1.0f);
+                    float sunsetFactor = std::clamp(1.0f - std::abs(sunElev) * 2.5f, 0.0f, 1.0f);
+
+                    RHISkyboxConstants skyConstants{};
+                    skyConstants.Params = glm::vec4(1.0f, world.Skybox.Intensity, world.Skybox.Exposure, 0.0f);
+                    skyConstants.SunDirection = glm::vec4(sunDir, dayFactor);
+                    skyConstants.SunColor = glm::vec4(glm::vec3(sceneConstants.SunColor), sunsetFactor);
+
+                    glm::vec3 zenith = glm::mix(glm::vec3(0.05f, 0.08f, 0.15f), glm::vec3(world.Skybox.ZenithColor), dayFactor);
+                    glm::vec3 horizon = glm::mix(glm::vec3(0.08f, 0.10f, 0.18f),
+                                                 glm::mix(glm::vec3(world.Skybox.HorizonColor), glm::vec3(1.0f, 0.45f, 0.15f), sunsetFactor),
+                                                 dayFactor);
+                    glm::vec3 ground = glm::mix(glm::vec3(0.02f, 0.02f, 0.03f), glm::vec3(world.Skybox.GroundColor), dayFactor);
+
+                    skyConstants.ZenithColor = glm::vec4(zenith, 1.0f);
+                    skyConstants.HorizonColor = glm::vec4(horizon, 1.0f);
+                    skyConstants.GroundColor = glm::vec4(ground, 1.0f);
+
+                    if (m_SkyboxConstantBuffer.IsValid()) {
+                        m_SkyboxConstantBuffer.UpdateData(&skyConstants, sizeof(RHISkyboxConstants));
+                    }
+
+                    nri::Pipeline* activeSkyboxPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
+                                                              ? m_SkyboxPipelineHDR
+                                                              : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline && activeSampleCount == 1)
+                                                                    ? m_SkyboxPipeline
+                                                                    : GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
+                    m_CommandBuffer.SetPipeline(activeSkyboxPipeline ? activeSkyboxPipeline : m_SkyboxPipeline);
+                    m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SkyboxPipelineLayout);
+                    if (m_SkyboxConstantBuffer.IsValid() && m_SkyboxConstantBuffer.GetCBV()) {
+                        m_CommandBuffer.SetRootDescriptor(0, m_SkyboxConstantBuffer.GetCBV());
+                    }
+
+                    m_CommandBuffer.Draw(3, 1, 0, 0);
+                    m_LastDrawCallCount++;
+                }
+            }
+        };
+
+        std::vector<DrawItem> opaqueQueue;
+        std::vector<DrawItem> transparentQueue;
+        glm::vec3 camPos = camera.GetPosition();
+
+        for (const auto& meshInst : world.Meshes) {
+            std::shared_ptr<RHIMesh> mesh = meshInst.NativeMesh;
+            if (!mesh || !mesh->IsValid()) continue;
+
+            DrawItem item;
+            item.DiagnosticEntity = static_cast<entt::entity>(meshInst.EntityID);
+            item.Mesh = mesh;
+            item.PushConsts.Model = meshInst.WorldTransform;
+            item.PushConsts.ColorPrimary = meshInst.Material.AlbedoColor;
+            item.PushConsts.ColorSecondary = meshInst.Material.SecondaryColor;
+            item.PushConsts.Params = glm::vec4(meshInst.Material.TileScale.x, meshInst.Material.TileScale.y, static_cast<float>(meshInst.Material.PatternMode), 0.5f);
+            item.PushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
+            glm::vec3 diff = glm::vec3(meshInst.WorldTransform[3]) - camPos;
+            item.DistanceSq = glm::dot(diff, diff);
+
+            item.Material = meshInst.Material.RHIMaterialAsset;
+            if (item.Material) {
+                item.Material->ApplyToPushConstants(item.PushConsts);
+                item.PushConsts.Model = meshInst.WorldTransform;
+                item.SurfaceType = item.Material->GetSurfaceType();
+                item.CullMode = item.Material->GetCullMode();
+                item.DepthWrite = item.Material->GetDepthWrite();
+                item.RenderQueue = item.Material->GetDesc().RenderQueue;
+            }
+
+            if (item.SurfaceType == Axle::SurfaceType::Transparent || item.SurfaceType == Axle::SurfaceType::Additive) {
+                transparentQueue.push_back(std::move(item));
+            } else {
+                opaqueQueue.push_back(std::move(item));
+            }
+        }
+
+        nri::Pipeline* currentPipeline = activePipeline;
+        bool refractionReady = false;
+        size_t materialDrawIndex = 0;
+
+        auto RenderDrawItem = [&](const DrawItem& item) {
+            nri::Pipeline* needed = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
+                ? m_PipelineHDR
+                : (sceneTargetFormat == nri::Format::RGBA8_UNORM && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_Pipeline)
+                    ? m_Pipeline
+                    : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode, item.DepthWrite);
+
+            if (needed && needed != currentPipeline) {
+                m_CommandBuffer.SetPipeline(needed);
+                currentPipeline = needed;
+            }
+
+            if (materialDrawIndex == m_MaterialDraws.size()) {
+                auto resource = std::make_unique<MaterialDrawResources>();
+                if (!resource->Constants.Init(RHIBufferDesc::Constant(sizeof(RHIMaterialConstants), RHIMemoryLocation::HostUpload, "MaterialConstants"))) return;
+                resource->Set = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 0);
+                if (!resource->Set) return;
+                m_MaterialDraws.push_back(std::move(resource));
+            }
+            auto& resource = *m_MaterialDraws[materialDrawIndex++];
+            RHIMaterialConstants materialData;
+            if (item.Material) materialData = item.Material->BuildConstants();
+            std::vector<nri::Descriptor*> srvs(static_cast<size_t>(RHITextureSlot::Count) + 5);
+            for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
+                auto textureSlot = static_cast<RHITextureSlot>(slot);
+                std::shared_ptr<RHITexture> texture;
+                if (item.Material && (materialData.Flags.x & (1u << slot))) {
+                    if (item.Material->HasTexture(textureSlot)) texture = item.Material->GetTexture(textureSlot);
+                    else {
+                        const auto& desc = item.Material->GetDesc();
+                        auto path = slot == 2 && desc.TextureMode == TextureMode::PackedORM
+                            ? desc.ORMPath : item.Material->GetTexturePath(textureSlot);
+                        texture = m_MaterialTextures.Get(path, slot == 0 || slot == 5);
+                    }
+                }
+                if (!texture) {
+                    materialData.Flags.x &= ~(1u << slot);
+                    texture = RHIMaterial::GetFallbackTexture(textureSlot);
+                }
+                resource.Textures[slot] = texture;
+                srvs[slot < 6 ? slot : slot + 3] = texture->GetSRV();
+            }
+            srvs[6] = (m_IrradianceMap ? m_IrradianceMap : RHIMaterial::GetDefaultIrradianceCubemap())->GetSRV();
+            srvs[7] = (m_PrefilterMap ? m_PrefilterMap : RHIMaterial::GetDefaultPrefilterCubemap())->GetSRV();
+            srvs[8] = (m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT())->GetSRV();
+            srvs[13] = refractionReady ? m_OpaqueSceneColor->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
+            srvs[14] = refractionReady ? m_OpaqueSceneDepth->GetSRV() : RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+            materialData.RefractionFrame = glm::vec4(width, height, refractionReady ? 1.0f : 0.0f, 0.0f);
+            m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs);
+            if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) return;
+            m_CommandBuffer.SetRootDescriptor(2, resource.Constants.GetCBV());
+            RHIDescriptorPool::BindDescriptorSet(m_CommandBuffer.GetNative(), 0, resource.Set);
+
+            m_CommandBuffer.SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
+            m_LastStreamedTransformBytes += sizeof(item.PushConsts);
+
+            item.Mesh->Bind(m_CommandBuffer);
+            item.Mesh->Draw(m_CommandBuffer);
+
+            m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+            m_LastRenderedEntityCount++;
+        };
+
+        std::sort(opaqueQueue.begin(), opaqueQueue.end(), [](const DrawItem& a, const DrawItem& b) {
+            return a.RenderQueue < b.RenderQueue;
+        });
+
+        for (const auto& item : opaqueQueue) {
+            RenderDrawItem(item);
+        }
+
+        RenderSkybox();
+
+        bool needsRefraction = std::any_of(transparentQueue.begin(), transparentQueue.end(), [](const DrawItem& item) {
+            return item.SurfaceType == SurfaceType::Transparent && item.Material && item.Material->GetDesc().RefractionEnabled;
+        });
+        if (needsRefraction && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV) {
+            if (m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth->IsValid()) {
+                m_CommandBuffer.EndRendering();
+                m_CommandBuffer.TransitionTexture(sceneTargetTexture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::CopySource);
+                m_CommandBuffer.TransitionTexture(sceneDepthTexture, RHIResourceLayout::DepthStencilWrite, RHIResourceLayout::CopySource);
+                m_CommandBuffer.TransitionTexture(m_OpaqueSceneColor->GetNative(), RHIResourceLayout::ShaderResource, RHIResourceLayout::CopyDest);
+                m_CommandBuffer.TransitionTexture(m_OpaqueSceneDepth->GetNative(), RHIResourceLayout::ShaderResource, RHIResourceLayout::CopyDest);
+                m_CommandBuffer.CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
+                m_CommandBuffer.CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
+                m_CommandBuffer.TransitionTexture(sceneTargetTexture, RHIResourceLayout::CopySource, RHIResourceLayout::ColorAttachment);
+                m_CommandBuffer.TransitionTexture(sceneDepthTexture, RHIResourceLayout::CopySource, RHIResourceLayout::DepthStencilWrite);
+                m_CommandBuffer.TransitionTexture(m_OpaqueSceneColor->GetNative(), RHIResourceLayout::CopyDest, RHIResourceLayout::ShaderResource);
+                m_CommandBuffer.TransitionTexture(m_OpaqueSceneDepth->GetNative(), RHIResourceLayout::CopyDest, RHIResourceLayout::ShaderResource);
+                colorAttachment.loadOp = nri::LoadOp::LOAD;
+                depthAttachment.loadOp = nri::LoadOp::LOAD;
+                renderingDesc.depth = depthAttachment;
+                m_CommandBuffer.BeginRendering(renderingDesc);
+                refractionReady = true;
+            }
+        }
+
+        m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+        m_CommandBuffer.SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
+        m_CommandBuffer.SetRootDescriptor(1, m_LightBuffer.GetCBV());
+        m_DescriptorPool.Bind(m_CommandBuffer.GetNative());
+        currentPipeline = nullptr;
+
+        if (!transparentQueue.empty()) {
+            std::sort(transparentQueue.begin(), transparentQueue.end(), [](const DrawItem& a, const DrawItem& b) {
+                return a.RenderQueue == b.RenderQueue ? a.DistanceSq > b.DistanceSq : a.RenderQueue < b.RenderQueue;
+            });
+            for (const auto& item : transparentQueue) {
+                RenderDrawItem(item);
+            }
+        }
+
+        // Physics Debug Wireframe Pass
+        if (settings.ShowPhysicsDebug && m_PhysicsDebugRenderer && physicsScene) {
+            m_PhysicsDebugRenderer->Begin(camera.GetPosition(),
+                                         camera.GetViewProjectionMatrixZO(),
+                                         sceneTargetFormat,
+                                         m_CurrentDepthFormat,
+                                         activeSampleCount,
+                                         true,
+                                         settings.PhysicsDepthBias,
+                                         settings.PhysicsAlphaMultiplier);
+
+            physicsScene->DrawDebug(*m_PhysicsDebugRenderer, settings.PhysicsDrawSettings);
+            m_PhysicsDebugRenderer->End(m_CommandBuffer);
+            m_LastDrawCallCount += m_PhysicsDebugRenderer->GetDrawCallCount();
+        }
+
+        m_CommandBuffer.EndRendering();
+
+        m_CommandBuffer.TransitionTexture(sceneTargetTexture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
+        if (sceneDepthTexture) {
+            m_CommandBuffer.TransitionTexture(sceneDepthTexture, RHIResourceLayout::DepthStencilWrite, RHIResourceLayout::DepthStencilRead);
+        }
+
+        if (useMSAA && m_MSAAColorTarget && m_MSAAColorTarget->IsValid()) {
+            nri::Texture* resolveDstTexture = colorTarget;
+            if (useToneMap) {
+                resolveDstTexture = m_IntermediateHDRTarget->GetNative();
+            } else if (useFXAA) {
+                resolveDstTexture = m_IntermediateFXAATarget->GetNative();
+            }
+
+            m_CommandBuffer.TransitionTexture(m_MSAAColorTarget->GetNative(), RHIResourceLayout::ShaderResource, RHIResourceLayout::ResolveSource);
+            m_CommandBuffer.TransitionTexture(resolveDstTexture, RHIResourceLayout::ShaderResource, RHIResourceLayout::ResolveDest);
+            m_CommandBuffer.ResolveTexture(resolveDstTexture, m_MSAAColorTarget->GetNative(), nri::ResolveOp::AVERAGE);
+            m_CommandBuffer.TransitionTexture(resolveDstTexture, RHIResourceLayout::ResolveDest, RHIResourceLayout::ShaderResource);
+            m_CommandBuffer.TransitionTexture(m_MSAAColorTarget->GetNative(), RHIResourceLayout::ResolveSource, RHIResourceLayout::ShaderResource);
+        }
+
+        if (useToneMap && m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid()) {
+            RHIToneMappingConstants toneConstants{};
+            toneConstants.Params = glm::vec4(settings.Exposure, settings.Gamma, static_cast<float>(settings.ToneMappingMode), settings.WhitePoint);
+            toneConstants.ColorGrading = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+
+            nri::Texture* toneOutTexture = colorTarget;
+            nri::Descriptor* toneOutRTV = colorRTV;
+            if (useFXAA) {
+                toneOutTexture = m_IntermediateFXAATarget->GetNative();
+                toneOutRTV = m_IntermediateFXAATarget->GetRTV();
+            }
+
+            RenderToneMapping(m_CommandBuffer,
+                              m_IntermediateHDRTarget->GetSRV(),
+                              toneOutTexture,
+                              toneOutRTV,
+                              width, height,
+                              m_CurrentColorFormat,
+                              toneConstants);
+        }
+
+        if (useFXAA && m_IntermediateFXAATarget && m_IntermediateFXAATarget->IsValid()) {
+            RHIFXAAConstants fxaaConstants{};
+            fxaaConstants.ScreenSize = glm::vec4(
+                static_cast<float>(width),
+                static_cast<float>(height),
+                1.0f / static_cast<float>(width),
+                1.0f / static_cast<float>(height)
+            );
+            fxaaConstants.FXAAParams = glm::vec4(settings.FXAASubpixQuality, settings.FXAAEdgeThreshold, settings.FXAAEdgeThresholdMin, 0.0f);
+
+            RenderFXAA(m_CommandBuffer,
+                       m_IntermediateFXAATarget->GetSRV(),
+                       colorTarget,
+                       colorRTV,
+                       width, height,
+                       m_CurrentColorFormat,
+                       fxaaConstants);
+        }
+
+        if (!m_CommandBuffer.End()) return;
+        auto* queue = m_Device->GetGraphicsQueue();
+        if (!m_CommandBuffer.Submit(queue) || !m_Device->WaitIdle()) return;
+        if (m_Streamer && !m_Streamer->EndFrame()) return;
+        m_CommandBuffer.Reset();
         if (m_Streamer) {
             m_Streamer->EndFrame();
         }

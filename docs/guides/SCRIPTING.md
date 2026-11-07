@@ -2,7 +2,18 @@
 
 Navigation: [documentation hub](../README.md).
 
-For the implemented registry/DLL contracts, reload failure paths and worker-thread callback behavior, see [SDD: Native scripts](../architecture/SDD.md#10-native-scripts-and-dll-boundary) and [reload sequence](../architecture/RUNTIME_FLOWS.md#7-windows-script-compilation-and-reload). C-linkage exports pass C++ metadata with runtime ABI validation (`AXLE_SCRIPT_ABI_VERSION = 2`).
+For the implemented registry/DLL contracts, reload failure paths and worker-thread callback behavior, see [SDD: Native scripts](../architecture/SDD.md#10-native-scripts-and-dll-boundary) and [reload sequence](../architecture/RUNTIME_FLOWS.md#7-windows-script-compilation-and-reload). C-linkage exports pass C++ metadata with runtime ABI validation (`AXLE_SCRIPT_ABI_VERSION = 4`).
+
+The build handshake also checks compiler, Debug/Release, STL exception mode,
+iterator debug level and CRT linkage. Rebuild all script modules after ABI changes.
+Reload covers edit, Play and private scenes; a bind failure after commit stops
+simulation and retains the new module for safe cleanup.
+
+`OnUpdate` runs once per admitted gameplay frame with scaled simulation dt.
+Use `OnFixedUpdate` for controls/physics and `OnLateUpdate` for presentation.
+Gameplay suspends at speed zero and while paused; an explicit Step performs one
+complete fixed tick. Tick input includes `Input::IsKeyJustPressed` and
+`IsKeyJustReleased`; edges survive zero-tick frames and are consumed once.
 
 AxleEngine adopts a high-performance **Hybrid ECS / C++ Native Scripting Architecture**. By writing gameplay code directly in native C++20, your game achieves zero language-bridge overhead, direct SIMD vectorization, and seamless integration with Jolt Physics and EnTT ECS—all while maintaining the ergonomic component-attachment workflows of modern engines.
 
@@ -37,7 +48,7 @@ Every gameplay script inherits from `Axle::ScriptableEntity` ([`Engine/Scene/inc
 #pragma once
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/ScriptRegistry.hpp>
-#include <Axle/Input/Input.hpp>
+#include <Axle/Input.hpp>
 
 class DroneController : public Axle::ScriptableEntity {
 public:
@@ -130,7 +141,7 @@ AXLE_REGISTER_SCRIPT(DroneController);
 
 ## 🔄 Dynamic In-Editor Script Hot-Reloading (`F9`)
 
-AxleEngine allows you to modify C++ code and see changes in the running editor without restarting. The reload manager enforces an ABI version handshake (`AXLE_SCRIPT_ABI_VERSION = 2`):
+AxleEngine allows you to modify C++ code and see changes in the running editor without restarting. The reload manager enforces an ABI version handshake (`AXLE_SCRIPT_ABI_VERSION = 4`):
 
 ```mermaid
 sequenceDiagram
@@ -148,7 +159,7 @@ sequenceDiagram
     Editor->>Manager: ReloadScripts()
     Manager->>DLL: Copy AxleScripts.dll to unique timestamped shadow DLL
     Manager->>DLL: LoadLibrary(shadow_dll) (Bypasses Windows LNK1104 file lock)
-    Manager->>DLL: Validate GetScriptABIVersion() == 2
+    Manager->>DLL: Validate GetScriptABIVersion() == 4
     Manager->>Manager: Serialize active script fields to memory
     Manager->>Editor: Re-bind new vtables and restore serialized field values
     Editor-->>Dev: [OK] Scripts reloaded in ~0.4s!
@@ -167,7 +178,7 @@ Open the generated file in your preferred IDE (Visual Studio, VS Code, CLion):
 #pragma once
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/ScriptRegistry.hpp>
-#include <Axle/Input/Input.hpp>
+#include <Axle/Input.hpp>
 
 class TurretController : public Axle::ScriptableEntity {
 public:

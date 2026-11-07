@@ -1,10 +1,15 @@
 # Scene and ECS Guide
 
-Reviewed: **2026-11-06** (post OPT-03). See [SDD](../architecture/SDD.md#4-scene-and-entity), [class relationships](../architecture/CLASS_RELATIONSHIPS.md#3-ecs-storage-and-entity-facade) and the [documentation hub](../README.md).
+Reviewed: **2026-11-07** (OPT-02/03 corrections). See the [independent review](../reviews/OPT_02_03_CODEX_REVIEW.md), [SDD](../architecture/SDD.md#4-scene-and-entity) and the [documentation hub](../README.md).
 
 ## 1. Identity, SceneData, and storage
 
 `SceneData` owns an `entt::registry` and manages entity storage, hierarchy relationships, and transform propagation without coupling to concrete graphics or physics runtimes. `Scene` provides the high-level coordinator facade.
+
+`Axle::SceneData` is a separate target in `Engine/SceneData`, linked only to Core.
+Use `DataComponents.hpp` and `SceneDataDocument` for CPU construction/copy and
+structural document loading with passive system/plugin sections. Concrete codecs
+are installed by Scene composition; generic data tools do not initialize them implicitly.
 
 `Entity` is a lightweight value facade wrapping an `entt::entity` and a non-owning pointer to its `SceneData`/`Scene`. Registry-local handles and persistent 64-bit UUIDs are distinct; `IDComponent` stores the persistent UUID.
 
@@ -19,11 +24,11 @@ auto& transform = player.GetComponent<Axle::TransformComponent>();
 transform.Translation = { 0.0f, 1.0f, 0.0f };
 ```
 
-Validate handles with `if (entity)` before use. `Entity` does not keep `Scene` alive and becomes invalid when its underlying entity is destroyed.
+Validate handles with `if (entity)` before use. A weak lifetime token and reset epoch invalidate handles on entity destruction, SceneData Clear, or owner destruction. `GetScene()` returns null for generic SceneData.
 
 ## 2. Component families
 
-Built-in types share [Components.hpp](../../Engine/Scene/include/Axle/Components.hpp):
+Basic identity, transform and hierarchy types live in [DataComponents.hpp](../../Engine/SceneData/include/Axle/DataComponents.hpp). Concrete system types are exposed by [Components.hpp](../../Engine/Scene/include/Axle/Components.hpp):
 
 | Family | Representative types |
 |---|---|
@@ -58,7 +63,7 @@ for (Axle::Entity child : vehicle.GetChildren()) {
 ```
 
 ### Monotonic transform revisions
-Transform evaluation is read-only and side-effect free via `GetWorldTransform()`. Scene data tracks a monotonic transform revision counter via `GetTransformRevision()`. Downstream consumers (renderers, physics post-step sync, spatial audio) inspect this revision to skip redundant matrix re-evaluations when transforms are stationary.
+`GetWorldTransform()` reads the last completed cache without mutation. After changing authored local values, explicitly call `UpdateWorldTransforms()` for the forest, or `RecomputeWorldTransform()` for one entity and its ancestors, before reading world matrices. Reparenting publishes the changed entity path; publish the forest once after a batch before reading descendants. `GetTransformRevision()` advances when an evaluation completes; pair a revision with its scene identity when switching scenes. Parent links are authoritative and inverse child lists are rebuilt before disjoint subtree evaluation.
 
 ## 4. Scenes, assemblies and play-mode clones
 
@@ -67,11 +72,14 @@ Transform evaluation is read-only and side-effect free via `GetWorldTransform()`
 - **Scene::Copy**: Creates an isolated `SceneData` copy for Editor Play while preserving UUIDs and mapping parent-child handles.
 - **Play/Stop lifecycle**: On stopping Play mode, runtime state is released and the pristine authoring scene is restored.
 
+Editor Play owns a separate physics world. Runtime body IDs are not copied with
+authored values; the runtime bridge creates bodies in the destination world.
+
 `SceneSerializerContext` supplies caller-installed script and component callbacks. Keep extension hooks explicit to avoid upward dependencies from `SceneData`.
 
 ## 5. Parallel iteration and command buffer mutation boundaries
 
-Parallel ECS iteration dispatches work across workers via `JobSystemEnkiTS`:
+Parallel ECS iteration dispatches work across workers via `JobSystem`:
 
 ```cpp
 #include <Axle/ParallelECS.hpp>
@@ -89,12 +97,12 @@ Axle::ParallelECS::ForEach<Axle::TransformComponent>(
 Iterators handle EnTT view chunks correctly and explicitly skip tombstones/destroyed entities during parallel iterations.
 
 ### Structural mutation boundaries (`SceneCommandBuffer`)
-Never call `CreateEntity`, `DestroyEntity`, `AddComponent`, or `RemoveComponent` directly inside parallel worker callbacks or active iteration loops. Instead, record structural changes into a [SceneCommandBuffer](../../Engine/Scene/include/Axle/SceneCommandBuffer.hpp):
+Never call `CreateEntity`, `DestroyEntity`, `AddComponent`, or `RemoveComponent` directly inside parallel worker callbacks or active iteration loops. Instead, record structural changes into a [SceneCommandBuffer](../../Engine/SceneData/include/Axle/SceneCommandBuffer.hpp):
 
 ```cpp
 Axle::SceneCommandBuffer cmdBuffer;
 cmdBuffer.DestroyEntity(deadEntity);
-cmdBuffer.AddComponent<Axle::ParticleEmitterComponent>(targetEntity, emitterProps);
+cmdBuffer.EmplaceOrReplace<Axle::TagComponent>(targetEntity, "Updated");
 
 // Flush synchronously at the end of the frame or phase:
 cmdBuffer.Execute(scene);

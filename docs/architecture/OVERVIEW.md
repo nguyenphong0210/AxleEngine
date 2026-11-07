@@ -27,7 +27,6 @@ flowchart TD
 
     subgraph Level 3: Systems & Features
         Scene[Scene & Systems]
-        SceneData[SceneData ECS]
         Physics[Physics Engine - Jolt]
         Audio[Audio Engine - miniaudio]
         Animation[Animation Evaluation]
@@ -47,11 +46,13 @@ flowchart TD
 
     subgraph Level 0: Core
         Core[Core - Primitives, Logging, Math, Jobs]
+        SceneData[SceneData ECS]
     end
 
     Editor --> Scene
     Runtime --> Scene
     Scene --> SceneData
+    SceneData --> Core
     Scene --> Physics
     Scene --> Audio
     Scene --> Animation
@@ -71,7 +72,8 @@ flowchart TD
 
 - **Clean Level-0 Core (`Engine/Core`)**: Contains primitive types, assertions, logging, GUIDs, math utilities, and job scheduling. It has zero upward dependencies on `Platform`, `Renderer`, `Scene`, or `Physics`.
 - **Platform Application (`Engine/Platform`)**: Owns window management, event loops, and the top-level `Application` lifecycle.
-- **Scene and SceneData Separation (`Engine/Scene`)**: `SceneData` encapsulates pure ECS data (`entt::registry`), hierarchy relationships, monotonic transform revisions (`GetTransformRevision()`), and serialization. High-level `Scene` and system bridges (`SceneRendererBridge`, `PhysicsScene`) coordinate simulation without coupling data storage to concrete device runtimes.
+- **Scene data (`Engine/SceneData`)**: A real Core-only library owns registry/entity lifetimes, basic components, hierarchy, explicit transform evaluation, commands, generic copy codecs and structural document loading with passive system sections.
+- **Scene composition (`Engine/Scene`)**: Scene inherits the same SceneData registry and installs concrete codecs and physics/script/audio/character/render bridges. Editor Play has its own runtime physics world; source authored values remain separate from runtime IDs and instances. See the [OPT-02/03 review](../reviews/OPT_02_03_CODEX_REVIEW.md).
 - **Unified Simulation Driver**: Both Editor Play mode and standalone Runtime step simulation through the shared `SimulationDriver` and `SimulationClock`, executing deterministic discrete phases (`FixedControls` $\to$ `Physics` $\to$ `PostStepSync` $\to$ `FrameScripts` $\to$ `AnimationVFX` $\to$ `LatePresentation`). Defect `ECSJ-05` (divergent Editor vs Runtime update order) is resolved.
 - **Pure CPU Asset Pipeline (`Engine/Asset`)**: `AssetManager` is decoupled from GPU device resources. Native assets embed persistent 64-bit UUIDs directly; raw assets use canonical root-relative paths. Companion `.meta` sidecars are completely eliminated.
 

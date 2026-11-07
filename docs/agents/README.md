@@ -15,11 +15,10 @@ explicitly if the running client/session has not loaded it.
 
 ## Current checkpoint
 
-- **OPT-00**: Vehicle Module Clean Retirement (Delivered & Verified).
-- **OPT-01**: Clean Baseline, Threading, Asset Identity & Model (Delivered & Verified).
-- **OPT-02**: Jobs & Worker Integrity, Core Leaf Decoupling (Delivered & Verified).
-- **OPT-03**: Core, SceneData, Assets & Shared Simulation (Delivered & Verified: AF-02, EJ-08..EJ-10, AF-03, AF-04, EJ-11..EJ-14).
-- **Next assignment**: [OPT-04](../ROADMAP.md#opt-04---nri-device-and-gpu-lifetime-foundation) (NRI device and GPU lifetime foundation).
+- **OPT-00**: Gemini delivered clean retirement; the separate independent manual/full-product acceptance gap remains open.
+- **OPT-01**: Accepted baseline and verified corrections; see the roadmap evidence.
+- **OPT-02/03**: Accepted after Codex review and verified corrections for EJ-01..EJ-14 and AF-02..AF-04; [acceptance report](../reviews/OPT_02_03_CODEX_REVIEW.md).
+- **Next phase in the queue**: OPT-04 (NRI device and GPU lifetime foundation). The current review assignment is complete; no later implementation was started.
 
 Read **[docs/ROADMAP.md](../ROADMAP.md)** for OPT-00..11 order/progress and the
 [active design index](../design/README.md) for current phase contracts.
@@ -34,7 +33,8 @@ The live exchange determines the current assignment; no plan releases production
 | Architecture contracts | [Master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | External prerequisite graph, AF definitions and bounded architecture exit |
 | Native render integration | [NRI contract](../design/NRI_INTEGRATION_CONTRACT.md) | Source-pinned vendor/service/lifetime rules mapped to P41 |
 | Rendering priority | [Phase 41 plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) | Canonical packages and required gates |
-| ECS/jobs current findings | [Integration review](../architecture/ENTT_ENKITS_REVIEW.md) | Reproduced faults, source-confirmed risks and verification limits |
+| OPT-02/03 acceptance | [Codex review and corrections](../reviews/OPT_02_03_CODEX_REVIEW.md) | Current-source Debug/Release, native products and verified repairs |
+| ECS/jobs baseline findings | [Integration review](../architecture/ENTT_ENKITS_REVIEW.md) | Historical reproduced faults and risks; use the current acceptance report for correction status |
 | ECS/jobs refactor | [Refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 package contracts; EJ-00..EJ-14 delivered |
 | Plugin product/ABI design | [Plugin architecture](../design/PLUGIN_SYSTEM_ARCHITECTURE.md) | Proposed DLL/static products, UX, lifetime and fresh Vehicle scope |
 | Plugin execution | [Plugin plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | 26 unreleased packages and acceptance gates |

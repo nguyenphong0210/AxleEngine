@@ -1,7 +1,7 @@
 # Architecture Optimization Roadmap
 
-Updated: **2026-11-05**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **execution plan; this update changes documentation only**.
+Updated: **2026-11-07**. Ordering baseline: `7869fce` (post-Vehicle retirement).
+Status: **OPT-02 and OPT-03 accepted after verified Codex corrections; later phases remain outside the current assignment**.
 
 ## Start here
 
@@ -10,23 +10,22 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Next bounded assignment: OPT-02 / EJ-01, English handoff ready for Gemini.**
-Codex reviewed Gemini AF-01, P41-00 and PLG-00 on 8e3450a, corrected the findings,
-and verified the final implementation. The [combined review](reviews/OPT_01_AF01_P41_PLG_REVIEW.md)
-and [structured results](reviews/OPT_01_AF01_P41_PLG_RESULTS.json) distinguish original
-independent review from Codex-authored correction verification. AF-00/EJ-00 and
-the three remaining OPT-01 packages are closed for baseline progression; no external
-post-fix independent review is claimed.
+**Current checkpoint: OPT-02 and OPT-03 accepted after review and repairs.**
+Codex independently reviewed Gemini's deliveries at `0eeb734`, found and corrected
+12 defect groups, and verified Debug/Release builds, 42/42 CTest per configuration,
+full integration, the 16/0/3 jobs harness and both native products. The
+[review and acceptance report](reviews/OPT_02_03_CODEX_REVIEW.md) records corrections
+`e351399` and `3a67116`, exact commands, evidence and limits. No separate independent
+review of Codex's own fixes is claimed. OPT-04+ implementation is outside this
+completed review assignment; this report does not release another package.
 
-Latest identity policy: **raw PNG/external resources use canonical root-relative
-paths; native Engine assets embed UUIDs inside the file.** No .meta/.uid/.import
-sidecars, authored central identity registry or legacy migration are required.
-The [EJ-01 handoff](agents/handoffs/OPT_02_EJ01_GEMINI.md) is the current single unit.
-The user requested a [Gemini autonomous execution plan](agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md).
-Its activation prompt can release OPT-02..10 as a sequential range, starting with
-EJ-01..07, without per-package Codex waits. The plan is prepared; the larger range
-has not been activated in this documentation-only turn. EJ-02+ is not yet assigned.
-Known production ECS/jobs faults remain recorded for their own packages. The separate OPT-00 manual/full-product acceptance gap remains open.
+The [OPT-01 combined review](reviews/OPT_01_AF01_P41_PLG_REVIEW.md) remains the prior
+accepted foundation. Identity policy is unchanged: raw external resources use
+canonical root-relative paths and native Engine assets embed UUIDs in the file.
+No sidecars, authored central identity registry or legacy migration are required.
+The [autonomous execution plan](agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md)
+and [exchange](agents/CODEX_GEMINI_EXCHANGE.json) preserve the earlier implementation
+activation and phase deliveries. The separate OPT-00 acceptance gap remains open.
 
 **Prior checkpoint: OPT-00, clean-removal follow-up awaiting independent verification.**
 The user confirmed on **2026-11-05** that Engine must be clean: old data formats,
@@ -35,14 +34,15 @@ are not requirements. The earlier [review](reviews/OPT_00_VEHICLE_RETIREMENT_REV
 remains evidence for its original baseline; its legacy preservation and special
 body-suppression requirements are superseded, not acceptance blockers.
 Gemini delivered complete removal in `be7b071` after interim fixes in `8478ec9`
-and reports build success, CTest 7/7 and integration 68/68. Codex has not independently
-rerun those results. Verify current-format scene/assembly operations, normal physics
+and reports build success, CTest 7/7 and integration 68/68. At that checkpoint Codex had not independently
+rerun those results. The current OPT-02/03 gates above do not close the separate
+OPT-00 manual/full-product checkpoint. Verify current-format scene/assembly operations, normal physics
 and lifecycle behavior, source/build cleanliness and VFX Step 47 before acceptance.
 No AF/EJ/P41/PLG package is closed by this scope clarification.
 
 OPT-01 ran AF-00/EJ-00, AF-01, P41-00 and PLG-00 in sequence. The
 [exchange](agents/CODEX_GEMINI_EXCHANGE.json) records actual assignments and evidence.
-OPT-02 begins with EJ-01 only; reading the remaining plan does not authorize it.
+OPT-02/03 implementation and review are now complete within their assigned range; reading later contracts does not release later production work.
 
 ## One sequence, stable technical identifiers
 
@@ -130,7 +130,7 @@ O1-R1..R4 were corrected and reverified in the [follow-up](reviews/OPT_01_BASELI
 with a [complete shared inventory](architecture/OPT_01_BASELINE_INVENTORY.md).
 AF-00/EJ-00 are closed for baseline progression; no external post-fix independent
 review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in the
-[combined follow-up](reviews/OPT_01_AF01_P41_PLG_REVIEW.md). EJ-01 is the next bounded unit.
+[combined follow-up](reviews/OPT_01_AF01_P41_PLG_REVIEW.md). The following OPT-02/03 review is now complete.
 
 ### OPT-02 - Repair threading, scripts and physics jobs
 
@@ -138,17 +138,17 @@ review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in th
 
 **Work:** Fix main/worker/external thread identity, deferred owner-scoped completion, compiler delivery, reload/detach, real enki task completion, one-thread Jolt progress and shutdown ordering.
 
-- [x] **EJ-01:** Thread identity and lifecycle admission (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
-- [x] **EJ-02:** Deferred main-thread executor and owner tokens (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
-- [x] **EJ-03:** Compiler request/result handoff (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
-- [x] **EJ-04:** Reload commit and scene/DLL teardown (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
-- [x] **EJ-05:** Stable physics submission lifetime (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
-- [x] **EJ-06:** Physics waits and forward progress (Gemini implemented and self-verified; resolves ECSJ-03; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
-- [x] **EJ-07:** Handles, draining and shutdown (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); independent review pending at checkpoint).
+- [x] **EJ-01:** Thread identity and lifecycle admission (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); reviewed/corrected and accepted by Codex; [acceptance](reviews/OPT_02_03_CODEX_REVIEW.md)).
+- [x] **EJ-02:** Deferred main-thread executor and owner tokens (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); reviewed/corrected and accepted by Codex; [acceptance](reviews/OPT_02_03_CODEX_REVIEW.md)).
+- [x] **EJ-03:** Compiler request/result handoff (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); reviewed/corrected and accepted by Codex; [acceptance](reviews/OPT_02_03_CODEX_REVIEW.md)).
+- [x] **EJ-04:** Reload commit and scene/DLL teardown (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); reviewed/corrected and accepted by Codex; [acceptance](reviews/OPT_02_03_CODEX_REVIEW.md)).
+- [x] **EJ-05:** Stable physics submission lifetime (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); reviewed/corrected and accepted by Codex; [acceptance](reviews/OPT_02_03_CODEX_REVIEW.md)).
+- [x] **EJ-06:** Physics waits and forward progress (Gemini implemented and self-verified; resolves ECSJ-03; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); reviewed/corrected and accepted by Codex; [acceptance](reviews/OPT_02_03_CODEX_REVIEW.md)).
+- [x] **EJ-07:** Handles, draining and shutdown (Gemini implemented and self-verified; [phase execution report](reviews/OPT_02_GEMINI_EXECUTION.md); reviewed/corrected and accepted by Codex; [acceptance](reviews/OPT_02_03_CODEX_REVIEW.md)).
 
 **Exit:** Current ECSJ-01..03 regressions pass against production APIs, including cancellation/detach and constrained-thread bridge disposal. No Scene/UI mutation occurs on a worker.
 
-**Evidence:** [OPT-02 Gemini execution report](reviews/OPT_02_GEMINI_EXECUTION.md). All packages EJ-01..EJ-07 complete and self-verified; ECSJ-01, ECSJ-02 and ECSJ-03 resolved; OPT-02 delivery complete; independent acceptance remains pending.
+**Evidence:** [Historical Gemini delivery](reviews/OPT_02_GEMINI_EXECUTION.md) and [Codex review, verified corrections and acceptance](reviews/OPT_02_03_CODEX_REVIEW.md). EJ-01..EJ-07 are accepted after correction; the current-source harness has 0 reproduced defects and 0 unexpected failures in Debug and Release.
 
 ### OPT-03 - Separate Core, scene data and assets; unify simulation
 
@@ -156,20 +156,28 @@ review is claimed. The remaining OPT-01 deliveries were reviewed/corrected in th
 
 **Work:** Extract Application/bootstrap from Core; correct EnTT iteration, structural mutation and transform ownership; separate SceneData and CPU asset registry/format from concrete services; move Editor Play and Runtime onto one simulation driver.
 
-- [x] **AF-02:** Foundation, Application and explicit service ownership. (Self-verified in AF-02 commit; Core clean Level 0, Application in Platform with explicit service ownership, ALLOW-001..003 retired, 32/32 CTest, 14/1/3 harness).
-- [x] **EJ-08:** Parallel EnTT view correctness. (Self-verified in EJ-08 commit; valid view iteration partitioning, tombstone skipping for in_place_delete storage, deduplicated ForEachEntity targets, ECSJ-04 converted to PASS across Debug/Release harness, 32/32 CTest).
-- [x] **EJ-09:** Scene command and mutation boundaries. (Self-verified in EJ-09 commit; SceneCommandBuffer with entity/scene generation checks, conflict resolution for destroy-then-edit and cross-scene collisions, safe recursive hierarchy/script/physics teardown without component reference invalidation, 33/33 CTest including dedicated AxleSceneMutationUnitTests).
-- [x] **EJ-10:** Transform evaluation ownership. (Self-verified in EJ-10 commit; replaced const-query cache writes with pure read-only GetWorldTransform vs explicit RecomputeWorldTransform/UpdateWorldTransforms, published monotonic transform revision counter, hardened parallel disjoint subtree evaluation with Floyd cycle detection/repair and recursion guards, scale inheritance rules, 12/12 unit tests, 33/33 CTest Debug/Release, all 68 steps in AxleTests passed).
-- [x] **AF-03:** Scene data and system bridge boundaries. (Self-verified in AF-03 commit; decoupled headless SceneData owning registry, generation, transform revision and command buffer from concrete system bridges Physics/Audio/Script/Character/Render, generic ComponentCodecRegistry with 20+ codecs, passive extension storage preserving unknown/plugin YAML sections, EnTT streaming moved from RHI to Renderer, 6/6 AxleSceneDataUnitTests, 34/34 CTest Debug/Release, all 68 steps in AxleTests passed).
-- [x] **AF-04:** Asset registry/format versus resources and tools. (Self-verified in AF-04 commit; separated pure CPU AssetManager/AssetSerializer from GPU MaterialCache in Renderer, decoupled PhysicsMaterial from AssetDSL, retired ALLOW-004, ALLOW-005, ALLOW-008, 5/5 AxleAssetFormatUnitTests, 14/14 AxleAssetUnitTests, 35/35 CTest Debug/Release, all 68 steps in AxleTests passed).
-- [x] **EJ-11:** Shared runtime phases and script API. (Self-verified in EJ-11 commit; discrete simulation phases FrameScripts/FixedControls/Physics/PostStepSync/AnimationVFX/LatePresentation with telemetry tracing, OnFixedUpdate and OnLateUpdate script callbacks, script ABI version 2 handshake and graceful rejection of mismatched DLLs, character bridge phase decomposition, same-tick SIM-01 controls-to-presentation contract, 5/5 AxleSharedRuntimePhasesUnitTests, 36/36 CTest Debug/Release, all 68 steps in AxleTests passed).
-- [x] **EJ-12:** Fixed clock, inputs and pause/step. (Self-verified in EJ-12 commit; SimulationClock with double-precision accumulator, dt validation, overload cap, speed scaling, clean pause/resume and single-step without backlog spike, SimulationInputAdapter with tick edge latching and paused UI isolation, SimulationDriver unified frame coordinator, 9/9 AxleSimulationClockUnitTests, 37/37 CTest Debug/Release, all 68 steps in AxleTests passed).
-- [x] **EJ-13:** Editor cutover. (Self-verified in EJ-13 commit; unified Play/Pause/Step/Stop/Speed to shared SimulationDriver, removed standalone physics step and frame dt multiplication, preserved zero-drift editor scene restoration, private preview clock isolation, 4/4 AxleEditorCutoverUnitTests, 38/38 CTest Debug/Release, all 68 steps in AxleTests passed).
-- [x] **EJ-14:** Runtime cutover and product parity. (Self-verified in EJ-14 commit; cut over standalone player to shared SimulationDriver, resolved defect ECSJ-05 controls-to-physics ordering, established 100% simulation and telemetry parity across Editor and Runtime, 5/5 AxleRuntimeProductParityUnitTests, 39/39 CTest Debug/Release, all 68 steps in AxleTests passed).
+All packages below have Gemini implementation history and current Codex review,
+correction verification and acceptance in the [combined report](reviews/OPT_02_03_CODEX_REVIEW.md).
 
-**Exit:** Core/scene/asset data fixtures run without GPU or Editor startup. ECSJ-04/05 have current coverage; both products follow the same fixed-step, input, pause/step/speed and teardown rules. (Verified across AF-02, EJ-08..EJ-10, AF-03, AF-04, EJ-11..EJ-14; 39/39 CTest Debug/Release, 16/0/3 harness, 68/68 AxleTests, 0 arch violations).
+- [x] **AF-02:** Foundation, Application and explicit service ownership, with consistent host/script exception ABI.
+- [x] **EJ-08:** Parallel EnTT iteration, filtered views, empty tags and const component access.
+- [x] **EJ-09:** Owner-bound scene commands, stale-handle rejection and component lifecycle teardown.
+- [x] **EJ-10:** Explicit transform publication, disjoint subtree evaluation and targeted ancestor recompute.
+- [x] **AF-03:** Real Core-only SceneData library, structural document codec, passive sections and concrete system bridges.
+- [x] **AF-04:** CPU asset registry/format separated from concrete resources and tools.
+- [x] **EJ-11:** Shared runtime phases, same-tick controls/physics/presentation and validated script ABI **4**.
+- [x] **EJ-12:** Bounded fixed clock, hardware/tick input, pause/resume/step and speed policy.
+- [x] **EJ-13:** Actual Editor update integration, independent Play world and edit-world restoration.
+- [x] **EJ-14:** Actual Runtime update integration and native product parity at 30/60/144 Hz.
 
-**Evidence:** Phase OPT-03 delivered in commits 374933a (AF-02), 4286425 (EJ-08), cc059af (EJ-09), b434dd0 (EJ-10), ca1fb42 (AF-03), b418b9e (AF-04), ae22b35 (EJ-11), 026bd91 (EJ-12), abf3300 (EJ-13), and 6e98a56 (EJ-14); execution details in docs/reviews/OPT_03_GEMINI_EXECUTION.md; independent review pending.
+**Exit:** Core/scene/asset data fixtures run without GPU or Editor startup.
+ECSJ-04/05 have current coverage; both products pass the fixed-step, input,
+pause/step/speed and teardown gates. Debug and Release each pass 42/42 CTest,
+full default integration and the 16 PASS / 0 defects / 3 verified-probe harness.
+
+**Evidence:** [Gemini's historical phase report](reviews/OPT_03_GEMINI_EXECUTION.md)
+and [Codex's acceptance report](reviews/OPT_02_03_CODEX_REVIEW.md). Corrections are
+local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was performed.
 
 ### OPT-04 - Normalize the NRI device and GPU lifetime foundation
 

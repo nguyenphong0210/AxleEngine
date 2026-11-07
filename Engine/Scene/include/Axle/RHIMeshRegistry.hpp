@@ -64,6 +64,7 @@ namespace Axle {
         std::shared_ptr<RHI::RHIMesh> m_Plane;
 
         std::unordered_map<std::string, std::shared_ptr<RHI::RHIMesh>> m_MeshCache;
+        std::unordered_map<std::string, uint64_t> m_FileRevisions;
         bool m_Initialized = false;
     };
 

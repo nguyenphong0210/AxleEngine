@@ -192,3 +192,51 @@ runtime-negative-debug-results.json. The focused service regression passes after
 the stale-feedback correction. Final Debug/Release matrices, remaining consumer
 checks and independent correction recheck still block phase acceptance. P41-26
 Editor-disabled build closure remains a separate later package.
+
+## Correction checkpoint 7
+
+Further source inspection found that AXLE_BUILD_RHI is never defined by the
+current build. Its stale guards compiled out Assembly's native viewport and the
+actual Runtime executable's presentation context. The earlier Runtime library
+fixture proved the shared presenter, but the executable smoke alone did not
+prove presentation. Those guards are removed (RHI is an unconditional dependency).
+The rebuilt executable now logs its real swapchain/native sampled context and
+checked present count. The replacement runtime-present-final Debug smoke passed;
+the complete final matrix will rerun the executable with present-count assertions.
+
+Assembly Editor initializes and registers its native viewport with the host GUI
+registrar. Asset Preview preserves actual hierarchy transforms/materials, retains
+CPU imported part sources and no longer substitutes cubes for missing parts.
+Model packages are distinguished from Assembly files; native Mesh assets are
+supported in preview/thumbnail paths. Shared resolution retains normals/UVs and
+caches immutable source revisions; file mesh caches observe source/project changes
+and allow mounted VFS meshes. RHIMeshView captures strong buffer generations, so
+a saved world keeps its geometry even after its mutable wrapper is replaced or
+shut down, without GPU work during extraction.
+
+GL panel images retain framebuffer generations at the UI frame boundary and
+resize by publishing a replacement, rather than destroying queued attachments.
+Thumbnail limits apply to raw images and 3D jobs (256 cached/pending, six renders
+per update). Root and used mesh/material/texture/include revisions invalidate
+results, including source deletion. GL uses the actual key/fill light rig,
+opaque/cutout/transparent/additive states and sorted transparent queues, with
+sky rendered before transparency/particles. Physics GL debug lines preserve the
+requested depth bias/alpha; the native path consumes the requested active scene.
+
+Debug physical probes pass actual Assembly/Asset Preview material/hierarchy and
+imported multi-part pixels, queued close/resize, main-scene isolation, thumbnail
+budgets/revisions/deletion, three-backend surface/second-light pixels and active
+PhysicsScene edit/play/pause/stop/close/alpha output. Evidence: preview-imported,
+preview-surfaces, frozen-geometry-previews and preview-lastcheck result JSON/logs.
+CPU/D3D12/Vulkan/GL focused service/Canvas/thumbnail probes also pass, including
+the new saved-geometry generation test (frozen-geometry-focused-debug-results).
+
+An initial panel probe incorrectly read an RGBA16 target using an RGBA8 readback
+helper; API validation rejected that probe. Assembly now explicitly declares its
+SDR GUI output. The GL probe also initially treated numeric texture-name reuse
+after a completed frame as a defect; the corrected test checks non-reuse while
+the prior image is queued in the same frame, and explicitly retains its manually
+queued GL image just as production panels do. Failed logs are retained.
+
+These are corrective self-checks. Final Debug/Release builds and complete gates,
+followed by the separate-context correction recheck, still block acceptance.

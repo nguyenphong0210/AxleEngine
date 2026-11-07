@@ -112,7 +112,7 @@ namespace Axle {
         constexpr bool IsRightHanded = true;
 
         // Front face winding & culling conventions
-        constexpr bool FrontCounterClockwise = false;
+        constexpr bool FrontCounterClockwise = true;
 
         // Clip NDC depth range:
         // Modern RHI (D3D12/Vulkan): [0.0, 1.0]

@@ -93,6 +93,9 @@ namespace Axle {
                 uniform vec4 u_Color1;
                 uniform vec4 u_Color2;
                 uniform vec3 u_LightDir;
+                uniform int u_NumExtraDirectionalLights;
+                uniform vec3 u_ExtraLightDirection[4];
+                uniform vec3 u_ExtraLightColor[4];
                 uniform vec3 u_LightColor;
                 uniform float u_LightIntensity;
                 uniform float u_AmbientIntensity;
@@ -357,6 +360,16 @@ namespace Axle {
 
                     vec3 radiance = u_LightColor * u_LightIntensity;
                     vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
+
+                    for (int i=0;i<u_NumExtraDirectionalLights;++i) {
+                        vec3 direction=normalize(u_ExtraLightDirection[i]);
+                        vec3 halfVector=normalize(V+direction);
+                        float nDotL=max(dot(N,direction),0.0);
+                        vec3 fresnel=FresnelSchlick(max(dot(halfVector,V),0.0),F0);
+                        vec3 spec=DistributionGGX(N,halfVector,roughness)*GeometrySmith(N,V,direction,roughness)*fresnel/
+                            (4.0*NdotV*nDotL+0.0001);
+                        Lo+=((1.0-fresnel)*(1.0-metallic)*baseColor.rgb/PI+spec)*u_ExtraLightColor[i]*nDotL;
+                    }
 
                     for (int i = 0; i < u_NumPointLights && i < 4; ++i) {
                         vec3 lightVec = u_PointLights[i].Position - v_WorldPos;
@@ -686,6 +699,14 @@ namespace Axle {
         }
         m_Shader->SetInt("u_UseIBL", useIBL); m_Shader->SetFloat("u_EnvironmentIntensity", world.Skybox.Intensity);
 
+        const auto extraLights=std::min<size_t>(4,world.AdditionalDirectionalLights.size());
+        m_Shader->SetInt("u_NumExtraDirectionalLights",static_cast<int>(extraLights));
+        for(size_t i=0;i<extraLights;++i) {
+            const auto& light=world.AdditionalDirectionalLights[i];
+            m_Shader->SetFloat3("u_ExtraLightDirection["+std::to_string(i)+"]",light.Direction);
+            m_Shader->SetFloat3("u_ExtraLightColor["+std::to_string(i)+"]",light.Color*light.Intensity);
+        }
+
         // Point lights
         int numPointLights = std::min(static_cast<int>(world.PointLights.size()), 4);
         m_Shader->SetInt("u_NumPointLights", numPointLights);
@@ -715,15 +736,30 @@ namespace Axle {
             RenderCommand::SetWireframeMode(true);
         }
 
-        // Render extracted meshes
-        for (const auto& meshInst : world.Meshes) {
-            if (!meshInst.GLMesh) continue;
-
+        std::vector<const RenderMeshInstance*> opaque, transparent;
+        for(const auto& mesh:world.Meshes) {
+            if(!mesh.GLMesh)continue;
+            const auto material=mesh.Material.MaterialAsset;
+            const auto surface=material?material->GetSurfaceType():SurfaceType::Opaque;
+            (surface==SurfaceType::Transparent||surface==SurfaceType::Additive?transparent:opaque).push_back(&mesh);
+        }
+        auto queue=[](const auto* mesh){return mesh->Material.MaterialAsset?mesh->Material.MaterialAsset->GetRenderQueue():2000;};
+        std::stable_sort(opaque.begin(),opaque.end(),[&](auto* a,auto* b){return queue(a)<queue(b);});
+        std::stable_sort(transparent.begin(),transparent.end(),[&](auto* a,auto* b){
+            if(queue(a)!=queue(b))return queue(a)<queue(b);
+            const auto da=glm::vec3(a->WorldTransform[3])-camera.GetPosition(), db=glm::vec3(b->WorldTransform[3])-camera.GetPosition();
+            return glm::dot(da,da)>glm::dot(db,db);
+        });
+        auto drawMesh=[&](const RenderMeshInstance& meshInst) {
             glm::vec4 color1 = meshInst.Material.AlbedoColor;
             if (meshInst.Selected) {
                 color1 = glm::mix(color1, glm::vec4(1.0f, 0.85f, 0.3f, 1.0f), 0.35f);
             }
 
+            m_Shader->Bind();
+            const auto material=meshInst.Material.MaterialAsset;
+            RenderCommand::SetMaterialState(material?material->GetSurfaceType():SurfaceType::Opaque,
+                material?material->GetCullMode():CullMode::None,material?material->GetDepthWrite():true);
             m_Shader->SetMat4("u_Transform", meshInst.WorldTransform);
             if (meshInst.Material.MaterialAsset) {
                 meshInst.Material.MaterialAsset->Bind(*m_Shader);
@@ -739,7 +775,9 @@ namespace Axle {
             meshInst.GLMesh->Bind();
             RenderCommand::DrawIndexed(meshInst.GLMesh);
             meshInst.GLMesh->Unbind();
-        }
+        };
+        for(auto* mesh:opaque)drawMesh(*mesh);
+        RenderCommand::SetMaterialState(SurfaceType::Opaque,CullMode::None,true);
 
         if (settings.Wireframe) {
             RenderCommand::SetWireframeMode(false);
@@ -764,13 +802,6 @@ namespace Axle {
             }
         };
         renderSkins(false, m_LightSpaceMatrix);
-        if (settings.EnableParticles && m_ParticleRenderer && !world.Particles.empty()) {
-            m_ParticleRenderer->Begin(camera, targetFBO, camera.GetNearClip(), camera.GetFarClip());
-            for (const auto& batch : world.Particles)
-                m_ParticleRenderer->Render(batch->Pool, batch->Config, batch->Texture, batch->Normal, batch->Config.SoftnessDistance);
-            m_ParticleRenderer->End();
-        }
-
         // 4. Skybox pass
         if (settings.EnableSkybox && m_Skybox && world.Skybox.Enabled) {
             m_Skybox->SetMode(world.Skybox.Type == 1 ? SkyboxMode::HDRCubemap : SkyboxMode::ProceduralAtmospheric);
@@ -782,13 +813,25 @@ namespace Axle {
             spec.GroundColor = glm::vec3(world.Skybox.GroundColor);
             spec.SunSize = world.Skybox.SunSize; spec.SunGlow = world.Skybox.SunGlow; spec.Turbidity = world.Skybox.Turbidity;
             m_Skybox->SetSunDirection(glm::vec3(world.Skybox.SunDirection));
+            m_Skybox->SetSunColor(glm::vec3(world.Skybox.SunColor));
             m_Skybox->Render(camera.GetViewMatrix(), camera.GetProjectionMatrix());
+        }
+
+        if(settings.Wireframe)RenderCommand::SetWireframeMode(true);
+        for(auto* mesh:transparent)drawMesh(*mesh);
+        if(settings.Wireframe)RenderCommand::SetWireframeMode(false);
+        RenderCommand::SetMaterialState(SurfaceType::Opaque,CullMode::None,true);
+        if (settings.EnableParticles && m_ParticleRenderer && !world.Particles.empty()) {
+            m_ParticleRenderer->Begin(camera, targetFBO, camera.GetNearClip(), camera.GetFarClip());
+            for (const auto& batch : world.Particles)
+                m_ParticleRenderer->Render(batch->Pool, batch->Config, batch->Texture, batch->Normal, batch->Config.SoftnessDistance);
+            m_ParticleRenderer->End();
         }
 
         // 5. Physics debug wireframes
         PhysicsDebugRenderer* activeDebug = physicsDebugRenderer ? physicsDebugRenderer : m_InternalDebugRenderer.get();
         if (settings.ShowPhysicsDebug && activeDebug && physicsScene) {
-            activeDebug->Begin(camera.GetPosition());
+            activeDebug->Begin(camera.GetPosition(),settings.PhysicsDepthBias,settings.PhysicsAlphaMultiplier);
             physicsScene->DrawDebug(*activeDebug, settings.PhysicsDrawSettings);
             activeDebug->End(camera.GetViewProjectionMatrix());
         }

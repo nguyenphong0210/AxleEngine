@@ -23,6 +23,23 @@ namespace Axle::RHI {
         glm::vec3 BoundingMax{ 0.0f };
     };
 
+    // Immutable geometry generation captured without GPU work. Unlike retaining
+    // a mutable RHIMesh wrapper, this view survives a later wrapper Init/Shutdown.
+    class RHIMeshView {
+    public:
+        bool IsValid() const { return m_Vertices.IsLive() && m_Indices.IsLive() && m_IndexCount>0; }
+        void Bind(RHICommandBuffer& commands) const;
+        void Draw(RHICommandBuffer& commands, uint32_t instances = 1) const;
+        size_t GetSubmeshCount() const { return m_SubmeshCount; }
+    private:
+        friend class RHIMesh;
+        RHIResourceLease m_Vertices, m_Indices;
+        nri::Buffer* m_VertexBuffer = nullptr;
+        nri::Buffer* m_IndexBuffer = nullptr;
+        uint32_t m_IndexCount = 0;
+        size_t m_SubmeshCount = 0;
+    };
+
     class RHIMesh {
     public:
         RHIMesh() = default;
@@ -43,6 +60,7 @@ namespace Axle::RHI {
                           const std::string& debugName = "");
 
         void Shutdown();
+        std::shared_ptr<const RHIMeshView> CaptureView() const;
 
         // GPU Command Recording helpers
         void Bind(RHICommandBuffer& cmdBuffer) const;

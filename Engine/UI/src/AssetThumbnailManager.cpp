@@ -78,6 +78,7 @@ namespace Axle {
         m_ThumbnailDimensions.erase(key);
         m_MetaCache.erase(key);
         m_AssetRevisions.erase(key);
+        m_SourceDependencies.erase(key);
 
         auto qIt = std::find(m_PendingQueue.begin(), m_PendingQueue.end(), path);
         if (qIt != m_PendingQueue.end()) {
@@ -128,6 +129,7 @@ namespace Axle {
         m_MetaCache.clear();
         m_LoadedTextures.clear();
         m_AssetRevisions.clear();
+        m_SourceDependencies.clear();
         m_PendingQueue.clear();
     }
 
@@ -149,10 +151,27 @@ namespace Axle {
         return nullptr;
     }
 
+    uint64_t AssetThumbnailManager::GetRevision(const std::filesystem::path& path) const {
+        uint64_t revision=FileSystem::GetSourceGeneration();
+        auto append=[&](const auto& source) {
+            std::error_code error;
+            auto file=FileSystem::ResolveAssetPath(source);
+            auto time=std::filesystem::last_write_time(file,error);
+            const uint64_t value=error?0:static_cast<uint64_t>(time.time_since_epoch().count());
+            revision^=value+0x9e3779b97f4a7c15ull+(revision<<6)+(revision>>2);
+        };
+        append(path);
+        if(auto dependencies=m_SourceDependencies.find(path.lexically_normal().string());dependencies!=m_SourceDependencies.end())
+            for(const auto& source:dependencies->second)append(source);
+        return revision;
+    }
+
     uint64_t AssetThumbnailManager::GetOrCreateThumbnail(const std::filesystem::path& path) {
 
 
         std::string key = path.lexically_normal().string();
+        if (!m_ThumbnailCache.contains(key)) while (m_ThumbnailCache.size()>=MaxCacheEntries)
+            InvalidateThumbnail(m_ThumbnailCache.begin()->first);
         auto ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
@@ -192,13 +211,8 @@ namespace Axle {
             const auto id = texture->GetRendererID(); m_ThumbnailDimensions[key] = {texture->GetWidth(), texture->GetHeight()};
             m_LoadedTextures[key] = std::move(texture); m_ThumbnailCache[key] = id; return id;
         }
-        std::error_code error;
-        const auto revision = std::filesystem::last_write_time(path, error);
-        if (!error) {
-            auto found = m_AssetRevisions.find(key);
-            if (found != m_AssetRevisions.end() && found->second != revision) InvalidateThumbnail(path);
-            m_AssetRevisions[key] = revision;
-        }
+        auto found=m_AssetRevisions.find(key);
+        if(found!=m_AssetRevisions.end() && found->second!=GetRevision(path)) InvalidateThumbnail(path);
         if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end()) {
             if (auto lease = m_GuiThumbnails.find(key); lease != m_GuiThumbnails.end()) return lease->second.GetID();
             return it->second;
@@ -212,7 +226,8 @@ namespace Axle {
         }
 
         // Check if path is supported 3D format
-        bool isSupported = ((ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material) || ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" ||
+        const auto kind=ext==".axleasset"?AssetDSL::PeekAssetKindFromFile(path.string()):AssetKind::Unknown;
+        bool isSupported = ((ext == ".axleasset" && (kind==AssetKind::Material||kind==AssetKind::Mesh)) || ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" ||
                             ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
         if (!isSupported) {
             return 0;
@@ -240,6 +255,7 @@ namespace Axle {
             }
 
             uint64_t handle = 0;
+            while(m_ThumbnailCache.size()>=MaxCacheEntries) InvalidateThumbnail(m_ThumbnailCache.begin()->first);
             AssetCachedMeta meta;
             if (RenderThumbnail(path, handle, meta)) {
                 m_ThumbnailCache[key] = handle;
@@ -248,12 +264,14 @@ namespace Axle {
                 m_ThumbnailCache[key] = 0; // Mark failed to avoid infinite retry
             }
             count++;
+            m_AssetRevisions[key]=GetRevision(path);
         }
     }
 
     bool AssetThumbnailManager::RenderThumbnail(const std::filesystem::path& path, uint64_t& outTexHandle, AssetCachedMeta& outMeta) {
         if (!std::filesystem::exists(path)) return false;
-        const auto ext = path.extension().string();
+        auto ext = path.extension().string();
+        std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
         RenderWorld world;
         glm::vec3 minimum(1e9f), maximum(-1e9f);
         outMeta.Name = path.stem().string();
@@ -264,7 +282,7 @@ namespace Axle {
             }
             outMeta.VertexCount += vertices.size(); outMeta.TriangleCount += indices / 3;
         };
-        if (ext == ".axleasset") {
+        if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string())==AssetKind::Material) {
             MaterialComponent material;
             if (!SceneHierarchyPanel::LoadMaterialAsset(path, material)) return false;
             Scene scene; auto sphere = scene.CreateEntity("Material thumbnail");
@@ -302,7 +320,7 @@ namespace Axle {
             if (!package.Success) return false;
             for (const auto& part : package.Parts) {
                 if (!part.LoadedMesh.Success) return false;
-                RenderMeshInstance mesh; mesh.MeshURI = part.RelativePath;
+                RenderMeshInstance mesh; mesh.MeshURI = (path.parent_path()/part.RelativePath).string();
                 mesh.Source = std::make_shared<AxleMeshSource>(part.LoadedMesh.SourceData);
                 mesh.WorldTransform = glm::translate(glm::mat4(1), part.LocalTranslation) * glm::mat4_cast(part.LocalRotation) * glm::scale(glm::mat4(1), part.LocalScale);
                 mesh.Material.AlbedoColor = mesh.Source->ColorPrimary; mesh.Material.SecondaryColor = mesh.Source->ColorSecondary;
@@ -312,6 +330,19 @@ namespace Axle {
             }
         }
         if (world.Meshes.empty() || !world.ErrorMessage.empty() || minimum.x > maximum.x) return false;
+        std::vector<std::filesystem::path> dependencies;
+        auto dependency=[&](const std::string& source) {if(!source.empty() && !ParseBuiltinMesh(source))dependencies.emplace_back(source);};
+        for(const auto& mesh:world.Meshes) {
+            dependency(mesh.MeshURI);dependency(mesh.Material.MaterialPath);
+            if(auto material=mesh.Material.RHIMaterialAsset) for(uint32_t slot=0;slot<static_cast<uint32_t>(RHI::RHITextureSlot::Count);++slot)
+                dependency(material->GetTexturePath(static_cast<RHI::RHITextureSlot>(slot)));
+            if(mesh.Material.UseCustomShader) {
+                dependency(mesh.Material.CustomShaderPath);
+                const auto includes=RHI::RHIShaderCompiler::ExtractIncludeDependencies(FileSystem::ResolveAssetPath(mesh.Material.CustomShaderPath));
+                dependencies.insert(dependencies.end(),includes.begin(),includes.end());
+            }
+        }
+        m_SourceDependencies[path.lexically_normal().string()]=std::move(dependencies);
         outMeta.Center = (minimum + maximum) * 0.5f; outMeta.BoundingSize = maximum - minimum;
         outMeta.MaxDimension = std::max({outMeta.BoundingSize.x, outMeta.BoundingSize.y, outMeta.BoundingSize.z, 0.05f});
         outMeta.SubPartCount = world.Meshes.size(); outMeta.IsPackage = world.Meshes.size() > 1;

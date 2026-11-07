@@ -21,6 +21,7 @@ namespace Axle {
         static void SetDepthFuncLEqual();
         static void SetDepthFuncLess();
         static void SetCullFace(bool enabled);
+        static void SetMaterialState(SurfaceType surface, CullMode cull, bool depthWrite);
 
         // Submit indexed draw call from a VertexArray
         static void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray);
@@ -30,6 +31,7 @@ namespace Axle {
 
         // Submit non-indexed line draw call
         static void DrawLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount);
+        static void DrawDebugLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount);
         static void SetLineWidth(f32 width);
         static void SetWireframeMode(bool enabled);
 

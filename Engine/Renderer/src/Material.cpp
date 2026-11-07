@@ -448,6 +448,8 @@ namespace Axle {
         Texture2D::GetBlackTexture()->Bind(slotMetallic);
 
         shader.SetInt("u_UseAlbedoMap", 0);
+        shader.SetInt("u_SurfaceType",static_cast<int>(SurfaceType::Opaque));
+        shader.SetFloat("u_AlphaCutoff",0.5f);
         shader.SetInt("u_UseNormalMap", 0);
         shader.SetInt("u_UseRoughnessMap", 0);
         shader.SetInt("u_UseMetallicMap", 0);

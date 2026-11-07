@@ -5,10 +5,8 @@
 #include <Axle/RenderCommand.hpp>
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
-#if defined(AXLE_BUILD_RHI)
 #include <Axle/RHI/RHIPresentationContext.hpp>
 #include <Axle/RenderService.hpp>
-#endif
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
 #include "RuntimeLayer.hpp"
@@ -157,18 +155,19 @@ int main(int argc, char** argv) {
         Axle::ImageTextureCache::SetSourceResolver(Axle::LoadImageSource);
         std::unique_ptr<Axle::Application> app;
         std::shared_ptr<Axle::RuntimeLayer> layer;
+        Axle::RuntimeRenderContext* nativePresenter=nullptr;
         if (!Axle::RHI::RHISwitcher::InitializeProduct(rhiConfig, [&](Axle::GraphicsAPI api) {
             try {
+                nativePresenter=nullptr;
                 spec.GraphicsBackend = api;
                 app = std::make_unique<Axle::Application>(spec);
                 app->RegisterService(std::make_shared<PhysicsApplicationService>());
                 layer = std::make_shared<Axle::RuntimeLayer>(projectPath,startup.ProjectDefinition);
                 app->PushLayer(layer);
-#if defined(AXLE_BUILD_RHI)
                 if (api != Axle::GraphicsAPI::OpenGL) {
-                    app->SetRenderContext(std::make_unique<Axle::RuntimeRenderContext>(app->GetWindow()));
+                    auto presenter=std::make_unique<Axle::RuntimeRenderContext>(app->GetWindow());
+                    nativePresenter=presenter.get();app->SetRenderContext(std::move(presenter));
                 }
-#endif
                 return true;
             } catch (const std::exception& error) {
                 AXLE_ERROR("Runtime backend candidate failed: {0}", error.what());
@@ -177,8 +176,13 @@ int main(int argc, char** argv) {
                 return false;
             }
         })) throw std::runtime_error("No requested backend could initialize the Runtime");
+        AXLE_INFO("Runtime render context: {0}", app->GetWindow().GetGraphicsBackend()==Axle::GraphicsAPI::OpenGL ? "OpenGL window" : "Native sampled presentation");
         if (verifySimulation) layer->VerifySimulationContract();
         else if (!app->Run(frameLimit)) throw std::runtime_error("Runtime rendering or presentation failed");
+        if(!verifySimulation&&nativePresenter) {
+            AXLE_INFO("Runtime frames presented: {0}",nativePresenter->GetPresentCount());
+            if(frameLimit&&nativePresenter->GetPresentCount()!=frameLimit)throw std::runtime_error("Bounded Runtime loop did not present all frames");
+        }
     } catch (const std::exception& e) {
         AXLE_CRITICAL("Unhandled Runtime Exception: {0}", e.what());
         fprintf(stderr, "[FATAL] Unhandled Runtime Exception: %s\n", e.what());

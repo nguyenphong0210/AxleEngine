@@ -6,9 +6,8 @@
 #include <Axle/MeshResourceResolver.hpp>
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/Log.hpp>
-#if defined(AXLE_BUILD_RHI)
+#include <Axle/ImGuiLayer.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
-#endif
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -20,6 +19,12 @@
 #include <unordered_set>
 
 namespace Axle {
+    void AssemblyEditorPanel::InitRHI(ImGuiLayer* layer) {
+        m_ImGuiLayer=layer;
+        m_DeferredRelease=layer?layer->GetDeferredReleaser():GuiDeferredReleaser{};
+        if (RHI::RHIDevice::Get().IsNativeReady() && layer)
+            m_RHIViewport.Init(layer,m_ViewportWidth,m_ViewportHeight,RHI::RHITextureFormat::RGBA8_UNORM,true);
+    }
 
     AssemblyEditorPanel::AssemblyEditorPanel() {
         m_PreviewScene = std::make_unique<Scene>();
@@ -126,7 +131,6 @@ namespace Axle {
                     auto& mesh = ent.AddComponent<MeshInstance3D>();
                     mesh = node.Mesh;
                     ResolveMeshResources(mesh, m_SerializerContext);
-                    node.Mesh = mesh;
                 }
 
                 if (node.HasMaterial) {
@@ -209,16 +213,15 @@ namespace Axle {
         request.Settings.EnableSkybox = false;
         request.Name = "AssemblyPreviewView";
 
-#if defined(AXLE_BUILD_RHI)
         if (RHI::RHIDevice::Get().IsNativeReady()) {
+            if (!m_RHIViewport.IsValid() && m_ImGuiLayer) InitRHI(m_ImGuiLayer);
             if (!m_RHIViewport.IsValid() || m_RHIViewport.GetWidth() != m_ViewportWidth || m_RHIViewport.GetHeight() != m_ViewportHeight) {
                 m_RHIViewport.Resize(m_ViewportWidth, m_ViewportHeight);
             }
             request.ColorTarget = m_RHIViewport.GetColorTexture();
             request.DepthTarget = m_RHIViewport.GetDepthTexture();
-            request.ViewTargets = m_RHIViewport.GetViewTargets();
+            request.ViewTargets = m_RHIViewport.GetTargets();
         } else
-#endif
         {
             if (Window::HasActiveContext()) {
                 if (!m_Framebuffer || m_Framebuffer->GetSpecification().Width != m_ViewportWidth || m_Framebuffer->GetSpecification().Height != m_ViewportHeight) {
@@ -564,14 +567,13 @@ namespace Axle {
                 RenderPreview(viewSize.x, viewSize.y);
 
                 bool imageDrawn = false;
-#if defined(AXLE_BUILD_RHI)
-                if (RHI::RHIDevice::Get().IsNativeReady() && m_RHIViewport.GetColorSRV()) {
-                    ImGui::Image((ImTextureID)m_RHIViewport.GetColorSRV(), viewSize);
+                if (RHI::RHIDevice::Get().IsNativeReady() && m_RHIViewport.GetImTextureID()) {
+                    ImGui::Image((ImTextureID)m_RHIViewport.GetImTextureID(), viewSize);
                     imageDrawn = true;
                 }
-#endif
                 if (!imageDrawn && m_Framebuffer) {
                     ImTextureID texID = (ImTextureID)(intptr_t)m_Framebuffer->GetColorAttachmentRendererID();
+                    if(m_DeferredRelease)m_DeferredRelease([owner=m_Framebuffer]{});
                     ImGui::Image(texID, viewSize, ImVec2(0, 1), ImVec2(1, 0));
                     imageDrawn = true;
                 }

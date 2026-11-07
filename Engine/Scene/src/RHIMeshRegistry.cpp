@@ -110,8 +110,18 @@ namespace Axle {
         if (assetPath.empty()) return nullptr;
         if (!RHIDevice::Get().IsNativeReady()) return nullptr;
 
+        const bool builtin=ParseBuiltinMesh(assetPath).has_value();
+        auto resolved=FileSystem::ResolveAssetPath(assetPath);
+        uint64_t revision=FileSystem::GetSourceGeneration();
+        if(!builtin) {
+            if(!FileSystem::Exists(resolved))return nullptr;
+            std::error_code error;
+            const auto timestamp=std::filesystem::last_write_time(resolved,error);
+            if(!error)revision^=static_cast<uint64_t>(timestamp.time_since_epoch().count());
+        }
         auto it = m_MeshCache.find(assetPath);
-        if (it != m_MeshCache.end() && it->second && it->second->IsValid()) {
+        if (it != m_MeshCache.end() && it->second && it->second->IsValid() &&
+            (builtin || (m_FileRevisions.contains(assetPath)&&m_FileRevisions[assetPath]==revision))) {
             return it->second;
         }
 
@@ -144,16 +154,16 @@ namespace Axle {
 
         // Try direct file path
         std::filesystem::path targetPath(assetPath);
-        if (!std::filesystem::exists(targetPath)) {
+        if (!FileSystem::Exists(targetPath)) {
             // Try resolving via FileSystem
             targetPath = Axle::FileSystem::ResolveAssetPath(assetPath);
         }
-        if (!std::filesystem::exists(targetPath)) {
+        if (!FileSystem::Exists(targetPath)) {
             // Try prefixing models/
             targetPath = Axle::FileSystem::ResolveAssetPath("models/" + assetPath);
         }
 
-        if (std::filesystem::exists(targetPath)) {
+        if (FileSystem::Exists(targetPath)) {
             auto loaded = Axle::AssetSerializer::LoadMesh(targetPath);
             if (loaded.Success && !loaded.SourceData.Vertices.empty()) {
                 const auto& source=loaded.SourceData;
@@ -162,6 +172,7 @@ namespace Axle {
                     : RHIMesh::CreateFromAxleMesh(source.Vertices,source.Indices,source.ColorPrimary,targetPath.filename().string());
                 if (mesh && mesh->IsValid()) {
                     m_MeshCache[assetPath] = mesh;
+                    m_FileRevisions[assetPath] = revision;
                     AXLE_CORE_INFO("RHIMeshRegistry: Cached GPU mesh '{0}' ({1} verts, {2} idx)",
                         assetPath, mesh->GetVertexCount(), mesh->GetIndexCount());
                     return mesh;
@@ -202,6 +213,7 @@ namespace Axle {
 
     void RHIMeshRegistry::Clear() {
         m_MeshCache.clear();
+        m_FileRevisions.clear();
     }
 
 }

@@ -50,6 +50,7 @@ namespace Axle {
         std::thread::id m_Owner;
         std::shared_ptr<int> m_Lifetime = std::make_shared<int>(0);
         std::unordered_map<std::string, std::shared_ptr<VertexArray>> m_GLMeshes;
+        std::unordered_map<std::string, std::shared_ptr<RHI::RHIMesh>> m_NativeSourceMeshes;
         std::unique_ptr<RHISceneRenderer> m_RHIRenderer;
         std::unique_ptr<SceneRenderer> m_GLRenderer;
         std::shared_ptr<RHI::RHIViewTargets> m_DefaultMainTargets;

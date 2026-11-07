@@ -1011,7 +1011,7 @@ namespace Axle {
     }
 
     struct DrawItem {
-        std::shared_ptr<RHIMesh> Mesh;
+        std::shared_ptr<const RHIMeshView> Mesh;
         RHIObjectPushConstants PushConsts;
         Axle::SurfaceType SurfaceType = Axle::SurfaceType::Opaque;
         Axle::CullMode CullMode = Axle::CullMode::None;
@@ -1312,7 +1312,7 @@ namespace Axle {
         const bool copyRefraction = activeSampleCount == 1 && sceneDepthDSV && sceneDepthTexture &&
             std::any_of(world.Meshes.begin(), world.Meshes.end(), [](const auto& mesh) {
                 const auto& material = mesh.Material.RHIMaterialAsset;
-                return mesh.NativeMesh && mesh.NativeMesh->IsValid() && material &&
+                return mesh.NativeView && mesh.NativeView->IsValid() && material &&
                     material->GetSurfaceType() == SurfaceType::Transparent && material->GetDesc().RefractionEnabled;
             });
         const bool copyParticleDepth = settings.EnableParticles && m_ParticleRenderer && !world.Particles.empty() &&
@@ -1506,7 +1506,7 @@ namespace Axle {
 
             for (const auto& meshInst : world.Meshes) {
                 const auto entityID = static_cast<entt::entity>(meshInst.EntityID);
-                auto mesh = meshInst.NativeMesh;
+                auto mesh = meshInst.NativeView;
                 if (mesh && mesh->IsValid()) {
                     glm::mat4 worldMat = meshInst.WorldTransform;
 

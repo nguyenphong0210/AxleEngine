@@ -237,6 +237,23 @@ temporarily where needed for scripts or plugins.
 
 ## 7. Completion and references
 
+OPT-05 implementation references (2026-11-07; acceptance evidence remains in the
+review report): Scene owns extraction and RenderService. RenderWorld carries
+owned material/pose/particle values and immutable imported CPU sources; captured
+native mesh views retain exact buffer generations. Renderer owns the sequential
+RenderGraph, canonical material contracts and Canvas GPU adapter. Platform owns
+CPU font rasterization. UI2D owns documents, layout, input and Canvas collection.
+RuntimePlayer shares project/package resolution, the game layer and sampled
+presentation with the actual player executable and physical product probes.
+
+The initial graph is whole-texture and sequential: declared reads/writes,
+attachment load/store, first use and dependency validation precede recording.
+Imported resources remain leased external generations; the RHI transactional
+command journal supplies actual queue state and submission retirement. This does
+not claim transient aliasing, parallel recording or asynchronous compute. Modern
+shadow/skinning/authored-HDR environment passes remain later packages; floating
+point target support alone does not imply those scene features are implemented.
+
 Completion requires the [execution plan's acceptance matrix](RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md#acceptance-matrix),
 including standalone and real windowed Editor checks. No percentage or parity
 claim follows from class names, successful shader compilation or CPU tests alone.

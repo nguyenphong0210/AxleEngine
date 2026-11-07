@@ -92,6 +92,18 @@ namespace Axle {
         glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertexCount));
     }
 
+    void RenderCommand::DrawDebugLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount) {
+        const bool blend=glIsEnabled(GL_BLEND);
+        GLint srcRGB,dstRGB,srcAlpha,dstAlpha,eqRGB,eqAlpha;GLboolean depthMask;
+        glGetIntegerv(GL_BLEND_SRC_RGB,&srcRGB);glGetIntegerv(GL_BLEND_DST_RGB,&dstRGB);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA,&srcAlpha);glGetIntegerv(GL_BLEND_DST_ALPHA,&dstAlpha);
+        glGetIntegerv(GL_BLEND_EQUATION_RGB,&eqRGB);glGetIntegerv(GL_BLEND_EQUATION_ALPHA,&eqAlpha);glGetBooleanv(GL_DEPTH_WRITEMASK,&depthMask);
+        glEnable(GL_BLEND);glBlendEquation(GL_FUNC_ADD);glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);
+        DrawLines(vertexArray, vertexCount);
+        glDepthMask(depthMask);glBlendFuncSeparate(srcRGB,dstRGB,srcAlpha,dstAlpha);glBlendEquationSeparate(eqRGB,eqAlpha);
+        if(!blend)glDisable(GL_BLEND);
+    }
+
     void RenderCommand::SetLineWidth(f32 width) {
         if (!glad_glLineWidth) return;
         glLineWidth(width);
@@ -100,6 +112,18 @@ namespace Axle {
     void RenderCommand::SetWireframeMode(bool enabled) {
         if (!glad_glPolygonMode) return;
         glPolygonMode(GL_FRONT_AND_BACK, enabled ? GL_LINE : GL_FILL);
+    }
+
+    void RenderCommand::SetMaterialState(SurfaceType surface, CullMode cull, bool depthWrite) {
+        if (!glad_glEnable) return;
+        glFrontFace(GL_CCW);
+        if(cull==CullMode::None)glDisable(GL_CULL_FACE);
+        else{glEnable(GL_CULL_FACE);glCullFace(cull==CullMode::Front?GL_FRONT:GL_BACK);}
+        glDepthMask(depthWrite?GL_TRUE:GL_FALSE);
+        if(surface==SurfaceType::Transparent||surface==SurfaceType::Additive) {
+            glEnable(GL_BLEND);glBlendEquation(GL_FUNC_ADD);
+            glBlendFuncSeparate(GL_SRC_ALPHA,surface==SurfaceType::Additive?GL_ONE:GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
+        } else glDisable(GL_BLEND);
     }
 
     void RenderCommand::SetBlendEnabled(bool enabled) {

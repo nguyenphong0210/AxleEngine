@@ -147,31 +147,7 @@ namespace Axle {
         m_FallbackMesh = fallbackMesh;
         m_SerializerContext = serializerContext;
 
-        if (m_HasAsset && m_IsAssembly) {
-            std::function<void(AssemblyNode&)> preloadMeshVAOs = [&](AssemblyNode& node) {
-                if (node.HasMesh && !node.Mesh.VAO) {
-                    if (m_SerializerContext) {
-                        if (node.Mesh.AssetPath == "builtin://sphere") node.Mesh.VAO = m_SerializerContext->SphereMesh;
-                        else if (node.Mesh.AssetPath == "builtin://cylinder") node.Mesh.VAO = m_SerializerContext->CylinderMesh;
-                        else if (node.Mesh.AssetPath == "builtin://cone") node.Mesh.VAO = m_SerializerContext->ConeMesh;
-                        else if (node.Mesh.AssetPath == "builtin://plane") node.Mesh.VAO = m_SerializerContext->PlaneMesh;
-                        else if (!node.Mesh.AssetPath.empty() && node.Mesh.AssetPath != "builtin://cube") {
-                            auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
-                            if (std::filesystem::exists(resolved)) {
-                                auto loaded = AssetSerializer::LoadMesh(resolved);
-                                if (loaded.Success) node.Mesh.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
-                            }
-                        }
-                        if (!node.Mesh.VAO) node.Mesh.VAO = m_SerializerContext->CubeMesh;
-                    }
-                    if (!node.Mesh.VAO) node.Mesh.VAO = m_FallbackMesh;
-                }
-                for (auto& child : node.Children) {
-                    preloadMeshVAOs(child);
-                }
-            };
-            preloadMeshVAOs(m_CurrentAssembly.RootNode);
-        }
+        if (m_HasAsset) m_SceneNeedsRebuild=true;
     }
 
     void AssetPreviewPanel::SetAsset(const std::filesystem::path& assetPath) {
@@ -188,7 +164,8 @@ namespace Axle {
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
         bool isMaterial = (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(assetPath.string()) == AssetKind::Material);
-        bool is3D = (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx" || isMaterial);
+        bool is3D = (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx" || isMaterial ||
+            (ext==".axleasset"&&AssetDSL::PeekAssetKindFromFile(assetPath.string())==AssetKind::Mesh));
         if (!is3D) {
             m_HasAsset = false;
             m_IsAssembly = false;
@@ -265,50 +242,11 @@ namespace Axle {
             }
         }
 
-        if (ext == ".axle") {
+        if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(assetPath)) {
             m_IsAssembly = true;
             m_CurrentAssembly = AssemblySerializer::LoadAssemblyData(assetPath, m_SerializerContext);
             m_HasAsset = m_CurrentAssembly.IsValid;
             if (!m_HasAsset) return;
-
-            // Preload and cache all mesh VAOs ONCE so RenderPreview3D doesn't reload from disk/cache every frame
-            std::function<void(AssemblyNode&)> preloadMeshVAOs = [&](AssemblyNode& node) {
-                if (node.HasMesh && !node.Mesh.AssetPath.empty()) {
-                    if (node.Mesh.AssetPath == "builtin://sphere") {
-                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->SphereMesh : nullptr;
-                    } else if (node.Mesh.AssetPath == "builtin://cylinder") {
-                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->CylinderMesh : nullptr;
-                    } else if (node.Mesh.AssetPath == "builtin://cone") {
-                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->ConeMesh : nullptr;
-                    } else if (node.Mesh.AssetPath == "builtin://plane") {
-                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->PlaneMesh : nullptr;
-                    } else if (node.Mesh.AssetPath == "builtin://cube") {
-                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->CubeMesh : nullptr;
-                    } else {
-                        auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
-                        if (!std::filesystem::exists(resolved)) {
-                            if (resolved.extension() == ".axle") {
-                                auto alt = resolved;
-                                alt.replace_extension(".axlemesh");
-                                if (std::filesystem::exists(alt)) resolved = alt;
-                            }
-                        }
-                        if (std::filesystem::exists(resolved)) {
-                            auto loaded = AssetSerializer::LoadMesh(resolved);
-                            if (loaded.Success) {
-                                node.Mesh.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
-                            }
-                        }
-                    }
-                    if (!node.Mesh.VAO) {
-                        node.Mesh.VAO = m_SerializerContext ? m_SerializerContext->CubeMesh : m_FallbackMesh;
-                    }
-                }
-                for (auto& child : node.Children) {
-                    preloadMeshVAOs(child);
-                }
-            };
-            preloadMeshVAOs(m_CurrentAssembly.RootNode);
 
             // Compute aggregate bounding box from assembly
             glm::vec3 minBound(1e9f);
@@ -319,12 +257,30 @@ namespace Axle {
             std::function<void(const AssemblyNode&, const glm::mat4&)> computeBounds = [&](const AssemblyNode& node, const glm::mat4& parentMat) {
                 glm::mat4 localMat = node.Transform.GetTransform();
                 glm::mat4 worldMat = parentMat * localMat;
-                glm::vec3 pos = glm::vec3(worldMat[3]);
-                glm::vec3 halfExt = node.HasCollisionShape ? node.CollisionShape.HalfExtent : glm::vec3(0.5f);
-                minBound = glm::min(minBound, pos - halfExt);
-                maxBound = glm::max(maxBound, pos + halfExt);
-                totalVertices += 24;
-                totalIndices += 36;
+                if (node.HasMesh) {
+                    const auto& source=node.Mesh.Source;
+                    if (source && !source->Vertices.empty()) {
+                        for (const auto& vertex : source->Vertices) {
+                            const auto position=glm::vec3(worldMat*glm::vec4(vertex,1));
+                            minBound=glm::min(minBound,position);maxBound=glm::max(maxBound,position);
+                        }
+                        totalVertices+=source->Vertices.size();totalIndices+=source->Indices.size();
+                    } else {
+                        auto half=glm::vec3(0.5f);
+                        if (auto builtin=ParseBuiltinMesh(node.Mesh.AssetPath)) {
+                            const auto* definition=GetBuiltinMeshDefinition(*builtin);
+                            if (definition->Radius>0) half={definition->Radius,definition->Height>0?definition->Height*0.5f:definition->Radius,definition->Radius};
+                        } else {
+                            const auto loaded=AssetSerializer::LoadMesh(FileSystem::ResolveAssetPath(node.Mesh.AssetPath));
+                            if (loaded.Success) half=loaded.SourceData.HalfExtent;
+                        }
+                        for (int x : {-1,1}) for (int y : {-1,1}) for (int z : {-1,1}) {
+                            const auto position=glm::vec3(worldMat*glm::vec4(half*glm::vec3(x,y,z),1));
+                            minBound=glm::min(minBound,position);maxBound=glm::max(maxBound,position);
+                        }
+                        totalVertices+=24;totalIndices+=36;
+                    }
+                }
                 for (const auto& child : node.Children) {
                     computeBounds(child, worldMat);
                 }
@@ -625,52 +581,26 @@ namespace Axle {
                         mc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(m_CustomMeshPath.string());
                         mc.VAO = m_CustomMeshVAO;
                     }
-                    if (!mc.RHIMeshAsset && !mc.VAO) {
-                        mc.AssetPath = "builtin://sphere";
-                        mc.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
-                        mc.VAO = PrimitiveMesh::CreateSphere(64, 96);
-                    }
                     break;
             }
 
             auto& matComp = m_PreviewEntity.AddComponent<MaterialComponent>(m_ActiveMaterial);
             matComp.SyncToRHI();
         } else if (m_IsAssembly) {
-            std::function<void(const AssemblyNode&, glm::vec3)> spawnNodes = [&](const AssemblyNode& node, glm::vec3 parentPos) {
-                glm::vec3 worldPos = parentPos + node.Transform.Translation;
-                if (node.HasMesh) {
-                    auto partEnt = m_PreviewScene->CreateEntity(node.Tag.empty() ? "Node" : node.Tag);
-                    partEnt.SetParent(m_PreviewEntity, false);
-                    auto& ptc = partEnt.GetComponent<TransformComponent>();
-                    ptc.Translation = worldPos - m_Center;
-                    ptc.Rotation = node.Transform.Rotation;
-                    ptc.Scale = node.Transform.Scale;
-
-                    auto& pmc = partEnt.AddComponent<MeshInstance3D>();
-                    pmc.AssetPath = node.Mesh.AssetPath;
-                    pmc.VAO = node.Mesh.VAO;
-                    if (!node.Mesh.AssetPath.empty()) {
-                        if (node.Mesh.AssetPath == "builtin://sphere") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
-                        else if (node.Mesh.AssetPath == "builtin://cylinder") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCylinder();
-                        else if (node.Mesh.AssetPath == "builtin://cone") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCone();
-                        else if (node.Mesh.AssetPath == "builtin://plane") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetPlane();
-                        else if (node.Mesh.AssetPath == "builtin://cube") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
-                        else {
-                            auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
-                            pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(resolved.string());
-                        }
-                    }
-                    if (!pmc.RHIMeshAsset && !pmc.VAO) pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
-                    pmc.Color1 = node.Mesh.Color1;
-                    pmc.Color2 = node.Mesh.Color2;
-                    pmc.PatternMode = node.Mesh.PatternMode;
-                    pmc.TileScale = node.Mesh.TileScale;
-                }
-                for (const auto& child : node.Children) {
-                    spawnNodes(child, worldPos);
-                }
+            auto centeredRoot=m_PreviewScene->CreateEntity("Assembly origin");
+            centeredRoot.SetParent(m_PreviewEntity,false);
+            centeredRoot.GetComponent<TransformComponent>().Translation=-m_Center;
+            std::function<void(const AssemblyNode&, Entity)> spawnNodes = [&](const AssemblyNode& node, Entity parent) {
+                auto part=m_PreviewScene->CreateEntity(node.Tag.empty()?"Node":node.Tag);
+                part.SetParent(parent,false);
+                part.GetComponent<TransformComponent>()=node.Transform;
+                if (node.HasMesh) part.AddComponent<MeshInstance3D>()=node.Mesh;
+                if (node.HasMaterial) part.AddComponent<MaterialComponent>()=node.Material;
+                if (node.HasSkeletalMesh) part.AddComponent<SkeletalMeshComponent>()=node.SkeletalMesh;
+                if (node.HasAnimator) part.AddComponent<AnimatorComponent>()=node.Animator;
+                for (const auto& child : node.Children) spawnNodes(child,part);
             };
-            spawnNodes(m_CurrentAssembly.RootNode, glm::vec3(0.0f));
+            spawnNodes(m_CurrentAssembly.RootNode,centeredRoot);
         } else {
             for (size_t i = 0; i < m_CurrentPackage.Parts.size(); ++i) {
                 const auto& part = m_CurrentPackage.Parts[i];
@@ -685,10 +615,10 @@ namespace Axle {
                 if (!m_CurrentAssetPath.empty()) {
                     auto partFullPath = m_CurrentAssetPath.parent_path() / part.RelativePath;
                     pmc.AssetPath = partFullPath.string();
-                    pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(partFullPath.string());
+
                 }
                 pmc.VAO = i < m_PartVAOs.size() ? m_PartVAOs[i] : nullptr;
-                if (!pmc.RHIMeshAsset && !pmc.VAO) pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+                pmc.Source=std::make_shared<AxleMeshSource>(part.LoadedMesh.SourceData);
                 pmc.Color1 = part.LoadedMesh.SourceData.ColorPrimary;
                 pmc.Color2 = part.LoadedMesh.SourceData.ColorSecondary;
                 pmc.PatternMode = part.LoadedMesh.SourceData.PatternMode;
@@ -792,7 +722,9 @@ namespace Axle {
             request.GLTargetFBO = m_Framebuffer;
         }
 
-        RenderService::Get().RenderView(*m_PreviewScene, request);
+        const auto result=RenderService::Get().RenderView(*m_PreviewScene, request);
+        m_RenderDiagnostic=result.ErrorMessage;
+        if (!result.Success) AXLE_CORE_WARN("Asset preview failed: {0}",m_RenderDiagnostic);
     }
 
     void AssetPreviewPanel::RenderPreviewViewport() {
@@ -847,10 +779,11 @@ namespace Axle {
             if ((uint32_t)availW != m_ViewportWidth || (uint32_t)viewportH != m_ViewportHeight) {
                 m_ViewportWidth = (uint32_t)availW;
                 m_ViewportHeight = (uint32_t)viewportH;
-                m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+                m_Framebuffer=Framebuffer::Create({m_ViewportWidth,m_ViewportHeight,1,false});
             }
             RenderPreview(availW, viewportH);
             u32 texID = m_Framebuffer->GetColorAttachmentRendererID();
+            if(m_DeferredRelease)m_DeferredRelease([owner=m_Framebuffer]{});
             ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(availW, viewportH), ImVec2(0, 1), ImVec2(1, 0));
         } else {
             ImGui::Dummy(ImVec2(availW, viewportH));

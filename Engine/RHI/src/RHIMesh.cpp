@@ -4,6 +4,22 @@
 #include <algorithm>
 
 namespace Axle::RHI {
+    std::shared_ptr<const RHIMeshView> RHIMesh::CaptureView() const {
+        if(!IsValid())return {};
+        auto view=std::make_shared<RHIMeshView>();
+        view->m_Vertices=m_VertexBuffer.AcquireLease();view->m_Indices=m_IndexBuffer.AcquireLease();
+        view->m_VertexBuffer=m_VertexBuffer.GetNative();view->m_IndexBuffer=m_IndexBuffer.GetNative();
+        view->m_IndexCount=m_IndexCount;view->m_SubmeshCount=m_Submeshes.size();
+        return view;
+    }
+    void RHIMeshView::Bind(RHICommandBuffer& commands) const {
+        if(!IsValid()||!commands.KeepAlive(m_Vertices)||!commands.KeepAlive(m_Indices))return;
+        commands.SetVertexBuffer(0,m_VertexBuffer,0,sizeof(RHIVertex3D));
+        commands.SetIndexBuffer(m_IndexBuffer,0,nri::IndexType::UINT32);
+    }
+    void RHIMeshView::Draw(RHICommandBuffer& commands,uint32_t instances) const {
+        if(IsValid())commands.DrawIndexed(m_IndexCount,instances,0,0,0);
+    }
 
     namespace {
         constexpr float PI = 3.14159265358979323846f;

@@ -18,6 +18,7 @@ namespace Axle {
     struct RenderParticleData;
     namespace RHI {
         class RHIMesh;
+        class RHIMeshView;
         class RHIMaterial;
     }
 
@@ -74,6 +75,7 @@ namespace Axle {
         std::optional<BuiltinMeshId> BuiltinId;
         std::shared_ptr<VertexArray> GLMesh;
         std::shared_ptr<RHI::RHIMesh> NativeMesh;
+        std::shared_ptr<const RHI::RHIMeshView> NativeView;
         glm::mat4 WorldTransform{ 1.0f };
         RenderMaterialData Material;
         bool CastsShadows = true;

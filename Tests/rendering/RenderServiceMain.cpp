@@ -80,6 +80,19 @@ static bool Service(RHIType backend) {
             RENDER_CHECK(service.RenderView(world,request).Success, "return from optional/empty views");
             target = service.GetDefaultMainColorTarget();
             RENDER_CHECK(ReadTexture(*target) == red, "optional passes cannot leak into later default views");
+            auto mutableGeometry=RHIMesh::CreateCube();
+            auto& authoredMesh=entity.GetComponent<MeshInstance3D>();authoredMesh.RHIMeshAsset=mutableGeometry;
+            auto frozenGeometry=ExtractRenderWorld(scene);
+            RENDER_CHECK(service.RenderView(frozenGeometry,request).Success,"captured native geometry generation");
+            const auto originalGeometry=ReadTexture(*target);
+            std::vector<RHIVertex3D> smallVertices;std::vector<uint32_t> smallIndices;
+            RHIMesh::GenerateCube(0.2f,smallVertices,smallIndices);
+            RENDER_CHECK(mutableGeometry->Init(smallVertices,smallIndices)&&service.RenderView(scene,request).Success&&ReadTexture(*target)!=originalGeometry,
+                "later mutable mesh wrapper replacement changes only later extracted views");
+            mutableGeometry->Shutdown();authoredMesh.RHIMeshAsset.reset();
+            RENDER_CHECK(service.RenderView(frozenGeometry,request).Success&&ReadTexture(*target)==originalGeometry,
+                "saved snapshot keeps exact native geometry after wrapper replacement and shutdown");
+            RENDER_CHECK(service.RenderView(world,request).Success,"restore original world after generation probe");
             const auto old = target->GetHandle();
             auto resized = request; resized.Width = resized.Height = 49;
             bool reached = false;

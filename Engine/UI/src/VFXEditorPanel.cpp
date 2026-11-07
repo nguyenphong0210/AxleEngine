@@ -89,6 +89,7 @@ namespace Axle {
 
     void VFXEditorPanel::InitRHI(ImGuiLayer* imguiLayer) {
         m_ImGuiLayer = imguiLayer;
+        m_DeferredRelease=imguiLayer?imguiLayer->GetDeferredReleaser():GuiDeferredReleaser{};
         if (!m_ImGuiLayer) return;
 
         if (RHI::RHIDevice::Get().IsNativeReady()) {
@@ -595,7 +596,7 @@ namespace Axle {
                 m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
             }
             if (m_Framebuffer) {
-                m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+                m_Framebuffer=Framebuffer::Create({m_ViewportWidth,m_ViewportHeight,1,false});
             }
         }
 
@@ -1687,7 +1688,7 @@ namespace Axle {
                     if (reqW > 0 && reqH > 0 && (reqW != m_ViewportWidth || reqH != m_ViewportHeight)) {
                         m_ViewportWidth = reqW;
                         m_ViewportHeight = reqH;
-                        m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+                        m_Framebuffer=Framebuffer::Create({m_ViewportWidth,m_ViewportHeight,1,false});
                     }
                     RenderPreview(avail.x, avail.y);
                 }
@@ -1700,6 +1701,7 @@ namespace Axle {
                     draw->AddImage((ImTextureID)(intptr_t)rhiTexID, origin, end, ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
                 } else if (m_Framebuffer && m_Framebuffer->GetColorAttachmentRendererID() != 0) {
                     ImTextureID texID = (ImTextureID)(intptr_t)m_Framebuffer->GetColorAttachmentRendererID();
+                    if(m_DeferredRelease)m_DeferredRelease([owner=m_Framebuffer]{});
                     draw->AddImage(texID, origin, end, ImVec2(0, 1), ImVec2(1, 0));
                 } else {
                     ImVec2 p0 = ImGui::GetCursorScreenPos();

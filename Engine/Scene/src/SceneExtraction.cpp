@@ -13,16 +13,16 @@ namespace Axle {
     bool ResolveRenderWorldResources(RenderWorld& world) {
         if (!world.ErrorMessage.empty()) return false;
         for (auto& instance : world.Meshes) {
+            if(RHI::RHIDevice::Get().IsNativeReady()&&instance.NativeView) {
+                if(!instance.NativeView->IsValid()){world.ErrorMessage="Stale captured mesh generation";return false;}
+                continue;
+            }
             MeshInstance3D candidate;
             candidate.AssetPath = instance.MeshURI; candidate.VAO = instance.GLMesh; candidate.RHIMeshAsset = instance.NativeMesh;
-            if (instance.Source) {
-                if (RHI::RHIDevice::Get().IsNativeReady() && !candidate.RHIMeshAsset)
-                    candidate.RHIMeshAsset = RHI::RHIMesh::CreateFromAxleMesh(instance.Source->Vertices, instance.Source->Indices);
-                else if (!RHI::RHIDevice::Get().IsNativeReady() && !candidate.VAO)
-                    candidate.VAO = CreateVertexArrayFromMeshSource(*instance.Source);
-            }
+            candidate.Source = instance.Source;
             if (!ResolveMeshResources(candidate)) { world.ErrorMessage = "Cannot resolve mesh: " + instance.MeshURI; return false; }
             instance.GLMesh = candidate.VAO; instance.NativeMesh = candidate.RHIMeshAsset;
+            if(instance.NativeMesh)instance.NativeView=instance.NativeMesh->CaptureView();
         }
         return true;
     }
@@ -149,6 +149,11 @@ namespace Axle {
             world.Skybox.GroundColor = glm::vec4(sc.GroundColor, 1.0f);
             if (world.DirectionalLight.has_value()) {
                 world.Skybox.SunDirection = glm::vec4(world.DirectionalLight->Direction, 0.0f);
+                world.Skybox.SunColor=glm::vec4(world.DirectionalLight->Color*world.DirectionalLight->Intensity,1);
+            } else world.Skybox.SunColor=glm::vec4(0);
+            if(!sc.SyncWithSun) {
+                const float azimuth=glm::radians(sc.CustomAzimuth), elevation=glm::radians(sc.CustomElevation);
+                world.Skybox.SunDirection=glm::vec4(std::cos(elevation)*std::sin(azimuth),std::sin(elevation),std::cos(elevation)*std::cos(azimuth),0);
             }
             break;
         }
@@ -172,6 +177,8 @@ namespace Axle {
             rmi.BuiltinId = ParseBuiltinMesh(mc.AssetPath);
             rmi.GLMesh = mc.VAO;
             rmi.NativeMesh = mc.RHIMeshAsset;
+            if(rmi.NativeMesh)rmi.NativeView=rmi.NativeMesh->CaptureView();
+            rmi.Source = mc.Source;
             rmi.WorldTransform = scene.GetWorldTransform(entity);
             rmi.Selected = options.SelectedEntities && (options.SelectedEntities->find(rmi.EntityID) != options.SelectedEntities->end());
 

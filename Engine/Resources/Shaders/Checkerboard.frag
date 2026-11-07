@@ -9,12 +9,17 @@ in vec4 v_FragPosLightSpace;
 
 // 1. Procedural Pattern Uniforms
 uniform int u_PatternMode;        // 0: World XZ Caro (Floor), 1: 3D Caro (Box/Mesh), 2: Spherical Caro, 3: Solid Color
+uniform int u_SurfaceType;
+uniform float u_AlphaCutoff;
 uniform float u_TileScale;        // Checkerboard tile frequency
 uniform vec4 u_Color1;            // Primary color or tint multiplier
 uniform vec4 u_Color2;            // Secondary pattern color
 
 // 2. Directional Sun Light & Real-Time Cascaded Shadow Mapping (4 Cascades, PCF 5x5)
 uniform vec3 u_LightDir;          // Directional sun light vector
+uniform int u_NumExtraDirectionalLights;
+uniform vec3 u_ExtraLightDirection[4];
+uniform vec3 u_ExtraLightColor[4];
 uniform vec3 u_LightColor;        // Sun light RGB color
 uniform float u_LightIntensity;   // Sun brightness multiplier
 uniform float u_AmbientIntensity; // Ambient fill lighting
@@ -351,6 +356,7 @@ void main() {
         baseColor = mix(u_Color1, u_Color2, pattern);
     }
 
+    if(u_SurfaceType==1&&baseColor.a<u_AlphaCutoff)discard;
     // 4. Material properties (Roughness & Metallic)
     float roughness = (u_UseRoughnessMap == 1) ? texture(u_RoughnessMap, uv).r : u_Roughness;
     roughness = clamp(roughness, 0.04, 1.0);
@@ -397,6 +403,14 @@ void main() {
     vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL * (1.0 - shadow);
 
     // 5.1 Additional Dynamic Point Lights
+    for (int i=0;i<u_NumExtraDirectionalLights;++i) {
+        vec3 direction=normalize(u_ExtraLightDirection[i]);
+        vec3 halfVector=normalize(V+direction);
+        float nDotL=max(dot(N,direction),0.0);
+        vec3 fresnel=FresnelSchlick(max(dot(halfVector,V),0.0),F0);
+        vec3 spec=DistributionGGX(N,halfVector,roughness)*GeometrySmith(N,V,direction,roughness)*fresnel/(4.0*NdotV*nDotL+0.0001);
+        Lo+=((1.0-fresnel)*(1.0-metallic)*baseColor.rgb/PI+spec)*u_ExtraLightColor[i]*nDotL;
+    }
     for (int i = 0; i < u_NumPointLights && i < 4; ++i) {
         vec3 lightVec = u_PointLights[i].Position - v_WorldPos;
         float dist = length(lightVec);

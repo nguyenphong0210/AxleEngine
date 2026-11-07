@@ -158,6 +158,7 @@ namespace Axle {
         std::shared_ptr<Framebuffer> m_Framebuffer;
         std::unique_ptr<RHIViewportDescriptor> m_RHIViewport;
         class ImGuiLayer* m_ImGuiLayer = nullptr;
+        GuiDeferredReleaser m_DeferredRelease;
         
         bool m_IsOpen = false;
         bool m_IsPlaying = true;

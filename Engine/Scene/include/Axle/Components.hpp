@@ -32,6 +32,7 @@
 #include <Axle/RHI/RHIMaterial.hpp>
 
 namespace Axle {
+    struct AxleMeshSource;
 
     namespace RHI {
         class RHIMesh;
@@ -39,6 +40,8 @@ namespace Axle {
     }
 
     struct MeshInstance3D {
+        // Immutable imported geometry cache; authored identity remains AssetPath.
+        std::shared_ptr<const AxleMeshSource> Source;
         std::shared_ptr<VertexArray> VAO;
         std::string AssetPath;
         std::shared_ptr<RHI::RHIMesh> RHIMeshAsset = nullptr; // Multi-backend RHI Mesh (Direct3D 12 / Vulkan)

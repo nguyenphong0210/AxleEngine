@@ -1,11 +1,14 @@
 #pragma once
 #include <Axle/BuiltinMesh.hpp>
+#include <cstdint>
 #include <memory>
 #include <string>
 
 namespace Axle {
     class VertexArray;
     struct MeshInstance3D;
+    struct AxleMeshSource;
+    uint64_t MeshSourceRevision(const AxleMeshSource& source);
     struct BuiltinMeshResources {
         std::shared_ptr<VertexArray> CubeMesh, SphereMesh, CylinderMesh, ConeMesh, PlaneMesh;
         std::shared_ptr<VertexArray> Get(BuiltinMeshId id) const;

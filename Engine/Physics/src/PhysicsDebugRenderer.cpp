@@ -16,12 +16,16 @@ namespace Axle {
             layout(location = 1) in vec4 a_Color;
 
             uniform mat4 u_ViewProjection;
+            uniform float u_DepthBias;
+            uniform float u_AlphaMultiplier;
 
             out vec4 v_Color;
 
             void main() {
                 v_Color = a_Color;
+                v_Color.a *= u_AlphaMultiplier;
                 gl_Position = u_ViewProjection * vec4(a_Position, 1.0);
+                gl_Position.z -= u_DepthBias * gl_Position.w;
             }
         )";
 
@@ -86,7 +90,8 @@ namespace Axle {
         (void)inHeight;
     }
 
-    void PhysicsDebugRenderer::Begin(const glm::vec3& cameraPos) {
+    void PhysicsDebugRenderer::Begin(const glm::vec3& cameraPos, float depthBias, float alphaMultiplier) {
+        m_DepthBias=depthBias;m_AlphaMultiplier=alphaMultiplier;
         SetCameraPos(JPH::RVec3(cameraPos.x, cameraPos.y, cameraPos.z));
         m_LineVertices.clear();
         NextFrame();
@@ -125,7 +130,9 @@ namespace Axle {
 
         m_Shader->Bind();
         m_Shader->SetMat4("u_ViewProjection", viewProjection);
-        RenderCommand::DrawLines(m_VertexArray, vertexCount);
+        m_Shader->SetFloat("u_DepthBias",m_DepthBias);
+        m_Shader->SetFloat("u_AlphaMultiplier",m_AlphaMultiplier);
+        RenderCommand::DrawDebugLines(m_VertexArray,vertexCount);
     }
 
 }

@@ -5,9 +5,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/RenderService.hpp>
-#if defined(AXLE_BUILD_RHI)
 #include <Axle/RHIViewportDescriptor.hpp>
-#endif
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -35,6 +33,10 @@ namespace Axle {
         Scene* GetPreviewScene() const { return m_PreviewScene.get(); }
         const AssemblyData& GetAssemblyData() const { return m_AssemblyData; }
         void SyncPreviewScene();
+        void InitRHI(ImGuiLayer* layer);
+        RHIViewportDescriptor* GetRHIViewport() { return &m_RHIViewport; }
+        const std::shared_ptr<Framebuffer>& GetGLFramebuffer() const { return m_Framebuffer; }
+        void RenderPreviewViewport(float width, float height) { RenderPreview(width,height); }
 
     private:
         void RenderPreview(float width, float height);
@@ -64,9 +66,9 @@ namespace Axle {
         std::unique_ptr<Scene> m_PreviewScene;
 
         // Viewport & Rendering Targets
-#if defined(AXLE_BUILD_RHI)
         RHIViewportDescriptor m_RHIViewport;
-#endif
+        ImGuiLayer* m_ImGuiLayer = nullptr;
+        GuiDeferredReleaser m_DeferredRelease;
         std::shared_ptr<Framebuffer> m_Framebuffer;
         u32 m_ViewportWidth = 480;
         u32 m_ViewportHeight = 360;

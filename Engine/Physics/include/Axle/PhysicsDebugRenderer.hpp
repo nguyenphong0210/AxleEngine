@@ -30,7 +30,7 @@ namespace Axle {
         void DrawText3D(JPH::RVec3Arg inPosition, const std::string_view& inString, JPH::ColorArg inColor, float inHeight) override;
 
         // Frame batching cycle
-        void Begin(const glm::vec3& cameraPos);
+        void Begin(const glm::vec3& cameraPos, float depthBias = 0.0001f, float alphaMultiplier = 1.0f);
         void End(const glm::mat4& viewProjection);
 
         void Clear();
@@ -47,6 +47,7 @@ namespace Axle {
         std::shared_ptr<VertexArray> m_VertexArray;
         std::shared_ptr<VertexBuffer> m_VertexBuffer;
         std::unique_ptr<Shader> m_Shader;
+        float m_DepthBias = 0.0001f, m_AlphaMultiplier = 1.0f;
     };
 
 }

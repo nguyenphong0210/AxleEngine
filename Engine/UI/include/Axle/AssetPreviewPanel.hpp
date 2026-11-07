@@ -58,6 +58,9 @@ namespace Axle {
         float GetSunElevation() const { return m_SunElevation; }
         void SetSunElevation(float deg);
         RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
+        const std::shared_ptr<Framebuffer>& GetGLFramebuffer() const { return m_Framebuffer; }
+        Scene* GetPreviewScene() const { return m_PreviewScene.get(); }
+        const std::string& GetRenderDiagnostic() const { return m_RenderDiagnostic; }
         void UpdateMaterialPreview(const MaterialComponent& mat);
 
         void RenderPreviewViewport();
@@ -71,6 +74,7 @@ namespace Axle {
         }
 
     private:
+        std::string m_RenderDiagnostic;
         void RenderPreview(float width, float height);
         void RebuildPreviewScene();
         bool IsMaterialPreview() const;

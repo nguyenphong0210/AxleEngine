@@ -170,6 +170,7 @@ void EditorLayer::OnAttach() {
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
     auto* imguiLayer = dynamic_cast<Axle::ImGuiLayer*>(Axle::Application::Get().GetUIContext());
     m_AssetPreviewPanel.InitRHI(imguiLayer);
+    m_AssemblyEditorPanel.InitRHI(imguiLayer);
     m_VFXEditorPanel.InitRHI(imguiLayer);
     m_SceneHierarchyPanel.SetImGuiLayer(imguiLayer);
     m_ContentBrowserPanel.SetAssetPreviewPanel(&m_AssetPreviewPanel);

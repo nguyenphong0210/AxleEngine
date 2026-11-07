@@ -63,6 +63,8 @@ namespace Axle {
 
         // Update tick for queued thumbnail rendering (called each frame)
         void OnUpdate();
+        size_t GetCachedCount() const { return m_ThumbnailCache.size(); }
+        size_t GetPendingCount() const { return m_PendingQueue.size(); }
 
     private:
         void RetireTextures(std::vector<uint64_t> handles,
@@ -70,6 +72,7 @@ namespace Axle {
                             std::vector<std::shared_ptr<Texture2D>> loaded,
                             std::vector<u32> generated);
         bool RenderThumbnail(const std::filesystem::path& path, uint64_t& outTexHandle, AssetCachedMeta& outMeta);
+        uint64_t GetRevision(const std::filesystem::path& path) const;
 
     private:
         static AssetThumbnailManager* s_Instance;
@@ -84,7 +87,8 @@ namespace Axle {
         std::unordered_map<std::string, std::shared_ptr<RHI::RHITexture>> m_RHIThumbnails;
         std::unordered_map<std::string, AssetCachedMeta> m_MetaCache;
         std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_LoadedTextures;
-        std::unordered_map<std::string, std::filesystem::file_time_type> m_AssetRevisions;
+        std::unordered_map<std::string, uint64_t> m_AssetRevisions;
+        std::unordered_map<std::string, std::vector<std::filesystem::path>> m_SourceDependencies;
         std::vector<u32> m_GeneratedTextures;
         std::unordered_map<std::string, std::shared_ptr<Framebuffer>> m_GLThumbnails;
         static constexpr size_t MaxCacheEntries = 256;

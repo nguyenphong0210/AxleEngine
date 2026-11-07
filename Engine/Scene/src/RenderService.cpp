@@ -36,7 +36,7 @@ namespace Axle {
         m_Initialized = true; return true;
     }
     void RenderService::Shutdown() {
-        m_DefaultMainTargets.reset(); m_GLMeshes.clear();
+        m_DefaultMainTargets.reset(); m_GLMeshes.clear(); m_NativeSourceMeshes.clear();
         m_RHIRenderer.reset(); m_GLRenderer.reset();
         m_Initialized = false; m_Epoch = 0; m_GLContext = nullptr;
     }
@@ -57,17 +57,35 @@ namespace Axle {
         if (!Init()) return fail("RenderService backend/context is unavailable");
         // Resource resolution happens after extraction, on owned records only.
         auto prepared = world;
+        auto meshKey = [](const RenderMeshInstance& mesh) {
+            auto key = std::to_string(FileSystem::GetSourceGeneration()) + ":" + mesh.MeshURI;
+            if (mesh.Source) return key + ":source:" + std::to_string(MeshSourceRevision(*mesh.Source));
+            if (!mesh.MeshURI.empty() && !ParseBuiltinMesh(mesh.MeshURI)) {
+                std::error_code error;
+                const auto path = FileSystem::ResolveAssetPath(mesh.MeshURI);
+                const auto revision = std::filesystem::last_write_time(path,error);
+                if (!error) key += ":" + std::to_string(revision.time_since_epoch().count());
+            }
+            return key;
+        };
+        if (m_RHIRenderer) for (auto& mesh : prepared.Meshes) if (mesh.Source && !mesh.NativeMesh) {
+            if (auto found=m_NativeSourceMeshes.find(meshKey(mesh));found!=m_NativeSourceMeshes.end()) mesh.NativeMesh=found->second;
+        }
         if (m_GLRenderer) for (auto& mesh : prepared.Meshes) {
             if (!mesh.GLMesh) {
-                const auto found = m_GLMeshes.find(mesh.MeshURI);
+                const auto found = m_GLMeshes.find(meshKey(mesh));
                 if (found != m_GLMeshes.end()) mesh.GLMesh = found->second;
             }
         }
         if (!ResolveRenderWorldResources(prepared)) return fail(prepared.ErrorMessage);
+        if (m_RHIRenderer) for (const auto& mesh : prepared.Meshes) if (mesh.Source && mesh.NativeMesh) {
+            if (m_NativeSourceMeshes.size()>=256) m_NativeSourceMeshes.clear();
+            m_NativeSourceMeshes[meshKey(mesh)]=mesh.NativeMesh;
+        }
         if (m_GLRenderer) for (auto& mesh : prepared.Meshes) {
             if (!mesh.MeshURI.empty() && mesh.GLMesh) {
                 if (m_GLMeshes.size() >= 256) m_GLMeshes.clear();
-                m_GLMeshes[mesh.MeshURI] = mesh.GLMesh;
+                m_GLMeshes[meshKey(mesh)] = mesh.GLMesh;
             }
             if (mesh.Material.MaterialAsset) {
                 auto material = std::make_shared<Material>(*mesh.Material.MaterialAsset);

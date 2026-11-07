@@ -129,6 +129,7 @@ static bool Windowed(RHIType backend) {
     auto& device = RHIDevice::Get();
     for (const auto* rejection : {"none", "QueueSubmit", "QueuePresent"}) {
         RHIDeviceDesc desc; desc.PreferredBackend = backend; desc.AllowFallback = false; desc.EnableNRIValidation = true;
+        desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
         RENDER_CHECK(device.Init(desc) && !device.IsSoftwareAdapter(), "physical windowed device");
         {
             WindowProps props; props.Title = "OPT-04 checked submit/present"; props.Width = props.Height = 96; props.Maximized = false;

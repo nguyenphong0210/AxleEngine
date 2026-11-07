@@ -197,7 +197,10 @@ namespace Axle::RHI {
                 core.DestroyBuffer(buffer);
                 if (memory) core.FreeMemory(memory);
             }, std::move(dependencies));
-        return m_Lease.IsLive() && device.GetResources().DefineBufferState(m_Lease);
+        const auto host = m_Desc.MemoryLocation == RHIMemoryLocation::HostReadback ? nri::AccessBits::HOST_READ :
+            m_Desc.MemoryLocation == RHIMemoryLocation::Device ? nri::AccessBits::NONE : nri::AccessBits::HOST_WRITE;
+        return m_Lease.IsLive() && device.GetResources().DefineBufferState(m_Lease,
+            {host, host == nri::AccessBits::NONE ? nri::StageBits::NONE : nri::StageBits::HOST});
     }
 
     void RHIBuffer::Shutdown() {
@@ -237,6 +240,8 @@ namespace Axle::RHI {
         });
         if (result != nri::Result::SUCCESS) return nullptr;
         *m_Mapping = true;
+        const auto access = m_Desc.MemoryLocation == RHIMemoryLocation::HostReadback ? nri::AccessBits::HOST_READ : nri::AccessBits::HOST_WRITE;
+        if (!device.GetResources().SetBufferState(m_Lease, {access, nri::StageBits::HOST})) { Unmap(); return nullptr; }
         m_MappedOffset = offset; m_MappedSize = count;
         return m_MappedData;
     }

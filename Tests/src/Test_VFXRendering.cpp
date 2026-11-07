@@ -172,6 +172,10 @@ namespace Axle {
             desc.PreferredBackend = targetBackend;
             desc.AllowFallback = false;
             desc.Headless = true;
+            desc.EnableNRIValidation = true;
+            desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(targetBackend);
+            std::cout << "  [VFX GPU ACCEPTANCE] Graphics API validation: "
+                      << (desc.EnableValidation ? "ENABLED" : "NOT RUN (layer unavailable)") << "\n";
             if (!device.Init(desc)) {
                 std::cout << "  [VFX GPU ACCEPTANCE] Failed to initialize the explicitly requested hardware "
                              "backend.\n";

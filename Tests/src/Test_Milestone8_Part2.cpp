@@ -3173,6 +3173,8 @@ bool RunTest_Step65_Phase32_Step7_MultithreadedCommandRecording() {
     for (const auto backend : {RHIType::Direct3D12, RHIType::Vulkan}) {
         RHIDeviceDesc desc;
         desc.PreferredBackend = backend; desc.Headless = true; desc.AllowFallback = false;
+        desc.EnableNRIValidation = true;
+        desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
         assert(device.Init(desc));
         assert(device.GetBackend() == backend && !device.IsSoftwareAdapter());
         std::vector<std::unique_ptr<RHICommandBuffer>> commands;

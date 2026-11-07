@@ -68,9 +68,16 @@ static bool Textures() {
         RENDER_CHECK(!texture.Init(bad) && texture.GetNative() == old, "invalid descriptor rejects before destructive replacement/narrowing");
     }
     auto volume = desc; volume.Width = volume.Height = 1; volume.Depth = 8; volume.MipLevels = 4;
-    volume.Usage = RHITextureUsage::ShaderResource;
+    volume.Usage = RHITextureUsage::CopySource | RHITextureUsage::CopyDest;
     RHITexture volumeTexture;
-    RENDER_CHECK(volumeTexture.Init(volume) && volumeTexture.GetDesc().MipLevels == 4, "3D depth participates in mip limit");
+    RENDER_CHECK(volumeTexture.Init(volume) && volumeTexture.GetDesc().MipLevels == 4, "3D depth participates in copy-texture mip limit");
+    auto sampledVolume = volume; sampledVolume.Usage = RHITextureUsage::ShaderResource; sampledVolume.MipLevels = 1;
+    RENDER_CHECK(volumeTexture.Init(sampledVolume) && volumeTexture.GetSRV(), "single-mip 3D shader view is supported");
+    const auto originalVolume = volumeTexture.GetHandle(); sampledVolume.MipLevels = 4;
+    if (RHIDevice::Get().GetBackend() == RHIType::Vulkan)
+        RENDER_CHECK(!volumeTexture.Init(sampledVolume) && volumeTexture.GetHandle() == originalVolume && volumeTexture.GetSRV(),
+            "unsupported pinned-NRI multi-mip 3D Vulkan view rejects without narrowing or destroying the published view");
+    else RENDER_CHECK(volumeTexture.Init(sampledVolume) && volumeTexture.GetDesc().MipLevels == 4, "D3D12 preserves full 3D mip shader views");
     RENDER_CHECK(texture.Init(RHITextureDesc::RenderTarget2D(16, 16)) && texture.GetWidth() == 16, "replacement recovers after injected failures");
     return true;
 }

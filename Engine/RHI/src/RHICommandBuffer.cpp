@@ -3,6 +3,9 @@
 #include <Axle/RHI/RHIStreamer.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#if defined(_WIN32)
+#include <d3d12.h>
+#endif
 
 namespace Axle::RHI {
 
@@ -206,6 +209,27 @@ namespace Axle::RHI {
         desc.textures = nriTextures.empty() ? nullptr : nriTextures.data();
         desc.textureNum = static_cast<uint32_t>(nriTextures.size());
 
+#if defined(_WIN32)
+        if (rhiDevice.GetBackend() == RHIType::Direct3D12 && !core.GetDeviceDesc(*rhiDevice.GetNRIDevice()).features.enhancedBarriers) {
+            auto common = desc; common.textureNum = 0; common.textures = nullptr;
+            if (common.globalNum || common.bufferNum) core.CmdBarrier(*m_CommandBuffer, common);
+            for (const auto& texture : nriTextures) {
+                nri::BarrierDesc single{}; single.textures = &texture; single.textureNum = 1;
+                core.CmdBarrier(*m_CommandBuffer, single);
+                if (texture.before.layout == nri::Layout::UNDEFINED &&
+                    (texture.after.layout == nri::Layout::COLOR_ATTACHMENT || texture.after.layout == nri::Layout::DEPTH_STENCIL_ATTACHMENT)) {
+                    const auto& info = core.GetTextureDesc(*texture.texture);
+                    D3D12_DISCARD_REGION discard{};
+                    discard.FirstSubresource = texture.mipOffset + texture.layerOffset * info.mipNum;
+                    if (texture.planes == nri::PlaneBits::STENCIL) discard.FirstSubresource += info.mipNum * info.layerNum;
+                    discard.NumSubresources = 1;
+                    auto* native = static_cast<ID3D12GraphicsCommandList*>(core.GetCommandBufferNativeObject(m_CommandBuffer));
+                    native->DiscardResource(reinterpret_cast<ID3D12Resource*>(core.GetTextureNativeObject(texture.texture)), &discard);
+                }
+            }
+            return;
+        }
+#endif
         if (desc.globalNum || desc.bufferNum || desc.textureNum) core.CmdBarrier(*m_CommandBuffer, desc);
     }
 

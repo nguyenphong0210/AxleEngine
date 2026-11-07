@@ -46,7 +46,7 @@ namespace Axle::RHI {
         ranges[0].descriptorNum = m_Capacity;
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND | nri::DescriptorRangeBits::ARRAY;
 
         // Sampler: SamplerState g_Sampler : register(s0, space1);
         ranges[1].baseRegisterIndex = 0;

@@ -54,6 +54,26 @@ static bool Policy() {
     auto replacement = resources.ImportTexture(native, owner, 1, 1, nri::PlaneBits::COLOR, {});
     RENDER_CHECK(replacement && !resources.Acquire(old) && replacement.GetHandle() != old &&
         resources.GetTextureState(replacement.GetHandle())->layout == nri::Layout::UNDEFINED, "reused address has fresh generation state");
+    int bufferAlias;
+    auto buffer = resources.ImportBuffer(reinterpret_cast<nri::Buffer*>(&bufferAlias), owner,
+        {nri::AccessBits::NONE, nri::StageBits::NONE});
+    RENDER_CHECK(buffer && resources.BeginRecording(&commandAlias) && resources.RecordUse(&commandAlias, buffer), "empty device-buffer access scope");
+    nri::BufferBarrierDesc bufferRequest{}; bufferRequest.buffer = reinterpret_cast<nri::Buffer*>(&bufferAlias);
+    bufferRequest.after = {nri::AccessBits::SHADER_RESOURCE, nri::StageBits::VERTEX_SHADER};
+    std::vector<nri::BufferBarrierDesc> bufferBarriers;
+    RENDER_CHECK(resources.BuildBufferBarrier(&commandAlias, bufferRequest, bufferBarriers) && bufferBarriers.empty(), "first read needs no empty-source barrier");
+    bufferRequest.after = {nri::AccessBits::SHADER_RESOURCE_STORAGE, nri::StageBits::COMPUTE_SHADER};
+    RENDER_CHECK(resources.BuildBufferBarrier(&commandAlias, bufferRequest, bufferBarriers) && bufferBarriers.size() == 1 &&
+        bufferBarriers[0].before.stages == nri::StageBits::VERTEX_SHADER, "empty NONE scope cannot contaminate the actual prior reader stage");
+    resources.AbandonRecording(&commandAlias);
+    RENDER_CHECK(resources.SetBufferState(buffer, {nri::AccessBits::SHADER_RESOURCE, nri::StageBits::ALL}) &&
+        resources.BeginRecording(&commandAlias) && resources.RecordUse(&commandAlias, buffer), "broad prior read scope");
+    bufferBarriers.clear();
+    bufferRequest.after = {nri::AccessBits::SHADER_RESOURCE, nri::StageBits::FRAGMENT_SHADER};
+    RENDER_CHECK(resources.BuildBufferBarrier(&commandAlias, bufferRequest, bufferBarriers), "merge a narrower read scope");
+    bufferRequest.after = {nri::AccessBits::SHADER_RESOURCE_STORAGE, nri::StageBits::COMPUTE_SHADER};
+    RENDER_CHECK(resources.BuildBufferBarrier(&commandAlias, bufferRequest, bufferBarriers) && bufferBarriers.size() == 1 &&
+        bufferBarriers[0].before.stages == nri::StageBits::ALL, "ALL must dominate rather than disappear during stage union");
     resources.CloseAfterDrain();
     return true;
 }

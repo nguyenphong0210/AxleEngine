@@ -296,9 +296,13 @@ namespace Axle {
 
         m_CommandBuffer.EndRendering();
 
-        // Transition Picking Target to CopySource for Host Readback
-        m_CommandBuffer.TransitionTexture(m_PickingTexture->GetNative(),
-            RHI::RHIResourceLayout::ColorAttachment, RHI::RHIResourceLayout::CopySource);
+        // NRI host-image readback requires GENERAL/HOST_READ on every backend.
+        RHI::RHIBarrierGroup hostRead;
+        hostRead.AddTexture(RHI::RHITextureBarrier(m_PickingTexture->GetNative(),
+            RHI::RHIResourceLayout::ColorAttachment, RHI::RHIResourceLayout::General,
+            RHI::RHIAccess::ColorAttachment, RHI::RHIAccess::HostRead,
+            RHI::RHIPipelineStage::ColorAttachment, RHI::RHIPipelineStage::Host));
+        m_CommandBuffer.PipelineBarrier(hostRead);
         m_CommandBuffer.TransitionTexture(m_DepthTexture->GetNative(),
             RHI::RHIResourceLayout::DepthStencilWrite, RHI::RHIResourceLayout::DepthStencilRead);
 

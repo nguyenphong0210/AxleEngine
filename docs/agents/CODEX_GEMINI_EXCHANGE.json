@@ -3,7 +3,7 @@
   "current_task": {
     "id": "OPT-04-CODEX-IMPLEMENTATION",
     "title": "Codex implements OPT-04 with separate-context review and supplementary Gemini review",
-    "state": "delivered_with_open_api_validation_gate",
+    "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Codex in a separate context",
@@ -26,7 +26,7 @@
       "P41-11"
     ],
     "current_phase": "OPT-04",
-    "current_package": "P41-11",
+    "current_package": "P41-07",
     "completed_packages": [
       "P41-01",
       "P41-02",
@@ -40,7 +40,7 @@
       "P41-10",
       "P41-11"
     ],
-    "implementation_status": "P41-01..11 implemented; all three final-review findings fixed in 00eba99; available Debug/Release phase gates passed",
+    "implementation_status": "Original P41-01..11 delivery/review complete; newly available API validation exposed API-01..05, repaired with focused Debug/Release checks; full API rerun pending",
     "independent_review_status": "single_fresh_context_review_and_same_reviewer_correction_recheck_complete",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
@@ -95,7 +95,7 @@
       "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
     "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Stop at OPT-04. Actual graphics API validation requires missing host prerequisites; dependent acceptance remains open. OPT-05 is not released.",
+    "next_action": "Complete actual D3D12/Vulkan API-validation reruns, broader affected gates and same-reviewer recheck of API-01..05. Keep pinned NRI clean; record explicit unsupported Vulkan multi-mip 3D shader views. Stop before OPT-05.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -118,7 +118,7 @@
         "https://learn.chatgpt.com/docs/models"
       ]
     },
-    "acceptance_status": "open_missing_actual_graphics_api_validation_prerequisites",
+    "acceptance_status": "api_validation_in_progress_after_host_installation",
     "implementation_commit": "e03e03361d1474f5d3eacee29e03e1d69defa2f3",
     "correction_commit": "00eba99e9fb161d411b071076b408fe8e8b2425d",
     "final_review_evidence": "docs/reviews/OPT_04_CODEX_EXECUTION.md; ignored final-review/targeted-results.json, reproduction-results.json and recheck-results.json"
@@ -1392,6 +1392,61 @@
       "base_commit": "00eba99",
       "timestamp_utc": "2026-11-07T08:14:17.212081+00:00",
       "body": "DELIVERY: OPT-04 / P41-01..11 implemented. P41-11 commit e03e03361d1474f5d3eacee29e03e1d69defa2f3; final review repair commit 00eba99e9fb161d411b071076b408fe8e8b2425d. The ONE fresh-context reviewer completed the whole-phase source/caller review, independently ran 32 passing focused modes and reproduced three P2 findings with 16 probes. FR-01 descriptor/CPU bindless publication, FR-02 incomplete default texture caching and FR-03 abandoned streamer batch ownership were fixed with tracked native regressions. The SAME reviewer independently rebuilt/rechecked 16/16 probes plus 6/6 retirement modes, all exit 0, and explicitly closed all three findings with no additional findings. This is actual separate-context Codex review, not independent-model/Gemini acceptance.\n\nFinal correction-source Debug/Release full AxleAllTests/Editor/Runtime builds, 50/50 CTest each, full default integration, jobs/ECS 16 PASS + 3 verified probes each, real simulation product probes, 54 focused rendering/policy/product cases per config, four mip and five primitive GL/fallback byte comparisons passed. Native focused mains enforce zero embedded NRI errors through teardown. Architecture PASS 397 files/18 CMake files, baseline tooling 18/18, whitespace clean, pinned NRI clean at 6998e3fbbaed1b132f386a9d49743a2481003487. Actual commands/exits/logs: build/agent-runs/OPT-04/review-fixed-<config>-results.json; independent recheck: final-review/recheck-results.json.\n\nActual graphics API validation remains NOT RUN (Vulkan Khronos layer and D3D12/DXGI debug prerequisites unavailable). Dependent acceptance remains open; NRI validation is not a substitute. Report: docs/reviews/OPT_04_CODEX_EXECUTION.md. No Gemini feedback invented, no vendor edits, no push, no OPT-05 work. Stopping at the authorized boundary."
+    },
+    {
+      "id": "CG-20261107T085108053819Z-CODEX-21e9ec",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T081417212081Z-CODEX-26345f",
+      "base_commit": "c27eeb2",
+      "timestamp_utc": "2026-11-07T08:51:08.053819+00:00",
+      "body": "IN_PROGRESS: User installed Windows Graphics Tools and Vulkan SDK 1.4.363.1 and requested immediate validation. Screenshot reports RestartNeeded=False. Current HEAD c27eeb2, clean tree. Both physical Debug foundation startup probes now initialize with actual API validation available/enabled (D3D12 debug interfaces and DXGI debug factory succeed; Vulkan reports CURRENT-VALIDATION-ENABLED). No machine restart is required for these processes. Reopening the remaining OPT-04 API-validation gate: run strict physical native resource/state/frame/lifetime/view/presentation/primitive/image cases in Debug/Release, inspect API callback errors, repair reproducible defects if found, and update only OPT-04 report/roadmap/exchange plus necessary scoped source/tests. No new phase or vendor changes."
+    },
+    {
+      "id": "CG-20261107T085401352607Z-CODEX-f09948",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T085108053819Z-CODEX-21e9ec",
+      "base_commit": "c27eeb2",
+      "timestamp_utc": "2026-11-07T08:54:01.352607+00:00",
+      "body": "STATUS: Both API startup checks now pass with installed layers. The Vulkan state/readback/MSAA/depth-copy fixture additionally reports Synchronization validation enabled and passes. To cover P41-07 dependent VFX/UI consumers honestly, update Tests/src/Test_VFXRendering.cpp to enable embedded NRI and available actual API validation explicitly (the existing fixture did not request API validation), and print its selected validation status. Rebuild affected AxleVFXGPUTests/AxleTests in Debug/Release, then run all physical API gates. No production/vendor source changes planned unless actual validation identifies a defect."
+    },
+    {
+      "id": "CG-20261107T090537037746Z-CODEX-a1e9dc",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T085401352607Z-CODEX-f09948",
+      "base_commit": "c27eeb2",
+      "timestamp_utc": "2026-11-07T09:05:37.037746+00:00",
+      "body": "STATUS: Actual API validation reproduced five distinct issues in both Debug/Release: API-01 D3D12 first resolve destination lacks compression metadata initialization; API-02 Vulkan bindless texture range expands into sampler binding 128 without ARRAY; API-03 repeated host-buffer use mixes D3D12 legacy/fixed heap state with enhanced barriers; API-04 pinned NRI unconditionally attaches sliced-3D view metadata to multi-mip 3D SRVs (VUID 07870); API-05 picking host-image copy requires GENERAL/HOST_READ instead of COPY_SOURCE. Window error fixture also omitted API-validation request. Planned source/tests: RHIResource.cpp, RHICommandBuffer.cpp, RHIBuffer.cpp, RHIBindless.cpp, RHITexture.cpp, RHIObjectPicker.cpp, RHIErrorMain.cpp, RHIResourceMain.cpp, RHIFrameMain.cpp and existing VFX fixture update. Preserve pinned NRI unchanged. For API-04, reject unsupported Vulkan multi-mip 3D shader views before native creation; preserve copy-only mip-chain dimension coverage, single-mip 3D SRVs and D3D12 full-chain support, with explicit negative transactional coverage and documented limitation. No assertion suppression or native-validation waiver. Fix/rebuild/recheck all actual API gates, then same-reviewer correction recheck."
+    },
+    {
+      "id": "CG-20261107T092250814978Z-CODEX-38eaf6",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T090537037746Z-CODEX-a1e9dc",
+      "base_commit": "c27eeb2",
+      "timestamp_utc": "2026-11-07T09:22:50.814978+00:00",
+      "body": "STATUS: Final strict API rerun passed all 35 modes in both configurations, and full CTest passed 50/50 each. Broader default integration now fails at the older Step65 command recording fixture (native Close E_INVALIDARG). Enable actual/NRI validation explicitly in Tests/src/Test_Milestone8_Part2.cpp Step65 to capture the underlying native diagnostic, preserve all existing checks, then fix the exact cause and rerun integration. No acceptance closure yet."
+    },
+    {
+      "id": "CG-20261107T092606061702Z-CODEX-d1d436",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T092250814978Z-CODEX-38eaf6",
+      "base_commit": "c27eeb2",
+      "timestamp_utc": "2026-11-07T09:26:06.061702+00:00",
+      "body": "STATUS: Diagnostic Step65 reproduced SDK message 1331: SyncBefore NONE incompatible with SHADER_RESOURCE. The empty initial buffer state was being merged into a real read scope, carrying NRI's NONE sentinel into the later write barrier. Correct RHIResource.cpp read-scope merge to combine only non-empty read states, preserve first-use read elision, and add a CPU regression in Tests/rendering/RHIStateMain.cpp. Step65 retains explicit API/NRI validation. This is part of API-03 correction; full API and integration rechecks remain required."
     }
   ],
   "deferred_tasks": [

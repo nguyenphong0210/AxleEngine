@@ -14,6 +14,7 @@ namespace Axle::RHI {
         std::vector<nri::PlaneBits> Planes;
         std::vector<nri::AccessLayoutStage> Textures;
         nri::AccessStage Buffer{};
+        nri::AccessBits HostAccess = nri::AccessBits::NONE;
         uint64_t Version = 0;
     };
     struct RHIPendingState {
@@ -351,6 +352,10 @@ namespace {
         return a.access == b.access && a.layout == b.layout && a.stages == b.stages;
     }
     bool SameState(nri::AccessStage a, nri::AccessStage b) { return a.access == b.access && a.stages == b.stages; }
+    nri::StageBits MergeReadStages(nri::StageBits a, nri::StageBits b) {
+        // ALL is NRI's zero-valued sentinel, not a normal bitmask member.
+        return a == nri::StageBits::ALL || b == nri::StageBits::ALL ? nri::StageBits::ALL : static_cast<nri::StageBits>(a | b);
+    }
     bool Writes(nri::AccessBits access) {
         constexpr auto writes = nri::AccessBits::COLOR_ATTACHMENT_WRITE | nri::AccessBits::DEPTH_STENCIL_ATTACHMENT_WRITE |
             nri::AccessBits::SHADER_RESOURCE_STORAGE | nri::AccessBits::COPY_DESTINATION | nri::AccessBits::RESOLVE_DESTINATION |
@@ -390,6 +395,7 @@ bool RHIResourceService::DefineBufferState(const RHIResourceLease& resource, nri
     if (!IsOwnerThread() || !resource.IsLive() || resource.GetHandle().Epoch != GetEpoch() ||
         resource.m_Generation->State.Defined || resource.m_Generation->Kind != RHIResourceKind::Buffer) return false;
     auto& state = resource.m_Generation->State; state.Defined = true; state.Buffer = initial;
+    state.HostAccess = static_cast<nri::AccessBits>(initial.access & (nri::AccessBits::HOST_READ | nri::AccessBits::HOST_WRITE));
     return true;
 }
 RHIResourceLease RHIResourceService::ImportTexture(nri::Texture* texture, const RHIResourceLease& owner,
@@ -450,8 +456,11 @@ bool RHIResourceService::BuildTextureBarriers(const void* commands, const nri::T
     for (auto index : indices) {
         const auto before = state.Textures[index];
         auto after = request.after;
-        const bool readOnly = before.layout == after.layout && !Writes(before.access) && !Writes(after.access);
-        if (readOnly) { after.access |= before.access; after.stages |= before.stages; }
+        const bool readOnly = before.layout == after.layout && !Writes(before.access) && !Writes(after.access) &&
+            (after.access != nri::AccessBits::NONE || before.access == nri::AccessBits::NONE);
+        if (readOnly && before.access != nri::AccessBits::NONE && after.access != nri::AccessBits::NONE) {
+            after.access |= before.access; after.stages = MergeReadStages(after.stages, before.stages);
+        }
         const bool barrierNeeded = !readOnly && (!SameState(before, after) || Writes(before.access) || Writes(after.access));
         if (barrierNeeded) {
             if (command.m_Generation->InRendering) return false;
@@ -462,6 +471,23 @@ bool RHIResourceService::BuildTextureBarriers(const void* commands, const nri::T
             barrier.mipOffset = static_cast<uint16_t>(index % state.Mips); barrier.mipNum = 1;
             barrier.layerOffset = static_cast<uint16_t>((index / state.Mips) % state.Layers); barrier.layerNum = 1;
             barrier.planes = state.Planes[index / (static_cast<size_t>(state.Mips) * state.Layers)];
+            auto& device = RHIDevice::Get();
+            if (before.layout == nri::Layout::UNDEFINED && after.layout != nri::Layout::UNDEFINED &&
+                after.layout != nri::Layout::COPY_DESTINATION && device.GetBackend() == RHIType::Direct3D12 && device.IsNativeReady() &&
+                resource.GetHandle().Epoch == device.GetEpoch()) {
+                const auto& desc = device.GetNRICore().GetTextureDesc(*request.texture);
+                nri::AccessLayoutStage initialization{};
+                if (desc.usage & nri::TextureUsageBits::COLOR_ATTACHMENT)
+                    initialization = {nri::AccessBits::COLOR_ATTACHMENT, nri::Layout::COLOR_ATTACHMENT, nri::StageBits::COLOR_ATTACHMENT};
+                else if (desc.usage & nri::TextureUsageBits::DEPTH_STENCIL_ATTACHMENT)
+                    initialization = {nri::AccessBits::DEPTH_STENCIL_ATTACHMENT_WRITE, nri::Layout::DEPTH_STENCIL_ATTACHMENT, nri::StageBits::DEPTH_STENCIL_ATTACHMENT};
+                // Only compressed attachment layouts initialize placed-resource metadata
+                // through an enhanced discard barrier. Resolve layouts alone do not.
+                if (initialization.access != nri::AccessBits::NONE && after.layout != initialization.layout) {
+                    auto initialize = barrier; initialize.after = initialization;
+                    barriers.push_back(initialize); barrier.before = initialization;
+                }
+            }
             barriers.push_back(barrier);
         }
         changed = changed || !SameState(before, after);
@@ -482,9 +508,18 @@ bool RHIResourceService::BuildBufferBarrier(const void* commands, const nri::Buf
     auto after = request.after;
     const bool hostBefore = state.Buffer.access & (nri::AccessBits::HOST_WRITE | nri::AccessBits::HOST_READ);
     if (after.access & (nri::AccessBits::HOST_WRITE | nri::AccessBits::HOST_READ)) return false;
-    const bool reads = !hostBefore && !Writes(state.Buffer.access) && !Writes(after.access);
-    if (reads) { after.access |= state.Buffer.access; after.stages |= state.Buffer.stages; }
-    const bool barrierNeeded = !reads && !hostBefore && (!SameState(state.Buffer, after) || Writes(after.access));
+    const bool reads = !hostBefore && !Writes(state.Buffer.access) && !Writes(after.access) &&
+        (after.access != nri::AccessBits::NONE || state.Buffer.access == nri::AccessBits::NONE);
+    if (reads && state.Buffer.access != nri::AccessBits::NONE && after.access != nri::AccessBits::NONE) {
+        after.access |= state.Buffer.access; after.stages = MergeReadStages(after.stages, state.Buffer.stages);
+    }
+    const auto& device = RHIDevice::Get();
+    const bool fixedHost = device.IsNativeReady() && resource.GetHandle().Epoch == device.GetEpoch() &&
+        device.GetBackend() == RHIType::Direct3D12 && state.HostAccess != nri::AccessBits::NONE;
+    if (fixedHost && ((state.HostAccess == nri::AccessBits::HOST_READ && after.access != nri::AccessBits::COPY_DESTINATION && after.access != nri::AccessBits::NONE) ||
+        (state.HostAccess == nri::AccessBits::HOST_WRITE && Writes(after.access)))) return false;
+    if (fixedHost && Writes(after.access) && command.m_Generation->InRendering) return false;
+    const bool barrierNeeded = !fixedHost && !reads && !hostBefore && (!SameState(state.Buffer, after) || Writes(after.access));
     if (barrierNeeded) {
         if (command.m_Generation->InRendering) return false;
         auto barrier = request; barrier.before = state.Buffer; barrier.after = after; barriers.push_back(barrier);

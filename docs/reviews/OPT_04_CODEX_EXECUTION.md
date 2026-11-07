@@ -2,6 +2,11 @@ Latest user steering (2026-11-07): implement all P41-01..11, then perform one co
 
 # OPT-04 Codex execution record
 
+Current checkpoint: the user installed Windows Graphics Tools and Vulkan SDK
+1.4.363.1. Actual API validation is now available without reboot. Its first full
+run exposed additional defects; repairs and API-gate rechecks are in progress.
+Earlier NOT RUN entries below describe the pre-installation checkpoint.
+
 Date: 2026-11-07. Starting clean HEAD: `977f68c42755f1cfc0042854dc06dc74fc8cebc8`.
 Scope: P41-01 through P41-11 only. No push or OPT-05 implementation.
 
@@ -654,3 +659,45 @@ Exact independent commands/commit/logs: final-review/recheck-results.json. No
 second fresh-context reviewer or Gemini response is claimed. This closes the
 source findings while the actual graphics API-validation acceptance gate stays
 open.
+
+## API validation after host installation (in progress)
+
+User installation completed with RestartNeeded=False. D3D12 debug-interface and
+DXGI debug factory probes now succeed; Vulkan enumerates the Khronos layer and
+reports Core/Synchronization/Object Lifetime/Thread Safety checks active. Settings
+are passed per child process through an ignored vk_layer_settings.txt and
+VK_LAYER_ENABLES; no global user settings or pinned vendor files are edited.
+
+The first strict run (api-validation/<config>/results.json) ran 35 cases per
+configuration and reproduced these issues in Debug/Release:
+
+- API-01: first resolve to a placed D3D12 render target needed attachment metadata
+  initialization before RESOLVE_DEST. Pending state now includes the attachment
+  discard transition; the legacy path explicitly discards in its attachment state.
+- API-02: a 256-texture Vulkan bindless range lacked ARRAY, expanding into sampler
+  binding 128. It now declares the actual texture-array shape.
+- API-03: repeated host buffers mixed fixed D3D12 heap access and enhanced barriers.
+  Host allocation identity and mapped CPU access now remain explicit; fixed-heap
+  GPU access is validated and does not receive incompatible D3D12 barriers.
+- API-04: pinned NRI attaches sliced-3D metadata to multi-mip Vulkan shader views,
+  violating VUID 07870. RHI rejects this unsupported combination before native
+  creation, preserving the prior view. Copy-only 3D mip chains and single-mip 3D
+  shader views remain covered on both backends; D3D12 full 3D shader mip chains
+  remain supported. No SRV is silently narrowed; no vendor source is changed.
+- API-05: picking host-image readback required GENERAL/HOST_READ, while its target
+  remained COPY_SOURCE. It now declares the actual host readback usage.
+- API-06: the broader Step 65 recording fixture exposed an empty NONE stage
+  contaminating a later read/write barrier (D3D12 SDK 1331). Read scopes now
+  accumulate only actual readers and preserve NRI's zero-valued ALL sentinel.
+  CPU policy regressions cover both cases; Step 65 now explicitly requests NRI
+  and available API validation. Policy and real Step 65 passed in Debug/Release
+  (api-validation/read-scope2-results.json).
+
+The windowed error fixture now requests actual API validation; the VFX fixture
+also explicitly requests and reports it. The eight previously failing cases per
+configuration passed after repair (api-validation/fix1/<config>/results.json),
+including real color/depth/MSAA pixels, repeated frame buffers, bindless ownership,
+3D texture validation, picking IDs and native view frames. A full 35/35 API rerun
+passed per configuration before API-06 was found by default integration. The
+post-API-06 full rebuild/rerun is recorded separately under api-validation/final2;
+affected broader gates and same-reviewer correction recheck remain pending.

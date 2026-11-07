@@ -90,6 +90,11 @@ namespace Axle::RHI {
             AXLE_CORE_ERROR("RHITexture '{}': invalid dimensions, format, samples or usage", desc.DebugName);
             return rhiDevice.ObserveResult(nri::Result::INVALID_ARGUMENT, "ValidateTextureDesc", desc.DebugName);
         }
+        // Pinned NRI attaches sliced-3D metadata to these Vulkan views, which
+        // cannot legally span mip levels. Reject rather than silently narrow the SRV.
+        if (desc.Depth > 1 && desc.MipLevels > 1 && (desc.Usage & RHITextureUsage::ShaderResource) &&
+            rhiDevice.GetBackend() == RHIType::Vulkan)
+            return rhiDevice.ObserveResult(nri::Result::UNSUPPORTED, "ValidateTextureDesc", "Vulkan multi-mip 3D shader views are unsupported by pinned NRI");
         const auto support = rhiDevice.GetTextureFormatSupport(format);
         auto required = nri::FormatSupportBits::UNSUPPORTED;
         if (desc.Usage & RHITextureUsage::ShaderResource) required |= nri::FormatSupportBits::TEXTURE;

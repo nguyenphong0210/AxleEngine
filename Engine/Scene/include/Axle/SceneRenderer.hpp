@@ -103,6 +103,7 @@ namespace Axle {
         std::shared_ptr<ParticleRenderer> m_ParticleRenderer;
         std::shared_ptr<ShadowMap> m_ShadowMap;
         std::shared_ptr<Skybox> m_Skybox;
+        std::unique_ptr<PhysicsDebugRenderer> m_InternalDebugRenderer;
 
         glm::mat4 m_LightSpaceMatrix{ 1.0f };
         glm::vec3 m_LightDir{ 0.45f, 1.0f, 0.65f };

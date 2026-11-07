@@ -5,6 +5,9 @@
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/MeshResourceResolver.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
+#include <Axle/PhysicsEngine.hpp>
+#include <Axle/PhysicsScene.hpp>
+#include <Axle/PhysicsDebugRenderer.hpp>
 #include <iostream>
 #include <vector>
 
@@ -470,6 +473,95 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_PhysicsDebugAndOverlayContracts() {
+        PhysicsEngine::Init();
+
+        // 1. Create PhysicsScene and add multiple collider bodies
+        auto physicsScene = std::make_unique<PhysicsScene>();
+        physicsScene->CreateBox(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.5f, 0.5f, 0.5f), true);
+        physicsScene->CreateSphere(glm::vec3(2.0f, 1.0f, 0.0f), 0.75f, true);
+        physicsScene->CreateCylinder(glm::vec3(-2.0f, 1.0f, 0.0f), 1.0f, 0.5f, true);
+        physicsScene->CreatePlane(PlaneBodyProps{});
+
+        RENDER_CHECK(physicsScene->GetNumBodies() == 4, "PhysicsScene holds 4 collider bodies");
+
+        // 2. Direct line generation into PhysicsDebugRenderer without GL mesh creation
+        PhysicsDebugRenderer debugRenderer;
+        debugRenderer.Begin(glm::vec3(0.0f, 5.0f, 10.0f));
+
+        PhysicsDrawSettings drawSettings;
+        drawSettings.DrawShapes = true;
+        drawSettings.DrawWireframe = true;
+        drawSettings.DrawBoundingBoxes = false;
+        drawSettings.DrawVelocity = false;
+        drawSettings.DrawCenterOfMass = false;
+
+        physicsScene->DrawDebug(debugRenderer, drawSettings);
+        uint32_t baseLineCount = debugRenderer.GetLineCount();
+        RENDER_CHECK(baseLineCount > 0, "Lines generated for collider wireframes");
+
+        // Adding bounding boxes increases the line count
+        drawSettings.DrawBoundingBoxes = true;
+        debugRenderer.Begin(glm::vec3(0.0f, 5.0f, 10.0f));
+        physicsScene->DrawDebug(debugRenderer, drawSettings);
+        uint32_t bboxLineCount = debugRenderer.GetLineCount();
+        RENDER_CHECK(bboxLineCount > baseLineCount, "Bounding box lines added when flag enabled");
+
+        debugRenderer.Clear();
+        RENDER_CHECK(debugRenderer.GetLineCount() == 0, "Clear resets debug lines");
+
+        // 3. ViewRequest active physics scene and view isolation contracts
+        ViewRequest mainReq;
+        mainReq.Kind = RenderViewKind::Main;
+        mainReq.Width = 1920;
+        mainReq.Height = 1080;
+        mainReq.PhysicsScene = physicsScene.get();
+        mainReq.Settings.ShowPhysicsDebug = true;
+        mainReq.Settings.PhysicsDrawSettings = drawSettings;
+        mainReq.Settings.PhysicsDepthBias = 0.0001f;
+        mainReq.Settings.PhysicsAlphaMultiplier = 0.85f;
+
+        RENDER_CHECK(mainReq.PhysicsScene == physicsScene.get(), "Main ViewRequest supplies active PhysicsScene");
+        RENDER_CHECK(mainReq.Settings.ShowPhysicsDebug, "Physics debug wireframe enabled on main view");
+        RENDER_CHECK(Near(mainReq.Settings.PhysicsDepthBias, 0.0001f, 0.00001f), "Physics depth bias preserved");
+        RENDER_CHECK(Near(mainReq.Settings.PhysicsAlphaMultiplier, 0.85f, 0.001f), "Physics alpha multiplier preserved");
+
+        // Preview views must isolate physics debug: PhysicsScene remains null
+        ViewRequest previewReq;
+        previewReq.Kind = RenderViewKind::AssetPreview;
+        previewReq.Width = 512;
+        previewReq.Height = 512;
+        previewReq.PhysicsScene = nullptr;
+        previewReq.Settings.ShowPhysicsDebug = false;
+
+        RENDER_CHECK(previewReq.PhysicsScene == nullptr, "Preview view request has null PhysicsScene");
+        RENDER_CHECK(!previewReq.Settings.ShowPhysicsDebug, "Preview view request has physics debug disabled");
+
+        // 4. Edit / Play / Pause / Stop lifecycle pointer isolation
+        auto editorPhysicsScene = std::make_unique<PhysicsScene>();
+        editorPhysicsScene->CreateBox(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
+        RENDER_CHECK(editorPhysicsScene->GetNumBodies() == 1, "Editor physics scene has 1 body");
+
+        // Play mode clones into an ephemeral play physics scene
+        auto playPhysicsScene = std::make_unique<PhysicsScene>();
+        playPhysicsScene->CreateBox(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
+        playPhysicsScene->CreateSphere(glm::vec3(0.0f, 5.0f, 0.0f), 0.5f);
+        RENDER_CHECK(playPhysicsScene->GetNumBodies() == 2, "Play physics scene has 2 bodies");
+
+        // During Play and Pause, request points to playPhysicsScene
+        ViewRequest playReq;
+        playReq.PhysicsScene = playPhysicsScene.get();
+        RENDER_CHECK(playReq.PhysicsScene->GetNumBodies() == 2, "Play ViewRequest references active play physics");
+
+        // On Stop, play scene destroyed and editor scene restored
+        playPhysicsScene.reset();
+        ViewRequest stopReq;
+        stopReq.PhysicsScene = editorPhysicsScene.get();
+        RENDER_CHECK(stopReq.PhysicsScene->GetNumBodies() == 1, "Stop ViewRequest restored pristine editor physics with zero drift");
+
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -488,6 +580,7 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_AssemblyPreviewExtractionAndIsolation()) return false;
     if (!Axle::RenderTests::Test_ThumbnailRenderJobAndCacheContracts()) return false;
     if (!Axle::RenderTests::Test_StandaloneRuntimeContracts()) return false;
+    if (!Axle::RenderTests::Test_PhysicsDebugAndOverlayContracts()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

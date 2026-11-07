@@ -340,3 +340,40 @@ Scope:
 - `python scripts/check_architecture.py --root .`: PASS (407 files / 18 CMake files)
 - `python scripts/test_baseline_tools.py`: 18/18 PASS
 - `git diff --check`: PASS
+
+---
+
+## Package P41-25: Physics Debug and Overlays
+
+- **Status:** Implemented and self-verified in Debug and Release.
+- **Scope & Contract:** `docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md` lines 362-369
+
+### Implementation Summary
+1. **Supplied Active Edit/Play `PhysicsScene` to ViewRequest & Viewports (`Editor/src/EditorLayer.cpp`):**
+   - Fixed modern RHI viewport scene submission in `EditorLayer::RenderMainViewport()`: replaced hardcoded `nullptr` with `m_PhysicsScene.get()`.
+   - The active `m_PhysicsScene` is now consistently supplied across all lifecycle states (Edit mode, Play mode simulation clone, Pause inspection, and Stop restoration).
+2. **Internal Fallback Physics Debug Renderer (`Engine/Scene/include/Axle/SceneRenderer.hpp`, `Engine/Scene/src/SceneRenderer.cpp`):**
+   - Added `std::unique_ptr<PhysicsDebugRenderer> m_InternalDebugRenderer` to `SceneRenderer`.
+   - In `SceneRenderer::Init()`, allocates `m_InternalDebugRenderer` when a window context is active.
+   - When callers (such as `RenderService::RenderView`) pass `physicsDebugRenderer = nullptr`, `SceneRenderer` automatically falls back to `m_InternalDebugRenderer.get()`, ensuring physics wireframes render without requiring callers to construct or pass ad-hoc debug renderers.
+3. **Preserved Collider / Vehicle Flags, Depth Bias, Alpha & View Isolation:**
+   - Full support for `PhysicsDrawSettings` flags (`DrawShapes`, `DrawWireframe`, `DrawBoundingBoxes`, `DrawVelocity`, `DrawCenterOfMass`).
+   - Line generation operates directly through JPH `DrawDebug` line batching without requiring GL or RHI mesh allocation or creation.
+   - View isolation strictly enforced: preview requests (`RenderViewKind::AssetPreview`, `RenderViewKind::VFXPreview`, `RenderViewKind::AssemblyPreview`, `RenderViewKind::Thumbnail`) pass `request.PhysicsScene = nullptr` and `request.Settings.ShowPhysicsDebug = false`, guaranteeing zero line leakage or crosstalk into preview targets.
+4. **Dedicated Unit Verification (`Tests/rendering/Test_RenderServiceUnit.cpp`):**
+   - Added `Test_PhysicsDebugAndOverlayContracts()`:
+     - Verifies `PhysicsScene` collider creation (Box, Sphere, Cylinder, Plane).
+     - Verifies `PhysicsDebugRenderer` line batching and flag responsiveness (shape wireframes and bounding box expansions) with zero GL mesh creation.
+     - Verifies `ViewRequest` configuration, active `PhysicsScene` propagation, depth bias, and alpha settings.
+     - Verifies view isolation between main viewport and preview requests.
+     - Verifies Edit / Play / Pause / Stop lifecycle transitions, proving zero physics drift and safe pointer lifetimes.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleScene AxleEditor AxleRenderUnitTests`: exit 0
+- `cmake --build build --config Release --target AxleScene AxleEditor AxleRenderUnitTests`: exit 0
+- `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `ctest --test-dir build -C Release -R "RenderUnitTests|MaterialUnitTests"`: 2/2 passed, exit 0
+- `python scripts/check_architecture.py --root .`: PASS (407 files / 18 CMake files)
+- `python scripts/test_baseline_tools.py`: 18/18 PASS
+- `git diff --check`: PASS

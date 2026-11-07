@@ -1644,7 +1644,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
             m_RHISceneRenderer->RenderScene(m_Scene, activeCamera,
                                             m_RHIViewport->GetColorTexture(),
                                             m_RHIViewport->GetDepthTexture(),
-                                            renderSettings, nullptr, m_RHIViewport->GetTargets());
+                                            renderSettings, m_PhysicsScene.get(), m_RHIViewport->GetTargets());
         }
     }
 }

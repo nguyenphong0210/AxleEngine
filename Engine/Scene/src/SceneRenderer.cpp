@@ -38,6 +38,11 @@ namespace Axle {
         // Initialize GPU-Instanced Particle Renderer (Phase 31)
         m_ParticleRenderer = std::make_shared<ParticleRenderer>();
 
+        // Initialize internal Physics Debug Renderer fallback
+        if (!m_InternalDebugRenderer && Window::HasActiveContext()) {
+            m_InternalDebugRenderer = std::make_unique<PhysicsDebugRenderer>();
+        }
+
         AXLE_CORE_INFO("SceneRenderer: Decoupled Multi-Pass Graphics Pipeline successfully initialized.");
     }
 
@@ -724,10 +729,11 @@ namespace Axle {
         // ==========================================
         // PASS 5: PHYSICS DEBUG WIREFRAMES (OPTIONAL)
         // ==========================================
-        if (settings.ShowPhysicsDebug && physicsDebugRenderer && physicsScene) {
-            physicsDebugRenderer->Begin(camera.GetPosition());
-            physicsScene->DrawDebug(*physicsDebugRenderer, settings.PhysicsDrawSettings);
-            physicsDebugRenderer->End(camera.GetViewProjectionMatrix());
+        PhysicsDebugRenderer* activeDebug = physicsDebugRenderer ? physicsDebugRenderer : m_InternalDebugRenderer.get();
+        if (settings.ShowPhysicsDebug && activeDebug && physicsScene) {
+            activeDebug->Begin(camera.GetPosition());
+            physicsScene->DrawDebug(*activeDebug, settings.PhysicsDrawSettings);
+            activeDebug->End(camera.GetViewProjectionMatrix());
         }
 
         // ==========================================
@@ -917,10 +923,11 @@ namespace Axle {
         }
 
         // 5. Physics debug wireframes
-        if (settings.ShowPhysicsDebug && physicsDebugRenderer && physicsScene) {
-            physicsDebugRenderer->Begin(camera.GetPosition());
-            physicsScene->DrawDebug(*physicsDebugRenderer, settings.PhysicsDrawSettings);
-            physicsDebugRenderer->End(camera.GetViewProjectionMatrix());
+        PhysicsDebugRenderer* activeDebug = physicsDebugRenderer ? physicsDebugRenderer : m_InternalDebugRenderer.get();
+        if (settings.ShowPhysicsDebug && activeDebug && physicsScene) {
+            activeDebug->Begin(camera.GetPosition());
+            physicsScene->DrawDebug(*activeDebug, settings.PhysicsDrawSettings);
+            activeDebug->End(camera.GetViewProjectionMatrix());
         }
 
         // 6. Cleanup

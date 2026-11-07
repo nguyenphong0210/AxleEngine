@@ -49,7 +49,7 @@ struct TextureCopy {
         if (!Readback.Init(desc) || !Commands.Init() || !Commands.Begin() || !Commands.KeepAlive(Readback.AcquireLease())) return false;
         Commands.TransitionTexture(texture, RHIResourceLayout::ShaderResource, RHIResourceLayout::CopySource);
         nri::TextureRegionDesc region{}; region.width = region.height = 8; region.depth = 1;
-        core.CmdReadbackTextureToBuffer(*Commands.GetNative(), *Readback.GetNative(), Layout, *texture, region);
+        Commands.ReadbackTextureToBuffer(*Readback.GetNative(), Layout, *texture, region);
         Commands.TransitionTexture(texture, RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
         return Commands.End();
     }
@@ -75,7 +75,7 @@ static bool Native(RHIType backend) {
     nri::TextureSubresourceUploadDesc sub{expected.data(), 1, 32, 256};
     nri::TextureUploadDesc upload{}; upload.texture = image.GetNative(); upload.subresources = &sub;
     upload.after = {nri::AccessBits::SHADER_RESOURCE, nri::Layout::SHADER_RESOURCE, nri::StageBits::ALL};
-    RENDER_CHECK(device.GetNRIHelper().UploadData(*device.GetGraphicsQueue(), &upload, 1, nullptr, 0) == nri::Result::SUCCESS, "real source pixels");
+    RENDER_CHECK(device.UploadData(&upload, 1, nullptr, 0) == nri::Result::SUCCESS, "real source pixels");
     const auto original = image.GetHandle();
     TextureCopy copy;
     RENDER_CHECK(copy.Record(image.GetNative()), "record real GPU readback before replacing its source");

@@ -12,6 +12,7 @@ namespace Axle::RHI {
     RHIStreamer::RHIStreamer(RHIStreamer&& other) noexcept
         : m_Lease(std::move(other.m_Lease))
         , m_CopyResources(std::move(other.m_CopyResources))
+        , m_Backings(std::move(other.m_Backings))
         , m_Streamer(other.m_Streamer)
         , m_Desc(other.m_Desc)
         , m_Device(other.m_Device)
@@ -25,6 +26,7 @@ namespace Axle::RHI {
             Shutdown();
             m_Lease = std::move(other.m_Lease);
             m_CopyResources = std::move(other.m_CopyResources);
+            m_Backings = std::move(other.m_Backings);
             m_Streamer = other.m_Streamer;
             m_Desc = other.m_Desc;
             m_Device = other.m_Device;
@@ -92,6 +94,7 @@ namespace Axle::RHI {
 
     void RHIStreamer::Shutdown() {
         m_CopyResources.clear();
+        m_Backings.clear();
         if (m_Lease) m_Lease.Reset();
         else if (m_Streamer && m_Device) {
             const auto& streamerInterface = m_Device->GetNRIStreamer();
@@ -109,8 +112,7 @@ namespace Axle::RHI {
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.GetStreamerConstantBuffer) return nullptr;
         auto* buffer = streamerInterface.GetStreamerConstantBuffer(*m_Streamer);
-        m_Device->GetResources().AddAlias(m_Lease, buffer);
-        return buffer;
+        return RegisterBuffer(buffer) ? buffer : nullptr;
     }
 
     uint32_t RHIStreamer::StreamConstantData(const void* data, uint32_t size) {
@@ -158,7 +160,7 @@ namespace Axle::RHI {
             bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
             return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
         });
-        m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
+        if (bo.buffer && !RegisterBuffer(bo.buffer)) return {};
         return { bo.buffer, bo.offset };
     }
 
@@ -183,7 +185,7 @@ namespace Axle::RHI {
             bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
             return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
         });
-        m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
+        if (bo.buffer && !RegisterBuffer(bo.buffer)) return {};
         if (bo.buffer) {
             auto destination = m_Device->GetResources().AcquireNative(dstBuffer);
             if (destination.IsLive()) m_CopyResources[copyBatch].push_back(std::move(destination));
@@ -223,7 +225,7 @@ namespace Axle::RHI {
             bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
             return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
         });
-        m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
+        if (bo.buffer && !RegisterBuffer(bo.buffer)) return {};
         if (bo.buffer) {
             auto destination = m_Device->GetResources().AcquireNative(dstBuffer);
             if (destination.IsLive()) m_CopyResources[copyBatch].push_back(std::move(destination));
@@ -260,7 +262,7 @@ namespace Axle::RHI {
         nriDesc.dstRegion.planes = nri::PlaneBits::ALL;
 
         nri::BufferOffset bo = streamerInterface.StreamTextureData(*m_Streamer, nriDesc);
-        m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
+        if (bo.buffer && !RegisterBuffer(bo.buffer)) return {};
         if (bo.buffer) {
             auto destination = m_Device->GetResources().AcquireNative(desc.DstTexture);
             if (destination.IsLive()) m_CopyResources[desc.CopyBatch].push_back(std::move(destination));
@@ -275,6 +277,25 @@ namespace Axle::RHI {
         auto found = m_CopyResources.find(copyBatch);
         if (found != m_CopyResources.end() && resources.AcquireNative(&cmdBuffer))
             for (const auto& resource : found->second) if (!resources.RecordUse(&cmdBuffer, resource)) return;
+        std::vector<nri::TextureBarrierDesc> textures;
+        std::vector<nri::BufferBarrierDesc> buffers;
+        if (found != m_CopyResources.end()) for (const auto& resource : found->second) {
+            const auto pinned = resources.Pin(resource);
+            for (auto* texture : resources.GetPinnedTextures(pinned)) {
+                nri::TextureBarrierDesc request{}; request.texture = texture;
+                request.after = {nri::AccessBits::COPY_DESTINATION, nri::Layout::COPY_DESTINATION, nri::StageBits::COPY};
+                request.mipNum = request.layerNum = nri::REMAINING;
+                if (!resources.BuildTextureBarriers(&cmdBuffer, request, textures)) { resources.EndRecording(&cmdBuffer, false); return; }
+            }
+            for (auto* buffer : resources.GetPinnedBuffers(pinned)) {
+                nri::BufferBarrierDesc request{}; request.buffer = buffer;
+                request.after = {nri::AccessBits::COPY_DESTINATION, nri::StageBits::COPY};
+                if (!resources.BuildBufferBarrier(&cmdBuffer, request, buffers)) { resources.EndRecording(&cmdBuffer, false); return; }
+            }
+        }
+        nri::BarrierDesc barriers{}; barriers.textures = textures.data(); barriers.textureNum = static_cast<uint32_t>(textures.size());
+        barriers.buffers = buffers.data(); barriers.bufferNum = static_cast<uint32_t>(buffers.size());
+        if (barriers.textureNum || barriers.bufferNum) m_Device->GetNRICore().CmdBarrier(cmdBuffer, barriers);
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (streamerInterface.CmdCopyStreamedData) {
             streamerInterface.CmdCopyStreamedData(cmdBuffer, *m_Streamer, copyBatch);
@@ -290,10 +311,23 @@ namespace Axle::RHI {
 
     void RHIStreamer::EndFrame() {
         if (!IsValid() || !m_Device) return;
+        if (!m_Device->WaitIdle() || m_Device->GetResources().IsInUse(m_Lease)) return;
+        m_Backings.clear();
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (streamerInterface.EndStreamerFrame) {
             streamerInterface.EndStreamerFrame(*m_Streamer);
         }
+    }
+
+    bool RHIStreamer::RegisterBuffer(nri::Buffer* buffer) const {
+        if (!buffer || !IsValid() || !m_Device) return false;
+        auto& resources = m_Device->GetResources();
+        auto existing = resources.AcquireNative(buffer);
+        if (existing.IsLive()) return resources.GetBufferState(existing.GetHandle()).has_value();
+        auto lease = resources.Publish(RHIResourceKind::Buffer, "Streamer backing", {buffer}, {}, {m_Lease});
+        if (!lease.IsLive() || !resources.DefineBufferState(lease, {nri::AccessBits::HOST_WRITE, nri::StageBits::HOST})) return false;
+        m_Backings[buffer] = std::move(lease);
+        return true;
     }
 
 }

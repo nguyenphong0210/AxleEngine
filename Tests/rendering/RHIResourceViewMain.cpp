@@ -30,7 +30,7 @@ static std::vector<uint8_t> ReadPinnedImage(nri::Texture* image) {
     if (!readback.Init(desc) || !commands.Init() || !commands.Begin() || !commands.KeepAlive(readback.AcquireLease())) return {};
     commands.TransitionTexture(image, RHIResourceLayout::ShaderResource, RHIResourceLayout::CopySource);
     nri::TextureRegionDesc region{}; region.width = region.height = 8; region.depth = 1;
-    core.CmdReadbackTextureToBuffer(*commands.GetNative(), *readback.GetNative(), layout, *image, region);
+    commands.ReadbackTextureToBuffer(*readback.GetNative(), layout, *image, region);
     commands.TransitionTexture(image, RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
     if (!commands.End() || !commands.Submit() || !device.WaitIdle()) return {};
     auto* data = static_cast<uint8_t*>(readback.Map()); if (!data) return {};
@@ -50,7 +50,7 @@ static bool RecordedUIOwner() {
     nri::TextureSubresourceUploadDesc sub{red, 1, 4, 4};
     nri::TextureUploadDesc upload{}; upload.texture = source.GetNative(); upload.subresources = &sub;
     upload.after = {nri::AccessBits::SHADER_RESOURCE, nri::Layout::SHADER_RESOURCE, nri::StageBits::ALL};
-    RENDER_CHECK(device.GetNRIHelper().UploadData(*device.GetGraphicsQueue(), &upload, 1, nullptr, 0) == nri::Result::SUCCESS, "recorded UI red pixels");
+    RENDER_CHECK(device.UploadData(&upload, 1, nullptr, 0) == nri::Result::SUCCESS, "recorded UI red pixels");
     const auto sourceHandle = source.GetHandle();
     auto token = ui->RegisterTexture(source);
     RENDER_CHECK(token.IsValid(), "recorded UI leased image");
@@ -97,7 +97,7 @@ static bool GUILeases(RHIType backend) {
         nri::TextureSubresourceUploadDesc sub{expected.data(), 1, 32, 256};
         nri::TextureUploadDesc upload{}; upload.texture = image.GetNative(); upload.subresources = &sub;
         upload.after = {nri::AccessBits::SHADER_RESOURCE, nri::Layout::SHADER_RESOURCE, nri::StageBits::ALL};
-        RENDER_CHECK(device.GetNRIHelper().UploadData(*device.GetGraphicsQueue(), &upload, 1, nullptr, 0) == nri::Result::SUCCESS, "native GUI source pixels");
+        RENDER_CHECK(device.UploadData(&upload, 1, nullptr, 0) == nri::Result::SUCCESS, "native GUI source pixels");
         const auto handle = image.GetHandle(); auto* original = image.GetNative();
         auto token = ui->RegisterTexture(image);
         RENDER_CHECK(token.IsValid(), "leased GUI registration");

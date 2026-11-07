@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <optional>
+#include <NRI.h>
 
 namespace Axle::RHI {
     // Authored identities never contain this device-specific identity.
@@ -22,6 +24,7 @@ namespace Axle::RHI {
     struct RHIResourceGeneration;
     struct RHIResourceOwner;
     struct RHIRecordingState;
+    struct RHIStateSubmission;
 
     // A strong reference to one complete native generation, independent of its wrapper.
     class RHIResourceLease {
@@ -79,6 +82,7 @@ namespace Axle::RHI {
         bool BeginRecording(const void* commands);
         bool EndRecording(const void* commands, bool executable);
         bool IsRecording(const void* commands) const;
+        bool SetRendering(const void* commands, bool rendering);
         bool IsExecutable(const void* commands) const;
         bool RecordUse(const void* commands, const RHIResourceLease& resource);
         bool RecordUses(const void* commands, const RHIRecordingLease& resources);
@@ -88,6 +92,29 @@ namespace Axle::RHI {
         bool SnapshotSubmission(const void* const* commands, uint32_t count, RHIRecordingLease& pins) const;
         void MarkSubmitted(const void* const* commands, uint32_t count);
         void AbandonRecording(const void* commands);
+        bool DefineTextureState(const RHIResourceLease& resource, uint16_t mipNum, uint16_t layerNum,
+                                nri::PlaneBits planes, nri::AccessLayoutStage initial = {});
+        bool DefineBufferState(const RHIResourceLease& resource, nri::AccessStage initial = {});
+        // Imported objects remain owned by the supplied generation. The importer
+        // declares their actual queue state; this foundation supports graphics only.
+        RHIResourceLease ImportTexture(nri::Texture* texture, const RHIResourceLease& owner, uint16_t mips,
+            uint16_t layers, nri::PlaneBits planes, nri::AccessLayoutStage initial);
+        RHIResourceLease ImportBuffer(nri::Buffer* buffer, const RHIResourceLease& owner, nri::AccessStage initial);
+        bool SetTextureState(const RHIResourceLease& resource, nri::AccessLayoutStage state,
+                             uint16_t mipOffset = 0, uint16_t mipNum = nri::REMAINING,
+                             uint16_t layerOffset = 0, uint16_t layerNum = nri::REMAINING, nri::PlaneBits planes = nri::PlaneBits::ALL);
+        bool SetBufferState(const RHIResourceLease& resource, nri::AccessStage state);
+        std::optional<nri::AccessLayoutStage> GetTextureState(RHIResourceHandle resource, uint16_t mip = 0,
+                             uint16_t layer = 0, nri::PlaneBits plane = nri::PlaneBits::ALL) const;
+        std::optional<nri::AccessStage> GetBufferState(RHIResourceHandle resource) const;
+        bool BuildTextureBarriers(const void* commands, const nri::TextureBarrierDesc& request, std::vector<nri::TextureBarrierDesc>& barriers);
+        bool BuildBufferBarrier(const void* commands, const nri::BufferBarrierDesc& request, std::vector<nri::BufferBarrierDesc>& barriers);
+        std::shared_ptr<RHIStateSubmission> PrepareSubmissionStates(const void* const* commands, uint32_t count) const;
+        void CommitSubmissionStates(const std::shared_ptr<RHIStateSubmission>& submission);
+        std::vector<nri::Texture*> GetPinnedTextures(const RHIRecordingLease& resources) const;
+        std::vector<nri::Buffer*> GetPinnedBuffers(const RHIRecordingLease& resources) const;
+        nri::Texture* GetTextureForAlias(const void* alias) const;
+        nri::Buffer* GetBufferForAlias(const void* alias) const;
         // Call only after checked queue completion (or confirmed device loss).
         void CollectAfterDrain();
         void CloseAfterDrain();

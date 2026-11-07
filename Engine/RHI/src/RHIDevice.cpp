@@ -500,6 +500,8 @@ namespace Axle::RHI {
         for (uint32_t i = 0; i < desc.commandBufferNum; ++i) commands.push_back(desc.commandBuffers[i]);
         RHIRecordingLease uses = std::move(externalUses);
         if (!m_Resources.SnapshotSubmission(commands.data(), desc.commandBufferNum, uses)) return false;
+        auto states = m_Resources.PrepareSubmissionStates(commands.data(), desc.commandBufferNum);
+        if (!states) return ObserveResult(nri::Result::INVALID_ARGUMENT, "SubmitResourceStates", "stale recording state");
         if (!m_SubmissionFence) {
             const auto result = ScopedRHIFault::Invoke("CreateSubmissionFence", [&] { return m_NRI.Core.CreateFence(*m_Device, 0, m_SubmissionFence); });
             if (result != nri::Result::SUCCESS || !m_SubmissionFence) return false;
@@ -520,6 +522,7 @@ namespace Axle::RHI {
         m_SubmittedValue = signal.value;
         RHICompletionToken token{GetEpoch(), signal.value};
         m_PendingSubmissions.push_back({token, std::move(uses)});
+        m_Resources.CommitSubmissionStates(states);
         m_Resources.MarkSubmitted(commands.data(), desc.commandBufferNum);
         if (completion) *completion = token;
         return true;
@@ -546,6 +549,29 @@ namespace Axle::RHI {
         if (!WaitForFence(m_SubmissionFence, token.Value, timeoutMilliseconds)) return false;
         // Keep conservative whole-queue reuse until P41-08 accounts for every arena.
         return WaitIdle(timeoutMilliseconds);
+    }
+
+    nri::Result RHIDevice::UploadData(const nri::TextureUploadDesc* textures, uint32_t textureNum,
+        const nri::BufferUploadDesc* buffers, uint32_t bufferNum) {
+        if (!CanCreateResources() || (textureNum && !textures) || (bufferNum && !buffers)) return nri::Result::INVALID_ARGUMENT;
+        for (uint32_t i = 0; i < textureNum; ++i) {
+            auto lease = m_Resources.AcquireNative(textures[i].texture);
+            if (!lease.IsLive() || m_Resources.IsInUse(lease) || !m_Resources.GetTextureState(lease.GetHandle())) return nri::Result::INVALID_ARGUMENT;
+        }
+        for (uint32_t i = 0; i < bufferNum; ++i) {
+            auto lease = m_Resources.AcquireNative(buffers[i].buffer);
+            if (!lease.IsLive() || m_Resources.IsInUse(lease) || !m_Resources.GetBufferState(lease.GetHandle())) return nri::Result::INVALID_ARGUMENT;
+        }
+        const auto result = ScopedRHIFault::Invoke("UploadData", [&] {
+            return m_NRI.Helper.UploadData(*m_GraphicsQueue, textures, textureNum, buffers, bufferNum);
+        });
+        if (result != nri::Result::SUCCESS) return result;
+        for (uint32_t i = 0; i < textureNum; ++i)
+            if (!m_Resources.SetTextureState(m_Resources.AcquireNative(textures[i].texture), textures[i].after,
+                0, nri::REMAINING, 0, nri::REMAINING, textures[i].planes)) return nri::Result::FAILURE;
+        for (uint32_t i = 0; i < bufferNum; ++i)
+            if (!m_Resources.SetBufferState(m_Resources.AcquireNative(buffers[i].buffer), buffers[i].after)) return nri::Result::FAILURE;
+        return nri::Result::SUCCESS;
     }
 
     void RHIDevice::ReleaseNative(std::function<void()> release) {

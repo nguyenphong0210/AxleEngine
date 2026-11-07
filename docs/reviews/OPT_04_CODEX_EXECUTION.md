@@ -354,12 +354,53 @@ P41-06 is implemented/self-verified. Graphics API validation remains NOT RUN;
 the consolidated separate-context review is pending after P41-11. No intermediate
 parallel review session was opened in this run. Full product/phase gates remain open.
 
+## P41-07 - Submission-aware resource state
+
+Starting from P41-06 commit `12413eb`. Texture state lives with the resource
+generation and is tracked per mip/layer/plane; buffers retain access/stage state.
+Recording maintains a private snapshot. Submission validates its base versions
+before touching the native queue and publishes the prepared state only on success.
+Abandon, invalid ranges, unsupported queue transfers and stale encoded barriers
+cannot publish state. External imports require a live owning generation and an
+explicit initial state on this graphics-queue foundation.
+
+Uploads now use the device boundary to publish helper after-states. Scene copies,
+readbacks, resolve, attachments, descriptor inputs, vertex/index/indirect buffers,
+streamer copies and native GUI inputs declare usage. Compatible read-only usage
+merges without an in-pass barrier. Host buffer access follows the pinned NRI rule:
+HOST access bits cannot occur in buffer barriers; completed/flushed CPU access is
+made visible by submission. Existing conservative waits remain.
+
+The new state fixture verifies range independence, first use, generation/address
+reuse, abandon, unsupported transfers, failed submit and stale recording rejection.
+Physical D3D12/Vulkan perform repeated real clears, MSAA resolve, depth copy and
+color/depth readback. Integration caught cached thumbnail IDs invalidated during
+the current frame: registration destruction now pins that generation through the
+frame boundary, including intermediate preparation drains. The real VFX/Inspector
+regression passes with original queued red/green pixels.
+
+Debug/Release builds of the nine focused native targets passed. Logs include
+p41-07-corrected-core-debug.log, p41-07-initial-build-release.log and
+p41-07-ui-{fix-build-debug,final-build-release}.log. An intermediate Release
+fixture-copy collision while another runner used the workspace was rerun after
+that runner ended; the final build exited 0. Each configuration passed 37 cases:
+state07.py (3), retire07.py (3), run07.py (11), views07.py (7), more07.py (13).
+The Debug main/primitive/view cases also ran through run07.py --views. Result
+manifests and individual logs are under build/agent-runs/OPT-04. Focused CTest
+passed 7/7 in each configuration; all five GL/fallback image pairs remain identical.
+Native fixture mains enforce zero NRI errors including teardown. Architecture,
+whitespace and clean pinned NRI checks passed.
+
+Implementation and the available self-verification are complete. Actual D3D12
+and Vulkan API validation remains NOT RUN because debug prerequisites are absent;
+P41-07 dependent acceptance remains open. One consolidated review is still pending.
+
 ## Remaining work
 
-P41-07..11 remain. Next: integrate generation/range-aware pending resource state
-with successful submission, then frame slots, shared presentation, complete view
-targets and central CPU decode/upload/cache ownership. Continue through P41-11,
-then one consolidated final review.
+P41-08..11 remain: frame slots, shared presentation, complete view target sets,
+and central CPU decode/upload/cache ownership. Continue through P41-11, then one
+consolidated final review. Unwired P41-08 frame-context/test drafts are prepared
+in the worktree and are not part of the P41-07 commit.
 
 Full phase builds, CTest, integration, jobs/ECS, final native product simulation, GPU
 readbacks and final window/lifetime checks remain open. API-validation prerequisites

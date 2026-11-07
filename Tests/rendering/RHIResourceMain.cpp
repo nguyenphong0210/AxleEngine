@@ -33,7 +33,7 @@ static bool Textures() {
     nri::TextureUploadDesc upload{};
     upload.texture = texture.GetNative(); upload.subresources = &sub;
     upload.after = {nri::AccessBits::SHADER_RESOURCE, nri::Layout::SHADER_RESOURCE, nri::StageBits::ALL};
-    RENDER_CHECK(device.GetNRIHelper().UploadData(*device.GetGraphicsQueue(), &upload, 1, nullptr, 0) == nri::Result::SUCCESS, "real image upload");
+    RENDER_CHECK(device.UploadData(&upload, 1, nullptr, 0) == nri::Result::SUCCESS, "real image upload");
     RENDER_CHECK(ReadTexture(texture) == pixels, "initial GPU pixels match source");
     const auto* old = texture.GetNative();
     const auto* oldSRV = texture.GetSRV();
@@ -122,7 +122,7 @@ static bool Buffers() {
     RENDER_CHECK(readback.Init(readDesc) && copy.Init() && copy.Begin(), "real buffer GPU readback setup");
     copy.TransitionBuffer(deviceBuffer.GetNative(), RHIAccess::VertexBuffer, RHIAccess::CopySource, RHIPipelineStage::AllCommands, RHIPipelineStage::Copy);
     auto& device = RHIDevice::Get();
-    device.GetNRICore().CmdCopyBuffer(*copy.GetNative(), *readback.GetNative(), 0, *deviceBuffer.GetNative(), 0, bytes.size());
+    copy.CopyBuffer(*readback.GetNative(), 0, *deviceBuffer.GetNative(), 0, bytes.size());
     RENDER_CHECK(copy.End() && copy.Submit() && device.WaitIdle(), "GPU readback submission completes");
     auto* mapped = readback.Map();
     RENDER_CHECK(mapped && std::memcmp(mapped, bytes.data(), bytes.size()) == 0, "old device bytes survive failed upload and partial-update rejection");

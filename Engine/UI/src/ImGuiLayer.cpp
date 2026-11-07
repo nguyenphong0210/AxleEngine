@@ -90,6 +90,13 @@ namespace Axle {
         uint64_t ID = 0;
         RHI::RHIResourceLease Generation;
         std::weak_ptr<GuiFrameState> Frame;
+        ~GuiTextureRegistration() {
+            // Invalidation can follow AddImage using an ID cached by a caller.
+            // Preserve that registration through the current draw-list boundary,
+            // including any intermediate state-preparation queue drain.
+            if (auto frame = Frame.lock(); frame && frame->Active && !frame->Closing)
+                RHI::RHIDevice::Get().GetResources().AppendPin(frame->Uses, Generation);
+        }
     };
     bool GuiTextureLease::IsValid() const {
         if (!m_Registration || !m_Registration->Generation.IsLive()) return false;
@@ -1029,6 +1036,7 @@ namespace Axle {
         UpdateWindowSnapping();
         ImGui::Render();
         if (!IsOperational()) { FlushDeferredReleases(); return; }
+        if (RHI::RHIDevice::Get().GetState() != RHI::RHIDeviceState::SurfaceRebuildRequired && !PrepareGuiTextures()) return;
 
         if (m_BackendType == ImGuiBackendType::OpenGL) {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -1156,6 +1164,7 @@ namespace Axle {
                         CreateWindowVK(vkPhysDevice, vkDevice, *wd, queueFamily,
                             static_cast<int>(m_VulkanWidth), static_cast<int>(m_VulkanHeight), m_VulkanMinImageCount);
                         rhiDevice.SurfaceRebuilt();
+                        if (!PrepareGuiTextures()) return;
                     } catch (...) {
                         rhiDevice.ObserveResult(nri::Result::FAILURE, "QueuePresent", "ImGui surface rebuild");
                         return;
@@ -1331,9 +1340,12 @@ namespace Axle {
         if (!cmdBuffer || !m_Initialized || !cmdBuffer->IsRecording() || !m_GuiFrame ||
             !m_GuiFrame->Active || m_GuiFrame->NativeRecorded) return false;
         if (!ImGui::GetDrawData() || !ImGui::GetDrawData()->Valid) return false;
+        if (!PrepareGuiTextures()) return false;
         if (m_BackendType != ImGuiBackendType::OpenGL) {
             if (!cmdBuffer->KeepAlive(m_BackendLease)) return false;
             if (!RHI::RHIDevice::Get().GetResources().RecordUses(cmdBuffer->GetNative(), m_GuiFrame->Uses)) return false;
+            for (auto* texture : RHI::RHIDevice::Get().GetResources().GetPinnedTextures(m_GuiFrame->Uses))
+                cmdBuffer->TransitionTexture(texture, RHI::RHIResourceLayout::ShaderResource, RHI::RHIResourceLayout::ShaderResource);
         }
 #if defined(AXLE_HAS_D3D12)
         if (m_BackendType == ImGuiBackendType::Direct3D12) {
@@ -1357,6 +1369,18 @@ namespace Axle {
         }
 #endif
         return false;
+    }
+
+    bool ImGuiLayer::PrepareGuiTextures() {
+        if (m_BackendType == ImGuiBackendType::OpenGL || !m_GuiFrame) return true;
+        auto& device = RHI::RHIDevice::Get();
+        const auto textures = device.GetResources().GetPinnedTextures(m_GuiFrame->Uses);
+        if (textures.empty()) return true;
+        RHI::RHICommandBuffer prepare;
+        if (!prepare.Init() || !prepare.Begin()) return false;
+        for (auto* texture : textures)
+            prepare.TransitionTexture(texture, RHI::RHIResourceLayout::Undefined, RHI::RHIResourceLayout::ShaderResource);
+        return prepare.End() && prepare.Submit() && device.WaitIdle();
     }
 
     void ImGuiLayer::Render(ID3D12GraphicsCommandList* cmdList) {

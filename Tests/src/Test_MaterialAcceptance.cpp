@@ -317,7 +317,7 @@ namespace Axle {
             region.height = height;
             region.depth = 1;
 
-            device.GetNRICore().CmdReadbackTextureToBuffer(*copyCmd.GetNative(), *readbackBuffer.GetNative(), layout, *texture.GetNative(), region);
+            copyCmd.ReadbackTextureToBuffer(*readbackBuffer.GetNative(), layout, *texture.GetNative(), region);
             copyCmd.TransitionTexture(texture.GetNative(), RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
 
             if (!copyCmd.End() || !copyCmd.Submit()) return {};

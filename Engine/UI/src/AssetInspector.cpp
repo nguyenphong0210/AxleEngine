@@ -106,7 +106,7 @@ namespace Axle {
                         upDesc.after.stages = nri::StageBits::ALL;
                         upDesc.planes = nri::PlaneBits::ALL;
 
-                        uploadResult = helper.UploadData(*queue, &upDesc, 1, nullptr, 0);
+                        uploadResult = rhiDevice.UploadData(&upDesc, 1, nullptr, 0);
                     }
 
                     if (uploadResult == nri::Result::SUCCESS) {

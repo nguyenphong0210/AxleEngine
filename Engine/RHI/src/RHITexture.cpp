@@ -205,7 +205,10 @@ namespace Axle::RHI {
                 functions.DestroyTexture(texture);
                 functions.FreeMemory(ownedMemory);
             });
-        return m_Lease.IsLive();
+        const auto planes = desc.Format == RHITextureFormat::D24_UNORM_S8_UINT ? nri::PlaneBits::DEPTH | nri::PlaneBits::STENCIL :
+            desc.Format == RHITextureFormat::D32_FLOAT ? nri::PlaneBits::DEPTH : nri::PlaneBits::COLOR;
+        return m_Lease.IsLive() && rhiDevice.GetResources().DefineTextureState(m_Lease,
+            static_cast<uint16_t>(desc.MipLevels), static_cast<uint16_t>(desc.ArrayLayers), planes);
     }
 
     void RHITexture::Shutdown() {

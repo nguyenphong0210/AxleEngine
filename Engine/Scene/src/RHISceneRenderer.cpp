@@ -1711,8 +1711,8 @@ namespace Axle {
                     m_CommandBuffer.TransitionTexture(m_OpaqueSceneColor->GetNative(),newColor?RHIResourceLayout::Undefined:RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
                     m_CommandBuffer.TransitionTexture(m_OpaqueSceneDepth->GetNative(),newDepth?RHIResourceLayout::Undefined:RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
                     const auto& core=m_Device->GetNRICore();
-                    core.CmdCopyTexture(*m_CommandBuffer.GetNative(),*m_OpaqueSceneColor->GetNative(),nullptr,*sceneTargetTexture,nullptr);
-                    core.CmdCopyTexture(*m_CommandBuffer.GetNative(),*m_OpaqueSceneDepth->GetNative(),nullptr,*sceneDepthTexture,nullptr);
+                    m_CommandBuffer.CopyTexture(*m_OpaqueSceneColor->GetNative(),nullptr,*sceneTargetTexture,nullptr);
+                    m_CommandBuffer.CopyTexture(*m_OpaqueSceneDepth->GetNative(),nullptr,*sceneDepthTexture,nullptr);
                     m_CommandBuffer.TransitionTexture(sceneTargetTexture,RHIResourceLayout::CopySource,RHIResourceLayout::ColorAttachment);
                     m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::CopySource,RHIResourceLayout::DepthStencilWrite);
                     m_CommandBuffer.TransitionTexture(m_OpaqueSceneColor->GetNative(),RHIResourceLayout::CopyDest,RHIResourceLayout::ShaderResource);
@@ -1761,7 +1761,7 @@ namespace Axle {
                     m_CommandBuffer.EndRendering();
                     m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::DepthStencilWrite,RHIResourceLayout::CopySource);
                     m_CommandBuffer.TransitionTexture(m_ParticleSceneDepth->GetNative(),fresh?RHIResourceLayout::Undefined:RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
-                    m_Device->GetNRICore().CmdCopyTexture(*m_CommandBuffer.GetNative(),*m_ParticleSceneDepth->GetNative(),nullptr,*sceneDepthTexture,nullptr);
+                    m_CommandBuffer.CopyTexture(*m_ParticleSceneDepth->GetNative(),nullptr,*sceneDepthTexture,nullptr);
                     m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::CopySource,RHIResourceLayout::DepthStencilWrite);
                     m_CommandBuffer.TransitionTexture(m_ParticleSceneDepth->GetNative(),RHIResourceLayout::CopyDest,RHIResourceLayout::ShaderResource);
                     colorAttachment.loadOp=nri::LoadOp::LOAD;

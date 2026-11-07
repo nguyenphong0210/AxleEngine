@@ -51,7 +51,7 @@ namespace Axle::RHI {
         upload.after.layout = nri::Layout::SHADER_RESOURCE;
         upload.after.stages = nri::StageBits::FRAGMENT_SHADER;
         const auto& helper = device.GetNRIHelper();
-        if (!device.GetGraphicsQueue() || !helper.UploadData || helper.UploadData(*device.GetGraphicsQueue(), &upload, 1, nullptr, 0) != nri::Result::SUCCESS)
+        if (!device.GetGraphicsQueue() || !helper.UploadData || device.UploadData(&upload, 1, nullptr, 0) != nri::Result::SUCCESS)
             AXLE_CORE_ERROR("Could not initialize material fallback texture {0}", desc.DebugName);
     }
 

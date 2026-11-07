@@ -135,7 +135,9 @@ namespace Axle::RHI {
 
     private:
         bool Build(RHIDevice& device, const RHIStreamerDesc& desc);
+        bool RegisterBuffer(nri::Buffer* buffer) const;
         RHIResourceLease m_Lease;
+        mutable std::unordered_map<nri::Buffer*, RHIResourceLease> m_Backings;
         std::unordered_map<RHICopyBatch, std::vector<RHIResourceLease>> m_CopyResources;
         nri::Streamer* m_Streamer = nullptr;
         RHIStreamerDesc m_Desc;

@@ -54,6 +54,8 @@ namespace Axle::RHI {
         bool Submit(const nri::QueueSubmitDesc& desc, nri::Queue* queue = nullptr, RHICompletionToken* completion = nullptr,
                     RHIRecordingLease externalUses = {});
         bool RetainExternalSubmission(RHIRecordingLease uses, RHICompletionToken* completion = nullptr);
+        nri::Result UploadData(const nri::TextureUploadDesc* textures, uint32_t textureNum,
+                        const nri::BufferUploadDesc* buffers, uint32_t bufferNum);
         bool WaitForCompletion(RHICompletionToken token, uint32_t timeoutMilliseconds = 2000);
         RHICompletionToken GetLastSubmittedToken() const { return {GetEpoch(), m_SubmittedValue}; }
         bool ObserveResult(nri::Result result, std::string_view operation, std::string_view resource = {}, bool timedOut = false);

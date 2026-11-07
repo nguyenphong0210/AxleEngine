@@ -106,6 +106,7 @@ namespace Axle {
         void FreeD3D12Descriptor(void* cpuHandle, void* gpuHandle);
         void FlushDeferredReleases();
         void FinishGuiFrame() noexcept;
+        bool PrepareGuiTextures();
 
     private:
         ImGuiBackendType m_BackendType = ImGuiBackendType::OpenGL;

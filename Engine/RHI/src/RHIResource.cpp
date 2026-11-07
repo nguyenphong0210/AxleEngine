@@ -8,6 +8,20 @@
 #include <unordered_set>
 
 namespace Axle::RHI {
+    struct RHITrackedState {
+        bool Texture = false, Defined = false;
+        uint16_t Mips = 1, Layers = 1;
+        std::vector<nri::PlaneBits> Planes;
+        std::vector<nri::AccessLayoutStage> Textures;
+        nri::AccessStage Buffer{};
+        uint64_t Version = 0;
+    };
+    struct RHIPendingState {
+        RHIResourceLease Resource;
+        uint64_t BaseVersion = 0;
+        RHITrackedState State;
+    };
+    struct RHIStateSubmission { std::vector<RHIPendingState> Published; };
     struct RHIResourceOwner {
         struct Slot { std::weak_ptr<RHIResourceGeneration> Value; uint32_t Generation = 0; };
         uint64_t Epoch = 0;
@@ -37,7 +51,12 @@ namespace Axle::RHI {
         std::atomic<uint32_t> Pins{0};
         enum class CommandState { Empty, Recording, Executable, Submitted, Abandoned };
         CommandState Recording = CommandState::Empty;
+        bool InRendering = false;
         RHIRecordingLease RecordedUses;
+        RHITrackedState State;
+        nri::Texture* NativeTexture = nullptr;
+        nri::Buffer* NativeBuffer = nullptr;
+        std::unordered_map<RHIResourceGeneration*, RHIPendingState> PendingStates;
         ~RHIResourceGeneration() { Retire(); }
         void Retire() {
             if (!Live.exchange(false)) return;
@@ -119,6 +138,10 @@ namespace Axle::RHI {
         generation->Owner = owner;
         generation->Handle = {owner->Epoch, index, ++slot.Generation};
         generation->Kind = kind; generation->Name = std::move(name);
+        if (kind == RHIResourceKind::Texture && aliases.size())
+            generation->NativeTexture = static_cast<nri::Texture*>(const_cast<void*>(*aliases.begin()));
+        if (kind == RHIResourceKind::Buffer && aliases.size())
+            generation->NativeBuffer = static_cast<nri::Buffer*>(const_cast<void*>(*aliases.begin()));
         generation->Cleanup = std::move(cleanup); generation->Dependencies = std::move(dependencies);
         slot.Value = generation;
         for (auto alias : aliases) if (alias) owner->Aliases[alias] = generation;
@@ -198,7 +221,7 @@ namespace Axle::RHI {
     bool RHIResourceService::EndRecording(const void* commands, bool executable) {
         auto lease = AcquireNative(commands);
         if (!lease.IsLive() || lease.m_Generation->Kind != RHIResourceKind::Commands) return false;
-        executable = executable && lease.m_Generation->Recording == RHIResourceGeneration::CommandState::Recording;
+        executable = executable && !lease.m_Generation->InRendering && lease.m_Generation->Recording == RHIResourceGeneration::CommandState::Recording;
         lease.m_Generation->Recording = executable ? RHIResourceGeneration::CommandState::Executable : RHIResourceGeneration::CommandState::Abandoned;
         return executable;
     }
@@ -206,6 +229,12 @@ namespace Axle::RHI {
         auto lease = AcquireNative(commands);
         return lease.IsLive() && lease.m_Generation->Kind == RHIResourceKind::Commands &&
             lease.m_Generation->Recording == RHIResourceGeneration::CommandState::Recording;
+    }
+    bool RHIResourceService::SetRendering(const void* commands, bool rendering) {
+        auto command = AcquireNative(commands);
+        if (!IsRecording(commands) || command.m_Generation->InRendering == rendering) return false;
+        command.m_Generation->InRendering = rendering;
+        return true;
     }
     bool RHIResourceService::IsExecutable(const void* commands) const {
         auto lease = AcquireNative(commands);
@@ -265,6 +294,7 @@ namespace Axle::RHI {
             if (lease.IsLive()) {
                 lease.m_Generation->Recording = RHIResourceGeneration::CommandState::Submitted;
                 lease.m_Generation->RecordedUses.Reset();
+                lease.m_Generation->PendingStates.clear();
             }
         }
     }
@@ -272,7 +302,9 @@ namespace Axle::RHI {
         auto lease = AcquireNative(commands);
         if (lease.IsLive() && !IsInUse(lease)) {
             lease.m_Generation->Recording = RHIResourceGeneration::CommandState::Empty;
+            lease.m_Generation->InRendering = false;
             lease.m_Generation->RecordedUses.Reset();
+            lease.m_Generation->PendingStates.clear();
         }
     }
     bool RHIResourceService::ReplaceDescriptorRange(const RHIResourceLease& lease, uint32_t range, uint32_t baseSlot, std::vector<RHIResourceLease> resources) {
@@ -313,5 +345,204 @@ namespace Axle::RHI {
         auto destroy = std::move(owner->DestroyDevice);
         if (destroy) destroy();
     }
+// Included by RHIResource.cpp: state lives in the same generation as its payload.
+namespace {
+    bool SameState(nri::AccessLayoutStage a, nri::AccessLayoutStage b) {
+        return a.access == b.access && a.layout == b.layout && a.stages == b.stages;
+    }
+    bool SameState(nri::AccessStage a, nri::AccessStage b) { return a.access == b.access && a.stages == b.stages; }
+    bool Writes(nri::AccessBits access) {
+        constexpr auto writes = nri::AccessBits::COLOR_ATTACHMENT_WRITE | nri::AccessBits::DEPTH_STENCIL_ATTACHMENT_WRITE |
+            nri::AccessBits::SHADER_RESOURCE_STORAGE | nri::AccessBits::COPY_DESTINATION | nri::AccessBits::RESOLVE_DESTINATION |
+            nri::AccessBits::HOST_WRITE | nri::AccessBits::SCRATCH_BUFFER;
+        return access & writes;
+    }
+    bool TextureRange(const RHITrackedState& state, uint16_t mip, uint16_t mipNum, uint16_t layer, uint16_t layerNum,
+                      nri::PlaneBits planes, std::vector<size_t>& indices) {
+        if (!state.Defined || !state.Texture || mip >= state.Mips || layer >= state.Layers) return false;
+        const uint32_t mips = mipNum == nri::REMAINING ? state.Mips - mip : mipNum;
+        const uint32_t layers = layerNum == nri::REMAINING ? state.Layers - layer : layerNum;
+        if (!mips || !layers || mips > state.Mips - mip || layers > state.Layers - layer) return false;
+        uint8_t available = 0; for (auto plane : state.Planes) available |= static_cast<uint8_t>(plane);
+        const auto requested = planes == nri::PlaneBits::ALL ? available : static_cast<uint8_t>(planes);
+        if (!requested || (requested & ~available)) return false;
+        for (size_t p = 0; p < state.Planes.size(); ++p) if (requested & static_cast<uint8_t>(state.Planes[p]))
+            for (uint32_t l = layer; l < layer + layers; ++l)
+                for (uint32_t m = mip; m < mip + mips; ++m)
+                    indices.push_back((p * state.Layers + l) * state.Mips + m);
+        return true;
+    }
+}
+
+bool RHIResourceService::DefineTextureState(const RHIResourceLease& resource, uint16_t mips, uint16_t layers,
+    nri::PlaneBits planes, nri::AccessLayoutStage initial) {
+    if (!IsOwnerThread() || !resource.IsLive() || resource.GetHandle().Epoch != GetEpoch() || !mips || !layers ||
+        resource.m_Generation->State.Defined || resource.m_Generation->Kind != RHIResourceKind::Texture) return false;
+    RHITrackedState state; state.Texture = state.Defined = true; state.Mips = mips; state.Layers = layers;
+    const auto mask = static_cast<uint8_t>(planes);
+    if (!mask || mask & static_cast<uint8_t>(nri::PlaneBits::NONE)) return false;
+    for (unsigned bit = 0; bit < 7; ++bit) if (mask & (1u << bit)) state.Planes.push_back(static_cast<nri::PlaneBits>(1u << bit));
+    state.Textures.assign(static_cast<size_t>(mips) * layers * state.Planes.size(), initial);
+    resource.m_Generation->State = std::move(state);
+    return true;
+}
+bool RHIResourceService::DefineBufferState(const RHIResourceLease& resource, nri::AccessStage initial) {
+    if (!IsOwnerThread() || !resource.IsLive() || resource.GetHandle().Epoch != GetEpoch() ||
+        resource.m_Generation->State.Defined || resource.m_Generation->Kind != RHIResourceKind::Buffer) return false;
+    auto& state = resource.m_Generation->State; state.Defined = true; state.Buffer = initial;
+    return true;
+}
+RHIResourceLease RHIResourceService::ImportTexture(nri::Texture* texture, const RHIResourceLease& owner,
+    uint16_t mips, uint16_t layers, nri::PlaneBits planes, nri::AccessLayoutStage initial) {
+    if (!texture || !owner.IsLive() || owner.GetHandle().Epoch != GetEpoch()) return {};
+    auto imported = Publish(RHIResourceKind::Texture, "Imported texture", {texture}, {}, {owner});
+    if (!DefineTextureState(imported, mips, layers, planes, initial)) return {};
+    return imported;
+}
+RHIResourceLease RHIResourceService::ImportBuffer(nri::Buffer* buffer, const RHIResourceLease& owner, nri::AccessStage initial) {
+    if (!buffer || !owner.IsLive() || owner.GetHandle().Epoch != GetEpoch()) return {};
+    auto imported = Publish(RHIResourceKind::Buffer, "Imported buffer", {buffer}, {}, {owner});
+    if (!DefineBufferState(imported, initial)) return {};
+    return imported;
+}
+bool RHIResourceService::SetTextureState(const RHIResourceLease& resource, nri::AccessLayoutStage next,
+    uint16_t mip, uint16_t mips, uint16_t layer, uint16_t layers, nri::PlaneBits planes) {
+    if (!IsOwnerThread() || !resource.IsLive() || IsInUse(resource) || resource.GetHandle().Epoch != GetEpoch()) return false;
+    auto& state = resource.m_Generation->State;
+    std::vector<size_t> indices;
+    if (!TextureRange(state, mip, mips, layer, layers, planes, indices)) return false;
+    for (auto index : indices) state.Textures[index] = next;
+    ++state.Version; return true;
+}
+bool RHIResourceService::SetBufferState(const RHIResourceLease& resource, nri::AccessStage next) {
+    if (!IsOwnerThread() || !resource.IsLive() || IsInUse(resource) || resource.GetHandle().Epoch != GetEpoch()) return false;
+    auto& state = resource.m_Generation->State;
+    if (!state.Defined || state.Texture) return false;
+    state.Buffer = next; ++state.Version; return true;
+}
+std::optional<nri::AccessLayoutStage> RHIResourceService::GetTextureState(RHIResourceHandle handle, uint16_t mip,
+    uint16_t layer, nri::PlaneBits plane) const {
+    auto resource = Acquire(handle); if (!resource.IsLive()) return {};
+    const auto& state = resource.m_Generation->State;
+    std::vector<size_t> indices;
+    if (!TextureRange(state, mip, 1, layer, 1, plane, indices) || indices.empty()) return {};
+    auto result = state.Textures[indices.front()];
+    for (auto index : indices) if (!SameState(result, state.Textures[index])) return {};
+    return result;
+}
+std::optional<nri::AccessStage> RHIResourceService::GetBufferState(RHIResourceHandle handle) const {
+    auto resource = Acquire(handle);
+    if (!resource.IsLive() || !resource.m_Generation->State.Defined || resource.m_Generation->State.Texture) return {};
+    return resource.m_Generation->State.Buffer;
+}
+bool RHIResourceService::BuildTextureBarriers(const void* commands, const nri::TextureBarrierDesc& request,
+    std::vector<nri::TextureBarrierDesc>& barriers) {
+    auto command = AcquireNative(commands), resource = AcquireNative(request.texture);
+    if (!IsRecording(commands) || !resource.IsLive() || !resource.m_Generation->State.Defined || request.srcQueue || request.dstQueue) return false;
+    auto* target = resource.m_Generation.get();
+    std::vector<size_t> indices;
+    if (!TextureRange(target->State, request.mipOffset, request.mipNum, request.layerOffset, request.layerNum, request.planes, indices)) return false;
+    auto& pending = command.m_Generation->PendingStates;
+    auto found = pending.find(target);
+    if (found == pending.end()) found = pending.emplace(target, RHIPendingState{resource, target->State.Version, target->State}).first;
+    auto& state = found->second.State;
+    bool changed = false;
+    for (auto index : indices) {
+        const auto before = state.Textures[index];
+        auto after = request.after;
+        const bool readOnly = before.layout == after.layout && !Writes(before.access) && !Writes(after.access);
+        if (readOnly) { after.access |= before.access; after.stages |= before.stages; }
+        const bool barrierNeeded = !readOnly && (!SameState(before, after) || Writes(before.access) || Writes(after.access));
+        if (barrierNeeded) {
+            if (command.m_Generation->InRendering) return false;
+            changed = true;
+            auto barrier = request;
+            barrier.before = before;
+            barrier.after = after;
+            barrier.mipOffset = static_cast<uint16_t>(index % state.Mips); barrier.mipNum = 1;
+            barrier.layerOffset = static_cast<uint16_t>((index / state.Mips) % state.Layers); barrier.layerNum = 1;
+            barrier.planes = state.Planes[index / (static_cast<size_t>(state.Mips) * state.Layers)];
+            barriers.push_back(barrier);
+        }
+        changed = changed || !SameState(before, after);
+        state.Textures[index] = after;
+    }
+    if (changed) ++state.Version;
+    return true;
+}
+bool RHIResourceService::BuildBufferBarrier(const void* commands, const nri::BufferBarrierDesc& request,
+    std::vector<nri::BufferBarrierDesc>& barriers) {
+    auto command = AcquireNative(commands), resource = AcquireNative(request.buffer);
+    if (!IsRecording(commands) || !resource.IsLive() || !resource.m_Generation->State.Defined || resource.m_Generation->State.Texture) return false;
+    auto* target = resource.m_Generation.get();
+    auto& pending = command.m_Generation->PendingStates;
+    auto found = pending.find(target);
+    if (found == pending.end()) found = pending.emplace(target, RHIPendingState{resource, target->State.Version, target->State}).first;
+    auto& state = found->second.State;
+    auto after = request.after;
+    const bool hostBefore = state.Buffer.access & (nri::AccessBits::HOST_WRITE | nri::AccessBits::HOST_READ);
+    if (after.access & (nri::AccessBits::HOST_WRITE | nri::AccessBits::HOST_READ)) return false;
+    const bool reads = !hostBefore && !Writes(state.Buffer.access) && !Writes(after.access);
+    if (reads) { after.access |= state.Buffer.access; after.stages |= state.Buffer.stages; }
+    const bool barrierNeeded = !reads && !hostBefore && (!SameState(state.Buffer, after) || Writes(after.access));
+    if (barrierNeeded) {
+        if (command.m_Generation->InRendering) return false;
+        auto barrier = request; barrier.before = state.Buffer; barrier.after = after; barriers.push_back(barrier);
+    }
+    if (!SameState(state.Buffer, after) || barrierNeeded) {
+        ++state.Version;
+    }
+    // Host access is completed/flushed before submission. Pinned NRI forbids
+    // HOST access masks in buffer barriers; the submission provides visibility.
+    state.Buffer = after;
+    return true;
+}
+std::shared_ptr<RHIStateSubmission> RHIResourceService::PrepareSubmissionStates(const void* const* commands, uint32_t count) const {
+    if (!IsOwnerThread()) return {};
+    auto result = std::make_shared<RHIStateSubmission>();
+    std::unordered_map<RHIResourceGeneration*, size_t> predicted;
+    for (uint32_t i = 0; i < count; ++i) {
+        auto command = AcquireNative(commands[i]); if (!command.IsLive()) return {};
+        for (const auto& [target, pending] : command.m_Generation->PendingStates) {
+            auto it = predicted.find(target);
+            const auto version = it == predicted.end() ? target->State.Version : result->Published[it->second].State.Version;
+            if (!pending.Resource.IsLive() || pending.BaseVersion != version) return {};
+            if (it == predicted.end()) { predicted[target] = result->Published.size(); result->Published.push_back(pending); }
+            else result->Published[it->second] = pending;
+        }
+    }
+    return result;
+}
+void RHIResourceService::CommitSubmissionStates(const std::shared_ptr<RHIStateSubmission>& submission) {
+    if (!submission || !IsOwnerThread()) return;
+    for (auto& pending : submission->Published) pending.Resource.m_Generation->State = std::move(pending.State);
+}
+std::vector<nri::Texture*> RHIResourceService::GetPinnedTextures(const RHIRecordingLease& pins) const {
+    std::vector<nri::Texture*> textures;
+    if (!IsOwnerThread() || pins.Empty()) return textures;
+    // Texture aliases include views. The native texture is the first published
+    // alias, retained explicitly in generation metadata below.
+    for (const auto& resource : pins.m_State->Resources)
+        if (resource.IsLive() && resource.m_Generation->State.Texture && resource.m_Generation->NativeTexture)
+            textures.push_back(resource.m_Generation->NativeTexture);
+    return textures;
+}
+std::vector<nri::Buffer*> RHIResourceService::GetPinnedBuffers(const RHIRecordingLease& pins) const {
+    std::vector<nri::Buffer*> buffers;
+    if (!IsOwnerThread() || pins.Empty()) return buffers;
+    for (const auto& resource : pins.m_State->Resources)
+        if (resource.IsLive() && resource.m_Generation->State.Defined && !resource.m_Generation->State.Texture && resource.m_Generation->NativeBuffer)
+            buffers.push_back(resource.m_Generation->NativeBuffer);
+    return buffers;
+}
+nri::Texture* RHIResourceService::GetTextureForAlias(const void* alias) const {
+    auto resource = AcquireNative(alias);
+    return resource.IsLive() ? resource.m_Generation->NativeTexture : nullptr;
+}
+nri::Buffer* RHIResourceService::GetBufferForAlias(const void* alias) const {
+    auto resource = AcquireNative(alias);
+    return resource.IsLive() ? resource.m_Generation->NativeBuffer : nullptr;
+}
+
     RHIResourceLease AcquireRHIResource(const void* native) { return RHIDevice::Get().GetResources().AcquireNative(native); }
 }

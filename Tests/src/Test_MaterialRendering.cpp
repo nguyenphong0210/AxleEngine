@@ -144,7 +144,7 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
         layout.slicePitch = resolution*resolution*4;
         nri::TextureRegionDesc region{};
         region.width = region.height = resolution; region.depth = 1;
-        device.GetNRICore().CmdReadbackTextureToBuffer(*copy.GetNative(),*readback.GetNative(),layout,*color.GetNative(),region);
+        copy.ReadbackTextureToBuffer(*readback.GetNative(),layout,*color.GetNative(),region);
         copy.TransitionTexture(color.GetNative(),RHIResourceLayout::CopySource,RHIResourceLayout::ShaderResource);
         if (!copy.End() || !copy.Submit()) return std::vector<uint8_t>{};
         device.WaitIdle();

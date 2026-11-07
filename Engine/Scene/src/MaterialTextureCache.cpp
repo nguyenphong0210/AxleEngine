@@ -52,7 +52,7 @@ namespace Axle {
         desc.DebugName = "Material_" + source.filename().string();
         bool success = texture->Init(desc);
         if (success) {
-            const auto& device = RHI::RHIDevice::Get();
+            auto& device = RHI::RHIDevice::Get();
             auto* queue = device.GetGraphicsQueue();
             const auto& helper = device.GetNRIHelper();
             nri::TextureSubresourceUploadDesc subresource{};
@@ -67,7 +67,7 @@ namespace Axle {
             upload.after.access = nri::AccessBits::SHADER_RESOURCE;
             upload.after.layout = nri::Layout::SHADER_RESOURCE;
             upload.after.stages = nri::StageBits::ALL;
-            success = queue && helper.UploadData && helper.UploadData(*queue, &upload, 1, nullptr, 0) == nri::Result::SUCCESS;
+            success = queue && helper.UploadData && device.UploadData(&upload, 1, nullptr, 0) == nri::Result::SUCCESS;
         }
         stbi_image_free(pixels);
         if (!success) {

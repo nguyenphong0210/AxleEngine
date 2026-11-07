@@ -150,6 +150,17 @@ namespace Axle::RHI {
     bool RHICommandBuffer::RetainNative(const void* native) {
         return CanRecord() && RHIDevice::Get().GetResources().RecordNativeUse(m_CommandBuffer, native);
     }
+    bool RHICommandBuffer::DeclareDescriptorRead(const void* descriptor) {
+        auto& resources = RHIDevice::Get().GetResources();
+        auto resource = resources.AcquireNative(descriptor);
+        if (!resource) return true; // explicitly borrowed native adapter
+        const auto pins = resources.Pin(resource);
+        for (auto* texture : resources.GetPinnedTextures(pins))
+            TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResource);
+        for (auto* buffer : resources.GetPinnedBuffers(pins))
+            TransitionBuffer(buffer, RHIAccess::None, RHIAccess::ConstantBuffer, RHIPipelineStage::None, RHIPipelineStage::AllShaders);
+        return CanRecord();
+    }
 
     void RHICommandBuffer::PipelineBarrier(const RHIBarrierGroup& barrierGroup) {
         if (!CanRecord() || barrierGroup.IsEmpty()) return;
@@ -170,13 +181,21 @@ namespace Axle::RHI {
         nriBuffers.reserve(barrierGroup.GetBufferCount());
         for (const auto& b : barrierGroup.GetBuffers()) {
             if (!RetainNative(b.Buffer)) return;
-            nriBuffers.push_back(b.ToNRIDesc());
+            if (!rhiDevice.GetResources().BuildBufferBarrier(m_CommandBuffer, b.ToNRIDesc(), nriBuffers)) {
+                rhiDevice.GetResources().EndRecording(m_CommandBuffer, false);
+                rhiDevice.ObserveResult(nri::Result::INVALID_ARGUMENT, "BufferState", "unregistered resource or invalid recording");
+                return;
+            }
         }
 
         nriTextures.reserve(barrierGroup.GetTextureCount());
         for (const auto& t : barrierGroup.GetTextures()) {
             if (!RetainNative(t.Texture)) return;
-            nriTextures.push_back(t.ToNRIDesc());
+            if (!rhiDevice.GetResources().BuildTextureBarriers(m_CommandBuffer, t.ToNRIDesc(), nriTextures)) {
+                rhiDevice.GetResources().EndRecording(m_CommandBuffer, false);
+                rhiDevice.ObserveResult(nri::Result::INVALID_ARGUMENT, "TextureState", "invalid resource range or queue ownership transfer");
+                return;
+            }
         }
 
         nri::BarrierDesc desc = {};
@@ -187,24 +206,21 @@ namespace Axle::RHI {
         desc.textures = nriTextures.empty() ? nullptr : nriTextures.data();
         desc.textureNum = static_cast<uint32_t>(nriTextures.size());
 
-        core.CmdBarrier(*m_CommandBuffer, desc);
+        if (desc.globalNum || desc.bufferNum || desc.textureNum) core.CmdBarrier(*m_CommandBuffer, desc);
     }
 
     void RHICommandBuffer::TransitionTexture(nri::Texture* texture, RHIResourceLayout before, RHIResourceLayout after) {
-        if (!texture || before == after) return;
+        if (!texture || !CanRecord()) return;
         RHIBarrierGroup group;
         group.AddTexture(texture, before, after);
         PipelineBarrier(group);
     }
 
     bool RHICommandBuffer::TransitionTexture(RHIResourceStateTracker& tracker, nri::Texture* texture, RHIResourceLayout targetLayout) {
-        if (!texture) return false;
-        RHIBarrierGroup group;
-        if (tracker.TransitionTexture(texture, targetLayout, group)) {
-            PipelineBarrier(group);
-            return true;
-        }
-        return false;
+        // The standalone CPU scratch tracker cannot publish native queue state.
+        if (!texture || !CanRecord()) return false;
+        TransitionTexture(texture, RHIResourceLayout::Undefined, targetLayout);
+        return CanRecord();
     }
 
     void RHICommandBuffer::TransitionBuffer(nri::Buffer* buffer, RHIAccess beforeAccess, RHIAccess afterAccess,
@@ -216,19 +232,48 @@ namespace Axle::RHI {
         PipelineBarrier(group);
     }
 
-    bool RHICommandBuffer::TransitionBuffer(RHIResourceStateTracker& tracker, nri::Buffer* buffer, RHIAccess targetAccess, RHIPipelineStage targetStage) {
+    bool RHICommandBuffer::TransitionBuffer(RHIResourceStateTracker& tracker, nri::Buffer* buffer, RHIAccess access, RHIPipelineStage stage) {
         if (!buffer || !CanRecord()) return false;
-        RHIBarrierGroup group;
-        if (tracker.TransitionBuffer(buffer, targetAccess, targetStage, group)) {
-            PipelineBarrier(group);
-            return true;
-        }
-        return false;
+        TransitionBuffer(buffer, RHIAccess::None, access, RHIPipelineStage::None, stage);
+        return CanRecord();
     }
 
     void RHICommandBuffer::CopyStreamedData(RHIStreamer& streamer, uint64_t copyBatch) {
         if (!CanRecord() || copyBatch == 0) return;
         streamer.CmdCopyStreamedData(*m_CommandBuffer, copyBatch);
+    }
+
+    void RHICommandBuffer::TransitionRegion(nri::Texture* texture, RHIResourceLayout layout, const nri::TextureRegionDesc* region) {
+        RHITextureBarrier barrier(texture, RHIResourceLayout::Undefined, layout);
+        if (region) {
+            barrier.MipOffset = region->mipOffset; barrier.MipNum = 1;
+            barrier.LayerOffset = region->layerOffset; barrier.LayerNum = 1; barrier.Planes = region->planes;
+        }
+        RHIBarrierGroup group; group.AddTexture(barrier); PipelineBarrier(group);
+    }
+    void RHICommandBuffer::CopyBuffer(nri::Buffer& dst, uint64_t dstOffset, const nri::Buffer& src, uint64_t srcOffset, uint64_t size) {
+        if (!CanRecord() || !RetainNative(&dst) || !RetainNative(&src)) return;
+        TransitionBuffer(&dst, RHIAccess::None, RHIAccess::CopyDest, RHIPipelineStage::None, RHIPipelineStage::Copy);
+        TransitionBuffer(const_cast<nri::Buffer*>(&src), RHIAccess::None, RHIAccess::CopySource, RHIPipelineStage::None, RHIPipelineStage::Copy);
+        if (CanRecord()) RHIDevice::Get().GetNRICore().CmdCopyBuffer(*m_CommandBuffer, dst, dstOffset, src, srcOffset, size);
+    }
+    void RHICommandBuffer::CopyTexture(nri::Texture& dst, const nri::TextureRegionDesc* dstRegion, const nri::Texture& src, const nri::TextureRegionDesc* srcRegion) {
+        if (!CanRecord() || !RetainNative(&dst) || !RetainNative(&src)) return;
+        TransitionRegion(&dst, RHIResourceLayout::CopyDest, dstRegion);
+        TransitionRegion(const_cast<nri::Texture*>(&src), RHIResourceLayout::CopySource, srcRegion);
+        if (CanRecord()) RHIDevice::Get().GetNRICore().CmdCopyTexture(*m_CommandBuffer, dst, dstRegion, src, srcRegion);
+    }
+    void RHICommandBuffer::ReadbackTextureToBuffer(nri::Buffer& dst, const nri::TextureDataLayoutDesc& layout, const nri::Texture& src, const nri::TextureRegionDesc& region) {
+        if (!CanRecord() || !RetainNative(&dst) || !RetainNative(&src)) return;
+        TransitionBuffer(&dst, RHIAccess::None, RHIAccess::CopyDest, RHIPipelineStage::None, RHIPipelineStage::Copy);
+        TransitionRegion(const_cast<nri::Texture*>(&src), RHIResourceLayout::CopySource, &region);
+        if (CanRecord()) RHIDevice::Get().GetNRICore().CmdReadbackTextureToBuffer(*m_CommandBuffer, dst, layout, src, region);
+    }
+    void RHICommandBuffer::UploadBufferToTexture(nri::Texture& dst, const nri::TextureRegionDesc& region, const nri::Buffer& src, const nri::TextureDataLayoutDesc& layout) {
+        if (!CanRecord() || !RetainNative(&dst) || !RetainNative(&src)) return;
+        TransitionRegion(&dst, RHIResourceLayout::CopyDest, &region);
+        TransitionBuffer(const_cast<nri::Buffer*>(&src), RHIAccess::None, RHIAccess::CopySource, RHIPipelineStage::None, RHIPipelineStage::Copy);
+        if (CanRecord()) RHIDevice::Get().GetNRICore().CmdUploadBufferToTexture(*m_CommandBuffer, dst, region, src, layout);
     }
 
     void RHICommandBuffer::SetPipeline(nri::Pipeline* pipeline) {
@@ -255,6 +300,7 @@ namespace Axle::RHI {
     void RHICommandBuffer::SetDescriptorSet(nri::BindPoint bindPoint, uint32_t setIndex, nri::DescriptorSet* descriptorSet) {
         if (!CanRecord() || !descriptorSet) return;
         if (!RetainNative(descriptorSet)) return;
+        if (!DeclareDescriptorRead(descriptorSet)) return;
         nri::SetDescriptorSetDesc desc = {};
         desc.bindPoint = bindPoint;
         desc.setIndex = setIndex;
@@ -276,6 +322,7 @@ namespace Axle::RHI {
     void RHICommandBuffer::SetRootDescriptor(uint32_t rootDescriptorIndex, nri::Descriptor* descriptor, uint32_t offset, nri::BindPoint bindPoint) {
         if (!CanRecord() || !descriptor) return;
         if (!RetainNative(descriptor)) return;
+        if (!DeclareDescriptorRead(descriptor)) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (!core.CmdSetRootDescriptor) return;
@@ -291,12 +338,17 @@ namespace Axle::RHI {
     void RHICommandBuffer::SetVertexBuffers(uint32_t baseSlot, const nri::VertexBufferDesc* vertexBufferDescs, uint32_t count) {
         if (!CanRecord() || !vertexBufferDescs || count == 0) return;
         for (uint32_t i = 0; i < count; ++i) if (!RetainNative(vertexBufferDescs[i].buffer)) return;
+        for (uint32_t i = 0; i < count; ++i)
+            TransitionBuffer(const_cast<nri::Buffer*>(vertexBufferDescs[i].buffer), RHIAccess::None, RHIAccess::VertexBuffer, RHIPipelineStage::None, RHIPipelineStage::VertexShader);
+        if (!CanRecord()) return;
         RHIDevice::Get().GetNRICore().CmdSetVertexBuffers(*m_CommandBuffer, baseSlot, vertexBufferDescs, count);
     }
 
     void RHICommandBuffer::SetVertexBuffer(uint32_t slot, const nri::Buffer* buffer, uint64_t offset, uint32_t stride) {
         if (!CanRecord() || !buffer) return;
         if (!RetainNative(buffer)) return;
+        TransitionBuffer(const_cast<nri::Buffer*>(buffer), RHIAccess::None, RHIAccess::VertexBuffer, RHIPipelineStage::None, RHIPipelineStage::VertexShader);
+        if (!CanRecord()) return;
         nri::VertexBufferDesc desc = {};
         desc.buffer = buffer;
         desc.offset = offset;
@@ -311,6 +363,8 @@ namespace Axle::RHI {
     void RHICommandBuffer::SetIndexBuffer(const nri::Buffer* buffer, uint64_t offset, nri::IndexType indexType) {
         if (!CanRecord() || !buffer) return;
         if (!RetainNative(buffer)) return;
+        TransitionBuffer(const_cast<nri::Buffer*>(buffer), RHIAccess::None, RHIAccess::IndexBuffer, RHIPipelineStage::None, RHIPipelineStage::IndexInput);
+        if (!CanRecord()) return;
         RHIDevice::Get().GetNRICore().CmdSetIndexBuffer(*m_CommandBuffer, *buffer, offset, indexType);
     }
 
@@ -344,11 +398,23 @@ namespace Axle::RHI {
         if (renderingDesc.colorNum && !renderingDesc.colors) return;
         for (uint32_t i = 0; i < renderingDesc.colorNum; ++i) if (!retainAttachment(renderingDesc.colors[i])) return;
         if (!retainAttachment(renderingDesc.depth) || !retainAttachment(renderingDesc.stencil) || !RetainNative(renderingDesc.shadingRate)) return;
+        auto& resources = RHIDevice::Get().GetResources();
+        for (uint32_t i = 0; i < renderingDesc.colorNum; ++i) {
+            if (auto* texture = resources.GetTextureForAlias(renderingDesc.colors[i].descriptor))
+                TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+            if (auto* texture = resources.GetTextureForAlias(renderingDesc.colors[i].resolveDst))
+                TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+        }
+        if (auto* texture = resources.GetTextureForAlias(renderingDesc.depth.descriptor))
+            TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::DepthStencilWrite);
+        if (!CanRecord()) return;
+        if (!RHIDevice::Get().GetResources().SetRendering(m_CommandBuffer, true)) return;
         RHIDevice::Get().GetNRICore().CmdBeginRendering(*m_CommandBuffer, renderingDesc);
     }
 
     void RHICommandBuffer::EndRendering() {
         if (!CanRecord()) return;
+        if (!RHIDevice::Get().GetResources().SetRendering(m_CommandBuffer, false)) return;
         RHIDevice::Get().GetNRICore().CmdEndRendering(*m_CommandBuffer);
     }
 
@@ -360,6 +426,9 @@ namespace Axle::RHI {
     void RHICommandBuffer::ResolveTexture(nri::Texture* dstTexture, const nri::Texture* srcTexture, nri::ResolveOp resolveOp) {
         if (!CanRecord() || !dstTexture || !srcTexture) return;
         if (!RetainNative(dstTexture) || !RetainNative(srcTexture)) return;
+        TransitionTexture(dstTexture, RHIResourceLayout::Undefined, RHIResourceLayout::ResolveDest);
+        TransitionTexture(const_cast<nri::Texture*>(srcTexture), RHIResourceLayout::Undefined, RHIResourceLayout::ResolveSource);
+        if (!CanRecord()) return;
         RHIDevice::Get().GetNRICore().CmdResolveTexture(*m_CommandBuffer, *dstTexture, nullptr, *srcTexture, nullptr, resolveOp);
     }
 
@@ -408,6 +477,9 @@ namespace Axle::RHI {
     void RHICommandBuffer::DrawIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const nri::Buffer* countBuffer, uint64_t countBufferOffset) {
         if (!CanRecord() || drawNum == 0) return;
         if (!RetainNative(&buffer) || !RetainNative(countBuffer)) return;
+        TransitionBuffer(const_cast<nri::Buffer*>(&buffer), RHIAccess::None, RHIAccess::ArgumentBuffer);
+        if (countBuffer) TransitionBuffer(const_cast<nri::Buffer*>(countBuffer), RHIAccess::None, RHIAccess::ArgumentBuffer);
+        if (!CanRecord()) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (core.CmdDrawIndirect) {
@@ -428,6 +500,9 @@ namespace Axle::RHI {
     void RHICommandBuffer::DrawIndexedIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const nri::Buffer* countBuffer, uint64_t countBufferOffset) {
         if (!CanRecord() || drawNum == 0) return;
         if (!RetainNative(&buffer) || !RetainNative(countBuffer)) return;
+        TransitionBuffer(const_cast<nri::Buffer*>(&buffer), RHIAccess::None, RHIAccess::ArgumentBuffer);
+        if (countBuffer) TransitionBuffer(const_cast<nri::Buffer*>(countBuffer), RHIAccess::None, RHIAccess::ArgumentBuffer);
+        if (!CanRecord()) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (core.CmdDrawIndexedIndirect) {
@@ -448,6 +523,8 @@ namespace Axle::RHI {
     void RHICommandBuffer::DispatchIndirect(const nri::Buffer& buffer, uint64_t offset) {
         if (!CanRecord()) return;
         if (!RetainNative(&buffer)) return;
+        TransitionBuffer(const_cast<nri::Buffer*>(&buffer), RHIAccess::None, RHIAccess::ArgumentBuffer);
+        if (!CanRecord()) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (core.CmdDispatchIndirect) {

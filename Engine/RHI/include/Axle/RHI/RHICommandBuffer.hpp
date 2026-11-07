@@ -55,6 +55,10 @@ namespace Axle::RHI {
 
         // Staging & Dynamic Streamer
         void CopyStreamedData(class RHIStreamer& streamer, uint64_t copyBatch);
+        void CopyBuffer(nri::Buffer& dst, uint64_t dstOffset, const nri::Buffer& src, uint64_t srcOffset, uint64_t size);
+        void CopyTexture(nri::Texture& dst, const nri::TextureRegionDesc* dstRegion, const nri::Texture& src, const nri::TextureRegionDesc* srcRegion);
+        void ReadbackTextureToBuffer(nri::Buffer& dst, const nri::TextureDataLayoutDesc& layout, const nri::Texture& src, const nri::TextureRegionDesc& region);
+        void UploadBufferToTexture(nri::Texture& dst, const nri::TextureRegionDesc& region, const nri::Buffer& src, const nri::TextureDataLayoutDesc& layout);
 
         // Pipeline & Resource Binding
         void SetPipeline(nri::Pipeline* pipeline);
@@ -134,6 +138,8 @@ namespace Axle::RHI {
     private:
         bool CanRecord() const { return IsRecording() && RHIDevice::Get().CanSubmit(); }
         bool RetainNative(const void* native);
+        bool DeclareDescriptorRead(const void* descriptor);
+        void TransitionRegion(nri::Texture* texture, RHIResourceLayout layout, const nri::TextureRegionDesc* region);
         bool Publish();
         RHIResourceLease m_Lease;
         nri::CommandBuffer* m_CommandBuffer = nullptr;

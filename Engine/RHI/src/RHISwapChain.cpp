@@ -156,11 +156,18 @@ namespace Axle::RHI {
             });
         if (!m_Lease.IsLive()) return false;
         for (const auto& frame : frames) device.GetResources().AddAlias(m_Lease, frame.CommandAllocator);
-        for (const auto& texture : ownedTextures) device.GetResources().AddAlias(m_Lease, texture.Texture);
+        for (const auto& texture : ownedTextures) {
+            auto image = device.GetResources().ImportTexture(texture.Texture, m_Lease, 1, 1, nri::PlaneBits::COLOR, {});
+            if (!image.IsLive()) return false;
+            m_BackbufferLeases.push_back(std::move(image));
+            device.GetResources().AddAlias(m_Lease, texture.AcquireSemaphore);
+            device.GetResources().AddAlias(m_Lease, texture.ReleaseSemaphore);
+        }
         return true;
     }
 
     void RHISwapChain::DestroyNRIResources() {
+        m_BackbufferLeases.clear();
         auto& device = RHIDevice::Get();
         if (m_Lease) {
             const bool current = m_Lease.IsLive();

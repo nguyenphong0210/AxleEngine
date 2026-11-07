@@ -197,7 +197,7 @@ namespace Axle::RHI {
                 core.DestroyBuffer(buffer);
                 if (memory) core.FreeMemory(memory);
             }, std::move(dependencies));
-        return m_Lease.IsLive();
+        return m_Lease.IsLive() && device.GetResources().DefineBufferState(m_Lease);
     }
 
     void RHIBuffer::Shutdown() {
@@ -245,6 +245,8 @@ namespace Axle::RHI {
         auto& device = RHIDevice::Get();
         if (IsValid() && m_MappedData && device.GetResources().IsOwnerThread()) device.GetNRICore().UnmapBuffer(*m_Buffer);
         if (m_Mapping) *m_Mapping = false;
+        if (IsValid()) device.GetResources().SetBufferState(m_Lease,
+            {m_Desc.MemoryLocation == RHIMemoryLocation::HostReadback ? nri::AccessBits::HOST_READ : nri::AccessBits::HOST_WRITE, nri::StageBits::HOST});
         m_MappedData = nullptr; m_MappedOffset = m_MappedSize = 0;
     }
 
@@ -274,7 +276,7 @@ namespace Axle::RHI {
             upload.after.access = BufferUploadAccess(m_Desc.Usage);
             upload.after.stages = nri::StageBits::ALL;
             return ScopedRHIFault::Invoke("UploadBufferData", [&] {
-                return device.GetNRIHelper().UploadData(*device.GetGraphicsQueue(), nullptr, 0, &upload, 1);
+                return device.UploadData(nullptr, 0, &upload, 1);
             }) == nri::Result::SUCCESS;
         }
         return false;

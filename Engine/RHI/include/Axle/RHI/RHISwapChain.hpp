@@ -81,6 +81,7 @@ namespace Axle::RHI {
 
     private:
         RHIResourceLease m_Lease;
+        std::vector<RHIResourceLease> m_BackbufferLeases;
         bool CreateNRIResources(const RHISurface& surface);
         void DestroyNRIResources();
         bool RecreateSwapChain();

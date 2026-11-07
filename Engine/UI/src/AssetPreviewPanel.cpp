@@ -299,7 +299,7 @@ namespace Axle {
                     upDesc.after.stages = nri::StageBits::ALL;
                     upDesc.planes = nri::PlaneBits::ALL;
 
-                    if (helper.UploadData(*queue, &upDesc, 1, nullptr, 0) != nri::Result::SUCCESS) {
+                    if (rhiDevice.UploadData(&upDesc, 1, nullptr, 0) != nri::Result::SUCCESS) {
                         stbi_image_free(pixels);
                         return 0;
                     }

@@ -285,7 +285,7 @@ namespace Axle {
                 nri::TextureRegionDesc region{};
                 region.width = width; region.height = height;
                 region.depth = 1;
-                device.GetNRICore().CmdReadbackTextureToBuffer(*guiCommand.GetNative(), *guiReadback.GetNative(), data, *guiColor.GetNative(), region);
+                guiCommand.ReadbackTextureToBuffer(*guiReadback.GetNative(), data, *guiColor.GetNative(), region);
                 if (!guiCommand.End() || !guiCommand.Submit()) return false;
                 device.WaitIdle();
                 auto* pixel = static_cast<const uint8_t*>(guiReadback.Map());
@@ -385,7 +385,7 @@ namespace Axle {
                 data.rowPitch = layout.RowPitch; data.slicePitch = layout.SlicePitch;
                 nri::TextureRegionDesc region{};
                 region.width = w; region.height = h; region.depth = 1;
-                device.GetNRICore().CmdReadbackTextureToBuffer(*command.GetNative(), *buffer.GetNative(), data, *texture.GetNative(), region);
+                command.ReadbackTextureToBuffer(*buffer.GetNative(), data, *texture.GetNative(), region);
                 command.TransitionTexture(texture.GetNative(), RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
                 if (!command.End() || !command.Submit()) return std::vector<uint8_t>{};
                 device.WaitIdle();
@@ -517,7 +517,7 @@ namespace Axle {
             region.width = w;
             region.height = h;
             region.depth = 1;
-            device.GetNRICore().CmdReadbackTextureToBuffer(*copy.GetNative(), *readback.GetNative(),
+            copy.ReadbackTextureToBuffer(*readback.GetNative(),
                                                            textureLayout, *renderTarget->GetNative(), region);
             copy.TransitionTexture(renderTarget->GetNative(), RHIResourceLayout::CopySource,
                                    RHIResourceLayout::ShaderResource);

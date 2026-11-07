@@ -1212,7 +1212,7 @@ namespace Axle {
         }
 
         if (m_Streamer && m_Streamer->IsValid()) {
-            m_Streamer->StreamConstant(sceneConstants);
+            if (m_Streamer->StreamConstant(sceneConstants) == UINT32_MAX) return;
             m_LastStreamedTransformBytes += sizeof(RHISceneConstants);
         }
 
@@ -1871,6 +1871,7 @@ namespace Axle {
         if (!m_CommandBuffer.End()) return;
         auto* queue = m_Device->GetGraphicsQueue();
         if (!m_CommandBuffer.Submit(queue) || !m_Device->WaitIdle()) return;
+        if (m_Streamer && !m_Streamer->EndFrame()) return;
 
         // Reset command allocator to recycle its memory pages for next frame
         m_CommandBuffer.Reset();

@@ -98,7 +98,8 @@ namespace Axle::RHI {
         // Statically allocated constant ring-buffer
         nri::Buffer* GetConstantBuffer() const;
 
-        // Streams data into the constant ring buffer. Returns byte offset in GetConstantBuffer()
+        // Returns a byte offset, or UINT32_MAX under pressure. Never wraps onto
+        // ranges returned in the current frame; EndFrame requires checked drain.
         uint32_t StreamConstantData(const void* data, uint32_t size);
 
         template <typename T>
@@ -106,7 +107,7 @@ namespace Axle::RHI {
             return StreamConstantData(&val, static_cast<uint32_t>(sizeof(T)));
         }
 
-        // Streams generic CPU host data. Returns valid pointer until wrap-around
+        // Streams CPU data into bounded, append-only blocks valid until EndFrame.
         void* StreamHostData(const void* data, uint64_t size, uint32_t alignment = 16);
 
         // Begin a batch of destination copy requests (consumed by CmdCopyStreamedData)
@@ -131,7 +132,7 @@ namespace Axle::RHI {
         void CmdCopyStreamedData(RHICommandBuffer& cmdBuffer, RHICopyBatch copyBatch);
 
         // Must be called once at the end of every frame (advances ring buffer slot & recycles garbage)
-        void EndFrame();
+        bool EndFrame();
 
     private:
         bool Build(RHIDevice& device, const RHIStreamerDesc& desc);
@@ -142,6 +143,9 @@ namespace Axle::RHI {
         nri::Streamer* m_Streamer = nullptr;
         RHIStreamerDesc m_Desc;
         RHIDevice* m_Device = nullptr;
+        uint64_t m_ConstantEnd = 0, m_HostUsed = 0;
+        bool m_CanWrapConstants = true;
+        std::vector<std::unique_ptr<unsigned char[]>> m_HostBlocks;
     };
 
 }

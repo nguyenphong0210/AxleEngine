@@ -395,12 +395,43 @@ Implementation and the available self-verification are complete. Actual D3D12
 and Vulkan API validation remains NOT RUN because debug prerequisites are absent;
 P41-07 dependent acceptance remains open. One consolidated review is still pending.
 
+## P41-08 - Completion-owned frame slots and bounded arenas
+
+Starting from P41-07 commit `551b3e2`. RHIFrameContext owns commands/allocator,
+a descriptor arena, bounded uniform/upload storage and uniform-range view
+generations. CPU allocation is append-only within the active frame; host writes
+are sealed before submission. Each uniform descriptor addresses its own aligned
+range. Slot begin requires its successful completion token, then retains the
+conservative whole-queue drain before resetting/replacing mutable storage.
+Failed construction preserves the old complete slot. Failed submit cannot publish
+a completion, and stopped epochs destroy abandoned commands after checked drain
+rather than recycling them. Shared presentation consumes these slots in P41-09.
+
+The existing streamer is now bounded too: constant pressure returns UINT32_MAX
+instead of wrapping onto ranges already returned during the current frame.
+Wrapping becomes eligible only after checked EndFrame with no recording pins.
+Host requests use bounded append-only blocks through that boundary. Streamer
+rotation cannot reclaim them while unsubmitted commands retain its backing.
+Scene rendering handles constant pressure and explicitly retires the streamer
+only after its successful submit/drain. No GPU overlap optimization was enabled.
+
+Debug/Release builds of AxleRHIFrameTests, AxlePrimitiveTests and AxleVFXGPUTests
+passed: p41-08-streamer-build-{debug,release}.log and final frame-only builds.
+frame08.py <Config> passed physical D3D12/Vulkan in both configurations. Two
+logical slots cycle six times with multiple view ranges; a deliberately unobserved
+completion rejects begin/write. GPU readback confirms all original uniform/upload
+bytes and streamer bytes under refused wrap. Partial construction, abandon, failed
+submit and stopped teardown pass with zero NRI errors. The fixture uses the actual
+backend alignment rather than assuming D3D12's constant alignment on Vulkan.
+Eight scene/VFX integration runs passed (two APIs, two targets, two configs),
+recorded in p41-08-integration-results.json. Architecture/whitespace checks passed.
+API-validation and final separate-context review gates remain open as above.
+
 ## Remaining work
 
-P41-08..11 remain: frame slots, shared presentation, complete view target sets,
-and central CPU decode/upload/cache ownership. Continue through P41-11, then one
-consolidated final review. Unwired P41-08 frame-context/test drafts are prepared
-in the worktree and are not part of the P41-07 commit.
+P41-09..11 remain: shared presentation, complete view target sets and central CPU
+decode/upload/cache ownership. Continue through P41-11, then one consolidated
+final review.
 
 Full phase builds, CTest, integration, jobs/ECS, final native product simulation, GPU
 readbacks and final window/lifetime checks remain open. API-validation prerequisites

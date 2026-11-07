@@ -2,6 +2,8 @@
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <cstring>
+#include <algorithm>
 
 namespace Axle::RHI {
 
@@ -16,6 +18,8 @@ namespace Axle::RHI {
         , m_Streamer(other.m_Streamer)
         , m_Desc(other.m_Desc)
         , m_Device(other.m_Device)
+        , m_ConstantEnd(other.m_ConstantEnd), m_HostUsed(other.m_HostUsed)
+        , m_CanWrapConstants(other.m_CanWrapConstants), m_HostBlocks(std::move(other.m_HostBlocks))
     {
         other.m_Streamer = nullptr;
         other.m_Device = nullptr;
@@ -30,6 +34,8 @@ namespace Axle::RHI {
             m_Streamer = other.m_Streamer;
             m_Desc = other.m_Desc;
             m_Device = other.m_Device;
+            m_ConstantEnd = other.m_ConstantEnd; m_HostUsed = other.m_HostUsed;
+            m_CanWrapConstants = other.m_CanWrapConstants; m_HostBlocks = std::move(other.m_HostBlocks);
 
             other.m_Streamer = nullptr;
             other.m_Device = nullptr;
@@ -50,7 +56,7 @@ namespace Axle::RHI {
 
     bool RHIStreamer::Build(RHIDevice& device, const RHIStreamerDesc& desc) {
 
-        if (!device.CanCreateResources()) {
+        if (!device.CanCreateResources() || desc.ConstantBufferSize > UINT32_MAX) {
             AXLE_CORE_ERROR("RHIStreamer::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -93,6 +99,7 @@ namespace Axle::RHI {
     }
 
     void RHIStreamer::Shutdown() {
+        m_HostBlocks.clear(); m_HostUsed = m_ConstantEnd = 0; m_CanWrapConstants = true;
         m_CopyResources.clear();
         m_Backings.clear();
         if (m_Lease) m_Lease.Reset();
@@ -116,17 +123,28 @@ namespace Axle::RHI {
     }
 
     uint32_t RHIStreamer::StreamConstantData(const void* data, uint32_t size) {
-        if (!IsValid() || !m_Device || !data || size == 0) return 0;
+        if (!IsValid() || !m_Device || !m_Device->CanSubmit() || !data || !size || size > m_Desc.ConstantBufferSize) return UINT32_MAX;
         const auto& streamerInterface = m_Device->GetNRIStreamer();
-        if (!streamerInterface.StreamConstantData) return 0;
-        return streamerInterface.StreamConstantData(*m_Streamer, data, size);
+        if (!streamerInterface.StreamConstantData) return UINT32_MAX;
+        const auto alignment = m_Device->GetNRICore().GetDeviceDesc(*m_Device->GetNRIDevice()).memoryAlignment.constantBufferOffset;
+        const auto offset = (m_ConstantEnd + alignment - 1) / alignment * alignment;
+        if ((offset > m_Desc.ConstantBufferSize || size > m_Desc.ConstantBufferSize - offset) && !m_CanWrapConstants) return UINT32_MAX;
+        const auto actual = streamerInterface.StreamConstantData(*m_Streamer, data, size);
+        m_ConstantEnd = static_cast<uint64_t>(actual) + size; m_CanWrapConstants = false;
+        return actual;
     }
 
     void* RHIStreamer::StreamHostData(const void* data, uint64_t size, uint32_t alignment) {
         if (!IsValid() || !m_Device || !data || size == 0) return nullptr;
-        const auto& streamerInterface = m_Device->GetNRIStreamer();
-        if (!streamerInterface.StreamHostData) return nullptr;
-        return streamerInterface.StreamHostData(*m_Streamer, data, size, alignment);
+        alignment = (std::max)(alignment, 1u);
+        if (m_HostUsed > m_Desc.HostDataCapacity || alignment - 1 > m_Desc.HostDataCapacity - m_HostUsed ||
+            size > m_Desc.HostDataCapacity - m_HostUsed - (alignment - 1)) return nullptr;
+        const auto allocation = size + alignment - 1;
+        auto block = std::make_unique<unsigned char[]>(static_cast<size_t>(allocation));
+        const auto address = reinterpret_cast<uintptr_t>(block.get());
+        auto* result = block.get() + ((alignment - address % alignment) % alignment);
+        std::memcpy(result, data, static_cast<size_t>(size));
+        m_HostBlocks.push_back(std::move(block)); m_HostUsed += allocation; return result;
     }
 
     RHICopyBatch RHIStreamer::BeginCopyBatch() {
@@ -309,14 +327,17 @@ namespace Axle::RHI {
         }
     }
 
-    void RHIStreamer::EndFrame() {
-        if (!IsValid() || !m_Device) return;
-        if (!m_Device->WaitIdle() || m_Device->GetResources().IsInUse(m_Lease)) return;
+    bool RHIStreamer::EndFrame() {
+        if (!IsValid() || !m_Device) return false;
+        if (!m_Device->WaitIdle() || m_Device->GetResources().IsInUse(m_Lease)) return false;
         m_Backings.clear();
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (streamerInterface.EndStreamerFrame) {
             streamerInterface.EndStreamerFrame(*m_Streamer);
+            m_CanWrapConstants = true; m_HostBlocks.clear(); m_HostUsed = 0;
+            return true;
         }
+        return false;
     }
 
     bool RHIStreamer::RegisterBuffer(nri::Buffer* buffer) const {

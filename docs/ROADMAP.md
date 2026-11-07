@@ -1,7 +1,7 @@
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-07**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-04 released to Gemini; OPT-02/03 accepted after verified Codex corrections**.
+Status: **OPT-04 assigned to Codex with separate-context Codex reviews and supplementary Gemini review; OPT-02/03 accepted**.
 
 ## Start here
 
@@ -10,10 +10,13 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Current assignment: Gemini OPT-04, P41-01..P41-11.** The user assigned this
-phase on 2026-11-07; [scoped handoff](agents/handoffs/OPT_04_GEMINI.md). Work through
-its package gates and stop after OPT-04 for review. A Gemini session must read the
-handoff to begin; no automatic background agent has been started.
+**Current assignment: Codex OPT-04, P41-01..P41-11.** The user reassigned
+implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
+A separate-context Codex reviewer checks P41-03, P41-06 and P41-11; significant
+fixes are rechecked before dependent implementation continues. Gemini supplies
+additional review. These are required future checkpoints, not completed reviews.
+The recommended model is GPT-6 Astra; the client model selection is user-controlled.
+No OPT-04 source implementation has started in this coordination turn.
 
 **Accepted prerequisite: OPT-02 and OPT-03, after review and repairs.**
 Codex independently reviewed Gemini's deliveries at `0eeb734`, found and corrected
@@ -204,7 +207,7 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 
 **Exit:** D3D12/Vulkan use the pinned NRI contract; GL is an explicit compatibility adapter. Creation failure, resize, recorded-but-unsubmitted work and shutdown have relevant current evidence; missing native checks remain NOT RUN.
 
-**Assignment:** Released to Gemini by the user on 2026-11-07; see the [OPT-04 handoff](agents/handoffs/OPT_04_GEMINI.md). Complete P41-01..11, then stop for review.
+**Assignment:** Codex implementation with separate-context Codex review at P41-03/P41-06/P41-11 and supplementary Gemini review; [current handoff](agents/handoffs/OPT_04_CODEX.md). Complete P41-01..11 and stop after the final review gate.
 
 **Evidence:** Pending; implementation/review is not claimed here.
 

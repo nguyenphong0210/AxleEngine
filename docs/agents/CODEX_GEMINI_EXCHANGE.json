@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-04-GEMINI-IMPLEMENTATION",
-    "title": "Implement OPT-04 NRI device and GPU lifetime foundation",
-    "state": "ready_for_Gemini",
+    "id": "OPT-04-CODEX-IMPLEMENTATION",
+    "title": "Codex implements OPT-04 with separate-context review and supplementary Gemini review",
+    "state": "ready_for_Codex",
     "coordinator": "Codex",
-    "implementer": "Gemini",
-    "reviewer": "Codex",
+    "implementer": "Codex",
+    "reviewer": "Codex in a separate context",
     "scope_updated_on": "2026-11-07",
-    "user_scope": "User will ask Gemini to begin OPT-04 after accepted OPT-02/03. Prepare and record the bounded OPT-04 handoff; Gemini implements P41-01..P41-11 in order, self-reviews, fixes, verifies and commits locally, then stops for independent review.",
-    "user_instruction": "v?y t?i b?t ??u nh? Gemini l?m OPT 04 nh?",
-    "code_baseline": "3853203c038733dcfa287ced9a213df5564448aa",
+    "user_scope": "User approves Codex as primary OPT-04 implementer, separate-context Codex review at P41-03/P41-06/P41-11 and supplementary Gemini review, prioritizing maximum output quality. User asks whether GPT-6.1 Sol or GPT-6 Astra should be selected.",
+    "user_instruction": "Apply the proposed Codex implementation/separate-context review workflow and recommend GPT-6.1 Sol versus GPT-6 Astra (English paraphrase of Vietnamese user instruction).",
+    "code_baseline": "cf168d2895d3bbf1080b57b73e183a32ecfc8c30",
     "execution_range": "OPT-04 / P41-01..P41-11 only",
     "released_packages": [
       "P41-01",
@@ -28,10 +28,10 @@
     "current_phase": "OPT-04",
     "current_package": "P41-01",
     "completed_packages": [],
-    "implementation_status": "not_started",
-    "independent_review_status": "pending_Gemini_delivery",
-    "handoff": "docs/agents/handoffs/OPT_04_GEMINI.md",
-    "phase_report": "docs/reviews/OPT_04_GEMINI_EXECUTION.md",
+    "implementation_status": "not_started; coordination reassignment prepared",
+    "independent_review_status": "pending_implementation_and_separate_context_reviews",
+    "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
+    "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
     "prerequisite_evidence": {
       "OPT-01": "Accepted baseline; docs/reviews/OPT_01_AF01_P41_PLG_REVIEW.md",
       "OPT-02/03": "Accepted after verified Codex corrections; docs/reviews/OPT_02_03_CODEX_REVIEW.md",
@@ -49,7 +49,7 @@
       "Renderer resource ownership and Asset CPU decode/upload callers",
       "Editor and Runtime callers explicitly required by P41-01..11",
       "Focused native/CPU regressions and test wiring",
-      "OPT-04 phase report, roadmap and Gemini exchange updates"
+      "OPT-04 phase report, roadmap and Codex exchange updates"
     ],
     "excluded": [
       "OPT-05+ / P41-12+ implementation except required current-package caller adaptations",
@@ -79,11 +79,45 @@
       "Typed jobs/ECS harness, architecture checks and baseline tool regressions",
       "Native Editor/Runtime simulation probes preserving accepted OPT-02/03 behavior",
       "Applicable physical D3D12/Vulkan readback, GL/fallback equivalence and real windowed startup/present/teardown checks",
-      "Missing required checks stay NOT RUN and dependent gates stay open"
+      "Missing required checks stay NOT RUN and dependent gates stay open",
+      "Separate-context Codex reviews at P41-03/P41-06/P41-11, with significant fixes rechecked before dependent work/acceptance"
     ],
-    "stop_boundary": "After P41-11 and OPT-04 delivery; independent acceptance remains pending. Do not start OPT-05.",
-    "next_action": "Gemini session reads GEMINI.md, scoped handoff and inbox, posts its own ACK/STATUS, inspects actual HEAD/status/vendor declarations, then starts P41-01.",
-    "transport_note": "Repository handoff only. No Gemini response, running session or automatic background agent is claimed."
+    "stop_boundary": "Review after P41-03 and P41-06 before dependent production work; final separate-context review after P41-11; do not start OPT-05.",
+    "next_action": "User selects the recommended model in the client for the implementation session; Codex reads the scoped handoff, actual HEAD/status, contracts and pinned vendor declarations, posts implementation STATUS and starts P41-01. No source implementation has begun during model-selection coordination.",
+    "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
+    "supplementary_reviewer": "Gemini",
+    "review_checkpoints": [
+      {
+        "after": "P41-03",
+        "before": "P41-04",
+        "scope": "Readiness/fallback, transactional construction, structured errors and device loss",
+        "status": "pending"
+      },
+      {
+        "after": "P41-06",
+        "before": "P41-07",
+        "scope": "Identity/generations/device epochs and recording/submission retirement",
+        "status": "pending"
+      },
+      {
+        "after": "P41-11",
+        "before": "OPT-04 acceptance",
+        "scope": "Complete phase and affected real product consumers",
+        "status": "pending"
+      }
+    ],
+    "review_policy": "Fresh-context Codex reviewer inspects contracts, source, exact diff and real evidence; read-only tracked files during review; implementing Codex fixes findings and reviewer rechecks significant changes. Same-model reviews can share blind spots. Gemini review is supplementary; no author or cursor impersonation.",
+    "model_policy": {
+      "recommended_model": "gpt-6-astra",
+      "alternative": "gpt-6.1-sol when balancing quality with cost",
+      "reason": "User prioritizes quality for complex GPU architecture/lifetime work; recommendation based on current official OpenAI model selection guidance, not an AxleEngine benchmark.",
+      "reasoning_recommendation": "Max for the hardest design/review tasks if supported by the client; Extra High is also supported for demanding analysis.",
+      "selection_status": "Recommendation only; actual session model is not verified or changed by this task card",
+      "official_sources": [
+        "https://developers.openai.com/api/docs/guides/model-selection",
+        "https://learn.chatgpt.com/docs/models"
+      ]
+    }
   },
   "last_read": {
     "Codex": "CG-20261106T090129914823Z-GEMINI-ff5ca6",
@@ -1167,6 +1201,17 @@
       "base_commit": "3853203c038733dcfa287ced9a213df5564448aa",
       "timestamp_utc": "2026-11-07T02:41:17.052065+00:00",
       "body": "HANDOFF: User has chosen OPT-04 as Gemini's next phase after OPT-02/03 acceptance.\n\nImplement P41-01..P41-11 only, in roadmap/dependency order. Read GEMINI.md, the shared protocol, inbox and docs/agents/handoffs/OPT_04_GEMINI.md. Starting handoff baseline: 3853203; accepted prerequisite corrections: e351399 and 3a67116, with docs/reviews/OPT_02_03_CODEX_REVIEW.md as evidence. Those prior results are not OPT-04 verification.\n\nPost your own Gemini ACK/STATUS linked to this message before editing. Follow each package's implementation/self-review/fix/verification/local-commit loop, preserving the current Core-only SceneData boundary, owner/job/physics lifecycle rules, simulation parity, script ABI 4 and exception ABI. Keep the actual pinned vendors; use local declarations. Preserve identity policy and unrelated work. No push.\n\nUse the P41 plan, NRI contract and master prerequisites linked in the scoped handoff. Native failure/retirement/frame/presentation checks must exercise the real operation/consumer; offscreen output or automatic GL fallback does not prove a native windowed backend gate. Keep unavailable required checks NOT RUN, with dependent gates open.\n\nMaintain docs/reviews/OPT_04_GEMINI_EXECUTION.md and the roadmap with actual commits/commands/configurations/exits/logs. Save resumable state before usage limits. Finish the OPT-04 phase gates, post DELIVERY and stop after P41-11 for independent review. Do not start OPT-05. The separate OPT-00 manual/full-product gap remains recorded; legacy compatibility is not requested.\n\nThis turn prepares the task and handoff only. No OPT-04 source implementation, native verification, Gemini ACK or running background session is claimed."
+    },
+    {
+      "id": "CG-20261107T025822743644Z-CODEX-bb7b64",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T024117052065Z-CODEX-fb0b62",
+      "base_commit": "cf168d2895d3bbf1080b57b73e183a32ecfc8c30",
+      "timestamp_utc": "2026-11-07T02:58:22.743644+00:00",
+      "body": "STATUS / REASSIGNMENT: The user approved Codex as primary implementer of OPT-04, with a separate-context Codex reviewer after P41-03, P41-06 and P41-11, and supplementary Gemini review. This supersedes the previous Gemini implementation handoff linked here.\n\nCurrent scoped handoff: docs/agents/handoffs/OPT_04_CODEX.md. The previous OPT_04_GEMINI.md is now a superseded pointer. P41-01..P41-11 and all production/native gates remain required; no OPT-05 release. Repo was clean at cf168d2, with no Gemini ACK/source changes recorded in the exchange.\n\nGemini's role is supplementary source-based review when requested. Do not begin implementation from the old handoff. Preserve any actual in-progress work and report its state; no Gemini response is invented here.\n\nAt each required review checkpoint, a Codex reviewer with a separate context inspects contracts/source/diff and verifies failure, lifetime, rollback and teardown paths. Tracked source writing pauses during review. Implementer fixes findings; significant fixes are rechecked. Separate context is not proof against shared model blind spots, so actual regression/native gates remain required.\n\nThe user also asks which model to choose. Current official OpenAI guidance supports recommending GPT-6 Astra for this quality-first demanding task, with Max reasoning for the hardest tasks if available. GPT-6.1 Sol is the balanced cost/quality alternative. This is a recommendation; the session model and global settings were not changed or verified.\n\nThis turn changes coordination/handoff documentation only. No OPT-04 source implementation or completed review is claimed. The selected-model implementation session should start P41-01 from the updated task card."
     }
   ],
   "deferred_tasks": [
@@ -2043,6 +2088,92 @@
         "manual_interactive_UI_audit": "NOT RUN; native product probes are automated real application checks"
       },
       "historical_handoff": "docs/agents/handoffs/OPT_02_EJ01_GEMINI.md"
+    },
+    {
+      "id": "OPT-04-GEMINI-IMPLEMENTATION",
+      "title": "Implement OPT-04 NRI device and GPU lifetime foundation",
+      "state": "ready_for_Gemini",
+      "coordinator": "Codex",
+      "implementer": "Gemini",
+      "reviewer": "Codex",
+      "scope_updated_on": "2026-11-07",
+      "user_scope": "User will ask Gemini to begin OPT-04 after accepted OPT-02/03. Prepare and record the bounded OPT-04 handoff; Gemini implements P41-01..P41-11 in order, self-reviews, fixes, verifies and commits locally, then stops for independent review.",
+      "user_instruction": "v?y t?i b?t ??u nh? Gemini l?m OPT 04 nh?",
+      "code_baseline": "3853203c038733dcfa287ced9a213df5564448aa",
+      "execution_range": "OPT-04 / P41-01..P41-11 only",
+      "released_packages": [
+        "P41-01",
+        "P41-02",
+        "P41-03",
+        "P41-04",
+        "P41-05",
+        "P41-06",
+        "P41-07",
+        "P41-08",
+        "P41-09",
+        "P41-10",
+        "P41-11"
+      ],
+      "current_phase": "OPT-04",
+      "current_package": "P41-01",
+      "completed_packages": [],
+      "implementation_status": "not_started",
+      "independent_review_status": "pending_Gemini_delivery",
+      "handoff": "docs/agents/handoffs/OPT_04_GEMINI.md",
+      "phase_report": "docs/reviews/OPT_04_GEMINI_EXECUTION.md",
+      "prerequisite_evidence": {
+        "OPT-01": "Accepted baseline; docs/reviews/OPT_01_AF01_P41_PLG_REVIEW.md",
+        "OPT-02/03": "Accepted after verified Codex corrections; docs/reviews/OPT_02_03_CODEX_REVIEW.md",
+        "correction_commits": [
+          "e351399ba08874019a6421fb877113c878423f96",
+          "3a671163abc6cbbfc0ed02630dc20578f6cdc80b"
+        ],
+        "acceptance_commit": "3853203c038733dcfa287ced9a213df5564448aa",
+        "review_message": "CG-20261107T023712554841Z-CODEX-f72792",
+        "provenance": "Predecessor results only; not evidence of OPT-04 implementation or verification."
+      },
+      "expected_files": [
+        "Engine/RHI device, resources, state, frames and swapchain",
+        "Platform/Application and UI presentation callers",
+        "Renderer resource ownership and Asset CPU decode/upload callers",
+        "Editor and Runtime callers explicitly required by P41-01..11",
+        "Focused native/CPU regressions and test wiring",
+        "OPT-04 phase report, roadmap and Gemini exchange updates"
+      ],
+      "excluded": [
+        "OPT-05+ / P41-12+ implementation except required current-package caller adaptations",
+        "Vendor fetches/upgrades",
+        "Retired Vehicle, old-format support or migration",
+        "Identity sidecars or authored central identity registry",
+        "Push, publish or deployment"
+      ],
+      "storage_policy": {
+        "raw_files": "canonical root-relative paths, no persistent UUID",
+        "native_assets": "UUID stored inside each Engine-owned asset document",
+        "per_asset_sidecars": false,
+        "central_authored_registry": false,
+        "discovery_index": "in-memory or ignored rebuildable cache only, derived from embedded native IDs",
+        "generated_caches": "ignored",
+        "legacy_meta_support": false
+      },
+      "prior_checkpoint": {
+        "id": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
+        "accepted": false,
+        "state": "full_product_verification_pending",
+        "note": "User-directed progression retains this gap; legacy preservation requirements are superseded. No old-format support required."
+      },
+      "required_gates": [
+        "Each package: production-API positive/negative and lifetime checks, active in Debug and Release",
+        "Phase checkpoint: Debug/Release AxleAllTests, AxleEditor and AxleRuntime builds; full CTest and default integration",
+        "Typed jobs/ECS harness, architecture checks and baseline tool regressions",
+        "Native Editor/Runtime simulation probes preserving accepted OPT-02/03 behavior",
+        "Applicable physical D3D12/Vulkan readback, GL/fallback equivalence and real windowed startup/present/teardown checks",
+        "Missing required checks stay NOT RUN and dependent gates stay open"
+      ],
+      "stop_boundary": "After P41-11 and OPT-04 delivery; independent acceptance remains pending. Do not start OPT-05.",
+      "next_action": "Gemini session reads GEMINI.md, scoped handoff and inbox, posts its own ACK/STATUS, inspects actual HEAD/status/vendor declarations, then starts P41-01.",
+      "transport_note": "Repository handoff only. No Gemini response, running session or automatic background agent is claimed.",
+      "archived_status": "Superseded before implementation by latest user reassignment to Codex"
     }
   ]
 }

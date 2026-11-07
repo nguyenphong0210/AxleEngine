@@ -14,8 +14,8 @@ cbuffer Canvas2DConstants : register(b0, space0) {
 // -----------------------------------------------------------------------------
 // Texture Array (Space 1) & Sampler
 // -----------------------------------------------------------------------------
-Texture2D    u_Textures[32] : register(t0, space1);
-SamplerState u_Sampler      : register(s0, space1);
+Texture2D    u_Texture : register(t0, space1);
+SamplerState u_Sampler      : register(s0, space0);
 
 // -----------------------------------------------------------------------------
 // Vertex & Pixel Shader I/O
@@ -99,14 +99,18 @@ float4 PSMain(PSInput input) : SV_Target {
     // 1: Sprite (Bindless Texture Blit)
     if (input.PrimitiveType == 1) {
         uint texIdx = min(input.TextureIndex, 31u);
-        float4 texColor = u_Textures[NonUniformResourceIndex(texIdx)].Sample(u_Sampler, input.UV);
+        float4 texColor = u_Texture.Sample(u_Sampler, input.UV);
         return texColor * input.Color;
+    }
+
+    if (input.PrimitiveType == 4) {
+        return input.Color * float4(1,1,1,u_Texture.Sample(u_Sampler,input.UV).a);
     }
 
     // 2: MSDF_Text (Multi-Channel Signed Distance Field Text)
     if (input.PrimitiveType == 2) {
         uint texIdx = min(input.TextureIndex, 31u);
-        float3 msd = u_Textures[NonUniformResourceIndex(texIdx)].Sample(u_Sampler, input.UV).rgb;
+        float3 msd = u_Texture.Sample(u_Sampler, input.UV).rgb;
         float sd = max(min(msd.r, msd.g), min(max(msd.r, msd.g), msd.b)) - 0.5;
         float2 unitRange = float2(4.0, 4.0) / max(input.QuadSize, float2(1.0, 1.0));
         float2 screenTexSize = float2(1.0, 1.0) / max(fwidth(input.UV), float2(1e-4, 1e-4));

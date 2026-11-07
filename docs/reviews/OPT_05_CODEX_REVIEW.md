@@ -85,3 +85,22 @@ allocator; SceneRenderer initializes PhysicsEngine before constructing that brid
 Debug consumer3-results.json records actual D3D12/Vulkan/GL thumbnail pixels and
 invalidate-before-submit lifetime checks, all exit 0. Debug AxleEditor and focused
 target builds pass. These are intermediate checks, not phase acceptance.
+
+## Correction checkpoint 3
+
+Canvas now has a real GL and NRI adapter with valid 80-byte vertices/indices,
+owned per-quad image descriptors, clip/scissor, alpha, sprite images and a CPU
+coverage font atlas rasterized from the installed Windows monospace font. Existing
+explicit external MSDF indices keep their geometry contract. UI shaders are
+embedded from the canonical source during configure, so the player does not need
+to find source files at draw time. Canvas CPU collection reports zero draws until
+a real submission; old CPU-only fixtures now assert that honest count. Actual
+pixel regressions independently check glyph strokes, sprite color, partial clips
+and alpha on GL/D3D12/Vulkan (canvas-stride-results.json, Debug all exit 0).
+
+Presentation samples the completed image through a fullscreen pass, supporting
+RGBA/BGRA format conversion and different/odd extents instead of invalid raw
+CopyTexture. Physical D3D12/Vulkan probes present seven frames each including
+resize, with actual API validation and no ImGui. Runtime now rejects renderer
+startup/render/Canvas failure and shuts service ownership down with the layer.
+Required final-source/full-product Debug/Release gates remain pending.

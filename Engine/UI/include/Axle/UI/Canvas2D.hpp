@@ -1,5 +1,7 @@
 #pragma once
 #include <Axle/UI/UITypes.hpp>
+#include <Axle/DecodedImage.hpp>
+#include <functional>
 #include <vector>
 #include <memory>
 #include <string_view>
@@ -7,6 +9,8 @@
 namespace Axle {
 
     class UIFont;
+    class CanvasRenderer;
+    namespace RHI { class RHITexture; }
 
     struct Canvas2DStats {
         uint32_t QuadCount   = 0;
@@ -29,6 +33,11 @@ namespace Axle {
 
         void BeginCanvas(const glm::vec2& viewportSize, float dpiScale = 1.0f);
         void EndCanvas();
+        bool Submit(RHI::RHITexture* target = nullptr);
+        uint32_t RegisterImage(const ImageSourceData& image);
+        void DrawImage(const UIRect& rect, const std::string& path, const glm::vec4& tint);
+        const auto& GetImages() const { return m_Images; }
+        const auto& GetQuadClips() const { return m_QuadClips; }
 
         void DrawRect(const UIRect& rect, const UIStyle& style);
         void DrawSprite(const UIRect& rect, uint32_t bindlessTexIndex, const glm::vec4& tint = glm::vec4(1.0f),
@@ -47,6 +56,7 @@ namespace Axle {
         const Canvas2DStats& GetStats() const { return m_Stats; }
         glm::vec2 GetViewportSize() const { return m_ViewportSize; }
         float GetDPIScale() const { return m_DPIScale; }
+        void SetDPIScale(float scale) { if (scale > 0) m_DPIScale = scale; }
 
     private:
         void EmitQuad(const UIRect& unscaledRect, const glm::vec4& uvBounds,
@@ -63,6 +73,9 @@ namespace Axle {
         std::vector<uint32_t> m_Indices;
         std::vector<UIRect>   m_ClipStack;
         Canvas2DStats         m_Stats{};
+        std::vector<ImageSourceData> m_Images;
+        std::vector<UIRect> m_QuadClips;
+        std::unique_ptr<CanvasRenderer> m_Renderer;
     };
 
 } // namespace Axle

@@ -347,7 +347,8 @@ namespace Axle {
     void UIImageNode::OnDraw(Canvas2D& canvas, const std::shared_ptr<UIFont>& defaultFont) {
         (void)defaultFont;
         if (!Visible) return;
-        canvas.DrawSprite(ComputedRect, BindlessTextureIndex, TintColor);
+        if (!TexturePath.empty()) canvas.DrawImage(ComputedRect, TexturePath, TintColor);
+        else canvas.DrawSprite(ComputedRect, BindlessTextureIndex, TintColor);
     }
 
     // --- UIProgressBarNode ---

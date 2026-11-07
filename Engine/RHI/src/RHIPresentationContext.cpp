@@ -1,6 +1,8 @@
 #include <Axle/RHI/RHIPresentationContext.hpp>
 #include <Axle/RHI/RHIFrameContext.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <Axle/RHI/RHIPipeline.hpp>
+#include <Axle/RHI/RHISampler.hpp>
 
 namespace Axle::RHI {
     struct RHIPresentationContext::Storage {
@@ -10,6 +12,60 @@ namespace Axle::RHI {
         std::vector<RHIFrameContext> Frames;
         std::vector<nri::Descriptor*> Views;
         std::vector<RHIResourceLease> ViewLeases;
+        RHIPipelineLayout ImageLayout;
+        RHIDescriptorPool ImagePool;
+        RHIShaderBytecode ImageVS, ImagePS;
+        nri::Pipeline* ImagePipeline = nullptr;
+        RHIResourceLease ImagePipelineOwner;
+        nri::Format ImageFormat = nri::Format::UNKNOWN;
+        bool PrepareImage(nri::Texture* source, nri::Format format, RHICommandBuffer& commands) {
+            auto& device = RHIDevice::Get();
+            auto owner = device.GetResources().AcquireNative(source);
+            if (!owner.IsLive()) return false;
+            if (!ImageLayout.IsValid()) {
+                nri::DescriptorRangeDesc range{}; range.descriptorNum = 1; range.descriptorType=nri::DescriptorType::TEXTURE;
+                range.shaderStages=nri::StageBits::FRAGMENT_SHADER;
+                nri::DescriptorSetDesc set{}; set.registerSpace=1; set.ranges=&range; set.rangeNum=1;
+                nri::RootSamplerDesc sampler{}; sampler.shaderStages=nri::StageBits::FRAGMENT_SHADER;
+                sampler.desc=RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge).ToNRIDesc();
+                nri::PipelineLayoutDesc desc{}; desc.descriptorSets=&set; desc.descriptorSetNum=1;
+                desc.rootSamplers=&sampler; desc.rootSamplerNum=1; desc.shaderStages=nri::StageBits::VERTEX_SHADER|nri::StageBits::FRAGMENT_SHADER;
+                if (!ImageLayout.Init(desc)) return false;
+                constexpr const char* shader=R"(
+                    Texture2D image:register(t0,space1); SamplerState linearSampler:register(s0,space0);
+                    struct Output { float4 position:SV_Position; float2 uv:TEXCOORD0; };
+                    Output VSMain(uint id:SV_VertexID){Output o; o.uv=float2((id<<1)&2,id&2);o.position=float4(o.uv*float2(2,-2)+float2(-1,1),0,1);return o;}
+                    float4 PSMain(Output i):SV_Target0{return image.Sample(linearSampler,i.uv);}
+                )";
+                RHIShaderCompileDesc compile; compile.Source=shader;
+                compile.Format=device.GetBackend()==RHIType::Vulkan?RHIShaderFormat::SPIRV:RHIShaderFormat::DXIL;
+                compile.Stage=RHIShaderStage::Vertex; compile.EntryPoint="VSMain";
+                auto vs=RHIShaderCompiler::Get().Compile(compile); if(!vs.Success)return false; ImageVS=std::move(vs.Bytecode);
+                compile.Stage=RHIShaderStage::Fragment; compile.EntryPoint="PSMain";
+                auto ps=RHIShaderCompiler::Get().Compile(compile); if(!ps.Success)return false; ImagePS=std::move(ps.Bytecode);
+            }
+            if (!ImagePipeline || ImageFormat!=format) {
+                RHIGraphicsPipelineDesc desc; desc.Layout=&ImageLayout;desc.Shaders={ImageVS,ImagePS};
+                desc.Rasterizer.CullMode=nri::CullMode::NONE;desc.DepthStencil.DepthTestEnable=false;desc.DepthStencil.DepthWriteEnable=false;
+                desc.DepthStencil.DepthStencilFormat=nri::Format::UNKNOWN;desc.ColorAttachmentFormats={format};desc.ColorAttachments={RHIBlendAttachmentDesc::Opaque()};
+                ImagePipeline=RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(desc);ImageFormat=format;
+                if(!ImagePipeline)return false;
+                ImagePipelineOwner=device.GetResources().AcquireNative(ImagePipeline);
+            }
+            // New descriptors retain both source and native view through submission.
+            if(!ImagePool.Init())return false;
+            nri::TextureViewDesc view{};view.texture=source;view.type=nri::TextureView::TEXTURE;
+            view.format=device.GetNRICore().GetTextureDesc(*source).format;view.mipNum=view.layerNum=1;
+            nri::Descriptor* descriptor=nullptr;auto core=device.GetNRICore();
+            if(core.CreateTextureView(view,descriptor)!=nri::Result::SUCCESS)return false;
+            auto lease=device.GetResources().Publish(RHIResourceKind::DescriptorSet,"Present source view",{descriptor},
+                [core,descriptor]{core.DestroyDescriptor(descriptor);},{owner});
+            auto* set=ImagePool.AllocateDescriptorSet(ImageLayout,0);
+            if(!lease || !set || !ImagePool.UpdateTextureRange(set,0,0,{descriptor}) || !commands.KeepAlive(lease))return false;
+            ImageSet=set; commands.TransitionTexture(source,RHIResourceLayout::Undefined,RHIResourceLayout::ShaderResource);
+            return true;
+        }
+        nri::DescriptorSet* ImageSet=nullptr;
         uint64_t Epoch = 0, Presented = 0;
         uint32_t Slot = 0;
         bool BuildFrameStorage() {
@@ -80,37 +136,23 @@ namespace Axle::RHI {
         auto& commands = *frame.GetCommands();
         if (prepare && !prepare(commands, format)) return abandon();
 
-        if (blitSource) {
-            commands.TransitionTexture(blitSource, RHIResourceLayout::Undefined, RHIResourceLayout::CopySource);
-            commands.TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::CopyDest);
-            commands.CopyTexture(*texture, nullptr, *blitSource, nullptr);
-            commands.TransitionTexture(blitSource, RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
-        }
-
+        if (blitSource && !state.PrepareImage(blitSource,format,commands)) return abandon();
         const auto index = state.SwapChain.GetCurrentTextureIndex();
         if (index >= state.Views.size() || !commands.KeepAlive(state.ViewLeases[index])) return abandon();
-
-        if (draw) {
-            commands.TransitionTexture(texture, blitSource ? RHIResourceLayout::CopyDest : RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
-            nri::AttachmentDesc color{}; color.descriptor = state.Views[index];
-            color.loadOp = blitSource ? nri::LoadOp::LOAD : nri::LoadOp::CLEAR;
-            color.storeOp = nri::StoreOp::STORE; color.clearValue.color.f = {0.04f, 0.05f, 0.07f, 1.0f};
-            nri::RenderingDesc rendering{}; rendering.colors = &color; rendering.colorNum = 1;
-            commands.BeginRendering(rendering);
-            if (!draw(commands, format)) return abandon();
-            commands.EndRendering();
-            commands.TransitionTexture(texture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::Present);
-        } else if (blitSource) {
-            commands.TransitionTexture(texture, RHIResourceLayout::CopyDest, RHIResourceLayout::Present);
-        } else {
-            commands.TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
-            nri::AttachmentDesc color{}; color.descriptor = state.Views[index]; color.loadOp = nri::LoadOp::CLEAR;
-            color.storeOp = nri::StoreOp::STORE; color.clearValue.color.f = {0.04f, 0.05f, 0.07f, 1.0f};
-            nri::RenderingDesc rendering{}; rendering.colors = &color; rendering.colorNum = 1;
-            commands.BeginRendering(rendering);
-            commands.EndRendering();
-            commands.TransitionTexture(texture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::Present);
+        commands.TransitionTexture(texture,RHIResourceLayout::Undefined,RHIResourceLayout::ColorAttachment);
+        nri::AttachmentDesc color{};color.descriptor=state.Views[index];color.loadOp=nri::LoadOp::CLEAR;color.storeOp=nri::StoreOp::STORE;
+        color.clearValue.color.f={0.04f,0.05f,0.07f,1};
+        nri::RenderingDesc rendering{};rendering.colors=&color;rendering.colorNum=1;
+        commands.BeginRendering(rendering);
+        if (blitSource) {
+            commands.SetPipelineLayout(nri::BindPoint::GRAPHICS,state.ImageLayout);commands.SetPipeline(state.ImagePipeline);
+            state.ImagePool.Bind(commands.GetNative());RHIDescriptorPool::BindDescriptorSet(commands.GetNative(),0,state.ImageSet);
+            commands.SetViewport({0,0,float(state.SwapChain.GetWidth()),float(state.SwapChain.GetHeight()),0,1});
+            commands.SetScissor({0,0,static_cast<uint16_t>(state.SwapChain.GetWidth()),static_cast<uint16_t>(state.SwapChain.GetHeight())});
+            commands.Draw(3);
         }
+        if (draw && !draw(commands,format)) return abandon();
+        commands.EndRendering();commands.TransitionTexture(texture,RHIResourceLayout::ColorAttachment,RHIResourceLayout::Present);
 
         if (!frame.End()) return abandon();
         const nri::CommandBuffer* native = commands.GetNative();

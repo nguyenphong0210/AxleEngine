@@ -1,5 +1,7 @@
 #include <Axle/UI/Canvas2D.hpp>
 #include <Axle/UI/UIFont.hpp>
+#include <Axle/UI/CanvasRenderer.hpp>
+#include <Axle/ImageTextureCache.hpp>
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
@@ -23,7 +25,9 @@ namespace Axle {
         m_Vertices.clear();
         m_Indices.clear();
         m_ClipStack.clear();
+        m_Images.clear(); m_QuadClips.clear();
         m_Stats = Canvas2DStats{};
+        m_Renderer.reset();
         m_Initialized = false;
     }
 
@@ -33,6 +37,7 @@ namespace Axle {
         m_Vertices.clear();
         m_Indices.clear();
         m_ClipStack.clear();
+        m_Images.clear(); m_QuadClips.clear();
         m_Stats = Canvas2DStats{};
     }
 
@@ -42,8 +47,25 @@ namespace Axle {
             return;
         }
 
-        // 1 unified batch draw call for the entire canvas
-        m_Stats.DrawCalls = 1;
+        m_Stats.DrawCalls = 0; // Only a successful GPU submission publishes draw counts.
+    }
+    bool Canvas2D::Submit(RHI::RHITexture* target) {
+        m_Stats.DrawCalls = 0;
+        if (!m_Initialized) return false;
+        if (m_Vertices.empty()) return true;
+        if (!m_Renderer) m_Renderer = std::make_unique<CanvasRenderer>();
+        const auto draws = m_Renderer->Submit(*this,target);
+        if (!draws) return false;
+        m_Stats.DrawCalls = draws; return true;
+    }
+    uint32_t Canvas2D::RegisterImage(const ImageSourceData& image) {
+        if (!image.Image) return 0;
+        for (size_t i=0;i<m_Images.size();++i)
+            if (m_Images[i].SourceKey==image.SourceKey && m_Images[i].Revision==image.Revision) return static_cast<uint32_t>(i+1);
+        m_Images.push_back(image); return static_cast<uint32_t>(m_Images.size());
+    }
+    void Canvas2D::DrawImage(const UIRect& rect, const std::string& path, const glm::vec4& tint) {
+        DrawSprite(rect,RegisterImage(ImageTextureCache::Resolve(path,{})),tint);
     }
 
     void Canvas2D::PushClipRect(const UIRect& clipRect) {
@@ -143,7 +165,8 @@ namespace Axle {
                     EmitQuad(UIRect{ gx, gy, gw, gh }, glyph->AtlasBounds,
                              color, glm::vec4(0.0f),
                              0.0f, 0.0f, glm::vec2(0.0f),
-                             font->GetBindlessTextureIndex(), UIPrimitiveType::MSDF_Text);
+                             font->GetAtlas().Image ? RegisterImage(font->GetAtlas()) : font->GetBindlessTextureIndex(),
+                             font->GetAtlas().Image ? static_cast<UIPrimitiveType>(4) : UIPrimitiveType::MSDF_Text);
                 }
             }
 
@@ -243,6 +266,7 @@ namespace Axle {
         m_Indices.push_back(baseIdx + 3);
         m_Indices.push_back(baseIdx + 0);
 
+        m_QuadClips.push_back(GetCurrentClipRect());
         m_Stats.QuadCount++;
         m_Stats.VertexCount += 4;
         m_Stats.IndexCount += 6;

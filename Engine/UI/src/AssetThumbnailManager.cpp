@@ -212,7 +212,7 @@ namespace Axle {
         }
 
         // Check if path is supported 3D format
-        bool isSupported = ((ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material) || ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" || 
+        bool isSupported = ((ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material) || ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" ||
                             ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
         if (!isSupported) {
             return 0;

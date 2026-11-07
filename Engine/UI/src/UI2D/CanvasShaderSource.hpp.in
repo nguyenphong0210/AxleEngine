@@ -1,0 +1,6 @@
+#pragma once
+namespace Axle::CanvasShaders {
+inline constexpr const char* HLSL = R"AXLE(@AXLE_CANVAS_HLSL@)AXLE";
+inline constexpr const char* Vertex = R"AXLE(@AXLE_CANVAS_VERTEX@)AXLE";
+inline constexpr const char* Fragment = R"AXLE(@AXLE_CANVAS_FRAGMENT@)AXLE";
+}

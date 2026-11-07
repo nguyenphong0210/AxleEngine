@@ -48,9 +48,7 @@ namespace Axle {
         m_PhysicsScene = std::make_unique<PhysicsScene>();
 
         // 4. Initialize unified RenderService
-        if (!RenderService::Get().Init()) {
-            AXLE_WARN("Runtime: RenderService initialized with fallback/partial backend");
-        }
+        if (!RenderService::Get().Init()) throw std::runtime_error("Runtime render service initialization failed");
 
         // 4. Initial Perspective Camera
         const float aspect = (m_WindowHeight > 0) ? (static_cast<float>(m_WindowWidth) / static_cast<float>(m_WindowHeight)) : (16.0f / 9.0f);
@@ -261,7 +259,8 @@ namespace Axle {
             request.GLTargetFBO = nullptr;
             request.Name = "RuntimeGameView";
 
-            RenderService::Get().RenderView(*m_Scene, request);
+            const auto result = RenderService::Get().RenderView(*m_Scene, request);
+            if (!result.Success) throw std::runtime_error("Runtime view failed: " + result.ErrorMessage);
         }
 
         // 5. Render In-Game UI & HUD via Hardware Canvas2D (Zero-ImGui Shipping Runtime)
@@ -325,7 +324,7 @@ namespace Axle {
             for (auto it = sortedCanvases.rbegin(); it != sortedCanvases.rend(); ++it) {
                 auto* comp = it->Comp;
                 if (comp->Document) {
-                    if (comp->Document->ProcessInput(glm::vec2(mx, my), isDown, isClicked, uiCtx)) {
+                    if (comp->Document->ProcessInput(glm::vec2(mx, my) / comp->Document->GetComputedDPIScale(), isDown, isClicked, uiCtx)) {
                         break;
                     }
                 }
@@ -363,10 +362,13 @@ namespace Axle {
 
             comp->Document->EvaluateBindings(scopedCtx);
             comp->Document->UpdateLayout(viewportSize);
+            m_Canvas.SetDPIScale(comp->Document->GetComputedDPIScale());
             comp->Document->Render(m_Canvas);
         }
 
         m_Canvas.EndCanvas();
+        auto* target = RHI::RHIDevice::Get().IsNativeReady() ? RenderService::Get().GetDefaultMainColorTarget() : nullptr;
+        if (!m_Canvas.Submit(target)) throw std::runtime_error("Runtime Canvas submission failed");
     }
 
     void RuntimeLayer::OnWindowResize(u32 width, u32 height) {
@@ -384,6 +386,7 @@ namespace Axle {
         Input::SetCursorMode(CursorMode::Normal);
         m_SimulationDriver.Reset();
         m_Canvas.Shutdown();
+        RenderService::Get().Shutdown();
         if (m_Scene) {
             m_Scene->OnRuntimeStop(m_PhysicsScene.get());
         }

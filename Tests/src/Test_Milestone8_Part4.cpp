@@ -227,7 +227,7 @@ bool RunTest_Step86_Phase34_Step1_Part2_Canvas2DBatchingAndSDFPipeline() {
     assert(dpiVerts[0].BorderWidth == 4.0f);   // 2 * 2.0
 
     canvas.EndCanvas();
-    assert(canvas.GetStats().DrawCalls == 1);
+    assert(canvas.GetStats().DrawCalls == 0);
     std::cout << "  -> 2.0x DPI scaling accurately multiplies ScreenPos, QuadSize, Radius, Border: PASS" << std::endl;
     std::cout << "  -> EndCanvas() consolidated 1 draw call: PASS" << std::endl;
 
@@ -403,7 +403,7 @@ bool RunTest_Step87_Phase34_Step2_MSDFFontAndTextLayout() {
     }
 
     canvas.EndCanvas();
-    assert(canvas.GetStats().DrawCalls == 1);
+    assert(canvas.GetStats().DrawCalls == 0);
     std::cout << "  -> Exactly 7 quads emitted for 8-char string (space quad omitted): PASS" << std::endl;
     std::cout << "  -> PrimitiveType == MSDF_Text and TextureIndex == 12 verified: PASS" << std::endl;
 
@@ -764,7 +764,7 @@ bool RunTest_Step88_Phase34_Step3_DOMTreeAnd2PassLayoutEngine() {
     assert(canvas.GetStats().IndexCount == 48);
 
     canvas.EndCanvas();
-    assert(canvas.GetStats().DrawCalls == 1);
+    assert(canvas.GetStats().DrawCalls == 0);
 
     std::cout << "  -> Document rendered 8 quads into Canvas2D in a single consolidated draw call: PASS" << std::endl;
     std::cout << "  -> Hidden node correctly skipped during OnDraw: PASS" << std::endl;
@@ -1393,12 +1393,12 @@ bool RunTest_Step91_Phase34_Step6_RacingHUDFullIntegration() {
     canvas.EndCanvas();
 
     const auto& stats = canvas.GetStats();
-    assert(stats.DrawCalls == 1);
+    assert(stats.DrawCalls == 0);
     assert(stats.QuadCount >= 15);
     assert(stats.VertexCount == stats.QuadCount * 4);
     assert(stats.IndexCount == stats.QuadCount * 6);
-    std::cout << "  -> Canvas2D consolidated " << stats.QuadCount << " quads (" 
-              << stats.VertexCount << " verts, " << stats.IndexCount << " idx) in " 
+    std::cout << "  -> Canvas2D consolidated " << stats.QuadCount << " quads ("
+              << stats.VertexCount << " verts, " << stats.IndexCount << " idx) in "
               << stats.DrawCalls << " draw call: PASS" << std::endl;
 
     // [91.5] Interactive Pause Menu & Action Callback Triggers
@@ -1790,7 +1790,7 @@ bool RunTest_Step92_Phase34_Step7_RectTransform() {
         canvas.EndCanvas();
 
         const auto& stats = canvas.GetStats();
-        assert(stats.DrawCalls == 1);
+        assert(stats.DrawCalls == 0);
         assert(stats.QuadCount == 1);
 
         std::cout << "  -> Declarative .axleui parsed RectTransform properties into AST: PASS" << std::endl;

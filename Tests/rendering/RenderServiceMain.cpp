@@ -4,6 +4,9 @@
 #include <Axle/JobSystem.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
+#include <Axle/UI/Canvas2D.hpp>
+#include <Axle/UI/UIFont.hpp>
+#include <Axle/RHI/RHIPresentationContext.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/Window.hpp>
@@ -162,11 +165,71 @@ static bool GLService() {
     }
     return glGetError() == GL_NO_ERROR;
 }
+static void EmitCanvas(Canvas2D& canvas) {
+    canvas.Init(); canvas.BeginCanvas({128,128});
+    UIStyle red; red.BackgroundColor={1,0,0,0.5f}; red.BorderWidth=0;
+    canvas.PushClipRect({16,16,16,16}); canvas.DrawRect({8,8,40,40},red); canvas.PopClipRect();
+    auto image=std::make_shared<DecodedImage>(); image->Mips.push_back({1,1,{0,0,255,255}});
+    ImageSourceData source; source.SourceKey=source.RequestKey="canvas-blue";source.Revision=1;source.Image=image;
+    canvas.DrawSprite({64,8,24,24},canvas.RegisterImage(source));
+    canvas.DrawTextString("AX",std::make_shared<UIFont>(),{8,60,100,32},32,{1,1,1,1});
+    canvas.EndCanvas();
+}
+static bool CheckCanvas(const std::vector<uint8_t>& pixels, bool flip) {
+    RENDER_CHECK(pixels.size()==128*128*4,"Canvas readback extent");
+    auto at=[&](unsigned x,unsigned y){return ((flip?127-y:y)*128+x)*4;};
+    const auto inside=at(24,24),outside=at(12,12),sprite=at(72,16);
+    std::cout << "Canvas pixels inside=" << unsigned(pixels[inside]) << "," << unsigned(pixels[inside+1]) << "," << unsigned(pixels[inside+2]) << " outside=" << unsigned(pixels[outside]) << " sprite=" << unsigned(pixels[sprite+2]) << "\n";
+    RENDER_CHECK(pixels[inside]>110 && pixels[inside]<150 && pixels[inside+1]<8,"alpha-blended red rectangle pixels");
+    RENDER_CHECK(pixels[outside]<8 && pixels[outside+1]<8,"partial clip removes pixels outside scissor");
+    RENDER_CHECK(pixels[sprite+2]>245 && pixels[sprite]<8,"authored sprite texture sampled by GPU");
+    size_t white=0;for(unsigned y=60;y<110;++y)for(unsigned x=8;x<70;++x){auto p=at(x,y);if(pixels[p]>150&&pixels[p+1]>150&&pixels[p+2]>150)++white;}
+    RENDER_CHECK(white>30 && white<900,"font atlas produces glyph strokes and transparent background, not solid quads");
+    return true;
+}
+static bool NativeCanvas(RHIType backend) {
+    auto& device=RHIDevice::Get();RHIDeviceDesc desc;desc.PreferredBackend=backend;desc.AllowFallback=false;
+    desc.EnableValidation=desc.EnableNRIValidation=true;
+    RENDER_CHECK(device.Init(desc)&&device.GetBackend()==backend&&!device.IsSoftwareAdapter(),"physical Canvas fixture");
+    {
+        WindowProps props;props.Title="OPT05 Runtime image presentation";props.Width=160;props.Height=128;props.Maximized=false;
+        props.GraphicsBackend=backend==RHIType::Vulkan?GraphicsAPI::Vulkan:GraphicsAPI::Direct3D12;
+        Window window(props);
+        RHITexture target; RENDER_CHECK(target.Init(RHITextureDesc::RenderTarget2D(128,128)),"Canvas target");
+        RHICommandBuffer clear;RENDER_CHECK(clear.Init()&&clear.Begin(),"Canvas clear recording");
+        clear.TransitionTexture(target.GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::ColorAttachment);
+        nri::AttachmentDesc color{};color.descriptor=target.GetRTV();color.loadOp=nri::LoadOp::CLEAR;color.storeOp=nri::StoreOp::STORE;
+        color.clearValue.color.f={0,0,0,1};nri::RenderingDesc rendering{};rendering.colors=&color;rendering.colorNum=1;
+        clear.BeginRendering(rendering);clear.EndRendering();clear.TransitionTexture(target.GetNative(),RHIResourceLayout::ColorAttachment,RHIResourceLayout::ShaderResource);
+        RENDER_CHECK(clear.End()&&clear.Submit()&&device.WaitIdle(),"real Canvas background clear");
+        Canvas2D canvas;EmitCanvas(canvas);
+        RENDER_CHECK(canvas.GetStats().DrawCalls==0&&canvas.Submit(&target)&&canvas.GetStats().DrawCalls>=4,"only actual Canvas submission reports draws");
+        RENDER_CHECK(CheckCanvas(ReadTexture(target),false),"native Canvas text/sprite/clip/blend output");
+        RHIPresentationContext presenter;RENDER_CHECK(presenter.Init(window.GetNativeWindow()),"ImGui-free presentation owner");
+        for(unsigned i=0;i<7;++i) {
+            const auto result=presenter.RenderFrame(i<3?160:173,i<3?128:131,false,{}, {},target.GetNative());
+            RENDER_CHECK(result==RHIPresentOutcome::Presented,"sampled image presentation handles RGBA/BGRA, scaling and odd resize");
+        }
+        RENDER_CHECK(presenter.GetPresentCount()==7&&presenter.Shutdown(),"actual repeated image presentation completion");
+        canvas.Shutdown();
+    }
+    return device.Shutdown();
+}
+static bool GLCanvas() {
+    WindowProps props;props.Title="OPT05 GL Canvas";props.Width=props.Height=128;props.Maximized=false;props.GraphicsBackend=GraphicsAPI::OpenGL;
+    Window window(props);RENDER_CHECK(RenderCommand::Init(reinterpret_cast<GLProcAddressFn>(glfwGetProcAddress)),"GL Canvas context");
+    auto target=Framebuffer::Create({128,128,1,false});target->Bind();glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
+    Canvas2D canvas;EmitCanvas(canvas);RENDER_CHECK(canvas.Submit()&&canvas.GetStats().DrawCalls>=4,"GL Canvas submits actual geometry");
+    std::vector<uint8_t> pixels(128*128*4);glReadPixels(0,0,128,128,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
+    RENDER_CHECK(CheckCanvas(pixels,true),"GL Canvas glyph/sprite/clip/blend readback");canvas.Shutdown();
+    target->Unbind();target.reset();return glGetError()==GL_NO_ERROR;
+}
 int main(int argc, char** argv) {
     Axle::RenderTests::ConfigureFailureReporting(); Log::Init(); JobSystem::Init(2);
     const auto backend = argc > 1 && std::string(argv[1]) == "vulkan" ? RHIType::Vulkan : RHIType::Direct3D12;
     bool passed = false;
-    try { passed = argc > 1 && std::string(argv[1]) == "gl" ? GLService() :
+    try { passed = argc > 2 && std::string(argv[2]) == "canvas" ? (std::string(argv[1])=="gl" ? GLCanvas() : NativeCanvas(backend)) :
+        argc > 1 && std::string(argv[1]) == "gl" ? GLService() :
         argc > 2 && std::string(argv[2]) == "consumers" ? Thumbnails(backend) : Service(backend); }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; }
     RenderService::Get().Shutdown(); RHIMeshRegistry::Get().Shutdown(); RHIDevice::Get().Shutdown(); JobSystem::Shutdown();

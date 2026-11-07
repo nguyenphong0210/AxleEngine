@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/UI/UITypes.hpp>
+#include <Axle/DecodedImage.hpp>
 #include <unordered_map>
 #include <string>
 #include <string_view>
@@ -31,12 +32,14 @@ namespace Axle {
 
         glm::vec2 MeasureText(std::string_view text, float fontSize) const;
 
+        const ImageSourceData& GetAtlas() const { return m_Atlas; }
         uint32_t GetBindlessTextureIndex() const { return m_BindlessTextureIndex; }
-        void SetBindlessTextureIndex(uint32_t idx) { m_BindlessTextureIndex = idx; }
+        void SetBindlessTextureIndex(uint32_t idx) { m_BindlessTextureIndex = idx; m_Atlas = {}; }
         float GetLineHeight() const { return m_LineHeight; }
         void SetLineHeight(float lineHeight) { m_LineHeight = lineHeight; }
 
     private:
+        ImageSourceData m_Atlas;
         float m_LineHeight = 1.15f;
         uint32_t m_BindlessTextureIndex = 0;
         std::unordered_map<uint32_t, GlyphMetrics> m_Glyphs;

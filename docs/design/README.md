@@ -20,6 +20,7 @@ separate contract; it must not reintroduce retired Vehicle compatibility code.
 | OPT-06..09 | [Plugin architecture](PLUGIN_SYSTEM_ARCHITECTURE.md) | Editor DLLs, selected static Runtime and project plugins |
 | OPT-06..09 | [Plugin packages](PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | SDK, Plugins window, fresh Vehicle and export |
 | During plugin implementation | [Plugin coding reference](PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Lifecycle/build algorithms and fixtures |
+| Post-OPT-10 | [Advanced rendering roadmap](POST_OPT10_ADVANCED_RENDERING_ROADMAP.md) | Multi-threading, VRAM aliasing, materials, geometry/culling and GI |
 
 Detailed contracts can include later packages needed to describe an end-to-end
 architecture. Their presence does not advance them ahead of the OPT sequence.

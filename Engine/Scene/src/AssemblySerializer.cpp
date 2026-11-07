@@ -1267,6 +1267,37 @@ namespace Axle {
         }
 
 
+            if (node.HasMaterial) {
+                const auto& mat = node.Material;
+                out << "    MaterialComponent:\n";
+                if (mat.HasAsset()) {
+                    out << "      MaterialHandle: " << (uint64_t)mat.MaterialHandle << "\n";
+                    if (mat.MaterialAsset && !mat.MaterialAsset->GetFilePath().empty()) {
+                        out << "      AssetPath: " << mat.MaterialAsset->GetFilePath().string() << "\n";
+                    }
+                }
+                out << "      AlbedoPath: " << mat.AlbedoPath << "\n";
+                out << "      UseAlbedoMap: " << (mat.UseAlbedoMap ? "true" : "false") << "\n";
+                out << "      AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
+                out << "      NormalPath: " << mat.NormalPath << "\n";
+                out << "      UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
+                out << "      NormalStrength: " << mat.NormalStrength << "\n";
+                out << "      RoughnessPath: " << mat.RoughnessPath << "\n";
+                out << "      UseRoughnessMap: " << (mat.UseRoughnessMap ? "true" : "false") << "\n";
+                out << "      Roughness: " << mat.Roughness << "\n";
+                out << "      MetallicPath: " << mat.MetallicPath << "\n";
+                out << "      UseMetallicMap: " << (mat.UseMetallicMap ? "true" : "false") << "\n";
+                out << "      Metallic: " << mat.Metallic << "\n";
+                out << "      EmissionColor: [ " << mat.EmissionColor.r << " , " << mat.EmissionColor.g << " , " << mat.EmissionColor.b << " ]\n";
+                out << "      EmissionIntensity: " << mat.EmissionIntensity << "\n";
+                out << "      UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
+                out << "      UVOffset: [ " << mat.UVOffset.x << " , " << mat.UVOffset.y << " ]\n";
+                out << "      SurfaceType: " << SurfaceTypeToString(mat.SurfaceType) << "\n";
+                out << "      CullMode: " << CullModeToString(mat.CullMode) << "\n";
+                out << "      AlphaCutoff: " << mat.AlphaCutoff << "\n";
+                out << "      DepthWrite: " << (mat.DepthWrite ? "true" : "false") << "\n";
+            }
+
         if (node.HasSkeletalMesh) {
             std::string rigFallback, unusedController;
             if (!CaptureAnimationBinding(&node.SkeletalMesh, nullptr, rigFallback, unusedController)) { out.setstate(std::ios::failbit); return; }

@@ -9,6 +9,7 @@
 #include <Axle/ParticleRenderer.hpp>
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/RenderParticleData.hpp>
+#include <Axle/PhysicsEngine.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -42,6 +43,7 @@ namespace Axle {
 
         // Initialize internal Physics Debug Renderer fallback
         if (!m_InternalDebugRenderer && Window::HasActiveContext()) {
+            if (!PhysicsEngine::IsInitialized()) PhysicsEngine::Init();
             m_InternalDebugRenderer = std::make_unique<PhysicsDebugRenderer>();
         }
 
@@ -594,6 +596,17 @@ namespace Axle {
                     RenderCommand::DrawIndexed(meshInst.GLMesh);
                     meshInst.GLMesh->Unbind();
                 }
+                if (m_SkinningPipeline && m_SkinningPipeline->GetShadowShader()) {
+                    auto shader = m_SkinningPipeline->GetShadowShader(); shader->Bind();
+                    shader->SetMat4("u_LightSpaceMatrix", cascadeMatrices[c]);
+                    for (const auto& skin : world.Skins) {
+                        if (!skin.GLMesh || !skin.CastsShadows) continue;
+                        shader->SetMat4("u_Transform", skin.WorldTransform);
+                        if (skin.BoneMatrices.empty()) m_SkinningPipeline->UploadIdentityPalette(*shader);
+                        else m_SkinningPipeline->UploadBonePalette(*shader, skin.BoneMatrices);
+                        RenderCommand::DrawIndexed(skin.GLMesh);
+                    }
+                }
             }
             m_ShadowMap->Unbind();
             m_LightSpaceMatrix = m_ShadowMap->GetLightSpaceMatrix(0);
@@ -660,7 +673,7 @@ namespace Axle {
         m_Shader->SetFloat("u_ShadowNormalBias", sun.ShadowNormalBias); m_Shader->SetFloat("u_ShadowFilterRadius", sun.ShadowFilterRadius);
         m_Shader->SetFloat("u_Exposure", sun.Exposure); m_Shader->SetFloat("u_Gamma", sun.Gamma);
         m_Shader->SetInt("u_ToneMappingMode", sun.ToneMappingMode);
-        m_Shader->SetInt("u_UseHemisphereAmbient", world.Skybox.Enabled ? 1 : 0);
+        m_Shader->SetInt("u_UseHemisphereAmbient", world.Skybox.Enabled && world.Skybox.HemisphereAmbient ? 1 : 0);
         m_Shader->SetFloat3("u_SkyZenithColor", glm::vec3(world.Skybox.ZenithColor));
         m_Shader->SetFloat3("u_SkyHorizonColor", glm::vec3(world.Skybox.HorizonColor));
         m_Shader->SetFloat3("u_SkyGroundColor", glm::vec3(world.Skybox.GroundColor));

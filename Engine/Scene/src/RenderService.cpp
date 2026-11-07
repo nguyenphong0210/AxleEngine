@@ -2,6 +2,8 @@
 #include <Axle/Log.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/MeshResourceResolver.hpp>
+#include <Axle/ImageTextureCache.hpp>
+#include <Axle/ImageSource.hpp>
 #include <GLFW/glfw3.h>
 #include <cmath>
 
@@ -62,8 +64,30 @@ namespace Axle {
             }
         }
         if (!ResolveRenderWorldResources(prepared)) return fail(prepared.ErrorMessage);
-        if (m_GLRenderer) for (const auto& mesh : prepared.Meshes)
-            if (!mesh.MeshURI.empty() && mesh.GLMesh) m_GLMeshes[mesh.MeshURI] = mesh.GLMesh;
+        if (m_GLRenderer) for (auto& mesh : prepared.Meshes) {
+            if (!mesh.MeshURI.empty() && mesh.GLMesh) {
+                if (m_GLMeshes.size() >= 256) m_GLMeshes.clear();
+                m_GLMeshes[mesh.MeshURI] = mesh.GLMesh;
+            }
+            if (mesh.Material.MaterialAsset) {
+                auto material = std::make_shared<Material>(*mesh.Material.MaterialAsset);
+                auto load = [&](const std::string& path, bool srgb) {
+                    TextureSpecification specification; specification.sRGB = srgb; specification.FlipVertically = false;
+                    return ImageTextureCache::GetGL(LoadImageSource(path, {}), specification);
+                };
+                if (material->IsAlbedoMapEnabled() && !material->GetAlbedoMap() && !material->GetAlbedoPath().empty())
+                    material->SetAlbedoTexture(load(material->GetAlbedoPath(),true),material->GetAlbedoPath());
+                if (material->IsNormalMapEnabled() && !material->GetNormalMap() && !material->GetNormalPath().empty())
+                    material->SetNormalTexture(load(material->GetNormalPath(),false),material->GetNormalPath());
+                if (material->IsRoughnessMapEnabled() && !material->GetRoughnessMap() && !material->GetRoughnessPath().empty())
+                    material->SetRoughnessTexture(load(material->GetRoughnessPath(),false),material->GetRoughnessPath());
+                if (material->IsMetallicMapEnabled() && !material->GetMetallicMap() && !material->GetMetallicPath().empty())
+                    material->SetMetallicTexture(load(material->GetMetallicPath(),false),material->GetMetallicPath());
+                if (material->IsORMMapEnabled() && !material->GetORMMap() && !material->GetORMPath().empty())
+                    material->SetORMTexture(load(material->GetORMPath(),false),material->GetORMPath());
+                mesh.Material.MaterialAsset = std::move(material);
+            }
+        }
         if (m_RHIRenderer) {
             auto& device = RHI::RHIDevice::Get();
             if (!device.CanSubmit()) return fail("Render device cannot submit");

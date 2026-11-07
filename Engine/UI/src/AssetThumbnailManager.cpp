@@ -1,3 +1,4 @@
+#include <Axle/SceneExtraction.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/Application.hpp>
 #include <Axle/ImGuiLayer.hpp>
@@ -70,6 +71,10 @@ namespace Axle {
             loaded.push_back(std::move(it->second));
             m_LoadedTextures.erase(it);
         }
+        if (auto it = m_GLThumbnails.find(key); it != m_GLThumbnails.end()) {
+            auto retired = std::move(it->second); m_GLThumbnails.erase(it);
+            if (m_DeferredRelease) m_DeferredRelease([retired] {});
+        }
         m_ThumbnailDimensions.erase(key);
         m_MetaCache.erase(key);
         m_AssetRevisions.erase(key);
@@ -106,6 +111,8 @@ namespace Axle {
     }
 
     void AssetThumbnailManager::Clear() {
+        auto framebuffers = std::move(m_GLThumbnails); m_GLThumbnails.clear();
+        if (m_DeferredRelease && !framebuffers.empty()) m_DeferredRelease([framebuffers = std::move(framebuffers)] {});
         m_GuiThumbnails.clear();
         std::vector<uint64_t> handles;
         std::vector<std::shared_ptr<RHI::RHITexture>> textures;
@@ -143,9 +150,7 @@ namespace Axle {
     }
 
     uint64_t AssetThumbnailManager::GetOrCreateThumbnail(const std::filesystem::path& path) {
-        if (!m_ImGuiLayer) {
-            SetImGuiLayer(dynamic_cast<ImGuiLayer*>(Application::Get().GetUIContext()));
-        }
+
 
         std::string key = path.lexically_normal().string();
         auto ext = path.extension().string();
@@ -187,37 +192,19 @@ namespace Axle {
             const auto id = texture->GetRendererID(); m_ThumbnailDimensions[key] = {texture->GetWidth(), texture->GetHeight()};
             m_LoadedTextures[key] = std::move(texture); m_ThumbnailCache[key] = id; return id;
         }
-        if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end()) return it->second;
-
-        // 2. Material Assets (.axleasset): High-Fidelity 3D PBR Sphere Thumbnail (Unreal Engine Parity)
-        // Renders an offscreen Cook-Torrance PBR material sphere with 2x2 MSAA supersampling and studio lighting
-        bool isMaterial = (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material);
-        if (isMaterial) {
-            std::vector<uint8_t> pixels;
-            uint32_t width = 0, height = 0;
-            if (RenderMaterialThumbnail(path, pixels, width, height) && !pixels.empty()) {
-                m_ThumbnailDimensions[key] = glm::vec2((float)width, (float)height);
-
-                auto image = std::make_shared<DecodedImage>();
-                image->Mips.push_back({width, height, std::move(pixels)});
-                ImageSourceData source; source.SourceKey = "generated-material:" + std::to_string(FileSystem::GetSourceGeneration()) + ":" + path.lexically_normal().generic_string();
-                source.RequestKey = source.SourceKey; source.Revision = ImageContentRevision(image->Mips.front().Pixels); source.Image = image;
-                if (RHI::RHIDevice::Get().IsNativeReady()) {
-                    auto texture = ImageTextureCache::GetNative(source);
-                    auto token = texture && m_TextureRegistrar ? m_TextureRegistrar(*texture) : GuiTextureLease{};
-                    if (token.IsValid()) {
-                        const auto id = token.GetID(); m_GuiThumbnails[key] = std::move(token);
-                        m_RHIThumbnails[key] = std::move(texture); m_ThumbnailCache[key] = id; return id;
-                    }
-                } else {
-                    TextureSpecification spec; spec.GenerateMipmaps = false; spec.WrapS = spec.WrapT = TextureWrap::ClampToEdge;
-                    auto texture = ImageTextureCache::GetGL(source, spec);
-                    if (texture) { const auto id = texture->GetRendererID(); m_LoadedTextures[key] = std::move(texture); m_ThumbnailCache[key] = id; return id; }
-                }
-            }
-            m_ThumbnailCache[key] = 0;
-            return 0;
+        std::error_code error;
+        const auto revision = std::filesystem::last_write_time(path, error);
+        if (!error) {
+            auto found = m_AssetRevisions.find(key);
+            if (found != m_AssetRevisions.end() && found->second != revision) InvalidateThumbnail(path);
+            m_AssetRevisions[key] = revision;
         }
+        if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end()) {
+            if (auto lease = m_GuiThumbnails.find(key); lease != m_GuiThumbnails.end()) return lease->second.GetID();
+            return it->second;
+        }
+        while (m_ThumbnailCache.size() >= MaxCacheEntries) InvalidateThumbnail(m_ThumbnailCache.begin()->first);
+
 
         // 3. 3D Meshes & Assemblies
         if (!RHI::RHIDevice::Get().IsNativeReady() && !Window::HasActiveContext()) {
@@ -225,25 +212,14 @@ namespace Axle {
         }
 
         // Check if path is supported 3D format
-        bool isSupported = (ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" || 
+        bool isSupported = ((ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material) || ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" || 
                             ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
         if (!isSupported) {
             return 0;
         }
 
-        // Render synchronously if pending queue is empty or small
-        if (m_PendingQueue.size() < 3) {
-            uint64_t handle = 0;
-            AssetCachedMeta meta;
-            if (RenderThumbnail(path, handle, meta)) {
-                m_ThumbnailCache[key] = handle;
-                m_MetaCache[key] = meta;
-                return handle;
-            }
-        }
-
         // Queue for background frame slicing
-        if (std::find(m_PendingQueue.begin(), m_PendingQueue.end(), path) == m_PendingQueue.end()) {
+        if (m_PendingQueue.size() < MaxCacheEntries && std::find(m_PendingQueue.begin(), m_PendingQueue.end(), path) == m_PendingQueue.end()) {
             m_PendingQueue.push_back(path);
         }
 
@@ -277,418 +253,102 @@ namespace Axle {
 
     bool AssetThumbnailManager::RenderThumbnail(const std::filesystem::path& path, uint64_t& outTexHandle, AssetCachedMeta& outMeta) {
         if (!std::filesystem::exists(path)) return false;
-        if (!RHI::RHIDevice::Get().IsNativeReady() && !Window::HasActiveContext()) return false;
-
-        auto ext = path.extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-
-        AxleLoadedPackage pkg;
-
-        // Case A: Material Asset (.axleasset) -> render on preview sphere
-        if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Material) {
-            MaterialComponent mat;
-            if (!SceneHierarchyPanel::LoadMaterialAsset(path, mat)) {
-                return false;
-            }
-            if (!m_PreviewSphereMesh) {
-                m_PreviewSphereMesh = PrimitiveMesh::CreateSphere(48, 64);
-            }
-            pkg.Name = path.stem().string();
-            pkg.BoundingSize = glm::vec3(1.0f);
-            pkg.HalfExtent = glm::vec3(0.5f);
-            pkg.IsPackage = false;
-            pkg.Success = true;
-
-            AxlePackagePart spherePart;
-            spherePart.Name = "MaterialSphere";
-            spherePart.RelativePath = path.filename().string();
-            spherePart.LoadedMesh.Success = true;
-            spherePart.LoadedMesh.SourceData.Name = pkg.Name;
-            spherePart.LoadedMesh.SourceData.ColorPrimary = mat.AlbedoColor;
-            spherePart.LoadedMesh.SourceData.ColorSecondary = mat.AlbedoColor * 0.85f;
-            spherePart.LoadedMesh.SourceData.PatternMode = 2; // Spherical PBR lighting pattern
-            spherePart.LoadedMesh.SourceData.TileScale = 1.0f;
-            spherePart.LoadedMesh.SourceData.Vertices = { glm::vec3(-0.5f), glm::vec3(0.5f) };
-            spherePart.LoadedMesh.SourceData.Indices = { 0, 1, 0 };
-            pkg.Parts.push_back(spherePart);
-        }
-        // Case B: Assembly Prefab (.axle) -> aggregate parts
-        else if (ext == ".axle") {
-            auto asmData = AssemblySerializer::LoadAssemblyData(path);
-            if (!asmData.IsValid) return false;
-
-            std::function<void(const AssemblyNode&, const glm::mat4&)> collectParts = 
-                [&](const AssemblyNode& node, const glm::mat4& parentMat) {
-                glm::mat4 currentMat = parentMat * node.Transform.GetTransform();
-                if (node.HasMesh && !node.Mesh.AssetPath.empty()) {
-                    auto meshPath = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
-                    if (!std::filesystem::exists(meshPath)) {
-                        if (meshPath.extension() == ".axle") {
-                            auto alt = meshPath;
-                            alt.replace_extension(".axlemesh");
-                            if (std::filesystem::exists(alt)) meshPath = alt;
-                        }
-                    }
-                    if (std::filesystem::exists(meshPath)) {
-                        auto loaded = AssetSerializer::LoadMesh(meshPath);
-                        if (loaded.Success) {
-                            AxlePackagePart part;
-                            part.Name = node.Tag;
-                            part.RelativePath = node.Mesh.AssetPath;
-                            part.LocalTranslation = glm::vec3(currentMat[3]);
-                            part.LocalRotation = glm::quat_cast(currentMat);
-                            part.LocalScale = glm::vec3(glm::length(currentMat[0]), glm::length(currentMat[1]), glm::length(currentMat[2]));
-                            part.LoadedMesh = loaded;
-                            if (node.Mesh.Color1 != glm::vec4(0.0f)) {
-                                part.LoadedMesh.SourceData.ColorPrimary = node.Mesh.Color1;
-                                part.LoadedMesh.SourceData.ColorSecondary = node.Mesh.Color2;
-                                part.LoadedMesh.SourceData.PatternMode = node.Mesh.PatternMode;
-                                part.LoadedMesh.SourceData.TileScale = node.Mesh.TileScale;
-                            }
-                            pkg.Parts.push_back(part);
-                        }
-                    }
-                }
-                for (const auto& child : node.Children) {
-                    collectParts(child, currentMat);
-                }
-            };
-
-            collectParts(asmData.RootNode, glm::mat4(1.0f));
-            if (pkg.Parts.empty()) {
-                return false;
-            }
-            pkg.Name = asmData.Name;
-            pkg.Success = true;
-        }
-        // Case C: 3D Mesh (.axlemesh, .obj, .gltf, etc.)
-        else {
-            pkg = AssetSerializer::LoadPackage(path);
-            if (!pkg.Success || pkg.Parts.empty()) {
-                return false;
-            }
-        }
-
-        // 1. Compute aggregate bounds across all loaded parts
-        glm::vec3 minBound(1e9f);
-        glm::vec3 maxBound(-1e9f);
-        size_t totalVertices = 0;
-        size_t totalIndices = 0;
-
-        for (const auto& part : pkg.Parts) {
-            if (!part.LoadedMesh.Success) continue;
-            const auto& verts = part.LoadedMesh.SourceData.Vertices;
-            glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
-                               * glm::mat4_cast(part.LocalRotation)
-                               * glm::scale(glm::mat4(1.0f), part.LocalScale);
-
-            for (const auto& v : verts) {
-                glm::vec3 worldV = glm::vec3(localMat * glm::vec4(v, 1.0f));
-                minBound = glm::min(minBound, worldV);
-                maxBound = glm::max(maxBound, worldV);
-            }
-            totalVertices += verts.size();
-            totalIndices += part.LoadedMesh.SourceData.Indices.size();
-        }
-
-        if (minBound.x > maxBound.x) {
-            minBound = glm::vec3(-0.5f);
-            maxBound = glm::vec3(0.5f);
-        }
-
-        glm::vec3 center = (minBound + maxBound) * 0.5f;
-        glm::vec3 size = maxBound - minBound;
-        float maxDim = std::max({ size.x, size.y, size.z, 0.05f });
-
-        // Populate metadata
-        outMeta.Name = pkg.Name.empty() ? path.stem().string() : pkg.Name;
-        outMeta.VertexCount = totalVertices;
-        outMeta.TriangleCount = totalIndices / 3;
-        outMeta.BoundingSize = size;
-        outMeta.Center = center;
-        outMeta.MaxDimension = maxDim;
-        outMeta.IsPackage = pkg.IsPackage;
-        outMeta.SubPartCount = pkg.Parts.size();
-
-        if (!pkg.Parts.empty()) {
-            const auto& firstPart = pkg.Parts[0].LoadedMesh.SourceData;
-            outMeta.ColorPrimary = firstPart.ColorPrimary;
-            outMeta.ColorSecondary = firstPart.ColorSecondary;
-            outMeta.PatternMode = firstPart.PatternMode;
-            outMeta.TileScale = firstPart.TileScale;
-        }
-
-        // 2. Build RenderWorld
+        const auto ext = path.extension().string();
         RenderWorld world;
-        world.TotalEntities = static_cast<uint32_t>(pkg.Parts.size());
-
-        RenderDirectionalLight keyLight;
-        keyLight.Direction = glm::normalize(glm::vec3(0.5f, 0.85f, 0.6f));
-        keyLight.Color = glm::vec3(1.0f);
-        keyLight.Intensity = 1.0f;
-        keyLight.AmbientIntensity = 0.34f;
-        world.DirectionalLight = keyLight;
-
-        RenderDirectionalLight fillLight;
-        fillLight.Direction = glm::normalize(glm::vec3(-0.4f, 0.5f, -0.6f));
-        fillLight.Color = glm::vec3(0.85f, 0.90f, 1.0f);
-        fillLight.Intensity = 0.35f;
-        world.AdditionalDirectionalLights.push_back(fillLight);
-
-        for (size_t i = 0; i < pkg.Parts.size(); ++i) {
-            const auto& part = pkg.Parts[i];
-            glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
-                               * glm::mat4_cast(part.LocalRotation)
-                               * glm::scale(glm::mat4(1.0f), part.LocalScale);
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), -center) * localMat;
-
-            RenderMeshInstance rmi;
-            rmi.EntityID = static_cast<uint32_t>(i + 1);
-            rmi.WorldTransform = model;
-            rmi.Material.AlbedoColor = part.LoadedMesh.SourceData.ColorPrimary;
-            rmi.Material.SecondaryColor = part.LoadedMesh.SourceData.ColorSecondary;
-            rmi.Material.PatternMode = part.LoadedMesh.SourceData.PatternMode;
-            rmi.Material.TileScale = glm::vec2(part.LoadedMesh.SourceData.TileScale);
-            rmi.Material.Roughness = 0.5f;
-            rmi.Material.Metallic = 0.0f;
-
-            if (part.Name == "MaterialSphere" && m_PreviewSphereMesh) {
-                rmi.GLMesh = m_PreviewSphereMesh;
-            } else if (!part.LoadedMesh.SourceData.Vertices.empty()) {
-                rmi.GLMesh = CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
+        glm::vec3 minimum(1e9f), maximum(-1e9f);
+        outMeta.Name = path.stem().string();
+        auto bounds = [&](const glm::mat4& matrix, const auto& vertices, size_t indices) {
+            for (const auto& vertex : vertices) {
+                const auto position = glm::vec3(matrix * glm::vec4(vertex, 1));
+                minimum = glm::min(minimum, position); maximum = glm::max(maximum, position);
             }
-
-#if defined(AXLE_BUILD_RHI)
-            if (RHI::RHIDevice::Get().IsNativeReady()) {
-                if (!part.LoadedMesh.SourceData.Vertices.empty()) {
-                    rmi.NativeMesh = RHI::RHIMesh::CreateFromAxleMesh(part.LoadedMesh.SourceData.Vertices, part.LoadedMesh.SourceData.Indices);
-                } else if (!part.RelativePath.empty()) {
-                    rmi.NativeMesh = RHIMeshRegistry::Get().GetOrCreateMesh(part.RelativePath);
+            outMeta.VertexCount += vertices.size(); outMeta.TriangleCount += indices / 3;
+        };
+        if (ext == ".axleasset") {
+            MaterialComponent material;
+            if (!SceneHierarchyPanel::LoadMaterialAsset(path, material)) return false;
+            Scene scene; auto sphere = scene.CreateEntity("Material thumbnail");
+            sphere.AddComponent<MeshInstance3D>().AssetPath = "builtin://sphere";
+            sphere.AddComponent<MaterialComponent>() = material;
+            world = ExtractRenderWorld(scene); minimum = glm::vec3(-1); maximum = glm::vec3(1);
+        } else if (ext == ".axle" && AssemblySerializer::IsAssemblyFile(path)) {
+            const auto assembly = AssemblySerializer::LoadAssemblyData(path);
+            if (!assembly.IsValid) return false;
+            Scene scene;
+            std::function<void(const AssemblyNode&, Entity)> append = [&](const AssemblyNode& node, Entity parent) {
+                auto entity = scene.CreateEntity(node.Tag);
+                entity.GetComponent<TransformComponent>() = node.Transform;
+                if (parent) entity.SetParent(parent, false);
+                if (node.HasMesh) entity.AddComponent<MeshInstance3D>() = node.Mesh;
+                if (node.HasMaterial) entity.AddComponent<MaterialComponent>() = node.Material;
+                for (const auto& child : node.Children) append(child, entity);
+            };
+            append(assembly.RootNode, {}); world = ExtractRenderWorld(scene);
+            for (const auto& mesh : world.Meshes) {
+                if (const auto builtin = ParseBuiltinMesh(mesh.MeshURI)) {
+                    const auto* definition = GetBuiltinMeshDefinition(*builtin);
+                    const auto half = definition->Radius > 0 ? glm::vec3(definition->Radius, definition->Height > 0 ? definition->Height * 0.5f : definition->Radius, definition->Radius) : glm::vec3(definition->Size * 0.5f);
+                    std::vector<glm::vec3> corners;
+                    for (int z : {-1,1}) for (int y : {-1,1}) for (int x : {-1,1}) corners.emplace_back(half * glm::vec3(x,y,z));
+                    bounds(mesh.WorldTransform, corners, 0);
+                } else {
+                    const auto source = AssetSerializer::LoadMesh(FileSystem::ResolveAssetPath(mesh.MeshURI));
+                    if (!source.Success) return false;
+                    bounds(mesh.WorldTransform, source.SourceData.Vertices, source.SourceData.Indices.size());
                 }
             }
-#endif
-            world.Meshes.push_back(std::move(rmi));
+        } else {
+            const auto package = AssetSerializer::LoadPackage(path);
+            if (!package.Success) return false;
+            for (const auto& part : package.Parts) {
+                if (!part.LoadedMesh.Success) return false;
+                RenderMeshInstance mesh; mesh.MeshURI = part.RelativePath;
+                mesh.Source = std::make_shared<AxleMeshSource>(part.LoadedMesh.SourceData);
+                mesh.WorldTransform = glm::translate(glm::mat4(1), part.LocalTranslation) * glm::mat4_cast(part.LocalRotation) * glm::scale(glm::mat4(1), part.LocalScale);
+                mesh.Material.AlbedoColor = mesh.Source->ColorPrimary; mesh.Material.SecondaryColor = mesh.Source->ColorSecondary;
+                mesh.Material.PatternMode = mesh.Source->PatternMode; mesh.Material.TileScale = glm::vec2(mesh.Source->TileScale);
+                bounds(mesh.WorldTransform, mesh.Source->Vertices, mesh.Source->Indices.size());
+                world.Meshes.push_back(std::move(mesh));
+            }
         }
-
-        // 3. Studio camera
-        float pitchRad = glm::radians(24.0f);
-        float yawRad = glm::radians(38.0f);
-        float distance = maxDim * 1.85f;
-        glm::vec3 camPos = glm::vec3(
-            distance * std::cos(pitchRad) * std::sin(yawRad),
-            distance * std::sin(pitchRad),
-            distance * std::cos(pitchRad) * std::cos(yawRad)
-        );
-        glm::mat4 view = glm::lookAt(camPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        PerspectiveCamera cam(45.0f, 1.0f, 0.01f, distance * 6.0f);
-        cam.SetViewMatrix(view, camPos);
-
-        // 4. ViewRequest
-        ViewRequest request;
-        request.Kind = RenderViewKind::Thumbnail;
-        request.Width = m_ThumbnailResolution;
-        request.Height = m_ThumbnailResolution;
-        request.Camera = cam;
-        request.Settings.ClearColor = glm::vec4(0.11f, 0.13f, 0.17f, 1.0f);
-        request.Settings.EnableShadows = false;
-        request.Settings.EnableSkybox = false;
-        request.Name = "Thumbnail_" + path.filename().string();
-
-        std::string key = path.lexically_normal().string();
-
-#if defined(AXLE_BUILD_RHI)
+        if (world.Meshes.empty() || !world.ErrorMessage.empty() || minimum.x > maximum.x) return false;
+        outMeta.Center = (minimum + maximum) * 0.5f; outMeta.BoundingSize = maximum - minimum;
+        outMeta.MaxDimension = std::max({outMeta.BoundingSize.x, outMeta.BoundingSize.y, outMeta.BoundingSize.z, 0.05f});
+        outMeta.SubPartCount = world.Meshes.size(); outMeta.IsPackage = world.Meshes.size() > 1;
+        for (auto& mesh : world.Meshes) mesh.WorldTransform = glm::translate(glm::mat4(1), -outMeta.Center) * mesh.WorldTransform;
+        RenderDirectionalLight key; key.Direction = glm::normalize(glm::vec3(0.5f,0.85f,0.6f)); key.CastsShadows = false;
+        world.DirectionalLight = key;
+        RenderDirectionalLight fill; fill.Direction = glm::normalize(glm::vec3(-0.4f,0.5f,-0.6f)); fill.Intensity = 0.35f;
+        world.AdditionalDirectionalLights.push_back(fill);
+        ViewRequest request; request.Kind = RenderViewKind::Thumbnail; request.Width = request.Height = m_ThumbnailResolution;
+        request.Settings.EnableShadows = request.Settings.EnableSkybox = false;
+        request.Settings.ClearColor = {0.11f,0.13f,0.17f,1}; request.Name = "Thumbnail " + path.filename().string();
+        const float distance = outMeta.MaxDimension * 1.85f;
+        const glm::vec3 position = glm::normalize(glm::vec3(0.6f,0.45f,0.8f)) * distance;
+        request.Camera = PerspectiveCamera(45,1,0.01f,distance*6);
+        request.Camera.SetViewMatrix(glm::lookAt(position,glm::vec3(0),glm::vec3(0,1,0)),position);
+        const auto cacheKey = path.lexically_normal().string();
         if (RHI::RHIDevice::Get().IsNativeReady()) {
-            auto rhiTex = std::make_shared<RHI::RHITexture>();
-            if (rhiTex->Init(RHI::RHITextureDesc::RenderTarget2D(m_ThumbnailResolution, m_ThumbnailResolution, RHI::RHITextureFormat::RGBA8_UNORM, request.Name))) {
-                request.ColorTarget = rhiTex.get();
-                auto result = RenderService::Get().RenderView(world, request);
-                if (result.Success) {
-                    auto token = m_TextureRegistrar ? m_TextureRegistrar(*rhiTex) : GuiTextureLease{};
-                    if (token.IsValid()) {
-                        outTexHandle = token.GetID();
-                        m_GuiThumbnails[key] = std::move(token);
-                        m_RHIThumbnails[key] = std::move(rhiTex);
-                        return true;
-                    }
-                }
-            }
-            return false;
+            auto targets = std::make_shared<RHI::RHIViewTargets>();
+            RHI::RHIViewTargetDesc desc; desc.Width = desc.Height = m_ThumbnailResolution;
+            if (!targets->Configure(desc)) return false;
+            request.ViewTargets = targets;
+            if (!RenderService::Get().RenderView(world,request).Success) return false;
+            auto* color = targets->Get(RHI::RHIViewTarget::Color);
+            auto lease = m_TextureRegistrar ? m_TextureRegistrar(*color) : GuiTextureLease{};
+            if (!lease.IsValid()) return false;
+            outTexHandle = lease.GetID(); m_GuiThumbnails[cacheKey] = std::move(lease);
+            m_RHIThumbnails[cacheKey] = std::shared_ptr<RHI::RHITexture>(targets,color);
+        } else {
+            if (!Window::HasActiveContext()) return false;
+            FramebufferSpecification spec; spec.Width = spec.Height = m_ThumbnailResolution;
+            auto framebuffer = Framebuffer::Create(spec); request.GLTargetFBO = framebuffer;
+            if (!RenderService::Get().RenderView(world,request).Success) return false;
+            outTexHandle = framebuffer->GetColorAttachmentRendererID();
+            if (!outTexHandle) return false;
+            m_GLThumbnails[cacheKey] = std::move(framebuffer);
         }
-#endif
-
-        if (Window::HasActiveContext()) {
-            FramebufferSpecification spec;
-            spec.Width = m_ThumbnailResolution;
-            spec.Height = m_ThumbnailResolution;
-            auto fb = Framebuffer::Create(spec);
-            request.GLTargetFBO = fb;
-            auto result = RenderService::Get().RenderView(world, request);
-            if (result.Success) {
-                outTexHandle = fb->GetColorAttachmentRendererID();
-                m_GeneratedTextures.push_back(static_cast<u32>(outTexHandle));
-                return true;
-            }
-        }
-        return false;
-    }
-
-    bool AssetThumbnailManager::RenderMaterialThumbnail(const std::filesystem::path& path, std::vector<uint8_t>& outPixels, uint32_t& outWidth, uint32_t& outHeight) {
-        if (!std::filesystem::exists(path)) return false;
-
-        MaterialComponent mat;
-        if (!SceneHierarchyPanel::LoadMaterialAsset(path, mat)) {
-            return false;
-        }
-
-        const uint32_t res = m_ThumbnailResolution;
-        outWidth = res;
-        outHeight = res;
-        outPixels.resize(res * res * 4);
-
-        glm::vec3 albedo = glm::vec3(mat.AlbedoColor.r, mat.AlbedoColor.g, mat.AlbedoColor.b);
-        float metallic = std::clamp(mat.Metallic, 0.0f, 1.0f);
-        float roughness = std::clamp(mat.Roughness, 0.04f, 1.0f);
-        float clearcoat = std::clamp(mat.ClearcoatStrength, 0.0f, 1.0f);
-        float clearcoatRoughness = std::clamp(mat.ClearcoatRoughness, 0.01f, 1.0f);
-        glm::vec3 emission = glm::vec3(mat.EmissionColor) * mat.EmissionIntensity;
-
-        int texW = 0, texH = 0, texChannels = 0;
-        const uint8_t* texPixels = nullptr;
-        ImageSourceData albedoImage;
-        if (mat.UseAlbedoMap && !mat.AlbedoPath.empty()) {
-            albedoImage = LoadImageSource(mat.AlbedoPath, {});
-            if (albedoImage.Image && !albedoImage.Image->HDR) {
-                const auto& mip = albedoImage.Image->Mips.front(); texW = mip.Width; texH = mip.Height; texChannels = albedoImage.Image->SourceChannels;
-                texPixels = mip.Pixels.data();
-            }
-        }
-
-        const glm::vec3 keyDir = glm::normalize(glm::vec3(0.45f, 0.65f, 0.60f));
-        const glm::vec3 fillDir = glm::normalize(glm::vec3(-0.55f, 0.50f, 0.50f));
-
-        const float radiusPixels = 54.0f;
-        const float centerOffset = 64.0f;
-
-        for (uint32_t py = 0; py < res; ++py) {
-            for (uint32_t px = 0; px < res; ++px) {
-                float accR = 0.0f, accG = 0.0f, accB = 0.0f, accA = 0.0f;
-
-                for (int sy = 0; sy < 2; ++sy) {
-                    for (int sx = 0; sx < 2; ++sx) {
-                        float x = (((float)px + 0.25f + (float)sx * 0.5f) - centerOffset) / radiusPixels;
-                        float y = (((float)py + 0.25f + (float)sy * 0.5f) - centerOffset) / radiusPixels;
-                        float r2 = x * x + y * y;
-
-                        if (r2 > 1.0f) {
-                            float bgY = 1.0f - ((float)py / (float)res);
-                            float bg = 0.075f + 0.035f * bgY;
-
-                            float shadowY = ((float)py - 100.0f) / 22.0f;
-                            float shadowX = x * 1.25f;
-                            float shadowR2 = shadowX * shadowX + shadowY * shadowY;
-                            if (shadowR2 < 1.0f && py > 85) {
-                                bg *= (0.40f + 0.60f * std::sqrt(shadowR2));
-                            }
-
-                            accR += bg * 0.95f;
-                            accG += bg;
-                            accB += bg * 1.15f;
-                            accA += 1.0f;
-                            continue;
-                        }
-
-                        float z = std::sqrt(std::max(0.0f, 1.0f - r2));
-                        glm::vec3 N(x, -y, z);
-                        glm::vec3 V(0.0f, 0.0f, 1.0f);
-
-                        float NdotV = std::max(0.001f, N.z);
-
-                        glm::vec3 pixelAlbedo = albedo;
-                        if (texPixels && texW > 0 && texH > 0) {
-                            float u = std::atan2(N.x, N.z) / (2.0f * 3.14159265f) + 0.5f;
-                            float v = std::asin(std::clamp(N.y, -1.0f, 1.0f)) / 3.14159265f + 0.5f;
-                            int tx = std::clamp((int)(u * (float)texW), 0, texW - 1);
-                            int ty = std::clamp((int)(v * (float)texH), 0, texH - 1);
-                            int idx = (ty * texW + tx) * 4;
-                            glm::vec3 texColor = glm::vec3(
-                                std::pow(texPixels[idx + 0] / 255.0f, 2.2f),
-                                std::pow(texPixels[idx + 1] / 255.0f, 2.2f),
-                                std::pow(texPixels[idx + 2] / 255.0f, 2.2f)
-                            );
-                            pixelAlbedo *= texColor;
-                        }
-
-                        glm::vec3 F0 = glm::mix(glm::vec3(0.04f), pixelAlbedo, metallic);
-
-                        float NdotL = glm::dot(N, keyDir);
-                        float NdotL_diff = std::clamp((NdotL + 0.22f) / 1.488f, 0.0f, 1.0f);
-                        float NdotL_spec = std::max(0.0f, NdotL);
-
-                        glm::vec3 H = glm::normalize(V + keyDir);
-                        float NdotH = std::max(0.0f, glm::dot(N, H));
-                        float VdotH = std::max(0.0f, glm::dot(V, H));
-
-                        float a2 = roughness * roughness * roughness * roughness;
-                        float dDenom = (NdotH * NdotH * (a2 - 1.0f) + 1.0f);
-                        float ndf = a2 / (3.14159265f * dDenom * dDenom + 1e-5f);
-
-                        float k = (roughness + 1.0f) * (roughness + 1.0f) / 8.0f;
-                        float g = (NdotV / (NdotV * (1.0f - k) + k)) * (NdotL_spec / (NdotL_spec * (1.0f - k) + k + 1e-4f));
-
-                        glm::vec3 F = F0 + (glm::vec3(1.0f) - F0) * std::pow(1.0f - VdotH, 5.0f);
-                        glm::vec3 spec = (ndf * g * F) / (4.0f * NdotV * std::max(NdotL_spec, 0.001f) + 1e-4f);
-
-                        glm::vec3 kD = (glm::vec3(1.0f) - F) * (1.0f - metallic);
-                        glm::vec3 cKey = (kD * pixelAlbedo / 3.14159265f * NdotL_diff + spec * NdotL_spec) * 2.4f;
-
-                        float NdotL_fill = glm::dot(N, fillDir);
-                        float NdotL_fill_diff = std::clamp((NdotL_fill + 0.25f) / 1.5625f, 0.0f, 1.0f);
-                        glm::vec3 cFill = (1.0f - metallic) * pixelAlbedo / 3.14159265f * NdotL_fill_diff * 1.0f * glm::vec3(0.88f, 0.93f, 1.0f);
-
-                        float upW = std::clamp(N.y * 0.5f + 0.5f, 0.0f, 1.0f);
-                        glm::vec3 ambSky = glm::mix(glm::vec3(0.68f, 0.70f, 0.74f), glm::vec3(0.96f, 0.98f, 1.00f), upW);
-                        glm::vec3 ambient = ambSky * pixelAlbedo * (1.0f - metallic) * 0.75f + F0 * (0.2f + 0.7f * upW) * (1.0f - roughness * 0.3f);
-
-                        float rim = std::pow(1.0f - NdotV, 4.0f) * 0.20f;
-                        glm::vec3 cRim = glm::vec3(0.92f, 0.95f, 1.0f) * rim;
-
-                        glm::vec3 cClearcoat(0.0f);
-                        if (clearcoat > 0.001f) {
-                            float ccRough2 = clearcoatRoughness * clearcoatRoughness;
-                            float ccA2 = ccRough2 * ccRough2;
-                            float ccDenom = (NdotH * NdotH * (ccA2 - 1.0f) + 1.0f);
-                            float ccNDF = ccA2 / (3.14159265f * ccDenom * ccDenom + 1e-5f);
-                            float ccK = (clearcoatRoughness + 1.0f) * (clearcoatRoughness + 1.0f) / 8.0f;
-                            float ccG = (NdotV / (NdotV * (1.0f - ccK) + ccK)) * (NdotL_spec / (NdotL_spec * (1.0f - ccK) + ccK + 1e-4f));
-                            float ccF = 0.04f + 0.96f * std::pow(1.0f - VdotH, 5.0f);
-                            float ccSpec = (ccNDF * ccG * ccF) / (4.0f * NdotV * std::max(NdotL_spec, 0.001f) + 1e-4f);
-                            cClearcoat = glm::vec3(ccSpec * NdotL_spec * clearcoat * 0.5f);
-                        }
-
-                        glm::vec3 total = cKey + cFill + ambient + cRim + cClearcoat + emission;
-
-                        const float a = 2.51f, b = 0.03f, c = 2.43f, d = 0.59f, e = 0.14f;
-                        glm::vec3 tm = (total * (a * total + b)) / (total * (c * total + d) + e);
-
-                        glm::vec3 sRGB = glm::pow(glm::clamp(tm, glm::vec3(0.0f), glm::vec3(1.0f)), glm::vec3(1.0f / 2.2f));
-
-                        accR += sRGB.r;
-                        accG += sRGB.g;
-                        accB += sRGB.b;
-                        accA += 1.0f;
-                    }
-                }
-
-                size_t pixelIdx = (py * res + px) * 4;
-                outPixels[pixelIdx + 0] = (uint8_t)std::clamp((int)std::round((accR / 4.0f) * 255.0f), 0, 255);
-                outPixels[pixelIdx + 1] = (uint8_t)std::clamp((int)std::round((accG / 4.0f) * 255.0f), 0, 255);
-                outPixels[pixelIdx + 2] = (uint8_t)std::clamp((int)std::round((accB / 4.0f) * 255.0f), 0, 255);
-                outPixels[pixelIdx + 3] = (uint8_t)std::clamp((int)std::round((accA / 4.0f) * 255.0f), 0, 255);
-            }
-        }
-
-
+        m_ThumbnailDimensions[cacheKey] = {m_ThumbnailResolution,m_ThumbnailResolution};
         return true;
     }
-
 }

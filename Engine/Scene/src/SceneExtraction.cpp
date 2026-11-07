@@ -3,6 +3,9 @@
 #include <Axle/Components.hpp>
 #include <Axle/RenderParticleData.hpp>
 #include <Axle/MeshResourceResolver.hpp>
+#include <Axle/SceneRenderBridge.hpp>
+#include <Axle/AssetSerializer.hpp>
+#include <Axle/RHI/RHIMesh.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace Axle {
@@ -12,6 +15,12 @@ namespace Axle {
         for (auto& instance : world.Meshes) {
             MeshInstance3D candidate;
             candidate.AssetPath = instance.MeshURI; candidate.VAO = instance.GLMesh; candidate.RHIMeshAsset = instance.NativeMesh;
+            if (instance.Source) {
+                if (RHI::RHIDevice::Get().IsNativeReady() && !candidate.RHIMeshAsset)
+                    candidate.RHIMeshAsset = RHI::RHIMesh::CreateFromAxleMesh(instance.Source->Vertices, instance.Source->Indices);
+                else if (!RHI::RHIDevice::Get().IsNativeReady() && !candidate.VAO)
+                    candidate.VAO = CreateVertexArrayFromMeshSource(*instance.Source);
+            }
             if (!ResolveMeshResources(candidate)) { world.ErrorMessage = "Cannot resolve mesh: " + instance.MeshURI; return false; }
             instance.GLMesh = candidate.VAO; instance.NativeMesh = candidate.RHIMeshAsset;
         }
@@ -125,6 +134,7 @@ namespace Axle {
         for (auto entity : skyboxView) {
             const auto& sc = skyboxView.get<SkyboxComponent>(entity);
             world.Skybox.Enabled = sc.Enabled;
+            world.Skybox.HemisphereAmbient = sc.HemisphereAmbient;
             world.Skybox.Type = static_cast<int>(sc.Type);
             world.Skybox.HDRPath = sc.HDRPath;
             world.Skybox.Intensity = sc.Intensity;

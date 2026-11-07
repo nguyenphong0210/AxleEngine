@@ -15,6 +15,7 @@
 namespace Axle {
 
     class ImGuiLayer;
+    class Framebuffer;
     namespace RHI { class RHITexture; }
 
     struct AssetCachedMeta {
@@ -69,7 +70,6 @@ namespace Axle {
                             std::vector<std::shared_ptr<Texture2D>> loaded,
                             std::vector<u32> generated);
         bool RenderThumbnail(const std::filesystem::path& path, uint64_t& outTexHandle, AssetCachedMeta& outMeta);
-        bool RenderMaterialThumbnail(const std::filesystem::path& path, std::vector<uint8_t>& outPixels, uint32_t& outWidth, uint32_t& outHeight);
 
     private:
         static AssetThumbnailManager* s_Instance;
@@ -86,6 +86,8 @@ namespace Axle {
         std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_LoadedTextures;
         std::unordered_map<std::string, std::filesystem::file_time_type> m_AssetRevisions;
         std::vector<u32> m_GeneratedTextures;
+        std::unordered_map<std::string, std::shared_ptr<Framebuffer>> m_GLThumbnails;
+        static constexpr size_t MaxCacheEntries = 256;
         std::vector<std::filesystem::path> m_PendingQueue;
 
         const u32 m_ThumbnailResolution = 128;

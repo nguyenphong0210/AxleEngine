@@ -14,6 +14,7 @@
 namespace Axle {
     class VertexArray;
     class Material;
+    struct AxleMeshSource;
     struct RenderParticleData;
     namespace RHI {
         class RHIMesh;
@@ -69,6 +70,7 @@ namespace Axle {
         std::string Tag;
         std::string MeshURI;
         UUID MeshSourceUUID = 0;
+        std::shared_ptr<const AxleMeshSource> Source;
         std::optional<BuiltinMeshId> BuiltinId;
         std::shared_ptr<VertexArray> GLMesh;
         std::shared_ptr<RHI::RHIMesh> NativeMesh;
@@ -113,6 +115,7 @@ namespace Axle {
 
     struct RenderSkyboxData {
         bool Enabled = false;
+        bool HemisphereAmbient = true;
         float SunSize = 0.02f, SunGlow = 1, Turbidity = 2;
         int Type = 0; // 0: Atmospheric Procedural, 1: Cubemap / HDRI
         glm::vec4 SunDirection{ 0.45f, 1.0f, 0.65f, 0.0f };

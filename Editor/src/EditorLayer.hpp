@@ -88,7 +88,7 @@ public:
     const std::filesystem::path& GetCurrentScenePath() const { return m_CurrentScenePath; }
     const std::filesystem::path& GetCurrentProjectPath() const { return m_CurrentProjectPath; }
     Axle::RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
-    Axle::RHISceneRenderer* GetRHISceneRenderer() const { return m_RHISceneRenderer.get(); }
+    Axle::RHISceneRenderer* GetRHISceneRenderer() const { return m_RHISceneRenderer; }
 
     // Viewport 2D UI Edit Mode & Grid Snapping (Phase 34 Step 7.3)
     void Set2DViewMode(bool enabled);
@@ -178,8 +178,8 @@ private:
     std::shared_ptr<Axle::VertexArray> m_CylinderMesh;
     std::shared_ptr<Axle::VertexArray> m_ConeMesh;
     std::shared_ptr<Axle::VertexArray> m_PlaneMesh;
-    std::unique_ptr<Axle::SceneRenderer> m_SceneRenderer;
-    std::unique_ptr<Axle::RHISceneRenderer> m_RHISceneRenderer;
+    Axle::SceneRenderer* m_SceneRenderer = nullptr; // Owned by RenderService.
+    Axle::RHISceneRenderer* m_RHISceneRenderer = nullptr; // Owned by RenderService.
     Axle::SceneSerializerContext m_SerializerContext;
 
     // Editor Panels

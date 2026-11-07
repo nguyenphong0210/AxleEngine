@@ -221,7 +221,7 @@ target_link_libraries(AxleRHIResourceViewTests PRIVATE Axle::UI Axle::Scene)
 
 add_executable(AxleRenderServiceTests EXCLUDE_FROM_ALL rendering/RenderServiceMain.cpp)
 target_include_directories(AxleRenderServiceTests PRIVATE rendering)
-target_link_libraries(AxleRenderServiceTests PRIVATE Axle::UI Axle::Scene)
+target_link_libraries(AxleRenderServiceTests PRIVATE Axle::UI Axle::Scene glad glfw)
 
 add_executable(AxleRHIErrorTests EXCLUDE_FROM_ALL rendering/RHIErrorMain.cpp)
 target_include_directories(AxleRHIErrorTests PRIVATE rendering)

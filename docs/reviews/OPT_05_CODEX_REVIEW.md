@@ -67,3 +67,21 @@ The regression now checks that contract explicitly.
 This is intermediate self-verification only. Release, consumer migrations, graph,
 Runtime/Canvas, remaining GL baseline details and final independent correction
 recheck are still pending. No phase acceptance is claimed.
+
+## Correction checkpoint 2
+
+Main Editor uses the shared RenderService. GL snapshot execution restores sampled
+material maps, authored lighting/shadow/environment values and skin palettes.
+Thumbnail requests now queue bounded work, own color/depth generations or a GL
+framebuffer, reacquire native draw-list pins on cache hits, and render material
+assets through the actual service instead of a separate CPU sphere approximation.
+Cache/queue entries are bounded; invalidation retires GL owners through the UI
+frame boundary. Builtin assembly hierarchies use canonical identities and bounds.
+
+Native consumer pixel checks exposed omitted MaterialComponent output in
+SaveAssemblyData; the existing material serializer block is now used for node
+saves as well. They also reproduced GL debug renderer initialization before Jolt's
+allocator; SceneRenderer initializes PhysicsEngine before constructing that bridge.
+Debug consumer3-results.json records actual D3D12/Vulkan/GL thumbnail pixels and
+invalidate-before-submit lifetime checks, all exit 0. Debug AxleEditor and focused
+target builds pass. These are intermediate checks, not phase acceptance.

@@ -1,3 +1,4 @@
+#include <Axle/RenderService.hpp>
 #include <cmath>
 #include <chrono>
 #include <Axle/TextureDescriptor.hpp>
@@ -105,10 +106,9 @@ void EditorLayer::OnAttach() {
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
 
     // 3. Decoupled Multi-Pass Scene Renderer (Phase 21)
-    if (window.GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
-        m_SceneRenderer = std::make_unique<Axle::SceneRenderer>();
-        if (!m_SceneRenderer->IsReady()) throw std::runtime_error("Editor OpenGL renderer initialization failed");
-    }
+    if (!Axle::RenderService::Get().Init()) throw std::runtime_error("Editor render service initialization failed");
+    m_SceneRenderer = Axle::RenderService::Get().GetGLRenderer();
+    m_RHISceneRenderer = Axle::RenderService::Get().GetRHIRenderer();
 
 
     // 4. Primitive Mesh Data (for legacy OpenGL SceneRenderer)
@@ -143,8 +143,6 @@ void EditorLayer::OnAttach() {
             vpDesc.DebugName = "EditorMainViewport";
             if (!m_RHIViewport->Init(uiContext, vpDesc)) throw std::runtime_error("Editor viewport initialization failed");
 
-            m_RHISceneRenderer = std::make_unique<Axle::RHISceneRenderer>();
-            if (!m_RHISceneRenderer->Init()) throw std::runtime_error("Editor scene renderer initialization failed");
 
             ClearRHIViewport();
         }
@@ -531,11 +529,8 @@ void EditorLayer::OnDetach() {
         m_RHIViewport->Shutdown();
         m_RHIViewport.reset();
     }
-    if (m_RHISceneRenderer) {
-        m_RHISceneRenderer->Shutdown();
-        m_RHISceneRenderer.reset();
-    }
-    m_SceneRenderer.reset();
+    m_RHISceneRenderer = nullptr; m_SceneRenderer = nullptr;
+    Axle::RenderService::Get().Shutdown();
     m_PhysicsDebugRenderer.reset();
     m_Framebuffer.reset();
 
@@ -1632,21 +1627,18 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
     renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
 
-    if (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
-        if (m_SceneRenderer && m_Framebuffer) {
-            m_SceneRenderer->RenderScene(m_Scene, activeCamera, m_Framebuffer,
-                                         m_PhysicsScene.get(), m_PhysicsDebugRenderer.get(),
-                                         renderSettings);
-        }
-    } else {
-        if (m_RHISceneRenderer && m_RHIViewport && m_RHIViewport->IsValid()) {
-            if (!m_RHIViewport->SetRenderOptions(renderSettings.MSAASamples, renderSettings.EnableToneMapping, renderSettings.EnableFXAA)) return;
-            m_RHISceneRenderer->RenderScene(m_Scene, activeCamera,
-                                            m_RHIViewport->GetColorTexture(),
-                                            m_RHIViewport->GetDepthTexture(),
-                                            renderSettings, m_PhysicsScene.get(), m_RHIViewport->GetTargets());
-        }
-    }
+    Axle::ViewRequest request;
+    request.Kind = Axle::RenderViewKind::Main; request.Width = m_ViewportWidth; request.Height = m_ViewportHeight;
+    request.Camera = activeCamera; request.Settings = renderSettings; request.PhysicsScene = m_PhysicsScene.get();
+    request.Name = "Editor main view";
+    if (m_RHIViewport && m_RHIViewport->IsValid()) {
+        if (!m_RHIViewport->SetRenderOptions(renderSettings.MSAASamples, renderSettings.EnableToneMapping, renderSettings.EnableFXAA)) return;
+        request.ColorTarget = m_RHIViewport->GetColorTexture(); request.DepthTarget = m_RHIViewport->GetDepthTexture();
+        request.ViewTargets = m_RHIViewport->GetTargets();
+    } else request.GLTargetFBO = m_Framebuffer;
+    const auto result = Axle::RenderService::Get().RenderView(*m_Scene, request);
+    if (!result.Success) AXLE_ERROR("Editor view failed: {0}", result.ErrorMessage);
+
 }
 
 void EditorLayer::RenderToolbar() {

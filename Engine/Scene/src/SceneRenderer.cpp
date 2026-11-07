@@ -580,6 +580,7 @@ namespace Axle {
                                         PhysicsScene* physicsScene,
                                         PhysicsDebugRenderer* physicsDebugRenderer,
                                         const SceneRenderSettings& settings) {
+        m_PhysicsDebugLineCount=0;
         if (!Window::HasActiveContext() || !m_Shader) return;
 
         // 1. Lighting setup from extracted RenderWorld
@@ -833,6 +834,7 @@ namespace Axle {
             activeDebug->Begin(camera.GetPosition(),settings.PhysicsDepthBias,settings.PhysicsAlphaMultiplier);
             physicsScene->DrawDebug(*activeDebug, settings.PhysicsDrawSettings);
             activeDebug->End(camera.GetViewProjectionMatrix());
+            m_PhysicsDebugLineCount=activeDebug->GetLineCount();
         }
 
         // 6. Cleanup

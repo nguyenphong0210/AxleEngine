@@ -9,6 +9,9 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/MaterialComponentCodec.hpp>
+#include <Axle/MaterialCache.hpp>
+#include <Axle/AssetManager.hpp>
+#include <Axle/FileSystem.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/RenderParticleData.hpp>
 #include <sstream>
@@ -618,10 +621,28 @@ namespace Axle::RenderTests {
         RENDER_CHECK(bool(emitter.EmitterStacks[0].Config.Collision.WorldRaycast),"extraction preserves simulation callback");return true;
     }
 
+
+    static bool Test_LoadedMaterialPeekIdentity() {
+        const auto root=std::filesystem::absolute("build/agent-runs/OPT-05/material-peek")/std::to_string(uint64_t(UUID()));
+        const auto a=root/"a",b=root/"b";std::filesystem::create_directories(a);std::filesystem::create_directories(b);
+        struct Restore {std::filesystem::path Root=FileSystem::GetAssetDirectory(),Assets=AssetManager::GetAssetDirectory();~Restore(){MaterialCache::ClearMaterialCache();if(Assets.empty())AssetManager::Shutdown();else AssetManager::Init(Assets);FileSystem::SetAssetDirectory(Root);}} restore;
+        Material first("First"),second("Second");first.SetAlphaCutoff(0.3f);second.SetAlphaCutoff(0.8f);
+        RENDER_CHECK(first.Save(a/"fx.axleasset")&&second.Save(b/"fx.axleasset"),"two project material identities");
+        MaterialCache::ClearMaterialCache();AssetManager::Init(a);
+        auto loaded=MaterialCache::GetMaterial(std::filesystem::path("fx.axleasset"));RENDER_CHECK(bool(loaded),"material authoring cache fixture");loaded->SetAlphaCutoff(0.17f);
+        auto peek=MaterialCache::FindLoadedMaterial("fx.axleasset");
+        RENDER_CHECK(peek&&peek->GetAlphaCutoff()==0.17f,"read-only material peek preserves unsaved values");
+        FileSystem::SetAssetDirectory(b);
+        RENDER_CHECK(!MaterialCache::FindLoadedMaterial("fx.axleasset"),"same relative path in another project cannot return old material");
+        FileSystem::SetAssetDirectory(a);std::filesystem::copy_file(b/"fx.axleasset",a/"fx.axleasset",std::filesystem::copy_options::overwrite_existing);
+        RENDER_CHECK(!MaterialCache::FindLoadedMaterial("fx.axleasset"),"replaced file UUID invalidates cached authoring values");return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
     std::cout << "  [RenderService] Running RenderService & ViewRequest unit tests...\n";
+    if (!Axle::RenderTests::Test_LoadedMaterialPeekIdentity()) return false;
     if (!Axle::RenderTests::Test_AuthoredMaterialRoundTrips()) return false;
     if (!Axle::RenderTests::Test_ParticleSnapshotHasNoCallbacks()) return false;
     if (!Axle::RenderTests::Test_ViewRequestDefaults()) return false;

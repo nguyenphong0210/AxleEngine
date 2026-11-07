@@ -58,6 +58,7 @@ namespace Axle {
         ShadowMap* GetShadowMap() const { return m_ShadowMap.get(); }
         Skybox* GetSkybox() const { return m_Skybox.get(); }
         SkinningPipeline* GetSkinningPipeline() const { return m_SkinningPipeline.get(); }
+        u32 GetPhysicsDebugLineCount() const { return m_PhysicsDebugLineCount; }
         ParticleRenderer* GetParticleRenderer() const { return m_ParticleRenderer.get(); }
 
         const glm::mat4& GetLightSpaceMatrix() const { return m_LightSpaceMatrix; }
@@ -82,6 +83,7 @@ namespace Axle {
         std::shared_ptr<ShadowMap> m_ShadowMap;
         std::shared_ptr<Skybox> m_Skybox;
         std::unique_ptr<PhysicsDebugRenderer> m_InternalDebugRenderer;
+        u32 m_PhysicsDebugLineCount=0;
 
         glm::mat4 m_LightSpaceMatrix{ 1.0f };
         glm::vec3 m_LightDir{ 0.45f, 1.0f, 0.65f };

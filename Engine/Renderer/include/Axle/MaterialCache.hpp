@@ -26,6 +26,8 @@ namespace Axle {
         // Material Cache
         static std::shared_ptr<Material> GetMaterial(const std::filesystem::path& path);
         static std::shared_ptr<Material> GetMaterial(UUID uuid);
+        // Read already loaded authoring values without loading, texture creation or cache mutation.
+        static std::shared_ptr<const Material> FindLoadedMaterial(const std::filesystem::path& path);
         static void ReloadMaterial(UUID uuid);
         static void ReloadMaterial(const std::filesystem::path& path);
         static void ClearMaterialCache();

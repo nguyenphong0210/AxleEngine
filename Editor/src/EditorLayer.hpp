@@ -106,7 +106,6 @@ private:
     std::unique_ptr<Axle::PerspectiveCameraController> m_CameraController;
     std::unique_ptr<Axle::PhysicsScene> m_PhysicsScene;
     std::unique_ptr<Axle::PhysicsScene> m_EditorPhysicsScene;
-    std::unique_ptr<Axle::PhysicsDebugRenderer> m_PhysicsDebugRenderer;
     Axle::PhysicsDrawSettings m_PhysicsDrawSettings;
     bool m_ShowPhysicsDebug = false;
     bool m_F1KeyWasPressed = false;

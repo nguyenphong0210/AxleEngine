@@ -151,10 +151,7 @@ void EditorLayer::OnAttach() {
         m_SceneRenderer->SetViewportSize(m_ViewportWidth, m_ViewportHeight);
     }
 
-    // 6. Physics Debug Wireframe Renderer (JPH::DebugRenderer bridge)
-    if (window.GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
-        m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
-    }
+    // Physics debug rendering is owned by the shared view service.
 
     // 7. ECS Scene Initialization (Phase 18.2: Safe Scene State Simulation)
     m_EditorScene = std::make_shared<Axle::Scene>();
@@ -532,7 +529,6 @@ void EditorLayer::OnDetach() {
     }
     m_RHISceneRenderer = nullptr; m_SceneRenderer = nullptr;
     Axle::RenderService::Get().Shutdown();
-    m_PhysicsDebugRenderer.reset();
     m_Framebuffer.reset();
 
     AXLE_INFO("EditorLayer::OnDetach -> [11/14] Shutdown PhysicsScene");
@@ -859,13 +855,6 @@ void EditorLayer::NewScene() {
 
     m_Scene->Clear();
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
-    if (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
-        if (!m_PhysicsDebugRenderer) {
-            m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
-        } else {
-            m_PhysicsDebugRenderer->Clear();
-        }
-    }
     m_CurrentScenePath.clear();
 
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
@@ -912,16 +901,9 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
     m_InitialDynamicStates.clear();
     m_SimulationDriver.Reset();
 
-    // 3. Create fresh PhysicsScene and maintain PhysicsDebugRenderer
+    // 3. Create a fresh PhysicsScene; rendering remains owned by the view service
     m_Scene->Clear();
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
-    if (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
-        if (!m_PhysicsDebugRenderer) {
-            m_PhysicsDebugRenderer = std::make_unique<Axle::PhysicsDebugRenderer>();
-        } else {
-            m_PhysicsDebugRenderer->Clear();
-        }
-    }
 
     Axle::SceneSerializer serializer(m_Scene.get(), m_PhysicsScene.get());
     serializer.SetContext(m_SerializerContext);
@@ -3208,7 +3190,7 @@ void EditorLayer::OnImGuiRender() {
             .DrawBoundingBoxes = m_PhysicsDrawSettings.DrawBoundingBoxes,
             .DrawVelocity = m_PhysicsDrawSettings.DrawVelocity,
             .DrawCenterOfMass = m_PhysicsDrawSettings.DrawCenterOfMass,
-            .DebugLineCount = m_PhysicsDebugRenderer ? m_PhysicsDebugRenderer->GetLineCount() : 0,
+            .DebugLineCount = m_SceneRenderer ? m_SceneRenderer->GetPhysicsDebugLineCount() : 0,
             .IsChaseCamera = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay)
         };
 

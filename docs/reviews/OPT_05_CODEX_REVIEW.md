@@ -283,3 +283,43 @@ shared-target compile error, a material fixture authored outside its active asse
 root, and a probe constructing two GL render services/Jolt debug renderers. The
 final fixture uses the production shared owner and a scoped real asset root;
 production assertions were not suppressed.
+
+## Full-gate correction checkpoint 9 (in progress)
+
+The first full Debug gate at 2653a46 passed 50/50 CTest, focused 9/9, previews
+12/12, Runtime fixtures/executable/negative cases, jobs/ECS, full default
+integration, architecture and baseline tools. It did **not** pass acceptance:
+
+- **OPT05-FR-06 / P1:** The older physical canonical-primitive gate on D3D12 and
+  Vulkan exposed a completely unassigned MeshInstance3D aborting resolution of
+  the entire view. Extraction now excludes only components with no URI, CPU
+  source or GL/native geometry. Nonempty missing asset references still fail.
+- **OPT05-FR-07 / P1:** The older VFX GPU gate on both native APIs exposed unsaved
+  inspector material edits being lost to disk-only metadata loading. Extraction
+  now reads already loaded authored material values through a read-only cache
+  lookup, checks current path/UUID identity and freezes effective values. Cache
+  misses still use metadata-only parsing. CPU tests reject another project's
+  same relative alias and replacement UUIDs; physical snapshots retain old values
+  while a new snapshot reflects unsaved edits.
+- **OPT05-FR-08 / P1:** The actual Editor GL simulation probe asserted Jolt's
+  singleton because Editor retained a legacy PhysicsDebugRenderer beside the
+  service-owned adapter. The obsolete Editor owner is removed. Rendering and
+  current-view line statistics are owned by the shared adapter; disabled/empty
+  debug passes report zero.
+
+First-attempt gate/API/regression logs are preserved under
+build/agent-runs/OPT-05/attempt-2653a46. The default integration itself passed;
+its wrapper failed because the two explicit VFX GPU cases failed. These failures
+are not suppressed or treated as unavailable checks. Corrections are being built;
+final gates and separate-context recheck remain required.
+
+Checkpoint 9 Debug self-verification now passes full AllTests/Editor/Runtime
+build (opt05-full-gate-fixes-debug.log), nine critical cases
+(critical9-results.json: CPU, old primitive/VFX gates on both native APIs, three
+particle consumers and actual Editor/Runtime simulation), and all nine focused
+CPU/service/Canvas cases (final9-focused-debug-results.json). The cache identity
+fixture initializes a real asset root and uses a fresh workspace per invocation.
+A separate-context reviewer rechecked the source repairs, including current
+path/UUID guards and per-view zero line counts, and found no remaining P1/P2
+issue. That reviewer performed source inspection only. The full final-source
+Debug/Release matrix is still required before acceptance.

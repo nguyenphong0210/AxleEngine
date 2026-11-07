@@ -2,6 +2,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RenderParticleData.hpp>
+#include <Axle/MaterialCache.hpp>
 #include <Axle/MeshResourceResolver.hpp>
 #include <Axle/SceneRenderBridge.hpp>
 #include <Axle/AssetSerializer.hpp>
@@ -15,6 +16,9 @@ namespace Axle {
     static void ResolveParticleMaterial(RenderParticleData& batch) {
         batch.Config.Collision.WorldRaycast=nullptr;
         batch.Material=ParticleMaterialAdapter::Resolve(batch.Config,batch.Resources,[](const auto& path) {
+            // Preserve unsaved inspector edits without asking the loading cache
+            // to allocate GPU resources. Only effective values escape this callback.
+            if(auto authored=MaterialCache::FindLoadedMaterial(path))return std::make_shared<Material>(*authored);
             auto material=std::make_shared<Material>();
             return material->Load(FileSystem::ResolveAssetPath(path),false)?material:nullptr;
         });
@@ -198,6 +202,9 @@ namespace Axle {
         auto meshView = registry.view<TransformComponent, MeshInstance3D>();
         for (auto entity : meshView) {
             const auto& mc = meshView.get<MeshInstance3D>(entity);
+            // An empty component has no geometry assignment. It must not abort
+            // otherwise valid meshes; nonempty missing references still fail.
+            if(mc.AssetPath.empty()&&!mc.VAO&&!mc.RHIMeshAsset&&!mc.Source)continue;
             RenderMeshInstance rmi;
             rmi.EntityID = static_cast<uint32_t>(entity);
             if (registry.all_of<IDComponent>(entity)) {

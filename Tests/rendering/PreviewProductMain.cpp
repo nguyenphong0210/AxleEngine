@@ -14,6 +14,8 @@
 #include <Axle/ImageTextureCache.hpp>
 #include <Axle/ImageSource.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/MaterialCache.hpp>
+#include <Axle/AssetManager.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -202,9 +204,9 @@ static bool Particles(const std::string& mode) {
     {
         auto root=std::filesystem::absolute("build/agent-runs/OPT-05/particle-fixtures")/(mode+"-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directories(root);
         for(int i=0;i<2;++i){std::ofstream file(root/(i?"green.tga":"red.tga"),std::ios::binary);char header[18]{};header[2]=2;header[12]=header[14]=1;header[16]=32;file.write(header,18);const char color[4]={0,char(i?255:0),char(i?0:255),char(255)};file.write(color,4);}
-        struct AssetRootScope { std::filesystem::path Previous=FileSystem::GetAssetDirectory(); ~AssetRootScope(){FileSystem::SetAssetDirectory(Previous);} } assetRoot;
+        struct AssetRootScope { std::filesystem::path Previous=FileSystem::GetAssetDirectory(),Assets=AssetManager::GetAssetDirectory(); ~AssetRootScope(){MaterialCache::ClearAll();if(Assets.empty())AssetManager::Shutdown();else AssetManager::Init(Assets);FileSystem::SetAssetDirectory(Previous);} } assetRoot;
         FileSystem::SetAssetDirectory(root);ImageTextureCache::SetSourceResolver(LoadImageSource);
-        auto materialPath=root/"green.axleasset";Material green("Green particle");green.SetAlbedoPath((root/"green.tga").generic_string());green.SetUseAlbedoMap(true);green.SetSurfaceType(SurfaceType::Cutout);Require(green.Save(materialPath),"textured particle material fixture");
+        auto materialPath=root/"green.axleasset";Material green("Green particle");green.SetAlbedoPath((root/"green.tga").generic_string());green.SetUseAlbedoMap(true);green.SetSurfaceType(SurfaceType::Cutout);Require(green.Save(materialPath),"textured particle material fixture");AssetManager::Init(root);
         Scene scene;auto entity=scene.CreateEntity("Local emitters");auto& emitter=entity.AddComponent<ParticleEmitterComponent>();emitter.EmitterStacks.clear();
         for(int i=0;i<2;++i){auto config=ParticleEmitterConfig::CreateNeutral();config.EmissionRate=0;config.MaxParticles=4;config.SimulationSpace=ParticleSimulationSpace::Local;config.StartSize=config.EndSize={0.8f,0.8f};config.InitialSpeed={0,0};config.StartColor=glm::vec4(1);config.SoftnessDistance=0;
             ParticleEmitterStack stack(i?"Green material":"Red texture",config);stack.LocalTransform.Translation={i?0.65f:-0.65f,0,0};stack.UseTexture=true;stack.TexturePath=(root/"red.tga").generic_string();if(i)stack.MaterialPath=materialPath.generic_string();
@@ -219,6 +221,12 @@ static bool Particles(const std::string& mode) {
         auto render=[&](){Require(service.RenderView(scene,view).Success,"particle production service");return native?Axle::RenderTests::ReadTexture(*service.GetDefaultMainColorTarget()):ReadGL(view.GLTargetFBO);};
         auto greenCount=[](const auto& pixels){size_t n=0;for(size_t i=0;i+3<pixels.size();i+=4)if(pixels[i+1]>pixels[i]+30&&pixels[i+1]>pixels[i+2]+30)++n;return n;};
         auto pixels=render();Require(Red(pixels)>100&&greenCount(pixels)>100,"local multi-emitter texture and referenced material pixels");
+        auto authored=MaterialCache::GetMaterial(materialPath);Require(bool(authored),"loaded editable particle material");
+        const auto frozen=ExtractRenderWorld(scene);authored->SetAlbedoColor({1,0.25f,1,1});
+        const auto edited=ExtractRenderWorld(scene);
+        Require(frozen.Particles[1]->Material.BaseColor.g==1&&edited.Particles[1]->Material.BaseColor.g==0.25f,
+            "new snapshots capture unsaved material edits while existing snapshots retain their values");
+        authored->SetAlbedoColor(glm::vec4(1));
         size_t leftRed=0,rightGreen=0;for(unsigned y=0;y<128;++y)for(unsigned x=0;x<128;++x){auto i=(y*128+x)*4;if(x<64&&pixels[i]>pixels[i+1]+30)++leftRed;if(x>=64&&pixels[i+1]>pixels[i]+30)++rightGreen;}
         Require(leftRed>100&&rightGreen>100,"emitter local transforms place independent textures on opposite sides");
         emitter.EmitterStacks[0].UseTexture=false;auto disabled=render();Require(Red(disabled)==0&&greenCount(disabled)>100,"authored emitter texture toggle is respected");emitter.EmitterStacks[0].UseTexture=true;

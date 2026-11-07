@@ -157,6 +157,24 @@ namespace Axle {
         s_TextureCacheByUUID.clear();
     }
 
+    std::shared_ptr<const Material> MaterialCache::FindLoadedMaterial(const std::filesystem::path& path) {
+        if(path.empty())return nullptr;
+        std::lock_guard lock(s_CacheMutex);
+        const auto resolved=ResolvePath(path);
+        if(!FileSystem::Exists(resolved))return nullptr;
+        for(const auto& key:{NormalizePathKey(path),NormalizePathKey(resolved)}) {
+            const auto found=s_MaterialCacheByPath.find(key);
+            if(found==s_MaterialCacheByPath.end()||!found->second)continue;
+            const auto& material=found->second;
+            const auto authoredPath=FileSystem::ResolveAssetPath(material->GetFilePath());
+            if(NormalizePathKey(std::filesystem::absolute(authoredPath))!=NormalizePathKey(std::filesystem::absolute(resolved)))continue;
+            uint64_t identity=0;
+            if(!FileSystem::ReadFileIdentity(resolved,identity)||!identity||identity!=uint64_t(material->GetHandle()))continue;
+            return material;
+        }
+        return nullptr;
+    }
+
     std::shared_ptr<Material> MaterialCache::GetMaterial(const std::filesystem::path& path) {
         if (path.empty()) return nullptr;
         std::lock_guard lock(s_CacheMutex);

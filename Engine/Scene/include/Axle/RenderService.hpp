@@ -5,6 +5,7 @@
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/SceneRenderer.hpp>
+#include <Axle/RenderCapabilities.hpp>
 #include <memory>
 
 namespace Axle {
@@ -33,6 +34,9 @@ namespace Axle {
         // Access underlying renderer backends
         RHISceneRenderer* GetRHIRenderer() { return m_RHIRenderer.get(); }
         SceneRenderer* GetGLRenderer() { return m_GLRenderer.get(); }
+
+        // Capabilities and honest diagnostics
+        RendererCapabilities GetActiveCapabilities() const;
 
     private:
         bool m_Initialized = false;

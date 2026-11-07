@@ -92,6 +92,46 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_RenderCapabilitiesContracts() {
+        auto d3d12Caps = QueryRendererCapabilities(RendererBackendType::ModernRHI_D3D12);
+        RENDER_CHECK(d3d12Caps.Backend == RendererBackendType::ModernRHI_D3D12, "D3D12 backend type");
+        RENDER_CHECK(d3d12Caps.SupportsMSAA && d3d12Caps.MaxMSAASamples == 8, "D3D12 supports 8x MSAA");
+        RENDER_CHECK(d3d12Caps.SupportsHDR && d3d12Caps.SupportsToneMapping, "D3D12 supports HDR & ToneMapping");
+        RENDER_CHECK(d3d12Caps.SupportsFXAA, "D3D12 supports FXAA");
+        RENDER_CHECK(d3d12Caps.SupportsCustomHLSLShaders, "D3D12 supports custom HLSL shaders");
+        RENDER_CHECK(d3d12Caps.SupportsRefractionCopy, "D3D12 supports refraction copy");
+        RENDER_CHECK(d3d12Caps.AdvancedFeatureDiagnostic.empty(), "D3D12 has no feature limitation diagnostic");
+
+        auto vkCaps = QueryRendererCapabilities(RendererBackendType::ModernRHI_Vulkan);
+        RENDER_CHECK(vkCaps.Backend == RendererBackendType::ModernRHI_Vulkan, "Vulkan backend type");
+        RENDER_CHECK(vkCaps.SupportsMSAA && vkCaps.MaxMSAASamples == 8, "Vulkan supports 8x MSAA");
+        RENDER_CHECK(vkCaps.SupportsHDR && vkCaps.SupportsToneMapping, "Vulkan supports HDR & ToneMapping");
+        RENDER_CHECK(vkCaps.SupportsFXAA, "Vulkan supports FXAA");
+        RENDER_CHECK(vkCaps.SupportsCustomHLSLShaders, "Vulkan supports custom HLSL shaders");
+        RENDER_CHECK(vkCaps.AdvancedFeatureDiagnostic.empty(), "Vulkan has no feature limitation diagnostic");
+
+        auto glCaps = QueryRendererCapabilities(RendererBackendType::OpenGL_Compatibility);
+        RENDER_CHECK(glCaps.Backend == RendererBackendType::OpenGL_Compatibility, "OpenGL Compatibility backend type");
+        RENDER_CHECK(glCaps.SupportsMSAA && glCaps.MaxMSAASamples == 4, "GL supports 4x MSAA");
+        RENDER_CHECK(!glCaps.SupportsHDR, "GL compatibility does not support HDR float render passes");
+        RENDER_CHECK(!glCaps.SupportsFXAA, "GL compatibility does not support FXAA post-processing");
+        RENDER_CHECK(!glCaps.SupportsCustomHLSLShaders, "GL compatibility does not support custom HLSL shaders");
+        RENDER_CHECK(!glCaps.SupportsRefractionCopy, "GL compatibility does not support screen-space refraction copy");
+        RENDER_CHECK(!glCaps.AdvancedFeatureDiagnostic.empty(), "GL compatibility reports honest feature limitation diagnostic");
+
+        auto noneCaps = QueryRendererCapabilities(RendererBackendType::None);
+        RENDER_CHECK(noneCaps.Backend == RendererBackendType::None, "None backend type");
+        RENDER_CHECK(!noneCaps.SupportsMSAA && !noneCaps.SupportsHDR, "None backend has no capabilities");
+        return true;
+    }
+
+    static bool Test_RenderServiceCapabilitiesIntegration() {
+        RenderService service;
+        RendererCapabilities caps = service.GetActiveCapabilities();
+        RENDER_CHECK(!caps.BackendName.empty(), "Active backend name is reported");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -101,6 +141,8 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_RenderResultContract()) return false;
     if (!Axle::RenderTests::Test_RenderServiceTargetValidation()) return false;
     if (!Axle::RenderTests::Test_RenderServiceMultipleViewKinds()) return false;
+    if (!Axle::RenderTests::Test_RenderCapabilitiesContracts()) return false;
+    if (!Axle::RenderTests::Test_RenderServiceCapabilitiesIntegration()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

@@ -48,3 +48,7 @@ target_link_libraries(AxleScene
         Axle::UI2D
 )
 
+if (MSVC)
+    target_compile_options(AxleScene PRIVATE /FS)
+endif()
+

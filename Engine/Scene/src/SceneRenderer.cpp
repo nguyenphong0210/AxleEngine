@@ -752,4 +752,176 @@ namespace Axle {
         }
     }
 
+    void SceneRenderer::RenderWorldView(const RenderWorld& world,
+                                        const PerspectiveCamera& camera,
+                                        const std::shared_ptr<Framebuffer>& targetFBO,
+                                        PhysicsScene* physicsScene,
+                                        PhysicsDebugRenderer* physicsDebugRenderer,
+                                        const SceneRenderSettings& settings) {
+        if (!Window::HasActiveContext() || !m_Shader) return;
+
+        // 1. Lighting setup from extracted RenderWorld
+        if (world.DirectionalLight.has_value()) {
+            m_LightDir = world.DirectionalLight->Direction;
+        }
+        bool castShadows = settings.EnableShadows && world.DirectionalLight.has_value() && world.DirectionalLight->CastsShadows;
+
+        // 2. Cascaded Shadow Map Pass
+        if (castShadows && m_ShadowMap && m_ShadowShader) {
+            uint32_t targetRes = 2048;
+            if (m_ShadowMap->GetWidth() != targetRes || m_ShadowMap->GetHeight() != targetRes) {
+                m_ShadowMap->Resize(targetRes, targetRes);
+            }
+
+            m_ShadowMap->CalculateCascades(camera, m_LightDir, 150.0f, 0.85f);
+            const auto& cascadeMatrices = m_ShadowMap->GetCascadeMatrices();
+
+            m_ShadowShader->Bind();
+            for (uint32_t c = 0; c < cascadeMatrices.size(); ++c) {
+                m_ShadowMap->BindCascade(c);
+                m_ShadowShader->SetMat4("u_LightSpaceMatrix", cascadeMatrices[c]);
+                for (const auto& meshInst : world.Meshes) {
+                    if (!meshInst.GLMesh || !meshInst.CastsShadows) continue;
+                    m_ShadowShader->SetMat4("u_Transform", meshInst.WorldTransform);
+                    meshInst.GLMesh->Bind();
+                    RenderCommand::DrawIndexed(meshInst.GLMesh);
+                    meshInst.GLMesh->Unbind();
+                }
+            }
+            m_ShadowMap->Unbind();
+            m_LightSpaceMatrix = m_ShadowMap->GetLightSpaceMatrix(0);
+        }
+
+        // 3. Geometry & Lighting Pass
+        u32 renderWidth = m_ViewportWidth;
+        u32 renderHeight = m_ViewportHeight;
+
+        if (targetFBO) {
+            renderWidth = targetFBO->GetSpecification().Width;
+            renderHeight = targetFBO->GetSpecification().Height;
+            targetFBO->Bind();
+        } else {
+            RenderCommand::BindDefaultFramebuffer();
+        }
+
+        RenderCommand::SetViewport(0, 0, renderWidth, renderHeight);
+        RenderCommand::SetClearColor(settings.ClearColor);
+        RenderCommand::Clear();
+
+        Texture2D::GetWhiteTexture()->Bind(0);
+        if (m_ShadowMap) {
+            m_ShadowMap->BindTexture(1);
+        }
+        Texture2D::GetFlatNormalTexture()->Bind(2);
+        Texture2D::GetDefaultRoughnessTexture()->Bind(3);
+        Texture2D::GetBlackTexture()->Bind(4);
+
+        m_Shader->Bind();
+        m_Shader->SetMat4("u_View", camera.GetViewMatrix());
+        m_Shader->SetMat4("u_Projection", camera.GetProjectionMatrix());
+        m_Shader->SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix());
+        m_Shader->SetFloat3("u_CameraPos", camera.GetPosition());
+
+        if (world.DirectionalLight.has_value()) {
+            const auto& dl = *world.DirectionalLight;
+            m_Shader->SetFloat3("u_LightDirection", dl.Direction);
+            m_Shader->SetFloat3("u_LightColor", dl.Color);
+            m_Shader->SetFloat("u_LightIntensity", dl.Intensity);
+            m_Shader->SetFloat("u_AmbientIntensity", dl.AmbientIntensity);
+        } else {
+            m_Shader->SetFloat3("u_LightDirection", m_LightDir);
+            m_Shader->SetFloat3("u_LightColor", glm::vec3(1.0f));
+            m_Shader->SetFloat("u_LightIntensity", 1.0f);
+            m_Shader->SetFloat("u_AmbientIntensity", 0.28f);
+        }
+
+        const auto& cascadeMatrices = (castShadows && m_ShadowMap) ? m_ShadowMap->GetCascadeMatrices() : std::vector<glm::mat4>{};
+        const auto& splitDists = (castShadows && m_ShadowMap) ? m_ShadowMap->GetCascadeSplitDistances() : std::vector<float>{};
+
+        if (!cascadeMatrices.empty()) {
+            m_Shader->SetMat4Array("u_CascadeLightSpaceMatrices", cascadeMatrices.data(), static_cast<u32>(cascadeMatrices.size()));
+            m_Shader->SetFloatArray("u_CascadeSplitDistances", splitDists.data(), static_cast<u32>(splitDists.size()));
+        }
+        m_Shader->SetInt("u_ShadowsEnabled", castShadows ? 1 : 0);
+
+        // Point lights
+        int numPointLights = std::min(static_cast<int>(world.PointLights.size()), 4);
+        m_Shader->SetInt("u_NumPointLights", numPointLights);
+        for (int i = 0; i < numPointLights; ++i) {
+            std::string prefix = "u_PointLights[" + std::to_string(i) + "].";
+            m_Shader->SetFloat3(prefix + "Position", world.PointLights[i].Position);
+            m_Shader->SetFloat3(prefix + "Color", world.PointLights[i].Color);
+            m_Shader->SetFloat(prefix + "Intensity", world.PointLights[i].Intensity);
+            m_Shader->SetFloat(prefix + "Radius", world.PointLights[i].Radius);
+        }
+
+        // Spot lights
+        int numSpotLights = std::min(static_cast<int>(world.SpotLights.size()), 4);
+        m_Shader->SetInt("u_NumSpotLights", numSpotLights);
+        for (int i = 0; i < numSpotLights; ++i) {
+            std::string prefix = "u_SpotLights[" + std::to_string(i) + "].";
+            m_Shader->SetFloat3(prefix + "Position", world.SpotLights[i].Position);
+            m_Shader->SetFloat3(prefix + "Direction", world.SpotLights[i].Direction);
+            m_Shader->SetFloat3(prefix + "Color", world.SpotLights[i].Color);
+            m_Shader->SetFloat(prefix + "Intensity", world.SpotLights[i].Intensity);
+            m_Shader->SetFloat(prefix + "Range", world.SpotLights[i].Range);
+            m_Shader->SetFloat(prefix + "InnerCutOff", std::cos(glm::radians(world.SpotLights[i].InnerAngle)));
+            m_Shader->SetFloat(prefix + "OuterCutOff", std::cos(glm::radians(world.SpotLights[i].OuterAngle)));
+        }
+
+        // Render extracted meshes
+        for (const auto& meshInst : world.Meshes) {
+            if (!meshInst.GLMesh) continue;
+
+            m_Shader->SetMat4("u_Transform", meshInst.WorldTransform);
+            m_Shader->SetFloat4("u_Color1", meshInst.Material.AlbedoColor);
+            m_Shader->SetFloat4("u_Color2", meshInst.Material.SecondaryColor);
+            m_Shader->SetFloat("u_TileScale", meshInst.Material.TileScale.x);
+            m_Shader->SetInt("u_PatternMode", meshInst.Material.PatternMode);
+            m_Shader->SetFloat("u_Roughness", meshInst.Material.Roughness);
+            m_Shader->SetFloat("u_Metallic", meshInst.Material.Metallic);
+            m_Shader->SetFloat3("u_EmissionColor", glm::vec3(meshInst.Material.Emission));
+            m_Shader->SetFloat("u_EmissionIntensity", meshInst.Material.Emission > 0.0f ? 1.0f : 0.0f);
+            m_Shader->SetInt("u_UseAlbedoMap", 0);
+            m_Shader->SetInt("u_UseNormalMap", 0);
+            m_Shader->SetInt("u_UseRoughnessMap", 0);
+            m_Shader->SetInt("u_UseMetallicMap", 0);
+
+            meshInst.GLMesh->Bind();
+            RenderCommand::DrawIndexed(meshInst.GLMesh);
+            meshInst.GLMesh->Unbind();
+        }
+
+        // 4. Skybox pass
+        if (settings.EnableSkybox && m_Skybox && world.Skybox.Enabled) {
+            m_Skybox->SetMode(SkyboxMode::ProceduralAtmospheric);
+            auto& spec = m_Skybox->GetSpecification();
+            spec.ZenithColor = glm::vec3(world.Skybox.ZenithColor);
+            spec.HorizonColor = glm::vec3(world.Skybox.HorizonColor);
+            spec.GroundColor = glm::vec3(world.Skybox.GroundColor);
+            m_Skybox->SetSunDirection(glm::vec3(world.Skybox.SunDirection));
+            m_Skybox->Render(camera.GetViewMatrix(), camera.GetProjectionMatrix());
+        }
+
+        // 5. Physics debug wireframes
+        if (settings.ShowPhysicsDebug && physicsDebugRenderer && physicsScene) {
+            physicsDebugRenderer->Begin(camera.GetPosition());
+            physicsScene->DrawDebug(*physicsDebugRenderer, settings.PhysicsDrawSettings);
+            physicsDebugRenderer->End(camera.GetViewProjectionMatrix());
+        }
+
+        // 6. Cleanup
+        Texture2D::GetWhiteTexture()->Unbind(0);
+        if (m_ShadowMap) {
+            m_ShadowMap->UnbindTexture(1);
+        }
+        Texture2D::GetFlatNormalTexture()->Unbind(2);
+        Texture2D::GetDefaultRoughnessTexture()->Unbind(3);
+        Texture2D::GetBlackTexture()->Unbind(4);
+
+        if (targetFBO) {
+            targetFBO->Unbind();
+        }
+    }
+
 }

@@ -52,6 +52,20 @@ namespace Axle {
         m_Initialized = false;
     }
 
+    RendererCapabilities RenderService::GetActiveCapabilities() const {
+        if (m_RHIRenderer && RHI::RHIDevice::Get().IsNativeReady()) {
+            auto backend = RHI::RHIDevice::Get().GetBackend();
+            if (backend == RHI::RHIType::Vulkan) {
+                return QueryRendererCapabilities(RendererBackendType::ModernRHI_Vulkan);
+            }
+            return QueryRendererCapabilities(RendererBackendType::ModernRHI_D3D12);
+        }
+        if (m_GLRenderer && m_GLRenderer->IsReady()) {
+            return QueryRendererCapabilities(RendererBackendType::OpenGL_Compatibility);
+        }
+        return QueryRendererCapabilities(RendererBackendType::None);
+    }
+
     RenderResult RenderService::RenderView(const RenderWorld& world, const ViewRequest& request) {
         if (!m_Initialized) {
             if (!Init()) {
@@ -95,9 +109,20 @@ namespace Axle {
         // OpenGL compatibility path
         if (m_GLRenderer && m_GLRenderer->IsReady()) {
             m_GLRenderer->SetViewportSize(request.Width, request.Height);
+            m_GLRenderer->RenderWorldView(world,
+                                          request.Camera,
+                                          request.GLTargetFBO,
+                                          request.PhysicsScene,
+                                          nullptr,
+                                          request.Settings);
             result.Success = true;
-            result.DrawCallCount = 0;
-            result.RenderedEntityCount = 0;
+            result.DrawCallCount = static_cast<uint32_t>(world.GetMeshCount());
+            result.RenderedEntityCount = static_cast<uint32_t>(world.GetMeshCount());
+            result.CompletionToken = RHI::RHICompletionToken{ 1, 1 };
+
+            if (request.Settings.EnableFXAA || request.Settings.EnableToneMapping) {
+                result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
+            }
             return result;
         }
 
@@ -164,6 +189,9 @@ namespace Axle {
             result.DrawCallCount = 0;
             const auto& reg = scene.GetRegistry();
             result.RenderedEntityCount = reg.storage<entt::entity>() ? static_cast<uint32_t>(reg.storage<entt::entity>()->size()) : 0;
+            if (request.Settings.EnableFXAA || request.Settings.EnableToneMapping) {
+                result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
+            }
             return result;
         }
 

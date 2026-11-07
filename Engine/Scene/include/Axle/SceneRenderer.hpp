@@ -8,6 +8,7 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/SkinningPipeline.hpp>
+#include <Axle/RenderWorld.hpp>
 
 #include <memory>
 #include <glm/glm.hpp>
@@ -56,6 +57,14 @@ namespace Axle {
                          PhysicsScene* physicsScene = nullptr,
                          PhysicsDebugRenderer* physicsDebugRenderer = nullptr,
                          const SceneRenderSettings& settings = SceneRenderSettings{});
+
+        // Render an immutable RenderWorld snapshot in OpenGL
+        void RenderWorldView(const RenderWorld& world,
+                             const PerspectiveCamera& camera,
+                             const std::shared_ptr<Framebuffer>& targetFBO = nullptr,
+                             PhysicsScene* physicsScene = nullptr,
+                             PhysicsDebugRenderer* physicsDebugRenderer = nullptr,
+                             const SceneRenderSettings& settings = SceneRenderSettings{});
 
         void SetViewportSize(u32 width, u32 height) {
             m_ViewportWidth = width;

@@ -9,7 +9,7 @@ Workflow: Default workflow under `docs/agents/WORKING_PROTOCOL.md` (Gemini imple
 Scope:
 - [x] **P41-12:** RenderWorld and shared scene extraction
 - [x] **P41-13:** RenderService and minimal modern render graph
-- [ ] **P41-14:** OpenGL compatibility behind the same service
+- [x] **P41-14:** OpenGL compatibility behind the same service
 - [ ] **P41-15:** Asset and material previews
 - [ ] **P41-16:** VFX preview
 - [ ] **P41-17:** Assembly preview
@@ -90,5 +90,39 @@ Scope:
 - `ctest --test-dir build -C Debug -R RenderUnitTests`: 1/1 passed, exit 0
 - `ctest --test-dir build -C Release -R RenderUnitTests`: 1/1 passed, exit 0
 - `python scripts/check_architecture.py --root .`: PASS (403 files / 18 CMake files)
+- `python scripts/test_baseline_tools.py`: 18/18 PASS
+- `git diff --check`: PASS
+
+
+---
+
+## Package P41-14: OpenGL Compatibility Behind the Same Service
+
+- **Status:** Implemented and self-verified in Debug and Release.
+- **Scope & Contract:** `docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md` lines 261-270
+
+### Implementation Summary
+1. **RenderCapabilities Contract (`Engine/Renderer/include/Axle/RenderCapabilities.hpp`, `Engine/Renderer/src/RenderCapabilities.cpp`):**
+   - Cleanly separated physical capabilities from implemented renderer features and active per-view enabled features.
+   - Enums & Structs: `RendererBackendType`, `RenderCapabilities`, `QueryRendererCapabilities()`, `LogRenderCapabilities()`.
+   - Distinguishes RHI backend capabilities (Modern Bindless/DX12/Vulkan) from OpenGL compatibility mode capabilities.
+2. **OpenGL RenderWorld Execution (`Engine/Scene/include/Axle/SceneRenderer.hpp`, `Engine/Scene/src/SceneRenderer.cpp`):**
+   - Implemented `RenderWorldView` in legacy `SceneRenderer`.
+   - Renders extracted `RenderWorld` meshes, lighting (directional, point, spot with shadow maps), skybox, and physics debug visualization in OpenGL without depending on `Scene` or `entt::registry`.
+3. **Honest Compatibility Diagnostics in RenderService (`Engine/Scene/src/RenderService.cpp`):**
+   - `RenderService::GetActiveCapabilities()` queries the active backend's capabilities accurately.
+   - When running on OpenGL, `RenderService::RenderView` detects if advanced features (HDR floating-point targets, FXAA post-processing, screen-space refraction copies, custom HLSL shaders) are requested, and issues explicit diagnostic warnings without mutating the authored scene settings.
+4. **Dedicated Unit Verification (`Tests/rendering/Test_RenderServiceUnit.cpp`):**
+   - `Test_RenderCapabilitiesContract`: Verifies querying capabilities across Direct3D 12, Vulkan, and OpenGL backends.
+   - `Test_GLCompatibilityReporting`: Validates that requesting advanced post-processing / HDR under GL compatibility triggers diagnostics and records appropriate status.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleRenderUnitTests`: exit 0
+- `cmake --build build --config Release --target AxleRenderUnitTests`: exit 0
+- `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `ctest --test-dir build -C Debug -R RenderUnitTests`: 1/1 passed, exit 0
+- `ctest --test-dir build -C Release -R RenderUnitTests`: 1/1 passed, exit 0
+- `python scripts/check_architecture.py --root .`: PASS (405 files / 18 CMake files)
 - `python scripts/test_baseline_tools.py`: 18/18 PASS
 - `git diff --check`: PASS

@@ -247,6 +247,10 @@ add_executable(AxleRHIFrameTests EXCLUDE_FROM_ALL rendering/RHIFrameMain.cpp)
 target_include_directories(AxleRHIFrameTests PRIVATE rendering)
 target_link_libraries(AxleRHIFrameTests PRIVATE Axle::RHI)
 
+add_executable(AxleRHIPresentationTests EXCLUDE_FROM_ALL rendering/RHIPresentationMain.cpp)
+target_include_directories(AxleRHIPresentationTests PRIVATE rendering)
+target_link_libraries(AxleRHIPresentationTests PRIVATE Axle::RHI)
+
 add_executable(AxlePrimitiveTests EXCLUDE_FROM_ALL rendering/PrimitiveMain.cpp)
 target_include_directories(AxlePrimitiveTests PRIVATE rendering)
 target_link_libraries(AxlePrimitiveTests PRIVATE Axle::UI Axle::Scene glad glfw)
@@ -516,7 +520,7 @@ add_test(NAME Opt0203ReviewRegressions COMMAND $<TARGET_FILE:AxleOpt0203ReviewTe
 set_tests_properties(Opt0203ReviewRegressions PROPERTIES LABELS "review;ecs-jobs;sim;cpu" TIMEOUT 60)
 
 set(AXLE_TEST_TARGETS AxleSceneDataBoundaryTests AxleOpt0203ReviewTests AxleFoundationUnitTests AxleSceneMutationUnitTests AxleSimulationClockUnitTests AxleEditorCutoverUnitTests AxleRuntimeProductParityUnitTests AxleProjectUnitTests AxleAssetUnitTests AxleAssetFormatUnitTests AxleSceneDataUnitTests AxleSharedRuntimePhasesUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
-list(APPEND AXLE_TEST_TARGETS AxlePrimitiveTests AxleRHIIdentityTests AxleRHIRetirementTests AxleRHIStateTests AxleRHIFrameTests)
+list(APPEND AXLE_TEST_TARGETS AxlePrimitiveTests AxleRHIIdentityTests AxleRHIRetirementTests AxleRHIStateTests AxleRHIFrameTests AxleRHIPresentationTests)
 if(WIN32)
     add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
     target_include_directories(AxleBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/Editor/generated/$<CONFIG>")

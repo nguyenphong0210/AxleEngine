@@ -108,22 +108,28 @@ static bool VulkanWindowFailures() {
     {
         Window window(props);
         RENDER_CHECK(window.GetNativeWindow(), "real native window exists before injected failure");
-        for (const auto* boundary : {"vkCreateSwapchainKHR", "vkGetSwapchainImagesKHR", "vkCreateRenderPass",
-            "vkCreateImageView", "vkCreateFramebuffer", "vkCreateCommandPool", "vkAllocateCommandBuffers", "vkCreateFence", "vkCreateSemaphore"}) {
+        for (const auto* boundary : {"CreateGuiDescriptorPool", "CreateSwapChain", "CreatePresentView",
+            "CreateCommandAllocator", "CreateCommandBuffer", "CreateDescriptorPool", "CreateBuffer", "CreateBufferCBV"}) {
             bool reached = false, rejected = false;
             ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
                 if (operation == boundary) { reached = true; return nri::Result::FAILURE; }
                 return {};
             });
             ImGuiLayer ui(ImGuiBackendType::Vulkan);
-            try { ui.Init(window.GetNativeWindow()); } catch (const std::exception&) { rejected = true; }
-            RENDER_CHECK(reached && rejected && !ui.IsInitialized(), "partial native UI construction rejects and rolls back");
+            try {
+                ui.Init(window.GetNativeWindow());
+                auto presentation = ui.CreateRenderContext(window);
+            } catch (const std::exception&) { rejected = true; ui.Shutdown(); }
+            RENDER_CHECK(reached && rejected && !ui.IsInitialized(), "partial native UI/presentation composition rejects and rolls back");
             ui.Shutdown();
         }
         ImGuiLayer ui(ImGuiBackendType::Vulkan);
         ui.Init(window.GetNativeWindow());
         RENDER_CHECK(ui.IsInitialized(), "native UI recovers after every partial construction stage");
-        ui.Begin(); ui.End(); ui.Shutdown();
+        auto presentation = ui.CreateRenderContext(window);
+        ui.Begin(); ui.End();
+        RENDER_CHECK(presentation->Present(window), "shared native UI recovers and presents after partial construction failures");
+        presentation->Shutdown(); ui.Shutdown();
     }
     device.Shutdown();
     return true;

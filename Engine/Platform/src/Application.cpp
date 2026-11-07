@@ -81,6 +81,7 @@ namespace Axle {
         JobSystem::PumpMainThreadCompletions();
 
         AXLE_CORE_INFO("Application::~Application -> [3/6] Shutdown UIContext");
+        if (m_RenderContext) { m_RenderContext->Shutdown(); m_RenderContext.reset(); }
         if (m_UIContext) {
             m_UIContext->Shutdown();
             m_UIContext.reset();
@@ -132,6 +133,7 @@ namespace Axle {
     }
 
     void Application::SetUIContext(std::unique_ptr<ApplicationUIContext> uiContext) {
+        if (m_RenderContext) { m_RenderContext->Shutdown(); m_RenderContext.reset(); }
         if (m_UIContext) {
             m_UIContext->Shutdown();
         }
@@ -139,6 +141,11 @@ namespace Axle {
         if (m_UIContext && m_Window) {
             m_UIContext->Init(m_Window->GetNativeWindow());
         }
+    }
+
+    void Application::SetRenderContext(std::unique_ptr<ApplicationRenderContext> context) {
+        if (m_RenderContext) m_RenderContext->Shutdown();
+        m_RenderContext = std::move(context);
     }
 
     void Application::Close() {
@@ -183,6 +190,8 @@ namespace Axle {
                 m_UIContext->End();
                 if (!m_UIContext->IsOperational()) m_Running = false;
             }
+
+            if (m_RenderContext && !m_RenderContext->Present(*m_Window)) m_Running = false;
 
             m_Window->SwapBuffers();
         }

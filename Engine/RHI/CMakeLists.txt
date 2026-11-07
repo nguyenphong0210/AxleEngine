@@ -9,6 +9,7 @@ add_library(AxleRHI STATIC
     src/RHIBarrier.cpp
     src/RHICommandBuffer.cpp
     src/RHIFrameContext.cpp
+    src/RHIPresentationContext.cpp
     src/RHIBuffer.cpp
     src/RHIStreamer.cpp
     src/RHITexture.cpp

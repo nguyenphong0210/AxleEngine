@@ -427,11 +427,54 @@ Eight scene/VFX integration runs passed (two APIs, two targets, two configs),
 recorded in p41-08-integration-results.json. Architecture/whitespace checks passed.
 API-validation and final separate-context review gates remain open as above.
 
+## P41-09 - Shared application presentation and UI recording bridge
+
+Starting from P41-08 commit `4028e7d`. Application composition now owns a generic
+render context, installed by Editor startup. Its RHIPresentationContext owns the
+single NRI surface/swapchain, completion-owned frame slots and attachment views.
+The coordinator prepares GUI resource state, records views/UI into its commands,
+submits once for that window frame and presents. Application shutdown/replacement
+releases presentation before the UI/window. Weak UI callbacks reject a destroyed
+owner; GUI teardown still retains independent native backend generations.
+
+ImGui End builds draw data; its native adapters only record. The competing D3D12
+and Vulkan UI swapchain/acquire/submit/present loops and their native window
+resources were removed. Vulkan uses dynamic rendering and rebuilds its UI pipeline
+for the actual target format. Its RHI bridge now also passes original red-pixel
+readback after the original UI object dies before command submission. GUI inputs
+are declared in coordinator commands before rendering; normal composed frames no
+longer need separate preparation or retirement submissions. GL retains its
+supported application window adapter.
+
+One swapchain policy applies requested VSync, framebuffer resize and native
+minimize/restore. Out-of-date acquire/present requests checked reconstruction.
+Accepted submits retain their completion even when present fails; failed submits
+cannot present or increment successful presentation. Conservative drains remain
+before native allocator reuse, including direct swapchain adapters. Empty adapter
+frames explicitly transition the image to PRESENT. Partial-construction tests now
+inject the active UI/presentation boundaries rather than retired vendor window
+operations; rollback and successful recovery remain asserted.
+
+Final Debug/Release builds of AxleRHIPresentationTests, AxleRHIResourceViewTests,
+AxleVFXGPUTests, AxleRHIFoundationTests, AxleRHIErrorTests and AxleEditor passed:
+p41-09-final-checked-build-{debug,release}.log. Each configuration passed 29 cases:
+more09.py (13), present09.py (2), additional09.py (7) and product09.py (7).
+Corresponding p41-09 manifests/logs record actual exits; strict startup rejection
+expects exit 1, all other cases exit 0. Physical window tests clear/present without
+ImGui, cycle both VSync requests, resize the real window, actually iconify/restore,
+exercise out-of-date acquire/present, abandon and rejected submission. UI-only,
+scene/UI, epoch, native UI lifetime/teardown, VFX and Editor strict modern/GL/
+fallback/rollback startup also pass. Native mains enforce zero NRI errors through
+teardown. Architecture, whitespace and clean pinned NRI checks passed.
+
+Implementation and available self-verification are complete. Actual API
+validation and final consolidated review remain open; no phase acceptance is claimed.
+
 ## Remaining work
 
-P41-09..11 remain: shared presentation, complete view target sets and central CPU
-decode/upload/cache ownership. Continue through P41-11, then one consolidated
-final review.
+P41-10..11 remain: complete per-view target ownership, external generation
+snapshots and shared CPU decode/upload/cache ownership. Continue through P41-11,
+then one consolidated final review.
 
 Full phase builds, CTest, integration, jobs/ECS, final native product simulation, GPU
 readbacks and final window/lifetime checks remain open. API-validation prerequisites

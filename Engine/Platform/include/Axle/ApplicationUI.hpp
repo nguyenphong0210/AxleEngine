@@ -3,6 +3,13 @@
 struct GLFWwindow;
 
 namespace Axle {
+    class Window;
+    class ApplicationRenderContext {
+    public:
+        virtual ~ApplicationRenderContext() = default;
+        virtual bool Present(const Window& window) = 0;
+        virtual void Shutdown() = 0;
+    };
 
     class ApplicationUIContext {
     public:

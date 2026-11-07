@@ -265,6 +265,8 @@ int main(int argc, char** argv) {
                     app = std::make_unique<Axle::Application>(spec);
                     app->RegisterService(std::make_shared<PhysicsApplicationService>());
                     app->SetUIContext(std::make_unique<Axle::ImGuiLayer>(Axle::ToImGuiBackend(api)));
+                    auto* ui = static_cast<Axle::ImGuiLayer*>(app->GetUIContext());
+                    app->SetRenderContext(ui->CreateRenderContext(app->GetWindow()));
                     if (Axle::RHI::ScopedRHIFault::Invoke("ProductUI", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS)
                         throw std::runtime_error("Injected rejection after native UI readiness");
                     editorLayer = std::make_shared<EditorLayer>(startupPath);

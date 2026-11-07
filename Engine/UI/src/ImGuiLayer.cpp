@@ -3,6 +3,7 @@
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/RHI/RHITexture.hpp>
+#include <Axle/RHI/RHIPresentationContext.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
@@ -82,6 +83,7 @@ namespace Axle {
     struct GuiFrameState {
         bool Active = false, Closing = false;
         bool NativeRecorded = false;
+        const void* PreparedCommands = nullptr;
         RHI::RHIRecordingLease Uses;
         GuiDeferredReleaser RetireOutsideFrame;
         std::vector<std::function<void()>> Deferred;
@@ -112,51 +114,58 @@ namespace Axle {
     }
     struct ImGuiDescriptorCallbackState { ImGuiLayer* Owner = nullptr; std::shared_ptr<ImGuiDescriptorArena> Arena; };
     struct ImGuiBackendRetirement { std::function<void()> Cleanup; };
-#if defined(AXLE_HAS_D3D12)
-    static nri::Result UIResultCode(HRESULT result) {
-        if (result == DXGI_ERROR_DEVICE_REMOVED || result == DXGI_ERROR_DEVICE_RESET) return nri::Result::DEVICE_LOST;
-        return SUCCEEDED(result) ? nri::Result::SUCCESS : nri::Result::FAILURE;
-    }
-#endif
-#if defined(AXLE_HAS_VULKAN)
-    static nri::Result UIResultCode(VkResult result) {
-        if (result == VK_ERROR_DEVICE_LOST) return nri::Result::DEVICE_LOST;
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) return nri::Result::OUT_OF_DATE;
-        if (result == VK_TIMEOUT || result == VK_NOT_READY) return nri::Result::NOT_READY;
-        return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR ? nri::Result::SUCCESS : nri::Result::FAILURE;
-    }
-#endif
-    template<class F> static bool CheckUIOperation(const char* name, F&& call) {
-        RHI::ScopedRHIOperation scope("ImGui surface");
-        const auto result = RHI::ScopedRHIFault::Invoke(name, [&] { return UIResultCode(call()); });
-        if (result == nri::Result::NOT_READY) RHI::RHIDevice::Get().ObserveResult(result, name, "ImGui surface", true);
-        return result == nri::Result::SUCCESS;
-    }
+    class GuiApplicationRenderer final : public ApplicationRenderContext {
+    public:
+        RHI::RHIPresentationContext Presenter;
+        RHI::RHIPresentationContext::Recorder Prepare, Draw;
+        std::function<void()> Complete;
+        std::function<void()> Detach;
+        ~GuiApplicationRenderer() override { Shutdown(); }
+        bool Present(const Window& window) override {
+            struct Finish { std::function<void()>& Complete; ~Finish() { if (Complete) Complete(); } } finish{Complete};
+            int width = 0, height = 0; glfwGetFramebufferSize(window.GetNativeWindow(), &width, &height);
+            if (glfwGetWindowAttrib(window.GetNativeWindow(), GLFW_ICONIFIED)) width = height = 0;
+            try {
+                const auto outcome = Presenter.RenderFrame(static_cast<uint32_t>(width), static_cast<uint32_t>(height), window.IsVSync(), Prepare, Draw);
+                return outcome != RHI::RHIPresentOutcome::Failed;
+            } catch (const std::exception& error) {
+                RHI::RHIDevice::Get().ObserveResult(nri::Result::FAILURE, "RecordPresentation", error.what());
+                Presenter.Shutdown(); return false;
+            }
+        }
+        void Shutdown() override { Presenter.Shutdown(); if (Detach) Detach(); }
+    };
 
+    std::unique_ptr<ApplicationRenderContext> ImGuiLayer::CreateRenderContext(const Window& window) {
+        if (m_BackendType == ImGuiBackendType::OpenGL) return {};
+        if (!m_Initialized || m_ComposedPresentation || !m_DescriptorCallbacks) throw std::runtime_error("Invalid UI composition owner");
+        auto result = std::make_unique<GuiApplicationRenderer>();
+        RHI::RHISwapChainDesc desc; desc.VSync = window.IsVSync(); desc.FramesInFlight = 3;
+        if (!result->Presenter.Init(window.GetNativeWindow(), desc)) throw std::runtime_error("Application presentation initialization failed");
+        std::weak_ptr<ImGuiDescriptorCallbackState> weak = m_DescriptorCallbacks;
+        result->Prepare = [weak](RHI::RHICommandBuffer& commands, nri::Format) {
+            auto state = weak.lock(); return state && state->Owner && state->Owner->PrepareGuiTextures(&commands);
+        };
+        result->Draw = [weak](RHI::RHICommandBuffer& commands, nri::Format format) {
+            auto state = weak.lock(); return state && state->Owner && state->Owner->Render(&commands, format);
+        };
+        result->Complete = [weak] { if (auto state = weak.lock(); state && state->Owner) state->Owner->FinishGuiFrame(); };
+        result->Detach = [weak] {
+            if (auto state = weak.lock(); state && state->Owner) {
+                auto* owner = state->Owner;
+                if (owner->m_GuiFrame && owner->m_GuiFrame->Active && ImGui::GetCurrentContext() && ImGui::GetCurrentContext()->WithinFrameScope)
+                    ImGui::EndFrame();
+                owner->FinishGuiFrame(); owner->m_ComposedPresentation = false;
+            }
+        };
+        m_ComposedPresentation = true; return result;
+    }
     bool ImGuiLayer::IsOperational() const {
         const auto state = RHI::RHIDevice::Get().GetState();
         return m_Initialized && (m_BackendType == ImGuiBackendType::OpenGL ||
             (state != RHI::RHIDeviceState::Lost && state != RHI::RHIDeviceState::Stopping));
     }
 
-
-#if defined(AXLE_HAS_VULKAN)
-    struct VulkanDispatchTable {
-        PFN_vkDeviceWaitIdle vkDeviceWaitIdle = nullptr;
-        PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR = nullptr;
-        PFN_vkQueueSubmit vkQueueSubmit = nullptr;
-        PFN_vkQueuePresentKHR vkQueuePresentKHR = nullptr;
-        PFN_vkWaitForFences vkWaitForFences = nullptr;
-        PFN_vkResetFences vkResetFences = nullptr;
-        PFN_vkResetCommandPool vkResetCommandPool = nullptr;
-        PFN_vkBeginCommandBuffer vkBeginCommandBuffer = nullptr;
-        PFN_vkEndCommandBuffer vkEndCommandBuffer = nullptr;
-        PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass = nullptr;
-        PFN_vkCmdEndRenderPass vkCmdEndRenderPass = nullptr;
-        PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = nullptr;
-    };
-    static VulkanDispatchTable s_VkFuncs;
-#endif
 
     ::ImFont* ImGuiLayer::s_RegularFont = nullptr;
     ::ImFont* ImGuiLayer::s_BoldFont    = nullptr;
@@ -375,14 +384,6 @@ namespace Axle {
             }
 
             bool ready = ImGui::GetIO().BackendRendererUserData && (!m_Window || ImGui::GetIO().BackendPlatformUserData);
-#if defined(AXLE_HAS_D3D12)
-            if (m_BackendType == ImGuiBackendType::Direct3D12 && m_Window)
-                ready = ready && m_D3D12SwapChain && m_D3D12RtvHeap && m_D3D12CommandList && m_D3D12Fence && m_D3D12FenceEvent;
-#endif
-#if defined(AXLE_HAS_VULKAN)
-            if (m_BackendType == ImGuiBackendType::Vulkan)
-                ready = ready && m_VulkanWindowData && m_VulkanWindowData->Swapchain && m_VulkanWindowData->ImageCount;
-#endif
             if (!ready) {
                 Shutdown();
                 throw std::runtime_error("UI backend initialization failed; product candidate must be rolled back");
@@ -505,76 +506,7 @@ namespace Axle {
 
         if (!ImGui_ImplDX12_CreateDeviceObjects()) throw std::runtime_error("D3D12 UI device objects failed");
 
-        // Create native D3D12 SwapChain for the GLFW window if m_Window is valid
-        if (m_Window) {
-            HWND hwnd = glfwGetWin32Window(m_Window);
-            if (hwnd) {
-                int w = 0, h = 0;
-                glfwGetFramebufferSize(m_Window, &w, &h);
-                m_D3D12Width = static_cast<uint32_t>(w > 0 ? w : 1280);
-                m_D3D12Height = static_cast<uint32_t>(h > 0 ? h : 720);
-
-                IDXGIFactory4* dxgiFactory = nullptr;
-                HRESULT scHr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
-                if (SUCCEEDED(scHr) && dxgiFactory) {
-                    DXGI_SWAP_CHAIN_DESC1 sd = {};
-                    sd.BufferCount = 3;
-                    sd.Width = m_D3D12Width;
-                    sd.Height = m_D3D12Height;
-                    sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                    sd.Flags = 0;
-                    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-                    sd.SampleDesc.Count = 1;
-                    sd.SampleDesc.Quality = 0;
-                    sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-                    sd.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-                    sd.Scaling = DXGI_SCALING_STRETCH;
-                    sd.Stereo = FALSE;
-
-                    IDXGISwapChain1* swapChain1 = nullptr;
-                    scHr = dxgiFactory->CreateSwapChainForHwnd(d3d12Queue, hwnd, &sd, nullptr, nullptr, &swapChain1);
-                    if (SUCCEEDED(scHr) && swapChain1) {
-                        swapChain1->QueryInterface(IID_PPV_ARGS(&m_D3D12SwapChain));
-                        swapChain1->Release();
-                    }
-                    dxgiFactory->Release();
-                }
-
-                if (m_D3D12SwapChain) {
-                    // Create RTV Descriptor Heap
-                    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-                    rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-                    rtvHeapDesc.NumDescriptors = 3;
-                    rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-                    d3d12Device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_D3D12RtvHeap));
-                    if (!m_D3D12RtvHeap) return;
-                    m_D3D12RtvDescriptorSize = d3d12Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-                    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_D3D12RtvHeap->GetCPUDescriptorHandleForHeapStart();
-                    for (UINT i = 0; i < 3; ++i) {
-                        m_D3D12SwapChain->GetBuffer(i, IID_PPV_ARGS(&m_D3D12RenderTargets[i]));
-                        if (!m_D3D12RenderTargets[i]) return;
-                        d3d12Device->CreateRenderTargetView(m_D3D12RenderTargets[i], nullptr, rtvHandle);
-                        rtvHandle.ptr += m_D3D12RtvDescriptorSize;
-                    }
-
-                    // Create Command Allocators & List
-                    for (UINT i = 0; i < 3; ++i) {
-                        d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_D3D12CommandAllocators[i]));
-                        if (!m_D3D12CommandAllocators[i]) return;
-                    }
-                    d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_D3D12CommandAllocators[0], nullptr, IID_PPV_ARGS(&m_D3D12CommandList));
-                    if (!m_D3D12CommandList || FAILED(m_D3D12CommandList->Close())) return;
-
-                    // Create Frame Synchronization Fence
-                    d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_D3D12Fence));
-                    m_D3D12FenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-                }
-            }
-        }
-
-        AXLE_CORE_INFO("ImGui Layer initialized successfully for Direct3D 12 (SRV Heap: 1024 descriptors{0})",
-                       m_D3D12SwapChain ? ", Window SwapChain: Active" : "");
+        AXLE_CORE_INFO("ImGui D3D12 recording bridge initialized");
 #else
         AXLE_CORE_WARN("D3D12 ImGui backend requested but not supported on this platform; rejecting product candidate!");
 #endif
@@ -582,11 +514,6 @@ namespace Axle {
 
     void ImGuiLayer::InitVulkan() {
 #if defined(AXLE_HAS_VULKAN)
-        if (!m_Window) {
-            AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: GLFW window is null!");
-            return;
-        }
-
         auto& rhiDevice = RHI::RHIDevice::Get();
         if (!rhiDevice.IsNativeReady() || rhiDevice.GetBackend() != RHI::RHIType::Vulkan) {
             AXLE_CORE_WARN("ImGuiLayer::InitVulkan: RHI Device is not initialized or not Vulkan; rejecting product candidate!");
@@ -651,68 +578,7 @@ namespace Axle {
             return;
         }
 
-        // Populate our local dispatch table for presentation & synchronization
-        #define AXLE_LOAD_VK_FUNC(fn) s_VkFuncs.fn = reinterpret_cast<PFN_##fn>(pfnGetInstanceProcAddr(vkInstance, #fn))
-        AXLE_LOAD_VK_FUNC(vkDeviceWaitIdle);
-        AXLE_LOAD_VK_FUNC(vkAcquireNextImageKHR);
-        AXLE_LOAD_VK_FUNC(vkQueueSubmit);
-        AXLE_LOAD_VK_FUNC(vkQueuePresentKHR);
-        AXLE_LOAD_VK_FUNC(vkWaitForFences);
-        AXLE_LOAD_VK_FUNC(vkResetFences);
-        AXLE_LOAD_VK_FUNC(vkResetCommandPool);
-        AXLE_LOAD_VK_FUNC(vkBeginCommandBuffer);
-        AXLE_LOAD_VK_FUNC(vkEndCommandBuffer);
-        AXLE_LOAD_VK_FUNC(vkCmdBeginRenderPass);
-        AXLE_LOAD_VK_FUNC(vkCmdEndRenderPass);
-        AXLE_LOAD_VK_FUNC(vkDestroySurfaceKHR);
-        #undef AXLE_LOAD_VK_FUNC
-
-        // Allocate Vulkan Window Data
-        m_VulkanWindowData = new ImGui_ImplVulkanH_Window();
-        ImGui_ImplVulkanH_Window* wd = m_VulkanWindowData;
-
-        // Create Surface via GLFW with Win32 fallback
-        VkResult err = glfwCreateWindowSurface(vkInstance, m_Window, nullptr, &wd->Surface);
-        if (err != VK_SUCCESS || wd->Surface == VK_NULL_HANDLE) {
-#if defined(_WIN32)
-            auto pfnCreateWin32Surface = reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(pfnGetInstanceProcAddr(vkInstance, "vkCreateWin32SurfaceKHR"));
-            if (pfnCreateWin32Surface) {
-                VkWin32SurfaceCreateInfoKHR sci = {};
-                sci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-                sci.hinstance = GetModuleHandle(nullptr);
-                sci.hwnd = glfwGetWin32Window(m_Window);
-                err = pfnCreateWin32Surface(vkInstance, &sci, nullptr, &wd->Surface);
-            }
-#endif
-            if (err != VK_SUCCESS || wd->Surface == VK_NULL_HANDLE) {
-                AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: Failed to create Vulkan surface! (VkResult: {0})", static_cast<int>(err));
-                delete m_VulkanWindowData;
-                m_VulkanWindowData = nullptr;
-                return;
-            }
-        }
-
-        int fbW = 0, fbH = 0;
-        glfwGetFramebufferSize(m_Window, &fbW, &fbH);
-        m_VulkanWidth = static_cast<uint32_t>(fbW > 0 ? fbW : 1280);
-        m_VulkanHeight = static_cast<uint32_t>(fbH > 0 ? fbH : 720);
-
-        uint32_t formatCount = 0;
-        CheckedWindowVK("vkGetPhysicalDeviceSurfaceFormatsKHR", [&] { return WindowVKProc<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR>("vkGetPhysicalDeviceSurfaceFormatsKHR")(vkPhysDevice, wd->Surface, &formatCount, nullptr); });
-        if (!formatCount) throw std::runtime_error("Vulkan surface has no formats");
-        std::vector<VkSurfaceFormatKHR> formats(formatCount);
-        CheckedWindowVK("vkGetPhysicalDeviceSurfaceFormatsKHR", [&] { return WindowVKProc<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR>("vkGetPhysicalDeviceSurfaceFormatsKHR")(vkPhysDevice, wd->Surface, &formatCount, formats.data()); });
-        wd->SurfaceFormat = formats.front();
-        for (const auto& format : formats)
-            if (format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR &&
-                (format.format == VK_FORMAT_B8G8R8A8_UNORM || format.format == VK_FORMAT_R8G8B8A8_UNORM)) { wd->SurfaceFormat = format; break; }
-        if (wd->SurfaceFormat.format == VK_FORMAT_UNDEFINED) wd->SurfaceFormat.format = VK_FORMAT_B8G8R8A8_UNORM;
-        wd->PresentMode = VK_PRESENT_MODE_FIFO_KHR;
-        CreateWindowVK(vkPhysDevice, vkDevice, *wd, queueFamily,
-            static_cast<int>(m_VulkanWidth), static_cast<int>(m_VulkanHeight), m_VulkanMinImageCount);
-
-        // Initialize ImGui GLFW implementation
-        ImGui_ImplGlfw_InitForVulkan(m_Window, true);
+        if (m_Window) ImGui_ImplGlfw_InitForVulkan(m_Window, true);
 
         // The shared arena survives the UI owner while GUI generations retain it.
         m_DescriptorArena = std::make_shared<ImGuiDescriptorArena>();
@@ -742,7 +608,10 @@ namespace Axle {
         // Initialize the native renderer bridge using the externally owned pool.
         ImGui_ImplVulkan_InitInfo initInfo = {};
         initInfo.CheckVkResultFn = [](VkResult result) {
-            if (result != VK_SUCCESS) throw std::runtime_error("Vulkan UI backend failed: " + std::to_string(result));
+            if (result != VK_SUCCESS) {
+                RHI::RHIDevice::Get().ObserveResult(result == VK_ERROR_DEVICE_LOST ? nri::Result::DEVICE_LOST : nri::Result::FAILURE, "NativeUIBridge");
+                throw std::runtime_error("Vulkan UI backend failed: " + std::to_string(result));
+            }
         };
         initInfo.ApiVersion = VK_API_VERSION_1_3;
         initInfo.Instance = vkInstance;
@@ -752,25 +621,29 @@ namespace Axle {
         initInfo.Queue = vkQueue;
         initInfo.DescriptorPool = pool;
         initInfo.DescriptorPoolSize = 0;
-        initInfo.MinImageCount = m_VulkanMinImageCount;
-        initInfo.ImageCount = wd->ImageCount;
+        initInfo.MinImageCount = 3;
+        initInfo.ImageCount = 3;
         initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        initInfo.PipelineInfoMain.RenderPass = wd->RenderPass;
-        initInfo.PipelineInfoMain.Subpass = 0;
+        initInfo.UseDynamicRendering = true;
+        VkFormat colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colorFormat;
+        m_VulkanColorFormat = static_cast<uint32_t>(colorFormat);
 
         if (!ImGui_ImplVulkan_Init(&initInfo)) {
             AXLE_CORE_ERROR("ImGuiLayer::InitVulkan: ImGui_ImplVulkan_Init failed!");
             return;
         }
 
-        AXLE_CORE_INFO("ImGui Layer initialized successfully for Vulkan 1.3 (Surface SwapChain: {0}x{1}, Images: {2}, PresentMode: {3})",
-                       m_VulkanWidth, m_VulkanHeight, wd->ImageCount, static_cast<int>(wd->PresentMode));
+        AXLE_CORE_INFO("ImGui Vulkan dynamic-rendering bridge initialized");
 #else
         AXLE_CORE_WARN("Vulkan ImGui backend requested but not available without Vulkan SDK!");
 #endif
     }
 
     void ImGuiLayer::Shutdown() {
+        m_ComposedPresentation = false;
         if (m_GuiFrame) {
             m_GuiFrame->Closing = true;
             if (m_GuiFrame->Active && m_ContextCreated && ImGui::GetCurrentContext() && ImGui::GetCurrentContext()->WithinFrameScope)
@@ -807,27 +680,9 @@ namespace Axle {
                 auto callbacks = std::move(m_DescriptorCallbacks);
                 if (callbacks) callbacks->Owner = nullptr;
                 auto* srvHeap = std::exchange(m_D3D12SrvHeap, nullptr);
-                auto* rtvHeap = std::exchange(m_D3D12RtvHeap, nullptr);
-                auto* swap = std::exchange(m_D3D12SwapChain, nullptr);
-                auto* commands = std::exchange(m_D3D12CommandList, nullptr);
-                auto* fence = std::exchange(m_D3D12Fence, nullptr);
-                auto event = std::exchange(m_D3D12FenceEvent, nullptr);
-                std::array<ID3D12Resource*, 3> targets{};
-                std::array<ID3D12CommandAllocator*, 3> allocators{};
-                for (size_t i = 0; i < 3; ++i) {
-                    targets[i] = std::exchange(m_D3D12RenderTargets[i], nullptr);
-                    allocators[i] = std::exchange(m_D3D12CommandAllocators[i], nullptr);
-                }
-                auto cleanup = [context, callbacks, srvHeap, rtvHeap, swap, commands, fence, event, targets, allocators] {
+                auto cleanup = [context, callbacks, srvHeap] {
                     auto* previous = ImGui::GetCurrentContext(); ImGui::SetCurrentContext(context);
                     if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplDX12_Shutdown();
-                    if (commands) commands->Release();
-                    for (auto* target : targets) if (target) target->Release();
-                    for (auto* allocator : allocators) if (allocator) allocator->Release();
-                    if (fence) fence->Release();
-                    if (event) CloseHandle(static_cast<HANDLE>(event));
-                    if (swap) swap->Release();
-                    if (rtvHeap) rtvHeap->Release();
                     if (srvHeap) srvHeap->Release();
                     ImGui::DestroyContext(context);
                     ImGui::SetCurrentContext(previous == context ? nullptr : previous);
@@ -838,18 +693,9 @@ namespace Axle {
 #endif
 #if defined(AXLE_HAS_VULKAN)
             if (m_BackendType == ImGuiBackendType::Vulkan) {
-                auto* native = device.GetNRIDevice();
-                auto vkDevice = static_cast<VkDevice>(device.GetNRICore().GetDeviceNativeObject(native));
-                auto instance = static_cast<VkInstance>(device.GetNRIWrapperVK().GetInstanceVK(*native));
-                auto* window = std::exchange(m_VulkanWindowData, nullptr);
-                auto cleanup = [context, vkDevice, instance, window] {
+                auto cleanup = [context] {
                     auto* previous = ImGui::GetCurrentContext(); ImGui::SetCurrentContext(context);
                     if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplVulkan_Shutdown();
-                    if (window) {
-                        DestroyWindowVK(vkDevice, *window);
-                        if (window->Surface && s_VkFuncs.vkDestroySurfaceKHR) s_VkFuncs.vkDestroySurfaceKHR(instance, window->Surface, nullptr);
-                        delete window;
-                    }
                     ImGui::DestroyContext(context);
                     ImGui::SetCurrentContext(previous == context ? nullptr : previous);
                 };
@@ -904,37 +750,6 @@ namespace Axle {
             ImGui_ImplGlfw_Shutdown();
         }
 
-        if (m_D3D12FenceEvent) {
-            CloseHandle((HANDLE)m_D3D12FenceEvent);
-            m_D3D12FenceEvent = nullptr;
-        }
-        if (m_D3D12Fence) {
-            m_D3D12Fence->Release();
-            m_D3D12Fence = nullptr;
-        }
-        if (m_D3D12CommandList) {
-            m_D3D12CommandList->Release();
-            m_D3D12CommandList = nullptr;
-        }
-        for (UINT i = 0; i < 3; ++i) {
-            if (m_D3D12CommandAllocators[i]) {
-                m_D3D12CommandAllocators[i]->Release();
-                m_D3D12CommandAllocators[i] = nullptr;
-            }
-            if (m_D3D12RenderTargets[i]) {
-                m_D3D12RenderTargets[i]->Release();
-                m_D3D12RenderTargets[i] = nullptr;
-            }
-        }
-        if (m_D3D12RtvHeap) {
-            m_D3D12RtvHeap->Release();
-            m_D3D12RtvHeap = nullptr;
-        }
-        if (m_D3D12SwapChain) {
-            m_D3D12SwapChain->Release();
-            m_D3D12SwapChain = nullptr;
-        }
-
         if (m_D3D12SrvHeap) {
             m_D3D12SrvHeap->Release();
             m_D3D12SrvHeap = nullptr;
@@ -946,40 +761,8 @@ namespace Axle {
 
     void ImGuiLayer::ShutdownVulkan() {
 #if defined(AXLE_HAS_VULKAN)
-        auto& rhiDevice = RHI::RHIDevice::Get();
-        if (rhiDevice.IsNativeReady() && rhiDevice.GetBackend() == RHI::RHIType::Vulkan) {
-            auto* nriDev = rhiDevice.GetNRIDevice();
-            const auto& core = rhiDevice.GetNRICore();
-            const auto& wrapperVK = rhiDevice.GetNRIWrapperVK();
-            auto vkDevice = static_cast<VkDevice>(core.GetDeviceNativeObject(nriDev));
-            auto vkInstance = static_cast<VkInstance>(wrapperVK.GetInstanceVK(*nriDev));
-
-            if (vkDevice) rhiDevice.WaitIdle();
-
-            if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplVulkan_Shutdown();
-            if (ImGui::GetIO().BackendPlatformUserData) {
-                ImGui_ImplGlfw_Shutdown();
-            }
-
-            if (m_VulkanWindowData) {
-                DestroyWindowVK(vkDevice, *m_VulkanWindowData);
-                if (m_VulkanWindowData->Surface != VK_NULL_HANDLE && s_VkFuncs.vkDestroySurfaceKHR) {
-                    s_VkFuncs.vkDestroySurfaceKHR(vkInstance, m_VulkanWindowData->Surface, nullptr);
-                    m_VulkanWindowData->Surface = VK_NULL_HANDLE;
-                }
-                delete m_VulkanWindowData;
-                m_VulkanWindowData = nullptr;
-            }
-        } else {
-            if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplVulkan_Shutdown();
-            if (ImGui::GetIO().BackendPlatformUserData) {
-                ImGui_ImplGlfw_Shutdown();
-            }
-            if (m_VulkanWindowData) {
-                delete m_VulkanWindowData;
-                m_VulkanWindowData = nullptr;
-            }
-        }
+        if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplVulkan_Shutdown();
+        if (ImGui::GetIO().BackendPlatformUserData) ImGui_ImplGlfw_Shutdown();
 #endif
     }
 
@@ -993,7 +776,7 @@ namespace Axle {
         if (m_GuiFrame) {
             if (m_GuiFrame->Active) throw std::runtime_error("UI frame is already active");
             if (!m_GuiFrame->Closing) m_GuiFrame->Active = true;
-            m_GuiFrame->NativeRecorded = false;
+            m_GuiFrame->NativeRecorded = false; m_GuiFrame->PreparedCommands = nullptr;
         }
 
         switch (m_BackendType) {
@@ -1026,229 +809,12 @@ namespace Axle {
     }
 
     void ImGuiLayer::End() {
-        struct Finish { ImGuiLayer* Layer; ~Finish() { Layer->FinishGuiFrame(); } } finish{this};
-        if (!m_Initialized || ImGui::GetIO().BackendRendererUserData == nullptr) {
-            FlushDeferredReleases();
-            return;
-        }
-        if (m_GuiFrame && m_GuiFrame->NativeRecorded) return;
-
-        UpdateWindowSnapping();
-        ImGui::Render();
-        if (!IsOperational()) { FlushDeferredReleases(); return; }
-        if (RHI::RHIDevice::Get().GetState() != RHI::RHIDeviceState::SurfaceRebuildRequired && !PrepareGuiTextures()) return;
-
+        if (!m_Initialized || !m_GuiFrame || !m_GuiFrame->Active) return;
+        if (m_GuiFrame->NativeRecorded) { FinishGuiFrame(); return; }
+        UpdateWindowSnapping(); ImGui::Render();
         if (m_BackendType == ImGuiBackendType::OpenGL) {
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        }
-#if defined(AXLE_HAS_D3D12)
-        else if (m_BackendType == ImGuiBackendType::Direct3D12 && m_D3D12SwapChain && m_D3D12CommandList) {
-            auto& rhiDevice = RHI::RHIDevice::Get();
-            if (!rhiDevice.IsNativeReady()) return;
-            const auto& core = rhiDevice.GetNRICore();
-            auto* d3d12Device = static_cast<ID3D12Device*>(core.GetDeviceNativeObject(rhiDevice.GetNRIDevice()));
-            auto* d3d12Queue = static_cast<ID3D12CommandQueue*>(core.GetQueueNativeObject(rhiDevice.GetGraphicsQueue()));
-            if (!d3d12Device || !d3d12Queue) return;
-
-            // Handle window resize for D3D12 swapchain
-            if (m_Window) {
-                int fbW = 0, fbH = 0;
-                glfwGetFramebufferSize(m_Window, &fbW, &fbH);
-                uint32_t curW = static_cast<uint32_t>(fbW > 0 ? fbW : 1280);
-                uint32_t curH = static_cast<uint32_t>(fbH > 0 ? fbH : 720);
-
-                if ((curW != m_D3D12Width || curH != m_D3D12Height) && curW > 0 && curH > 0) {
-                    if (!rhiDevice.WaitIdle()) return;
-
-                    for (UINT i = 0; i < 3; ++i) {
-                        if (m_D3D12RenderTargets[i]) {
-                            m_D3D12RenderTargets[i]->Release();
-                            m_D3D12RenderTargets[i] = nullptr;
-                        }
-                    }
-                    m_D3D12Width = curW;
-                    m_D3D12Height = curH;
-                    m_D3D12SwapChain->ResizeBuffers(3, m_D3D12Width, m_D3D12Height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
-
-                    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_D3D12RtvHeap->GetCPUDescriptorHandleForHeapStart();
-                    for (UINT i = 0; i < 3; ++i) {
-                        m_D3D12SwapChain->GetBuffer(i, IID_PPV_ARGS(&m_D3D12RenderTargets[i]));
-                        d3d12Device->CreateRenderTargetView(m_D3D12RenderTargets[i], nullptr, rtvHandle);
-                        rtvHandle.ptr += m_D3D12RtvDescriptorSize;
-                    }
-                }
-            }
-
-            UINT backBufferIdx = m_D3D12SwapChain->GetCurrentBackBufferIndex();
-
-            if (!rhiDevice.WaitIdle()) return;
-            if (!CheckUIOperation("BeginCommandBuffer", [&] { return m_D3D12CommandAllocators[backBufferIdx]->Reset(); }) ||
-                !CheckUIOperation("BeginCommandBuffer", [&] { return m_D3D12CommandList->Reset(m_D3D12CommandAllocators[backBufferIdx], nullptr); })) {
-                rhiDevice.ObserveResult(nri::Result::FAILURE, "QueueSubmit", "ImGui recording rejected"); return;
-            }
-
-            // Transition to RENDER_TARGET
-            D3D12_RESOURCE_BARRIER barrier = {};
-            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            barrier.Transition.pResource = m_D3D12RenderTargets[backBufferIdx];
-            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            m_D3D12CommandList->ResourceBarrier(1, &barrier);
-
-            // Clear and bind RTV
-            D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_D3D12RtvHeap->GetCPUDescriptorHandleForHeapStart();
-            rtvHandle.ptr += backBufferIdx * m_D3D12RtvDescriptorSize;
-            const float clearColor[4] = { 0.10f, 0.11f, 0.13f, 1.0f };
-            m_D3D12CommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-            m_D3D12CommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
-
-            // Set descriptor heap and render ImGui
-            ID3D12DescriptorHeap* heaps[] = { m_D3D12SrvHeap };
-            m_D3D12CommandList->SetDescriptorHeaps(1, heaps);
-            ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_D3D12CommandList);
-
-            // Transition to PRESENT
-            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-            m_D3D12CommandList->ResourceBarrier(1, &barrier);
-
-            if (!CheckUIOperation("EndCommandBuffer", [&] { return m_D3D12CommandList->Close(); })) {
-                rhiDevice.ObserveResult(nri::Result::FAILURE, "QueueSubmit", "ImGui recording rejected"); return;
-            }
-            const auto signal = m_D3D12FenceValueCounter + 1;
-            if (!CheckUIOperation("QueueSubmit", [&] {
-                ID3D12CommandList* lists[] = {m_D3D12CommandList};
-                d3d12Queue->ExecuteCommandLists(1, lists);
-                const auto removed = d3d12Device->GetDeviceRemovedReason();
-                return FAILED(removed) ? removed : d3d12Queue->Signal(m_D3D12Fence, signal);
-            })) return;
-            m_D3D12FenceValueCounter = signal;
-            m_D3D12FenceValues[backBufferIdx] = signal;
-            if (!rhiDevice.WaitIdle()) return;
-            if (!CheckUIOperation("QueuePresent", [&] { return m_D3D12SwapChain->Present(1, 0); })) return;
-        }
-#endif
-#if defined(AXLE_HAS_VULKAN)
-        else if (m_BackendType == ImGuiBackendType::Vulkan && m_VulkanWindowData) {
-            auto& rhiDevice = RHI::RHIDevice::Get();
-            if (!rhiDevice.IsNativeReady() || rhiDevice.GetBackend() != RHI::RHIType::Vulkan) return;
-
-            auto* nriDev = rhiDevice.GetNRIDevice();
-            auto* nriQueue = rhiDevice.GetGraphicsQueue();
-            if (!nriDev || !nriQueue) return;
-
-            const auto& core = rhiDevice.GetNRICore();
-            const auto& wrapperVK = rhiDevice.GetNRIWrapperVK();
-
-            VkInstance vkInstance = static_cast<VkInstance>(wrapperVK.GetInstanceVK(*nriDev));
-            VkPhysicalDevice vkPhysDevice = static_cast<VkPhysicalDevice>(wrapperVK.GetPhysicalDeviceVK(*nriDev));
-            VkDevice vkDevice = static_cast<VkDevice>(core.GetDeviceNativeObject(nriDev));
-            VkQueue vkQueue = static_cast<VkQueue>(core.GetQueueNativeObject(nriQueue));
-            uint32_t queueFamily = wrapperVK.GetQueueFamilyIndexVK(*nriQueue);
-
-            ImGui_ImplVulkanH_Window* wd = m_VulkanWindowData;
-            ImDrawData* draw_data = ImGui::GetDrawData();
-            const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
-
-            // Handle window resize for Vulkan swapchain
-            if (m_Window) {
-                int fbW = 0, fbH = 0;
-                glfwGetFramebufferSize(m_Window, &fbW, &fbH);
-                if (fbW > 0 && fbH > 0 && (m_VulkanSwapChainRebuild || m_VulkanWidth != static_cast<uint32_t>(fbW) || m_VulkanHeight != static_cast<uint32_t>(fbH))) {
-                    if (!rhiDevice.WaitIdle()) return;
-                    m_VulkanWidth = static_cast<uint32_t>(fbW);
-                    m_VulkanHeight = static_cast<uint32_t>(fbH);
-                    DestroyWindowVK(vkDevice, *wd);
-                    try {
-                        CreateWindowVK(vkPhysDevice, vkDevice, *wd, queueFamily,
-                            static_cast<int>(m_VulkanWidth), static_cast<int>(m_VulkanHeight), m_VulkanMinImageCount);
-                        rhiDevice.SurfaceRebuilt();
-                        if (!PrepareGuiTextures()) return;
-                    } catch (...) {
-                        rhiDevice.ObserveResult(nri::Result::FAILURE, "QueuePresent", "ImGui surface rebuild");
-                        return;
-                    }
-                    wd->FrameIndex = 0;
-                    m_VulkanSwapChainRebuild = false;
-                }
-            }
-
-            if (!is_minimized && wd->Swapchain != VK_NULL_HANDLE && s_VkFuncs.vkAcquireNextImageKHR && s_VkFuncs.vkQueueSubmit && s_VkFuncs.vkQueuePresentKHR) {
-                VkSemaphore image_acquired_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].ImageAcquiredSemaphore;
-                VkSemaphore render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
-
-                VkResult err = VK_SUCCESS;
-                if (!CheckUIOperation("AcquireNextTexture", [&] {
-                    err = s_VkFuncs.vkAcquireNextImageKHR(vkDevice, wd->Swapchain, 2000000000ull, image_acquired_semaphore, VK_NULL_HANDLE, &wd->FrameIndex);
-                    return err;
-                })) {
-                    m_VulkanSwapChainRebuild = rhiDevice.GetState() == RHI::RHIDeviceState::SurfaceRebuildRequired;
-                    return;
-                }
-                if (err == VK_SUBOPTIMAL_KHR) m_VulkanSwapChainRebuild = true;
-                if (wd->FrameIndex >= wd->ImageCount) { rhiDevice.ObserveResult(nri::Result::FAILURE, "QueuePresent", "invalid surface index"); return; }
-                ImGui_ImplVulkanH_Frame* fd = &wd->Frames[wd->FrameIndex];
-                if (!CheckUIOperation("WaitFence", [&] { return s_VkFuncs.vkWaitForFences(vkDevice, 1, &fd->Fence, VK_TRUE, 2000000000ull); }) ||
-                    !CheckUIOperation("ResetFence", [&] { return s_VkFuncs.vkResetFences(vkDevice, 1, &fd->Fence); }) ||
-                    !CheckUIOperation("ResetCommandPool", [&] { return s_VkFuncs.vkResetCommandPool(vkDevice, fd->CommandPool, 0); })) return;
-                VkCommandBufferBeginInfo beginInfo = {};
-                beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-                beginInfo.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-                if (!CheckUIOperation("BeginCommandBuffer", [&] { return s_VkFuncs.vkBeginCommandBuffer(fd->CommandBuffer, &beginInfo); })) return;
-
-                VkRenderPassBeginInfo rpInfo = {};
-                rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-                rpInfo.renderPass = wd->RenderPass;
-                rpInfo.framebuffer = fd->Framebuffer;
-                rpInfo.renderArea.extent.width = wd->Width;
-                rpInfo.renderArea.extent.height = wd->Height;
-                rpInfo.clearValueCount = 1;
-                rpInfo.pClearValues = &wd->ClearValue;
-                s_VkFuncs.vkCmdBeginRenderPass(fd->CommandBuffer, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-                // Record Dear ImGui primitives into Vulkan command buffer
-                ImGui_ImplVulkan_RenderDrawData(draw_data, fd->CommandBuffer);
-
-                s_VkFuncs.vkCmdEndRenderPass(fd->CommandBuffer);
-                if (!CheckUIOperation("EndCommandBuffer", [&] { return s_VkFuncs.vkEndCommandBuffer(fd->CommandBuffer); })) return;
-
-                VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                VkSubmitInfo submitInfo = {};
-                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-                submitInfo.waitSemaphoreCount = 1;
-                submitInfo.pWaitSemaphores = &image_acquired_semaphore;
-                submitInfo.pWaitDstStageMask = &wait_stage;
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &fd->CommandBuffer;
-                submitInfo.signalSemaphoreCount = 1;
-                submitInfo.pSignalSemaphores = &render_complete_semaphore;
-
-                if (!CheckUIOperation("QueueSubmit", [&] { return s_VkFuncs.vkQueueSubmit(vkQueue, 1, &submitInfo, fd->Fence); })) return;
-                if (!rhiDevice.WaitIdle()) return;
-
-                if (!m_VulkanSwapChainRebuild) {
-                    VkPresentInfoKHR presentInfo = {};
-                    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-                    presentInfo.waitSemaphoreCount = 1;
-                    presentInfo.pWaitSemaphores = &render_complete_semaphore;
-                    presentInfo.swapchainCount = 1;
-                    presentInfo.pSwapchains = &wd->Swapchain;
-                    presentInfo.pImageIndices = &wd->FrameIndex;
-
-                    if (!CheckUIOperation("QueuePresent", [&] { err = s_VkFuncs.vkQueuePresentKHR(vkQueue, &presentInfo); return err; })) {
-                        m_VulkanSwapChainRebuild = rhiDevice.GetState() == RHI::RHIDeviceState::SurfaceRebuildRequired;
-                        return;
-                    }
-                    if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR) {
-                        m_VulkanSwapChainRebuild = true;
-                    }
-                    wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->SemaphoreCount;
-                }
-            }
-        }
-#endif
-        FlushDeferredReleases();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData()); FinishGuiFrame();
+        } else if (!m_ComposedPresentation) FinishGuiFrame(); // Explicitly abandoned offscreen draw list.
     }
 
     void ImGuiLayer::DeferRelease(std::function<void()> release) {
@@ -1262,18 +828,9 @@ namespace Axle {
         m_GuiFrame->Uses = {};
         auto deferred = std::move(m_GuiFrame->Deferred); m_GuiFrame->Deferred.clear();
         for (auto& release : deferred) m_DeferredReleases.push_back(std::move(release));
-        auto& device = RHI::RHIDevice::Get();
-        try {
-            if (m_BackendType != ImGuiBackendType::OpenGL && !uses.Empty()) {
-                RHI::RHICompletionToken completion;
-                if (device.RetainExternalSubmission(std::move(uses), &completion) && completion)
-                    device.WaitForCompletion(completion);
-            }
-            FlushDeferredReleases();
-        } catch (...) {
-            device.ObserveResult(nri::Result::FAILURE, "QueueSubmit", "GUI completion bookkeeping");
-            device.WaitIdle();
-        }
+        uses.Reset();
+        try { FlushDeferredReleases(); }
+        catch (...) { RHI::RHIDevice::Get().ObserveResult(nri::Result::FAILURE, "GUIFrameRetirement"); }
     }
 
     void ImGuiLayer::FlushDeferredReleases() {
@@ -1336,11 +893,11 @@ namespace Axle {
         };
     }
 
-    bool ImGuiLayer::Render(RHI::RHICommandBuffer* cmdBuffer) {
+    bool ImGuiLayer::Render(RHI::RHICommandBuffer* cmdBuffer, nri::Format colorFormat) {
         if (!cmdBuffer || !m_Initialized || !cmdBuffer->IsRecording() || !m_GuiFrame ||
             !m_GuiFrame->Active || m_GuiFrame->NativeRecorded) return false;
         if (!ImGui::GetDrawData() || !ImGui::GetDrawData()->Valid) return false;
-        if (!PrepareGuiTextures()) return false;
+        if (m_GuiFrame->PreparedCommands != cmdBuffer->GetNative() && !PrepareGuiTextures()) return false;
         if (m_BackendType != ImGuiBackendType::OpenGL) {
             if (!cmdBuffer->KeepAlive(m_BackendLease)) return false;
             if (!RHI::RHIDevice::Get().GetResources().RecordUses(cmdBuffer->GetNative(), m_GuiFrame->Uses)) return false;
@@ -1352,6 +909,7 @@ namespace Axle {
             const auto& core = RHI::RHIDevice::Get().GetNRICore();
             auto* nativeCmd = static_cast<ID3D12GraphicsCommandList*>(core.GetCommandBufferNativeObject(cmdBuffer->GetNative()));
             if (!nativeCmd) return false;
+            if (colorFormat != nri::Format::RGBA8_UNORM) return false;
             Render(nativeCmd);
             m_GuiFrame->NativeRecorded = true;
             return true;
@@ -1362,6 +920,14 @@ namespace Axle {
             const auto& core = RHI::RHIDevice::Get().GetNRICore();
             auto vkCmd = static_cast<VkCommandBuffer>(core.GetCommandBufferNativeObject(cmdBuffer->GetNative()));
             if (vkCmd) {
+                const auto nativeFormat = static_cast<VkFormat>(nri::nriConvertNRIFormatToVK(colorFormat));
+                if (m_VulkanColorFormat != static_cast<uint32_t>(nativeFormat)) {
+                    ImGui_ImplVulkan_PipelineInfo info{}; info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+                    info.PipelineRenderingCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+                    info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+                    info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &nativeFormat;
+                    ImGui_ImplVulkan_CreateMainPipeline(&info); m_VulkanColorFormat = static_cast<uint32_t>(nativeFormat);
+                }
                 ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), vkCmd);
                 m_GuiFrame->NativeRecorded = true;
                 return true;
@@ -1371,10 +937,14 @@ namespace Axle {
         return false;
     }
 
-    bool ImGuiLayer::PrepareGuiTextures() {
+    bool ImGuiLayer::PrepareGuiTextures(RHI::RHICommandBuffer* commands) {
         if (m_BackendType == ImGuiBackendType::OpenGL || !m_GuiFrame) return true;
         auto& device = RHI::RHIDevice::Get();
         const auto textures = device.GetResources().GetPinnedTextures(m_GuiFrame->Uses);
+        if (commands) {
+            for (auto* texture : textures) commands->TransitionTexture(texture, RHI::RHIResourceLayout::Undefined, RHI::RHIResourceLayout::ShaderResource);
+            m_GuiFrame->PreparedCommands = commands->GetNative(); return commands->IsRecording();
+        }
         if (textures.empty()) return true;
         RHI::RHICommandBuffer prepare;
         if (!prepare.Init() || !prepare.Begin()) return false;

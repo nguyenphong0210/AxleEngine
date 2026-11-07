@@ -9,14 +9,9 @@
 #include <memory>
 
 struct GLFWwindow;
-struct IDXGISwapChain3;
-struct ID3D12Resource;
-struct ID3D12CommandAllocator;
 struct ID3D12DescriptorHeap;
 struct ID3D12GraphicsCommandList;
-struct ID3D12Fence;
 struct ImFont;
-struct ImGui_ImplVulkanH_Window;
 
 namespace Axle {
     struct ImGuiDescriptorCallbackState;
@@ -57,7 +52,8 @@ namespace Axle {
         bool IsOperational() const override;
 
         // Render recorded ImGui draw data into a command buffer (for D3D12/Vulkan RHI backends)
-        bool Render(RHI::RHICommandBuffer* cmdBuffer);
+        bool Render(RHI::RHICommandBuffer* cmdBuffer, nri::Format colorFormat = nri::Format::RGBA8_UNORM);
+        std::unique_ptr<ApplicationRenderContext> CreateRenderContext(const Window& window);
         void Render(ID3D12GraphicsCommandList* cmdList);
 
         void SetDarkThemeColors();
@@ -86,9 +82,6 @@ namespace Axle {
         // End has submitted all UI draws and the GPU has finished using them.
         void DeferRelease(std::function<void()> release);
 
-        // Force Vulkan SwapChain rebuild on next frame (e.g. on window resize / restoration)
-        void RebuildVulkanSwapChain() { m_VulkanSwapChainRebuild = true; }
-
     private:
         static ::ImFont* s_RegularFont;
         static ::ImFont* s_BoldFont;
@@ -106,7 +99,7 @@ namespace Axle {
         void FreeD3D12Descriptor(void* cpuHandle, void* gpuHandle);
         void FlushDeferredReleases();
         void FinishGuiFrame() noexcept;
-        bool PrepareGuiTextures();
+        bool PrepareGuiTextures(RHI::RHICommandBuffer* commands = nullptr);
 
     private:
         ImGuiBackendType m_BackendType = ImGuiBackendType::OpenGL;
@@ -127,27 +120,8 @@ namespace Axle {
         uint32_t m_AllocatedDescriptorCount = 0;
         std::vector<uint32_t> m_FreeDescriptorIndices;
 
-        // D3D12 Window Swapchain & Presentation
-        IDXGISwapChain3* m_D3D12SwapChain = nullptr;
-        ID3D12DescriptorHeap* m_D3D12RtvHeap = nullptr;
-        uint32_t m_D3D12RtvDescriptorSize = 0;
-        ID3D12Resource* m_D3D12RenderTargets[3] = {};
-        ID3D12CommandAllocator* m_D3D12CommandAllocators[3] = {};
-        ID3D12GraphicsCommandList* m_D3D12CommandList = nullptr;
-        ID3D12Fence* m_D3D12Fence = nullptr;
-        void* m_D3D12FenceEvent = nullptr;
-        uint64_t m_D3D12FenceValues[3] = {};
-        uint64_t m_D3D12FenceValueCounter = 0;
-        uint32_t m_D3D12Width = 0;
-        uint32_t m_D3D12Height = 0;
-
-        // Vulkan Window Swapchain & Presentation
-        ImGui_ImplVulkanH_Window* m_VulkanWindowData = nullptr;
-        void* m_VulkanDescriptorPool = nullptr; // VkDescriptorPool
-        bool m_VulkanSwapChainRebuild = false;
-        uint32_t m_VulkanMinImageCount = 2;
-        uint32_t m_VulkanWidth = 0;
-        uint32_t m_VulkanHeight = 0;
+        bool m_ComposedPresentation = false;
+        uint32_t m_VulkanColorFormat = 0;
     };
 
 }

@@ -39,9 +39,9 @@ static std::vector<uint8_t> ReadPinnedImage(nri::Texture* image) {
     readback.Unmap(); return pixels;
 }
 
-static bool RecordedUIOwner() {
+static bool RecordedUIOwner(RHIType backend) {
     auto& device = RHIDevice::Get();
-    auto ui = std::make_unique<ImGuiLayer>(ImGuiBackendType::Direct3D12);
+    auto ui = std::make_unique<ImGuiLayer>(backend == RHIType::Vulkan ? ImGuiBackendType::Vulkan : ImGuiBackendType::Direct3D12);
     ui->Init(nullptr);
     ImGui::GetIO().DisplaySize = ImVec2(64, 64); ImGui::GetIO().DeltaTime = 1.0f / 60;
     RHITexture source, target;
@@ -88,6 +88,7 @@ static bool GUILeases(RHIType backend) {
     for (bool closeBeforeSubmit : {false, true}) {
         auto ui = std::make_unique<ImGuiLayer>(backend == RHIType::Vulkan ? ImGuiBackendType::Vulkan : ImGuiBackendType::Direct3D12);
         ui->Init(window.GetNativeWindow());
+        auto presentation = ui->CreateRenderContext(window);
         auto registrar = ui->GetTextureRegistrar();
         auto retire = ui->GetDeferredReleaser();
         RHITexture image;
@@ -112,13 +113,13 @@ static bool GUILeases(RHIType backend) {
         retire([retire, &retired] { ++retired; retire([&retired] { ++retired; }); });
         RENDER_CHECK(retired == 0, "retirement waits for the CPU frame boundary");
         if (closeBeforeSubmit) ui.reset();
-        else { ui->End(); ui.reset(); }
+        else { ui->End(); RENDER_CHECK(presentation->Present(window), "shared window UI submission"); ui.reset(); }
         RENDER_CHECK(device.WaitIdle() && retired == 2 && !device.GetResources().Acquire(handle), "submit or abandon retires nested resources independently of the dead UI owner");
         retire([&retired] { ++retired; });
         RENDER_CHECK(device.WaitIdle() && retired == 3, "saved retirement handle remains safe after UI destruction");
         RENDER_CHECK(!registrar(image).IsValid(), "saved registration factory rejects a destroyed owner");
     }
-    return backend == RHIType::Direct3D12 ? RecordedUIOwner() : true;
+    return RecordedUIOwner(backend);
 }
 
 static bool EpochOwnership(RHIType backend) {
@@ -127,7 +128,8 @@ static bool EpochOwnership(RHIType backend) {
     props.GraphicsBackend = backend == RHIType::Vulkan ? GraphicsAPI::Vulkan : GraphicsAPI::Direct3D12;
     Window window(props);
     ImGuiLayer ui(backend == RHIType::Vulkan ? ImGuiBackendType::Vulkan : ImGuiBackendType::Direct3D12);
-    ui.Init(window.GetNativeWindow()); ui.Begin(); ui.End();
+    ui.Init(window.GetNativeWindow()); auto presentation = ui.CreateRenderContext(window); ui.Begin(); ui.End();
+    RENDER_CHECK(presentation->Present(window), "shared epoch window frame");
     auto oldMesh = RHIMeshRegistry::Get().GetCube();
     RENDER_CHECK(oldMesh && oldMesh->IsValid(), "old epoch owns a real shared builtin");
     const auto epoch = device.GetEpoch();
@@ -139,7 +141,8 @@ static bool EpochOwnership(RHIType backend) {
     auto freshMesh = RHIMeshRegistry::Get().GetCube();
     RENDER_CHECK(freshMesh && freshMesh->IsValid() && freshMesh != oldMesh, "registry replaces stale migration caches with current-epoch resources");
     oldMesh.reset();
-    ui.Init(window.GetNativeWindow()); ui.Begin(); ui.End(); ui.Shutdown();
+    presentation.reset(); ui.Init(window.GetNativeWindow()); presentation = ui.CreateRenderContext(window); ui.Begin(); ui.End();
+    RENDER_CHECK(presentation->Present(window), "shared new-epoch window frame"); ui.Shutdown();
     RENDER_CHECK(freshMesh->IsValid() && device.WaitIdle(), "stale mesh/UI teardown cannot damage the new device");
     return true;
 }
@@ -151,9 +154,11 @@ static bool UIErrors(RHIType backend) {
     Window window(props);
     auto ui = std::make_unique<ImGuiLayer>(backend == RHIType::Vulkan ? ImGuiBackendType::Vulkan : ImGuiBackendType::Direct3D12);
     ui->Init(window.GetNativeWindow());
+    auto presentation = ui->CreateRenderContext(window);
     ui->Begin();
     ImGui::Begin("Failure ownership fixture"); ImGui::TextUnformatted("Native font and vertex storage"); ImGui::End();
     ui->End();
+    RENDER_CHECK(presentation->Present(window), "shared UI warm-up frame");
     bool reached = false;
     {
         ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
@@ -163,6 +168,7 @@ static bool UIErrors(RHIType backend) {
         ui->Begin();
         ImGui::Begin("Failure ownership fixture"); ImGui::TextUnformatted("Pending submission"); ImGui::End();
         ui->End();
+        RENDER_CHECK(!presentation->Present(window), "shared UI failure propagates");
     }
     RENDER_CHECK(reached && !ui->IsOperational() && !device.CanSubmit(), "native UI submit rejection stops product admission");
     unsigned retired = 0;
@@ -188,6 +194,7 @@ static bool Run(RHIType backend) {
     RENDER_CHECK(window.GetNativeWindow(), "real native window");
     ImGuiLayer ui(backend == RHIType::Vulkan ? ImGuiBackendType::Vulkan : ImGuiBackendType::Direct3D12);
     ui.Init(window.GetNativeWindow());
+    auto presentation = ui.CreateRenderContext(window);
     RHIViewportDesc desc; desc.Width = desc.Height = 64; desc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
     RHIViewportDescriptor view;
     RENDER_CHECK(view.Init(&ui, desc), "complete view and real GUI registration");
@@ -272,6 +279,7 @@ static bool Run(RHIType backend) {
     ui.Begin();
     ImGui::Image(static_cast<ImTextureID>(view.GetImTextureID()), ImVec2(64, 64));
     ui.End();
+    RENDER_CHECK(presentation->Present(window), "shared scene and UI window presentation");
     device.WaitIdle();
     return true;
 }

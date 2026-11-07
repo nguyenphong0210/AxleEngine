@@ -26,7 +26,7 @@
       "P41-11"
     ],
     "current_phase": "OPT-04",
-    "current_package": "P41-09",
+    "current_package": "P41-10",
     "completed_packages": [
       "P41-01",
       "P41-02",
@@ -35,9 +35,10 @@
       "P41-05",
       "P41-06",
       "P41-07",
-      "P41-08"
+      "P41-08",
+      "P41-09"
     ],
-    "implementation_status": "P41-01..08 implemented with available Debug/Release self-verification; API-validation acceptance and final review remain open",
+    "implementation_status": "P41-01..09 implemented with available Debug/Release self-verification; API-validation acceptance and final review remain open",
     "independent_review_status": "pending_single_final_separate_context_review",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
@@ -92,7 +93,7 @@
       "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
     "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Implement/verify P41-09 shared application/render presentation, then P41-10..11 and one final separate-context review.",
+    "next_action": "Implement/verify P41-10 complete per-view targets/external ownership, then P41-11 shared image boundary/cache and one final separate-context review.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -1330,6 +1331,17 @@
       "base_commit": "551b3e2",
       "timestamp_utc": "2026-11-07T06:23:00.772073+00:00",
       "body": "P41-08 implemented/self-verified on 551b3e2: completion-owned frame slots, bounded append-only uniform/upload ranges with per-range descriptors, conservative allocator/arena reuse, protected streamer wrap and host lifetime, scene checked EndFrame. Physical Debug/Release D3D12/Vulkan busy-slot, six-cycle two-slot/multiple-view original-byte readback, pressure, construction failure, abandon and failed-submit tests pass with zero NRI errors; eight scene/VFX integration runs pass. Evidence: docs/reviews/OPT_04_CODEX_EXECUTION.md. Next sole-writer files P41-09: RHI shared presenter/swapchain, Platform application composition interface, UI native recording bridge, Editor composition and windowed/native focused tests. One final reviewer after P41-11; actual API validation still unavailable."
+    },
+    {
+      "id": "CG-20261107T064351385239Z-CODEX-5ea0bf",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T062300772073Z-CODEX-5d0294",
+      "base_commit": "4028e7d",
+      "timestamp_utc": "2026-11-07T06:43:51.385239+00:00",
+      "body": "P41-09 implemented/self-verified on 4028e7d. Application render composition owns the shared NRI surface/swapchain/frame slots; ImGui native backends record only, with both competing UI window loops retired. Vulkan dynamic-rendering UI passes actual red pixels after UI-owner destruction before submit. Final Debug/Release six-target builds passed; 29 cases each cover real no-ImGui and UI-only window presentation, actual minimize/restore, VSync/resize, acquire/present rebuild, rejection/abandon, lifetime/errors/VFX, and strict modern/GL/fallback/rollback Editor startup. Zero NRI errors enforced through teardown. Report: docs/reviews/OPT_04_CODEX_EXECUTION.md. Next sole-writer scope P41-10: RHI per-view target sets and texture-generation snapshot support; scene auxiliary target ownership; UI viewport and required Editor/preview callers; complete-set/GUI/external/multiple-view tests. API validation remains NOT RUN and final review remains after P41-11."
     }
   ],
   "deferred_tasks": [

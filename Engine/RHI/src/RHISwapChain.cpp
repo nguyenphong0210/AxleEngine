@@ -1,6 +1,7 @@
 #include <Axle/RHI/RHISwapChain.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <Axle/RHI/RHICommandBuffer.hpp>
 #include <limits>
 
 #include <algorithm>
@@ -222,7 +223,7 @@ namespace Axle::RHI {
         if (!device.CanSubmit()) return false;
         m_FrameInFlightIndex = static_cast<uint32_t>(m_FrameCount % m_Desc.FramesInFlight);
         auto& frame = m_Frames[m_FrameInFlightIndex];
-        if (!device.WaitForFence(m_FrameFence, frame.FenceValue)) return false;
+        if (!device.WaitForFence(m_FrameFence, frame.FenceValue) || !device.WaitIdle()) return false;
         if (frame.CommandAllocator) core.ResetCommandAllocator(*frame.CommandAllocator);
         const uint32_t acquireIndex = static_cast<uint32_t>(m_FrameCount % m_ActualTextureCount);
         const auto result = ScopedRHIFault::Invoke("AcquireNextTexture", [&] {
@@ -254,23 +255,33 @@ namespace Axle::RHI {
 
         if (!device.CanSubmit() || (commandBufferNum && !commandBuffers)) return false;
         for (uint32_t i = 0; i < commandBufferNum; ++i) if (!commandBuffers[i]) return false;
+        RHICommandBuffer emptyFrame;
+        const nri::CommandBuffer* emptyNative = nullptr;
+        if (!commandBufferNum) {
+            if (!emptyFrame.Init() || !emptyFrame.Begin()) return false;
+            emptyFrame.TransitionTexture(GetCurrentTexture(), RHIResourceLayout::Undefined, RHIResourceLayout::Present);
+            if (!emptyFrame.End()) return false;
+            emptyNative = emptyFrame.GetNative(); commandBuffers = &emptyNative; commandBufferNum = 1;
+        }
         uint32_t acquireIndex = static_cast<uint32_t>(m_FrameCount % m_ActualTextureCount);
         nri::Fence* acquireSemaphore = m_Textures[acquireIndex].AcquireSemaphore;
         nri::Fence* releaseSemaphore = m_Textures[m_CurrentTextureIndex].ReleaseSemaphore;
         uint64_t signalValue = 1 + m_FrameCount;
 
-        // Synchronize GPU stages: wait for image acquisition before writing color attachments
+        // Acquisition precedes every possible use, including copy-only/empty frames.
         nri::FenceSubmitDesc waitFence = {};
         waitFence.fence = acquireSemaphore;
-        waitFence.stages = nri::StageBits::COLOR_ATTACHMENT;
+        waitFence.stages = nri::StageBits::ALL;
 
         // Signal release semaphore (for presentation) and frame fence (for CPU sync)
         nri::FenceSubmitDesc renderingFinishedFence = {};
         renderingFinishedFence.fence = releaseSemaphore;
+        renderingFinishedFence.stages = nri::StageBits::ALL;
 
         nri::FenceSubmitDesc frameFenceSubmit = {};
         frameFenceSubmit.fence = m_FrameFence;
         frameFenceSubmit.value = signalValue;
+        frameFenceSubmit.stages = nri::StageBits::ALL;
 
         nri::FenceSubmitDesc signalFences[2] = { renderingFinishedFence, frameFenceSubmit };
 
@@ -296,48 +307,22 @@ namespace Axle::RHI {
         return (res == nri::Result::SUCCESS);
     }
 
-    bool RHISwapChain::Resize(uint32_t width, uint32_t height) {
-        if (!m_Initialized) return false;
+    bool RHISwapChain::Resize(uint32_t width, uint32_t height) { return Configure(width, height, m_Desc.VSync); }
 
-        if (width == 0 || height == 0) {
-            m_IsMinimized = true;
-            AXLE_CORE_WARN("RHISwapChain: Window minimized ({0}x{1}), rendering paused.", width, height);
-            return true;
-        }
-
-        bool wasMinimized = m_IsMinimized;
-        m_IsMinimized = false;
-
-        if (wasMinimized) {
-            AXLE_CORE_INFO("RHISwapChain: Window restored from minimized state to {0}x{1}.", width, height);
-        }
-
-        if (!wasMinimized && m_Desc.Width == width && m_Desc.Height == height && !m_NeedsResize) {
-            return true;
-        }
-
-        m_Desc.Width = width;
-        m_Desc.Height = height;
-
-        if (m_IsLegacyOpenGL) {
-            m_NeedsResize = false;
-            return true;
-        }
-
-        return RecreateSwapChain();
+    bool RHISwapChain::SetVSync(bool vsync) {
+        if (m_IsMinimized) { m_Desc.VSync = vsync; m_NeedsResize = true; return true; }
+        return Configure(m_Desc.Width, m_Desc.Height, vsync);
     }
 
-    void RHISwapChain::SetVSync(bool vsync) {
-        if (m_Desc.VSync == vsync) {
-            return;
-        }
-
-        m_Desc.VSync = vsync;
-        AXLE_CORE_INFO("RHISwapChain: Setting VSync to {0}", vsync ? "ON (FIFO)" : "OFF (Mailbox / Low-Latency)");
-
-        if (m_Initialized && !m_IsLegacyOpenGL && !m_IsMinimized) {
-            RecreateSwapChain();
-        }
+    bool RHISwapChain::Configure(uint32_t width, uint32_t height, bool vsync) {
+        if (!m_Initialized) return false;
+        if (!width || !height) { m_IsMinimized = true; return true; }
+        const bool changed = m_IsMinimized || m_NeedsResize || m_Desc.Width != width || m_Desc.Height != height || m_Desc.VSync != vsync;
+        m_IsMinimized = false;
+        if (!changed) return true;
+        m_Desc.Width = width; m_Desc.Height = height; m_Desc.VSync = vsync;
+        if (m_IsLegacyOpenGL) { m_NeedsResize = false; return true; }
+        return RecreateSwapChain();
     }
 
     bool RHISwapChain::RecreateSwapChain() {

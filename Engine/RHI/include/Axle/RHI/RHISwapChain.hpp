@@ -53,7 +53,9 @@ namespace Axle::RHI {
         bool Resize(uint32_t width, uint32_t height);
 
         // Reconfigure presentation mode (VSync vs Low-Latency Mailbox)
-        void SetVSync(bool vsync);
+        bool SetVSync(bool vsync);
+        bool Configure(uint32_t width, uint32_t height, bool vsync);
+        void RequestRebuild() { m_NeedsResize = true; m_Acquired = false; }
 
         bool IsValid() const { return m_Initialized && ((m_SwapChain && m_Lease.IsLive()) || m_IsLegacyOpenGL); }
         bool NeedsResize() const { return m_NeedsResize; }

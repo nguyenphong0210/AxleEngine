@@ -53,6 +53,7 @@ namespace Axle {
 
         void SetUIContext(std::unique_ptr<ApplicationUIContext> uiContext);
         ApplicationUIContext* GetUIContext() { return m_UIContext.get(); }
+        void SetRenderContext(std::unique_ptr<ApplicationRenderContext> context);
 
         Window& GetWindow() { return *m_Window; }
         const Window& GetWindow() const { return *m_Window; }
@@ -80,6 +81,7 @@ namespace Axle {
         ApplicationSpecification m_Specification;
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<ApplicationUIContext> m_UIContext;
+        std::unique_ptr<ApplicationRenderContext> m_RenderContext;
         LayerStack m_LayerStack;
         std::vector<std::shared_ptr<IApplicationService>> m_Services;
 

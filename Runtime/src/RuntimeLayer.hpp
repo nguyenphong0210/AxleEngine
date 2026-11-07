@@ -22,7 +22,7 @@ namespace Axle {
 
     class RuntimeLayer : public Layer {
     public:
-        RuntimeLayer(const std::filesystem::path& projectPath = {});
+        RuntimeLayer(const std::filesystem::path& projectPath = {}, std::shared_ptr<Project> preparedProject = {});
         ~RuntimeLayer() override = default;
 
         void OnAttach() override;
@@ -34,6 +34,7 @@ namespace Axle {
         SimulationDriver& GetSimulationDriver() { return m_SimulationDriver; }
         const SimulationDriver& GetSimulationDriver() const { return m_SimulationDriver; }
         bool IsPaused() const { return m_IsPaused; }
+        const std::shared_ptr<Scene>& GetScene() const { return m_Scene; }
         void VerifySimulationContract();
 
     private:
@@ -43,6 +44,7 @@ namespace Axle {
 
     private:
         std::filesystem::path m_ProjectPath;
+        std::shared_ptr<Project> m_PreparedProject;
         std::shared_ptr<Scene> m_Scene;
         std::unique_ptr<PhysicsScene> m_PhysicsScene;
         SimulationDriver m_SimulationDriver;

@@ -12,6 +12,8 @@
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
 #include "RuntimeLayer.hpp"
+#include "RuntimeStartup.hpp"
+#include "RuntimeRenderContext.hpp"
 #include <exception>
 #include <csignal>
 #include <cstdio>
@@ -102,42 +104,27 @@ int main(int argc, char** argv) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
 
-    std::filesystem::path projectPath;
-    bool verifySimulation = false;
-    auto rhiConfig = Axle::RHI::RHISwitcher::ParseCommandLine(argc, argv);
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        if (arg == "--verify-simulation") verifySimulation = true;
-        else if (arg == "--project" && i + 1 < argc) projectPath = argv[++i];
-        else if (arg.rfind("--project=", 0) == 0) projectPath = arg.substr(10);
-        else if (!arg.empty() && arg[0] != '-') projectPath = arg;
-    }
-
-    // Apply consistent project / CLI precedence:
-    // If no explicit CLI backend was provided, inspect Project configuration
-    if (rhiConfig.RawArgument.empty()) {
-        std::filesystem::path inspectPath = projectPath;
-        if (inspectPath.empty()) {
-            if (std::filesystem::exists("Sandbox.axleproj")) inspectPath = "Sandbox.axleproj";
-            else if (std::filesystem::exists("Project.axleproj")) inspectPath = "Project.axleproj";
-        }
-        if (!inspectPath.empty() && std::filesystem::exists(inspectPath)) {
-            auto tempProj = Axle::Project::New();
-            Axle::ProjectSerializer serializer(tempProj);
-            if (serializer.Deserialize(inspectPath)) {
-                const std::string& b = tempProj->GetConfig().RHIBackend;
-                if (b == "Direct3D12" || b == "dx12" || b == "d3d12") {
-                    rhiConfig.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
-                } else if (b == "Vulkan" || b == "vulkan" || b == "vk") {
-                    rhiConfig.PreferredBackend = Axle::RHI::RHIType::Vulkan;
-                } else if (b == "OpenGL" || b == "opengl" || b == "gl") {
-                    rhiConfig.PreferredBackend = Axle::RHI::RHIType::OpenGL;
-                }
-            }
-        }
-    }
-
     try {
+        std::filesystem::path projectPath;
+        uint32_t frameLimit = 0;
+        bool verifySimulation = false;
+        auto rhiConfig = Axle::RHI::RHISwitcher::ParseCommandLine(argc, argv);
+        for (int i = 1; i < argc; ++i) {
+            const std::string arg = argv[i];
+            if (arg == "--verify-simulation") verifySimulation = true;
+            else if (arg.rfind("--frames=", 0) == 0) {
+                size_t consumed = 0; const auto value = std::stoul(arg.substr(9),&consumed);
+                if (consumed != arg.size()-9 || value == 0 || value > 1000000) throw std::invalid_argument("--frames requires an integer from 1 to 1000000");
+                frameLimit = static_cast<uint32_t>(value);
+            }
+            else if (arg == "--project" && i + 1 < argc) projectPath = argv[++i];
+            else if (arg.rfind("--project=", 0) == 0) projectPath = arg.substr(10);
+            else if (!arg.empty() && arg[0] != '-') projectPath = arg;
+        }
+
+        const auto startup = Axle::PrepareRuntimeStartup(projectPath,rhiConfig);
+        projectPath = startup.ProjectPath; rhiConfig = startup.Backend;
+
         class PhysicsApplicationService final : public Axle::IApplicationService {
         public:
             const char* GetName() const override { return "Physics"; }
@@ -152,43 +139,6 @@ int main(int argc, char** argv) {
                 }
             }
         };
-
-#if defined(AXLE_BUILD_RHI)
-        class RuntimeRenderContext final : public Axle::ApplicationRenderContext {
-        public:
-            RuntimeRenderContext(const Axle::Window& window) {
-                Axle::RHI::RHISwapChainDesc desc;
-                desc.VSync = window.IsVSync();
-                desc.FramesInFlight = 3;
-                if (!m_Presenter.Init(window.GetNativeWindow(), desc)) {
-                    throw std::runtime_error("Runtime application presentation initialization failed");
-                }
-            }
-
-            bool Present(const Axle::Window& window) override {
-                nri::Texture* blitSource = nullptr;
-                if (auto* target = Axle::RenderService::Get().GetDefaultMainColorTarget()) {
-                    blitSource = target->GetNative();
-                }
-                const auto outcome = m_Presenter.RenderFrame(
-                    window.GetWidth(),
-                    window.GetHeight(),
-                    window.IsVSync(),
-                    {},
-                    {},
-                    blitSource
-                );
-                return outcome != Axle::RHI::RHIPresentOutcome::Failed;
-            }
-
-            void Shutdown() override {
-                m_Presenter.Shutdown();
-            }
-
-        private:
-            Axle::RHI::RHIPresentationContext m_Presenter;
-        };
-#endif
 
         Axle::ApplicationSpecification spec{
             .Name = "Axle Game Player",
@@ -212,11 +162,11 @@ int main(int argc, char** argv) {
                 spec.GraphicsBackend = api;
                 app = std::make_unique<Axle::Application>(spec);
                 app->RegisterService(std::make_shared<PhysicsApplicationService>());
-                layer = std::make_shared<Axle::RuntimeLayer>(projectPath);
+                layer = std::make_shared<Axle::RuntimeLayer>(projectPath,startup.ProjectDefinition);
                 app->PushLayer(layer);
 #if defined(AXLE_BUILD_RHI)
                 if (api != Axle::GraphicsAPI::OpenGL) {
-                    app->SetRenderContext(std::make_unique<RuntimeRenderContext>(app->GetWindow()));
+                    app->SetRenderContext(std::make_unique<Axle::RuntimeRenderContext>(app->GetWindow()));
                 }
 #endif
                 return true;
@@ -228,17 +178,18 @@ int main(int argc, char** argv) {
             }
         })) throw std::runtime_error("No requested backend could initialize the Runtime");
         if (verifySimulation) layer->VerifySimulationContract();
-        else app->Run();
+        else if (!app->Run(frameLimit)) throw std::runtime_error("Runtime rendering or presentation failed");
     } catch (const std::exception& e) {
         AXLE_CRITICAL("Unhandled Runtime Exception: {0}", e.what());
         fprintf(stderr, "[FATAL] Unhandled Runtime Exception: %s\n", e.what());
+        Axle::RHI::RHIDevice::Get().Shutdown();
         return 1;
     } catch (...) {
         AXLE_CRITICAL("Unhandled unknown exception caught in Runtime main!");
         fprintf(stderr, "[FATAL] Unhandled unknown exception caught in Runtime main!\n");
+        Axle::RHI::RHIDevice::Get().Shutdown();
         return 1;
     }
 
-    Axle::RHI::RHIDevice::Get().Shutdown();
-    return 0;
+    return Axle::RHI::RHIDevice::Get().Shutdown() ? 0 : 1;
 }

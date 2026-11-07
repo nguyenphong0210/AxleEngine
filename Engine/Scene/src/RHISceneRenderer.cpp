@@ -1070,7 +1070,7 @@ namespace Axle {
         auto world = ExtractRenderWorld(*scene, options);
         if (!ResolveRenderWorldResources(world)) return;
         RenderWorldView(world, camera, colorTarget, colorRTV, depthTarget, depthDSV, width, height, settings, physicsScene, std::move(viewTargets));
-        PublishMaterialFeedback(*scene, world);
+        if (m_LastRenderSucceeded) PublishMaterialFeedback(*scene, world);
     }
 
     void RHISceneRenderer::PublishMaterialFeedback(Scene& scene, const RenderWorld& world) const {

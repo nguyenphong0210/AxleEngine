@@ -1,14 +1,20 @@
-add_executable(AxleRuntime EXCLUDE_FROM_ALL
-    src/Main.cpp
+add_library(AxleRuntimePlayer STATIC
     src/RuntimeLayer.cpp
+    src/RuntimeStartup.cpp
+    src/RuntimeRenderContext.cpp
 )
+add_library(Axle::RuntimePlayer ALIAS AxleRuntimePlayer)
 
-target_include_directories(AxleRuntime PRIVATE
+add_executable(AxleRuntime EXCLUDE_FROM_ALL src/Main.cpp)
+target_link_libraries(AxleRuntime PRIVATE Axle::RuntimePlayer)
+
+target_include_directories(AxleRuntimePlayer PUBLIC
     src
 )
 
-target_link_libraries(AxleRuntime PRIVATE
+target_link_libraries(AxleRuntimePlayer PUBLIC
     Axle::Core
+    Axle::RHI
     Axle::Platform
     Axle::Renderer
     Axle::Audio

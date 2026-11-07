@@ -163,7 +163,9 @@
       "Axle::Spline",
       "Axle::Terrain",
       "Axle::Animation",
-      "Axle::VFX"
+      "Axle::VFX",
+      "Axle::RHI",
+      "Axle::RuntimePlayer"
     ],
     "Editor": [
       "Axle::Core",

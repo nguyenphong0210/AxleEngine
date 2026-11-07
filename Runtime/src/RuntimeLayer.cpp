@@ -22,8 +22,8 @@
 
 namespace Axle {
 
-    RuntimeLayer::RuntimeLayer(const std::filesystem::path& projectPath)
-        : Layer("RuntimeLayer"), m_ProjectPath(projectPath), m_Camera(45.0f, 16.0f / 9.0f, 0.1f, 1000.0f) {
+    RuntimeLayer::RuntimeLayer(const std::filesystem::path& projectPath, std::shared_ptr<Project> preparedProject)
+        : Layer("RuntimeLayer"), m_ProjectPath(projectPath), m_PreparedProject(std::move(preparedProject)), m_Camera(45.0f, 16.0f / 9.0f, 0.1f, 1000.0f) {
     }
 
     void RuntimeLayer::OnAttach() {
@@ -61,23 +61,6 @@ namespace Axle {
     }
 
     void RuntimeLayer::LoadProjectAndStartScene() {
-        // Step 0: Auto-mount monolithic asset package if available (e.g. Data.axlepak)
-        static const std::vector<std::filesystem::path> packageCandidates = {
-            "Data.axlepak",
-            "Game.axlepak",
-            "assets.axlepak",
-            "Export/Data.axlepak"
-        };
-        for (const auto& pkg : packageCandidates) {
-            if (std::filesystem::exists(pkg)) {
-                if (FileSystem::MountPackage(pkg)) {
-                    AXLE_INFO("Runtime: Mounted asset package '{0}' ({1} assets indexed)",
-                        pkg.string(), FileSystem::GetMountedPackage()->GetEntryCount());
-                    break;
-                }
-            }
-        }
-
         // Step A: Locate project configuration
         std::filesystem::path projPath = m_ProjectPath;
         if (projPath.empty()) {
@@ -91,8 +74,9 @@ namespace Axle {
             }
         }
 
-        std::shared_ptr<Project> project = nullptr;
-        if (!projPath.empty() && FileSystem::Exists(projPath)) {
+        std::shared_ptr<Project> project = m_PreparedProject;
+        if (project) Project::SetActive(project);
+        else if (!projPath.empty() && FileSystem::Exists(projPath)) {
             project = Project::Load(projPath);
             if (project) {
                 AXLE_INFO("Runtime: Loaded project from '{0}'", projPath.string());
@@ -178,6 +162,8 @@ namespace Axle {
             }
         }
 
+        if (!sceneLoaded && !startScenePath.empty())
+            throw std::runtime_error("Configured Runtime startup scene could not be loaded: " + startScenePath.string());
         if (!sceneLoaded) {
             AXLE_INFO("Runtime: No authored startup scene loaded; keeping an empty scene.");
             Application::Get().GetWindow().SetTitle("Axle Game - Standalone Player");
@@ -187,6 +173,7 @@ namespace Axle {
         m_SimulationDriver.Reset();
         m_SimulationDriver.Resume();
         m_Scene->OnRuntimeStart(m_PhysicsScene.get());
+        SetupPauseMenu();
         AXLE_INFO("Runtime: Simulation lifecycle started successfully.");
     }
 

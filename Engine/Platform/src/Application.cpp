@@ -160,8 +160,9 @@ namespace Axle {
         m_LayerStack.PopLayer(layer);
     }
 
-    void Application::Run() {
-        while (m_Running && !m_Window->ShouldClose()) {
+    bool Application::Run(uint32_t frameLimit) {
+        uint32_t frames = 0;
+        while (m_Running && !m_Window->ShouldClose() && (!frameLimit || frames < frameLimit)) {
             Input::SetMouseScrollY(0.0f);
             m_Window->PollEvents();
             JobSystem::RunPinnedTasks();
@@ -188,13 +189,15 @@ namespace Axle {
                     layer->OnImGuiRender();
                 }
                 m_UIContext->End();
-                if (!m_UIContext->IsOperational()) m_Running = false;
+                if (!m_UIContext->IsOperational()) { m_Running = false; return false; }
             }
 
-            if (m_RenderContext && !m_RenderContext->Present(*m_Window)) m_Running = false;
+            if (m_RenderContext && !m_RenderContext->Present(*m_Window)) { m_Running = false; return false; }
 
             m_Window->SwapBuffers();
+            ++frames;
         }
+        return true;
     }
 
 }

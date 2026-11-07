@@ -139,7 +139,7 @@ namespace Axle {
         SceneExtractionOptions options; options.CameraOverride = &request.Camera;
         auto world = ExtractRenderWorld(scene, options);
         auto result = RenderView(world, request);
-        if (m_RHIRenderer) m_RHIRenderer->PublishMaterialFeedback(scene, world);
+        if (result.Success && m_RHIRenderer) m_RHIRenderer->PublishMaterialFeedback(scene, world);
         return result;
     }
     RHI::RHITexture* RenderService::GetDefaultMainColorTarget() const {

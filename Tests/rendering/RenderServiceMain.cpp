@@ -94,6 +94,9 @@ static bool Service(RHIType backend) {
             auto zero = request; zero.Width = 0;
             const auto prior = device.GetLastSubmittedToken();
             RENDER_CHECK(!service.RenderView(world,zero).Success && device.GetLastSubmittedToken() == prior, "zero extent never submits or allocates");
+            material.CustomShaderDiagnostic="Current owner diagnostic";
+            RENDER_CHECK(!service.RenderView(scene,zero).Success && material.CustomShaderDiagnostic=="Current owner diagnostic",
+                "rejected scene request cannot publish stale feedback from a previous view");
             auto privateRequest = request; privateRequest.Kind = RenderViewKind::Thumbnail;
             RENDER_CHECK(!service.RenderView(world,privateRequest).Success, "private views cannot borrow shared main targets");
             {

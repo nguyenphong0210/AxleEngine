@@ -43,7 +43,7 @@ namespace Axle {
         virtual ~Application();
 
         // Run the main game loop
-        void Run();
+        bool Run(uint32_t frameLimit = 0);
 
         // Request graceful shutdown
         void Close();

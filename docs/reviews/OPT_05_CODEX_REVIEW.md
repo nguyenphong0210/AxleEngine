@@ -158,3 +158,37 @@ then checks restoration. Debug Editor, Runtime and focused targets build; all
 nine focused CPU/D3D12/Vulkan/GL cases pass with actual native API validation
 (canvas-boundary-focused-debug-results.json). Full final-source gates and the
 Runtime loose/cooked product fixture remain pending. No phase acceptance yet.
+
+## Correction checkpoint 6
+
+Runtime project/package/backend resolution now completes on CPU before backend
+candidates are constructed, including absolute paths to virtual project files in
+exports. Explicit CLI selection overrides the project's backend. The reusable
+player core owns startup, layer and presentation; the executable uses the same
+implementations as its physical product probe. Application reports presentation
+or UI failure and supports a bounded loop for automation. Runtime rejects a
+configured startup scene that cannot be loaded, closes the device on failure,
+and registers its existing pause-menu actions.
+
+The product fixture exposed a UI round-trip defect: Image serialization wrote
+`texture`, while UIImageNode only accepted `source`/`texturePath`. The canonical
+serialized property is now read. Rejected render requests also no longer publish
+stale reflected material feedback from an earlier successful view.
+
+Debug Runtime product probes pass all eight loose/cooked x D3D12/Vulkan/GL/forced
+GL fallback cases. They run the production Application/layer/presenter, read real
+mesh, sprite, font and particle pixels, resize the actual window, click the loaded
+UI before/after DPI change, pause/resume and check presentation failure/teardown.
+Native probes require installed API validation and zero NRI/API errors; Vulkan
+confirms synchronization validation. Cooked fixtures contain no loose authored
+payload. GL fallback matches explicit GL byte-for-byte before and after resize.
+
+The actual AxleRuntime.exe also passes six bounded loose/cooked startup/present
+cases; Vulkan inherits its backend from the project without an RHI CLI override.
+Six missing-startup-scene executable cases fail with exit 1 as required, without
+silently substituting an empty scene or producing API errors. Evidence is under
+OPT-05/runtime-fixture-debug-results.json, runtime-exe-debug-results.json and
+runtime-negative-debug-results.json. The focused service regression passes after
+the stale-feedback correction. Final Debug/Release matrices, remaining consumer
+checks and independent correction recheck still block phase acceptance. P41-26
+Editor-disabled build closure remains a separate later package.

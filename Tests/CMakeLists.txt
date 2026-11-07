@@ -223,6 +223,14 @@ add_executable(AxleRenderServiceTests EXCLUDE_FROM_ALL rendering/RenderServiceMa
 target_include_directories(AxleRenderServiceTests PRIVATE rendering)
 target_link_libraries(AxleRenderServiceTests PRIVATE Axle::UI Axle::Scene glad glfw)
 
+add_executable(AxleRuntimeRenderTests EXCLUDE_FROM_ALL rendering/RuntimeProductMain.cpp)
+target_include_directories(AxleRuntimeRenderTests PRIVATE rendering)
+target_link_libraries(AxleRuntimeRenderTests PRIVATE Axle::RuntimePlayer glad glfw)
+target_compile_definitions(AxleRuntimeRenderTests PRIVATE
+    AXLE_RUNTIME_TEST_RESOURCES="${CMAKE_SOURCE_DIR}/Engine/Resources"
+    AXLE_RUNTIME_TEST_SCRIPTS="$<TARGET_FILE:AxleScripts>")
+add_dependencies(AxleRuntimeRenderTests AxleScripts)
+
 add_executable(AxleRHIErrorTests EXCLUDE_FROM_ALL rendering/RHIErrorMain.cpp)
 target_include_directories(AxleRHIErrorTests PRIVATE rendering)
 target_link_libraries(AxleRHIErrorTests PRIVATE Axle::RHI)
@@ -546,7 +554,7 @@ if(WIN32)
         "${CMAKE_COMMAND}" "${CMAKE_CURRENT_BINARY_DIR}/Build Workflow Fixture" "$<CONFIG>")
     set_tests_properties(BuildWorkflowTests PROPERTIES FIXTURES_REQUIRED BuildWorkflow RUN_SERIAL TRUE TIMEOUT 30)
 endif()
-add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests)
+add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests)
 
 foreach(testTarget IN LISTS AXLE_TEST_TARGETS)
     target_include_directories(${testTarget} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")

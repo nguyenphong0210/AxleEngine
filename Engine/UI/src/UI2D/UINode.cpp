@@ -334,7 +334,7 @@ namespace Axle {
 
     // --- UIImageNode ---
     bool UIImageNode::SetProperty(std::string_view propName, std::string_view strVal) {
-        if (propName == "source" || propName == "texturePath") { TexturePath = std::string(strVal); return true; }
+        if (propName == "texture" || propName == "source" || propName == "texturePath") { TexturePath = std::string(strVal); return true; }
         if (propName == "tint" || propName == "tintColor") { TintColor = ParseHexColor(strVal); return true; }
         return UINode::SetProperty(propName, strVal);
     }

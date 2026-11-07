@@ -81,6 +81,10 @@ namespace Axle::RHI {
             ParseArgument(argv[i], config);
         }
 
+        for (int i = 1; i < argc; ++i) {
+            const std::string arg = argv[i];
+            if (arg == "--no-fallback" || arg == "--strict-rhi") config.AllowFallback = false;
+        }
         return config;
     }
 
@@ -133,6 +137,29 @@ namespace Axle::RHI {
 
     RHIType RHISwitcher::GetActiveBackend() {
         return RHIDevice::Get().IsInitialized() ? RHIDevice::Get().GetBackend() : RHIType::None;
+    }
+
+    bool RHISwitcher::InitializeProduct(const RHIBackendConfig& config,
+        const std::function<bool(GraphicsAPI)>& initializeCandidate) {
+        auto preferred = config.PreferredBackend == RHIType::None ? RHIType::Direct3D12 : config.PreferredBackend;
+        std::vector<RHIType> candidates{preferred};
+        if (config.AllowFallback && preferred != RHIType::OpenGL) {
+            candidates.push_back(preferred == RHIType::Direct3D12 ? RHIType::Vulkan : RHIType::Direct3D12);
+            candidates.push_back(RHIType::OpenGL);
+        }
+        auto& device = RHIDevice::Get();
+        for (auto backend : candidates) {
+            RHIBackendConfig candidate = config;
+            candidate.PreferredBackend = backend;
+            candidate.AllowFallback = false;
+            if (!ResolveAndInitialize(candidate)) continue;
+            if (initializeCandidate && initializeCandidate(ToGraphicsAPI(backend))) {
+                device.SetContextReady(true);
+                return true;
+            }
+            device.Shutdown();
+        }
+        return false;
     }
 
     GraphicsAPI RHISwitcher::GetActiveGraphicsAPI() {

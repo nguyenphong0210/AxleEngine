@@ -190,7 +190,7 @@ namespace Axle {
 
         // Real DXC compilation hook when RHI device is initialized
         auto& device = RHI::RHIDevice::Get();
-        if (!device.IsInitialized()) {
+        if (!device.IsNativeReady()) {
             result.Success = false;
             result.Diagnostic = "RHI device not initialized for shader compilation.";
             return result;

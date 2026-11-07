@@ -41,7 +41,7 @@ namespace Axle::RHI {
         m_Desc = desc;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHITexture::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -139,7 +139,7 @@ namespace Axle::RHI {
         if (!m_Texture) return;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (rhiDevice.IsInitialized()) {
+        if (rhiDevice.IsNativeReady()) {
             const auto& core = rhiDevice.GetNRICore();
             if (m_SRV) {
                 core.DestroyDescriptor(m_SRV);

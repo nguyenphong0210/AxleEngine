@@ -10,7 +10,7 @@
 
 namespace Axle {
     std::shared_ptr<RHI::RHITexture> MaterialTextureCache::Get(const std::string& path, bool color) {
-        if (path.empty() || !RHI::RHIDevice::Get().IsInitialized()) return nullptr;
+        if (path.empty() || !RHI::RHIDevice::Get().IsNativeReady()) return nullptr;
         auto source = FileSystem::ResolveAssetPath(path);
         auto extension = source.extension().string();
         std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){ return static_cast<char>(std::tolower(c)); });

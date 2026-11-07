@@ -1,4 +1,5 @@
 #include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/Log.hpp>
@@ -200,7 +201,11 @@ namespace Axle::RHI {
             tryOrder.push_back(RHIType::OpenGL);
         } else {
             // None or unspecified default
-            tryOrder = { RHIType::Direct3D12, RHIType::Vulkan, RHIType::OpenGL };
+            tryOrder = { RHIType::Direct3D12 };
+            if (desc.AllowFallback) {
+                tryOrder.push_back(RHIType::Vulkan);
+                tryOrder.push_back(RHIType::OpenGL);
+            }
         }
 
         bool success = false;
@@ -230,6 +235,10 @@ namespace Axle::RHI {
     }
 
     bool RHIDevice::TryInitNRI(RHIType backend, const RHIDeviceDesc& desc, const nri::AdapterDesc* adapterDesc) {
+        if (desc.EnableValidation && !IsGraphicsAPIValidationAvailable(backend)) {
+            AXLE_CORE_ERROR("Backend {0}: requested graphics API validation is unavailable", RHITypeToString(backend));
+            return false;
+        }
         nri::DeviceCreationDesc creationDesc = {};
         if (backend == RHIType::Direct3D12) {
             creationDesc.graphicsAPI = nri::GraphicsAPI::D3D12;
@@ -239,13 +248,16 @@ namespace Axle::RHI {
             return false;
         }
 
-        creationDesc.enableNRIValidation = desc.EnableValidation;
+        creationDesc.enableNRIValidation = desc.EnableValidation || desc.EnableNRIValidation;
         creationDesc.enableGraphicsAPIValidation = desc.EnableValidation;
         creationDesc.adapterDesc = adapterDesc;
 
         // Callback interface for diagnostic logging
         nri::CallbackInterface callbackInterface = {};
         callbackInterface.MessageCallback = NriMessageCallback;
+        // NRI's default calls DebugBreak even for recoverable startup failures.
+        // Keep the diagnostic callback and consume the returned operation result.
+        callbackInterface.AbortExecution = [](void*) {};
         creationDesc.callbackInterface = callbackInterface;
 
         // Standard Vulkan binding register offsets for HLSL SPIR-V compatibility
@@ -258,49 +270,50 @@ namespace Axle::RHI {
         }
 
         nri::Device* device = nullptr;
-        nri::Result res = nri::nriCreateDevice(creationDesc, device);
+        NRIInterfaces interfaces;
+        nri::Queue* queue = nullptr;
+        auto res = ScopedRHIFault::Invoke("CreateDevice", [&] { return nri::nriCreateDevice(creationDesc, device); });
         if (res != nri::Result::SUCCESS || !device) {
+            if (device) nri::nriDestroyDevice(device);
             return false;
         }
-
-        m_Device = device;
-
-        // Retrieve Core, Helper, and Streamer interfaces
-        res = nri::nriGetInterface(*m_Device, NRI_INTERFACE(nri::CoreInterface), (void*)&m_NRI.Core);
-        if (res != nri::Result::SUCCESS) {
-            AXLE_CORE_ERROR("Failed to query nri::CoreInterface!");
-            nri::nriDestroyDevice(m_Device);
-            m_Device = nullptr;
+        auto reject = [&](const char* operation) {
+            AXLE_CORE_ERROR("Backend {0}: required {1} unavailable", RHITypeToString(backend), operation);
+            nri::nriDestroyDevice(device);
             return false;
-        }
-
-        res = nri::nriGetInterface(*m_Device, NRI_INTERFACE(nri::HelperInterface), (void*)&m_NRI.Helper);
-        if (res != nri::Result::SUCCESS) {
-            AXLE_CORE_WARN("Failed to query nri::HelperInterface (some memory utilities may be unavailable).");
-        }
-
-        res = nri::nriGetInterface(*m_Device, NRI_INTERFACE(nri::StreamerInterface), (void*)&m_NRI.Streamer);
-        if (res != nri::Result::SUCCESS) {
-            AXLE_CORE_WARN("Failed to query nri::StreamerInterface (staging streaming may be unavailable).");
-        }
-
-        res = nri::nriGetInterface(*m_Device, NRI_INTERFACE(nri::SwapChainInterface), (void*)&m_NRI.SwapChain);
-        if (res != nri::Result::SUCCESS) {
-            AXLE_CORE_WARN("Failed to query nri::SwapChainInterface (presentation may be unavailable).");
-        }
-
+        };
+        // No candidate state is visible to resource callers until every required
+        // interface and queue is usable. Current upload paths require both helpers.
+        res = ScopedRHIFault::Invoke("CoreInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::CoreInterface), &interfaces.Core); });
+        if (res != nri::Result::SUCCESS || !interfaces.Core.GetQueue || !interfaces.Core.GetDeviceDesc ||
+            !interfaces.Core.CreateTexture || !interfaces.Core.CreateBuffer || !interfaces.Core.QueueSubmit ||
+            !interfaces.Core.CreateCommittedTexture || !interfaces.Core.CreateCommittedBuffer ||
+            !interfaces.Core.CreateTextureView || !interfaces.Core.CreateBufferView ||
+            !interfaces.Core.DestroyTexture || !interfaces.Core.DestroyBuffer || !interfaces.Core.DestroyDescriptor ||
+            !interfaces.Core.GetDeviceNativeObject || !interfaces.Core.GetQueueNativeObject)
+            return reject("CoreInterface");
+        res = ScopedRHIFault::Invoke("HelperInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::HelperInterface), &interfaces.Helper); });
+        if (res != nri::Result::SUCCESS || !interfaces.Helper.AllocateAndBindMemory || !interfaces.Helper.UploadData)
+            return reject("HelperInterface");
+        res = ScopedRHIFault::Invoke("StreamerInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::StreamerInterface), &interfaces.Streamer); });
+        if (res != nri::Result::SUCCESS || !interfaces.Streamer.CreateStreamer)
+            return reject("StreamerInterface");
+        res = ScopedRHIFault::Invoke("SwapChainInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::SwapChainInterface), &interfaces.SwapChain); });
+        if (!desc.Headless && (res != nri::Result::SUCCESS || !interfaces.SwapChain.CreateSwapChain || !interfaces.SwapChain.QueuePresent))
+            return reject("SwapChainInterface");
+        if (res != nri::Result::SUCCESS) interfaces.SwapChain = {};
         if (backend == RHIType::Vulkan) {
-            res = nri::nriGetInterface(*m_Device, NRI_INTERFACE(nri::WrapperVKInterface), (void*)&m_NRI.WrapperVK);
-            if (res != nri::Result::SUCCESS) {
-                AXLE_CORE_WARN("Failed to query nri::WrapperVKInterface for Vulkan device!");
-            }
+            res = ScopedRHIFault::Invoke("WrapperVKInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::WrapperVKInterface), &interfaces.WrapperVK); });
+            if (!desc.Headless && (res != nri::Result::SUCCESS || !interfaces.WrapperVK.GetInstanceVK ||
+                !interfaces.WrapperVK.GetPhysicalDeviceVK || !interfaces.WrapperVK.GetInstanceProcAddrVK || !interfaces.WrapperVK.GetQueueFamilyIndexVK))
+                return reject("WrapperVKInterface");
+            if (res != nri::Result::SUCCESS) interfaces.WrapperVK = {};
         }
-
-        res = m_NRI.Core.GetQueue(*m_Device, nri::QueueType::GRAPHICS, 0, m_GraphicsQueue);
-        if (res != nri::Result::SUCCESS || !m_GraphicsQueue) {
-            AXLE_CORE_ERROR("Failed to obtain primary Graphics Queue!");
-        }
-
+        res = ScopedRHIFault::Invoke("GetGraphicsQueue", [&] { return interfaces.Core.GetQueue(*device, nri::QueueType::GRAPHICS, 0, queue); });
+        if (res != nri::Result::SUCCESS || !queue) return reject("GraphicsQueue");
+        m_Device = device;
+        m_NRI = interfaces;
+        m_GraphicsQueue = queue;
         m_Capabilities.ActiveBackend = backend;
         PopulateCapabilities();
         return true;
@@ -415,6 +428,7 @@ namespace Axle::RHI {
         m_Capabilities = {};
         m_Adapters.clear();
         m_Initialized = false;
+        m_ContextReady = false;
 
         AXLE_CORE_INFO("RHI Device successfully shut down.");
     }

@@ -42,7 +42,7 @@ namespace Axle::RHI {
         Shutdown();
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHIPipelineLayout::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -78,7 +78,7 @@ namespace Axle::RHI {
     void RHIPipelineLayout::Shutdown() {
         if (m_Layout) {
             auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.IsInitialized()) {
+            if (rhiDevice.IsNativeReady()) {
                 rhiDevice.GetNRICore().DestroyPipelineLayout(m_Layout);
             }
             m_Layout = nullptr;
@@ -226,14 +226,14 @@ namespace Axle::RHI {
         auto& rhiDevice = RHIDevice::Get();
         const auto& nriCore = rhiDevice.GetNRICore();
 
-        if (rhiDevice.IsInitialized() && m_LRUList.size() > m_MaxCapacity) {
+        if (rhiDevice.IsNativeReady() && m_LRUList.size() > m_MaxCapacity) {
             rhiDevice.WaitIdle();
         }
 
         while (m_LRUList.size() > m_MaxCapacity) {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
-            if (victim.Pipeline && rhiDevice.IsInitialized()) {
+            if (victim.Pipeline && rhiDevice.IsNativeReady()) {
                 nriCore.DestroyPipeline(victim.Pipeline);
             }
             m_LRUList.pop_back();
@@ -249,7 +249,7 @@ namespace Axle::RHI {
         const auto& nriCore = rhiDevice.GetNRICore();
 
         for (auto& entry : m_LRUList) {
-            if (entry.Pipeline && rhiDevice.IsInitialized()) {
+            if (entry.Pipeline && rhiDevice.IsNativeReady()) {
                 nriCore.DestroyPipeline(entry.Pipeline);
             }
         }
@@ -273,7 +273,7 @@ namespace Axle::RHI {
         m_MissCount++;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHIPipelineCache::GetOrCreateGraphicsPipeline failed: RHIDevice is not initialized!");
             return nullptr;
         }
@@ -408,7 +408,7 @@ namespace Axle::RHI {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
             if (victim.Pipeline) {
-                if (rhiDevice.IsInitialized()) {
+                if (rhiDevice.IsNativeReady()) {
                     rhiDevice.WaitIdle();
                 }
                 nriCore.DestroyPipeline(victim.Pipeline);
@@ -445,7 +445,7 @@ namespace Axle::RHI {
         m_MissCount++;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHIPipelineCache::GetOrCreateComputePipeline failed: RHIDevice is not initialized!");
             return nullptr;
         }
@@ -469,7 +469,7 @@ namespace Axle::RHI {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
             if (victim.Pipeline) {
-                if (rhiDevice.IsInitialized()) {
+                if (rhiDevice.IsNativeReady()) {
                     rhiDevice.WaitIdle();
                 }
                 nriCore.DestroyPipeline(victim.Pipeline);

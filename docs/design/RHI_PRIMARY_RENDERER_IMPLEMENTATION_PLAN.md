@@ -12,7 +12,7 @@ Read the [architecture contract](RHI_PRIMARY_RENDERER_ARCHITECTURE.md) and
 [implementation guide](RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md).
 The [shared exchange](../agents/CODEX_GEMINI_EXCHANGE.json) records the current
 assignment, implementer evidence and independent review. This plan does not
-release all packages to an agent. The current user request is documentation only.
+release all packages to an agent. Consult the live task card for the current release.
 
 ## Priority and execution policy
 
@@ -460,7 +460,10 @@ assignment from unchecked roadmap rows.
 
 | Package range | Implementation | Review | Required acceptance |
 | --- | --- | --- | --- |
-| P41-00..29 | NOT STARTED | NOT STARTED | NOT RUN |
+| P41-00 | Delivered in OPT-01 | Accepted predecessor | See OPT-01 review |
+| P41-01 | Implemented and self-verified Debug/Release | P41-03 checkpoint pending | See OPT-04 execution record; API-validation layers unavailable |
+| P41-02..11 | NOT STARTED | NOT STARTED | NOT RUN |
+| P41-12..29 | NOT STARTED | NOT STARTED | NOT RUN |
 
 Split this row into per-package rows as implementation starts. Documentation
 creation and prior Inspector/VFX bug fixes do not complete any package here.

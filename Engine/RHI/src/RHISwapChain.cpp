@@ -20,7 +20,8 @@ namespace Axle::RHI {
         }
 
         auto& device = RHIDevice::Get();
-        if (!device.IsInitialized()) {
+        if (!device.IsBackendSelected() ||
+            (device.GetBackend() != RHIType::OpenGL && !device.IsNativeReady())) {
             AXLE_CORE_ERROR("Failed to initialize RHISwapChain: RHIDevice is not initialized!");
             return false;
         }

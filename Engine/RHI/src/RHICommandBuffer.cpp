@@ -46,7 +46,7 @@ namespace Axle::RHI {
         }
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHICommandBuffer::Init: RHIDevice is not initialized!");
             return false;
         }
@@ -69,7 +69,7 @@ namespace Axle::RHI {
         Shutdown();
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHICommandBuffer::Init: RHIDevice is not initialized!");
             return false;
         }
@@ -104,7 +104,7 @@ namespace Axle::RHI {
 
     void RHICommandBuffer::Shutdown() {
         auto& rhiDevice = RHIDevice::Get();
-        if (rhiDevice.IsInitialized()) {
+        if (rhiDevice.IsNativeReady()) {
             const auto& core = rhiDevice.GetNRICore();
             if (m_CommandBuffer && core.DestroyCommandBuffer) {
                 core.DestroyCommandBuffer(m_CommandBuffer);
@@ -549,7 +549,7 @@ namespace Axle::RHI {
     bool RHICommandBuffer::Reset() {
         if (!m_CommandAllocator) return false;
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) return false;
+        if (!rhiDevice.IsNativeReady()) return false;
 
         const auto& core = rhiDevice.GetNRICore();
         if (m_OwnsAllocator && core.ResetCommandAllocator) {

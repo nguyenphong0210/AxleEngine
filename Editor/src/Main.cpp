@@ -7,6 +7,7 @@
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/PhysicsEngine.hpp>
@@ -130,12 +131,14 @@ int main(int argc, char** argv) {
     bool verifyEmptyStartup = false;
     bool verifyStartup = false;
     bool verifySimulation = false;
+    std::string startupRejection;
     for (int i = 1; i < argc; ++i) {
         std::string argument = argv[i];
         if (argument == "--empty-project") emptyProject = true;
         else if (argument == "--verify-empty-startup") verifyEmptyStartup = true;
         else if (argument == "--verify-startup") verifyStartup = true;
         else if (argument == "--verify-simulation") verifySimulation = true;
+        else if (argument.rfind("--verify-startup-rejection=", 0) == 0) startupRejection = argument.substr(27);
         else if (argument == "--project" && i + 1 < argc) requestedProject = argv[++i];
         else if (argument.rfind("--project=", 0) == 0) requestedProject = argument.substr(10);
         else {
@@ -205,25 +208,16 @@ int main(int argc, char** argv) {
         }
     }
 
-#if defined(_WIN32)
-#if !defined(AXLE_HAS_VULKAN)
-    if (rhiConfig.PreferredBackend == Axle::RHI::RHIType::Vulkan) {
-        AXLE_WARN("Vulkan 1.3 is supported for headless RHI compute/tests, but Editor UI requires the Vulkan SDK (not installed). Defaulting to Direct3D 12.");
-        rhiConfig.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
-    }
-#endif
-#endif
-
-    Axle::GraphicsAPI activeAPI = Axle::GraphicsAPI::OpenGL;
-
-    if (rhiConfig.PreferredBackend != Axle::RHI::RHIType::OpenGL) {
-        if (Axle::RHI::RHISwitcher::ResolveAndInitialize(rhiConfig)) {
-            activeAPI = Axle::RHI::RHISwitcher::GetActiveGraphicsAPI();
-        } else {
-            AXLE_WARN("RHI Switcher failed to initialize preferred backend; falling back to OpenGL.");
-            activeAPI = Axle::GraphicsAPI::OpenGL;
+    Axle::GraphicsAPI activeAPI = Axle::GraphicsAPI::None;
+    bool startupRejected = false;
+    Axle::RHI::ScopedRHIFault startupFault([&](std::string_view operation) -> std::optional<nri::Result> {
+        if (!startupRejection.empty() && operation == startupRejection &&
+            (!startupRejected || startupRejection == "CreateDevice")) {
+            startupRejected = true;
+            return nri::Result::FAILURE;
         }
-    }
+        return {};
+    });
 
     try {
         class PhysicsApplicationService final : public Axle::IApplicationService {
@@ -262,11 +256,35 @@ int main(int argc, char** argv) {
                 AXLE_ERROR("Could not open the selected startup project.");
                 return 1;
             }
-            auto app = std::make_unique<Axle::Application>(spec);
-            app->RegisterService(std::make_shared<PhysicsApplicationService>());
-            app->SetUIContext(std::make_unique<Axle::ImGuiLayer>(Axle::ToImGuiBackend(activeAPI)));
-            auto editorLayer = std::make_shared<EditorLayer>(startupPath);
-            app->PushLayer(editorLayer);
+            std::unique_ptr<Axle::Application> app;
+            std::shared_ptr<EditorLayer> editorLayer;
+            const bool initialized = Axle::RHI::RHISwitcher::InitializeProduct(rhiConfig, [&](Axle::GraphicsAPI api) {
+                try {
+                    activeAPI = api;
+                    spec.GraphicsBackend = api;
+                    app = std::make_unique<Axle::Application>(spec);
+                    app->RegisterService(std::make_shared<PhysicsApplicationService>());
+                    app->SetUIContext(std::make_unique<Axle::ImGuiLayer>(Axle::ToImGuiBackend(api)));
+                    if (Axle::RHI::ScopedRHIFault::Invoke("ProductUI", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS)
+                        throw std::runtime_error("Injected rejection after native UI readiness");
+                    editorLayer = std::make_shared<EditorLayer>(startupPath);
+                    app->PushLayer(editorLayer);
+                    if (Axle::RHI::ScopedRHIFault::Invoke("ProductRenderer", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS)
+                        throw std::runtime_error("Injected rejection after Editor renderer readiness");
+                    return true;
+                } catch (const std::exception& error) {
+                    AXLE_ERROR("Product backend candidate failed: {0}", error.what());
+                    editorLayer.reset();
+                    app.reset();
+                    Axle::RHIMeshRegistry::Get().Shutdown();
+                    return false;
+                }
+            });
+            if (!initialized) {
+                AXLE_ERROR("No requested backend could initialize the complete Editor");
+                return 1;
+            }
+            if (!startupRejection.empty() && !startupRejected) throw std::runtime_error("Startup rejection probe did not reach the requested operation");
             if (verifyEmptyStartup || verifyStartup) {
                 // Check after the Editor's UI each frame: panels may mutate the scene.
                 struct StartupVerifier final : Axle::Layer {

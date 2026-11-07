@@ -1,5 +1,6 @@
 add_library(AxleRHI STATIC
     src/RHIDevice.cpp
+    src/RHIValidation.cpp
     src/RHISurface.cpp
     src/RHISwapChain.cpp
     src/RHIShader.cpp
@@ -31,3 +32,9 @@ target_link_libraries(AxleRHI
         Axle::Platform
         NRI
 )
+
+if(WIN32)
+    # The pinned NRI build supplies the Vulkan declarations used for validation
+    # prerequisite discovery; no SDK installation or vendor update is required.
+    target_include_directories(AxleRHI PRIVATE "${CMAKE_BINARY_DIR}/_deps/vulkan_headers-src/include")
+endif()

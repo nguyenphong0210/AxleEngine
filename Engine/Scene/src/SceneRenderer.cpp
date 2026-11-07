@@ -17,6 +17,15 @@ namespace Axle {
         Init();
     }
 
+    bool SceneRenderer::IsReady() const {
+        const auto valid = [](const auto& shader) { return shader && shader->GetRendererID() != 0; };
+        return Window::HasActiveContext() && valid(m_Shader) && valid(m_ShadowShader) &&
+            m_ShadowMap && m_ShadowMap->GetDepthTextureID() && m_ShadowMap->GetRendererID() &&
+            m_Skybox && valid(m_Skybox->GetShader()) && m_SkinningPipeline &&
+            valid(m_SkinningPipeline->GetShader()) && valid(m_SkinningPipeline->GetShadowShader()) &&
+            m_ParticleRenderer && valid(m_ParticleRenderer->GetShader());
+    }
+
     void SceneRenderer::Init() {
         InitShaders();
 

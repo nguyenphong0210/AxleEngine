@@ -53,7 +53,7 @@ namespace Axle::RHI {
         Shutdown();
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHISampler::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -80,7 +80,7 @@ namespace Axle::RHI {
     void RHISampler::Shutdown() {
         if (m_Sampler) {
             auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.IsInitialized()) {
+            if (rhiDevice.IsNativeReady()) {
                 rhiDevice.GetNRICore().DestroyDescriptor(m_Sampler);
             }
             m_Sampler = nullptr;

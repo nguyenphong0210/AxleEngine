@@ -80,7 +80,7 @@ namespace Axle {
     }
 
     void VFXEditorPanel::ShutdownRHI() {
-        if (RHI::RHIDevice::Get().IsInitialized() && (m_RHISceneRenderer || m_RHIViewport))
+        if (RHI::RHIDevice::Get().IsNativeReady() && (m_RHISceneRenderer || m_RHIViewport))
             RHI::RHIDevice::Get().WaitIdle();
         m_PreviewGrid.clear();
         m_PreviewEntity = {};
@@ -94,7 +94,7 @@ namespace Axle {
         m_ImGuiLayer = imguiLayer;
         if (!m_ImGuiLayer) return;
 
-        if (RHI::RHIDevice::Get().IsInitialized()) {
+        if (RHI::RHIDevice::Get().IsNativeReady()) {
             if (!m_RHIViewport) {
                 m_RHIViewport = std::make_unique<RHIViewportDescriptor>();
             }
@@ -637,7 +637,7 @@ namespace Axle {
 
     void VFXEditorPanel::RenderPreviewRHI(float width, float height) {
         if (!m_RHIViewport || !m_RHIViewport->IsValid()) return;
-        if (!RHI::RHIDevice::Get().IsInitialized()) return;
+        if (!RHI::RHIDevice::Get().IsNativeReady()) return;
 
         if (!m_RHISceneRenderer) {
             m_RHISceneRenderer = std::make_unique<RHISceneRenderer>();

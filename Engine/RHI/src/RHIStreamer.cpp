@@ -37,7 +37,7 @@ namespace Axle::RHI {
     bool RHIStreamer::Init(RHIDevice& device, const RHIStreamerDesc& desc) {
         Shutdown();
 
-        if (!device.IsInitialized()) {
+        if (!device.IsNativeReady()) {
             AXLE_CORE_ERROR("RHIStreamer::Init failed: RHIDevice is not initialized!");
             return false;
         }

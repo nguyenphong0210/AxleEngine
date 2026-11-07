@@ -179,7 +179,7 @@ namespace Axle {
 
     bool RHISceneRenderer::Init(RHIDevice& device, bool enablePhysicsDebug) {
         if (m_Initialized) return true;
-        if (!device.IsInitialized()) {
+        if (!device.IsNativeReady()) {
             AXLE_CORE_ERROR("RHISceneRenderer::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -187,12 +187,13 @@ namespace Axle {
         m_Device = &device;
 
         // Initialize mesh registry
-        RHIMeshRegistry::Get().Init();
+        if (!RHIMeshRegistry::Get().Init()) return false;
 
         // Initialize constant streamer
         m_Streamer = std::make_unique<RHIStreamer>();
         if (!m_Streamer->Init(device)) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize RHIStreamer");
+            return false;
         }
 
         // Initialize Command Buffer
@@ -216,6 +217,7 @@ namespace Axle {
         // Initialize 16x Anisotropic Trilinear Sampler
         if (!m_AnisoSampler.Init(RHISamplerDesc::Anisotropic16x())) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize 16x Anisotropic Sampler, using defaults.");
+            return false;
         }
 
         // Per-draw resource descriptors; the immutable sampler uses no heap slots.
@@ -227,7 +229,8 @@ namespace Axle {
         } else {
             // Allocate Default PBR Material Descriptor Set (Space 1)
             m_DefaultDescriptorSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 0);
-            if (m_DefaultDescriptorSet) {
+            if (!m_DefaultDescriptorSet) return false;
+            {
                 // Bind Fallback GPU resident textures to Range 0 (t0..t8: PBR material + IBL cubemaps + BRDF LUT)
                 auto whiteTex = RHIMaterial::GetDefaultWhiteTexture();
                 auto normalTex = RHIMaterial::GetDefaultFlatNormalTexture();
@@ -237,7 +240,8 @@ namespace Axle {
                 auto prefilterTex = m_PrefilterMap ? m_PrefilterMap : RHIMaterial::GetDefaultPrefilterCubemap();
                 auto brdfLUTTex = m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT();
 
-                if (whiteTex && normalTex && roughTex && blackTex && irradianceTex && prefilterTex && brdfLUTTex) {
+                if (!whiteTex || !normalTex || !roughTex || !blackTex || !irradianceTex || !prefilterTex || !brdfLUTTex) return false;
+                {
                     std::vector<nri::Descriptor*> defaultSRVs = {
                         whiteTex->GetSRV(),       // t0: Albedo (1x1 White)
                         normalTex->GetSRV(),      // t1: Normal (1x1 Flat Normal)
@@ -249,8 +253,11 @@ namespace Axle {
                         prefilterTex->GetSRV(),   // t7: Specular Prefilter Cubemap
                         brdfLUTTex->GetSRV()      // t8: BRDF Integration 2D LUT
                     };
-                    for (uint32_t slot=6;slot<static_cast<uint32_t>(RHITextureSlot::Count);++slot)
-                        defaultSRVs.push_back(RHIMaterial::GetFallbackTexture(static_cast<RHITextureSlot>(slot))->GetSRV());
+                    for (uint32_t slot=6;slot<static_cast<uint32_t>(RHITextureSlot::Count);++slot) {
+                        auto fallback = RHIMaterial::GetFallbackTexture(static_cast<RHITextureSlot>(slot));
+                        if (!fallback || !fallback->IsValid()) return false;
+                        defaultSRVs.push_back(fallback->GetSRV());
+                    }
                     defaultSRVs.push_back(blackTex->GetSRV());
                     defaultSRVs.push_back(whiteTex->GetSRV());
                     m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 0, defaultSRVs);
@@ -270,67 +277,81 @@ namespace Axle {
         }
 
         // Initialize Scene Constants and Forward+ Multi-Light Constant Buffers
-        m_SceneConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISceneConstants), RHIMemoryLocation::HostUpload, "SceneConstantsBuffer"));
+        if (!m_SceneConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISceneConstants), RHIMemoryLocation::HostUpload, "SceneConstantsBuffer"))) return false;
         if (!m_LightBuffer.Init(device)) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Forward+ Multi-Light GPU Buffer!");
+            return false;
         }
 
         // Initialize Atmospheric Skybox Pipeline & Constant Buffer
-        if (CompileSkyboxShaders(device) && CreateSkyboxPipelineLayout(device)) {
+        if (!CompileSkyboxShaders(device) || !CreateSkyboxPipelineLayout(device)) return false;
+        {
             if (!CreateSkyboxPipeline(device)) {
                 AXLE_CORE_WARN("RHISceneRenderer: Failed to create Atmospheric Skybox graphics pipeline!");
+                return false;
             }
         }
-        m_SkyboxConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISkyboxConstants), RHIMemoryLocation::HostUpload, "SkyboxConstantsBuffer"));
+        if (!m_SkyboxConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISkyboxConstants), RHIMemoryLocation::HostUpload, "SkyboxConstantsBuffer"))) return false;
 
         // Initialize Film-Grade Tone Mapping Post-Processing Pipeline & Resources
-        if (CompileToneMappingShaders(device) && CreateToneMappingPipelineLayout(device)) {
+        if (!CompileToneMappingShaders(device) || !CreateToneMappingPipelineLayout(device)) return false;
+        {
             if (!CreateToneMappingPipeline(device)) {
                 AXLE_CORE_WARN("RHISceneRenderer: Failed to create Tone Mapping graphics pipeline!");
+                return false;
             }
         }
 
         if (!m_ToneMappingSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Bilinear Clamp Sampler for Tone Mapping.");
+            return false;
         }
 
         if (!m_ToneMappingDescriptorPool.Init(RHIDescriptorPoolDesc::Tier2Bindless(64, 16))) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Tone Mapping Descriptor Pool!");
+            return false;
         } else if (m_ToneMappingPipelineLayout.IsValid()) {
             m_ToneMappingDescriptorSet = m_ToneMappingDescriptorPool.AllocateDescriptorSet(m_ToneMappingPipelineLayout, 0);
-            if (m_ToneMappingDescriptorSet && m_ToneMappingSampler.IsValid()) {
+            if (!m_ToneMappingDescriptorSet) return false;
+            if (m_ToneMappingSampler.IsValid()) {
                 m_ToneMappingDescriptorPool.UpdateSampler(m_ToneMappingDescriptorSet, 1, 0, m_ToneMappingSampler.GetNative());
             }
         }
 
-        m_ToneMappingConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIToneMappingConstants), RHIMemoryLocation::HostUpload, "ToneMappingConstantsBuffer"));
+        if (!m_ToneMappingConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIToneMappingConstants), RHIMemoryLocation::HostUpload, "ToneMappingConstantsBuffer"))) return false;
 
         // Initialize Fast Approximate Anti-Aliasing (FXAA 3.11 Quality) Pipeline & Resources
-        if (CompileFXAAShaders(device) && CreateFXAAPipelineLayout(device)) {
+        if (!CompileFXAAShaders(device) || !CreateFXAAPipelineLayout(device)) return false;
+        {
             if (!CreateFXAAPipeline(device)) {
                 AXLE_CORE_WARN("RHISceneRenderer: Failed to create FXAA graphics pipeline!");
+                return false;
             }
         }
 
         if (!m_FXAASampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Bilinear Clamp Sampler for FXAA.");
+            return false;
         }
 
         if (!m_FXAADescriptorPool.Init(RHIDescriptorPoolDesc::Tier2Bindless(64, 16))) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize FXAA Descriptor Pool!");
+            return false;
         } else if (m_FXAAPipelineLayout.IsValid()) {
             m_FXAADescriptorSet = m_FXAADescriptorPool.AllocateDescriptorSet(m_FXAAPipelineLayout, 0);
-            if (m_FXAADescriptorSet && m_FXAASampler.IsValid()) {
+            if (!m_FXAADescriptorSet) return false;
+            if (m_FXAASampler.IsValid()) {
                 m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 1, 0, m_FXAASampler.GetNative());
             }
         }
 
-        m_FXAAConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIFXAAConstants), RHIMemoryLocation::HostUpload, "FXAAConstantsBuffer"));
+        if (!m_FXAAConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIFXAAConstants), RHIMemoryLocation::HostUpload, "FXAAConstantsBuffer"))) return false;
 
         // Initialize GPU Instanced Particle VFX Renderer
         m_ParticleRenderer = std::make_unique<RHIParticleRenderer>();
         if (!m_ParticleRenderer->Init(device)) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize GPU Instanced Particle VFX Renderer!");
+            return false;
         }
 
         // Initialize RHI Physics Debug Wireframe Line Renderer
@@ -344,6 +365,7 @@ namespace Axle {
                 m_PhysicsDebugRenderer = std::make_unique<RHIPhysicsDebugRenderer>();
                 if (!m_PhysicsDebugRenderer->Init(device)) {
                     AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize RHI Physics Debug Wireframe Line Renderer!");
+                    return false;
                 }
             }
         }
@@ -352,6 +374,7 @@ namespace Axle {
         m_ObjectPicker = std::make_unique<RHIObjectPicker>();
         if (!m_ObjectPicker->Init(device)) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize GPU Integer Object ID Picker!");
+            return false;
         }
 
         m_Initialized = true;
@@ -360,7 +383,7 @@ namespace Axle {
     }
 
     void RHISceneRenderer::Shutdown() {
-        if (!m_Initialized) return;
+        // Partial initialization owns resources too; all shutdown members are idempotent.
 
         if (m_ObjectPicker) {
             m_ObjectPicker->Shutdown();

@@ -97,6 +97,7 @@ namespace Axle {
     private:
         ImGuiBackendType m_BackendType = ImGuiBackendType::OpenGL;
         bool m_Initialized = false;
+        bool m_ContextCreated = false;
         GLFWwindow* m_Window = nullptr;
         std::vector<std::function<void()>> m_DeferredReleases;
 

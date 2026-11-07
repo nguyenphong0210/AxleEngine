@@ -107,6 +107,7 @@ void EditorLayer::OnAttach() {
     // 3. Decoupled Multi-Pass Scene Renderer (Phase 21)
     if (window.GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
         m_SceneRenderer = std::make_unique<Axle::SceneRenderer>();
+        if (!m_SceneRenderer->IsReady()) throw std::runtime_error("Editor OpenGL renderer initialization failed");
     }
 
 
@@ -140,10 +141,10 @@ void EditorLayer::OnAttach() {
             vpDesc.EnableDepth = true;
             vpDesc.DepthFormat = Axle::RHI::RHITextureFormat::D32_FLOAT;
             vpDesc.DebugName = "EditorMainViewport";
-            m_RHIViewport->Init(uiContext, vpDesc);
+            if (!m_RHIViewport->Init(uiContext, vpDesc)) throw std::runtime_error("Editor viewport initialization failed");
 
             m_RHISceneRenderer = std::make_unique<Axle::RHISceneRenderer>();
-            m_RHISceneRenderer->Init();
+            if (!m_RHISceneRenderer->Init()) throw std::runtime_error("Editor scene renderer initialization failed");
 
             ClearRHIViewport();
         }
@@ -368,7 +369,7 @@ void EditorLayer::OnAttach() {
                 sc.VertexCount = static_cast<Axle::u32>(mesh.GetVertexCount());
                 sc.TriangleCount = static_cast<Axle::u32>(mesh.GetTriangleCount());
                 std::shared_ptr<Axle::RHI::RHIMesh> trackRHIMesh = nullptr;
-                if (Axle::RHI::RHIDevice::Get().IsInitialized() && !mesh.IsEmpty()) {
+                if (Axle::RHI::RHIDevice::Get().IsNativeReady() && !mesh.IsEmpty()) {
                     std::vector<glm::vec3> trackNormals(mesh.Positions.size(), glm::vec3(0.0f));
                     for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
                         uint32_t i0 = mesh.Indices[i], i1 = mesh.Indices[i + 1], i2 = mesh.Indices[i + 2];
@@ -410,7 +411,7 @@ void EditorLayer::OnAttach() {
                 tc.CombinedVAO = Axle::Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
 
                 std::shared_ptr<Axle::RHI::RHIMesh> terrainRHIMesh = nullptr;
-                if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
+                if (Axle::RHI::RHIDevice::Get().IsNativeReady()) {
                     uint32_t resX = tc.Data.GetResolutionX();
                     uint32_t resZ = tc.Data.GetResolutionZ();
                     glm::vec3 scale(tc.Data.GetSpacingX(), 1.0f, tc.Data.GetSpacingZ());
@@ -521,7 +522,7 @@ void EditorLayer::OnDetach() {
     Axle::Spline::SplinePlugin::Shutdown();
 
     AXLE_INFO("EditorLayer::OnDetach -> [9/14] Wait GPU idle");
-    if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
+    if (Axle::RHI::RHIDevice::Get().IsNativeReady()) {
         Axle::RHI::RHIDevice::Get().WaitIdle();
     }
 
@@ -953,7 +954,7 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
             sc.Dirty = false;
 
             std::shared_ptr<Axle::RHI::RHIMesh> trackRHIMesh = nullptr;
-            if (Axle::RHI::RHIDevice::Get().IsInitialized() && !mesh.IsEmpty()) {
+            if (Axle::RHI::RHIDevice::Get().IsNativeReady() && !mesh.IsEmpty()) {
                 std::vector<glm::vec3> trackNormals(mesh.Positions.size(), glm::vec3(0.0f));
                 for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
                     uint32_t i0 = mesh.Indices[i], i1 = mesh.Indices[i + 1], i2 = mesh.Indices[i + 2];
@@ -994,7 +995,7 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
             tc.CombinedVAO = Axle::Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
 
             std::shared_ptr<Axle::RHI::RHIMesh> terrainRHIMesh = nullptr;
-            if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
+            if (Axle::RHI::RHIDevice::Get().IsNativeReady()) {
                 uint32_t resX = tc.Data.GetResolutionX();
                 uint32_t resZ = tc.Data.GetResolutionZ();
                 glm::vec3 scale(tc.Data.GetSpacingX(), 1.0f, tc.Data.GetSpacingZ());
@@ -3281,7 +3282,7 @@ void EditorLayer::RenderStatusBar() {
         float ms = m_LastDeltaTime * 1000.0f;
         const char* rhiName = "OpenGL 4.5";
         if (m_RHIViewport && m_RHIViewport->IsValid()) {
-            if (Axle::RHI::RHIDevice::Get().IsInitialized() && Axle::RHI::RHIDevice::Get().GetBackend() == Axle::RHI::RHIType::Vulkan) {
+            if (Axle::RHI::RHIDevice::Get().IsNativeReady() && Axle::RHI::RHIDevice::Get().GetBackend() == Axle::RHI::RHIType::Vulkan) {
                 rhiName = "Vulkan 1.3";
             } else {
                 rhiName = "Direct3D 12";
@@ -3711,7 +3712,7 @@ void EditorLayer::RenderExportGameModal() {
 void EditorLayer::ClearRHIViewport() {
     if (!m_RHIViewport || !m_RHIViewport->IsValid()) return;
     auto& rhiDevice = Axle::RHI::RHIDevice::Get();
-    if (!rhiDevice.IsInitialized()) return;
+    if (!rhiDevice.IsNativeReady()) return;
 
     auto* queue = rhiDevice.GetGraphicsQueue();
     if (!queue) return;
@@ -3810,7 +3811,7 @@ void EditorLayer::RenderProjectSettingsModal() {
                 : "OpenGL 4.5 Core (Legacy)";
             ImGui::BulletText("Active Running Backend: %s", activeName.c_str());
 
-            if (Axle::RHI::RHIDevice::Get().IsInitialized()) {
+            if (Axle::RHI::RHIDevice::Get().IsNativeReady()) {
                 const auto& caps = Axle::RHI::RHIDevice::Get().GetCapabilities();
                 uint32_t vramMB = static_cast<uint32_t>(caps.DedicatedVideoMemory / (1024 * 1024));
                 ImGui::BulletText("Active GPU Device: %s (Dedicated VRAM: %u MB)", caps.AdapterName.c_str(), vramMB);

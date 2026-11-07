@@ -203,6 +203,12 @@ add_test(NAME AssetFormatUnitTests COMMAND $<TARGET_FILE:AxleAssetFormatUnitTest
 set_tests_properties(AssetFormatUnitTests PROPERTIES LABELS "asset;cpu" TIMEOUT 30)
 
 # Dedicated CPU-Only Render Contracts & Always-Active Harness (P41-00)
+add_executable(AxleRHIFoundationTests EXCLUDE_FROM_ALL rendering/RHIFoundationMain.cpp)
+target_include_directories(AxleRHIFoundationTests PRIVATE rendering)
+target_link_libraries(AxleRHIFoundationTests PRIVATE Axle::RHI Axle::Renderer Axle::UI glad glfw)
+add_test(NAME RHIFoundationPolicy COMMAND $<TARGET_FILE:AxleRHIFoundationTests> policy)
+set_tests_properties(RHIFoundationPolicy PROPERTIES LABELS "render;cpu" TIMEOUT 30)
+
 add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/RenderUnitTestMain.cpp
     rendering/Test_RenderContractsUnit.cpp
@@ -479,7 +485,7 @@ if(WIN32)
         "${CMAKE_COMMAND}" "${CMAKE_CURRENT_BINARY_DIR}/Build Workflow Fixture" "$<CONFIG>")
     set_tests_properties(BuildWorkflowTests PROPERTIES FIXTURES_REQUIRED BuildWorkflow RUN_SERIAL TRUE TIMEOUT 30)
 endif()
-add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS})
+add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests)
 
 foreach(testTarget IN LISTS AXLE_TEST_TARGETS)
     target_include_directories(${testTarget} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")

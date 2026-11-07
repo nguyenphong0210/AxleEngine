@@ -42,6 +42,11 @@ namespace Axle::RHI {
         void WaitIdle();
 
         bool IsInitialized() const { return m_Initialized; }
+        bool IsBackendSelected() const { return m_Initialized; }
+        bool IsNativeReady() const { return m_Initialized && m_Device && m_GraphicsQueue; }
+        bool IsContextReady() const { return m_ContextReady; }
+        // Set by product composition only after window and entry points are ready.
+        void SetContextReady(bool ready) { m_ContextReady = m_Initialized && ready; }
         RHIType GetBackend() const { return m_Capabilities.ActiveBackend; }
         const RHIDeviceCapabilities& GetCapabilities() const { return m_Capabilities; }
         const std::vector<RHIAdapterInfo>& GetAdapters() const { return m_Adapters; }
@@ -52,6 +57,7 @@ namespace Axle::RHI {
         static std::vector<RHIAdapterInfo> EnumerateAdapters();
         static int32_t FindSoftwareAdapterIndex(RHIType backend = RHIType::None);
         static int32_t FindDiscreteAdapterIndex(RHIType backend = RHIType::None);
+        static bool IsGraphicsAPIValidationAvailable(RHIType backend);
 
         // Access underlying NRI device and interfaces
         nri::Device* GetNRIDevice() const { return m_Device; }
@@ -69,6 +75,7 @@ namespace Axle::RHI {
 
     private:
         bool m_Initialized = false;
+        bool m_ContextReady = false;
         RHIDeviceDesc m_Desc;
         RHIDeviceCapabilities m_Capabilities;
         std::vector<RHIAdapterInfo> m_Adapters;

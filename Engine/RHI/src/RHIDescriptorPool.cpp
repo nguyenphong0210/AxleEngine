@@ -33,7 +33,7 @@ namespace Axle::RHI {
         Shutdown();
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHIDescriptorPool::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -71,7 +71,7 @@ namespace Axle::RHI {
     void RHIDescriptorPool::Shutdown() {
         if (m_Pool) {
             auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.IsInitialized()) {
+            if (rhiDevice.IsNativeReady()) {
                 rhiDevice.GetNRICore().DestroyDescriptorPool(m_Pool);
             }
             m_Pool = nullptr;
@@ -163,7 +163,7 @@ namespace Axle::RHI {
     void RHIDescriptorPool::Reset() {
         if (m_Pool) {
             auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.IsInitialized()) {
+            if (rhiDevice.IsNativeReady()) {
                 rhiDevice.GetNRICore().ResetDescriptorPool(*m_Pool);
             }
             m_AllocatedSets = 0;
@@ -173,7 +173,7 @@ namespace Axle::RHI {
     void RHIDescriptorPool::Bind(nri::CommandBuffer* cmdBuffer) {
         if (m_Pool && cmdBuffer) {
             auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.IsInitialized()) {
+            if (rhiDevice.IsNativeReady()) {
                 rhiDevice.GetNRICore().CmdSetDescriptorPool(*cmdBuffer, *m_Pool);
             }
         }
@@ -182,7 +182,7 @@ namespace Axle::RHI {
     void RHIDescriptorPool::BindDescriptorSet(nri::CommandBuffer* cmdBuffer, uint32_t setIndex, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
         if (cmdBuffer && set) {
             auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.IsInitialized()) {
+            if (rhiDevice.IsNativeReady()) {
                 nri::SetDescriptorSetDesc setDesc = {};
                 setDesc.setIndex = setIndex;
                 setDesc.descriptorSet = set;

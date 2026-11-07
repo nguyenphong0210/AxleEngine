@@ -3,14 +3,14 @@
   "current_task": {
     "id": "OPT-04-CODEX-IMPLEMENTATION",
     "title": "Codex implements OPT-04 with separate-context review and supplementary Gemini review",
-    "state": "ready_for_Codex",
+    "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Codex in a separate context",
     "scope_updated_on": "2026-11-07",
     "user_scope": "User approves Codex as primary OPT-04 implementer, separate-context Codex review at P41-03/P41-06/P41-11 and supplementary Gemini review, prioritizing maximum output quality. User asks whether GPT-6.1 Sol or GPT-6 Astra should be selected.",
-    "user_instruction": "Apply the proposed Codex implementation/separate-context review workflow and recommend GPT-6.1 Sol versus GPT-6 Astra (English paraphrase of Vietnamese user instruction).",
-    "code_baseline": "cf168d2895d3bbf1080b57b73e183a32ecfc8c30",
+    "user_instruction": "Implement OPT-04 (latest user request, 2026-11-07).",
+    "code_baseline": "977f68c42755f1cfc0042854dc06dc74fc8cebc8",
     "execution_range": "OPT-04 / P41-01..P41-11 only",
     "released_packages": [
       "P41-01",
@@ -26,9 +26,11 @@
       "P41-11"
     ],
     "current_phase": "OPT-04",
-    "current_package": "P41-01",
-    "completed_packages": [],
-    "implementation_status": "not_started; coordination reassignment prepared",
+    "current_package": "P41-02",
+    "completed_packages": [
+      "P41-01"
+    ],
+    "implementation_status": "P41-01 implemented and self-verified in Debug/Release; P41-02 next; separate-context review pending",
     "independent_review_status": "pending_implementation_and_separate_context_reviews",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
@@ -83,7 +85,7 @@
       "Separate-context Codex reviews at P41-03/P41-06/P41-11, with significant fixes rechecked before dependent work/acceptance"
     ],
     "stop_boundary": "Review after P41-03 and P41-06 before dependent production work; final separate-context review after P41-11; do not start OPT-05.",
-    "next_action": "User selects the recommended model in the client for the implementation session; Codex reads the scoped handoff, actual HEAD/status, contracts and pinned vendor declarations, posts implementation STATUS and starts P41-01. No source implementation has begun during model-selection coordination.",
+    "next_action": "Implement transactional construction P41-02, then P41-03 and required separate-context review before P41-04.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -1212,6 +1214,28 @@
       "base_commit": "cf168d2895d3bbf1080b57b73e183a32ecfc8c30",
       "timestamp_utc": "2026-11-07T02:58:22.743644+00:00",
       "body": "STATUS / REASSIGNMENT: The user approved Codex as primary implementer of OPT-04, with a separate-context Codex reviewer after P41-03, P41-06 and P41-11, and supplementary Gemini review. This supersedes the previous Gemini implementation handoff linked here.\n\nCurrent scoped handoff: docs/agents/handoffs/OPT_04_CODEX.md. The previous OPT_04_GEMINI.md is now a superseded pointer. P41-01..P41-11 and all production/native gates remain required; no OPT-05 release. Repo was clean at cf168d2, with no Gemini ACK/source changes recorded in the exchange.\n\nGemini's role is supplementary source-based review when requested. Do not begin implementation from the old handoff. Preserve any actual in-progress work and report its state; no Gemini response is invented here.\n\nAt each required review checkpoint, a Codex reviewer with a separate context inspects contracts/source/diff and verifies failure, lifetime, rollback and teardown paths. Tracked source writing pauses during review. Implementer fixes findings; significant fixes are rechecked. Separate context is not proof against shared model blind spots, so actual regression/native gates remain required.\n\nThe user also asks which model to choose. Current official OpenAI guidance supports recommending GPT-6 Astra for this quality-first demanding task, with Max reasoning for the hardest tasks if available. GPT-6.1 Sol is the balanced cost/quality alternative. This is a recommendation; the session model and global settings were not changed or verified.\n\nThis turn changes coordination/handoff documentation only. No OPT-04 source implementation or completed review is claimed. The selected-model implementation session should start P41-01 from the updated task card."
+    },
+    {
+      "id": "CG-20261107T030550669961Z-CODEX-b199c5",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T025822743644Z-CODEX-bb7b64",
+      "base_commit": "977f68c42755f1cfc0042854dc06dc74fc8cebc8",
+      "timestamp_utc": "2026-11-07T03:05:50.669961+00:00",
+      "body": "IN_PROGRESS: User now requests OPT-04 implementation. Starting clean HEAD 977f68c42755f1cfc0042854dc06dc74fc8cebc8. Scope P41-01..11, no OPT-05 or push. Pinned NRI 6998e3fbbaed1b132f386a9d49743a2481003487 has a clean vendor working tree. No unread incoming Gemini message.\n\nFirst source-writing tranche: RHIDevice/RHISwitcher and native readiness callers; Platform Application/Window and Editor/Runtime startup; resource creation, commands/swapchain and corresponding rendering regressions. Later source paths remain as scoped in handoff. Two Codex subagents inspect source read-only; root is sole source writer. Required separate-context checkpoint reviews remain P41-03/P41-06/P41-11. This status is implementation start, not a completed gate or Gemini reply."
+    },
+    {
+      "id": "CG-20261107T033032941528Z-CODEX-d6aa97",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T030550669961Z-CODEX-b199c5",
+      "base_commit": "977f68c42755f1cfc0042854dc06dc74fc8cebc8",
+      "timestamp_utc": "2026-11-07T03:30:32.941528+00:00",
+      "body": "P41-01 implementation/self-verification complete; see docs/reviews/OPT_04_CODEX_EXECUTION.md. Debug and Release builds of AxleRHIFoundationTests/AxleRenderUnitTests/AxleEditor/AxleRuntime exit 0. Per configuration: all five foundation modes, seven Editor startup cases (strict injected rejection expected exit 1), focused CTest 3/3, actual Editor/Runtime simulation probe PASS. AF-04 architecture PASS (377 source files/18 CMake files); baseline tools 18/18 PASS. Native hardware is RTX 3070; pinned NRI remains clean.\n\nAPI validation is NOT RUN on this host: no Vulkan Khronos layer or complete D3D12/DXGI debug prerequisites. Requests for unavailable validation now reject clearly. Physical native tests enable embedded NRI validation separately; they do not close later P41-07 API-validation gates. This is self-verification, not separate-context review or phase acceptance.\n\nUser resumed the authorized task. Root remains sole source writer. Next P41-02 files: texture/buffer/mesh, sampler/pool/layout/cache helpers, affected viewport/picker/scene target callers, native regressions and phase records. Keep P41-03/P41-06/P41-11 review checkpoints. No push."
     }
   ],
   "deferred_tasks": [

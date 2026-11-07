@@ -22,7 +22,7 @@ namespace Axle {
     bool RHIMeshRegistry::Init() {
         if (m_Initialized) return true;
         auto& device = RHIDevice::Get();
-        if (!device.IsInitialized()) return false;
+        if (!device.IsNativeReady()) return false;
 
         // Generate built-in primitive meshes with high-fidelity curvature (Godot & Unity parity)
         m_Cube = RHIMesh::CreateCube(1.0f);
@@ -37,6 +37,10 @@ namespace Axle {
         if (m_Cone) m_MeshCache["Cone"] = m_Cone;
         if (m_Plane) m_MeshCache["Plane"] = m_Plane;
 
+        if (!m_Cube || !m_Sphere || !m_Cylinder || !m_Cone || !m_Plane) {
+            Shutdown();
+            return false;
+        }
         m_Initialized = true;
         return true;
     }
@@ -101,7 +105,7 @@ namespace Axle {
 
     std::shared_ptr<RHIMesh> RHIMeshRegistry::GetOrCreateMesh(const std::string& assetPath) {
         if (assetPath.empty()) return nullptr;
-        if (!RHIDevice::Get().IsInitialized()) return nullptr;
+        if (!RHIDevice::Get().IsNativeReady()) return nullptr;
 
         auto it = m_MeshCache.find(assetPath);
         if (it != m_MeshCache.end() && it->second && it->second->IsValid()) {

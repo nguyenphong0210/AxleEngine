@@ -49,6 +49,7 @@ namespace Axle {
 
         // 4. Initialize Decoupled Scene Renderer (Direct Screen Backbuffer)
         m_SceneRenderer = std::make_unique<SceneRenderer>();
+        if (!m_SceneRenderer->IsReady()) throw std::runtime_error("Runtime OpenGL renderer initialization failed");
         m_SceneRenderer->SetViewportSize(m_WindowWidth, m_WindowHeight);
 
         // 4. Initial Perspective Camera

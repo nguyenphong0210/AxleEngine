@@ -11,7 +11,7 @@ namespace Axle::RHI {
 
     bool RHIMultiLightBuffer::Init(RHIDevice& device) {
         if (m_Initialized) return true;
-        if (!device.IsInitialized()) {
+        if (!device.IsNativeReady()) {
             AXLE_CORE_ERROR("RHIMultiLightBuffer::Init failed: RHIDevice is not initialized!");
             return false;
         }

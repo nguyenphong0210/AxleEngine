@@ -181,7 +181,7 @@ namespace Axle::RHI {
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultWhiteTexture() {
-        if (!s_DefaultWhite && RHIDevice::Get().IsInitialized()) {
+        if (!s_DefaultWhite && RHIDevice::Get().IsNativeReady()) {
             s_DefaultWhite = std::make_shared<RHITexture>();
             RHITextureDesc desc;
             desc.Width = 1;
@@ -196,7 +196,7 @@ namespace Axle::RHI {
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultFlatNormalTexture() {
-        if (!s_DefaultFlatNormal && RHIDevice::Get().IsInitialized()) {
+        if (!s_DefaultFlatNormal && RHIDevice::Get().IsNativeReady()) {
             s_DefaultFlatNormal = std::make_shared<RHITexture>();
             RHITextureDesc desc;
             desc.Width = 1;
@@ -211,7 +211,7 @@ namespace Axle::RHI {
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultRoughnessTexture() {
-        if (!s_DefaultRoughness && RHIDevice::Get().IsInitialized()) {
+        if (!s_DefaultRoughness && RHIDevice::Get().IsNativeReady()) {
             s_DefaultRoughness = std::make_shared<RHITexture>();
             RHITextureDesc desc;
             desc.Width = 1;
@@ -226,7 +226,7 @@ namespace Axle::RHI {
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultBlackTexture() {
-        if (!s_DefaultBlack && RHIDevice::Get().IsInitialized()) {
+        if (!s_DefaultBlack && RHIDevice::Get().IsNativeReady()) {
             s_DefaultBlack = std::make_shared<RHITexture>();
             RHITextureDesc desc;
             desc.Width = 1;
@@ -241,7 +241,7 @@ namespace Axle::RHI {
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultIrradianceCubemap() {
-        if (!s_DefaultIrradianceCubemap && RHIDevice::Get().IsInitialized()) {
+        if (!s_DefaultIrradianceCubemap && RHIDevice::Get().IsNativeReady()) {
             s_DefaultIrradianceCubemap = std::make_shared<RHITexture>();
             s_DefaultIrradianceCubemap->Init(RHITextureDesc::Cubemap(16, 1, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Irradiance_Cubemap"));
             FillFallback(s_DefaultIrradianceCubemap, {128, 128, 128, 255});
@@ -250,7 +250,7 @@ namespace Axle::RHI {
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultPrefilterCubemap() {
-        if (!s_DefaultPrefilterCubemap && RHIDevice::Get().IsInitialized()) {
+        if (!s_DefaultPrefilterCubemap && RHIDevice::Get().IsNativeReady()) {
             s_DefaultPrefilterCubemap = std::make_shared<RHITexture>();
             s_DefaultPrefilterCubemap->Init(RHITextureDesc::Cubemap(16, 5, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Prefilter_Cubemap"));
             FillFallback(s_DefaultPrefilterCubemap, {128, 128, 128, 255});
@@ -259,7 +259,7 @@ namespace Axle::RHI {
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultBRDFLUT() {
-        if (!s_DefaultBRDFLUT && RHIDevice::Get().IsInitialized()) {
+        if (!s_DefaultBRDFLUT && RHIDevice::Get().IsNativeReady()) {
             s_DefaultBRDFLUT = std::make_shared<RHITexture>();
             RHITextureDesc desc;
             desc.Width = 16;

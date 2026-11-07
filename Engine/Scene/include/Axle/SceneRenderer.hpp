@@ -45,6 +45,7 @@ namespace Axle {
         ~SceneRenderer() = default;
 
         void Init();
+        bool IsReady() const;
 
         // Main rendering entry point
         // If targetFBO is provided, renders offscreen into targetFBO.

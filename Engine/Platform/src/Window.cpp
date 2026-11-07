@@ -36,6 +36,7 @@ namespace Axle {
             s_GLFWInitialized = true;
         }
 
+        glfwDefaultWindowHints();
         if (props.GraphicsBackend == GraphicsAPI::OpenGL) {
             // OpenGL context hints (Core Profile 4.5)
             glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
@@ -61,7 +62,10 @@ namespace Axle {
 
         if (!m_Window) {
             AXLE_CORE_CRITICAL("Failed to create GLFW window '{0}'!", m_Data.Title);
-            glfwTerminate();
+            if (s_GLFWWindowCount == 0) {
+                glfwTerminate();
+                s_GLFWInitialized = false;
+            }
             return;
         }
 
@@ -183,6 +187,7 @@ namespace Axle {
 
     Window::~Window() {
         if (m_Window) {
+            if (Input::GetContext() == m_Window) Input::SetContext(nullptr);
             glfwDestroyWindow(m_Window);
             --s_GLFWWindowCount;
         }

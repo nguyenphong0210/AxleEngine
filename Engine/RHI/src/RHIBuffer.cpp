@@ -87,7 +87,7 @@ namespace Axle::RHI {
         Shutdown();
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHIBuffer::Init failed: RHIDevice is not initialized!");
             return false;
         }
@@ -161,7 +161,7 @@ namespace Axle::RHI {
         Shutdown();
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHIBuffer::InitPlaced failed: RHIDevice is not initialized!");
             return false;
         }
@@ -214,7 +214,7 @@ namespace Axle::RHI {
         m_IsCommitted = false;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (rhiDevice.IsInitialized()) {
+        if (rhiDevice.IsNativeReady()) {
             const auto& core = rhiDevice.GetNRICore();
             if (!m_Desc.DebugName.empty() && core.SetDebugName) {
                 core.SetDebugName((nri::Object*)m_Buffer, m_Desc.DebugName.c_str());
@@ -238,7 +238,7 @@ namespace Axle::RHI {
         }
 
         auto& rhiDevice = RHIDevice::Get();
-        if (rhiDevice.IsInitialized()) {
+        if (rhiDevice.IsNativeReady()) {
             const auto& core = rhiDevice.GetNRICore();
             if (m_CBV && core.DestroyDescriptor) {
                 core.DestroyDescriptor(m_CBV);
@@ -321,7 +321,7 @@ namespace Axle::RHI {
     RHIVideoMemoryInfo RHIMemoryManager::QueryVRAMInfo(RHIMemoryLocation location) {
         RHIVideoMemoryInfo outInfo = {};
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) return outInfo;
+        if (!rhiDevice.IsNativeReady()) return outInfo;
 
         auto* nativeDevice = rhiDevice.GetNRIDevice();
         const auto& helper = rhiDevice.GetNRIHelper();
@@ -348,7 +348,7 @@ namespace Axle::RHI {
         if (descs.empty()) return true;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) {
+        if (!rhiDevice.IsNativeReady()) {
             AXLE_CORE_ERROR("RHIMemoryManager::AllocateBufferGroup failed: RHIDevice is not initialized!");
             return false;
         }
@@ -420,7 +420,7 @@ namespace Axle::RHI {
 
     void RHIMemoryManager::FreeAllocatedChunks(std::vector<nri::Memory*>& chunks) {
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsInitialized()) return;
+        if (!rhiDevice.IsNativeReady()) return;
         const auto& core = rhiDevice.GetNRICore();
         if (!core.FreeMemory) return;
 

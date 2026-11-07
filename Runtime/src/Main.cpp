@@ -2,6 +2,7 @@
 #include <Axle/Log.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/PhysicsEngine.hpp>
+#include <Axle/RHI/RHISwitcher.hpp>
 #include "RuntimeLayer.hpp"
 #include <exception>
 #include <csignal>
@@ -94,9 +95,16 @@ int main(int argc, char** argv) {
 #endif
 
     std::filesystem::path projectPath;
-    const bool verifySimulation = argc > 1 && std::string(argv[1]) == "--verify-simulation";
-    if (argc > 1 && !verifySimulation) {
-        projectPath = argv[1];
+    bool verifySimulation = false;
+    auto rhiConfig = Axle::RHI::RHISwitcher::ParseCommandLine(argc, argv);
+    // Runtime scene rendering remains GL until its dedicated consumer cutover.
+    if (rhiConfig.RawArgument.empty()) rhiConfig.PreferredBackend = Axle::RHI::RHIType::OpenGL;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--verify-simulation") verifySimulation = true;
+        else if (arg == "--project" && i + 1 < argc) projectPath = argv[++i];
+        else if (arg.rfind("--project=", 0) == 0) projectPath = arg.substr(10);
+        else if (!arg.empty() && arg[0] != '-') projectPath = arg;
     }
 
     try {
@@ -129,10 +137,27 @@ int main(int argc, char** argv) {
             }
         };
 
-        auto app = std::make_unique<Axle::Application>(spec);
-        app->RegisterService(std::make_shared<PhysicsApplicationService>());
-        auto layer = std::make_shared<Axle::RuntimeLayer>(projectPath);
-        app->PushLayer(layer);
+        std::unique_ptr<Axle::Application> app;
+        std::shared_ptr<Axle::RuntimeLayer> layer;
+        if (!Axle::RHI::RHISwitcher::InitializeProduct(rhiConfig, [&](Axle::GraphicsAPI api) {
+            if (api != Axle::GraphicsAPI::OpenGL) {
+                AXLE_ERROR("Runtime scene renderer currently requires OpenGL");
+                return false;
+            }
+            try {
+                spec.GraphicsBackend = api;
+                app = std::make_unique<Axle::Application>(spec);
+                app->RegisterService(std::make_shared<PhysicsApplicationService>());
+                layer = std::make_shared<Axle::RuntimeLayer>(projectPath);
+                app->PushLayer(layer);
+                return true;
+            } catch (const std::exception& error) {
+                AXLE_ERROR("Runtime backend candidate failed: {0}", error.what());
+                layer.reset();
+                app.reset();
+                return false;
+            }
+        })) throw std::runtime_error("No requested backend could initialize the Runtime");
         if (verifySimulation) layer->VerifySimulationContract();
         else app->Run();
     } catch (const std::exception& e) {
@@ -145,5 +170,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    Axle::RHI::RHIDevice::Get().Shutdown();
     return 0;
 }

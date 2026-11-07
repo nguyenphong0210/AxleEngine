@@ -268,7 +268,7 @@ namespace Axle {
             auto mips = BuildIconMips(pixels, width, height);
 
             auto &rhiDevice = RHI::RHIDevice::Get();
-            if (!rhiDevice.IsInitialized()) {
+            if (!rhiDevice.IsNativeReady()) {
                 stbi_image_free(pixels);
                 return 0;
             }
@@ -392,7 +392,7 @@ namespace Axle {
         m_ImGuiLayer = imguiLayer;
         if (!m_ImGuiLayer) return;
 
-        if (RHI::RHIDevice::Get().IsInitialized()) {
+        if (RHI::RHIDevice::Get().IsNativeReady()) {
             if (!m_RHIViewport) {
                 m_RHIViewport = std::make_unique<RHIViewportDescriptor>();
             }
@@ -981,7 +981,7 @@ namespace Axle {
     }
 
     void AssetPreviewPanel::RebuildPreviewScene() {
-        if (!RHI::RHIDevice::Get().IsInitialized()) return;
+        if (!RHI::RHIDevice::Get().IsNativeReady()) return;
 
         if (!m_PreviewScene) {
             m_PreviewScene = std::make_shared<Scene>();
@@ -1194,7 +1194,7 @@ namespace Axle {
         }
 
         // 2. Render 3D Scene into Viewport
-        if (RHI::RHIDevice::Get().IsInitialized()) {
+        if (RHI::RHIDevice::Get().IsNativeReady()) {
             if (!m_RHIViewport && m_ImGuiLayer) {
                 InitRHI(m_ImGuiLayer);
             }

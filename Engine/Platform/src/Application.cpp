@@ -3,6 +3,7 @@
 #include <Axle/Log.hpp>
 #include <Axle/JobSystem.hpp>
 #include <GLFW/glfw3.h>
+#include <stdexcept>
 
 namespace Axle {
 
@@ -27,38 +28,47 @@ namespace Axle {
         props.Maximized = spec.Maximized;
         props.GraphicsBackend = spec.GraphicsBackend;
 
-        m_Window = std::make_unique<Window>(props);
+        try {
+            m_Window = std::make_unique<Window>(props);
+            if (!m_Window->GetNativeWindow()) throw std::runtime_error("Application window creation failed");
 
-        // 4. Initialize renderer context if host callback provided
-        if (m_Specification.GraphicsBackend == GraphicsAPI::OpenGL && m_Specification.RendererInitCallback) {
-            if (!m_Specification.RendererInitCallback(reinterpret_cast<void*>(glfwGetProcAddress))) {
-                AXLE_CORE_CRITICAL("Failed to initialize renderer context in Application!");
-            }
-            if (m_Specification.ViewportResizeCallback) {
-                m_Specification.ViewportResizeCallback(m_Window->GetWidth(), m_Window->GetHeight());
-            }
-        }
-
-        // 5. Setup window resize callback
-        m_Window->SetWindowResizeCallback([this](const WindowResizeEvent& e) {
-            if (e.Width > 0 && e.Height > 0) {
-                if (m_Specification.GraphicsBackend == GraphicsAPI::OpenGL && m_Specification.ViewportResizeCallback) {
-                    m_Specification.ViewportResizeCallback(e.Width, e.Height);
+            // 4. Initialize renderer context if host callback provided
+            if (m_Specification.GraphicsBackend == GraphicsAPI::OpenGL && m_Specification.RendererInitCallback) {
+                if (!m_Specification.RendererInitCallback(reinterpret_cast<void*>(glfwGetProcAddress))) {
+                    throw std::runtime_error("Application renderer context initialization failed");
                 }
+                if (m_Specification.ViewportResizeCallback) {
+                    m_Specification.ViewportResizeCallback(m_Window->GetWidth(), m_Window->GetHeight());
+                }
+            }
+
+            // 5. Setup window resize callback
+            m_Window->SetWindowResizeCallback([this](const WindowResizeEvent& e) {
+                if (e.Width > 0 && e.Height > 0) {
+                    if (m_Specification.GraphicsBackend == GraphicsAPI::OpenGL && m_Specification.ViewportResizeCallback) {
+                        m_Specification.ViewportResizeCallback(e.Width, e.Height);
+                    }
+                    for (auto& layer : m_LayerStack) {
+                        layer->OnWindowResize(e.Width, e.Height);
+                    }
+                }
+            });
+
+            // 5.1 Setup OS file drop callback
+            m_Window->SetWindowDropCallback([this](const std::vector<std::string>& paths) {
                 for (auto& layer : m_LayerStack) {
-                    layer->OnWindowResize(e.Width, e.Height);
+                    layer->OnFileDrop(paths);
                 }
-            }
-        });
+            });
 
-        // 5.1 Setup OS file drop callback
-        m_Window->SetWindowDropCallback([this](const std::vector<std::string>& paths) {
-            for (auto& layer : m_LayerStack) {
-                layer->OnFileDrop(paths);
-            }
-        });
-
-        AXLE_CORE_INFO("Application '{0}' initialized successfully ({1}x{2})", spec.Name, spec.Width, spec.Height);
+            AXLE_CORE_INFO("Application '{0}' initialized successfully ({1}x{2})", spec.Name, spec.Width, spec.Height);
+        } catch (...) {
+            if (m_Specification.RendererShutdownCallback) m_Specification.RendererShutdownCallback();
+            m_Window.reset();
+            JobSystem::Shutdown();
+            s_Instance = nullptr;
+            throw;
+        }
     }
 
     Application::~Application() {

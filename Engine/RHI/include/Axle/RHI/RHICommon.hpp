@@ -84,6 +84,9 @@ namespace Axle::RHI {
         int32_t AdapterIndex = -1; // -1 = automatically select best discrete GPU
         bool PreferSoftware = false; // When true, selects WARP (D3D12) or SwiftShader/Mock ICD (Vulkan)
         bool Headless = false;       // Headless mode (no swapchain, surface, or window needed)
+        // Embedded NRI validation can be used independently when the OS graphics
+        // debug layer is unavailable. EnableValidation still requests both layers.
+        bool EnableNRIValidation = false;
     };
 
 }

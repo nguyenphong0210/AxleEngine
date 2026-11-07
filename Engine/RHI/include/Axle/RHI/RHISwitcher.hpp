@@ -5,6 +5,7 @@
 #include <Axle/Log.hpp>
 #include <string>
 #include <vector>
+#include <functional>
 
 namespace Axle::RHI {
 
@@ -31,6 +32,10 @@ namespace Axle::RHI {
         // Resolves requested backend against hardware and initializes RHIDevice with graceful fallback
         // Fallback chain: Direct3D12 -> Vulkan -> OpenGL, or Vulkan -> Direct3D12 -> OpenGL
         static bool ResolveAndInitialize(const RHIBackendConfig& config);
+        // The callback owns the complete product candidate and must roll it back
+        // before returning false. Backend fallback is allowed only at startup.
+        static bool InitializeProduct(const RHIBackendConfig& config,
+            const std::function<bool(GraphicsAPI)>& initializeCandidate);
 
         // Query active backend from RHIDevice
         static RHIType GetActiveBackend();

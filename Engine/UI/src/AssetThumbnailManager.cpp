@@ -282,7 +282,7 @@ namespace Axle {
             bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
             if (isRHI) {
                 auto& rhiDevice = RHI::RHIDevice::Get();
-                if (rhiDevice.IsInitialized()) {
+                if (rhiDevice.IsNativeReady()) {
                     auto rhiTex = std::make_shared<RHI::RHITexture>();
                     auto desc = RHI::RHITextureDesc::RenderTarget2D((uint32_t)width, (uint32_t)height, RHI::RHITextureFormat::RGBA8_UNORM, "Thumb_" + path.filename().string());
                     desc.Usage = RHI::RHITextureUsage::ShaderResource;
@@ -347,7 +347,7 @@ namespace Axle {
                 bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
                 if (isRHI) {
                     auto& rhiDevice = RHI::RHIDevice::Get();
-                    if (rhiDevice.IsInitialized()) {
+                    if (rhiDevice.IsNativeReady()) {
                         auto rhiTex = std::make_shared<RHI::RHITexture>();
                         auto desc = RHI::RHITextureDesc::RenderTarget2D(width, height, RHI::RHITextureFormat::RGBA8_UNORM, "MatThumb_" + path.filename().string());
                         desc.Usage = RHI::RHITextureUsage::ShaderResource;

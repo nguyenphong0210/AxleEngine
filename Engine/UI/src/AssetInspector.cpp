@@ -86,7 +86,7 @@ namespace Axle {
         bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
         if (isRHI) {
             auto& rhiDevice = RHI::RHIDevice::Get();
-            if (rhiDevice.IsInitialized()) {
+            if (rhiDevice.IsNativeReady()) {
                 m_RHITexturePreview = std::make_shared<RHI::RHITexture>();
                 auto desc = RHI::RHITextureDesc::RenderTarget2D(m_LoadedTextureWidth, m_LoadedTextureHeight, RHI::RHITextureFormat::RGBA8_UNORM, "TexturePreview_" + path.filename().string());
                 desc.Usage = RHI::RHITextureUsage::ShaderResource;

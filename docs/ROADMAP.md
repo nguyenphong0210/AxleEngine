@@ -16,7 +16,9 @@ A separate-context Codex reviewer checks P41-03, P41-06 and P41-11; significant
 fixes are rechecked before dependent implementation continues. Gemini supplies
 additional review. These are required future checkpoints, not completed reviews.
 The recommended model is GPT-6 Astra; the client model selection is user-controlled.
-No OPT-04 source implementation has started in this coordination turn.
+P41-01 implementation is undergoing current-source verification; see the
+[execution record](reviews/OPT_04_CODEX_EXECUTION.md). Later packages and all
+three required checkpoint reviews remain open.
 
 **Accepted prerequisite: OPT-02 and OPT-03, after review and repairs.**
 Codex independently reviewed Gemini's deliveries at `0eeb734`, found and corrected
@@ -193,7 +195,7 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 
 **Work:** Implement real backend readiness and GL fallback, transactional resource creation, error/device-loss handling, stable primitive/resource identity, recording/submission leases, state tracking, frame completion, presentation, view targets and shared uploads/cache.
 
-- [ ] **P41-01:** Backend readiness and fallback equivalence.
+- [x] **P41-01:** Backend readiness and fallback equivalence (self-verified; P41-03 review pending).
 - [ ] **P41-02:** Transactional GPU resource construction.
 - [ ] **P41-03:** Error propagation and device-loss state.
 - [ ] **P41-04:** Primitive creation and canonical mesh identity.
@@ -209,7 +211,8 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 
 **Assignment:** Codex implementation with separate-context Codex review at P41-03/P41-06/P41-11 and supplementary Gemini review; [current handoff](agents/handoffs/OPT_04_CODEX.md). Complete P41-01..11 and stop after the final review gate.
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** [Codex execution record](reviews/OPT_04_CODEX_EXECUTION.md).
+P41-01 is self-verified in Debug/Release; P41-02 is next. No phase acceptance is claimed.
 
 ### OPT-05 - Unify rendering across Editor, previews and Runtime
 

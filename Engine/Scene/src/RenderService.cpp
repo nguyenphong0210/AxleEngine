@@ -156,18 +156,14 @@ namespace Axle {
                 return result;
             }
 
-            // Extract RenderWorld snapshot and render
-            SceneExtractionOptions options;
-            options.ResolveResources = true;
-            RenderWorld world = ExtractRenderWorld(scene, options);
-
-            m_RHIRenderer->RenderWorldView(world,
-                                           request.Camera,
-                                           colorTarget,
-                                           depthTarget,
-                                           request.Settings,
-                                           request.PhysicsScene,
-                                           request.ViewTargets);
+            std::shared_ptr<Scene> scenePtr(&scene, [](Scene*){});
+            m_RHIRenderer->RenderScene(scenePtr,
+                                       request.Camera,
+                                       colorTarget,
+                                       depthTarget,
+                                       request.Settings,
+                                       request.PhysicsScene,
+                                       request.ViewTargets);
 
             result.Success = true;
             result.DrawCallCount = m_RHIRenderer->GetDrawCallCount();

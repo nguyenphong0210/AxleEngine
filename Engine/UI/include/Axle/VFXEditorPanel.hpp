@@ -11,6 +11,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/RenderService.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -111,8 +112,7 @@ namespace Axle {
         MaterialInspectorControls m_TexturePicker;
         char m_ResourceSearch[128]{};
         std::vector<std::filesystem::path> m_ResourceFiles;
-        void RenderPreview3D(float width, float height);
-        void RenderPreviewRHI(float width, float height);
+        void RenderPreview(float width, float height);
         void DrawGrid(const glm::mat4& viewProj, float radius = 5.0f);
         
         // Adaptive emitter, preview and module workspace
@@ -152,7 +152,6 @@ namespace Axle {
 
 
         std::unique_ptr<ParticleRenderer> m_ParticleRenderer;
-        std::unique_ptr<class RHISceneRenderer> m_RHISceneRenderer;
         std::shared_ptr<Scene> m_PreviewScene;
         Entity m_PreviewEntity;
         std::vector<Entity> m_PreviewGrid;

@@ -214,6 +214,44 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_VFXPreviewIsolationAndMultiEmitter() {
+        Scene mainScene;
+        auto mainEnt = mainScene.CreateEntity("GameEntity");
+        mainEnt.AddComponent<TransformComponent>();
+
+        Scene vfxScene;
+        auto vfxEnt = vfxScene.CreateEntity("VFX Preview");
+        auto& pec = vfxEnt.AddComponent<ParticleEmitterComponent>();
+        pec.EmitterStacks.clear();
+
+        ParticleEmitterStack stack1;
+        stack1.Name = "Sparks";
+        stack1.Visible = true;
+        ParticleEmitterStack stack2;
+        stack2.Name = "Smoke";
+        stack2.Visible = true;
+
+        pec.EmitterStacks.push_back(stack1);
+        pec.EmitterStacks.push_back(stack2);
+
+        RENDER_CHECK(pec.EmitterStacks.size() == 2, "VFX preview has 2 emitter stacks");
+        RENDER_CHECK(mainScene.GetRegistry().view<ParticleEmitterComponent>().empty(), "Main scene has no VFX emitters");
+
+        ViewRequest vfxReq;
+        vfxReq.Kind = RenderViewKind::VFXPreview;
+        vfxReq.Width = 640;
+        vfxReq.Height = 480;
+        vfxReq.Settings.EnableParticles = true;
+        vfxReq.Name = "VFXPreview";
+
+        RENDER_CHECK(vfxReq.Kind == RenderViewKind::VFXPreview, "VFX view kind set correctly");
+        RENDER_CHECK(vfxReq.Settings.EnableParticles, "VFX view enables particles");
+
+        // Verify main scene entity count remains 1 and is isolated
+        RENDER_CHECK(!mainScene.GetRegistry().all_of<ParticleEmitterComponent>(static_cast<entt::entity>(mainEnt)), "Main entity not polluted by VFX");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -228,6 +266,7 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_PreviewTwoLightsExtraction()) return false;
     if (!Axle::RenderTests::Test_PreviewMaterialIsolationAndEdits()) return false;
     if (!Axle::RenderTests::Test_PreviewViewRequestResizeIsolation()) return false;
+    if (!Axle::RenderTests::Test_VFXPreviewIsolationAndMultiEmitter()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

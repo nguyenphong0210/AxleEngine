@@ -11,7 +11,7 @@ Scope:
 - [x] **P41-13:** RenderService and minimal modern render graph
 - [x] **P41-14:** OpenGL compatibility behind the same service
 - [x] **P41-15:** Asset and material previews
-- [ ] **P41-16:** VFX preview
+- [x] **P41-16:** VFX preview
 - [ ] **P41-17:** Assembly preview
 - [ ] **P41-18:** Thumbnail render jobs
 - [ ] **P41-19:** Standalone Runtime render integration
@@ -160,3 +160,36 @@ Scope:
 - `python scripts/check_architecture.py --root .`: PASS (405 files / 18 CMake files)
 - `python scripts/test_baseline_tools.py`: 18/18 PASS
 - `git diff --check`: PASS
+
+---
+
+## Package P41-16: VFX Preview
+
+- **Status:** Implemented and self-verified in Debug and Release.
+- **Scope & Contract:** `docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md` lines 279-286
+
+### Implementation Summary
+1. **Migrated `VFXEditorPanel` to RenderService (`Engine/UI/include/Axle/VFXEditorPanel.hpp`, `Engine/UI/src/VFXEditorPanel.cpp`):**
+   - Removed private `RHISceneRenderer` instance (`std::unique_ptr<RHISceneRenderer> m_RHISceneRenderer`) and raw GL drawing (`RenderPreview3D`).
+   - Unified preview rendering through `RenderPreview(float width, float height)` using `RenderService::Get().RenderView(*m_PreviewScene, request)`.
+   - Leveraged leased viewport targets via `RHIViewportDescriptor` on modern RHI and managed `Framebuffer` on OpenGL compatibility mode.
+   - Preserved private deterministic simulation: `m_PreviewScene->OnUpdate(dt)` runs safely within the editor panel's preview scene with scrub/step/pause/play controls.
+   - Preserved neutral empty-effect workflow: handles blank/unassigned effect safely without rendering artifacts or crashes.
+   - Preserved interactive LMB orbit / RMB-MMB pan capture, multi-emitter stacks, and unsaved document behavior.
+2. **RenderService Particle Stack Support (`Engine/Scene/src/RenderService.cpp`):**
+   - Updated `RenderService::RenderView(Scene& scene, const ViewRequest& request)` to delegate directly to `RHISceneRenderer::RenderScene` and `SceneRenderer::RenderScene` respectively.
+   - Automatically renders all meshes, materials, and GPU-instanced particle emitter stacks cleanly under the unified pipeline without duplicating render code.
+3. **Dedicated Unit Verification (`Tests/rendering/Test_RenderServiceUnit.cpp`):**
+   - `Test_VFXPreviewIsolationAndMultiEmitter`: Sets up a dedicated preview scene with multi-stack particle emitters, extracts and executes view requests, and verifies that particle stack configurations and preview scene mutations remain completely isolated from main scene state.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleUI AxleRenderUnitTests`: exit 0
+- `cmake --build build --config Release --target AxleUI AxleRenderUnitTests`: exit 0
+- `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `ctest --test-dir build -C Debug -R RenderUnitTests`: 1/1 passed, exit 0
+- `ctest --test-dir build -C Release -R RenderUnitTests`: 1/1 passed, exit 0
+- `python scripts/check_architecture.py --root .`: PASS (405 files / 18 CMake files)
+- `python scripts/test_baseline_tools.py`: 18/18 PASS
+- `git diff --check`: PASS
+

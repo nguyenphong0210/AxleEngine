@@ -2,7 +2,7 @@
 #include <Axle/CurveEditorWidget.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
-#include <Axle/RHISceneRenderer.hpp>
+#include <Axle/RenderService.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/Shader.hpp>
@@ -80,12 +80,9 @@ namespace Axle {
     }
 
     void VFXEditorPanel::ShutdownRHI() {
-        if (RHI::RHIDevice::Get().IsNativeReady() && (m_RHISceneRenderer || m_RHIViewport))
-            RHI::RHIDevice::Get().WaitIdle();
         m_PreviewGrid.clear();
         m_PreviewEntity = {};
         m_PreviewScene.reset();
-        m_RHISceneRenderer.reset();
         m_RHIViewport.reset();
         m_ImGuiLayer = nullptr;
     }
@@ -586,66 +583,22 @@ namespace Axle {
         glEnable(GL_DEPTH_TEST);
     }
 
-    void VFXEditorPanel::RenderPreview3D(float width, float height) {
-        if (width <= 0 || height <= 0 || !m_Framebuffer || !glad_glBindFramebuffer || !glad_glClear) return;
+    void VFXEditorPanel::RenderPreview(float width, float height) {
+        if (width <= 0 || height <= 0) return;
 
-        u32 w = static_cast<u32>(width);
-        u32 h = static_cast<u32>(height);
-        if (w != m_ViewportWidth || h != m_ViewportHeight) {
-            m_ViewportWidth = w;
-            m_ViewportHeight = h;
-            m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
-        }
-
-        m_Framebuffer->Bind();
-        glViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
-        glClearColor(m_PreviewBackground.r, m_PreviewBackground.g, m_PreviewBackground.b, 1);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        auto camera = CreatePreviewCamera(width, height);
-
-        // 1. Draw ground grid & reference axes
-        DrawGrid(camera.GetViewProjectionMatrix());
-
-        // 2. Render all visible emitter stacks
-        if (m_ParticleRenderer) {
-            m_ParticleRenderer->Begin(camera, m_Framebuffer, 0.1f, 1000.0f);
-            for (auto& stack : m_EmitterStacks) {
-                if (stack.Visible && stack.Enabled && stack.System) {
-                    if (!stack.Texture && !stack.TexturePath.empty()) {
-                        auto resolved = FileSystem::ResolveAssetPath(stack.TexturePath);
-                        if (std::filesystem::exists(resolved)) {
-                            stack.Texture = Texture2D::Create(resolved.string());
-                        }
-                    }
-                    if (!stack.NormalMap && !stack.NormalMapPath.empty()) {
-                        auto resolved = FileSystem::ResolveAssetPath(stack.NormalMapPath);
-                        if (std::filesystem::exists(resolved)) {
-                            stack.NormalMap = Texture2D::Create(resolved.string());
-                        }
-                    }
-                    m_ParticleRenderer->Render(*stack.System, stack.UseTexture ? stack.Texture : nullptr,
-                                               stack.UseNormalMap ? stack.NormalMap : nullptr,
-                                               stack.Config.SoftnessDistance);
-                }
+        u32 reqW = static_cast<u32>(width);
+        u32 reqH = static_cast<u32>(height);
+        if (reqW > 0 && reqH > 0 && (reqW != m_ViewportWidth || reqH != m_ViewportHeight)) {
+            m_ViewportWidth = reqW;
+            m_ViewportHeight = reqH;
+            if (m_RHIViewport && m_RHIViewport->IsValid()) {
+                m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
             }
-            m_ParticleRenderer->End();
-        }
-
-        m_Framebuffer->Unbind();
-    }
-
-    void VFXEditorPanel::RenderPreviewRHI(float width, float height) {
-        if (!m_RHIViewport || !m_RHIViewport->IsValid()) return;
-        if (!RHI::RHIDevice::Get().IsNativeReady()) return;
-
-        if (!m_RHISceneRenderer) {
-            m_RHISceneRenderer = std::make_unique<RHISceneRenderer>();
-            if (!m_RHISceneRenderer->Init(RHI::RHIDevice::Get(), false)) {
-                m_RHISceneRenderer.reset();
-                return;
+            if (m_Framebuffer) {
+                m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
             }
         }
+
         if (!m_PreviewScene) {
             m_PreviewScene = std::make_shared<Scene>();
             m_PreviewEntity = m_PreviewScene->CreateEntity("VFX Preview");
@@ -666,8 +619,11 @@ namespace Axle {
                 }
         }
         for (auto entity : m_PreviewGrid) {
-            if (m_ShowGroundGrid && !entity.HasComponent<MeshInstance3D>())
-                entity.AddComponent<MeshInstance3D>().RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+            if (m_ShowGroundGrid && !entity.HasComponent<MeshInstance3D>()) {
+                auto& mi = entity.AddComponent<MeshInstance3D>();
+                mi.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+                mi.AssetPath = "builtin://cube";
+            }
             if (!m_ShowGroundGrid && entity.HasComponent<MeshInstance3D>())
                 entity.RemoveComponent<MeshInstance3D>();
         }
@@ -683,24 +639,33 @@ namespace Axle {
         }
         component.SyncPrimary();
 
-        u32 reqW = static_cast<u32>(width);
-        u32 reqH = static_cast<u32>(height);
-        if (reqW > 0 && reqH > 0 && (reqW != m_ViewportWidth || reqH != m_ViewportHeight)) {
-            m_ViewportWidth = reqW;
-            m_ViewportHeight = reqH;
-            m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
-        }
-
         auto camera = CreatePreviewCamera(width, height);
 
         SceneRenderSettings settings;
         settings.EnableShadows = false;
         settings.EnableSkybox = false;
         settings.EnableStudioLightLobes = false;
+        settings.EnableParticles = true;
         settings.ClearColor = m_PreviewBackground;
-        if (!m_RHIViewport->SetRenderOptions(settings.MSAASamples, settings.EnableToneMapping, settings.EnableFXAA)) return;
-        m_RHISceneRenderer->RenderScene(m_PreviewScene, camera, m_RHIViewport->GetColorTexture(),
-                                        m_RHIViewport->GetDepthTexture(), settings, nullptr, m_RHIViewport->GetTargets());
+
+        ViewRequest request;
+        request.Kind = RenderViewKind::VFXPreview;
+        request.Width = m_ViewportWidth;
+        request.Height = m_ViewportHeight;
+        request.Camera = camera;
+        request.Settings = settings;
+        request.Name = "VFXPreview";
+
+        if (RHI::RHIDevice::Get().IsNativeReady() && m_RHIViewport && m_RHIViewport->IsValid()) {
+            if (!m_RHIViewport->SetRenderOptions(settings.MSAASamples, settings.EnableToneMapping, settings.EnableFXAA)) return;
+            request.ColorTarget = m_RHIViewport->GetColorTexture();
+            request.DepthTarget = m_RHIViewport->GetDepthTexture();
+            request.ViewTargets = m_RHIViewport->GetTargets();
+        } else if (m_Framebuffer) {
+            request.GLTargetFBO = m_Framebuffer;
+        }
+
+        RenderService::Get().RenderView(*m_PreviewScene, request);
     }
 
     void VFXEditorPanel::DrawDocumentDialogs() {
@@ -1706,7 +1671,7 @@ namespace Axle {
                 const ImVec2 origin = ImGui::GetCursorScreenPos();
 
                 uint64_t rhiTexID = 0;
-                if (m_RHIViewport && m_RHIViewport->IsValid()) {
+                if (RHI::RHIDevice::Get().IsNativeReady() && m_RHIViewport && m_RHIViewport->IsValid()) {
                     uint32_t reqW = (uint32_t)avail.x;
                     uint32_t reqH = (uint32_t)avail.y;
                     if (reqW > 0 && reqH > 0 && (reqW != m_ViewportWidth || reqH != m_ViewportHeight)) {
@@ -1714,10 +1679,17 @@ namespace Axle {
                         m_ViewportHeight = reqH;
                         m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
                     }
-                    RenderPreviewRHI(avail.x, avail.y);
+                    RenderPreview(avail.x, avail.y);
                     rhiTexID = m_RHIViewport->GetImTextureID();
-                } else {
-                    RenderPreview3D(avail.x, avail.y);
+                } else if (m_Framebuffer) {
+                    uint32_t reqW = (uint32_t)avail.x;
+                    uint32_t reqH = (uint32_t)avail.y;
+                    if (reqW > 0 && reqH > 0 && (reqW != m_ViewportWidth || reqH != m_ViewportHeight)) {
+                        m_ViewportWidth = reqW;
+                        m_ViewportHeight = reqH;
+                        m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+                    }
+                    RenderPreview(avail.x, avail.y);
                 }
 
                 auto* draw = ImGui::GetWindowDrawList();

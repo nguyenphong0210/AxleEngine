@@ -298,12 +298,68 @@ P41-05 is implemented/self-verified. Recording/submission pinning is P41-06 work
 graphics API validation and the consolidated final review remain open. Product
 executables/full phase gates will be rebuilt at the phase checkpoint.
 
+## P41-06 - Recorded/submitted leases and unified retirement
+
+Starting from P41-05 commit `02236e6`. Command recording now pins transitive
+resource generations at barriers, attachments, binding and streamed-copy boundaries.
+Snapshots retain views, descriptors, layouts, arenas, backing allocations and the
+native commands/allocator. Central graphics-queue submission publishes an
+epoch/value completion token only after successful submit. Failed submits retain
+ambiguous snapshots until checked drain; abandoned recordings release their pins
+when reset/destroyed. Duplicate/raw invalid batches and foreign queues reject.
+Full buffer updates publish a replacement when recorded/in-flight; mapped storage
+cannot be reused while pinned. Conservative whole-queue waits remain for P41-08.
+
+GuiTextureLease acquires the CPU draw-list pin before publishing its image ID.
+Registrations own texture and independent descriptor-arena generations. D3D12
+descriptor callbacks own shared arena state; Vulkan uses an external shared pool
+and copied native cleanup functions. The native ImGui backend itself has a lease
+covering fonts, vertex/index storage and renderer context when recorded through the
+RHI bridge. Destroying the original UI owner preserves that independent payload
+until completion/abandon. Another UI recording cannot overwrite that frame storage.
+
+Inspector, thumbnails, preview icons and viewport registration use leased tokens;
+their teardown no longer invokes a destroyed UI owner. Saved registration factories
+use weak owner guards. Deferred-release handles refer to the device owner/frame
+queue rather than the panel/layer and drain nested callbacks outside iteration.
+Viewport replacement retains the old GUI generation and uses a saved factory
+without dereferencing a dead UI pointer. Full per-view history/MSAA ownership is
+still P41-10 work; shared presentation is still P41-09 work.
+
+AxleRHIRetirementTests verifies transitive CPU recording pins, transfer, nested
+retirement, real original GPU pixels after replacing a source before submit,
+unobserved completion, mapped reuse rejection, completed slot reuse, abandon and
+ambiguous failed submission on both physical APIs. Windowed GUI fixtures verify
+reload/close after image publication, queue drain before UI submit, original GPU
+pixels, submit/abandon, saved handles after owner destruction and no NRI errors.
+The D3D12 RHI UI bridge additionally renders the original red image after its UI
+object is destroyed before command submission. The Vulkan RHI UI pipeline/target
+composition is part of P41-09; this package's Vulkan GUI test uses its real native
+windowed presenter. No cross-API interop/presentation acceptance is inferred.
+
+Final Debug/Release builds of AxleRHIRetirementTests, AxleRHIIdentityTests,
+AxleRHIResourceTests, AxleRHIErrorTests, AxleRHIResourceViewTests,
+AxlePrimitiveTests, AxleRHIFoundationTests and AxleVFXGPUTests passed (exit 0).
+Logs: p41-06-final-build-{debug,release}.log. Each configuration passed 34 runner
+cases: run06.py <Config> --views (18), more06.py <Config> (13) and retire06.py
+<Config> (3). Corresponding p41-06-{debug,release}{,-more,-retirement}-results.json
+record exits and logs. Focused CTest passed 6/6 in both configurations. All five
+fresh explicit/fallback GL images remain byte-identical in each configuration.
+Native test mains enforce zero NRI validation errors through teardown; final logs
+contain none. Architecture AF-04 passed (385 files, 18 CMake files), diff whitespace
+passed and pinned NRI remains clean. An Inspector backend-selection regression
+found by the real VFX/Inspector fixture was fixed before these final runs.
+
+P41-06 is implemented/self-verified. Graphics API validation remains NOT RUN;
+the consolidated separate-context review is pending after P41-11. No intermediate
+parallel review session was opened in this run. Full product/phase gates remain open.
+
 ## Remaining work
 
-P41-06..11 remain. Next: pin complete generations from CPU recording/GUI image
-publication through successful submission and checked completion, including abandon,
-failure and nested retirement; migrate raw UI callbacks to independent leased owners.
-Continue in dependency order and perform one consolidated final review after P41-11.
+P41-07..11 remain. Next: integrate generation/range-aware pending resource state
+with successful submission, then frame slots, shared presentation, complete view
+targets and central CPU decode/upload/cache ownership. Continue through P41-11,
+then one consolidated final review.
 
 Full phase builds, CTest, integration, jobs/ECS, final native product simulation, GPU
 readbacks and final window/lifetime checks remain open. API-validation prerequisites

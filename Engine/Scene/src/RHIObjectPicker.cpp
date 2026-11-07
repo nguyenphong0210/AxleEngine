@@ -49,7 +49,7 @@ namespace Axle {
 
     void RHIObjectPicker::Shutdown() {
         if (m_Device && m_Device->GetGraphicsQueue()) {
-            m_Device->GetNRICore().QueueWaitIdle(m_Device->GetGraphicsQueue());
+            m_Device->WaitIdle();
         }
 
         m_PickingTexture.reset();
@@ -188,7 +188,7 @@ namespace Axle {
         }
 
         if (m_Device && m_Device->GetGraphicsQueue()) {
-            m_Device->GetNRICore().QueueWaitIdle(m_Device->GetGraphicsQueue());
+            m_Device->WaitIdle();
         }
 
         auto color = std::make_unique<RHI::RHITexture>();

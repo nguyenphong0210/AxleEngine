@@ -122,15 +122,18 @@ namespace Axle::RHI {
         bool Reset();
 
         bool IsValid() const { return m_CommandBuffer && m_Lease.IsLive(); }
-        bool IsRecording() const { return IsValid() && m_IsRecording; }
-        bool IsExecutable() const { return IsValid() && m_IsExecutable; }
+        bool IsRecording() const { return IsValid() && m_IsRecording && RHIDevice::Get().GetResources().IsRecording(m_CommandBuffer); }
+        bool IsExecutable() const { return IsValid() && m_IsExecutable && RHIDevice::Get().GetResources().IsExecutable(m_CommandBuffer); }
         RHIResourceLease AcquireLease() const { return m_Lease; }
+        bool KeepAlive(const RHIResourceLease& resource);
 
         nri::CommandBuffer* GetNative() const { return IsValid() ? m_CommandBuffer : nullptr; }
         operator nri::CommandBuffer*() const { return GetNative(); }
         nri::CommandAllocator* GetCommandAllocator() const { return IsValid() ? m_CommandAllocator : nullptr; }
 
     private:
+        bool CanRecord() const { return IsRecording() && RHIDevice::Get().CanSubmit(); }
+        bool RetainNative(const void* native);
         bool Publish();
         RHIResourceLease m_Lease;
         nri::CommandBuffer* m_CommandBuffer = nullptr;

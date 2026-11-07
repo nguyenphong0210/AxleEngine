@@ -31,25 +31,22 @@
 
 namespace Axle {
 
+    void SceneHierarchyPanel::SetImGuiLayer(ImGuiLayer* layer) {
+        m_ImGuiLayer = layer;
+        m_TextureRegistrar = layer ? layer->GetTextureRegistrar() : GuiTextureRegistrar{};
+        m_DeferredRelease = layer ? layer->GetDeferredReleaser() : GuiDeferredReleaser{};
+    }
+
     void SceneHierarchyPanel::ClearTexturePreview() {
-        if (m_TexturePreviewImGuiID || m_RHITexturePreview || m_GLTexturePreview) {
-            // Selection may change while this frame's draw lists still reference the old image.
-            // Keep both the descriptor and texture alive until UI submission and GPU completion.
-            auto release = [layer = m_ImGuiLayer, handle = m_TexturePreviewImGuiID,
-                            rhiTexture = std::move(m_RHITexturePreview),
-                            glTexture = std::move(m_GLTexturePreview)] {
-                if (handle && layer && layer->GetBackendType() != ImGuiBackendType::OpenGL)
-                    layer->UnregisterTextureDescriptor(handle);
-                // The captured shared owners are released with the retired callback.
-            };
-            if (m_ImGuiLayer) m_ImGuiLayer->DeferRelease(std::move(release));
-            else release();
+        m_TexturePreviewLease.Reset();
+        m_RHITexturePreview.reset();
+        if (m_GLTexturePreview) {
+            auto release = [texture = std::move(m_GLTexturePreview)] {};
+            if (m_DeferredRelease) m_DeferredRelease(std::move(release)); else release();
         }
         m_TexturePreviewImGuiID = 0;
         m_LoadedTexturePath.clear();
-        m_LoadedTextureWidth = 0;
-        m_LoadedTextureHeight = 0;
-        m_LoadedTextureChannels = 0;
+        m_LoadedTextureWidth = m_LoadedTextureHeight = m_LoadedTextureChannels = 0;
     }
 
     void SceneHierarchyPanel::LoadTexturePreview(const std::filesystem::path& path) {
@@ -83,7 +80,7 @@ namespace Axle {
         m_LoadedTextureHeight = static_cast<uint32_t>(height);
         m_LoadedTextureChannels = static_cast<uint32_t>(channels);
 
-        bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
+        bool isRHI = RHI::RHIDevice::Get().IsNativeReady();
         if (isRHI) {
             auto& rhiDevice = RHI::RHIDevice::Get();
             if (rhiDevice.IsNativeReady()) {
@@ -114,8 +111,10 @@ namespace Axle {
 
                     if (uploadResult == nri::Result::SUCCESS) {
                         uint64_t nativeHandle = m_RHITexturePreview->GetNativeSRVHandle();
-                        if (nativeHandle != 0 && m_ImGuiLayer)
-                            m_TexturePreviewImGuiID = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                        if (nativeHandle != 0 && m_TextureRegistrar) {
+                            m_TexturePreviewLease = m_TextureRegistrar(*m_RHITexturePreview);
+                            m_TexturePreviewImGuiID = m_TexturePreviewLease.GetID();
+                        }
                     } else {
                         AXLE_CORE_WARN("SceneHierarchyPanel: Texture preview upload failed for '{0}' (result {1})",
                                        absPath.string(), static_cast<int>(uploadResult));
@@ -230,11 +229,12 @@ namespace Axle {
                     if (padX > 0) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + padX);
                     if (padY > 0) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + padY);
 
-                    ImVec2 uv0 = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) ? ImVec2(0.0f, 0.0f) : ImVec2(0.0f, 1.0f);
-                    ImVec2 uv1 = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) ? ImVec2(1.0f, 1.0f) : ImVec2(1.0f, 0.0f);
+                    ImVec2 uv0 = (m_RHITexturePreview != nullptr) ? ImVec2(0.0f, 0.0f) : ImVec2(0.0f, 1.0f);
+                    ImVec2 uv1 = (m_RHITexturePreview != nullptr) ? ImVec2(1.0f, 1.0f) : ImVec2(1.0f, 0.0f);
 
-                    if (m_TexturePreviewImGuiID != 0) {
-                        ImGui::Image((ImTextureID)(intptr_t)m_TexturePreviewImGuiID, ImVec2(dispW, dispH), uv0, uv1);
+                    const auto imageID = m_RHITexturePreview ? m_TexturePreviewLease.GetID() : m_TexturePreviewImGuiID;
+                    if (imageID != 0) {
+                        ImGui::Image((ImTextureID)(intptr_t)imageID, ImVec2(dispW, dispH), uv0, uv1);
                     } else {
                         ImGui::TextDisabled("Preview unavailable");
                     }

@@ -138,6 +138,7 @@ namespace Axle {
 
     void AssetThumbnailManager::InvalidateThumbnail(const std::filesystem::path& path) {
         std::string key = path.lexically_normal().string();
+        m_GuiThumbnails.erase(key);
         std::vector<uint64_t> handles;
         std::vector<std::shared_ptr<RHI::RHITexture>> textures;
         std::vector<std::shared_ptr<Texture2D>> loaded;
@@ -184,24 +185,25 @@ namespace Axle {
         m_Shader = std::make_unique<Shader>(s_ThumbnailVertSrc, s_ThumbnailFragSrc);
     }
 
+    void AssetThumbnailManager::SetImGuiLayer(ImGuiLayer* layer) {
+        m_ImGuiLayer = layer;
+        m_TextureRegistrar = layer ? layer->GetTextureRegistrar() : GuiTextureRegistrar{};
+        m_DeferredRelease = layer ? layer->GetDeferredReleaser() : GuiDeferredReleaser{};
+    }
+
     void AssetThumbnailManager::RetireTextures(std::vector<uint64_t> handles,
             std::vector<std::shared_ptr<RHI::RHITexture>> textures,
             std::vector<std::shared_ptr<Texture2D>> loaded, std::vector<u32> generated) {
-        if (handles.empty() && textures.empty() && loaded.empty() && generated.empty()) return;
-        auto release = [layer = m_ImGuiLayer, handles = std::move(handles), textures = std::move(textures),
-                        loaded = std::move(loaded), generated = std::move(generated)]() {
-            if (layer && layer->GetBackendType() != ImGuiBackendType::OpenGL) {
-                for (auto id : handles) if (id) layer->UnregisterTextureDescriptor(id);
-            } else if (Window::HasActiveContext()) {
-                for (auto id : generated) if (id) glDeleteTextures(1, &id);
-            }
-            // Captured shared owners keep textures alive along with their descriptors.
+        // Native registrations retain complete payload generations themselves.
+        if (loaded.empty() && generated.empty()) return;
+        auto release = [loaded = std::move(loaded), generated = std::move(generated)] {
+            if (Window::HasActiveContext()) for (auto id : generated) if (id) glDeleteTextures(1, &id);
         };
-        if (m_ImGuiLayer) m_ImGuiLayer->DeferRelease(std::move(release));
-        else release();
+        if (m_DeferredRelease) m_DeferredRelease(std::move(release)); else release();
     }
 
     void AssetThumbnailManager::Clear() {
+        m_GuiThumbnails.clear();
         std::vector<uint64_t> handles;
         std::vector<std::shared_ptr<RHI::RHITexture>> textures;
         std::vector<std::shared_ptr<Texture2D>> loaded;
@@ -238,13 +240,14 @@ namespace Axle {
 
     uint64_t AssetThumbnailManager::GetOrCreateThumbnail(const std::filesystem::path& path) {
         if (!m_ImGuiLayer) {
-            m_ImGuiLayer = dynamic_cast<ImGuiLayer*>(Application::Get().GetUIContext());
+            SetImGuiLayer(dynamic_cast<ImGuiLayer*>(Application::Get().GetUIContext()));
         }
 
         std::string key = path.lexically_normal().string();
         auto it = m_ThumbnailCache.find(key);
         if (it != m_ThumbnailCache.end()) {
-            return it->second;
+            auto gui = m_GuiThumbnails.find(key);
+            return gui != m_GuiThumbnails.end() ? gui->second.GetID() : it->second;
         }
 
         auto ext = path.extension().string();
@@ -309,9 +312,11 @@ namespace Axle {
 
                         uint64_t nativeHandle = rhiTex->GetNativeSRVHandle();
                         if (nativeHandle != 0 && m_ImGuiLayer) {
-                            uint64_t gpuHandle = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                            auto token = m_TextureRegistrar ? m_TextureRegistrar(*rhiTex) : GuiTextureLease{};
+                            uint64_t gpuHandle = token.GetID();
                             if (gpuHandle != 0) {
                                 m_ThumbnailCache[key] = gpuHandle;
+                                m_GuiThumbnails[key] = std::move(token);
                                 m_RHIThumbnails[key] = rhiTex;
                                 stbi_image_free(pixels);
                                 return gpuHandle;
@@ -374,9 +379,11 @@ namespace Axle {
 
                             uint64_t nativeHandle = rhiTex->GetNativeSRVHandle();
                             if (nativeHandle != 0 && m_ImGuiLayer) {
-                                uint64_t gpuHandle = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                                auto token = m_TextureRegistrar ? m_TextureRegistrar(*rhiTex) : GuiTextureLease{};
+                            uint64_t gpuHandle = token.GetID();
                                 if (gpuHandle != 0) {
                                     m_ThumbnailCache[key] = gpuHandle;
+                                m_GuiThumbnails[key] = std::move(token);
                                     m_RHIThumbnails[key] = rhiTex;
                                     return gpuHandle;
                                 }

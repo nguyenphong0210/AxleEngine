@@ -123,7 +123,7 @@ static bool Buffers() {
     copy.TransitionBuffer(deviceBuffer.GetNative(), RHIAccess::VertexBuffer, RHIAccess::CopySource, RHIPipelineStage::AllCommands, RHIPipelineStage::Copy);
     auto& device = RHIDevice::Get();
     device.GetNRICore().CmdCopyBuffer(*copy.GetNative(), *readback.GetNative(), 0, *deviceBuffer.GetNative(), 0, bytes.size());
-    RENDER_CHECK(copy.End() && copy.Submit() && device.GetNRICore().QueueWaitIdle(device.GetGraphicsQueue()) == nri::Result::SUCCESS, "GPU readback submission completes");
+    RENDER_CHECK(copy.End() && copy.Submit() && device.WaitIdle(), "GPU readback submission completes");
     auto* mapped = readback.Map();
     RENDER_CHECK(mapped && std::memcmp(mapped, bytes.data(), bytes.size()) == 0, "old device bytes survive failed upload and partial-update rejection");
     readback.Unmap();

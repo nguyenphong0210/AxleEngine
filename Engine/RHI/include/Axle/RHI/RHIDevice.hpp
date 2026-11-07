@@ -24,6 +24,13 @@ namespace Axle::RHI {
         nri::WrapperVKInterface WrapperVK = {};
     };
 
+    struct RHICompletionToken {
+        uint64_t Epoch = 0;
+        uint64_t Value = 0;
+        explicit operator bool() const { return Epoch && Value; }
+        bool operator==(const RHICompletionToken&) const = default;
+    };
+
     class RHIDevice {
     public:
         static RHIDevice& Get();
@@ -44,6 +51,11 @@ namespace Axle::RHI {
         // Wait for all GPU queue operations to complete
         bool WaitIdle(uint32_t timeoutMilliseconds = 2000);
         bool WaitForFence(nri::Fence* fence, uint64_t value, uint32_t timeoutMilliseconds = 2000);
+        bool Submit(const nri::QueueSubmitDesc& desc, nri::Queue* queue = nullptr, RHICompletionToken* completion = nullptr,
+                    RHIRecordingLease externalUses = {});
+        bool RetainExternalSubmission(RHIRecordingLease uses, RHICompletionToken* completion = nullptr);
+        bool WaitForCompletion(RHICompletionToken token, uint32_t timeoutMilliseconds = 2000);
+        RHICompletionToken GetLastSubmittedToken() const { return {GetEpoch(), m_SubmittedValue}; }
         bool ObserveResult(nri::Result result, std::string_view operation, std::string_view resource = {}, bool timedOut = false);
         RHIDeviceState GetState() const { return m_State; }
         const std::optional<RHIGPUError>& GetFirstError() const { return m_FirstError; }
@@ -105,6 +117,11 @@ namespace Axle::RHI {
         nri::Queue* m_GraphicsQueue = nullptr;
         NRIInterfaces m_NRI;
         RHIResourceService m_Resources;
+        struct PendingSubmission { RHICompletionToken Token; RHIRecordingLease Uses; };
+        nri::Fence* m_SubmissionFence = nullptr;
+        uint64_t m_SubmittedValue = 0;
+        std::vector<PendingSubmission> m_PendingSubmissions;
+        std::vector<RHIRecordingLease> m_AmbiguousSubmissions;
     };
 
 }

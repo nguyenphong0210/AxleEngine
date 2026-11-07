@@ -192,7 +192,7 @@ namespace Axle::RHI {
     void RHIDescriptorPool::Bind(nri::CommandBuffer* cmdBuffer) {
         if (IsValid() && cmdBuffer) {
             auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.IsNativeReady()) {
+            if (rhiDevice.CanSubmit() && rhiDevice.GetResources().RecordNativeUse(cmdBuffer, m_Pool)) {
                 rhiDevice.GetNRICore().CmdSetDescriptorPool(*cmdBuffer, *m_Pool);
             }
         }
@@ -201,7 +201,7 @@ namespace Axle::RHI {
     void RHIDescriptorPool::BindDescriptorSet(nri::CommandBuffer* cmdBuffer, uint32_t setIndex, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
         if (cmdBuffer && set) {
             auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.IsNativeReady()) {
+            if (rhiDevice.CanSubmit() && rhiDevice.GetResources().RecordNativeUse(cmdBuffer, set)) {
                 nri::SetDescriptorSetDesc setDesc = {};
                 setDesc.setIndex = setIndex;
                 setDesc.descriptorSet = set;

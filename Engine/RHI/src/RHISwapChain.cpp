@@ -275,9 +275,9 @@ namespace Axle::RHI {
         submitDesc.signalFences = signalFences;
         submitDesc.signalFenceNum = 2;
 
-        const auto submitted = ScopedRHIFault::Invoke("QueueSubmit", [&] { return core.QueueSubmit(*queue, submitDesc); });
+        const bool submitted = device.Submit(submitDesc, queue, nullptr, device.GetResources().Pin(m_Lease));
         m_Acquired = false;
-        if (submitted != nri::Result::SUCCESS) return false;
+        if (!submitted) return false;
         m_Frames[m_FrameInFlightIndex].FenceValue = signalValue;
         m_FrameCount = signalValue;
         // Presentation cannot undo an accepted submission or its completion value.

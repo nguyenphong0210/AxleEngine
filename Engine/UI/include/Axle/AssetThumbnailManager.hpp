@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/GuiTextureLease.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/Shader.hpp>
 #include <Axle/Texture2D.hpp>
@@ -40,7 +41,7 @@ namespace Axle {
         AssetThumbnailManager(const AssetThumbnailManager&) = delete;
         AssetThumbnailManager& operator=(const AssetThumbnailManager&) = delete;
 
-        void SetImGuiLayer(ImGuiLayer* layer) { m_ImGuiLayer = layer; }
+        void SetImGuiLayer(ImGuiLayer* layer);
 
         // Returns GPU Texture Descriptor / GL Texture ID (or 0 if pending/not available)
         uint64_t GetOrCreateThumbnail(const std::filesystem::path& path);
@@ -74,6 +75,9 @@ namespace Axle {
     private:
         static AssetThumbnailManager* s_Instance;
         ImGuiLayer* m_ImGuiLayer = nullptr;
+        GuiTextureRegistrar m_TextureRegistrar;
+        GuiDeferredReleaser m_DeferredRelease;
+        std::unordered_map<std::string, GuiTextureLease> m_GuiThumbnails;
         u32 m_FBO = 0;
         u32 m_RBO = 0;
         std::unique_ptr<Shader> m_Shader;

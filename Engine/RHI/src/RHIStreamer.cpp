@@ -11,6 +11,7 @@ namespace Axle::RHI {
 
     RHIStreamer::RHIStreamer(RHIStreamer&& other) noexcept
         : m_Lease(std::move(other.m_Lease))
+        , m_CopyResources(std::move(other.m_CopyResources))
         , m_Streamer(other.m_Streamer)
         , m_Desc(other.m_Desc)
         , m_Device(other.m_Device)
@@ -23,6 +24,7 @@ namespace Axle::RHI {
         if (this != &other) {
             Shutdown();
             m_Lease = std::move(other.m_Lease);
+            m_CopyResources = std::move(other.m_CopyResources);
             m_Streamer = other.m_Streamer;
             m_Desc = other.m_Desc;
             m_Device = other.m_Device;
@@ -89,6 +91,7 @@ namespace Axle::RHI {
     }
 
     void RHIStreamer::Shutdown() {
+        m_CopyResources.clear();
         if (m_Lease) m_Lease.Reset();
         else if (m_Streamer && m_Device) {
             const auto& streamerInterface = m_Device->GetNRIStreamer();
@@ -181,6 +184,10 @@ namespace Axle::RHI {
             return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
         });
         m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
+        if (bo.buffer) {
+            auto destination = m_Device->GetResources().AcquireNative(dstBuffer);
+            if (destination.IsLive()) m_CopyResources[copyBatch].push_back(std::move(destination));
+        }
         return { bo.buffer, bo.offset };
     }
 
@@ -217,6 +224,10 @@ namespace Axle::RHI {
             return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
         });
         m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
+        if (bo.buffer) {
+            auto destination = m_Device->GetResources().AcquireNative(dstBuffer);
+            if (destination.IsLive()) m_CopyResources[copyBatch].push_back(std::move(destination));
+        }
         return { bo.buffer, bo.offset };
     }
 
@@ -250,14 +261,24 @@ namespace Axle::RHI {
 
         nri::BufferOffset bo = streamerInterface.StreamTextureData(*m_Streamer, nriDesc);
         m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
+        if (bo.buffer) {
+            auto destination = m_Device->GetResources().AcquireNative(desc.DstTexture);
+            if (destination.IsLive()) m_CopyResources[desc.CopyBatch].push_back(std::move(destination));
+        }
         return { bo.buffer, bo.offset };
     }
 
     void RHIStreamer::CmdCopyStreamedData(nri::CommandBuffer& cmdBuffer, RHICopyBatch copyBatch) {
         if (!IsValid() || !m_Device || copyBatch == 0) return;
+        auto& resources = m_Device->GetResources();
+        if (!resources.RecordNativeUse(&cmdBuffer, m_Streamer)) return;
+        auto found = m_CopyResources.find(copyBatch);
+        if (found != m_CopyResources.end() && resources.AcquireNative(&cmdBuffer))
+            for (const auto& resource : found->second) if (!resources.RecordUse(&cmdBuffer, resource)) return;
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (streamerInterface.CmdCopyStreamedData) {
             streamerInterface.CmdCopyStreamedData(cmdBuffer, *m_Streamer, copyBatch);
+            m_CopyResources.erase(copyBatch);
         }
     }
 

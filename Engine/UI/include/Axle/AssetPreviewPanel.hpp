@@ -96,6 +96,8 @@ namespace Axle {
         std::unique_ptr<Shader> m_Shader;
         std::unique_ptr<RHIViewportDescriptor> m_RHIViewport;
         ImGuiLayer* m_ImGuiLayer = nullptr;
+        GuiTextureRegistrar m_TextureRegistrar;
+        GuiDeferredReleaser m_DeferredRelease;
         u32 m_ViewportWidth = 380;
         u32 m_ViewportHeight = 320;
 
@@ -149,7 +151,7 @@ namespace Axle {
         // UI Icon Texture Cache
         void FreeIconTextures();
         std::unordered_map<std::string, IconTextureRegion> m_IconRegions;
-        std::unordered_map<std::string, std::pair<std::shared_ptr<RHI::RHITexture>, uint64_t>> m_IconCache;
+        std::unordered_map<std::string, std::pair<std::shared_ptr<RHI::RHITexture>, GuiTextureLease>> m_IconCache;
         std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_GLIconCache;
     };
 

@@ -7,6 +7,7 @@
 #include <Extensions/NRIStreamer.h>
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 #include <string>
 #include <memory>
@@ -135,6 +136,7 @@ namespace Axle::RHI {
     private:
         bool Build(RHIDevice& device, const RHIStreamerDesc& desc);
         RHIResourceLease m_Lease;
+        std::unordered_map<RHICopyBatch, std::vector<RHIResourceLease>> m_CopyResources;
         nri::Streamer* m_Streamer = nullptr;
         RHIStreamerDesc m_Desc;
         RHIDevice* m_Device = nullptr;

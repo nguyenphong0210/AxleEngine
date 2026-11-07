@@ -25,7 +25,7 @@ inline std::vector<uint8_t> ReadTexture(RHITexture& texture) {
     region.width = texture.GetWidth(); region.height = texture.GetHeight(); region.depth = 1;
     core.CmdReadbackTextureToBuffer(*commands.GetNative(), *readback.GetNative(), layout, *texture.GetNative(), region);
     commands.TransitionTexture(texture.GetNative(), RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
-    if (!commands.End() || !commands.Submit() || core.QueueWaitIdle(device.GetGraphicsQueue()) != nri::Result::SUCCESS) return {};
+    if (!commands.End() || !commands.Submit() || !device.WaitIdle()) return {};
     auto* bytes = static_cast<const uint8_t*>(readback.Map());
     if (!bytes) return {};
     std::vector<uint8_t> pixels(texture.GetWidth() * texture.GetHeight() * 4);

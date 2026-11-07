@@ -2,6 +2,8 @@
 #include <Axle/Types.hpp>
 #include <Axle/ApplicationUI.hpp>
 #include <Axle/Window.hpp>
+#include <Axle/GuiTextureLease.hpp>
+#include <Axle/RHI/RHIResource.hpp>
 #include <vector>
 #include <functional>
 #include <memory>
@@ -18,9 +20,13 @@ struct ImGui_ImplVulkanH_Window;
 
 namespace Axle {
     struct ImGuiDescriptorCallbackState;
+    struct ImGuiDescriptorArena;
+    struct GuiFrameState;
+    struct ImGuiBackendRetirement;
 
     namespace RHI {
         class RHICommandBuffer;
+        class RHITexture;
     }
 
     enum class ImGuiBackendType {
@@ -51,7 +57,7 @@ namespace Axle {
         bool IsOperational() const override;
 
         // Render recorded ImGui draw data into a command buffer (for D3D12/Vulkan RHI backends)
-        void Render(RHI::RHICommandBuffer* cmdBuffer);
+        bool Render(RHI::RHICommandBuffer* cmdBuffer);
         void Render(ID3D12GraphicsCommandList* cmdList);
 
         void SetDarkThemeColors();
@@ -67,7 +73,10 @@ namespace Axle {
 
         // D3D12 Descriptor Heap management for textures & viewports
         ID3D12DescriptorHeap* GetD3D12DescriptorHeap() const { return m_D3D12SrvHeap; }
-        uint32_t GetAllocatedDescriptorCount() const { return m_AllocatedDescriptorCount; }
+        uint32_t GetAllocatedDescriptorCount() const;
+        GuiTextureLease RegisterTexture(const RHI::RHITexture& texture);
+        GuiTextureRegistrar GetTextureRegistrar() const;
+        GuiDeferredReleaser GetDeferredReleaser() const;
 
         // Register / copy an external D3D12 SRV CPU descriptor or Vulkan ImageView into the ImGui heap/pool, returning a GPU handle (ImTextureID)
         uint64_t RegisterTextureDescriptor(uint64_t cpuHandlePtr);
@@ -96,6 +105,7 @@ namespace Axle {
         void AllocateD3D12Descriptor(void* outCpuHandle, void* outGpuHandle);
         void FreeD3D12Descriptor(void* cpuHandle, void* gpuHandle);
         void FlushDeferredReleases();
+        void FinishGuiFrame() noexcept;
 
     private:
         ImGuiBackendType m_BackendType = ImGuiBackendType::OpenGL;
@@ -104,6 +114,10 @@ namespace Axle {
         GLFWwindow* m_Window = nullptr;
         std::vector<std::function<void()>> m_DeferredReleases;
         std::shared_ptr<ImGuiDescriptorCallbackState> m_DescriptorCallbacks;
+        std::shared_ptr<ImGuiDescriptorArena> m_DescriptorArena;
+        std::shared_ptr<GuiFrameState> m_GuiFrame;
+        std::shared_ptr<ImGuiBackendRetirement> m_BackendRetirement;
+        RHI::RHIResourceLease m_BackendLease;
 
         // D3D12 Descriptor Heap
         static constexpr uint32_t D3D12DescriptorCapacity = 1024;

@@ -2,6 +2,7 @@
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <Axle/RHI/RHITexture.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
@@ -45,10 +46,65 @@
 #include <stdexcept>
 #include <array>
 #include <utility>
+#include <unordered_set>
 #include "VulkanWindowBridge.hpp"
 
 namespace Axle {
-    struct ImGuiDescriptorCallbackState { ImGuiLayer* Owner = nullptr; };
+    struct ImGuiDescriptorArena {
+        RHI::RHIResourceLease Lifetime;
+        std::shared_ptr<bool> NativeAlive = std::make_shared<bool>(true);
+        bool Closing = false;
+        uint32_t Capacity = 0, Allocated = 0, Stride = 0;
+        uint64_t CPUStart = 0, GPUStart = 0;
+        std::vector<uint32_t> FreeIndices;
+        std::unordered_set<uint32_t> LiveIndices;
+        std::unordered_set<uint64_t> LiveHandles;
+        std::function<void(uint64_t)> FreeNative;
+        bool Allocate(uint64_t& cpu, uint64_t& gpu) {
+            cpu = gpu = 0;
+            if (Closing || !Lifetime.IsLive()) return false;
+            uint32_t index;
+            if (!FreeIndices.empty()) { index = FreeIndices.back(); FreeIndices.pop_back(); }
+            else { if (Allocated == Capacity) return false; index = Allocated++; }
+            LiveIndices.insert(index);
+            cpu = CPUStart + static_cast<uint64_t>(index) * Stride;
+            gpu = GPUStart + static_cast<uint64_t>(index) * Stride;
+            return true;
+        }
+        void Free(uint64_t id) {
+            if (!id || !*NativeAlive) return;
+            if (FreeNative) { if (LiveHandles.erase(id)) FreeNative(id); return; }
+            if (!Stride || id < GPUStart || (id - GPUStart) % Stride) return;
+            const auto index = static_cast<uint32_t>((id - GPUStart) / Stride);
+            if (index < Capacity && LiveIndices.erase(index) && !Closing) FreeIndices.push_back(index);
+        }
+    };
+    struct GuiFrameState {
+        bool Active = false, Closing = false;
+        bool NativeRecorded = false;
+        RHI::RHIRecordingLease Uses;
+        GuiDeferredReleaser RetireOutsideFrame;
+        std::vector<std::function<void()>> Deferred;
+    };
+    struct GuiTextureRegistration {
+        uint64_t ID = 0;
+        RHI::RHIResourceLease Generation;
+        std::weak_ptr<GuiFrameState> Frame;
+    };
+    bool GuiTextureLease::IsValid() const {
+        if (!m_Registration || !m_Registration->Generation.IsLive()) return false;
+        auto frame = m_Registration->Frame.lock();
+        return frame && !frame->Closing;
+    }
+    uint64_t GuiTextureLease::GetID() const {
+        if (!RHI::RHIDevice::Get().GetResources().IsOwnerThread()) return 0;
+        if (!IsValid()) return 0;
+        auto frame = m_Registration->Frame.lock();
+        if (frame->Active && !RHI::RHIDevice::Get().GetResources().AppendPin(frame->Uses, m_Registration->Generation)) return 0;
+        return m_Registration->ID;
+    }
+    struct ImGuiDescriptorCallbackState { ImGuiLayer* Owner = nullptr; std::shared_ptr<ImGuiDescriptorArena> Arena; };
+    struct ImGuiBackendRetirement { std::function<void()> Cleanup; };
 #if defined(AXLE_HAS_D3D12)
     static nri::Result UIResultCode(HRESULT result) {
         if (result == DXGI_ERROR_DEVICE_REMOVED || result == DXGI_ERROR_DEVICE_RESET) return nri::Result::DEVICE_LOST;
@@ -226,6 +282,10 @@ namespace Axle {
         if (m_Initialized) return;
 
         m_Window = window;
+        m_GuiFrame = std::make_shared<GuiFrameState>();
+        m_GuiFrame->RetireOutsideFrame = m_BackendType == ImGuiBackendType::OpenGL ?
+            GuiDeferredReleaser([](std::function<void()> release) { if (release) release(); }) :
+            RHI::RHIDevice::Get().GetResources().GetDeferredReleaser();
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -322,6 +382,12 @@ namespace Axle {
             }
             m_Initialized = true;
             if (m_BackendType != ImGuiBackendType::OpenGL) {
+                m_BackendRetirement = std::make_shared<ImGuiBackendRetirement>();
+                auto retirement = m_BackendRetirement;
+                m_BackendLease = RHI::RHIDevice::Get().GetResources().Publish(RHI::RHIResourceKind::UIBackend,
+                    "Native UI backend", {}, [retirement] { if (auto cleanup = std::move(retirement->Cleanup)) cleanup(); },
+                    {m_DescriptorArena->Lifetime});
+                if (!m_BackendLease.IsLive()) throw std::runtime_error("Native UI backend lifetime publication failed");
                 if (!m_DescriptorCallbacks || !m_DescriptorCallbacks->Owner) {
                     m_DescriptorCallbacks = std::make_shared<ImGuiDescriptorCallbackState>();
                     m_DescriptorCallbacks->Owner = this;
@@ -390,6 +456,17 @@ namespace Axle {
         m_AllocatedDescriptorCount = 0;
         m_FreeDescriptorIndices.clear();
 
+        m_DescriptorArena = std::make_shared<ImGuiDescriptorArena>();
+        auto arena = m_DescriptorArena;
+        arena->Capacity = D3D12DescriptorCapacity; arena->Stride = m_D3D12DescriptorSize;
+        arena->CPUStart = m_D3D12SrvHeap->GetCPUDescriptorHandleForHeapStart().ptr;
+        arena->GPUStart = m_D3D12SrvHeap->GetGPUDescriptorHandleForHeapStart().ptr;
+        auto* heap = m_D3D12SrvHeap; heap->AddRef();
+        auto alive = arena->NativeAlive;
+        arena->Lifetime = rhiDevice.GetResources().Publish(RHI::RHIResourceKind::Pool, "ImGui D3D12 arena", {},
+            [heap, alive] { *alive = false; heap->Release(); });
+        if (!arena->Lifetime.IsLive()) { heap->Release(); throw std::runtime_error("GUI arena publication failed"); }
+
         ImGui_ImplDX12_InitInfo initInfo = {};
         initInfo.Device = d3d12Device;
         initInfo.CommandQueue = d3d12Queue;
@@ -399,15 +476,17 @@ namespace Axle {
         initInfo.SrvDescriptorHeap = m_D3D12SrvHeap;
         m_DescriptorCallbacks = std::make_shared<ImGuiDescriptorCallbackState>();
         m_DescriptorCallbacks->Owner = this;
+        m_DescriptorCallbacks->Arena = arena;
         initInfo.UserData = m_DescriptorCallbacks.get();
         initInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* outCpu, D3D12_GPU_DESCRIPTOR_HANDLE* outGpu) {
             auto* state = static_cast<ImGuiDescriptorCallbackState*>(info->UserData);
-            if (state->Owner) state->Owner->AllocateD3D12Descriptor(outCpu, outGpu);
-            else { *outCpu = {}; *outGpu = {}; }
+            uint64_t cpu = 0, gpu = 0;
+            if (state->Arena) state->Arena->Allocate(cpu, gpu);
+            outCpu->ptr = cpu; outGpu->ptr = gpu;
         };
         initInfo.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE gpu) {
             auto* state = static_cast<ImGuiDescriptorCallbackState*>(info->UserData);
-            if (state->Owner) state->Owner->FreeD3D12Descriptor(&cpu, &gpu);
+            if (state->Arena) state->Arena->Free(gpu.ptr);
         };
 
         if (!ImGui_ImplDX12_Init(&initInfo)) {
@@ -628,7 +707,32 @@ namespace Axle {
         // Initialize ImGui GLFW implementation
         ImGui_ImplGlfw_InitForVulkan(m_Window, true);
 
-        // Initialize ImGui Vulkan implementation with automatic descriptor pool management
+        // The shared arena survives the UI owner while GUI generations retain it.
+        m_DescriptorArena = std::make_shared<ImGuiDescriptorArena>();
+        auto arena = m_DescriptorArena;
+        const auto createPool = WindowVKProc<PFN_vkCreateDescriptorPool>("vkCreateDescriptorPool");
+        const auto destroyPool = WindowVKProc<PFN_vkDestroyDescriptorPool>("vkDestroyDescriptorPool");
+        const auto freeSets = WindowVKProc<PFN_vkFreeDescriptorSets>("vkFreeDescriptorSets");
+        VkDescriptorPoolSize poolSizes[] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1024},
+            {VK_DESCRIPTOR_TYPE_SAMPLER, IMGUI_IMPL_VULKAN_MINIMUM_SAMPLER_POOL_SIZE}};
+        VkDescriptorPoolCreateInfo poolDesc{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        poolDesc.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        poolDesc.maxSets = 1024 + IMGUI_IMPL_VULKAN_MINIMUM_SAMPLER_POOL_SIZE;
+        poolDesc.poolSizeCount = 2; poolDesc.pPoolSizes = poolSizes;
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        CheckedWindowVK("CreateGuiDescriptorPool", [&] { return createPool(vkDevice, &poolDesc, nullptr, &pool); });
+        auto alive = arena->NativeAlive;
+        arena->Lifetime = rhiDevice.GetResources().Publish(RHI::RHIResourceKind::Pool, "ImGui Vulkan arena", {},
+            [vkDevice, pool, destroyPool, alive] { *alive = false; destroyPool(vkDevice, pool, nullptr); });
+        if (!arena->Lifetime.IsLive()) { destroyPool(vkDevice, pool, nullptr); throw std::runtime_error("GUI arena publication failed"); }
+        arena->FreeNative = [vkDevice, pool, freeSets, alive](uint64_t id) {
+            if (!*alive) return;
+            auto descriptor = reinterpret_cast<VkDescriptorSet>(id);
+            const auto result = freeSets(vkDevice, pool, 1, &descriptor);
+            if (result != VK_SUCCESS) AXLE_CORE_ERROR("GUI descriptor cleanup failed: {0}", static_cast<int>(result));
+        };
+
+        // Initialize the native renderer bridge using the externally owned pool.
         ImGui_ImplVulkan_InitInfo initInfo = {};
         initInfo.CheckVkResultFn = [](VkResult result) {
             if (result != VK_SUCCESS) throw std::runtime_error("Vulkan UI backend failed: " + std::to_string(result));
@@ -639,7 +743,8 @@ namespace Axle {
         initInfo.Device = vkDevice;
         initInfo.QueueFamily = queueFamily;
         initInfo.Queue = vkQueue;
-        initInfo.DescriptorPoolSize = 1024;
+        initInfo.DescriptorPool = pool;
+        initInfo.DescriptorPoolSize = 0;
         initInfo.MinImageCount = m_VulkanMinImageCount;
         initInfo.ImageCount = wd->ImageCount;
         initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
@@ -659,17 +764,29 @@ namespace Axle {
     }
 
     void ImGuiLayer::Shutdown() {
+        if (m_GuiFrame) {
+            m_GuiFrame->Closing = true;
+            if (m_GuiFrame->Active && m_ContextCreated && ImGui::GetCurrentContext() && ImGui::GetCurrentContext()->WithinFrameScope)
+                ImGui::EndFrame();
+            m_GuiFrame->Active = false;
+            m_GuiFrame->Uses.Reset();
+            auto deferred = std::move(m_GuiFrame->Deferred); m_GuiFrame->Deferred.clear();
+            for (auto& release : deferred) m_GuiFrame->RetireOutsideFrame(std::move(release));
+        }
+        if (m_DescriptorArena) m_DescriptorArena->Closing = true;
         if (m_DescriptorCallbacks) m_DescriptorCallbacks->Owner = nullptr;
         auto& device = RHI::RHIDevice::Get();
-        if (m_ContextCreated && m_BackendType != ImGuiBackendType::OpenGL && device.IsNativeReady() &&
-            !device.WaitIdle() && device.GetState() != RHI::RHIDeviceState::Lost) {
-            device.ObserveResult(nri::Result::FAILURE, "QueueSubmit", "unresolved UI shutdown");
+        const bool nativeOwner = m_ContextCreated && m_BackendType != ImGuiBackendType::OpenGL && device.IsNativeReady();
+        const bool drained = !nativeOwner || device.GetState() == RHI::RHIDeviceState::Lost || device.WaitIdle();
+        const bool recorded = m_BackendLease && device.GetResources().IsInUse(m_BackendLease);
+        if (nativeOwner && ((!drained && device.GetState() != RHI::RHIDeviceState::Lost) || recorded)) {
+            if (!drained) device.ObserveResult(nri::Result::FAILURE, "QueueSubmit", "unresolved UI shutdown");
             // The native context and backend objects outlive this layer if a
             // checked drain cannot resolve an ambiguous submission yet.
-            while (!m_DeferredReleases.empty()) {
-                auto releases = std::move(m_DeferredReleases); m_DeferredReleases.clear();
-                for (auto& release : releases) release();
-            }
+            auto deferred = std::move(m_DeferredReleases); m_DeferredReleases.clear();
+            device.GetResources().DeferUntilDrain([deferred = std::move(deferred)] {
+                for (auto& release : deferred) release();
+            });
             // Detach the main viewport's renderer-owned storage while GLFW
             // removes its hooks. That storage is restored for deferred renderer
             // shutdown after completion, and remains owned by the context.
@@ -694,7 +811,7 @@ namespace Axle {
                     targets[i] = std::exchange(m_D3D12RenderTargets[i], nullptr);
                     allocators[i] = std::exchange(m_D3D12CommandAllocators[i], nullptr);
                 }
-                device.ReleaseNative([context, callbacks, srvHeap, rtvHeap, swap, commands, fence, event, targets, allocators] {
+                auto cleanup = [context, callbacks, srvHeap, rtvHeap, swap, commands, fence, event, targets, allocators] {
                     auto* previous = ImGui::GetCurrentContext(); ImGui::SetCurrentContext(context);
                     if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplDX12_Shutdown();
                     if (commands) commands->Release();
@@ -707,7 +824,9 @@ namespace Axle {
                     if (srvHeap) srvHeap->Release();
                     ImGui::DestroyContext(context);
                     ImGui::SetCurrentContext(previous == context ? nullptr : previous);
-                });
+                };
+                if (m_BackendRetirement) m_BackendRetirement->Cleanup = std::move(cleanup);
+                else device.ReleaseNative(std::move(cleanup));
             }
 #endif
 #if defined(AXLE_HAS_VULKAN)
@@ -716,7 +835,7 @@ namespace Axle {
                 auto vkDevice = static_cast<VkDevice>(device.GetNRICore().GetDeviceNativeObject(native));
                 auto instance = static_cast<VkInstance>(device.GetNRIWrapperVK().GetInstanceVK(*native));
                 auto* window = std::exchange(m_VulkanWindowData, nullptr);
-                device.ReleaseNative([context, vkDevice, instance, window] {
+                auto cleanup = [context, vkDevice, instance, window] {
                     auto* previous = ImGui::GetCurrentContext(); ImGui::SetCurrentContext(context);
                     if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplVulkan_Shutdown();
                     if (window) {
@@ -726,11 +845,15 @@ namespace Axle {
                     }
                     ImGui::DestroyContext(context);
                     ImGui::SetCurrentContext(previous == context ? nullptr : previous);
-                });
+                };
+                if (m_BackendRetirement) m_BackendRetirement->Cleanup = std::move(cleanup);
+                else device.ReleaseNative(std::move(cleanup));
             }
 #endif
             ImGui::SetCurrentContext(nullptr);
             m_ContextCreated = m_Initialized = false; m_Window = nullptr;
+            m_BackendLease.Reset(); m_BackendRetirement.reset();
+            m_DescriptorArena.reset(); m_GuiFrame.reset();
             return;
         }
         FlushDeferredReleases();
@@ -752,6 +875,8 @@ namespace Axle {
         m_ContextCreated = false;
         m_Initialized = false;
         m_Window = nullptr;
+        m_BackendLease.Reset(); m_BackendRetirement.reset();
+        m_DescriptorArena.reset(); m_GuiFrame.reset();
         AXLE_CORE_INFO("ImGui Layer shut down cleanly");
     }
 
@@ -853,6 +978,16 @@ namespace Axle {
 
     void ImGuiLayer::Begin() {
         if (!m_Initialized) return;
+        if (m_BackendLease && RHI::RHIDevice::Get().GetResources().IsInUse(m_BackendLease)) {
+            auto& device = RHI::RHIDevice::Get();
+            if (!device.WaitIdle() || device.GetResources().IsInUse(m_BackendLease))
+                throw std::runtime_error("Native UI storage is retained by an unsubmitted recording");
+        }
+        if (m_GuiFrame) {
+            if (m_GuiFrame->Active) throw std::runtime_error("UI frame is already active");
+            if (!m_GuiFrame->Closing) m_GuiFrame->Active = true;
+            m_GuiFrame->NativeRecorded = false;
+        }
 
         switch (m_BackendType) {
             case ImGuiBackendType::OpenGL:
@@ -884,10 +1019,12 @@ namespace Axle {
     }
 
     void ImGuiLayer::End() {
+        struct Finish { ImGuiLayer* Layer; ~Finish() { Layer->FinishGuiFrame(); } } finish{this};
         if (!m_Initialized || ImGui::GetIO().BackendRendererUserData == nullptr) {
             FlushDeferredReleases();
             return;
         }
+        if (m_GuiFrame && m_GuiFrame->NativeRecorded) return;
 
         UpdateWindowSnapping();
         ImGui::Render();
@@ -1106,27 +1243,106 @@ namespace Axle {
     }
 
     void ImGuiLayer::DeferRelease(std::function<void()> release) {
-        if (release) m_DeferredReleases.push_back(std::move(release));
+        GetDeferredReleaser()(std::move(release));
+    }
+
+    void ImGuiLayer::FinishGuiFrame() noexcept {
+        if (!m_GuiFrame || !m_GuiFrame->Active) return;
+        m_GuiFrame->Active = false;
+        auto uses = std::move(m_GuiFrame->Uses);
+        m_GuiFrame->Uses = {};
+        auto deferred = std::move(m_GuiFrame->Deferred); m_GuiFrame->Deferred.clear();
+        for (auto& release : deferred) m_DeferredReleases.push_back(std::move(release));
+        auto& device = RHI::RHIDevice::Get();
+        try {
+            if (m_BackendType != ImGuiBackendType::OpenGL && !uses.Empty()) {
+                RHI::RHICompletionToken completion;
+                if (device.RetainExternalSubmission(std::move(uses), &completion) && completion)
+                    device.WaitForCompletion(completion);
+            }
+            FlushDeferredReleases();
+        } catch (...) {
+            device.ObserveResult(nri::Result::FAILURE, "QueueSubmit", "GUI completion bookkeeping");
+            device.WaitIdle();
+        }
     }
 
     void ImGuiLayer::FlushDeferredReleases() {
-        if (m_DeferredReleases.empty()) return;
-        // A wait before UI submission would not protect draw lists still being built.
-        // Retire after submission, and only synchronize frames that actually retire resources.
+        if (m_DeferredReleases.empty() || (m_GuiFrame && m_GuiFrame->Active)) return;
         auto& device = RHI::RHIDevice::Get();
-        if (m_BackendType != ImGuiBackendType::OpenGL && device.IsNativeReady() && !device.WaitIdle() && device.GetState() != RHI::RHIDeviceState::Lost) return;
-        auto releases = std::move(m_DeferredReleases);
-        m_DeferredReleases.clear();
-        for (auto& release : releases) release();
+        if (m_BackendType != ImGuiBackendType::OpenGL) {
+            auto releases = std::move(m_DeferredReleases); m_DeferredReleases.clear();
+            device.GetResources().DeferUntilDrain([releases = std::move(releases)] {
+                for (auto& release : releases) release();
+            });
+            if (device.IsNativeReady()) device.WaitIdle();
+        } else {
+            while (!m_DeferredReleases.empty()) {
+                auto releases = std::move(m_DeferredReleases); m_DeferredReleases.clear();
+                for (auto& release : releases) release();
+            }
+        }
     }
 
-    void ImGuiLayer::Render(RHI::RHICommandBuffer* cmdBuffer) {
-        if (!cmdBuffer || !m_Initialized) return;
+    uint32_t ImGuiLayer::GetAllocatedDescriptorCount() const {
+        return m_DescriptorArena ? m_DescriptorArena->Allocated : m_AllocatedDescriptorCount;
+    }
+
+    GuiTextureLease ImGuiLayer::RegisterTexture(const RHI::RHITexture& texture) {
+        GuiTextureLease token;
+        if (!RHI::RHIDevice::Get().CanCreateResources()) return token;
+        if (!m_Initialized || !texture.IsValid() || !m_DescriptorArena || m_DescriptorArena->Closing || !m_GuiFrame) return token;
+        if (RHI::ScopedRHIFault::Invoke("RegisterGuiTexture", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS) return token;
+        if (texture.GetHandle().Epoch != m_DescriptorArena->Lifetime.GetHandle().Epoch) return token;
+        uint64_t id = 0;
+        try { id = RegisterTextureDescriptor(texture.GetNativeSRVHandle()); }
+        catch (const std::exception& error) { AXLE_CORE_WARN("GUI texture registration failed: {0}", error.what()); return token; }
+        if (!id) return token;
+        auto arena = m_DescriptorArena;
+        auto lease = RHI::RHIDevice::Get().GetResources().Publish(RHI::RHIResourceKind::DescriptorSet,
+            "GUI texture registration", {}, [arena, id] { arena->Free(id); }, {texture.AcquireLease(), arena->Lifetime});
+        if (!lease.IsLive()) { arena->Free(id); return token; }
+        auto registration = std::make_shared<GuiTextureRegistration>();
+        registration->ID = id; registration->Generation = std::move(lease); registration->Frame = m_GuiFrame;
+        token.m_Registration = std::move(registration);
+        return token;
+    }
+
+    GuiTextureRegistrar ImGuiLayer::GetTextureRegistrar() const {
+        std::weak_ptr<ImGuiDescriptorCallbackState> owner = m_DescriptorCallbacks;
+        return [owner](const RHI::RHITexture& texture) {
+            auto state = owner.lock();
+            return state && state->Owner ? state->Owner->RegisterTexture(texture) : GuiTextureLease{};
+        };
+    }
+
+    GuiDeferredReleaser ImGuiLayer::GetDeferredReleaser() const {
+        std::weak_ptr<GuiFrameState> frame = m_GuiFrame;
+        auto outside = m_GuiFrame ? m_GuiFrame->RetireOutsideFrame :
+            RHI::RHIDevice::Get().GetResources().GetDeferredReleaser();
+        return [frame, outside](std::function<void()> release) {
+            if (!release) return;
+            if (auto state = frame.lock(); state && state->Active && !state->Closing) state->Deferred.push_back(std::move(release));
+            else outside(std::move(release));
+        };
+    }
+
+    bool ImGuiLayer::Render(RHI::RHICommandBuffer* cmdBuffer) {
+        if (!cmdBuffer || !m_Initialized || !cmdBuffer->IsRecording() || !m_GuiFrame ||
+            !m_GuiFrame->Active || m_GuiFrame->NativeRecorded) return false;
+        if (!ImGui::GetDrawData() || !ImGui::GetDrawData()->Valid) return false;
+        if (m_BackendType != ImGuiBackendType::OpenGL) {
+            if (!cmdBuffer->KeepAlive(m_BackendLease)) return false;
+            if (!RHI::RHIDevice::Get().GetResources().RecordUses(cmdBuffer->GetNative(), m_GuiFrame->Uses)) return false;
+        }
 #if defined(AXLE_HAS_D3D12)
         if (m_BackendType == ImGuiBackendType::Direct3D12) {
             const auto& core = RHI::RHIDevice::Get().GetNRICore();
             auto* nativeCmd = static_cast<ID3D12GraphicsCommandList*>(core.GetCommandBufferNativeObject(cmdBuffer->GetNative()));
+            if (!nativeCmd) return false;
             Render(nativeCmd);
+            m_GuiFrame->NativeRecorded = true;
+            return true;
         }
 #endif
 #if defined(AXLE_HAS_VULKAN)
@@ -1135,9 +1351,12 @@ namespace Axle {
             auto vkCmd = static_cast<VkCommandBuffer>(core.GetCommandBufferNativeObject(cmdBuffer->GetNative()));
             if (vkCmd) {
                 ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), vkCmd);
+                m_GuiFrame->NativeRecorded = true;
+                return true;
             }
         }
 #endif
+        return false;
     }
 
     void ImGuiLayer::Render(ID3D12GraphicsCommandList* cmdList) {
@@ -1177,85 +1396,34 @@ namespace Axle {
         if (m_BackendType == ImGuiBackendType::Vulkan && cpuHandlePtr != 0) {
             auto imageView = reinterpret_cast<VkImageView>(cpuHandlePtr);
             VkDescriptorSet descSet = ImGui_ImplVulkan_AddTexture(imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            return reinterpret_cast<uint64_t>(descSet);
+            const auto id = reinterpret_cast<uint64_t>(descSet);
+            if (id && m_DescriptorArena) m_DescriptorArena->LiveHandles.insert(id);
+            return id;
         }
 #endif
         (void)cpuHandlePtr;
         return 0;
     }
 
-    void ImGuiLayer::UnregisterTextureDescriptor(uint64_t gpuHandlePtr) {
-#if defined(AXLE_HAS_D3D12)
-        if (m_BackendType == ImGuiBackendType::Direct3D12 && m_D3D12SrvHeap && gpuHandlePtr != 0) {
-            D3D12_GPU_DESCRIPTOR_HANDLE gpuStart = m_D3D12SrvHeap->GetGPUDescriptorHandleForHeapStart();
-            if (gpuHandlePtr >= gpuStart.ptr) {
-                uint32_t index = static_cast<uint32_t>((gpuHandlePtr - gpuStart.ptr) / m_D3D12DescriptorSize);
-                m_FreeDescriptorIndices.push_back(index);
-                return;
-            }
-        }
-#endif
-#if defined(AXLE_HAS_VULKAN)
-        if (m_BackendType == ImGuiBackendType::Vulkan && gpuHandlePtr != 0) {
-            auto descSet = reinterpret_cast<VkDescriptorSet>(gpuHandlePtr);
-            auto* context = ImGui::GetCurrentContext();
-            RHI::RHIDevice::Get().ReleaseNative([context, descSet] {
-                auto* previous = ImGui::GetCurrentContext(); ImGui::SetCurrentContext(context);
-                ImGui_ImplVulkan_RemoveTexture(descSet);
-                ImGui::SetCurrentContext(previous);
-            });
-            return;
-        }
-#endif
-        (void)gpuHandlePtr;
+    void ImGuiLayer::UnregisterTextureDescriptor(uint64_t id) {
+        if (!id || !m_DescriptorArena) return;
+        auto arena = m_DescriptorArena;
+        GetDeferredReleaser()([arena, id] { arena->Free(id); });
+        if ((!m_GuiFrame || !m_GuiFrame->Active) && RHI::RHIDevice::Get().IsNativeReady()) RHI::RHIDevice::Get().WaitIdle();
     }
 
-    void ImGuiLayer::AllocateD3D12Descriptor(void* outCpuHandle, void* outGpuHandle) {
+    void ImGuiLayer::AllocateD3D12Descriptor(void* cpu, void* gpu) {
 #if defined(AXLE_HAS_D3D12)
-        if (!outCpuHandle || !outGpuHandle) return;
-        auto* outCpu = static_cast<D3D12_CPU_DESCRIPTOR_HANDLE*>(outCpuHandle);
-        auto* outGpu = static_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(outGpuHandle);
-        *outCpu = {};
-        *outGpu = {};
-        if (!m_D3D12SrvHeap) return;
-
-        uint32_t index = 0;
-        if (!m_FreeDescriptorIndices.empty()) {
-            index = m_FreeDescriptorIndices.back();
-            m_FreeDescriptorIndices.pop_back();
-        } else {
-            if (m_AllocatedDescriptorCount >= D3D12DescriptorCapacity) {
-                AXLE_CORE_ERROR("ImGui texture descriptor heap is full; skipping texture registration.");
-                return;
-            }
-            index = m_AllocatedDescriptorCount++;
-        }
-
-        D3D12_CPU_DESCRIPTOR_HANDLE cpuStart = m_D3D12SrvHeap->GetCPUDescriptorHandleForHeapStart();
-        D3D12_GPU_DESCRIPTOR_HANDLE gpuStart = m_D3D12SrvHeap->GetGPUDescriptorHandleForHeapStart();
-
-        outCpu->ptr = cpuStart.ptr + static_cast<SIZE_T>(index) * m_D3D12DescriptorSize;
-        outGpu->ptr = gpuStart.ptr + static_cast<UINT64>(index) * m_D3D12DescriptorSize;
-#else
-        (void)outCpuHandle;
-        (void)outGpuHandle;
+        if (!cpu || !gpu) return;
+        uint64_t cpuValue = 0, gpuValue = 0;
+        if (m_DescriptorArena) m_DescriptorArena->Allocate(cpuValue, gpuValue);
+        static_cast<D3D12_CPU_DESCRIPTOR_HANDLE*>(cpu)->ptr = cpuValue;
+        static_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(gpu)->ptr = gpuValue;
 #endif
     }
-
-    void ImGuiLayer::FreeD3D12Descriptor(void* cpuHandle, void* gpuHandle) {
+    void ImGuiLayer::FreeD3D12Descriptor(void* cpu, void* gpu) {
 #if defined(AXLE_HAS_D3D12)
-        (void)gpuHandle;
-        if (!m_D3D12SrvHeap || !cpuHandle) return;
-
-        auto* cpu = static_cast<D3D12_CPU_DESCRIPTOR_HANDLE*>(cpuHandle);
-        D3D12_CPU_DESCRIPTOR_HANDLE cpuStart = m_D3D12SrvHeap->GetCPUDescriptorHandleForHeapStart();
-        if (cpu->ptr < cpuStart.ptr) return;
-
-        uint32_t index = static_cast<uint32_t>((cpu->ptr - cpuStart.ptr) / m_D3D12DescriptorSize);
-        m_FreeDescriptorIndices.push_back(index);
-#else
-        (void)cpuHandle;
-        (void)gpuHandle;
+        if (gpu && m_DescriptorArena) m_DescriptorArena->Free(static_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(gpu)->ptr);
 #endif
     }
 

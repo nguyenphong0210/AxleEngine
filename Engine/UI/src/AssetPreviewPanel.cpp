@@ -251,8 +251,8 @@ namespace Axle {
 
         if (isRHI) {
             auto it = m_IconCache.find(iconFilename);
-            if (it != m_IconCache.end() && it->second.second != 0) {
-                return it->second.second;
+            if (it != m_IconCache.end() && it->second.second.IsValid()) {
+                return it->second.second.GetID();
             }
 
             std::filesystem::path iconPath = FindIconPath(iconFilename);
@@ -310,9 +310,10 @@ namespace Axle {
 
                 uint64_t nativeHandle = rhiTex->GetNativeSRVHandle();
                 if (nativeHandle != 0 && m_ImGuiLayer) {
-                    uint64_t gpuHandle = m_ImGuiLayer->RegisterTextureDescriptor(nativeHandle);
+                    auto token = m_TextureRegistrar ? m_TextureRegistrar(*rhiTex) : GuiTextureLease{};
+                    uint64_t gpuHandle = token.GetID();
                     if (gpuHandle != 0) {
-                        m_IconCache[iconFilename] = {rhiTex, gpuHandle};
+                        m_IconCache[iconFilename] = {rhiTex, std::move(token)};
                         stbi_image_free(pixels);
                         return gpuHandle;
                     }
@@ -364,15 +365,12 @@ namespace Axle {
     }
 
     void AssetPreviewPanel::FreeIconTextures() {
-        if (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL) {
-            for (auto &[name, pair] : m_IconCache) {
-                if (pair.second != 0) {
-                    m_ImGuiLayer->UnregisterTextureDescriptor(pair.second);
-                }
-            }
-        }
         m_IconCache.clear();
-        m_GLIconCache.clear();
+        if (!m_GLIconCache.empty()) {
+            auto release = [textures = std::move(m_GLIconCache)] {};
+            m_GLIconCache.clear();
+            if (m_DeferredRelease) m_DeferredRelease(std::move(release)); else release();
+        }
         m_IconRegions.clear();
     }
 
@@ -390,6 +388,8 @@ namespace Axle {
 
     void AssetPreviewPanel::InitRHI(ImGuiLayer* imguiLayer) {
         m_ImGuiLayer = imguiLayer;
+        m_TextureRegistrar = imguiLayer ? imguiLayer->GetTextureRegistrar() : GuiTextureRegistrar{};
+        m_DeferredRelease = imguiLayer ? imguiLayer->GetDeferredReleaser() : GuiDeferredReleaser{};
         if (!m_ImGuiLayer) return;
 
         if (RHI::RHIDevice::Get().IsNativeReady()) {

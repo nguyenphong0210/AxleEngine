@@ -53,8 +53,8 @@ namespace Axle {
 
         void Shutdown();
 
-        bool IsValid() const { return m_ColorTexture != nullptr && m_ImTextureID != 0; }
-        uint64_t GetImTextureID() const { return m_ImTextureID; }
+        bool IsValid() const { return m_GuiTexture.IsValid(); }
+        uint64_t GetImTextureID() const { return m_GuiTexture.GetID(); }
 
         uint32_t GetWidth() const { return m_Desc.Width; }
         uint32_t GetHeight() const { return m_Desc.Height; }
@@ -74,9 +74,11 @@ namespace Axle {
     private:
         bool RegisterWithImGui();
         void UnregisterFromImGui();
+        bool Build(const RHIViewportDesc& desc);
+        bool Recreate(const RHIViewportDesc& desc);
 
     private:
-        ImGuiLayer* m_ImGuiLayer = nullptr;
+        GuiTextureRegistrar m_Registrar;
         RHIViewportDesc m_Desc;
 
         std::unique_ptr<RHI::RHITexture> m_OwnedColorTexture;
@@ -85,7 +87,7 @@ namespace Axle {
         RHI::RHITexture* m_ColorTexture = nullptr;
         bool m_OwnsColorTexture = true;
 
-        uint64_t m_ImTextureID = 0;
+        GuiTextureLease m_GuiTexture;
     };
 
 }

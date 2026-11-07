@@ -111,6 +111,7 @@ namespace Axle::RHI {
 
     bool RHICommandBuffer::Begin(nri::DescriptorPool* descriptorPool) {
         if (!IsValid() || m_IsRecording || !RHIDevice::Get().CanSubmit()) return false;
+        if (!RHIDevice::Get().GetResources().BeginRecording(m_CommandBuffer)) return false;
         m_IsExecutable = false;
 
         auto& rhiDevice = RHIDevice::Get();
@@ -120,30 +121,38 @@ namespace Axle::RHI {
         m_IsRecording = (res == nri::Result::SUCCESS);
         m_NeedsRecreation = true;
         if (!m_IsRecording) {
+            rhiDevice.GetResources().EndRecording(m_CommandBuffer, false);
             AXLE_CORE_ERROR("RHICommandBuffer::Begin failed with code {0}!", static_cast<uint32_t>(res));
         }
-        return m_IsRecording;
+        return m_IsRecording && (!descriptorPool || RetainNative(descriptorPool));
     }
 
     bool RHICommandBuffer::End() {
-        if (!IsValid() || !m_IsRecording) return false;
+        if (!CanRecord()) return false;
 
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
 
         nri::Result res = ScopedRHIFault::Invoke("EndCommandBuffer", [&] { return core.EndCommandBuffer(*m_CommandBuffer); });
         m_IsRecording = false;
-        m_IsExecutable = res == nri::Result::SUCCESS;
+        m_IsExecutable = rhiDevice.GetResources().EndRecording(m_CommandBuffer, res == nri::Result::SUCCESS);
         m_NeedsRecreation = !m_IsExecutable;
         if (res != nri::Result::SUCCESS) {
             AXLE_CORE_ERROR("RHICommandBuffer::End failed with code {0}!", static_cast<uint32_t>(res));
             return false;
         }
-        return true;
+        return m_IsExecutable;
+    }
+
+    bool RHICommandBuffer::KeepAlive(const RHIResourceLease& resource) {
+        return CanRecord() && RHIDevice::Get().GetResources().RecordUse(m_CommandBuffer, resource);
+    }
+    bool RHICommandBuffer::RetainNative(const void* native) {
+        return CanRecord() && RHIDevice::Get().GetResources().RecordNativeUse(m_CommandBuffer, native);
     }
 
     void RHICommandBuffer::PipelineBarrier(const RHIBarrierGroup& barrierGroup) {
-        if (!IsValid() || !m_IsRecording || barrierGroup.IsEmpty()) return;
+        if (!CanRecord() || barrierGroup.IsEmpty()) return;
 
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
@@ -160,11 +169,13 @@ namespace Axle::RHI {
 
         nriBuffers.reserve(barrierGroup.GetBufferCount());
         for (const auto& b : barrierGroup.GetBuffers()) {
+            if (!RetainNative(b.Buffer)) return;
             nriBuffers.push_back(b.ToNRIDesc());
         }
 
         nriTextures.reserve(barrierGroup.GetTextureCount());
         for (const auto& t : barrierGroup.GetTextures()) {
+            if (!RetainNative(t.Texture)) return;
             nriTextures.push_back(t.ToNRIDesc());
         }
 
@@ -199,14 +210,14 @@ namespace Axle::RHI {
     void RHICommandBuffer::TransitionBuffer(nri::Buffer* buffer, RHIAccess beforeAccess, RHIAccess afterAccess,
                                             RHIPipelineStage beforeStage, RHIPipelineStage afterStage)
     {
-        if (!buffer || !IsValid() || !m_IsRecording) return;
+        if (!buffer || !CanRecord()) return;
         RHIBarrierGroup group;
         group.AddBuffer(buffer, beforeAccess, afterAccess, beforeStage, afterStage);
         PipelineBarrier(group);
     }
 
     bool RHICommandBuffer::TransitionBuffer(RHIResourceStateTracker& tracker, nri::Buffer* buffer, RHIAccess targetAccess, RHIPipelineStage targetStage) {
-        if (!buffer || !IsValid() || !m_IsRecording) return false;
+        if (!buffer || !CanRecord()) return false;
         RHIBarrierGroup group;
         if (tracker.TransitionBuffer(buffer, targetAccess, targetStage, group)) {
             PipelineBarrier(group);
@@ -216,30 +227,34 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::CopyStreamedData(RHIStreamer& streamer, uint64_t copyBatch) {
-        if (!IsValid() || !m_IsRecording || copyBatch == 0) return;
+        if (!CanRecord() || copyBatch == 0) return;
         streamer.CmdCopyStreamedData(*m_CommandBuffer, copyBatch);
     }
 
     void RHICommandBuffer::SetPipeline(nri::Pipeline* pipeline) {
-        if (!IsValid() || !m_IsRecording || !pipeline) return;
+        if (!CanRecord() || !pipeline) return;
+        if (!RetainNative(pipeline)) return;
         auto& rhiDevice = RHIDevice::Get();
         rhiDevice.GetNRICore().CmdSetPipeline(*m_CommandBuffer, *pipeline);
     }
 
     void RHICommandBuffer::SetPipelineLayout(nri::BindPoint bindPoint, const RHIPipelineLayout& layout) {
-        if (!IsValid() || !m_IsRecording || !layout.IsValid()) return;
+        if (!CanRecord() || !layout.IsValid()) return;
+        if (!KeepAlive(layout.AcquireLease())) return;
         auto& rhiDevice = RHIDevice::Get();
         rhiDevice.GetNRICore().CmdSetPipelineLayout(*m_CommandBuffer, bindPoint, *layout.GetNative());
     }
 
     void RHICommandBuffer::SetDescriptorPool(nri::DescriptorPool* descriptorPool) {
-        if (!IsValid() || !m_IsRecording || !descriptorPool) return;
+        if (!CanRecord() || !descriptorPool) return;
+        if (!RetainNative(descriptorPool)) return;
         auto& rhiDevice = RHIDevice::Get();
         rhiDevice.GetNRICore().CmdSetDescriptorPool(*m_CommandBuffer, *descriptorPool);
     }
 
     void RHICommandBuffer::SetDescriptorSet(nri::BindPoint bindPoint, uint32_t setIndex, nri::DescriptorSet* descriptorSet) {
-        if (!IsValid() || !m_IsRecording || !descriptorSet) return;
+        if (!CanRecord() || !descriptorSet) return;
+        if (!RetainNative(descriptorSet)) return;
         nri::SetDescriptorSetDesc desc = {};
         desc.bindPoint = bindPoint;
         desc.setIndex = setIndex;
@@ -248,7 +263,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetRootConstants(uint32_t rootConstantIndex, const void* data, uint32_t size, nri::BindPoint bindPoint) {
-        if (!IsValid() || !m_IsRecording || !data || size == 0) return;
+        if (!CanRecord() || !data || size == 0) return;
         nri::SetRootConstantsDesc desc = {};
         desc.rootConstantIndex = rootConstantIndex;
         desc.data = data;
@@ -259,7 +274,8 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetRootDescriptor(uint32_t rootDescriptorIndex, nri::Descriptor* descriptor, uint32_t offset, nri::BindPoint bindPoint) {
-        if (!IsValid() || !m_IsRecording || !descriptor) return;
+        if (!CanRecord() || !descriptor) return;
+        if (!RetainNative(descriptor)) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (!core.CmdSetRootDescriptor) return;
@@ -273,12 +289,14 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetVertexBuffers(uint32_t baseSlot, const nri::VertexBufferDesc* vertexBufferDescs, uint32_t count) {
-        if (!IsValid() || !m_IsRecording || !vertexBufferDescs || count == 0) return;
+        if (!CanRecord() || !vertexBufferDescs || count == 0) return;
+        for (uint32_t i = 0; i < count; ++i) if (!RetainNative(vertexBufferDescs[i].buffer)) return;
         RHIDevice::Get().GetNRICore().CmdSetVertexBuffers(*m_CommandBuffer, baseSlot, vertexBufferDescs, count);
     }
 
     void RHICommandBuffer::SetVertexBuffer(uint32_t slot, const nri::Buffer* buffer, uint64_t offset, uint32_t stride) {
-        if (!IsValid() || !m_IsRecording || !buffer) return;
+        if (!CanRecord() || !buffer) return;
+        if (!RetainNative(buffer)) return;
         nri::VertexBufferDesc desc = {};
         desc.buffer = buffer;
         desc.offset = offset;
@@ -291,7 +309,8 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetIndexBuffer(const nri::Buffer* buffer, uint64_t offset, nri::IndexType indexType) {
-        if (!IsValid() || !m_IsRecording || !buffer) return;
+        if (!CanRecord() || !buffer) return;
+        if (!RetainNative(buffer)) return;
         RHIDevice::Get().GetNRICore().CmdSetIndexBuffer(*m_CommandBuffer, *buffer, offset, indexType);
     }
 
@@ -300,7 +319,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetViewports(const nri::Viewport* viewports, uint32_t count) {
-        if (!IsValid() || !m_IsRecording || !viewports || count == 0) return;
+        if (!CanRecord() || !viewports || count == 0) return;
         RHIDevice::Get().GetNRICore().CmdSetViewports(*m_CommandBuffer, viewports, count);
     }
 
@@ -309,7 +328,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetScissors(const nri::Rect* rects, uint32_t count) {
-        if (!IsValid() || !m_IsRecording || !rects || count == 0) return;
+        if (!CanRecord() || !rects || count == 0) return;
         RHIDevice::Get().GetNRICore().CmdSetScissors(*m_CommandBuffer, rects, count);
     }
 
@@ -318,27 +337,34 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::BeginRendering(const nri::RenderingDesc& renderingDesc) {
-        if (!IsValid() || !m_IsRecording) return;
+        if (!CanRecord()) return;
+        auto retainAttachment = [&](const nri::AttachmentDesc& attachment) {
+            return RetainNative(attachment.descriptor) && RetainNative(attachment.resolveDst);
+        };
+        if (renderingDesc.colorNum && !renderingDesc.colors) return;
+        for (uint32_t i = 0; i < renderingDesc.colorNum; ++i) if (!retainAttachment(renderingDesc.colors[i])) return;
+        if (!retainAttachment(renderingDesc.depth) || !retainAttachment(renderingDesc.stencil) || !RetainNative(renderingDesc.shadingRate)) return;
         RHIDevice::Get().GetNRICore().CmdBeginRendering(*m_CommandBuffer, renderingDesc);
     }
 
     void RHICommandBuffer::EndRendering() {
-        if (!IsValid() || !m_IsRecording) return;
+        if (!CanRecord()) return;
         RHIDevice::Get().GetNRICore().CmdEndRendering(*m_CommandBuffer);
     }
 
     void RHICommandBuffer::ClearAttachments(const nri::ClearAttachmentDesc* clearDescs, uint32_t clearDescNum, const nri::Rect* rects, uint32_t rectNum) {
-        if (!IsValid() || !m_IsRecording || !clearDescs || clearDescNum == 0) return;
+        if (!CanRecord() || !clearDescs || clearDescNum == 0) return;
         RHIDevice::Get().GetNRICore().CmdClearAttachments(*m_CommandBuffer, clearDescs, clearDescNum, rects, rectNum);
     }
 
     void RHICommandBuffer::ResolveTexture(nri::Texture* dstTexture, const nri::Texture* srcTexture, nri::ResolveOp resolveOp) {
-        if (!IsValid() || !m_IsRecording || !dstTexture || !srcTexture) return;
+        if (!CanRecord() || !dstTexture || !srcTexture) return;
+        if (!RetainNative(dstTexture) || !RetainNative(srcTexture)) return;
         RHIDevice::Get().GetNRICore().CmdResolveTexture(*m_CommandBuffer, *dstTexture, nullptr, *srcTexture, nullptr, resolveOp);
     }
 
     void RHICommandBuffer::Draw(const nri::DrawDesc& drawDesc) {
-        if (!IsValid() || !m_IsRecording) return;
+        if (!CanRecord()) return;
         RHIDevice::Get().GetNRICore().CmdDraw(*m_CommandBuffer, drawDesc);
     }
 
@@ -352,7 +378,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::DrawIndexed(const nri::DrawIndexedDesc& drawIndexedDesc) {
-        if (!IsValid() || !m_IsRecording) return;
+        if (!CanRecord()) return;
         RHIDevice::Get().GetNRICore().CmdDrawIndexed(*m_CommandBuffer, drawIndexedDesc);
     }
 
@@ -367,7 +393,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::Dispatch(const nri::DispatchDesc& dispatchDesc) {
-        if (!IsValid() || !m_IsRecording) return;
+        if (!CanRecord()) return;
         RHIDevice::Get().GetNRICore().CmdDispatch(*m_CommandBuffer, dispatchDesc);
     }
 
@@ -380,7 +406,8 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::DrawIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const nri::Buffer* countBuffer, uint64_t countBufferOffset) {
-        if (!IsValid() || !m_IsRecording || drawNum == 0) return;
+        if (!CanRecord() || drawNum == 0) return;
+        if (!RetainNative(&buffer) || !RetainNative(countBuffer)) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (core.CmdDrawIndirect) {
@@ -399,7 +426,8 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::DrawIndexedIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const nri::Buffer* countBuffer, uint64_t countBufferOffset) {
-        if (!IsValid() || !m_IsRecording || drawNum == 0) return;
+        if (!CanRecord() || drawNum == 0) return;
+        if (!RetainNative(&buffer) || !RetainNative(countBuffer)) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (core.CmdDrawIndexedIndirect) {
@@ -418,7 +446,8 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::DispatchIndirect(const nri::Buffer& buffer, uint64_t offset) {
-        if (!IsValid() || !m_IsRecording) return;
+        if (!CanRecord()) return;
+        if (!RetainNative(&buffer)) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (core.CmdDispatchIndirect) {
@@ -437,7 +466,7 @@ namespace Axle::RHI {
     }
 
     bool RHICommandBuffer::Submit(nri::Queue* queue, nri::Fence* waitFence, uint64_t waitValue, nri::Fence* signalFence, uint64_t signalValue) {
-        if (!IsValid() || m_IsRecording || !m_IsExecutable) return false;
+        if (!IsExecutable() || m_IsRecording) return false;
         const nri::CommandBuffer* commands = m_CommandBuffer;
         return SubmitBatch(&commands, 1, queue, waitFence, waitValue, signalFence, signalValue);
     }
@@ -502,8 +531,7 @@ namespace Axle::RHI {
             submitDesc.signalFenceNum = 1;
         }
 
-        nri::Result res = ScopedRHIFault::Invoke("QueueSubmit", [&] { return core.QueueSubmit(*queue, submitDesc); });
-        return (res == nri::Result::SUCCESS);
+        return rhiDevice.Submit(submitDesc, queue);
     }
 
     bool RHICommandBuffer::Reset() {
@@ -520,6 +548,8 @@ namespace Axle::RHI {
         if (m_OwnsAllocator && core.ResetCommandAllocator) {
             core.ResetCommandAllocator(*m_CommandAllocator);
         }
+        rhiDevice.GetResources().AbandonRecording(m_CommandBuffer);
+        rhiDevice.GetResources().CollectAfterDrain();
         m_IsRecording = false;
         m_IsExecutable = false;
         return true;

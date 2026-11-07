@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/GuiTextureLease.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
@@ -32,7 +33,7 @@ namespace Axle {
         SceneHierarchyPanel() = default;
         SceneHierarchyPanel(Scene* scene, PhysicsScene* physicsScene = nullptr);
         ~SceneHierarchyPanel();
-        void SetImGuiLayer(ImGuiLayer* layer) { m_ImGuiLayer = layer; }
+        void SetImGuiLayer(ImGuiLayer* layer);
 
         void SetContext(Scene* scene, PhysicsScene* physicsScene = nullptr);
         void SetMeshes(
@@ -109,6 +110,9 @@ namespace Axle {
         void ClearTexturePreview();
 
         ImGuiLayer* m_ImGuiLayer = nullptr;
+        GuiTextureRegistrar m_TextureRegistrar;
+        GuiDeferredReleaser m_DeferredRelease;
+        GuiTextureLease m_TexturePreviewLease;
         std::filesystem::path m_LoadedTexturePath;
         uint32_t m_LoadedTextureWidth = 0;
         uint32_t m_LoadedTextureHeight = 0;

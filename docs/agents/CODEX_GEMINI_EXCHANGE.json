@@ -26,15 +26,16 @@
       "P41-11"
     ],
     "current_phase": "OPT-04",
-    "current_package": "P41-06",
+    "current_package": "P41-07",
     "completed_packages": [
       "P41-01",
       "P41-02",
       "P41-03",
       "P41-04",
-      "P41-05"
+      "P41-05",
+      "P41-06"
     ],
-    "implementation_status": "P41-01..05 implemented and self-verified Debug/Release; final consolidated review pending",
+    "implementation_status": "P41-01..06 implemented and self-verified Debug/Release; final consolidated review pending",
     "independent_review_status": "pending_single_final_separate_context_review",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
@@ -89,7 +90,7 @@
       "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
     "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Implement/verify P41-06 recorded/submitted resource lifetime, continue P41-07..11, then one consolidated review.",
+    "next_action": "Implement/verify P41-07 submission-aware resource states/ranges; continue P41-08..11, then one consolidated review. API validation prerequisite remains open.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -1294,6 +1295,17 @@
       "base_commit": "59f12b6",
       "timestamp_utc": "2026-11-07T04:58:45.601037+00:00",
       "body": "P41-05 device epoch/generation ownership is implemented and self-verified on top of 59f12b6. Both Debug/Release final builds passed; all 29 per-configuration runner cases and focused CTest 5/5 passed. Fresh native tests fail on any NRI validation error including teardown. Current final logs contain no NRI errors. Evidence, raw borrowed-memory lifetime contract and migration-adapter limits are in docs/reviews/OPT_04_CODEX_EXECUTION.md. P41-06 is next: Engine/RHI resource/command/submission lifetime, ImGui shared registration/frame leases, Inspector/thumbnail/preview/viewport callers and focused lifetime regressions. Root is sole source writer. No review agent has been opened for this run; one consolidated separate-context review follows P41-11. API graphics validation remains NOT RUN and dependent acceptance is open."
+    },
+    {
+      "id": "CG-20261107T054730898143Z-CODEX-a68f3a",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T045845601037Z-CODEX-1b5b91",
+      "base_commit": "02236e6",
+      "timestamp_utc": "2026-11-07T05:47:30.898143+00:00",
+      "body": "P41-06 recording/submission retirement is implemented and self-verified on top of 02236e6. Final Debug/Release builds passed; 34 runner cases per configuration and focused CTest 6/6 passed, with zero NRI validation errors through teardown. Physical original-pixel readback survives replacement before submit, and D3D12 native UI remains drawable after its original UI owner dies before submit. Vulkan windowed GUI queued-image ownership also passes; shared Vulkan RHI UI target/pipeline composition remains P41-09. Inspector/thumbnail/icon/viewport teardown uses independent tokens/handles. Full evidence/limits: docs/reviews/OPT_04_CODEX_EXECUTION.md. Next P41-07 files: RHI resource/state/command/submission/upload boundaries, scene/post-process/picking/native-UI usage declarations and focused state/range regressions. Root remains sole source writer; one final separate-context review after P41-11. Graphics API validation is unavailable on this host and dependent acceptance is not waived."
     }
   ],
   "deferred_tasks": [

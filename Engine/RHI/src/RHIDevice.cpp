@@ -479,6 +479,8 @@ namespace Axle::RHI {
         m_IdleValue = signal.value;
         if (!WaitForFence(m_IdleFence, m_IdleValue, timeoutMilliseconds)) return false;
         m_UnresolvedWork = false;
+        m_PendingSubmissions.clear();
+        m_AmbiguousSubmissions.clear();
         while (!m_DeferredCleanup.empty()) {
             auto releases = std::move(m_DeferredCleanup);
             m_DeferredCleanup.clear();
@@ -486,6 +488,64 @@ namespace Axle::RHI {
         }
         m_Resources.CollectAfterDrain();
         return true;
+    }
+
+    bool RHIDevice::Submit(const nri::QueueSubmitDesc& desc, nri::Queue* queue, RHICompletionToken* completion, RHIRecordingLease externalUses) {
+        if (completion) *completion = {};
+        if (!CanSubmit() || (queue && queue != m_GraphicsQueue) || m_SubmittedValue == UINT64_MAX ||
+            (desc.commandBufferNum && !desc.commandBuffers) || (desc.signalFenceNum && !desc.signalFences) ||
+            (desc.waitFenceNum && !desc.waitFences) || (!externalUses.Empty() && !externalUses.IsLive())) return false;
+        if (!queue) queue = m_GraphicsQueue;
+        std::vector<const void*> commands;
+        for (uint32_t i = 0; i < desc.commandBufferNum; ++i) commands.push_back(desc.commandBuffers[i]);
+        RHIRecordingLease uses = std::move(externalUses);
+        if (!m_Resources.SnapshotSubmission(commands.data(), desc.commandBufferNum, uses)) return false;
+        if (!m_SubmissionFence) {
+            const auto result = ScopedRHIFault::Invoke("CreateSubmissionFence", [&] { return m_NRI.Core.CreateFence(*m_Device, 0, m_SubmissionFence); });
+            if (result != nri::Result::SUCCESS || !m_SubmissionFence) return false;
+        }
+        std::vector<nri::FenceSubmitDesc> signals;
+        if (desc.signalFenceNum) signals.assign(desc.signalFences, desc.signalFences + desc.signalFenceNum);
+        nri::FenceSubmitDesc signal{};
+        signal.fence = m_SubmissionFence; signal.value = m_SubmittedValue + 1; signal.stages = nri::StageBits::ALL;
+        signals.push_back(signal);
+        m_PendingSubmissions.reserve(m_PendingSubmissions.size() + 1);
+        m_AmbiguousSubmissions.reserve(m_AmbiguousSubmissions.size() + 1);
+        auto submit = desc; submit.signalFences = signals.data(); submit.signalFenceNum = static_cast<uint32_t>(signals.size());
+        const auto result = ScopedRHIFault::Invoke("QueueSubmit", [&] { return m_NRI.Core.QueueSubmit(*queue, submit); });
+        if (result != nri::Result::SUCCESS) {
+            m_AmbiguousSubmissions.push_back(std::move(uses));
+            return false;
+        }
+        m_SubmittedValue = signal.value;
+        RHICompletionToken token{GetEpoch(), signal.value};
+        m_PendingSubmissions.push_back({token, std::move(uses)});
+        m_Resources.MarkSubmitted(commands.data(), desc.commandBufferNum);
+        if (completion) *completion = token;
+        return true;
+    }
+
+    bool RHIDevice::RetainExternalSubmission(RHIRecordingLease uses, RHICompletionToken* completion) {
+        if (completion) *completion = {};
+        if (uses.Empty()) return true;
+        // Native UI submission may already have happened even when its result or
+        // subsequent present fails. Keep the pins on every failure path.
+        if (!CanSubmit()) { m_AmbiguousSubmissions.push_back(std::move(uses)); return false; }
+        auto retained = uses;
+        nri::QueueSubmitDesc submit{};
+        if (!Submit(submit, nullptr, completion, std::move(uses))) {
+            m_AmbiguousSubmissions.push_back(std::move(retained));
+            ObserveResult(nri::Result::FAILURE, "QueueSubmit", "external completion tracking");
+            return false;
+        }
+        return true;
+    }
+
+    bool RHIDevice::WaitForCompletion(RHICompletionToken token, uint32_t timeoutMilliseconds) {
+        if (!token || token.Epoch != GetEpoch() || token.Value > m_SubmittedValue || !m_SubmissionFence) return false;
+        if (!WaitForFence(m_SubmissionFence, token.Value, timeoutMilliseconds)) return false;
+        // Keep conservative whole-queue reuse until P41-08 accounts for every arena.
+        return WaitIdle(timeoutMilliseconds);
     }
 
     void RHIDevice::ReleaseNative(std::function<void()> release) {
@@ -507,6 +567,8 @@ namespace Axle::RHI {
             }
         }
         m_UnresolvedWork = false;
+        m_PendingSubmissions.clear();
+        m_AmbiguousSubmissions.clear();
         while (!m_DeferredCleanup.empty()) {
             auto releases = std::move(m_DeferredCleanup); m_DeferredCleanup.clear();
             for (auto& release : releases) release();
@@ -521,6 +583,8 @@ namespace Axle::RHI {
         if (!WaitIdle() && m_State != RHIDeviceState::Lost) return false;
 
         if (m_IdleFence) { m_NRI.Core.DestroyFence(m_IdleFence); m_IdleFence = nullptr; }
+        if (m_SubmissionFence) { m_NRI.Core.DestroyFence(m_SubmissionFence); m_SubmissionFence = nullptr; }
+        m_SubmittedValue = 0;
         m_IdleValue = 0;
         m_Resources.CloseAfterDrain();
         m_Device = nullptr;

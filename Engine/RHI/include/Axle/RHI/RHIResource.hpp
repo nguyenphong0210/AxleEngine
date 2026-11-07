@@ -17,10 +17,11 @@ namespace Axle::RHI {
     };
 
     enum class RHIResourceKind : uint8_t {
-        Memory, Surface, Streamer, Buffer, Texture, Sampler, Layout, Pool, DescriptorSet, Pipeline, Commands
+        Memory, Surface, Streamer, Buffer, Texture, Sampler, Layout, Pool, DescriptorSet, Pipeline, UIBackend, Commands
     };
     struct RHIResourceGeneration;
     struct RHIResourceOwner;
+    struct RHIRecordingState;
 
     // A strong reference to one complete native generation, independent of its wrapper.
     class RHIResourceLease {
@@ -32,8 +33,21 @@ namespace Axle::RHI {
         void Reset() { m_Generation.reset(); }
     private:
         friend class RHIResourceService;
+        friend struct RHIRecordingState;
         explicit RHIResourceLease(std::shared_ptr<RHIResourceGeneration> generation) : m_Generation(std::move(generation)) {}
         std::shared_ptr<RHIResourceGeneration> m_Generation;
+    };
+
+    // Pins an immutable snapshot of transitive native dependencies. Copies share
+    // one pin set, so it can move from a CPU draw list to a submitted batch.
+    class RHIRecordingLease {
+    public:
+        bool IsLive() const;
+        bool Empty() const;
+        void Reset() { m_State.reset(); }
+    private:
+        friend class RHIResourceService;
+        std::shared_ptr<RHIRecordingState> m_State;
     };
 
     // Owner-thread publication/lookup; releasing a lease from another thread only
@@ -57,6 +71,23 @@ namespace Axle::RHI {
         void AddAlias(const RHIResourceLease& lease, const void* alias);
         void BeforeDeviceClose(std::function<void()> closeOwner);
         void PrepareDeviceClose();
+        void DeferUntilDrain(std::function<void()> release);
+        std::function<void(std::function<void()>)> GetDeferredReleaser() const;
+        RHIRecordingLease Pin(const RHIResourceLease& resource) const;
+        bool AppendPin(RHIRecordingLease& pins, const RHIResourceLease& resource) const;
+        bool IsInUse(const RHIResourceLease& resource) const;
+        bool BeginRecording(const void* commands);
+        bool EndRecording(const void* commands, bool executable);
+        bool IsRecording(const void* commands) const;
+        bool IsExecutable(const void* commands) const;
+        bool RecordUse(const void* commands, const RHIResourceLease& resource);
+        bool RecordUses(const void* commands, const RHIRecordingLease& resources);
+        // Raw migration bindings may borrow external native objects; their owner
+        // must retain them through completion. Managed aliases acquire a pin.
+        bool RecordNativeUse(const void* commands, const void* alias);
+        bool SnapshotSubmission(const void* const* commands, uint32_t count, RHIRecordingLease& pins) const;
+        void MarkSubmitted(const void* const* commands, uint32_t count);
+        void AbandonRecording(const void* commands);
         // Call only after checked queue completion (or confirmed device loss).
         void CollectAfterDrain();
         void CloseAfterDrain();

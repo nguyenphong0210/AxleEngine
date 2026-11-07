@@ -221,7 +221,8 @@ namespace Axle::RHI {
     }
 
     void* RHIBuffer::Map(uint64_t offset, uint64_t size) {
-        if (!RHIDevice::Get().CanCreateResources() || !IsValid() || m_Desc.MemoryLocation == RHIMemoryLocation::Device || offset >= m_Desc.Size) return nullptr;
+        if (!RHIDevice::Get().CanCreateResources() || !IsValid() || RHIDevice::Get().GetResources().IsInUse(m_Lease) ||
+            m_Desc.MemoryLocation == RHIMemoryLocation::Device || offset >= m_Desc.Size) return nullptr;
         const uint64_t count = size ? size : m_Desc.Size - offset;
         if (count > m_Desc.Size - offset) return nullptr;
         if (m_MappedData) {
@@ -251,6 +252,12 @@ namespace Axle::RHI {
         if (!IsValid() || !data || !size || offset > m_Desc.Size || size > m_Desc.Size - offset) return false;
         auto& device = RHIDevice::Get();
         if (!device.CanCreateResources()) return false;
+        if (device.GetResources().IsInUse(m_Lease)) {
+            // A full update publishes another generation; recorded work keeps
+            // its original immutable bytes. Partial updates require an idle arena.
+            if (offset || size != m_Desc.Size) return false;
+            return Init(m_Desc, data);
+        }
         if (m_Desc.MemoryLocation == RHIMemoryLocation::HostUpload || m_Desc.MemoryLocation == RHIMemoryLocation::DeviceUpload) {
             const bool alreadyMapped = m_MappedData != nullptr;
             void* ptr = Map(offset, size);

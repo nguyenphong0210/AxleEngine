@@ -18,7 +18,7 @@ explicitly if the running client/session has not loaded it.
 - **OPT-00**: Gemini delivered clean retirement; the separate independent manual/full-product acceptance gap remains open.
 - **OPT-01**: Accepted baseline and verified corrections; see the roadmap evidence.
 - **OPT-02/03**: Accepted after Codex review and verified corrections for EJ-01..EJ-14 and AF-02..AF-04; [acceptance report](../reviews/OPT_02_03_CODEX_REVIEW.md).
-- **Next phase in the queue**: OPT-04 (NRI device and GPU lifetime foundation). The current review assignment is complete; no later implementation was started.
+- **Current assignment**: Gemini OPT-04, P41-01..P41-11 (NRI device and GPU lifetime foundation); [scoped handoff](handoffs/OPT_04_GEMINI.md). Implementation has not started in this handoff session; stop after OPT-04 for review.
 
 Read **[docs/ROADMAP.md](../ROADMAP.md)** for OPT-00..11 order/progress and the
 [active design index](../design/README.md) for current phase contracts.

@@ -1,7 +1,7 @@
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-07**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-02 and OPT-03 accepted after verified Codex corrections; later phases remain outside the current assignment**.
+Status: **OPT-04 released to Gemini; OPT-02/03 accepted after verified Codex corrections**.
 
 ## Start here
 
@@ -10,14 +10,19 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Current checkpoint: OPT-02 and OPT-03 accepted after review and repairs.**
+**Current assignment: Gemini OPT-04, P41-01..P41-11.** The user assigned this
+phase on 2026-11-07; [scoped handoff](agents/handoffs/OPT_04_GEMINI.md). Work through
+its package gates and stop after OPT-04 for review. A Gemini session must read the
+handoff to begin; no automatic background agent has been started.
+
+**Accepted prerequisite: OPT-02 and OPT-03, after review and repairs.**
 Codex independently reviewed Gemini's deliveries at `0eeb734`, found and corrected
 12 defect groups, and verified Debug/Release builds, 42/42 CTest per configuration,
 full integration, the 16/0/3 jobs harness and both native products. The
 [review and acceptance report](reviews/OPT_02_03_CODEX_REVIEW.md) records corrections
 `e351399` and `3a67116`, exact commands, evidence and limits. No separate independent
-review of Codex's own fixes is claimed. OPT-04+ implementation is outside this
-completed review assignment; this report does not release another package.
+review of Codex's own fixes is claimed. That acceptance report did not release
+another package; the user's subsequent assignment above releases OPT-04 only.
 
 The [OPT-01 combined review](reviews/OPT_01_AF01_P41_PLG_REVIEW.md) remains the prior
 accepted foundation. Identity policy is unchanged: raw external resources use
@@ -198,6 +203,8 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 - [ ] **P41-11:** Asset decoding, upload and shared GPU cache.
 
 **Exit:** D3D12/Vulkan use the pinned NRI contract; GL is an explicit compatibility adapter. Creation failure, resize, recorded-but-unsubmitted work and shutdown have relevant current evidence; missing native checks remain NOT RUN.
+
+**Assignment:** Released to Gemini by the user on 2026-11-07; see the [OPT-04 handoff](agents/handoffs/OPT_04_GEMINI.md). Complete P41-01..11, then stop for review.
 
 **Evidence:** Pending; implementation/review is not claimed here.
 

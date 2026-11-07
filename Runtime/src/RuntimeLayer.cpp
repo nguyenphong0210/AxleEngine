@@ -47,10 +47,10 @@ namespace Axle {
         // 3. Initialize Physics Scene
         m_PhysicsScene = std::make_unique<PhysicsScene>();
 
-        // 4. Initialize Decoupled Scene Renderer (Direct Screen Backbuffer)
-        m_SceneRenderer = std::make_unique<SceneRenderer>();
-        if (!m_SceneRenderer->IsReady()) throw std::runtime_error("Runtime OpenGL renderer initialization failed");
-        m_SceneRenderer->SetViewportSize(m_WindowWidth, m_WindowHeight);
+        // 4. Initialize unified RenderService
+        if (!RenderService::Get().Init()) {
+            AXLE_WARN("Runtime: RenderService initialized with fallback/partial backend");
+        }
 
         // 4. Initial Perspective Camera
         const float aspect = (m_WindowHeight > 0) ? (static_cast<float>(m_WindowWidth) / static_cast<float>(m_WindowHeight)) : (16.0f / 9.0f);
@@ -244,14 +244,24 @@ namespace Axle {
             }
         }
 
-        // 4. Render directly to screen backbuffer (targetFBO == nullptr)
-        if (m_SceneRenderer && m_Scene) {
+        // 4. Render Scene via unified RenderService
+        if (m_Scene) {
             SceneRenderSettings settings;
             settings.EnableShadows = true;
             settings.EnableSkybox = true;
             settings.ShowPhysicsDebug = false;
 
-            m_SceneRenderer->RenderScene(m_Scene, activeCamera, nullptr, m_PhysicsScene.get(), nullptr, settings);
+            ViewRequest request;
+            request.Kind = RenderViewKind::Main;
+            request.Width = m_WindowWidth;
+            request.Height = m_WindowHeight;
+            request.Camera = activeCamera;
+            request.Settings = settings;
+            request.PhysicsScene = m_PhysicsScene.get();
+            request.GLTargetFBO = nullptr;
+            request.Name = "RuntimeGameView";
+
+            RenderService::Get().RenderView(*m_Scene, request);
         }
 
         // 5. Render In-Game UI & HUD via Hardware Canvas2D (Zero-ImGui Shipping Runtime)
@@ -364,10 +374,6 @@ namespace Axle {
         m_WindowWidth = width;
         m_WindowHeight = height;
 
-        if (m_SceneRenderer) {
-            m_SceneRenderer->SetViewportSize(width, height);
-        }
-
         const float aspect = static_cast<float>(width) / static_cast<float>(height);
         m_Camera.SetProjection(45.0f, aspect, 0.1f, 1000.0f);
     }
@@ -383,7 +389,6 @@ namespace Axle {
         }
         m_Scene.reset();
         m_PhysicsScene.reset();
-        m_SceneRenderer.reset();
         ScriptHotReloadManager::Get().Shutdown();
         AudioEngine::Shutdown();
     }

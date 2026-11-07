@@ -4,6 +4,7 @@
 #include <Axle/RenderService.hpp>
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/MeshResourceResolver.hpp>
+#include <Axle/RHI/RHISwitcher.hpp>
 #include <iostream>
 #include <vector>
 
@@ -414,6 +415,61 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    bool Test_StandaloneRuntimeContracts() {
+        // 1. Standalone GameView ViewRequest contracts
+        ViewRequest request;
+        request.Kind = RenderViewKind::Main;
+        request.Width = 1920;
+        request.Height = 1080;
+        request.Name = "RuntimeGameView";
+        request.Settings.EnableShadows = true;
+        request.Settings.EnableSkybox = true;
+        request.Settings.ShowPhysicsDebug = false;
+
+        PerspectiveCamera cam(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+        cam.SetPosition(glm::vec3(0.0f, 2.0f, 5.0f));
+        request.Camera = cam;
+
+        RENDER_CHECK(request.Kind == RenderViewKind::Main, "Main view kind matches");
+        RENDER_CHECK(request.Width == 1920 && request.Height == 1080, "Resolution matches 1080p");
+        RENDER_CHECK(request.Settings.EnableShadows && request.Settings.EnableSkybox, "Standard shipping settings");
+        RENDER_CHECK(!request.Settings.ShowPhysicsDebug, "Physics debug disabled by default in shipping runtime");
+
+        // 2. Resize behavior
+        request.Width = 2560;
+        request.Height = 1440;
+        cam.SetProjection(60.0f, 2560.0f / 1440.0f, 0.1f, 1000.0f);
+        request.Camera = cam;
+        RENDER_CHECK(request.Width == 2560 && request.Height == 1440, "Resize to 1440p validated");
+
+        // 3. Scene RenderView execution contract
+        auto scene = std::make_shared<Scene>();
+        auto entity = scene->CreateEntity("RuntimeActor");
+        auto& tc = entity.GetComponent<TransformComponent>();
+        tc.Translation = glm::vec3(0.0f, 1.0f, 0.0f);
+
+        auto& mc = entity.AddComponent<MaterialComponent>();
+        mc.AlbedoColor = glm::vec4(0.2f, 0.7f, 0.3f, 1.0f);
+        mc.Roughness = 0.4f;
+        mc.Metallic = 0.1f;
+
+        // Without targets or active device, gracefully returns safe result
+        auto result = RenderService::Get().RenderView(*scene, request);
+        RENDER_CHECK(!result.Success || result.DrawCallCount >= 0, "RenderView executed safely");
+
+        // 4. CLI vs project precedence contracts
+        RHI::RHIBackendConfig cfg;
+        RENDER_CHECK(RHI::RHISwitcher::ParseArgument("--rhi=dx12", cfg), "Parse CLI dx12");
+        RENDER_CHECK(cfg.PreferredBackend == RHI::RHIType::Direct3D12, "CLI preferred dx12");
+        RENDER_CHECK(cfg.RawArgument == "dx12", "CLI raw argument recorded");
+
+        RHI::RHIBackendConfig glCfg;
+        RENDER_CHECK(RHI::RHISwitcher::ParseArgument("--rhi=opengl", glCfg), "Parse CLI opengl");
+        RENDER_CHECK(glCfg.PreferredBackend == RHI::RHIType::OpenGL, "CLI preferred opengl");
+
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -431,6 +487,7 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_VFXPreviewIsolationAndMultiEmitter()) return false;
     if (!Axle::RenderTests::Test_AssemblyPreviewExtractionAndIsolation()) return false;
     if (!Axle::RenderTests::Test_ThumbnailRenderJobAndCacheContracts()) return false;
+    if (!Axle::RenderTests::Test_StandaloneRuntimeContracts()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

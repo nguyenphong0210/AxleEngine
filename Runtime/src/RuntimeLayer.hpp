@@ -2,7 +2,7 @@
 #include <Axle/Layer.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
-#include <Axle/SceneRenderer.hpp>
+#include <Axle/RenderService.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/Project.hpp>
@@ -45,7 +45,6 @@ namespace Axle {
         std::filesystem::path m_ProjectPath;
         std::shared_ptr<Scene> m_Scene;
         std::unique_ptr<PhysicsScene> m_PhysicsScene;
-        std::unique_ptr<SceneRenderer> m_SceneRenderer;
         SimulationDriver m_SimulationDriver;
 
         PerspectiveCamera m_Camera;

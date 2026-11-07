@@ -5,6 +5,12 @@
 #include <Axle/RenderCommand.hpp>
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
+#if defined(AXLE_BUILD_RHI)
+#include <Axle/RHI/RHIPresentationContext.hpp>
+#include <Axle/RenderService.hpp>
+#endif
+#include <Axle/Project.hpp>
+#include <Axle/ProjectSerializer.hpp>
 #include "RuntimeLayer.hpp"
 #include <exception>
 #include <csignal>
@@ -99,14 +105,36 @@ int main(int argc, char** argv) {
     std::filesystem::path projectPath;
     bool verifySimulation = false;
     auto rhiConfig = Axle::RHI::RHISwitcher::ParseCommandLine(argc, argv);
-    // Runtime scene rendering remains GL until its dedicated consumer cutover.
-    if (rhiConfig.RawArgument.empty()) rhiConfig.PreferredBackend = Axle::RHI::RHIType::OpenGL;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--verify-simulation") verifySimulation = true;
         else if (arg == "--project" && i + 1 < argc) projectPath = argv[++i];
         else if (arg.rfind("--project=", 0) == 0) projectPath = arg.substr(10);
         else if (!arg.empty() && arg[0] != '-') projectPath = arg;
+    }
+
+    // Apply consistent project / CLI precedence:
+    // If no explicit CLI backend was provided, inspect Project configuration
+    if (rhiConfig.RawArgument.empty()) {
+        std::filesystem::path inspectPath = projectPath;
+        if (inspectPath.empty()) {
+            if (std::filesystem::exists("Sandbox.axleproj")) inspectPath = "Sandbox.axleproj";
+            else if (std::filesystem::exists("Project.axleproj")) inspectPath = "Project.axleproj";
+        }
+        if (!inspectPath.empty() && std::filesystem::exists(inspectPath)) {
+            auto tempProj = Axle::Project::New();
+            Axle::ProjectSerializer serializer(tempProj);
+            if (serializer.Deserialize(inspectPath)) {
+                const std::string& b = tempProj->GetConfig().RHIBackend;
+                if (b == "Direct3D12" || b == "dx12" || b == "d3d12") {
+                    rhiConfig.PreferredBackend = Axle::RHI::RHIType::Direct3D12;
+                } else if (b == "Vulkan" || b == "vulkan" || b == "vk") {
+                    rhiConfig.PreferredBackend = Axle::RHI::RHIType::Vulkan;
+                } else if (b == "OpenGL" || b == "opengl" || b == "gl") {
+                    rhiConfig.PreferredBackend = Axle::RHI::RHIType::OpenGL;
+                }
+            }
+        }
     }
 
     try {
@@ -124,6 +152,43 @@ int main(int argc, char** argv) {
                 }
             }
         };
+
+#if defined(AXLE_BUILD_RHI)
+        class RuntimeRenderContext final : public Axle::ApplicationRenderContext {
+        public:
+            RuntimeRenderContext(const Axle::Window& window) {
+                Axle::RHI::RHISwapChainDesc desc;
+                desc.VSync = window.IsVSync();
+                desc.FramesInFlight = 3;
+                if (!m_Presenter.Init(window.GetNativeWindow(), desc)) {
+                    throw std::runtime_error("Runtime application presentation initialization failed");
+                }
+            }
+
+            bool Present(const Axle::Window& window) override {
+                nri::Texture* blitSource = nullptr;
+                if (auto* target = Axle::RenderService::Get().GetDefaultMainColorTarget()) {
+                    blitSource = target->GetNative();
+                }
+                const auto outcome = m_Presenter.RenderFrame(
+                    window.GetWidth(),
+                    window.GetHeight(),
+                    window.IsVSync(),
+                    {},
+                    {},
+                    blitSource
+                );
+                return outcome != Axle::RHI::RHIPresentOutcome::Failed;
+            }
+
+            void Shutdown() override {
+                m_Presenter.Shutdown();
+            }
+
+        private:
+            Axle::RHI::RHIPresentationContext m_Presenter;
+        };
+#endif
 
         Axle::ApplicationSpecification spec{
             .Name = "Axle Game Player",
@@ -143,16 +208,17 @@ int main(int argc, char** argv) {
         std::unique_ptr<Axle::Application> app;
         std::shared_ptr<Axle::RuntimeLayer> layer;
         if (!Axle::RHI::RHISwitcher::InitializeProduct(rhiConfig, [&](Axle::GraphicsAPI api) {
-            if (api != Axle::GraphicsAPI::OpenGL) {
-                AXLE_ERROR("Runtime scene renderer currently requires OpenGL");
-                return false;
-            }
             try {
                 spec.GraphicsBackend = api;
                 app = std::make_unique<Axle::Application>(spec);
                 app->RegisterService(std::make_shared<PhysicsApplicationService>());
                 layer = std::make_shared<Axle::RuntimeLayer>(projectPath);
                 app->PushLayer(layer);
+#if defined(AXLE_BUILD_RHI)
+                if (api != Axle::GraphicsAPI::OpenGL) {
+                    app->SetRenderContext(std::make_unique<RuntimeRenderContext>(app->GetWindow()));
+                }
+#endif
                 return true;
             } catch (const std::exception& error) {
                 AXLE_ERROR("Runtime backend candidate failed: {0}", error.what());

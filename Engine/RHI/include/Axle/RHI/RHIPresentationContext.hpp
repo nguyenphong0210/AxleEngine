@@ -16,7 +16,7 @@ namespace Axle::RHI {
         bool Init(GLFWwindow* window, const RHISwapChainDesc& desc = {});
         bool Shutdown();
         RHIPresentOutcome RenderFrame(uint32_t width, uint32_t height, bool vsync,
-            const Recorder& prepare = {}, const Recorder& draw = {});
+            const Recorder& prepare = {}, const Recorder& draw = {}, nri::Texture* blitSource = nullptr);
         uint64_t GetPresentCount() const;
         bool IsVSync() const;
     private:

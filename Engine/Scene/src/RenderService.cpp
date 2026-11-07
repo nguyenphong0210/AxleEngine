@@ -43,6 +43,7 @@ namespace Axle {
     void RenderService::Shutdown() {
         if (!m_Initialized) return;
 
+        m_DefaultMainTargets.reset();
         if (m_RHIRenderer) {
             m_RHIRenderer->Shutdown();
             m_RHIRenderer.reset();
@@ -83,6 +84,20 @@ namespace Axle {
             if (!colorTarget && request.ViewTargets && request.ViewTargets->IsValid()) {
                 colorTarget = request.ViewTargets->Get(RHI::RHIViewTarget::Color);
                 depthTarget = request.ViewTargets->Get(RHI::RHIViewTarget::Depth);
+            }
+
+            if (!colorTarget && request.Kind == RenderViewKind::Main && request.Width > 0 && request.Height > 0) {
+                if (!m_DefaultMainTargets || m_DefaultMainTargets->GetDesc().Width != request.Width || m_DefaultMainTargets->GetDesc().Height != request.Height) {
+                    m_DefaultMainTargets = std::make_shared<RHI::RHIViewTargets>();
+                    RHI::RHIViewTargetDesc desc;
+                    desc.Width = request.Width;
+                    desc.Height = request.Height;
+                    m_DefaultMainTargets->Configure(desc);
+                }
+                if (m_DefaultMainTargets->IsValid()) {
+                    colorTarget = m_DefaultMainTargets->Get(RHI::RHIViewTarget::Color);
+                    depthTarget = m_DefaultMainTargets->Get(RHI::RHIViewTarget::Depth);
+                }
             }
 
             if (!colorTarget) {
@@ -153,6 +168,20 @@ namespace Axle {
                 depthTarget = request.ViewTargets->Get(RHI::RHIViewTarget::Depth);
             }
 
+            if (!colorTarget && request.Kind == RenderViewKind::Main && request.Width > 0 && request.Height > 0) {
+                if (!m_DefaultMainTargets || m_DefaultMainTargets->GetDesc().Width != request.Width || m_DefaultMainTargets->GetDesc().Height != request.Height) {
+                    m_DefaultMainTargets = std::make_shared<RHI::RHIViewTargets>();
+                    RHI::RHIViewTargetDesc desc;
+                    desc.Width = request.Width;
+                    desc.Height = request.Height;
+                    m_DefaultMainTargets->Configure(desc);
+                }
+                if (m_DefaultMainTargets->IsValid()) {
+                    colorTarget = m_DefaultMainTargets->Get(RHI::RHIViewTarget::Color);
+                    depthTarget = m_DefaultMainTargets->Get(RHI::RHIViewTarget::Depth);
+                }
+            }
+
             if (!colorTarget) {
                 result.Success = false;
                 result.ErrorMessage = "No valid modern RHI color target provided in ViewRequest";
@@ -200,6 +229,10 @@ namespace Axle {
         result.Success = false;
         result.ErrorMessage = "No active rendering backend available";
         return result;
+    }
+
+    RHI::RHITexture* RenderService::GetDefaultMainColorTarget() const {
+        return m_DefaultMainTargets && m_DefaultMainTargets->IsValid() ? m_DefaultMainTargets->Get(RHI::RHIViewTarget::Color) : nullptr;
     }
 
 }

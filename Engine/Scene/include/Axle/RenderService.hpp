@@ -6,6 +6,7 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/RenderCapabilities.hpp>
+#include <Axle/RHI/RHIViewTargets.hpp>
 #include <memory>
 
 namespace Axle {
@@ -38,10 +39,13 @@ namespace Axle {
         // Capabilities and honest diagnostics
         RendererCapabilities GetActiveCapabilities() const;
 
+        RHI::RHITexture* GetDefaultMainColorTarget() const;
+
     private:
         bool m_Initialized = false;
         std::unique_ptr<RHISceneRenderer> m_RHIRenderer;
         std::unique_ptr<SceneRenderer> m_GLRenderer;
+        std::shared_ptr<RHI::RHIViewTargets> m_DefaultMainTargets;
     };
 
 }

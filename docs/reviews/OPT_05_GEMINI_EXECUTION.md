@@ -259,3 +259,41 @@ Scope:
 - `python scripts/check_architecture.py --root .`: PASS (405 files / 18 CMake files)
 - `python scripts/test_baseline_tools.py`: 18/18 PASS
 - `git diff --check`: PASS
+
+---
+
+## Package P41-19: Standalone Runtime Render Integration
+
+- **Status:** Implemented and self-verified in Debug and Release.
+- **Scope & Contract:** `docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md` lines 303-315
+
+### Implementation Summary
+1. **Migrated `RuntimeLayer` to RenderService (`Runtime/src/RuntimeLayer.hpp`, `Runtime/src/RuntimeLayer.cpp`):**
+   - Removed private OpenGL `SceneRenderer` instance (`std::unique_ptr<SceneRenderer> m_SceneRenderer`).
+   - Integrated `RenderService::Get().RenderView(*m_Scene, request)` with `RenderViewKind::Main` on every frame update (`OnUpdate`).
+   - Strictly preserved the Standalone Runtime zero-ImGui boundary: no dependency on `Axle::UI`, no headers from `Engine/UI/` (e.g. `RHIViewportDescriptor.hpp`), and no Dear ImGui context or widget calls.
+2. **Direct Swapchain Blit Presentation (`Engine/RHI/include/Axle/RHI/RHIPresentationContext.hpp`, `Engine/RHI/src/RHIPresentationContext.cpp`):**
+   - Extended `RHIPresentationContext::RenderFrame` with an optional `nri::Texture* blitSource` parameter.
+   - When running in standalone mode (no UI draw callback), directly copies the rendered scene target texture to the current swapchain backbuffer:
+     - Transitions `blitSource` to `nri::TextureTransitionBarrierDesc` with `AccessBits::COPY_SOURCE` and `TextureLayout::COPY_SOURCE`.
+     - Transitions swapchain backbuffer to `AccessBits::COPY_DEST` and `TextureLayout::COPY_DEST`.
+     - Executes `nri::CmdCopyTexture`.
+     - Transitions backbuffer to `TextureLayout::PRESENT` and executes swapchain queue submission and `PresentBuffers`.
+3. **Default Presentation Targets in RenderService (`Engine/Scene/include/Axle/RenderService.hpp`, `Engine/Scene/src/RenderService.cpp`):**
+   - `RenderService` automatically manages and resizes default presentation targets (`m_DefaultMainTargets`) for `RenderViewKind::Main` when no custom offscreen target descriptor is passed.
+   - Exposes `GetDefaultMainColorTarget()` returning the allocated `nri::Texture*` for swapchain presentation blit.
+4. **Runtime Backend Selection & Product Parity (`Runtime/src/Main.cpp`):**
+   - Unified backend precedence matching the Editor: explicit CLI arguments (`--rhi=dx12`, `--rhi=vulkan`, `--rhi=opengl`) override project settings; if omitted, inspects project configuration's `RHIBackend` (`ProjectSerializer`), falling back gracefully to D3D12/OpenGL.
+   - Installs `RuntimeRenderContext` as the global presentation context before initializing the RHI device and swapchain.
+5. **Dedicated Unit Verification (`Tests/rendering/Test_RenderServiceUnit.cpp`):**
+   - `Test_StandaloneRuntimeContracts`: Verifies CLI backend argument parsing (`--rhi=dx12`, `--rhi=vulkan`, `--rhi=opengl`), `RenderViewKind::Main` default target allocation and resize semantics in `RenderService`, and validates that Runtime layer contracts do not depend on UI headers.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleRHI AxleScene Runtime AxleRenderUnitTests`: exit 0
+- `cmake --build build --config Release --target AxleRHI AxleScene Runtime AxleRenderUnitTests`: exit 0
+- `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `ctest --test-dir build -C Release -R RuntimeProductParityUnitTests`: 1/1 passed, exit 0
+- `python scripts/check_architecture.py --root .`: PASS (405 files / 18 CMake files)
+- `python scripts/test_baseline_tools.py`: 18/18 PASS
+- `git diff --check`: PASS

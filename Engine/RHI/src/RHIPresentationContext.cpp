@@ -57,7 +57,7 @@ namespace Axle::RHI {
         m_Storage.reset(); return true;
     }
     RHIPresentOutcome RHIPresentationContext::RenderFrame(uint32_t width, uint32_t height, bool vsync,
-        const Recorder& prepare, const Recorder& draw) {
+        const Recorder& prepare, const Recorder& draw, nri::Texture* blitSource) {
         auto& device = RHIDevice::Get();
         if (!m_Storage || m_Storage->Epoch != device.GetEpoch()) return RHIPresentOutcome::Failed;
         auto& state = *m_Storage;
@@ -79,16 +79,39 @@ namespace Axle::RHI {
         const auto format = device.GetNRICore().GetTextureDesc(*texture).format;
         auto& commands = *frame.GetCommands();
         if (prepare && !prepare(commands, format)) return abandon();
-        commands.TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+
+        if (blitSource) {
+            commands.TransitionTexture(blitSource, RHIResourceLayout::Undefined, RHIResourceLayout::CopySource);
+            commands.TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::CopyDest);
+            commands.CopyTexture(*texture, nullptr, *blitSource, nullptr);
+            commands.TransitionTexture(blitSource, RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
+        }
+
         const auto index = state.SwapChain.GetCurrentTextureIndex();
         if (index >= state.Views.size() || !commands.KeepAlive(state.ViewLeases[index])) return abandon();
-        nri::AttachmentDesc color{}; color.descriptor = state.Views[index]; color.loadOp = nri::LoadOp::CLEAR;
-        color.storeOp = nri::StoreOp::STORE; color.clearValue.color.f = {0.04f, 0.05f, 0.07f, 1.0f};
-        nri::RenderingDesc rendering{}; rendering.colors = &color; rendering.colorNum = 1;
-        commands.BeginRendering(rendering);
-        if (draw && !draw(commands, format)) return abandon();
-        commands.EndRendering();
-        commands.TransitionTexture(texture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::Present);
+
+        if (draw) {
+            commands.TransitionTexture(texture, blitSource ? RHIResourceLayout::CopyDest : RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+            nri::AttachmentDesc color{}; color.descriptor = state.Views[index];
+            color.loadOp = blitSource ? nri::LoadOp::LOAD : nri::LoadOp::CLEAR;
+            color.storeOp = nri::StoreOp::STORE; color.clearValue.color.f = {0.04f, 0.05f, 0.07f, 1.0f};
+            nri::RenderingDesc rendering{}; rendering.colors = &color; rendering.colorNum = 1;
+            commands.BeginRendering(rendering);
+            if (!draw(commands, format)) return abandon();
+            commands.EndRendering();
+            commands.TransitionTexture(texture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::Present);
+        } else if (blitSource) {
+            commands.TransitionTexture(texture, RHIResourceLayout::CopyDest, RHIResourceLayout::Present);
+        } else {
+            commands.TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+            nri::AttachmentDesc color{}; color.descriptor = state.Views[index]; color.loadOp = nri::LoadOp::CLEAR;
+            color.storeOp = nri::StoreOp::STORE; color.clearValue.color.f = {0.04f, 0.05f, 0.07f, 1.0f};
+            nri::RenderingDesc rendering{}; rendering.colors = &color; rendering.colorNum = 1;
+            commands.BeginRendering(rendering);
+            commands.EndRendering();
+            commands.TransitionTexture(texture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::Present);
+        }
+
         if (!frame.End()) return abandon();
         const nri::CommandBuffer* native = commands.GetNative();
         const auto before = device.GetLastSubmittedToken();

@@ -45,6 +45,7 @@ namespace Axle {
 
         // 2. Directional Light extraction
         auto dirLightView = registry.view<DirectionalLightComponent>();
+        bool primaryDirFound = false;
         for (auto entity : dirLightView) {
             const auto& dl = dirLightView.get<DirectionalLightComponent>(entity);
             RenderDirectionalLight rdl;
@@ -59,8 +60,13 @@ namespace Axle {
             } else {
                 rdl.Direction = dl.GetDirection();
             }
-            world.DirectionalLight = rdl;
-            break; // Single primary directional light
+
+            if (!primaryDirFound) {
+                world.DirectionalLight = rdl;
+                primaryDirFound = true;
+            } else {
+                world.AdditionalDirectionalLights.push_back(rdl);
+            }
         }
 
         // 3. Point Lights extraction
@@ -155,13 +161,20 @@ namespace Axle {
                 rmi.Material.RHIMaterialAsset = matComp.RHIMaterialAsset;
                 rmi.Material.UseCustomShader = matComp.UseCustomShader;
                 rmi.Material.CustomShaderPath = matComp.CustomShaderPath;
+                rmi.Material.AlbedoColor = matComp.AlbedoColor;
+                rmi.Material.SecondaryColor = matComp.AlbedoColor * 0.85f;
+                rmi.Material.Roughness = matComp.Roughness;
+                rmi.Material.Metallic = matComp.Metallic;
+                rmi.Material.Emission = matComp.EmissionIntensity;
+                rmi.Material.TileScale = glm::vec2(mc.TileScale);
+                rmi.Material.PatternMode = mc.PatternMode;
             } else {
                 rmi.Material.RHIMaterialAsset = mc.RHIMaterialAsset;
+                rmi.Material.AlbedoColor = mc.Color1;
+                rmi.Material.SecondaryColor = mc.Color2;
+                rmi.Material.TileScale = glm::vec2(mc.TileScale);
+                rmi.Material.PatternMode = mc.PatternMode;
             }
-            rmi.Material.AlbedoColor = mc.Color1;
-            rmi.Material.SecondaryColor = mc.Color2;
-            rmi.Material.TileScale = glm::vec2(mc.TileScale);
-            rmi.Material.PatternMode = mc.PatternMode;
 
             world.Meshes.push_back(std::move(rmi));
         }

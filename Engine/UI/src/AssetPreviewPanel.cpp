@@ -8,7 +8,7 @@
 #include <windows.h>
 #endif
 #include <Axle/AssetPreviewPanel.hpp>
-#include <Axle/RHISceneRenderer.hpp>
+#include <Axle/RenderService.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
@@ -40,117 +40,17 @@
 
 namespace Axle {
 
-    static const char* s_PreviewVertSrc = R"(
-        #version 450 core
-        layout(location = 0) in vec3 a_Position;
-
-        uniform mat4 u_ViewProjection;
-        uniform mat4 u_Transform;
-
-        out vec3 v_WorldPos;
-        out vec3 v_LocalPos;
-
-        void main() {
-            v_LocalPos = a_Position;
-            vec4 worldPos = u_Transform * vec4(a_Position, 1.0);
-            v_WorldPos = worldPos.xyz;
-            gl_Position = u_ViewProjection * worldPos;
-        }
-    )";
-
-    static const char* s_PreviewFragSrc = R"(
-        #version 450 core
-        layout(location = 0) out vec4 o_Color;
-
-        in vec3 v_WorldPos;
-        in vec3 v_LocalPos;
-
-        uniform int u_PatternMode;
-        uniform float u_TileScale;
-        uniform vec4 u_Color1;
-        uniform vec4 u_Color2;
-        uniform vec3 u_LightDir;
-        uniform vec3 u_CameraPosition;
-        uniform vec3 u_FillDirection;
-        uniform float u_KeyIntensity;
-        uniform float u_FillIntensity;
-        uniform mat4 u_Transform;
-        uniform int u_WireframeMode;
-
-        void main() {
-            if (u_WireframeMode == 1) {
-                o_Color = vec4(0.25, 0.88, 1.0, 1.0);
-                return;
-            }
-
-            float pattern = 0.0;
-            vec3 normal = vec3(0.0, 1.0, 0.0);
-            vec4 baseColor = u_Color1;
-            if (u_PatternMode == 0) {
-                vec2 coord = floor(v_WorldPos.xz * u_TileScale);
-                pattern = mod(coord.x + coord.y, 2.0);
-                baseColor = mix(u_Color1, u_Color2, pattern);
-            } else if (u_PatternMode == 1) {
-                vec3 dx = dFdx(v_WorldPos);
-                vec3 dy = dFdy(v_WorldPos);
-                normal = normalize(cross(dx, dy));
-                if (dot(normal, normalize(u_CameraPosition - v_WorldPos)) < 0.0) normal = -normal;
-
-                vec3 absN = abs(normal);
-                vec2 uv = (absN.y >= absN.x && absN.y >= absN.z) ? v_LocalPos.xz :
-                          ((absN.x >= absN.z) ? v_LocalPos.zy : v_LocalPos.xy);
-                vec2 coord = floor(uv * u_TileScale + vec2(0.0001));
-                pattern = mod(coord.x + coord.y, 2.0);
-                baseColor = mix(u_Color1, u_Color2, pattern);
-            } else if (u_PatternMode == 2) {
-                vec3 nLocal = normalize(v_LocalPos);
-                float u = atan(nLocal.z, nLocal.x) / (2.0 * 3.14159265359) + 0.5;
-                float v = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
-                vec2 coord = floor(vec2(u * u_TileScale, v * (u_TileScale * 0.5)));
-                pattern = mod(coord.x + coord.y, 2.0);
-                normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
-                baseColor = mix(u_Color1, u_Color2, pattern);
-            } else {
-                // PatternMode 3+: Unity Default Shading (Clean, solid matte surface)
-                vec3 dx = dFdx(v_WorldPos);
-                vec3 dy = dFdy(v_WorldPos);
-                normal = normalize(cross(dx, dy));
-                if (dot(normal, normalize(u_CameraPosition - v_WorldPos)) < 0.0) normal = -normal;
-                baseColor = u_Color1;
-            }
-            vec3 keyLight = normalize(u_LightDir);
-            vec3 fillLight = normalize(u_FillDirection);
-
-            float NdotKey = max(dot(normal, keyLight), 0.0) * u_KeyIntensity;
-            float NdotFill = max(dot(normal, fillLight), 0.0) * 0.7 * u_FillIntensity;
-            float ambient = 0.32;
-            float lighting = ambient + 0.58 * NdotKey + NdotFill;
-
-            vec3 viewDir = normalize(u_CameraPosition - v_WorldPos);
-            vec3 halfDir = normalize(keyLight + viewDir);
-            float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.25 * u_KeyIntensity;
-
-            o_Color = vec4(baseColor.rgb * lighting + vec3(spec), baseColor.a);
-        }
-    )";
-
     AssetPreviewPanel::AssetPreviewPanel() {
         if (Window::HasActiveContext()) {
             FramebufferSpecification spec;
             spec.Width = m_ViewportWidth;
             spec.Height = m_ViewportHeight;
             m_Framebuffer = Framebuffer::Create(spec);
-
-            m_Shader = std::make_unique<Shader>(s_PreviewVertSrc, s_PreviewFragSrc);
         }
     }
 
     AssetPreviewPanel::~AssetPreviewPanel() {
         FreeIconTextures();
-        if (m_RHISceneRenderer) {
-            m_RHISceneRenderer->Shutdown();
-            m_RHISceneRenderer.reset();
-        }
         if (m_PreviewScene) {
             m_PreviewScene->Clear();
             m_PreviewScene.reset();
@@ -237,11 +137,6 @@ namespace Axle {
             desc.DepthFormat = RHI::RHITextureFormat::D32_FLOAT;
             desc.DebugName = "AssetPreviewViewport";
             m_RHIViewport->Init(m_ImGuiLayer, desc);
-
-            if (!m_RHISceneRenderer) {
-                m_RHISceneRenderer = std::make_unique<RHISceneRenderer>();
-                m_RHISceneRenderer->Init(RHI::RHIDevice::Get(), false);
-            }
             m_SceneNeedsRebuild = true;
         }
     }
@@ -542,134 +437,6 @@ namespace Axle {
              * glm::scale(glm::mat4(1.0f), glm::vec3(GetPreviewScale()));
     }
 
-    void AssetPreviewPanel::RenderPreview3D(float width, float height) {
-        if (!Window::HasActiveContext() || !m_Framebuffer || !m_Shader) return;
-
-        u32 w = static_cast<u32>(std::max(width, 64.0f));
-        u32 h = static_cast<u32>(std::max(height, 64.0f));
-
-        if (w != m_ViewportWidth || h != m_ViewportHeight) {
-            m_ViewportWidth = w;
-            m_ViewportHeight = h;
-            m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
-        }
-
-        GLint prevFBO = 0;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
-        GLint prevViewport[4];
-        glGetIntegerv(GL_VIEWPORT, prevViewport);
-        GLboolean prevDepthTest = glIsEnabled(GL_DEPTH_TEST);
-        GLboolean prevCullFace = glIsEnabled(GL_CULL_FACE);
-        GLint prevPolygonMode[2];
-        glGetIntegerv(GL_POLYGON_MODE, prevPolygonMode);
-
-        m_Framebuffer->Bind();
-        glViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
-        glEnable(GL_DEPTH_TEST);
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // Show the same checkerboard as the RHI preview.
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        if (!m_HasAsset || (!m_IsAssembly && m_CurrentPackage.Parts.empty())) {
-            glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
-            glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
-            if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
-            return;
-        }
-
-        // Fixed camera; rotation, pan and zoom are applied to the object.
-        float pitchRad = glm::radians(m_Pitch);
-        float yawRad = glm::radians(m_Yaw);
-        bool isMaterial = IsMaterialPreview();
-        float distance = m_MaxDim * (isMaterial ? 3.0f : 1.95f);
-
-        glm::vec3 camPos = glm::vec3(
-            distance * std::cos(pitchRad) * std::sin(yawRad),
-            distance * std::sin(pitchRad),
-            distance * std::cos(pitchRad) * std::cos(yawRad)
-        );
-
-        glm::mat4 view = glm::lookAt(camPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        float aspect = static_cast<float>(m_ViewportWidth) / static_cast<float>(m_ViewportHeight);
-        glm::mat4 proj = glm::perspective(glm::radians(isMaterial ? 20.0f : 45.0f), aspect, 0.01f, distance * 8.0f);
-        glm::mat4 viewProj = proj * view;
-
-        m_Shader->Bind();
-        m_Shader->SetMat4("u_ViewProjection", viewProj);
-        float azimRad = glm::radians(m_SunAzimuth);
-        float elevRad = glm::radians(m_SunElevation);
-        glm::vec3 sunLightDir = glm::normalize(glm::vec3(
-            std::cos(elevRad) * std::sin(azimRad),
-            std::sin(elevRad),
-            std::cos(elevRad) * std::cos(azimRad)
-        ));
-        m_Shader->SetFloat3("u_LightDir", sunLightDir);
-        m_Shader->SetFloat3("u_CameraPosition", camPos);
-        m_Shader->SetFloat3("u_FillDirection", glm::vec3(0.0f, -1.0f, 0.0f));
-        m_Shader->SetFloat("u_KeyIntensity", m_EnableKeyLight ? 1.0f : 0.0f);
-        m_Shader->SetFloat("u_FillIntensity", m_EnableSecondaryLight ? 1.0f : 0.0f);
-        glm::mat4 previewTransform = GetPreviewTransform();
-
-        if (m_WireframeMode) {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            m_Shader->SetInt("u_WireframeMode", 1);
-        } else {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            m_Shader->SetInt("u_WireframeMode", 0);
-        }
-
-        if (m_IsAssembly) {
-            std::function<void(const AssemblyNode&, const glm::mat4&)> renderNodeRec = [&](const AssemblyNode& node, const glm::mat4& parentMat) {
-                glm::mat4 localMat = node.Transform.GetTransform();
-                glm::mat4 worldMat = parentMat * localMat;
-                glm::mat4 model = previewTransform * glm::translate(glm::mat4(1.0f), -m_Center) * worldMat;
-
-                if (node.HasMesh) {
-                    std::shared_ptr<VertexArray> vao = node.Mesh.VAO;
-                    if (!vao) vao = m_FallbackMesh;
-
-                    if (vao) {
-                        m_Shader->SetMat4("u_Transform", model);
-                        m_Shader->SetInt("u_PatternMode", node.Mesh.PatternMode);
-                        m_Shader->SetFloat("u_TileScale", node.Mesh.TileScale);
-                        m_Shader->SetFloat4("u_Color1", node.Mesh.Color1);
-                        m_Shader->SetFloat4("u_Color2", node.Mesh.Color2);
-                        RenderCommand::DrawIndexed(vao);
-                    }
-                }
-
-                for (const auto& child : node.Children) {
-                    renderNodeRec(child, worldMat);
-                }
-            };
-            renderNodeRec(m_CurrentAssembly.RootNode, glm::mat4(1.0f));
-        } else {
-            // Render all subparts with center offset
-            for (size_t i = 0; i < m_CurrentPackage.Parts.size(); ++i) {
-                const auto& part = m_CurrentPackage.Parts[i];
-                auto vao = i < m_PartVAOs.size() ? m_PartVAOs[i] : nullptr;
-                if (!vao) continue;
-                glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
-                                   * glm::mat4_cast(part.LocalRotation)
-                                   * glm::scale(glm::mat4(1.0f), part.LocalScale);
-                glm::mat4 model = previewTransform * glm::translate(glm::mat4(1.0f), -m_Center) * localMat;
-
-                m_Shader->SetMat4("u_Transform", model);
-                m_Shader->SetInt("u_PatternMode", part.LoadedMesh.SourceData.PatternMode);
-                m_Shader->SetFloat("u_TileScale", part.LoadedMesh.SourceData.TileScale);
-                m_Shader->SetFloat4("u_Color1", part.LoadedMesh.SourceData.ColorPrimary);
-                m_Shader->SetFloat4("u_Color2", part.LoadedMesh.SourceData.ColorSecondary);
-
-                RenderCommand::DrawIndexed(vao);
-            }
-        }
-
-        glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
-        glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
-        if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
-        if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
-        glPolygonMode(GL_FRONT_AND_BACK, prevPolygonMode[0]);
-    }
-
     void AssetPreviewPanel::SpawnCurrentAssetIntoScene() {
         if (!m_Scene || !m_HasAsset) return;
 
@@ -814,8 +581,6 @@ namespace Axle {
     }
 
     void AssetPreviewPanel::RebuildPreviewScene() {
-        if (!RHI::RHIDevice::Get().IsNativeReady()) return;
-
         if (!m_PreviewScene) {
             m_PreviewScene = std::make_shared<Scene>();
         }
@@ -835,22 +600,36 @@ namespace Axle {
             auto& mc = m_PreviewEntity.AddComponent<MeshInstance3D>();
             switch (m_PreviewMeshType) {
                 case PreviewMeshType::Sphere:
+                    mc.AssetPath = "builtin://sphere";
                     mc.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+                    mc.VAO = (m_SerializerContext && m_SerializerContext->SphereMesh) ? m_SerializerContext->SphereMesh : PrimitiveMesh::CreateSphere(64, 96);
                     break;
                 case PreviewMeshType::Cube:
+                    mc.AssetPath = "builtin://cube";
                     mc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+                    mc.VAO = PrimitiveMesh::CreateCube();
                     break;
                 case PreviewMeshType::Cylinder:
+                    mc.AssetPath = "builtin://cylinder";
                     mc.RHIMeshAsset = RHIMeshRegistry::Get().GetCylinder();
+                    mc.VAO = PrimitiveMesh::CreateCylinder(32);
                     break;
                 case PreviewMeshType::Plane:
+                    mc.AssetPath = "builtin://plane";
                     mc.RHIMeshAsset = RHIMeshRegistry::Get().GetPlane();
+                    mc.VAO = PrimitiveMesh::CreatePlane(1, 1);
                     break;
                 case PreviewMeshType::Custom:
                     if (!m_CustomMeshPath.empty()) {
+                        mc.AssetPath = m_CustomMeshPath.string();
                         mc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(m_CustomMeshPath.string());
+                        mc.VAO = m_CustomMeshVAO;
                     }
-                    if (!mc.RHIMeshAsset) mc.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+                    if (!mc.RHIMeshAsset && !mc.VAO) {
+                        mc.AssetPath = "builtin://sphere";
+                        mc.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
+                        mc.VAO = PrimitiveMesh::CreateSphere(64, 96);
+                    }
                     break;
             }
 
@@ -868,6 +647,8 @@ namespace Axle {
                     ptc.Scale = node.Transform.Scale;
 
                     auto& pmc = partEnt.AddComponent<MeshInstance3D>();
+                    pmc.AssetPath = node.Mesh.AssetPath;
+                    pmc.VAO = node.Mesh.VAO;
                     if (!node.Mesh.AssetPath.empty()) {
                         if (node.Mesh.AssetPath == "builtin://sphere") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetSphere();
                         else if (node.Mesh.AssetPath == "builtin://cylinder") pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCylinder();
@@ -879,10 +660,11 @@ namespace Axle {
                             pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(resolved.string());
                         }
                     }
-                    if (!pmc.RHIMeshAsset) pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+                    if (!pmc.RHIMeshAsset && !pmc.VAO) pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
                     pmc.Color1 = node.Mesh.Color1;
                     pmc.Color2 = node.Mesh.Color2;
                     pmc.PatternMode = node.Mesh.PatternMode;
+                    pmc.TileScale = node.Mesh.TileScale;
                 }
                 for (const auto& child : node.Children) {
                     spawnNodes(child, worldPos);
@@ -890,7 +672,8 @@ namespace Axle {
             };
             spawnNodes(m_CurrentAssembly.RootNode, glm::vec3(0.0f));
         } else {
-            for (const auto& part : m_CurrentPackage.Parts) {
+            for (size_t i = 0; i < m_CurrentPackage.Parts.size(); ++i) {
+                const auto& part = m_CurrentPackage.Parts[i];
                 auto partEnt = m_PreviewScene->CreateEntity(part.Name.empty() ? "Part" : part.Name);
                 partEnt.SetParent(m_PreviewEntity, false);
                 auto& ptc = partEnt.GetComponent<TransformComponent>();
@@ -901,12 +684,15 @@ namespace Axle {
                 auto& pmc = partEnt.AddComponent<MeshInstance3D>();
                 if (!m_CurrentAssetPath.empty()) {
                     auto partFullPath = m_CurrentAssetPath.parent_path() / part.RelativePath;
+                    pmc.AssetPath = partFullPath.string();
                     pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(partFullPath.string());
                 }
-                if (!pmc.RHIMeshAsset) pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
+                pmc.VAO = i < m_PartVAOs.size() ? m_PartVAOs[i] : nullptr;
+                if (!pmc.RHIMeshAsset && !pmc.VAO) pmc.RHIMeshAsset = RHIMeshRegistry::Get().GetCube();
                 pmc.Color1 = part.LoadedMesh.SourceData.ColorPrimary;
                 pmc.Color2 = part.LoadedMesh.SourceData.ColorSecondary;
                 pmc.PatternMode = part.LoadedMesh.SourceData.PatternMode;
+                pmc.TileScale = part.LoadedMesh.SourceData.TileScale;
             }
         }
 
@@ -934,13 +720,8 @@ namespace Axle {
         m_SceneNeedsRebuild = false;
     }
 
-    void AssetPreviewPanel::RenderPreviewRHI(float width, float height) {
-        if (!m_RHIViewport || !m_RHIViewport->IsValid()) return;
-
-        if (!m_RHISceneRenderer) {
-            m_RHISceneRenderer = std::make_unique<RHISceneRenderer>();
-            m_RHISceneRenderer->Init(RHI::RHIDevice::Get(), false);
-        }
+    void AssetPreviewPanel::RenderPreview(float width, float height) {
+        if (!m_HasAsset) return;
 
         if (m_SceneNeedsRebuild || !m_PreviewScene) {
             RebuildPreviewScene();
@@ -972,6 +753,12 @@ namespace Axle {
             auto& dlc = m_PreviewLight.GetComponent<DirectionalLightComponent>();
             dlc.Elevation = m_SunElevation;
             dlc.Azimuth = m_SunAzimuth;
+            dlc.Intensity = m_EnableKeyLight ? 1.0f : 0.0f;
+            dlc.AmbientIntensity = m_EnableKeyLight ? 0.65f : 0.25f;
+        }
+        if (m_PreviewFillLight && m_PreviewFillLight.HasComponent<DirectionalLightComponent>()) {
+            auto& flc = m_PreviewFillLight.GetComponent<DirectionalLightComponent>();
+            flc.Intensity = m_EnableSecondaryLight ? 1.0f : 0.0f;
         }
 
         float aspect = (height > 0.0f) ? (width / height) : 1.0f;
@@ -988,14 +775,24 @@ namespace Axle {
         settings.MSAASamples = 4;
         settings.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // Transparent clear for Godot checkerboard
 
-        if (!m_RHIViewport->SetRenderOptions(settings.MSAASamples, settings.EnableToneMapping, settings.EnableFXAA)) return;
-        m_RHISceneRenderer->RenderScene(
-            m_PreviewScene,
-            camera,
-            m_RHIViewport->GetColorTexture(),
-            m_RHIViewport->GetDepthTexture(),
-            settings, nullptr, m_RHIViewport->GetTargets()
-        );
+        ViewRequest request;
+        request.Kind = RenderViewKind::AssetPreview;
+        request.Width = m_ViewportWidth;
+        request.Height = m_ViewportHeight;
+        request.Camera = camera;
+        request.Settings = settings;
+        request.Name = "AssetPreview";
+
+        if (RHI::RHIDevice::Get().IsNativeReady() && m_RHIViewport && m_RHIViewport->IsValid()) {
+            if (!m_RHIViewport->SetRenderOptions(settings.MSAASamples, settings.EnableToneMapping, settings.EnableFXAA)) return;
+            request.ColorTarget = m_RHIViewport->GetColorTexture();
+            request.DepthTarget = m_RHIViewport->GetDepthTexture();
+            request.ViewTargets = m_RHIViewport->GetTargets();
+        } else if (m_Framebuffer) {
+            request.GLTargetFBO = m_Framebuffer;
+        }
+
+        RenderService::Get().RenderView(*m_PreviewScene, request);
     }
 
     void AssetPreviewPanel::RenderPreviewViewport() {
@@ -1038,7 +835,7 @@ namespace Axle {
                     m_ViewportHeight = (uint32_t)viewportH;
                     m_RHIViewport->Resize(m_ViewportWidth, m_ViewportHeight);
                 }
-                RenderPreviewRHI(availW, viewportH);
+                RenderPreview(availW, viewportH);
                 uint64_t rhiTexID = m_RHIViewport->GetImTextureID();
                 if (rhiTexID != 0) {
                     glm::vec2 uv0 = m_RHIViewport->GetUV0();
@@ -1047,7 +844,12 @@ namespace Axle {
                 }
             }
         } else if (Window::HasActiveContext() && m_Framebuffer) {
-            RenderPreview3D(availW, viewportH);
+            if ((uint32_t)availW != m_ViewportWidth || (uint32_t)viewportH != m_ViewportHeight) {
+                m_ViewportWidth = (uint32_t)availW;
+                m_ViewportHeight = (uint32_t)viewportH;
+                m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+            }
+            RenderPreview(availW, viewportH);
             u32 texID = m_Framebuffer->GetColorAttachmentRendererID();
             ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(availW, viewportH), ImVec2(0, 1), ImVec2(1, 0));
         } else {

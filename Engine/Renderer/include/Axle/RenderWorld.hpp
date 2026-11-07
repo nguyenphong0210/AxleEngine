@@ -126,6 +126,7 @@ namespace Axle {
         void Clear() {
             Meshes.clear();
             DirectionalLight.reset();
+            AdditionalDirectionalLights.clear();
             PointLights.clear();
             SpotLights.clear();
             EntityToStableUUID.clear();
@@ -135,10 +136,11 @@ namespace Axle {
             TotalEntities = 0;
         }
 
-        bool IsEmpty() const { return Meshes.empty() && PointLights.empty() && SpotLights.empty() && !DirectionalLight.has_value(); }
+        bool IsEmpty() const { return Meshes.empty() && PointLights.empty() && SpotLights.empty() && !DirectionalLight.has_value() && AdditionalDirectionalLights.empty(); }
         size_t GetMeshCount() const { return Meshes.size(); }
         size_t GetPointLightCount() const { return PointLights.size(); }
         size_t GetSpotLightCount() const { return SpotLights.size(); }
+        size_t GetDirectionalLightCount() const { return (DirectionalLight.has_value() ? 1 : 0) + AdditionalDirectionalLights.size(); }
 
         std::optional<UUID> FindStableUUID(uint32_t entityID) const {
             auto it = EntityToStableUUID.find(entityID);
@@ -150,6 +152,7 @@ namespace Axle {
         RenderCamera Camera;
         std::vector<RenderMeshInstance> Meshes;
         std::optional<RenderDirectionalLight> DirectionalLight;
+        std::vector<RenderDirectionalLight> AdditionalDirectionalLights;
         std::vector<RenderPointLight> PointLights;
         std::vector<RenderSpotLight> SpotLights;
         RenderSkyboxData Skybox;

@@ -4,12 +4,12 @@
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/Framebuffer.hpp>
-#include <Axle/Shader.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/RenderService.hpp>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -19,8 +19,6 @@ namespace Axle {
 
     namespace RHI { class RHITexture; }
     class Texture2D;
-
-    class RHISceneRenderer;
 
     enum class PreviewMeshType {
         Sphere = 0,
@@ -73,8 +71,7 @@ namespace Axle {
         }
 
     private:
-        void RenderPreview3D(float width, float height);
-        void RenderPreviewRHI(float width, float height);
+        void RenderPreview(float width, float height);
         void RebuildPreviewScene();
         bool IsMaterialPreview() const;
         glm::quat GetPreviewRotation() const;
@@ -93,7 +90,6 @@ namespace Axle {
 
         // Viewport & Rendering
         std::shared_ptr<Framebuffer> m_Framebuffer;
-        std::unique_ptr<Shader> m_Shader;
         std::unique_ptr<RHIViewportDescriptor> m_RHIViewport;
         ImGuiLayer* m_ImGuiLayer = nullptr;
         GuiTextureRegistrar m_TextureRegistrar;
@@ -132,8 +128,7 @@ namespace Axle {
         std::shared_ptr<VertexArray> m_FallbackMesh;
         const SceneSerializerContext* m_SerializerContext = nullptr;
 
-        // RHI Multi-Backend Scene & Lighting Preview
-        std::unique_ptr<RHISceneRenderer> m_RHISceneRenderer;
+        // Multi-Backend Scene & Lighting Preview
         std::shared_ptr<Scene> m_PreviewScene;
         Entity m_PreviewEntity;
         Entity m_PreviewLight;

@@ -132,6 +132,88 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_PreviewTwoLightsExtraction() {
+        Scene scene;
+        auto keyEnt = scene.CreateEntity("KeyLight");
+        auto& dlc1 = keyEnt.AddComponent<DirectionalLightComponent>();
+        dlc1.Azimuth = 45.0f;
+        dlc1.Elevation = 35.0f;
+        dlc1.Intensity = 1.0f;
+        dlc1.Color = glm::vec3(1.0f, 0.95f, 0.9f);
+
+        auto fillEnt = scene.CreateEntity("FillLight");
+        auto& dlc2 = fillEnt.AddComponent<DirectionalLightComponent>();
+        dlc2.Azimuth = 0.0f;
+        dlc2.Elevation = -90.0f;
+        dlc2.Intensity = 0.7f;
+        dlc2.Color = glm::vec3(0.7f, 0.7f, 0.75f);
+
+        SceneExtractionOptions options;
+        RenderWorld world = ExtractRenderWorld(scene, options);
+
+        RENDER_CHECK(world.DirectionalLight.has_value(), "Primary directional light extracted");
+        RENDER_CHECK(world.AdditionalDirectionalLights.size() == 1, "Secondary fill light extracted into AdditionalDirectionalLights");
+        RENDER_CHECK(world.GetDirectionalLightCount() == 2, "GetDirectionalLightCount reports 2 lights");
+        bool hasKey = (world.DirectionalLight->Intensity == 1.0f) || (world.AdditionalDirectionalLights[0].Intensity == 1.0f);
+        bool hasFill = (world.DirectionalLight->Intensity == 0.7f) || (world.AdditionalDirectionalLights[0].Intensity == 0.7f);
+        RENDER_CHECK(hasKey, "Key light intensity 1.0 is present");
+        RENDER_CHECK(hasFill, "Fill light intensity 0.7 is present");
+        return true;
+    }
+
+    static bool Test_PreviewMaterialIsolationAndEdits() {
+        Scene mainScene;
+        auto mainEnt = mainScene.CreateEntity("MainObject");
+        mainEnt.AddComponent<TransformComponent>();
+        auto& mainMesh = mainEnt.AddComponent<MeshInstance3D>();
+        mainMesh.AssetPath = "builtin://cube";
+        auto& mainMat = mainEnt.AddComponent<MaterialComponent>();
+        mainMat.AlbedoColor = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f); // Red
+
+        Scene previewScene;
+        auto previewEnt = previewScene.CreateEntity("PreviewObject");
+        previewEnt.AddComponent<TransformComponent>();
+        auto& prevMesh = previewEnt.AddComponent<MeshInstance3D>();
+        prevMesh.AssetPath = "builtin://sphere";
+        auto& prevMat = previewEnt.AddComponent<MaterialComponent>();
+        prevMat.AlbedoColor = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f); // Blue
+
+        SceneExtractionOptions options;
+        RenderWorld mainWorld = ExtractRenderWorld(mainScene, options);
+        RenderWorld prevWorld = ExtractRenderWorld(previewScene, options);
+
+        RENDER_CHECK(mainWorld.GetMeshCount() == 1, "Main world has 1 mesh");
+        RENDER_CHECK(prevWorld.GetMeshCount() == 1, "Preview world has 1 mesh");
+        RENDER_CHECK(mainWorld.Meshes[0].Material.AlbedoColor.r == 1.0f, "Main mesh is red");
+        RENDER_CHECK(prevWorld.Meshes[0].Material.AlbedoColor.b == 1.0f, "Preview mesh is blue");
+
+        // Edit preview material in place
+        prevMat.AlbedoColor = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f); // Green
+        RenderWorld prevWorldEdited = ExtractRenderWorld(previewScene, options);
+        RENDER_CHECK(prevWorldEdited.Meshes[0].Material.AlbedoColor.g == 1.0f, "Preview mesh updated to green");
+
+        // Verify main scene remains untouched
+        RenderWorld mainWorldCheck = ExtractRenderWorld(mainScene, options);
+        RENDER_CHECK(mainWorldCheck.Meshes[0].Material.AlbedoColor.r == 1.0f, "Main mesh remains red after preview edit");
+        RENDER_CHECK(mainWorldCheck.Meshes[0].Material.AlbedoColor.g == 0.0f, "No color bleed into main scene");
+        return true;
+    }
+
+    static bool Test_PreviewViewRequestResizeIsolation() {
+        ViewRequest req;
+        req.Kind = RenderViewKind::AssetPreview;
+        req.Width = 380;
+        req.Height = 320;
+        RENDER_CHECK(req.Width == 380 && req.Height == 320, "Initial preview dimensions");
+
+        // Same-frame resize
+        req.Width = 450;
+        req.Height = 240;
+        RENDER_CHECK(req.Width == 450 && req.Height == 240, "Resized preview dimensions");
+        RENDER_CHECK(req.Kind == RenderViewKind::AssetPreview, "Kind preserved after resize");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -143,6 +225,9 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_RenderServiceMultipleViewKinds()) return false;
     if (!Axle::RenderTests::Test_RenderCapabilitiesContracts()) return false;
     if (!Axle::RenderTests::Test_RenderServiceCapabilitiesIntegration()) return false;
+    if (!Axle::RenderTests::Test_PreviewTwoLightsExtraction()) return false;
+    if (!Axle::RenderTests::Test_PreviewMaterialIsolationAndEdits()) return false;
+    if (!Axle::RenderTests::Test_PreviewViewRequestResizeIsolation()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

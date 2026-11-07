@@ -1942,6 +1942,15 @@ namespace Axle {
         }
 
         uint32_t pointIndex = 0;
+        for (const auto& dl : world.AdditionalDirectionalLights) {
+            if (pointIndex >= MAX_POINT_LIGHTS) break;
+            float lux = dl.Intensity > 100.0f ? dl.Intensity : dl.Intensity * PhysicalIlluminance::DirectSunlight;
+            auto& light = lightData.PointLights[pointIndex++];
+            light.PositionAndRadius = glm::vec4(dl.Direction, 0.0f);
+            light.ColorAndIntensity = glm::vec4(dl.Color, lux * 0.000035f);
+            light.Params = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+        }
+
         for (const auto& pl : world.PointLights) {
             if (pointIndex >= MAX_POINT_LIGHTS) break;
             float intensity = (pl.Intensity > 10.0f) ? pl.Intensity : (pl.Intensity * 1000.0f);

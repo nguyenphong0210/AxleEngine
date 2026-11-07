@@ -10,7 +10,7 @@ Scope:
 - [x] **P41-12:** RenderWorld and shared scene extraction
 - [x] **P41-13:** RenderService and minimal modern render graph
 - [x] **P41-14:** OpenGL compatibility behind the same service
-- [ ] **P41-15:** Asset and material previews
+- [x] **P41-15:** Asset and material previews
 - [ ] **P41-16:** VFX preview
 - [ ] **P41-17:** Assembly preview
 - [ ] **P41-18:** Thumbnail render jobs
@@ -119,6 +119,40 @@ Scope:
 ### Verification Evidence
 - `cmake --build build --config Debug --target AxleRenderUnitTests`: exit 0
 - `cmake --build build --config Release --target AxleRenderUnitTests`: exit 0
+- `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `ctest --test-dir build -C Debug -R RenderUnitTests`: 1/1 passed, exit 0
+- `ctest --test-dir build -C Release -R RenderUnitTests`: 1/1 passed, exit 0
+- `python scripts/check_architecture.py --root .`: PASS (405 files / 18 CMake files)
+- `python scripts/test_baseline_tools.py`: 18/18 PASS
+- `git diff --check`: PASS
+
+
+---
+
+## Package P41-15: Asset and Material Previews
+
+- **Status:** Implemented and self-verified in Debug and Release.
+- **Scope & Contract:** `docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md` lines 271-278
+
+### Implementation Summary
+1. **Migrated `AssetPreviewPanel` to RenderService (`Engine/UI/src/AssetPreviewPanel.cpp`, `Engine/UI/include/Axle/AssetPreviewPanel.hpp`):**
+   - Removed private renderer instance (`std::unique_ptr<RHISceneRenderer> m_RHISceneRenderer`), duplicate vertex/fragment shaders (`s_PreviewVertSrc`, `s_PreviewFragSrc`), and raw OpenGL submission (`RenderPreview3D`).
+   - Unified rendering behind `RenderService::Get().RenderView(*m_PreviewScene, request)` across both Modern RHI (Direct3D 12, Vulkan) and OpenGL compatibility backends.
+   - Preserved all interactive functionality: material editing, two preview lights (key & fill), camera turntable and gestures, checkerboard grid, custom mesh drag-and-drop, and icon overlays.
+   - Leased output textures via `RHIViewportDescriptor` for RHI and managed `Framebuffer` for OpenGL without any idle waiting or private queue submission.
+2. **Multi-Light and Material Scene Extraction (`Engine/Renderer/include/Axle/RenderWorld.hpp`, `Engine/Scene/src/SceneExtraction.cpp`, `Engine/Scene/src/RHISceneRenderer.cpp`):**
+   - Added `AdditionalDirectionalLights` to `RenderWorld` to support the Godot-style two-light studio rig (primary key light + secondary fill light) through extracted snapshots.
+   - Extracted `MaterialComponent` instance properties (`AlbedoColor`, `Roughness`, `Metallic`, `EmissionIntensity`) directly into `RenderMeshInstance::Material`, ensuring complete isolation between main scene materials and preview materials.
+   - Handled additional directional lights in `RHISceneRenderer::RenderWorldView` consistent with standard scene rendering.
+3. **Dedicated Unit Verification (`Tests/rendering/Test_RenderServiceUnit.cpp`):**
+   - `Test_PreviewTwoLightsExtraction`: Verifies key and fill lights extract into primary and additional directional light slots with accurate intensities.
+   - `Test_PreviewMaterialIsolationAndEdits`: Verifies that editing preview material parameters has zero crosstalk or state bleed into main scene materials.
+   - `Test_PreviewViewRequestResizeIsolation`: Verifies that same-frame and rapid view request resizes preserve request parameters cleanly.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleUI AxleRenderUnitTests`: exit 0
+- `cmake --build build --config Release --target AxleUI AxleRenderUnitTests`: exit 0
 - `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
 - `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
 - `ctest --test-dir build -C Debug -R RenderUnitTests`: 1/1 passed, exit 0
